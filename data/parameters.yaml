@@ -1,0 +1,639 @@
+parameters:
+
+  # ====================================================================
+  # targen — generate profiling target patch values (.ti1)
+  # ====================================================================
+  targen:
+
+    - flag: "-d"
+      name: "Device Type"
+      type: choice
+      choices: ["1", "2", "3", "4", "5", "6"]
+      labels:
+        - "Video/display grey"
+        - "Print RGB (recommended)"
+        - "Video/display RGB"
+        - "CMYK"
+        - "CMY"
+        - "Hexachrome"
+      default: "2"
+      no_space: true
+      affects_preview: true
+      expert_only: false
+      tooltip_title: "Device Type (-d)"
+      tooltip_body: |
+        Defines the colorant combination of your output device.
+        For RGB inkjet printers, use "Print RGB" (-d 2).
+        "Video/display RGB" (-d 3) uses a different colour space model
+        suited for monitors.  CMYK (-d 4) is for four-colour offset or
+        inkjet printers with separate K cartridge.
+
+    - flag: "-f"
+      name: "Total Patch Count"
+      type: int
+      min: 50
+      max: 10000
+      default: 0
+      step: 50
+      affects_preview: true
+      expert_only: false
+      tooltip_title: "Total Patch Count (-f)"
+      tooltip_body: |
+        Sets the total number of colour patches.  More patches = better
+        profile accuracy but longer print and measurement time.
+        Typical ranges for RGB inkjet:
+          • Quick test: 400–600
+          • Standard:   800–1200
+          • High quality: 1500–2000
+          • Very high:  2500–3000
+        In Guided mode this is computed automatically from the
+        patches-per-page database × selected page count.
+        Set to 0 in Guided mode to use automatic calculation.
+
+    - flag: "-e"
+      name: "White Patches"
+      type: int
+      min: 0
+      max: 100
+      default: 4
+      step: 1
+      affects_preview: false
+      expert_only: false
+      tooltip_title: "White Patches (-e)"
+      tooltip_body: |
+        Number of device-white (full paper white) patches to include.
+        These help calibrate the measurement instrument to the paper.
+        4 is a good default; increase to 8 for very glossy papers.
+
+    - flag: "-B"
+      name: "Black Patches"
+      type: int
+      min: 0
+      max: 100
+      default: 4
+      step: 1
+      affects_preview: false
+      expert_only: false
+      tooltip_title: "Black Patches (-B)"
+      tooltip_body: |
+        Number of device-black (maximum ink) patches to include.
+        4 is a good default for RGB printers.
+
+    - flag: "-g"
+      name: "Grey Axis Steps"
+      type: int
+      min: 0
+      max: 256
+      default: 0
+      step: 8
+      affects_preview: false
+      expert_only: false
+      tooltip_title: "Grey Axis Steps (-g)"
+      tooltip_body: |
+        Extra neutral grey steps added along the grey axis.
+        Helps the profile engine better characterise the neutral
+        reproduction of the printer.  Typical: 0 for quick profiles,
+        50–100 for standard, 128–200 for high quality.
+        In Guided mode this is computed automatically as a ratio
+        of the total patch count.
+
+    - flag: "-G"
+      name: "Good Distribution (recommended)"
+      type: boolean
+      default: true
+      affects_preview: true
+      expert_only: false
+      tooltip_title: "Good Optimised Distribution (-G)"
+      tooltip_body: |
+        Enables the OFPS (Optimised Farthest Point Sampling) algorithm
+        which produces a well-distributed, perceptually-uniform patch set.
+        This is strongly recommended over the default random distribution
+        and has no significant drawback.
+
+    - flag: "-s"
+      name: "Single Channel Steps"
+      type: int
+      min: 0
+      max: 256
+      default: 0
+      step: 5
+      affects_preview: false
+      expert_only: false
+      tooltip_title: "Single Channel Steps (-s)"
+      tooltip_body: |
+        Adds extra single-channel ramp patches (R, G, B separately).
+        Useful for characterising individual ink behaviour.
+        Typical: 0 for quick, 20–50 for standard, 50–100 for high.
+
+    - flag: "-c"
+      name: "Pre-conditioning Profile"
+      type: file_path
+      default: ""
+      filter: "ICC profiles (*.icc *.icm)"
+      affects_preview: true
+      expert_only: true
+      tooltip_title: "Pre-conditioning Profile (-c)"
+      tooltip_body: |
+        An existing ICC profile for this printer/paper combination used
+        to pre-condition the patch distribution in perceptual space.
+        Using a previous profile here produces patches more evenly
+        distributed in the output gamut, leading to better accuracy on
+        a second profiling pass.  Leave blank for a first-time profile.
+
+    - flag: "-N"
+      name: "Neutral Axis Emphasis"
+      type: float
+      min: 0.0
+      max: 1.0
+      default: 0.50
+      step: 0.05
+      affects_preview: false
+      expert_only: true
+      tooltip_title: "Neutral Axis Emphasis (-N)"
+      tooltip_body: |
+        Controls how strongly patches cluster near the neutral axis.
+        0.0 = no emphasis, 1.0 = maximum clustering near grey.
+        Default 0.5 is appropriate for most printers.
+
+    - flag: "-V"
+      name: "Dark Region Emphasis"
+      type: float
+      min: 1.0
+      max: 4.0
+      default: 1.0
+      step: 0.1
+      affects_preview: false
+      expert_only: true
+      tooltip_title: "Dark Region Emphasis (-V)"
+      tooltip_body: |
+        Adds extra patches in dark (shadow) areas of the gamut.
+        1.0 = no emphasis (default).  Increase to 2.0–3.0 for printers
+        with complex shadow behaviour (e.g. matte fine-art papers).
+
+  # ====================================================================
+  # printtarg — create printable TIFF / PostScript test chart (.ti2)
+  # ====================================================================
+  printtarg:
+
+    - flag: "-i"
+      name: "Measurement Instrument"
+      type: choice
+      choices: ["i1", "p3", "CM", "SS"]
+      labels:
+        - "i1Pro / i1Pro 2 / i1Pro 3"
+        - "i1Pro 3 Plus"
+        - "ColorMunki / i1Studio / ColorChecker Studio"
+        - "SpectroScan (flatbed)"
+      default: "i1"
+      no_space: true
+      affects_preview: true
+      expert_only: false
+      tooltip_title: "Measurement Instrument (-i)"
+      tooltip_body: |
+        Selects the strip layout optimised for your measurement device.
+        Each instrument has different strip widths, patch sizes and
+        spacing requirements.  Choosing the wrong instrument results in
+        a chart the device cannot read reliably.
+        In Guided mode this is set automatically.
+
+    - flag: "-h"
+      name: "Double Density (ColorMunki / i1Studio only)"
+      type: boolean
+      default: false
+      affects_preview: true
+      expert_only: false
+      tooltip_title: "Double Density (-h)"
+      tooltip_body: |
+        Doubles the number of patches per strip for ColorMunki /
+        i1Studio / ColorChecker Studio by using the measuring rig.
+        This roughly doubles the patches per page but requires the
+        physical rig accessory.  Has no effect for other instruments.
+
+    - flag: "-p"
+      name: "Paper Size"
+      type: choice
+      choices: ["A4", "A4R", "A3", "420x297", "A2", "Letter", "LetterR", "Legal", "11x17"]
+      labels:
+        - "A4 Portrait (210 × 297 mm)"
+        - "A4 Landscape (297 × 210 mm)"
+        - "A3 Portrait (297 × 420 mm)"
+        - "A3 Landscape (420 × 297 mm)"
+        - "A2 (420 × 594 mm)"
+        - "Letter Portrait (8.5 × 11\")"
+        - "Letter Landscape (11 × 8.5\")"
+        - "Legal (8.5 × 14\")"
+        - "Tabloid / 11 × 17\""
+      default: "A4"
+      no_space: false
+      affects_preview: true
+      expert_only: false
+      tooltip_title: "Paper Size (-p)"
+      tooltip_body: |
+        Physical paper size to be used for printing.  The chart layout
+        is calculated to fill the selected size.  In Guided mode this
+        controls how many patches fit per page (from the database).
+        Use landscape variants (A4R, 420x297, LetterR) when your
+        printer feeds landscape more reliably.
+
+    - flag: "-t"
+      name: "TIFF Output DPI"
+      type: int
+      min: 72
+      max: 1200
+      default: 300
+      step: 50
+      affects_preview: false
+      expert_only: false
+      tooltip_title: "TIFF Resolution (-t)"
+      tooltip_body: |
+        Output resolution for the TIFF raster chart files.
+        300 DPI is recommended for strip-reading instruments and gives
+        a good balance of file size and patch clarity.
+        Use 200 DPI for very large charts to reduce file size.
+        Higher values (600+) are rarely needed and produce large files.
+
+    - flag: "-L"
+      name: "Suppress Left Clip Border"
+      type: boolean
+      default: true
+      affects_preview: true
+      expert_only: false
+      tooltip_title: "Suppress Left Clip Border (-L)"
+      tooltip_body: |
+        Removes the left-edge paper-clip border strip, reclaiming
+        ~15 mm of page width for additional patch columns.
+        Enable this unless you are using a physical page-clamp jig.
+        All values in the patch database assume this flag is ON.
+
+    - flag: "-a"
+      name: "Patch Size Scale"
+      type: float
+      min: 0.5
+      max: 4.0
+      default: 1.0
+      step: 0.1
+      affects_preview: true
+      expert_only: false
+      tooltip_title: "Patch Size Scale (-a)"
+      tooltip_body: |
+        Scales the patch and spacer dimensions uniformly.
+        1.0 is the default (instrument-optimised size).
+        Increase to 1.5–2.0 on rough / textured papers where the
+        instrument needs a larger measurement area.
+        Decreasing below 1.0 fits more patches per page but may
+        cause read errors on some instruments.
+        Note: changing this value from the default triggers a
+        live binary-search recalculation instead of the fast lookup.
+
+    - flag: "-m"
+      name: "Page Margin (mm)"
+      type: int
+      min: 0
+      max: 30
+      default: 6
+      step: 1
+      affects_preview: true
+      expert_only: true
+      tooltip_title: "Page Margin (-m)"
+      tooltip_body: |
+        Sets the printable-area margin in millimetres.
+        6 mm matches most printer minimum margins.  Reduce only if
+        your printer supports borderless printing.  Changing this
+        from the default triggers a recalculation.
+
+    - flag: "-M"
+      name: "TIFF Margin (mm)"
+      type: int
+      min: 0
+      max: 30
+      default: 6
+      step: 1
+      affects_preview: false
+      expert_only: true
+      tooltip_title: "TIFF File Margin (-M)"
+      tooltip_body: |
+        Margin included in the TIFF file dimensions (as opposed to
+        being outside the printable area).  Usually the same as -m.
+
+    - flag: "-r"
+      name: "Preserve Patch Order (no randomise)"
+      type: boolean
+      default: false
+      affects_preview: false
+      expert_only: true
+      tooltip_title: "No Randomisation (-r)"
+      tooltip_body: |
+        By default printtarg randomises patch positions to reduce
+        instrument drift artefacts.  Enable this flag only if you
+        are testing a specific patch sequence or if your instrument
+        requires ordered patches.
+
+    - flag: "-b"
+      name: "Force B&W Spacers"
+      type: boolean
+      default: false
+      affects_preview: false
+      expert_only: true
+      tooltip_title: "Force B&W Spacers (-b)"
+      tooltip_body: |
+        Forces inter-strip spacers to be black/white instead of
+        coloured.  Does not affect patch count or layout geometry.
+
+  # ====================================================================
+  # chartread — measure printed chart with instrument (.ti2 → .ti3)
+  # ====================================================================
+  chartread:
+
+    - flag: "-B"
+      name: "Disable Bidirectional Strip Recognition"
+      type: boolean
+      default: true
+      expert_only: false
+      tooltip_title: "Disable Bidirectional Reading (-B)"
+      tooltip_body: |
+        Disables automatic bidirectional strip direction detection.
+        It is strongly recommended to leave this ON (checked) to avoid
+        mis-reads caused by scanning strips in the wrong direction.
+        Only disable if you experience false strip direction errors
+        with your specific instrument.
+
+    - flag: "-S"
+      name: "Suppress Warning Messages"
+      type: boolean
+      default: true
+      expert_only: false
+      tooltip_title: "Suppress Warnings (-S)"
+      tooltip_body: |
+        Suppresses non-fatal measurement warning dialogs from chartread.
+        Recommended for unattended or batch measurement sessions.
+        Errors that would prevent profile generation are still reported.
+
+    - flag: "-N"
+      name: "Disable Initial Calibration"
+      type: boolean
+      default: false
+      expert_only: false
+      tooltip_title: "Disable Initial Calibration (-N)"
+      tooltip_body: |
+        Skips the automatic instrument white-tile calibration at startup.
+        Only use this if you have already calibrated the instrument in
+        this session and want to measure additional charts without
+        re-calibrating.
+
+    - flag: "-p"
+      name: "Patch-by-Patch Mode"
+      type: boolean
+      default: false
+      expert_only: false
+      tooltip_title: "Patch-by-Patch Mode (-p)"
+      tooltip_body: |
+        Switches from strip-reading to individual patch measurement.
+        Useful for hand-held single measurements or if strip reading
+        fails on a particular paper.  Significantly slower for large
+        charts.
+
+    - flag: "-H"
+      name: "High Resolution Spectral Mode"
+      type: boolean
+      default: false
+      expert_only: true
+      tooltip_title: "High Resolution Spectrum (-H)"
+      tooltip_body: |
+        Enables high-resolution spectral sampling on instruments that
+        support it (e.g. i1Pro 2/3).  Produces more accurate Lab values
+        but increases measurement time slightly.
+
+    - flag: "-T"
+      name: "Patch Consistency Tolerance"
+      type: float
+      min: 0.1
+      max: 5.0
+      default: 1.0
+      step: 0.1
+      expert_only: true
+      tooltip_title: "Patch Tolerance Multiplier (-T)"
+      tooltip_body: |
+        Multiplies the default patch consistency tolerance.  Increase to
+        2.0–3.0 if you are getting false "inconsistent patch" errors on
+        textured or matte papers.  Decrease to tighten quality checks.
+
+    - flag: "-l"
+      name: "Save D50 L*a*b* Values"
+      type: boolean
+      default: false
+      expert_only: true
+      tooltip_title: "Save L*a*b* Instead of XYZ (-l)"
+      tooltip_body: |
+        Saves measurement data as D50 L*a*b* values instead of XYZ.
+        Most workflows use XYZ (default).  Enable only if downstream
+        tools specifically require L*a*b* input.
+
+    - flag: "-X"
+      name: "Colorimeter Correction Matrix"
+      type: file_path
+      default: ""
+      filter: "Correction matrices (*.ccmx *.ccss)"
+      expert_only: true
+      tooltip_title: "Colorimeter Correction Matrix (-X)"
+      tooltip_body: |
+        Applies a colorimeter correction matrix (.ccmx) or calibration
+        spectral set (.ccss) to improve colorimeter accuracy.
+        Only relevant for colorimeters (not spectrophotometers).
+        Obtain the correct file from the instrument manufacturer or
+        create it with ArgyllCMS ccss/ccmx tools.
+
+  # ====================================================================
+  # colprof — create ICC printer profile from measurements (.ti3 → .icc)
+  # ====================================================================
+  colprof:
+
+    - flag: "-D"
+      name: "Profile Description"
+      type: string
+      default: ""
+      expert_only: false
+      tooltip_title: "Profile Description (-D)"
+      tooltip_body: |
+        Short human-readable name embedded in the ICC profile.
+        This is the name that appears in application colour-picker
+        menus.  A good convention is:
+        "Printer Model_Paper_Ink_Date"
+        e.g. "Epson P900_Canson Baryta_Chromatic_2026-04"
+
+    - flag: "-a"
+      name: "Profile Algorithm"
+      type: choice
+      choices: ["l", "x", "X", "g", "G", "s", "S", "m", "M"]
+      labels:
+        - "l — Lab cLUT (recommended for RGB printers)"
+        - "x — XYZ cLUT"
+        - "X — XYZ cLUT (Absolute)"
+        - "g — Gamma + matrix (fast, less accurate)"
+        - "G — Gamma + matrix (forced)"
+        - "s — Single gamma + matrix"
+        - "S — Single gamma + matrix (forced)"
+        - "m — Matrix only"
+        - "M — Matrix only (forced)"
+      default: "l"
+      no_space: true
+      expert_only: false
+      tooltip_title: "Profile Algorithm (-a)"
+      tooltip_body: |
+        Selects the colour transform algorithm:
+        • Lab cLUT (-al): Best accuracy for printer profiles.
+          Uses a full 3D lookup table in L*a*b* space.  Recommended.
+        • XYZ cLUT (-ax): Similar to Lab but in XYZ space.
+          Sometimes produces smoother neutral gradients.
+        • Matrix/gamma (-ag, -as): Simpler model, less accurate
+          for complex printer behaviour but faster to compute.
+        Always use Lab cLUT (-al) for first-time RGB printer profiles.
+
+    - flag: "-q"
+      name: "Profile Quality"
+      type: choice
+      choices: ["l", "m", "h", "u"]
+      labels:
+        - "l — Low (fast, ~30 s)"
+        - "m — Medium (recommended, ~2 min)"
+        - "h — High (~10 min)"
+        - "u — Ultra (~30+ min)"
+      default: "m"
+      no_space: true
+      expert_only: false
+      tooltip_title: "Profile Quality (-q)"
+      tooltip_body: |
+        Controls the cLUT grid resolution and smoothing iterations:
+        • Low: 17³ grid — quick test, not for production
+        • Medium: 33³ grid — good balance, recommended default
+        • High: 45³ grid — production quality
+        • Ultra: 65³ grid — maximum accuracy, very slow
+        Medium quality is sufficient for most inkjet work.
+        Use High for fine-art or contract proofing applications.
+
+    - flag: "-b"
+      name: "B2A Table Quality"
+      type: choice
+      choices: ["", "l", "m", "h", "u", "n"]
+      labels:
+        - "Same as profile quality (default)"
+        - "l — Low"
+        - "m — Medium"
+        - "h — High"
+        - "u — Ultra"
+        - "n — None (omit B2A tables)"
+      default: ""
+      no_space: true
+      expert_only: true
+      tooltip_title: "B2A Table Quality (-b)"
+      tooltip_body: |
+        Independently controls the quality of the B2A (device→PCS)
+        tables used for input (e.g. soft-proofing) transforms.
+        Leave blank to match the main -q quality setting.
+        Use "n" to omit B2A tables and reduce profile file size
+        (output-only profiles don't need B2A).
+
+    - flag: "-r"
+      name: "Smoothing / Device Noise (% ΔE)"
+      type: float
+      min: 0.0
+      max: 5.0
+      default: 0.5
+      step: 0.1
+      expert_only: true
+      tooltip_title: "Average Device Noise (-r)"
+      tooltip_body: |
+        Estimated average measurement or device noise as a percentage
+        of ΔE.  Higher values increase profile smoothing, reducing
+        the effect of outlier patches.
+        • 0.5%: clean measurements, well-maintained printer
+        • 1.0–2.0%: noisy measurements or textured paper
+        • 3.0–5.0%: very noisy; increases smoothing significantly
+
+    - flag: "-s"
+      name: "Gamut Mapping Source (Perceptual)"
+      type: file_path
+      default: ""
+      filter: "ICC profiles (*.icc *.icm)"
+      expert_only: true
+      tooltip_title: "Perceptual Gamut Mapping Source (-s)"
+      tooltip_body: |
+        Source ICC profile used to compute the perceptual rendering
+        intent gamut mapping tables (A2B / B2A perceptual).
+        Without this, the perceptual intent uses the colorimetric
+        data directly (no gamut compression).
+        Typically set to a standard RGB working space like
+        AdobeRGB or ProPhoto RGB.
+
+    - flag: "-S"
+      name: "Gamut Mapping Source (Perceptual + Saturation)"
+      type: file_path
+      default: ""
+      filter: "ICC profiles (*.icc *.icm)"
+      expert_only: true
+      tooltip_title: "Perceptual + Saturation Source (-S)"
+      tooltip_body: |
+        Like -s but applies the gamut mapping to both the perceptual
+        and saturation rendering intents.
+
+    - flag: "-A"
+      name: "Manufacturer"
+      type: string
+      default: ""
+      expert_only: true
+      tooltip_title: "Manufacturer String (-A)"
+      tooltip_body: |
+        Manufacturer string embedded in the ICC profile header.
+        Optional — used for identification in profile picker UIs.
+
+    - flag: "-M"
+      name: "Model"
+      type: string
+      default: ""
+      expert_only: true
+      tooltip_title: "Model String (-M)"
+      tooltip_body: |
+        Model string embedded in the ICC profile header.
+
+    - flag: "-C"
+      name: "Copyright"
+      type: string
+      default: ""
+      expert_only: true
+      tooltip_title: "Copyright String (-C)"
+      tooltip_body: |
+        Copyright notice embedded in the ICC profile.
+
+    - flag: "-ni"
+      name: "No Input Shaper Curves"
+      type: boolean
+      default: false
+      expert_only: true
+      tooltip_title: "No Input Shaper Curves (-ni)"
+      tooltip_body: |
+        Disables the 1D input shaper (tone) curves that pre-condition
+        device values before the 3D cLUT.  These curves normally
+        improve profile accuracy.  Disable only for diagnostic purposes.
+
+    - flag: "-no"
+      name: "No Output Shaper Curves"
+      type: boolean
+      default: false
+      expert_only: true
+      tooltip_title: "No Output Shaper Curves (-no)"
+      tooltip_body: |
+        Disables the 1D output shaper curves applied after the 3D cLUT.
+        Disable only for diagnostic purposes.
+
+    - flag: "-V"
+      name: "Dark Region Grid Emphasis"
+      type: float
+      min: 1.0
+      max: 3.0
+      default: 1.0
+      step: 0.1
+      expert_only: true
+      tooltip_title: "Dark Region Grid Emphasis (-V)"
+      tooltip_body: |
+        Adds extra cLUT grid points in dark (shadow) regions.
+        1.0 = uniform grid (default).  Increase to 1.5–2.0 for
+        printers with complex shadow behaviour or blocked-up blacks.

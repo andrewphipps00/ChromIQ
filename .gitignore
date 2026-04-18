@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Distribution / PyInstaller
+dist/
+build/
+*.egg-info/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# IDE / editor
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# App runtime output
+ChromIQ/
+chromiq.log*
+
+# Claude Code local settings
+.claude/
+
+# Secrets / credentials
+.env
+*.key
+*.pem
