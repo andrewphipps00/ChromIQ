@@ -275,12 +275,13 @@ class TabChart(QWidget):
         self._lb_check.setChecked(True)
         self._lb_check.toggled.connect(self._update_patch_count)
         lb_row.addWidget(self._lb_check)
-        lb_row.addWidget(TooltipButton(
+        self._lb_tooltip = TooltipButton(
             "Suppress Left Clip Border (-L)",
             "Removes the left-edge paper-clip border, gaining ~15 mm for extra patches.\n"
             "Enable unless you use a physical page-clamp jig.  Recommended: ON.",
             inner,
-        ))
+        )
+        lb_row.addWidget(self._lb_tooltip)
         lb_row.addStretch()
         pages_layout.addLayout(lb_row)
         layout.addWidget(pages_grp)
@@ -446,6 +447,9 @@ class TabChart(QWidget):
         visible = instr == "CM"
         self._dd_check.setVisible(visible)
         self._dd_tooltip.setVisible(visible)
+        lb_visible = instr != "CM"
+        self._lb_check.setVisible(lb_visible)
+        self._lb_tooltip.setVisible(lb_visible)
 
     # ------------------------------------------------------------------
     # Actions

@@ -221,7 +221,9 @@ class ChartCreator:
 
     def _build_printtarg_args(self, p: ChartParams) -> list[str]:
         args: list[str] = []
-        args.append(f"-i{p.instrument}")
+        # printtarg uses "3p" for i1Pro 3 Plus; help text lists "p3" but that's a typo
+        pt_instr = "3p" if p.instrument == "p3" else p.instrument
+        args.append(f"-i{pt_instr}")
         args.append(f"-p{p.paper}")
         args.append(f"-t{p.tiff_dpi}")
         if p.double_density:
@@ -231,7 +233,8 @@ class ChartCreator:
         if abs(p.patch_scale - 1.0) > 0.01:
             args += [f"-a{p.patch_scale:.2f}"]
         if p.margin_mm != 6:
-            args += [f"-m{p.margin_mm}", f"-M{p.margin_mm}"]
+            args += [f"-m{p.margin_mm}"]
+        args.append(f"-M{p.margin_mm}")
         if p.no_randomise:
             args.append("-r")
         if p.bw_spacers:
