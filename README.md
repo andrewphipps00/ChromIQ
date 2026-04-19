@@ -223,7 +223,7 @@ Save the file and restart ChromIQ — the new parameter appears automatically in
 
 > This section will be updated as issues are resolved.
 
-- **Printing (Step 2):** Direct TIFF printing via CUPS works, but color management behavior depends entirely on the printer driver and CUPS configuration. The recommended workflow is to disable color management in the printer driver and let the ICC profile handle it downstream in the application.
+- **Printing (Step 2):** Direct TIFF printing via CUPS works, but color management behavior requires further testing.
 - **Measurement (Step 3):** Some spectrophotometer models may require additional calibration steps not yet surfaced in the UI.
 - **Profile (Step 4):** Advanced gamut mapping options (FWA, custom intents) are present in the UI but have not been fully tested across all instrument/paper combinations.
 - **Windows/Linux:** Not tested. The app is developed and tested on macOS only. Linux support via CUPS is theoretically possible; Windows would require significant changes to the printing pipeline.
