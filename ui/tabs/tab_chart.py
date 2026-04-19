@@ -563,17 +563,25 @@ class TabChart(QWidget):
             if self._current_mode() == "guided"
             else self._manual_target_name_edit.text().strip()
         )
-        s.set("chart_target_name",        name or "ChromIQ Test Chart")
-        s.set("chart_instrument",         params.instrument)
-        s.set("chart_paper",              params.paper)
-        s.set("chart_pages",              params.pages)
-        s.set("chart_double_density",     params.double_density)
+        s.set("chart_target_name",         name or "ChromIQ Test Chart")
+        s.set("chart_instrument",          params.instrument)
+        s.set("chart_paper",               params.paper)
+        s.set("chart_pages",               params.pages)
+        s.set("chart_double_density",      params.double_density)
         s.set("chart_disable_left_border", params.disable_left_border)
-        s.set("targen_device_type",       params.device_type)
-        s.set("targen_good_mode",         params.good_mode)
-        s.set("targen_white_patches",     params.white_patches)
-        s.set("targen_black_patches",     params.black_patches)
-        s.set("printtarg_dpi",            params.tiff_dpi)
+        s.set("targen_device_type",        params.device_type)
+        s.set("targen_good_mode",          params.good_mode)
+        s.set("targen_white_patches",      params.white_patches)
+        s.set("targen_black_patches",      params.black_patches)
+        s.set("printtarg_dpi",             params.tiff_dpi)
+        # Save all manual widget values individually
+        for tool, widgets in self._manual_widgets.items():
+            for pw in widgets:
+                v = pw.get_raw_value()
+                if v is not None:
+                    s.set(f"manual_{tool}_{pw.flag}", v)
+        if self._bit16_radio is not None:
+            s.set("manual_printtarg_tiff_16bit", self._bit16_radio.isChecked())
         log.info("Chart defaults saved")
         self._log.appendPlainText("Current settings saved as defaults.")
 
@@ -659,6 +667,18 @@ class TabChart(QWidget):
         self._lb_check.setChecked(bool(s.get("chart_disable_left_border", True)))
         self._update_dd_visibility()
         self._update_patch_count()
+
+        # Restore manual widget values
+        for tool, widgets in self._manual_widgets.items():
+            for pw in widgets:
+                v = s.get(f"manual_{tool}_{pw.flag}")
+                if v is not None:
+                    pw.set_value(v)
+        if self._bit8_radio is not None and self._bit16_radio is not None:
+            is_16bit = bool(s.get("manual_printtarg_tiff_16bit", False))
+            self._bit16_radio.setChecked(is_16bit)
+            self._bit8_radio.setChecked(not is_16bit)
+        self._update_manual_lb_visibility()
 
         mode = s.get("chart_mode", "guided")
         self._switch_mode(mode)

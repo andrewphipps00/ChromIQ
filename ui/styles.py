@@ -162,7 +162,7 @@ QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox {{
     padding: 4px 6px;
     min-height: 26px;
 }}
-QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QComboBox:focus {{
+QLineEdit:focus, QComboBox:focus {{
     border-color: {ACCENT_BLUE};
 }}
 QComboBox {{
@@ -202,6 +202,8 @@ QSpinBox::up-button, QDoubleSpinBox::up-button {{
     width: 18px;
     height: 14px;
     border-left: 1px solid {BORDER};
+    border-top: 1px solid transparent;
+    border-right: 1px solid transparent;
     border-bottom: 1px solid {BORDER};
     border-top-right-radius: 3px;
     background: #323232;
@@ -216,6 +218,8 @@ QSpinBox::down-button, QDoubleSpinBox::down-button {{
     height: 14px;
     border-left: 1px solid {BORDER};
     border-top: 1px solid {BORDER};
+    border-right: 1px solid transparent;
+    border-bottom: 1px solid transparent;
     border-bottom-right-radius: 3px;
     background: #323232;
 }}
