@@ -151,7 +151,7 @@ class TabProfile(QWidget):
         self._log = QPlainTextEdit(self)
         self._log.setObjectName("log")
         self._log.setReadOnly(True)
-        self._log.setMaximumHeight(180)
+        self._log.setMaximumHeight(67)
         self._log.setPlaceholderText("colprof output will appear here…")
         root.addWidget(self._log)
 
@@ -365,14 +365,19 @@ class TabProfile(QWidget):
 
         # Gamut source — perceptual
         gam_row = QHBoxLayout()
-        gam_row.addWidget(QLabel("Gamut Source — Perceptual (-s):", grp))
+        self._gam_check = QCheckBox("Gamut Source — Perceptual (-s):", grp)
         self._gam_edit = QLineEdit(grp)
         self._gam_edit.setPlaceholderText(
             "Optional: source RGB profile (e.g. AdobeRGB.icc) for perceptual gamut mapping"
         )
-        gam_row.addWidget(self._gam_edit, stretch=1)
+        self._gam_edit.setEnabled(False)
         gam_browse = make_browse_button(grp, "Select perceptual gamut source profile")
         gam_browse.clicked.connect(self._browse_gam)
+        gam_browse.setEnabled(False)
+        self._gam_check.toggled.connect(self._gam_edit.setEnabled)
+        self._gam_check.toggled.connect(gam_browse.setEnabled)
+        gam_row.addWidget(self._gam_check)
+        gam_row.addWidget(self._gam_edit, stretch=1)
         gam_row.addWidget(gam_browse)
         gam_row.addWidget(TooltipButton(
             "Perceptual Gamut Mapping Source (-s)",
@@ -650,7 +655,7 @@ class TabProfile(QWidget):
             b2a_quality      = self._b2a_combo.currentData() if self._b2a_check.isChecked() else "",
             smoothing        = self._smooth_spin.value(),
             dark_emphasis    = self._dark_spin.value(),
-            gamut_src        = self._gam_edit.text().strip(),
+            gamut_src        = self._gam_edit.text().strip() if self._gam_check.isChecked() else "",
             manufacturer     = self._mfr_edit.text().strip() if self._mfr_check.isChecked() else "",
             model            = self._model_edit.text().strip() if self._model_check.isChecked() else "",
             copyright        = self._copy_edit.text().strip() if self._copy_check.isChecked() else "",
