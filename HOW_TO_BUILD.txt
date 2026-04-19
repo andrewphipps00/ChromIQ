@@ -1,0 +1,103 @@
+HOW TO BUILD ChromIQ.app
+========================
+
+These steps produce a self-contained macOS application bundle (dist/ChromIQ.app)
+that any Mac user can run without installing Python or any other tool.
+
+Prerequisites
+-------------
+- macOS (Apple Silicon or Intel)
+- Python 3.11 – 3.14  (python3 from Homebrew or python.org)
+- Git  (to clone the repo)
+- The ChromIQ source code (git clone …)
+- No Xcode required
+
+Step 1 — Create and activate a virtual environment
+---------------------------------------------------
+Open Terminal and navigate to the ChromIQ project folder.
+
+    cd /path/to/ChromIQ
+    python3 -m venv .venv
+    source .venv/bin/activate
+
+You should now see (.venv) at the start of your prompt.
+
+Step 2 — Install dependencies
+------------------------------
+    pip install -r requirements.txt
+
+This installs PyQt6, Pillow, PyYAML, and PyInstaller inside the venv.
+
+IMPORTANT: Always use   python -m PyInstaller   (not the bare pyinstaller
+command) so that PyInstaller uses the same Python environment where the
+packages are installed.
+
+Step 3 — Generate the app icon (only needed once, or after the icon changes)
+-----------------------------------------------------------------------------
+ChromIQ.spec expects  assets/app_icon.icns.  If it doesn't exist yet, create
+it from the existing PNG with these commands:
+
+    mkdir -p /tmp/chromiq_icon.iconset
+    for size in 16 32 128 256 512; do
+        sips -z $size $size assets/app_icon.png \
+            --out /tmp/chromiq_icon.iconset/icon_${size}x${size}.png
+        sips -z $((size*2)) $((size*2)) assets/app_icon.png \
+            --out /tmp/chromiq_icon.iconset/icon_${size}x${size}@2x.png
+    done
+    iconutil -c icns /tmp/chromiq_icon.iconset -o assets/app_icon.icns
+
+Step 4 — Build the app
+-----------------------
+    python -m PyInstaller ChromIQ.spec
+
+PyInstaller prints progress to the terminal.  The build takes about 15-30
+seconds on Apple Silicon and a bit longer on Intel.
+
+The finished app is at:
+
+    dist/ChromIQ.app
+
+Step 5 — Test the app
+----------------------
+Double-click  dist/ChromIQ.app  in Finder, or run from Terminal:
+
+    open dist/ChromIQ.app
+
+If macOS says "unidentified developer", right-click the app → Open → Open.
+This only needs to be done once per Mac.
+
+Step 6 — Distribute the app
+-----------------------------
+You can zip the app for sharing:
+
+    cd dist
+    zip -r ChromIQ.zip ChromIQ.app
+
+Or drag ChromIQ.app straight into a DMG with Disk Utility → New Image from Folder.
+
+Rebuilding after code changes
+------------------------------
+Just repeat Step 4.  PyInstaller detects what changed and only rebuilds the
+affected parts (incremental rebuild).
+
+To force a completely clean rebuild from scratch (e.g. after adding new asset
+files or changing the spec):
+
+    rm -rf build dist
+    python -m PyInstaller ChromIQ.spec
+
+Notes
+-----
+- The build is architecture-specific: an Apple Silicon Mac produces an arm64
+  bundle; an Intel Mac produces an x86_64 bundle.  To produce a universal
+  binary (runs on both), both architectures need to be available in the same
+  Python installation — this is complex and not necessary for most use cases.
+
+- dist/ChromIQ.app is about 89 MB.  This is normal — it bundles Python, PyQt6,
+  and all dependencies so recipients need nothing else installed.
+
+- The  build/  folder is an intermediate cache used by PyInstaller.  It is
+  safe to delete but speeds up subsequent builds if kept.
+
+- hooks/hook-workflow.py is an empty file that overrides a conflicting
+  PyInstaller hook from _pyinstaller_hooks_contrib.  Do not delete it.

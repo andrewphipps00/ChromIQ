@@ -9,17 +9,12 @@ Build command:
 The result will be in dist/ChromIQ.app
 """
 
-import sys
-from pathlib import Path
-
-block_cipher = None
-
 a = Analysis(
     ['main.py'],
     pathex=['.'],
     binaries=[],
     datas=[
-        ('assets', 'assets'),
+        ('assets',           'assets'),
         ('data/parameters.yaml', 'data'),
     ],
     hiddenimports=[
@@ -28,23 +23,19 @@ a = Analysis(
         'PyQt6.QtGui',
         'PyQt6.QtWidgets',
         'PyQt6.QtPrintSupport',
-        'PIL._tkinter_finder',
         'PIL.Image',
         'PIL.ImageFile',
         'PIL.TiffImagePlugin',
         'yaml',
     ],
-    hookspath=[],
+    hookspath=['hooks'],
     hooksconfig={},
     runtime_hooks=[],
     excludes=[],
-    win_no_prefer_redirects=False,
-    win_private_assemblies=False,
-    cipher=block_cipher,
     noarchive=False,
 )
 
-pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+pyz = PYZ(a.pure)
 
 exe = EXE(
     pyz,
@@ -61,7 +52,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='assets/app_icon.png',
+    icon='assets/app_icon.icns',
 )
 
 coll = COLLECT(
@@ -78,16 +69,17 @@ coll = COLLECT(
 app = BUNDLE(
     coll,
     name='ChromIQ.app',
-    icon='assets/app_icon.png',
+    icon='assets/app_icon.icns',
     bundle_identifier='com.chromiq.app',
     info_plist={
-        'CFBundleName': 'ChromIQ',
-        'CFBundleDisplayName': 'ChromIQ',
+        'CFBundleName':              'ChromIQ',
+        'CFBundleDisplayName':       'ChromIQ',
         'CFBundleShortVersionString': '1.0.0',
-        'CFBundleVersion': '1.0.0',
-        'NSHighResolutionCapable': True,
-        'NSPrincipalClass': 'NSApplication',
+        'CFBundleVersion':           '1.0.0',
+        'NSHighResolutionCapable':   True,
+        'NSPrincipalClass':          'NSApplication',
         'NSRequiresAquaSystemAppearance': False,
         'LSApplicationCategoryType': 'public.app-category.graphics-design',
+        'LSMinimumSystemVersion':    '12.0',
     },
 )
