@@ -17,13 +17,19 @@ if TYPE_CHECKING:
 log = get_logger(__name__)
 
 # Regex to detect which strip chartread is currently asking for.
-# chartread prints e.g. "Scanning strip 'A01'"  or  "Strip ID: A"
-_STRIP_RE = re.compile(r"[Ss]trip\s+(?:ID:\s*)?['\"]?([A-Za-z0-9]+)['\"]?")
+# Handles formats:
+#   "Ready to read strip pass A"   (Argyll 3.x default)
+#   "Scanning strip 'A01'"
+#   "Strip ID: B"
+_STRIP_RE = re.compile(
+    r"[Ss]trip\s+(?:pass\s+|ID:\s*'?|'?)([A-Za-z]{1,3}\d*)(?:')?(?![A-Za-z0-9])"
+)
 
 
 @dataclass
 class MeasureParams:
     ti1_path: Path
+    instrument: str = "1"
     disable_bidir: bool = True
     suppress_warnings: bool = True
     disable_initial_cal: bool = False
@@ -57,6 +63,7 @@ class MeasureManager(QObject):
             cwd,
             on_line=lambda line: self._handle_line(line, on_line),
             on_finish=on_finish,
+            use_pty=True,
         )
 
     def send_key(self, key: str) -> None:
@@ -69,7 +76,7 @@ class MeasureManager(QObject):
     # ------------------------------------------------------------------
 
     def _build_args(self, p: MeasureParams) -> list[str]:
-        args: list[str] = []
+        args: list[str] = ["-c", p.instrument]
         if p.disable_bidir:
             args.append("-B")
         if p.suppress_warnings:
@@ -88,6 +95,6 @@ class MeasureManager(QObject):
 
     def _handle_line(self, line: str, on_line: Callable[[str], None]) -> None:
         on_line(line)
-        m = _STRIP_RE.search(line)
-        if m:
-            self.stripe_changed.emit(m.group(1))
+        matches = _STRIP_RE.findall(line)
+        if matches:
+            self.stripe_changed.emit(matches[-1])

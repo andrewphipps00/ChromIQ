@@ -329,7 +329,7 @@ parameters:
         requires ordered patches.
 
     - flag: "-b"
-      name: "Force B&W Spacers"
+      name: "Force B&&W Spacers"
       type: boolean
       default: false
       affects_preview: false

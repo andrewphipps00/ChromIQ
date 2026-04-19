@@ -1,6 +1,7 @@
 """Settings / Preferences dialog."""
 from __future__ import annotations
 
+import os
 import platform
 import re
 import subprocess
@@ -199,10 +200,18 @@ class SettingsDialog(QDialog):
         results = []
         for tool in ("targen", "printtarg", "chartread", "colprof"):
             p = bin_dir / tool
+            if tool == "chartread":
+                # chartread probes USB hardware even with -?, causing a hang.
+                # Existence + executable check is sufficient here.
+                if p.exists() and os.access(str(p), os.X_OK):
+                    results.append(f"✓ {tool}")
+                else:
+                    results.append(f"✗ {tool} (not found)")
+                continue
             if p.exists():
                 try:
-                    r = subprocess.run(
-                        [str(p)], capture_output=True, timeout=3,
+                    subprocess.run(
+                        [str(p), "-?"], capture_output=True, timeout=5,
                     )
                     results.append(f"✓ {tool}")
                 except Exception:

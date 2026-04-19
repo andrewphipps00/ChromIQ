@@ -6,7 +6,7 @@ from typing import Optional
 
 from PIL import Image
 from PyQt6.QtCore import QRect, QSize, Qt, QTimer
-from PyQt6.QtGui import QColor, QPainter, QPixmap
+from PyQt6.QtGui import QColor, QPainter, QPainterPath, QPixmap
 from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -21,6 +21,7 @@ from core.logger import get_logger
 log = get_logger(__name__)
 
 _REFRESH_DELAY_MS = 80   # debounce repaint
+_BORDER = 15             # white display border: all sides (px)
 
 
 class TiffPreview(QWidget):
@@ -78,6 +79,14 @@ class TiffPreview(QWidget):
     def set_stripe_rects(self, rects: list[QRect]) -> None:
         """Provide precomputed pixel rects for each stripe on current page."""
         self._stripe_rects = rects
+
+    def show_page(self, index: int) -> None:
+        """Switch to page by index and repaint."""
+        if 0 <= index < len(self._pages) and index != self._current:
+            self._current = index
+            self._active_stripe = -1
+            self._update_nav()
+            self._schedule_refresh()
 
     def clear(self) -> None:
         self._pages = []
@@ -198,38 +207,47 @@ class TiffPreview(QWidget):
     def _repaint_label(self) -> None:
         if not self._pixmap:
             return
+        B = _BORDER
         label_size = self._img_label.size()
+
+        # Scale image into the area that remains after adding the border
+        avail = QSize(
+            max(1, label_size.width()  - 2 * B),
+            max(1, label_size.height() - 2 * B),
+        )
         scaled = self._pixmap.scaled(
-            label_size,
+            avail,
             Qt.AspectRatioMode.KeepAspectRatio,
             Qt.TransformationMode.SmoothTransformation,
         )
 
-        if self._active_stripe >= 0 and self._stripe_rects:
-            result = QPixmap(scaled.size())
-            result.fill(Qt.GlobalColor.transparent)
-            painter = QPainter(result)
-            painter.drawPixmap(0, 0, scaled)
+        # Build canvas with white border on all sides
+        canvas = QPixmap(scaled.width() + 2 * B, scaled.height() + 2 * B)
+        canvas.fill(Qt.GlobalColor.white)
+        painter = QPainter(canvas)
+        painter.drawPixmap(B, B, scaled)
 
-            # Scale rect from original to scaled dimensions
+        if self._active_stripe >= 0 and self._stripe_rects:
             sx = scaled.width()  / self._pixmap.width()
             sy = scaled.height() / self._pixmap.height()
 
             if self._active_stripe < len(self._stripe_rects):
-                r = self._stripe_rects[self._active_stripe]
-                sr = QRect(
-                    int(r.x() * sx), int(r.y() * sy),
-                    int(r.width() * sx), int(r.height() * sy),
-                )
-                painter.setOpacity(0.35)
-                painter.fillRect(sr, QColor("#00bcd4"))
-                painter.setOpacity(1.0)
-                painter.setPen(QColor("#00bcd4"))
-                painter.drawRect(sr)
-            painter.end()
-            self._img_label.setPixmap(result)
-        else:
-            self._img_label.setPixmap(scaled)
+                r  = self._stripe_rects[self._active_stripe]
+                # Map original rect → canvas coords (include border offset)
+                x  = int(r.x()      * sx) + B
+                y  = int(r.y()      * sy) + B + 3
+                rw = max(1, int(r.width()  * sx) + 2)
+                cx = x + rw // 2
+                arrow_h = 20
+                path = QPainterPath()
+                path.moveTo(cx - rw // 2, y)
+                path.lineTo(cx + rw // 2, y)
+                path.lineTo(cx, y + arrow_h)
+                path.closeSubpath()
+                painter.fillPath(path, QColor("#00bcd4"))
+
+        painter.end()
+        self._img_label.setPixmap(canvas)
 
     def resizeEvent(self, event) -> None:  # type: ignore[override]
         super().resizeEvent(event)

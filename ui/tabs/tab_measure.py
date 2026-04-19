@@ -1,12 +1,11 @@
 """Tab 3: Measure Chart."""
 from __future__ import annotations
 
-import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import QEvent, QObject, QRect, Qt
 from PyQt6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -21,7 +20,6 @@ from PyQt6.QtWidgets import (
     QScrollArea,
     QSpinBox,
     QSplitter,
-    QStyle,
     QVBoxLayout,
     QWidget,
 )
@@ -40,24 +38,129 @@ if TYPE_CHECKING:
 log = get_logger(__name__)
 
 
-def _detect_instruments(argyll_bin: str) -> list[tuple[str, str]]:
-    """Return list of (index, description) from chartread -?."""
+def _letter_to_idx(letter: str) -> int:
+    """Convert a strip letter (A=0, B=1, … Z=25, AA=26, …) to a 0-based index."""
+    idx = 0
+    for c in letter.upper():
+        idx = idx * 26 + (ord(c) - ord("A") + 1)
+    return idx - 1
+
+
+def _detect_stripe_rects(tiff_path: Path) -> list[QRect]:
+    """Locate vertical strip columns in a printtarg TIFF.
+
+    Strategy
+    --------
+    1. Find the label zone: the first contiguous block of rows that have a
+       "moderate" number of dark pixels (printed label characters — neither
+       blank white rows nor full-width separator lines).
+    2. Build a per-column dark-pixel count from those rows; merge adjacent
+       non-zero runs to get one cluster per strip label.
+    3. Convert label-cluster centres → strip x-boundaries (midpoints between
+       centres, extrapolated at the edges).
+    4. Derive the vertical extent from the full content bounding box.
+    """
+    from PIL import Image
     try:
-        r = subprocess.run(
-            [str(Path(argyll_bin) / "chartread"), "-?"],
-            capture_output=True, text=True, timeout=5,
-        )
-        lines = (r.stdout + r.stderr).splitlines()
-        instruments: list[tuple[str, str]] = []
-        for line in lines:
-            stripped = line.strip()
-            if stripped and stripped[0].isdigit() and " " in stripped:
-                parts = stripped.split(None, 1)
-                if len(parts) == 2:
-                    instruments.append((parts[0], parts[1]))
-        return instruments if instruments else [("1", "Default instrument")]
-    except Exception:
-        return [("1", "Default instrument")]
+        img = Image.open(tiff_path).convert("L")
+        orig_w, orig_h = img.size
+
+        ANALYSIS_W = 1000
+        scale  = ANALYSIS_W / orig_w if orig_w > ANALYSIS_W else 1.0
+        aw     = max(1, int(orig_w * scale))
+        ah     = max(1, int(orig_h * scale))
+        small  = img.resize((aw, ah), Image.BOX)
+        pix    = small.load()
+
+        DARK            = 80
+        WHITE           = 240
+        MIN_LABEL_DARK  = max(5, aw // 200)   # at least this many dark px/row
+        MAX_LABEL_FRAC  = 0.30                 # exclude separator lines (>30% dark)
+        EMPTY_STOP      = 8                    # white rows before stopping label scan
+        MERGE_GAP       = max(3, aw // 200)   # merge within-label character gaps
+
+        # ── 1. Locate the label zone ─────────────────────────────────────────
+        max_label_dark = int(aw * MAX_LABEL_FRAC)
+        y_lab_start: int | None = None
+        y_lab_end:   int | None = None
+        empty_streak = 0
+        for y in range(ah * 30 // 100):
+            count = sum(1 for x in range(aw) if pix[x, y] < DARK)
+            if MIN_LABEL_DARK <= count <= max_label_dark:
+                if y_lab_start is None:
+                    y_lab_start = y
+                y_lab_end = y
+                empty_streak = 0
+            else:
+                empty_streak += 1
+                if y_lab_start is not None and empty_streak >= EMPTY_STOP:
+                    break
+
+        if y_lab_start is None or y_lab_end is None:
+            log.debug("Strip detection: no label zone found")
+            return []
+
+        # ── 2. Column dark-pixel profile → merge into per-strip clusters ─────
+        col_dark = [0] * aw
+        for y in range(y_lab_start, y_lab_end + 1):
+            for x in range(aw):
+                if pix[x, y] < DARK:
+                    col_dark[x] += 1
+
+        runs: list[tuple[int, int]] = []
+        in_run = False
+        r_start = 0
+        for x in range(aw):
+            if col_dark[x] > 0 and not in_run:
+                in_run, r_start = True, x
+            elif col_dark[x] == 0 and in_run:
+                in_run = False
+                runs.append((r_start, x - 1))
+        if in_run:
+            runs.append((r_start, aw - 1))
+
+        merged: list[list[int]] = []
+        for s, e in runs:
+            if merged and s - merged[-1][1] <= MERGE_GAP:
+                merged[-1][1] = e
+            else:
+                merged.append([s, e])
+
+        n_strips = len(merged)
+        if n_strips < 1:
+            log.debug("Strip detection: no label clusters found")
+            return []
+
+        centers = [(s + e) / 2 for s, e in merged]
+
+        # ── 3. Vertical extent ───────────────────────────────────────────────
+        y_top_a    = next((y for y in range(ah)
+                           if any(pix[x, y] < WHITE for x in range(0, aw, 4))), 0)
+        y_bottom_a = next((y for y in range(ah - 1, -1, -1)
+                           if any(pix[x, y] < WHITE for x in range(0, aw, 4))), ah - 1)
+
+        inv           = 1.0 / scale
+        y_top         = max(0,      int(y_top_a    * inv))
+        y_bottom      = min(orig_h, int((y_bottom_a + 1) * inv))
+        strip_h       = max(1, y_bottom - y_top)
+        y_label_bot   = min(orig_h, int((y_lab_end + 1) * inv))
+
+        # ── 4. Build vertical column rects ───────────────────────────────────
+        rects: list[QRect] = []
+        for i, cx in enumerate(centers):
+            half_l = (cx - centers[i - 1]) / 2 if i > 0         else (centers[1] - centers[0]) / 2
+            half_r = (centers[i + 1] - cx) / 2 if i < n_strips-1 else (centers[-1] - centers[-2]) / 2
+            x0 = max(0,      int((cx - half_l) * inv))
+            x1 = min(orig_w, int((cx + half_r) * inv))
+            rects.append(QRect(x0, y_label_bot, max(1, x1 - x0), strip_h))
+
+        log.info("Strip detection: %d strips, label y=%d–%d (scaled), content y=%d–%d (orig)",
+                 n_strips, y_lab_start, y_lab_end, y_top, y_bottom)
+        return rects
+
+    except Exception as exc:
+        log.warning("Strip detection failed: %s", exc)
+        return []
 
 
 # ---------------------------------------------------------------------------
@@ -110,6 +213,7 @@ class TabMeasure(QWidget):
         self._ti1_path: Path | None = None
         self._tiff_pages: list[Path] = []
         self._chartread_opts: list[_ChartreadOption] = []
+        self._measure_failed: bool = False
 
         self._manager.stripe_changed.connect(self._on_stripe_changed)
         self._build_ui()
@@ -139,24 +243,18 @@ class TabMeasure(QWidget):
         ig = QVBoxLayout(instr_grp)
         ig.setContentsMargins(8, 14, 8, 8)
         instr_row = QHBoxLayout()
-        instr_row.addWidget(QLabel("Instrument:", left))
-        self._instr_combo = QComboBox(left)
-        self._instr_combo.addItem("Detecting…", "1")
-        instr_row.addWidget(self._instr_combo, stretch=1)
-        refresh_btn = QPushButton(left)
-        refresh_btn.setIcon(
-            QApplication.style().standardIcon(QStyle.StandardPixmap.SP_BrowserReload)
-        )
-        refresh_btn.setFixedSize(34, 34)
-        refresh_btn.setStyleSheet("QPushButton { padding: 0; min-height: 0; }")
-        refresh_btn.setToolTip("Refresh instrument list")
-        refresh_btn.clicked.connect(self._refresh_instruments)
-        instr_row.addWidget(refresh_btn)
+        instr_row.addWidget(QLabel("Instrument port number:", left))
+        self._instr_spin = QSpinBox(left)
+        self._instr_spin.setRange(1, 9)
+        self._instr_spin.setValue(1)
+        instr_row.addWidget(self._instr_spin)
+        instr_row.addStretch()
         instr_row.addWidget(TooltipButton(
             "Instrument Port",
-            "Select the port / connection index for your spectrophotometer.\n"
-            "chartread lists connected instruments at startup.\n"
-            "Click ⟳ to refresh after connecting your device.",
+            "Port index passed to chartread via -c.\n"
+            "Most setups use 1 (single instrument connected).\n"
+            "If chartread lists multiple devices at startup, set the\n"
+            "number shown next to your instrument in that list.",
             left,
         ))
         ig.addLayout(instr_row)
@@ -267,18 +365,6 @@ class TabMeasure(QWidget):
         btn_row.addWidget(self._save_defaults_btn)
         ll.addLayout(btn_row)
 
-        # Key shortcut info
-        info = QLabel(
-            "During measurement:  "
-            "Enter/Space = confirm strip  ·  "
-            "← / → = prev/next strip  ·  "
-            "ESC = abort",
-            left,
-        )
-        info.setObjectName("info")
-        info.setWordWrap(True)
-        ll.addWidget(info)
-
         # Log
         self._log = QPlainTextEdit(left)
         self._log.setObjectName("log")
@@ -305,8 +391,6 @@ class TabMeasure(QWidget):
         splitter.setStretchFactor(0, 1)
         splitter.setStretchFactor(1, 1)
         root.addWidget(splitter)
-
-        self._refresh_instruments()
 
     # ------------------------------------------------------------------
     # Chartread option rows
@@ -395,15 +479,6 @@ class TabMeasure(QWidget):
     # Internal
     # ------------------------------------------------------------------
 
-    def _refresh_instruments(self) -> None:
-        bin_dir = self._settings.get("argyll_bin_path", "/Applications/Argyll/bin")
-        instruments = _detect_instruments(bin_dir)
-        self._instr_combo.blockSignals(True)
-        self._instr_combo.clear()
-        for idx, desc in instruments:
-            self._instr_combo.addItem(f"{idx}: {desc}", idx)
-        self._instr_combo.blockSignals(False)
-
     def _on_load_ti2(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
             self, "Load .ti2 file", str(Path.home()),
@@ -422,12 +497,21 @@ class TabMeasure(QWidget):
         if tiffs:
             self._tiff_pages = tiffs
             self._preview.load_tiff(tiffs)
+            self._setup_stripe_rects()
         else:
             self._preview.clear()
             self._log.appendPlainText(
                 "[WARNING] No matching TIFF preview found. "
                 "Ensure you scan the correct target."
             )
+
+    def _setup_stripe_rects(self) -> None:
+        """Detect strip positions from the first TIFF page and push to preview."""
+        if not self._tiff_pages:
+            return
+        rects = _detect_stripe_rects(self._tiff_pages[0])
+        if rects:
+            self._preview.set_stripe_rects(rects)
 
     def _on_start(self) -> None:
         if not self._ti1_path:
@@ -440,6 +524,7 @@ class TabMeasure(QWidget):
         self._log.clear()
         self._start_btn.setEnabled(False)
         self._stop_btn.setEnabled(True)
+        QApplication.instance().installEventFilter(self)
 
         self._manager.start(
             params,
@@ -453,17 +538,56 @@ class TabMeasure(QWidget):
     def _on_log_line(self, line: str) -> None:
         self._log.appendPlainText(line)
         self._log.ensureCursorVisible()
+        if "failed" in line.lower() or "communications failure" in line.lower():
+            self._measure_failed = True
 
     def _on_measure_done(self, code: int) -> None:
+        QApplication.instance().removeEventFilter(self)
         self._start_btn.setEnabled(True)
         self._stop_btn.setEnabled(False)
-        if code == 0:
-            self._log.appendPlainText("\n[OK] Measurement complete.")
+        failed = self._measure_failed or code != 0
+        self._measure_failed = False
+        if failed:
+            self._log.appendPlainText("\n[ERROR] Measurement failed — see output above.")
         else:
-            self._log.appendPlainText(f"\n[ERROR] chartread exited with code {code}.")
+            self._log.appendPlainText("\n[OK] Measurement complete.")
+
+    def eventFilter(self, obj: QObject, event: QEvent) -> bool:
+        if event.type() == QEvent.Type.KeyPress:
+            key = event.key()
+            if key == Qt.Key.Key_Escape:
+                self._manager.send_key("\x1b")
+            elif key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+                self._manager.send_key("\r")
+            elif key == Qt.Key.Key_Space:
+                self._manager.send_key(" ")
+            elif key == Qt.Key.Key_Left:
+                self._manager.send_key("\x1b[D")
+            elif key == Qt.Key.Key_Right:
+                self._manager.send_key("\x1b[C")
+            else:
+                text = event.text()
+                if text:
+                    self._manager.send_key(text)
+            return True   # consume — don't let widgets act on it
+        return False
 
     def _on_stripe_changed(self, strip_id: str) -> None:
-        self._log.appendPlainText(f"[STRIP] Now scanning strip: {strip_id}")
+        self._log.appendPlainText(f"[→ strip {strip_id}]")
+        letter = "".join(c for c in strip_id if c.isalpha()).upper()
+        if not letter:
+            return
+        rects = self._preview._stripe_rects
+        if not rects:
+            return
+        global_idx     = _letter_to_idx(letter)
+        strips_per_page = len(rects)
+        page            = global_idx // strips_per_page
+        local_idx       = global_idx % strips_per_page
+        n_pages         = max(1, len(self._tiff_pages))
+        if 0 <= page < n_pages:
+            self._preview.show_page(page)
+        self._preview.highlight_stripe(local_idx)
 
     def _collect_params(self) -> MeasureParams:
         extra_args: list[str] = []
@@ -472,6 +596,7 @@ class TabMeasure(QWidget):
 
         return MeasureParams(
             ti1_path           = self._ti1_path,
+            instrument         = str(self._instr_spin.value()),
             disable_bidir      = self._bidir_cb.isChecked(),
             suppress_warnings  = self._suppress_cb.isChecked(),
             disable_initial_cal = self._nocal_cb.isChecked(),

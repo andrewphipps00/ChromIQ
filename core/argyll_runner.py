@@ -1,6 +1,12 @@
 """QProcess wrapper for ArgyllCMS tool execution."""
 from __future__ import annotations
 
+import os
+import pty
+import re
+import select
+import subprocess
+import threading
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
@@ -13,10 +19,13 @@ if TYPE_CHECKING:
 
 log = get_logger(__name__)
 
+_ANSI_RE = re.compile(r"\x1b(?:\[[0-9;]*[A-Za-z]|\][^\x07]*\x07|[()][AB012]|[=>])")
+
 
 class ArgyllRunner(QObject):
     line_received = pyqtSignal(str)
-    finished = pyqtSignal(int)   # exit code
+    finished      = pyqtSignal(int)   # exit code
+    _pty_done     = pyqtSignal(int)   # internal: PTY reader → main thread
 
     def __init__(self, settings: "AppSettings", parent: QObject | None = None) -> None:
         super().__init__(parent)
@@ -25,6 +34,12 @@ class ArgyllRunner(QObject):
         self._pending_stdin: bytes | None = None
         self._run_on_finish: Callable[[int], None] | None = None
         self._run_on_line:   Callable[[str], None] | None = None
+
+        # PTY mode state
+        self._pty_proc:   subprocess.Popen | None = None
+        self._pty_master: int | None = None
+        self._pty_thread: threading.Thread | None = None
+        self._pty_done.connect(self._on_pty_finished)
 
     # ------------------------------------------------------------------
     # Public API
@@ -37,9 +52,14 @@ class ArgyllRunner(QObject):
         cwd: Path,
         on_line: Callable[[str], None] | None = None,
         on_finish: Callable[[int], None] | None = None,
+        use_pty: bool = False,
     ) -> None:
         if self.is_running:
             log.warning("ArgyllRunner: already running, ignoring run(%s)", tool)
+            return
+
+        if use_pty:
+            self._run_pty(tool, args, cwd, on_line, on_finish)
             return
 
         bin_path = self._resolve(tool)
@@ -63,20 +83,138 @@ class ArgyllRunner(QObject):
         self._process.start(str(bin_path), args)
 
     def write_stdin(self, text: str) -> None:
-        if self._process and self._process.state() == QProcess.ProcessState.Running:
+        if self._pty_master is not None:
+            try:
+                os.write(self._pty_master, text.encode())
+            except OSError:
+                pass
+        elif self._process and self._process.state() == QProcess.ProcessState.Running:
             self._process.write(text.encode())
 
     def abort(self) -> None:
-        if self._process:
+        if self._pty_proc is not None:
+            self._pty_proc.kill()
+            log.info("ArgyllRunner: PTY process killed")
+        elif self._process:
             self._process.kill()
             log.info("ArgyllRunner: process killed")
 
     @property
     def is_running(self) -> bool:
+        if self._pty_proc is not None and self._pty_proc.poll() is None:
+            return True
         return (
             self._process is not None
             and self._process.state() != QProcess.ProcessState.NotRunning
         )
+
+    # ------------------------------------------------------------------
+    # PTY mode
+    # ------------------------------------------------------------------
+
+    def _run_pty(
+        self,
+        tool: str,
+        args: list[str],
+        cwd: Path,
+        on_line: Callable[[str], None] | None,
+        on_finish: Callable[[int], None] | None,
+    ) -> None:
+        bin_path = self._resolve(tool)
+        log.info("Run (PTY): %s %s  [cwd=%s]", bin_path, " ".join(args), cwd)
+
+        master_fd, slave_fd = pty.openpty()
+        self._pty_proc = subprocess.Popen(
+            [str(bin_path)] + args,
+            stdin=slave_fd, stdout=slave_fd, stderr=slave_fd,
+            cwd=str(cwd),
+            close_fds=True,
+            start_new_session=True,
+        )
+        os.close(slave_fd)
+        self._pty_master = master_fd
+
+        self._run_on_finish = on_finish
+        self._run_on_line   = on_line
+        if on_line:
+            self.line_received.connect(on_line)
+
+        self._pty_thread = threading.Thread(
+            target=self._pty_reader, args=(master_fd,), daemon=True
+        )
+        self._pty_thread.start()
+
+    def _pty_reader(self, master_fd: int) -> None:
+        buf = b""
+        FLUSH_AFTER = 0.15   # emit partial prompt lines after this silence
+
+        while True:
+            try:
+                r, _, _ = select.select([master_fd], [], [], FLUSH_AFTER)
+            except (OSError, ValueError):
+                break
+
+            if r:
+                try:
+                    data = os.read(master_fd, 4096)
+                except OSError:
+                    break
+                if not data:
+                    break
+                buf += data
+                while b"\n" in buf:
+                    raw, buf = buf.split(b"\n", 1)
+                    line = _ANSI_RE.sub("", raw.decode("utf-8", errors="replace")).rstrip("\r")
+                    if line:
+                        log.debug("[argyll-pty] %s", line)
+                        self.line_received.emit(line)
+            else:
+                # Silence window — flush any partial prompt
+                if buf:
+                    line = _ANSI_RE.sub("", buf.decode("utf-8", errors="replace")).rstrip("\r")
+                    buf = b""
+                    if line:
+                        log.debug("[argyll-pty] %s", line)
+                        self.line_received.emit(line)
+
+            if self._pty_proc and self._pty_proc.poll() is not None:
+                break
+
+        # Flush remainder
+        if buf:
+            line = _ANSI_RE.sub("", buf.decode("utf-8", errors="replace")).rstrip("\r")
+            if line:
+                self.line_received.emit(line)
+
+        code = 0
+        if self._pty_proc:
+            try:
+                code = self._pty_proc.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                self._pty_proc.kill()
+                code = self._pty_proc.wait()
+
+        try:
+            os.close(master_fd)
+        except OSError:
+            pass
+
+        self._pty_done.emit(code)
+
+    def _on_pty_finished(self, code: int) -> None:
+        self._pty_master = None
+        self._pty_proc   = None
+        on_finish = self._run_on_finish
+        self._run_on_finish = None
+        self._run_on_line   = None
+        try:
+            self.line_received.disconnect()
+        except (TypeError, RuntimeError):
+            pass
+        log.info("ArgyllRunner (PTY): finished with code %d", code)
+        self.finished.emit(code)
+        if on_finish:
+            on_finish(code)
 
     # ------------------------------------------------------------------
     # Internal slots

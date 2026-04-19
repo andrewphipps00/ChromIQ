@@ -116,9 +116,9 @@ class TabPrint(QWidget):
         warn.setWordWrap(True)
         ll.addWidget(warn)
 
-        # Load TIFFs button
-        load_btn = QPushButton("Load existing TIFF files…", left)
-        load_btn.clicked.connect(self._on_load_tiffs)
+        # Load existing target button
+        load_btn = QPushButton("Load existing target — select .ti2 file", left)
+        load_btn.clicked.connect(self._on_load_ti2)
         ll.addWidget(load_btn)
 
         # Print buttons
@@ -246,13 +246,23 @@ class TabPrint(QWidget):
             self._opts_layout.addLayout(row)
             self._option_combos[opt_name] = combo
 
-    def _on_load_tiffs(self) -> None:
-        paths, _ = QFileDialog.getOpenFileNames(
-            self, "Load TIFF files", str(Path.home()),
-            "TIFF files (*.tif *.tiff)",
+    def _on_load_ti2(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Select .ti2 file to load its chart", str(Path.home()),
+            "ArgyllCMS target files (*.ti2)",
         )
-        if paths:
-            self.load_tiffs([Path(p) for p in sorted(paths)])
+        if not path:
+            return
+        folder = Path(path).parent
+        tiffs = sorted([
+            *folder.glob("*.tif"),
+            *folder.glob("*.TIF"),
+            *folder.glob("*.tiff"),
+        ])
+        if tiffs:
+            self.load_tiffs(tiffs)
+        else:
+            self._status_lbl.setText("No TIFF files found in the same folder as the selected .ti2 file.")
 
     def _on_print_current(self) -> None:
         if not self._tiff_pages:
