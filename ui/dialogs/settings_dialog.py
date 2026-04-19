@@ -2,23 +2,16 @@
 from __future__ import annotations
 
 import os
-import platform
-import re
 import subprocess
-import threading
-import urllib.error
-import urllib.request
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from PyQt6.QtCore import Qt, QTimer, QUrl
+from PyQt6.QtCore import Qt, QUrl
 from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import (
-    QComboBox,
     QDialog,
     QDialogButtonBox,
     QFileDialog,
-    QFormLayout,
     QGroupBox,
     QHBoxLayout,
     QLabel,
@@ -29,7 +22,6 @@ from PyQt6.QtWidgets import (
 )
 
 from core.logger import get_logger
-from data.patch_db import INSTRUMENT_LABELS, PAPER_LABELS, PAPER_SIZES
 from ui.tooltip_button import TooltipButton
 from ui.widgets import make_browse_button
 
@@ -38,8 +30,7 @@ if TYPE_CHECKING:
 
 log = get_logger(__name__)
 
-_ARGYLL_DOWNLOAD_PAGE = "https://www.argyllcms.com/downloaddev.html"
-_ARGYLL_BASE_URL      = "https://www.argyllcms.com/"
+_ARGYLL_DOWNLOAD_PAGE = "https://www.argyllcms.com/downloadmac.html"
 
 
 class SettingsDialog(QDialog):
@@ -97,22 +88,6 @@ class SettingsDialog(QDialog):
 
         layout.addWidget(argyll_grp)
 
-        # ---- Preferences ----
-        pref_grp = QGroupBox("Defaults", self)
-        pf = QFormLayout(pref_grp)
-
-        self._instr_combo = QComboBox(self)
-        for code, label in INSTRUMENT_LABELS.items():
-            self._instr_combo.addItem(label, code)
-        pf.addRow("Preferred instrument:", self._instr_combo)
-
-        self._paper_combo = QComboBox(self)
-        for size in PAPER_SIZES:
-            self._paper_combo.addItem(PAPER_LABELS.get(size, size), size)
-        pf.addRow("Preferred paper size:", self._paper_combo)
-
-        layout.addWidget(pref_grp)
-
         # ---- Output folder ----
         folder_grp = QGroupBox("Output Folder", self)
         fl = QVBoxLayout(folder_grp)
@@ -158,23 +133,11 @@ class SettingsDialog(QDialog):
         s = self._settings
         self._argyll_edit.setText(s.get("argyll_bin_path", "/Applications/Argyll/bin"))
 
-        instr = s.get("preferred_instrument", "i1")
-        idx = self._instr_combo.findData(instr)
-        if idx >= 0:
-            self._instr_combo.setCurrentIndex(idx)
-
-        paper = s.get("preferred_paper_size", "A4")
-        idx = self._paper_combo.findData(paper)
-        if idx >= 0:
-            self._paper_combo.setCurrentIndex(idx)
-
         self._folder_edit.setText(s.get("custom_output_path", ""))
 
     def _save_and_close(self) -> None:
         s = self._settings
         s.set("argyll_bin_path",       self._argyll_edit.text().strip())
-        s.set("preferred_instrument",  self._instr_combo.currentData() or "i1")
-        s.set("preferred_paper_size",  self._paper_combo.currentData() or "A4")
         s.set("custom_output_path",    self._folder_edit.text().strip())
         log.info("Settings saved")
         self.accept()
@@ -227,34 +190,13 @@ class SettingsDialog(QDialog):
         log.info("ArgyllCMS test: %s", msg)
 
     def _open_argyll_download(self) -> None:
-        arch = platform.machine()
-        pattern = (
-            r"Argyll_V[\d.]+_macos_arm64_bin\.tar\.gz"
-            if arch == "arm64"
-            else r"Argyll_V[\d.]+_osx64_bin\.tar\.gz"
-        )
         self._argyll_status.setStyleSheet("")
-        self._argyll_status.setText("Finding latest ArgyllCMS for your platform…")
-
-        def _fetch() -> None:
-            url = _ARGYLL_DOWNLOAD_PAGE
-            try:
-                with urllib.request.urlopen(url, timeout=5) as resp:
-                    html = resp.read().decode("utf-8", errors="replace")
-                m = re.search(pattern, html)
-                if m:
-                    direct = _ARGYLL_BASE_URL + m.group(0)
-                    QTimer.singleShot(0, lambda: _open(direct, "Opening download…"))
-                else:
-                    QTimer.singleShot(0, lambda: _open(url, "Version not detected — opening download page."))
-            except Exception:
-                QTimer.singleShot(0, lambda: _open(url, "Could not reach argyllcms.com — opening download page."))
-
-        def _open(target_url: str, msg: str) -> None:
-            self._argyll_status.setText(msg)
-            QDesktopServices.openUrl(QUrl(target_url))
-
-        threading.Thread(target=_fetch, daemon=True).start()
+        self._argyll_status.setText(
+            "Opening argyllcms.com — download the latest version for your Mac "
+            "(arm64 for Apple Silicon, osx64 for Intel), then unpack and set the "
+            "bin path above."
+        )
+        QDesktopServices.openUrl(QUrl(_ARGYLL_DOWNLOAD_PAGE))
 
     def _restore_defaults(self) -> None:
         self._settings.reset_to_defaults()

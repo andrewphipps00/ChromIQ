@@ -8,7 +8,6 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
-    QDoubleSpinBox,
     QFileDialog,
     QGroupBox,
     QHBoxLayout,
@@ -23,7 +22,7 @@ from PyQt6.QtWidgets import (
 
 from core.logger import get_logger
 from ui.tooltip_button import TooltipButton
-from ui.widgets import make_browse_button
+from ui.widgets import NoScrollComboBox, NoScrollDoubleSpinBox, make_browse_button
 from workflow.profile_builder import ProfileBuilder, ProfileParams
 
 if TYPE_CHECKING:
@@ -181,7 +180,7 @@ class TabProfile(QWidget):
         # Algorithm
         algo_row = QHBoxLayout()
         algo_row.addWidget(QLabel("Algorithm (-a):", grp))
-        self._algo_combo = QComboBox(grp)
+        self._algo_combo = NoScrollComboBox(grp)
         for code, label in [
             ("l", "Lab cLUT (recommended for inkjet)"),
             ("x", "XYZ cLUT"),
@@ -207,7 +206,7 @@ class TabProfile(QWidget):
         # Quality
         qual_row = QHBoxLayout()
         qual_row.addWidget(QLabel("Quality (-q):", grp))
-        self._qual_combo = QComboBox(grp)
+        self._qual_combo = NoScrollComboBox(grp)
         for code, label in [
             ("l", "Low — fast test (~30 s)"),
             ("m", "Medium — recommended (~2 min)"),
@@ -230,7 +229,7 @@ class TabProfile(QWidget):
 
         # B2A quality
         self._b2a_check = QCheckBox("B2A Table Quality (-b):", grp)
-        self._b2a_combo = QComboBox(grp)
+        self._b2a_combo = NoScrollComboBox(grp)
         for code, lbl in [("l", "Low"), ("m", "Medium"), ("h", "High"),
                            ("u", "Ultra"), ("n", "None (skip B2A)")]:
             self._b2a_combo.addItem(lbl, code)
@@ -257,7 +256,7 @@ class TabProfile(QWidget):
 
         smooth_row = QHBoxLayout()
         smooth_row.addWidget(QLabel("Smoothing / Noise (-r):", grp))
-        self._smooth_spin = QDoubleSpinBox(grp)
+        self._smooth_spin = NoScrollDoubleSpinBox(grp)
         self._smooth_spin.setRange(0.0, 5.0)
         self._smooth_spin.setSingleStep(0.1)
         self._smooth_spin.setDecimals(2)
@@ -277,7 +276,7 @@ class TabProfile(QWidget):
 
         dark_row = QHBoxLayout()
         dark_row.addWidget(QLabel("Dark Region Emphasis (-V):", grp))
-        self._dark_spin = QDoubleSpinBox(grp)
+        self._dark_spin = NoScrollDoubleSpinBox(grp)
         self._dark_spin.setRange(1.0, 4.0)
         self._dark_spin.setSingleStep(0.1)
         self._dark_spin.setDecimals(1)
@@ -302,7 +301,7 @@ class TabProfile(QWidget):
         # Illuminant
         illum_row = QHBoxLayout()
         illum_row.addWidget(QLabel("Illuminant (-i):", grp))
-        self._illum_combo = QComboBox(grp)
+        self._illum_combo = NoScrollComboBox(grp)
         for label, val in _ILLUMINANTS:
             self._illum_combo.addItem(label, val)
         illum_row.addWidget(self._illum_combo, stretch=1)
@@ -318,7 +317,7 @@ class TabProfile(QWidget):
         # Observer
         obs_row = QHBoxLayout()
         obs_row.addWidget(QLabel("CIE Observer (-o):", grp))
-        self._obs_combo = QComboBox(grp)
+        self._obs_combo = NoScrollComboBox(grp)
         for label, val in [
             ("Default (1931 2° standard)", ""),
             ("1964 10° large-field observer", "1964_10"),
@@ -340,7 +339,7 @@ class TabProfile(QWidget):
         # FWA compensation
         fwa_row = QHBoxLayout()
         self._fwa_check = QCheckBox("FWA Compensation (-f):", grp)
-        self._fwa_illum_combo = QComboBox(grp)
+        self._fwa_illum_combo = NoScrollComboBox(grp)
         self._fwa_illum_combo.addItem("Same as illuminant (-i)", "")
         for label, val in _ILLUMINANTS[1:]:  # skip the "Default (D50)" entry
             self._fwa_illum_combo.addItem(label, val)
@@ -411,7 +410,7 @@ class TabProfile(QWidget):
         # Perceptual intent override
         perc_intent_row = QHBoxLayout()
         self._perc_intent_check = QCheckBox("Perceptual Intent Override (-t):", grp)
-        self._perc_intent_combo = QComboBox(grp)
+        self._perc_intent_combo = NoScrollComboBox(grp)
         for label, val in _INTENTS:
             self._perc_intent_combo.addItem(label, val)
         self._perc_intent_combo.setEnabled(False)
@@ -430,7 +429,7 @@ class TabProfile(QWidget):
         # Saturation intent override
         sat_intent_row = QHBoxLayout()
         self._sat_intent_check = QCheckBox("Saturation Intent Override (-T):", grp)
-        self._sat_intent_combo = QComboBox(grp)
+        self._sat_intent_combo = NoScrollComboBox(grp)
         for label, val in _INTENTS:
             self._sat_intent_combo.addItem(label, val)
         self._sat_intent_combo.setEnabled(False)

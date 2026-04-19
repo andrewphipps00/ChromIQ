@@ -12,9 +12,6 @@ log = get_logger(__name__)
 DEFAULTS: dict[str, Any] = {
     # ArgyllCMS
     "argyll_bin_path":           "/Applications/Argyll/bin",
-    # Preferences
-    "preferred_instrument":      "i1",
-    "preferred_paper_size":      "A4",
     "custom_output_path":        "",       # "" = ~/ChromIQ/
     # Step 1 — chart creation
     "chart_mode":                "guided",

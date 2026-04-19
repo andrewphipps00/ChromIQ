@@ -22,6 +22,7 @@ from PyQt6.QtWidgets import (
 from core.logger import get_logger
 from ui.tiff_preview import TiffPreview
 from ui.tooltip_button import TooltipButton
+from ui.widgets import NoScrollComboBox
 from workflow.cups_printer import CupsRawPrinter
 from workflow.print_manager import PrintModule
 
@@ -68,7 +69,7 @@ class TabPrint(QWidget):
 
         pr_row = QHBoxLayout()
         pr_row.addWidget(QLabel("Printer:", left))
-        self._printer_combo = QComboBox(left)
+        self._printer_combo = NoScrollComboBox(left)
         pr_row.addWidget(self._printer_combo, stretch=1)
 
         refresh_btn = QPushButton(left)
@@ -232,7 +233,7 @@ class TabPrint(QWidget):
             lbl = QLabel(f"{label}:", self)
             lbl.setMinimumWidth(160)
             row.addWidget(lbl)
-            combo = QComboBox(self)
+            combo = NoScrollComboBox(self)
             combo.setMaxVisibleItems(12)
             combo.addItem("(not set)", "")
             for display, raw_val in value_pairs:

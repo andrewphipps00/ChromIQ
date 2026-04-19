@@ -7,15 +7,15 @@ from typing import TYPE_CHECKING, Any
 import yaml
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import (
+    QButtonGroup,
     QCheckBox,
-    QComboBox,
     QFileDialog,
     QGroupBox,
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QRadioButton,
     QScrollArea,
-    QSpinBox,
     QSplitter,
     QStackedWidget,
     QVBoxLayout,
@@ -33,6 +33,7 @@ from data.patch_db import (
 from ui.parameter_widget import ParameterWidget
 from ui.tiff_preview import TiffPreview
 from ui.tooltip_button import TooltipButton
+from ui.widgets import NoScrollComboBox, NoScrollSpinBox
 from workflow.chart_creator import ChartCreator, ChartParams
 
 if TYPE_CHECKING:
@@ -131,7 +132,7 @@ class TabChart(QWidget):
         self._log = QPlainTextEdit(self)
         self._log.setObjectName("log")
         self._log.setReadOnly(True)
-        self._log.setMaximumHeight(100)
+        self._log.setMaximumHeight(67)
         self._log.setPlaceholderText("Output will appear here…")
         left_layout.addWidget(self._log)
 
@@ -197,7 +198,7 @@ class TabChart(QWidget):
         instr_layout.setSpacing(6)
         row = QHBoxLayout()
         row.addWidget(QLabel("Instrument:", inner))
-        self._instr_combo = QComboBox(inner)
+        self._instr_combo = NoScrollComboBox(inner)
         for code, label in INSTRUMENT_LABELS.items():
             self._instr_combo.addItem(label, code)
         self._instr_combo.currentIndexChanged.connect(self._update_patch_count)
@@ -232,7 +233,7 @@ class TabChart(QWidget):
         paper_layout = QVBoxLayout(paper_grp)
         paper_row = QHBoxLayout()
         paper_row.addWidget(QLabel("Paper size:", inner))
-        self._paper_combo = QComboBox(inner)
+        self._paper_combo = NoScrollComboBox(inner)
         for size in PAPER_SIZES:
             self._paper_combo.addItem(PAPER_LABELS.get(size, size), size)
         self._paper_combo.currentIndexChanged.connect(self._update_patch_count)
@@ -255,7 +256,7 @@ class TabChart(QWidget):
 
         pages_row = QHBoxLayout()
         pages_row.addWidget(QLabel("Number of pages:", inner))
-        self._pages_spin = QSpinBox(inner)
+        self._pages_spin = NoScrollSpinBox(inner)
         self._pages_spin.setRange(1, 20)
         self._pages_spin.setValue(1)
         self._pages_spin.valueChanged.connect(self._update_patch_count)
@@ -345,6 +346,11 @@ class TabChart(QWidget):
         self._manual_widgets: dict[str, list[ParameterWidget]] = {
             "targen": [], "printtarg": [],
         }
+        self._manual_lb_pw: ParameterWidget | None = None
+        self._manual_dd_pw: ParameterWidget | None = None
+        self._manual_instr_pw: ParameterWidget | None = None
+        self._bit8_radio: QRadioButton | None = None
+        self._bit16_radio: QRadioButton | None = None
 
         for tool, params in [
             ("targen",    self._params.get("targen", [])),
@@ -360,6 +366,30 @@ class TabChart(QWidget):
 
             for p in params:
                 pw = ParameterWidget(p, inner)
+                flag = p.get("flag", "")
+
+                if tool == "printtarg" and flag == "-t":
+                    # Shrink the DPI spinbox and add 8-bit/16-bit radio buttons
+                    pw._control.setMaximumWidth(90)
+                    bg = QButtonGroup(pw)
+                    self._bit8_radio = QRadioButton("8-bit", pw)
+                    self._bit16_radio = QRadioButton("16-bit", pw)
+                    self._bit8_radio.setChecked(True)
+                    bg.addButton(self._bit8_radio)
+                    bg.addButton(self._bit16_radio)
+                    # Insert before the last item (tooltip button)
+                    insert_at = pw.layout().count() - 1
+                    pw.layout().insertWidget(insert_at,     self._bit8_radio)
+                    pw.layout().insertWidget(insert_at + 1, self._bit16_radio)
+
+                if tool == "printtarg" and flag == "-L":
+                    self._manual_lb_pw = pw
+                if tool == "printtarg" and flag == "-h":
+                    self._manual_dd_pw = pw
+                if tool == "printtarg" and flag == "-i":
+                    self._manual_instr_pw = pw
+                    pw.value_changed.connect(self._update_manual_lb_visibility)
+
                 if p.get("expert_only", False):
                     expert_layout.addWidget(pw)
                 else:
@@ -369,6 +399,8 @@ class TabChart(QWidget):
             grp_layout.addWidget(basic_grp)
             grp_layout.addWidget(expert_grp)
             inner_layout.addWidget(grp)
+
+        self._update_manual_lb_visibility()
 
         inner_layout.addStretch()
         scroll.setWidget(inner)
@@ -407,6 +439,16 @@ class TabChart(QWidget):
 
     def _current_mode(self) -> str:
         return "guided" if self._stack.currentIndex() == 0 else "manual"
+
+    def _update_manual_lb_visibility(self) -> None:
+        if self._manual_instr_pw is None:
+            return
+        instr = self._manual_instr_pw.get_raw_value() or "i1"
+        is_cm = instr == "CM"
+        if self._manual_lb_pw is not None:
+            self._manual_lb_pw.setVisible(not is_cm)
+        if self._manual_dd_pw is not None:
+            self._manual_dd_pw.setVisible(is_cm)
 
     # ------------------------------------------------------------------
     # Patch count display
@@ -582,6 +624,7 @@ class TabChart(QWidget):
         p.instrument           = str(_get("printtarg", "-i",  "i1"))
         p.paper                = str(_get("printtarg", "-p",  "A4"))
         p.tiff_dpi             = int(_get("printtarg", "-t",  300))
+        p.tiff_16bit           = self._bit16_radio is not None and self._bit16_radio.isChecked()
         p.double_density       = bool(_get("printtarg", "-h", False))
         p.disable_left_border  = bool(_get("printtarg", "-L", True))
         p.patch_scale          = float(_get("printtarg", "-a", 1.0))

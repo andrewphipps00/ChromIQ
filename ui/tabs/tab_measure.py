@@ -27,7 +27,7 @@ from PyQt6.QtWidgets import (
 from core.logger import get_logger
 from core.resource_path import resource_path
 from ui.tooltip_button import TooltipButton
-from ui.widgets import make_browse_button
+from ui.widgets import NoScrollComboBox, NoScrollDoubleSpinBox, NoScrollSpinBox, make_browse_button
 from workflow.measure_manager import MeasureManager, MeasureParams
 from ui.tiff_preview import TiffPreview
 
@@ -244,7 +244,7 @@ class TabMeasure(QWidget):
         ig.setContentsMargins(8, 14, 8, 8)
         instr_row = QHBoxLayout()
         instr_row.addWidget(QLabel("Instrument port number:", left))
-        self._instr_spin = QSpinBox(left)
+        self._instr_spin = NoScrollSpinBox(left)
         self._instr_spin.setRange(1, 9)
         self._instr_spin.setValue(1)
         instr_row.addWidget(self._instr_spin)
@@ -401,14 +401,14 @@ class TabMeasure(QWidget):
 
         def _spinbox(lo, hi, step, default, decimals=0):
             if decimals > 0:
-                sb = QDoubleSpinBox(parent)
+                sb = NoScrollDoubleSpinBox(parent)
                 sb.setRange(lo, hi)
                 sb.setSingleStep(step)
                 sb.setDecimals(decimals)
                 sb.setValue(default)
                 sb.setFixedWidth(90)
             else:
-                sb = QSpinBox(parent)
+                sb = NoScrollSpinBox(parent)
                 sb.setRange(int(lo), int(hi))
                 sb.setSingleStep(int(step))
                 sb.setValue(int(default))
@@ -450,7 +450,7 @@ class TabMeasure(QWidget):
         ))
 
         # XRGA conversion combo
-        xrga_combo = QComboBox(parent)
+        xrga_combo = NoScrollComboBox(parent)
         xrga_combo.setFixedWidth(110)
         for code, lbl in [("N", "None"), ("A", "XRGA"), ("X", "XRDI"), ("G", "GMDI")]:
             xrga_combo.addItem(lbl, code)

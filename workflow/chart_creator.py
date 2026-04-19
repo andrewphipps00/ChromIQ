@@ -40,6 +40,7 @@ class ChartParams:
 
     # printtarg params
     tiff_dpi: int = 300
+    tiff_16bit: bool = False
     patch_scale: float = 1.0
     margin_mm: int = 6
     no_randomise: bool = False
@@ -225,7 +226,8 @@ class ChartCreator:
         pt_instr = "3p" if p.instrument == "p3" else p.instrument
         args.append(f"-i{pt_instr}")
         args.append(f"-p{p.paper}")
-        args.append(f"-t{p.tiff_dpi}")
+        dpi_flag = "-T" if p.tiff_16bit else "-t"
+        args.append(f"{dpi_flag}{p.tiff_dpi}")
         if p.double_density:
             args.append("-h")
         if p.disable_left_border:

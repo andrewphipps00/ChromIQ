@@ -4,6 +4,11 @@ from __future__ import annotations
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor, QPalette
 
+from core.resource_path import resource_path
+
+_ARROW_DOWN = str(resource_path("assets/arrow_down.svg")).replace("\\", "/")
+_ARROW_UP   = str(resource_path("assets/arrow_up.svg")).replace("\\", "/")
+
 # -----------------------------------------------------------------------
 # Colour tokens
 # -----------------------------------------------------------------------
@@ -175,7 +180,11 @@ QComboBox::drop-down {{
 QComboBox::drop-down:hover {{
     background: #404040;
 }}
-/* Fusion style draws the arrow natively using ButtonText palette colour */
+QComboBox::down-arrow {{
+    image: url({_ARROW_DOWN});
+    width: 10px;
+    height: 6px;
+}}
 QComboBox QAbstractItemView {{
     background: #2d2d2d;
     border: 1px solid {BORDER_HI};
@@ -200,7 +209,6 @@ QSpinBox::up-button, QDoubleSpinBox::up-button {{
 QSpinBox::up-button:hover, QDoubleSpinBox::up-button:hover {{
     background: #444444;
 }}
-/* Fusion draws spinbox arrows natively */
 QSpinBox::down-button, QDoubleSpinBox::down-button {{
     subcontrol-origin: border;
     subcontrol-position: bottom right;
@@ -213,6 +221,16 @@ QSpinBox::down-button, QDoubleSpinBox::down-button {{
 }}
 QSpinBox::down-button:hover, QDoubleSpinBox::down-button:hover {{
     background: #444444;
+}}
+QSpinBox::up-arrow, QDoubleSpinBox::up-arrow {{
+    image: url({_ARROW_UP});
+    width: 10px;
+    height: 6px;
+}}
+QSpinBox::down-arrow, QDoubleSpinBox::down-arrow {{
+    image: url({_ARROW_DOWN});
+    width: 10px;
+    height: 6px;
 }}
 
 /* ---- CheckBox ----------------------------------------------------- */

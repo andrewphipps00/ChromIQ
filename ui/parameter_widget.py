@@ -6,20 +6,17 @@ from typing import Any
 from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import (
     QCheckBox,
-    QComboBox,
-    QDoubleSpinBox,
     QFileDialog,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QPushButton,
-    QSpinBox,
     QWidget,
 )
 
 from core.logger import get_logger
 from ui.tooltip_button import TooltipButton
-from ui.widgets import make_browse_button
+from ui.widgets import NoScrollComboBox, NoScrollDoubleSpinBox, NoScrollSpinBox, make_browse_button
 
 log = get_logger(__name__)
 
@@ -225,7 +222,7 @@ class ParameterWidget(QWidget):
             return cb
 
         if t == "choice":
-            combo = QComboBox(self)
+            combo = NoScrollComboBox(self)
             choices = self._param.get("choices", [])
             labels  = self._param.get("labels", choices)
             for ch, lb in zip(choices, labels):
@@ -238,7 +235,7 @@ class ParameterWidget(QWidget):
             return combo
 
         if t == "int":
-            sb = QSpinBox(self)
+            sb = NoScrollSpinBox(self)
             sb.setRange(
                 self._param.get("min", 0),
                 self._param.get("max", 9999),
@@ -250,7 +247,7 @@ class ParameterWidget(QWidget):
             return sb
 
         if t == "float":
-            sb = QDoubleSpinBox(self)
+            sb = NoScrollDoubleSpinBox(self)
             sb.setRange(
                 self._param.get("min", 0.0),
                 self._param.get("max", 999.9),

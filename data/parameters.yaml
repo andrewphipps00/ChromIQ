@@ -197,7 +197,7 @@ parameters:
         In Guided mode this is set automatically.
 
     - flag: "-h"
-      name: "Double Density (ColorMunki / i1Studio only)"
+      name: "Double density (for measuring rig)"
       type: boolean
       default: false
       affects_preview: true
