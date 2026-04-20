@@ -57,6 +57,18 @@ The finished app is at:
 
     dist/ChromIQ.app
 
+Step 4b — Re-sign the bundle (required for distribution)
+---------------------------------------------------------
+After building, run a deep ad-hoc re-sign so macOS correctly resolves the
+bundle when the app is downloaded from the internet:
+
+    codesign --deep --force --sign - dist/ChromIQ.app
+
+Without this step the app works when run from the project folder but crashes
+on launch after being downloaded (macOS enforces stricter bundle integrity
+checks on quarantined apps, and PyInstaller's per-binary signatures need to
+be unified into one consistent ad-hoc signature across the whole bundle).
+
 Step 5 — Test the app
 ----------------------
 Double-click  dist/ChromIQ.app  in Finder, or run from Terminal:
