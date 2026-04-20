@@ -12,15 +12,15 @@
 
 | Step 1a — Create Chart (guided) | Step 1b — Create Chart (manual)  |
 |---|---|
-| (docs/create chart guided.png) | (docs/create chart manual.png) |
+|![ChromIQ Guided Test Chart creation](docs/create_chart_guided.png) | ![ChromIQ Manual Test Chart creation](docs/create_chart_manual.png) |
 
 | Step 2 — Print Chart | Step 3 — Measure Chart |
 |---|---|
-| (docs/print.png) | (docs/measure.png) |
+| ![ChromIQ Print Tab](docs/print.png) | ![ChromIQ Measurement Tab](docs/measure.png) |
 
 | Step 4 — Build Profile | Step 5 — Check & Refine |
 |---|---|
-| (docs/build.png) | *screenshot coming soon* |
+| ![ChromIQ Create ICC Profile](docs/build.png) | *screenshot coming soon* |
 
 ---
 
