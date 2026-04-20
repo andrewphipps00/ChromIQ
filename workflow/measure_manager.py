@@ -32,6 +32,7 @@ _STRIP_ERROR_RE        = re.compile(r"Strip\s+read\s+failed[^(]*\(([^)]+)\)",   
 _USB_ERROR_RE          = re.compile(r"ReadPipeAsync\s+failed",                   re.IGNORECASE)
 _DEVICE_BUSY_RE        = re.compile(r"Device being used",                        re.IGNORECASE)
 _NO_INSTRUMENT_RE      = re.compile(r"no instrument detected",                   re.IGNORECASE)
+_WRONG_STRIP_RE        = re.compile(r"Seem to have read strip pass (\w+) rather than (\w+)", re.IGNORECASE)
 
 
 @dataclass
@@ -55,7 +56,8 @@ class MeasureManager(QObject):
     strip_error            = pyqtSignal(str) # emitted on strip read failure; carries the reason string
     instrument_disconnected = pyqtSignal()   # emitted on USB communication failure
     device_busy             = pyqtSignal()   # emitted when instrument is held by another process
-    no_instrument           = pyqtSignal()   # emitted when no instrument is detected at startup
+    no_instrument           = pyqtSignal()     # emitted when no instrument is detected at startup
+    wrong_strip             = pyqtSignal(str, str)  # (read_strip, expected_strip)
 
     def __init__(self, runner: "ArgyllRunner", parent: QObject | None = None) -> None:
         super().__init__(parent)
@@ -131,3 +133,6 @@ class MeasureManager(QObject):
             self.device_busy.emit()
         if _NO_INSTRUMENT_RE.search(line):
             self.no_instrument.emit()
+        m = _WRONG_STRIP_RE.search(line)
+        if m:
+            self.wrong_strip.emit(m.group(1).upper(), m.group(2).upper())

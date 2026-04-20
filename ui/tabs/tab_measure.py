@@ -232,6 +232,7 @@ class TabMeasure(QWidget):
         self._manager.instrument_disconnected.connect(self._on_instrument_disconnected)
         self._manager.device_busy.connect(self._on_device_busy)
         self._manager.no_instrument.connect(self._on_no_instrument)
+        self._manager.wrong_strip.connect(self._on_wrong_strip)
         self._build_ui()
         self._restore_defaults()
 
@@ -603,6 +604,65 @@ class TabMeasure(QWidget):
         # separately via the strip_error signal / dialog.
         if "communications failure" in line.lower():
             self._measure_failed = True
+
+    def _on_wrong_strip(self, read: str, expected: str) -> None:
+        from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QVBoxLayout
+
+        QApplication.instance().removeEventFilter(self)
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Wrong Strip Read")
+        dlg.setMinimumWidth(500)
+
+        layout = QVBoxLayout(dlg)
+        layout.setSpacing(16)
+        layout.setContentsMargins(24, 20, 24, 20)
+
+        msg = QLabel(
+            f"<b>Strip {read} was read, but strip {expected} was expected.</b><br><br>"
+            "This happens when the instrument is placed on the wrong stripe. "
+            "You have three options:<br><br>"
+            "&nbsp;&nbsp;<b>Use Anyway</b> — accept the reading for strip "
+            f"{read} and continue. Use this if you intentionally read "
+            f"{read} out of order.<br><br>"
+            "&nbsp;&nbsp;<b>Retry</b> — discard this reading and try again. "
+            f"Place your instrument at the correct position for strip {expected}.<br><br>"
+            "&nbsp;&nbsp;<b>Give Up</b> — stop the measurement without saving.",
+            dlg,
+        )
+        msg.setWordWrap(True)
+        layout.addWidget(msg)
+
+        btn_box = QDialogButtonBox()
+        use_btn   = btn_box.addButton("Use Anyway", QDialogButtonBox.ButtonRole.AcceptRole)
+        retry_btn = btn_box.addButton("Retry",      QDialogButtonBox.ButtonRole.ResetRole)
+        give_btn  = btn_box.addButton("Give Up",    QDialogButtonBox.ButtonRole.RejectRole)
+        use_btn.setObjectName("primary")
+
+        chosen = ["\r"]   # default: use anyway
+
+        def _use():
+            chosen[0] = "\r"
+            dlg.accept()
+
+        def _retry():
+            chosen[0] = " "
+            dlg.accept()
+
+        def _give_up():
+            chosen[0] = "\x1b"
+            dlg.accept()
+
+        use_btn.clicked.connect(_use)
+        retry_btn.clicked.connect(_retry)
+        give_btn.clicked.connect(_give_up)
+
+        dlg.exec()
+        self._manager.send_key(chosen[0])
+
+        if chosen[0] != "\x1b":
+            QApplication.instance().installEventFilter(self)
+        # If giving up, chartread will exit and _on_measure_done re-enables UI.
 
     def _on_device_busy(self) -> None:
         if self._device_busy:
