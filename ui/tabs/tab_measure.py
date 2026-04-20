@@ -233,6 +233,7 @@ class TabMeasure(QWidget):
         self._manager.device_busy.connect(self._on_device_busy)
         self._manager.no_instrument.connect(self._on_no_instrument)
         self._manager.wrong_strip.connect(self._on_wrong_strip)
+        self._manager.unexpected_response.connect(self._on_unexpected_response)
         self._build_ui()
         self._restore_defaults()
 
@@ -674,6 +675,76 @@ class TabMeasure(QWidget):
         if chosen[0] != "\x1b":
             QApplication.instance().installEventFilter(self)
         # If giving up, chartread will exit and _on_measure_done re-enables UI.
+
+    def _on_unexpected_response(self, delta_e: str) -> None:
+        from PyQt6.QtWidgets import QDialog, QLabel, QVBoxLayout
+
+        QApplication.instance().removeEventFilter(self)
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Unexpected Color Response")
+        dlg.setMinimumWidth(500)
+
+        layout = QVBoxLayout(dlg)
+        layout.setSpacing(16)
+        layout.setContentsMargins(24, 20, 24, 20)
+
+        msg = QLabel(
+            f"<b>An unexpected color response was detected (ΔE {delta_e}).</b><br><br>"
+            "This usually means the instrument was not aligned correctly with "
+            "the stripe, was moved during the scan, or the wrong stripe was read. "
+            "A ΔE this high indicates the measured colors are very far from what "
+            "is expected.<br><br>"
+            "&nbsp;&nbsp;<b>Use Anyway</b> — accept the reading and continue. "
+            "Only use this if you are sure the scan was correct.<br><br>"
+            "&nbsp;&nbsp;<b>Retry</b> — discard this reading, re-position your "
+            "instrument carefully on the correct stripe, and try again.<br><br>"
+            "&nbsp;&nbsp;<b>Give Up</b> — stop the measurement without saving.",
+            dlg,
+        )
+        msg.setWordWrap(True)
+        layout.addWidget(msg)
+
+        chosen = ["\r"]
+
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(8)
+
+        use_btn   = QPushButton("Use Anyway", dlg)
+        retry_btn = QPushButton("Retry",      dlg)
+        give_btn  = QPushButton("Give Up",    dlg)
+        use_btn.setObjectName("primary")
+        use_btn.setFixedHeight(32)
+        retry_btn.setFixedHeight(32)
+        give_btn.setFixedHeight(32)
+
+        def _use():
+            chosen[0] = "\r"
+            dlg.accept()
+
+        def _retry():
+            chosen[0] = " "
+            dlg.accept()
+
+        def _give_up():
+            chosen[0] = "\x1b"
+            dlg.accept()
+
+        use_btn.clicked.connect(_use)
+        retry_btn.clicked.connect(_retry)
+        give_btn.clicked.connect(_give_up)
+
+        btn_row.addWidget(use_btn)
+        btn_row.addWidget(retry_btn)
+        btn_row.addStretch()
+        btn_row.addWidget(give_btn)
+        layout.addLayout(btn_row)
+
+        dlg.exec()
+        self._manager.send_key(chosen[0])
+
+        if chosen[0] != "\x1b":
+            QApplication.instance().installEventFilter(self)
 
     def _on_device_busy(self) -> None:
         if self._device_busy:
