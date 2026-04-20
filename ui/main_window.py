@@ -39,8 +39,8 @@ class MainWindow(QMainWindow):
         self._file_mgr  = FileManager(settings)
 
         self.setWindowTitle("ChromIQ — Printer Profiling")
-        self.setMinimumSize(1250, 875)
-        self.resize(1250, 875)
+        self.setMinimumSize(1250, 895)
+        self.resize(1250, 895)
 
         # Central widget
         central = QWidget(self)

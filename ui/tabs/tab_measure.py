@@ -371,7 +371,8 @@ class TabMeasure(QWidget):
         self._log = QPlainTextEdit(left)
         self._log.setObjectName("log")
         self._log.setReadOnly(True)
-        self._log.setMinimumHeight(120)
+        self._log.setMinimumHeight(100)
+        self._log.setMaximumHeight(100)
         self._log.setPlaceholderText("chartread output will appear here…")
         ll.addWidget(self._log, stretch=1)
 
