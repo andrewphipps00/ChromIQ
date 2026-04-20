@@ -208,40 +208,47 @@ class TiffPreview(QWidget):
         if not self._pixmap:
             return
         B = _BORDER
-        label_size = self._img_label.size()
+        dpr = self._img_label.devicePixelRatioF()
+        label_size = self._img_label.size()  # logical pixels
 
-        # Scale image into the area that remains after adding the border
+        # Scale to device pixels so the preview is sharp on HiDPI/Retina displays
         avail = QSize(
-            max(1, label_size.width()  - 2 * B),
-            max(1, label_size.height() - 2 * B),
+            max(1, int((label_size.width()  - 2 * B) * dpr)),
+            max(1, int((label_size.height() - 2 * B) * dpr)),
         )
         scaled = self._pixmap.scaled(
             avail,
             Qt.AspectRatioMode.KeepAspectRatio,
             Qt.TransformationMode.SmoothTransformation,
         )
+        scaled.setDevicePixelRatio(dpr)
 
-        # Build canvas with white border on all sides
-        canvas = QPixmap(scaled.width() + 2 * B, scaled.height() + 2 * B)
+        # Canvas at device pixel dimensions; DPR tells Qt the logical display size
+        canvas = QPixmap(scaled.width() + int(2 * B * dpr),
+                         scaled.height() + int(2 * B * dpr))
+        canvas.setDevicePixelRatio(dpr)
         canvas.fill(Qt.GlobalColor.white)
+
+        # Painter coordinates are logical (canvas has DPR set)
         painter = QPainter(canvas)
         painter.drawPixmap(B, B, scaled)
 
         if self._active_stripe >= 0 and self._stripe_rects:
+            # sx/sy: device pixels per original image pixel
             sx = scaled.width()  / self._pixmap.width()
             sy = scaled.height() / self._pixmap.height()
 
             if self._active_stripe < len(self._stripe_rects):
-                r  = self._stripe_rects[self._active_stripe]
-                # Map original rect → canvas coords (include border offset)
-                x  = int(r.x()      * sx) + B
-                y  = int(r.y()      * sy) + B + 3
-                rw = max(1, int(r.width()  * sx) + 2)
-                cx = x + rw // 2
-                arrow_h = 20
+                r   = self._stripe_rects[self._active_stripe]
+                # Convert device-pixel coords → logical coords for painter
+                x   = r.x()     * sx / dpr + B
+                y   = r.y()     * sy / dpr + B + 3
+                rw  = max(1.0, r.width() * sx / dpr + 2.0 / dpr)
+                cx  = x + rw / 2
+                arrow_h = 20  # logical pixels — constant visual size on all displays
                 path = QPainterPath()
-                path.moveTo(cx - rw // 2, y)
-                path.lineTo(cx + rw // 2, y)
+                path.moveTo(cx - rw / 2, y)
+                path.lineTo(cx + rw / 2, y)
                 path.lineTo(cx, y + arrow_h)
                 path.closeSubpath()
                 painter.fillPath(path, QColor("#00bcd4"))
