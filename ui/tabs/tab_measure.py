@@ -222,6 +222,7 @@ class TabMeasure(QWidget):
 
         self._manager.stripe_changed.connect(self._on_stripe_changed)
         self._manager.all_stripes_done.connect(self._on_all_stripes_done)
+        self._manager.calibration_done.connect(self._on_calibration_done)
         self._build_ui()
         self._restore_defaults()
 
@@ -551,6 +552,41 @@ class TabMeasure(QWidget):
         self._log.ensureCursorVisible()
         if "failed" in line.lower() or "communications failure" in line.lower():
             self._measure_failed = True
+
+    def _on_calibration_done(self) -> None:
+        from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QVBoxLayout
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Calibration Complete — How to Measure")
+        dlg.setMinimumWidth(500)
+
+        layout = QVBoxLayout(dlg)
+        layout.setSpacing(16)
+        layout.setContentsMargins(24, 20, 24, 20)
+
+        msg = QLabel(
+            "<b>Calibration complete. You are ready to start measuring.</b><br><br>"
+            "Place your instrument at the beginning of the first stripe and "
+            "trigger it (or press any key) to read that stripe. "
+            "Then proceed stripe by stripe until all are done.<br><br>"
+            "<b>Navigation keys:</b><br>"
+            "&nbsp;&nbsp;<b>f</b> &nbsp;— move to the next stripe<br>"
+            "&nbsp;&nbsp;<b>b</b> &nbsp;— move back to the previous stripe<br>"
+            "&nbsp;&nbsp;<b>n</b> &nbsp;— jump to the next unread stripe<br>"
+            "&nbsp;&nbsp;<b>d</b> &nbsp;— finish and save when all stripes are done<br>"
+            "&nbsp;&nbsp;<b>Esc&nbsp;/&nbsp;q</b> &nbsp;— quit without saving<br><br>"
+            "<span style='color:#909090;'>These instructions are always visible "
+            "in the output log below.</span>",
+            dlg,
+        )
+        msg.setWordWrap(True)
+        layout.addWidget(msg)
+
+        btn_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
+        btn_box.accepted.connect(dlg.accept)
+        layout.addWidget(btn_box)
+
+        dlg.exec()
 
     def _on_all_stripes_done(self) -> None:
         if self._all_done_shown:

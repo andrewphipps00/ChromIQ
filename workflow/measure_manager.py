@@ -25,7 +25,8 @@ _STRIP_RE = re.compile(
     r"[Ss]trip\s+(?:pass\s+|ID:\s*'?|'?)([A-Za-z]{1,3}\d*)(?:')?(?![A-Za-z0-9])"
 )
 
-_ALL_DONE_RE = re.compile(r"ALL\s+ROWS\s+READ", re.IGNORECASE)
+_ALL_DONE_RE       = re.compile(r"ALL\s+ROWS\s+READ",    re.IGNORECASE)
+_CALIBRATION_RE    = re.compile(r"Calibration\s+complete", re.IGNORECASE)
 
 
 @dataclass
@@ -41,8 +42,9 @@ class MeasureParams:
 
 
 class MeasureManager(QObject):
-    stripe_changed   = pyqtSignal(str)  # emits strip ID string e.g. "A01"
-    all_stripes_done = pyqtSignal()     # emitted when chartread reports all rows read
+    stripe_changed    = pyqtSignal(str)  # emits strip ID string e.g. "A01"
+    all_stripes_done  = pyqtSignal()    # emitted when chartread reports all rows read
+    calibration_done  = pyqtSignal()    # emitted when instrument calibration completes
 
     def __init__(self, runner: "ArgyllRunner", parent: QObject | None = None) -> None:
         super().__init__(parent)
@@ -103,3 +105,5 @@ class MeasureManager(QObject):
             self.stripe_changed.emit(matches[-1])
         if _ALL_DONE_RE.search(line):
             self.all_stripes_done.emit()
+        if _CALIBRATION_RE.search(line):
+            self.calibration_done.emit()
