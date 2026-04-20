@@ -31,6 +31,7 @@ _CALIBRATION_PROMPT_RE = re.compile(r"Set\s+instrument\s+sensor\s+to\s+calibrati
 _STRIP_ERROR_RE        = re.compile(r"Strip\s+read\s+failed[^(]*\(([^)]+)\)",   re.IGNORECASE)
 _USB_ERROR_RE          = re.compile(r"ReadPipeAsync\s+failed",                   re.IGNORECASE)
 _DEVICE_BUSY_RE        = re.compile(r"Device being used",                        re.IGNORECASE)
+_NO_INSTRUMENT_RE      = re.compile(r"no instrument detected",                   re.IGNORECASE)
 
 
 @dataclass
@@ -53,6 +54,7 @@ class MeasureManager(QObject):
     strip_error            = pyqtSignal(str) # emitted on strip read failure; carries the reason string
     instrument_disconnected = pyqtSignal()   # emitted on USB communication failure
     device_busy             = pyqtSignal()   # emitted when instrument is held by another process
+    no_instrument           = pyqtSignal()   # emitted when no instrument is detected at startup
 
     def __init__(self, runner: "ArgyllRunner", parent: QObject | None = None) -> None:
         super().__init__(parent)
@@ -124,3 +126,5 @@ class MeasureManager(QObject):
             self.instrument_disconnected.emit()
         if _DEVICE_BUSY_RE.search(line):
             self.device_busy.emit()
+        if _NO_INSTRUMENT_RE.search(line):
+            self.no_instrument.emit()

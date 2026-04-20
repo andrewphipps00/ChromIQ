@@ -222,6 +222,7 @@ class TabMeasure(QWidget):
         self._all_done_shown: bool = False
         self._instrument_disconnected: bool = False
         self._device_busy: bool = False
+        self._no_instrument: bool = False
 
         self._manager.stripe_changed.connect(self._on_stripe_changed)
         self._manager.all_stripes_done.connect(self._on_all_stripes_done)
@@ -230,6 +231,7 @@ class TabMeasure(QWidget):
         self._manager.strip_error.connect(self._on_strip_error)
         self._manager.instrument_disconnected.connect(self._on_instrument_disconnected)
         self._manager.device_busy.connect(self._on_device_busy)
+        self._manager.no_instrument.connect(self._on_no_instrument)
         self._build_ui()
         self._restore_defaults()
 
@@ -548,6 +550,7 @@ class TabMeasure(QWidget):
         self._all_done_shown = False
         self._instrument_disconnected = False
         self._device_busy = False
+        self._no_instrument = False
         subprocess.run(["killall", "-q", "chartread"], capture_output=True)
         self._set_settings_enabled(False)
         self._start_btn.setEnabled(False)
@@ -575,6 +578,9 @@ class TabMeasure(QWidget):
         if self._device_busy:
             return
         self._device_busy = True
+
+    def _on_no_instrument(self) -> None:
+        self._no_instrument = True
 
     def _on_instrument_disconnected(self) -> None:
         if self._instrument_disconnected:
@@ -755,6 +761,32 @@ class TabMeasure(QWidget):
         self._set_settings_enabled(True)
         self._start_btn.setEnabled(True)
         self._stop_btn.setEnabled(False)
+
+        if self._no_instrument:
+            self._no_instrument = False
+            from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QVBoxLayout
+            dlg = QDialog(self)
+            dlg.setWindowTitle("No Instrument Found")
+            dlg.setMinimumWidth(460)
+            layout = QVBoxLayout(dlg)
+            layout.setSpacing(16)
+            layout.setContentsMargins(24, 20, 24, 20)
+            msg = QLabel(
+                "<b>No measurement instrument was detected.</b><br><br>"
+                "Please make sure your instrument is:<br>"
+                "&nbsp;&nbsp;• connected to your Mac via USB<br>"
+                "&nbsp;&nbsp;• switched on<br>"
+                "&nbsp;&nbsp;• not in use by another application<br><br>"
+                "Once the instrument is ready, press <b>Start Measurement</b> again.",
+                dlg,
+            )
+            msg.setWordWrap(True)
+            layout.addWidget(msg)
+            btn_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
+            btn_box.accepted.connect(dlg.accept)
+            layout.addWidget(btn_box)
+            dlg.exec()
+            return
 
         if self._device_busy:
             self._device_busy = False
