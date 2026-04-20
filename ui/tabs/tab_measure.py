@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from PyQt6.QtCore import QEvent, QObject, QRect, Qt
+from PyQt6.QtCore import QEvent, QObject, QRect, Qt, pyqtSignal
 from PyQt6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -199,6 +199,8 @@ class _ChartreadOption:
 
 class TabMeasure(QWidget):
     """Step 3: interactive chart measurement with chartread."""
+
+    measure_finished = pyqtSignal(Path)   # emits the .ti3 path on success
 
     def __init__(
         self,
@@ -504,6 +506,7 @@ class TabMeasure(QWidget):
                 "[WARNING] No matching TIFF preview found. "
                 "Ensure you scan the correct target."
             )
+            self._log.ensureCursorVisible()
 
     def _setup_stripe_rects(self) -> None:
         """Detect strip positions from the first TIFF page and push to preview."""
@@ -516,6 +519,7 @@ class TabMeasure(QWidget):
     def _on_start(self) -> None:
         if not self._ti1_path:
             self._log.appendPlainText("[ERROR] No .ti2 file selected.")
+            self._log.ensureCursorVisible()
             return
         if self._runner.is_running:
             return
@@ -545,12 +549,21 @@ class TabMeasure(QWidget):
         QApplication.instance().removeEventFilter(self)
         self._start_btn.setEnabled(True)
         self._stop_btn.setEnabled(False)
-        failed = self._measure_failed or code != 0
+
+        # chartread exits non-zero even on a clean 'd' (done) completion.
+        # Treat as success if the .ti3 file was actually written.
+        ti3 = self._ti1_path.with_suffix(".ti3") if self._ti1_path else None
+        ti3_exists = ti3 is not None and ti3.exists()
+        failed = self._measure_failed or (code != 0 and not ti3_exists)
         self._measure_failed = False
+
         if failed:
             self._log.appendPlainText("\n[ERROR] Measurement failed — see output above.")
         else:
             self._log.appendPlainText("\n[OK] Measurement complete.")
+            if ti3_exists:
+                self.measure_finished.emit(ti3)
+        self._log.ensureCursorVisible()
 
     def eventFilter(self, obj: QObject, event: QEvent) -> bool:
         if event.type() == QEvent.Type.KeyPress:
@@ -574,6 +587,7 @@ class TabMeasure(QWidget):
 
     def _on_stripe_changed(self, strip_id: str) -> None:
         self._log.appendPlainText(f"[→ strip {strip_id}]")
+        self._log.ensureCursorVisible()
         letter = "".join(c for c in strip_id if c.isalpha()).upper()
         if not letter:
             return
@@ -619,6 +633,7 @@ class TabMeasure(QWidget):
                 elif isinstance(opt.widget, QComboBox):
                     s.set(f"measure_{opt.key}_value", opt.widget.currentData())
         self._log.appendPlainText("Measurement settings saved as defaults.")
+        self._log.ensureCursorVisible()
 
     def _restore_defaults(self) -> None:
         s = self._settings

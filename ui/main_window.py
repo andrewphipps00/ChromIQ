@@ -39,8 +39,8 @@ class MainWindow(QMainWindow):
         self._file_mgr  = FileManager(settings)
 
         self.setWindowTitle("ChromIQ — Printer Profiling")
-        self.setMinimumSize(1200, 850)
-        self.resize(1200, 850)
+        self.setMinimumSize(1250, 875)
+        self.resize(1250, 875)
 
         # Central widget
         central = QWidget(self)
@@ -68,6 +68,7 @@ class MainWindow(QMainWindow):
         self._tabs.addTab(self._tab_profile, "4. Build Profile")
 
         self._tab_chart.chart_finished.connect(self._on_chart_generated)
+        self._tab_measure.measure_finished.connect(self._on_measure_done)
 
         main_layout.addWidget(self._tabs, stretch=1)
 
@@ -138,6 +139,10 @@ class MainWindow(QMainWindow):
         self._tab_print.load_tiffs(list(tiffs))
         if ti2 and Path(ti2).exists():
             self._tab_measure.set_ti1_path(Path(ti2))
+
+    def _on_measure_done(self, ti3: Path) -> None:
+        self._tab_profile.set_ti3_path(ti3)
+        self._tabs.setCurrentWidget(self._tab_profile)
 
     def _open_settings(self) -> None:
         dlg = SettingsDialog(self._settings, self)

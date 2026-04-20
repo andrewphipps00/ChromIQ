@@ -543,6 +543,7 @@ class TabChart(QWidget):
 
     def _on_log_line(self, line: str) -> None:
         self._log.appendPlainText(line)
+        self._log.ensureCursorVisible()
 
     def _on_generate_finished(self, tiffs: list[Path]) -> None:
         self._generate_btn.setEnabled(True)
@@ -554,6 +555,7 @@ class TabChart(QWidget):
             self.chart_finished.emit(tiffs, ti2)
         else:
             self._log.appendPlainText("[ERROR] Chart generation failed.")
+            self._log.ensureCursorVisible()
 
     def _on_save_defaults(self) -> None:
         params = self._collect_params()
@@ -584,6 +586,7 @@ class TabChart(QWidget):
             s.set("manual_printtarg_tiff_16bit", self._bit16_radio.isChecked())
         log.info("Chart defaults saved")
         self._log.appendPlainText("Current settings saved as defaults.")
+        self._log.ensureCursorVisible()
 
     # ------------------------------------------------------------------
     # Param collection

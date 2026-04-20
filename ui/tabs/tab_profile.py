@@ -594,6 +594,7 @@ class TabProfile(QWidget):
     def _on_build(self) -> None:
         if not self._ti3_path or not self._ti3_path.exists():
             self._log.appendPlainText("[ERROR] No valid .ti3 file selected.")
+            self._log.ensureCursorVisible()
             return
         if self._runner.is_running:
             return
@@ -618,6 +619,7 @@ class TabProfile(QWidget):
         self._build_btn.setEnabled(True)
         if code != 0:
             self._log.appendPlainText(f"\n[ERROR] colprof exited with code {code}.")
+            self._log.ensureCursorVisible()
             return
 
         params = self._collect_params()
@@ -636,6 +638,7 @@ class TabProfile(QWidget):
         if self._icc_path and self._icc_path.exists():
             self._install_btn.setEnabled(True)
             self._log.appendPlainText(f"\n[OK] Profile saved: {self._icc_path}")
+            self._log.ensureCursorVisible()
 
     def _on_install(self) -> None:
         if not self._icc_path:
@@ -643,8 +646,10 @@ class TabProfile(QWidget):
         try:
             self._builder.install_profile(self._icc_path)
             self._log.appendPlainText("[OK] Profile installed to ~/Library/ColorSync/Profiles/")
+            self._log.ensureCursorVisible()
         except Exception as exc:
             self._log.appendPlainText(f"[ERROR] Install failed: {exc}")
+            self._log.ensureCursorVisible()
 
     def _collect_params(self) -> ProfileParams:
         return ProfileParams(
@@ -708,6 +713,7 @@ class TabProfile(QWidget):
         s.set("colprof_no_grid_pos",        self._no_grid_pos_cb.isChecked())
         s.set("colprof_no_embedded",        self._no_embedded_cb.isChecked())
         self._log.appendPlainText("Profile settings saved as defaults.")
+        self._log.ensureCursorVisible()
 
     def _restore_defaults(self) -> None:
         s = self._settings
