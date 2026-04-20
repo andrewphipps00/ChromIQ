@@ -575,7 +575,7 @@ class TabMeasure(QWidget):
 
         msg = QLabel(
             "<b>Your instrument needs to be calibrated before measuring.</b><br><br>"
-            "Place the instrument on the <b>white calibration tile</b> as described "
+            "Place the instrument in the <b>calibration position</b> as described "
             "in its manual, then click <b>Start Calibration</b>.<br><br>"
             "The calibration takes only a few seconds. Once it is complete, another "
             "message will appear with instructions on how to start measuring the "
@@ -611,8 +611,8 @@ class TabMeasure(QWidget):
 
         msg = QLabel(
             "<b>Calibration complete. You are ready to start measuring.</b><br><br>"
-            "Place your instrument at the beginning of the first stripe and "
-            "trigger it (or press any key) to read that stripe. "
+            "Put your instrument into measuring position, place it at the beginning "
+            "of the first stripe and trigger it to read that stripe. "
             "Then proceed stripe by stripe until all are done.<br><br>"
             "<b>Navigation keys:</b><br>"
             "&nbsp;&nbsp;<b>f</b> &nbsp;— move to the next stripe<br>"
