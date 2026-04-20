@@ -148,6 +148,26 @@ class ArgyllRunner(QObject):
         buf = b""
         FLUSH_AFTER = 0.15   # emit partial prompt lines after this silence
 
+        # Throttle repeated identical lines so a runaway process (e.g. USB
+        # error loop) cannot flood the Qt event queue and freeze the UI.
+        _last_line  = ""
+        _repeat_cnt = 0
+        _MAX_REPEAT = 4  # show a line up to this many times, then suppress
+
+        def _emit(line: str) -> None:
+            nonlocal _last_line, _repeat_cnt
+            if line == _last_line:
+                _repeat_cnt += 1
+                if _repeat_cnt == _MAX_REPEAT:
+                    self.line_received.emit("[…repeated output suppressed]")
+                if _repeat_cnt >= _MAX_REPEAT:
+                    return
+            else:
+                _last_line  = line
+                _repeat_cnt = 0
+            log.debug("[argyll-pty] %s", line)
+            self.line_received.emit(line)
+
         while True:
             try:
                 r, _, _ = select.select([master_fd], [], [], FLUSH_AFTER)
@@ -166,16 +186,14 @@ class ArgyllRunner(QObject):
                     raw, buf = buf.split(b"\n", 1)
                     line = _ANSI_RE.sub("", raw.decode("utf-8", errors="replace")).rstrip("\r")
                     if line:
-                        log.debug("[argyll-pty] %s", line)
-                        self.line_received.emit(line)
+                        _emit(line)
             else:
                 # Silence window — flush any partial prompt
                 if buf:
                     line = _ANSI_RE.sub("", buf.decode("utf-8", errors="replace")).rstrip("\r")
                     buf = b""
                     if line:
-                        log.debug("[argyll-pty] %s", line)
-                        self.line_received.emit(line)
+                        _emit(line)
 
             if self._pty_proc and self._pty_proc.poll() is not None:
                 break

@@ -219,12 +219,14 @@ class TabMeasure(QWidget):
         self._measure_failed: bool = False
         self._auto_proceed: bool = False
         self._all_done_shown: bool = False
+        self._instrument_disconnected: bool = False
 
         self._manager.stripe_changed.connect(self._on_stripe_changed)
         self._manager.all_stripes_done.connect(self._on_all_stripes_done)
         self._manager.calibration_prompt.connect(self._on_calibration_prompt)
         self._manager.calibration_done.connect(self._on_calibration_done)
         self._manager.strip_error.connect(self._on_strip_error)
+        self._manager.instrument_disconnected.connect(self._on_instrument_disconnected)
         self._build_ui()
         self._restore_defaults()
 
@@ -541,6 +543,7 @@ class TabMeasure(QWidget):
         self._log.clear()
         self._auto_proceed = False
         self._all_done_shown = False
+        self._instrument_disconnected = False
         self._set_settings_enabled(False)
         self._start_btn.setEnabled(False)
         self._stop_btn.setEnabled(True)
@@ -562,6 +565,16 @@ class TabMeasure(QWidget):
         # separately via the strip_error signal / dialog.
         if "communications failure" in line.lower():
             self._measure_failed = True
+
+    def _on_instrument_disconnected(self) -> None:
+        if self._instrument_disconnected:
+            return
+        self._instrument_disconnected = True
+        self._log.appendPlainText(
+            "\n[ERROR] Instrument disconnected — stopping measurement."
+        )
+        self._log.ensureCursorVisible()
+        self._manager.abort()
 
     def _on_strip_error(self, reason: str) -> None:
         from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QVBoxLayout
@@ -732,6 +745,30 @@ class TabMeasure(QWidget):
         self._set_settings_enabled(True)
         self._start_btn.setEnabled(True)
         self._stop_btn.setEnabled(False)
+
+        if self._instrument_disconnected:
+            self._instrument_disconnected = False
+            from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QVBoxLayout
+            dlg = QDialog(self)
+            dlg.setWindowTitle("Instrument Disconnected")
+            dlg.setMinimumWidth(460)
+            layout = QVBoxLayout(dlg)
+            layout.setSpacing(16)
+            layout.setContentsMargins(24, 20, 24, 20)
+            msg = QLabel(
+                "<b>The measurement instrument was disconnected.</b><br><br>"
+                "The measurement has been stopped automatically. Please check "
+                "the USB connection, reconnect your instrument, and start a "
+                "new measurement.",
+                dlg,
+            )
+            msg.setWordWrap(True)
+            layout.addWidget(msg)
+            btn_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
+            btn_box.accepted.connect(dlg.accept)
+            layout.addWidget(btn_box)
+            dlg.exec()
+            return
 
         # chartread exits non-zero even on a clean 'd' (done) completion.
         # Treat as success if the .ti3 file was actually written.

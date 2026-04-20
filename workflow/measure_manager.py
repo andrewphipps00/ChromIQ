@@ -29,6 +29,7 @@ _ALL_DONE_RE           = re.compile(r"ALL\s+ROWS\s+READ",                       
 _CALIBRATION_RE        = re.compile(r"Calibration\s+complete",                   re.IGNORECASE)
 _CALIBRATION_PROMPT_RE = re.compile(r"Set\s+instrument\s+sensor\s+to\s+calibration\s+position", re.IGNORECASE)
 _STRIP_ERROR_RE        = re.compile(r"Strip\s+read\s+failed[^(]*\(([^)]+)\)",   re.IGNORECASE)
+_USB_ERROR_RE          = re.compile(r"ReadPipeAsync\s+failed",                   re.IGNORECASE)
 
 
 @dataclass
@@ -44,11 +45,12 @@ class MeasureParams:
 
 
 class MeasureManager(QObject):
-    stripe_changed      = pyqtSignal(str)  # emits strip ID string e.g. "A01"
-    all_stripes_done    = pyqtSignal()    # emitted when chartread reports all rows read
-    calibration_prompt  = pyqtSignal()    # emitted when chartread asks user to position instrument
-    calibration_done    = pyqtSignal()    # emitted when instrument calibration completes
-    strip_error         = pyqtSignal(str) # emitted on strip read failure; carries the reason string
+    stripe_changed         = pyqtSignal(str)  # emits strip ID string e.g. "A01"
+    all_stripes_done       = pyqtSignal()    # emitted when chartread reports all rows read
+    calibration_prompt     = pyqtSignal()    # emitted when chartread asks user to position instrument
+    calibration_done       = pyqtSignal()    # emitted when instrument calibration completes
+    strip_error            = pyqtSignal(str) # emitted on strip read failure; carries the reason string
+    instrument_disconnected = pyqtSignal()   # emitted on USB communication failure
 
     def __init__(self, runner: "ArgyllRunner", parent: QObject | None = None) -> None:
         super().__init__(parent)
@@ -116,3 +118,5 @@ class MeasureManager(QObject):
         m = _STRIP_ERROR_RE.search(line)
         if m:
             self.strip_error.emit(m.group(1).strip())
+        if _USB_ERROR_RE.search(line):
+            self.instrument_disconnected.emit()
