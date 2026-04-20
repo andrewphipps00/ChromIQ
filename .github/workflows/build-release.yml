@@ -43,25 +43,18 @@ jobs:
       - name: Package as zip
         run: cd dist && zip -r ../${{ matrix.zip_name }} ChromIQ.app
 
-      - name: Upload to GitHub Release
+      - name: Create GitHub Release (if not exists)
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${{ github.ref_name }}" \
-            --title "ChromIQ ${{ github.ref_name }}" \
-            --notes "## ChromIQ ${{ github.ref_name }}
+          TAG="${{ github.ref_name }}"
+          if ! gh release view "$TAG" > /dev/null 2>&1; then
+            gh release create "$TAG" \
+              --title "ChromIQ $TAG" \
+              --notes "Download the zip for your Mac, unzip, and move ChromIQ.app to Applications. First launch: right-click → Open (bypasses Gatekeeper). Requires macOS 12+ and ArgyllCMS 3.5.0 at /Applications/Argyll/bin."
+          fi
 
-Download the version for your Mac:
-- **Apple Silicon (M1/M2/M3/M4):** \`ChromIQ-macOS-arm64.zip\`
-- **Intel Mac:** \`ChromIQ-macOS-x86_64.zip\`
-
-### Install
-1. Download and unzip
-2. Move \`ChromIQ.app\` to your Applications folder
-3. On first launch: right-click → Open (to bypass Gatekeeper)
-
-### Requirements
-- macOS 12 Monterey or later
-- [ArgyllCMS 3.5.0](https://www.argyllcms.com/) installed at \`/Applications/Argyll/bin\`" \
-            || true
-          gh release upload "${{ github.ref_name }}" "${{ matrix.zip_name }}" --clobber
+      - name: Upload artifact to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.ref_name }}" "${{ matrix.zip_name }}" --clobber
