@@ -1,6 +1,7 @@
 """Tab 3: Measure Chart."""
 from __future__ import annotations
 
+import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -220,6 +221,7 @@ class TabMeasure(QWidget):
         self._auto_proceed: bool = False
         self._all_done_shown: bool = False
         self._instrument_disconnected: bool = False
+        self._device_busy: bool = False
 
         self._manager.stripe_changed.connect(self._on_stripe_changed)
         self._manager.all_stripes_done.connect(self._on_all_stripes_done)
@@ -227,6 +229,7 @@ class TabMeasure(QWidget):
         self._manager.calibration_done.connect(self._on_calibration_done)
         self._manager.strip_error.connect(self._on_strip_error)
         self._manager.instrument_disconnected.connect(self._on_instrument_disconnected)
+        self._manager.device_busy.connect(self._on_device_busy)
         self._build_ui()
         self._restore_defaults()
 
@@ -544,6 +547,8 @@ class TabMeasure(QWidget):
         self._auto_proceed = False
         self._all_done_shown = False
         self._instrument_disconnected = False
+        self._device_busy = False
+        subprocess.run(["killall", "-q", "chartread"], capture_output=True)
         self._set_settings_enabled(False)
         self._start_btn.setEnabled(False)
         self._stop_btn.setEnabled(True)
@@ -565,6 +570,11 @@ class TabMeasure(QWidget):
         # separately via the strip_error signal / dialog.
         if "communications failure" in line.lower():
             self._measure_failed = True
+
+    def _on_device_busy(self) -> None:
+        if self._device_busy:
+            return
+        self._device_busy = True
 
     def _on_instrument_disconnected(self) -> None:
         if self._instrument_disconnected:
@@ -745,6 +755,32 @@ class TabMeasure(QWidget):
         self._set_settings_enabled(True)
         self._start_btn.setEnabled(True)
         self._stop_btn.setEnabled(False)
+
+        if self._device_busy:
+            self._device_busy = False
+            from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QVBoxLayout
+            dlg = QDialog(self)
+            dlg.setWindowTitle("Instrument Not Available")
+            dlg.setMinimumWidth(480)
+            layout = QVBoxLayout(dlg)
+            layout.setSpacing(16)
+            layout.setContentsMargins(24, 20, 24, 20)
+            msg = QLabel(
+                "<b>The instrument could not be opened — it is already in use by "
+                "another process.</b><br><br>"
+                "This usually happens when a previous measurement session was not "
+                "stopped properly before closing the app. ChromIQ automatically "
+                "tries to free the device when starting a new measurement.<br><br>"
+                "Please click OK and then press <b>Start Measurement</b> again.",
+                dlg,
+            )
+            msg.setWordWrap(True)
+            layout.addWidget(msg)
+            btn_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
+            btn_box.accepted.connect(dlg.accept)
+            layout.addWidget(btn_box)
+            dlg.exec()
+            return
 
         if self._instrument_disconnected:
             self._instrument_disconnected = False

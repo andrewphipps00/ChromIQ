@@ -30,6 +30,7 @@ _CALIBRATION_RE        = re.compile(r"Calibration\s+complete",                  
 _CALIBRATION_PROMPT_RE = re.compile(r"Set\s+instrument\s+sensor\s+to\s+calibration\s+position", re.IGNORECASE)
 _STRIP_ERROR_RE        = re.compile(r"Strip\s+read\s+failed[^(]*\(([^)]+)\)",   re.IGNORECASE)
 _USB_ERROR_RE          = re.compile(r"ReadPipeAsync\s+failed",                   re.IGNORECASE)
+_DEVICE_BUSY_RE        = re.compile(r"Device being used",                        re.IGNORECASE)
 
 
 @dataclass
@@ -51,6 +52,7 @@ class MeasureManager(QObject):
     calibration_done       = pyqtSignal()    # emitted when instrument calibration completes
     strip_error            = pyqtSignal(str) # emitted on strip read failure; carries the reason string
     instrument_disconnected = pyqtSignal()   # emitted on USB communication failure
+    device_busy             = pyqtSignal()   # emitted when instrument is held by another process
 
     def __init__(self, runner: "ArgyllRunner", parent: QObject | None = None) -> None:
         super().__init__(parent)
@@ -120,3 +122,5 @@ class MeasureManager(QObject):
             self.strip_error.emit(m.group(1).strip())
         if _USB_ERROR_RE.search(line):
             self.instrument_disconnected.emit()
+        if _DEVICE_BUSY_RE.search(line):
+            self.device_busy.emit()
