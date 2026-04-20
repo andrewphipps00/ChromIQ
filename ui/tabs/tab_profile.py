@@ -251,7 +251,7 @@ class TabProfile(QWidget):
         layout.addWidget(grp)
 
     def _build_measurement_group(self, layout: QVBoxLayout) -> None:
-        grp = QGroupBox("Measurement & Smoothing", layout.parentWidget())
+        grp = QGroupBox("Measurement && Smoothing", layout.parentWidget())
         g = QVBoxLayout(grp)
 
         smooth_row = QHBoxLayout()
