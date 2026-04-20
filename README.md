@@ -10,11 +10,15 @@
 
 <!-- Screenshots will be added once the UI is more polished -->
 
-| Step 1 — Create Chart | Step 2 — Print Chart |
+| Step 1a — Create Chart (guided) | Step 1b — Create Chart (manual)  |
 |---|---|
 | *screenshot coming soon* | *screenshot coming soon* |
 
-| Step 3 — Measure Chart | Step 4 — Build Profile |
+| Step 2 — Print Chart | Step 3 — Measure Chart |
+|---|---|
+| *screenshot coming soon* | *screenshot coming soon* |
+
+| Step 4 — Build Profile | Step 5 — Check & Refine |
 |---|---|
 | *screenshot coming soon* | *screenshot coming soon* |
 
