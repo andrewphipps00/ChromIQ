@@ -633,13 +633,18 @@ class TabMeasure(QWidget):
         msg.setWordWrap(True)
         layout.addWidget(msg)
 
-        btn_box = QDialogButtonBox()
-        use_btn   = btn_box.addButton("Use Anyway", QDialogButtonBox.ButtonRole.AcceptRole)
-        retry_btn = btn_box.addButton("Retry",      QDialogButtonBox.ButtonRole.ResetRole)
-        give_btn  = btn_box.addButton("Give Up",    QDialogButtonBox.ButtonRole.RejectRole)
-        use_btn.setObjectName("primary")
-
         chosen = ["\r"]   # default: use anyway
+
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(8)
+
+        use_btn   = QPushButton("Use Anyway", dlg)
+        retry_btn = QPushButton("Retry",      dlg)
+        give_btn  = QPushButton("Give Up",    dlg)
+        use_btn.setObjectName("primary")
+        use_btn.setFixedHeight(32)
+        retry_btn.setFixedHeight(32)
+        give_btn.setFixedHeight(32)
 
         def _use():
             chosen[0] = "\r"
@@ -656,6 +661,12 @@ class TabMeasure(QWidget):
         use_btn.clicked.connect(_use)
         retry_btn.clicked.connect(_retry)
         give_btn.clicked.connect(_give_up)
+
+        btn_row.addWidget(use_btn)
+        btn_row.addWidget(retry_btn)
+        btn_row.addStretch()
+        btn_row.addWidget(give_btn)
+        layout.addLayout(btn_row)
 
         dlg.exec()
         self._manager.send_key(chosen[0])
