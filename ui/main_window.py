@@ -142,7 +142,6 @@ class MainWindow(QMainWindow):
 
     def _on_measure_done(self, ti3: Path) -> None:
         self._tab_profile.set_ti3_path(ti3)
-        self._tabs.setCurrentWidget(self._tab_profile)
 
     def _open_settings(self) -> None:
         dlg = SettingsDialog(self._settings, self)

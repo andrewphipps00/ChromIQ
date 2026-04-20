@@ -560,7 +560,11 @@ class TabMeasure(QWidget):
         if failed:
             self._log.appendPlainText("\n[ERROR] Measurement failed — see output above.")
         else:
-            self._log.appendPlainText("\n[OK] Measurement complete.")
+            self._log.appendPlainText(
+                "\n[OK] Measurement complete.\n"
+                f"Saved: {ti3}\n\n"
+                "→ Next step: go to the '4. Build Profile' tab to create your ICC profile."
+            )
             if ti3_exists:
                 self.measure_finished.emit(ti3)
         self._log.ensureCursorVisible()
