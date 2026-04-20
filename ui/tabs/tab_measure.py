@@ -246,7 +246,7 @@ class TabMeasure(QWidget):
         ll.setSpacing(10)
 
         # Instrument
-        instr_grp = QGroupBox("Measurement Instrument", left)
+        self._instr_grp = instr_grp = QGroupBox("Measurement Instrument", left)
         ig = QVBoxLayout(instr_grp)
         ig.setContentsMargins(8, 14, 8, 8)
         instr_row = QHBoxLayout()
@@ -268,7 +268,7 @@ class TabMeasure(QWidget):
         ll.addWidget(instr_grp)
 
         # Core measurement options (always shown)
-        core_grp = QGroupBox("Measurement Options", left)
+        self._core_grp = core_grp = QGroupBox("Measurement Options", left)
         cg = QVBoxLayout(core_grp)
         cg.setContentsMargins(8, 14, 8, 8)
         cg.setSpacing(8)
@@ -309,7 +309,7 @@ class TabMeasure(QWidget):
         ll.addWidget(core_grp)
 
         # Additional chartread arguments — structured
-        adv_grp = QGroupBox("Additional Options", left)
+        self._adv_grp = adv_grp = QGroupBox("Additional Options", left)
         ag = QVBoxLayout(adv_grp)
         ag.setContentsMargins(8, 14, 8, 8)
         ag.setSpacing(6)
@@ -340,7 +340,7 @@ class TabMeasure(QWidget):
         ll.addWidget(adv_grp)
 
         # File selection
-        file_grp = QGroupBox("Target File (.ti2)", left)
+        self._file_grp = file_grp = QGroupBox("Target File (.ti2)", left)
         fg = QVBoxLayout(file_grp)
         fg.setContentsMargins(8, 14, 8, 8)
         file_row = QHBoxLayout()
@@ -522,6 +522,11 @@ class TabMeasure(QWidget):
         if rects:
             self._preview.set_stripe_rects(rects)
 
+    def _set_settings_enabled(self, enabled: bool) -> None:
+        for w in (self._instr_grp, self._core_grp, self._adv_grp,
+                  self._file_grp, self._save_defaults_btn):
+            w.setEnabled(enabled)
+
     def _on_start(self) -> None:
         if not self._ti1_path:
             self._log.appendPlainText("[ERROR] No .ti2 file selected.")
@@ -534,6 +539,7 @@ class TabMeasure(QWidget):
         self._log.clear()
         self._auto_proceed = False
         self._all_done_shown = False
+        self._set_settings_enabled(False)
         self._start_btn.setEnabled(False)
         self._stop_btn.setEnabled(True)
         QApplication.instance().installEventFilter(self)
@@ -632,6 +638,7 @@ class TabMeasure(QWidget):
 
     def _on_measure_done(self, code: int) -> None:
         QApplication.instance().removeEventFilter(self)
+        self._set_settings_enabled(True)
         self._start_btn.setEnabled(True)
         self._stop_btn.setEnabled(False)
 
