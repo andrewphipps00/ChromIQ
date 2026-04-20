@@ -16,6 +16,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from core.argyll_detect import all_tools_present, find_argyll_bin_path
 from core.argyll_runner import ArgyllRunner
 from core.file_manager import FileManager
 from core.logger import get_logger
@@ -84,7 +85,7 @@ class MainWindow(QMainWindow):
         active = int(self._settings.get("active_tab", 0))
         self._tabs.setCurrentIndex(active)
 
-        self._check_argyll_binaries()
+        self._check_argyll_binaries(initial=True)
         log.info("MainWindow initialised")
 
     # ------------------------------------------------------------------
@@ -152,18 +153,69 @@ class MainWindow(QMainWindow):
         dlg.exec()
         self._check_argyll_binaries()
 
-    def _check_argyll_binaries(self) -> None:
+    def _check_argyll_binaries(self, initial: bool = False) -> None:
         bin_dir = Path(self._settings.get("argyll_bin_path", "/Applications/Argyll/bin"))
-        missing = [t for t in ("targen", "printtarg", "chartread", "colprof")
-                   if not (bin_dir / t).exists()]
-        if missing:
-            log.warning("Missing ArgyllCMS binaries: %s", missing)
-            self.statusBar().showMessage(
-                f"⚠ ArgyllCMS binaries not found at {bin_dir}. "
-                "Open Preferences to configure.", 0
-            )
-        else:
+
+        if all_tools_present(bin_dir):
             self.statusBar().clearMessage()
+            return
+
+        if initial:
+            # Try to auto-detect a working installation
+            detected = find_argyll_bin_path()
+            if detected:
+                self._settings.set("argyll_bin_path", str(detected))
+                log.info("ArgyllCMS auto-configured to %s", detected)
+                self.statusBar().clearMessage()
+                return
+
+        # Not found — show status bar warning and, on first launch, a popup
+        log.warning("ArgyllCMS binaries not found at %s", bin_dir)
+        self.statusBar().showMessage(
+            "⚠ ArgyllCMS not found. Open Preferences (⚙) to set the path.", 0
+        )
+        if initial:
+            self._show_argyll_not_found_dialog()
+
+    def _show_argyll_not_found_dialog(self) -> None:
+        from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QVBoxLayout
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle("ArgyllCMS Not Found")
+        dlg.setMinimumWidth(520)
+
+        layout = QVBoxLayout(dlg)
+        layout.setSpacing(16)
+        layout.setContentsMargins(24, 20, 24, 20)
+
+        msg = QLabel(
+            "<b>ArgyllCMS could not be found on your system.</b><br><br>"
+            "ChromIQ requires ArgyllCMS to create and measure ICC profiles. "
+            "It was not detected in any of the usual locations.<br><br>"
+            "<b>To install ArgyllCMS:</b><br>"
+            "&nbsp;&nbsp;1. Download ArgyllCMS from "
+            "<a href='https://www.argyllcms.com'>argyllcms.com</a><br>"
+            "&nbsp;&nbsp;2. Extract the archive and move the folder to "
+            "<span style='font-family:monospace'>/Applications</span><br>"
+            "&nbsp;&nbsp;3. Restart ChromIQ — it will detect the installation "
+            "automatically.<br><br>"
+            "If ArgyllCMS is already installed in a custom location, click "
+            "<b>Open Preferences</b> to set the path manually.",
+            dlg,
+        )
+        msg.setOpenExternalLinks(True)
+        msg.setWordWrap(True)
+        layout.addWidget(msg)
+
+        btn_box = QDialogButtonBox()
+        prefs_btn = btn_box.addButton("Open Preferences", QDialogButtonBox.ButtonRole.ActionRole)
+        btn_box.addButton("OK", QDialogButtonBox.ButtonRole.AcceptRole)
+        btn_box.accepted.connect(dlg.accept)
+        prefs_btn.clicked.connect(dlg.accept)
+        prefs_btn.clicked.connect(self._open_settings)
+        layout.addWidget(btn_box)
+
+        dlg.exec()
 
     # ------------------------------------------------------------------
     # Window events
