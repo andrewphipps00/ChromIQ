@@ -25,9 +25,10 @@ _STRIP_RE = re.compile(
     r"[Ss]trip\s+(?:pass\s+|ID:\s*'?|'?)([A-Za-z]{1,3}\d*)(?:')?(?![A-Za-z0-9])"
 )
 
-_ALL_DONE_RE          = re.compile(r"ALL\s+ROWS\s+READ",                       re.IGNORECASE)
-_CALIBRATION_RE       = re.compile(r"Calibration\s+complete",                   re.IGNORECASE)
+_ALL_DONE_RE           = re.compile(r"ALL\s+ROWS\s+READ",                        re.IGNORECASE)
+_CALIBRATION_RE        = re.compile(r"Calibration\s+complete",                   re.IGNORECASE)
 _CALIBRATION_PROMPT_RE = re.compile(r"Set\s+instrument\s+sensor\s+to\s+calibration\s+position", re.IGNORECASE)
+_STRIP_ERROR_RE        = re.compile(r"Strip\s+read\s+failed[^(]*\(([^)]+)\)",   re.IGNORECASE)
 
 
 @dataclass
@@ -47,6 +48,7 @@ class MeasureManager(QObject):
     all_stripes_done    = pyqtSignal()    # emitted when chartread reports all rows read
     calibration_prompt  = pyqtSignal()    # emitted when chartread asks user to position instrument
     calibration_done    = pyqtSignal()    # emitted when instrument calibration completes
+    strip_error         = pyqtSignal(str) # emitted on strip read failure; carries the reason string
 
     def __init__(self, runner: "ArgyllRunner", parent: QObject | None = None) -> None:
         super().__init__(parent)
@@ -111,3 +113,6 @@ class MeasureManager(QObject):
             self.calibration_prompt.emit()
         if _CALIBRATION_RE.search(line):
             self.calibration_done.emit()
+        m = _STRIP_ERROR_RE.search(line)
+        if m:
+            self.strip_error.emit(m.group(1).strip())

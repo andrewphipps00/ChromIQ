@@ -224,6 +224,7 @@ class TabMeasure(QWidget):
         self._manager.all_stripes_done.connect(self._on_all_stripes_done)
         self._manager.calibration_prompt.connect(self._on_calibration_prompt)
         self._manager.calibration_done.connect(self._on_calibration_done)
+        self._manager.strip_error.connect(self._on_strip_error)
         self._build_ui()
         self._restore_defaults()
 
@@ -557,8 +558,49 @@ class TabMeasure(QWidget):
     def _on_log_line(self, line: str) -> None:
         self._log.appendPlainText(line)
         self._log.ensureCursorVisible()
-        if "failed" in line.lower() or "communications failure" in line.lower():
+        # Only flag fatal errors — strip read failures are recoverable and handled
+        # separately via the strip_error signal / dialog.
+        if "communications failure" in line.lower():
             self._measure_failed = True
+
+    def _on_strip_error(self, reason: str) -> None:
+        from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QVBoxLayout
+
+        QApplication.instance().removeEventFilter(self)
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Strip Read Failed")
+        dlg.setMinimumWidth(500)
+
+        layout = QVBoxLayout(dlg)
+        layout.setSpacing(16)
+        layout.setContentsMargins(24, 20, 24, 20)
+
+        msg = QLabel(
+            f"<b>The stripe could not be read:</b> {reason}<br><br>"
+            "Re-position your instrument at the beginning of the stripe and try again. "
+            "If the error keeps occurring, try scanning more slowly and steadily.<br><br>"
+            "Click <b>Retry</b> to read the stripe again, or <b>Give Up</b> to skip "
+            "it and continue with the remaining stripes.",
+            dlg,
+        )
+        msg.setWordWrap(True)
+        layout.addWidget(msg)
+
+        btn_box = QDialogButtonBox()
+        retry_btn = btn_box.addButton("Retry", QDialogButtonBox.ButtonRole.AcceptRole)
+        retry_btn.setObjectName("primary")
+        btn_box.addButton("Give Up", QDialogButtonBox.ButtonRole.RejectRole)
+        btn_box.accepted.connect(dlg.accept)
+        btn_box.rejected.connect(dlg.reject)
+        layout.addWidget(btn_box)
+
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            self._manager.send_key("\r")   # any key = retry
+        else:
+            self._manager.send_key("\x1b") # Esc = give up on this stripe
+
+        QApplication.instance().installEventFilter(self)
 
     def _on_calibration_prompt(self) -> None:
         from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QVBoxLayout
