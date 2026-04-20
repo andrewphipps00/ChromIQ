@@ -1,0 +1,67 @@
+name: Build macOS App Bundle
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-latest
+            arch: arm64
+            zip_name: ChromIQ-macOS-arm64.zip
+          - runner: macos-13
+            arch: x86_64
+            zip_name: ChromIQ-macOS-x86_64.zip
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build app bundle
+        run: python -m PyInstaller ChromIQ.spec
+
+      - name: Package as zip
+        run: cd dist && zip -r ../${{ matrix.zip_name }} ChromIQ.app
+
+      - name: Upload to GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            --title "ChromIQ ${{ github.ref_name }}" \
+            --notes "## ChromIQ ${{ github.ref_name }}
+
+Download the version for your Mac:
+- **Apple Silicon (M1/M2/M3/M4):** \`ChromIQ-macOS-arm64.zip\`
+- **Intel Mac:** \`ChromIQ-macOS-x86_64.zip\`
+
+### Install
+1. Download and unzip
+2. Move \`ChromIQ.app\` to your Applications folder
+3. On first launch: right-click → Open (to bypass Gatekeeper)
+
+### Requirements
+- macOS 12 Monterey or later
+- [ArgyllCMS 3.5.0](https://www.argyllcms.com/) installed at \`/Applications/Argyll/bin\`" \
+            || true
+          gh release upload "${{ github.ref_name }}" "${{ matrix.zip_name }}" --clobber
