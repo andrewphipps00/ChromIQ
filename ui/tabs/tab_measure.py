@@ -315,6 +315,23 @@ class TabMeasure(QWidget):
             "Measure each patch individually instead of reading strips.\n"
             "Much slower but useful if strip reading fails.",
         )
+
+        resume_row = QHBoxLayout()
+        self._resume_cb = QCheckBox("Resume interrupted measurement (-r)", left)
+        self._resume_cb.setChecked(False)
+        self._resume_cb.setEnabled(False)
+        resume_row.addWidget(self._resume_cb)
+        resume_row.addStretch()
+        resume_row.addWidget(TooltipButton(
+            "Resume Interrupted Measurement (-r)",
+            "Resume a previous measurement from the existing .ti3 file in\n"
+            "the same folder as the .ti2 file.  Use this if a measurement\n"
+            "was interrupted before all stripes were read.\n"
+            "Only available when a matching .ti3 file exists.",
+            left,
+        ))
+        cg.addLayout(resume_row)
+
         ll.addWidget(core_grp)
 
         # Additional chartread arguments — structured
@@ -491,6 +508,7 @@ class TabMeasure(QWidget):
         self._ti1_path = path
         self._ti1_lbl.setText(str(path))
         self._try_load_tiffs(path)
+        self._update_resume_availability()
 
     # ------------------------------------------------------------------
     # Internal
@@ -506,6 +524,18 @@ class TabMeasure(QWidget):
         self._ti1_path = Path(path)
         self._ti1_lbl.setText(str(self._ti1_path))
         self._try_load_tiffs(self._ti1_path)
+        self._update_resume_availability()
+
+    def _update_resume_availability(self) -> None:
+        if self._ti1_path is None:
+            self._resume_cb.setEnabled(False)
+            self._resume_cb.setChecked(False)
+            return
+        ti3 = self._ti1_path.with_suffix(".ti3")
+        has_ti3 = ti3.exists()
+        self._resume_cb.setEnabled(has_ti3)
+        if not has_ti3:
+            self._resume_cb.setChecked(False)
 
     def _try_load_tiffs(self, base_path: Path) -> None:
         stem   = base_path.with_suffix("").stem
@@ -904,13 +934,14 @@ class TabMeasure(QWidget):
             extra_args += opt.build_args()
 
         return MeasureParams(
-            ti1_path           = self._ti1_path,
-            instrument         = str(self._instr_spin.value()),
-            disable_bidir      = self._bidir_cb.isChecked(),
-            suppress_warnings  = self._suppress_cb.isChecked(),
+            ti1_path            = self._ti1_path,
+            instrument          = str(self._instr_spin.value()),
+            disable_bidir       = self._bidir_cb.isChecked(),
+            suppress_warnings   = self._suppress_cb.isChecked(),
             disable_initial_cal = self._nocal_cb.isChecked(),
-            patch_by_patch     = self._pbp_cb.isChecked(),
-            extra_args         = " ".join(extra_args),
+            patch_by_patch      = self._pbp_cb.isChecked(),
+            resume              = self._resume_cb.isChecked(),
+            extra_args          = " ".join(extra_args),
         )
 
     def _on_save_defaults(self) -> None:

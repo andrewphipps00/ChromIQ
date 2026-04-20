@@ -43,6 +43,7 @@ class MeasureParams:
     disable_initial_cal: bool = False
     patch_by_patch: bool = False
     high_res: bool = False
+    resume: bool = False
     extra_args: str = ""
 
 
@@ -102,6 +103,8 @@ class MeasureManager(QObject):
             args.append("-p")
         if p.high_res:
             args.append("-H")
+        if p.resume:
+            args.append("-r")
         if p.extra_args:
             args += shlex.split(p.extra_args)
         # Base name without extension
