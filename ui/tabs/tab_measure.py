@@ -222,6 +222,7 @@ class TabMeasure(QWidget):
 
         self._manager.stripe_changed.connect(self._on_stripe_changed)
         self._manager.all_stripes_done.connect(self._on_all_stripes_done)
+        self._manager.calibration_prompt.connect(self._on_calibration_prompt)
         self._manager.calibration_done.connect(self._on_calibration_done)
         self._build_ui()
         self._restore_defaults()
@@ -558,6 +559,42 @@ class TabMeasure(QWidget):
         self._log.ensureCursorVisible()
         if "failed" in line.lower() or "communications failure" in line.lower():
             self._measure_failed = True
+
+    def _on_calibration_prompt(self) -> None:
+        from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QVBoxLayout
+
+        QApplication.instance().removeEventFilter(self)
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Calibration Required")
+        dlg.setMinimumWidth(500)
+
+        layout = QVBoxLayout(dlg)
+        layout.setSpacing(16)
+        layout.setContentsMargins(24, 20, 24, 20)
+
+        msg = QLabel(
+            "<b>Your instrument needs to be calibrated before measuring.</b><br><br>"
+            "Place the instrument on the <b>white calibration tile</b> as described "
+            "in its manual, then click <b>Start Calibration</b>.<br><br>"
+            "The calibration takes only a few seconds. Once it is complete, another "
+            "message will appear with instructions on how to start measuring the "
+            "stripes.",
+            dlg,
+        )
+        msg.setWordWrap(True)
+        layout.addWidget(msg)
+
+        btn_box = QDialogButtonBox()
+        ok_btn = btn_box.addButton("Start Calibration", QDialogButtonBox.ButtonRole.AcceptRole)
+        ok_btn.setObjectName("primary")
+        btn_box.accepted.connect(dlg.accept)
+        layout.addWidget(btn_box)
+
+        dlg.exec()
+        # Send any key to tell chartread to proceed with calibration.
+        self._manager.send_key("\r")
+        QApplication.instance().installEventFilter(self)
 
     def _on_calibration_done(self) -> None:
         from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QVBoxLayout
