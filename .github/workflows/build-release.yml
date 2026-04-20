@@ -40,10 +40,13 @@ jobs:
       - name: Build app bundle
         run: python -m PyInstaller ChromIQ.spec
 
+      - name: Re-sign bundle (ad-hoc deep sign)
+        run: codesign --deep --force --sign - dist/ChromIQ.app
+
       - name: Create DMG
         run: |
           mkdir -p /tmp/dmg_src
-          cp -r dist/ChromIQ.app /tmp/dmg_src/
+          ditto dist/ChromIQ.app /tmp/dmg_src/ChromIQ.app
           ln -s /Applications /tmp/dmg_src/Applications
           hdiutil create -volname "ChromIQ" \
             -srcfolder /tmp/dmg_src \
