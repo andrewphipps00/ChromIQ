@@ -69,6 +69,7 @@ class MainWindow(QMainWindow):
 
         self._tab_chart.chart_finished.connect(self._on_chart_generated)
         self._tab_measure.measure_finished.connect(self._on_measure_done)
+        self._tab_measure.proceed_to_profile.connect(self._on_proceed_to_profile)
 
         main_layout.addWidget(self._tabs, stretch=1)
 
@@ -142,6 +143,9 @@ class MainWindow(QMainWindow):
 
     def _on_measure_done(self, ti3: Path) -> None:
         self._tab_profile.set_ti3_path(ti3)
+
+    def _on_proceed_to_profile(self) -> None:
+        self._tabs.setCurrentWidget(self._tab_profile)
 
     def _open_settings(self) -> None:
         dlg = SettingsDialog(self._settings, self)

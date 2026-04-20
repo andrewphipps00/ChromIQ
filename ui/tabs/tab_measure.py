@@ -200,7 +200,8 @@ class _ChartreadOption:
 class TabMeasure(QWidget):
     """Step 3: interactive chart measurement with chartread."""
 
-    measure_finished = pyqtSignal(Path)   # emits the .ti3 path on success
+    measure_finished   = pyqtSignal(Path)  # emits the .ti3 path on success
+    proceed_to_profile = pyqtSignal()      # emitted when user chooses to go straight to tab 4
 
     def __init__(
         self,
@@ -216,8 +217,11 @@ class TabMeasure(QWidget):
         self._tiff_pages: list[Path] = []
         self._chartread_opts: list[_ChartreadOption] = []
         self._measure_failed: bool = False
+        self._auto_proceed: bool = False
+        self._all_done_shown: bool = False
 
         self._manager.stripe_changed.connect(self._on_stripe_changed)
+        self._manager.all_stripes_done.connect(self._on_all_stripes_done)
         self._build_ui()
         self._restore_defaults()
 
@@ -527,6 +531,8 @@ class TabMeasure(QWidget):
 
         params = self._collect_params()
         self._log.clear()
+        self._auto_proceed = False
+        self._all_done_shown = False
         self._start_btn.setEnabled(False)
         self._stop_btn.setEnabled(True)
         QApplication.instance().installEventFilter(self)
@@ -545,6 +551,48 @@ class TabMeasure(QWidget):
         self._log.ensureCursorVisible()
         if "failed" in line.lower() or "communications failure" in line.lower():
             self._measure_failed = True
+
+    def _on_all_stripes_done(self) -> None:
+        if self._all_done_shown:
+            return
+        self._all_done_shown = True
+
+        from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QVBoxLayout
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle("All Stripes Read")
+        dlg.setMinimumWidth(500)
+
+        layout = QVBoxLayout(dlg)
+        layout.setSpacing(16)
+        layout.setContentsMargins(24, 20, 24, 20)
+
+        msg = QLabel(
+            "<b>All stripes have been read successfully.</b><br><br>"
+            "Click <b>Build Profile</b> to finalise the measurement and go directly "
+            "to the Build Profile tab — the next and final step.<br><br>"
+            "If you would like to re-read any stripe first, click <b>Re-read Stripes</b>. "
+            "Use <b>f</b>&nbsp;/&nbsp;<b>b</b> to move forward and back between stripes, "
+            "<b>n</b> to jump to the next unread stripe, and press <b>d</b> when you "
+            "are done.<br><br>"
+            "<span style='color:#909090;'>These instructions are always visible in "
+            "the output log below.</span>",
+            dlg,
+        )
+        msg.setWordWrap(True)
+        layout.addWidget(msg)
+
+        btn_box = QDialogButtonBox()
+        build_btn = btn_box.addButton("Build Profile →", QDialogButtonBox.ButtonRole.AcceptRole)
+        build_btn.setObjectName("primary")
+        btn_box.addButton("Re-read Stripes", QDialogButtonBox.ButtonRole.RejectRole)
+        btn_box.accepted.connect(dlg.accept)
+        btn_box.rejected.connect(dlg.reject)
+        layout.addWidget(btn_box)
+
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            self._auto_proceed = True
+            self._manager.send_key("d")
 
     def _on_measure_done(self, code: int) -> None:
         QApplication.instance().removeEventFilter(self)
@@ -568,6 +616,9 @@ class TabMeasure(QWidget):
             )
             if ti3_exists:
                 self.measure_finished.emit(ti3)
+                if self._auto_proceed:
+                    self.proceed_to_profile.emit()
+        self._auto_proceed = False
         self._log.ensureCursorVisible()
 
     def eventFilter(self, obj: QObject, event: QEvent) -> bool:
