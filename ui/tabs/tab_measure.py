@@ -562,6 +562,8 @@ class TabMeasure(QWidget):
     def _on_calibration_done(self) -> None:
         from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QVBoxLayout
 
+        QApplication.instance().removeEventFilter(self)
+
         dlg = QDialog(self)
         dlg.setWindowTitle("Calibration Complete — How to Measure")
         dlg.setMinimumWidth(500)
@@ -593,6 +595,7 @@ class TabMeasure(QWidget):
         layout.addWidget(btn_box)
 
         dlg.exec()
+        QApplication.instance().installEventFilter(self)
 
     def _on_all_stripes_done(self) -> None:
         if self._all_done_shown:
@@ -600,6 +603,11 @@ class TabMeasure(QWidget):
         self._all_done_shown = True
 
         from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QVBoxLayout
+
+        # Suspend the event filter while the dialog is open so that keyboard
+        # interactions with the dialog (Enter, Space, Esc) are not forwarded
+        # to chartread as spurious keystrokes.
+        QApplication.instance().removeEventFilter(self)
 
         dlg = QDialog(self)
         dlg.setWindowTitle("All Stripes Read")
@@ -635,6 +643,10 @@ class TabMeasure(QWidget):
         if dlg.exec() == QDialog.DialogCode.Accepted:
             self._auto_proceed = True
             self._manager.send_key("d")
+            # Event filter stays off — chartread will finish momentarily.
+        else:
+            # User wants to re-read stripes: restore key forwarding.
+            QApplication.instance().installEventFilter(self)
 
     def _on_measure_done(self, code: int) -> None:
         QApplication.instance().removeEventFilter(self)
