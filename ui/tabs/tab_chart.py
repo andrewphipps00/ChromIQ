@@ -525,7 +525,8 @@ class TabChart(QWidget):
 
     def _on_load_ti1(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
-            self, "Load .ti1 file", str(Path.home()), "TI1 files (*.ti1)"
+            self, "Load .ti1 file", str(Path.home()), "TI1 files (*.ti1)",
+            options=QFileDialog.Option.DontUseNativeDialog,
         )
         if not path:
             return

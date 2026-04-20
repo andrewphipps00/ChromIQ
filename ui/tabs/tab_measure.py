@@ -520,6 +520,7 @@ class TabMeasure(QWidget):
         path, _ = QFileDialog.getOpenFileName(
             self, "Load .ti2 file", str(Path.home()),
             "TI2 files (*.ti2)",
+            options=QFileDialog.Option.DontUseNativeDialog,
         )
         if not path:
             return

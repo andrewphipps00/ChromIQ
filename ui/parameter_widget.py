@@ -268,6 +268,9 @@ class ParameterWidget(QWidget):
 
     def _browse(self) -> None:
         filt = self._param.get("filter", "All Files (*)")
-        path, _ = QFileDialog.getOpenFileName(self, "Select file", "", filt)
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Select file", "", filt,
+            options=QFileDialog.Option.DontUseNativeDialog,
+        )
         if path and isinstance(self._control, QLineEdit):
             self._control.setText(path)

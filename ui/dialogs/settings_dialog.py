@@ -146,6 +146,7 @@ class SettingsDialog(QDialog):
         d = QFileDialog.getExistingDirectory(
             self, "Select ArgyllCMS bin directory",
             self._argyll_edit.text() or "/Applications",
+            QFileDialog.Option.ShowDirsOnly | QFileDialog.Option.DontUseNativeDialog,
         )
         if d:
             self._argyll_edit.setText(d)
@@ -154,6 +155,7 @@ class SettingsDialog(QDialog):
         d = QFileDialog.getExistingDirectory(
             self, "Select output folder",
             self._folder_edit.text() or str(Path.home()),
+            QFileDialog.Option.ShowDirsOnly | QFileDialog.Option.DontUseNativeDialog,
         )
         if d:
             self._folder_edit.setText(d)

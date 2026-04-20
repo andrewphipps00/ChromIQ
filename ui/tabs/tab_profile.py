@@ -570,7 +570,8 @@ class TabProfile(QWidget):
 
     def _on_load_ti3(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
-            self, "Load .ti3 file", str(Path.home()), "TI3 files (*.ti3)"
+            self, "Load .ti3 file", str(Path.home()), "TI3 files (*.ti3)",
+            options=QFileDialog.Option.DontUseNativeDialog,
         )
         if path:
             self.set_ti3_path(Path(path))
@@ -579,6 +580,7 @@ class TabProfile(QWidget):
         path, _ = QFileDialog.getOpenFileName(
             self, "Select gamut source profile", str(Path.home()),
             "ICC profiles (*.icc *.icm)",
+            options=QFileDialog.Option.DontUseNativeDialog,
         )
         if path:
             self._gam_edit.setText(path)
@@ -587,6 +589,7 @@ class TabProfile(QWidget):
         path, _ = QFileDialog.getOpenFileName(
             self, "Select gamut source profile (perc+sat)", str(Path.home()),
             "ICC profiles (*.icc *.icm)",
+            options=QFileDialog.Option.DontUseNativeDialog,
         )
         if path:
             self._gam_sat_edit.setText(path)

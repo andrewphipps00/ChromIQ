@@ -251,6 +251,7 @@ class TabPrint(QWidget):
         path, _ = QFileDialog.getOpenFileName(
             self, "Select .ti2 file to load its chart", str(Path.home()),
             "ArgyllCMS target files (*.ti2)",
+            options=QFileDialog.Option.DontUseNativeDialog,
         )
         if not path:
             return
