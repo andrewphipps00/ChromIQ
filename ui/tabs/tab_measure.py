@@ -27,6 +27,7 @@ from PyQt6.QtWidgets import (
 
 from core.logger import get_logger
 from core.resource_path import resource_path
+from core.strip_utils import letter_to_idx
 from ui.tooltip_button import TooltipButton
 from ui.widgets import NoScrollComboBox, NoScrollDoubleSpinBox, NoScrollSpinBox, make_browse_button
 from workflow.measure_manager import MeasureManager, MeasureParams
@@ -38,13 +39,6 @@ if TYPE_CHECKING:
 
 log = get_logger(__name__)
 
-
-def _letter_to_idx(letter: str) -> int:
-    """Convert a strip letter (A=0, B=1, … Z=25, AA=26, …) to a 0-based index."""
-    idx = 0
-    for c in letter.upper():
-        idx = idx * 26 + (ord(c) - ord("A") + 1)
-    return idx - 1
 
 
 def _detect_stripe_rects(tiff_path: Path) -> list[QRect]:
@@ -218,6 +212,10 @@ class TabMeasure(QWidget):
         self._tiff_pages: list[Path] = []
         self._chartread_opts: list[_ChartreadOption] = []
         self._measure_failed: bool = False
+        self._strip_list: list[str] = []
+        self._refine_strips_path: Path | None = None
+        self._guided_refinement_active: bool = False
+        self._resume_active: bool = False
         self._auto_proceed: bool = False
         self._all_done_shown: bool = False
         self._instrument_disconnected: bool = False
@@ -234,6 +232,7 @@ class TabMeasure(QWidget):
         self._manager.no_instrument.connect(self._on_no_instrument)
         self._manager.wrong_strip.connect(self._on_wrong_strip)
         self._manager.unexpected_response.connect(self._on_unexpected_response)
+        self._manager.sensor_wrong_position.connect(self._on_sensor_wrong_position)
         self._build_ui()
         self._restore_defaults()
 
@@ -319,20 +318,51 @@ class TabMeasure(QWidget):
         )
 
         resume_row = QHBoxLayout()
-        self._resume_cb = QCheckBox("Resume interrupted measurement (-r)", left)
+        self._resume_cb = QCheckBox("Continue from existing .ti3 (-r)", left)
         self._resume_cb.setChecked(False)
         self._resume_cb.setEnabled(False)
         resume_row.addWidget(self._resume_cb)
         resume_row.addStretch()
         resume_row.addWidget(TooltipButton(
-            "Resume Interrupted Measurement (-r)",
-            "Resume a previous measurement from the existing .ti3 file in\n"
-            "the same folder as the .ti2 file.  Use this if a measurement\n"
-            "was interrupted before all stripes were read.\n"
+            "Continue from Existing .ti3 (-r)",
+            "Resume from the .ti3 file in the same folder as the .ti2.\n"
+            "Use this if a measurement was interrupted, or when refining\n"
+            "specific strips after a quality check.\n"
             "Only available when a matching .ti3 file exists.",
             left,
         ))
         cg.addLayout(resume_row)
+
+        # Refinement file row — shown only when resume is checked
+        self._refine_row = QWidget(left)
+        refine_rl = QHBoxLayout(self._refine_row)
+        refine_rl.setContentsMargins(20, 0, 0, 0)
+        refine_rl.setSpacing(6)
+        self._refine_cb = QCheckBox(
+            "Use refinement strips file for guided re-measurement",
+            self._refine_row,
+        )
+        self._refine_cb.setEnabled(False)
+        refine_rl.addWidget(self._refine_cb, stretch=1)
+        refine_rl.addWidget(TooltipButton(
+            "Refinement Strips File",
+            "Available when a Refine_Strips_<name>.txt file exists next\n"
+            "to your .ti2 file.\n\n"
+            "That file is created automatically by the Check && Refine\n"
+            "tab after a quality check. It lists the strips with the\n"
+            "highest colour errors, sorted worst-first.\n\n"
+            "When active, the app navigates chartread to each of those\n"
+            "strips automatically — you only need to scan them.",
+            self._refine_row,
+        ))
+        self._refine_row.setVisible(False)
+        cg.addWidget(self._refine_row)
+
+        self._resume_cb.stateChanged.connect(
+            lambda state: self._refine_row.setVisible(
+                state == Qt.CheckState.Checked.value
+            )
+        )
 
         ll.addWidget(core_grp)
 
@@ -533,12 +563,46 @@ class TabMeasure(QWidget):
         if self._ti1_path is None:
             self._resume_cb.setEnabled(False)
             self._resume_cb.setChecked(False)
+            self._refine_cb.setEnabled(False)
+            self._refine_cb.setChecked(False)
+            self._refine_strips_path = None
+            self._strip_list = []
             return
         ti3 = self._ti1_path.with_suffix(".ti3")
         has_ti3 = ti3.exists()
         self._resume_cb.setEnabled(has_ti3)
         if not has_ti3:
             self._resume_cb.setChecked(False)
+        # Auto-detect Refine_Strips file
+        refine_file = self._ti1_path.parent / f"Refine_Strips_{self._ti1_path.stem}.txt"
+        if refine_file.exists():
+            self._refine_strips_path = refine_file
+            self._load_refine_strips(refine_file)
+            self._refine_cb.setEnabled(True)
+            self._refine_cb.setChecked(True)
+        else:
+            self._refine_strips_path = None
+            self._strip_list = []
+            self._refine_cb.setEnabled(False)
+            self._refine_cb.setChecked(False)
+
+    def _load_refine_strips(self, path: Path) -> None:
+        from workflow.profcheck_runner import parse_refine_strips
+        try:
+            self._strip_list = parse_refine_strips(path)
+        except Exception:
+            self._strip_list = []
+
+    def start_guided_refinement(self, ti3: Path, strips_file: Path) -> None:
+        """Called by main window when user launches guided refinement from Check & Refine tab."""
+        ti2 = ti3.with_suffix(".ti2")
+        if ti2.exists():
+            self.set_ti1_path(ti2)
+        self._resume_cb.setChecked(True)
+        self._refine_strips_path = strips_file
+        self._load_refine_strips(strips_file)
+        self._refine_cb.setEnabled(True)
+        self._refine_cb.setChecked(True)
 
     def _try_load_tiffs(self, base_path: Path) -> None:
         stem   = base_path.with_suffix("").stem
@@ -589,6 +653,15 @@ class TabMeasure(QWidget):
         self._start_btn.setEnabled(False)
         self._stop_btn.setEnabled(True)
         QApplication.instance().installEventFilter(self)
+
+        guided = (
+            self._resume_cb.isChecked()
+            and self._refine_cb.isChecked()
+            and bool(self._strip_list)
+        )
+        self._guided_refinement_active = guided
+        self._resume_active = self._resume_cb.isChecked()
+        self._manager.set_guided_strips(self._strip_list if guided else [])
 
         self._manager.start(
             params,
@@ -747,6 +820,41 @@ class TabMeasure(QWidget):
         if chosen[0] != "\x1b":
             QApplication.instance().installEventFilter(self)
 
+    def _on_sensor_wrong_position(self) -> None:
+        from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QVBoxLayout
+
+        QApplication.instance().removeEventFilter(self)
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Instrument in Wrong Position")
+        dlg.setMinimumWidth(500)
+
+        layout = QVBoxLayout(dlg)
+        layout.setSpacing(16)
+        layout.setContentsMargins(24, 20, 24, 20)
+
+        msg = QLabel(
+            "<b>The measurement device is in the wrong position.</b><br><br>"
+            "It looks like the instrument is still in its <b>calibration position</b> "
+            "(sensor facing up or to the side). "
+            "To scan a strip, it needs to be switched to <b>measuring position</b> "
+            "(sensor facing down, resting on the paper).<br><br>"
+            "How to fix it:<br>"
+            "&nbsp;&nbsp;1. Flip or slide the sensor head so it faces <b>downward</b>.<br>"
+            "&nbsp;&nbsp;2. Place the instrument at the beginning of the strip.<br>"
+            "&nbsp;&nbsp;3. Press <b>OK</b> \u2014 chartread is still waiting and you can scan straight away.",
+            dlg,
+        )
+        msg.setWordWrap(True)
+        layout.addWidget(msg)
+
+        btn_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
+        btn_box.accepted.connect(dlg.accept)
+        layout.addWidget(btn_box)
+
+        dlg.exec()
+        QApplication.instance().installEventFilter(self)
+
     def _on_device_busy(self) -> None:
         if self._device_busy:
             return
@@ -846,28 +954,66 @@ class TabMeasure(QWidget):
         QApplication.instance().removeEventFilter(self)
 
         dlg = QDialog(self)
-        dlg.setWindowTitle("Calibration Complete — How to Measure")
         dlg.setMinimumWidth(500)
 
         layout = QVBoxLayout(dlg)
         layout.setSpacing(16)
         layout.setContentsMargins(24, 20, 24, 20)
 
-        msg = QLabel(
-            "<b>Calibration complete. You are ready to start measuring.</b><br><br>"
-            "Put your instrument into measuring position, place it at the beginning "
-            "of the first stripe and trigger it to read that stripe. "
-            "Then proceed stripe by stripe until all are done.<br><br>"
-            "<b>Navigation keys:</b><br>"
-            "&nbsp;&nbsp;<b>f</b> &nbsp;— move to the next stripe<br>"
-            "&nbsp;&nbsp;<b>b</b> &nbsp;— move back to the previous stripe<br>"
-            "&nbsp;&nbsp;<b>n</b> &nbsp;— jump to the next unread stripe<br>"
-            "&nbsp;&nbsp;<b>d</b> &nbsp;— finish and save when all stripes are done<br>"
-            "&nbsp;&nbsp;<b>Esc&nbsp;/&nbsp;q</b> &nbsp;— quit without saving<br><br>"
-            "<span style='color:#909090;'>These instructions are always visible "
-            "in the output log below.</span>",
-            dlg,
-        )
+        if self._guided_refinement_active and self._strip_list:
+            # Semi-automatic: app navigates to each strip automatically
+            first = self._strip_list[0]
+            n = len(self._strip_list)
+            dlg.setWindowTitle("Calibration Complete \u2014 Guided Refinement Ready")
+            msg = QLabel(
+                "<b>Calibration complete. The app will guide you to each strip.</b><br><br>"
+                f"There are <b>{n} strip(s)</b> to re-measure. "
+                "The app will automatically navigate chartread to each one \u2014 "
+                "<b>you do not need to press f or b yourself.</b><br><br>"
+                "To know which strip to scan:<br>"
+                "&nbsp;&nbsp;\u2022&nbsp; Watch the <b>highlighted strip</b> in the preview panel on the right.<br>"
+                "&nbsp;&nbsp;\u2022&nbsp; Or follow the <b>output field</b> below \u2014 it will name the strip you should place your instrument on.<br><br>"
+                f"<b>First strip: {first}</b> \u2014 place your instrument there and scan when ready.<br><br>"
+                "<span style='color:#909090;'>When all strips are done, the output field will tell you to press \u2018d\u2019 to finish and save.</span>",
+                dlg,
+            )
+        elif self._resume_active:
+            # Manual resume: user navigates to strips themselves
+            dlg.setWindowTitle("Calibration Complete \u2014 Manual Re-measurement")
+            msg = QLabel(
+                "<b>Calibration complete. You are ready to re-measure strips manually.</b><br><br>"
+                "chartread will show you each strip in order. Strips that were already "
+                "measured are marked with <i>(!! ALL ROWS READ !!)</i> \u2014 you can "
+                "skip those or scan them again if you want to update them.<br><br>"
+                "<b>To re-measure a specific strip:</b><br>"
+                "&nbsp;&nbsp;1. Press <b>f</b> to move forward or <b>b</b> to move back "
+                "until chartread shows the strip you want.<br>"
+                "&nbsp;&nbsp;2. Place your instrument on that strip and scan it.<br>"
+                "&nbsp;&nbsp;3. Repeat for each strip you want to update.<br><br>"
+                "When you are done, press <b>d</b> to finish and save.<br><br>"
+                "<span style='color:#909090;'><b>n</b> jumps to the next unread strip &nbsp;\u2014&nbsp; "
+                "<b>Esc / q</b> quits without saving.</span>",
+                dlg,
+            )
+        else:
+            # Standard fresh measurement
+            dlg.setWindowTitle("Calibration Complete \u2014 How to Measure")
+            msg = QLabel(
+                "<b>Calibration complete. You are ready to start measuring.</b><br><br>"
+                "Put your instrument into measuring position, place it at the beginning "
+                "of the first stripe and trigger it to read that stripe. "
+                "Then proceed stripe by stripe until all are done.<br><br>"
+                "<b>Navigation keys:</b><br>"
+                "&nbsp;&nbsp;<b>f</b> &nbsp;\u2014 move to the next stripe<br>"
+                "&nbsp;&nbsp;<b>b</b> &nbsp;\u2014 move back to the previous stripe<br>"
+                "&nbsp;&nbsp;<b>n</b> &nbsp;\u2014 jump to the next unread stripe<br>"
+                "&nbsp;&nbsp;<b>d</b> &nbsp;\u2014 finish and save when all stripes are done<br>"
+                "&nbsp;&nbsp;<b>Esc&nbsp;/&nbsp;q</b> &nbsp;\u2014 quit without saving<br><br>"
+                "<span style='color:#909090;'>These instructions are always visible "
+                "in the output log below.</span>",
+                dlg,
+            )
+
         msg.setWordWrap(True)
         layout.addWidget(msg)
 
@@ -891,32 +1037,52 @@ class TabMeasure(QWidget):
         QApplication.instance().removeEventFilter(self)
 
         dlg = QDialog(self)
-        dlg.setWindowTitle("All Stripes Read")
-        dlg.setMinimumWidth(500)
+        dlg.setMinimumWidth(520)
 
         layout = QVBoxLayout(dlg)
         layout.setSpacing(16)
         layout.setContentsMargins(24, 20, 24, 20)
 
-        msg = QLabel(
-            "<b>All stripes have been read successfully.</b><br><br>"
-            "Click <b>Build Profile</b> to finalise the measurement and go directly "
-            "to the Build Profile tab — the next and final step.<br><br>"
-            "If you would like to re-read any stripe first, click <b>Re-read Stripes</b>. "
-            "Use <b>f</b>&nbsp;/&nbsp;<b>b</b> to move forward and back between stripes, "
-            "<b>n</b> to jump to the next unread stripe, and press <b>d</b> when you "
-            "are done.<br><br>"
-            "<span style='color:#909090;'>These instructions are always visible in "
-            "the output log below.</span>",
-            dlg,
-        )
+        if self._guided_refinement_active:
+            n = len(self._strip_list)
+            dlg.setWindowTitle("Re-measurement Complete")
+            msg = QLabel(
+                f"<b>All {n} target strip(s) have been re-measured successfully.</b><br><br>"
+                "What would you like to do next?<br><br>"
+                "&nbsp;&nbsp;\u2022&nbsp; <b>Build Profile</b> \u2014 saves the measurement "
+                "and takes you straight to the Build Profile tab to create your updated "
+                "ICC profile.<br><br>"
+                "&nbsp;&nbsp;\u2022&nbsp; <b>Continue Measuring Manually</b> \u2014 keeps "
+                "chartread running so you can scan additional strips yourself. "
+                "You will have <b>full manual control</b>: use <b>f</b>&nbsp;/&nbsp;<b>b</b> "
+                "to move between strips, <b>n</b> to jump to the next unread one, and "
+                "<b>d</b> when you are done. "
+                "The automatic strip navigation is switched off for the rest of this session.",
+                dlg,
+            )
+        else:
+            dlg.setWindowTitle("All Stripes Read")
+            msg = QLabel(
+                "<b>All stripes have been read successfully.</b><br><br>"
+                "Click <b>Build Profile</b> to finalise the measurement and go directly "
+                "to the Build Profile tab \u2014 the next and final step.<br><br>"
+                "If you would like to re-read any stripe first, click <b>Re-read Stripes</b>. "
+                "Use <b>f</b>&nbsp;/&nbsp;<b>b</b> to move forward and back between stripes, "
+                "<b>n</b> to jump to the next unread stripe, and press <b>d</b> when you "
+                "are done.<br><br>"
+                "<span style='color:#909090;'>These instructions are always visible in "
+                "the output log below.</span>",
+                dlg,
+            )
+
         msg.setWordWrap(True)
         layout.addWidget(msg)
 
         btn_box = QDialogButtonBox()
-        build_btn = btn_box.addButton("Build Profile →", QDialogButtonBox.ButtonRole.AcceptRole)
+        build_btn = btn_box.addButton("Build Profile \u2192", QDialogButtonBox.ButtonRole.AcceptRole)
         build_btn.setObjectName("primary")
-        btn_box.addButton("Re-read Stripes", QDialogButtonBox.ButtonRole.RejectRole)
+        cont_label = "Continue Measuring Manually" if self._guided_refinement_active else "Re-read Stripes"
+        btn_box.addButton(cont_label, QDialogButtonBox.ButtonRole.RejectRole)
         btn_box.accepted.connect(dlg.accept)
         btn_box.rejected.connect(dlg.reject)
         layout.addWidget(btn_box)
@@ -926,7 +1092,10 @@ class TabMeasure(QWidget):
             self._manager.send_key("d")
             # Event filter stays off — chartread will finish momentarily.
         else:
-            # User wants to re-read stripes: restore key forwarding.
+            if self._guided_refinement_active:
+                # Hand back full keyboard control; disable auto-navigation.
+                self._guided_refinement_active = False
+                self._manager.set_guided_strips([])
             QApplication.instance().installEventFilter(self)
 
     def _on_measure_done(self, code: int) -> None:
@@ -1062,7 +1231,7 @@ class TabMeasure(QWidget):
         rects = self._preview._stripe_rects
         if not rects:
             return
-        global_idx     = _letter_to_idx(letter)
+        global_idx     = letter_to_idx(letter)
         strips_per_page = len(rects)
         page            = global_idx // strips_per_page
         local_idx       = global_idx % strips_per_page

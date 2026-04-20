@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Callable
 from PyQt6.QtCore import QObject, pyqtSignal
 
 from core.logger import get_logger
+from core.strip_utils import letter_to_idx
 
 if TYPE_CHECKING:
     from core.argyll_runner import ArgyllRunner
@@ -34,6 +35,8 @@ _DEVICE_BUSY_RE        = re.compile(r"Device being used",                       
 _NO_INSTRUMENT_RE      = re.compile(r"no instrument detected",                   re.IGNORECASE)
 _WRONG_STRIP_RE        = re.compile(r"Seem to have read strip pass (\w+) rather than (\w+)", re.IGNORECASE)
 _UNEXPECTED_RESP_RE    = re.compile(r"unexpected response.*\(DeltaE\s*([\d.]+)\)",            re.IGNORECASE)
+_STRIP_OK_RE           = re.compile(r"strip\s+read\s+ok",                                    re.IGNORECASE)
+_SENSOR_POSITION_RE    = re.compile(r"sensor.*wrong\s+position|sensor should be in surface", re.IGNORECASE)
 
 
 @dataclass
@@ -60,10 +63,15 @@ class MeasureManager(QObject):
     no_instrument           = pyqtSignal()     # emitted when no instrument is detected at startup
     wrong_strip             = pyqtSignal(str, str)  # (read_strip, expected_strip)
     unexpected_response     = pyqtSignal(str)       # carries the DeltaE value string
+    sensor_wrong_position   = pyqtSignal()          # emitted when instrument is in calibration position during scan
 
     def __init__(self, runner: "ArgyllRunner", parent: QObject | None = None) -> None:
         super().__init__(parent)
-        self._runner = runner
+        self._runner         = runner
+        self._guided_strips: list[str] = []
+        self._guided_idx:    int  = 0
+        self._guided_state:  str  = "idle"   # "idle" | "navigating" | "waiting"
+        self._guided_on_line: "Callable[[str], None] | None" = None
 
     # ------------------------------------------------------------------
 
@@ -76,6 +84,10 @@ class MeasureManager(QObject):
         args = self._build_args(params)
         cwd  = params.ti1_path.parent
         log.info("chartread: %s  [cwd=%s]", " ".join(args), cwd)
+        self._guided_on_line = on_line
+        # Reset guided state for this run
+        self._guided_idx   = 0
+        self._guided_state = "idle" if self._guided_strips else "disabled"
 
         self._runner.run(
             "chartread",
@@ -85,6 +97,12 @@ class MeasureManager(QObject):
             on_finish=on_finish,
             use_pty=True,
         )
+
+    def set_guided_strips(self, strips: list[str]) -> None:
+        """Configure strips to auto-navigate during the next measurement run."""
+        self._guided_strips = list(strips)
+        self._guided_idx    = 0
+        self._guided_state  = "idle" if strips else "disabled"
 
     def send_key(self, key: str) -> None:
         """Send a keystroke to the running chartread process."""
@@ -119,8 +137,13 @@ class MeasureManager(QObject):
         on_line(line)
         matches = _STRIP_RE.findall(line)
         if matches:
-            self.stripe_changed.emit(matches[-1])
-        if _ALL_DONE_RE.search(line):
+            current = matches[-1]
+            self.stripe_changed.emit(current)
+            if self._guided_state not in ("idle_done", "disabled"):
+                self._guided_step(current, on_line)
+        if _STRIP_OK_RE.search(line) and self._guided_state == "waiting":
+            self._advance_guided_strip(on_line)
+        if _ALL_DONE_RE.search(line) and not _STRIP_RE.search(line):
             self.all_stripes_done.emit()
         if _CALIBRATION_PROMPT_RE.search(line):
             self.calibration_prompt.emit()
@@ -141,3 +164,80 @@ class MeasureManager(QObject):
         m = _UNEXPECTED_RESP_RE.search(line)
         if m:
             self.unexpected_response.emit(m.group(1))
+        if _SENSOR_POSITION_RE.search(line):
+            self.sensor_wrong_position.emit()
+
+    # ------------------------------------------------------------------
+    # Guided strip navigation
+    # ------------------------------------------------------------------
+
+    def _advance_guided_strip(self, on_line: Callable[[str], None]) -> None:
+        """Called when 'Strip read OK' is detected while in guided-waiting state."""
+        target = self._guided_strips[self._guided_idx]
+        self._guided_idx += 1
+        if self._guided_idx >= len(self._guided_strips):
+            self._guided_state = "idle_done"
+            on_line("[Guided Refinement] All target strips measured.")
+            self.all_stripes_done.emit()
+        else:
+            next_target = self._guided_strips[self._guided_idx]
+            self._guided_state = "navigating"
+            on_line(
+                f"[Guided Refinement] Strip {target} done. "
+                f"Moving to strip {next_target}\u2026"
+            )
+            # Navigation is triggered by the next stripe_changed event —
+            # chartread re-announces the current strip after Strip read OK
+            # in resume mode, which fires stripe_changed and drives navigation.
+
+    def _guided_step(self, current: str, on_line: Callable[[str], None]) -> None:
+        letter = "".join(c for c in current if c.isalpha()).upper()
+        if not letter:
+            return
+
+        if self._guided_state == "idle":
+            target = self._guided_strips[0]
+            self._guided_state = "navigating"
+            strips_str = ", ".join(self._guided_strips)
+            on_line(
+                f"[Guided Refinement] Starting auto-navigation to "
+                f"{len(self._guided_strips)} strip(s): {strips_str} — worst \u0394E first."
+            )
+            on_line("[Guided Refinement] The app will press 'f'/'b' for you. Do not touch the keyboard.")
+            on_line(f"[Guided Refinement] Moving to strip {target}\u2026")
+            self._navigate_toward(letter, target)
+            return
+
+        if self._guided_state == "navigating":
+            target = self._guided_strips[self._guided_idx]
+            if letter == target:
+                self._guided_state = "waiting"
+                on_line(f"[Guided Refinement] Arrived at strip {target} \u2014 please scan now.")
+            else:
+                self._navigate_toward(letter, target)
+
+        elif self._guided_state == "waiting":
+            target = self._guided_strips[self._guided_idx]
+            if letter != target:
+                # chartread moved to a new strip — previous one was accepted
+                self._guided_idx += 1
+                if self._guided_idx >= len(self._guided_strips):
+                    self._guided_state = "idle_done"
+                    on_line(
+                        "[Guided Refinement] All target strips measured. "
+                        "You may press 'n' or 'd' to finish."
+                    )
+                else:
+                    next_target = self._guided_strips[self._guided_idx]
+                    self._guided_state = "navigating"
+                    on_line(
+                        f"[Guided Refinement] Strip {target} done. "
+                        f"Moving to strip {next_target}\u2026"
+                    )
+                    self._navigate_toward(letter, next_target)
+
+    def _navigate_toward(self, current: str, target: str) -> None:
+        ci = letter_to_idx(current)
+        ti = letter_to_idx(target)
+        key = "f" if ti > ci else "b"
+        self._runner.write_stdin(key)

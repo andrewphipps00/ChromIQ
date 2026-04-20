@@ -25,6 +25,7 @@ from core.settings import AppSettings
 from ui.dialogs.settings_dialog import SettingsDialog
 from ui.styles import APP_STYLESHEET, make_dark_palette
 from ui.tabs.tab_chart import TabChart
+from ui.tabs.tab_check_refine import TabCheckRefine
 from ui.tabs.tab_measure import TabMeasure
 from ui.tabs.tab_print import TabPrint
 from ui.tabs.tab_profile import TabProfile
@@ -40,8 +41,8 @@ class MainWindow(QMainWindow):
         self._file_mgr  = FileManager(settings)
 
         self.setWindowTitle("ChromIQ — Printer Profiling")
-        self.setMinimumSize(1300, 920)
-        self.resize(1300, 920)
+        self.setMinimumSize(1350, 945)
+        self.resize(1350, 945)
 
         # Central widget
         central = QWidget(self)
@@ -62,15 +63,19 @@ class MainWindow(QMainWindow):
         self._tab_print   = TabPrint(self._settings, self)
         self._tab_measure = TabMeasure(self._runner, self._settings, self)
         self._tab_profile = TabProfile(self._runner, self._settings, self)
+        self._tab_check   = TabCheckRefine(self._runner, self._settings, self)
 
         self._tabs.addTab(self._tab_chart,   "1. Create Chart")
         self._tabs.addTab(self._tab_print,   "2. Print Chart")
         self._tabs.addTab(self._tab_measure, "3. Measure")
         self._tabs.addTab(self._tab_profile, "4. Build Profile")
+        self._tabs.addTab(self._tab_check,   "5. Check && Refine")
 
         self._tab_chart.chart_finished.connect(self._on_chart_generated)
         self._tab_measure.measure_finished.connect(self._on_measure_done)
         self._tab_measure.proceed_to_profile.connect(self._on_proceed_to_profile)
+        self._tab_profile.profile_built.connect(self._tab_check.set_paths)
+        self._tab_check.guide_refinement_requested.connect(self._on_guide_refinement)
 
         main_layout.addWidget(self._tabs, stretch=1)
 
@@ -147,6 +152,10 @@ class MainWindow(QMainWindow):
 
     def _on_proceed_to_profile(self) -> None:
         self._tabs.setCurrentWidget(self._tab_profile)
+
+    def _on_guide_refinement(self, ti3: Path, strips_file: Path) -> None:
+        self._tabs.setCurrentWidget(self._tab_measure)
+        self._tab_measure.start_guided_refinement(ti3, strips_file)
 
     def _open_settings(self) -> None:
         dlg = SettingsDialog(self._settings, self)

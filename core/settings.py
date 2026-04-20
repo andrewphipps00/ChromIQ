@@ -42,6 +42,18 @@ DEFAULTS: dict[str, Any] = {
     "colprof_algorithm":         "l",
     "colprof_quality":           "m",
     "colprof_extra_args":        "",
+    # Step 5 — check & refine
+    "profcheck_de_formula":      "k",       # "" / "-c" / "-k"
+    "profcheck_intent":          "a",       # "a" = absolute,  "r" = relative
+    "profcheck_sort":            True,
+    "profcheck_verbosity":       "2",       # "1" = summary,  "2" = per-patch
+    "profcheck_fwa_enabled":     False,
+    "profcheck_fwa_illum":       "D50",
+    "profcheck_illum":           "D50",
+    "profcheck_observer":        "1931_2",
+    "profcheck_prune_enabled":   False,
+    "profcheck_prune_value":     3.0,
+    "profcheck_x3dom":           False,
     # UI state
     "window_geometry":           None,
     "active_tab":                0,

@@ -4,7 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -61,6 +61,8 @@ _INTENTS = [
 
 class TabProfile(QWidget):
     """Step 4: build and install ICC profile from .ti3 measurements."""
+
+    profile_built = pyqtSignal(Path, Path)   # (ti3_path, icc_path)
 
     def __init__(
         self,
@@ -642,6 +644,8 @@ class TabProfile(QWidget):
             self._install_btn.setEnabled(True)
             self._log.appendPlainText(f"\n[OK] Profile saved: {self._icc_path}")
             self._log.ensureCursorVisible()
+            if self._ti3_path:
+                self.profile_built.emit(self._ti3_path, self._icc_path)
 
     def _on_install(self) -> None:
         if not self._icc_path:
