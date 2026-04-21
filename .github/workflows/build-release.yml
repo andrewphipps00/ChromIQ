@@ -19,36 +19,44 @@ jobs:
           - runner: macos-latest
             arch: arm64
             artifact: ChromIQ-macOS-arm64.dmg
-            python_version: '3.14'
             target_arch_env: ''
+
           - runner: macos-latest
             arch: universal2
             artifact: ChromIQ-macOS-universal.dmg
-            python_version: '3.13'
             target_arch_env: 'universal2'
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python
+      # arm64 job: use setup-python with the same Python version as local dev
+      - name: Set up Python (arm64)
+        if: matrix.arch == 'arm64'
         uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python_version }}
+          python-version: '3.14'
+
+      # universal2 job: use Python.org's official universal2 installer so that
+      # pip downloads universal2 wheels for all packages, giving us fat binaries
+      # that PyInstaller can bundle into a single universal2 app.
+      - name: Set up Python (universal2 via python.org installer)
+        if: matrix.arch == 'universal2'
+        run: |
+          curl -fsSL -o /tmp/python.pkg \
+            "https://www.python.org/ftp/python/3.12.9/python-3.12.9-macos11.pkg"
+          sudo installer -pkg /tmp/python.pkg -target /
+          echo "/Library/Frameworks/Python.framework/Versions/3.12/bin" >> "$GITHUB_PATH"
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pyinstaller
-
-      - name: Reinstall PyYAML as pure Python (universal2 only)
-        if: matrix.target_arch_env == 'universal2'
-        run: pip install --force-reinstall --no-binary PyYAML PyYAML
+          python3 -m pip install --upgrade pip
+          pip3 install -r requirements.txt
+          pip3 install pyinstaller
 
       - name: Build app bundle
         env:
           PYINSTALLER_TARGET_ARCH: ${{ matrix.target_arch_env }}
-        run: python -m PyInstaller ChromIQ.spec
+        run: python3 -m PyInstaller ChromIQ.spec
 
       - name: Re-sign bundle (ad-hoc deep sign)
         run: codesign --deep --force --sign - dist/ChromIQ.app
