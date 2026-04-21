@@ -69,6 +69,7 @@ class TabCheckRefine(QWidget):
     """Step 5: check an ICC profile against .ti3 data and guide strip re-measurement."""
 
     guide_refinement_requested = pyqtSignal(Path, Path)  # (ti3_path, strips_file_path)
+    ti2_found                  = pyqtSignal(Path)         # emitted when a matching .ti2 exists next to the .ti3
 
     def __init__(
         self,
@@ -97,6 +98,12 @@ class TabCheckRefine(QWidget):
         self._icc_path = icc
         self._ti3_edit.setText(str(ti3))
         self._icc_edit.setText(str(icc))
+        self._notify_ti2(ti3)
+
+    def _notify_ti2(self, ti3: Path) -> None:
+        ti2 = ti3.with_suffix(".ti2")
+        if ti2.exists():
+            self.ti2_found.emit(ti2)
 
     # ------------------------------------------------------------------
     # UI construction
@@ -402,6 +409,7 @@ class TabCheckRefine(QWidget):
         self._ti3_path = ti3
         self._ti3_edit.setText(str(ti3))
         self._auto_fill_icc(ti3)
+        self._notify_ti2(ti3)
 
     def _on_browse_icc(self) -> None:
         path = open_file_dialog(

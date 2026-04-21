@@ -76,6 +76,7 @@ class MainWindow(QMainWindow):
         self._tab_measure.proceed_to_profile.connect(self._on_proceed_to_profile)
         self._tab_profile.profile_built.connect(self._tab_check.set_paths)
         self._tab_check.guide_refinement_requested.connect(self._on_guide_refinement)
+        self._tab_check.ti2_found.connect(self._tab_measure.set_ti1_path)
 
         main_layout.addWidget(self._tabs, stretch=1)
 
