@@ -238,9 +238,13 @@ class TabCheckRefine(QWidget):
         fwa_row.addStretch()
         fwa_row.addWidget(TooltipButton(
             "FWA Compensation (-f)",
-            "Compensates for Fluorescent Whitening Agents in the paper.\n"
-            "Only relevant if spectral data (.ti3 with spectral columns) is present.\n"
-            "Use the illuminant that matches your viewing conditions.",
+            "Some papers contain optical brighteners (fluorescent whitening agents)\n"
+            "that make the paper look extra white under certain lighting. This option\n"
+            "compensates for that effect during the check.\n\n"
+            "Only works if your .ti3 file contains spectral measurement data\n"
+            "(not all instruments produce this). If you are unsure, leave it off.\n\n"
+            "Set the illuminant to match the light source you view your prints under\n"
+            "(D50 = standard daylight, D65 = cooler daylight).",
             self,
         ))
         adv_layout.addLayout(fwa_row)
@@ -255,9 +259,11 @@ class TabCheckRefine(QWidget):
         illum_row.addStretch()
         illum_row.addWidget(TooltipButton(
             "Illuminant (-i)",
-            "Choose the illuminant for computing XYZ from spectral data.\n"
-            "Only affects results when spectral data is present in the .ti3.\n"
-            "Leave at D50 for standard profiling.",
+            "Selects the light source used when converting spectral measurements\n"
+            "to colour values. Only relevant if your .ti3 contains spectral data.\n\n"
+            "D50 is the standard for print profiling and the right choice for most\n"
+            "workflows. D65 is used in some video and photography contexts.\n\n"
+            "Leave at D50 unless you have a specific reason to change it.",
             self,
         ))
         adv_layout.addLayout(illum_row)
@@ -272,8 +278,13 @@ class TabCheckRefine(QWidget):
         obs_row.addStretch()
         obs_row.addWidget(TooltipButton(
             "CIE Observer (-o)",
-            "The standard observer model used for colour calculations.\n"
-            "1931 2° is the default and most widely used standard.",
+            "Defines the mathematical model used to represent how the human eye\n"
+            "sees colour.\n\n"
+            "1931 2° is the international standard for print and ICC profiling\n"
+            "and the correct choice for virtually all printer profiling work.\n\n"
+            "The 1964 10° observer can be used for large-area colour matching,\n"
+            "but is rarely needed here. Leave at 1931 2° unless specifically\n"
+            "requested by your colour management workflow.",
             self,
         ))
         adv_layout.addLayout(obs_row)
@@ -294,10 +305,14 @@ class TabCheckRefine(QWidget):
         prune_row.addStretch()
         prune_row.addWidget(TooltipButton(
             "Prune .ti3 (-P)",
-            "Creates a new .ti3 file containing only patches whose \u0394E\n"
-            "is at or below the given threshold. Useful for isolating\n"
-            "good measurements when building a refined profile.\n"
-            "The pruned file is saved next to the original .ti3.",
+            "Creates a reduced copy of your .ti3 file containing only patches\n"
+            "whose colour error is at or below the threshold you set.\n\n"
+            "Useful if a small number of badly measured patches are pulling\n"
+            "the profile down. Pruning them out lets you build a cleaner\n"
+            "profile from the remaining good patches \u2014 at the cost of\n"
+            "having fewer data points overall.\n\n"
+            "The pruned file is saved next to the original .ti3 and can be\n"
+            "loaded directly in the Build Profile tab.",
             self,
         ))
         adv_layout.addLayout(prune_row)
@@ -309,10 +324,12 @@ class TabCheckRefine(QWidget):
         x3d_row.addStretch()
         x3d_row.addWidget(TooltipButton(
             "X3DOM Visualisation (-w)",
-            "Generates an interactive 3D HTML file showing the error vectors\n"
-            "in Lab colour space. Open the resulting .x3d.html file in a\n"
-            "web browser to explore which regions of the gamut have the\n"
-            "highest errors.",
+            "Generates an interactive 3D visualisation of your profile's colour\n"
+            "errors and saves it as an HTML file next to your .ti3.\n\n"
+            "Open the .x3d.html file in any modern web browser to explore a\n"
+            "3D diagram showing where errors are largest — useful for seeing\n"
+            "which parts of the colour gamut your profile handles well and\n"
+            "which areas need improvement.",
             self,
         ))
         adv_layout.addLayout(x3d_row)

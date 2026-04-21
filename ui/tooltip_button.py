@@ -1,7 +1,7 @@
 """Clickable info icon that shows a detailed tooltip dialog."""
 from __future__ import annotations
 
-from PyQt6.QtCore import QSize, Qt
+from PyQt6.QtCore import QEvent, QSize, Qt
 from PyQt6.QtGui import QIcon, QPixmap
 from PyQt6.QtWidgets import (
     QDialog,
@@ -39,6 +39,13 @@ class TooltipButton(QToolButton):
         self._set_icon()
         self.clicked.connect(self._show_dialog)
         log.debug("TooltipButton created: %s", title)
+
+    def changeEvent(self, event: QEvent) -> None:
+        super().changeEvent(event)
+        # Keep tooltip buttons always active — they should be clickable even
+        # when a parent QGroupBox is collapsed/unchecked and disables its children.
+        if event.type() == QEvent.Type.EnabledChange and not self.isEnabled():
+            self.setEnabled(True)
 
     # ------------------------------------------------------------------
 
