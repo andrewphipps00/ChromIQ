@@ -51,9 +51,10 @@ DEFAULTS: dict[str, Any] = {
     "profcheck_fwa_illum":       "D50",
     "profcheck_illum":           "D50",
     "profcheck_observer":        "1931_2",
-    "profcheck_prune_enabled":   False,
-    "profcheck_prune_value":     3.0,
-    "profcheck_x3dom":           False,
+    "profcheck_prune_enabled":      False,
+    "profcheck_prune_value":        3.0,
+    "profcheck_x3dom":              False,
+    "profcheck_refine_threshold":   2.0,
     # UI state
     "window_geometry":           None,
     "active_tab":                0,

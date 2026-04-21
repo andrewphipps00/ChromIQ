@@ -215,6 +215,34 @@ class TabCheckRefine(QWidget):
         ))
         og.addLayout(verb_row)
 
+        # Re-measurement threshold
+        threshold_row = QHBoxLayout()
+        threshold_row.addWidget(QLabel("Flag strips for re-measurement above ΔE:", self))
+        self._threshold_spin = NoScrollDoubleSpinBox(self)
+        self._threshold_spin.setRange(0.5, 10.0)
+        self._threshold_spin.setSingleStep(0.5)
+        self._threshold_spin.setDecimals(1)
+        self._threshold_spin.setValue(REFINE_DE_THRESHOLD)
+        threshold_row.addWidget(self._threshold_spin)
+        threshold_row.addStretch()
+        threshold_row.addWidget(TooltipButton(
+            "Re-measurement Threshold (ΔE)",
+            "Sets how sensitive the quality check is when deciding which strips\n"
+            "need to be re-measured.\n\n"
+            "A strip is flagged if any single patch on it has a colour error (ΔE)\n"
+            "higher than this value.\n\n"
+            "Lower value (e.g. 1.0) — more strict: flags strips with even small\n"
+            "errors. Use this for critical colour work where accuracy matters most.\n\n"
+            "Higher value (e.g. 3.0 or 4.0) — more lenient: only flags strips with\n"
+            "clearly visible errors. Use this to limit re-measurement to the worst\n"
+            "offenders only.\n\n"
+            "The default of 2.0 is a good balance for most RGB printer profiles.\n"
+            "Note: this does not affect the profcheck analysis itself — only which\n"
+            "strips appear in the re-measurement recommendation.",
+            self,
+        ))
+        og.addLayout(threshold_row)
+
         opts_layout.addWidget(opts_grp)
 
         # ── Advanced options ────────────────────────────────────────────
@@ -453,7 +481,7 @@ class TabCheckRefine(QWidget):
         self._last_result = result
 
         all_strips_display = group_by_strip(result.patch_errors) if result.patch_errors else []
-        refine_strips      = strips_to_refine(result.patch_errors) if result.patch_errors else []
+        refine_strips      = strips_to_refine(result.patch_errors, threshold=self._threshold_spin.value()) if result.patch_errors else []
         n_total            = total_strip_count(result.patch_errors) if result.patch_errors else 1
         recommend_start_over = len(refine_strips) > n_total * REFINE_START_OVER_RATIO
 
@@ -476,7 +504,7 @@ class TabCheckRefine(QWidget):
                 )
                 summary_text += (
                     f"\n\nStrips flagged for re-measurement (in measurement order, "
-                    f"threshold \u0394E > {REFINE_DE_THRESHOLD}):\n{refine_lines}"
+                    f"threshold \u0394E > {self._threshold_spin.value():.1f}):\n{refine_lines}"
                 )
 
             report_path = write_quality_report(folder, stem, summary_text, result.raw_log)
@@ -544,7 +572,7 @@ class TabCheckRefine(QWidget):
         if recommend_start_over and refine_strips:
             action_lbl = QLabel(
                 f"<b>{len(refine_strips)} out of {total_strips} strip(s) have at least one patch "
-                f"above \u0394E\u202f{REFINE_DE_THRESHOLD:.1f} \u2014 that is more than half "
+                f"above \u0394E\u202f{self._threshold_spin.value():.1f} \u2014 that is more than half "
                 f"of your chart.</b><br><br>"
                 "Re-measuring individual strips is unlikely to reliably fix this many "
                 "issues. <b>Starting over with a freshly printed and measured chart is "
@@ -559,7 +587,7 @@ class TabCheckRefine(QWidget):
             )
             action_lbl = QLabel(
                 f"<b>{len(refine_strips)} strip(s) have at least one patch above "
-                f"\u0394E\u202f{REFINE_DE_THRESHOLD:.1f} and should be re-measured:</b>"
+                f"\u0394E\u202f{self._threshold_spin.value():.1f} and should be re-measured:</b>"
                 f"<br><pre>{refine_lines}</pre>"
                 "Listed in measurement order \u2014 the app will navigate to each one "
                 "automatically.",
@@ -629,7 +657,8 @@ class TabCheckRefine(QWidget):
         s.set("profcheck_observer",      self._obs_combo.currentData() or "1931_2")
         s.set("profcheck_prune_enabled", self._prune_cb.isChecked())
         s.set("profcheck_prune_value",   self._prune_spin.value())
-        s.set("profcheck_x3dom",         self._x3dom_cb.isChecked())
+        s.set("profcheck_x3dom",             self._x3dom_cb.isChecked())
+        s.set("profcheck_refine_threshold",  self._threshold_spin.value())
         self._log.appendPlainText("Check & Refine settings saved as defaults.")
 
     def _restore_defaults(self) -> None:
@@ -678,3 +707,9 @@ class TabCheckRefine(QWidget):
         self._prune_spin.setEnabled(self._prune_cb.isChecked())
 
         self._x3dom_cb.setChecked(bool(s.get("profcheck_x3dom", False)))
+
+        try:
+            threshold_val = float(s.get("profcheck_refine_threshold", REFINE_DE_THRESHOLD))
+        except (TypeError, ValueError):
+            threshold_val = REFINE_DE_THRESHOLD
+        self._threshold_spin.setValue(threshold_val)
