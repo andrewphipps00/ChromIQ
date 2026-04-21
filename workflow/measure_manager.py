@@ -68,6 +68,7 @@ class MeasureManager(QObject):
     def __init__(self, runner: "ArgyllRunner", parent: QObject | None = None) -> None:
         super().__init__(parent)
         self._runner         = runner
+        self._is_resume:     bool = False
         self._guided_strips: list[str] = []
         self._guided_idx:    int  = 0
         self._guided_state:  str  = "idle"   # "idle" | "navigating" | "waiting"
@@ -84,6 +85,7 @@ class MeasureManager(QObject):
         args = self._build_args(params)
         cwd  = params.ti1_path.parent
         log.info("chartread: %s  [cwd=%s]", " ".join(args), cwd)
+        self._is_resume      = params.resume
         self._guided_on_line = on_line
         # Reset guided state for this run
         self._guided_idx   = 0
@@ -143,7 +145,7 @@ class MeasureManager(QObject):
                 self._guided_step(current, on_line)
         if _STRIP_OK_RE.search(line) and self._guided_state == "waiting":
             self._advance_guided_strip(on_line)
-        if _ALL_DONE_RE.search(line) and not _STRIP_RE.search(line):
+        if _ALL_DONE_RE.search(line) and not (self._is_resume and _STRIP_RE.search(line)):
             self.all_stripes_done.emit()
         if _CALIBRATION_PROMPT_RE.search(line):
             self.calibration_prompt.emit()
