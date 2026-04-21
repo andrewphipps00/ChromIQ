@@ -1,9 +1,10 @@
 """Shared widget factory helpers."""
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
-from PyQt6.QtCore import Qt, QUrl
+from PyQt6.QtCore import QModelIndex, QSortFilterProxyModel, Qt, QUrl
 from PyQt6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -14,6 +15,35 @@ from PyQt6.QtWidgets import (
     QStyle,
     QWidget,
 )
+
+
+class _ExtensionFilterProxy(QSortFilterProxyModel):
+    """Hides files whose extension is not in the allowed set; directories always shown."""
+
+    def __init__(self, extensions: list[str], parent=None) -> None:
+        super().__init__(parent)
+        self._exts = {e.lower() for e in extensions}
+
+    def filterAcceptsRow(self, source_row: int, source_parent: QModelIndex) -> bool:
+        if not self._exts:
+            return True
+        src = self.sourceModel()
+        idx = src.index(source_row, 0, source_parent)
+        try:
+            if src.isDir(idx):
+                return True
+            name = src.fileName(idx)
+        except Exception:
+            return True
+        dot = name.rfind(".")
+        if dot < 0:
+            return False
+        return ("." + name[dot + 1:].lower()) in self._exts
+
+
+def _parse_extensions(name_filter: str) -> list[str]:
+    """Return ['.ti3', '.icc'] from 'ICC profiles (*.icc *.icm)'."""
+    return ["." + e.lower() for e in re.findall(r"\*\.(\w+)", name_filter)]
 
 
 class NoScrollComboBox(QComboBox):
@@ -82,6 +112,9 @@ def open_file_dialog(
     dlg.setFileMode(QFileDialog.FileMode.ExistingFile)
     if name_filter:
         dlg.setNameFilter(name_filter)
+        exts = _parse_extensions(name_filter)
+        if exts:
+            dlg.setProxyModel(_ExtensionFilterProxy(exts, dlg))
     dlg.setSidebarUrls(_sidebar_urls(extra_path))
     if dlg.exec() == QFileDialog.DialogCode.Accepted:
         files = dlg.selectedFiles()
