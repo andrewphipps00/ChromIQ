@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 log = get_logger(__name__)
 
 _SUMMARY_RE   = re.compile(r"max\.\s*=\s*([\d.]+).*?avg\.\s*=\s*([\d.]+)", re.IGNORECASE)
-_PATCH_RE     = re.compile(r"^\[([\d.]+)\]\s+\d+\s+@\s+([A-Za-z0-9]+):", re.MULTILINE)
+_PATCH_RE     = re.compile(r"^\s*\[([\d.]+)\]\s+\d+\s+@\s+([A-Za-z0-9]+):", re.MULTILINE)
 _STRIP_LETTER = re.compile(r"^([A-Za-z]+)")
 
 REFINE_DE_THRESHOLD     = 2.0   # flag a strip if any single patch exceeds this ΔE
@@ -125,16 +125,29 @@ class ProfcheckRunner:
 # Quality assessment helpers
 # ---------------------------------------------------------------------------
 
+def _grade_from_value(value: float, thresholds: tuple[float, float, float]) -> int:
+    """Return 0=Excellent, 1=Good, 2=Acceptable, 3=Needs Work."""
+    t1, t2, t3 = thresholds
+    if value < t1:
+        return 0
+    if value < t2:
+        return 1
+    if value < t3:
+        return 2
+    return 3
+
+
+_GRADE_LABELS    = ("Excellent", "Good", "Acceptable", "Needs Work")
+_AVG_THRESHOLDS  = (1.0, 2.0, 4.0)
+_PEAK_THRESHOLDS = (3.0, 5.0, 8.0)
+
+
 def quality_grade(avg_de: float | None, peak_de: float | None) -> str:
     if avg_de is None:
         return "Unknown"
-    if avg_de < 1.0:
-        return "Excellent"
-    if avg_de < 2.0:
-        return "Good"
-    if avg_de < 4.0:
-        return "Acceptable"
-    return "Needs Work"
+    avg_rank  = _grade_from_value(avg_de, _AVG_THRESHOLDS)
+    peak_rank = _grade_from_value(peak_de, _PEAK_THRESHOLDS) if peak_de is not None else 0
+    return _GRADE_LABELS[max(avg_rank, peak_rank)]
 
 
 def quality_explanation(avg_de: float | None, peak_de: float | None) -> str:
@@ -144,39 +157,69 @@ def quality_explanation(avg_de: float | None, peak_de: float | None) -> str:
             "Make sure the .ti3 and .icc files match and that "
             "per-patch verbosity is enabled."
         )
-    lines: list[str] = []
-    lines.append(f"Average \u0394E: {avg_de:.2f}  |  Peak \u0394E: {peak_de:.2f}" if peak_de else f"Average \u0394E: {avg_de:.2f}")
-    if avg_de < 1.0:
-        lines.append(
-            "Your profile is excellent. Colour accuracy is very high — "
-            "typical for well-measured printer/paper combinations."
-        )
-    elif avg_de < 2.0:
-        lines.append(
-            "Your profile is good. Most colours will reproduce accurately. "
-            "Small errors may be visible only in critical colour-matching situations."
-        )
-    elif avg_de < 4.0:
-        lines.append(
-            "Your profile is acceptable but has room for improvement. "
-            "Some colours may look slightly off in prints. "
-            "Re-measuring the strips with the highest error can help."
-        )
-    else:
-        lines.append(
-            "Your profile needs work. Colour accuracy is low and prints "
-            "will likely show noticeable colour shifts. "
-            "Re-measuring the worst strips — or re-printing and measuring "
-            "a fresh chart — is strongly recommended."
-        )
-    if peak_de and peak_de > 10:
-        lines.append(
-            f"Note: peak error is {peak_de:.1f} \u0394E, which is very high. "
-            "One or more patches may have been mis-measured and could be dragging "
-            "the profile quality down significantly."
-        )
-    return "\n\n".join(lines)
 
+    avg_rank  = _grade_from_value(avg_de, _AVG_THRESHOLDS)
+    peak_rank = _grade_from_value(peak_de, _PEAK_THRESHOLDS) if peak_de is not None else 0
+    limiting  = "peak" if peak_rank > avg_rank else "avg"
+
+    lines: list[str] = []
+    lines.append(
+        f"Average \u0394E: {avg_de:.2f}  |  Peak \u0394E: {peak_de:.2f}"
+        if peak_de is not None else f"Average \u0394E: {avg_de:.2f}"
+    )
+
+    overall_rank = max(avg_rank, peak_rank)
+    if overall_rank == 0:
+        lines.append(
+            "Your profile is excellent. Both average and peak colour errors are very low — "
+            "typical for a well-measured printer/paper combination."
+        )
+    elif overall_rank == 1:
+        if limiting == "peak":
+            lines.append(
+                f"Your profile is good overall (average \u0394E {avg_de:.2f}), but one or more "
+                f"individual patches have higher errors (peak \u0394E {peak_de:.2f}). "
+                "Most colours will reproduce accurately; the outlier patches may cause "
+                "subtle shifts in specific colours."
+            )
+        else:
+            lines.append(
+                "Your profile is good. Most colours will reproduce accurately. "
+                "Small errors may be visible only in critical colour-matching situations."
+            )
+    elif overall_rank == 2:
+        if limiting == "peak":
+            lines.append(
+                f"Your profile's average accuracy is reasonable (\u0394E {avg_de:.2f}), but "
+                f"there are individual patches with significant errors (peak \u0394E {peak_de:.2f}). "
+                "These outliers will likely cause noticeable colour shifts in specific areas. "
+                "Re-measuring the flagged strips can help."
+            )
+        else:
+            lines.append(
+                "Your profile is acceptable but has room for improvement. "
+                "Some colours may look slightly off in prints. "
+                "Re-measuring the strips with the highest error can help."
+            )
+    else:
+        if limiting == "peak":
+            avg_label = _GRADE_LABELS[avg_rank].lower()
+            lines.append(
+                f"Your average colour accuracy is {avg_label} (\u0394E {avg_de:.2f}), but "
+                f"one or more individual patches have very high errors (peak \u0394E {peak_de:.2f}). "
+                "These outliers will cause clearly visible colour shifts in specific areas. "
+                "Re-measuring the worst strips — or re-printing and measuring "
+                "a fresh chart — is strongly recommended."
+            )
+        else:
+            lines.append(
+                "Your profile needs work. Colour accuracy is low and prints "
+                "will likely show noticeable colour shifts. "
+                "Re-measuring the worst strips — or re-printing and measuring "
+                "a fresh chart — is strongly recommended."
+            )
+
+    return "\n\n".join(lines)
 
 def group_by_strip(
     patch_errors: list[tuple[str, float]],

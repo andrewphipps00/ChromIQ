@@ -7,7 +7,7 @@ from pathlib import Path
 
 
 def _log_path() -> Path:
-    p = Path.home() / "ChromIQ"
+    p = Path.home() / "Library" / "Logs" / "ChromIQ"
     p.mkdir(parents=True, exist_ok=True)
     return p / "chromiq.log"
 

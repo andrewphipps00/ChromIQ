@@ -250,23 +250,22 @@ class TabPrint(QWidget):
             self._option_combos[opt_name] = combo
 
     def _on_load_ti2(self) -> None:
+        from ui.ti2_loader import resolve_ti2
         path = open_file_dialog(
             self, "Select .ti2 file to load its chart", "ArgyllCMS target files (*.ti2)",
             extra_path=self._settings.get("custom_output_path", ""),
         )
         if not path:
             return
-        self.ti2_loaded.emit(Path(path))
-        folder = Path(path).parent
-        tiffs = sorted([
-            *folder.glob("*.tif"),
-            *folder.glob("*.TIF"),
-            *folder.glob("*.tiff"),
-        ])
+        result = resolve_ti2(self, Path(path), self._settings)
+        if result is None:
+            return
+        ti2_path, tiffs = result
+        self.ti2_loaded.emit(ti2_path)
         if tiffs:
             self.load_tiffs(tiffs)
         else:
-            self._status_lbl.setText("No TIFF files found in the same folder as the selected .ti2 file.")
+            self._status_lbl.setText("No TIFF files found matching the selected .ti2 file.")
 
     def _on_print_current(self) -> None:
         if not self._tiff_pages:

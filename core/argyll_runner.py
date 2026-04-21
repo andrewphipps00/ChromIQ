@@ -249,6 +249,18 @@ class ArgyllRunner(QObject):
 
     def _on_finished(self, exit_code: int, _exit_status: object) -> None:
         log.info("ArgyllRunner: finished with code %d", exit_code)
+        # Drain any output still buffered in QProcess before disconnecting.
+        # Qt does not guarantee all readyReadStandardOutput events arrive before
+        # finished(), so the last chunk of output (e.g. profcheck per-patch lines)
+        # can be silently lost without this flush.
+        if self._process:
+            remaining = self._process.readAllStandardOutput().data()
+            if remaining:
+                text = remaining.decode("utf-8", errors="replace")
+                for line in text.splitlines():
+                    log.debug("[argyll] %s", line)
+                    self.line_received.emit(line)
+
         # Capture per-run callback before it can be overwritten by a chained run()
         on_finish = self._run_on_finish
         self._run_on_finish = None

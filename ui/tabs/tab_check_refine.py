@@ -471,51 +471,62 @@ class TabCheckRefine(QWidget):
     def _on_done(self, code: int) -> None:
         self._run_btn.setEnabled(True)
 
-        if code != 0:
-            self._log.appendPlainText(f"\n[ERROR] profcheck exited with code {code}.")
-            return
-
+        # profcheck exits with 1 when it detects colour errors — that is normal.
+        # Only treat it as a hard failure if we also got no parseable output.
         result = self._checker.parse_results()
         self._last_result = result
 
-        all_strips_display = group_by_strip(result.patch_errors) if result.patch_errors else []
-        refine_strips      = strips_to_refine(result.patch_errors, threshold=self._threshold_spin.value()) if result.patch_errors else []
-        n_total            = total_strip_count(result.patch_errors) if result.patch_errors else 1
-        recommend_start_over = len(refine_strips) > n_total * REFINE_START_OVER_RATIO
+        if code != 0 and result.avg_de is None:
+            self._log.appendPlainText(f"\n[ERROR] profcheck exited with code {code} and produced no results.")
+            return
 
-        # Write output files
+        if code != 0:
+            self._log.appendPlainText(f"\n[WARNING] profcheck exited with code {code}.")
+
+        threshold          = self._threshold_spin.value()
+        all_strips_display = group_by_strip(result.patch_errors) if result.patch_errors else []
+        refine_strips      = strips_to_refine(result.patch_errors, threshold=threshold) if result.patch_errors else []
+        n_patches_above    = sum(1 for _, de in result.patch_errors if de > threshold)
+        n_total_patches    = len(result.patch_errors) if result.patch_errors else 1
+        recommend_start_over = n_patches_above > n_total_patches * REFINE_START_OVER_RATIO
+
+        # Write output files (best-effort — a failure must not prevent the dialog)
         strips_file: Path | None = None
         if self._ti3_path:
-            stem = self._ti3_path.stem
-            folder = self._ti3_path.parent
-            grade = quality_grade(result.avg_de, result.peak_de)
-            explanation = quality_explanation(result.avg_de, result.peak_de)
-            summary_text = f"Profile Quality Assessment: {grade}\n\n{explanation}"
-            if all_strips_display:
-                strip_lines = "\n".join(
-                    f"  {s:4s}  avg \u0394E: {de:.2f}" for s, de in all_strips_display[:10]
-                )
-                summary_text += f"\n\nStrips with highest error (worst first, avg \u0394E):\n{strip_lines}"
-            if refine_strips and not recommend_start_over:
-                refine_lines = "\n".join(
-                    f"  {s:4s}  max \u0394E: {de:.2f}" for s, de in refine_strips
-                )
-                summary_text += (
-                    f"\n\nStrips flagged for re-measurement (in measurement order, "
-                    f"threshold \u0394E > {self._threshold_spin.value():.1f}):\n{refine_lines}"
-                )
+            try:
+                stem = self._ti3_path.stem
+                folder = self._ti3_path.parent
+                grade = quality_grade(result.avg_de, result.peak_de)
+                explanation = quality_explanation(result.avg_de, result.peak_de)
+                summary_text = f"Profile Quality Assessment: {grade}\n\n{explanation}"
+                if all_strips_display:
+                    strip_lines = "\n".join(
+                        f"  {s:4s}  avg \u0394E: {de:.2f}" for s, de in all_strips_display[:10]
+                    )
+                    summary_text += f"\n\nStrips with highest error (worst first, avg \u0394E):\n{strip_lines}"
+                if refine_strips and not recommend_start_over:
+                    refine_lines = "\n".join(
+                        f"  {s:4s}  max \u0394E: {de:.2f}" for s, de in refine_strips
+                    )
+                    summary_text += (
+                        f"\n\nStrips flagged for re-measurement (in measurement order, "
+                        f"threshold \u0394E > {threshold:.1f}):\n{refine_lines}"
+                    )
 
-            report_path = write_quality_report(folder, stem, summary_text, result.raw_log)
-            self._log.appendPlainText(f"\n[OK] Quality report saved: {report_path.name}")
+                report_path = write_quality_report(folder, stem, summary_text, result.raw_log)
+                self._log.appendPlainText(f"\n[OK] Quality report saved: {report_path.name}")
 
-            if refine_strips and not recommend_start_over:
-                strips_file = write_refine_strips(folder, stem, refine_strips)
-                self._log.appendPlainText(f"[OK] Refinement strips file saved: {strips_file.name}")
+                if refine_strips and not recommend_start_over:
+                    strips_file = write_refine_strips(folder, stem, refine_strips)
+                    self._log.appendPlainText(f"[OK] Refinement strips file saved: {strips_file.name}")
+            except Exception as exc:
+                log.warning("Could not write quality report: %s", exc)
+                self._log.appendPlainText(f"[WARNING] Could not write output files: {exc}")
 
-        # Show assessment popup
+        # Always show the assessment dialog if we have results
         self._show_result_dialog(
             result, all_strips_display, refine_strips, strips_file,
-            recommend_start_over, n_total,
+            recommend_start_over, n_patches_above, n_total_patches,
         )
 
     # ------------------------------------------------------------------
@@ -529,7 +540,8 @@ class TabCheckRefine(QWidget):
         refine_strips: list[tuple[str, float]],
         strips_file: Path | None,
         recommend_start_over: bool,
-        total_strips: int = 0,
+        n_patches_above: int = 0,
+        n_total_patches: int = 1,
     ) -> None:
         grade       = quality_grade(result.avg_de, result.peak_de)
         explanation = quality_explanation(result.avg_de, result.peak_de)
@@ -568,12 +580,13 @@ class TabCheckRefine(QWidget):
 
         # Action recommendation
         if recommend_start_over and refine_strips:
+            pct = round(100 * n_patches_above / n_total_patches)
             action_lbl = QLabel(
-                f"<b>{len(refine_strips)} out of {total_strips} strip(s) have at least one patch "
-                f"above \u0394E\u202f{self._threshold_spin.value():.1f} \u2014 that is more than half "
-                f"of your chart.</b><br><br>"
-                "Re-measuring individual strips is unlikely to reliably fix this many "
-                "issues. <b>Starting over with a freshly printed and measured chart is "
+                f"<b>{n_patches_above} out of {n_total_patches} patches ({pct}%) exceed "
+                f"\u0394E\u202f{self._threshold_spin.value():.1f} \u2014 more than half of your "
+                f"measurement data.</b><br><br>"
+                "Re-measuring individual strips is unlikely to reliably fix this. "
+                "<b>Starting over with a freshly printed and measured chart is "
                 "strongly recommended.</b>",
                 dlg,
             )

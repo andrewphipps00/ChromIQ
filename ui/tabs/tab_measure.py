@@ -550,16 +550,18 @@ class TabMeasure(QWidget):
     # ------------------------------------------------------------------
 
     def _on_load_ti2(self) -> None:
+        from ui.ti2_loader import resolve_ti2
         path = open_file_dialog(
             self, "Load .ti2 file", "TI2 files (*.ti2)",
             extra_path=self._settings.get("custom_output_path", ""),
         )
         if not path:
             return
-        self._ti1_path = Path(path)
-        self._ti1_lbl.setText(str(self._ti1_path))
-        self._try_load_tiffs(self._ti1_path)
-        self._update_resume_availability()
+        result = resolve_ti2(self, Path(path), self._settings)
+        if result is None:
+            return
+        ti2_path, _ = result   # TIFFs re-discovered by set_ti1_path → _try_load_tiffs
+        self.set_ti1_path(ti2_path)
 
     def _update_resume_availability(self) -> None:
         if self._ti1_path is None:
