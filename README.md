@@ -21,15 +21,15 @@ Open the DMG, drag ChromIQ to Applications, eject, then launch. **First launch:*
 
 | Step 1a — Create Chart (guided) | Step 1b — Create Chart (manual)  |
 |---|---|
-|![ChromIQ Guided Test Chart creation](docs/createG.png) | ![ChromIQ Manual Test Chart creation](docs/createM.png) |
+|![ChromIQ Guided Test Chart creation](docs/1a.png) | ![ChromIQ Manual Test Chart creation](docs/1b.png) |
 
 | Step 2 — Print Chart | Step 3 — Measure Chart |
 |---|---|
-| ![ChromIQ Print Tab](docs/print.png) | ![ChromIQ Measurement Tab](docs/measure.png) |
+| ![ChromIQ Print Tab](docs/2.png) | ![ChromIQ Measurement Tab](docs/3.png) |
 
 | Step 4 — Build Profile | Step 5 — Check & Refine |
 |---|---|
-| ![ChromIQ Create ICC Profile](docs/build.png) | ![ChromIQ Check & Refine](docs/checkrefine.png) |
+| ![ChromIQ Create ICC Profile](docs/4.png) | ![ChromIQ Check & Refine](docs/5.png) |
 
 ---
 
