@@ -7,7 +7,7 @@ i.e. default patch scale (-a 1.0), 300 DPI TIFF, left-clip border suppressed.
 Key: (instrument_code, double_density, paper_size)
   instrument codes:
     "i1"  = i1Pro / i1Pro 2 / i1Pro 3
-    "p3"  = i1Pro 3 Plus (same strip geometry as i1 — use i1 values)
+    "p3"  = i1Pro 3 Plus (measured with -i3p; much larger patches than i1 — ~5× fewer per sheet)
     "CM"  = ColorMunki / i1Studio / ColorChecker Studio
     "SS"  = SpectroScan (flatbed XY scanner)
   double_density: True only meaningful for CM (-h flag)
@@ -26,16 +26,16 @@ _PER_SHEET_CAPACITY: dict[tuple[str, bool, str], int] = {
     ("i1", False, "LetterR"):  512,
     ("i1", False, "Legal"):    504,
     ("i1", False, "11x17"):    672,
-    # ---- i1Pro 3 Plus (same geometry as i1) ------------------------
-    ("p3", False, "A4"):       504,
-    ("p3", False, "A4R"):      560,
-    ("p3", False, "A3"):       735,
-    ("p3", False, "420x297"):  1050,
-    ("p3", False, "A2"):       1050,
-    ("p3", False, "Letter"):   504,
-    ("p3", False, "LetterR"):  512,
-    ("p3", False, "Legal"):    504,
-    ("p3", False, "11x17"):    672,
+    # ---- i1Pro 3 Plus (measured with -i3p; ~5× fewer per sheet than i1) --------
+    ("p3", False, "A4"):       108,
+    ("p3", False, "A4R"):      119,
+    ("p3", False, "A3"):       153,
+    ("p3", False, "420x297"):  225,
+    ("p3", False, "A2"):       225,
+    ("p3", False, "Letter"):   108,
+    ("p3", False, "LetterR"):  112,
+    ("p3", False, "Legal"):    108,
+    ("p3", False, "11x17"):    144,
     # ---- ColorMunki / i1Studio / ColorChecker Studio — standard ----
     ("CM", False, "A4"):       90,
     ("CM", False, "A4R"):      100,
@@ -89,6 +89,17 @@ PAPER_SIZES: list[str] = [
     "Letter", "LetterR", "Legal", "11x17",
 ]
 
+# Paper sizes hidden in guided mode for specific instruments.
+# A3 portrait excluded for i1Pro 3 Plus: only 153 patches vs 225 on 420x297 landscape.
+EXCLUDED_PAPERS: dict[str, set[str]] = {
+    "p3": {"A3"},
+}
+
+# When the selected paper becomes excluded on instrument switch, use this fallback.
+PAPER_FALLBACK: dict[str, str] = {
+    "A3": "420x297",
+}
+
 PAPER_LABELS: dict[str, str] = {
     "A4":      "A4 (210 × 297 mm) Portrait",
     "A4R":     "A4 (297 × 210 mm) Landscape",
@@ -131,16 +142,16 @@ _PER_SHEET_CAPACITY_NO_LB: dict[tuple[str, bool, str], int] = {
     ("i1", False, "LetterR"):  476,
     ("i1", False, "Legal"):    460,
     ("i1", False, "11x17"):    628,
-    # ---- i1Pro 3 Plus (same geometry as i1) ------------------------
-    ("p3", False, "A4"):       441,
-    ("p3", False, "A4R"):      506,
-    ("p3", False, "A3"):       670,
-    ("p3", False, "420x297"):  986,
-    ("p3", False, "A2"):       986,
-    ("p3", False, "Letter"):   460,
-    ("p3", False, "LetterR"):  476,
-    ("p3", False, "Legal"):    460,
-    ("p3", False, "11x17"):    628,
+    # ---- i1Pro 3 Plus (measured with -i3p; ~5× fewer per sheet than i1) --------
+    ("p3", False, "A4"):        90,
+    ("p3", False, "A4R"):      112,
+    ("p3", False, "A3"):       144,
+    ("p3", False, "420x297"):  207,
+    ("p3", False, "A2"):       207,
+    ("p3", False, "Letter"):    99,
+    ("p3", False, "LetterR"):  105,
+    ("p3", False, "Legal"):     99,
+    ("p3", False, "11x17"):    135,
     # ---- ColorMunki / i1Studio / ColorChecker Studio — standard ----
     # -L has no effect on CM layout; values identical to with-L baseline
     ("CM", False, "A4"):       90,

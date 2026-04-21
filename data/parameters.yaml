@@ -94,8 +94,8 @@ parameters:
         Helps the profile engine better characterise the neutral
         reproduction of the printer.  Typical: 0 for quick profiles,
         50–100 for standard, 128–200 for high quality.
-        In Guided mode this is computed automatically as a ratio
-        of the total patch count.
+        In Guided mode this is set automatically: max(8, total_patches // 30),
+        capped at 64 — scales with page count and instrument capacity.
 
     - flag: "-G"
       name: "Good Distribution (recommended)"

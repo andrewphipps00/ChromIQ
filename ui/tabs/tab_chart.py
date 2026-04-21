@@ -25,7 +25,9 @@ from PyQt6.QtWidgets import (
 from core.logger import get_logger
 from core.resource_path import resource_path
 from data.patch_db import (
+    EXCLUDED_PAPERS,
     INSTRUMENT_LABELS,
+    PAPER_FALLBACK,
     PAPER_LABELS,
     PAPER_SIZES,
     query_patches,
@@ -204,6 +206,7 @@ class TabChart(QWidget):
             self._instr_combo.addItem(label, code)
         self._instr_combo.currentIndexChanged.connect(self._update_patch_count)
         self._instr_combo.currentIndexChanged.connect(self._update_dd_visibility)
+        self._instr_combo.currentIndexChanged.connect(self._rebuild_paper_combo)
         row.addWidget(self._instr_combo, stretch=1)
         row.addWidget(TooltipButton(
             "Measurement Instrument",
@@ -235,8 +238,6 @@ class TabChart(QWidget):
         paper_row = QHBoxLayout()
         paper_row.addWidget(QLabel("Paper size:", inner))
         self._paper_combo = NoScrollComboBox(inner)
-        for size in PAPER_SIZES:
-            self._paper_combo.addItem(PAPER_LABELS.get(size, size), size)
         self._paper_combo.currentIndexChanged.connect(self._update_patch_count)
         paper_row.addWidget(self._paper_combo, stretch=1)
         paper_row.addWidget(TooltipButton(
@@ -474,16 +475,39 @@ class TabChart(QWidget):
             self._patch_count_lbl.setText("?")
             self._patch_detail_lbl.setText("Custom layout — count calculated at generation")
 
-        # Hidden-defaults info label
+        # Hidden-defaults info label (values mirror _collect_guided logic)
+        base_white = int(self._settings.get("targen_white_patches", 4))
+        base_black = int(self._settings.get("targen_black_patches", 4))
+        ps = per_sheet or 504
+        grey_steps = max(8, min((ps * pages) // 30, 64))
+        wp = base_white + (pages - 1) * 2
+        bp = base_black + (pages - 1) * 2
         lb_flag = "-L " if has_lb else ""
         dd_flag = "-h " if dd else ""
         info = (
             f"Guided mode applies these fixed settings:\n"
-            f"targen -d2 -G -e4 -B4\n"
+            f"targen -d2 -G -e{wp} -B{bp} -g{grey_steps}\n"
             f"printtarg -i{instr} -p{paper} -t{dpi} {lb_flag}{dd_flag}chart"
         )
         if hasattr(self, "_guided_info_lbl"):
             self._guided_info_lbl.setText(info)
+
+    def _rebuild_paper_combo(self) -> None:
+        instr    = self._instr_combo.currentData() or "i1"
+        excluded = EXCLUDED_PAPERS.get(instr, set())
+        current  = self._paper_combo.currentData()
+
+        self._paper_combo.blockSignals(True)
+        self._paper_combo.clear()
+        for size in PAPER_SIZES:
+            if size not in excluded:
+                self._paper_combo.addItem(PAPER_LABELS.get(size, size), size)
+        self._paper_combo.blockSignals(False)
+
+        target = current if current not in excluded else PAPER_FALLBACK.get(current, "A4")
+        idx = self._paper_combo.findData(target)
+        self._paper_combo.setCurrentIndex(max(idx, 0))
+        self._update_patch_count()
 
     def _update_dd_visibility(self) -> None:
         instr = self._instr_combo.currentData() or "i1"
@@ -600,17 +624,27 @@ class TabChart(QWidget):
         return self._collect_manual()
 
     def _collect_guided(self) -> ChartParams:
+        pages   = self._pages_spin.value()
+        instr   = self._instr_combo.currentData() or "i1"
+        paper   = self._paper_combo.currentData() or "A4"
+        dd      = self._dd_check.isChecked()
+        has_lb  = self._lb_check.isChecked()
+        base_white = int(self._settings.get("targen_white_patches", 4))
+        base_black = int(self._settings.get("targen_black_patches", 4))
+        per_sheet  = query_patches(instr, paper, dd, suppress_lb=has_lb) or 504
+        grey_steps = max(8, min((per_sheet * pages) // 30, 64))
         return ChartParams(
-            instrument           = self._instr_combo.currentData() or "i1",
-            paper                = self._paper_combo.currentData() or "A4",
-            pages                = self._pages_spin.value(),
-            double_density       = self._dd_check.isChecked(),
-            disable_left_border  = self._lb_check.isChecked(),
+            instrument           = instr,
+            paper                = paper,
+            pages                = pages,
+            double_density       = dd,
+            disable_left_border  = has_lb,
             device_type          = self._settings.get("targen_device_type", "2"),
-            patches              = 0,  # auto
-            white_patches        = int(self._settings.get("targen_white_patches", 4)),
-            black_patches        = int(self._settings.get("targen_black_patches", 4)),
+            patches              = 0,
+            white_patches        = base_white + (pages - 1) * 2,
+            black_patches        = base_black + (pages - 1) * 2,
             good_mode            = bool(self._settings.get("targen_good_mode", True)),
+            grey_steps           = grey_steps,
             tiff_dpi             = int(self._settings.get("printtarg_dpi", 300)),
             patch_scale          = 1.0,
             margin_mm            = 6,
@@ -661,6 +695,7 @@ class TabChart(QWidget):
         idx = self._instr_combo.findData(instr)
         if idx >= 0:
             self._instr_combo.setCurrentIndex(idx)
+        self._rebuild_paper_combo()  # populate/filter even if instrument index didn't change
 
         paper = s.get("chart_paper", "A4")
         idx = self._paper_combo.findData(paper)
