@@ -134,14 +134,16 @@ QPushButton:disabled {{
 QPushButton#primary {{
     background: {ACCENT_BLUE};
     color: #ffffff;
-    border: none;
+    border: 1px solid {ACCENT_BLUE};
     font-weight: bold;
 }}
 QPushButton#primary:hover {{
     background: {ACCENT_HOVER};
+    border-color: {ACCENT_HOVER};
 }}
 QPushButton#primary:disabled {{
     background: #1a3a6a;
+    border-color: #1a3a6a;
     color: #607090;
 }}
 QPushButton#danger {{
