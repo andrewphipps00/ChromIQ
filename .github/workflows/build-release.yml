@@ -20,12 +20,12 @@ jobs:
             arch: arm64
             artifact: ChromIQ-macOS-arm64.dmg
             python_version: '3.14'
-            pyinstaller_args: ''
+            target_arch_env: ''
           - runner: macos-latest
             arch: universal2
             artifact: ChromIQ-macOS-universal.dmg
             python_version: '3.13'
-            pyinstaller_args: '--target-arch universal2'
+            target_arch_env: 'universal2'
 
     steps:
       - uses: actions/checkout@v4
@@ -42,7 +42,9 @@ jobs:
           pip install pyinstaller
 
       - name: Build app bundle
-        run: python -m PyInstaller ${{ matrix.pyinstaller_args }} ChromIQ.spec
+        env:
+          PYINSTALLER_TARGET_ARCH: ${{ matrix.target_arch_env }}
+        run: python -m PyInstaller ChromIQ.spec
 
       - name: Re-sign bundle (ad-hoc deep sign)
         run: codesign --deep --force --sign - dist/ChromIQ.app

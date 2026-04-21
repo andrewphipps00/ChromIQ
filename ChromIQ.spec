@@ -6,8 +6,14 @@ Build command:
     source .venv/bin/activate
     pyinstaller ChromIQ.spec
 
+For a universal2 (ARM + Intel) build:
+    PYINSTALLER_TARGET_ARCH=universal2 pyinstaller ChromIQ.spec
+
 The result will be in dist/ChromIQ.app
 """
+
+import os
+_target_arch = os.environ.get("PYINSTALLER_TARGET_ARCH") or None
 
 a = Analysis(
     ['main.py'],
@@ -49,7 +55,7 @@ exe = EXE(
     upx=True,
     console=False,
     disable_windowed_traceback=False,
-    target_arch=None,
+    target_arch=_target_arch,
     codesign_identity=None,
     entitlements_file=None,
     icon='assets/app_icon.icns',
