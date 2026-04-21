@@ -4,7 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -33,6 +33,8 @@ log = get_logger(__name__)
 
 
 class TabPrint(QWidget):
+
+    ti2_loaded = pyqtSignal(Path)  # emitted when the user loads a .ti2 file
     """Step 2: print the test chart via CUPS."""
 
     def __init__(
@@ -254,6 +256,7 @@ class TabPrint(QWidget):
         )
         if not path:
             return
+        self.ti2_loaded.emit(Path(path))
         folder = Path(path).parent
         tiffs = sorted([
             *folder.glob("*.tif"),
