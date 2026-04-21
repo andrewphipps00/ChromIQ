@@ -22,7 +22,7 @@ from PyQt6.QtWidgets import (
 
 from core.logger import get_logger
 from ui.tooltip_button import TooltipButton
-from ui.widgets import NoScrollComboBox, NoScrollDoubleSpinBox, make_browse_button
+from ui.widgets import NoScrollComboBox, NoScrollDoubleSpinBox, make_browse_button, open_file_dialog
 from workflow.profile_builder import ProfileBuilder, ProfileParams
 
 if TYPE_CHECKING:
@@ -571,27 +571,23 @@ class TabProfile(QWidget):
     # ------------------------------------------------------------------
 
     def _on_load_ti3(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(
-            self, "Load .ti3 file", str(Path.home()), "TI3 files (*.ti3)",
-            options=QFileDialog.Option.DontUseNativeDialog,
+        path = open_file_dialog(
+            self, "Load .ti3 file", "TI3 files (*.ti3)",
+            extra_path=self._settings.get("custom_output_path", ""),
         )
         if path:
             self.set_ti3_path(Path(path))
 
     def _browse_gam(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(
-            self, "Select gamut source profile", str(Path.home()),
-            "ICC profiles (*.icc *.icm)",
-            options=QFileDialog.Option.DontUseNativeDialog,
+        path = open_file_dialog(
+            self, "Select gamut source profile", "ICC profiles (*.icc *.icm)",
         )
         if path:
             self._gam_edit.setText(path)
 
     def _browse_gam_sat(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(
-            self, "Select gamut source profile (perc+sat)", str(Path.home()),
-            "ICC profiles (*.icc *.icm)",
-            options=QFileDialog.Option.DontUseNativeDialog,
+        path = open_file_dialog(
+            self, "Select gamut source profile (perc+sat)", "ICC profiles (*.icc *.icm)",
         )
         if path:
             self._gam_sat_edit.setText(path)

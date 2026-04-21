@@ -33,7 +33,7 @@ from data.patch_db import (
 from ui.parameter_widget import ParameterWidget
 from ui.tiff_preview import TiffPreview
 from ui.tooltip_button import TooltipButton
-from ui.widgets import NoScrollComboBox, NoScrollSpinBox
+from ui.widgets import NoScrollComboBox, NoScrollSpinBox, open_file_dialog
 from workflow.chart_creator import ChartCreator, ChartParams
 
 if TYPE_CHECKING:
@@ -524,9 +524,9 @@ class TabChart(QWidget):
         )
 
     def _on_load_ti1(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(
-            self, "Load .ti1 file", str(Path.home()), "TI1 files (*.ti1)",
-            options=QFileDialog.Option.DontUseNativeDialog,
+        path = open_file_dialog(
+            self, "Load .ti1 file", "TI1 files (*.ti1)",
+            extra_path=self._settings.get("custom_output_path", ""),
         )
         if not path:
             return

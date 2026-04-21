@@ -22,7 +22,7 @@ from PyQt6.QtWidgets import (
 from core.logger import get_logger
 from ui.tiff_preview import TiffPreview
 from ui.tooltip_button import TooltipButton
-from ui.widgets import NoScrollComboBox
+from ui.widgets import NoScrollComboBox, open_file_dialog
 from workflow.cups_printer import CupsRawPrinter
 from workflow.print_manager import PrintModule
 
@@ -248,10 +248,9 @@ class TabPrint(QWidget):
             self._option_combos[opt_name] = combo
 
     def _on_load_ti2(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(
-            self, "Select .ti2 file to load its chart", str(Path.home()),
-            "ArgyllCMS target files (*.ti2)",
-            options=QFileDialog.Option.DontUseNativeDialog,
+        path = open_file_dialog(
+            self, "Select .ti2 file to load its chart", "ArgyllCMS target files (*.ti2)",
+            extra_path=self._settings.get("custom_output_path", ""),
         )
         if not path:
             return

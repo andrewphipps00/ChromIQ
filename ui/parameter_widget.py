@@ -16,7 +16,7 @@ from PyQt6.QtWidgets import (
 
 from core.logger import get_logger
 from ui.tooltip_button import TooltipButton
-from ui.widgets import NoScrollComboBox, NoScrollDoubleSpinBox, NoScrollSpinBox, make_browse_button
+from ui.widgets import NoScrollComboBox, NoScrollDoubleSpinBox, NoScrollSpinBox, make_browse_button, open_file_dialog
 
 log = get_logger(__name__)
 
@@ -267,10 +267,7 @@ class ParameterWidget(QWidget):
         return le
 
     def _browse(self) -> None:
-        filt = self._param.get("filter", "All Files (*)")
-        path, _ = QFileDialog.getOpenFileName(
-            self, "Select file", "", filt,
-            options=QFileDialog.Option.DontUseNativeDialog,
-        )
+        filt = self._param.get("filter", "")
+        path = open_file_dialog(self, "Select file", filt)
         if path and isinstance(self._control, QLineEdit):
             self._control.setText(path)

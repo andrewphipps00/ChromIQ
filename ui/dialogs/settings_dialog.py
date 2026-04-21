@@ -23,7 +23,7 @@ from PyQt6.QtWidgets import (
 
 from core.logger import get_logger
 from ui.tooltip_button import TooltipButton
-from ui.widgets import make_browse_button
+from ui.widgets import make_browse_button, open_dir_dialog
 
 if TYPE_CHECKING:
     from core.settings import AppSettings
@@ -143,19 +143,17 @@ class SettingsDialog(QDialog):
         self.accept()
 
     def _browse_argyll(self) -> None:
-        d = QFileDialog.getExistingDirectory(
+        d = open_dir_dialog(
             self, "Select ArgyllCMS bin directory",
-            self._argyll_edit.text() or "/Applications",
-            QFileDialog.Option.ShowDirsOnly | QFileDialog.Option.DontUseNativeDialog,
+            start_dir=self._argyll_edit.text() or "/Applications",
         )
         if d:
             self._argyll_edit.setText(d)
 
     def _browse_folder(self) -> None:
-        d = QFileDialog.getExistingDirectory(
+        d = open_dir_dialog(
             self, "Select output folder",
-            self._folder_edit.text() or str(Path.home()),
-            QFileDialog.Option.ShowDirsOnly | QFileDialog.Option.DontUseNativeDialog,
+            start_dir=self._folder_edit.text() or str(Path.home()),
         )
         if d:
             self._folder_edit.setText(d)

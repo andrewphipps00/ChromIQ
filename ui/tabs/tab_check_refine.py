@@ -23,7 +23,7 @@ from PyQt6.QtWidgets import (
 
 from core.logger import get_logger
 from ui.tooltip_button import TooltipButton
-from ui.widgets import NoScrollComboBox, NoScrollDoubleSpinBox, make_browse_button
+from ui.widgets import NoScrollComboBox, NoScrollDoubleSpinBox, make_browse_button, open_file_dialog
 from workflow.profcheck_runner import (
     REFINE_DE_THRESHOLD,
     REFINE_START_OVER_RATIO,
@@ -352,10 +352,9 @@ class TabCheckRefine(QWidget):
     # ------------------------------------------------------------------
 
     def _on_browse_ti3(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(
-            self, "Select .ti3 file", "",
-            "Test chart data (*.ti3)",
-            options=QFileDialog.Option.DontUseNativeDialog,
+        path = open_file_dialog(
+            self, "Select .ti3 file", "Test chart data (*.ti3)",
+            extra_path=self._settings.get("custom_output_path", ""),
         )
         if not path:
             return
@@ -365,10 +364,9 @@ class TabCheckRefine(QWidget):
         self._auto_fill_icc(ti3)
 
     def _on_browse_icc(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(
-            self, "Select ICC / ICM profile", "",
-            "ICC profiles (*.icc *.icm)",
-            options=QFileDialog.Option.DontUseNativeDialog,
+        path = open_file_dialog(
+            self, "Select ICC / ICM profile", "ICC profiles (*.icc *.icm)",
+            extra_path=self._settings.get("custom_output_path", ""),
         )
         if path:
             self._icc_path = Path(path)

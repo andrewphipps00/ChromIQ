@@ -29,7 +29,7 @@ from core.logger import get_logger
 from core.resource_path import resource_path
 from core.strip_utils import letter_to_idx
 from ui.tooltip_button import TooltipButton
-from ui.widgets import NoScrollComboBox, NoScrollDoubleSpinBox, NoScrollSpinBox, make_browse_button
+from ui.widgets import NoScrollComboBox, NoScrollDoubleSpinBox, NoScrollSpinBox, make_browse_button, open_file_dialog
 from workflow.measure_manager import MeasureManager, MeasureParams
 from ui.tiff_preview import TiffPreview
 
@@ -547,10 +547,9 @@ class TabMeasure(QWidget):
     # ------------------------------------------------------------------
 
     def _on_load_ti2(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(
-            self, "Load .ti2 file", str(Path.home()),
-            "TI2 files (*.ti2)",
-            options=QFileDialog.Option.DontUseNativeDialog,
+        path = open_file_dialog(
+            self, "Load .ti2 file", "TI2 files (*.ti2)",
+            extra_path=self._settings.get("custom_output_path", ""),
         )
         if not path:
             return
