@@ -2,13 +2,22 @@
 
 **ChromIQ** is a macOS desktop application for creating custom ICC profiles for RGB inkjet printers using [ArgyllCMS](https://www.argyllcms.com/). It provides a guided, five-step workflow that takes you from generating and printing a test chart through measuring it, building a ready-to-use ICC profile, and verifying its quality — without needing to touch the command line.
 
-> **Status: Under active development.** Core functionality works end-to-end, but some features are still being refined and a few known issues remain. See [Known Issues](#known-issues) below.
+---
+
+## Download
+
+Pre-built DMGs are attached to each [GitHub Release](https://github.com/itsab1989/ChromIQ/releases/latest):
+
+| Build | Runs on |
+|-------|---------|
+| `ChromIQ-macOS-universal.dmg` | Apple Silicon **and** Intel (recommended) |
+| `ChromIQ-macOS-arm64.dmg` | Apple Silicon only |
+
+Open the DMG, drag ChromIQ to Applications, eject, then launch. **First launch:** right-click → Open to bypass Gatekeeper (the app is ad-hoc signed, not notarized). ArgyllCMS must be installed separately — see [Requirements](#requirements).
 
 ---
 
 ## Screenshots
-
-<!-- Screenshots will be added once the UI is more polished -->
 
 | Step 1a — Create Chart (guided) | Step 1b — Create Chart (manual)  |
 |---|---|
@@ -67,12 +76,14 @@ A4, A4 Landscape, A3, A3 Landscape, A2, US Letter, Letter Landscape, Legal, Tabl
 
 ### System
 - macOS 12 Ventura or later (Apple Silicon and Intel supported)
-- Python 3.11 or later
-- [ArgyllCMS 3.1.0 or later](https://www.argyllcms.com/downloaddev.html) — binaries must be installed (default path: `/Applications/Argyll/bin`)
+- [ArgyllCMS 3.5.0](https://www.argyllcms.com/downloaddev.html) — binaries must be installed at `/Applications/Argyll/bin` (configurable in Preferences)
+
+### To run from source
+- Python 3.12 or later
 
 ### Python dependencies
 ```
-PyQt6 >= 6.6.0
+PyQt6 >= 6.11.0
 Pillow >= 10.0.0
 PyYAML >= 6.0
 ```
@@ -80,6 +91,10 @@ PyYAML >= 6.0
 ---
 
 ## Installation
+
+### Pre-built app (recommended)
+
+Download the latest DMG from the [Releases page](https://github.com/itsab1989/ChromIQ/releases/latest), open it, drag ChromIQ to Applications, and launch. No Python or build tools required.
 
 ### From source
 
@@ -92,7 +107,7 @@ pip install -r requirements.txt
 python main.py
 ```
 
-### Build a standalone .app
+### Build a standalone .app from source
 
 ```bash
 source .venv/bin/activate
@@ -133,6 +148,13 @@ Copy `dist/ChromIQ.app` to `/Applications` and launch like any other macOS app. 
 - Review the colprof settings (quality, algorithm, gamut mapping, etc.)
 - Click **Build Profile** — the resulting `.icm` file is saved in the same folder as the chart
 - Install the profile in macOS via **ColorSync Utility** or by double-clicking the `.icm` file
+
+### Step 5 — Check & Refine
+- The `.ti3` measurement file from Step 3 is loaded automatically
+- Click **Run profcheck** to evaluate the finished profile — per-patch ΔE statistics are shown in the log
+- Patches above the ΔE threshold are highlighted; click **Re-measure patches** to start a guided re-measurement of only those patches
+- After re-measurement, click **Build Profile** again to incorporate the improved data
+- Repeat until the profile accuracy meets your requirements
 
 ---
 
