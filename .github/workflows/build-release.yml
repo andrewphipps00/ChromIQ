@@ -48,6 +48,9 @@ jobs:
           echo "/Library/Frameworks/Python.framework/Versions/3.12/bin" >> "$GITHUB_PATH"
 
       - name: Install dependencies
+        env:
+          # Force pip to download universal2 wheels instead of arm64-only ones
+          _PYTHON_HOST_PLATFORM: ${{ matrix.arch == 'universal2' && 'macosx-11.0-universal2' || '' }}
         run: |
           python3 -m pip install --upgrade pip
           pip3 install -r requirements.txt
