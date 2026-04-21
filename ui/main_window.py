@@ -4,7 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from PyQt6.QtCore import Qt, QSize, QTimer
-from PyQt6.QtGui import QIcon, QPixmap
+from PyQt6.QtGui import QGuiApplication, QIcon, QPixmap
 from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -128,11 +128,14 @@ class MainWindow(QMainWindow):
 
         px = QPixmap(str(resource_path("assets/settings.PNG")))
         if not px.isNull():
+            dpr = QGuiApplication.primaryScreen().devicePixelRatio()
+            phys = round(32 * dpr)
             scaled = px.scaled(
-                32, 32,
+                phys, phys,
                 Qt.AspectRatioMode.KeepAspectRatio,
                 Qt.TransformationMode.SmoothTransformation,
             )
+            scaled.setDevicePixelRatio(dpr)
             btn.setIcon(QIcon(scaled))
             btn.setIconSize(QSize(32, 32))
         else:

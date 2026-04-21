@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from PyQt6.QtCore import QEvent, QSize, Qt
-from PyQt6.QtGui import QIcon, QPixmap
+from PyQt6.QtGui import QGuiApplication, QIcon, QPixmap
 from PyQt6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
@@ -56,11 +56,14 @@ class TooltipButton(QToolButton):
             log.warning("tooltip.png not found at %s", path)
             self.setText("ⓘ")
         else:
+            dpr = QGuiApplication.primaryScreen().devicePixelRatio()
+            phys = round(_ICON_SIZE * dpr)
             scaled = px.scaled(
-                _ICON_SIZE, _ICON_SIZE,
+                phys, phys,
                 Qt.AspectRatioMode.KeepAspectRatio,
                 Qt.TransformationMode.SmoothTransformation,
             )
+            scaled.setDevicePixelRatio(dpr)
             self.setIcon(QIcon(scaled))
             self.setIconSize(QSize(_ICON_SIZE, _ICON_SIZE))
 
