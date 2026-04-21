@@ -422,6 +422,7 @@ class TabMeasure(QWidget):
         self._start_btn.clicked.connect(self._on_start)
         self._stop_btn = QPushButton("Stop", left)
         self._stop_btn.setObjectName("danger")
+        self._stop_btn.setFixedHeight(36)
         self._stop_btn.clicked.connect(self._on_stop)
         self._stop_btn.setEnabled(False)
         self._save_defaults_btn = QPushButton("Save as Defaults", left)

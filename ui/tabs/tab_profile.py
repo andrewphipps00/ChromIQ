@@ -130,6 +130,7 @@ class TabProfile(QWidget):
         self._build_btn.clicked.connect(self._on_build)
 
         self._install_btn = QPushButton("Install Profile", self)
+        self._install_btn.setFixedHeight(36)
         self._install_btn.setEnabled(False)
         self._install_btn.clicked.connect(self._on_install)
 

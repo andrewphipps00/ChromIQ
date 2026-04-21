@@ -116,6 +116,7 @@ class TabChart(QWidget):
         self._generate_btn.clicked.connect(self._on_generate)
 
         self._load_ti1_btn = QPushButton("Load existing .ti1…", self)
+        self._load_ti1_btn.setFixedHeight(36)
         self._load_ti1_btn.clicked.connect(self._on_load_ti1)
 
         self._save_defaults_btn = QPushButton("Save as Defaults", self)

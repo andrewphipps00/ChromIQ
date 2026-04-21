@@ -372,14 +372,9 @@ class TabCheckRefine(QWidget):
         self._run_btn.setObjectName("primary")
         self._run_btn.setFixedHeight(36)
         self._run_btn.clicked.connect(self._on_run)
-        self._stop_btn = QPushButton("Stop", self)
-        self._stop_btn.setObjectName("danger")
-        self._stop_btn.setEnabled(False)
-        self._stop_btn.clicked.connect(self._on_stop)
         self._save_defaults_btn = QPushButton("Save as Defaults", self)
         self._save_defaults_btn.clicked.connect(self._on_save_defaults)
         btn_row.addWidget(self._run_btn)
-        btn_row.addWidget(self._stop_btn)
         btn_row.addStretch()
         btn_row.addWidget(self._save_defaults_btn)
         root.addLayout(btn_row)
@@ -454,7 +449,6 @@ class TabCheckRefine(QWidget):
         self._log.clear()
         self._last_result = None
         self._run_btn.setEnabled(False)
-        self._stop_btn.setEnabled(True)
 
         self._checker.run(
             params,
@@ -462,16 +456,12 @@ class TabCheckRefine(QWidget):
             on_finish=self._on_done,
         )
 
-    def _on_stop(self) -> None:
-        self._runner.abort()
-
     def _on_log_line(self, line: str) -> None:
         self._log.appendPlainText(line)
         self._log.ensureCursorVisible()
 
     def _on_done(self, code: int) -> None:
         self._run_btn.setEnabled(True)
-        self._stop_btn.setEnabled(False)
 
         if code != 0:
             self._log.appendPlainText(f"\n[ERROR] profcheck exited with code {code}.")
