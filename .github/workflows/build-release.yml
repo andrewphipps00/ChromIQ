@@ -53,9 +53,13 @@ jobs:
           pip3 install -r requirements.txt
           pip3 install pyinstaller
 
-      - name: Use pure-Python PyYAML (universal2 only — avoids arm64-only C extension)
+      - name: Force universal2 fat binaries (universal2 only)
         if: matrix.arch == 'universal2'
-        run: pip3 install --force-reinstall --no-binary PyYAML PyYAML
+        run: |
+          # PyYAML: pure-Python fallback avoids arm64-only C extension
+          pip3 install --force-reinstall --no-binary PyYAML PyYAML
+          # Pillow: build from source with both archs so .so files are fat binaries
+          ARCHFLAGS="-arch x86_64 -arch arm64" pip3 install --force-reinstall --no-binary Pillow Pillow
 
       - name: Build app bundle
         env:
