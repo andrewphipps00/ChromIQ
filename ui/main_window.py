@@ -41,8 +41,8 @@ class MainWindow(QMainWindow):
         self._file_mgr  = FileManager(settings)
 
         self.setWindowTitle("ChromIQ — Printer Profiling")
-        self.setMinimumSize(1390, 970)
-        self.resize(1390, 970)
+        self.setMinimumSize(1390, 1000)
+        self.resize(1390, 1000)
 
         # Central widget
         central = QWidget(self)
@@ -99,7 +99,7 @@ class MainWindow(QMainWindow):
 
     def _make_header(self) -> QWidget:
         header = QWidget(self)
-        header.setFixedHeight(80)
+        header.setFixedHeight(110)
         header.setStyleSheet("background: #161616;")
 
         layout = QHBoxLayout(header)
