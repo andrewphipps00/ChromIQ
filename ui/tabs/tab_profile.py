@@ -8,12 +8,15 @@ from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
+    QDialog,
+    QDialogButtonBox,
     QFileDialog,
     QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QPlainTextEdit,
+    QProgressBar,
     QPushButton,
     QScrollArea,
     QVBoxLayout,
@@ -62,7 +65,8 @@ _INTENTS = [
 class TabProfile(QWidget):
     """Step 4: build and install ICC profile from .ti3 measurements."""
 
-    profile_built = pyqtSignal(Path, Path)   # (ti3_path, icc_path)
+    profile_built    = pyqtSignal(Path, Path)   # (ti3_path, icc_path)
+    check_requested  = pyqtSignal()             # user clicked "Check Quality" in the result dialog
 
     def __init__(
         self,
@@ -143,12 +147,13 @@ class TabProfile(QWidget):
         btn_row.addWidget(self._save_defaults_btn)
         root.addLayout(btn_row)
 
-        # --- Sanity label ---
-        self._sanity_lbl = QLabel("", self)
-        self._sanity_lbl.setObjectName("info")
-        self._sanity_lbl.setWordWrap(True)
-        self._sanity_lbl.setVisible(False)
-        root.addWidget(self._sanity_lbl)
+        # --- Build progress bar (hidden until a build is running) ---
+        self._progress_bar = QProgressBar(self)
+        self._progress_bar.setRange(0, 0)          # indeterminate / busy indicator
+        self._progress_bar.setFixedHeight(6)
+        self._progress_bar.setTextVisible(False)
+        self._progress_bar.setVisible(False)
+        root.addWidget(self._progress_bar)
 
         # --- Log ---
         self._log = QPlainTextEdit(self)
@@ -366,56 +371,52 @@ class TabProfile(QWidget):
         grp = QGroupBox("Gamut Mapping", layout.parentWidget())
         g = QVBoxLayout(grp)
 
-        # Gamut source — perceptual
-        gam_row = QHBoxLayout()
-        self._gam_check = QCheckBox("Gamut Source — Perceptual (-s):", grp)
-        self._gam_edit = QLineEdit(grp)
-        self._gam_edit.setPlaceholderText(
-            "Optional: source RGB profile (e.g. AdobeRGB.icc) for perceptual gamut mapping"
-        )
-        self._gam_edit.setEnabled(False)
-        gam_browse = make_browse_button(grp, "Select perceptual gamut source profile")
-        gam_browse.clicked.connect(self._browse_gam)
-        gam_browse.setEnabled(False)
-        self._gam_check.toggled.connect(self._gam_edit.setEnabled)
-        self._gam_check.toggled.connect(gam_browse.setEnabled)
-        gam_row.addWidget(self._gam_check)
-        gam_row.addWidget(self._gam_edit, stretch=1)
-        gam_row.addWidget(gam_browse)
-        gam_row.addWidget(TooltipButton(
-            "Perceptual Gamut Mapping Source (-s)",
-            "Source RGB working-space profile for perceptual gamut mapping B2A table.\n"
-            "Optional.  If specified (e.g. AdobeRGB.icc), the perceptual intent\n"
-            "will be built using that space's gamut as the source.",
+        # ── Unified gamut source selector ───────────────────────────────
+        mode_row = QHBoxLayout()
+        mode_row.addWidget(QLabel("Gamut Source:", grp))
+        self._gam_mode_combo = NoScrollComboBox(grp)
+        self._gam_mode_combo.addItem("None (colprof default)", "")
+        self._gam_mode_combo.addItem("Perceptual only (-s)", "s")
+        self._gam_mode_combo.addItem("Perceptual + Saturation (-S)  ← recommended", "S")
+        mode_row.addWidget(self._gam_mode_combo, stretch=1)
+        mode_row.addWidget(TooltipButton(
+            "Gamut Source (-s / -S)",
+            "When printing, colours that fall outside your printer's range must be\n"
+            "compressed to fit. This setting tells ChromIQ which colour space your\n"
+            "images live in, so the compression is tuned to that space and looks\n"
+            "natural in prints.\n\n"
+            "None — colprof uses a large internal default. Works, but the perceptual\n"
+            "intent is not optimised for any real working space.\n\n"
+            "Perceptual only (-s) — applies the source gamut to the perceptual\n"
+            "rendering intent only.\n\n"
+            "Perceptual + Saturation (-S, recommended) — applies it to both intents.\n"
+            "Use this unless you have a specific reason to treat them differently.\n\n"
+            "Leave set to 'Perc+Sat' and sRGB unless you edit your images in\n"
+            "AdobeRGB, in which case browse to AdobeRGB.icm in the Argyll ref folder.",
             grp,
         ))
-        g.addLayout(gam_row)
+        g.addLayout(mode_row)
 
-        # Gamut source — perc+sat
-        gam_sat_row = QHBoxLayout()
-        self._gam_sat_check = QCheckBox("Gamut Source — Perc+Sat (-S):", grp)
-        self._gam_sat_edit = QLineEdit(grp)
-        self._gam_sat_edit.setPlaceholderText(
-            "Optional: source RGB profile for both perceptual AND saturation gamut mapping"
+        path_row = QHBoxLayout()
+        self._gam_path_edit = QLineEdit(grp)
+        self._gam_path_edit.setPlaceholderText(
+            "Path to source RGB profile (e.g. sRGB.icm or AdobeRGB.icm from Argyll/ref/)"
         )
-        self._gam_sat_edit.setEnabled(False)
-        gam_sat_browse = make_browse_button(grp, "Select perceptual+saturation gamut source profile")
-        gam_sat_browse.clicked.connect(self._browse_gam_sat)
-        gam_sat_browse.setEnabled(False)
-        self._gam_sat_check.toggled.connect(self._gam_sat_edit.setEnabled)
-        self._gam_sat_check.toggled.connect(gam_sat_browse.setEnabled)
-        gam_sat_row.addWidget(self._gam_sat_check)
-        gam_sat_row.addWidget(self._gam_sat_edit, stretch=1)
-        gam_sat_row.addWidget(gam_sat_browse)
-        gam_sat_row.addWidget(TooltipButton(
-            "Perceptual + Saturation Gamut Source (-S)",
-            "Like -s but applies the gamut source to both the perceptual AND saturation\n"
-            "B2A tables.  Only one of -s or -S should be used.",
-            grp,
-        ))
-        g.addLayout(gam_sat_row)
+        self._gam_path_browse = make_browse_button(grp, "Select gamut source profile")
+        self._gam_path_browse.clicked.connect(self._browse_gam)
+        path_row.addWidget(self._gam_path_edit, stretch=1)
+        path_row.addWidget(self._gam_path_browse)
+        g.addLayout(path_row)
 
-        # Perceptual intent override
+        def _on_mode_changed() -> None:
+            active = bool(self._gam_mode_combo.currentData())
+            self._gam_path_edit.setEnabled(active)
+            self._gam_path_browse.setEnabled(active)
+
+        self._gam_mode_combo.currentIndexChanged.connect(_on_mode_changed)
+        _on_mode_changed()
+
+        # ── Perceptual intent override ──────────────────────────────────
         perc_intent_row = QHBoxLayout()
         self._perc_intent_check = QCheckBox("Perceptual Intent Override (-t):", grp)
         self._perc_intent_combo = NoScrollComboBox(grp)
@@ -427,14 +428,16 @@ class TabProfile(QWidget):
         perc_intent_row.addWidget(self._perc_intent_combo, stretch=1)
         perc_intent_row.addWidget(TooltipButton(
             "Perceptual Rendering Intent Override (-t)",
-            "Overrides the gamut-mapping algorithm used to build the perceptual B2A table.\n"
-            "Default (unchecked) uses colprof's built-in perceptual mapping.\n"
-            "Most useful when a -s/-S gamut source is provided.",
+            "Changes the mathematical algorithm used to compress out-of-gamut colours\n"
+            "for the perceptual rendering intent.\n\n"
+            "The default (unchecked) works well for most inkjet workflows.\n"
+            "Only change this if you are experimenting with different gamut-mapping\n"
+            "behaviours.",
             grp,
         ))
         g.addLayout(perc_intent_row)
 
-        # Saturation intent override
+        # ── Saturation intent override ──────────────────────────────────
         sat_intent_row = QHBoxLayout()
         self._sat_intent_check = QCheckBox("Saturation Intent Override (-T):", grp)
         self._sat_intent_combo = NoScrollComboBox(grp)
@@ -446,13 +449,14 @@ class TabProfile(QWidget):
         sat_intent_row.addWidget(self._sat_intent_combo, stretch=1)
         sat_intent_row.addWidget(TooltipButton(
             "Saturation Rendering Intent Override (-T)",
-            "Overrides the gamut-mapping algorithm used to build the saturation B2A table.\n"
-            "Default (unchecked) uses colprof's built-in saturation mapping.",
+            "Same as the Perceptual override above, but for the saturation rendering\n"
+            "intent. The saturation intent is rarely used in photo printing — leave\n"
+            "unchecked unless you specifically need it.",
             grp,
         ))
         g.addLayout(sat_intent_row)
 
-        # nP / nS / nI flags
+        # ── nP / nS / nI flags ─────────────────────────────────────────
         flags_row = QHBoxLayout()
         self._no_perc_gamut_cb = QCheckBox("Use colorimetric gamut — perceptual (-nP)", grp)
         self._no_sat_gamut_cb  = QCheckBox("Use colorimetric gamut — saturation (-nS)", grp)
@@ -460,23 +464,25 @@ class TabProfile(QWidget):
         flags_row.addWidget(self._no_perc_gamut_cb)
         flags_row.addWidget(TooltipButton(
             "No Perceptual Gamut (-nP)",
-            "Use the colorimetric source gamut instead of a separate perceptual source\n"
-            "when building the perceptual B2A table.",
+            "Forces the perceptual intent to use the same gamut boundaries as the\n"
+            "colorimetric intent, ignoring any gamut source set above.\n"
+            "Advanced — leave unchecked.",
             grp,
         ))
         flags_row.addSpacing(12)
         flags_row.addWidget(self._no_sat_gamut_cb)
         flags_row.addWidget(TooltipButton(
             "No Saturation Gamut (-nS)",
-            "Use the colorimetric source gamut when building the saturation B2A table.",
+            "Same as above, but for the saturation intent.\n"
+            "Advanced — leave unchecked.",
             grp,
         ))
         flags_row.addSpacing(12)
         flags_row.addWidget(self._inv_gamut_cb)
         flags_row.addWidget(TooltipButton(
             "Inverse Gamut Mapping (-nI)",
-            "Apply inverse gamut mapping to the perceptual and saturation A→B tables.\n"
-            "Advanced option — use only if you understand its effect.",
+            "Applies gamut mapping in reverse on the A→B tables.\n"
+            "Highly experimental — only use if you know exactly what this does.",
             grp,
         ))
         flags_row.addStretch()
@@ -571,6 +577,11 @@ class TabProfile(QWidget):
     # Internal
     # ------------------------------------------------------------------
 
+    def _default_gamut_src(self) -> str:
+        bin_path = self._settings.get("argyll_bin_path", "/Applications/Argyll/bin")
+        candidate = Path(bin_path).parent / "ref" / "sRGB.icm"
+        return str(candidate) if candidate.exists() else ""
+
     def _on_load_ti3(self) -> None:
         path = open_file_dialog(
             self, "Load .ti3 file", "TI3 files (*.ti3)",
@@ -584,14 +595,7 @@ class TabProfile(QWidget):
             self, "Select gamut source profile", "ICC profiles (*.icc *.icm)",
         )
         if path:
-            self._gam_edit.setText(path)
-
-    def _browse_gam_sat(self) -> None:
-        path = open_file_dialog(
-            self, "Select gamut source profile (perc+sat)", "ICC profiles (*.icc *.icm)",
-        )
-        if path:
-            self._gam_sat_edit.setText(path)
+            self._gam_path_edit.setText(path)
 
     def _on_build(self) -> None:
         if not self._ti3_path or not self._ti3_path.exists():
@@ -603,9 +607,10 @@ class TabProfile(QWidget):
 
         params = self._collect_params()
         self._log.clear()
-        self._sanity_lbl.setVisible(False)
+        self._build_btn.setText("Building Profile…")
         self._build_btn.setEnabled(False)
         self._install_btn.setEnabled(False)
+        self._progress_bar.setVisible(True)
 
         self._builder.build(
             params,
@@ -618,7 +623,10 @@ class TabProfile(QWidget):
         self._log.ensureCursorVisible()
 
     def _on_build_done(self, code: int) -> None:
+        self._build_btn.setText("Build Profile")
         self._build_btn.setEnabled(True)
+        self._progress_bar.setVisible(False)
+
         if code != 0:
             self._log.appendPlainText(f"\n[ERROR] colprof exited with code {code}.")
             self._log.ensureCursorVisible()
@@ -628,21 +636,95 @@ class TabProfile(QWidget):
         self._icc_path = self._builder.expected_icc_path(params)
         issues = self._builder.sanity_check(self._icc_path)
 
-        if issues:
-            self._sanity_lbl.setObjectName("warning")
-            self._sanity_lbl.setText("Warnings:\n" + "\n".join(f"• {i}" for i in issues))
-            self._sanity_lbl.setVisible(True)
-        else:
-            self._sanity_lbl.setObjectName("info")
-            self._sanity_lbl.setText("Profile created successfully. No issues detected.")
-            self._sanity_lbl.setVisible(True)
-
-        if self._icc_path and self._icc_path.exists():
-            self._install_btn.setEnabled(True)
-            self._log.appendPlainText(f"\n[OK] Profile saved: {self._icc_path}")
+        if not (self._icc_path and self._icc_path.exists()):
+            self._log.appendPlainText("\n[ERROR] Profile file was not created.")
             self._log.ensureCursorVisible()
-            if self._ti3_path:
-                self.profile_built.emit(self._ti3_path, self._icc_path)
+            return
+
+        self._install_btn.setEnabled(True)
+        self._log.appendPlainText(f"\n[OK] Profile saved: {self._icc_path}")
+        self._log.ensureCursorVisible()
+        if self._ti3_path:
+            self.profile_built.emit(self._ti3_path, self._icc_path)
+
+        self._show_build_result_dialog(self._icc_path, issues)
+
+    def _show_build_result_dialog(self, icc_path: Path, issues: list[str]) -> None:
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Profile Built")
+        dlg.setMinimumWidth(520)
+
+        layout = QVBoxLayout(dlg)
+        layout.setContentsMargins(24, 20, 24, 20)
+        layout.setSpacing(14)
+
+        if issues:
+            headline = QLabel("<b>Your ICC profile has been built — with warnings.</b>", dlg)
+        else:
+            headline = QLabel("<b>Your ICC profile has been built successfully.</b>", dlg)
+        headline.setStyleSheet("font-size: 14px;")
+        layout.addWidget(headline)
+
+        path_lbl = QLabel(
+            f"Saved to:<br><code style='font-size:11px'>{icc_path}</code>",
+            dlg,
+        )
+        path_lbl.setWordWrap(True)
+        layout.addWidget(path_lbl)
+
+        if issues:
+            warn_lbl = QLabel(
+                "<b>Warnings detected:</b><br>" +
+                "<br>".join(f"&nbsp;&nbsp;• {i}" for i in issues),
+                dlg,
+            )
+            warn_lbl.setWordWrap(True)
+            warn_lbl.setStyleSheet("color: #d4a017;")
+            layout.addWidget(warn_lbl)
+
+        next_lbl = QLabel("What would you like to do next?", dlg)
+        layout.addWidget(next_lbl)
+
+        install_desc = QLabel(
+            "<b>Install on this Mac</b> — adds the profile to your Mac's colour management "
+            "system so it is immediately available in Photoshop, Lightroom, and other "
+            "colour-managed apps.",
+            dlg,
+        )
+        install_desc.setWordWrap(True)
+        install_desc.setStyleSheet("color: #b0b0b0; font-size: 11px;")
+        layout.addWidget(install_desc)
+
+        check_desc = QLabel(
+            "<b>Check Profile Quality</b> — runs a quality check to see how accurately "
+            "the profile represents your printer's colours. Recommended before using "
+            "the profile for critical prints.",
+            dlg,
+        )
+        check_desc.setWordWrap(True)
+        check_desc.setStyleSheet("color: #b0b0b0; font-size: 11px;")
+        layout.addWidget(check_desc)
+
+        btn_box = QDialogButtonBox(dlg)
+        install_btn = btn_box.addButton("Install on this Mac",    QDialogButtonBox.ButtonRole.ActionRole)
+        check_btn   = btn_box.addButton("Check Profile Quality →", QDialogButtonBox.ButtonRole.ActionRole)
+        done_btn    = btn_box.addButton("Done",                    QDialogButtonBox.ButtonRole.AcceptRole)
+        install_btn.setObjectName("primary")
+        layout.addWidget(btn_box)
+
+        def _on_install() -> None:
+            dlg.accept()
+            self._on_install()
+
+        def _on_check() -> None:
+            dlg.accept()
+            self.check_requested.emit()
+
+        install_btn.clicked.connect(_on_install)
+        check_btn.clicked.connect(_on_check)
+        done_btn.clicked.connect(dlg.accept)
+
+        dlg.exec()
 
     def _on_install(self) -> None:
         if not self._icc_path:
@@ -664,7 +746,7 @@ class TabProfile(QWidget):
             b2a_quality      = self._b2a_combo.currentData() if self._b2a_check.isChecked() else "",
             smoothing        = self._smooth_spin.value(),
             dark_emphasis    = self._dark_spin.value(),
-            gamut_src        = self._gam_edit.text().strip() if self._gam_check.isChecked() else "",
+            gamut_src        = self._gam_path_edit.text().strip() if self._gam_mode_combo.currentData() == "s" else "",
             manufacturer     = self._mfr_edit.text().strip() if self._mfr_check.isChecked() else "",
             model            = self._model_edit.text().strip() if self._model_check.isChecked() else "",
             copyright        = self._copy_edit.text().strip() if self._copy_check.isChecked() else "",
@@ -675,7 +757,7 @@ class TabProfile(QWidget):
             observer         = self._obs_combo.currentData() or "",
             fwa_enabled      = self._fwa_check.isChecked(),
             fwa_illum        = (self._fwa_illum_combo.currentData() or "") if self._fwa_check.isChecked() else "",
-            gamut_sat_src    = self._gam_sat_edit.text().strip() if self._gam_sat_check.isChecked() else "",
+            gamut_sat_src    = self._gam_path_edit.text().strip() if self._gam_mode_combo.currentData() == "S" else "",
             no_perc_gamut    = self._no_perc_gamut_cb.isChecked(),
             no_sat_gamut     = self._no_sat_gamut_cb.isChecked(),
             inv_gamut_map    = self._inv_gamut_cb.isChecked(),
@@ -697,8 +779,8 @@ class TabProfile(QWidget):
         s.set("colprof_observer",           self._obs_combo.currentData() or "")
         s.set("colprof_fwa_enabled",        self._fwa_check.isChecked())
         s.set("colprof_fwa_illum",          self._fwa_illum_combo.currentData() or "")
-        s.set("colprof_gam_sat_enabled",    self._gam_sat_check.isChecked())
-        s.set("colprof_gam_sat",            self._gam_sat_edit.text().strip())
+        s.set("colprof_gamut_mode",          self._gam_mode_combo.currentData() or "")
+        s.set("colprof_gamut_src",           self._gam_path_edit.text().strip())
         s.set("colprof_perc_intent_enabled",self._perc_intent_check.isChecked())
         s.set("colprof_perc_intent",        self._perc_intent_combo.currentData() or "")
         s.set("colprof_sat_intent_enabled", self._sat_intent_check.isChecked())
@@ -740,8 +822,13 @@ class TabProfile(QWidget):
         self._fwa_check.setChecked(bool(s.get("colprof_fwa_enabled", False)))
         _set_combo(self._fwa_illum_combo,    "colprof_fwa_illum",  "")
 
-        self._gam_sat_check.setChecked(bool(s.get("colprof_gam_sat_enabled", False)))
-        self._gam_sat_edit.setText(s.get("colprof_gam_sat", ""))
+        gamut_mode = s.get("colprof_gamut_mode", "S")
+        idx = self._gam_mode_combo.findData(gamut_mode)
+        self._gam_mode_combo.setCurrentIndex(idx if idx >= 0 else self._gam_mode_combo.findData("S"))
+        saved_src = s.get("colprof_gamut_src", "")
+        if not saved_src:
+            saved_src = self._default_gamut_src()
+        self._gam_path_edit.setText(saved_src)
         self._perc_intent_check.setChecked(bool(s.get("colprof_perc_intent_enabled", False)))
         _set_combo(self._perc_intent_combo,  "colprof_perc_intent", "")
         self._sat_intent_check.setChecked(bool(s.get("colprof_sat_intent_enabled", False)))

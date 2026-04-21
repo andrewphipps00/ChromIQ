@@ -323,7 +323,7 @@ class TabMeasure(QWidget):
         self._resume_cb.setVisible(False)
         resume_row.addWidget(self._resume_cb)
         resume_row.addStretch()
-        resume_row.addWidget(TooltipButton(
+        self._resume_tip = TooltipButton(
             "Refine Existing Measurement (-r)",
             "Resumes from the existing .ti3 file in the same folder as the\n"
             ".ti2 file. Previously measured strips are kept — you only need\n"
@@ -332,7 +332,9 @@ class TabMeasure(QWidget):
             "or to continue a measurement that was interrupted.\n\n"
             "This option appears only when a matching .ti3 file is found.",
             left,
-        ))
+        )
+        self._resume_tip.setVisible(False)
+        resume_row.addWidget(self._resume_tip)
         cg.addLayout(resume_row)
 
         # Refinement file row — shown only when resume is checked
@@ -566,6 +568,7 @@ class TabMeasure(QWidget):
     def _update_resume_availability(self) -> None:
         if self._ti1_path is None:
             self._resume_cb.setVisible(False)
+            self._resume_tip.setVisible(False)
             self._resume_cb.setChecked(False)
             self._refine_cb.setEnabled(False)
             self._refine_cb.setChecked(False)
@@ -575,6 +578,7 @@ class TabMeasure(QWidget):
         ti3 = self._ti1_path.with_suffix(".ti3")
         has_ti3 = ti3.exists()
         self._resume_cb.setVisible(has_ti3)
+        self._resume_tip.setVisible(has_ti3)
         if not has_ti3:
             self._resume_cb.setChecked(False)
         # Auto-detect Refine_Strips file

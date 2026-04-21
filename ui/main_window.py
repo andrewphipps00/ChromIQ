@@ -75,6 +75,7 @@ class MainWindow(QMainWindow):
         self._tab_measure.measure_finished.connect(self._on_measure_done)
         self._tab_measure.proceed_to_profile.connect(self._on_proceed_to_profile)
         self._tab_profile.profile_built.connect(self._tab_check.set_paths)
+        self._tab_profile.check_requested.connect(lambda: self._tabs.setCurrentWidget(self._tab_check))
         self._tab_check.guide_refinement_requested.connect(self._on_guide_refinement)
         self._tab_check.ti2_found.connect(self._tab_measure.set_ti1_path)
         self._tab_print.ti2_loaded.connect(self._tab_measure.set_ti1_path)
