@@ -318,17 +318,19 @@ class TabMeasure(QWidget):
         )
 
         resume_row = QHBoxLayout()
-        self._resume_cb = QCheckBox("Continue from existing .ti3 (-r)", left)
+        self._resume_cb = QCheckBox("Refine existing measurement (-r)", left)
         self._resume_cb.setChecked(False)
-        self._resume_cb.setEnabled(False)
+        self._resume_cb.setVisible(False)
         resume_row.addWidget(self._resume_cb)
         resume_row.addStretch()
         resume_row.addWidget(TooltipButton(
-            "Continue from Existing .ti3 (-r)",
-            "Resume from the .ti3 file in the same folder as the .ti2.\n"
-            "Use this if a measurement was interrupted, or when refining\n"
-            "specific strips after a quality check.\n"
-            "Only available when a matching .ti3 file exists.",
+            "Refine Existing Measurement (-r)",
+            "Resumes from the existing .ti3 file in the same folder as the\n"
+            ".ti2 file. Previously measured strips are kept — you only need\n"
+            "to scan the strips you want to update or add.\n\n"
+            "Use this after a quality check to re-measure problem strips,\n"
+            "or to continue a measurement that was interrupted.\n\n"
+            "This option appears only when a matching .ti3 file is found.",
             left,
         ))
         cg.addLayout(resume_row)
@@ -560,7 +562,7 @@ class TabMeasure(QWidget):
 
     def _update_resume_availability(self) -> None:
         if self._ti1_path is None:
-            self._resume_cb.setEnabled(False)
+            self._resume_cb.setVisible(False)
             self._resume_cb.setChecked(False)
             self._refine_cb.setEnabled(False)
             self._refine_cb.setChecked(False)
@@ -569,7 +571,7 @@ class TabMeasure(QWidget):
             return
         ti3 = self._ti1_path.with_suffix(".ti3")
         has_ti3 = ti3.exists()
-        self._resume_cb.setEnabled(has_ti3)
+        self._resume_cb.setVisible(has_ti3)
         if not has_ti3:
             self._resume_cb.setChecked(False)
         # Auto-detect Refine_Strips file
