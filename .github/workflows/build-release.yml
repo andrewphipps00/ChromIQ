@@ -4,6 +4,11 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to build (e.g. v1.1.4)'
+        required: true
 
 permissions:
   contents: write
@@ -26,8 +31,13 @@ jobs:
             artifact: ChromIQ-macOS-universal.dmg
             target_arch_env: 'universal2'
 
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
 
       # arm64 job: use setup-python with the same Python version as local dev
       - name: Set up Python (arm64)
@@ -83,13 +93,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          TAG="${{ github.ref_name }}"
+          TAG="$RELEASE_TAG"
           if ! gh release view "$TAG" > /dev/null 2>&1; then
             python3 - <<'PYEOF'
-import re, os, subprocess
+import re, os
 
-tag = os.environ.get("TAG") or subprocess.check_output(["git", "describe", "--tags", "--exact-match"], text=True).strip()
-tag = os.environ.get("GITHUB_REF_NAME", tag)
+tag = os.environ["RELEASE_TAG"]
 
 try:
     text = open("CHANGELOG.md").read()
@@ -116,4 +125,4 @@ PYEOF
       - name: Upload DMG to release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${{ github.ref_name }}" "${{ matrix.artifact }}" --clobber
+        run: gh release upload "$RELEASE_TAG" "${{ matrix.artifact }}" --clobber
