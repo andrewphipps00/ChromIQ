@@ -92,6 +92,7 @@ PAPER_SIZES: list[str] = [
 # Paper sizes hidden in guided mode for specific instruments.
 # A3 portrait excluded for i1Pro 3 Plus: only 153 patches vs 225 on 420x297 landscape.
 EXCLUDED_PAPERS: dict[str, set[str]] = {
+    "i1": {"A3"},
     "p3": {"A3"},
 }
 
