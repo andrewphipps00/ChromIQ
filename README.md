@@ -1,6 +1,6 @@
 # ChromIQ
 
-**ChromIQ** is a macOS desktop application for creating custom ICC profiles for RGB inkjet printers using [ArgyllCMS](https://www.argyllcms.com/). It provides a guided, step-by-step workflow that takes you from printing a test chart all the way through measuring it and building a ready-to-use ICC profile — without needing to touch the command line.
+**ChromIQ** is a macOS desktop application for creating custom ICC profiles for RGB inkjet printers using [ArgyllCMS](https://www.argyllcms.com/). It provides a guided, five-step workflow that takes you from generating and printing a test chart through measuring it, building a ready-to-use ICC profile, and verifying its quality — without needing to touch the command line.
 
 > **Status: Under active development.** Core functionality works end-to-end, but some features are still being refined and a few known issues remain. See [Known Issues](#known-issues) below.
 
@@ -27,12 +27,13 @@
 ## Features
 
 ### Guided Workflow
-ChromIQ walks you through the four steps of RGB printer profiling:
+ChromIQ walks you through five steps of RGB printer profiling:
 
 1. **Create Chart** — generates a test chart using `targen` and `printtarg`, with automatic patch count calculation for your instrument/paper combination
 2. **Print Chart** — sends the chart TIFF directly to your printer via CUPS with configurable print options
 3. **Measure Chart** — drives your spectrophotometer with `chartread` to measure the printed patches
 4. **Build Profile** — runs `colprof` to generate a finished ICC profile
+5. **Check & Refine** — evaluates the finished profile with `profcheck`, shows per-patch ΔE statistics, and guides you through a targeted re-measurement to improve accuracy
 
 ### Guided and Manual Modes
 - **Guided mode** (Step 1): Select instrument, paper size, and number of pages — ChromIQ looks up the optimal patch count from an empirical database and sets sensible defaults automatically.
@@ -162,10 +163,11 @@ ChromIQ/
 │   ├── dialogs/
 │   │   └── settings_dialog.py # Preferences dialog
 │   └── tabs/
-│       ├── tab_chart.py       # Step 1: chart creation
-│       ├── tab_print.py       # Step 2: CUPS printing
-│       ├── tab_measure.py     # Step 3: chartread measurement
-│       └── tab_profile.py     # Step 4: colprof profile building
+│       ├── tab_chart.py           # Step 1: chart creation
+│       ├── tab_print.py           # Step 2: CUPS printing
+│       ├── tab_measure.py         # Step 3: chartread measurement
+│       ├── tab_profile.py         # Step 4: colprof profile building
+│       └── tab_check_refine.py    # Step 5: profcheck quality check & refinement
 └── workflow/
     ├── chart_creator.py       # targen + printtarg orchestration
     ├── cups_printer.py        # lp command wrapper
@@ -249,3 +251,5 @@ To be determined.
 ## Acknowledgements
 
 ChromIQ is built on top of [ArgyllCMS](https://www.argyllcms.com/) by Graeme Gill — an outstanding open-source color management system. All color science heavy lifting is done by ArgyllCMS; ChromIQ is purely a GUI front-end.
+
+A heartfelt thanks to **soul-traveller** for [Argyll_Printer_Profiler](https://github.com/soul-traveller/Argyll_Printer_Profiler) — a printer profiling tool that is likely in a more mature and in several areas more comprehensive state than ChromIQ. If you prefer working with proven, pre-made test charts rather than randomly generated targets, his project includes an extensive collection of carefully selected charts that are an excellent fit for exactly that use case.
