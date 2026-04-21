@@ -95,28 +95,13 @@ jobs:
         run: |
           TAG="$RELEASE_TAG"
           if ! gh release view "$TAG" > /dev/null 2>&1; then
-            python3 - <<'PYEOF'
-import re, os
-
-tag = os.environ["RELEASE_TAG"]
-
-try:
-    text = open("CHANGELOG.md").read()
-    m = re.search(r"(?m)^## " + re.escape(tag) + r"\n(.*?)(?=^## |\Z)", text, re.DOTALL)
-    body = m.group(1).strip() if m else ""
-except FileNotFoundError:
-    body = ""
-
-install = (
-    "\n\n---\n"
-    "**Installation:** Open the DMG, drag ChromIQ to Applications, eject, then launch. "
-    "First launch: right-click → Open (bypasses Gatekeeper). "
-    "Requires macOS 12+ and ArgyllCMS 3.5.0 at `/Applications/Argyll/bin`."
-)
-
-with open("/tmp/release_notes.txt", "w") as f:
-    f.write(body + install)
-PYEOF
+            body=$(awk "/^## ${TAG}$/{found=1; next} found && /^## /{exit} found{print}" CHANGELOG.md 2>/dev/null | sed '/^[[:space:]]*$/d' || true)
+            {
+              printf '%s\n\n---\n' "$body"
+              printf '**Installation:** Open the DMG, drag ChromIQ to Applications, eject, then launch. '
+              printf 'First launch: right-click → Open (bypasses Gatekeeper). '
+              printf 'Requires macOS 12+ and ArgyllCMS 3.5.0 at `/Applications/Argyll/bin`.'
+            } > /tmp/release_notes.txt
             gh release create "$TAG" \
               --title "ChromIQ $TAG" \
               --notes-file /tmp/release_notes.txt
