@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PyQt6.QtCore import Qt, QSize
+from PyQt6.QtCore import Qt, QSize, QTimer
 from PyQt6.QtGui import QIcon, QPixmap
 from PyQt6.QtWidgets import (
     QHBoxLayout,
@@ -91,6 +91,7 @@ class MainWindow(QMainWindow):
         self._tabs.setCurrentIndex(active)
 
         self._check_argyll_binaries(initial=True)
+        QTimer.singleShot(0, self._apply_dark_title_bar)
         log.info("MainWindow initialised")
 
     # ------------------------------------------------------------------
@@ -229,6 +230,46 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
     # Window events
     # ------------------------------------------------------------------
+
+    def _apply_dark_title_bar(self) -> None:
+        """Force the macOS title bar to use dark (black) appearance."""
+        import sys
+        if sys.platform != "darwin":
+            return
+        try:
+            import ctypes, ctypes.util
+            objc = ctypes.cdll.LoadLibrary(ctypes.util.find_library("objc"))
+            objc.objc_msgSend.restype      = ctypes.c_void_p
+            objc.sel_registerName.restype  = ctypes.c_void_p
+            objc.objc_getClass.restype     = ctypes.c_void_p
+
+            def _S(name: str):
+                return objc.sel_registerName(name.encode())
+
+            def _C(name: str):
+                return objc.objc_getClass(name.encode())
+
+            def _msg(obj, sel, *args, argtypes=None):
+                objc.objc_msgSend.argtypes = (
+                    [ctypes.c_void_p, ctypes.c_void_p]
+                    + (argtypes or [ctypes.c_void_p] * len(args))
+                )
+                return objc.objc_msgSend(obj, _S(sel), *args)
+
+            dark_str = _msg(
+                _C("NSString"), "stringWithUTF8String:",
+                b"NSAppearanceNameDarkAqua",
+                argtypes=[ctypes.c_char_p],
+            )
+            appearance = _msg(
+                _C("NSAppearance"), "appearanceNamed:",
+                ctypes.c_void_p(dark_str),
+            )
+            ns_view   = ctypes.c_void_p(int(self.winId()))
+            ns_window = _msg(ns_view, "window")
+            _msg(ns_window, "setAppearance:", ctypes.c_void_p(appearance))
+        except Exception:
+            pass
 
     def closeEvent(self, event) -> None:
         self._settings.set("window_geometry", self.saveGeometry())
