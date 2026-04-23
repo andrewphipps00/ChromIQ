@@ -33,6 +33,7 @@ a = Analysis(
         'PIL.ImageFile',
         'PIL.TiffImagePlugin',
         'yaml',
+        'cups',
     ],
     hookspath=['hooks'],
     hooksconfig={},
@@ -80,8 +81,8 @@ app = BUNDLE(
     info_plist={
         'CFBundleName':              'ChromIQ',
         'CFBundleDisplayName':       'ChromIQ',
-        'CFBundleShortVersionString': '1.3.1',
-        'CFBundleVersion':           '1.3.1',
+        'CFBundleShortVersionString': '1.4.0',
+        'CFBundleVersion':           '1.4.0',
         'NSHighResolutionCapable':   True,
         'NSPrincipalClass':          'NSApplication',
         'NSRequiresAquaSystemAppearance': False,

@@ -10,6 +10,17 @@ from core.logger import get_logger
 
 log = get_logger(__name__)
 
+# Injected into every print job to disable all color management in CUPS.
+_COLOR_MGMT_OFF: dict[str, str] = {
+    "ColorSync":        "None",
+    "cupsColorSpace":   "DeviceRGB",
+    "cupsColorOrder":   "0",
+    "ColorModel":       "RGB",
+    "cupsCompression":  "None",
+    "cupsBitsPerColor": "8",
+    "Duplex":           "None",
+}
+
 
 @dataclass
 class PrintConfig:
@@ -51,9 +62,21 @@ class CupsRawPrinter:
 
     @staticmethod
     def _build_lp_command(tiff_path: Path, cfg: PrintConfig) -> list[str]:
+        # Color-management options always override user selections.
+        merged = {**cfg.options, **_COLOR_MGMT_OFF}
         cmd = ["lp", "-d", cfg.printer_name]
-        for key, val in cfg.options.items():
+        for key, val in merged.items():
             if val:
                 cmd += ["-o", f"{key}={val}"]
         cmd.append(str(tiff_path))
         return cmd
+
+    @staticmethod
+    def is_printer_reachable(printer_name: str) -> bool:
+        """Return True if the printer is idle or printing (state 3 or 4)."""
+        try:
+            import cups
+            attrs = cups.Connection().getPrinters().get(printer_name, {})
+            return attrs.get("printer-state", 5) in (3, 4)
+        except Exception:
+            return True  # fail open — let lp surface the real error

@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.4.0
+### Added
+- **Clear Print Queue button** — cancels all pending and stuck jobs for the selected printer directly from the Print tab, without needing to open a system tool.
+- **Stuck-job pre-print check** — before sending a job, ChromIQ detects held, stopped, or aborted jobs in the CUPS queue and offers to clear them first ("Clear & Print / Print Anyway / Cancel").
+- **Printer reachability check** — a clear error dialog is shown if the selected printer is offline before a job is submitted.
+### Improved
+- **Print option combos unlock sequentially** — each option only becomes active once the preceding one is set, and incompatible quality values are filtered automatically based on the selected media type (Epson EPIJ exact rules, PPD UIConstraints, or general keyword heuristics for other drivers).
+- **Color management is now always disabled automatically** — no manual option selection required; the correct CUPS flags are injected into every print job.
+- **Multi-page TIFF handling** — "Print Current Page" and "Print All Pages" now correctly extract and send individual frames from multi-page TIFF files.
+- **Printer detection** now uses the pycups API directly instead of parsing `lpstat` output, giving more reliable results across locales.
+- **Drying time guidance** updated to reflect professional recommendations (at least 1 h; 24 h for best accuracy).
+- **New app icon.**
+
 ## v1.3.1
 ### Improved
 - **Check & Refine start-over logic** now uses OR logic: starting over is recommended when more than 50% of individual patches exceed the ΔE threshold, *or* when more than 75% of strips are flagged. This prevents false "start over" recommendations on small charts where a few outlier patches flag most strips, while still correctly catching large charts where nearly every strip needs re-measuring.

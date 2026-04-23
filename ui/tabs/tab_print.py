@@ -1,9 +1,12 @@
 """Tab 2: Print Chart."""
 from __future__ import annotations
 
+import os
+import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from PIL import Image
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import (
     QApplication,
@@ -12,6 +15,7 @@ from PyQt6.QtWidgets import (
     QGroupBox,
     QHBoxLayout,
     QLabel,
+    QMessageBox,
     QPushButton,
     QSplitter,
     QStyle,
@@ -47,6 +51,10 @@ class TabPrint(QWidget):
         self._module   = PrintModule()
         self._printer  = CupsRawPrinter()
         self._tiff_pages: list[Path] = []
+        # Sequential-enabling state — populated in _rebuild_option_rows
+        self._ordered_opts: list[tuple[str, list[str], QComboBox]] = []
+        self._raw_value_pairs: dict[str, list[tuple[str, str]]] = {}
+        self._restoring: bool = False
 
         self._build_ui()
 
@@ -89,8 +97,7 @@ class TabPrint(QWidget):
             "Select the printer to send the chart to.  Only printers installed in\n"
             "the system CUPS print queue are listed.\n\n"
             "The TIFF is sent directly via lp with the options you configure below.\n"
-            "To suppress colour management, select 'No Color Adjustment' (or equivalent)\n"
-            "in the Print Options section.",
+            "Color management is always disabled automatically.",
             left,
         ))
         pg.addLayout(pr_row)
@@ -109,10 +116,10 @@ class TabPrint(QWidget):
 
         # Warning label
         warn = QLabel(
-            "⚠  Verify that all print settings above match the media you are printing on.\n"
-            "   Wrong media type or quality settings will cause incorrect ink laydown\n"
-            "   and invalid colour measurements. Allow the print to dry fully before\n"
-            "   measuring (at least 15–30 min for pigment inks).",
+            "⚠  Verify that all print settings above match the media you are printing on.\n\n"
+            "Wrong media type or quality settings will cause incorrect ink laydown and "
+            "invalid colour measurements. Allow pigment inks to dry fully before measuring "
+            "(at least 1 h; 24 h for best accuracy).",
             left,
         )
         warn.setObjectName("warning")
@@ -136,9 +143,16 @@ class TabPrint(QWidget):
         self._save_defaults_btn = QPushButton("Save as Defaults", left)
         self._save_defaults_btn.clicked.connect(self._on_save_defaults)
 
+        self._clear_queue_btn = QPushButton("Clear Print Queue", left)
+        self._clear_queue_btn.setToolTip(
+            "Cancel all pending and stuck jobs for the selected printer."
+        )
+        self._clear_queue_btn.clicked.connect(self._on_clear_queue)
+
         btn_row.addWidget(self._print_page_btn)
         btn_row.addWidget(self._print_all_btn)
         btn_row.addStretch()
+        btn_row.addWidget(self._clear_queue_btn)
         btn_row.addWidget(self._save_defaults_btn)
         ll.addLayout(btn_row)
 
@@ -210,6 +224,8 @@ class TabPrint(QWidget):
             if item.widget():
                 item.widget().deleteLater()
         self._option_combos.clear()
+        self._ordered_opts.clear()
+        self._raw_value_pairs.clear()
 
         if not printer:
             self._opts_layout.addWidget(QLabel("Select a printer to see its options.", self))
@@ -230,7 +246,8 @@ class TabPrint(QWidget):
                     k, v = pair.split("=", 1)
                     saved_printer_opts[k] = v
 
-        for opt_name, (label, value_pairs) in opts.items():
+        for i, (opt_name, (label, value_pairs)) in enumerate(opts.items()):
+            self._raw_value_pairs[opt_name] = value_pairs
             row = QHBoxLayout()
             lbl = QLabel(f"{label}:", self)
             lbl.setMinimumWidth(160)
@@ -240,14 +257,68 @@ class TabPrint(QWidget):
             combo.addItem("(not set)", "")
             for display, raw_val in value_pairs:
                 combo.addItem(display, raw_val)
-            saved_val = saved_printer_opts.get(opt_name, "")
-            if saved_val:
-                idx = combo.findData(saved_val)
-                if idx >= 0:
-                    combo.setCurrentIndex(idx)
+            # Only the first combo starts enabled; the rest unlock sequentially.
+            combo.setEnabled(i == 0)
             row.addWidget(combo, stretch=1)
             self._opts_layout.addLayout(row)
             self._option_combos[opt_name] = combo
+            self._ordered_opts.append((opt_name, [rv for _, rv in value_pairs], combo))
+            combo.currentIndexChanged.connect(
+                lambda _, idx=i: self._on_option_changed(idx)
+            )
+
+        # Restore saved values in insertion order so the enable-chain fires naturally.
+        self._restoring = True
+        for opt_name, _, combo in self._ordered_opts:
+            saved_val = saved_printer_opts.get(opt_name, "")
+            if saved_val and combo.isEnabled():
+                found = combo.findData(saved_val)
+                if found >= 0:
+                    combo.setCurrentIndex(found)
+        self._restoring = False
+
+    def _on_option_changed(self, combo_index: int) -> None:
+        if not self._ordered_opts:
+            return
+        _, _, changed_combo = self._ordered_opts[combo_index]
+        has_val = bool(changed_combo.currentData())
+
+        # When the user changes a combo interactively, reset all later combos.
+        if not self._restoring:
+            for j in range(combo_index + 1, len(self._ordered_opts)):
+                _, _, c = self._ordered_opts[j]
+                c.setEnabled(False)
+                c.blockSignals(True)
+                c.setCurrentIndex(0)
+                c.blockSignals(False)
+
+        if not has_val or combo_index + 1 >= len(self._ordered_opts):
+            return
+
+        preceding = {
+            self._ordered_opts[k][0]: self._ordered_opts[k][2].currentData() or ""
+            for k in range(combo_index + 1)
+        }
+        preceding_labels = {
+            self._ordered_opts[k][0]: self._ordered_opts[k][2].currentText() or ""
+            for k in range(combo_index + 1)
+        }
+        next_opt, next_all_vals, next_combo = self._ordered_opts[combo_index + 1]
+        next_all_pairs = self._raw_value_pairs.get(next_opt, [])
+
+        valid_vals = set(self._module.get_valid_option_values(
+            self._printer_combo.currentData() or "",
+            preceding, preceding_labels, next_opt, next_all_vals, next_all_pairs,
+        ))
+
+        next_combo.blockSignals(True)
+        next_combo.clear()
+        next_combo.addItem("(not set)", "")
+        for display, raw_val in self._raw_value_pairs.get(next_opt, []):
+            if raw_val in valid_vals:
+                next_combo.addItem(display, raw_val)
+        next_combo.blockSignals(False)
+        next_combo.setEnabled(True)
 
     def _on_load_ti2(self) -> None:
         from ui.ti2_loader import resolve_ti2
@@ -268,41 +339,110 @@ class TabPrint(QWidget):
             self._status_lbl.setText("No TIFF files found matching the selected .ti2 file.")
 
     def _on_print_current(self) -> None:
-        if not self._tiff_pages:
+        if not self._preview._pages:
             return
-        idx = self._preview._current
-        page = self._tiff_pages[min(idx, len(self._tiff_pages) - 1)]
-        self._send_page(page)
+        path, frame = self._preview._pages[self._preview._current]
+        self._send_page(path, frame)
 
     def _on_print_all(self) -> None:
-        for page in self._tiff_pages:
-            self._send_page(page)
+        if not self._preview._pages:
+            return
+        for path, frame in self._preview._pages:
+            self._send_page(path, frame)
 
-    def _send_page(self, tiff_path: Path) -> None:
+    def _send_page(self, tiff_path: Path, frame: int = 0) -> None:
         printer = self._printer_combo.currentData() or ""
         if not printer:
-            self._status_lbl.setObjectName("error")
-            self._status_lbl.setText("No printer selected.")
-            self._status_lbl.setStyleSheet("")
+            QMessageBox.warning(self, "No Printer", "Please select a printer before printing.")
             return
 
-        selected_opts = {
-            k: (combo.currentData() or "")
-            for k, combo in self._option_combos.items()
-        }
-        config = self._module.build_config(printer=printer, options=selected_opts)
-        self._status_lbl.setText(f"Sending {tiff_path.name} to {printer}…")
+        if not self._printer.is_printer_reachable(printer):
+            QMessageBox.critical(
+                self, "Printer Offline",
+                f"The printer \"{printer}\" appears to be offline or unreachable.\n"
+                "Please check that it is powered on and connected.",
+            )
+            return
 
-        self._printer.print_job(
-            tiff_path, config,
-            on_finish=self._on_print_done,
-        )
+        stuck = self._module.get_stuck_jobs(printer)
+        if stuck:
+            n = len(stuck)
+            dlg = QMessageBox(self)
+            dlg.setWindowTitle("Stuck Print Jobs Detected")
+            dlg.setIcon(QMessageBox.Icon.Warning)
+            dlg.setText(
+                f"There {'is' if n == 1 else 'are'} {n} stuck print "
+                f"job{'s' if n != 1 else ''} in the queue for \"{printer}\".\n\n"
+                "Stuck jobs can block new print jobs from being processed.\n"
+                "Clear them before printing?"
+            )
+            clear_btn  = dlg.addButton("Clear & Print",  QMessageBox.ButtonRole.AcceptRole)
+            dlg.addButton("Print Anyway", QMessageBox.ButtonRole.DestructiveRole)
+            cancel_btn = dlg.addButton(QMessageBox.StandardButton.Cancel)
+            dlg.setDefaultButton(clear_btn)
+            dlg.exec()
+            clicked = dlg.clickedButton()
+            if clicked is cancel_btn:
+                return
+            if clicked is clear_btn:
+                cleared = self._module.cancel_all_jobs(printer)
+                log.info("Cleared %d stuck job(s) before printing", cleared)
+
+        # Extract the target frame to a temporary single-page TIFF when needed.
+        tmp_path: Path | None = None
+        try:
+            img = Image.open(tiff_path)
+            n_frames = getattr(img, "n_frames", 1)
+            if n_frames > 1 or frame > 0:
+                img.seek(min(frame, n_frames - 1))
+                fd, tmp_str = tempfile.mkstemp(suffix=".tif")
+                os.close(fd)
+                tmp_path = Path(tmp_str)
+                img.save(tmp_path, format="TIFF")
+                print_path = tmp_path
+            else:
+                print_path = tiff_path
+        except Exception as exc:
+            QMessageBox.critical(
+                self, "TIFF Error",
+                f"Cannot read TIFF file:\n{tiff_path.name}\n\n{exc}",
+            )
+            return
+
+        selected_opts = {k: (c.currentData() or "") for k, c in self._option_combos.items()}
+        config = self._module.build_config(printer=printer, options=selected_opts)
+        self._status_lbl.setText(f"Sending {tiff_path.name} (page {frame + 1}) to {printer}…")
+
+        def _cleanup_and_finish(code: int) -> None:
+            if tmp_path and tmp_path.exists():
+                tmp_path.unlink(missing_ok=True)
+            self._on_print_done(code)
+
+        self._printer.print_job(print_path, config, on_finish=_cleanup_and_finish)
 
     def _on_print_done(self, code: int) -> None:
         if code == 0:
             self._status_lbl.setText("Print job submitted successfully.")
         else:
             self._status_lbl.setText(f"Print failed (lp exit code {code}).")
+            QMessageBox.critical(
+                self, "Print Error",
+                f"CUPS rejected the print job (exit code {code}).\n"
+                "Check that the printer is online and the selected options are valid.",
+            )
+
+    def _on_clear_queue(self) -> None:
+        printer = self._printer_combo.currentData() or ""
+        if not printer:
+            QMessageBox.warning(self, "No Printer", "Select a printer first.")
+            return
+        count = self._module.cancel_all_jobs(printer)
+        if count:
+            self._status_lbl.setText(
+                f"Cleared {count} job{'s' if count != 1 else ''} from the queue."
+            )
+        else:
+            self._status_lbl.setText("No jobs in the queue to clear.")
 
     def _set_print_buttons_enabled(self, enabled: bool) -> None:
         self._print_page_btn.setEnabled(enabled)

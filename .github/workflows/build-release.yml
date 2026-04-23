@@ -70,6 +70,8 @@ jobs:
           pip3 install --force-reinstall --no-binary PyYAML PyYAML
           # Pillow: build from source with both archs so .so files are fat binaries
           ARCHFLAGS="-arch x86_64 -arch arm64" pip3 install --force-reinstall --no-binary Pillow Pillow
+          # pycups: C extension wrapping libcups — must also be a fat binary
+          ARCHFLAGS="-arch x86_64 -arch arm64" pip3 install --force-reinstall --no-binary pycups pycups
 
       - name: Build app bundle
         env:
