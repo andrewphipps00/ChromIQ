@@ -2,9 +2,12 @@
 from __future__ import annotations
 
 import json
+import ssl
 import threading
 import urllib.request
 from urllib.error import URLError
+
+import certifi
 
 from PyQt6.QtCore import QObject, pyqtSignal
 
@@ -38,7 +41,8 @@ class UpdateChecker(QObject):
                 _RELEASES_API,
                 headers={"User-Agent": "ChromIQ-update-check"},
             )
-            with urllib.request.urlopen(req, timeout=10) as resp:
+            ctx = ssl.create_default_context(cafile=certifi.where())
+            with urllib.request.urlopen(req, timeout=10, context=ctx) as resp:
                 data = json.loads(resp.read())
             latest = data.get("tag_name", "")
             if not latest:

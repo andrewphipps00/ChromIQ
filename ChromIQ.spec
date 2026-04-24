@@ -13,6 +13,8 @@ The result will be in dist/ChromIQ.app
 """
 
 import os
+import certifi
+certifi_where = certifi.where()
 _target_arch = os.environ.get("PYINSTALLER_TARGET_ARCH") or None
 
 a = Analysis(
@@ -22,6 +24,7 @@ a = Analysis(
     datas=[
         ('assets',           'assets'),
         ('data/parameters.yaml', 'data'),
+        (certifi_where, 'certifi'),
     ],
     hiddenimports=[
         'PyQt6.sip',
