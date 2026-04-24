@@ -69,6 +69,7 @@ class TabPrint(QWidget):
         # ---- Left controls ----
         left = QWidget(self)
         left.setMaximumWidth(560)
+        left.setStyleSheet("QPushButton { min-height: 44px; }")
         ll = QVBoxLayout(left)
         ll.setContentsMargins(16, 12, 16, 12)
         ll.setSpacing(10)
@@ -133,17 +134,17 @@ class TabPrint(QWidget):
 
         # Print buttons
         btn_row = QHBoxLayout()
-        self._print_page_btn = QPushButton("Print Current Page", left)
+        self._print_page_btn = QPushButton("Print\nCurrent Page", left)
         self._print_page_btn.setObjectName("primary")
         self._print_page_btn.clicked.connect(self._on_print_current)
 
-        self._print_all_btn = QPushButton("Print All Pages", left)
+        self._print_all_btn = QPushButton("Print All\nPages", left)
         self._print_all_btn.clicked.connect(self._on_print_all)
 
-        self._save_defaults_btn = QPushButton("Save as Defaults", left)
+        self._save_defaults_btn = QPushButton("Save as\nDefaults", left)
         self._save_defaults_btn.clicked.connect(self._on_save_defaults)
 
-        self._clear_queue_btn = QPushButton("Clear Print Queue", left)
+        self._clear_queue_btn = QPushButton("Clear\nPrint Queue", left)
         self._clear_queue_btn.setToolTip(
             "Cancel all pending and stuck jobs for the selected printer."
         )

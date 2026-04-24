@@ -390,6 +390,7 @@ class TabCheckRefine(QWidget):
         self._run_btn.setFixedHeight(36)
         self._run_btn.clicked.connect(self._on_run)
         self._save_defaults_btn = QPushButton("Save as Defaults", self)
+        self._save_defaults_btn.setFixedHeight(36)
         self._save_defaults_btn.clicked.connect(self._on_save_defaults)
         btn_row.addWidget(self._run_btn)
         btn_row.addStretch()

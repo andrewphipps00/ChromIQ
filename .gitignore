@@ -30,6 +30,7 @@ build/
 # App runtime output
 ChromIQ/
 chromiq.log*
+assets/exported/
 
 # Claude Code local settings
 .claude/

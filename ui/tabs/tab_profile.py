@@ -139,6 +139,7 @@ class TabProfile(QWidget):
         self._install_btn.clicked.connect(self._on_install)
 
         self._save_defaults_btn = QPushButton("Save as Defaults", self)
+        self._save_defaults_btn.setFixedHeight(36)
         self._save_defaults_btn.clicked.connect(self._on_save_defaults)
 
         btn_row.addWidget(self._build_btn)
