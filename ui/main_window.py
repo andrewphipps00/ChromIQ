@@ -22,6 +22,7 @@ from core.file_manager import FileManager
 from core.logger import get_logger
 from core.resource_path import resource_path
 from core.settings import AppSettings
+from core.updater import UpdateChecker
 from ui.dialogs.settings_dialog import SettingsDialog
 from ui.styles import APP_STYLESHEET, make_dark_palette
 from ui.tabs.tab_chart import TabChart
@@ -94,7 +95,9 @@ class MainWindow(QMainWindow):
         self._tabs.setCurrentIndex(active)
 
         self._check_argyll_binaries(initial=True)
+        self._startup_update_checker: UpdateChecker | None = None
         QTimer.singleShot(0, self._apply_dark_title_bar)
+        QTimer.singleShot(3000, self._check_for_updates_on_startup)
         log.info("MainWindow initialised")
 
     # ------------------------------------------------------------------
@@ -168,6 +171,19 @@ class MainWindow(QMainWindow):
         dlg = SettingsDialog(self._settings, self)
         dlg.exec()
         self._check_argyll_binaries()
+
+    def _check_for_updates_on_startup(self) -> None:
+        self._startup_update_checker = UpdateChecker(self)
+        self._startup_update_checker.update_available.connect(
+            self._on_startup_update_available
+        )
+        self._startup_update_checker.check_async()
+
+    def _on_startup_update_available(self, latest: str) -> None:
+        if not self.statusBar().currentMessage():
+            self.statusBar().showMessage(
+                f"Update available: ChromIQ {latest} — open Preferences (⚙) to download.", 0
+            )
 
     def _check_argyll_binaries(self, initial: bool = False) -> None:
         bin_dir = Path(self._settings.get("argyll_bin_path", "/Applications/Argyll/bin"))

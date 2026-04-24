@@ -591,8 +591,11 @@ class TabProfile(QWidget):
             self.set_ti3_path(Path(path))
 
     def _browse_gam(self) -> None:
+        bin_path = self._settings.get("argyll_bin_path", "/Applications/Argyll/bin")
+        ref_dir = Path(bin_path).parent / "ref"
         path = open_file_dialog(
             self, "Select gamut source profile", "ICC profiles (*.icc *.icm)",
+            start_dir=str(ref_dir) if ref_dir.is_dir() else "",
         )
         if path:
             self._gam_path_edit.setText(path)

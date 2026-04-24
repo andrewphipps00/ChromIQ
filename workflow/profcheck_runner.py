@@ -269,18 +269,14 @@ def write_quality_report(
     summary_text: str,
     raw_log: str,
 ) -> Path:
-    """Write Quality_Check_<stem>.txt, numbering if it already exists."""
-    base = folder / f"Quality_Check_{stem}.txt"
-    if not base.exists():
-        target = base
-    else:
-        n = 2
-        while True:
-            candidate = folder / f"Quality_Check_{n}_{stem}.txt"
-            if not candidate.exists():
-                target = candidate
-                break
-            n += 1
+    """Write Quality_Check_<n>_<stem>.txt, incrementing n until the name is free."""
+    n = 1
+    while True:
+        candidate = folder / f"Quality_Check_{n}_{stem}.txt"
+        if not candidate.exists():
+            target = candidate
+            break
+        n += 1
 
     target.write_text(
         f"{summary_text}\n\n{'─' * 60}\n\nFull profcheck output:\n\n{raw_log}",

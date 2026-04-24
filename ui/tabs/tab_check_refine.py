@@ -1,6 +1,7 @@
 """Tab 5: Check && Refine — profcheck quality assessment and guided re-measurement."""
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -222,6 +223,14 @@ class TabCheckRefine(QWidget):
             self,
         ))
         og.addLayout(verb_row)
+
+        def _on_verbosity_changed() -> None:
+            per_patch = self._verb_combo.currentData() == "2"
+            self._sort_cb.setEnabled(per_patch)
+            if not per_patch:
+                self._sort_cb.setChecked(False)
+
+        self._verb_combo.currentIndexChanged.connect(_on_verbosity_changed)
 
         # Re-measurement threshold
         threshold_row = QHBoxLayout()
@@ -631,6 +640,17 @@ class TabCheckRefine(QWidget):
         close_btn = btn_box.addButton("Close", QDialogButtonBox.ButtonRole.RejectRole)
         close_btn.clicked.connect(dlg.reject)
 
+        _install_labels = {
+            "Excellent":  "Install Profile",
+            "Good":       "Install Profile As Is",
+            "Acceptable": "Install Profile As Is",
+            "Needs Work": "Install Profile Anyway",
+        }
+        install_btn: QPushButton | None = None
+        if self._icc_path:
+            install_label = _install_labels.get(grade, "Install Profile Anyway")
+            install_btn = btn_box.addButton(install_label, QDialogButtonBox.ButtonRole.ActionRole)
+
         guide_btn: QPushButton | None = None
         if strips_file and refine_strips and not recommend_start_over and self._ti3_path:
             guide_btn = btn_box.addButton(
@@ -638,6 +658,8 @@ class TabCheckRefine(QWidget):
                 QDialogButtonBox.ButtonRole.ActionRole,
             )
             guide_btn.setObjectName("primary")
+        elif install_btn and grade == "Excellent":
+            install_btn.setObjectName("primary")
 
         layout.addWidget(btn_box)
 
@@ -649,6 +671,22 @@ class TabCheckRefine(QWidget):
                 self.guide_refinement_requested.emit(ti3, strips_file)
 
             guide_btn.clicked.connect(_on_guide)
+
+        if install_btn:
+            icc = self._icc_path
+
+            def _on_install():
+                try:
+                    _profile_dir = Path.home() / "Library" / "ColorSync" / "Profiles"
+                    _profile_dir.mkdir(parents=True, exist_ok=True)
+                    dest = _profile_dir / icc.name
+                    shutil.copy2(icc, dest)
+                    dlg.accept()
+                    self._log.appendPlainText(f"[OK] Profile installed to {dest}")
+                except Exception as exc:
+                    self._log.appendPlainText(f"[ERROR] Install failed: {exc}")
+
+            install_btn.clicked.connect(_on_install)
 
         dlg.exec()
 

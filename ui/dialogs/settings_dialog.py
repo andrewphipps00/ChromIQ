@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from PyQt6.QtCore import Qt, QUrl
-from PyQt6.QtGui import QDesktopServices
+from PyQt6.QtGui import QDesktopServices, QFontMetrics
 from PyQt6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
@@ -22,6 +22,8 @@ from PyQt6.QtWidgets import (
 )
 
 from core.logger import get_logger
+from core.updater import UpdateChecker, _RELEASES_PAGE
+from core.version import APP_VERSION
 from ui.tooltip_button import TooltipButton
 from ui.widgets import make_browse_button, open_dir_dialog
 
@@ -37,6 +39,7 @@ class SettingsDialog(QDialog):
     def __init__(self, settings: "AppSettings", parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._settings = settings
+        self._update_checker: UpdateChecker | None = None
         self.setWindowTitle("ChromIQ Preferences")
         self.setMinimumWidth(540)
         self.setWindowFlags(
@@ -109,19 +112,37 @@ class SettingsDialog(QDialog):
 
         layout.addWidget(folder_grp)
 
-        # ---- Author credit ----
-        credit_lbl = QLabel("ChromIQ · Created by Sebastian Reiprich", self)
-        credit_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        credit_lbl.setStyleSheet("color: #606060; font-size: 11px;")
-        layout.addWidget(credit_lbl)
+        # ---- About / Updates ----
+        credit1 = QLabel(f"ChromIQ v{APP_VERSION} · Created by Sebastian Reiprich", self)
+        credit1.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        credit1.setStyleSheet("color: #606060; font-size: 11px;")
+        layout.addWidget(credit1)
 
-        # ---- Bottom row: Restore Defaults left, Cancel/OK right ----
+        credit2 = QLabel(
+            "Built on ArgyllCMS by Graeme Gill · With thanks to Knut Georg Larsson", self
+        )
+        credit2.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        credit2.setStyleSheet("color: #606060; font-size: 11px;")
+        layout.addWidget(credit2)
+
+        self._update_status = QLabel("", self)
+        self._update_status.setStyleSheet("font-size: 11px;")
+        self._update_status.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._update_status.setFixedHeight(QFontMetrics(self._update_status.font()).height())
+        layout.addWidget(self._update_status)
+
+        # ---- Bottom row: Restore Defaults | Check for Updates | Cancel / OK ----
         bottom_row = QHBoxLayout()
         reset_btn = QPushButton("Restore Factory Defaults", self)
         reset_btn.setObjectName("danger")
         reset_btn.clicked.connect(self._restore_defaults)
         bottom_row.addWidget(reset_btn)
         bottom_row.addStretch()
+
+        self._update_btn = QPushButton("Check for Updates", self)
+        self._update_btn.clicked.connect(self._check_for_updates)
+        bottom_row.addWidget(self._update_btn)
+        bottom_row.addSpacing(8)
 
         bb = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok |
@@ -208,3 +229,35 @@ class SettingsDialog(QDialog):
         self._settings.reset_to_defaults()
         self._load_settings()
         log.info("Factory defaults restored")
+
+    def _check_for_updates(self) -> None:
+        self._update_btn.setEnabled(False)
+        self._update_btn.setText("Checking…")
+        self._update_status.setText("")
+
+        self._update_checker = UpdateChecker(self)
+        self._update_checker.update_available.connect(self._on_update_available)
+        self._update_checker.up_to_date.connect(self._on_up_to_date)
+        self._update_checker.check_failed.connect(self._on_update_failed)
+        self._update_checker.check_async()
+
+    def _on_update_available(self, latest: str) -> None:
+        self._update_btn.setEnabled(True)
+        self._update_btn.setText("Check for Updates")
+        self._update_status.setStyleSheet("font-size: 11px; color: #e67e00;")
+        self._update_status.setText(
+            f'{latest} available — <a href="{_RELEASES_PAGE}">open GitHub Releases</a>'
+        )
+        self._update_status.setOpenExternalLinks(True)
+
+    def _on_up_to_date(self) -> None:
+        self._update_btn.setEnabled(True)
+        self._update_btn.setText("Check for Updates")
+        self._update_status.setStyleSheet("font-size: 11px; color: #4caf50;")
+        self._update_status.setText("You're up to date.")
+
+    def _on_update_failed(self, reason: str) -> None:
+        self._update_btn.setEnabled(True)
+        self._update_btn.setText("Check for Updates")
+        self._update_status.setStyleSheet("font-size: 11px; color: #888;")
+        self._update_status.setText(f"Check failed: {reason}")

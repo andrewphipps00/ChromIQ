@@ -286,7 +286,7 @@ parameters:
         live binary-search recalculation instead of the fast lookup.
 
     - flag: "-m"
-      name: "Page Margin (mm)"
+      name: "Margin (mm)"
       type: int
       min: 0
       max: 30
@@ -294,26 +294,13 @@ parameters:
       step: 1
       affects_preview: true
       expert_only: true
-      tooltip_title: "Page Margin (-m)"
+      tooltip_title: "Margin (-m / -M)"
       tooltip_body: |
-        Sets the printable-area margin in millimetres.
+        Sets the margin in millimetres for both the printable area (-m)
+        and the TIFF file dimensions (-M).  Both are kept in sync.
         6 mm matches most printer minimum margins.  Reduce only if
         your printer supports borderless printing.  Changing this
         from the default triggers a recalculation.
-
-    - flag: "-M"
-      name: "TIFF Margin (mm)"
-      type: int
-      min: 0
-      max: 30
-      default: 6
-      step: 1
-      affects_preview: false
-      expert_only: true
-      tooltip_title: "TIFF File Margin (-M)"
-      tooltip_body: |
-        Margin included in the TIFF file dimensions (as opposed to
-        being outside the printable area).  Usually the same as -m.
 
     - flag: "-r"
       name: "Preserve Patch Order (no randomise)"
