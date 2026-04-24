@@ -1,17 +1,22 @@
 """Tab 1: Chart Creation — Guided and Manual modes."""
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import yaml
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import QSize, Qt, pyqtSignal
+from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import (
     QButtonGroup,
     QCheckBox,
+    QDialog,
+    QDialogButtonBox,
     QFileDialog,
     QGroupBox,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QPushButton,
     QRadioButton,
@@ -338,6 +343,41 @@ class TabChart(QWidget):
         output_layout.addLayout(name_row)
         layout.addWidget(output_grp)
 
+        # Presets
+        presets_grp = QGroupBox("Presets", w)
+        presets_row = QHBoxLayout(presets_grp)
+        presets_row.setContentsMargins(8, 4, 8, 8)
+        presets_row.addWidget(QLabel("Select preset:", w))
+        self._preset_combo = NoScrollComboBox(w)
+        self._preset_combo.addItem("Default", userData=None)
+        presets_row.addWidget(self._preset_combo, stretch=1)
+        self._preset_add_btn = QPushButton(w)
+        self._preset_add_btn.setObjectName("icon_btn")
+        self._preset_add_btn.setFixedSize(28, 28)
+        self._preset_add_btn.setIcon(QIcon(str(resource_path("assets/plus.svg"))))
+        self._preset_add_btn.setIconSize(QSize(14, 14))
+        self._preset_add_btn.setToolTip("Save current settings as a new preset")
+        self._preset_del_btn = QPushButton(w)
+        self._preset_del_btn.setObjectName("icon_btn")
+        self._preset_del_btn.setFixedSize(28, 28)
+        self._preset_del_btn.setIcon(QIcon(str(resource_path("assets/minus.svg"))))
+        self._preset_del_btn.setIconSize(QSize(14, 14))
+        self._preset_del_btn.setToolTip("Delete selected preset")
+        self._preset_del_btn.setEnabled(False)
+        presets_row.addWidget(self._preset_add_btn)
+        presets_row.addWidget(self._preset_del_btn)
+        presets_row.addWidget(TooltipButton(
+            "Manual Presets",
+            "Save and recall named snapshots of all Manual mode settings.\n\n"
+            "Use the + button to save the current parameter values as a named preset. "
+            "Select a preset from the list to instantly restore those values. "
+            "Use the − button to delete the selected preset.\n\n"
+            "The target name field is not saved with presets.",
+            w,
+            min_width=520,
+        ))
+        layout.addWidget(presets_grp)
+
         scroll = QScrollArea(w)
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(scroll.Shape.NoFrame)
@@ -404,6 +444,9 @@ class TabChart(QWidget):
             inner_layout.addWidget(grp)
 
         self._update_manual_lb_visibility()
+        self._preset_combo.currentIndexChanged.connect(self._on_preset_selected)
+        self._preset_add_btn.clicked.connect(self._on_preset_save)
+        self._preset_del_btn.clicked.connect(self._on_preset_delete)
 
         inner_layout.addStretch()
         scroll.setWidget(inner)
@@ -452,6 +495,121 @@ class TabChart(QWidget):
             self._manual_lb_pw.setVisible(not is_cm)
         if self._manual_dd_pw is not None:
             self._manual_dd_pw.setVisible(is_cm)
+
+    # ------------------------------------------------------------------
+    # Preset helpers
+    # ------------------------------------------------------------------
+
+    def _load_presets_from_settings(self) -> dict:
+        raw = self._settings.get("manual_presets", "")
+        try:
+            return json.loads(raw) if raw else {}
+        except Exception:
+            return {}
+
+    def _save_presets_to_settings(self, presets: dict) -> None:
+        self._settings.set("manual_presets", json.dumps(presets))
+
+    def _populate_preset_combo(self, presets: dict, select_name: str | None = None) -> None:
+        self._preset_combo.blockSignals(True)
+        self._preset_combo.clear()
+        self._preset_combo.addItem("Default", userData=None)
+        for name in presets:
+            self._preset_combo.addItem(name, userData=name)
+        if select_name is not None:
+            idx = self._preset_combo.findText(select_name)
+            if idx >= 0:
+                self._preset_combo.setCurrentIndex(idx)
+        self._preset_combo.blockSignals(False)
+        self._preset_del_btn.setEnabled(self._preset_combo.currentIndex() > 0)
+
+    def _on_preset_selected(self, index: int) -> None:
+        self._preset_del_btn.setEnabled(index > 0)
+        s = self._settings
+        if index == 0:
+            for tool, widgets in self._manual_widgets.items():
+                for pw in widgets:
+                    v = s.get(f"manual_{tool}_{pw.flag}")
+                    if v is not None:
+                        pw.set_value(v)
+            if self._bit8_radio is not None and self._bit16_radio is not None:
+                is_16bit = bool(s.get("manual_printtarg_tiff_16bit", False))
+                self._bit16_radio.setChecked(is_16bit)
+                self._bit8_radio.setChecked(not is_16bit)
+        else:
+            name = self._preset_combo.currentData()
+            presets = self._load_presets_from_settings()
+            data = presets.get(name, {})
+            for tool, widgets in self._manual_widgets.items():
+                for pw in widgets:
+                    v = data.get(f"{tool}_{pw.flag}")
+                    if v is not None:
+                        pw.set_value(v)
+            if self._bit8_radio is not None and self._bit16_radio is not None:
+                is_16bit = bool(data.get("tiff_16bit", False))
+                self._bit16_radio.setChecked(is_16bit)
+                self._bit8_radio.setChecked(not is_16bit)
+        self._update_manual_lb_visibility()
+
+    def _on_preset_save(self) -> None:
+        capture: dict = {}
+        for tool, widgets in self._manual_widgets.items():
+            for pw in widgets:
+                v = pw.get_raw_value()
+                if v is not None:
+                    capture[f"{tool}_{pw.flag}"] = v
+        capture["tiff_16bit"] = (
+            self._bit16_radio.isChecked() if self._bit16_radio is not None else False
+        )
+        dlg = QInputDialog(self)
+        dlg.setWindowTitle("Save Preset")
+        dlg.setLabelText(
+            "Give this preset a name.\n"
+            "All current Manual mode parameter values will be saved under that name\n"
+            "and can be recalled at any time from the preset list."
+        )
+        dlg.setMinimumWidth(460)
+        if not dlg.exec():
+            return
+        name = dlg.textValue().strip()
+        if not name:
+            return
+        presets = self._load_presets_from_settings()
+        presets[name] = capture
+        self._save_presets_to_settings(presets)
+        self._populate_preset_combo(presets, select_name=name)
+
+    def _on_preset_delete(self) -> None:
+        name = self._preset_combo.currentText()
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Delete Preset")
+        dlg.setMinimumWidth(460)
+        dlg_layout = QVBoxLayout(dlg)
+        dlg_layout.setSpacing(10)
+        dlg_layout.setContentsMargins(20, 20, 20, 16)
+        heading = QLabel(f'Delete the preset "{name}"?', dlg)
+        heading.setStyleSheet("font-weight: bold;")
+        heading.setWordWrap(True)
+        dlg_layout.addWidget(heading)
+        info = QLabel(
+            "All parameter values saved in this preset will be permanently removed. "
+            "This cannot be undone.",
+            dlg,
+        )
+        info.setWordWrap(True)
+        dlg_layout.addWidget(info)
+        bb = QDialogButtonBox(dlg)
+        bb.addButton("Cancel", QDialogButtonBox.ButtonRole.RejectRole)
+        bb.addButton("Delete", QDialogButtonBox.ButtonRole.AcceptRole)
+        bb.rejected.connect(dlg.reject)
+        bb.accepted.connect(dlg.accept)
+        dlg_layout.addWidget(bb)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        presets = self._load_presets_from_settings()
+        presets.pop(name, None)
+        self._save_presets_to_settings(presets)
+        self._populate_preset_combo(presets)
 
     # ------------------------------------------------------------------
     # Patch count display
@@ -720,6 +878,9 @@ class TabChart(QWidget):
             self._bit16_radio.setChecked(is_16bit)
             self._bit8_radio.setChecked(not is_16bit)
         self._update_manual_lb_visibility()
+
+        presets = self._load_presets_from_settings()
+        self._populate_preset_combo(presets)
 
         mode = s.get("chart_mode", "guided")
         self._switch_mode(mode)

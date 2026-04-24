@@ -84,7 +84,10 @@ class AppSettings:
         self._qs.setValue(key, value)
 
     def reset_to_defaults(self) -> None:
+        presets = self._qs.value("manual_presets", "")
         self._qs.clear()
+        if presets:
+            self._qs.setValue("manual_presets", presets)
         log.info("Settings reset to factory defaults")
 
     def save_tab_defaults(self, prefix: str, values: dict[str, Any]) -> None:

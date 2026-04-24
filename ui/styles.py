@@ -362,6 +362,13 @@ QPushButton#browse:hover {{
     background: #444;
 }}
 
+/* ---- Icon-only square buttons ------------------------------------ */
+QPushButton#icon_btn {{
+    padding: 0;
+    min-height: 0;
+    min-width: 0;
+}}
+
 /* ---- ToolButton (tooltip icon) ----------------------------------- */
 QToolButton#tooltip_btn {{
     background: transparent;

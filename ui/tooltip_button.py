@@ -28,10 +28,12 @@ class TooltipButton(QToolButton):
         title: str,
         body: str,
         parent: QWidget | None = None,
+        min_width: int = 420,
     ) -> None:
         super().__init__(parent)
         self._title = title
         self._body = body.strip()
+        self._min_width = min_width
 
         self.setObjectName("tooltip_btn")
         self.setToolTip(f"{title}\n\nClick for details")
@@ -69,16 +71,16 @@ class TooltipButton(QToolButton):
 
     def _show_dialog(self) -> None:
         log.debug("Tooltip dialog opened: %s", self._title)
-        dlg = _InfoDialog(self._title, self._body, self.window())
+        dlg = _InfoDialog(self._title, self._body, self.window(), self._min_width)
         dlg.exec()
 
 
 class _InfoDialog(QDialog):
-    def __init__(self, title: str, body: str, parent: QWidget | None) -> None:
+    def __init__(self, title: str, body: str, parent: QWidget | None, min_width: int = 420) -> None:
         super().__init__(parent)
         self.setWindowTitle(title)
-        self.setMinimumWidth(420)
-        self.setMaximumWidth(540)
+        self.setMinimumWidth(min_width)
+        self.setMaximumWidth(max(min_width + 120, 540))
         self.setWindowFlags(
             self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint
         )
