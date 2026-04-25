@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.6.1
+### Improved
+- **AirPrint driver warning in Print tab** — when no configurable options are
+  detected for the selected printer, the Print tab now shows an informative
+  message explaining that macOS often installs AirPrint or Driverless drivers
+  automatically, how to identify them in System Settings → Printers & Scanners,
+  and how to reinstall the printer with the manufacturer's native PPD driver.
+
 ## v1.6.0
 ### Added
 - **Manual mode presets** — the Create Chart tab's Manual mode now has a Presets section between the Output and parameter groups. Use the + button to save the current parameter values under a custom name, select a preset from the list to restore it instantly, and use the − button to delete it. Presets survive a factory settings reset.

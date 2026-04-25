@@ -12,6 +12,7 @@ from PyQt6.QtWidgets import (
     QApplication,
     QComboBox,
     QFileDialog,
+    QFrame,
     QGroupBox,
     QHBoxLayout,
     QLabel,
@@ -234,9 +235,50 @@ class TabPrint(QWidget):
 
         opts = self._module.query_options(printer)
         if not opts:
-            self._opts_layout.addWidget(
-                QLabel("No configurable options detected for this printer.", self)
+            box = QFrame(self)
+            box.setFrameShape(QFrame.Shape.NoFrame)
+            box.setObjectName("airprintInfoBox")
+            box.setStyleSheet(
+                "#airprintInfoBox {"
+                "  background-color: #2a2000;"
+                "  border: 1px solid #f9a825;"
+                "  border-radius: 6px;"
+                "}"
+                "#airprintInfoBox QLabel {"
+                "  background: transparent;"
+                "}"
             )
+            box_layout = QVBoxLayout(box)
+            box_layout.setContentsMargins(10, 8, 10, 8)
+            box_layout.setSpacing(6)
+
+            title = QLabel("No configurable options detected", box)
+            title.setStyleSheet("font-weight: bold; color: #fdd835;")
+            box_layout.addWidget(title)
+
+            body = QLabel(
+                "macOS often installs an <b>AirPrint</b> or <b>Driverless</b> driver "
+                "automatically when you add a printer. These work fine for everyday "
+                "printing, but don't expose the detailed settings needed for ICC profiling."
+                "<br><br>"
+                "<b>How to check:</b><br>"
+                "Open <i>System Settings → Printers &amp; Scanners</i>, select your "
+                "printer, and look at the <i>Kind</i> field. If it says "
+                "\"AirPrint\" or \"Driverless\", that's the cause."
+                "<br><br>"
+                "<b>How to fix:</b><br>"
+                "1. Click the <b>−</b> button to remove the printer.<br>"
+                "2. Download the native driver from your printer manufacturer's website.<br>"
+                "3. Re-add the printer — macOS should now use the native PPD driver "
+                "with all options available.",
+                box,
+            )
+            body.setWordWrap(True)
+            body.setTextFormat(Qt.TextFormat.RichText)
+            body.setStyleSheet("color: #e0d5b0;")
+            box_layout.addWidget(body)
+
+            self._opts_layout.addWidget(box)
             return
 
         saved_printer_opts: dict[str, str] = {}
