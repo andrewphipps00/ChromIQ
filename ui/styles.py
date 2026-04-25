@@ -379,4 +379,23 @@ QToolButton#tooltip_btn:hover {{
     background: rgba(255,255,255,15);
     border-radius: 10px;
 }}
+
+/* ---- Compact inputs (Measure tab: Additional Options) -------------- */
+QSpinBox#compact_input, QDoubleSpinBox#compact_input, QComboBox#compact_input {{
+    min-height: 0;
+    max-height: 22px;
+    padding: 1px 6px;
+}}
+QSpinBox#compact_input, QDoubleSpinBox#compact_input {{
+    padding-right: 20px;
+}}
+QSpinBox#compact_input::up-button, QDoubleSpinBox#compact_input::up-button {{
+    height: 10px;
+}}
+QSpinBox#compact_input::down-button, QDoubleSpinBox#compact_input::down-button {{
+    height: 10px;
+}}
+QComboBox#compact_input {{
+    padding-right: 28px;
+}}
 """

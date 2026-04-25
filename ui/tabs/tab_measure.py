@@ -257,8 +257,9 @@ class TabMeasure(QWidget):
 
         # Instrument
         self._instr_grp = instr_grp = QGroupBox("Measurement Instrument", left)
+        instr_grp.setFlat(True)
         ig = QVBoxLayout(instr_grp)
-        ig.setContentsMargins(8, 14, 8, 8)
+        ig.setContentsMargins(8, 6, 8, 8)
         instr_row = QHBoxLayout()
         instr_row.addWidget(QLabel("Instrument port number:", left))
         self._instr_spin = NoScrollSpinBox(left)
@@ -403,8 +404,9 @@ class TabMeasure(QWidget):
 
         # File selection
         self._file_grp = file_grp = QGroupBox("Target File (.ti2)", left)
+        file_grp.setFlat(True)
         fg = QVBoxLayout(file_grp)
-        fg.setContentsMargins(8, 14, 8, 8)
+        fg.setContentsMargins(8, 6, 8, 8)
         file_row = QHBoxLayout()
         self._load_ti1_btn = QPushButton("Load .ti2 file…", left)
         self._load_ti1_btn.clicked.connect(self._on_load_ti2)
@@ -435,6 +437,7 @@ class TabMeasure(QWidget):
         btn_row.addStretch()
         btn_row.addWidget(self._save_defaults_btn)
         ll.addLayout(btn_row)
+        ll.addStretch(1)
 
         # Log
         self._log = QPlainTextEdit(left)
@@ -443,7 +446,7 @@ class TabMeasure(QWidget):
         self._log.setMinimumHeight(100)
         self._log.setMaximumHeight(100)
         self._log.setPlaceholderText("chartread output will appear here…")
-        ll.addWidget(self._log, stretch=1)
+        ll.addWidget(self._log)
 
         left_scroll.setWidget(left)
         splitter.addWidget(left_scroll)
@@ -485,6 +488,7 @@ class TabMeasure(QWidget):
                 sb.setSingleStep(int(step))
                 sb.setValue(int(default))
                 sb.setFixedWidth(90)
+            sb.setObjectName("compact_input")
             return sb
 
         opts.append(_ChartreadOption(
@@ -493,6 +497,30 @@ class TabMeasure(QWidget):
             tooltip_title="High Resolution Spectral Mode (-H)",
             tooltip_body="Enables high-resolution spectral sampling on instruments that\n"
                          "support it (i1Pro 2/3).  Slightly slower but more accurate Lab values.",
+        ))
+
+        filter_combo = NoScrollComboBox(parent)
+        filter_combo.setFixedWidth(130)
+        filter_combo.setObjectName("compact_input")
+        for code, lbl in [("n", "None (M0)"), ("5", "D50 (M1)"), ("6", "D65"), ("u", "UV Cut (M2)"), ("p", "Polarizing (M3)")]:
+            filter_combo.addItem(lbl, code)
+        filter_combo.setCurrentIndex(1)  # default to D50 (M1)
+        opts.append(_ChartreadOption(
+            key="filter", flag="-F",
+            label="Spectral filter type (-F)",
+            tooltip_title="Spectral Filter (-F)",
+            tooltip_body=(
+                "Overrides the filter configuration used by the instrument.\n"
+                "Select the filter physically in use on your spectrophotometer:\n\n"
+                "  n = None (M0 — default, no filter)\n"
+                "  5 = D50 (M1 illuminant)\n"
+                "  6 = D65 illuminant\n"
+                "  u = UV Cut (M2)\n"
+                "  p = Polarizing filter (M3)\n\n"
+                "Only set this if you are using a specific filter or illuminant\n"
+                "condition. Wrong selection will silently skew measured values."
+            ),
+            widget=filter_combo,
         ))
 
         opts.append(_ChartreadOption(
@@ -524,6 +552,7 @@ class TabMeasure(QWidget):
         # XRGA conversion combo
         xrga_combo = NoScrollComboBox(parent)
         xrga_combo.setFixedWidth(110)
+        xrga_combo.setObjectName("compact_input")
         for code, lbl in [("N", "None"), ("A", "XRGA"), ("X", "XRDI"), ("G", "GMDI")]:
             xrga_combo.addItem(lbl, code)
         opts.append(_ChartreadOption(
