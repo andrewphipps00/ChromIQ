@@ -417,6 +417,7 @@ class TabMeasure(QWidget):
         file_row.addWidget(self._ti1_lbl, stretch=1)
         fg.addLayout(file_row)
         ll.addWidget(file_grp)
+        ll.addStretch(1)
 
         # Buttons
         btn_row = QHBoxLayout()
@@ -437,7 +438,6 @@ class TabMeasure(QWidget):
         btn_row.addStretch()
         btn_row.addWidget(self._save_defaults_btn)
         ll.addLayout(btn_row)
-        ll.addStretch(1)
 
         # Log
         self._log = QPlainTextEdit(left)
