@@ -7,6 +7,7 @@ from pathlib import Path
 from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import QApplication
 
+from PyQt6.QtGui import QFontDatabase
 from core.logger import configure_logging, get_logger
 from core.resource_path import resource_path
 from core.settings import AppSettings
@@ -24,16 +25,22 @@ def main() -> int:
     app.setOrganizationName("ChromIQ")
     app.setApplicationDisplayName("ChromIQ — Printer Profiling")
 
+    try:
+        for font_path in resource_path("assets/fonts").glob("*.ttf"):
+            QFontDatabase.addApplicationFont(str(font_path))
+    except Exception:
+        pass  # fonts dir missing — app falls back to system fonts
+
     app.setStyle("Fusion")
     app.setPalette(make_dark_palette())
     app.setStyleSheet(APP_STYLESHEET)
+    settings = AppSettings()
 
     icon_path = resource_path("assets/app_icon.png")
     log.debug("App icon: %s  exists=%s", icon_path, icon_path.exists())
     if icon_path.exists():
         app.setWindowIcon(QIcon(str(icon_path)))
 
-    settings = AppSettings()
     win = MainWindow(settings)
     win.show()
 

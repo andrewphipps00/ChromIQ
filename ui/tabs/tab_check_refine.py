@@ -24,7 +24,9 @@ from PyQt6.QtWidgets import (
 
 from core.logger import get_logger
 from ui.tooltip_button import TooltipButton
-from ui.widgets import NoScrollComboBox, NoScrollDoubleSpinBox, make_browse_button, open_file_dialog
+from ui.widgets import NoScrollComboBox, NoScrollDoubleSpinBox, make_browse_button, open_file_dialog, tint_dialog_primary
+
+_TAB_COLOR = "#9f82ff"  # Check & Refine tab accent
 from workflow.profcheck_runner import (
     REFINE_DE_THRESHOLD,
     REFINE_START_OVER_RATIO,
@@ -89,10 +91,16 @@ class TabCheckRefine(QWidget):
 
         self._build_ui()
         self._restore_defaults()
+        self._run_btn.setEnabled(False)
 
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
+
+    def _update_run_btn(self) -> None:
+        self._run_btn.setEnabled(
+            self._ti3_path is not None and self._icc_path is not None
+        )
 
     def set_paths(self, ti3: Path, icc: Path) -> None:
         """Pre-populate both file fields after a successful profile build."""
@@ -100,6 +108,7 @@ class TabCheckRefine(QWidget):
         self._icc_path = icc
         self._ti3_edit.setText(str(ti3))
         self._icc_edit.setText(str(icc))
+        self._update_run_btn()
         self._notify_ti2(ti3)
 
     def _notify_ti2(self, ti3: Path) -> None:
@@ -129,7 +138,7 @@ class TabCheckRefine(QWidget):
         self._ti3_edit.setPlaceholderText("Path to .ti3 measurement file")
         self._ti3_edit.setReadOnly(True)
         ti3_row.addWidget(self._ti3_edit, stretch=1)
-        ti3_browse = make_browse_button(self, "Browse for .ti3 file")
+        ti3_browse = make_browse_button(self, "Browse for .ti3 file", icon="folder_check")
         ti3_browse.clicked.connect(self._on_browse_ti3)
         ti3_row.addWidget(ti3_browse)
         fg.addLayout(ti3_row)
@@ -140,7 +149,7 @@ class TabCheckRefine(QWidget):
         self._icc_edit.setPlaceholderText("Path to .icc or .icm profile (auto-filled when .ti3 is loaded)")
         self._icc_edit.setReadOnly(True)
         icc_row.addWidget(self._icc_edit, stretch=1)
-        icc_browse = make_browse_button(self, "Browse for ICC/ICM profile")
+        icc_browse = make_browse_button(self, "Browse for ICC/ICM profile", icon="folder_check")
         icc_browse.clicked.connect(self._on_browse_icc)
         icc_row.addWidget(icc_browse)
         fg.addLayout(icc_row)
@@ -421,6 +430,7 @@ class TabCheckRefine(QWidget):
         self._ti3_edit.setText(str(ti3))
         self._auto_fill_icc(ti3)
         self._notify_ti2(ti3)
+        self._update_run_btn()
 
     def _on_browse_icc(self) -> None:
         path = open_file_dialog(
@@ -430,6 +440,7 @@ class TabCheckRefine(QWidget):
         if path:
             self._icc_path = Path(path)
             self._icc_edit.setText(str(self._icc_path))
+            self._update_run_btn()
 
     def _auto_fill_icc(self, ti3: Path) -> None:
         """Try to find a matching ICC/ICM in the same folder."""
@@ -438,10 +449,12 @@ class TabCheckRefine(QWidget):
             if candidate.exists():
                 self._icc_path = candidate
                 self._icc_edit.setText(str(candidate))
+                self._update_run_btn()
                 return
         # No match — clear ICC field and warn
         self._icc_path = None
         self._icc_edit.clear()
+        self._update_run_btn()
         from PyQt6.QtWidgets import QMessageBox
         QMessageBox.warning(
             self,
@@ -689,6 +702,7 @@ class TabCheckRefine(QWidget):
 
             install_btn.clicked.connect(_on_install)
 
+        tint_dialog_primary(dlg, _TAB_COLOR)
         dlg.exec()
 
     # ------------------------------------------------------------------
