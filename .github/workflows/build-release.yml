@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Release tag to build (e.g. v1.1.4)'
+        description: 'Release tag to build (e.g. v2.0.2)'
         required: true
 
 permissions:
@@ -16,18 +16,16 @@ permissions:
 jobs:
   build:
     name: Build (${{ matrix.arch }})
-    runs-on: ${{ matrix.runner }}
+    runs-on: macos-14
     strategy:
       fail-fast: false
       matrix:
         include:
-          - runner: macos-latest
-            arch: arm64
+          - arch: arm64
             artifact: ChromIQ-macOS-arm64.dmg
             target_arch_env: ''
 
-          - runner: macos-latest
-            arch: universal2
+          - arch: universal2
             artifact: ChromIQ-macOS-universal.dmg
             target_arch_env: 'universal2'
 
@@ -39,23 +37,23 @@ jobs:
         with:
           ref: ${{ inputs.tag || github.ref_name }}
 
-      # arm64 job: use setup-python with the same Python version as local dev
+      # arm64 job: GitHub-hosted Python 3.13 (stable, arm64)
       - name: Set up Python (arm64)
         if: matrix.arch == 'arm64'
         uses: actions/setup-python@v5
         with:
-          python-version: '3.14'
+          python-version: '3.13'
 
-      # universal2 job: use Python.org's official universal2 installer so that
-      # pip downloads universal2 wheels for all packages, giving us fat binaries
-      # that PyInstaller can bundle into a single universal2 app.
+      # universal2 job: python.org official universal2 installer so that pip
+      # fetches universal2 wheels for all packages, giving fat binaries that
+      # PyInstaller can bundle into a single universal2 app.
       - name: Set up Python (universal2 via python.org installer)
         if: matrix.arch == 'universal2'
         run: |
           curl -fsSL -o /tmp/python.pkg \
-            "https://www.python.org/ftp/python/3.12.9/python-3.12.9-macos11.pkg"
+            "https://www.python.org/ftp/python/3.13.3/python-3.13.3-macos11.pkg"
           sudo installer -pkg /tmp/python.pkg -target /
-          echo "/Library/Frameworks/Python.framework/Versions/3.12/bin" >> "$GITHUB_PATH"
+          echo "/Library/Frameworks/Python.framework/Versions/3.13/bin" >> "$GITHUB_PATH"
 
       - name: Install dependencies
         run: |
@@ -63,14 +61,13 @@ jobs:
           pip3 install -r requirements.txt
           pip3 install pyinstaller
 
+      # Rebuild C-extension packages from source so the .so files are fat binaries.
+      # PyQt6 and certifi ship universal2 wheels on PyPI and need no special treatment.
       - name: Force universal2 fat binaries (universal2 only)
         if: matrix.arch == 'universal2'
         run: |
-          # PyYAML: pure-Python fallback avoids arm64-only C extension
           pip3 install --force-reinstall --no-binary PyYAML PyYAML
-          # Pillow: build from source with both archs so .so files are fat binaries
           ARCHFLAGS="-arch x86_64 -arch arm64" pip3 install --force-reinstall --no-binary Pillow Pillow
-          # pycups: C extension wrapping libcups — must also be a fat binary
           ARCHFLAGS="-arch x86_64 -arch arm64" pip3 install --force-reinstall --no-binary pycups pycups
 
       - name: Build app bundle
@@ -78,8 +75,11 @@ jobs:
           PYINSTALLER_TARGET_ARCH: ${{ matrix.target_arch_env }}
         run: python3 -m PyInstaller ChromIQ.spec
 
-      - name: Re-sign bundle (ad-hoc deep sign)
-        run: codesign --deep --force --sign - dist/ChromIQ.app
+      - name: Codesign app (ad-hoc)
+        run: codesign --force --deep --sign - dist/ChromIQ.app
+
+      - name: Verify app signature
+        run: codesign --verify --verbose dist/ChromIQ.app
 
       - name: Create DMG
         run: |
@@ -90,6 +90,9 @@ jobs:
             -srcfolder /tmp/dmg_src \
             -ov -format UDZO -fs HFS+ \
             "${{ matrix.artifact }}"
+
+      - name: Codesign DMG (ad-hoc)
+        run: codesign --sign - "${{ matrix.artifact }}"
 
       - name: Create GitHub Release (if not exists)
         env:

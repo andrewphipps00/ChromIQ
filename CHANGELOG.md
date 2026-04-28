@@ -1,5 +1,25 @@
 # Changelog
 
+## v2.0.2
+### Fixed
+- arm64 DMG is now properly ad-hoc signed — the app opens on macOS 13+ via right-click → Open without Gatekeeper blocking it.
+- Build is now automated via GitHub Actions (arm64 + universal2 in a single workflow).
+
+## v2.0.1
+### Fixed
+- Settings lockdown during Build Profile — all settings widgets are disabled while colprof runs, preventing accidental changes mid-build.
+- Guided panel section margins are now uniform across all five sections in the Create Chart tab.
+
+## v2.0.0
+### Added
+- Complete UI redesign with the Spectrum design language: custom gradient masthead, per-tab accent colors, animated segment progress bar, and a new font stack (Inter, Instrument Serif, JetBrains Mono).
+- Settings button embedded in the header.
+- Colored folder and refresh icons on all file dialog buttons (HiDPI-aware).
+- Start Measurement button is disabled until a .ti2 file is loaded.
+- Analyse button in Check & Refine is disabled until both required files are loaded.
+- Dialog primary buttons are tinted to match the active tab's color scheme.
+- New monogram app icon.
+
 ## v1.7.1
 ### Fixed
 - **Measure tab layout** — the empty space now appears between the Target File section and the action buttons, keeping the buttons and log output together at the bottom of the panel.
