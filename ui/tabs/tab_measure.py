@@ -29,7 +29,9 @@ from core.logger import get_logger
 from core.resource_path import resource_path
 from core.strip_utils import letter_to_idx
 from ui.tooltip_button import TooltipButton
-from ui.widgets import NoScrollComboBox, NoScrollDoubleSpinBox, NoScrollSpinBox, make_browse_button, open_file_dialog
+from ui.widgets import NoScrollComboBox, NoScrollDoubleSpinBox, NoScrollSpinBox, load_folder_icon, make_browse_button, open_file_dialog, tint_dialog_primary
+
+_TAB_COLOR = "#56d6a5"  # Measure tab accent
 from workflow.measure_manager import MeasureManager, MeasureParams
 from ui.tiff_preview import TiffPreview
 
@@ -235,6 +237,7 @@ class TabMeasure(QWidget):
         self._manager.sensor_wrong_position.connect(self._on_sensor_wrong_position)
         self._build_ui()
         self._restore_defaults()
+        self._start_btn.setEnabled(False)
 
     # ------------------------------------------------------------------
 
@@ -409,6 +412,7 @@ class TabMeasure(QWidget):
         fg.setContentsMargins(8, 6, 8, 8)
         file_row = QHBoxLayout()
         self._load_ti1_btn = QPushButton("Load .ti2 file…", left)
+        self._load_ti1_btn.setIcon(load_folder_icon("folder_measure"))
         self._load_ti1_btn.clicked.connect(self._on_load_ti2)
         self._ti1_lbl = QLabel("No file selected", left)
         self._ti1_lbl.setStyleSheet("color: #909090; font-size: 11px;")
@@ -426,8 +430,12 @@ class TabMeasure(QWidget):
         self._start_btn.setFixedHeight(36)
         self._start_btn.clicked.connect(self._on_start)
         self._stop_btn = QPushButton("Stop", left)
-        self._stop_btn.setObjectName("danger")
         self._stop_btn.setFixedHeight(36)
+        self._stop_btn.setStyleSheet(
+            "QPushButton { background: #f4f4f4; color: #121212; border: 1px solid #cccccc; font-weight: 600; }"
+            "QPushButton:hover { background: #e0e0e0; border-color: #bbbbbb; }"
+            "QPushButton:disabled { background: #2a2a2a; color: #555555; border-color: #333333; }"
+        )
         self._stop_btn.clicked.connect(self._on_stop)
         self._stop_btn.setEnabled(False)
         self._save_defaults_btn = QPushButton("Save as Defaults", left)
@@ -574,6 +582,7 @@ class TabMeasure(QWidget):
     def set_ti1_path(self, path: Path) -> None:
         self._ti1_path = path
         self._ti1_lbl.setText(str(path))
+        self._start_btn.setEnabled(True)
         self._try_load_tiffs(path)
         self._update_resume_availability()
 
@@ -781,6 +790,7 @@ class TabMeasure(QWidget):
         btn_row.addWidget(give_btn)
         layout.addLayout(btn_row)
 
+        tint_dialog_primary(dlg, _TAB_COLOR)
         dlg.exec()
         self._manager.send_key(chosen[0])
 
@@ -852,6 +862,7 @@ class TabMeasure(QWidget):
         btn_row.addWidget(give_btn)
         layout.addLayout(btn_row)
 
+        tint_dialog_primary(dlg, _TAB_COLOR)
         dlg.exec()
         self._manager.send_key(chosen[0])
 
@@ -890,6 +901,7 @@ class TabMeasure(QWidget):
         btn_box.accepted.connect(dlg.accept)
         layout.addWidget(btn_box)
 
+        tint_dialog_primary(dlg, _TAB_COLOR)
         dlg.exec()
         QApplication.instance().installEventFilter(self)
 
@@ -943,6 +955,7 @@ class TabMeasure(QWidget):
         btn_box.rejected.connect(dlg.reject)
         layout.addWidget(btn_box)
 
+        tint_dialog_primary(dlg, _TAB_COLOR)
         if dlg.exec() == QDialog.DialogCode.Accepted:
             self._manager.send_key("\r")   # any key = retry
         else:
@@ -981,6 +994,7 @@ class TabMeasure(QWidget):
         btn_box.accepted.connect(dlg.accept)
         layout.addWidget(btn_box)
 
+        tint_dialog_primary(dlg, _TAB_COLOR)
         dlg.exec()
         # Send any key to tell chartread to proceed with calibration.
         self._manager.send_key("\r")
@@ -1059,6 +1073,7 @@ class TabMeasure(QWidget):
         btn_box.accepted.connect(dlg.accept)
         layout.addWidget(btn_box)
 
+        tint_dialog_primary(dlg, _TAB_COLOR)
         dlg.exec()
         QApplication.instance().installEventFilter(self)
 
@@ -1125,6 +1140,7 @@ class TabMeasure(QWidget):
         btn_box.rejected.connect(dlg.reject)
         layout.addWidget(btn_box)
 
+        tint_dialog_primary(dlg, _TAB_COLOR)
         if dlg.exec() == QDialog.DialogCode.Accepted:
             self._auto_proceed = True
             self._manager.send_key("d")
@@ -1165,6 +1181,7 @@ class TabMeasure(QWidget):
             btn_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
             btn_box.accepted.connect(dlg.accept)
             layout.addWidget(btn_box)
+            tint_dialog_primary(dlg, _TAB_COLOR)
             dlg.exec()
             return
 
@@ -1191,6 +1208,7 @@ class TabMeasure(QWidget):
             btn_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
             btn_box.accepted.connect(dlg.accept)
             layout.addWidget(btn_box)
+            tint_dialog_primary(dlg, _TAB_COLOR)
             dlg.exec()
             return
 
@@ -1215,6 +1233,7 @@ class TabMeasure(QWidget):
             btn_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
             btn_box.accepted.connect(dlg.accept)
             layout.addWidget(btn_box)
+            tint_dialog_primary(dlg, _TAB_COLOR)
             dlg.exec()
             return
 

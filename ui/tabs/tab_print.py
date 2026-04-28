@@ -27,7 +27,7 @@ from PyQt6.QtWidgets import (
 from core.logger import get_logger
 from ui.tiff_preview import TiffPreview
 from ui.tooltip_button import TooltipButton
-from ui.widgets import NoScrollComboBox, open_file_dialog
+from ui.widgets import NoScrollComboBox, load_folder_icon, load_refresh_icon, open_file_dialog
 from workflow.cups_printer import CupsRawPrinter
 from workflow.print_manager import PrintModule
 
@@ -85,9 +85,7 @@ class TabPrint(QWidget):
         pr_row.addWidget(self._printer_combo, stretch=1)
 
         refresh_btn = QPushButton(left)
-        refresh_btn.setIcon(
-            QApplication.style().standardIcon(QStyle.StandardPixmap.SP_BrowserReload)
-        )
+        refresh_btn.setIcon(load_refresh_icon("refresh_print"))
         refresh_btn.setFixedSize(34, 34)
         refresh_btn.setStyleSheet("QPushButton { padding: 0; min-height: 0; }")
         refresh_btn.setToolTip("Refresh printer list")
@@ -130,6 +128,7 @@ class TabPrint(QWidget):
 
         # Load existing target button
         load_btn = QPushButton("Load existing target — select .ti2 file", left)
+        load_btn.setIcon(load_folder_icon("folder_print"))
         load_btn.clicked.connect(self._on_load_ti2)
         ll.addWidget(load_btn)
 

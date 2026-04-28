@@ -3,15 +3,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PyQt6.QtCore import Qt, QSize, QTimer
-from PyQt6.QtGui import QGuiApplication, QIcon, QPixmap
+from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import (
-    QHBoxLayout,
-    QLabel,
     QMainWindow,
-    QSizePolicy,
     QTabWidget,
-    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -20,11 +15,11 @@ from core.argyll_detect import all_tools_present, find_argyll_bin_path
 from core.argyll_runner import ArgyllRunner
 from core.file_manager import FileManager
 from core.logger import get_logger
-from core.resource_path import resource_path
 from core.settings import AppSettings
 from core.updater import UpdateChecker
 from ui.dialogs.settings_dialog import SettingsDialog
-from ui.styles import APP_STYLESHEET, make_dark_palette
+from ui.masthead_header import MastheadHeader
+from ui.spectrum_tab_bar import SpectrumTabBar
 from ui.tabs.tab_chart import TabChart
 from ui.tabs.tab_check_refine import TabCheckRefine
 from ui.tabs.tab_measure import TabMeasure
@@ -53,12 +48,15 @@ class MainWindow(QMainWindow):
         main_layout.setSpacing(0)
 
         # Header
-        header = self._make_header()
-        main_layout.addWidget(header)
+        from core.version import APP_VERSION
+        self._masthead = MastheadHeader(version=APP_VERSION, parent=central)
+        self._masthead.settings_clicked.connect(self._open_settings)
+        main_layout.addWidget(self._masthead)
 
         # Tabs
         self._tabs = QTabWidget(central)
         self._tabs.setDocumentMode(True)
+        self._tabs.setTabBar(SpectrumTabBar(self._tabs))
 
         self._tab_chart   = TabChart(self._runner, self._file_mgr, self._settings, self)
         self._tab_print   = TabPrint(self._settings, self)
@@ -70,7 +68,7 @@ class MainWindow(QMainWindow):
         self._tabs.addTab(self._tab_print,   "2. Print Chart")
         self._tabs.addTab(self._tab_measure, "3. Measure")
         self._tabs.addTab(self._tab_profile, "4. Build Profile")
-        self._tabs.addTab(self._tab_check,   "5. Check && Refine")
+        self._tabs.addTab(self._tab_check,   "5. Check & Refine")
 
         self._tab_chart.chart_finished.connect(self._on_chart_generated)
         self._tab_measure.measure_finished.connect(self._on_measure_done)
@@ -82,6 +80,9 @@ class MainWindow(QMainWindow):
         self._tab_print.ti2_loaded.connect(self._tab_measure.set_ti1_path)
 
         main_layout.addWidget(self._tabs, stretch=1)
+
+        self._tabs.currentChanged.connect(self._on_tab_changed)
+        QTimer.singleShot(0, lambda: self._on_tab_changed(self._tabs.currentIndex()))
 
         # Restore geometry
         geom = self._settings.get("window_geometry")
@@ -100,57 +101,71 @@ class MainWindow(QMainWindow):
         QTimer.singleShot(3000, self._check_for_updates_on_startup)
         log.info("MainWindow initialised")
 
-    # ------------------------------------------------------------------
-    # Header
-    # ------------------------------------------------------------------
+    def _on_tab_changed(self, index: int) -> None:
+        from ui.styles import TAB_COLORS
+        from ui.tooltip_button import TooltipButton
 
-    def _make_header(self) -> QWidget:
-        header = QWidget(self)
-        header.setFixedHeight(110)
-        header.setStyleSheet("background: #161616;")
+        color = TAB_COLORS[index] if index < len(TAB_COLORS) else TAB_COLORS[-1]
 
-        layout = QHBoxLayout(header)
-        layout.setContentsMargins(0, 0, 12, 0)
-        layout.setSpacing(0)
+        # Compute variants without broken hex-alpha (Qt reads #AARRGGBB, not #RRGGBBAA)
+        r, g, b = int(color[1:3], 16), int(color[3:5], 16), int(color[5:7], 16)
+        color_hover = "#{:02x}{:02x}{:02x}".format(int(r * 0.82), int(g * 0.82), int(b * 0.82))
+        color_glow  = f"rgba({r},{g},{b},0.33)"
 
-        # Banner image
-        banner = _HeaderBanner(header)
-        banner.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        layout.addWidget(banner, stretch=1)
+        tab_w = self._tabs.widget(index)
+        if tab_w:
+            tab_w.setStyleSheet(f"""
+                QPushButton#primary {{
+                    background: {color};
+                    border: 1px solid {color};
+                    color: #0a0a0a;
+                    font-weight: 700;
+                }}
+                QPushButton#primary:hover {{
+                    background: {color_hover};
+                    border-color: {color_hover};
+                }}
+                QPushButton#primary:disabled {{
+                    background: #1e1e1e;
+                    border: 1px solid {color};
+                    color: #484848;
+                }}
+                QCheckBox::indicator:checked {{
+                    background: {color};
+                    border-color: {color};
+                }}
+                QRadioButton::indicator:checked {{
+                    background: {color};
+                    border-color: {color};
+                }}
+                QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus,
+                QComboBox:focus, QComboBox:on {{
+                    border-color: {color};
+                }}
+                QLabel#patch_count {{
+                    color: {color};
+                }}
+                QLabel#info {{
+                    color: {color};
+                    border-color: {color};
+                }}
+                QPlainTextEdit#log {{
+                    color: {color};
+                }}
+            """)
 
-        # Settings button
-        settings_btn = self._make_settings_btn(header)
-        layout.addWidget(settings_btn)
+        self._tabs.setStyleSheet(f"""
+            QTabWidget::pane {{
+                border: none;
+                border-top: 1px solid {color_glow};
+                background: #181818;
+            }}
+        """)
 
-        return header
-
-    def _make_settings_btn(self, parent: QWidget) -> QToolButton:
-        btn = QToolButton(parent)
-        btn.setFixedSize(QSize(54, 54))
-        btn.setObjectName("tooltip_btn")
-        btn.setToolTip("Preferences")
-
-        px = QPixmap(str(resource_path("assets/settings.PNG")))
-        if not px.isNull():
-            dpr = QGuiApplication.primaryScreen().devicePixelRatio()
-            phys = round(32 * dpr)
-            scaled = px.scaled(
-                phys, phys,
-                Qt.AspectRatioMode.KeepAspectRatio,
-                Qt.TransformationMode.SmoothTransformation,
-            )
-            scaled.setDevicePixelRatio(dpr)
-            btn.setIcon(QIcon(scaled))
-            btn.setIconSize(QSize(32, 32))
-        else:
-            btn.setText("⚙")
-
-        btn.clicked.connect(self._open_settings)
-        return btn
-
-    # ------------------------------------------------------------------
-    # Settings
-    # ------------------------------------------------------------------
+        TooltipButton.ACCENT = color
+        if tab_w:
+            for btn in tab_w.findChildren(TooltipButton):
+                btn._set_icon()
 
     def _on_chart_generated(self, tiffs: object, ti2: object) -> None:
         self._tab_print.load_tiffs(list(tiffs))
@@ -168,7 +183,11 @@ class MainWindow(QMainWindow):
         self._tab_measure.start_guided_refinement(ti3, strips_file)
 
     def _open_settings(self) -> None:
+        from ui.tooltip_button import TooltipButton
         dlg = SettingsDialog(self._settings, self)
+        for btn in dlg.findChildren(TooltipButton):
+            btn._color_override = "#f4f4f4"
+            btn._set_icon()
         dlg.exec()
         self._check_argyll_binaries()
 
@@ -297,35 +316,3 @@ class MainWindow(QMainWindow):
         self._settings.set("window_geometry", self.saveGeometry())
         self._settings.set("active_tab", self._tabs.currentIndex())
         super().closeEvent(event)
-
-
-# -----------------------------------------------------------------------
-# Header banner widget
-# -----------------------------------------------------------------------
-
-class _HeaderBanner(QLabel):
-    def __init__(self, parent: QWidget) -> None:
-        super().__init__(parent)
-        self._src = QPixmap(str(resource_path("assets/header.PNG")))
-        if self._src.isNull():
-            log.warning("header.PNG not found")
-            self.setText("ChromIQ")
-            self.setStyleSheet("color: white; font-size: 22px; font-weight: bold; padding: 8px;")
-        self.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-
-    def resizeEvent(self, event) -> None:
-        super().resizeEvent(event)
-        if not self._src.isNull():
-            dpr = self.devicePixelRatio()
-            target_w = int(self.width() * dpr * 0.9)
-            target_h = int(self.height() * dpr)
-            scaled = self._src.scaledToWidth(
-                target_w,
-                Qt.TransformationMode.SmoothTransformation,
-            )
-            # Crop to header height, taking the vertical center of the image
-            if scaled.height() > target_h:
-                y_off = (scaled.height() - target_h) // 2
-                scaled = scaled.copy(0, y_off, scaled.width(), target_h)
-            scaled.setDevicePixelRatio(dpr)
-            self.setPixmap(scaled)

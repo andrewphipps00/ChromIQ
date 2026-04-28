@@ -16,7 +16,6 @@ from PyQt6.QtWidgets import (
     QLabel,
     QLineEdit,
     QPlainTextEdit,
-    QProgressBar,
     QPushButton,
     QScrollArea,
     QVBoxLayout,
@@ -25,7 +24,7 @@ from PyQt6.QtWidgets import (
 
 from core.logger import get_logger
 from ui.tooltip_button import TooltipButton
-from ui.widgets import NoScrollComboBox, NoScrollDoubleSpinBox, make_browse_button, open_file_dialog
+from ui.widgets import NoScrollComboBox, NoScrollDoubleSpinBox, load_folder_icon, make_browse_button, open_file_dialog
 from workflow.profile_builder import ProfileBuilder, ProfileParams
 
 if TYPE_CHECKING:
@@ -95,6 +94,7 @@ class TabProfile(QWidget):
         file_grp = QGroupBox("Measurement Data (.ti3)", self)
         fg = QHBoxLayout(file_grp)
         self._load_btn = QPushButton("Load .ti3 file…", self)
+        self._load_btn.setIcon(load_folder_icon("folder_build"))
         self._load_btn.clicked.connect(self._on_load_ti3)
         self._file_lbl = QLabel("No file selected", self)
         self._file_lbl.setStyleSheet("color: #909090; font-size: 11px;")
@@ -149,10 +149,9 @@ class TabProfile(QWidget):
         root.addLayout(btn_row)
 
         # --- Build progress bar (hidden until a build is running) ---
-        self._progress_bar = QProgressBar(self)
-        self._progress_bar.setRange(0, 0)          # indeterminate / busy indicator
-        self._progress_bar.setFixedHeight(6)
-        self._progress_bar.setTextVisible(False)
+        from ui.spectrum_progress import SpectrumSegmentsBar
+        self._progress_bar = SpectrumSegmentsBar(self)
+        self._progress_bar.set_label("Building", "colprof")
         self._progress_bar.setVisible(False)
         root.addWidget(self._progress_bar)
 
@@ -403,7 +402,7 @@ class TabProfile(QWidget):
         self._gam_path_edit.setPlaceholderText(
             "Path to source RGB profile (e.g. sRGB.icm or AdobeRGB.icm from Argyll/ref/)"
         )
-        self._gam_path_browse = make_browse_button(grp, "Select gamut source profile")
+        self._gam_path_browse = make_browse_button(grp, "Select gamut source profile", icon="folder_build")
         self._gam_path_browse.clicked.connect(self._browse_gam)
         path_row.addWidget(self._gam_path_edit, stretch=1)
         path_row.addWidget(self._gam_path_browse)
@@ -614,6 +613,7 @@ class TabProfile(QWidget):
         self._build_btn.setText("Building Profile…")
         self._build_btn.setEnabled(False)
         self._install_btn.setEnabled(False)
+        self._progress_bar.start()
         self._progress_bar.setVisible(True)
 
         self._builder.build(
@@ -629,6 +629,7 @@ class TabProfile(QWidget):
     def _on_build_done(self, code: int) -> None:
         self._build_btn.setText("Build Profile")
         self._build_btn.setEnabled(True)
+        self._progress_bar.stop()
         self._progress_bar.setVisible(False)
 
         if code != 0:

@@ -63,7 +63,7 @@ class SettingsDialog(QDialog):
         path_row.addWidget(QLabel("Binary path:", self))
         self._argyll_edit = QLineEdit(self)
         path_row.addWidget(self._argyll_edit, stretch=1)
-        browse_btn = make_browse_button(self, "Select ArgyllCMS bin folder")
+        browse_btn = make_browse_button(self, "Select ArgyllCMS bin folder", icon="folder")
         browse_btn.clicked.connect(self._browse_argyll)
         path_row.addWidget(browse_btn)
         path_row.addWidget(TooltipButton(
@@ -105,7 +105,7 @@ class SettingsDialog(QDialog):
         self._folder_edit = QLineEdit(self)
         self._folder_edit.setPlaceholderText("~/ChromIQ/  (default)")
         folder_row.addWidget(self._folder_edit, stretch=1)
-        folder_browse = make_browse_button(self, "Select output folder")
+        folder_browse = make_browse_button(self, "Select output folder", icon="folder")
         folder_browse.clicked.connect(self._browse_folder)
         folder_row.addWidget(folder_browse)
         fl.addLayout(folder_row)
@@ -134,7 +134,10 @@ class SettingsDialog(QDialog):
         # ---- Bottom row: Restore Defaults | Check for Updates | Cancel / OK ----
         bottom_row = QHBoxLayout()
         reset_btn = QPushButton("Restore Factory Defaults", self)
-        reset_btn.setObjectName("danger")
+        reset_btn.setStyleSheet(
+            "QPushButton { background: #f4f4f4; color: #121212; border: 1px solid #d0d0d0; }"
+            "QPushButton:hover { background: #e0e0e0; border-color: #bbbbbb; }"
+        )
         reset_btn.clicked.connect(self._restore_defaults)
         bottom_row.addWidget(reset_btn)
         bottom_row.addStretch()
@@ -159,7 +162,6 @@ class SettingsDialog(QDialog):
     def _load_settings(self) -> None:
         s = self._settings
         self._argyll_edit.setText(s.get("argyll_bin_path", "/Applications/Argyll/bin"))
-
         self._folder_edit.setText(s.get("custom_output_path", ""))
 
     def _save_and_close(self) -> None:
@@ -188,7 +190,8 @@ class SettingsDialog(QDialog):
     def _test_argyll(self) -> None:
         bin_dir = Path(self._argyll_edit.text().strip())
         results = []
-        for tool in ("targen", "printtarg", "chartread", "colprof"):
+        for tool in ("targen", "printtarg", "chartread", "colprof",
+                     "profcheck", "printcal", "applycal"):
             p = bin_dir / tool
             if tool == "chartread":
                 # chartread probes USB hardware even with -?, causing a hang.

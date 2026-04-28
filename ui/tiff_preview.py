@@ -124,7 +124,7 @@ class TiffPreview(QWidget):
         nav_layout.setContentsMargins(4, 0, 4, 0)
 
         self._prev_btn = QPushButton("‹ Prev", nav)
-        self._prev_btn.setFixedWidth(70)
+        self._prev_btn.setFixedWidth(84)
         self._prev_btn.clicked.connect(self._go_prev)
         nav_layout.addWidget(self._prev_btn)
 
@@ -136,7 +136,7 @@ class TiffPreview(QWidget):
         nav_layout.addStretch()
 
         self._next_btn = QPushButton("Next ›", nav)
-        self._next_btn.setFixedWidth(70)
+        self._next_btn.setFixedWidth(84)
         self._next_btn.clicked.connect(self._go_next)
         nav_layout.addWidget(self._next_btn)
 
@@ -251,7 +251,7 @@ class TiffPreview(QWidget):
                 path.lineTo(cx + rw / 2, y)
                 path.lineTo(cx, y + arrow_h)
                 path.closeSubpath()
-                painter.fillPath(path, QColor("#00bcd4"))
+                painter.fillPath(path, QColor("#56d6a5"))
 
         painter.end()
         self._img_label.setPixmap(canvas)

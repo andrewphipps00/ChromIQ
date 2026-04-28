@@ -40,7 +40,7 @@ from data.patch_db import (
 from ui.parameter_widget import ParameterWidget
 from ui.tiff_preview import TiffPreview
 from ui.tooltip_button import TooltipButton
-from ui.widgets import NoScrollComboBox, NoScrollSpinBox, open_file_dialog
+from ui.widgets import NoScrollComboBox, NoScrollSpinBox, load_folder_icon, open_file_dialog
 from workflow.chart_creator import ChartCreator, ChartParams
 
 if TYPE_CHECKING:
@@ -124,6 +124,7 @@ class TabChart(QWidget):
 
         self._load_ti1_btn = QPushButton("Load existing .ti1…", self)
         self._load_ti1_btn.setFixedHeight(36)
+        self._load_ti1_btn.setIcon(load_folder_icon("folder_create"))
         self._load_ti1_btn.clicked.connect(self._on_load_ti1)
 
         self._save_defaults_btn = QPushButton("Save as Defaults", self)

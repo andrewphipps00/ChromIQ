@@ -4,7 +4,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from PyQt6.QtCore import QModelIndex, QSortFilterProxyModel, Qt, QUrl
+from PyQt6.QtCore import QModelIndex, QSize, QSortFilterProxyModel, Qt, QUrl
+from PyQt6.QtGui import QIcon, QPixmap
 from PyQt6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -146,12 +147,74 @@ def open_dir_dialog(
     return ""
 
 
-def make_browse_button(parent: QWidget | None = None, tooltip: str = "Browse…") -> QPushButton:
-    """Create a standardised file-browse button with folder icon."""
+def load_folder_icon(name: str) -> QIcon:
+    """Load a colored folder icon from assets/folder/<name>.png.
+
+    Falls back to the OS system folder icon if the file is not found.
+    """
+    from core.resource_path import resource_path
+    from PyQt6.QtGui import QGuiApplication
+    px = QPixmap(str(resource_path(f"assets/folder/{name}.png")))
+    if not px.isNull():
+        dpr  = QGuiApplication.primaryScreen().devicePixelRatio()
+        phys = round(20 * dpr)
+        scaled = px.scaled(phys, phys,
+                           Qt.AspectRatioMode.KeepAspectRatio,
+                           Qt.TransformationMode.SmoothTransformation)
+        scaled.setDevicePixelRatio(dpr)
+        return QIcon(scaled)
+    return QApplication.style().standardIcon(QStyle.StandardPixmap.SP_DirOpenIcon)
+
+
+def tint_dialog_primary(dlg: "QWidget", color: str) -> None:
+    """Stamp tab accent color onto every QPushButton#primary inside a dialog (v2 only).
+
+    Safe to call on any dialog — no-op if no primary buttons are present.
+    """
+    r, g, b = int(color[1:3], 16), int(color[3:5], 16), int(color[5:7], 16)
+    hover = "#{:02x}{:02x}{:02x}".format(int(r * 0.82), int(g * 0.82), int(b * 0.82))
+    for btn in dlg.findChildren(QPushButton):
+        if btn.objectName() == "primary":
+            btn.setStyleSheet(
+                f"QPushButton {{ background: {color}; border: 1px solid {color};"
+                f" color: #0a0a0a; font-weight: 700; }}"
+                f"QPushButton:hover {{ background: {hover}; border-color: {hover}; }}"
+            )
+
+
+def load_refresh_icon(name: str) -> QIcon:
+    """Load a colored refresh icon from assets/refresh/<name>.png.
+
+    Falls back to the OS browser-reload icon if the file is not found.
+    """
+    from core.resource_path import resource_path
+    from PyQt6.QtGui import QGuiApplication
+    px = QPixmap(str(resource_path(f"assets/refresh/{name}.png")))
+    if not px.isNull():
+        dpr  = QGuiApplication.primaryScreen().devicePixelRatio()
+        phys = round(20 * dpr)
+        scaled = px.scaled(phys, phys,
+                           Qt.AspectRatioMode.KeepAspectRatio,
+                           Qt.TransformationMode.SmoothTransformation)
+        scaled.setDevicePixelRatio(dpr)
+        return QIcon(scaled)
+    return QApplication.style().standardIcon(QStyle.StandardPixmap.SP_BrowserReload)
+
+
+def make_browse_button(
+    parent: QWidget | None = None,
+    tooltip: str = "Browse…",
+    icon: str = "folder",
+) -> QPushButton:
+    """Create a standardised file-browse button with a folder icon.
+
+    Pass the icon name (without path or extension) to select a colored variant,
+    e.g. ``icon="folder_build"``.
+    """
     btn = QPushButton(parent)
     btn.setObjectName("browse")
     btn.setFixedWidth(36)
     btn.setToolTip(tooltip)
-    icon = QApplication.style().standardIcon(QStyle.StandardPixmap.SP_DirOpenIcon)
-    btn.setIcon(icon)
+    btn.setIcon(load_folder_icon(icon))
+    btn.setIconSize(QSize(20, 20))
     return btn
