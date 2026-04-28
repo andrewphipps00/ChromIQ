@@ -202,9 +202,7 @@ class TabChart(QWidget):
 
         # Instrument
         instr_grp = QGroupBox("Measurement Instrument", inner)
-        instr_grp.setContentsMargins(0, 0, 0, 0)
         instr_layout = QVBoxLayout(instr_grp)
-        instr_layout.setContentsMargins(8, 14, 8, 8)
         instr_layout.setSpacing(6)
         row = QHBoxLayout()
         row.addWidget(QLabel("Instrument:", inner))
@@ -258,9 +256,7 @@ class TabChart(QWidget):
 
         # Pages + left border
         pages_grp = QGroupBox("Chart Size", inner)
-        pages_grp.setContentsMargins(0, 0, 0, 0)
         pages_layout = QVBoxLayout(pages_grp)
-        pages_layout.setContentsMargins(8, 14, 8, 8)
         pages_layout.setSpacing(6)
 
         pages_row = QHBoxLayout()

@@ -91,7 +91,7 @@ class TabProfile(QWidget):
         root.setSpacing(10)
 
         # --- File selection (outside scroll) ---
-        file_grp = QGroupBox("Measurement Data (.ti3)", self)
+        self._file_grp = file_grp = QGroupBox("Measurement Data (.ti3)", self)
         fg = QHBoxLayout(file_grp)
         self._load_btn = QPushButton("Load .ti3 file…", self)
         self._load_btn.setIcon(load_folder_icon("folder_build"))
@@ -109,7 +109,7 @@ class TabProfile(QWidget):
         scroll.setFrameShape(scroll.Shape.NoFrame)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
-        inner = QWidget()
+        self._options_widget = inner = QWidget()
         inner_layout = QVBoxLayout(inner)
         inner_layout.setContentsMargins(0, 0, 4, 0)
         inner_layout.setSpacing(10)
@@ -613,6 +613,9 @@ class TabProfile(QWidget):
         self._build_btn.setText("Building Profile…")
         self._build_btn.setEnabled(False)
         self._install_btn.setEnabled(False)
+        self._save_defaults_btn.setEnabled(False)
+        self._file_grp.setEnabled(False)
+        self._options_widget.setEnabled(False)
         self._progress_bar.start()
         self._progress_bar.setVisible(True)
 
@@ -629,6 +632,9 @@ class TabProfile(QWidget):
     def _on_build_done(self, code: int) -> None:
         self._build_btn.setText("Build Profile")
         self._build_btn.setEnabled(True)
+        self._save_defaults_btn.setEnabled(True)
+        self._file_grp.setEnabled(True)
+        self._options_widget.setEnabled(True)
         self._progress_bar.stop()
         self._progress_bar.setVisible(False)
 
