@@ -37,8 +37,8 @@ class MainWindow(QMainWindow):
         self._file_mgr  = FileManager(settings)
 
         self.setWindowTitle("ChromIQ — Printer Profiling")
-        self.setMinimumSize(1390, 1000)
-        self.resize(1390, 1000)
+        self.setMinimumSize(1440, 1025)
+        self.resize(1440, 1025)
 
         # Central widget
         central = QWidget(self)
@@ -151,6 +151,27 @@ class MainWindow(QMainWindow):
                 }}
                 QPlainTextEdit#log {{
                     color: {color};
+                }}
+                QPushButton#mode_btn {{
+                    background: #2a2a2a;
+                    border: 1px solid #4a4a4a;
+                    color: #909090;
+                }}
+                QPushButton#mode_btn:hover {{
+                    background: #383838;
+                    border-color: #5a5a5a;
+                    color: #e6e6e6;
+                }}
+                QPushButton#mode_btn:checked {{
+                    background: {color};
+                    border: 1px solid {color};
+                    color: #0a0a0a;
+                    font-weight: 700;
+                }}
+                QPushButton#mode_btn:checked:hover {{
+                    background: {color_hover};
+                    border-color: {color_hover};
+                    color: #0a0a0a;
                 }}
             """)
 

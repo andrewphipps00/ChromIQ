@@ -25,6 +25,7 @@ from PyQt6.QtWidgets import (
 )
 
 from core.logger import get_logger
+from ui.tab_header import TabHeader
 from ui.tiff_preview import TiffPreview
 from ui.tooltip_button import TooltipButton
 from ui.widgets import NoScrollComboBox, load_folder_icon, load_refresh_icon, open_file_dialog
@@ -74,6 +75,10 @@ class TabPrint(QWidget):
         ll = QVBoxLayout(left)
         ll.setContentsMargins(16, 12, 16, 12)
         ll.setSpacing(10)
+
+        ll.addWidget(TabHeader(
+            "STEP 02 · PRINT TARGET", "Print test chart", "#ffb42d", left
+        ))
 
         # Printer selection
         printer_grp = QGroupBox("Printer", left)

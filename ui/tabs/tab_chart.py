@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 import yaml
 from PyQt6.QtCore import QSize, Qt, pyqtSignal
-from PyQt6.QtGui import QIcon
+from PyQt6.QtGui import QFont, QIcon
 from PyQt6.QtWidgets import (
     QButtonGroup,
     QCheckBox,
@@ -38,6 +38,7 @@ from data.patch_db import (
     query_patches,
 )
 from ui.parameter_widget import ParameterWidget
+from ui.tab_header import TabHeader
 from ui.tiff_preview import TiffPreview
 from ui.tooltip_button import TooltipButton
 from ui.widgets import NoScrollComboBox, NoScrollSpinBox, load_folder_icon, open_file_dialog
@@ -93,13 +94,22 @@ class TabChart(QWidget):
         left_layout.setContentsMargins(16, 12, 16, 12)
         left_layout.setSpacing(14)
 
+        left_layout.addWidget(TabHeader(
+            "STEP 01 · GENERATE TARGET", "Create test chart", "#ff4573", left
+        ))
+
         # Mode switcher
         mode_row = QHBoxLayout()
-        self._guided_btn = QPushButton("Guided", self)
+        _mode_font = QFont("Menlo", 11, QFont.Weight.Medium)
+        self._guided_btn = QPushButton("GUIDED", self)
         self._guided_btn.setCheckable(True)
         self._guided_btn.setChecked(True)
-        self._manual_btn = QPushButton("Manual", self)
+        self._guided_btn.setObjectName("mode_btn")
+        self._guided_btn.setFont(_mode_font)
+        self._manual_btn = QPushButton("MANUAL", self)
         self._manual_btn.setCheckable(True)
+        self._manual_btn.setObjectName("mode_btn")
+        self._manual_btn.setFont(_mode_font)
         self._guided_btn.clicked.connect(lambda: self._switch_mode("guided"))
         self._manual_btn.clicked.connect(lambda: self._switch_mode("manual"))
         mode_row.addWidget(self._guided_btn)

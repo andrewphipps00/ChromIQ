@@ -1,5 +1,10 @@
 # Changelog
 
+## v2.0.3
+### Improved
+- Each tab now shows a workflow header at the top of its controls panel: a small coloured accent stroke followed by a step indicator (Menlo, all-caps, grey) and a large headline (Georgia 24 pt, white) — matching the tab's accent colour.
+- Minimum window size increased slightly (1440 × 1025 px).
+
 ## v2.0.2
 ### Fixed
 - arm64 DMG is now properly ad-hoc signed — the app opens on macOS 13+ via right-click → Open without Gatekeeper blocking it.

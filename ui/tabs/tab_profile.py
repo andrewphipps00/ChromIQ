@@ -23,6 +23,7 @@ from PyQt6.QtWidgets import (
 )
 
 from core.logger import get_logger
+from ui.tab_header import TabHeader
 from ui.tooltip_button import TooltipButton
 from ui.widgets import NoScrollComboBox, NoScrollDoubleSpinBox, load_folder_icon, make_browse_button, open_file_dialog
 from workflow.profile_builder import ProfileBuilder, ProfileParams
@@ -89,6 +90,10 @@ class TabProfile(QWidget):
         root = QVBoxLayout(self)
         root.setContentsMargins(16, 12, 16, 12)
         root.setSpacing(10)
+
+        root.addWidget(TabHeader(
+            "STEP 04 · CREATE ICC PROFILE", "Build ICC profile", "#37bcd6", self
+        ))
 
         # --- File selection (outside scroll) ---
         self._file_grp = file_grp = QGroupBox("Measurement Data (.ti3)", self)

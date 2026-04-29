@@ -23,6 +23,7 @@ from PyQt6.QtWidgets import (
 )
 
 from core.logger import get_logger
+from ui.tab_header import TabHeader
 from ui.tooltip_button import TooltipButton
 from ui.widgets import NoScrollComboBox, NoScrollDoubleSpinBox, make_browse_button, open_file_dialog, tint_dialog_primary
 
@@ -124,6 +125,10 @@ class TabCheckRefine(QWidget):
         root = QVBoxLayout(self)
         root.setContentsMargins(16, 12, 16, 12)
         root.setSpacing(10)
+
+        root.addWidget(TabHeader(
+            "STEP 05 · SANITY CHECK", "Check & refine", "#9f82ff", self
+        ))
 
         # ── File selection ──────────────────────────────────────────────
         file_grp = QGroupBox("Test Data && Profile", self)
@@ -391,6 +396,7 @@ class TabCheckRefine(QWidget):
         opts_layout.addWidget(adv_grp)
 
         root.addWidget(opts_container)
+        root.addStretch()
 
         # ── Action buttons ──────────────────────────────────────────────
         btn_row = QHBoxLayout()

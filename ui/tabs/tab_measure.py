@@ -28,6 +28,7 @@ from PyQt6.QtWidgets import (
 from core.logger import get_logger
 from core.resource_path import resource_path
 from core.strip_utils import letter_to_idx
+from ui.tab_header import TabHeader
 from ui.tooltip_button import TooltipButton
 from ui.widgets import NoScrollComboBox, NoScrollDoubleSpinBox, NoScrollSpinBox, load_folder_icon, make_browse_button, open_file_dialog, tint_dialog_primary
 
@@ -257,6 +258,10 @@ class TabMeasure(QWidget):
         ll = QVBoxLayout(left)
         ll.setContentsMargins(16, 12, 16, 12)
         ll.setSpacing(10)
+
+        ll.addWidget(TabHeader(
+            "STEP 03 · MEASURE TARGET", "Measure printed chart", "#56d6a5", left
+        ))
 
         # Instrument
         self._instr_grp = instr_grp = QGroupBox("Measurement Instrument", left)
