@@ -25,7 +25,7 @@ from PyQt6.QtWidgets import (
 from core.logger import get_logger
 from ui.tab_header import TabHeader
 from ui.tooltip_button import TooltipButton
-from ui.widgets import NoScrollComboBox, NoScrollDoubleSpinBox, load_folder_icon, make_browse_button, open_file_dialog
+from ui.widgets import NoScrollComboBox, NoScrollDoubleSpinBox, load_folder_icon, make_browse_button, open_file_dialog, tint_dialog_primary
 from workflow.profile_builder import ProfileBuilder, ProfileParams
 
 if TYPE_CHECKING:
@@ -33,6 +33,8 @@ if TYPE_CHECKING:
     from core.settings import AppSettings
 
 log = get_logger(__name__)
+
+_TAB_COLOR = "#37bcd6"  # Build Profile tab accent
 
 _ILLUMINANTS = [
     ("Default (D50)", ""),
@@ -67,6 +69,7 @@ class TabProfile(QWidget):
 
     profile_built    = pyqtSignal(Path, Path)   # (ti3_path, icc_path)
     check_requested  = pyqtSignal()             # user clicked "Check Quality" in the result dialog
+    profile_active   = pyqtSignal(bool)         # True while colprof is running, False when done
 
     def __init__(
         self,
@@ -153,11 +156,11 @@ class TabProfile(QWidget):
         btn_row.addWidget(self._save_defaults_btn)
         root.addLayout(btn_row)
 
-        # --- Build progress bar (hidden until a build is running) ---
+        # --- Build progress bar (always visible; animated only while building) ---
         from ui.spectrum_progress import SpectrumSegmentsBar
         self._progress_bar = SpectrumSegmentsBar(self)
-        self._progress_bar.set_label("Building", "colprof")
-        self._progress_bar.setVisible(False)
+        self._progress_bar.set_label("Build Profile", "")
+        self._progress_bar.set_value(0)
         root.addWidget(self._progress_bar)
 
         # --- Log ---
@@ -621,8 +624,10 @@ class TabProfile(QWidget):
         self._save_defaults_btn.setEnabled(False)
         self._file_grp.setEnabled(False)
         self._options_widget.setEnabled(False)
+        self._progress_bar.set_label("Building", "colprof")
+        self._progress_bar.set_value(None)
         self._progress_bar.start()
-        self._progress_bar.setVisible(True)
+        self.profile_active.emit(True)
 
         self._builder.build(
             params,
@@ -635,13 +640,15 @@ class TabProfile(QWidget):
         self._log.ensureCursorVisible()
 
     def _on_build_done(self, code: int) -> None:
+        self.profile_active.emit(False)
         self._build_btn.setText("Build Profile")
         self._build_btn.setEnabled(True)
         self._save_defaults_btn.setEnabled(True)
         self._file_grp.setEnabled(True)
         self._options_widget.setEnabled(True)
         self._progress_bar.stop()
-        self._progress_bar.setVisible(False)
+        self._progress_bar.set_label("Build Profile", "")
+        self._progress_bar.set_value(0)
 
         if code != 0:
             self._log.appendPlainText(f"\n[ERROR] colprof exited with code {code}.")
@@ -726,6 +733,7 @@ class TabProfile(QWidget):
         check_btn   = btn_box.addButton("Check Profile Quality →", QDialogButtonBox.ButtonRole.ActionRole)
         done_btn    = btn_box.addButton("Done",                    QDialogButtonBox.ButtonRole.AcceptRole)
         install_btn.setObjectName("primary")
+        check_btn.setObjectName("primary")
         layout.addWidget(btn_box)
 
         def _on_install() -> None:
@@ -740,6 +748,7 @@ class TabProfile(QWidget):
         check_btn.clicked.connect(_on_check)
         done_btn.clicked.connect(dlg.accept)
 
+        tint_dialog_primary(dlg, _TAB_COLOR)
         dlg.exec()
 
     def _on_install(self) -> None:

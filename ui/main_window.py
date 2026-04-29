@@ -82,6 +82,8 @@ class MainWindow(QMainWindow):
         self._tab_chart.chart_finished.connect(self._on_chart_generated)
         self._tab_measure.measure_finished.connect(self._on_measure_done)
         self._tab_measure.proceed_to_profile.connect(self._on_proceed_to_profile)
+        self._tab_measure.measurement_active.connect(self._on_measurement_active)
+        self._tab_profile.profile_active.connect(self._on_profile_active)
         self._tab_profile.profile_built.connect(self._tab_check.set_paths)
         self._tab_profile.check_requested.connect(lambda: self._tabs.setCurrentWidget(self._tab_check))
         self._tab_check.guide_refinement_requested.connect(self._on_guide_refinement)
@@ -226,6 +228,18 @@ class MainWindow(QMainWindow):
 
     def _on_measure_done(self, ti3: Path) -> None:
         self._tab_profile.set_ti3_path(ti3)
+
+    def _on_measurement_active(self, active: bool) -> None:
+        measure_idx = self._tabs.indexOf(self._tab_measure)
+        for i in range(self._tabs.count()):
+            if i != measure_idx:
+                self._tabs.setTabEnabled(i, not active)
+
+    def _on_profile_active(self, active: bool) -> None:
+        profile_idx = self._tabs.indexOf(self._tab_profile)
+        for i in range(self._tabs.count()):
+            if i != profile_idx:
+                self._tabs.setTabEnabled(i, not active)
 
     def _on_proceed_to_profile(self) -> None:
         self._tabs.setCurrentWidget(self._tab_profile)

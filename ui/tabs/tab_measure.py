@@ -200,6 +200,7 @@ class TabMeasure(QWidget):
 
     measure_finished   = pyqtSignal(Path)  # emits the .ti3 path on success
     proceed_to_profile = pyqtSignal()      # emitted when user chooses to go straight to tab 4
+    measurement_active = pyqtSignal(bool)  # True when chartread is running, False when done
 
     def __init__(
         self,
@@ -737,6 +738,7 @@ class TabMeasure(QWidget):
             on_line=self._on_log_line,
             on_finish=self._on_measure_done,
         )
+        self.measurement_active.emit(True)
 
     def _on_stop(self) -> None:
         self._manager.abort()
@@ -1023,75 +1025,163 @@ class TabMeasure(QWidget):
         QApplication.instance().installEventFilter(self)
 
     def _on_calibration_done(self) -> None:
-        from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QVBoxLayout
+        from PyQt6.QtWidgets import (
+            QDialog, QDialogButtonBox, QFrame, QGridLayout, QLabel, QVBoxLayout,
+        )
 
         QApplication.instance().removeEventFilter(self)
 
         dlg = QDialog(self)
-        dlg.setMinimumWidth(500)
+        dlg.setMinimumWidth(520)
 
         layout = QVBoxLayout(dlg)
-        layout.setSpacing(16)
+        layout.setSpacing(14)
         layout.setContentsMargins(24, 20, 24, 20)
 
+        _frame_style = (
+            "QFrame { background: #181818; border: 1px solid #2a2a2a; border-radius: 6px; }"
+        )
+        _key_style = (
+            f"font-family: Menlo, monospace; font-weight: 700; color: {_TAB_COLOR};"
+            " background: transparent; border: none;"
+        )
+        _dim_style = "color: #909090; background: transparent; border: none;"
+        _plain_style = "background: transparent; border: none;"
+
         if self._guided_refinement_active and self._strip_list:
-            # Semi-automatic: app navigates to each strip automatically
             first = self._strip_list[0]
             n = len(self._strip_list)
             dlg.setWindowTitle("Calibration Complete \u2014 Guided Refinement Ready")
+
             msg = QLabel(
                 "<b>Calibration complete. The app will guide you to each strip.</b><br><br>"
                 f"There are <b>{n} strip(s)</b> to re-measure. "
                 "The app will automatically navigate chartread to each one \u2014 "
-                "<b>you do not need to press f or b yourself.</b><br><br>"
-                "To know which strip to scan:<br>"
-                "&nbsp;&nbsp;\u2022&nbsp; Watch the <b>highlighted strip</b> in the preview panel on the right.<br>"
-                "&nbsp;&nbsp;\u2022&nbsp; Or follow the <b>output field</b> below \u2014 it will name the strip you should place your instrument on.<br><br>"
-                f"<b>First strip: {first}</b> \u2014 place your instrument there and scan when ready.<br><br>"
-                "<span style='color:#909090;'>When all strips are done, the output field will tell you to press \u2018d\u2019 to finish and save.</span>",
+                "<b>you do not need to press f or b yourself.</b>",
                 dlg,
             )
+            msg.setWordWrap(True)
+            layout.addWidget(msg)
+
+            hint_frame = QFrame(dlg)
+            hint_frame.setStyleSheet(_frame_style)
+            hfl = QVBoxLayout(hint_frame)
+            hfl.setContentsMargins(16, 12, 16, 12)
+            hfl.setSpacing(6)
+            hdr = QLabel("To identify which strip to scan:", dlg)
+            hdr.setStyleSheet("font-weight: 600; " + _plain_style)
+            hfl.addWidget(hdr)
+            for bullet_text in (
+                "Watch the <b>highlighted strip</b> in the preview panel on the right.",
+                "Or follow the <b>output field</b> below \u2014 it will name the strip.",
+            ):
+                b = QLabel(f"  \u2022  {bullet_text}", dlg)
+                b.setWordWrap(True)
+                b.setStyleSheet(_plain_style)
+                hfl.addWidget(b)
+            layout.addWidget(hint_frame)
+
+            first_lbl = QLabel(
+                f"<b>First strip: {first}</b> \u2014 place your instrument there and scan when ready.",
+                dlg,
+            )
+            first_lbl.setWordWrap(True)
+            layout.addWidget(first_lbl)
+
+            footnote = QLabel(
+                "When all strips are done, the output field will tell you to press \u2018d\u2019 to finish and save.",
+                dlg,
+            )
+            footnote.setWordWrap(True)
+            footnote.setStyleSheet(_dim_style)
+            layout.addWidget(footnote)
+
         elif self._resume_active:
-            # Manual resume: user navigates to strips themselves
             dlg.setWindowTitle("Calibration Complete \u2014 Manual Re-measurement")
+
             msg = QLabel(
                 "<b>Calibration complete. You are ready to re-measure strips manually.</b><br><br>"
-                "chartread will show you each strip in order. Strips that were already "
-                "measured are marked with <i>(!! ALL ROWS READ !!)</i> \u2014 you can "
-                "skip those or scan them again if you want to update them.<br><br>"
-                "<b>To re-measure a specific strip:</b><br>"
-                "&nbsp;&nbsp;1. Press <b>f</b> to move forward or <b>b</b> to move back "
-                "until chartread shows the strip you want.<br>"
-                "&nbsp;&nbsp;2. Place your instrument on that strip and scan it.<br>"
-                "&nbsp;&nbsp;3. Repeat for each strip you want to update.<br><br>"
-                "When you are done, press <b>d</b> to finish and save.<br><br>"
-                "<span style='color:#909090;'><b>n</b> jumps to the next unread strip &nbsp;\u2014&nbsp; "
-                "<b>Esc / q</b> quits without saving.</span>",
+                "chartread will show you each strip in order. Strips already measured are "
+                "marked with <i>(!! ALL ROWS READ !!)</i> \u2014 skip or re-scan as needed.",
                 dlg,
             )
+            msg.setWordWrap(True)
+            layout.addWidget(msg)
+
+            step_frame = QFrame(dlg)
+            step_frame.setStyleSheet(_frame_style)
+            sfl = QGridLayout(step_frame)
+            sfl.setContentsMargins(16, 12, 16, 12)
+            sfl.setHorizontalSpacing(14)
+            sfl.setVerticalSpacing(7)
+            sfl.setColumnStretch(1, 1)
+            steps = [
+                ("1.", "Press <b>f</b> (forward) or <b>b</b> (back) until chartread shows the strip you want."),
+                ("2.", "Place your instrument on that strip and scan it."),
+                ("3.", "Repeat for each strip you want to update, then press <b>d</b> to finish and save."),
+            ]
+            for row, (num, text) in enumerate(steps):
+                n_lbl = QLabel(num)
+                n_lbl.setStyleSheet(_key_style)
+                n_lbl.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight)
+                t_lbl = QLabel(text)
+                t_lbl.setWordWrap(True)
+                t_lbl.setStyleSheet(_plain_style)
+                sfl.addWidget(n_lbl, row, 0)
+                sfl.addWidget(t_lbl, row, 1)
+            layout.addWidget(step_frame)
+
+            footnote = QLabel(
+                "<b>n</b> jumps to the next unread strip \u00a0\u2014\u00a0 <b>Esc / q</b> quits without saving.",
+                dlg,
+            )
+            footnote.setWordWrap(True)
+            footnote.setStyleSheet(_dim_style)
+            layout.addWidget(footnote)
+
         else:
-            # Standard fresh measurement
             dlg.setWindowTitle("Calibration Complete \u2014 How to Measure")
+
             msg = QLabel(
                 "<b>Calibration complete. You are ready to start measuring.</b><br><br>"
-                "Put your instrument into measuring position, place it at the beginning "
-                "of the first stripe and trigger it to read that stripe. "
-                "Then proceed stripe by stripe until all are done.<br><br>"
-                "<b>Navigation keys:</b><br>"
-                "&nbsp;&nbsp;<b>f</b> &nbsp;\u2014 move to the next stripe<br>"
-                "&nbsp;&nbsp;<b>b</b> &nbsp;\u2014 move back to the previous stripe<br>"
-                "&nbsp;&nbsp;<b>n</b> &nbsp;\u2014 jump to the next unread stripe<br>"
-                "&nbsp;&nbsp;<b>d</b> &nbsp;\u2014 finish and save when all stripes are done<br>"
-                "&nbsp;&nbsp;<b>Esc&nbsp;/&nbsp;q</b> &nbsp;\u2014 quit without saving<br><br>"
-                "<span style='color:#909090;'>These instructions are always visible "
-                "in the output log below.</span>",
+                "Place your instrument at the beginning of the first stripe and trigger it to scan. "
+                "Then proceed stripe by stripe until all are done.",
                 dlg,
             )
+            msg.setWordWrap(True)
+            layout.addWidget(msg)
 
-        msg.setWordWrap(True)
-        layout.addWidget(msg)
+            key_frame = QFrame(dlg)
+            key_frame.setStyleSheet(_frame_style)
+            kfl = QGridLayout(key_frame)
+            kfl.setContentsMargins(16, 12, 16, 12)
+            kfl.setHorizontalSpacing(20)
+            kfl.setVerticalSpacing(6)
+            kfl.setColumnStretch(1, 1)
+            key_rows = [
+                ("f", "Move to the next stripe"),
+                ("b", "Move back to the previous stripe"),
+                ("n", "Jump to the next unread stripe"),
+                ("d", "Finish and save when all stripes are done"),
+                ("Esc / q", "Quit without saving"),
+            ]
+            for row, (key, desc) in enumerate(key_rows):
+                k = QLabel(key)
+                k.setStyleSheet(_key_style)
+                d = QLabel(desc)
+                d.setStyleSheet(_plain_style)
+                kfl.addWidget(k, row, 0, Qt.AlignmentFlag.AlignLeft)
+                kfl.addWidget(d, row, 1, Qt.AlignmentFlag.AlignLeft)
+            layout.addWidget(key_frame)
+
+            footnote = QLabel("These instructions are always visible in the output log below.", dlg)
+            footnote.setWordWrap(True)
+            footnote.setStyleSheet(_dim_style)
+            layout.addWidget(footnote)
 
         btn_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
+        ok_btn = btn_box.button(QDialogButtonBox.StandardButton.Ok)
+        ok_btn.setObjectName("primary")
         btn_box.accepted.connect(dlg.accept)
         layout.addWidget(btn_box)
 
@@ -1175,6 +1265,7 @@ class TabMeasure(QWidget):
             QApplication.instance().installEventFilter(self)
 
     def _on_measure_done(self, code: int) -> None:
+        self.measurement_active.emit(False)
         QApplication.instance().removeEventFilter(self)
         self._set_settings_enabled(True)
         self._start_btn.setEnabled(True)

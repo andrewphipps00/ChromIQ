@@ -1,5 +1,16 @@
 # Changelog
 
+## v2.0.7
+### Improved
+- **Measure tab — Calibration Complete dialog**: Restructured with a visual key-binding table (Menlo, accent colour) for the navigation keys, separate prose and footnote sections. OK button is now tinted in the tab's green accent colour.
+- **Measure tab**: All other tabs are disabled and visually dimmed while a measurement is running, preventing accidental tab switches mid-scan.
+- **Build Profile tab**: Progress bar is now always visible — dimmed and static when idle, animated during a build.
+- **Build Profile tab**: All other tabs are disabled and visually dimmed while colprof is running.
+- **Build Profile tab — Profile Built dialog**: "Install on this Mac" and "Check Profile Quality" buttons are now tinted in the tab's cyan accent colour.
+- **Spinboxes**: The focus border now runs continuously around the entire widget — the up/down buttons no longer interrupt it.
+### Fixed
+- ARM and universal2 app bundles are now reliably ad-hoc signed: all `.so` and `.dylib` files inside the bundle are signed individually before the top-level bundle sign, preventing Gatekeeper rejections on Apple Silicon.
+
 ## v2.0.6
 ### Improved
 - Tab workflow headers: step label increased to 12 pt and headline increased to 30 pt for better legibility.

@@ -83,6 +83,28 @@ class SpectrumTabBar(QTabBar):
             color_hex = SPECTRUM[i] if i < len(SPECTRUM) else SPECTRUM[-1]
             color = QColor(color_hex)
             is_active = (i == self.currentIndex())
+            is_enabled = self.isTabEnabled(i)
+
+            # Disabled tab: dim background overlay and skip accent
+            if not is_enabled:
+                overlay = QColor("#0f0f0f")
+                overlay.setAlpha(160)
+                p.fillRect(rect, overlay)
+
+                if i < self.count() - 1:
+                    p.setPen(QPen(QColor(SEP), 1))
+                    p.drawLine(rect.x() + rect.width() - 1, rect.y() + 8,
+                               rect.x() + rect.width() - 1,
+                               rect.y() + rect.height() - 8)
+
+                p.setPen(QColor("#404040"))
+                font: QFont = self.font()
+                font.setPointSize(13)
+                font.setWeight(QFont.Weight.Medium)
+                p.setFont(font)
+                label_rect = rect.adjusted(8, 3, -8, -2)
+                p.drawText(label_rect, int(Qt.AlignmentFlag.AlignCenter), self.tabText(i))
+                continue
 
             # Active tab: subtle color-tint background
             if is_active:
@@ -120,7 +142,7 @@ class SpectrumTabBar(QTabBar):
             # Label
             text_color = TEXT_ACTIVE if is_active else TEXT_INACTIVE
             p.setPen(QColor(text_color))
-            font: QFont = self.font()
+            font = self.font()
             font.setPointSize(13)
             font.setWeight(QFont.Weight.DemiBold if is_active
                            else QFont.Weight.Medium)

@@ -155,20 +155,20 @@ QComboBox QAbstractItemView {{
 }}
 QSpinBox, QDoubleSpinBox {{ padding-right: 20px; min-height: 28px; }}
 QSpinBox::up-button, QDoubleSpinBox::up-button {{
-    subcontrol-origin: border; subcontrol-position: top right;
-    width: 18px; height: 14px;
+    subcontrol-origin: padding; subcontrol-position: top right;
+    width: 18px; height: 13px;
     border-left: 1px solid {BORDER};
     border-bottom: 1px solid {BORDER};
-    border-top-right-radius: 3px;
+    border-top-right-radius: 2px;
     background: #2c2c2c;
 }}
 QSpinBox::up-button:hover, QDoubleSpinBox::up-button:hover {{ background: #3a3a3a; }}
 QSpinBox::down-button, QDoubleSpinBox::down-button {{
-    subcontrol-origin: border; subcontrol-position: bottom right;
-    width: 18px; height: 14px;
+    subcontrol-origin: padding; subcontrol-position: bottom right;
+    width: 18px; height: 13px;
     border-left: 1px solid {BORDER};
     border-top: 1px solid {BORDER};
-    border-bottom-right-radius: 3px;
+    border-bottom-right-radius: 2px;
     background: #2c2c2c;
 }}
 QSpinBox::down-button:hover, QDoubleSpinBox::down-button:hover {{ background: #3a3a3a; }}

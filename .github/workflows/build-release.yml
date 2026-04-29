@@ -76,7 +76,15 @@ jobs:
         run: python3 -m PyInstaller ChromIQ.spec
 
       - name: Codesign app (ad-hoc)
-        run: codesign --force --deep --sign - dist/ChromIQ.app
+        run: |
+          # Sign every .so and .dylib inside the bundle first.
+          # codesign --deep alone misses PyInstaller's nested extensions on
+          # Apple Silicon, which causes Gatekeeper to reject the app.
+          find dist/ChromIQ.app -type f -name "*.so" \
+            -exec codesign --force --sign - {} \;
+          find dist/ChromIQ.app -type f -name "*.dylib" \
+            -exec codesign --force --sign - {} \;
+          codesign --force --deep --sign - dist/ChromIQ.app
 
       - name: Verify app signature
         run: codesign --verify --verbose dist/ChromIQ.app
