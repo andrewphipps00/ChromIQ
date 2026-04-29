@@ -207,6 +207,29 @@ parameters:
         distributed in the output gamut, leading to better accuracy on
         a second profiling pass.  Leave blank for a first-time profile.
 
+    - flag: "-C"
+      name: "Calibration Override"
+      type: file_path
+      default: ""
+      filter: "Calibration files (*.cal)"
+      affects_preview: false
+      expert_only: true
+      tooltip_title: "Calibration Override (-C)"
+      tooltip_body: |
+        Optional .cal file whose calibration curves are applied when estimating
+        the ink limit for patch generation.  Overrides any .cal embedded in
+        the ICC target .ti3 file produced by a previous profiling pass.
+
+        Use this when you have a validated device calibration (e.g. from
+        printcal/applycal) and want targen to account for it when computing
+        how many patches are needed in the shadow region.
+
+        Type "none" in the field (without quotes) to explicitly prevent any
+        .cal from being used, even if one is embedded in the .ti3.
+
+        Leave blank for most workflows — only needed when you are managing
+        a separate calibration curve independently from the profile.
+
     - flag: "-N"
       name: "Neutral Axis Emphasis"
       type: float
