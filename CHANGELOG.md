@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.0.6
+### Improved
+- Tab workflow headers: step label increased to 12 pt and headline increased to 30 pt for better legibility.
+
 ## v2.0.5
 ### Improved
 - All button labels across every tab, dialog, and the Settings window now use Menlo font in all-caps, applied globally via a Qt event filter — future buttons inherit the style automatically.
