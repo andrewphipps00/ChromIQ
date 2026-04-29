@@ -70,6 +70,7 @@ class TabPrint(QWidget):
 
         # ---- Left controls ----
         left = QWidget(self)
+        self._left_panel = left
         left.setMaximumWidth(560)
         left.setStyleSheet("QPushButton { min-height: 44px; }")
         ll = QVBoxLayout(left)
@@ -174,9 +175,12 @@ class TabPrint(QWidget):
         right = QWidget(self)
         rl = QVBoxLayout(right)
         rl.setContentsMargins(0, 0, 0, 0)
-        lbl = QLabel("Print Preview", right)
+        lbl = QLabel("PRINT PREVIEW", right)
         lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        lbl.setStyleSheet("color: #909090; font-size: 11px; padding: 4px;")
+        lbl.setStyleSheet(
+            "color: #808080; background: transparent; padding: 4px;"
+            " font-family: Menlo; font-size: 9pt; font-weight: 300;"
+        )
         rl.addWidget(lbl)
         self._preview = TiffPreview(right)
         rl.addWidget(self._preview, stretch=1)

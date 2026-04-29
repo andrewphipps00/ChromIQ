@@ -1,5 +1,14 @@
 # Changelog
 
+## v2.0.4
+### Improved
+- Accent-coloured gradient wash at the top of each tab's control panel fades with a quadratic ease-out curve for a smoother, more natural look.
+- A 2 px vertical accent line in the active tab's colour now runs along the full left edge of the window, below the tab bar.
+- Active tab button background tint reduced to 6 % opacity for a subtler highlight.
+- **Create Chart — Calculated Patches** section redesigned: patch count displayed in large Georgia 56 pt with letter-spacing 85 %, subtitle and paper info in small Menlo caps, and a five-segment spectrum bar underneath.
+- Preview panel labels (CHART PREVIEW, PRINT PREVIEW) now use Menlo 9 pt grey all-caps.
+- Calculated Patches group-box internal padding adjusted so top and bottom spacing are visually balanced.
+
 ## v2.0.3
 ### Improved
 - Each tab now shows a workflow header at the top of its controls panel: a small coloured accent stroke followed by a step indicator (Menlo, all-caps, grey) and a large headline (Georgia 24 pt, white) — matching the tab's accent colour.

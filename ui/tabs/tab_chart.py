@@ -14,6 +14,7 @@ from PyQt6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QFileDialog,
+    QFrame,
     QGroupBox,
     QHBoxLayout,
     QInputDialog,
@@ -38,6 +39,7 @@ from data.patch_db import (
     query_patches,
 )
 from ui.parameter_widget import ParameterWidget
+from ui.styles import SPEC_AMBER, SPEC_CYAN, SPEC_GREEN, SPEC_MAGENTA, SPEC_VIOLET
 from ui.tab_header import TabHeader
 from ui.tiff_preview import TiffPreview
 from ui.tooltip_button import TooltipButton
@@ -88,6 +90,7 @@ class TabChart(QWidget):
 
         # Left: controls
         left = QWidget(self)
+        self._left_panel = left
         left.setMinimumWidth(420)
         left.setMaximumWidth(700)
         left_layout = QVBoxLayout(left)
@@ -162,9 +165,12 @@ class TabChart(QWidget):
         right = QWidget(self)
         right_layout = QVBoxLayout(right)
         right_layout.setContentsMargins(0, 0, 0, 0)
-        lbl = QLabel("Chart Preview", right)
+        lbl = QLabel("CHART PREVIEW", right)
         lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        lbl.setStyleSheet("color: #909090; font-size: 11px; padding: 4px;")
+        lbl.setStyleSheet(
+            "color: #808080; background: transparent; padding: 4px;"
+            " font-family: Menlo; font-size: 9pt; font-weight: 300;"
+        )
         right_layout.addWidget(lbl)
         self._preview = TiffPreview(right)
         right_layout.addWidget(self._preview, stretch=1)
@@ -304,14 +310,50 @@ class TabChart(QWidget):
 
         # Patch count display
         count_grp = QGroupBox("Calculated Patches", inner)
-        count_layout = QHBoxLayout(count_grp)
+        count_grp.setStyleSheet(
+            "QGroupBox { margin-top: 14px; padding-top: 0px;"
+            " border: 1px solid #333333; border-radius: 4px; }"
+            "QGroupBox::title { subcontrol-origin: margin; left: 10px; top: 2px;"
+            " color: #8a8a8a; font-size: 11px; text-transform: uppercase;"
+            " letter-spacing: 1px; }"
+        )
+        count_layout = QVBoxLayout(count_grp)
+        count_layout.setContentsMargins(8, 0, 8, 12)
+        count_layout.setSpacing(4)
+
         self._patch_count_lbl = QLabel("—", inner)
         self._patch_count_lbl.setObjectName("patch_count")
         self._patch_count_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._patch_count_lbl.setStyleSheet(
+            "color: #ffffff; background: transparent;"
+            " font-family: Georgia; font-size: 56pt;"
+        )
+        count_font = QFont()
+        count_font.setLetterSpacing(QFont.SpacingType.PercentageSpacing, 85)
+        self._patch_count_lbl.setFont(count_font)
         count_layout.addWidget(self._patch_count_lbl)
+
         self._patch_detail_lbl = QLabel("", inner)
-        self._patch_detail_lbl.setStyleSheet("color: #909090; font-size: 11px;")
+        self._patch_detail_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._patch_detail_lbl.setStyleSheet(
+            "color: #808080; background: transparent;"
+            " font-family: Menlo; font-size: 9pt; font-weight: 300;"
+        )
         count_layout.addWidget(self._patch_detail_lbl)
+
+        # 5-segment spectrum bar, centered
+        bar_row = QHBoxLayout()
+        bar_row.setContentsMargins(0, 6, 0, 0)
+        bar_row.setSpacing(0)
+        bar_row.addStretch()
+        for _color in (SPEC_MAGENTA, SPEC_AMBER, SPEC_GREEN, SPEC_CYAN, SPEC_VIOLET):
+            _seg = QFrame(inner)
+            _seg.setFixedSize(22, 2)
+            _seg.setStyleSheet(f"background-color: {_color}; border: none;")
+            bar_row.addWidget(_seg)
+        bar_row.addStretch()
+        count_layout.addLayout(bar_row)
+
         layout.addWidget(count_grp)
 
         # Hidden-defaults info box
@@ -635,11 +677,11 @@ class TabChart(QWidget):
             total = per_sheet * pages
             self._patch_count_lbl.setText(str(total))
             self._patch_detail_lbl.setText(
-                f"{per_sheet} patches/sheet × {pages} page(s)"
+                f"PATCHES · {pages} PAGES · {paper.upper()}"
             )
         else:
             self._patch_count_lbl.setText("?")
-            self._patch_detail_lbl.setText("Custom layout — count calculated at generation")
+            self._patch_detail_lbl.setText("CUSTOM LAYOUT")
 
         # Hidden-defaults info label (values mirror _collect_guided logic)
         base_white = int(self._settings.get("targen_white_patches", 4))

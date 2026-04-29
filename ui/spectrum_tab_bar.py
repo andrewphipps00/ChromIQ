@@ -88,7 +88,7 @@ class SpectrumTabBar(QTabBar):
             if is_active:
                 p.fillRect(rect, QColor(BG_ACTIVE))
                 tint = QColor(color)
-                tint.setAlpha(18)
+                tint.setAlpha(15)
                 p.fillRect(rect, tint)
 
             # Top accent strip (3px)

@@ -5,6 +5,7 @@ from pathlib import Path
 
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import (
+    QFrame,
     QMainWindow,
     QTabWidget,
     QVBoxLayout,
@@ -18,6 +19,7 @@ from core.logger import get_logger
 from core.settings import AppSettings
 from core.updater import UpdateChecker
 from ui.dialogs.settings_dialog import SettingsDialog
+from ui.gradient_overlay import GradientOverlay
 from ui.masthead_header import MastheadHeader
 from ui.spectrum_tab_bar import SpectrumTabBar
 from ui.tabs.tab_chart import TabChart
@@ -70,6 +72,13 @@ class MainWindow(QMainWindow):
         self._tabs.addTab(self._tab_profile, "4. Build Profile")
         self._tabs.addTab(self._tab_check,   "5. Check & Refine")
 
+        # Gradient wash — left panel only for splitter tabs, full pane for the rest
+        from ui.styles import TAB_COLORS
+        for _i in range(self._tabs.count()):
+            _tab_w = self._tabs.widget(_i)
+            _target = getattr(_tab_w, "_left_panel", _tab_w)
+            GradientOverlay(TAB_COLORS[_i], parent=_target)
+
         self._tab_chart.chart_finished.connect(self._on_chart_generated)
         self._tab_measure.measure_finished.connect(self._on_measure_done)
         self._tab_measure.proceed_to_profile.connect(self._on_proceed_to_profile)
@@ -80,6 +89,12 @@ class MainWindow(QMainWindow):
         self._tab_print.ti2_loaded.connect(self._tab_measure.set_ti1_path)
 
         main_layout.addWidget(self._tabs, stretch=1)
+
+        # 2px accent line on the left edge — child of the main window so it
+        # spans the full height including the status bar below the tab widget
+        self._accent_line = QFrame(self)
+        self._accent_line.setFixedWidth(2)
+        self._accent_line.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
 
         self._tabs.currentChanged.connect(self._on_tab_changed)
         QTimer.singleShot(0, lambda: self._on_tab_changed(self._tabs.currentIndex()))
@@ -101,6 +116,15 @@ class MainWindow(QMainWindow):
         QTimer.singleShot(3000, self._check_for_updates_on_startup)
         log.info("MainWindow initialised")
 
+    def resizeEvent(self, event) -> None:  # type: ignore[override]
+        super().resizeEvent(event)
+        self._refit_accent_line()
+
+    def _refit_accent_line(self) -> None:
+        y = self._masthead.height() + self._tabs.tabBar().height()
+        self._accent_line.setGeometry(0, y, 2, max(0, self.height() - y))
+        self._accent_line.raise_()
+
     def _on_tab_changed(self, index: int) -> None:
         from ui.styles import TAB_COLORS
         from ui.tooltip_button import TooltipButton
@@ -111,6 +135,10 @@ class MainWindow(QMainWindow):
         r, g, b = int(color[1:3], 16), int(color[3:5], 16), int(color[5:7], 16)
         color_hover = "#{:02x}{:02x}{:02x}".format(int(r * 0.82), int(g * 0.82), int(b * 0.82))
         color_glow  = f"rgba({r},{g},{b},0.33)"
+
+        self._accent_line.setStyleSheet(f"background: {color}; border: none;")
+        self._refit_accent_line()
+
 
         tab_w = self._tabs.widget(index)
         if tab_w:
