@@ -36,6 +36,7 @@ if TYPE_CHECKING:
     from core.settings import AppSettings
 
 log = get_logger(__name__)
+from ui.styles import SPEC_AMBER, TAB_COLORS
 
 
 class TabPrint(QWidget):
@@ -132,6 +133,48 @@ class TabPrint(QWidget):
         warn.setWordWrap(True)
         ll.addWidget(warn)
 
+        ll.addStretch()
+
+        # Feed the beast block
+        beast_box = QGroupBox(left)
+        beast_box.setStyleSheet(
+            "QGroupBox { margin-top: 0px; padding: 14px 8px 12px 8px;"
+            " border: 1px solid #333333; border-radius: 4px; }"
+        )
+        beast_layout = QVBoxLayout(beast_box)
+        beast_layout.setContentsMargins(0, 0, 0, 0)
+        beast_layout.setSpacing(4)
+        beast_headline = QLabel(
+            f'Feed the beast<span style="color: {SPEC_AMBER}; font-style: italic;">!</span>',
+            beast_box,
+        )
+        beast_headline.setTextFormat(Qt.TextFormat.RichText)
+        beast_headline.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        beast_headline.setStyleSheet(
+            "color: #ffffff; background: transparent;"
+            " font-family: Georgia; font-size: 28pt;"
+        )
+        beast_layout.addWidget(beast_headline)
+        beast_subtext = QLabel("Your printer is hungry.", beast_box)
+        beast_subtext.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        beast_subtext.setStyleSheet(
+            "color: #808080; background: transparent;"
+            " font-family: Menlo; font-size: 9pt; font-weight: 300;"
+        )
+        beast_layout.addWidget(beast_subtext)
+        beast_bar = QHBoxLayout()
+        beast_bar.setContentsMargins(0, 6, 0, 0)
+        beast_bar.setSpacing(0)
+        beast_bar.addStretch()
+        for _color in TAB_COLORS:
+            _seg = QFrame(beast_box)
+            _seg.setFixedSize(22, 2)
+            _seg.setStyleSheet(f"background-color: {_color}; border: none;")
+            beast_bar.addWidget(_seg)
+        beast_bar.addStretch()
+        beast_layout.addLayout(beast_bar)
+        ll.addWidget(beast_box)
+
         # Load existing target button
         load_btn = QPushButton("Load existing target — select .ti2 file", left)
         load_btn.setIcon(load_folder_icon("folder_print"))
@@ -167,8 +210,6 @@ class TabPrint(QWidget):
         self._status_lbl = QLabel("", left)
         self._status_lbl.setWordWrap(True)
         ll.addWidget(self._status_lbl)
-
-        ll.addStretch()
 
         # Status bar (replaces main-window status bar)
         self._status_bar_lbl = QLabel("", left)

@@ -13,6 +13,7 @@ from PyQt6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QFileDialog,
+    QFrame,
     QGroupBox,
     QHBoxLayout,
     QInputDialog,
@@ -40,6 +41,7 @@ if TYPE_CHECKING:
 log = get_logger(__name__)
 
 _TAB_COLOR = "#37bcd6"  # Build Profile tab accent
+from ui.styles import SPEC_CYAN, TAB_COLORS
 
 _ILLUMINANTS = [
     ("Default (D50)", ""),
@@ -105,6 +107,7 @@ class TabProfile(QWidget):
             self._stack.setCurrentIndex(1)
             self._guided_btn.setChecked(False)
             self._manual_btn.setChecked(True)
+        self._build_state_box.setVisible(mode == "guided")
 
     def _current_mode(self) -> str:
         return "guided" if self._stack.currentIndex() == 0 else "manual"
@@ -159,6 +162,47 @@ class TabProfile(QWidget):
         self._stack.addWidget(self._guided_panel)
         self._stack.addWidget(self._manual_panel)
         root.addWidget(self._stack, stretch=1)
+
+        # Build-state block — guided mode only, sits directly above buttons
+        build_box = QGroupBox(self)
+        build_box.setStyleSheet(
+            "QGroupBox { margin-top: 0px; padding: 14px 8px 12px 8px;"
+            " border: 1px solid #333333; border-radius: 4px; }"
+        )
+        build_layout = QVBoxLayout(build_box)
+        build_layout.setContentsMargins(0, 0, 0, 0)
+        build_layout.setSpacing(4)
+        self._build_headline = QLabel(
+            f'Ready to build<span style="color: {SPEC_CYAN}; font-style: italic;">?</span>',
+            build_box,
+        )
+        self._build_headline.setTextFormat(Qt.TextFormat.RichText)
+        self._build_headline.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._build_headline.setStyleSheet(
+            "color: #ffffff; background: transparent;"
+            " font-family: Georgia; font-size: 28pt;"
+        )
+        build_layout.addWidget(self._build_headline)
+        self._build_subtext = QLabel("Awaiting your command.", build_box)
+        self._build_subtext.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._build_subtext.setStyleSheet(
+            "color: #808080; background: transparent;"
+            " font-family: Menlo; font-size: 9pt; font-weight: 300;"
+        )
+        build_layout.addWidget(self._build_subtext)
+        bar_row = QHBoxLayout()
+        bar_row.setContentsMargins(0, 6, 0, 0)
+        bar_row.setSpacing(0)
+        bar_row.addStretch()
+        for _color in TAB_COLORS:
+            _seg = QFrame(build_box)
+            _seg.setFixedSize(22, 2)
+            _seg.setStyleSheet(f"background-color: {_color}; border: none;")
+            bar_row.addWidget(_seg)
+        bar_row.addStretch()
+        build_layout.addLayout(bar_row)
+        self._build_state_box = build_box
+        root.addWidget(build_box)
 
         # --- Buttons (outside stack) ---
         btn_row = QHBoxLayout()
@@ -1361,6 +1405,10 @@ class TabProfile(QWidget):
 
         params = self._collect_params()
         self._log.clear()
+        self._build_headline.setText(
+            f'Working hard<span style="color: {SPEC_CYAN}; font-style: italic;">…</span>'
+        )
+        self._build_subtext.setText("Good things take time.")
         self._build_btn.setText("Building Profile…")
         self._build_btn.setEnabled(False)
         self._install_btn.setEnabled(False)
@@ -1384,6 +1432,10 @@ class TabProfile(QWidget):
 
     def _on_build_done(self, code: int) -> None:
         self.profile_active.emit(False)
+        self._build_headline.setText(
+            f'Ready to build<span style="color: {SPEC_CYAN}; font-style: italic;">?</span>'
+        )
+        self._build_subtext.setText("Awaiting your command.")
         self._build_btn.setText("Build Profile")
         self._build_btn.setEnabled(True)
         self._save_defaults_btn.setEnabled(True)

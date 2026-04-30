@@ -13,6 +13,7 @@ from PyQt6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QFileDialog,
+    QFrame,
     QGroupBox,
     QHBoxLayout,
     QInputDialog,
@@ -34,6 +35,7 @@ from ui.tooltip_button import TooltipButton
 from ui.widgets import NoScrollComboBox, NoScrollDoubleSpinBox, make_browse_button, open_file_dialog, tint_dialog_primary
 
 _TAB_COLOR = "#9f82ff"  # Check & Refine tab accent
+from ui.styles import SPEC_VIOLET, TAB_COLORS
 from workflow.profcheck_runner import (
     REFINE_DE_THRESHOLD,
     REFINE_START_OVER_RATIO,
@@ -113,6 +115,7 @@ class TabCheckRefine(QWidget):
             self._stack.setCurrentIndex(1)
             self._guided_btn.setChecked(False)
             self._manual_btn.setChecked(True)
+        self._nervous_box.setVisible(mode == "guided")
 
     def _current_mode(self) -> str:
         return "guided" if self._stack.currentIndex() == 0 else "manual"
@@ -210,6 +213,47 @@ class TabCheckRefine(QWidget):
         self._stack.addWidget(self._guided_panel)
         self._stack.addWidget(self._manual_panel)
         root.addWidget(self._stack, stretch=1)
+
+        # Nervous block — guided mode only, sits directly above buttons
+        nervous_box = QGroupBox(self)
+        nervous_box.setStyleSheet(
+            "QGroupBox { margin-top: 0px; padding: 14px 8px 12px 8px;"
+            " border: 1px solid #333333; border-radius: 4px; }"
+        )
+        nervous_layout = QVBoxLayout(nervous_box)
+        nervous_layout.setContentsMargins(0, 0, 0, 0)
+        nervous_layout.setSpacing(4)
+        headline = QLabel(
+            f'Are you nervous<span style="color: {SPEC_VIOLET}; font-style: italic;">?</span>',
+            nervous_box,
+        )
+        headline.setTextFormat(Qt.TextFormat.RichText)
+        headline.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        headline.setStyleSheet(
+            "color: #ffffff; background: transparent;"
+            " font-family: Georgia; font-size: 28pt;"
+        )
+        nervous_layout.addWidget(headline)
+        subtext = QLabel("Your colors are in good hands.", nervous_box)
+        subtext.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        subtext.setStyleSheet(
+            "color: #808080; background: transparent;"
+            " font-family: Menlo; font-size: 9pt; font-weight: 300;"
+        )
+        nervous_layout.addWidget(subtext)
+        bar_row = QHBoxLayout()
+        bar_row.setContentsMargins(0, 6, 0, 0)
+        bar_row.setSpacing(0)
+        bar_row.addStretch()
+        for _color in TAB_COLORS:
+            _seg = QFrame(nervous_box)
+            _seg.setFixedSize(22, 2)
+            _seg.setStyleSheet(f"background-color: {_color}; border: none;")
+            bar_row.addWidget(_seg)
+        bar_row.addStretch()
+        nervous_layout.addLayout(bar_row)
+        self._nervous_box = nervous_box
+        root.addWidget(nervous_box)
 
         # ── Action buttons (outside stack) ──────────────────────────────
         btn_row = QHBoxLayout()

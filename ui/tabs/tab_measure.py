@@ -17,6 +17,7 @@ from PyQt6.QtWidgets import (
     QDialogButtonBox,
     QDoubleSpinBox,
     QFileDialog,
+    QFrame,
     QGroupBox,
     QHBoxLayout,
     QInputDialog,
@@ -39,6 +40,7 @@ from ui.tooltip_button import TooltipButton
 from ui.widgets import NoScrollComboBox, NoScrollDoubleSpinBox, NoScrollSpinBox, load_folder_icon, make_browse_button, open_file_dialog, tint_dialog_primary
 
 _TAB_COLOR = "#56d6a5"  # Measure tab accent
+from ui.styles import SPEC_GREEN, TAB_COLORS
 from workflow.measure_manager import MeasureManager, MeasureParams
 from ui.tiff_preview import TiffPreview
 
@@ -260,6 +262,7 @@ class TabMeasure(QWidget):
             self._stack.setCurrentIndex(1)
             self._guided_btn.setChecked(False)
             self._manual_btn.setChecked(True)
+        self._calm_outer.setVisible(mode == "guided")
 
     def _current_mode(self) -> str:
         return "guided" if self._stack.currentIndex() == 0 else "manual"
@@ -338,6 +341,48 @@ class TabMeasure(QWidget):
         self._stack.addWidget(self._guided_panel)
         self._stack.addWidget(self._manual_panel)
         lc_layout.addWidget(self._stack, stretch=1)
+
+        # Keep-calm block — guided mode only, sits directly above buttons
+        calm_outer = QWidget(left_container)
+        co_layout = QVBoxLayout(calm_outer)
+        co_layout.setContentsMargins(16, 8, 16, 0)
+        calm_box = QGroupBox(calm_outer)
+        calm_box.setStyleSheet(
+            "QGroupBox { margin-top: 0px; padding: 14px 8px 12px 8px;"
+            " border: 1px solid #333333; border-radius: 4px; }"
+        )
+        calm_layout = QVBoxLayout(calm_box)
+        calm_layout.setContentsMargins(0, 0, 0, 0)
+        calm_layout.setSpacing(4)
+        headline = QLabel(f'Keep calm<span style="color: {SPEC_GREEN}; font-style: italic;">!</span>', calm_box)
+        headline.setTextFormat(Qt.TextFormat.RichText)
+        headline.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        headline.setStyleSheet(
+            "color: #ffffff; background: transparent;"
+            " font-family: Georgia; font-size: 28pt;"
+        )
+        calm_layout.addWidget(headline)
+        subtext = QLabel("Scan each strip with a slow, steady motion.", calm_box)
+        subtext.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        subtext.setStyleSheet(
+            "color: #808080; background: transparent;"
+            " font-family: Menlo; font-size: 9pt; font-weight: 300;"
+        )
+        calm_layout.addWidget(subtext)
+        bar_row = QHBoxLayout()
+        bar_row.setContentsMargins(0, 6, 0, 0)
+        bar_row.setSpacing(0)
+        bar_row.addStretch()
+        for _color in TAB_COLORS:
+            _seg = QFrame(calm_outer)
+            _seg.setFixedSize(22, 2)
+            _seg.setStyleSheet(f"background-color: {_color}; border: none;")
+            bar_row.addWidget(_seg)
+        bar_row.addStretch()
+        calm_layout.addLayout(bar_row)
+        co_layout.addWidget(calm_box)
+        self._calm_outer = calm_outer
+        lc_layout.addWidget(calm_outer)
 
         # Buttons — shared
         btn_outer = QWidget(left_container)
