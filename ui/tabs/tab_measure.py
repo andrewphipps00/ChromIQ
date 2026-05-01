@@ -183,6 +183,7 @@ class _ChartreadOption:
     tooltip_body: str
     widget: QWidget | None = None   # value widget (spinbox, combo…)
     checkbox: QCheckBox | None = None
+    row_widget: QWidget | None = None
 
     def build_args(self) -> list[str]:
         """Return CLI tokens for this option if enabled."""
@@ -596,9 +597,11 @@ class TabMeasure(QWidget):
 
         self._chartread_opts = self._make_chartread_options(left)
         for opt in self._chartread_opts:
-            row = QHBoxLayout()
+            row_w = QWidget(left)
+            row = QHBoxLayout(row_w)
             row.setContentsMargins(0, 0, 0, 0)
             row.setSpacing(8)
+            opt.row_widget = row_w
 
             cb = QCheckBox(opt.label, left)
             cb.setChecked(False)
@@ -613,10 +616,19 @@ class TabMeasure(QWidget):
                 row.addWidget(cb, stretch=1)
 
             row.addWidget(TooltipButton(opt.tooltip_title, opt.tooltip_body, left))
-            ag.addLayout(row)
+            ag.addWidget(row_w)
+
+        for opt in self._chartread_opts:
+            if opt.key == "tolerance":
+                opt.checkbox.setChecked(True)
+                if opt.widget is not None:
+                    opt.widget.setValue(0.7)
+                    opt.widget.setEnabled(True)
+            else:
+                if opt.row_widget is not None:
+                    opt.row_widget.setVisible(False)
 
         ll.addWidget(adv_grp)
-        adv_grp.setVisible(False)
         ll.addStretch(1)
 
         scroll.setWidget(left)

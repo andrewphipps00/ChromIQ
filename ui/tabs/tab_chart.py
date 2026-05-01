@@ -253,8 +253,8 @@ class TabChart(QWidget):
             inner,
         )
         dd_row.addWidget(self._dd_check)
-        dd_row.addWidget(self._dd_tooltip)
         dd_row.addStretch()
+        dd_row.addWidget(self._dd_tooltip)
         instr_layout.addLayout(dd_row)
         layout.addWidget(instr_grp)
 
@@ -287,6 +287,7 @@ class TabChart(QWidget):
         self._pages_spin.setValue(1)
         self._pages_spin.valueChanged.connect(self._update_patch_count)
         pages_row.addWidget(self._pages_spin)
+        pages_row.addStretch()
         pages_row.addWidget(TooltipButton(
             "Number of Pages",
             "How many physical sheets to print.  Each sheet contains as many\n"
@@ -294,7 +295,6 @@ class TabChart(QWidget):
             "Total patches = patches/page × pages.",
             inner,
         ))
-        pages_row.addStretch()
         pages_layout.addLayout(pages_row)
 
         lb_row = QHBoxLayout()
@@ -302,6 +302,7 @@ class TabChart(QWidget):
         self._lb_check.setChecked(True)
         self._lb_check.toggled.connect(self._update_patch_count)
         lb_row.addWidget(self._lb_check)
+        lb_row.addStretch()
         self._lb_tooltip = TooltipButton(
             "Suppress Left Clip Border (-L)",
             "Removes the left-edge paper-clip border, gaining ~15 mm for extra patches.\n"
@@ -309,7 +310,6 @@ class TabChart(QWidget):
             inner,
         )
         lb_row.addWidget(self._lb_tooltip)
-        lb_row.addStretch()
         pages_layout.addLayout(lb_row)
         layout.addWidget(pages_grp)
 

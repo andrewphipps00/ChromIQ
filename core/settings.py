@@ -35,9 +35,11 @@ DEFAULTS: dict[str, Any] = {
     "print_media_type":          "",
     "print_quality":             "",
     # Step 3 — measure
-    "measure_disable_bidir":     True,
-    "measure_suppress_warnings": True,
-    "measure_extra_args":        "",
+    "measure_disable_bidir":       True,
+    "measure_suppress_warnings":   True,
+    "measure_extra_args":          "",
+    "measure_tolerance_enabled":   True,
+    "measure_tolerance_value":     0.7,
     # Step 4 — profile
     "colprof_algorithm":         "l",
     "colprof_quality":           "m",
@@ -58,6 +60,7 @@ DEFAULTS: dict[str, Any] = {
     # UI state
     "window_geometry":           None,
     "active_tab":                0,
+    "restore_last_tab":          True,
 }
 
 

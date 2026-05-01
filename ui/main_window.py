@@ -109,8 +109,9 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
 
-        active = int(self._settings.get("active_tab", 0))
-        self._tabs.setCurrentIndex(active)
+        if self._settings.get("restore_last_tab", True):
+            active = int(self._settings.get("active_tab", 0))
+            self._tabs.setCurrentIndex(active)
 
         self.statusBar().hide()
         self._status_msg: str = ""

@@ -639,6 +639,7 @@ class TabProfile(QWidget):
         self._m_smooth_spin.setDecimals(2)
         self._m_smooth_spin.setValue(0.5)
         smooth_row.addWidget(self._m_smooth_spin)
+        smooth_row.addStretch()
         smooth_row.addWidget(TooltipButton(
             "Measurement Noise (-r)",
             "Estimated average measurement noise as % ΔE.\n"
@@ -648,7 +649,6 @@ class TabProfile(QWidget):
             "• 3.0–5.0%: very noisy conditions",
             grp,
         ))
-        smooth_row.addStretch()
         g.addLayout(smooth_row)
 
         dark_row = QHBoxLayout()
@@ -659,6 +659,7 @@ class TabProfile(QWidget):
         self._m_dark_spin.setDecimals(1)
         self._m_dark_spin.setValue(1.0)
         dark_row.addWidget(self._m_dark_spin)
+        dark_row.addStretch()
         dark_row.addWidget(TooltipButton(
             "Dark Region Grid Emphasis (-V)",
             "Adds extra cLUT grid points in shadow areas for better shadow gradation.\n"
@@ -666,7 +667,6 @@ class TabProfile(QWidget):
             "Try 1.5–2.0 for printers with complex shadow behaviour.",
             grp,
         ))
-        dark_row.addStretch()
         g.addLayout(dark_row)
 
         layout.addWidget(grp)

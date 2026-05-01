@@ -126,7 +126,9 @@ class TabPrint(QWidget):
             "⚠  Verify that all print settings above match the media you are printing on.\n\n"
             "Wrong media type or quality settings will cause incorrect ink laydown and "
             "invalid colour measurements. Allow pigment inks to dry fully before measuring "
-            "(at least 1 h; 24 h for best accuracy).",
+            "(at least 1 h; 24 h for best accuracy).\n\n"
+            "Colour management is disabled automatically. ChromIQ passes the necessary "
+            "CUPS options to ensure the printer always receives the unaltered RGB values.",
             left,
         )
         warn.setObjectName("warning")

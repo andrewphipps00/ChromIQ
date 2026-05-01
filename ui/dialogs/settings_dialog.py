@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 from PyQt6.QtCore import Qt, QUrl
 from PyQt6.QtGui import QDesktopServices, QFontMetrics
 from PyQt6.QtWidgets import (
+    QCheckBox,
     QDialog,
     QDialogButtonBox,
     QFileDialog,
@@ -112,6 +113,15 @@ class SettingsDialog(QDialog):
 
         layout.addWidget(folder_grp)
 
+        # ---- Behaviour ----
+        behaviour_grp = QGroupBox("Behaviour", self)
+        bh = QVBoxLayout(behaviour_grp)
+        self._restore_tab_check = QCheckBox(
+            "Restore last active tab on launch", self
+        )
+        bh.addWidget(self._restore_tab_check)
+        layout.addWidget(behaviour_grp)
+
         # ---- About / Updates ----
         credit1 = QLabel(f"ChromIQ v{APP_VERSION} · Created by Sebastian Reiprich", self)
         credit1.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -157,7 +167,11 @@ class SettingsDialog(QDialog):
         bottom_row.addWidget(bb)
         layout.addLayout(bottom_row)
 
-        self.setStyleSheet("QLineEdit:focus { border-color: #f4f4f4; }")
+        self.setStyleSheet(
+            "QLineEdit:focus { border-color: #f4f4f4; }"
+            "QCheckBox::indicator:checked { background: #f4f4f4; border-color: #d0d0d0; }"
+            "QCheckBox::indicator:hover { border-color: #f4f4f4; }"
+        )
 
     # ------------------------------------------------------------------
 
@@ -165,11 +179,13 @@ class SettingsDialog(QDialog):
         s = self._settings
         self._argyll_edit.setText(s.get("argyll_bin_path", "/Applications/Argyll/bin"))
         self._folder_edit.setText(s.get("custom_output_path", ""))
+        self._restore_tab_check.setChecked(s.get("restore_last_tab", True))
 
     def _save_and_close(self) -> None:
         s = self._settings
         s.set("argyll_bin_path",       self._argyll_edit.text().strip())
         s.set("custom_output_path",    self._folder_edit.text().strip())
+        s.set("restore_last_tab",      self._restore_tab_check.isChecked())
         log.info("Settings saved")
         self.accept()
 
