@@ -214,9 +214,15 @@ class TabChart(QWidget):
         name_row.addWidget(self._target_name_edit, stretch=1)
         name_row.addWidget(TooltipButton(
             "Target Name",
-            "Name of the subfolder created in ~/ChromIQ/ (or your custom path).\n"
-            "Default format: Printer_Paper_Papertype_Instrument_Date",
+            "A short, descriptive name for this profiling session.\n\n"
+            "This name is used for the output folder and all generated files "
+            "(chart, TIFF, measurements, ICC profile) throughout the entire workflow. "
+            "Choose a name that lets you identify the correct files for your printer "
+            "and paper combination at a glance.\n\n"
+            "Tip: combine your printer model, paper type, and instrument — "
+            "e.g. Canon_Pro1000_Baryta_i1Pro3. Use underscores or dashes instead of spaces.",
             inner,
+            min_width=540,
         ))
         folder_layout.addLayout(name_row)
         layout.addWidget(folder_grp)
@@ -391,8 +397,15 @@ class TabChart(QWidget):
         name_row.addWidget(self._manual_target_name_edit, stretch=1)
         name_row.addWidget(TooltipButton(
             "Target Name",
-            "Name of the subfolder created in ~/ChromIQ/ (or your custom path).",
+            "A short, descriptive name for this profiling session.\n\n"
+            "This name is used for the output folder and all generated files "
+            "(chart, TIFF, measurements, ICC profile) throughout the entire workflow. "
+            "Choose a name that lets you identify the correct files for your printer "
+            "and paper combination at a glance.\n\n"
+            "Tip: combine your printer model, paper type, and instrument — "
+            "e.g. Canon_Pro1000_Baryta_i1Pro3. Use underscores or dashes instead of spaces.",
             w,
+            min_width=540,
         ))
         output_layout.addLayout(name_row)
         layout.addWidget(output_grp)
