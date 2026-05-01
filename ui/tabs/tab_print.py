@@ -421,6 +421,19 @@ class TabPrint(QWidget):
         next_combo.blockSignals(False)
         next_combo.setEnabled(True)
 
+    def set_ti2_path(self, path: Path) -> None:
+        """Programmatically load a .ti2 file (cross-tab auto-population)."""
+        from ui.ti2_loader import resolve_ti2
+        if not path.exists():
+            return
+        result = resolve_ti2(self, path, self._settings)
+        if result is None:
+            return
+        ti2_path, tiffs = result
+        self.ti2_loaded.emit(ti2_path)
+        if tiffs:
+            self.load_tiffs(tiffs)
+
     def _on_load_ti2(self) -> None:
         from ui.ti2_loader import resolve_ti2
         path = open_file_dialog(

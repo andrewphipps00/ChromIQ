@@ -77,6 +77,7 @@ class TabProfile(QWidget):
     profile_built    = pyqtSignal(Path, Path)   # (ti3_path, icc_path)
     check_requested  = pyqtSignal()             # user clicked "Check Quality" in the result dialog
     profile_active   = pyqtSignal(bool)         # True while colprof is running, False when done
+    ti2_found        = pyqtSignal(Path)         # emitted when a matching .ti2 exists next to the loaded .ti3
 
     def __init__(
         self,
@@ -551,8 +552,12 @@ class TabProfile(QWidget):
         desc_row.addWidget(self._m_desc_edit, stretch=1)
         desc_row.addWidget(TooltipButton(
             "Profile Description (-D)",
-            "Name embedded in the ICC profile shown in colour-picker menus.\n"
-            "Suggested format: Printer_Paper_Type_Date",
+            "The name embedded in the ICC profile — shown in colour management\n"
+            "menus in apps like Photoshop, Lightroom, and Preview.\n\n"
+            "Use a consistent format: Printer · Paper · Ink type · Date\n"
+            "e.g. \"Epson P900 · Canson Baryta · Chromatic · 2026-04\"\n\n"
+            "The output file is named after your .ti3 file — keep that name\n"
+            "consistent using underscores: EpsonP900_CansonBaryta_2026-04.icc",
             grp,
         ))
         g.addLayout(desc_row)
@@ -941,8 +946,12 @@ class TabProfile(QWidget):
         desc_row.addWidget(self._desc_edit, stretch=1)
         desc_row.addWidget(TooltipButton(
             "Profile Description (-D)",
-            "Name embedded in the ICC profile shown in colour-picker menus.\n"
-            "Suggested format: Printer_Paper_Type_Date",
+            "The name embedded in the ICC profile — shown in colour management\n"
+            "menus in apps like Photoshop, Lightroom, and Preview.\n\n"
+            "Use a consistent format: Printer · Paper · Ink type · Date\n"
+            "e.g. \"Epson P900 · Canson Baryta · Chromatic · 2026-04\"\n\n"
+            "The output file is named after your .ti3 file — keep that name\n"
+            "consistent using underscores: EpsonP900_CansonBaryta_2026-04.icc",
             grp,
         ))
         g.addLayout(desc_row)
@@ -1349,7 +1358,7 @@ class TabProfile(QWidget):
     # Public
     # ------------------------------------------------------------------
 
-    def set_ti3_path(self, path: Path) -> None:
+    def set_ti3_path(self, path: Path, propagate: bool = True) -> None:
         self._ti3_path = path
         self._file_lbl.setText(str(path))
         self._build_btn.setEnabled(True)
@@ -1357,6 +1366,10 @@ class TabProfile(QWidget):
             self._desc_edit.setText(path.stem)
         if not self._m_desc_edit.text():
             self._m_desc_edit.setText(path.stem)
+        if propagate:
+            ti2 = path.with_suffix(".ti2")
+            if ti2.exists():
+                self.ti2_found.emit(ti2)
 
     # ------------------------------------------------------------------
     # Internal

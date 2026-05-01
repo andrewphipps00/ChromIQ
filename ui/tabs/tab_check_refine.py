@@ -83,6 +83,7 @@ class TabCheckRefine(QWidget):
 
     guide_refinement_requested = pyqtSignal(Path, Path)  # (ti3_path, strips_file_path)
     ti2_found                  = pyqtSignal(Path)         # emitted when a matching .ti2 exists next to the .ti3
+    ti3_selected               = pyqtSignal(Path)         # emitted when the user manually browses a .ti3
 
     def __init__(
         self,
@@ -974,6 +975,7 @@ class TabCheckRefine(QWidget):
         self._auto_fill_icc(ti3)
         self._notify_ti2(ti3)
         self._update_run_btn()
+        self.ti3_selected.emit(ti3)
 
     def _on_browse_icc(self) -> None:
         path = open_file_dialog(

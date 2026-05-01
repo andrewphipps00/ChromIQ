@@ -5,15 +5,18 @@ import re
 from pathlib import Path
 
 from PyQt6.QtCore import QEvent, QModelIndex, QObject, QSize, QSortFilterProxyModel, Qt, QUrl
-from PyQt6.QtGui import QFont, QIcon, QPixmap
+from PyQt6.QtGui import QColor, QFont, QIcon, QPainter, QPixmap
 from PyQt6.QtWidgets import (
     QApplication,
     QComboBox,
     QDoubleSpinBox,
     QFileDialog,
     QPushButton,
+    QSizeGrip,
     QSpinBox,
     QStyle,
+    QToolBar,
+    QToolButton,
     QWidget,
 )
 
@@ -108,6 +111,56 @@ def _sidebar_urls(extra_path: str = "") -> list[QUrl]:
     return [QUrl.fromLocalFile(str(p)) for p in candidates if p.exists()]
 
 
+_NAV_BUTTONS = {
+    "backButton":     QStyle.StandardPixmap.SP_ArrowBack,
+    "forwardButton":  QStyle.StandardPixmap.SP_ArrowForward,
+    "toParentButton": QStyle.StandardPixmap.SP_FileDialogToParent,
+}
+
+# Arrow drawn at _NAV_ARROW_SIZE, centred inside a _NAV_BTN_SIZE canvas.
+# Qt places the canvas icon at top-left of the button, so centering is
+# baked into the transparent padding of the canvas image.
+_NAV_BTN_SIZE   = QSize(28, 28)
+_NAV_ARROW_SIZE = QSize(16, 16)
+
+
+def _nav_icon(icon: QIcon, color: QColor) -> QIcon:
+    """Recolor icon and centre it on a transparent canvas matching button size."""
+    raw = icon.pixmap(_NAV_ARROW_SIZE)
+    # recolor
+    colored = QPixmap(raw.size())
+    colored.fill(Qt.GlobalColor.transparent)
+    p = QPainter(colored)
+    p.drawPixmap(0, 0, raw)
+    p.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
+    p.fillRect(colored.rect(), color)
+    p.end()
+    # centre on canvas
+    canvas = QPixmap(_NAV_BTN_SIZE)
+    canvas.fill(Qt.GlobalColor.transparent)
+    p = QPainter(canvas)
+    x = (_NAV_BTN_SIZE.width()  - _NAV_ARROW_SIZE.width())  // 2
+    y = (_NAV_BTN_SIZE.height() - _NAV_ARROW_SIZE.height()) // 2
+    p.drawPixmap(x, y, colored)
+    p.end()
+    return QIcon(canvas)
+
+
+def _style_file_dialog_toolbar(dlg: QFileDialog) -> None:
+    arrow_color = QColor("#e0e0e0")
+    style = dlg.style()
+    for name, sp in _NAV_BUTTONS.items():
+        btn = dlg.findChild(QToolButton, name)
+        if btn:
+            btn.setIcon(_nav_icon(style.standardIcon(sp), arrow_color))
+            btn.setIconSize(_NAV_BTN_SIZE)
+            btn.setFixedSize(_NAV_BTN_SIZE)
+            btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
+    grip = dlg.findChild(QSizeGrip)
+    if grip:
+        grip.hide()
+
+
 def open_file_dialog(
     parent: QWidget,
     title: str,
@@ -122,6 +175,7 @@ def open_file_dialog(
     """
     dlg = QFileDialog(parent, title, start_dir or str(Path.home()))
     dlg.setOptions(QFileDialog.Option.DontUseNativeDialog)
+    _style_file_dialog_toolbar(dlg)
     dlg.setFileMode(QFileDialog.FileMode.ExistingFile)
     if name_filter:
         dlg.setNameFilter(name_filter)
@@ -149,6 +203,7 @@ def open_dir_dialog(
     dlg.setOptions(
         QFileDialog.Option.DontUseNativeDialog | QFileDialog.Option.ShowDirsOnly
     )
+    _style_file_dialog_toolbar(dlg)
     dlg.setFileMode(QFileDialog.FileMode.Directory)
     urls = _sidebar_urls(extra_path)
     urls.append(QUrl.fromLocalFile("/Applications"))

@@ -86,7 +86,10 @@ class MainWindow(QMainWindow):
         self._tab_profile.profile_active.connect(self._on_profile_active)
         self._tab_profile.profile_built.connect(self._tab_check.set_paths)
         self._tab_profile.check_requested.connect(lambda: self._tabs.setCurrentWidget(self._tab_check))
+        self._tab_profile.ti2_found.connect(self._tab_measure.set_ti1_path)
+        self._tab_profile.ti2_found.connect(self._tab_print.set_ti2_path)
         self._tab_check.guide_refinement_requested.connect(self._on_guide_refinement)
+        self._tab_check.ti3_selected.connect(self._tab_profile.set_ti3_path)
         self._tab_check.ti2_found.connect(self._tab_measure.set_ti1_path)
         self._tab_print.ti2_loaded.connect(self._tab_measure.set_ti1_path)
 
@@ -168,6 +171,9 @@ class MainWindow(QMainWindow):
                     background: {color};
                     border-color: {color};
                 }}
+                QCheckBox::indicator:hover {{
+                    border-color: {color};
+                }}
                 QRadioButton::indicator:checked {{
                     background: {color};
                     border-color: {color};
@@ -228,7 +234,7 @@ class MainWindow(QMainWindow):
             self._tab_measure.set_ti1_path(Path(ti2))
 
     def _on_measure_done(self, ti3: Path) -> None:
-        self._tab_profile.set_ti3_path(ti3)
+        self._tab_profile.set_ti3_path(ti3, propagate=False)
 
     def _on_measurement_active(self, active: bool) -> None:
         measure_idx = self._tabs.indexOf(self._tab_measure)

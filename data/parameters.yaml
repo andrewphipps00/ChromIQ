@@ -531,11 +531,18 @@ parameters:
       expert_only: false
       tooltip_title: "Profile Description (-D)"
       tooltip_body: |
-        Short human-readable name embedded in the ICC profile.
-        This is the name that appears in application colour-picker
-        menus.  A good convention is:
-        "Printer Model_Paper_Ink_Date"
-        e.g. "Epson P900_Canson Baryta_Chromatic_2026-04"
+        The name embedded in the ICC profile — shown in colour management
+        menus in apps like Photoshop, Lightroom, and Preview.
+
+        Use a consistent format that identifies printer, paper, ink type,
+        and date so the right profile is easy to find later:
+
+          Printer · Paper · Ink type · Date
+          e.g. "Epson P900 · Canson Baryta · Chromatic · 2026-04"
+
+        The output file is named after your .ti3 file — keep that name
+        consistent with the description using underscores instead of spaces:
+          e.g. EpsonP900_CansonBaryta_Chromatic_2026-04.icc
 
     - flag: "-a"
       name: "Profile Algorithm"
@@ -640,6 +647,9 @@ parameters:
         data directly (no gamut compression).
         Typically set to a standard RGB working space like
         AdobeRGB or ProPhoto RGB.
+        Both .icc and .icm files are accepted — ICM is simply
+        Microsoft's name for the ICC profile format, they are
+        identical.
 
     - flag: "-S"
       name: "Gamut Mapping Source (Perceptual + Saturation)"
