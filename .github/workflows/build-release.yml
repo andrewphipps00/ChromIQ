@@ -1,107 +1,128 @@
-name: Build & Release
+name: Build macOS App Bundle
 
 on:
   push:
     tags:
-      - 'v*.*.*'
-  workflow_dispatch:   # allows manual test builds without creating a release
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to build (e.g. v2.0.2)'
+        required: true
+
+permissions:
+  contents: write
 
 jobs:
-  # ── 1. Build native bundles on each architecture ─────────────────────────
   build:
-    name: Build (${{ matrix.label }})
-    runs-on: ${{ matrix.os }}
+    name: Build (${{ matrix.arch }})
+    runs-on: macos-14
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: macos-15   # Apple Silicon
-            label: arm64
-          - os: macos-13   # Intel x86_64
-            label: intel
+          - arch: arm64
+            artifact: ChromIQ-macOS-arm64.dmg
+            target_arch_env: ''
+
+          - arch: universal2
+            artifact: ChromIQ-macOS-universal.dmg
+            target_arch_env: 'universal2'
+
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
 
     steps:
       - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          ref: ${{ inputs.tag || github.ref_name }}
+
+      # arm64 job: GitHub-hosted Python 3.13 (stable, arm64)
+      - name: Set up Python (arm64)
+        if: matrix.arch == 'arm64'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      # universal2 job: python.org official universal2 installer so that pip
+      # fetches universal2 wheels for all packages, giving fat binaries that
+      # PyInstaller can bundle into a single universal2 app.
+      - name: Set up Python (universal2 via python.org installer)
+        if: matrix.arch == 'universal2'
+        run: |
+          curl -fsSL -o /tmp/python.pkg \
+            "https://www.python.org/ftp/python/3.13.3/python-3.13.3-macos11.pkg"
+          sudo installer -pkg /tmp/python.pkg -target /
+          echo "/Library/Frameworks/Python.framework/Versions/3.13/bin" >> "$GITHUB_PATH"
 
       - name: Install dependencies
-        run: pip install -r requirements.txt pyinstaller
+        run: |
+          python3 -m pip install --upgrade pip
+          pip3 install -r requirements.txt
+          pip3 install pyinstaller
+
+      # Rebuild C-extension packages from source so the .so files are fat binaries.
+      # PyQt6 and certifi ship universal2 wheels on PyPI and need no special treatment.
+      - name: Force universal2 fat binaries (universal2 only)
+        if: matrix.arch == 'universal2'
+        run: |
+          pip3 install --force-reinstall --no-binary PyYAML PyYAML
+          ARCHFLAGS="-arch x86_64 -arch arm64" pip3 install --force-reinstall --no-binary Pillow Pillow
+          ARCHFLAGS="-arch x86_64 -arch arm64" pip3 install --force-reinstall --no-binary pycups pycups
 
       - name: Build app bundle
-        run: pyinstaller ChromIQ.spec --clean
+        env:
+          PYINSTALLER_TARGET_ARCH: ${{ matrix.target_arch_env }}
+        run: python3 -m PyInstaller ChromIQ.spec
 
-      - name: Archive bundle (preserves permissions & symlinks)
-        run: tar -czf ChromIQ-${{ matrix.label }}.tar.gz -C dist ChromIQ.app
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: bundle-${{ matrix.label }}
-          path: ChromIQ-${{ matrix.label }}.tar.gz
-          retention-days: 1
-
-  # ── 2. Merge, sign, package DMGs, publish release ─────────────────────────
-  package:
-    name: Package & Release
-    needs: build
-    runs-on: macos-15
-    permissions:
-      contents: write
-
-    steps:
-      - name: Download bundles
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-
-      - name: Extract bundles
+      - name: Codesign app (ad-hoc)
         run: |
-          mkdir -p bundles/arm64 bundles/intel bundles/universal
-          tar -xzf artifacts/bundle-arm64/ChromIQ-arm64.tar.gz -C bundles/arm64
-          tar -xzf artifacts/bundle-intel/ChromIQ-intel.tar.gz -C bundles/intel
+          # Sign bottom-up: leaf binaries first, then frameworks, then the app.
+          # Avoid --deep: it re-signs internals after we've already signed them,
+          # which can corrupt the code directory on Apple Silicon.
+          find dist/ChromIQ.app -type f \( -name "*.so" -o -name "*.dylib" \) \
+            -exec codesign --force --sign - {} \;
+          find dist/ChromIQ.app -name "*.framework" -type d \
+            -exec codesign --force --sign - {} \;
+          find dist/ChromIQ.app -name "*.bundle" -type d \
+            -exec codesign --force --sign - {} \;
+          codesign --force --sign - dist/ChromIQ.app
 
-      - name: Build universal bundle
+      - name: Verify app signature
+        run: codesign --verify --verbose dist/ChromIQ.app
+
+      - name: Create DMG
         run: |
-          cp -R bundles/arm64/ChromIQ.app bundles/universal/ChromIQ.app
-          find bundles/arm64/ChromIQ.app -type f | while IFS= read -r arm_file; do
-            rel="${arm_file#bundles/arm64/ChromIQ.app/}"
-            intel_file="bundles/intel/ChromIQ.app/$rel"
-            univ_file="bundles/universal/ChromIQ.app/$rel"
-            if [ -f "$intel_file" ] && file "$arm_file" | grep -q "Mach-O"; then
-              lipo -create -output "$univ_file" "$arm_file" "$intel_file" 2>/dev/null || true
-            fi
-          done
+          mkdir -p /tmp/dmg_src
+          ditto dist/ChromIQ.app /tmp/dmg_src/ChromIQ.app
+          ln -s /Applications /tmp/dmg_src/Applications
+          hdiutil create -volname "ChromIQ" \
+            -srcfolder /tmp/dmg_src \
+            -ov -format UDZO -fs HFS+ \
+            "${{ matrix.artifact }}"
 
-      - name: Ad-hoc sign all bundles
+      - name: Codesign DMG (ad-hoc)
+        run: codesign --sign - "${{ matrix.artifact }}"
+
+      - name: Create GitHub Release (if not exists)
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          for variant in arm64 intel universal; do
-            app="bundles/$variant/ChromIQ.app"
-            find "$app" \( -name "*.dylib" -o -name "*.so" \) -print0 \
-              | xargs -0 -I{} codesign --force --sign - "{}" 2>/dev/null || true
-            codesign --deep --force --sign - "$app"
-          done
+          TAG="$RELEASE_TAG"
+          if ! gh release view "$TAG" > /dev/null 2>&1; then
+            body=$(awk "/^## ${TAG}$/{found=1; next} found && /^## /{exit} found{print}" CHANGELOG.md 2>/dev/null | sed '/^[[:space:]]*$/d' || true)
+            {
+              printf '%s\n\n---\n' "$body"
+              printf '**Installation:** Open the DMG, drag ChromIQ to Applications, eject, then launch. '
+              printf 'First launch: right-click → Open (bypasses Gatekeeper). '
+              printf 'Requires macOS 12+ and ArgyllCMS 3.5.0 at `/Applications/Argyll/bin`.'
+            } > /tmp/release_notes.txt
+            gh release create "$TAG" \
+              --title "ChromIQ $TAG" \
+              --notes-file /tmp/release_notes.txt
+          fi
 
-      - name: Create DMGs
-        run: |
-          for variant in arm64 intel universal; do
-            mkdir -p "staging/$variant"
-            cp -R "bundles/$variant/ChromIQ.app" "staging/$variant/"
-            ln -sf /Applications "staging/$variant/Applications"
-            hdiutil create \
-              -volname "ChromIQ" \
-              -srcfolder "staging/$variant" \
-              -ov -format UDZO \
-              "ChromIQ-macOS-$variant.dmg"
-          done
-
-      - name: Publish GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            ChromIQ-macOS-arm64.dmg
-            ChromIQ-macOS-intel.dmg
-            ChromIQ-macOS-universal.dmg
-          generate_release_notes: true
+      - name: Upload DMG to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$RELEASE_TAG" "${{ matrix.artifact }}" --clobber
