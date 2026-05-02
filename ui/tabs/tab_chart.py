@@ -57,7 +57,8 @@ log = get_logger(__name__)
 class TabChart(QWidget):
     """Step 1: create targen/printtarg test chart."""
 
-    chart_finished = pyqtSignal(object, object)  # (list[Path] tiffs, Path ti2)
+    chart_finished  = pyqtSignal(object, object)  # (list[Path] tiffs, Path ti2)
+    target_started  = pyqtSignal()
 
     def __init__(
         self,
@@ -752,6 +753,7 @@ class TabChart(QWidget):
         if self._runner.is_running:
             log.warning("A process is already running")
             return
+        self.target_started.emit()
 
         params = self._collect_params()
         name = (

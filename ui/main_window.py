@@ -80,6 +80,8 @@ class MainWindow(QMainWindow):
             GradientOverlay(TAB_COLORS[_i], parent=_target)
 
         self._tab_chart.chart_finished.connect(self._on_chart_generated)
+        self._tab_chart.target_started.connect(self._tab_profile.clear_files)
+        self._tab_chart.target_started.connect(self._tab_check.clear_files)
         self._tab_measure.measure_finished.connect(self._on_measure_done)
         self._tab_measure.proceed_to_profile.connect(self._on_proceed_to_profile)
         self._tab_measure.measurement_active.connect(self._on_measurement_active)

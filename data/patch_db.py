@@ -125,7 +125,7 @@ PAPER_SIZES: list[str] = [
 # Smallest photo formats excluded for p3: patch counts too low for a usable profile.
 EXCLUDED_PAPERS: dict[str, set[str]] = {
     "i1": {"A3"},
-    "p3": {"A3", "127x178", "4x6"},
+    "p3": {"A3", "329x483", "127x178", "4x6"},
 }
 
 # When the selected paper becomes excluded on instrument switch, use this fallback.

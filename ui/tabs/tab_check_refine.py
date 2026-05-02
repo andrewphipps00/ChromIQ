@@ -139,6 +139,13 @@ class TabCheckRefine(QWidget):
         self._update_run_btn()
         self._notify_ti2(ti3)
 
+    def clear_files(self) -> None:
+        self._ti3_path = None
+        self._icc_path = None
+        self._ti3_edit.clear()
+        self._icc_edit.clear()
+        self._update_run_btn()
+
     def _notify_ti2(self, ti3: Path) -> None:
         ti2 = ti3.with_suffix(".ti2")
         if ti2.exists():

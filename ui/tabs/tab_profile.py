@@ -1371,6 +1371,17 @@ class TabProfile(QWidget):
             if ti2.exists():
                 self.ti2_found.emit(ti2)
 
+    def clear_files(self) -> None:
+        self._ti3_path = None
+        self._icc_path = None
+        self._file_lbl.setText("")
+        self._build_btn.setEnabled(False)
+        for field in (
+            self._desc_edit, self._mfr_edit, self._model_edit, self._copy_edit,
+            self._m_desc_edit, self._m_mfr_edit, self._m_model_edit, self._m_copy_edit,
+        ):
+            field.clear()
+
     # ------------------------------------------------------------------
     # Internal
     # ------------------------------------------------------------------
