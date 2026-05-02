@@ -11,6 +11,7 @@ from PyQt6.QtWidgets import (
     QLabel,
     QLineEdit,
     QPushButton,
+    QVBoxLayout,
     QWidget,
 )
 
@@ -36,6 +37,10 @@ class ParameterWidget(QWidget):
         self._control: QWidget | None = None
         self._browse_btn: QPushButton | None = None
         self._enable_check: QCheckBox | None = None
+        self._custom_combo: NoScrollComboBox | None = None
+        self._custom_w_spin: NoScrollSpinBox | None = None
+        self._custom_h_spin: NoScrollSpinBox | None = None
+        self._custom_dim_row: QWidget | None = None
         self._build()
 
     # ------------------------------------------------------------------
@@ -69,6 +74,11 @@ class ParameterWidget(QWidget):
         if t == "boolean":
             return "" if not c.isChecked() else "__flag__"
         if t == "choice":
+            if self._custom_combo is not None:
+                data = self._custom_combo.currentData()
+                if data == "custom" and self._custom_w_spin is not None and self._custom_h_spin is not None:
+                    return f"{self._custom_w_spin.value()}x{self._custom_h_spin.value()}"
+                return data or ""
             return c.currentData() or ""
         if t == "int":
             return str(c.value()) if c.value() != self._param.get("default", 0) else str(c.value())
@@ -87,6 +97,11 @@ class ParameterWidget(QWidget):
         if t == "boolean":
             return c.isChecked()
         if t == "choice":
+            if self._custom_combo is not None:
+                data = self._custom_combo.currentData()
+                if data == "custom" and self._custom_w_spin is not None and self._custom_h_spin is not None:
+                    return f"{self._custom_w_spin.value()}x{self._custom_h_spin.value()}"
+                return data
             return c.currentData()
         if t == "int":
             return c.value()
@@ -108,9 +123,24 @@ class ParameterWidget(QWidget):
             if t == "boolean":
                 c.setChecked(bool(v))
             elif t == "choice":
-                idx = c.findData(str(v))
+                combo = self._custom_combo if self._custom_combo is not None else c
+                idx = combo.findData(str(v))
                 if idx >= 0:
-                    c.setCurrentIndex(idx)
+                    combo.setCurrentIndex(idx)
+                elif self._custom_combo is not None and "x" in str(v):
+                    parts = str(v).split("x", 1)
+                    if len(parts) == 2:
+                        try:
+                            w, h = int(parts[0]), int(parts[1])
+                            ci = self._custom_combo.findData("custom")
+                            if ci >= 0:
+                                self._custom_combo.setCurrentIndex(ci)
+                            if self._custom_w_spin:
+                                self._custom_w_spin.setValue(w)
+                            if self._custom_h_spin:
+                                self._custom_h_spin.setValue(h)
+                        except ValueError:
+                            pass
             elif t == "int":
                 c.setValue(int(v))
             elif t == "float":
@@ -222,6 +252,8 @@ class ParameterWidget(QWidget):
             return cb
 
         if t == "choice":
+            if self._param.get("custom_dimensions"):
+                return self._make_custom_dim_control()
             combo = NoScrollComboBox(self)
             choices = self._param.get("choices", [])
             labels  = self._param.get("labels", choices)
@@ -271,3 +303,63 @@ class ParameterWidget(QWidget):
         path = open_file_dialog(self, "Select file", filt)
         if path and isinstance(self._control, QLineEdit):
             self._control.setText(path)
+
+    def _make_custom_dim_control(self) -> QWidget:
+        container = QWidget(self)
+        vbox = QVBoxLayout(container)
+        vbox.setContentsMargins(0, 0, 0, 0)
+        vbox.setSpacing(4)
+
+        combo = NoScrollComboBox(container)
+        choices = self._param.get("choices", [])
+        labels  = self._param.get("labels", choices)
+        for ch, lb in zip(choices, labels):
+            combo.addItem(str(lb), str(ch))
+        default = self._param.get("default")
+        if default is not None:
+            idx = combo.findData(str(default))
+            if idx >= 0:
+                combo.setCurrentIndex(idx)
+        self._custom_combo = combo
+        combo.currentIndexChanged.connect(self.value_changed)
+        combo.currentIndexChanged.connect(self._on_custom_dim_changed)
+        vbox.addWidget(combo)
+
+        dim_row = QWidget(container)
+        hbox = QHBoxLayout(dim_row)
+        hbox.setContentsMargins(0, 0, 0, 0)
+        hbox.setSpacing(6)
+
+        lbl_w = QLabel("W (mm):", dim_row)
+        lbl_w.setStyleSheet("color: #c8c8c8;")
+        hbox.addWidget(lbl_w)
+
+        w_spin = NoScrollSpinBox(dim_row)
+        w_spin.setRange(10, 9999)
+        w_spin.setValue(210)
+        w_spin.valueChanged.connect(self.value_changed)
+        self._custom_w_spin = w_spin
+        hbox.addWidget(w_spin)
+
+        lbl_h = QLabel("H (mm):", dim_row)
+        lbl_h.setStyleSheet("color: #c8c8c8;")
+        hbox.addWidget(lbl_h)
+
+        h_spin = NoScrollSpinBox(dim_row)
+        h_spin.setRange(10, 9999)
+        h_spin.setValue(297)
+        h_spin.valueChanged.connect(self.value_changed)
+        self._custom_h_spin = h_spin
+        hbox.addWidget(h_spin)
+        hbox.addStretch()
+
+        dim_row.hide()
+        self._custom_dim_row = dim_row
+        vbox.addWidget(dim_row)
+
+        return container
+
+    def _on_custom_dim_changed(self) -> None:
+        if self._custom_dim_row is None or self._custom_combo is None:
+            return
+        self._custom_dim_row.setVisible(self._custom_combo.currentData() == "custom")

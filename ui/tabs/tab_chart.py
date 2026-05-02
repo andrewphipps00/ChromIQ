@@ -904,6 +904,7 @@ class TabChart(QWidget):
         p.margin_mm            = int(_get("printtarg",  "-m",  6))
         p.no_randomise         = bool(_get("printtarg", "-r",  False))
         p.bw_spacers           = bool(_get("printtarg", "-b",  False))
+        p.no_strip_limit       = bool(_get("printtarg", "-P",  False))
         return p
 
     # ------------------------------------------------------------------

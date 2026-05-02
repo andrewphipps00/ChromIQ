@@ -302,19 +302,26 @@ parameters:
     - flag: "-p"
       name: "Paper Size"
       type: choice
-      choices: ["A4", "A4R", "A3", "420x297", "A2", "Letter", "LetterR", "Legal", "11x17"]
+      choices: ["A2", "329x483", "483x329", "A3", "420x297", "11x17", "Legal", "A4", "A4R", "Letter", "LetterR", "203x254", "127x178", "4x6", "custom"]
       labels:
-        - "A4 Portrait (210 × 297 mm)"
-        - "A4 Landscape (297 × 210 mm)"
+        - "A2 (420 × 594 mm)"
+        - "A3+ Portrait (329 × 483 mm)"
+        - "A3+ Landscape (483 × 329 mm)"
         - "A3 Portrait (297 × 420 mm)"
         - "A3 Landscape (420 × 297 mm)"
-        - "A2 (420 × 594 mm)"
+        - "Tabloid / 11 × 17\""
+        - "Legal (8.5 × 14\")"
+        - "A4 Portrait (210 × 297 mm)"
+        - "A4 Landscape (297 × 210 mm)"
         - "Letter Portrait (8.5 × 11\")"
         - "Letter Landscape (11 × 8.5\")"
-        - "Legal (8.5 × 14\")"
-        - "Tabloid / 11 × 17\""
+        - "8×10\" (203 × 254 mm)"
+        - "5×7\" (127 × 178 mm)"
+        - "4×6\" (102 × 152 mm)"
+        - "Custom (enter dimensions)"
       default: "A4"
       no_space: false
+      custom_dimensions: true
       affects_preview: true
       expert_only: false
       tooltip_title: "Paper Size (-p)"
@@ -324,6 +331,7 @@ parameters:
         controls how many patches fit per page (from the database).
         Use landscape variants (A4R, 420x297, LetterR) when your
         printer feeds landscape more reliably.
+        Select "Custom" to enter exact width and height in millimetres.
 
     - flag: "-t"
       name: "TIFF Output DPI"
@@ -415,6 +423,23 @@ parameters:
       tooltip_body: |
         Forces inter-strip spacers to be black/white instead of
         coloured.  Does not affect patch count or layout geometry.
+
+    - flag: "-P"
+      name: "Don't Limit Strip Length"
+      type: boolean
+      default: false
+      affects_preview: true
+      expert_only: true
+      tooltip_title: "Don't Limit Strip Length (-P)"
+      tooltip_body: |
+        By default printtarg caps strip length so that every strip
+        fits within the paper without overflow.  Enabling this flag
+        removes that limit, allowing very long strips.
+        Useful for narrow roll paper or when you want as few strips
+        as possible for a given patch count.
+        Warning: if the patch count is high, strips may extend
+        beyond the paper edge — verify the generated TIFF before
+        printing.
 
   # ====================================================================
   # chartread — measure printed chart with instrument (.ti2 → .ti3)

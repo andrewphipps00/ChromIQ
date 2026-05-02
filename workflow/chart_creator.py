@@ -45,6 +45,7 @@ class ChartParams:
     margin_mm: int = 6
     no_randomise: bool = False
     bw_spacers: bool = False
+    no_strip_limit: bool = False
     extra_printtarg_args: str = ""
 
     target_name: str = "chart"
@@ -241,6 +242,8 @@ class ChartCreator:
             args.append("-r")
         if p.bw_spacers:
             args.append("-b")
+        if p.no_strip_limit:
+            args.append("-P")
         if p.extra_printtarg_args:
             args += shlex.split(p.extra_printtarg_args)
         args.append(p.target_name or "chart")
