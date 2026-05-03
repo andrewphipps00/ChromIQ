@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import shlex
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -895,6 +896,13 @@ class TabChart(QWidget):
         p.good_mode            = bool(_get("targen",   "-G",  True))
         p.grey_steps           = int(_get("targen",    "-g",  0))
         p.single_channel_steps = int(_get("targen",    "-s",  0))
+
+        extra = []
+        for pw in self._manual_widgets.get("targen", []):
+            if pw.flag in {"-D", "-c", "-C", "-N", "-V"}:
+                extra.extend(pw.build_args())
+        if extra:
+            p.extra_targen_args = shlex.join(extra)
 
         p.instrument           = str(_get("printtarg", "-i",  "i1"))
         p.paper                = str(_get("printtarg", "-p",  "A4"))

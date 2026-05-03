@@ -403,4 +403,5 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event) -> None:
         self._settings.set("window_geometry", self.saveGeometry())
         self._settings.set("active_tab", self._tabs.currentIndex())
+        self._runner.cleanup()
         super().closeEvent(event)

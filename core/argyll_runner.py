@@ -99,6 +99,42 @@ class ArgyllRunner(QObject):
             self._process.kill()
             log.info("ArgyllRunner: process killed")
 
+    def cleanup(self) -> None:
+        """Kill any running process and join the PTY thread before app shutdown.
+
+        Must be called from closeEvent before Qt starts destroying objects,
+        otherwise the daemon PTY thread can emit signals into already-freed
+        C++ objects and cause a segfault (macOS 'quit unexpectedly' dialog).
+        """
+        # Disconnect all signals so no callbacks fire during teardown.
+        for sig in (self.line_received, self.finished, self._pty_done):
+            try:
+                sig.disconnect()
+            except (TypeError, RuntimeError):
+                pass
+
+        # Kill subprocess(es).
+        if self._pty_proc is not None and self._pty_proc.poll() is None:
+            self._pty_proc.kill()
+        if self._process and self._process.state() != QProcess.ProcessState.NotRunning:
+            self._process.kill()
+            self._process.waitForFinished(2000)
+
+        # Close the PTY master fd so the reader thread unblocks immediately.
+        if self._pty_master is not None:
+            try:
+                os.close(self._pty_master)
+            except OSError:
+                pass
+            self._pty_master = None
+
+        # Wait for the reader thread to exit so it cannot emit after we return.
+        if self._pty_thread is not None and self._pty_thread.is_alive():
+            self._pty_thread.join(timeout=2.0)
+            self._pty_thread = None
+
+        log.info("ArgyllRunner: cleanup complete")
+
     @property
     def is_running(self) -> bool:
         if self._pty_proc is not None and self._pty_proc.poll() is None:
