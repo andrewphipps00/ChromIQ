@@ -90,6 +90,8 @@ class ParameterWidget(QWidget):
 
     def get_raw_value(self) -> Any:
         """Return Python-native value (bool, int, float, str)."""
+        if self._control is None and self._enable_check is not None:
+            return self._enable_check.isChecked()
         c = self._control
         if c is None:
             return None
