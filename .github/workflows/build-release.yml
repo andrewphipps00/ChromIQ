@@ -83,7 +83,7 @@ jobs:
             local VER X86_URL TMPDIR
             VER=$(python3 -c "import importlib.metadata; print(importlib.metadata.version('${pypi_name}'))")
             X86_URL=$(curl -fsSL "https://pypi.org/pypi/${pypi_name}/${VER}/json" | \
-              python3 -c "import json,sys; vf='${ver_filter}'; d=json.load(sys.stdin); print(next(f['url'] for f in d['urls'] if 'x86_64' in f['filename'] and vf in f['filename'] and f['filename'].endswith('.whl')))")
+              python3 -c "import json,sys; vf='${ver_filter}'; d=json.load(sys.stdin); print(next(f['url'] for f in d['urls'] if 'macosx' in f['filename'] and 'x86_64' in f['filename'] and vf in f['filename'] and f['filename'].endswith('.whl')))")
             echo "Downloading x86_64 wheel for ${pypi_name} ${VER}: $X86_URL"
             TMPDIR="/tmp/${pkg_dir}_x86"
             mkdir -p "$TMPDIR"
