@@ -464,6 +464,12 @@ class TiffPreview(QWidget):
     @staticmethod
     def _load_frame(path: Path, frame: int, ink_channels: list[str] | None) -> Image.Image:
         """Load one TIFF frame as RGB, handling CMYK and multi-channel Separated."""
+        # Bypass PIL for known multi-channel files: PIL may silently return only 4 channels
+        # from a Separated TIFF, dropping any extra ink channels without raising an exception.
+        known_codes = ink_channels or _find_sidecar_channels(path)
+        if known_codes and len(known_codes) > 4:
+            return TiffPreview._tifffile_load_frame(path, frame, ink_channels)
+
         try:
             img = Image.open(path)
             if hasattr(img, "seek"):
@@ -521,6 +527,9 @@ class TiffPreview(QWidget):
         with tifffile.TiffFile(str(path)) as tif:
             idx = min(frame, len(tif.pages) - 1)
             data = tif.pages[idx].asarray()
+
+        if data.dtype != np.uint8:
+            data = (data.astype(np.float32) * (255.0 / np.iinfo(data.dtype).max)).astype(np.uint8)
 
         if data.ndim == 2:
             return Image.fromarray(data.astype(np.uint8), "L").convert("RGB")
