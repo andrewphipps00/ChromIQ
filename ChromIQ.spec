@@ -14,17 +14,23 @@ The result will be in dist/ChromIQ.app
 
 import os
 import certifi
+from PyInstaller.utils.hooks import collect_all
 certifi_where = certifi.where()
 _target_arch = os.environ.get("PYINSTALLER_TARGET_ARCH") or None
+
+# Collect all imagecodecs binaries/data: its LZW and other codecs live in
+# compiled C extensions that PyInstaller won't find via static analysis alone.
+_ic_datas, _ic_binaries, _ic_hiddenimports = collect_all('imagecodecs')
 
 a = Analysis(
     ['main.py'],
     pathex=['.'],
-    binaries=[],
+    binaries=[*_ic_binaries],
     datas=[
         ('assets',           'assets'),
         ('data/parameters.yaml', 'data'),
         (certifi_where, 'certifi'),
+        *_ic_datas,
     ],
     hiddenimports=[
         'PyQt6.sip',
@@ -39,8 +45,8 @@ a = Analysis(
         'yaml',
         'cups',
         'tifffile',
-        'imagecodecs',
         'numpy',
+        *_ic_hiddenimports,
     ],
     hookspath=['hooks'],
     hooksconfig={},
@@ -88,8 +94,8 @@ app = BUNDLE(
     info_plist={
         'CFBundleName':              'ChromIQ',
         'CFBundleDisplayName':       'ChromIQ',
-        'CFBundleShortVersionString': '2.3.1',
-        'CFBundleVersion':           '2.3.1',
+        'CFBundleShortVersionString': '2.3.2',
+        'CFBundleVersion':           '2.3.2',
         'NSHighResolutionCapable':   True,
         'NSPrincipalClass':          'NSApplication',
         'NSRequiresAquaSystemAppearance': False,
