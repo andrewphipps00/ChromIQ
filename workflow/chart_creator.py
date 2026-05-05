@@ -30,7 +30,8 @@ class ChartParams:
 
     # targen params
     device_type: str = "2"
-    patches: int = 0            # 0 = auto-compute from DB / binary search
+    patches: int = 0            # 0 = auto-compute from DB / binary search (guided); pass -f0 to targen (manual)
+    is_manual: bool = False     # True = manual mode; skip patch DB lookup, pass patches directly to targen
     white_patches: int = 4
     black_patches: int = 4
     good_mode: bool = True
@@ -82,7 +83,10 @@ class ChartCreator:
         work_dir = self._file_mgr.ensure_folder()
         self._file_mgr.clean_folder(["ti1", "ti2", "tif", "cht", "ps"])
 
-        patch_count = params.patches if params.patches > 0 else self._lookup_patches(params)
+        if params.is_manual:
+            patch_count = params.patches  # pass value as-is; 0 lets targen decide
+        else:
+            patch_count = params.patches if params.patches > 0 else self._lookup_patches(params)
         log.info("Chart generation: %d patches, instrument=%s paper=%s disable_lb=%s",
                  patch_count, params.instrument, params.paper, params.disable_left_border)
 

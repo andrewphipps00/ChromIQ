@@ -915,6 +915,7 @@ class TabChart(QWidget):
         p.no_randomise         = bool(_get("printtarg", "-r",  False))
         p.bw_spacers           = bool(_get("printtarg", "-b",  False))
         p.no_strip_limit       = bool(_get("printtarg", "-P",  False))
+        p.is_manual            = True
         return p
 
     # ------------------------------------------------------------------
