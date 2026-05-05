@@ -69,7 +69,38 @@ jobs:
           pip3 install --force-reinstall --no-binary PyYAML PyYAML
           ARCHFLAGS="-arch x86_64 -arch arm64" pip3 install --force-reinstall --no-binary Pillow Pillow
           ARCHFLAGS="-arch x86_64 -arch arm64" pip3 install --force-reinstall --no-binary pycups pycups
-          ARCHFLAGS="-arch x86_64 -arch arm64" pip3 install --force-reinstall --no-binary imagecodecs imagecodecs
+
+      # imagecodecs ships arch-specific wheels (no universal2, no vendored lcms2 source).
+      # Strategy: download the matching x86_64 binary wheel and lipo-merge each .so
+      # with the arm64 .so already installed by pip, producing fat binaries in-place.
+      - name: Make imagecodecs universal2 via lipo (universal2 only)
+        if: matrix.arch == 'universal2'
+        run: |
+          SITELIB=$(python3 -c "import site; print(site.getsitepackages()[0])")
+          IC_VER=$(python3 -c "import imagecodecs; print(imagecodecs.__version__)")
+          # Download x86_64 binary wheel without installing it
+          pip3 download \
+            --platform macosx_10_13_x86_64 \
+            --python-version 39 \
+            --implementation cp \
+            --abi abi3 \
+            --only-binary :all: \
+            --no-deps \
+            --dest /tmp/x86_wheels \
+            "imagecodecs==${IC_VER}"
+          mkdir -p /tmp/ic_x86
+          unzip -q /tmp/x86_wheels/imagecodecs-*.whl -d /tmp/ic_x86
+          # lipo-merge each .so in the installed arm64 package
+          find "${SITELIB}/imagecodecs" -name "*.so" | while read arm_so; do
+            name=$(basename "$arm_so")
+            x86_so=$(find /tmp/ic_x86/imagecodecs -name "$name" 2>/dev/null | head -1)
+            if [ -n "$x86_so" ]; then
+              lipo -create "$arm_so" "$x86_so" -output "$arm_so"
+              echo "Merged: $name"
+            else
+              echo "WARNING: no x86_64 counterpart for $name"
+            fi
+          done
 
       - name: Build app bundle
         env:
