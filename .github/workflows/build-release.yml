@@ -69,6 +69,7 @@ jobs:
           pip3 install --force-reinstall --no-binary PyYAML PyYAML
           ARCHFLAGS="-arch x86_64 -arch arm64" pip3 install --force-reinstall --no-binary Pillow Pillow
           ARCHFLAGS="-arch x86_64 -arch arm64" pip3 install --force-reinstall --no-binary pycups pycups
+          ARCHFLAGS="-arch x86_64 -arch arm64" pip3 install --force-reinstall --no-binary imagecodecs imagecodecs
 
       - name: Build app bundle
         env:
@@ -100,7 +101,7 @@ jobs:
 
           # Step 1: writable sparse image
           hdiutil create -megabytes "$IMG_MB" \
-            -volname "ChromIQ" -fs HFS+ -format UDRW /tmp/rw.dmg
+            -volname "ChromIQ" -fs HFS+ /tmp/rw.dmg
 
           # Step 2: mount it
           MOUNT=$(hdiutil attach /tmp/rw.dmg -nobrowse -noautoopen \
