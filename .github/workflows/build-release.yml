@@ -71,25 +71,27 @@ jobs:
           ARCHFLAGS="-arch x86_64 -arch arm64" pip3 install --force-reinstall --no-binary pycups pycups
 
       # imagecodecs ships arch-specific wheels (no universal2, no vendored lcms2 source).
-      # Strategy: download the matching x86_64 binary wheel and lipo-merge each .so
-      # with the arm64 .so already installed by pip, producing fat binaries in-place.
+      # Strategy: query PyPI JSON API for the exact x86_64 wheel URL, download it,
+      # then lipo-merge each .so with the arm64 .so already installed by pip.
       - name: Make imagecodecs universal2 via lipo (universal2 only)
         if: matrix.arch == 'universal2'
         run: |
           SITELIB=$(python3 -c "import site; print(site.getsitepackages()[0])")
           IC_VER=$(python3 -c "import imagecodecs; print(imagecodecs.__version__)")
-          # Download x86_64 binary wheel without installing it
-          pip3 download \
-            --platform macosx_10_13_x86_64 \
-            --python-version 39 \
-            --implementation cp \
-            --abi abi3 \
-            --only-binary :all: \
-            --no-deps \
-            --dest /tmp/x86_wheels \
-            "imagecodecs==${IC_VER}"
-          mkdir -p /tmp/ic_x86
-          unzip -q /tmp/x86_wheels/imagecodecs-*.whl -d /tmp/ic_x86
+          # Fetch the x86_64 wheel URL directly from the PyPI JSON API
+          X86_URL=$(curl -fsSL "https://pypi.org/pypi/imagecodecs/${IC_VER}/json" | \
+            python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+for f in data['urls']:
+    if 'x86_64' in f['filename'] and f['filename'].endswith('.whl'):
+        print(f['url'])
+        break
+")
+          echo "Downloading x86_64 wheel: $X86_URL"
+          mkdir -p /tmp/x86_wheels /tmp/ic_x86
+          curl -fsSL -o /tmp/x86_wheels/imagecodecs.whl "$X86_URL"
+          unzip -q /tmp/x86_wheels/imagecodecs.whl -d /tmp/ic_x86
           # lipo-merge each .so in the installed arm64 package
           find "${SITELIB}/imagecodecs" -name "*.so" | while read arm_so; do
             name=$(basename "$arm_so")
