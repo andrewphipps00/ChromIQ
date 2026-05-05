@@ -61,13 +61,15 @@ jobs:
           pip3 install -r requirements.txt
           pip3 install pyinstaller
 
-      # Rebuild C-extension packages from source so the .so files are fat binaries.
-      # PyQt6 and certifi ship universal2 wheels on PyPI and need no special treatment.
+      # numpy, Pillow, PyYAML ship universal2 wheels; _PYTHON_HOST_PLATFORM forces pip
+      # to prefer them over the arm64-specific wheels it would otherwise select on this runner.
+      # pycups has no universal2 wheel, so build it from source as a fat binary.
       - name: Force universal2 fat binaries (universal2 only)
         if: matrix.arch == 'universal2'
         run: |
-          pip3 install --force-reinstall --no-binary PyYAML PyYAML
-          ARCHFLAGS="-arch x86_64 -arch arm64" pip3 install --force-reinstall --no-binary Pillow Pillow
+          _PYTHON_HOST_PLATFORM=macosx-10.13-universal2 pip3 install \
+            --force-reinstall --only-binary :all: \
+            numpy Pillow PyYAML
           ARCHFLAGS="-arch x86_64 -arch arm64" pip3 install --force-reinstall --no-binary pycups pycups
 
       # imagecodecs ships arch-specific wheels (no universal2, no vendored lcms2 source).
