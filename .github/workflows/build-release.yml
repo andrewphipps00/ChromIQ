@@ -80,14 +80,7 @@ jobs:
           IC_VER=$(python3 -c "import imagecodecs; print(imagecodecs.__version__)")
           # Fetch the x86_64 wheel URL directly from the PyPI JSON API
           X86_URL=$(curl -fsSL "https://pypi.org/pypi/imagecodecs/${IC_VER}/json" | \
-            python3 -c "
-import json, sys
-data = json.load(sys.stdin)
-for f in data['urls']:
-    if 'x86_64' in f['filename'] and f['filename'].endswith('.whl'):
-        print(f['url'])
-        break
-")
+            python3 -c "import json,sys; d=json.load(sys.stdin); print(next(f['url'] for f in d['urls'] if 'x86_64' in f['filename'] and f['filename'].endswith('.whl')))")
           echo "Downloading x86_64 wheel: $X86_URL"
           mkdir -p /tmp/x86_wheels /tmp/ic_x86
           curl -fsSL -o /tmp/x86_wheels/imagecodecs.whl "$X86_URL"
