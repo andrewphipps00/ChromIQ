@@ -198,8 +198,26 @@ class ChartCreator:
         log.info("printtarg produced %d TIFF(s) in %s", len(tiffs), work_dir)
         if not tiffs:
             log.warning("No TIFFs found; searched %s for chart*.tif", work_dir)
+
+        if tiffs and self._pending_params is not None:
+            self._write_channel_sidecar(work_dir, stem, self._pending_params)
+
         if on_finish:
             on_finish(tiffs)
+
+    def _write_channel_sidecar(
+        self, work_dir: Path, stem: str, params: "ChartParams"
+    ) -> None:
+        """Write <stem>.channels.json so the preview can identify inks in future sessions."""
+        import json
+        from ui.tiff_preview import resolve_ink_channels
+        channels = resolve_ink_channels(params.device_type, params.extra_targen_args)
+        sidecar = work_dir / f"{stem}.channels.json"
+        try:
+            sidecar.write_text(json.dumps({"ink_channels": channels}))
+            log.debug("Wrote channel sidecar %s: %s", sidecar.name, channels)
+        except Exception as exc:
+            log.warning("Could not write channel sidecar: %s", exc)
 
     # ------------------------------------------------------------------
     # Arg builders

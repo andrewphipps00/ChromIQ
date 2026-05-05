@@ -1,6 +1,9 @@
 """Multi-page TIFF preview widget with stripe highlight overlay."""
 from __future__ import annotations
 
+import json
+import re
+import shlex
 from pathlib import Path
 from typing import Optional
 
@@ -23,6 +26,184 @@ log = get_logger(__name__)
 _REFRESH_DELAY_MS = 80   # debounce repaint
 _BORDER = 15             # white display border: all sides (px)
 
+# ---------------------------------------------------------------------------
+# Ink channel tables
+# ---------------------------------------------------------------------------
+
+# ink code → (R_absorption, G_absorption, B_absorption) per unit ink value (0–1)
+# Values calibrated against US Web Coated SWOP v2 ICC profile full-ink response.
+# Used ONLY for extra channels (index 4+) that sit on top of the ICC-converted
+# CMYK base. The c/m/y/k entries are retained as fallback for edge cases.
+_INK_ABSORPTION: dict[str, tuple[float, float, float]] = {
+    # CMYK primaries (calibrated from SWOP full-ink response on white paper)
+    "c":   (1.00, 0.32, 0.06),   # Cyan:    R=0, G=174, B=239 at full ink on white
+    "m":   (0.08, 1.00, 0.45),   # Magenta: R=236, G=0, B=140
+    "y":   (0.00, 0.05, 1.00),   # Yellow:  R=255, G=242, B=0
+    "k":   (0.86, 0.88, 0.87),   # Black:   R=35, G=31, B=32
+    # Light inks ≈ parent at ~50% (extrapolated from SWOP midtone data)
+    "lc":  (0.57, 0.18, 0.04),
+    "lm":  (0.04, 0.57, 0.25),
+    "ly":  (0.00, 0.03, 0.55),
+    "lk":  (0.42, 0.42, 0.42),
+    "llk": (0.22, 0.22, 0.22),
+    # Medium inks ≈ parent at ~75%
+    "mc":  (0.80, 0.25, 0.05),
+    "mm":  (0.06, 0.80, 0.35),
+    "my":  (0.00, 0.04, 0.78),
+    "mk":  (0.65, 0.65, 0.65),
+    # Spot / extended-gamut inks
+    "o":   (0.02, 0.40, 0.95),   # Orange:      absorbs blue + some green
+    "r":   (0.05, 0.90, 0.80),   # Red:         absorbs green + blue
+    "g":   (0.90, 0.05, 0.80),   # Green:       absorbs red + blue
+    "b":   (0.82, 0.68, 0.05),   # Blue/Violet: absorbs red + most green
+    "v":   (0.76, 0.62, 0.04),   # Violet
+    "w":   (0.00, 0.00, 0.00),   # White
+}
+
+# targen -d<N> → ordered ink codes (source: data/parameters.yaml device_type labels)
+_D_TYPE_CHANNELS: dict[int, list[str]] = {
+    0:  ["k"],
+    1:  ["k"],
+    2:  ["r", "g", "b"],
+    3:  ["r", "g", "b"],
+    4:  ["c", "m", "y", "k"],
+    5:  ["c", "m", "y"],
+    6:  ["c", "m", "y", "k", "lc", "lm"],
+    7:  ["c", "m", "y", "k", "lc", "lm", "lk"],
+    8:  ["c", "m", "y", "k", "r", "b"],
+    9:  ["c", "m", "y", "k", "o", "g"],
+    10: ["c", "m", "y", "k", "r", "g", "b"],
+    11: ["c", "m", "y", "k", "o", "g", "v"],
+    12: ["c", "m", "y", "k", "o", "g", "b"],
+    13: ["c", "m", "y", "k", "lc", "lm", "lk", "llk"],
+    14: ["c", "m", "y", "k", "o", "g", "lc", "lm"],
+    15: ["c", "m", "y", "k", "lc", "lm", "mc", "mm"],
+}
+
+# targen -D <N> → ink code
+_D_FLAG_CODE: dict[int, str] = {
+    1: "c", 2: "m", 3: "y", 4: "k",
+    5: "o", 6: "r", 7: "g", 8: "b", 9: "v", 10: "w",
+    11: "lc", 12: "lm", 13: "ly", 14: "lk",
+    15: "mc", 16: "mm", 17: "my", 18: "mk",
+    19: "llk",
+}
+
+# Channel count → most common ink layout (fallback when sidecar is absent)
+_N_CHANNELS_FALLBACK: dict[int, list[str]] = {
+    1: ["k"],
+    3: ["r", "g", "b"],
+    4: ["c", "m", "y", "k"],
+    6: ["c", "m", "y", "k", "lc", "lm"],
+    7: ["c", "m", "y", "k", "lc", "lm", "lk"],
+    8: ["c", "m", "y", "k", "lc", "lm", "lk", "llk"],
+}
+
+# ---------------------------------------------------------------------------
+# ICC transform cache
+# ---------------------------------------------------------------------------
+
+_cmyk_icc_transform: object = None  # None = not tried; False = unavailable; transform = ready
+
+
+def _get_cmyk_transform():
+    """Return a cached PIL.ImageCms CMYK→sRGB transform, or None if unavailable."""
+    global _cmyk_icc_transform
+    if _cmyk_icc_transform is not None:
+        return _cmyk_icc_transform if _cmyk_icc_transform is not False else None
+    from PIL import ImageCms
+    from core.resource_path import resource_path
+    candidates = [
+        resource_path("assets/USWebCoatedSWOP.icc"),
+        Path("/Library/Application Support/Adobe/Color/Profiles/Recommended/USWebCoatedSWOP.icc"),
+        Path("/System/Library/ColorSync/Profiles/Generic CMYK Profile.icc"),
+    ]
+    for p in candidates:
+        if p.exists():
+            try:
+                src = ImageCms.getOpenProfile(str(p))
+                dst = ImageCms.createProfile("sRGB")
+                t = ImageCms.buildTransformFromOpenProfiles(
+                    src, dst, "CMYK", "RGB",
+                    renderingIntent=ImageCms.Intent.PERCEPTUAL,
+                )
+                _cmyk_icc_transform = t
+                log.debug("ICC CMYK transform loaded from %s", p.name)
+                return t
+            except Exception:
+                continue
+    _cmyk_icc_transform = False
+    log.debug("No CMYK ICC profile found; will use naive subtractive fallback")
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Public helpers
+# ---------------------------------------------------------------------------
+
+def resolve_ink_channels(device_type: str, extra_targen_args: str = "") -> list[str]:
+    """Return ordered ink codes for a targen -d / -D configuration.
+
+    device_type:       ChartParams.device_type string (e.g. "6")
+    extra_targen_args: ChartParams.extra_targen_args (may contain -D N)
+    """
+    try:
+        base = list(_D_TYPE_CHANNELS.get(int(device_type), ["c", "m", "y", "k"]))
+    except ValueError:
+        return ["c", "m", "y", "k"]
+    try:
+        tokens = shlex.split(extra_targen_args)
+    except ValueError:
+        return base
+    i = 0
+    while i < len(tokens):
+        m = re.match(r"^-D(\d+)?$", tokens[i])
+        if m:
+            raw = m.group(1)
+            if raw is None and i + 1 < len(tokens) and tokens[i + 1].isdigit():
+                i += 1
+                raw = tokens[i]
+            if raw is not None:
+                code = _D_FLAG_CODE.get(int(raw))
+                if code:
+                    if code in base:
+                        base.remove(code)
+                    else:
+                        base.append(code)
+        i += 1
+    return base
+
+
+def _find_sidecar_channels(path: Path) -> list[str] | None:
+    """Return ink channels from a ChromIQ sidecar file next to path, or None."""
+    stem = path.stem
+    while stem and (stem[-1].isdigit() or stem[-1] in "_- "):
+        stem = stem[:-1]
+    candidates = [path.parent / f"{path.stem}.channels.json"]
+    if stem:
+        candidates.append(path.parent / f"{stem}.channels.json")
+    for candidate in candidates:
+        if candidate.exists():
+            try:
+                data = json.loads(candidate.read_text())
+                channels = data.get("ink_channels")
+                if isinstance(channels, list):
+                    return channels
+            except Exception:
+                pass
+    return None
+
+
+def load_tiff_as_rgb(
+    path: Path, frame: int = 0, ink_channels: list[str] | None = None
+) -> Image.Image:
+    """Load any TIFF frame as RGB PIL Image, handling multi-channel Separated TIFFs."""
+    return TiffPreview._load_frame(path, frame, ink_channels)
+
+
+# ---------------------------------------------------------------------------
+# Widget
+# ---------------------------------------------------------------------------
 
 class TiffPreview(QWidget):
     """Displays multi-page TIFF files with optional stripe highlight overlay."""
@@ -34,6 +215,7 @@ class TiffPreview(QWidget):
         self._active_stripe: int = -1
         self._stripe_rects: list[QRect] = []
         self._pixmap: QPixmap | None = None
+        self._ink_channels: list[str] | None = None
         self._refresh_timer = QTimer(self)
         self._refresh_timer.setSingleShot(True)
         self._refresh_timer.setInterval(_REFRESH_DELAY_MS)
@@ -45,17 +227,17 @@ class TiffPreview(QWidget):
     # Public API
     # ------------------------------------------------------------------
 
-    def load_tiff(self, paths: list[Path]) -> None:
+    def load_tiff(self, paths: list[Path], ink_channels: list[str] | None = None) -> None:
         """Load a list of TIFF pages (one entry per printable page)."""
+        self._ink_channels = ink_channels
         self._pages = []
         for p in paths:
-            try:
-                img = Image.open(p)
-                n_frames = getattr(img, "n_frames", 1)
-                for i in range(n_frames):
-                    self._pages.append((p, i))
-            except Exception as exc:
-                log.warning("Cannot open TIFF %s: %s", p, exc)
+            n = self._count_frames(p)
+            if n == 0:
+                log.warning("Cannot open TIFF %s", p)
+                continue
+            for i in range(n):
+                self._pages.append((p, i))
 
         if not self._pages and paths:
             log.warning("TiffPreview: received %d path(s) but none could be opened: %s",
@@ -65,7 +247,6 @@ class TiffPreview(QWidget):
         self._active_stripe = -1
         self._stripe_rects = []
         self._update_nav()
-        # Fire immediately (after pending events) then again after 80ms for resize
         from PyQt6.QtCore import QTimer
         QTimer.singleShot(0, self._update_display)
         self._schedule_refresh()
@@ -94,6 +275,7 @@ class TiffPreview(QWidget):
         self._active_stripe = -1
         self._stripe_rects = []
         self._pixmap = None
+        self._ink_channels = None
         self._img_label.setText("No preview")
         self._update_nav()
 
@@ -191,14 +373,7 @@ class TiffPreview(QWidget):
 
         path, frame = self._pages[self._current]
         try:
-            img = Image.open(path)
-            if hasattr(img, "seek"):
-                try:
-                    img.seek(frame)
-                except EOFError:
-                    pass
-            if img.mode not in ("RGB", "RGBA"):
-                img = img.convert("RGB")
+            img = self._load_frame(path, frame, self._ink_channels)
             self._pixmap = self._pil_to_pixmap(img)
         except Exception as exc:
             log.warning("Preview render error: %s", exc)
@@ -263,9 +438,132 @@ class TiffPreview(QWidget):
         super().resizeEvent(event)
         self._repaint_label()
 
+    def showEvent(self, event) -> None:  # type: ignore[override]
+        super().showEvent(event)
+        if self._pixmap:
+            self._repaint_label()
+
     # ------------------------------------------------------------------
-    # Helpers
+    # Image loading helpers
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _count_frames(path: Path) -> int:
+        """Return number of frames in a TIFF, trying PIL then tifffile."""
+        try:
+            return getattr(Image.open(path), "n_frames", 1)
+        except Exception:
+            pass
+        try:
+            import tifffile
+            with tifffile.TiffFile(str(path)) as tif:
+                return len(tif.pages)
+        except Exception:
+            return 0
+
+    @staticmethod
+    def _load_frame(path: Path, frame: int, ink_channels: list[str] | None) -> Image.Image:
+        """Load one TIFF frame as RGB, handling CMYK and multi-channel Separated."""
+        try:
+            img = Image.open(path)
+            if hasattr(img, "seek"):
+                try:
+                    img.seek(frame)
+                except EOFError:
+                    pass
+            if img.mode in ("RGB", "RGBA"):
+                return img.convert("RGB")
+            if img.mode == "CMYK":
+                return TiffPreview._cmyk_pil_to_rgb(img)
+            return img.convert("RGB")
+        except Exception:
+            return TiffPreview._tifffile_load_frame(path, frame, ink_channels)
+
+    @staticmethod
+    def _cmyk_pil_to_rgb(img: Image.Image) -> Image.Image:
+        """Convert CMYK PIL image to RGB using ICC profile (embedded or system SWOP)."""
+        from PIL import ImageCms
+        icc_data = img.info.get("icc_profile")
+        if icc_data:
+            try:
+                import io
+                src = ImageCms.ImageCmsProfile(io.BytesIO(icc_data))
+                dst = ImageCms.createProfile("sRGB")
+                t = ImageCms.buildTransformFromOpenProfiles(
+                    src, dst, "CMYK", "RGB",
+                    renderingIntent=ImageCms.Intent.PERCEPTUAL,
+                )
+                return ImageCms.applyTransform(img, t)
+            except Exception:
+                pass
+        t = _get_cmyk_transform()
+        if t:
+            try:
+                return ImageCms.applyTransform(img, t)
+            except Exception:
+                pass
+        from PIL import ImageChops, ImageOps
+        c, m, y, k = img.split()
+        k_inv = ImageOps.invert(k)
+        r = ImageChops.multiply(ImageOps.invert(c), k_inv)
+        g = ImageChops.multiply(ImageOps.invert(m), k_inv)
+        b = ImageChops.multiply(ImageOps.invert(y), k_inv)
+        return Image.merge("RGB", (r, g, b))
+
+    @staticmethod
+    def _tifffile_load_frame(
+        path: Path, frame: int, ink_channels: list[str] | None
+    ) -> Image.Image:
+        """Load multi-channel/malformed TIFF via tifffile and composite to RGB."""
+        import tifffile
+        import numpy as np
+
+        with tifffile.TiffFile(str(path)) as tif:
+            idx = min(frame, len(tif.pages) - 1)
+            data = tif.pages[idx].asarray()
+
+        if data.ndim == 2:
+            return Image.fromarray(data.astype(np.uint8), "L").convert("RGB")
+
+        n_ch = data.shape[2] if data.ndim == 3 else 1
+        if n_ch == 3:
+            return Image.fromarray(data.astype(np.uint8), "RGB")
+        if n_ch < 2:
+            return Image.fromarray(data[:, :, 0].astype(np.uint8), "L").convert("RGB")
+
+        # Resolve ink codes: caller-supplied → sidecar → count heuristic → generic
+        codes = (
+            ink_channels
+            or _find_sidecar_channels(path)
+            or _N_CHANNELS_FALLBACK.get(n_ch)
+            or (["c", "m", "y", "k"] + ["k"] * max(0, n_ch - 4))
+        )
+
+        # n_ch >= 4: ICC-convert CMYK base, then composite extra channels on top
+        if n_ch >= 4:
+            cmyk_img = Image.fromarray(data[:, :, :4], "CMYK")
+            base = TiffPreview._cmyk_pil_to_rgb(cmyk_img)
+            if n_ch == 4:
+                return base
+            ref = np.array(base, dtype=np.float32) / 255.0
+            for i, code in enumerate(codes[4:n_ch], start=4):
+                ink_val = data[:, :, i].astype(np.float32) / 255.0
+                ar, ag, ab = _INK_ABSORPTION.get(code, (0.87, 0.87, 0.87))
+                ref[:, :, 0] *= 1.0 - ink_val * ar
+                ref[:, :, 1] *= 1.0 - ink_val * ag
+                ref[:, :, 2] *= 1.0 - ink_val * ab
+            return Image.fromarray((ref.clip(0, 1) * 255).astype(np.uint8), "RGB")
+
+        # n_ch < 4 but > 1: pure absorption compositing (RGB/CMY devices)
+        h, w = data.shape[:2]
+        ref = np.ones((h, w, 3), dtype=np.float32)
+        for ch_idx, code in enumerate(codes[:n_ch]):
+            ink_val = data[:, :, ch_idx].astype(np.float32) / 255.0
+            ar, ag, ab = _INK_ABSORPTION.get(code, (1.0, 1.0, 1.0))
+            ref[:, :, 0] *= 1.0 - ink_val * ar
+            ref[:, :, 1] *= 1.0 - ink_val * ag
+            ref[:, :, 2] *= 1.0 - ink_val * ab
+        return Image.fromarray((ref.clip(0, 1) * 255).astype(np.uint8), "RGB")
 
     @staticmethod
     def _pil_to_pixmap(img: Image.Image) -> QPixmap:

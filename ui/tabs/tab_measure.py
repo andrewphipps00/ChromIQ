@@ -68,7 +68,13 @@ def _detect_stripe_rects(tiff_path: Path) -> list[QRect]:
     """
     from PIL import Image
     try:
-        img = Image.open(tiff_path).convert("L")
+        try:
+            img = Image.open(tiff_path).convert("L")
+        except Exception:
+            from ui.tiff_preview import load_tiff_as_rgb, _find_sidecar_channels
+            img = load_tiff_as_rgb(
+                tiff_path, ink_channels=_find_sidecar_channels(tiff_path)
+            ).convert("L")
         orig_w, orig_h = img.size
 
         ANALYSIS_W = 1000
