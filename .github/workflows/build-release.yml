@@ -61,51 +61,46 @@ jobs:
           pip3 install -r requirements.txt
           pip3 install pyinstaller
 
-      # pip on arm64 always picks arm64-specific wheels over universal2, even under
-      # the python.org universal2 Python. Use pip download --platform to explicitly
-      # fetch universal2 wheels, then install them from the local .whl files.
-      # pycups has no universal2 wheel; build it from source as a fat binary.
+      # pycups has no macOS wheel; build from source as a fat binary.
       - name: Force universal2 fat binaries (universal2 only)
         if: matrix.arch == 'universal2'
         run: |
-          pip3 download \
-            --platform macosx_11_0_universal2 \
-            --python-version 313 \
-            --implementation cp \
-            --abi cp313 \
-            --only-binary :all: \
-            --no-deps \
-            -d /tmp/u2wheels \
-            numpy Pillow PyYAML
-          pip3 install --force-reinstall --no-deps /tmp/u2wheels/*.whl
           ARCHFLAGS="-arch x86_64 -arch arm64" pip3 install --force-reinstall --no-binary pycups pycups
 
-      # imagecodecs ships arch-specific wheels (no universal2, no vendored lcms2 source).
-      # Strategy: query PyPI JSON API for the exact x86_64 wheel URL, download it,
-      # then lipo-merge each .so with the arm64 .so already installed by pip.
-      - name: Make imagecodecs universal2 via lipo (universal2 only)
+      # numpy, Pillow, PyYAML, and imagecodecs ship only arch-specific wheels — no
+      # universal2 exists on PyPI for any of them. Strategy: query PyPI JSON API for
+      # each package's x86_64 wheel, download it, and lipo-merge every .so with the
+      # arm64 .so already installed by pip.
+      - name: Make C extensions universal2 via lipo (universal2 only)
         if: matrix.arch == 'universal2'
         run: |
           SITELIB=$(python3 -c "import site; print(site.getsitepackages()[0])")
-          IC_VER=$(python3 -c "import imagecodecs; print(imagecodecs.__version__)")
-          # Fetch the x86_64 wheel URL directly from the PyPI JSON API
-          X86_URL=$(curl -fsSL "https://pypi.org/pypi/imagecodecs/${IC_VER}/json" | \
-            python3 -c "import json,sys; d=json.load(sys.stdin); print(next(f['url'] for f in d['urls'] if 'x86_64' in f['filename'] and f['filename'].endswith('.whl')))")
-          echo "Downloading x86_64 wheel: $X86_URL"
-          mkdir -p /tmp/x86_wheels /tmp/ic_x86
-          curl -fsSL -o /tmp/x86_wheels/imagecodecs.whl "$X86_URL"
-          unzip -q /tmp/x86_wheels/imagecodecs.whl -d /tmp/ic_x86
-          # lipo-merge each .so in the installed arm64 package
-          find "${SITELIB}/imagecodecs" -name "*.so" | while read arm_so; do
-            name=$(basename "$arm_so")
-            x86_so=$(find /tmp/ic_x86/imagecodecs -name "$name" 2>/dev/null | head -1)
-            if [ -n "$x86_so" ]; then
-              lipo -create "$arm_so" "$x86_so" -output "$arm_so"
-              echo "Merged: $name"
-            else
-              echo "WARNING: no x86_64 counterpart for $name"
-            fi
-          done
+          lipo_pkg() {
+            local pypi_name="$1" pkg_dir="$2"
+            local VER X86_URL TMPDIR
+            VER=$(python3 -c "import importlib.metadata; print(importlib.metadata.version('${pypi_name}'))")
+            X86_URL=$(curl -fsSL "https://pypi.org/pypi/${pypi_name}/${VER}/json" | \
+              python3 -c "import json,sys; d=json.load(sys.stdin); print(next(f['url'] for f in d['urls'] if 'x86_64' in f['filename'] and f['filename'].endswith('.whl')))")
+            echo "Downloading x86_64 wheel for ${pypi_name} ${VER}: $X86_URL"
+            TMPDIR="/tmp/${pkg_dir}_x86"
+            mkdir -p "$TMPDIR"
+            curl -fsSL -o "/tmp/${pkg_dir}.whl" "$X86_URL"
+            unzip -q "/tmp/${pkg_dir}.whl" -d "$TMPDIR"
+            find "${SITELIB}/${pkg_dir}" -name "*.so" | while read -r arm_so; do
+              name=$(basename "$arm_so")
+              x86_so=$(find "$TMPDIR/${pkg_dir}" -name "$name" 2>/dev/null | head -1)
+              if [ -n "$x86_so" ]; then
+                lipo -create "$arm_so" "$x86_so" -output "$arm_so"
+                echo "Merged ${pkg_dir}: $name"
+              else
+                echo "WARNING: no x86_64 counterpart for ${pkg_dir}/$name"
+              fi
+            done
+          }
+          lipo_pkg numpy numpy
+          lipo_pkg Pillow PIL
+          lipo_pkg PyYAML yaml
+          lipo_pkg imagecodecs imagecodecs
 
       - name: Build app bundle
         env:
