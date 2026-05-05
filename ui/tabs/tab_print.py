@@ -26,7 +26,7 @@ from PyQt6.QtWidgets import (
 
 from core.logger import get_logger
 from ui.tab_header import TabHeader
-from ui.tiff_preview import TiffPreview
+from ui.tiff_preview import TiffPreview, _find_sidecar_channels
 from ui.tooltip_button import TooltipButton
 from ui.widgets import NoScrollComboBox, load_folder_icon, load_refresh_icon, open_file_dialog
 from workflow.cups_printer import CupsRawPrinter
@@ -532,7 +532,12 @@ class TabPrint(QWidget):
                 tmp_path.unlink(missing_ok=True)
             self._on_print_done(code)
 
-        self._printer.print_job(print_path, config, on_finish=_cleanup_and_finish)
+        ink_channels = _find_sidecar_channels(tiff_path)
+        self._printer.print_job_ps(
+            print_path, config,
+            ink_channels=ink_channels,
+            on_finish=_cleanup_and_finish,
+        )
 
     def _on_print_done(self, code: int) -> None:
         if code == 0:

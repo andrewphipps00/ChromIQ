@@ -93,13 +93,33 @@ jobs:
 
       - name: Create DMG
         run: |
-          mkdir -p /tmp/dmg_src
-          ditto dist/ChromIQ.app /tmp/dmg_src/ChromIQ.app
-          ln -s /Applications /tmp/dmg_src/Applications
-          hdiutil create -volname "ChromIQ" \
-            -srcfolder /tmp/dmg_src \
-            -ov -format UDZO -fs HFS+ \
-            "${{ matrix.artifact }}"
+          # Two-step approach — avoids hdiutil create -srcfolder hanging on
+          # GitHub Actions runners when bundling large app bundles.
+          APP_MB=$(du -sm dist/ChromIQ.app | awk '{print $1}')
+          IMG_MB=$((APP_MB + 40))
+
+          # Step 1: writable sparse image
+          hdiutil create -megabytes "$IMG_MB" \
+            -volname "ChromIQ" -fs HFS+ -format UDRW /tmp/rw.dmg
+
+          # Step 2: mount it
+          MOUNT=$(hdiutil attach /tmp/rw.dmg -nobrowse -noautoopen \
+            | awk '/Apple_HFS/{print $NF}')
+
+          # Step 3: populate
+          ditto dist/ChromIQ.app "$MOUNT/ChromIQ.app"
+          ln -sf /Applications "$MOUNT/Applications"
+          sync
+
+          # Step 4: detach
+          hdiutil detach "$MOUNT" -force
+
+          # Step 5: convert to compressed read-only (UDZO = zlib)
+          hdiutil convert /tmp/rw.dmg \
+            -format UDZO -imagekey zlib-level=9 \
+            -o "${{ matrix.artifact }}"
+
+          rm -f /tmp/rw.dmg
 
       - name: Codesign DMG (ad-hoc)
         run: codesign --sign - "${{ matrix.artifact }}"
