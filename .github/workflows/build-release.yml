@@ -69,38 +69,39 @@ jobs:
 
       # numpy, Pillow, PyYAML, and imagecodecs ship only arch-specific wheels — no
       # universal2 exists on PyPI for any of them. Strategy: query PyPI JSON API for
-      # each package's x86_64 wheel, download it, and lipo-merge every .so with the
-      # arm64 .so already installed by pip.
+      # each package's x86_64 wheel, download it, and lipo-merge every .so/.dylib
+      # with the arm64 binaries already installed by pip.
+      # lipo_pkg args: <PyPI name> <site-packages dir> <version tag filter>
+      #   ver_filter must appear in the wheel filename to select the right Python
+      #   version. Use "cp313" for cpython-tagged wheels, "abi3" for stable-ABI wheels.
       - name: Make C extensions universal2 via lipo (universal2 only)
         if: matrix.arch == 'universal2'
         run: |
           SITELIB=$(python3 -c "import site; print(site.getsitepackages()[0])")
           lipo_pkg() {
-            local pypi_name="$1" pkg_dir="$2"
+            local pypi_name="$1" pkg_dir="$2" ver_filter="$3"
             local VER X86_URL TMPDIR
             VER=$(python3 -c "import importlib.metadata; print(importlib.metadata.version('${pypi_name}'))")
             X86_URL=$(curl -fsSL "https://pypi.org/pypi/${pypi_name}/${VER}/json" | \
-              python3 -c "import json,sys; d=json.load(sys.stdin); print(next(f['url'] for f in d['urls'] if 'x86_64' in f['filename'] and f['filename'].endswith('.whl')))")
+              python3 -c "import json,sys; vf='${ver_filter}'; d=json.load(sys.stdin); print(next(f['url'] for f in d['urls'] if 'x86_64' in f['filename'] and vf in f['filename'] and f['filename'].endswith('.whl')))")
             echo "Downloading x86_64 wheel for ${pypi_name} ${VER}: $X86_URL"
             TMPDIR="/tmp/${pkg_dir}_x86"
             mkdir -p "$TMPDIR"
             curl -fsSL -o "/tmp/${pkg_dir}.whl" "$X86_URL"
             unzip -q "/tmp/${pkg_dir}.whl" -d "$TMPDIR"
-            find "${SITELIB}/${pkg_dir}" -name "*.so" | while read -r arm_so; do
-              name=$(basename "$arm_so")
-              x86_so=$(find "$TMPDIR/${pkg_dir}" -name "$name" 2>/dev/null | head -1)
-              if [ -n "$x86_so" ]; then
-                lipo -create "$arm_so" "$x86_so" -output "$arm_so"
+            find "${SITELIB}/${pkg_dir}" -type f \( -name "*.so" -o -name "*.dylib" \) | while read -r arm_bin; do
+              name=$(basename "$arm_bin")
+              x86_bin=$(find "$TMPDIR/${pkg_dir}" -type f -name "$name" 2>/dev/null | head -1)
+              if [ -n "$x86_bin" ]; then
+                lipo -create "$arm_bin" "$x86_bin" -output "$arm_bin"
                 echo "Merged ${pkg_dir}: $name"
-              else
-                echo "WARNING: no x86_64 counterpart for ${pkg_dir}/$name"
               fi
             done
           }
-          lipo_pkg numpy numpy
-          lipo_pkg Pillow PIL
-          lipo_pkg PyYAML yaml
-          lipo_pkg imagecodecs imagecodecs
+          lipo_pkg numpy    numpy       cp313
+          lipo_pkg Pillow   PIL         cp313
+          lipo_pkg PyYAML   yaml        cp313
+          lipo_pkg imagecodecs imagecodecs abi3
 
       - name: Build app bundle
         env:
