@@ -61,15 +61,23 @@ jobs:
           pip3 install -r requirements.txt
           pip3 install pyinstaller
 
-      # numpy, Pillow, PyYAML ship universal2 wheels; _PYTHON_HOST_PLATFORM forces pip
-      # to prefer them over the arm64-specific wheels it would otherwise select on this runner.
-      # pycups has no universal2 wheel, so build it from source as a fat binary.
+      # pip on arm64 always picks arm64-specific wheels over universal2, even under
+      # the python.org universal2 Python. Use pip download --platform to explicitly
+      # fetch universal2 wheels, then install them from the local .whl files.
+      # pycups has no universal2 wheel; build it from source as a fat binary.
       - name: Force universal2 fat binaries (universal2 only)
         if: matrix.arch == 'universal2'
         run: |
-          _PYTHON_HOST_PLATFORM=macosx-10.13-universal2 pip3 install \
-            --force-reinstall --only-binary :all: \
+          pip3 download \
+            --platform macosx_11_0_universal2 \
+            --python-version 313 \
+            --implementation cp \
+            --abi cp313 \
+            --only-binary :all: \
+            --no-deps \
+            -d /tmp/u2wheels \
             numpy Pillow PyYAML
+          pip3 install --force-reinstall --no-deps /tmp/u2wheels/*.whl
           ARCHFLAGS="-arch x86_64 -arch arm64" pip3 install --force-reinstall --no-binary pycups pycups
 
       # imagecodecs ships arch-specific wheels (no universal2, no vendored lcms2 source).
