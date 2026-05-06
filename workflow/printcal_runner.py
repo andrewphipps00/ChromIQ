@@ -16,9 +16,19 @@ log = get_logger(__name__)
 
 
 @dataclass
+class ChannelTarget:
+    """Per-channel initial target overrides for printcal (-x/-m/-n/-t flags)."""
+    ch: int                     # channel index 0-7
+    max_pct: float | None = None   # -x: max device % (override auto)
+    dev_pct: float | None = None   # -m: dev target as % of auto max
+    white_de: float | None = None  # -n: white minimum deltaE target
+    t50_pct: float | None = None   # -t: 50% transfer curve percentage
+
+
+@dataclass
 class PrintcalParams:
     ti3_path: Path                   # input measurement file (base name also used for output .cal)
-    mode: str = "initial"            # "initial" | "recalibrate" | "verify"
+    mode: str = "initial"            # "initial" | "recalibrate" | "verify" | "imitation"
     prev_cal: str = ""               # previous .cal path (used in recalibrate/verify mode)
     verbosity: int = 1
     smoothing: float = 1.0
@@ -27,6 +37,8 @@ class PrintcalParams:
     model: str = ""
     description: str = ""
     copyright: str = ""
+    dry_run: bool = False            # -d: simulate without writing files
+    channel_targets: list[ChannelTarget] = field(default_factory=list)
     extra_args: str = ""
 
 
@@ -86,6 +98,11 @@ class PrintcalRunner:
             args.append("-r")
         elif p.mode == "verify":
             args.append("-e")
+        elif p.mode == "imitation":
+            args.append("-I")
+
+        if p.dry_run:
+            args.append("-d")
 
         if p.manufacturer:
             args += ["-A", p.manufacturer]
@@ -95,6 +112,19 @@ class PrintcalRunner:
             args += ["-D", p.description]
         if p.copyright:
             args += ["-C", p.copyright]
+
+        # Per-channel initial target overrides (only meaningful for initial/imitation modes)
+        # Format: flag+channel-code as one arg, value as separate arg (e.g. "-x0" "85.0")
+        for ct in p.channel_targets:
+            ch = str(ct.ch)
+            if ct.max_pct is not None:
+                args += [f"-x{ch}", f"{ct.max_pct:.1f}"]
+            if ct.dev_pct is not None:
+                args += [f"-m{ch}", f"{ct.dev_pct:.1f}"]
+            if ct.white_de is not None:
+                args += [f"-n{ch}", f"{ct.white_de:.2f}"]
+            if ct.t50_pct is not None:
+                args += [f"-t{ch}", f"{ct.t50_pct:.1f}"]
 
         if p.extra_args:
             args += shlex.split(p.extra_args)

@@ -88,6 +88,7 @@ class MainWindow(QMainWindow):
         self._tab_chart.target_started.connect(self._tab_check.clear_files)
         self._tab_measure.measure_finished.connect(self._on_measure_done)
         self._tab_profile.cal_file_created.connect(self._on_cal_file_created)
+        self._tab_profile.cal_chart_requested.connect(self._on_cal_chart_requested)
         self._tab_measure.proceed_to_profile.connect(self._on_proceed_to_profile)
         self._tab_measure.measurement_active.connect(self._on_measurement_active)
         self._tab_profile.profile_active.connect(self._on_profile_active)
@@ -272,41 +273,13 @@ class MainWindow(QMainWindow):
                 self._tabs.setTabEnabled(i, not active)
 
     def _on_cal_file_created(self, cal_path: Path) -> None:
-        from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QVBoxLayout
+        """Fill -K/-I fields silently (user chose Done in the result dialog)."""
+        self._tab_chart.set_cal_file_paths(cal_path)
+
+    def _on_cal_chart_requested(self, cal_path: Path) -> None:
+        """Fill -K/-I fields and navigate to Create Chart (user chose Go to Create Chart)."""
         self._tab_chart.set_cal_file_paths(cal_path)
         self._tabs.setCurrentWidget(self._tab_chart)
-
-        dlg = QDialog(self)
-        dlg.setWindowTitle("Calibration File Created")
-        dlg.setMinimumWidth(540)
-        layout = QVBoxLayout(dlg)
-        layout.setSpacing(14)
-        layout.setContentsMargins(24, 20, 24, 20)
-
-        heading = QLabel("<b>Your calibration file is ready!</b>", dlg)
-        heading.setWordWrap(True)
-        layout.addWidget(heading)
-
-        body = QLabel(
-            f"<b>{cal_path.name}</b> has been created and auto-filled into the "
-            "<b>-I</b> and <b>-K</b> fields of the Create Chart manual module.<br><br>"
-            "<b>What to do next:</b><br>"
-            "Generate your profiling chart (not the calibration target — make sure "
-            "<i>Create target for calibration</i> is unchecked), then choose whether to:<br><br>"
-            "&nbsp;&nbsp;<b>-K</b> &nbsp;Apply the calibration to patches before printing — "
-            "the printer will produce already-linearised output. Recommended for most workflows.<br><br>"
-            "&nbsp;&nbsp;<b>-I</b> &nbsp;Embed the calibration file without applying it — "
-            "the .ti3 measurements will include the raw (uncalibrated) device values. "
-            "Use this if you need to separate calibration from profiling.",
-            dlg,
-        )
-        body.setWordWrap(True)
-        layout.addWidget(body)
-
-        bb = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok, dlg)
-        bb.accepted.connect(dlg.accept)
-        layout.addWidget(bb)
-        dlg.exec()
 
     def _on_proceed_to_profile(self) -> None:
         self._tabs.setCurrentWidget(self._tab_profile)

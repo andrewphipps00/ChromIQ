@@ -14,6 +14,7 @@ from PyQt6.QtWidgets import (
     QDialogButtonBox,
     QFileDialog,
     QFrame,
+    QGridLayout,
     QGroupBox,
     QHBoxLayout,
     QInputDialog,
@@ -22,6 +23,7 @@ from PyQt6.QtWidgets import (
     QPlainTextEdit,
     QPushButton,
     QScrollArea,
+    QSizePolicy,
     QStackedWidget,
     QVBoxLayout,
     QWidget,
@@ -32,8 +34,9 @@ from core.resource_path import resource_path
 from ui.tab_header import TabHeader
 from ui.tooltip_button import TooltipButton
 from ui.widgets import NoScrollComboBox, NoScrollDoubleSpinBox, NoScrollSpinBox, load_folder_icon, make_browse_button, open_file_dialog, tint_dialog_primary
+from ui.spectrum_progress import SpectrumSegmentsBar
 from workflow.profile_builder import ProfileBuilder, ProfileParams
-from workflow.printcal_runner import PrintcalRunner, PrintcalParams
+from workflow.printcal_runner import PrintcalRunner, PrintcalParams, ChannelTarget
 from workflow.applycal_runner import ApplycalRunner
 
 if TYPE_CHECKING:
@@ -80,7 +83,8 @@ class TabProfile(QWidget):
     check_requested  = pyqtSignal()             # user clicked "Check Quality" in the result dialog
     profile_active   = pyqtSignal(bool)         # True while colprof is running, False when done
     ti2_found        = pyqtSignal(Path)         # emitted when a matching .ti2 exists next to the loaded .ti3
-    cal_file_created = pyqtSignal(Path)         # emitted when printcal produces a new .cal file
+    cal_file_created    = pyqtSignal(Path)  # printcal done; fill -K/-I silently, stay on tab
+    cal_chart_requested = pyqtSignal(Path)  # user chose "Go to Create Chart" in result dialog
 
     def __init__(
         self,
@@ -263,7 +267,6 @@ class TabProfile(QWidget):
         btn_row.addWidget(self._save_defaults_btn)
         cc.addLayout(btn_row)
 
-        from ui.spectrum_progress import SpectrumSegmentsBar
         self._progress_bar = SpectrumSegmentsBar(colprof_container)
         self._progress_bar.set_label("Build Profile", "")
         self._progress_bar.set_value(0)
@@ -364,28 +367,116 @@ class TabProfile(QWidget):
     # Printcal section
     # ------------------------------------------------------------------
 
+    # ---- Channel target row helper -------------------------------------------
+
+    class _ChannelRow:
+        """One row in the channel target overrides grid."""
+        def __init__(self, ch: int, label: str, parent: QWidget) -> None:
+            self.ch = ch
+            self.enabled_cb = QCheckBox(label, parent)
+            self.enabled_cb.setFixedWidth(60)
+
+            def _spin(lo: float, hi: float, decimals: int, step: float) -> NoScrollDoubleSpinBox:
+                s = NoScrollDoubleSpinBox(parent)
+                s.setRange(lo, hi)
+                s.setDecimals(decimals)
+                s.setSingleStep(step)
+                s.setFixedWidth(70)
+                s.setEnabled(False)
+                s.setSpecialValueText("—")
+                s.setMinimum(lo - step)   # one step below range = "not set"
+                s.setValue(lo - step)
+                return s
+
+            self.max_spin  = _spin(0.0, 100.0, 1, 1.0)
+            self.dev_spin  = _spin(0.0, 100.0, 1, 1.0)
+            self.white_spin = _spin(0.0,  20.0, 2, 0.1)
+            self.t50_spin  = _spin(0.0, 100.0, 1, 1.0)
+
+            self.enabled_cb.toggled.connect(self._on_toggle)
+
+        def _on_toggle(self, checked: bool) -> None:
+            for sp in (self.max_spin, self.dev_spin, self.white_spin, self.t50_spin):
+                sp.setEnabled(checked)
+
+        def channel_target(self) -> "ChannelTarget | None":
+            if not self.enabled_cb.isChecked():
+                return None
+            def _val(sp: NoScrollDoubleSpinBox) -> float | None:
+                # value below minimum = "not set"
+                return sp.value() if sp.value() >= sp.minimum() + sp.singleStep() * 0.5 else None
+            return ChannelTarget(
+                ch=self.ch,
+                max_pct=_val(self.max_spin),
+                dev_pct=_val(self.dev_spin),
+                white_de=_val(self.white_spin),
+                t50_pct=_val(self.t50_spin),
+            )
+
+        def restore(self, data: dict) -> None:
+            self.enabled_cb.setChecked(data.get("enabled", False))
+            for attr, key in (
+                ("max_spin",   "max_pct"),
+                ("dev_spin",   "dev_pct"),
+                ("white_spin", "white_de"),
+                ("t50_spin",   "t50_pct"),
+            ):
+                v = data.get(key)
+                if v is not None:
+                    getattr(self, attr).setValue(v)
+
+        def save(self) -> dict:
+            def _v(sp: NoScrollDoubleSpinBox) -> float | None:
+                return sp.value() if sp.value() >= sp.minimum() + sp.singleStep() * 0.5 else None
+            return {
+                "enabled":  self.enabled_cb.isChecked(),
+                "max_pct":  _v(self.max_spin),
+                "dev_pct":  _v(self.dev_spin),
+                "white_de": _v(self.white_spin),
+                "t50_pct":  _v(self.t50_spin),
+            }
+
+    # --------------------------------------------------------------------------
+
     def _make_printcal_section(self) -> QWidget:
         container = QWidget(self)
         cc = QVBoxLayout(container)
         cc.setContentsMargins(0, 0, 0, 0)
         cc.setSpacing(8)
 
-        grp = QGroupBox("Create Calibration File  (printcal)", container)
-        g = QVBoxLayout(grp)
-        g.setSpacing(8)
+        # ---- Scrollable groupbox ----
+        scroll = QScrollArea(container)
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
-        # ---- Input file ----
+        grp_wrapper = QWidget()
+        gw_layout = QVBoxLayout(grp_wrapper)
+        gw_layout.setContentsMargins(0, 0, 0, 0)
+        gw_layout.setSpacing(8)
+
+        # ---- Measurement Data section ----
+        grp_ti3 = QGroupBox("Measurement Data (.ti3)", grp_wrapper)
+        ti3_g = QVBoxLayout(grp_ti3)
+        ti3_g.setSpacing(8)
         in_row = QHBoxLayout()
-        in_row.addWidget(QLabel("Input measurement (.ti3):", grp))
-        self._pc_load_btn = QPushButton("Load cal_*.ti3…", grp)
+        self._pc_load_btn = QPushButton("Load cal_*.ti3…", grp_ti3)
         self._pc_load_btn.setIcon(load_folder_icon("folder_build"))
         self._pc_load_btn.clicked.connect(self._pc_browse_ti3)
-        self._pc_ti3_lbl = QLabel("No file selected — measure a calibration target first.", grp)
+        self._pc_ti3_lbl = QLabel("No file selected — measure a calibration target first.", grp_ti3)
         self._pc_ti3_lbl.setStyleSheet("color: #909090; font-size: 11px;")
         self._pc_ti3_lbl.setWordWrap(True)
         in_row.addWidget(self._pc_load_btn)
         in_row.addWidget(self._pc_ti3_lbl, stretch=1)
-        g.addLayout(in_row)
+        ti3_g.addLayout(in_row)
+        gw_layout.addWidget(grp_ti3)
+
+        # ---- Calibration Metadata section ----
+        self._build_pc_metadata_group(gw_layout, grp_wrapper)
+
+        grp = QGroupBox("Create Calibration File  (printcal)", grp_wrapper)
+        g = QVBoxLayout(grp)
+        g.setSpacing(8)
 
         # ---- Mode ----
         mode_row = QHBoxLayout()
@@ -394,17 +485,21 @@ class TabProfile(QWidget):
         self._pc_mode_combo.addItem("Initial calibration  (creates fresh .cal)", "initial")
         self._pc_mode_combo.addItem("Re-calibrate  (refine existing .cal)", "recalibrate")
         self._pc_mode_combo.addItem("Verify  (check against existing .cal)", "verify")
-        self._pc_mode_combo.currentIndexChanged.connect(self._pc_update_prev_vis)
+        self._pc_mode_combo.addItem("Imitation target  (null cal from .ti3)", "imitation")
+        self._pc_mode_combo.currentIndexChanged.connect(self._pc_update_mode_vis)
         mode_row.addWidget(self._pc_mode_combo, stretch=1)
         mode_row.addWidget(TooltipButton(
             "Calibration Mode",
-            "Initial calibration: creates a brand-new .cal file from your\n"
+            "Initial calibration (-i): creates a brand-new .cal file from your\n"
             "calibration target measurement. Use this the first time.\n\n"
-            "Re-calibrate: refines an existing .cal by comparing new\n"
+            "Re-calibrate (-r): refines an existing .cal by comparing new\n"
             "measurements to the previous target. Useful for keeping a\n"
             "printer consistent over time.\n\n"
-            "Verify: checks how well a printer still matches a prior .cal\n"
-            "without writing any new files.",
+            "Verify (-e): checks how well a printer still matches a prior .cal\n"
+            "without writing any new files.\n\n"
+            "Imitation target (-I): creates a calibration target from an existing\n"
+            ".ti3 using a null (identity) calibration. Useful for deriving a\n"
+            "calibration target when no previous .cal exists.",
             grp,
             min_width=480,
         ))
@@ -424,7 +519,22 @@ class TabProfile(QWidget):
         self._pc_prev_widget.setVisible(False)
         g.addWidget(self._pc_prev_widget)
 
-        # ---- Smoothing (vertical stack, tooltip on right) ----
+        # ---- Dry run ----
+        dry_row = QHBoxLayout()
+        self._pc_dry_run_cb = QCheckBox("Dry run (-d)  —  simulate without writing any files", grp)
+        dry_row.addWidget(self._pc_dry_run_cb)
+        dry_row.addStretch()
+        dry_row.addWidget(TooltipButton(
+            "Dry Run (-d)",
+            "Runs printcal through all its calculations without writing the .cal\n"
+            "file to disk. Use this to check that your input file and settings are\n"
+            "correct and to preview what targets would be computed — before\n"
+            "committing to a real calibration run.",
+            grp,
+        ))
+        g.addLayout(dry_row)
+
+        # ---- Smoothing ----
         smooth_row = QHBoxLayout()
         smooth_row.addWidget(QLabel("Smoothing:", grp))
         self._pc_smooth_spin = NoScrollDoubleSpinBox(grp)
@@ -444,7 +554,7 @@ class TabProfile(QWidget):
         ))
         g.addLayout(smooth_row)
 
-        # ---- Verbosity (vertical stack, tooltip on right) ----
+        # ---- Verbosity ----
         verb_row = QHBoxLayout()
         verb_row.addWidget(QLabel("Verbosity:", grp))
         self._pc_verb_spin = NoScrollSpinBox(grp)
@@ -461,10 +571,19 @@ class TabProfile(QWidget):
         ))
         g.addLayout(verb_row)
 
-        cc.addWidget(grp)
-        cc.addStretch()
+        gw_layout.addWidget(grp)
 
-        # ---- Button row (outside groupbox) ----
+        # ---- Initial target overrides (hidden for recalibrate/verify) ----
+        _targets_inner = self._make_channel_targets_widget(grp_wrapper)
+        self._pc_targets_widget = QGroupBox("Initial Target Overrides", grp_wrapper)
+        _tg = QVBoxLayout(self._pc_targets_widget)
+        _tg.addWidget(_targets_inner)
+        gw_layout.addWidget(self._pc_targets_widget)
+        gw_layout.addStretch()
+        scroll.setWidget(grp_wrapper)
+        cc.addWidget(scroll, stretch=1)
+
+        # ---- Button row (outside scroll area) ----
         btn_row = QHBoxLayout()
         self._pc_run_btn = QPushButton("Create Calibration File", container)
         self._pc_run_btn.setObjectName("primary")
@@ -479,7 +598,13 @@ class TabProfile(QWidget):
         btn_row.addWidget(self._pc_save_defaults_btn)
         cc.addLayout(btn_row)
 
-        # ---- Log (outside groupbox) ----
+        # ---- Progress bar (outside scroll area) ----
+        self._pc_progress = SpectrumSegmentsBar(container)
+        self._pc_progress.set_label("Create Calibration File", "")
+        self._pc_progress.set_value(0)
+        cc.addWidget(self._pc_progress)
+
+        # ---- Log (outside scroll area) ----
         self._pc_log = QPlainTextEdit(container)
         self._pc_log.setObjectName("log")
         self._pc_log.setReadOnly(True)
@@ -490,16 +615,205 @@ class TabProfile(QWidget):
         s = self._settings
         self._pc_smooth_spin.setValue(float(s.get("printcal_smoothing", 1.0)))
         self._pc_verb_spin.setValue(int(s.get("printcal_verbosity", 1)))
+        self._pc_dry_run_cb.setChecked(bool(s.get("printcal_dry_run", False)))
         saved_mode = s.get("printcal_mode", "initial")
         idx = self._pc_mode_combo.findData(saved_mode)
         if idx >= 0:
             self._pc_mode_combo.setCurrentIndex(idx)
+        saved_targets = s.get("printcal_channel_targets", "[]")
+        try:
+            targets_data = json.loads(saved_targets) if isinstance(saved_targets, str) else saved_targets
+        except (json.JSONDecodeError, TypeError):
+            targets_data = []
+        for row in self._pc_channel_rows:
+            for td in targets_data:
+                if isinstance(td, dict) and td.get("ch") == row.ch:
+                    row.restore(td)
+                    break
+        # Auto-show extended channels if any ch4-7 rows were restored as enabled
+        if any(row.enabled_cb.isChecked() for row in self._pc_channel_rows if row.ch >= 4):
+            self._pc_extended_cb.setChecked(True)
+
+        # Sync visibility for the current mode (in case default index didn't change)
+        self._pc_update_mode_vis()
 
         return container
 
-    def _pc_update_prev_vis(self) -> None:
+    def _make_channel_targets_widget(self, parent: QWidget) -> QWidget:
+        """Build the 'Initial Target Overrides' section with per-channel spinboxes.
+
+        Layout (all rows in outer VBoxLayout):
+          ① header label + stretch + section TooltipButton  (QHBoxLayout)
+          ② standard grid  — column headers + C/M/Y/K rows  (QGridLayout)
+          ③ extended disclosure + stretch + ext TooltipButton (QHBoxLayout)
+          ④ extended grid   — Ch4–Ch7 rows, hidden by default (QGridLayout)
+
+        Both grids use identical column stretch so their columns stay aligned.
+        The two TooltipButtons are in addStretch() rows, matching the
+        smoothing / verbosity / dry-run pattern above.
+        """
+        w = QWidget(parent)
+        outer = QVBoxLayout(w)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(4)
+
+        # ① Tooltip row -------------------------------------------------------
+        tip_row = QHBoxLayout()
+        tip_row.addStretch()
+        tip_row.addWidget(TooltipButton(
+            "Initial Target Overrides",
+            "These optional settings let you override the targets printcal computes\n"
+            "automatically when building calibration curves.\n\n"
+            "Enable a channel row with its checkbox, then fill in only the values\n"
+            "you want to change — leave a spinbox at '—' to let printcal decide\n"
+            "that value automatically from your measurement data.\n\n"
+            "These overrides apply only in Initial calibration and Imitation target\n"
+            "modes. They have no effect in Re-calibrate or Verify mode.",
+            w,
+            min_width=440,
+        ))
+        outer.addLayout(tip_row)
+
+        # Shared helper: apply identical column stretch to both grids
+        def _set_col_stretch(g: QGridLayout) -> None:
+            g.setColumnStretch(0, 0)
+            for c in range(1, 5):
+                g.setColumnStretch(c, 1)
+
+        # Shared helper: add one channel row to a given grid/parent
+        def _make_row(label: str, ch: int, grid: QGridLayout,
+                      grid_parent: QWidget, grid_row: int) -> "TabProfile._ChannelRow":
+            row = TabProfile._ChannelRow(ch, label, grid_parent)
+            self._pc_channel_rows.append(row)
+            grid.addWidget(row.enabled_cb, grid_row, 0)
+            for col, sp in enumerate(
+                (row.max_spin, row.dev_spin, row.white_spin, row.t50_spin), start=1
+            ):
+                grid.addWidget(sp, grid_row, col)
+            return row
+
+        # ② Standard grid (header row + C/M/Y/K) -----------------------------
+        _col_headers = [
+            ("Channel",       ""),
+            ("Max % (-x)",
+             "Maximum device value for this channel (0–100 %).\n"
+             "printcal determines this automatically from your measurements.\n"
+             "Override it only if you need to enforce a specific ink limit.\n"
+             "Example: 85 caps the darkest patch at 85 % ink."),
+            ("Dev % (-m)",
+             "Initial target as a percentage of the automatic maximum (0–100 %).\n"
+             "Lets you back off from the auto ink limit without specifying an\n"
+             "absolute value. Example: 90 means 'target 90 % of the auto max'."),
+            ("White ΔE (-n)",
+             "Minimum deltaE the white point must deviate before a correction\n"
+             "is applied to the lightest end of this channel.\n"
+             "Lower values (e.g. 1.0) correct even small white-point shifts;\n"
+             "higher values leave the white end untouched."),
+            ("50% (-t)",
+             "Target device percentage for the 50 % tone step (0–100 %).\n"
+             "For a perfectly linear printer this would be 50.\n"
+             "Adjust it to shift the mid-tone balance of the calibration curve\n"
+             "if your printer's 50 % response is consistently too dark or too light."),
+        ]
+
+        std_widget = QWidget(w)
+        std_grid = QGridLayout(std_widget)
+        std_grid.setContentsMargins(0, 0, 0, 0)
+        std_grid.setHorizontalSpacing(4)
+        std_grid.setVerticalSpacing(4)
+        _set_col_stretch(std_grid)
+
+        for col, (text, tip) in enumerate(_col_headers):
+            lbl = QLabel(text, std_widget)
+            lbl.setStyleSheet("color: #707070; font-size: 10px;")
+            lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            if tip:
+                lbl.setToolTip(tip)
+            std_grid.addWidget(lbl, 0, col)
+
+        self._pc_channel_rows: list[TabProfile._ChannelRow] = []
+        for row_idx, (label, ch) in enumerate([("C", 0), ("M", 1), ("Y", 2), ("K", 3)], start=1):
+            _make_row(label, ch, std_grid, std_widget, row_idx)
+
+        outer.addWidget(std_widget)
+
+        # ③ Extended-disclosure row -------------------------------------------
+        ext_disc_row = QHBoxLayout()
+        self._pc_extended_cb = QCheckBox("Extended inkset channels (Ch4–Ch7)", w)
+        self._pc_extended_cb.setStyleSheet("color: #909090; font-size: 11px;")
+        ext_disc_row.addWidget(self._pc_extended_cb)
+        ext_disc_row.addStretch()
+        ext_disc_row.addWidget(TooltipButton(
+            "Extended Inkset Channels",
+            "Show per-channel controls for printers with more than 4 ink channels\n"
+            "(e.g. light cyan, light magenta, or other specialty inks).\n"
+            "Channels are numbered from 0; Ch4–Ch7 cover the fifth ink and beyond.",
+            w,
+        ))
+        outer.addLayout(ext_disc_row)
+
+        # ④ Extended grid (Ch4–Ch7), hidden by default -----------------------
+        self._pc_ext_grid_widget = QWidget(w)
+        ext_grid = QGridLayout(self._pc_ext_grid_widget)
+        ext_grid.setContentsMargins(0, 0, 0, 0)
+        ext_grid.setHorizontalSpacing(4)
+        ext_grid.setVerticalSpacing(4)
+        _set_col_stretch(ext_grid)
+
+        for row_idx, (label, ch) in enumerate([("Ch4", 4), ("Ch5", 5), ("Ch6", 6), ("Ch7", 7)]):
+            _make_row(label, ch, ext_grid, self._pc_ext_grid_widget, row_idx)
+
+        self._pc_ext_grid_widget.setVisible(False)
+        outer.addWidget(self._pc_ext_grid_widget)
+
+        self._pc_extended_cb.toggled.connect(self._pc_ext_grid_widget.setVisible)
+
+        # Keep the old attribute name so restore/save code still works
+        self._pc_extended_widgets: list[QWidget] = []  # unused sentinel — toggled via widget
+
+        return w
+
+    def _build_pc_metadata_group(self, layout: QVBoxLayout, parent: QWidget) -> None:
+        grp = QGroupBox("Calibration Metadata", parent)
+        g = QVBoxLayout(grp)
+
+        desc_row = QHBoxLayout()
+        desc_row.addWidget(QLabel("Description (-D):", grp))
+        self._pc_desc_edit = QLineEdit(grp)
+        self._pc_desc_edit.setPlaceholderText("e.g. EpsonP900_Cal_2026-04")
+        desc_row.addWidget(self._pc_desc_edit, stretch=1)
+        desc_row.addWidget(TooltipButton(
+            "Description (-D)",
+            "Optional description string embedded in the .cal file header.",
+            grp,
+        ))
+        g.addLayout(desc_row)
+
+        for attr, flag, label, placeholder, tip in [
+            ("_pc_mfr",   "A", "Manufacturer", "e.g. Epson",    "Manufacturer string embedded in the .cal file header."),
+            ("_pc_model", "M", "Model",        "e.g. SC-P900",  "Model string embedded in the .cal file header."),
+            ("_pc_copy",  "C", "Copyright",    "e.g. © 2026 …", "Copyright string embedded in the .cal file header."),
+        ]:
+            check = QCheckBox(f"{label} (-{flag}):", grp)
+            edit  = QLineEdit(grp)
+            edit.setPlaceholderText(placeholder)
+            edit.setEnabled(False)
+            check.toggled.connect(edit.setEnabled)
+            row = QHBoxLayout()
+            row.addWidget(check)
+            row.addWidget(edit, stretch=1)
+            row.addWidget(TooltipButton(f"-{flag}", tip, grp))
+            g.addLayout(row)
+            setattr(self, attr + "_check", check)
+            setattr(self, attr + "_edit",  edit)
+
+        layout.addWidget(grp)
+
+    def _pc_update_mode_vis(self) -> None:
         mode = self._pc_mode_combo.currentData()
         self._pc_prev_widget.setVisible(mode in ("recalibrate", "verify"))
+        # Target overrides only apply to initial / imitation modes
+        self._pc_targets_widget.setVisible(mode in ("initial", "imitation"))
 
     def _pc_browse_ti3(self) -> None:
         p = open_file_dialog(self, "Load calibration measurement", "TI3 files (*.ti3)",
@@ -509,6 +823,9 @@ class TabProfile(QWidget):
             self._pc_ti3_lbl.setText(p)
             self._pc_ti3_lbl.setStyleSheet("color: #e6e6e6; font-size: 11px;")
             self._pc_run_btn.setEnabled(True)
+            if not self._pc_desc_edit.text():
+                stem = Path(p).stem
+                self._pc_desc_edit.setText(stem[4:] if stem.startswith("cal_") else stem)
 
     def _pc_browse_prev(self) -> None:
         p = open_file_dialog(self, "Load previous .cal file", "CAL files (*.cal)",
@@ -518,9 +835,12 @@ class TabProfile(QWidget):
 
     def _on_pc_save_defaults(self) -> None:
         s = self._settings
-        s.set("printcal_smoothing",  self._pc_smooth_spin.value())
-        s.set("printcal_verbosity",  self._pc_verb_spin.value())
-        s.set("printcal_mode",       self._pc_mode_combo.currentData() or "initial")
+        s.set("printcal_smoothing",        self._pc_smooth_spin.value())
+        s.set("printcal_verbosity",        self._pc_verb_spin.value())
+        s.set("printcal_mode",             self._pc_mode_combo.currentData() or "initial")
+        s.set("printcal_dry_run",          self._pc_dry_run_cb.isChecked())
+        targets = [{"ch": row.ch, **row.save()} for row in self._pc_channel_rows]
+        s.set("printcal_channel_targets",  json.dumps(targets))
 
     def _on_printcal_run(self) -> None:
         if self._runner.is_running:
@@ -531,13 +851,27 @@ class TabProfile(QWidget):
 
         self._pc_log.clear()
         self._pc_run_btn.setEnabled(False)
+        self._pc_progress.set_label("Creating calibration…", "printcal")
+        self._pc_progress.set_value(None)
+        self._pc_progress.start()
+
+        channel_targets = [
+            ct for row in self._pc_channel_rows
+            if (ct := row.channel_target()) is not None
+        ]
 
         params = PrintcalParams(
-            ti3_path  = self._cal_ti3_path,
-            mode      = self._pc_mode_combo.currentData() or "initial",
-            prev_cal  = self._pc_prev_edit.text().strip(),
-            verbosity = self._pc_verb_spin.value(),
-            smoothing = self._pc_smooth_spin.value(),
+            ti3_path        = self._cal_ti3_path,
+            mode            = self._pc_mode_combo.currentData() or "initial",
+            prev_cal        = self._pc_prev_edit.text().strip(),
+            verbosity       = self._pc_verb_spin.value(),
+            smoothing       = self._pc_smooth_spin.value(),
+            dry_run         = self._pc_dry_run_cb.isChecked(),
+            channel_targets = channel_targets,
+            description     = self._pc_desc_edit.text().strip(),
+            manufacturer    = self._pc_mfr_edit.text().strip() if self._pc_mfr_check.isChecked() else "",
+            model           = self._pc_model_edit.text().strip() if self._pc_model_check.isChecked() else "",
+            copyright       = self._pc_copy_edit.text().strip() if self._pc_copy_check.isChecked() else "",
         )
 
         def _on_line(line: str) -> None:
@@ -545,14 +879,18 @@ class TabProfile(QWidget):
             self._pc_log.ensureCursorVisible()
 
         def _on_finish(cal_path: Path | None) -> None:
+            self._pc_progress.stop()
+            self._pc_progress.set_label("Create Calibration File", "")
+            self._pc_progress.set_value(0)
             self._pc_run_btn.setEnabled(True)
             if cal_path is None:
                 self._pc_log.appendPlainText("\n[ERROR] printcal failed — see output above.")
+                self._pc_log.ensureCursorVisible()
             else:
                 self._pc_log.appendPlainText(f"\n[OK] Calibration file created: {cal_path}")
                 self._pc_log.ensureCursorVisible()
                 self._ac_cal_edit.setText(str(cal_path))
-                self.cal_file_created.emit(cal_path)
+                self._show_printcal_result_dialog(cal_path)
 
         self._printcal_runner.run(params, on_line=_on_line, on_finish=_on_finish)
 
@@ -649,6 +987,12 @@ class TabProfile(QWidget):
         btn_row.addWidget(self._ac_save_defaults_btn)
         cc.addLayout(btn_row)
 
+        # ---- Progress bar (outside groupbox) ----
+        self._ac_progress = SpectrumSegmentsBar(container)
+        self._ac_progress.set_label("Apply Calibration", "")
+        self._ac_progress.set_value(0)
+        cc.addWidget(self._ac_progress)
+
         # ---- Log (outside groupbox) ----
         self._ac_log = QPlainTextEdit(container)
         self._ac_log.setObjectName("log")
@@ -717,18 +1061,27 @@ class TabProfile(QWidget):
         self._ac_log.clear()
         self._ac_run_btn.setEnabled(False)
         mode = self._ac_mode_combo.currentData() or "apply"
+        self._ac_progress.set_label("Applying calibration…", "applycal")
+        self._ac_progress.set_value(None)
+        self._ac_progress.start()
 
         def _on_line(line: str) -> None:
             self._ac_log.appendPlainText(line)
             self._ac_log.ensureCursorVisible()
 
         def _on_finish(result: Path | None) -> None:
+            self._ac_progress.stop()
+            self._ac_progress.set_label("Apply Calibration", "")
+            self._ac_progress.set_value(0)
             self._ac_run_btn.setEnabled(True)
             if result is None:
                 self._ac_log.appendPlainText("\n[ERROR] applycal failed — see output above.")
+                self._ac_log.ensureCursorVisible()
             else:
                 self._ac_log.appendPlainText(f"\n[OK] Done. Output: {result}")
-            self._ac_log.ensureCursorVisible()
+                self._ac_log.ensureCursorVisible()
+                if mode == "apply":
+                    self._show_applycal_result_dialog(result)
 
         self._applycal_runner.run(
             cal_path=Path(cal),
@@ -739,6 +1092,147 @@ class TabProfile(QWidget):
             on_line=_on_line,
             on_finish=_on_finish,
         )
+
+    def _show_applycal_result_dialog(self, icc_path: Path) -> None:
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Calibration Applied")
+        dlg.setMinimumWidth(520)
+
+        layout = QVBoxLayout(dlg)
+        layout.setContentsMargins(24, 20, 24, 20)
+        layout.setSpacing(14)
+
+        headline = QLabel("<b>Calibration applied successfully.</b>", dlg)
+        headline.setStyleSheet("font-size: 14px;")
+        layout.addWidget(headline)
+
+        path_lbl = QLabel(
+            f"Saved to:<br><code style='font-size:11px'>{icc_path}</code>",
+            dlg,
+        )
+        path_lbl.setWordWrap(True)
+        layout.addWidget(path_lbl)
+
+        next_lbl = QLabel("What would you like to do next?", dlg)
+        layout.addWidget(next_lbl)
+
+        install_desc = QLabel(
+            "<b>Install on this Mac</b> — adds the calibrated profile to your Mac's "
+            "colour management system so it is immediately available in Photoshop, "
+            "Lightroom, and other colour-managed apps.",
+            dlg,
+        )
+        install_desc.setWordWrap(True)
+        install_desc.setStyleSheet("color: #b0b0b0; font-size: 11px;")
+        layout.addWidget(install_desc)
+
+        btn_box = QDialogButtonBox(dlg)
+        install_btn = btn_box.addButton("Install on this Mac", QDialogButtonBox.ButtonRole.ActionRole)
+        done_btn    = btn_box.addButton("Done",                QDialogButtonBox.ButtonRole.AcceptRole)
+        install_btn.setObjectName("primary")
+        layout.addWidget(btn_box)
+
+        def _on_install() -> None:
+            dlg.accept()
+            try:
+                self._builder.install_profile(icc_path)
+                self._ac_log.appendPlainText("[OK] Profile installed to ~/Library/ColorSync/Profiles/")
+            except Exception as exc:
+                self._ac_log.appendPlainText(f"[ERROR] Install failed: {exc}")
+            self._ac_log.ensureCursorVisible()
+
+        install_btn.clicked.connect(_on_install)
+        done_btn.clicked.connect(dlg.accept)
+
+        tint_dialog_primary(dlg, _TAB_COLOR)
+        dlg.exec()
+
+    def _show_printcal_result_dialog(self, cal_path: Path) -> None:
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Calibration File Created")
+        dlg.setMinimumWidth(560)
+
+        layout = QVBoxLayout(dlg)
+        layout.setContentsMargins(24, 20, 24, 20)
+        layout.setSpacing(14)
+
+        headline = QLabel("<b>Your calibration file is ready.</b>", dlg)
+        headline.setStyleSheet("font-size: 14px;")
+        layout.addWidget(headline)
+
+        path_lbl = QLabel(
+            f"Saved to:<br><code style='font-size:11px'>{cal_path}</code>",
+            dlg,
+        )
+        path_lbl.setWordWrap(True)
+        layout.addWidget(path_lbl)
+
+        next_lbl = QLabel(
+            "Next step: go to the <b>Create Chart</b> tab, make sure "
+            "<i>Create target for calibration</i> is unchecked, and generate a "
+            "profiling chart. The .cal path has been pre-filled in both the "
+            "<b>-K</b> and <b>-I</b> fields — use whichever applies to your workflow:",
+            dlg,
+        )
+        next_lbl.setWordWrap(True)
+        layout.addWidget(next_lbl)
+
+        k_lbl = QLabel(
+            "<b>-K &nbsp; Apply calibration to patches</b><br>"
+            "<span style='color:#b0b0b0; font-size:11px'>"
+            "printtarg remaps every patch value through the .cal curves before printing. "
+            "Use this when your printer has no built-in linearisation — the chart will "
+            "already reflect calibrated device behaviour. Recommended for most desktop "
+            "inkjet printers driven directly from a TIFF."
+            "</span>",
+            dlg,
+        )
+        k_lbl.setWordWrap(True)
+        k_lbl.setTextFormat(Qt.TextFormat.RichText)
+        layout.addWidget(k_lbl)
+
+        i_lbl = QLabel(
+            "<b>-I &nbsp; Embed calibration without applying</b><br>"
+            "<span style='color:#b0b0b0; font-size:11px'>"
+            "The .cal is embedded in the .ti2 as metadata only; patch values are left "
+            "untouched. Use this when your printer or RIP already applies linearisation "
+            "natively (e.g. EFI Fiery, Wasatch, or any RIP with its own LUT). "
+            "colprof will reference the .cal when building the profile."
+            "</span>",
+            dlg,
+        )
+        i_lbl.setWordWrap(True)
+        i_lbl.setTextFormat(Qt.TextFormat.RichText)
+        layout.addWidget(i_lbl)
+
+        note_lbl = QLabel(
+            "<span style='color:#606060; font-size:11px'>"
+            "-K and -I are mutually exclusive — enable only one at a time."
+            "</span>",
+            dlg,
+        )
+        note_lbl.setTextFormat(Qt.TextFormat.RichText)
+        layout.addWidget(note_lbl)
+
+        btn_box = QDialogButtonBox(dlg)
+        chart_btn = btn_box.addButton("Go to Create Chart →", QDialogButtonBox.ButtonRole.ActionRole)
+        done_btn  = btn_box.addButton("Done",                  QDialogButtonBox.ButtonRole.AcceptRole)
+        chart_btn.setObjectName("primary")
+        layout.addWidget(btn_box)
+
+        def _on_chart() -> None:
+            dlg.accept()
+            self.cal_chart_requested.emit(cal_path)
+
+        def _on_done() -> None:
+            dlg.accept()
+            self.cal_file_created.emit(cal_path)
+
+        chart_btn.clicked.connect(_on_chart)
+        done_btn.clicked.connect(_on_done)
+
+        tint_dialog_primary(dlg, _TAB_COLOR)
+        dlg.exec()
 
     # ------------------------------------------------------------------
     # Guided panel
@@ -1990,9 +2484,11 @@ class TabProfile(QWidget):
         self._show_build_result_dialog(self._icc_path, issues)
 
     def _show_build_result_dialog(self, icc_path: Path, issues: list[str]) -> None:
+        cal_mode = bool(self._settings.get("calibration_mode", False))
+
         dlg = QDialog(self)
         dlg.setWindowTitle("Profile Built")
-        dlg.setMinimumWidth(520)
+        dlg.setMinimumWidth(620 if cal_mode else 560)
 
         layout = QVBoxLayout(dlg)
         layout.setContentsMargins(24, 20, 24, 20)
@@ -2045,9 +2541,26 @@ class TabProfile(QWidget):
         check_desc.setStyleSheet("color: #b0b0b0; font-size: 11px;")
         layout.addWidget(check_desc)
 
+        if cal_mode:
+            apply_desc = QLabel(
+                "<b>Apply Calibration</b> — bakes your calibration curves (.cal file) "
+                "directly into the ICC profile. This means every colour-managed app will "
+                "automatically apply the calibration without any extra steps. Use this "
+                "after you have created a calibration file in the "
+                "<i>Create Calibration File</i> module. The profile path is already "
+                "pre-filled — just select your .cal file and run.",
+                dlg,
+            )
+            apply_desc.setWordWrap(True)
+            apply_desc.setStyleSheet("color: #b0b0b0; font-size: 11px;")
+            layout.addWidget(apply_desc)
+
         btn_box = QDialogButtonBox(dlg)
-        install_btn = btn_box.addButton("Install on this Mac",    QDialogButtonBox.ButtonRole.ActionRole)
+        install_btn = btn_box.addButton("Install on this Mac",     QDialogButtonBox.ButtonRole.ActionRole)
         check_btn   = btn_box.addButton("Check Profile Quality →", QDialogButtonBox.ButtonRole.ActionRole)
+        if cal_mode:
+            apply_btn = btn_box.addButton("Apply Calibration →",   QDialogButtonBox.ButtonRole.ActionRole)
+            apply_btn.setObjectName("primary")
         done_btn    = btn_box.addButton("Done",                    QDialogButtonBox.ButtonRole.AcceptRole)
         install_btn.setObjectName("primary")
         check_btn.setObjectName("primary")
@@ -2061,8 +2574,16 @@ class TabProfile(QWidget):
             dlg.accept()
             self.check_requested.emit()
 
+        def _on_apply_cal() -> None:
+            dlg.accept()
+            if icc_path and not self._ac_in_edit.text().strip():
+                self._ac_in_edit.setText(str(icc_path))
+            self._switch_cal_mode(2)
+
         install_btn.clicked.connect(_on_install)
         check_btn.clicked.connect(_on_check)
+        if cal_mode:
+            apply_btn.clicked.connect(_on_apply_cal)
         done_btn.clicked.connect(dlg.accept)
 
         tint_dialog_primary(dlg, _TAB_COLOR)

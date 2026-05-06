@@ -587,8 +587,10 @@ class TabChart(QWidget):
         cal_str = str(cal_path)
         if self._manual_cal_k_pw is not None:
             self._manual_cal_k_pw.set_value(cal_str)
+            self._manual_cal_k_pw.set_user_enabled(False)
         if self._manual_cal_i_pw is not None:
             self._manual_cal_i_pw.set_value(cal_str)
+            self._manual_cal_i_pw.set_user_enabled(False)
         self._cal_target_check.setChecked(False)
 
     def _check_for_cal_file(self, name: str) -> None:
@@ -602,8 +604,10 @@ class TabChart(QWidget):
             cal_str = str(cal_file)
             if self._manual_cal_k_pw is not None:
                 self._manual_cal_k_pw.set_value(cal_str)
+                self._manual_cal_k_pw.set_user_enabled(False)
             if self._manual_cal_i_pw is not None:
                 self._manual_cal_i_pw.set_value(cal_str)
+                self._manual_cal_i_pw.set_user_enabled(False)
             self._cal_status_lbl.setText(
                 f"Calibration file found: {cal_file.name} — auto-filled into -I and -K fields below."
             )

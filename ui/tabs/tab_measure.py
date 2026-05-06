@@ -1821,13 +1821,20 @@ class TabMeasure(QWidget):
 
         from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QVBoxLayout
 
+        _ti3_path = self._ti1_path.with_suffix(".ti3") if self._ti1_path else None
+        is_cal = (
+            _ti3_path is not None
+            and _ti3_path.stem.startswith("cal_")
+            and bool(self._settings.get("calibration_mode", False))
+        )
+
         # Suspend the event filter while the dialog is open so that keyboard
         # interactions with the dialog (Enter, Space, Esc) are not forwarded
         # to chartread as spurious keystrokes.
         QApplication.instance().removeEventFilter(self)
 
         dlg = QDialog(self)
-        dlg.setMinimumWidth(520)
+        dlg.setMinimumWidth(560)
 
         layout = QVBoxLayout(dlg)
         layout.setSpacing(16)
@@ -1850,6 +1857,22 @@ class TabMeasure(QWidget):
                 "The automatic strip navigation is switched off for the rest of this session.",
                 dlg,
             )
+        elif is_cal:
+            dlg.setWindowTitle("Calibration Measurement Complete")
+            msg = QLabel(
+                "<b>All stripes of your calibration target have been read successfully.</b><br><br>"
+                "The measurement data has been saved. The next step is to turn it into a "
+                "<b>calibration file (.cal)</b> — click <b>Create Calibration File</b> to go "
+                "directly to the <b>4. Calibration &amp; Profiling</b> tab, where the file "
+                "path is already filled in and ready to go.<br><br>"
+                "If you would like to re-read any stripe first, click <b>Re-read Stripes</b>. "
+                "Use <b>f</b>&nbsp;/&nbsp;<b>b</b> to move forward and back between stripes, "
+                "<b>n</b> to jump to the next unread stripe, and press <b>d</b> when you "
+                "are done.<br><br>"
+                "<span style='color:#909090;'>These instructions are always visible in "
+                "the output log below.</span>",
+                dlg,
+            )
         else:
             dlg.setWindowTitle("All Stripes Read")
             msg = QLabel(
@@ -1869,7 +1892,11 @@ class TabMeasure(QWidget):
         layout.addWidget(msg)
 
         btn_box = QDialogButtonBox()
-        build_btn = btn_box.addButton("Build Profile →", QDialogButtonBox.ButtonRole.AcceptRole)
+        if is_cal and not self._guided_refinement_active:
+            accept_label = "Create Calibration File →"
+        else:
+            accept_label = "Build Profile →"
+        build_btn = btn_box.addButton(accept_label, QDialogButtonBox.ButtonRole.AcceptRole)
         build_btn.setObjectName("primary")
         cont_label = "Continue Measuring Manually" if self._guided_refinement_active else "Re-read Stripes"
         btn_box.addButton(cont_label, QDialogButtonBox.ButtonRole.RejectRole)
@@ -1982,13 +2009,22 @@ class TabMeasure(QWidget):
         failed = self._measure_failed or (code != 0 and not ti3_exists)
         self._measure_failed = False
 
+        is_cal = (
+            ti3 is not None
+            and ti3.stem.startswith("cal_")
+            and bool(self._settings.get("calibration_mode", False))
+        )
         if failed:
             self._log.appendPlainText("\n[ERROR] Measurement failed — see output above.")
         else:
+            if is_cal:
+                next_step = "→ Next step: go to the '4. Calibration & Profiling' tab to create your calibration file."
+            else:
+                next_step = "→ Next step: go to the '4. Build Profile' tab to create your ICC profile."
             self._log.appendPlainText(
                 "\n[OK] Measurement complete.\n"
                 f"Saved: {ti3}\n\n"
-                "→ Next step: go to the '4. Build Profile' tab to create your ICC profile."
+                + next_step
             )
             if ti3_exists:
                 self.measure_finished.emit(ti3)
