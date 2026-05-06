@@ -5,6 +5,7 @@ from pathlib import Path
 
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import (
+    QApplication,
     QFrame,
     QMainWindow,
     QTabWidget,
@@ -39,8 +40,11 @@ class MainWindow(QMainWindow):
         self._file_mgr  = FileManager(settings)
 
         self.setWindowTitle("ChromIQ — Printer Profiling")
-        self.setMinimumSize(1440, 1025)
-        self.resize(1440, 1025)
+        self.setMinimumSize(900, 650)
+        screen = QApplication.primaryScreen().availableGeometry()
+        w = min(1440, screen.width())
+        h = min(1025, screen.height())
+        self.resize(w, h)
 
         # Central widget
         central = QWidget(self)
@@ -112,6 +116,13 @@ class MainWindow(QMainWindow):
         if geom:
             try:
                 self.restoreGeometry(geom)
+                available = QApplication.primaryScreen().availableGeometry()
+                fg = self.frameGeometry()
+                if fg.right() > available.right():
+                    fg.moveRight(available.right())
+                if fg.bottom() > available.bottom():
+                    fg.moveBottom(available.bottom())
+                self.move(fg.topLeft())
             except Exception:
                 pass
 

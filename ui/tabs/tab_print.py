@@ -18,6 +18,7 @@ from PyQt6.QtWidgets import (
     QLabel,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QSplitter,
     QStyle,
     QVBoxLayout,
@@ -82,7 +83,7 @@ class TabPrint(QWidget):
             "STEP 02 · PRINT TARGET", "Print test chart", "#ffb42d", left
         ))
 
-        # Printer selection
+        # Printer selection (pinned above scroll area)
         printer_grp = QGroupBox("Printer", left)
         pg = QVBoxLayout(printer_grp)
 
@@ -113,14 +114,24 @@ class TabPrint(QWidget):
         pg.addLayout(pr_row)
         ll.addWidget(printer_grp)
 
+        # Scrollable content area (options + warning)
+        scroll = QScrollArea(left)
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll_content = QWidget()
+        scl = QVBoxLayout(scroll_content)
+        scl.setContentsMargins(0, 0, 0, 0)
+        scl.setSpacing(10)
+
         # Print options — dynamically built from CUPS lpoptions output
-        self._opts_grp = QGroupBox("Print Options", left)
+        self._opts_grp = QGroupBox("Print Options", scroll_content)
         self._opts_layout = QVBoxLayout(self._opts_grp)
         self._option_combos: dict[str, QComboBox] = {}
         self._opts_layout.addWidget(
-            QLabel("Select a printer to see its options.", left)
+            QLabel("Select a printer to see its options.", scroll_content)
         )
-        ll.addWidget(self._opts_grp)
+        scl.addWidget(self._opts_grp)
 
         self._printer_combo.currentIndexChanged.connect(self._on_printer_changed)
 
@@ -134,13 +145,15 @@ class TabPrint(QWidget):
             "PostScript and sends it via lp, bypassing ColorSync entirely. If CUPS rejects "
             "PostScript (e.g. AirPrint or Driverless drivers), it automatically retries "
             "by sending the TIFF directly with colour-space-aware raster options.",
-            left,
+            scroll_content,
         )
         warn.setObjectName("warning")
         warn.setWordWrap(True)
-        ll.addWidget(warn)
+        scl.addWidget(warn)
 
-        ll.addStretch()
+        scl.addStretch()
+        scroll.setWidget(scroll_content)
+        ll.addWidget(scroll, stretch=1)
 
         # Feed the beast block
         beast_box = QGroupBox(left)
@@ -213,9 +226,10 @@ class TabPrint(QWidget):
         btn_row.addWidget(self._save_defaults_btn)
         ll.addLayout(btn_row)
 
-        # Status
+        # Status — hidden when empty so it doesn't add gap below buttons
         self._status_lbl = QLabel("", left)
         self._status_lbl.setWordWrap(True)
+        self._status_lbl.setVisible(False)
         ll.addWidget(self._status_lbl)
 
         # Status bar (replaces main-window status bar)
@@ -455,7 +469,7 @@ class TabPrint(QWidget):
         if tiffs:
             self.load_tiffs(tiffs)
         else:
-            self._status_lbl.setText("No TIFF files found matching the selected .ti2 file.")
+            self._set_status("No TIFF files found matching the selected .ti2 file.")
 
     def _on_print_current(self) -> None:
         if not self._preview._pages:
@@ -530,7 +544,7 @@ class TabPrint(QWidget):
 
         selected_opts = {k: (c.currentData() or "") for k, c in self._option_combos.items()}
         config = self._module.build_config(printer=printer, options=selected_opts)
-        self._status_lbl.setText(f"Sending {tiff_path.name} (page {frame + 1}) to {printer}…")
+        self._set_status(f"Sending {tiff_path.name} (page {frame + 1}) to {printer}…")
 
         def _cleanup_and_finish(code: int) -> None:
             if tmp_path and tmp_path.exists():
@@ -546,9 +560,9 @@ class TabPrint(QWidget):
 
     def _on_print_done(self, code: int) -> None:
         if code == 0:
-            self._status_lbl.setText("Print job submitted successfully.")
+            self._set_status("Print job submitted successfully.")
         else:
-            self._status_lbl.setText(f"Print failed (lp exit code {code}).")
+            self._set_status(f"Print failed (lp exit code {code}).")
             QMessageBox.critical(
                 self, "Print Error",
                 f"CUPS rejected the print job (exit code {code}).\n"
@@ -562,11 +576,13 @@ class TabPrint(QWidget):
             return
         count = self._module.cancel_all_jobs(printer)
         if count:
-            self._status_lbl.setText(
-                f"Cleared {count} job{'s' if count != 1 else ''} from the queue."
-            )
+            self._set_status(f"Cleared {count} job{'s' if count != 1 else ''} from the queue.")
         else:
-            self._status_lbl.setText("No jobs in the queue to clear.")
+            self._set_status("No jobs in the queue to clear.")
+
+    def _set_status(self, text: str) -> None:
+        self._status_lbl.setText(text)
+        self._status_lbl.setVisible(bool(text))
 
     def _set_print_buttons_enabled(self, enabled: bool) -> None:
         self._print_page_btn.setEnabled(enabled)
@@ -582,7 +598,7 @@ class TabPrint(QWidget):
                 for k, combo in self._option_combos.items()
             )
             s.set(f"print_opts_{printer}", pairs)
-        self._status_lbl.setText("Print settings saved as defaults.")
+        self._set_status("Print settings saved as defaults.")
 
     def _restore_defaults(self) -> None:
         pass
