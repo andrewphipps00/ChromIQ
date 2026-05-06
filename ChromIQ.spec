@@ -94,8 +94,8 @@ app = BUNDLE(
     info_plist={
         'CFBundleName':              'ChromIQ',
         'CFBundleDisplayName':       'ChromIQ',
-        'CFBundleShortVersionString': '2.9.1',
-        'CFBundleVersion':           '2.9.1',
+        'CFBundleShortVersionString': '2.9.2',
+        'CFBundleVersion':           '2.9.2',
         'NSHighResolutionCapable':   True,
         'NSPrincipalClass':          'NSApplication',
         'NSRequiresAquaSystemAppearance': False,

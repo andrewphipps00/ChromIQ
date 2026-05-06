@@ -516,6 +516,7 @@ class TabChart(QWidget):
 
             for p in params:
                 pw = ParameterWidget(p, inner)
+                pw.make_compact()
                 flag = p.get("flag", "")
 
                 if tool == "printtarg" and flag == "-t":

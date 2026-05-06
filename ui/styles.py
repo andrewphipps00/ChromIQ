@@ -257,6 +257,12 @@ QPushButton#browse {{
     padding: 4px 8px; min-width: 32px; font-size: 14px;
 }}
 QPushButton#browse:hover {{ background: #3a3a3a; }}
+QPushButton#browse_compact {{
+    background: #2c2c2c; color: {TEXT_MAIN};
+    border: 1px solid {BORDER_HI}; border-radius: 3px;
+    padding: 1px 4px; min-width: 32px; min-height: 0; max-height: 22px; font-size: 14px;
+}}
+QPushButton#browse_compact:hover {{ background: #3a3a3a; }}
 
 /* ---- Icon-only buttons ------------------------------------------- */
 QPushButton#icon_btn {{ padding: 0; min-height: 0; min-width: 0; }}
@@ -267,7 +273,8 @@ QToolButton#tooltip_btn:hover {{
     background: rgba(255,255,255,18); border-radius: 10px;
 }}
 
-/* ---- Compact inputs (Measure tab) --------------------------------- */
+/* ---- Compact inputs (Measure tab, Create Chart parameters) -------- */
+QLineEdit#compact_input,
 QSpinBox#compact_input, QDoubleSpinBox#compact_input, QComboBox#compact_input {{
     min-height: 0; max-height: 22px; padding: 1px 6px;
 }}

@@ -166,6 +166,23 @@ class ParameterWidget(QWidget):
         if self._enable_check is not None:
             self._enable_check.setChecked(checked)
 
+    def make_compact(self) -> None:
+        """Apply compact_input styling to any spinbox, combobox, or line edit in this widget."""
+        from PyQt6.QtWidgets import QAbstractSpinBox, QComboBox, QLineEdit
+        for w in (self._control, self._custom_combo,
+                  self._custom_w_spin, self._custom_h_spin):
+            if w is not None and isinstance(w, (QAbstractSpinBox, QComboBox, QLineEdit)):
+                w.setObjectName("compact_input")
+                w.style().unpolish(w)
+                w.style().polish(w)
+        if self._browse_btn is not None:
+            self._browse_btn.setObjectName("browse_compact")
+            self._browse_btn.style().unpolish(self._browse_btn)
+            self._browse_btn.style().polish(self._browse_btn)
+            from PyQt6.QtCore import QSize
+            self._browse_btn.setIconSize(QSize(14, 14))
+            self._browse_btn.setFixedHeight(22)
+
     def build_args(self) -> list[str]:
         """Build the list of CLI tokens for this parameter."""
         if not self.is_enabled_by_user:
