@@ -501,6 +501,7 @@ class TabChart(QWidget):
         self._manual_cal_i_pw: ParameterWidget | None = None
         self._bit8_radio: QRadioButton | None = None
         self._bit16_radio: QRadioButton | None = None
+        self._pre_cal_snapshot: dict | None = None
 
         for tool, params in [
             ("targen",    self._params.get("targen", [])),
@@ -561,6 +562,7 @@ class TabChart(QWidget):
         self._preset_add_btn.clicked.connect(self._on_preset_save)
         self._preset_del_btn.clicked.connect(self._on_preset_delete)
         self._manual_target_name_edit.textChanged.connect(self._check_for_cal_file)
+        self._cal_target_check.toggled.connect(self._on_cal_target_toggled)
 
         inner_layout.addStretch()
         scroll.setWidget(inner)
@@ -611,6 +613,32 @@ class TabChart(QWidget):
             self._cal_status_lbl.setVisible(True)
         else:
             self._cal_status_lbl.setVisible(False)
+
+    def _on_cal_target_toggled(self, checked: bool) -> None:
+        _CAL_VALUES: list[tuple[str, str, Any]] = [
+            ("targen",    "-f",  0),
+            ("targen",    "-e",  0),
+            ("targen",    "-B",  0),
+            ("targen",    "-s",  20),
+            ("targen",    "-G",  False),
+            ("printtarg", "-r",  True),
+        ]
+        if checked:
+            self._pre_cal_snapshot = {}
+            for tool, flag, val in _CAL_VALUES:
+                for pw in self._manual_widgets.get(tool, []):
+                    if pw.flag == flag:
+                        self._pre_cal_snapshot[(tool, flag)] = pw.get_raw_value()
+                        pw.set_value(val)
+        else:
+            if self._pre_cal_snapshot:
+                for tool, flag, _ in _CAL_VALUES:
+                    saved = self._pre_cal_snapshot.get((tool, flag))
+                    if saved is not None:
+                        for pw in self._manual_widgets.get(tool, []):
+                            if pw.flag == flag:
+                                pw.set_value(saved)
+            self._pre_cal_snapshot = None
 
     def _make_lineedit(self, text: str, parent: QWidget) -> Any:
         from PyQt6.QtWidgets import QLineEdit
@@ -867,12 +895,6 @@ class TabChart(QWidget):
         )
         if cal_target_active:
             params.cal_target = True
-            params.patches = 0
-            params.white_patches = 0
-            params.black_patches = 0
-            params.single_channel_steps = 20
-            params.good_mode = False
-            params.no_randomise = True
             params.target_name = f"cal_{base_name}"
         else:
             params.target_name = base_name
