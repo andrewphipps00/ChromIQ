@@ -102,8 +102,10 @@ class TabChart(QWidget):
             "STEP 01 · GENERATE TARGET", "Create test chart", "#ff4573", left
         ))
 
-        # Mode switcher
-        mode_row = QHBoxLayout()
+        # Mode switcher (wrapped in a widget so it can be hidden in calibration mode)
+        self._mode_row_widget = QWidget(left)
+        mode_row = QHBoxLayout(self._mode_row_widget)
+        mode_row.setContentsMargins(0, 0, 0, 0)
         _mode_font = QFont("Menlo", 11, QFont.Weight.Medium)
         self._guided_btn = QPushButton("GUIDED", self)
         self._guided_btn.setCheckable(True)
@@ -119,7 +121,7 @@ class TabChart(QWidget):
         mode_row.addWidget(self._guided_btn)
         mode_row.addWidget(self._manual_btn)
         mode_row.addStretch()
-        left_layout.addLayout(mode_row)
+        left_layout.addWidget(self._mode_row_widget)
 
         # Stacked panel
         self._stack = QStackedWidget(self)
@@ -390,6 +392,40 @@ class TabChart(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(8)
 
+        # Calibration target option (hidden until calibration mode is enabled)
+        self._cal_target_grp = QGroupBox("Calibration Target", w)
+        cal_tgt_layout = QVBoxLayout(self._cal_target_grp)
+        cal_tgt_row = QHBoxLayout()
+        self._cal_target_check = QCheckBox("Create target for calibration", w)
+        cal_tgt_row.addWidget(self._cal_target_check)
+        cal_tgt_row.addStretch()
+        cal_tgt_row.addWidget(TooltipButton(
+            "Create Target for Calibration",
+            "Use this before running printcal to create a printer linearisation curve.\n\n"
+            "When enabled:\n"
+            "  • Output files are prefixed with 'cal_' (e.g. cal_MyChart.ti1)\n"
+            "  • Patch count is set to 0 (auto), white and black patches set to 0\n"
+            "  • Single channel steps set to 20, randomisation disabled\n"
+            "  • Good distribution (-G) is disabled\n\n"
+            "Generate the chart, print it, and measure it. The resulting cal_*.ti3\n"
+            "file is automatically routed to the Create Calibration File module\n"
+            "in the Calibration & Profiling tab.\n\n"
+            "Existing cal_* files in your working folder are preserved when this\n"
+            "option is OFF, so your .cal file survives the next chart generation.",
+            w,
+            min_width=560,
+        ))
+        cal_tgt_layout.addLayout(cal_tgt_row)
+
+        self._cal_status_lbl = QLabel("", w)
+        self._cal_status_lbl.setWordWrap(True)
+        self._cal_status_lbl.setStyleSheet("color: #56d6a5; font-size: 11px;")
+        self._cal_status_lbl.setVisible(False)
+        cal_tgt_layout.addWidget(self._cal_status_lbl)
+
+        self._cal_target_grp.setVisible(False)
+        layout.addWidget(self._cal_target_grp)
+
         # Output (target name)
         output_grp = QGroupBox("Output", w)
         output_layout = QVBoxLayout(output_grp)
@@ -523,6 +559,7 @@ class TabChart(QWidget):
         self._preset_combo.currentIndexChanged.connect(self._on_preset_selected)
         self._preset_add_btn.clicked.connect(self._on_preset_save)
         self._preset_del_btn.clicked.connect(self._on_preset_delete)
+        self._manual_target_name_edit.textChanged.connect(self._check_for_cal_file)
 
         inner_layout.addStretch()
         scroll.setWidget(inner)
@@ -532,6 +569,47 @@ class TabChart(QWidget):
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
+
+    def set_calibration_mode(self, enabled: bool) -> None:
+        """Show/hide calibration-specific UI and lock to manual mode when enabled."""
+        self._mode_row_widget.setVisible(not enabled)
+        self._cal_target_grp.setVisible(enabled)
+        if enabled:
+            self._switch_mode("manual")
+            if not self._cal_target_check.isChecked():
+                self._check_for_cal_file(self._manual_target_name_edit.text())
+        else:
+            self._cal_target_check.setChecked(False)
+
+    def set_cal_file_paths(self, cal_path: "Path") -> None:
+        """Pre-fill the -I and -K parameter widgets with the given .cal path."""
+        from pathlib import Path
+        cal_str = str(cal_path)
+        if self._manual_cal_k_pw is not None:
+            self._manual_cal_k_pw.set_value(cal_str)
+        if self._manual_cal_i_pw is not None:
+            self._manual_cal_i_pw.set_value(cal_str)
+        self._cal_target_check.setChecked(False)
+
+    def _check_for_cal_file(self, name: str) -> None:
+        """Live check: if cal_<name>.cal exists in working folder, prefill -I and -K."""
+        name = name.strip()
+        if not name:
+            self._cal_status_lbl.setVisible(False)
+            return
+        cal_file = self._file_mgr.working_dir() / f"cal_{name}.cal"
+        if cal_file.exists():
+            cal_str = str(cal_file)
+            if self._manual_cal_k_pw is not None:
+                self._manual_cal_k_pw.set_value(cal_str)
+            if self._manual_cal_i_pw is not None:
+                self._manual_cal_i_pw.set_value(cal_str)
+            self._cal_status_lbl.setText(
+                f"Calibration file found: {cal_file.name} — auto-filled into -I and -K fields below."
+            )
+            self._cal_status_lbl.setVisible(True)
+        else:
+            self._cal_status_lbl.setVisible(False)
 
     def _make_lineedit(self, text: str, parent: QWidget) -> Any:
         from PyQt6.QtWidgets import QLineEdit
@@ -778,7 +856,26 @@ class TabChart(QWidget):
         )
         if name:
             self._file_mgr.set_target_name(name)
-        params.target_name = self._file_mgr.get_target_name()
+        base_name = self._file_mgr.get_target_name()
+
+        # Apply calibration target overrides (working folder stays as base_name)
+        cal_target_active = (
+            hasattr(self, "_cal_target_check")
+            and self._cal_target_check.isChecked()
+            and self._cal_target_grp.isVisible()
+        )
+        if cal_target_active:
+            params.cal_target = True
+            params.patches = 0
+            params.white_patches = 0
+            params.black_patches = 0
+            params.single_channel_steps = 20
+            params.good_mode = False
+            params.no_randomise = True
+            params.target_name = f"cal_{base_name}"
+        else:
+            params.target_name = base_name
+
         self._last_target_name = params.target_name
 
         self._log.clear()

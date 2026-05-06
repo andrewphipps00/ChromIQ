@@ -31,8 +31,10 @@ from core.logger import get_logger
 from core.resource_path import resource_path
 from ui.tab_header import TabHeader
 from ui.tooltip_button import TooltipButton
-from ui.widgets import NoScrollComboBox, NoScrollDoubleSpinBox, load_folder_icon, make_browse_button, open_file_dialog, tint_dialog_primary
+from ui.widgets import NoScrollComboBox, NoScrollDoubleSpinBox, NoScrollSpinBox, load_folder_icon, make_browse_button, open_file_dialog, tint_dialog_primary
 from workflow.profile_builder import ProfileBuilder, ProfileParams
+from workflow.printcal_runner import PrintcalRunner, PrintcalParams
+from workflow.applycal_runner import ApplycalRunner
 
 if TYPE_CHECKING:
     from core.argyll_runner import ArgyllRunner
@@ -78,6 +80,7 @@ class TabProfile(QWidget):
     check_requested  = pyqtSignal()             # user clicked "Check Quality" in the result dialog
     profile_active   = pyqtSignal(bool)         # True while colprof is running, False when done
     ti2_found        = pyqtSignal(Path)         # emitted when a matching .ti2 exists next to the loaded .ti3
+    cal_file_created = pyqtSignal(Path)         # emitted when printcal produces a new .cal file
 
     def __init__(
         self,
@@ -86,11 +89,14 @@ class TabProfile(QWidget):
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
-        self._runner   = runner
-        self._settings = settings
-        self._builder  = ProfileBuilder(runner)
+        self._runner        = runner
+        self._settings      = settings
+        self._builder       = ProfileBuilder(runner)
+        self._printcal_runner = PrintcalRunner(runner, settings)
+        self._applycal_runner = ApplycalRunner(runner, settings)
         self._ti3_path: Path | None = None
         self._icc_path: Path | None = None
+        self._cal_ti3_path: Path | None = None
 
         self._build_ui()
         self._restore_defaults()
@@ -120,19 +126,46 @@ class TabProfile(QWidget):
         root.setContentsMargins(16, 12, 16, 12)
         root.setSpacing(8)
 
-        root.addWidget(TabHeader(
+        self._header = TabHeader(
             "STEP 04 · CREATE ICC PROFILE", "Build ICC profile", "#37bcd6", self
-        ))
+        )
+        root.addWidget(self._header)
 
-        # --- Mode buttons ---
         _mode_font = QFont("Menlo", 11, QFont.Weight.Medium)
-        mode_row = QHBoxLayout()
-        self._guided_btn = QPushButton("GUIDED", self)
+
+        # --- Calibration mode row: 3 named buttons (hidden in normal mode) ---
+        self._cal_mode_row_widget = QWidget(self)
+        cal_mode_row = QHBoxLayout(self._cal_mode_row_widget)
+        cal_mode_row.setContentsMargins(0, 0, 0, 0)
+        self._cal_create_btn  = QPushButton("CREATE CALIBRATION FILE", self._cal_mode_row_widget)
+        self._cal_profile_btn = QPushButton("BUILD PROFILE",           self._cal_mode_row_widget)
+        self._cal_apply_btn   = QPushButton("APPLY CALIBRATION",       self._cal_mode_row_widget)
+        for _btn in (self._cal_create_btn, self._cal_profile_btn, self._cal_apply_btn):
+            _btn.setCheckable(True)
+            _btn.setObjectName("mode_btn")
+            _btn.setFont(_mode_font)
+        self._cal_profile_btn.setChecked(True)
+        # page 0 = colprof, page 1 = printcal, page 2 = applycal
+        self._cal_create_btn.clicked.connect(lambda: self._switch_cal_mode(1))
+        self._cal_profile_btn.clicked.connect(lambda: self._switch_cal_mode(0))
+        self._cal_apply_btn.clicked.connect(lambda: self._switch_cal_mode(2))
+        cal_mode_row.addWidget(self._cal_create_btn)
+        cal_mode_row.addWidget(self._cal_profile_btn)
+        cal_mode_row.addWidget(self._cal_apply_btn)
+        cal_mode_row.addStretch()
+        self._cal_mode_row_widget.setVisible(False)
+        root.addWidget(self._cal_mode_row_widget)
+
+        # --- Normal mode row: GUIDED / MANUAL (hidden in calibration mode) ---
+        self._mode_row_widget = QWidget(self)
+        mode_row = QHBoxLayout(self._mode_row_widget)
+        mode_row.setContentsMargins(0, 0, 0, 0)
+        self._guided_btn = QPushButton("GUIDED", self._mode_row_widget)
         self._guided_btn.setCheckable(True)
         self._guided_btn.setChecked(True)
         self._guided_btn.setObjectName("mode_btn")
         self._guided_btn.setFont(_mode_font)
-        self._manual_btn = QPushButton("MANUAL", self)
+        self._manual_btn = QPushButton("MANUAL", self._mode_row_widget)
         self._manual_btn.setCheckable(True)
         self._manual_btn.setObjectName("mode_btn")
         self._manual_btn.setFont(_mode_font)
@@ -141,31 +174,37 @@ class TabProfile(QWidget):
         mode_row.addWidget(self._guided_btn)
         mode_row.addWidget(self._manual_btn)
         mode_row.addStretch()
-        root.addLayout(mode_row)
+        root.addWidget(self._mode_row_widget)
 
-        # --- File selection (outside stack) ---
-        self._file_grp = file_grp = QGroupBox("Measurement Data (.ti3)", self)
+        # --- Outer stack: page 0 = colprof, page 1 = printcal, page 2 = applycal ---
+        self._outer_stack = QStackedWidget(self)
+
+        # Page 0 — colprof container (shown in both normal and cal "Build Profile" modes)
+        colprof_container = QWidget()
+        cc = QVBoxLayout(colprof_container)
+        cc.setContentsMargins(0, 0, 0, 0)
+        cc.setSpacing(8)
+
+        self._file_grp = file_grp = QGroupBox("Measurement Data (.ti3)", colprof_container)
         fg = QHBoxLayout(file_grp)
-        self._load_btn = QPushButton("Load .ti3 file…", self)
+        self._load_btn = QPushButton("Load .ti3 file…", file_grp)
         self._load_btn.setIcon(load_folder_icon("folder_build"))
         self._load_btn.clicked.connect(self._on_load_ti3)
-        self._file_lbl = QLabel("No file selected", self)
+        self._file_lbl = QLabel("No file selected", file_grp)
         self._file_lbl.setStyleSheet("color: #909090; font-size: 11px;")
         self._file_lbl.setWordWrap(True)
         fg.addWidget(self._load_btn)
         fg.addWidget(self._file_lbl, stretch=1)
-        root.addWidget(file_grp)
+        cc.addWidget(file_grp)
 
-        # --- Stacked panels ---
-        self._stack = QStackedWidget(self)
+        self._stack = QStackedWidget(colprof_container)
         self._guided_panel = self._make_guided_panel()
         self._manual_panel = self._make_manual_panel()
         self._stack.addWidget(self._guided_panel)
         self._stack.addWidget(self._manual_panel)
-        root.addWidget(self._stack, stretch=1)
+        cc.addWidget(self._stack, stretch=1)
 
-        # Build-state block — guided mode only, sits directly above buttons
-        build_box = QGroupBox(self)
+        build_box = QGroupBox(colprof_container)
         build_box.setStyleSheet(
             "QGroupBox { margin-top: 0px; padding: 14px 8px 12px 8px;"
             " border: 1px solid #333333; border-radius: 4px; }"
@@ -203,45 +242,488 @@ class TabProfile(QWidget):
         bar_row.addStretch()
         build_layout.addLayout(bar_row)
         self._build_state_box = build_box
-        root.addWidget(build_box)
+        cc.addWidget(build_box)
 
-        # --- Buttons (outside stack) ---
         btn_row = QHBoxLayout()
-        self._build_btn = QPushButton("Build Profile", self)
+        self._build_btn = QPushButton("Build Profile", colprof_container)
         self._build_btn.setObjectName("primary")
         self._build_btn.setFixedHeight(36)
         self._build_btn.setEnabled(False)
         self._build_btn.clicked.connect(self._on_build)
-
-        self._install_btn = QPushButton("Install Profile", self)
+        self._install_btn = QPushButton("Install Profile", colprof_container)
         self._install_btn.setFixedHeight(36)
         self._install_btn.setEnabled(False)
         self._install_btn.clicked.connect(self._on_install)
-
-        self._save_defaults_btn = QPushButton("Save as Defaults", self)
+        self._save_defaults_btn = QPushButton("Save as Defaults", colprof_container)
         self._save_defaults_btn.setFixedHeight(36)
         self._save_defaults_btn.clicked.connect(self._on_save_defaults)
-
         btn_row.addWidget(self._build_btn)
         btn_row.addWidget(self._install_btn)
         btn_row.addStretch()
         btn_row.addWidget(self._save_defaults_btn)
-        root.addLayout(btn_row)
+        cc.addLayout(btn_row)
 
-        # --- Build progress bar ---
         from ui.spectrum_progress import SpectrumSegmentsBar
-        self._progress_bar = SpectrumSegmentsBar(self)
+        self._progress_bar = SpectrumSegmentsBar(colprof_container)
         self._progress_bar.set_label("Build Profile", "")
         self._progress_bar.set_value(0)
-        root.addWidget(self._progress_bar)
+        cc.addWidget(self._progress_bar)
 
-        # --- Log ---
-        self._log = QPlainTextEdit(self)
+        self._log = QPlainTextEdit(colprof_container)
         self._log.setObjectName("log")
         self._log.setReadOnly(True)
         self._log.setMaximumHeight(67)
         self._log.setPlaceholderText("colprof output will appear here…")
-        root.addWidget(self._log)
+        cc.addWidget(self._log)
+
+        self._outer_stack.addWidget(colprof_container)       # page 0
+        self._outer_stack.addWidget(self._make_printcal_section())  # page 1
+        self._outer_stack.addWidget(self._make_applycal_section())  # page 2
+
+        root.addWidget(self._outer_stack, stretch=1)
+
+    # ------------------------------------------------------------------
+    # Calibration mode
+    # ------------------------------------------------------------------
+
+    def set_calibration_mode(self, enabled: bool) -> None:
+        """Switch between normal (GUIDED/MANUAL) and calibration (3-module) mode."""
+        self._cal_mode_row_widget.setVisible(enabled)
+        self._mode_row_widget.setVisible(not enabled)
+        if enabled:
+            self._header.set_texts("STEP 04 · CALIBRATE & PROFILE", "Calibration & Profiling")
+            self._switch_mode("manual")
+            self._switch_cal_mode(0)  # default to Build Profile
+        else:
+            self._header.set_texts("STEP 04 · CREATE ICC PROFILE", "Build ICC profile")
+            self._outer_stack.setCurrentIndex(0)
+
+    def _switch_cal_mode(self, page: int) -> None:
+        """Switch the outer stack page and update the 3 calibration mode buttons.
+        page 0 = colprof (Build Profile), 1 = printcal, 2 = applycal."""
+        self._outer_stack.setCurrentIndex(page)
+        self._cal_create_btn.setChecked(page == 1)
+        self._cal_profile_btn.setChecked(page == 0)
+        self._cal_apply_btn.setChecked(page == 2)
+        if page == 2:
+            self._ac_try_autofill()
+
+    def _ac_try_autofill(self) -> None:
+        """Scan the working folder and pre-fill applycal fields if matching files exist."""
+        work_dir: Path | None = None
+        for candidate in (self._cal_ti3_path, self._ti3_path):
+            if candidate and candidate.exists():
+                work_dir = candidate.parent
+                break
+        if work_dir is None:
+            raw = self._settings.get("custom_output_path", "")
+            if raw:
+                work_dir = Path(raw)
+        if work_dir is None or not work_dir.is_dir():
+            return
+
+        folder_name = work_dir.name
+
+        if not self._ac_cal_edit.text().strip():
+            cal_candidate = work_dir / f"cal_{folder_name}.cal"
+            if cal_candidate.exists():
+                self._ac_cal_edit.setText(str(cal_candidate))
+
+        if not self._ac_in_edit.text().strip():
+            for ext in (".icc", ".icm"):
+                icc_candidate = work_dir / f"{folder_name}{ext}"
+                if icc_candidate.exists():
+                    self._ac_in_edit.setText(str(icc_candidate))
+                    break
+
+    def set_cal_ti3_path(self, ti3: Path) -> None:
+        """Receive a cal_*.ti3 from the measure tab, pre-fill printcal, and switch to it."""
+        self._cal_ti3_path = ti3
+        self._pc_ti3_lbl.setText(str(ti3))
+        self._pc_ti3_lbl.setStyleSheet("color: #e6e6e6; font-size: 11px;")
+        self._pc_run_btn.setEnabled(True)
+        self._switch_cal_mode(1)  # jump straight to Create Calibration File
+        log.info("Printcal input set to %s", ti3)
+
+    # ------------------------------------------------------------------
+    # Printcal section
+    # ------------------------------------------------------------------
+
+    def _make_printcal_section(self) -> QWidget:
+        container = QWidget(self)
+        cc = QVBoxLayout(container)
+        cc.setContentsMargins(0, 0, 0, 0)
+        cc.setSpacing(8)
+
+        grp = QGroupBox("Create Calibration File  (printcal)", container)
+        g = QVBoxLayout(grp)
+        g.setSpacing(8)
+
+        # ---- Input file ----
+        in_row = QHBoxLayout()
+        in_row.addWidget(QLabel("Input measurement (.ti3):", grp))
+        self._pc_load_btn = QPushButton("Load cal_*.ti3…", grp)
+        self._pc_load_btn.setIcon(load_folder_icon("folder_build"))
+        self._pc_load_btn.clicked.connect(self._pc_browse_ti3)
+        self._pc_ti3_lbl = QLabel("No file selected — measure a calibration target first.", grp)
+        self._pc_ti3_lbl.setStyleSheet("color: #909090; font-size: 11px;")
+        self._pc_ti3_lbl.setWordWrap(True)
+        in_row.addWidget(self._pc_load_btn)
+        in_row.addWidget(self._pc_ti3_lbl, stretch=1)
+        g.addLayout(in_row)
+
+        # ---- Mode ----
+        mode_row = QHBoxLayout()
+        mode_row.addWidget(QLabel("Mode:", grp))
+        self._pc_mode_combo = NoScrollComboBox(grp)
+        self._pc_mode_combo.addItem("Initial calibration  (creates fresh .cal)", "initial")
+        self._pc_mode_combo.addItem("Re-calibrate  (refine existing .cal)", "recalibrate")
+        self._pc_mode_combo.addItem("Verify  (check against existing .cal)", "verify")
+        self._pc_mode_combo.currentIndexChanged.connect(self._pc_update_prev_vis)
+        mode_row.addWidget(self._pc_mode_combo, stretch=1)
+        mode_row.addWidget(TooltipButton(
+            "Calibration Mode",
+            "Initial calibration: creates a brand-new .cal file from your\n"
+            "calibration target measurement. Use this the first time.\n\n"
+            "Re-calibrate: refines an existing .cal by comparing new\n"
+            "measurements to the previous target. Useful for keeping a\n"
+            "printer consistent over time.\n\n"
+            "Verify: checks how well a printer still matches a prior .cal\n"
+            "without writing any new files.",
+            grp,
+            min_width=480,
+        ))
+        g.addLayout(mode_row)
+
+        # ---- Previous .cal (shown for recal / verify) ----
+        self._pc_prev_widget = QWidget(grp)
+        prev_row = QHBoxLayout(self._pc_prev_widget)
+        prev_row.setContentsMargins(0, 0, 0, 0)
+        prev_row.addWidget(QLabel("Previous .cal file:", self._pc_prev_widget))
+        self._pc_prev_edit = QLineEdit(self._pc_prev_widget)
+        self._pc_prev_edit.setPlaceholderText("Path to previous calibration file…")
+        prev_browse = make_browse_button(self._pc_prev_widget, "Select previous .cal file", icon="folder_build")
+        prev_browse.clicked.connect(self._pc_browse_prev)
+        prev_row.addWidget(self._pc_prev_edit, stretch=1)
+        prev_row.addWidget(prev_browse)
+        self._pc_prev_widget.setVisible(False)
+        g.addWidget(self._pc_prev_widget)
+
+        # ---- Smoothing (vertical stack, tooltip on right) ----
+        smooth_row = QHBoxLayout()
+        smooth_row.addWidget(QLabel("Smoothing:", grp))
+        self._pc_smooth_spin = NoScrollDoubleSpinBox(grp)
+        self._pc_smooth_spin.setRange(0.1, 10.0)
+        self._pc_smooth_spin.setSingleStep(0.1)
+        self._pc_smooth_spin.setDecimals(1)
+        self._pc_smooth_spin.setValue(1.0)
+        self._pc_smooth_spin.setMaximumWidth(80)
+        smooth_row.addWidget(self._pc_smooth_spin)
+        smooth_row.addStretch()
+        smooth_row.addWidget(TooltipButton(
+            "Curve Smoothing (-s)",
+            "Extra smoothing applied to the calibration curves.\n"
+            "Default 1.0 suits most printers.\n"
+            "Raise (e.g. 2–5) if the printer has noisy tone response.",
+            grp,
+        ))
+        g.addLayout(smooth_row)
+
+        # ---- Verbosity (vertical stack, tooltip on right) ----
+        verb_row = QHBoxLayout()
+        verb_row.addWidget(QLabel("Verbosity:", grp))
+        self._pc_verb_spin = NoScrollSpinBox(grp)
+        self._pc_verb_spin.setRange(0, 3)
+        self._pc_verb_spin.setValue(1)
+        self._pc_verb_spin.setMaximumWidth(60)
+        verb_row.addWidget(self._pc_verb_spin)
+        verb_row.addStretch()
+        verb_row.addWidget(TooltipButton(
+            "Verbosity (-v)",
+            "Controls how much detail printcal writes to the log.\n"
+            "0 = silent, 1 = normal, 2–3 = verbose/debug.",
+            grp,
+        ))
+        g.addLayout(verb_row)
+
+        cc.addWidget(grp)
+        cc.addStretch()
+
+        # ---- Button row (outside groupbox) ----
+        btn_row = QHBoxLayout()
+        self._pc_run_btn = QPushButton("Create Calibration File", container)
+        self._pc_run_btn.setObjectName("primary")
+        self._pc_run_btn.setFixedHeight(36)
+        self._pc_run_btn.setEnabled(False)
+        self._pc_run_btn.clicked.connect(self._on_printcal_run)
+        self._pc_save_defaults_btn = QPushButton("Save as Defaults", container)
+        self._pc_save_defaults_btn.setFixedHeight(36)
+        self._pc_save_defaults_btn.clicked.connect(self._on_pc_save_defaults)
+        btn_row.addWidget(self._pc_run_btn)
+        btn_row.addStretch()
+        btn_row.addWidget(self._pc_save_defaults_btn)
+        cc.addLayout(btn_row)
+
+        # ---- Log (outside groupbox) ----
+        self._pc_log = QPlainTextEdit(container)
+        self._pc_log.setObjectName("log")
+        self._pc_log.setReadOnly(True)
+        self._pc_log.setMaximumHeight(67)
+        self._pc_log.setPlaceholderText("printcal output will appear here…")
+        cc.addWidget(self._pc_log)
+
+        s = self._settings
+        self._pc_smooth_spin.setValue(float(s.get("printcal_smoothing", 1.0)))
+        self._pc_verb_spin.setValue(int(s.get("printcal_verbosity", 1)))
+        saved_mode = s.get("printcal_mode", "initial")
+        idx = self._pc_mode_combo.findData(saved_mode)
+        if idx >= 0:
+            self._pc_mode_combo.setCurrentIndex(idx)
+
+        return container
+
+    def _pc_update_prev_vis(self) -> None:
+        mode = self._pc_mode_combo.currentData()
+        self._pc_prev_widget.setVisible(mode in ("recalibrate", "verify"))
+
+    def _pc_browse_ti3(self) -> None:
+        p = open_file_dialog(self, "Load calibration measurement", "TI3 files (*.ti3)",
+                             extra_path=self._settings.get("custom_output_path", ""))
+        if p:
+            self._cal_ti3_path = Path(p)
+            self._pc_ti3_lbl.setText(p)
+            self._pc_ti3_lbl.setStyleSheet("color: #e6e6e6; font-size: 11px;")
+            self._pc_run_btn.setEnabled(True)
+
+    def _pc_browse_prev(self) -> None:
+        p = open_file_dialog(self, "Load previous .cal file", "CAL files (*.cal)",
+                             extra_path=self._settings.get("custom_output_path", ""))
+        if p:
+            self._pc_prev_edit.setText(p)
+
+    def _on_pc_save_defaults(self) -> None:
+        s = self._settings
+        s.set("printcal_smoothing",  self._pc_smooth_spin.value())
+        s.set("printcal_verbosity",  self._pc_verb_spin.value())
+        s.set("printcal_mode",       self._pc_mode_combo.currentData() or "initial")
+
+    def _on_printcal_run(self) -> None:
+        if self._runner.is_running:
+            return
+        if self._cal_ti3_path is None or not self._cal_ti3_path.exists():
+            self._pc_log.setPlainText("[ERROR] No input .ti3 file selected.")
+            return
+
+        self._pc_log.clear()
+        self._pc_run_btn.setEnabled(False)
+
+        params = PrintcalParams(
+            ti3_path  = self._cal_ti3_path,
+            mode      = self._pc_mode_combo.currentData() or "initial",
+            prev_cal  = self._pc_prev_edit.text().strip(),
+            verbosity = self._pc_verb_spin.value(),
+            smoothing = self._pc_smooth_spin.value(),
+        )
+
+        def _on_line(line: str) -> None:
+            self._pc_log.appendPlainText(line)
+            self._pc_log.ensureCursorVisible()
+
+        def _on_finish(cal_path: Path | None) -> None:
+            self._pc_run_btn.setEnabled(True)
+            if cal_path is None:
+                self._pc_log.appendPlainText("\n[ERROR] printcal failed — see output above.")
+            else:
+                self._pc_log.appendPlainText(f"\n[OK] Calibration file created: {cal_path}")
+                self._pc_log.ensureCursorVisible()
+                self._ac_cal_edit.setText(str(cal_path))
+                self.cal_file_created.emit(cal_path)
+
+        self._printcal_runner.run(params, on_line=_on_line, on_finish=_on_finish)
+
+    # ------------------------------------------------------------------
+    # Applycal section
+    # ------------------------------------------------------------------
+
+    def _make_applycal_section(self) -> QWidget:
+        container = QWidget(self)
+        cc = QVBoxLayout(container)
+        cc.setContentsMargins(0, 0, 0, 0)
+        cc.setSpacing(8)
+
+        grp = QGroupBox("Apply Calibration  (applycal)", container)
+        g = QVBoxLayout(grp)
+        g.setSpacing(8)
+
+        # ---- Mode ----
+        mode_row = QHBoxLayout()
+        mode_row.addWidget(QLabel("Mode:", grp))
+        self._ac_mode_combo = NoScrollComboBox(grp)
+        self._ac_mode_combo.addItem("Apply calibration to profile  (-a)", "apply")
+        self._ac_mode_combo.addItem("Remove calibration from profile  (-u)", "remove")
+        self._ac_mode_combo.addItem("Check calibration (no file written)  (-c)", "check")
+        mode_row.addWidget(self._ac_mode_combo, stretch=1)
+        mode_row.addWidget(TooltipButton(
+            "applycal Mode",
+            "Apply: bakes the calibration curves into the ICC profile so\n"
+            "that any app using the profile automatically gets calibration.\n\n"
+            "Remove: strips previously applied calibration curves out of\n"
+            "the profile, reverting it to its uncalibrated state.\n\n"
+            "Check: reports whether the profile has calibration curves\n"
+            "applied, without modifying anything.",
+            grp,
+            min_width=480,
+        ))
+        g.addLayout(mode_row)
+
+        # ---- Cal file ----
+        cal_row = QHBoxLayout()
+        cal_row.addWidget(QLabel("Calibration file (.cal):", grp))
+        self._ac_cal_edit = QLineEdit(grp)
+        self._ac_cal_edit.setPlaceholderText("Path to .cal file…")
+        ac_cal_browse = make_browse_button(grp, "Select .cal file", icon="folder_build")
+        ac_cal_browse.clicked.connect(self._ac_browse_cal)
+        cal_row.addWidget(self._ac_cal_edit, stretch=1)
+        cal_row.addWidget(ac_cal_browse)
+        g.addLayout(cal_row)
+
+        # ---- Input ICC ----
+        in_row = QHBoxLayout()
+        in_row.addWidget(QLabel("Input ICC profile:", grp))
+        self._ac_in_edit = QLineEdit(grp)
+        self._ac_in_edit.setPlaceholderText("Path to input .icc / .icm…")
+        self._ac_in_edit.textChanged.connect(self._ac_update_out_placeholder)
+        ac_in_browse = make_browse_button(grp, "Select input ICC profile", icon="folder_build")
+        ac_in_browse.clicked.connect(self._ac_browse_in)
+        in_row.addWidget(self._ac_in_edit, stretch=1)
+        in_row.addWidget(ac_in_browse)
+        g.addLayout(in_row)
+
+        # ---- Output ICC ----
+        out_row = QHBoxLayout()
+        out_row.addWidget(QLabel("Output ICC profile:", grp))
+        self._ac_out_edit = QLineEdit(grp)
+        self._ac_out_edit.setPlaceholderText("Leave blank to save as cal_<name>.icc")
+        ac_out_browse = make_browse_button(grp, "Select output ICC path", icon="folder_build")
+        ac_out_browse.clicked.connect(self._ac_browse_out)
+        out_row.addWidget(self._ac_out_edit, stretch=1)
+        out_row.addWidget(ac_out_browse)
+        g.addLayout(out_row)
+
+        # ---- Verbose ----
+        opt_row = QHBoxLayout()
+        self._ac_verbose_cb = QCheckBox("Verbose", grp)
+        opt_row.addWidget(self._ac_verbose_cb)
+        opt_row.addStretch()
+        g.addLayout(opt_row)
+
+        cc.addWidget(grp)
+        cc.addStretch()
+
+        # ---- Button row (outside groupbox) ----
+        btn_row = QHBoxLayout()
+        self._ac_run_btn = QPushButton("Apply Calibration", container)
+        self._ac_run_btn.setObjectName("primary")
+        self._ac_run_btn.setFixedHeight(36)
+        self._ac_run_btn.clicked.connect(self._on_applycal_run)
+        self._ac_save_defaults_btn = QPushButton("Save as Defaults", container)
+        self._ac_save_defaults_btn.setFixedHeight(36)
+        self._ac_save_defaults_btn.clicked.connect(self._on_ac_save_defaults)
+        btn_row.addWidget(self._ac_run_btn)
+        btn_row.addStretch()
+        btn_row.addWidget(self._ac_save_defaults_btn)
+        cc.addLayout(btn_row)
+
+        # ---- Log (outside groupbox) ----
+        self._ac_log = QPlainTextEdit(container)
+        self._ac_log.setObjectName("log")
+        self._ac_log.setReadOnly(True)
+        self._ac_log.setMaximumHeight(67)
+        self._ac_log.setPlaceholderText("applycal output will appear here…")
+        cc.addWidget(self._ac_log)
+
+        s = self._settings
+        saved_mode = s.get("applycal_mode", "apply")
+        idx = self._ac_mode_combo.findData(saved_mode)
+        if idx >= 0:
+            self._ac_mode_combo.setCurrentIndex(idx)
+        self._ac_verbose_cb.setChecked(bool(s.get("applycal_verbose", False)))
+
+        return container
+
+    def _ac_browse_cal(self) -> None:
+        p = open_file_dialog(self, "Select calibration file", "CAL files (*.cal)",
+                             extra_path=self._settings.get("custom_output_path", ""))
+        if p:
+            self._ac_cal_edit.setText(p)
+
+    def _ac_browse_in(self) -> None:
+        p = open_file_dialog(self, "Select input ICC profile", "ICC profiles (*.icc *.icm)",
+                             extra_path=self._settings.get("custom_output_path", ""))
+        if p:
+            self._ac_in_edit.setText(p)
+
+    def _ac_browse_out(self) -> None:
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Save output ICC profile", self._ac_in_edit.text() or "",
+            "ICC profiles (*.icc *.icm)",
+        )
+        if path:
+            self._ac_out_edit.setText(path)
+
+    def _ac_update_out_placeholder(self, in_text: str) -> None:
+        """Keep the output placeholder in sync with the input ICC field."""
+        if in_text.strip():
+            stem = Path(in_text.strip()).stem
+            self._ac_out_edit.setPlaceholderText(f"Leave blank to save as cal_{stem}.icc")
+        else:
+            self._ac_out_edit.setPlaceholderText("Leave blank to save as cal_<name>.icc")
+
+    def _on_ac_save_defaults(self) -> None:
+        s = self._settings
+        s.set("applycal_mode", self._ac_mode_combo.currentData() or "apply")
+        s.set("applycal_verbose", self._ac_verbose_cb.isChecked())
+
+    def _on_applycal_run(self) -> None:
+        if self._runner.is_running:
+            return
+        cal = self._ac_cal_edit.text().strip()
+        in_icc = self._ac_in_edit.text().strip()
+        if not cal or not in_icc:
+            self._ac_log.setPlainText("[ERROR] Please select a .cal file and an input ICC profile.")
+            return
+        out_raw = self._ac_out_edit.text().strip()
+        if out_raw:
+            out_icc = out_raw
+        else:
+            in_path = Path(in_icc)
+            out_icc = str(in_path.parent / f"cal_{in_path.name}")
+
+        self._ac_log.clear()
+        self._ac_run_btn.setEnabled(False)
+        mode = self._ac_mode_combo.currentData() or "apply"
+
+        def _on_line(line: str) -> None:
+            self._ac_log.appendPlainText(line)
+            self._ac_log.ensureCursorVisible()
+
+        def _on_finish(result: Path | None) -> None:
+            self._ac_run_btn.setEnabled(True)
+            if result is None:
+                self._ac_log.appendPlainText("\n[ERROR] applycal failed — see output above.")
+            else:
+                self._ac_log.appendPlainText(f"\n[OK] Done. Output: {result}")
+            self._ac_log.ensureCursorVisible()
+
+        self._applycal_runner.run(
+            cal_path=Path(cal),
+            in_icc=Path(in_icc),
+            out_icc=Path(out_icc),
+            mode=mode,
+            verbose=self._ac_verbose_cb.isChecked(),
+            on_line=_on_line,
+            on_finish=_on_finish,
+        )
 
     # ------------------------------------------------------------------
     # Guided panel
@@ -1486,6 +1968,7 @@ class TabProfile(QWidget):
         self._install_btn.setEnabled(True)
         self._log.appendPlainText(f"\n[OK] Profile saved: {self._icc_path}")
         self._log.ensureCursorVisible()
+        self._ac_in_edit.setText(str(self._icc_path))
         if self._ti3_path:
             self.profile_built.emit(self._ti3_path, self._icc_path)
 

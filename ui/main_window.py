@@ -83,6 +83,7 @@ class MainWindow(QMainWindow):
         self._tab_chart.target_started.connect(self._tab_profile.clear_files)
         self._tab_chart.target_started.connect(self._tab_check.clear_files)
         self._tab_measure.measure_finished.connect(self._on_measure_done)
+        self._tab_profile.cal_file_created.connect(self._on_cal_file_created)
         self._tab_measure.proceed_to_profile.connect(self._on_proceed_to_profile)
         self._tab_measure.measurement_active.connect(self._on_measurement_active)
         self._tab_profile.profile_active.connect(self._on_profile_active)
@@ -124,6 +125,7 @@ class MainWindow(QMainWindow):
         self._check_argyll_binaries(initial=True)
         self._startup_update_checker: UpdateChecker | None = None
         QTimer.singleShot(0, self._apply_dark_title_bar)
+        QTimer.singleShot(0, self._apply_calibration_mode)
         QTimer.singleShot(3000, self._check_for_updates_on_startup)
         log.info("MainWindow initialised")
 
@@ -236,7 +238,12 @@ class MainWindow(QMainWindow):
             self._tab_measure.set_ti1_path(Path(ti2))
 
     def _on_measure_done(self, ti3: Path) -> None:
-        self._tab_profile.set_ti3_path(ti3, propagate=False)
+        cal_mode = bool(self._settings.get("calibration_mode", False))
+        if cal_mode and ti3.stem.startswith("cal_"):
+            self._tab_profile.set_cal_ti3_path(ti3)
+            self._tabs.setCurrentWidget(self._tab_profile)
+        else:
+            self._tab_profile.set_ti3_path(ti3, propagate=False)
 
     def _on_measurement_active(self, active: bool) -> None:
         measure_idx = self._tabs.indexOf(self._tab_measure)
@@ -249,6 +256,43 @@ class MainWindow(QMainWindow):
         for i in range(self._tabs.count()):
             if i != profile_idx:
                 self._tabs.setTabEnabled(i, not active)
+
+    def _on_cal_file_created(self, cal_path: Path) -> None:
+        from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QVBoxLayout
+        self._tab_chart.set_cal_file_paths(cal_path)
+        self._tabs.setCurrentWidget(self._tab_chart)
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Calibration File Created")
+        dlg.setMinimumWidth(540)
+        layout = QVBoxLayout(dlg)
+        layout.setSpacing(14)
+        layout.setContentsMargins(24, 20, 24, 20)
+
+        heading = QLabel("<b>Your calibration file is ready!</b>", dlg)
+        heading.setWordWrap(True)
+        layout.addWidget(heading)
+
+        body = QLabel(
+            f"<b>{cal_path.name}</b> has been created and auto-filled into the "
+            "<b>-I</b> and <b>-K</b> fields of the Create Chart manual module.<br><br>"
+            "<b>What to do next:</b><br>"
+            "Generate your profiling chart (not the calibration target — make sure "
+            "<i>Create target for calibration</i> is unchecked), then choose whether to:<br><br>"
+            "&nbsp;&nbsp;<b>-K</b> &nbsp;Apply the calibration to patches before printing — "
+            "the printer will produce already-linearised output. Recommended for most workflows.<br><br>"
+            "&nbsp;&nbsp;<b>-I</b> &nbsp;Embed the calibration file without applying it — "
+            "the .ti3 measurements will include the raw (uncalibrated) device values. "
+            "Use this if you need to separate calibration from profiling.",
+            dlg,
+        )
+        body.setWordWrap(True)
+        layout.addWidget(body)
+
+        bb = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok, dlg)
+        bb.accepted.connect(dlg.accept)
+        layout.addWidget(bb)
+        dlg.exec()
 
     def _on_proceed_to_profile(self) -> None:
         self._tabs.setCurrentWidget(self._tab_profile)
@@ -265,6 +309,18 @@ class MainWindow(QMainWindow):
             btn._set_icon()
         dlg.exec()
         self._check_argyll_binaries()
+        self._apply_calibration_mode()
+
+    def _apply_calibration_mode(self) -> None:
+        enabled = bool(self._settings.get("calibration_mode", False))
+        for tab in (self._tab_chart, self._tab_measure, self._tab_profile, self._tab_check):
+            if hasattr(tab, "set_calibration_mode"):
+                tab.set_calibration_mode(enabled)
+        profile_idx = self._tabs.indexOf(self._tab_profile)
+        self._tabs.setTabText(
+            profile_idx,
+            "4. Calibration & Profiling" if enabled else "4. Build Profile",
+        )
 
     def _check_for_updates_on_startup(self) -> None:
         self._startup_update_checker = UpdateChecker(self)

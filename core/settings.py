@@ -57,6 +57,13 @@ DEFAULTS: dict[str, Any] = {
     "profcheck_prune_value":        3.0,
     "profcheck_x3dom":              False,
     "profcheck_refine_threshold":   2.0,
+    # Calibration workflow
+    "calibration_mode":          False,
+    "printcal_smoothing":        1.0,
+    "printcal_verbosity":        1,
+    "printcal_mode":             "initial",
+    "applycal_mode":             "apply",
+    "applycal_verbose":          False,
     # UI state
     "window_geometry":           None,
     "active_tab":                0,
@@ -78,6 +85,11 @@ class AppSettings:
         elif isinstance(fallback, int) and isinstance(val, str):
             try:
                 val = int(val)
+            except ValueError:
+                val = fallback
+        elif isinstance(fallback, float) and isinstance(val, str):
+            try:
+                val = float(val)
             except ValueError:
                 val = fallback
         return val

@@ -124,6 +124,28 @@ class SettingsDialog(QDialog):
             "Restore last active tab on launch", self
         )
         bh.addWidget(self._restore_tab_check)
+
+        cal_row = QHBoxLayout()
+        self._cal_mode_check = QCheckBox("Enable calibration options", self)
+        cal_row.addWidget(self._cal_mode_check)
+        cal_row.addStretch()
+        cal_row.addWidget(TooltipButton(
+            "Enable Calibration Options",
+            "Unlocks the full printer calibration workflow (printcal / applycal).\n\n"
+            "Most users do NOT need this — consumer and prosumer inkjet printers "
+            "typically produce better results from a direct profiling run without "
+            "any hardware calibration step.\n\n"
+            "Enable this only if you know your printer requires linearisation curves "
+            "before profiling, or if you are an advanced user following an explicit "
+            "ArgyllCMS calibration guide.\n\n"
+            "When active: the guided modes in all tabs are hidden, a calibration "
+            "target option appears in Create Chart, and a full printcal → applycal "
+            "workflow is added to the Calibration & Profiling tab.",
+            self,
+            min_width=620,
+        ))
+        bh.addLayout(cal_row)
+
         layout.addWidget(behaviour_grp)
 
         # ---- About / Updates ----
@@ -184,12 +206,14 @@ class SettingsDialog(QDialog):
         self._argyll_edit.setText(s.get("argyll_bin_path", "/Applications/Argyll/bin"))
         self._folder_edit.setText(s.get("custom_output_path", ""))
         self._restore_tab_check.setChecked(s.get("restore_last_tab", True))
+        self._cal_mode_check.setChecked(bool(s.get("calibration_mode", False)))
 
     def _save_and_close(self) -> None:
         s = self._settings
         s.set("argyll_bin_path",       self._argyll_edit.text().strip())
         s.set("custom_output_path",    self._folder_edit.text().strip())
         s.set("restore_last_tab",      self._restore_tab_check.isChecked())
+        s.set("calibration_mode",      self._cal_mode_check.isChecked())
         log.info("Settings saved")
         self.accept()
 

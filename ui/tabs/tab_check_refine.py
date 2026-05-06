@@ -121,6 +121,12 @@ class TabCheckRefine(QWidget):
     def _current_mode(self) -> str:
         return "guided" if self._stack.currentIndex() == 0 else "manual"
 
+    def set_calibration_mode(self, enabled: bool) -> None:
+        """Hide guided mode toggle and lock to manual when calibration mode is active."""
+        self._mode_row_widget.setVisible(not enabled)
+        if enabled:
+            self._switch_mode("manual")
+
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
@@ -166,13 +172,15 @@ class TabCheckRefine(QWidget):
 
         # --- Mode buttons ---
         _mode_font = QFont("Menlo", 11, QFont.Weight.Medium)
-        mode_row = QHBoxLayout()
-        self._guided_btn = QPushButton("GUIDED", self)
+        self._mode_row_widget = QWidget(self)
+        mode_row = QHBoxLayout(self._mode_row_widget)
+        mode_row.setContentsMargins(0, 0, 0, 0)
+        self._guided_btn = QPushButton("GUIDED", self._mode_row_widget)
         self._guided_btn.setCheckable(True)
         self._guided_btn.setChecked(True)
         self._guided_btn.setObjectName("mode_btn")
         self._guided_btn.setFont(_mode_font)
-        self._manual_btn = QPushButton("MANUAL", self)
+        self._manual_btn = QPushButton("MANUAL", self._mode_row_widget)
         self._manual_btn.setCheckable(True)
         self._manual_btn.setObjectName("mode_btn")
         self._manual_btn.setFont(_mode_font)
@@ -181,7 +189,7 @@ class TabCheckRefine(QWidget):
         mode_row.addWidget(self._guided_btn)
         mode_row.addWidget(self._manual_btn)
         mode_row.addStretch()
-        root.addLayout(mode_row)
+        root.addWidget(self._mode_row_widget)
 
         # ── File selection (shared, outside stack) ──────────────────────
         file_grp = QGroupBox("Test Data && Profile", self)

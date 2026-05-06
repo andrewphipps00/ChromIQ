@@ -1066,3 +1066,116 @@ parameters:
         colour errors.  Open the resulting .x3d.html file in any modern
         browser to explore which parts of the colour gamut have the
         largest errors.
+
+  # ====================================================================
+  # printcal — create printer calibration curves (.cal)
+  # ====================================================================
+  printcal:
+
+    - flag: "-v"
+      name: "Verbosity"
+      type: int
+      default: 1
+      min: 0
+      max: 3
+      no_space: true
+      expert_only: false
+      tooltip_title: "Verbosity (-v)"
+      tooltip_body: |
+        Controls how much output printcal writes during calibration.
+          0 = silent
+          1 = basic progress (default)
+          2 = detailed per-channel info
+          3 = debug output
+
+    - flag: "-s"
+      name: "Curve Smoothing"
+      type: float
+      default: 1.0
+      min: 0.1
+      max: 10.0
+      decimals: 1
+      no_space: true
+      expert_only: false
+      tooltip_title: "Curve Smoothing (-s)"
+      tooltip_body: |
+        Controls how much extra smoothing is applied to the calibration
+        curves.  Higher values produce smoother but less precise curves.
+
+        Default: 1.0 — good for most printers.
+        Increase (e.g. 2.0–5.0) if the printer has noisy tone response
+        or the calibration curves look jagged.
+
+    - flag: "-z"
+      name: "Curve Resolution"
+      type: int
+      default: 256
+      min: 16
+      max: 4096
+      no_space: true
+      expert_only: true
+      tooltip_title: "Curve Resolution (-z)"
+      tooltip_body: |
+        Number of steps in the output calibration curve tables.
+        Higher values give finer resolution but larger .cal files.
+        Default (256) is suitable for virtually all printers.
+
+    - flag: "-A"
+      name: "Manufacturer"
+      type: string
+      default: ""
+      no_space: false
+      expert_only: true
+      tooltip_title: "Manufacturer (-A)"
+      tooltip_body: |
+        Sets the manufacturer description embedded in the .cal file.
+        Purely informational — does not affect the calibration curves.
+
+    - flag: "-M"
+      name: "Model"
+      type: string
+      default: ""
+      no_space: false
+      expert_only: true
+      tooltip_title: "Model (-M)"
+      tooltip_body: |
+        Sets the printer model description embedded in the .cal file.
+        Purely informational — does not affect the calibration curves.
+
+    - flag: "-D"
+      name: "Description"
+      type: string
+      default: ""
+      no_space: false
+      expert_only: true
+      tooltip_title: "Description (-D)"
+      tooltip_body: |
+        Sets a human-readable description embedded in the .cal file.
+        Purely informational — does not affect the calibration curves.
+
+    - flag: "-C"
+      name: "Copyright"
+      type: string
+      default: ""
+      no_space: false
+      expert_only: true
+      tooltip_title: "Copyright (-C)"
+      tooltip_body: |
+        Sets the copyright string embedded in the .cal file.
+        Purely informational — does not affect the calibration curves.
+
+  # ====================================================================
+  # applycal — apply calibration curves to an ICC profile
+  # ====================================================================
+  applycal:
+
+    - flag: "-v"
+      name: "Verbose"
+      type: boolean
+      default: false
+      no_space: false
+      expert_only: false
+      tooltip_title: "Verbose (-v)"
+      tooltip_body: |
+        Prints detailed information about the calibration being applied,
+        including per-channel curve statistics.

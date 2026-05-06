@@ -50,6 +50,7 @@ class ChartParams:
     extra_printtarg_args: str = ""
 
     target_name: str = "chart"
+    cal_target: bool = False          # when True, preserve existing cal_* files during cleanup
 
 
 class ChartCreator:
@@ -81,7 +82,21 @@ class ChartCreator:
         self._pending_params = params
 
         work_dir = self._file_mgr.ensure_folder()
-        self._file_mgr.clean_folder(["ti1", "ti2", "tif", "cht", "ps"])
+        if params.cal_target:
+            # Starting a calibration target run — full wipe, no exceptions
+            self._file_mgr.clean_folder(["ti1", "ti2", "tif", "cht", "ps"])
+        else:
+            # Normal profiling run — preserve any cal_* files from a prior calibration step
+            _exts = {"ti1", "ti2", "tif", "cht", "ps"}
+            _deleted = 0
+            for _f in work_dir.iterdir():
+                if _f.is_file() and _f.suffix.lstrip(".").lower() in _exts and not _f.stem.startswith("cal_"):
+                    try:
+                        _f.unlink()
+                        _deleted += 1
+                    except OSError as _exc:
+                        log.warning("Could not delete %s: %s", _f, _exc)
+            log.debug("Cleaned %d file(s), preserved cal_* files", _deleted)
 
         if params.is_manual:
             patch_count = params.patches  # pass value as-is; 0 lets targen decide
