@@ -210,12 +210,12 @@ class ParameterWidget(QWidget):
         if self.expert_only:
             self._enable_check = QCheckBox(name + ":", self)
             self._enable_check.setChecked(False)
-            self._enable_check.setFixedWidth(230)
+            self._enable_check.setFixedWidth(190)
             self._enable_check.setStyleSheet("color: #c8c8c8;")
             layout.addWidget(self._enable_check)
         else:
             lbl = QLabel(name + ":", self)
-            lbl.setFixedWidth(230)
+            lbl.setFixedWidth(190)
             lbl.setWordWrap(False)
             lbl.setStyleSheet("color: #c8c8c8;")
             layout.addWidget(lbl)
@@ -264,6 +264,7 @@ class ParameterWidget(QWidget):
             if self._param.get("custom_dimensions"):
                 return self._make_custom_dim_control()
             combo = NoScrollComboBox(self)
+            combo.setSizeAdjustPolicy(combo.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
             choices = self._param.get("choices", [])
             labels  = self._param.get("labels", choices)
             for ch, lb in zip(choices, labels):

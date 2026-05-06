@@ -93,7 +93,7 @@ class TabChart(QWidget):
         # Left: controls
         left = QWidget(self)
         self._left_panel = left
-        left.setFixedWidth(700)
+        left.setFixedWidth(580)
         left_layout = QVBoxLayout(left)
         left_layout.setContentsMargins(16, 12, 16, 12)
         left_layout.setSpacing(8)
