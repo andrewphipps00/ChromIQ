@@ -336,6 +336,21 @@ class TabProfile(QWidget):
                     self._ac_in_edit.setText(str(icc_candidate))
                     break
 
+    @property
+    def ti3_path(self) -> Path | None:
+        return self._ti3_path
+
+    @property
+    def icc_path(self) -> Path | None:
+        return self._icc_path
+
+    @property
+    def cal_ti3_path(self) -> Path | None:
+        return self._cal_ti3_path
+
+    def set_icc_path(self, path: Path) -> None:
+        self._icc_path = path
+
     def set_cal_ti3_path(self, ti3: Path) -> None:
         """Receive a cal_*.ti3 from the measure tab, pre-fill printcal, and switch to it."""
         self._cal_ti3_path = ti3

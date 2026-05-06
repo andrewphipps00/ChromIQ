@@ -68,6 +68,13 @@ DEFAULTS: dict[str, Any] = {
     "window_geometry":           None,
     "active_tab":                0,
     "restore_last_tab":          True,
+    "restore_last_session":      False,
+    # Session restore paths (only used when restore_last_session is True)
+    "session_target_name":       "",
+    "session_ti1_path":          "",
+    "session_ti3_path":          "",
+    "session_icc_path":          "",
+    "session_cal_ti3_path":      "",
 }
 
 

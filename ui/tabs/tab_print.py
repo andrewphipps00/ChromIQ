@@ -103,8 +103,11 @@ class TabPrint(QWidget):
             "Printer Selection",
             "Select the printer to send the chart to.  Only printers installed in\n"
             "the system CUPS print queue are listed.\n\n"
-            "The TIFF is sent directly via lp with the options you configure below.\n"
-            "Color management is always disabled automatically.",
+            "ChromIQ converts the chart to PostScript and sends it via lp —\n"
+            "bypassing ColorSync entirely.  If CUPS rejects PostScript (e.g.\n"
+            "AirPrint or Driverless drivers), it automatically retries by sending\n"
+            "the TIFF directly with colour-space-aware raster options.\n"
+            "Colour management is always disabled automatically.",
             left,
         ))
         pg.addLayout(pr_row)
@@ -127,8 +130,10 @@ class TabPrint(QWidget):
             "Wrong media type or quality settings will cause incorrect ink laydown and "
             "invalid colour measurements. Allow pigment inks to dry fully before measuring "
             "(at least 1 h; 24 h for best accuracy).\n\n"
-            "Colour management is disabled automatically. ChromIQ passes the necessary "
-            "CUPS options to ensure the printer always receives the unaltered RGB values.",
+            "Colour management is disabled automatically. ChromIQ converts the chart to "
+            "PostScript and sends it via lp, bypassing ColorSync entirely. If CUPS rejects "
+            "PostScript (e.g. AirPrint or Driverless drivers), it automatically retries "
+            "by sending the TIFF directly with colour-space-aware raster options.",
             left,
         )
         warn.setObjectName("warning")

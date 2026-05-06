@@ -1206,6 +1206,10 @@ class TabMeasure(QWidget):
     # Public
     # ------------------------------------------------------------------
 
+    @property
+    def ti1_path(self) -> Path | None:
+        return self._ti1_path
+
     def set_ti1_path(self, path: Path) -> None:
         self._ti1_path = path
         self._ti1_lbl.setText(str(path))

@@ -119,6 +119,9 @@ class MainWindow(QMainWindow):
             active = int(self._settings.get("active_tab", 0))
             self._tabs.setCurrentIndex(active)
 
+        if self._settings.get("restore_last_session", False):
+            QTimer.singleShot(0, self._restore_last_session)
+
         self.statusBar().hide()
         self._status_msg: str = ""
 
@@ -456,8 +459,43 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
 
+    def _restore_last_session(self) -> None:
+        target = self._settings.get("session_target_name", "")
+        if not target:
+            return
+        self._file_mgr.set_target_name(target)
+
+        ti1 = Path(self._settings.get("session_ti1_path", ""))
+        if ti1.exists():
+            self._tab_measure.set_ti1_path(ti1)
+
+        tiffs = sorted(self._file_mgr.working_dir().glob("*.tif*"))
+        if tiffs:
+            self._tab_print.load_tiffs(tiffs)
+
+        ti3 = Path(self._settings.get("session_ti3_path", ""))
+        icc = Path(self._settings.get("session_icc_path", ""))
+        if ti3.exists():
+            self._tab_profile.set_ti3_path(ti3, propagate=False)
+        if icc.exists():
+            self._tab_profile.set_icc_path(icc)
+        if ti3.exists() and icc.exists():
+            self._tab_check.set_paths(ti3, icc)
+
+        if self._settings.get("calibration_mode", False):
+            cal_ti3 = Path(self._settings.get("session_cal_ti3_path", ""))
+            if cal_ti3.exists():
+                self._tab_profile.set_cal_ti3_path(cal_ti3)
+
+        log.info("Session restored: target=%s", target)
+
     def closeEvent(self, event) -> None:
         self._settings.set("window_geometry", self.saveGeometry())
         self._settings.set("active_tab", self._tabs.currentIndex())
+        self._settings.set("session_target_name",  self._file_mgr._target_name)
+        self._settings.set("session_ti1_path",     str(self._tab_measure.ti1_path or ""))
+        self._settings.set("session_ti3_path",     str(self._tab_profile.ti3_path or ""))
+        self._settings.set("session_icc_path",     str(self._tab_profile.icc_path or ""))
+        self._settings.set("session_cal_ti3_path", str(self._tab_profile.cal_ti3_path or ""))
         self._runner.cleanup()
         super().closeEvent(event)

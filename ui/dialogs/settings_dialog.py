@@ -125,6 +125,11 @@ class SettingsDialog(QDialog):
         )
         bh.addWidget(self._restore_tab_check)
 
+        self._restore_session_check = QCheckBox(
+            "Restore last session on launch (reload previously loaded files)", self
+        )
+        bh.addWidget(self._restore_session_check)
+
         cal_row = QHBoxLayout()
         self._cal_mode_check = QCheckBox("Enable calibration options", self)
         cal_row.addWidget(self._cal_mode_check)
@@ -206,14 +211,16 @@ class SettingsDialog(QDialog):
         self._argyll_edit.setText(s.get("argyll_bin_path", "/Applications/Argyll/bin"))
         self._folder_edit.setText(s.get("custom_output_path", ""))
         self._restore_tab_check.setChecked(s.get("restore_last_tab", True))
+        self._restore_session_check.setChecked(bool(s.get("restore_last_session", False)))
         self._cal_mode_check.setChecked(bool(s.get("calibration_mode", False)))
 
     def _save_and_close(self) -> None:
         s = self._settings
         s.set("argyll_bin_path",       self._argyll_edit.text().strip())
         s.set("custom_output_path",    self._folder_edit.text().strip())
-        s.set("restore_last_tab",      self._restore_tab_check.isChecked())
-        s.set("calibration_mode",      self._cal_mode_check.isChecked())
+        s.set("restore_last_tab",       self._restore_tab_check.isChecked())
+        s.set("restore_last_session",   self._restore_session_check.isChecked())
+        s.set("calibration_mode",       self._cal_mode_check.isChecked())
         log.info("Settings saved")
         self.accept()
 
