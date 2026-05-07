@@ -151,6 +151,35 @@ class SettingsDialog(QDialog):
         ))
         bh.addLayout(cal_row)
 
+        native_print_row = QHBoxLayout()
+        self._native_print_check = QCheckBox("Use default macOS printer dialog", self)
+        native_print_row.addWidget(self._native_print_check)
+        native_print_row.addStretch()
+        native_print_row.addWidget(TooltipButton(
+            "Use default macOS printer dialog",
+            "When enabled, clicking Print in the Print Chart tab opens the standard\n"
+            "macOS print dialog instead of ChromIQ's built-in PostScript / CUPS pipeline.\n\n"
+            "⚠  IMPORTANT: You MUST disable colour management manually in the\n"
+            "printer driver panel every time you print — otherwise the printer applies\n"
+            "its own colour corrections, which will corrupt the measurement chart\n"
+            "and make your ICC profile inaccurate.\n\n"
+            "How to disable colour management in the macOS print dialog:\n"
+            "After clicking Print, open the dropdown in the middle of the dialog\n"
+            "(it usually shows your printer's name or 'Color Matching') and look\n"
+            "for a colour-management section:\n\n"
+            "  • Epson:  'Epson Color Controls' → Off (No Color Adjustment)\n"
+            "  • Canon:  'Color Options' → Manual → set to None\n"
+            "  • HP:     'Color Options' → Application Managed Colors\n"
+            "  • Others: look for 'No Color Management', 'Off', or\n"
+            "            'Application Controlled'\n\n"
+            "If you are unsure, leave this option disabled and use ChromIQ's\n"
+            "default printing method instead — it disables colour management\n"
+            "automatically with no extra steps required.",
+            self,
+            min_width=620,
+        ))
+        bh.addLayout(native_print_row)
+
         layout.addWidget(behaviour_grp)
 
         # ---- About / Updates ----
@@ -213,14 +242,16 @@ class SettingsDialog(QDialog):
         self._restore_tab_check.setChecked(s.get("restore_last_tab", True))
         self._restore_session_check.setChecked(bool(s.get("restore_last_session", False)))
         self._cal_mode_check.setChecked(bool(s.get("calibration_mode", False)))
+        self._native_print_check.setChecked(bool(s.get("use_native_print_dialog", False)))
 
     def _save_and_close(self) -> None:
         s = self._settings
         s.set("argyll_bin_path",       self._argyll_edit.text().strip())
         s.set("custom_output_path",    self._folder_edit.text().strip())
-        s.set("restore_last_tab",       self._restore_tab_check.isChecked())
-        s.set("restore_last_session",   self._restore_session_check.isChecked())
-        s.set("calibration_mode",       self._cal_mode_check.isChecked())
+        s.set("restore_last_tab",          self._restore_tab_check.isChecked())
+        s.set("restore_last_session",      self._restore_session_check.isChecked())
+        s.set("calibration_mode",          self._cal_mode_check.isChecked())
+        s.set("use_native_print_dialog",   self._native_print_check.isChecked())
         log.info("Settings saved")
         self.accept()
 

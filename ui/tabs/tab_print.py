@@ -86,7 +86,8 @@ class TabPrint(QWidget):
         ))
 
         # Printer selection (pinned above scroll area)
-        printer_grp = QGroupBox("Printer", left)
+        self._printer_grp = QGroupBox("Printer", left)
+        printer_grp = self._printer_grp
         pg = QVBoxLayout(printer_grp)
 
         pr_row = QHBoxLayout()
@@ -137,25 +138,20 @@ class TabPrint(QWidget):
 
         self._printer_combo.currentIndexChanged.connect(self._on_printer_changed)
 
-        # Warning label
-        warn = QLabel(
-            "⚠  Verify that all print settings above match the media you are printing on.\n\n"
-            "Wrong media type or quality settings will cause incorrect ink laydown and "
-            "invalid colour measurements. Allow pigment inks to dry fully before measuring "
-            "(at least 1 h; 24 h for best accuracy).\n\n"
-            "Colour management is disabled automatically. ChromIQ converts the chart to "
-            "PostScript and sends it via lp, bypassing ColorSync entirely. If CUPS rejects "
-            "PostScript (e.g. AirPrint or Driverless drivers), it automatically retries "
-            "by sending the TIFF directly with colour-space-aware raster options.",
-            scroll_content,
-        )
-        warn.setObjectName("warning")
-        warn.setWordWrap(True)
-        scl.addWidget(warn)
-
         scl.addStretch()
         scroll.setWidget(scroll_content)
         ll.addWidget(scroll, stretch=1)
+
+        # Warning label — placed between scroll area and "Feed the beast" block
+        self._warn_lbl = QLabel("", left)
+        self._warn_lbl.setObjectName("warning")
+        self._warn_lbl.setWordWrap(True)
+        ll.addWidget(self._warn_lbl)
+
+        # Spacer below warn label; shown only in native mode to vertically centre the label
+        self._native_warn_spacer = QWidget(left)
+        self._native_warn_spacer.setVisible(False)
+        ll.addWidget(self._native_warn_spacer, stretch=1)
 
         # Feed the beast block
         beast_box = QGroupBox(left)
@@ -198,10 +194,10 @@ class TabPrint(QWidget):
         ll.addWidget(beast_box)
 
         # Load existing target button
-        load_btn = QPushButton("Load existing target — select .ti2 file", left)
-        load_btn.setIcon(load_folder_icon("folder_print"))
-        load_btn.clicked.connect(self._on_load_ti2)
-        ll.addWidget(load_btn)
+        self._load_btn = QPushButton("Load existing target — select .ti2 file", left)
+        self._load_btn.setIcon(load_folder_icon("folder_print"))
+        self._load_btn.clicked.connect(self._on_load_ti2)
+        ll.addWidget(self._load_btn)
 
         # Print buttons
         btn_row = QHBoxLayout()
@@ -265,6 +261,7 @@ class TabPrint(QWidget):
         self._set_print_buttons_enabled(False)
         self._refresh_printers()
         self._restore_defaults()
+        self.apply_native_dialog_mode()
 
     # ------------------------------------------------------------------
 
@@ -480,11 +477,18 @@ class TabPrint(QWidget):
     def _on_print_current(self) -> None:
         if not self._preview._pages:
             return
+        if self._settings.get("use_native_print_dialog", False):
+            path, frame = self._preview._pages[self._preview._current]
+            self._print_native([(path, frame)])
+            return
         path, frame = self._preview._pages[self._preview._current]
         self._send_page(path, frame)
 
     def _on_print_all(self) -> None:
         if not self._preview._pages:
+            return
+        if self._settings.get("use_native_print_dialog", False):
+            self._print_native(list(self._preview._pages))
             return
         for path, frame in self._preview._pages:
             self._send_page(path, frame)
@@ -608,3 +612,83 @@ class TabPrint(QWidget):
 
     def _restore_defaults(self) -> None:
         pass
+
+    # ------------------------------------------------------------------
+    # Native macOS print dialog
+    # ------------------------------------------------------------------
+
+    def apply_native_dialog_mode(self) -> None:
+        self._set_native_mode(bool(self._settings.get("use_native_print_dialog", False)))
+
+    def _set_native_mode(self, enabled: bool) -> None:
+        self._printer_grp.setVisible(not enabled)
+        self._opts_grp.setVisible(not enabled)
+        self._native_warn_spacer.setVisible(enabled)
+        if enabled:
+            self._warn_lbl.setText(
+                "⚠  You are printing via the macOS printer dialog. You must disable "
+                "colour management in your printer driver before printing — otherwise "
+                "the printer applies its own corrections and the chart will be unusable "
+                "for accurate ICC profiling.\n\n"
+                "How to disable colour management: after clicking Print, open the "
+                "dropdown in the dialog (usually labelled with your printer's name) "
+                "and look for a colour-management section:\n"
+                "  • Epson:  \"Epson Color Controls\" → Off (No Color Adjustment)\n"
+                "  • Canon:  \"Color Options\" → Manual → None\n"
+                "  • HP:     \"Color Options\" → Application Managed Colors\n"
+                "  • Others: look for \"No Color Management\", \"Off\", or "
+                "\"Application Controlled\"\n\n"
+                "Allow pigment inks to dry fully before measuring "
+                "(at least 1 h; 24 h for best accuracy)."
+            )
+        else:
+            self._warn_lbl.setText(
+                "⚠  Verify that all print settings above match the media you are printing on.\n\n"
+                "Wrong media type or quality settings will cause incorrect ink laydown and "
+                "invalid colour measurements. Allow pigment inks to dry fully before measuring "
+                "(at least 1 h; 24 h for best accuracy).\n\n"
+                "Colour management is disabled automatically. ChromIQ converts the chart to "
+                "PostScript and sends it via lp, bypassing ColorSync entirely. If CUPS rejects "
+                "PostScript (e.g. AirPrint or Driverless drivers), it automatically retries "
+                "by sending the TIFF directly with colour-space-aware raster options."
+            )
+
+    def _print_native(self, pages: list[tuple[Path, int]]) -> None:
+        from PyQt6.QtPrintSupport import QPrinter, QPrintDialog
+        from PyQt6.QtGui import QPainter, QImage
+        from PyQt6.QtWidgets import QDialog
+
+        printer = QPrinter(QPrinter.PrinterMode.HighResolution)
+        dialog = QPrintDialog(printer, self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        painter = QPainter(printer)
+        for i, (tiff_path, frame) in enumerate(pages):
+            if i > 0:
+                printer.newPage()
+            try:
+                img = Image.open(tiff_path)
+                n_frames = getattr(img, "n_frames", 1)
+                img.seek(min(frame, n_frames - 1))
+                display_img = img.convert("RGB")
+                import io as _io
+                buf = _io.BytesIO()
+                display_img.save(buf, format="PNG")
+                buf.seek(0)
+                qimg = QImage()
+                qimg.loadFromData(buf.read())
+                if qimg.isNull():
+                    log.warning("Native print: QImage is null for %s frame %d", tiff_path.name, frame)
+                    continue
+                painter.save()
+                rect = painter.viewport()
+                size = qimg.size()
+                size.scale(rect.size(), Qt.AspectRatioMode.KeepAspectRatio)
+                painter.setViewport(rect.x(), rect.y(), size.width(), size.height())
+                painter.setWindow(qimg.rect())
+                painter.drawImage(0, 0, qimg)
+                painter.restore()
+            except Exception as exc:
+                log.warning("Native print: cannot render %s frame %d: %s", tiff_path.name, frame, exc)
+        painter.end()

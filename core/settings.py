@@ -34,6 +34,7 @@ DEFAULTS: dict[str, Any] = {
     "print_media":               "",
     "print_media_type":          "",
     "print_quality":             "",
+    "use_native_print_dialog":   False,
     # Step 3 — measure
     "measure_disable_bidir":       True,
     "measure_suppress_warnings":   True,

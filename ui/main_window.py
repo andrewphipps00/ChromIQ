@@ -303,6 +303,7 @@ class MainWindow(QMainWindow):
         dlg.exec()
         self._check_argyll_binaries()
         self._apply_calibration_mode()
+        self._tab_print.apply_native_dialog_mode()
 
     def _apply_calibration_mode(self) -> None:
         enabled = bool(self._settings.get("calibration_mode", False))
