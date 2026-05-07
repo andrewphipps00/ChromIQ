@@ -474,10 +474,12 @@ class TabChart(QWidget):
         presets_row.addWidget(TooltipButton(
             "Manual Presets",
             "Save and recall named snapshots of all Manual mode settings.\n\n"
-            "Use the + button to save the current parameter values as a named preset. "
-            "Select a preset from the list to instantly restore those values. "
-            "Use the − button to delete the selected preset.\n\n"
-            "The target name field is not saved with presets.",
+            "  +  Save current parameter values as a new named preset.\n"
+            "  −  Delete the currently selected preset.\n\n"
+            "Select a preset from the dropdown to instantly restore all\n"
+            "values. The Default entry always resets to built-in defaults.\n\n"
+            "The target name field is not saved with presets.\n"
+            "Presets persist between sessions.",
             w,
             min_width=520,
         ))

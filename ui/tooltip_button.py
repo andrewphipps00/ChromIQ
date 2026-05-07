@@ -134,3 +134,5 @@ class _InfoDialog(QDialog):
         bb = QDialogButtonBox(QDialogButtonBox.StandardButton.Close, self)
         bb.rejected.connect(self.accept)
         layout.addWidget(bb)
+
+        self.adjustSize()

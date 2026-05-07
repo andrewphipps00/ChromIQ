@@ -1294,12 +1294,14 @@ class TabProfile(QWidget):
         presets_row.addWidget(TooltipButton(
             "Manual Presets",
             "Save and recall named snapshots of all Manual mode settings.\n\n"
-            "Use the + button to save the current parameter values as a named preset. "
-            "Select a preset from the list to instantly restore those values. "
-            "Use the − button to delete the selected preset.\n\n"
-            "Profile Description is not saved with presets — it is filled from the .ti3 filename.",
+            "  +  Save current parameter values as a new named preset.\n"
+            "  −  Delete the currently selected preset.\n\n"
+            "Select a preset from the dropdown to instantly restore all\n"
+            "values. The Default entry always resets to built-in defaults.\n\n"
+            "Profile Description is not saved — it is filled from the\n"
+            ".ti3 filename. Presets persist between sessions.",
             container,
-            min_width=480,
+            min_width=520,
         ))
         self._m_preset_combo.currentIndexChanged.connect(self._on_m_preset_selected)
         self._m_preset_add_btn.clicked.connect(self._on_m_preset_save)
