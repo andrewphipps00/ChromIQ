@@ -502,6 +502,7 @@ class TabChart(QWidget):
         self._bit8_radio: QRadioButton | None = None
         self._bit16_radio: QRadioButton | None = None
         self._pre_cal_snapshot: dict | None = None
+        self._d_cascade_widgets: list[ParameterWidget] = []
 
         for tool, params in [
             ("targen",    self._params.get("targen", [])),
@@ -546,11 +547,23 @@ class TabChart(QWidget):
                 if tool == "printtarg" and flag == "-I":
                     self._manual_cal_i_pw = pw
 
-                if p.get("expert_only", False):
+                if tool == "targen" and flag == "-D":
+                    self._d_cascade_widgets.append(pw)
                     expert_layout.addWidget(pw)
+                    self._manual_widgets[tool].append(pw)
+                    for _ in range(10):
+                        extra_pw = ParameterWidget(p, inner)
+                        extra_pw.make_compact()
+                        extra_pw.setVisible(False)
+                        self._d_cascade_widgets.append(extra_pw)
+                        expert_layout.addWidget(extra_pw)
+                        self._manual_widgets[tool].append(extra_pw)
+                elif p.get("expert_only", False):
+                    expert_layout.addWidget(pw)
+                    self._manual_widgets[tool].append(pw)
                 else:
                     basic_layout.addWidget(pw)
-                self._manual_widgets[tool].append(pw)
+                    self._manual_widgets[tool].append(pw)
 
             grp_layout.addWidget(basic_grp)
             grp_layout.addWidget(expert_grp)
@@ -558,6 +571,7 @@ class TabChart(QWidget):
 
         self._update_manual_lb_visibility()
         self._connect_cal_mutex()
+        self._connect_d_cascade()
         self._preset_combo.currentIndexChanged.connect(self._on_preset_selected)
         self._preset_add_btn.clicked.connect(self._on_preset_save)
         self._preset_del_btn.clicked.connect(self._on_preset_delete)
@@ -686,6 +700,29 @@ class TabChart(QWidget):
         k.value_changed.connect(lambda: i.set_user_enabled(False) if k.is_enabled_by_user else None)
         i.value_changed.connect(lambda: k.set_user_enabled(False) if i.is_enabled_by_user else None)
 
+    def _connect_d_cascade(self) -> None:
+        for i, pw in enumerate(self._d_cascade_widgets):
+            pw.value_changed.connect(lambda _=None, idx=i: self._on_d_cascade(idx))
+
+    def _rebuild_d_cascade_visibility(self) -> None:
+        for i, pw in enumerate(self._d_cascade_widgets):
+            if i == 0:
+                pw.setVisible(True)
+            else:
+                pw.setVisible(self._d_cascade_widgets[i - 1].is_enabled_by_user)
+
+    def _on_d_cascade(self, index: int) -> None:
+        pw = self._d_cascade_widgets[index]
+        nxt = index + 1
+        if pw.is_enabled_by_user:
+            if nxt < len(self._d_cascade_widgets):
+                self._d_cascade_widgets[nxt].setVisible(True)
+        else:
+            for i in range(nxt, len(self._d_cascade_widgets)):
+                w = self._d_cascade_widgets[i]
+                w.set_user_enabled(False)
+                w.setVisible(False)
+
     # ------------------------------------------------------------------
     # Preset helpers
     # ------------------------------------------------------------------
@@ -719,9 +756,17 @@ class TabChart(QWidget):
         if index == 0:
             for tool, widgets in self._manual_widgets.items():
                 for pw in widgets:
+                    if pw in self._d_cascade_widgets:
+                        continue
                     v = s.get(f"manual_{tool}_{pw.flag}")
                     if v is not None:
                         pw.set_value(v)
+            for idx, pw in enumerate(self._d_cascade_widgets):
+                v = s.get(f"manual_targen_-D_{idx}")
+                if v is not None:
+                    pw.set_value(v)
+                pw.set_user_enabled(bool(s.get(f"manual_targen_-D_{idx}_enabled", False)))
+            self._rebuild_d_cascade_visibility()
             if self._bit8_radio is not None and self._bit16_radio is not None:
                 is_16bit = bool(s.get("manual_printtarg_tiff_16bit", False))
                 self._bit16_radio.setChecked(is_16bit)
@@ -732,9 +777,17 @@ class TabChart(QWidget):
             data = presets.get(name, {})
             for tool, widgets in self._manual_widgets.items():
                 for pw in widgets:
+                    if pw in self._d_cascade_widgets:
+                        continue
                     v = data.get(f"{tool}_{pw.flag}")
                     if v is not None:
                         pw.set_value(v)
+            for idx, pw in enumerate(self._d_cascade_widgets):
+                v = data.get(f"targen_-D_{idx}")
+                if v is not None:
+                    pw.set_value(v)
+                pw.set_user_enabled(bool(data.get(f"targen_-D_{idx}_enabled", False)))
+            self._rebuild_d_cascade_visibility()
             if self._bit8_radio is not None and self._bit16_radio is not None:
                 is_16bit = bool(data.get("tiff_16bit", False))
                 self._bit16_radio.setChecked(is_16bit)
@@ -745,9 +798,14 @@ class TabChart(QWidget):
         capture: dict = {}
         for tool, widgets in self._manual_widgets.items():
             for pw in widgets:
+                if pw in self._d_cascade_widgets:
+                    continue
                 v = pw.get_raw_value()
                 if v is not None:
                     capture[f"{tool}_{pw.flag}"] = v
+        for idx, pw in enumerate(self._d_cascade_widgets):
+            capture[f"targen_-D_{idx}"] = pw.get_raw_value()
+            capture[f"targen_-D_{idx}_enabled"] = pw.is_enabled_by_user
         capture["tiff_16bit"] = (
             self._bit16_radio.isChecked() if self._bit16_radio is not None else False
         )
@@ -968,9 +1026,14 @@ class TabChart(QWidget):
         # Save all manual widget values individually
         for tool, widgets in self._manual_widgets.items():
             for pw in widgets:
+                if pw in self._d_cascade_widgets:
+                    continue
                 v = pw.get_raw_value()
                 if v is not None:
                     s.set(f"manual_{tool}_{pw.flag}", v)
+        for idx, pw in enumerate(self._d_cascade_widgets):
+            s.set(f"manual_targen_-D_{idx}", pw.get_raw_value())
+            s.set(f"manual_targen_-D_{idx}_enabled", pw.is_enabled_by_user)
         if self._bit16_radio is not None:
             s.set("manual_printtarg_tiff_16bit", self._bit16_radio.isChecked())
         log.info("Chart defaults saved")
@@ -1095,9 +1158,17 @@ class TabChart(QWidget):
         # Restore manual widget values
         for tool, widgets in self._manual_widgets.items():
             for pw in widgets:
+                if pw in self._d_cascade_widgets:
+                    continue
                 v = s.get(f"manual_{tool}_{pw.flag}")
                 if v is not None:
                     pw.set_value(v)
+        for idx, pw in enumerate(self._d_cascade_widgets):
+            v = s.get(f"manual_targen_-D_{idx}")
+            if v is not None:
+                pw.set_value(v)
+            pw.set_user_enabled(bool(s.get(f"manual_targen_-D_{idx}_enabled", False)))
+        self._rebuild_d_cascade_visibility()
         if self._bit8_radio is not None and self._bit16_radio is not None:
             is_16bit = bool(s.get("manual_printtarg_tiff_16bit", False))
             self._bit16_radio.setChecked(is_16bit)

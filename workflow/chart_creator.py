@@ -84,10 +84,10 @@ class ChartCreator:
         work_dir = self._file_mgr.ensure_folder()
         if params.cal_target:
             # Starting a calibration target run — full wipe, no exceptions
-            self._file_mgr.clean_folder(["ti1", "ti2", "tif", "cht", "ps", "json"])
+            self._file_mgr.clean_folder(["ti1", "ti2", "tif", "cht", "ps", "json", "cal"])
         else:
             # Normal profiling run — preserve any cal_* files from a prior calibration step
-            _exts = {"ti1", "ti2", "tif", "cht", "ps"}
+            _exts = {"ti1", "ti2", "tif", "cht", "ps", "json", "cal"}
             _deleted = 0
             for _f in work_dir.iterdir():
                 if _f.is_file() and _f.suffix.lstrip(".").lower() in _exts and not _f.stem.startswith("cal_"):

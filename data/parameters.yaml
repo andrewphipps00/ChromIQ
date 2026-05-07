@@ -90,8 +90,8 @@ parameters:
           • Add Light Cyan (-D 11) / Light Magenta (-D 12) to CMYK
             for smoother highlight gradients
 
-        Note: the UI supports one -D modification at a time.  For multiple
-        colorant modifications run targen directly from the command line.
+        Enable multiple slots to stack additional colorants (each enabled
+        slot reveals the next, up to 11 total modifications).
 
         Leave this disabled for standard device types 0–5.
 
