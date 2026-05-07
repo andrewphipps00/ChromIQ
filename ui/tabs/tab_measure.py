@@ -216,6 +216,7 @@ class TabMeasure(QWidget):
     measure_finished   = pyqtSignal(Path)  # emits the .ti3 path on success
     proceed_to_profile = pyqtSignal()      # emitted when user chooses to go straight to tab 4
     measurement_active = pyqtSignal(bool)  # True when chartread is running, False when done
+    ti2_replaced       = pyqtSignal()      # emitted when the user manually loads a different .ti2 file
 
     def __init__(
         self,
@@ -1349,6 +1350,8 @@ class TabMeasure(QWidget):
         if result is None:
             return
         ti2_path, _ = result   # TIFFs re-discovered by set_ti1_path → _try_load_tiffs
+        if ti2_path != self._ti1_path:
+            self.ti2_replaced.emit()
         self.set_ti1_path(ti2_path)
 
     def _update_resume_availability(self) -> None:

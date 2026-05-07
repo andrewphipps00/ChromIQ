@@ -100,6 +100,12 @@ class MainWindow(QMainWindow):
         self._tab_check.ti3_selected.connect(self._tab_profile.set_ti3_path)
         self._tab_check.ti2_found.connect(self._tab_measure.set_ti1_path)
         self._tab_print.ti2_loaded.connect(self._tab_measure.set_ti1_path)
+        self._tab_print.ti2_replaced.connect(self._tab_profile.clear_files)
+        self._tab_print.ti2_replaced.connect(self._tab_check.clear_files)
+        self._tab_measure.ti2_replaced.connect(self._tab_profile.clear_files)
+        self._tab_measure.ti2_replaced.connect(self._tab_check.clear_files)
+        self._tab_profile.ti3_manually_loaded.connect(self._tab_check.clear_files)
+        self._tab_measure.measure_finished.connect(lambda _: self._tab_check.clear_files())
 
         main_layout.addWidget(self._tabs, stretch=1)
 

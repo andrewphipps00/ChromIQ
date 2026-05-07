@@ -42,7 +42,8 @@ from ui.styles import SPEC_AMBER, TAB_COLORS
 
 class TabPrint(QWidget):
 
-    ti2_loaded = pyqtSignal(Path)  # emitted when the user loads a .ti2 file
+    ti2_loaded   = pyqtSignal(Path)  # emitted when the user loads a .ti2 file
+    ti2_replaced = pyqtSignal()      # emitted when a different .ti2 file is loaded by the user
     """Step 2: print the test chart via CUPS."""
 
     def __init__(
@@ -55,6 +56,7 @@ class TabPrint(QWidget):
         self._module   = PrintModule()
         self._printer  = CupsRawPrinter()
         self._tiff_pages: list[Path] = []
+        self._current_ti2: Path | None = None
         # Sequential-enabling state — populated in _rebuild_option_rows
         self._ordered_opts: list[tuple[str, list[str], QComboBox]] = []
         self._raw_value_pairs: dict[str, list[tuple[str, str]]] = {}
@@ -449,6 +451,7 @@ class TabPrint(QWidget):
         if result is None:
             return
         ti2_path, tiffs = result
+        self._current_ti2 = ti2_path
         self.ti2_loaded.emit(ti2_path)
         if tiffs:
             self.load_tiffs(tiffs)
@@ -465,6 +468,9 @@ class TabPrint(QWidget):
         if result is None:
             return
         ti2_path, tiffs = result
+        if ti2_path != self._current_ti2:
+            self._current_ti2 = ti2_path
+            self.ti2_replaced.emit()
         self.ti2_loaded.emit(ti2_path)
         if tiffs:
             self.load_tiffs(tiffs)

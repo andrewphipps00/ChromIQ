@@ -82,7 +82,8 @@ class TabProfile(QWidget):
     profile_built    = pyqtSignal(Path, Path)   # (ti3_path, icc_path)
     check_requested  = pyqtSignal()             # user clicked "Check Quality" in the result dialog
     profile_active   = pyqtSignal(bool)         # True while colprof is running, False when done
-    ti2_found        = pyqtSignal(Path)         # emitted when a matching .ti2 exists next to the loaded .ti3
+    ti2_found           = pyqtSignal(Path)  # emitted when a matching .ti2 exists next to the loaded .ti3
+    ti3_manually_loaded = pyqtSignal()      # emitted when the user manually loads a .ti3 file
     cal_file_created    = pyqtSignal(Path)  # printcal done; fill -K/-I silently, stay on tab
     cal_chart_requested = pyqtSignal(Path)  # user chose "Go to Create Chart" in result dialog
 
@@ -2355,10 +2356,8 @@ class TabProfile(QWidget):
         self._ti3_path = path
         self._file_lbl.setText(str(path))
         self._build_btn.setEnabled(True)
-        if not self._desc_edit.text():
-            self._desc_edit.setText(path.stem)
-        if not self._m_desc_edit.text():
-            self._m_desc_edit.setText(path.stem)
+        self._desc_edit.setText(path.stem)
+        self._m_desc_edit.setText(path.stem)
         if propagate:
             ti2 = path.with_suffix(".ti2")
             if ti2.exists():
@@ -2391,6 +2390,7 @@ class TabProfile(QWidget):
         )
         if path:
             self.set_ti3_path(Path(path))
+            self.ti3_manually_loaded.emit()
 
     def _browse_gam(self) -> None:
         bin_path = self._settings.get("argyll_bin_path", "/Applications/Argyll/bin")
