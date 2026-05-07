@@ -1,0 +1,89 @@
+name: Build Windows App
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to build (e.g. v3.0.0-beta.1)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build (Windows x64)
+    runs-on: windows-latest
+
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      # pycups is macOS/Linux-only; filter it out before installing.
+      - name: Install dependencies
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          grep -v 'pycups' requirements.txt > requirements-win.txt
+          pip install -r requirements-win.txt
+          pip install pyinstaller
+
+      # Generate a .ico from the existing app_icon.png using Pillow (already installed).
+      - name: Generate Windows icon
+        shell: python
+        run: |
+          from PIL import Image
+          img = Image.open('assets/app_icon.png').convert('RGBA')
+          img.save(
+              'assets/app_icon.ico',
+              format='ICO',
+              sizes=[(16,16),(32,32),(48,48),(64,64),(128,128),(256,256)],
+          )
+          print('Generated assets/app_icon.ico')
+
+      - name: Build Windows executable
+        run: python -m PyInstaller ChromIQWin.spec
+
+      - name: Package as ZIP
+        shell: powershell
+        run: |
+          Compress-Archive -Path dist\ChromIQ -DestinationPath ChromIQ-Windows-x64.zip
+          $size = (Get-Item ChromIQ-Windows-x64.zip).Length / 1MB
+          Write-Host ("ZIP size: {0:N1} MB" -f $size)
+
+      - name: Create GitHub Release (if not exists)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          TAG="$RELEASE_TAG"
+          if ! gh release view "$TAG" > /dev/null 2>&1; then
+            body=$(awk "/^## ${TAG}$/{found=1; next} found && /^## /{exit} found{print}" CHANGELOG.md 2>/dev/null | sed '/^[[:space:]]*$/d' || true)
+            {
+              printf '%s\n\n---\n' "$body"
+              printf '**Installation (Windows):** Extract the ZIP, open the ChromIQ folder, '
+              printf 'and run ChromIQ.exe. Windows SmartScreen may warn on first launch — '
+              printf 'click "More info" → "Run anyway". '
+              printf 'Requires ArgyllCMS 3.5.0 installed and configured in Preferences.'
+            } > /tmp/release_notes.txt
+            gh release create "$TAG" \
+              --title "ChromIQ $TAG" \
+              --notes-file /tmp/release_notes.txt
+          fi
+
+      - name: Upload ZIP to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ env.RELEASE_TAG }}" ChromIQ-Windows-x64.zip --clobber
