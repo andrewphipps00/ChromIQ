@@ -34,7 +34,12 @@ if TYPE_CHECKING:
 
 log = get_logger(__name__)
 
-_ARGYLL_DOWNLOAD_PAGE = "https://www.argyllcms.com/downloadmac.html"
+import sys as _sys
+_ARGYLL_DOWNLOAD_PAGE = (
+    "https://www.argyllcms.com/downloadwin.html"
+    if _sys.platform == "win32"
+    else "https://www.argyllcms.com/downloadmac.html"
+)
 
 
 class SettingsDialog(QDialog):
@@ -286,15 +291,17 @@ class SettingsDialog(QDialog):
         log.info("ArgyllCMS auto-detect: %s", detected)
 
     def _test_argyll(self) -> None:
+        from core.resource_path import argyll_binary
         bin_dir = Path(self._argyll_edit.text().strip())
         results = []
         for tool in ("targen", "printtarg", "chartread", "colprof",
                      "profcheck", "printcal", "applycal"):
-            p = bin_dir / tool
+            p = bin_dir / argyll_binary(tool)
             if tool == "chartread":
                 # chartread probes USB hardware even with -?, causing a hang.
                 # Existence + executable check is sufficient here.
-                if p.exists() and os.access(str(p), os.X_OK):
+                executable = p.exists() and (_sys.platform == "win32" or os.access(str(p), os.X_OK))
+                if executable:
                     results.append(f"✓ {tool}")
                 else:
                     results.append(f"✗ {tool} (not found)")
@@ -319,10 +326,13 @@ class SettingsDialog(QDialog):
 
     def _open_argyll_download(self) -> None:
         self._argyll_status.setStyleSheet("")
+        if _sys.platform == "win32":
+            hint = "win64 for 64-bit Windows"
+        else:
+            hint = "arm64 for Apple Silicon, osx64 for Intel"
         self._argyll_status.setText(
-            "Opening argyllcms.com — download the latest version for your Mac "
-            "(arm64 for Apple Silicon, osx64 for Intel), then unpack and set the "
-            "bin path above."
+            f"Opening argyllcms.com — download the latest version ({hint}), "
+            "then unpack and set the bin path above."
         )
         QDesktopServices.openUrl(QUrl(_ARGYLL_DOWNLOAD_PAGE))
 

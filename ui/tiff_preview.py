@@ -116,11 +116,20 @@ def _get_cmyk_transform():
         return _cmyk_icc_transform if _cmyk_icc_transform is not False else None
     from PIL import ImageCms
     from core.resource_path import resource_path
-    candidates = [
-        resource_path("assets/USWebCoatedSWOP.icc"),
-        Path("/Library/Application Support/Adobe/Color/Profiles/Recommended/USWebCoatedSWOP.icc"),
-        Path("/System/Library/ColorSync/Profiles/Generic CMYK Profile.icc"),
-    ]
+    import sys as _sys
+    if _sys.platform == "win32":
+        import os as _os
+        _windir = Path(_os.environ.get("WINDIR", r"C:\Windows"))
+        _extra = [
+            _windir / "System32" / "spool" / "drivers" / "color" / "USWebCoatedSWOP.icc",
+            Path(r"C:\Program Files\Common Files\Adobe\Color\Profiles\USWebCoatedSWOP.icc"),
+        ]
+    else:
+        _extra = [
+            Path("/Library/Application Support/Adobe/Color/Profiles/Recommended/USWebCoatedSWOP.icc"),
+            Path("/System/Library/ColorSync/Profiles/Generic CMYK Profile.icc"),
+        ]
+    candidates = [resource_path("assets/USWebCoatedSWOP.icc")] + _extra
     for p in candidates:
         if p.exists():
             try:

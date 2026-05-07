@@ -15,3 +15,8 @@ def resource_path(relative: str) -> Path:
     """
     base = Path(getattr(sys, "_MEIPASS", _PROJECT_ROOT))
     return base / relative
+
+
+def argyll_binary(name: str) -> str:
+    """Return the platform-correct binary name (appends .exe on Windows)."""
+    return name + ".exe" if sys.platform == "win32" else name

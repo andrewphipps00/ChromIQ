@@ -1,9 +1,11 @@
 """Orchestrates colprof for ICC profile creation and installation."""
 from __future__ import annotations
 
+import os
 import re
 import shlex
 import shutil
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable
@@ -15,7 +17,12 @@ if TYPE_CHECKING:
 
 log = get_logger(__name__)
 
-_PROFILE_DIR = Path.home() / "Library" / "ColorSync" / "Profiles"
+
+def _profile_dir() -> Path:
+    if sys.platform == "win32":
+        windir = Path(os.environ.get("WINDIR", r"C:\Windows"))
+        return windir / "System32" / "spool" / "drivers" / "color"
+    return Path.home() / "Library" / "ColorSync" / "Profiles"
 
 
 @dataclass
@@ -82,9 +89,14 @@ class ProfileBuilder:
         )
 
     def install_profile(self, icc_path: Path) -> None:
-        """Copy .icc file to ~/Library/ColorSync/Profiles/."""
-        _PROFILE_DIR.mkdir(parents=True, exist_ok=True)
-        dest = _PROFILE_DIR / icc_path.name
+        """Copy .icc file to the system ICC profile folder."""
+        profile_dir = _profile_dir()
+        try:
+            profile_dir.mkdir(parents=True, exist_ok=True)
+        except PermissionError:
+            log.warning("Cannot create profile dir %s — elevation may be required", profile_dir)
+            raise
+        dest = profile_dir / icc_path.name
         shutil.copy2(icc_path, dest)
         log.info("Profile installed: %s", dest)
 

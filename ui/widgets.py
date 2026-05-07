@@ -205,8 +205,10 @@ def open_dir_dialog(
     )
     _style_file_dialog_toolbar(dlg)
     dlg.setFileMode(QFileDialog.FileMode.Directory)
+    import sys as _sys
     urls = _sidebar_urls(extra_path)
-    urls.append(QUrl.fromLocalFile("/Applications"))
+    if _sys.platform == "darwin":
+        urls.append(QUrl.fromLocalFile("/Applications"))
     dlg.setSidebarUrls(urls)
     if dlg.exec() == QFileDialog.DialogCode.Accepted:
         dirs = dlg.selectedFiles()

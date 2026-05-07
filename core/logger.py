@@ -7,9 +7,14 @@ from pathlib import Path
 
 
 def _log_path() -> Path:
-    p = Path.home() / "Library" / "Logs" / "ChromIQ"
-    p.mkdir(parents=True, exist_ok=True)
-    return p / "chromiq.log"
+    import sys
+    if sys.platform == "win32":
+        import os
+        base = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "ChromIQ" / "Logs"
+    else:
+        base = Path.home() / "Library" / "Logs" / "ChromIQ"
+    base.mkdir(parents=True, exist_ok=True)
+    return base / "chromiq.log"
 
 
 def configure_logging() -> None:

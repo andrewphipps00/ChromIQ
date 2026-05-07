@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -1455,7 +1456,13 @@ class TabMeasure(QWidget):
         self._instrument_disconnected = False
         self._device_busy = False
         self._no_instrument = False
-        subprocess.run(["killall", "-q", "chartread"], capture_output=True)
+        if sys.platform == "win32":
+            subprocess.run(
+                ["taskkill", "/F", "/IM", "chartread.exe"],
+                capture_output=True,
+            )
+        else:
+            subprocess.run(["killall", "-q", "chartread"], capture_output=True)
         self._set_settings_enabled(False)
         self._start_btn.setEnabled(False)
         self._stop_btn.setEnabled(True)
