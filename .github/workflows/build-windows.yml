@@ -15,8 +15,26 @@ permissions:
 
 jobs:
   build:
-    name: Build (Windows x64)
-    runs-on: windows-latest
+    name: Build (Windows ${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            artifact: ChromIQ-Windows-x64.zip
+            runner: windows-latest
+            python_arch: x64
+
+          - arch: x86
+            artifact: ChromIQ-Windows-x86.zip
+            runner: windows-latest
+            python_arch: x86
+
+          - arch: arm64
+            artifact: ChromIQ-Windows-arm64.zip
+            runner: windows-11-arm
+            python_arch: arm64
 
     env:
       RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
@@ -30,6 +48,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.13'
+          architecture: ${{ matrix.python_arch }}
 
       # pycups is macOS/Linux-only; filter it out before installing.
       - name: Install dependencies
@@ -59,8 +78,8 @@ jobs:
       - name: Package as ZIP
         shell: powershell
         run: |
-          Compress-Archive -Path dist\ChromIQ -DestinationPath ChromIQ-Windows-x64.zip
-          $size = (Get-Item ChromIQ-Windows-x64.zip).Length / 1MB
+          Compress-Archive -Path dist\ChromIQ -DestinationPath '${{ matrix.artifact }}'
+          $size = (Get-Item '${{ matrix.artifact }}').Length / 1MB
           Write-Host ("ZIP size: {0:N1} MB" -f $size)
 
       - name: Create GitHub Release (if not exists)
@@ -73,17 +92,19 @@ jobs:
             body=$(awk "/^## ${TAG}$/{found=1; next} found && /^## /{exit} found{print}" CHANGELOG.md 2>/dev/null | sed '/^[[:space:]]*$/d' || true)
             {
               printf '%s\n\n---\n' "$body"
-              printf '**Installation (Windows):** Extract the ZIP, open the ChromIQ folder, '
-              printf 'and run ChromIQ.exe. Windows SmartScreen may warn on first launch — '
+              printf '**Installation (Windows):** Download the ZIP for your architecture '
+              printf '(x64 for most PCs, x86 for 32-bit systems, arm64 for ARM laptops). '
+              printf 'Extract it, open the ChromIQ folder, and run ChromIQ.exe. '
+              printf 'Windows SmartScreen may warn on first launch — '
               printf 'click "More info" → "Run anyway". '
               printf 'Requires ArgyllCMS 3.5.0 installed and configured in Preferences.'
             } > /tmp/release_notes.txt
             gh release create "$TAG" \
               --title "ChromIQ $TAG" \
-              --notes-file /tmp/release_notes.txt
+              --notes-file /tmp/release_notes.txt 2>/dev/null || true
           fi
 
       - name: Upload ZIP to release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${{ env.RELEASE_TAG }}" ChromIQ-Windows-x64.zip --clobber
+        run: gh release upload "${{ env.RELEASE_TAG }}" "${{ matrix.artifact }}" --clobber
