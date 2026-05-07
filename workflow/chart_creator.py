@@ -85,6 +85,12 @@ class ChartCreator:
         if params.cal_target:
             # Starting a calibration target run — full wipe, no exceptions
             self._file_mgr.clean_folder(["ti1", "ti2", "tif", "cht", "ps", "json", "cal"])
+            for _f in work_dir.iterdir():
+                if _f.is_file() and _f.stem.startswith("pre_") and _f.suffix.lower() in (".icc", ".icm"):
+                    try:
+                        _f.unlink()
+                    except OSError as _exc:
+                        log.warning("Could not delete %s: %s", _f, _exc)
         else:
             # Normal profiling run — preserve any cal_* files from a prior calibration step
             _exts = {"ti1", "ti2", "tif", "cht", "ps", "json", "cal"}
@@ -97,6 +103,7 @@ class ChartCreator:
                     except OSError as _exc:
                         log.warning("Could not delete %s: %s", _f, _exc)
             log.debug("Cleaned %d file(s), preserved cal_* files", _deleted)
+            params.extra_targen_args = self._stage_precond_profile(params.extra_targen_args, work_dir)
 
         if params.is_manual:
             patch_count = params.patches  # pass value as-is; 0 lets targen decide
@@ -164,6 +171,31 @@ class ChartCreator:
             on_line=on_line,
             on_finish=lambda code: self._printtarg_done(code, work_dir, on_finish, stem),
         )
+
+    @staticmethod
+    def _stage_precond_profile(extra_args: str, work_dir: Path) -> str:
+        """Copy the -c ICC/ICM file into work_dir with a pre_ prefix if needed."""
+        if not extra_args:
+            return extra_args
+        parts = shlex.split(extra_args)
+        try:
+            idx = parts.index("-c")
+        except ValueError:
+            return extra_args
+        if idx + 1 >= len(parts):
+            return extra_args
+        src = Path(parts[idx + 1])
+        if not src.is_file():
+            return extra_args
+        dest_name = src.name if src.stem.startswith("pre_") else f"pre_{src.name}"
+        dest = work_dir / dest_name
+        if src != dest:
+            import shutil
+            shutil.copy2(src, dest)
+            log.info("Staged pre-conditioning profile to %s", dest)
+            parts[idx + 1] = str(dest)
+            return shlex.join(parts)
+        return extra_args
 
     # ------------------------------------------------------------------
     # Internal

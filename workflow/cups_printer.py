@@ -114,6 +114,7 @@ class CupsRawPrinter:
 
         if code == 1 and "postscript" in stderr.lower():
             log.warning("PostScript rejected by CUPS — retrying as TIFF")
+            self._cancel_pending_jobs(config.printer_name)
             self._print_job_tiff(tiff_path, config, on_finish)
             return
 
@@ -177,6 +178,23 @@ class CupsRawPrinter:
         code, _ = self._run_lp_result(cmd)
         if on_finish:
             on_finish(code)
+
+    @staticmethod
+    def _cancel_pending_jobs(printer_name: str) -> None:
+        try:
+            import cups
+            conn = cups.Connection()
+            jobs = conn.getJobs(which_jobs="not-completed", my_jobs=False)
+            for job_id, attrs in jobs.items():
+                if printer_name not in attrs.get("job-printer-uri", ""):
+                    continue
+                try:
+                    conn.cancelJob(job_id)
+                    log.info("Cancelled queued job %d for %s before TIFF retry", job_id, printer_name)
+                except Exception:
+                    pass
+        except Exception as exc:
+            log.warning("_cancel_pending_jobs error: %s", exc)
 
     @staticmethod
     def _build_lp_command_ps(ps_path: Path, cfg: PrintConfig) -> list[str]:
