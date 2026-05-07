@@ -1,12 +1,16 @@
 # ChromIQ
 
-**ChromIQ** is a free, open-source macOS desktop application for creating custom ICC profiles for RGB inkjet printers using [ArgyllCMS](https://www.argyllcms.com/). It provides a guided, five-step printer color calibration workflow that takes you from generating and printing a test chart through spectrophotometer measurement, ICC profile building with `colprof`, and quality verification with `profcheck` — without needing to touch the command line.
+**ChromIQ** is a free, open-source desktop application for creating custom ICC profiles for RGB inkjet printers using [ArgyllCMS](https://www.argyllcms.com/). It provides a guided, five-step printer color calibration workflow that takes you from generating and printing a test chart through spectrophotometer measurement, ICC profile building with `colprof`, and quality verification with `profcheck` — without needing to touch the command line.
+
+ChromIQ runs on macOS (primary platform). A **Windows beta** is available — see [Windows Beta](#windows-beta) below.
 
 Supported instruments: X-Rite i1Pro, i1Pro 2, i1Pro 3, i1Pro 3 Plus, ColorMunki, i1Studio, ColorChecker Studio, and SpectroScan.
 
 ---
 
 ## Download
+
+### macOS
 
 Pre-built DMGs are attached to each [GitHub Release](https://github.com/itsab1989/ChromIQ/releases/latest):
 
@@ -16,6 +20,17 @@ Pre-built DMGs are attached to each [GitHub Release](https://github.com/itsab198
 | `ChromIQ-macOS-arm64.dmg` | Apple Silicon only |
 
 Open the DMG, drag ChromIQ to Applications, eject, then launch. **First launch:** right-click → Open to bypass Gatekeeper (the app is ad-hoc signed, not notarized). ArgyllCMS must be installed separately — see [Requirements](#requirements).
+
+### Windows (beta)
+
+Pre-built ZIPs are available on the [v3.0.0-beta.1 release](https://github.com/itsab1989/ChromIQ/releases/tag/v3.0.0-beta.1):
+
+| Build | Runs on |
+|-------|---------|
+| `ChromIQ-Windows-x64.zip` | 64-bit Intel / AMD (most PCs) |
+| `ChromIQ-Windows-arm64.zip` | ARM64 (e.g. Snapdragon X laptops) |
+
+Extract the ZIP, open the `ChromIQ` folder, and run `ChromIQ.exe`. Windows SmartScreen may warn on first launch — click **More info → Run anyway**. See the [Windows Beta](#windows-beta) section for details and known limitations.
 
 ---
 
@@ -306,13 +321,36 @@ Save the file and restart ChromIQ — the new parameter appears automatically in
 
 ---
 
+## Windows Beta
+
+Windows support is in **public beta** as of v3.0.0-beta.1. All macOS behaviour is unchanged — every adaptation is behind a platform guard. The full ArgyllCMS workflow (chart creation, measurement, profiling, quality check) runs on Windows. The main differences from macOS:
+
+- **Printing** uses the native Windows print dialog instead of the CUPS/PostScript pipeline. You must disable ICM (colour management) in your printer driver settings manually before printing a profiling target — ChromIQ cannot do this automatically without CUPS.
+- **ICC profiles** are installed to `%WINDIR%\System32\spool\drivers\color\`. On some systems this may require administrator privileges; if it fails, copy the `.icc` file there manually.
+- ArgyllCMS is auto-detected in `C:\Program Files\ArgyllCMS\bin` and `%LOCALAPPDATA%\ArgyllCMS\bin`. Download for Windows from [argyllcms.com](https://www.argyllcms.com/downloadwin.html) (`win64`).
+
+### Feedback wanted
+
+If you try ChromIQ on Windows, please [open an issue](https://github.com/itsab1989/ChromIQ/issues) and let us know:
+
+- Does the app launch and detect ArgyllCMS correctly?
+- Does chart creation (targen / printtarg) work?
+- Does measurement (chartread) work — do the instrument selection prompts appear and respond?
+- Does printing via the native dialog work? Were you able to disable colour management in your driver?
+- Did profile installation work, or did it ask for elevation?
+- Any crashes, error messages, or unexpected behaviour?
+
+Any report — even just "it worked" — is helpful at this stage.
+
+---
+
 ## Known Issues
 
 > This section will be updated as issues are resolved.
 
 - **Measurement (Step 3):** Some spectrophotometer models may require additional calibration steps not yet surfaced in the UI.
 - **Advanced color science (Step 4):** FWA compensation and custom gamut mapping intents cover a wide range of instrument/paper combinations — edge cases may exist depending on your specific hardware and media.
-- **macOS only:** ChromIQ is developed and tested exclusively on macOS. The profile installation path (`~/Library/ColorSync/Profiles/`) and certain system integrations (dark title bar, macOS keychain) are macOS-specific. There are no plans for Windows or Linux support at this time. If you need a simple Windows or Linux option for printer profiling, try [Argyll_Printer_Profiler scripts](https://soul-traveller.github.io/Argyll_Printer_Profiler/) by Knut Georg Larsson.
+- **Windows (beta):** The CUPS-based PostScript print pipeline is not available on Windows — see [Windows Beta](#windows-beta) above. Linux is not currently supported.
 
 ---
 
