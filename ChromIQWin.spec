@@ -5,7 +5,7 @@ PyInstaller spec file for ChromIQ — Windows x64.
 Build command (run from the repo root with venv active):
     pyinstaller ChromIQWin.spec
 
-Result: dist\ChromIQ\ChromIQ.exe  (one-dir bundle)
+Result: dist/ChromIQ/ChromIQ.exe  (one-dir bundle)
 """
 
 import certifi
