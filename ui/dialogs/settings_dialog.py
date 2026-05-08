@@ -183,7 +183,10 @@ class SettingsDialog(QDialog):
             self,
             min_width=620,
         ))
-        bh.addLayout(native_print_row)
+        native_print_container = QWidget(self)
+        native_print_container.setLayout(native_print_row)
+        native_print_container.setVisible(_sys.platform != "win32")
+        bh.addWidget(native_print_container)
 
         layout.addWidget(behaviour_grp)
 

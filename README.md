@@ -23,7 +23,7 @@ Open the DMG, drag ChromIQ to Applications, eject, then launch. **First launch:*
 
 ### Windows (beta)
 
-Pre-built ZIPs are available on the [v3.0.0-beta.1 release](https://github.com/itsab1989/ChromIQ/releases/tag/v3.0.0-beta.1):
+Pre-built ZIPs are available on the [v3.0.0-beta.2 release](https://github.com/itsab1989/ChromIQ/releases/tag/v3.0.0-beta.2):
 
 | Build | Runs on |
 |-------|---------|
@@ -319,7 +319,7 @@ Save the file and restart ChromIQ — the new parameter appears automatically in
 
 ## Windows Beta
 
-Windows support is in **public beta** as of v3.0.0-beta.1. All macOS behaviour is unchanged — every adaptation is behind a platform guard. The full ArgyllCMS workflow (chart creation, measurement, profiling, quality check) runs on Windows. The main differences from macOS:
+Windows support is in **public beta** as of v3.0.0-beta.2. All macOS behaviour is unchanged — every adaptation is behind a platform guard. The full ArgyllCMS workflow (chart creation, measurement, profiling, quality check) runs on Windows. The main differences from macOS:
 
 - **Printing** uses the native Windows print dialog instead of the CUPS/PostScript pipeline. You must disable ICM (colour management) in your printer driver settings manually before printing a profiling target — ChromIQ cannot do this automatically without CUPS.
 - **ICC profiles** are installed to `%WINDIR%\System32\spool\drivers\color\`. On some systems this may require administrator privileges; if it fails, copy the `.icc` file there manually.

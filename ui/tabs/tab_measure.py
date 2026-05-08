@@ -242,6 +242,7 @@ class TabMeasure(QWidget):
         self._instrument_disconnected: bool = False
         self._device_busy: bool = False
         self._no_instrument: bool = False
+        self._ti3_mtime_before: float | None = None
 
         self._manager.stripe_changed.connect(self._on_stripe_changed)
         self._manager.all_stripes_done.connect(self._on_all_stripes_done)
@@ -308,7 +309,10 @@ class TabMeasure(QWidget):
         top_layout.addWidget(TabHeader(
             "STEP 03 · MEASURE TARGET", "Measure printed chart", "#56d6a5", top_widget
         ))
-        _mode_font = QFont("Menlo", 11, QFont.Weight.Medium)
+        _mode_font = QFont()
+        _mode_font.setFamilies(["Menlo", "Consolas", "Courier New", "monospace"])
+        _mode_font.setPointSize(11)
+        _mode_font.setWeight(QFont.Weight.Bold)
         self._mode_row_widget = QWidget(top_widget)
         mode_row = QHBoxLayout(self._mode_row_widget)
         mode_row.setContentsMargins(0, 0, 0, 0)
@@ -1456,10 +1460,15 @@ class TabMeasure(QWidget):
         self._instrument_disconnected = False
         self._device_busy = False
         self._no_instrument = False
+        _ti3_pre = self._ti1_path.with_suffix(".ti3") if self._ti1_path else None
+        self._ti3_mtime_before = (
+            _ti3_pre.stat().st_mtime if (_ti3_pre and _ti3_pre.exists()) else None
+        )
         if sys.platform == "win32":
             subprocess.run(
                 ["taskkill", "/F", "/IM", "chartread.exe"],
                 capture_output=True,
+                creationflags=subprocess.CREATE_NO_WINDOW,
             )
         else:
             subprocess.run(["killall", "-q", "chartread"], capture_output=True)
@@ -2058,13 +2067,25 @@ class TabMeasure(QWidget):
             layout = QVBoxLayout(dlg)
             layout.setSpacing(16)
             layout.setContentsMargins(24, 20, 24, 20)
+            _conn_bullet = (
+                "&nbsp;&nbsp;• connected to your Windows PC via USB<br>"
+                if sys.platform == "win32" else
+                "&nbsp;&nbsp;• connected to your Mac via USB<br>"
+            )
+            _driver_hint = (
+                "<br>If the instrument is connected but still not found, make sure the "
+                "Argyll WinUSB driver is installed for your device (use Argyll's "
+                "ArgyllInstallers tool or Zadig). See the Argyll documentation for details."
+                if sys.platform == "win32" else ""
+            )
             msg = QLabel(
                 "<b>No measurement instrument was detected.</b><br><br>"
                 "Please make sure your instrument is:<br>"
-                "&nbsp;&nbsp;• connected to your Mac via USB<br>"
+                + _conn_bullet +
                 "&nbsp;&nbsp;• switched on<br>"
                 "&nbsp;&nbsp;• not in use by another application<br><br>"
-                "Once the instrument is ready, press <b>Start Measurement</b> again.",
+                "Once the instrument is ready, press <b>Start Measurement</b> again."
+                + _driver_hint,
                 dlg,
             )
             msg.setWordWrap(True)
@@ -2129,9 +2150,16 @@ class TabMeasure(QWidget):
             return
 
         # chartread exits non-zero even on a clean 'd' (done) completion.
-        # Treat as success if the .ti3 file was actually written.
+        # Only count the .ti3 as valid if it was actually written during this run —
+        # a stale file from a previous session must not mask a fresh failure.
         ti3 = self._ti1_path.with_suffix(".ti3") if self._ti1_path else None
-        ti3_exists = ti3 is not None and ti3.exists()
+        if ti3 is not None and ti3.exists():
+            ti3_exists = (
+                self._ti3_mtime_before is None          # file didn't exist before → fresh
+                or ti3.stat().st_mtime > self._ti3_mtime_before
+            )
+        else:
+            ti3_exists = False
         failed = self._measure_failed or (code != 0 and not ti3_exists)
         self._measure_failed = False
 

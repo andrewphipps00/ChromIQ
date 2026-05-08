@@ -136,7 +136,10 @@ class TabProfile(QWidget):
         )
         root.addWidget(self._header)
 
-        _mode_font = QFont("Menlo", 11, QFont.Weight.Medium)
+        _mode_font = QFont()
+        _mode_font.setFamilies(["Menlo", "Consolas", "Courier New", "monospace"])
+        _mode_font.setPointSize(11)
+        _mode_font.setWeight(QFont.Weight.Bold)
 
         # --- Calibration mode row: 3 named buttons (hidden in normal mode) ---
         self._cal_mode_row_widget = QWidget(self)

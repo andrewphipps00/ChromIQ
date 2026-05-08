@@ -221,6 +221,7 @@ class MainWindow(QMainWindow):
                     background: #2a2a2a;
                     border: 1px solid #4a4a4a;
                     color: #909090;
+                    font-weight: normal;
                 }}
                 QPushButton#mode_btn:hover {{
                     background: #383838;

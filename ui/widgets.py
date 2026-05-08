@@ -27,7 +27,7 @@ class ButtonFontFilter(QObject):
     def eventFilter(self, obj: QObject, event: QEvent) -> bool:
         if isinstance(obj, QPushButton) and event.type() == QEvent.Type.Polish:
             font = obj.font()
-            font.setFamily("Menlo")
+            font.setFamilies(["Menlo", "Consolas", "Courier New", "monospace"])
             font.setCapitalization(QFont.Capitalization.AllUppercase)
             obj.setFont(font)
         return False
