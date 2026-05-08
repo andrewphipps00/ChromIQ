@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -1131,7 +1132,8 @@ class TabProfile(QWidget):
         layout.addWidget(install_desc)
 
         btn_box = QDialogButtonBox(dlg)
-        install_btn = btn_box.addButton("Install on this Mac", QDialogButtonBox.ButtonRole.ActionRole)
+        _install_label = "Install Profile" if sys.platform == "win32" else "Install on this Mac"
+        install_btn = btn_box.addButton(_install_label, QDialogButtonBox.ButtonRole.ActionRole)
         done_btn    = btn_box.addButton("Done",                QDialogButtonBox.ButtonRole.AcceptRole)
         install_btn.setObjectName("primary")
         layout.addWidget(btn_box)
@@ -1139,8 +1141,8 @@ class TabProfile(QWidget):
         def _on_install() -> None:
             dlg.accept()
             try:
-                self._builder.install_profile(icc_path)
-                self._ac_log.appendPlainText("[OK] Profile installed to ~/Library/ColorSync/Profiles/")
+                dest = self._builder.install_profile(icc_path)
+                self._ac_log.appendPlainText(f"[OK] Profile installed to {dest}")
             except Exception as exc:
                 self._ac_log.appendPlainText(f"[ERROR] Install failed: {exc}")
             self._ac_log.ensureCursorVisible()
@@ -2598,8 +2600,8 @@ class TabProfile(QWidget):
         if not self._icc_path:
             return
         try:
-            self._builder.install_profile(self._icc_path)
-            self._log.appendPlainText("[OK] Profile installed to ~/Library/ColorSync/Profiles/")
+            dest = self._builder.install_profile(self._icc_path)
+            self._log.appendPlainText(f"[OK] Profile installed to {dest}")
             self._log.ensureCursorVisible()
         except Exception as exc:
             self._log.appendPlainText(f"[ERROR] Install failed: {exc}")

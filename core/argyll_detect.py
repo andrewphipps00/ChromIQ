@@ -39,6 +39,17 @@ def find_argyll_bin_path() -> Path | None:
             local_app / "ArgyllCMS" / "bin",
             Path.home() / "ArgyllCMS" / "bin",
         ]
+        # Scan for versioned installs, e.g. %LOCALAPPDATA%\ArgyllCMS\Argyll_V3.5.0\bin
+        for _search_root in (local_app / "ArgyllCMS", Path(r"C:\Program Files\ArgyllCMS")):
+            try:
+                _versioned = sorted(
+                    (d for d in _search_root.iterdir()
+                     if d.is_dir() and "argyll" in d.name.lower()),
+                    reverse=True,
+                )
+                candidates = [d / "bin" for d in _versioned] + candidates
+            except (PermissionError, OSError):
+                pass
     else:
         candidates = [
             Path("/Applications/Argyll/bin"),

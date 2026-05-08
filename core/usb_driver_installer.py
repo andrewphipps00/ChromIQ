@@ -23,6 +23,7 @@ KNOWN_COLORIMETERS: dict[tuple[str, str], str] = {
     ("0765", "d094"): "X-Rite ColorMunki Photo/Design",
     ("0765", "d095"): "X-Rite ColorMunki Display",
     ("0765", "d0c0"): "X-Rite i1 Studio",
+    ("0765", "6008"): "X-Rite i1 Studio (Argyll)",
     ("0765", "d065"): "X-Rite i1 Display Pro / ColorMunki Display (HID)",
     ("085c", "0200"): "Datacolor Spyder 2",
     ("085c", "0300"): "Datacolor Spyder 3",
@@ -40,7 +41,7 @@ class UsbDevice(NamedTuple):
     vid: str        # 4-char hex, lower-case, no 0x prefix
     pid: str
     name: str
-    has_winusb: bool   # True if WinUSB is already the active driver
+    has_winusb: bool   # True if WinUSB or libusb0 (Argyll) driver is active
 
 
 def _wdi_simple_path() -> Path:
@@ -88,7 +89,7 @@ def enumerate_connected() -> list[UsbDevice]:
                     inst_key = winreg.OpenKey(dev_key, inst)
                     try:
                         svc, _ = winreg.QueryValueEx(inst_key, "Service")
-                        if str(svc).lower() == "winusb":
+                        if str(svc).lower() in ("winusb", "libusb0"):
                             has_winusb = True
                     except OSError:
                         pass

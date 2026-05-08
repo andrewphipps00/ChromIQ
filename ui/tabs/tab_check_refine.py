@@ -36,6 +36,7 @@ from ui.widgets import NoScrollComboBox, NoScrollDoubleSpinBox, make_browse_butt
 
 _TAB_COLOR = "#9f82ff"  # Check & Refine tab accent
 from ui.styles import SPEC_VIOLET, TAB_COLORS
+from workflow.profile_builder import _profile_dir as _get_profile_dir
 from workflow.profcheck_runner import (
     REFINE_DE_THRESHOLD,
     REFINE_START_OVER_RATIO,
@@ -1256,9 +1257,9 @@ class TabCheckRefine(QWidget):
 
             def _on_install():
                 try:
-                    _profile_dir = Path.home() / "Library" / "ColorSync" / "Profiles"
-                    _profile_dir.mkdir(parents=True, exist_ok=True)
-                    dest = _profile_dir / icc.name
+                    profile_dir = _get_profile_dir()
+                    profile_dir.mkdir(parents=True, exist_ok=True)
+                    dest = profile_dir / icc.name
                     shutil.copy2(icc, dest)
                     dlg.accept()
                     self._log.appendPlainText(f"[OK] Profile installed to {dest}")

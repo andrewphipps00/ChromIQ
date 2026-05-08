@@ -88,8 +88,8 @@ class ProfileBuilder:
             on_finish=on_finish,
         )
 
-    def install_profile(self, icc_path: Path) -> None:
-        """Copy .icc file to the system ICC profile folder."""
+    def install_profile(self, icc_path: Path) -> Path:
+        """Copy .icc file to the system ICC profile folder. Returns the installed path."""
         profile_dir = _profile_dir()
         try:
             profile_dir.mkdir(parents=True, exist_ok=True)
@@ -99,6 +99,7 @@ class ProfileBuilder:
         dest = profile_dir / icc_path.name
         shutil.copy2(icc_path, dest)
         log.info("Profile installed: %s", dest)
+        return dest
 
     def sanity_check(self, icc_path: Path, log_output: str = "") -> list[str]:
         """Return list of warning strings; empty = pass."""
