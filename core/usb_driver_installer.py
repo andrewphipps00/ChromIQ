@@ -24,14 +24,14 @@ KNOWN_COLORIMETERS: dict[tuple[str, str], str] = {
     ("0765", "d095"): "X-Rite ColorMunki Display",
     ("0765", "d0c0"): "X-Rite i1 Studio",
     ("0765", "d065"): "X-Rite i1 Display Pro / ColorMunki Display (HID)",
-    ("085C", "0200"): "Datacolor Spyder 2",
-    ("085C", "0300"): "Datacolor Spyder 3",
-    ("085C", "0400"): "Datacolor Spyder 4",
-    ("085C", "0500"): "Datacolor Spyder 5",
-    ("085C", "0a00"): "Datacolor SpyderX",
-    ("085C", "0b00"): "Datacolor SpyderX Pro",
-    ("085C", "0c00"): "Datacolor Spyder X2",
-    ("04DB", "005B"): "Colorvision Spyder 1",
+    ("085c", "0200"): "Datacolor Spyder 2",
+    ("085c", "0300"): "Datacolor Spyder 3",
+    ("085c", "0400"): "Datacolor Spyder 4",
+    ("085c", "0500"): "Datacolor Spyder 5",
+    ("085c", "0a00"): "Datacolor SpyderX",
+    ("085c", "0b00"): "Datacolor SpyderX Pro",
+    ("085c", "0c00"): "Datacolor Spyder X2",
+    ("04db", "005b"): "Colorvision Spyder 1",
     ("0670", "0001"): "Sequel Chroma 5",
 }
 
@@ -100,7 +100,16 @@ def enumerate_connected() -> list[UsbDevice]:
 
         found.append(UsbDevice(vid=vid, pid=pid, name=name, has_winusb=has_winusb))
 
-    return found
+    # Composite USB devices register multiple keys per VID/PID (parent + MI_xx
+    # interface children). Keep only the first occurrence of each (vid, pid).
+    seen: set[tuple[str, str]] = set()
+    unique: list[UsbDevice] = []
+    for dev in found:
+        key = (dev.vid, dev.pid)
+        if key not in seen:
+            seen.add(key)
+            unique.append(dev)
+    return unique
 
 
 def install_winusb(device: UsbDevice) -> bool:
