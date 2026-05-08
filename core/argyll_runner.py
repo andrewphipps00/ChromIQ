@@ -38,6 +38,81 @@ log = get_logger(__name__)
 
 _CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
+if sys.platform == "win32":
+    import ctypes as _ct
+    import ctypes.wintypes as _wt
+
+    _VK_MAP: dict[str, tuple[int, int]] = {
+        '\r':   (0x0D, 0x1C),
+        '\n':   (0x0D, 0x1C),
+        '\x1b': (0x1B, 0x01),
+        ' ':    (0x20, 0x39),
+    }
+
+    def _win_inject_key(pid: int, text: str) -> None:
+        """Inject text[0] into the console of process `pid` via WriteConsoleInputW.
+
+        Uses AttachConsole so we share the child's CONIN$ input buffer —
+        the same buffer MSVCRT's _getch() reads from.
+        """
+        if not text:
+            return
+        ch = text[0]
+        vk, scan = _VK_MAP.get(ch, (ord(ch.upper()) if ch.isalpha() else 0, 0))
+
+        class _CharUnion(_ct.Union):
+            _fields_ = [("UnicodeChar", _wt.WCHAR), ("AsciiChar", _ct.c_char)]
+
+        class _KeyEvent(_ct.Structure):
+            _fields_ = [
+                ("bKeyDown",          _wt.BOOL),
+                ("wRepeatCount",      _wt.WORD),
+                ("wVirtualKeyCode",   _wt.WORD),
+                ("wVirtualScanCode",  _wt.WORD),
+                ("uChar",             _CharUnion),
+                ("dwControlKeyState", _wt.DWORD),
+            ]
+
+        class _InputRecord(_ct.Structure):
+            class _U(_ct.Union):
+                _fields_ = [("KeyEvent", _KeyEvent)]
+            _anonymous_ = ("_u",)
+            _fields_ = [("EventType", _wt.WORD), ("_u", _U)]
+
+        k32 = _ct.windll.kernel32
+        k32.FreeConsole()
+        if not k32.AttachConsole(pid):
+            log.warning("_win_inject_key: AttachConsole(%d) failed (err %d)",
+                        pid, k32.GetLastError())
+            return
+        try:
+            h = k32.CreateFileW(
+                r"\\.\CONIN$",
+                0xC0000000,   # GENERIC_READ | GENERIC_WRITE
+                0x3,          # FILE_SHARE_READ | FILE_SHARE_WRITE
+                None, 3, 0, None,
+            )
+            if h == _wt.HANDLE(-1).value:
+                log.warning("_win_inject_key: CONIN$ open failed (err %d)", k32.GetLastError())
+                return
+            try:
+                recs = (_InputRecord * 2)()
+                for i, down in enumerate((True, False)):
+                    recs[i].EventType                   = 1   # KEY_EVENT
+                    recs[i].KeyEvent.bKeyDown            = _wt.BOOL(down)
+                    recs[i].KeyEvent.wRepeatCount        = 1
+                    recs[i].KeyEvent.wVirtualKeyCode     = vk
+                    recs[i].KeyEvent.wVirtualScanCode    = scan
+                    recs[i].KeyEvent.uChar.UnicodeChar   = ch
+                    recs[i].KeyEvent.dwControlKeyState   = 0
+                n_written = _wt.DWORD(0)
+                ok = k32.WriteConsoleInputW(h, recs, 2, _ct.byref(n_written))
+                log.debug("_win_inject_key: ch=%r ok=%s written=%d", ch, bool(ok), n_written.value)
+            finally:
+                k32.CloseHandle(h)
+        finally:
+            k32.FreeConsole()
+
 _ANSI_RE = re.compile(r"\x1b(?:\[[0-9;]*[A-Za-z]|\][^\x07]*\x07|[()][AB012]|[=>])")
 
 
@@ -59,6 +134,7 @@ class ArgyllRunner(QObject):
         self._pty_master:  int | None = None
         self._pty_thread:  threading.Thread | None = None
         self._winpty_proc: "_WinPtyProcess | None" = None
+        self._use_console_input: bool = False   # True = inject via WriteConsoleInputW
         self._pty_done.connect(self._on_pty_finished)
 
     # ------------------------------------------------------------------
@@ -114,6 +190,9 @@ class ArgyllRunner(QObject):
                 self._winpty_proc.write(text)
             except Exception as exc:
                 log.warning("write_stdin: winpty.write failed: %s", exc)
+        elif self._use_console_input and self._pty_proc is not None:
+            log.debug("write_stdin → inject: %r", text)
+            _win_inject_key(self._pty_proc.pid, text)
         elif self._pty_proc is not None and self._pty_proc.stdin:
             try:
                 self._pty_proc.stdin.write(text.encode())
@@ -249,30 +328,33 @@ class ArgyllRunner(QObject):
         on_line: Callable[[str], None] | None,
         on_finish: Callable[[int], None] | None,
     ) -> None:
+        """Windows interactive mode: hidden real console + WriteConsoleInputW for stdin.
+
+        Pywinpty (ConPTY / WinPTY) proved unreliable in frozen PyInstaller apps
+        across multiple beta releases.  Instead we give chartread its own real
+        but invisible console (CREATE_NEW_CONSOLE + SW_HIDE) so _getch() works,
+        pipe stdout for output reading, and inject keystrokes via AttachConsole +
+        WriteConsoleInputW — the same path a physical keyboard uses.
+        """
         cmd = [str(bin_path)] + args
-        log.info("Run (winpty): %s  [cwd=%s]", " ".join(cmd), cwd)
+        log.info("Run (new-console): %s  [cwd=%s]", " ".join(cmd), cwd)
 
-        # Prefer the legacy WinPTY backend: it injects keystrokes via
-        # WriteConsoleInput, which _getch() reads reliably. ConPTY (the
-        # default on Win10 1809+) can emit spurious EOF on its output pipe
-        # while the child is blocked on _getch(), prematurely killing our
-        # reader thread and dropping the calibration/navigation keypresses.
-        spawned = False
-        if _WinPtyBackend is not None:
-            try:
-                self._winpty_proc = _WinPtyProcess.spawn(
-                    cmd, cwd=str(cwd), dimensions=(24, 200),
-                    backend=_WinPtyBackend.WinPTY,
-                )
-                log.info("winpty: WinPTY backend active")
-                spawned = True
-            except Exception as exc:
-                log.warning("winpty: WinPTY backend unavailable (%s), trying ConPTY", exc)
-        if not spawned:
-            self._winpty_proc = _WinPtyProcess.spawn(cmd, cwd=str(cwd), dimensions=(24, 200))
-            log.info("winpty: ConPTY backend active")
+        si = subprocess.STARTUPINFO()
+        si.dwFlags   = subprocess.STARTF_USESHOWWINDOW
+        si.wShowWindow = 0   # SW_HIDE
 
-        self._pty_master = None
+        CREATE_NEW_CONSOLE = 0x10
+        self._pty_proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            creationflags=CREATE_NEW_CONSOLE,
+            startupinfo=si,
+            cwd=str(cwd),
+        )
+        self._pty_master        = None
+        self._winpty_proc       = None
+        self._use_console_input = True
 
         self._run_on_finish = on_finish
         self._run_on_line   = on_line
@@ -280,7 +362,7 @@ class ArgyllRunner(QObject):
             self.line_received.connect(on_line)
 
         self._pty_thread = threading.Thread(
-            target=self._winpty_reader, daemon=True
+            target=self._pipe_reader, daemon=True
         )
         self._pty_thread.start()
 
@@ -578,9 +660,10 @@ class ArgyllRunner(QObject):
         self._pty_done.emit(code)
 
     def _on_pty_finished(self, code: int) -> None:
-        self._pty_master  = None
-        self._pty_proc    = None
-        self._winpty_proc = None
+        self._pty_master        = None
+        self._pty_proc          = None
+        self._winpty_proc       = None
+        self._use_console_input = False
         on_finish = self._run_on_finish
         self._run_on_finish = None
         self._run_on_line   = None
