@@ -46,6 +46,12 @@ class ProfileParams:
     observer: str = ""
     fwa_enabled: bool = False
     fwa_illum: str = ""
+    # ICC media attributes & default intent (-Z)
+    z_surface: str = ""        # "" = glossy (default), "m" = matte
+    z_media_type: str = ""     # "" = reflective (default), "t" = transparent
+    z_polarity: str = ""       # "" = positive (default), "n" = negative
+    z_color_mode: str = ""     # "" = color (default), "b" = black & white
+    z_default_intent: str = "" # "" = not set, "p"/"r"/"s"/"a"
     # Gamut mapping extended
     gamut_sat_src: str = ""
     no_perc_gamut: bool = False
@@ -157,6 +163,11 @@ class ProfileBuilder:
             args += ["-o", p.observer]
         if p.fwa_enabled:
             args.append(f"-f{p.fwa_illum}" if p.fwa_illum else "-f")
+        z_attrs = "".join(filter(None, [p.z_surface, p.z_media_type, p.z_polarity, p.z_color_mode]))
+        if z_attrs:
+            args += ["-Z", z_attrs]
+        if p.z_default_intent:
+            args += ["-Z", p.z_default_intent]
         if p.gamut_sat_src:
             args += ["-S", p.gamut_sat_src]
         if p.no_perc_gamut:

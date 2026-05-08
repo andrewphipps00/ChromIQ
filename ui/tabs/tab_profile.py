@@ -1377,6 +1377,11 @@ class TabProfile(QWidget):
             "observer":            self._m_obs_combo.currentData() or "",
             "fwa_enabled":         self._m_fwa_check.isChecked(),
             "fwa_illum":           self._m_fwa_illum_combo.currentData() or "",
+            "z_surface":           self._m_z_surface_combo.currentData() or "",
+            "z_media_type":        self._m_z_media_type_combo.currentData() or "",
+            "z_polarity":          self._m_z_polarity_combo.currentData() or "",
+            "z_color_mode":        self._m_z_color_mode_combo.currentData() or "",
+            "z_default_intent":    self._m_z_intent_combo.currentData() or "",
             "gamut_mode":          gam_mode,
             "gamut_src":           self._m_gam_path_edit.text().strip(),
             "perc_intent_enabled": self._m_perc_intent_check.isChecked(),
@@ -1412,7 +1417,12 @@ class TabProfile(QWidget):
         _set_combo(self._m_illum_combo,         "illuminant", "")
         _set_combo(self._m_obs_combo,           "observer",   "")
         self._m_fwa_check.setChecked(bool(data.get("fwa_enabled", False)))
-        _set_combo(self._m_fwa_illum_combo,     "fwa_illum",  "")
+        _set_combo(self._m_fwa_illum_combo,     "fwa_illum",        "")
+        _set_combo(self._m_z_surface_combo,    "z_surface",         "")
+        _set_combo(self._m_z_media_type_combo, "z_media_type",      "")
+        _set_combo(self._m_z_polarity_combo,   "z_polarity",        "")
+        _set_combo(self._m_z_color_mode_combo, "z_color_mode",      "")
+        _set_combo(self._m_z_intent_combo,     "z_default_intent",  "")
         gam_mode = data.get("gamut_mode", "S")
         idx = self._m_gam_mode_combo.findData(gam_mode)
         if idx >= 0:
@@ -1734,6 +1744,102 @@ class TabProfile(QWidget):
             grp,
         ))
         g.addLayout(fwa_row)
+
+        # Media Surface
+        m_surf_row = QHBoxLayout()
+        m_surf_row.addWidget(QLabel("Media Surface (-Z m):", grp))
+        self._m_z_surface_combo = NoScrollComboBox(grp)
+        self._m_z_surface_combo.addItem("Glossy / Reflective (default)", "")
+        self._m_z_surface_combo.addItem("Matte", "m")
+        m_surf_row.addWidget(self._m_z_surface_combo, stretch=1)
+        m_surf_row.addWidget(TooltipButton(
+            "Media Surface (-Z m)",
+            "Marks the profile as belonging to matte or glossy media.\n"
+            "This is embedded in the ICC profile header and used by colour management\n"
+            "systems to select the correct profile when multiple are installed.\n\n"
+            "Glossy / Reflective — the ArgyllCMS default. Leave here for glossy, satin,\n"
+            "and most photo papers.\n\n"
+            "Matte — set this when profiling true matte papers. Some CMSes use this flag\n"
+            "to automatically pick the matte profile when the user selects matte media.",
+            grp,
+        ))
+        g.addLayout(m_surf_row)
+
+        # Media Type
+        m_mtype_row = QHBoxLayout()
+        m_mtype_row.addWidget(QLabel("Media Type (-Z t):", grp))
+        self._m_z_media_type_combo = NoScrollComboBox(grp)
+        self._m_z_media_type_combo.addItem("Reflective (default)", "")
+        self._m_z_media_type_combo.addItem("Transparent", "t")
+        m_mtype_row.addWidget(self._m_z_media_type_combo, stretch=1)
+        m_mtype_row.addWidget(TooltipButton(
+            "Media Type (-Z t)",
+            "Marks the profile for transparent media (slide film, overhead transparencies).\n"
+            "Leave at 'Reflective' for all standard inkjet and laser paper profiles.\n"
+            "Set 'Transparent' only if you are profiling a transparency inkset.",
+            grp,
+        ))
+        g.addLayout(m_mtype_row)
+
+        # Media Polarity
+        m_pol_row = QHBoxLayout()
+        m_pol_row.addWidget(QLabel("Media Polarity (-Z n):", grp))
+        self._m_z_polarity_combo = NoScrollComboBox(grp)
+        self._m_z_polarity_combo.addItem("Positive (default)", "")
+        self._m_z_polarity_combo.addItem("Negative", "n")
+        m_pol_row.addWidget(self._m_z_polarity_combo, stretch=1)
+        m_pol_row.addWidget(TooltipButton(
+            "Media Polarity (-Z n)",
+            "Marks the profile for negative media (photographic film negatives).\n"
+            "Used almost exclusively in professional film scanning workflows.\n"
+            "Leave at 'Positive' for all normal print profiling.",
+            grp,
+        ))
+        g.addLayout(m_pol_row)
+
+        # Color Type
+        m_cmode_row = QHBoxLayout()
+        m_cmode_row.addWidget(QLabel("Color Type (-Z b):", grp))
+        self._m_z_color_mode_combo = NoScrollComboBox(grp)
+        self._m_z_color_mode_combo.addItem("Color media (default)", "")
+        self._m_z_color_mode_combo.addItem("Black & White", "b")
+        m_cmode_row.addWidget(self._m_z_color_mode_combo, stretch=1)
+        m_cmode_row.addWidget(TooltipButton(
+            "Color Type (-Z b)",
+            "Marks the profile as intended for black & white output.\n"
+            "Set this only when profiling a monochrome inkset or a printer\n"
+            "in pure greyscale mode. Leave at 'Color media' for all normal RGB profiles.",
+            grp,
+        ))
+        g.addLayout(m_cmode_row)
+
+        # Default Rendering Intent
+        m_intent_row = QHBoxLayout()
+        m_intent_row.addWidget(QLabel("Default Intent (-Z):", grp))
+        self._m_z_intent_combo = NoScrollComboBox(grp)
+        self._m_z_intent_combo.addItem("Not set (profile default)", "")
+        self._m_z_intent_combo.addItem("Perceptual", "p")
+        self._m_z_intent_combo.addItem("Relative Colorimetric", "r")
+        self._m_z_intent_combo.addItem("Saturation", "s")
+        self._m_z_intent_combo.addItem("Absolute Colorimetric", "a")
+        m_intent_row.addWidget(self._m_z_intent_combo, stretch=1)
+        m_intent_row.addWidget(TooltipButton(
+            "Default Rendering Intent (-Z p/r/s/a)",
+            "Sets which rendering intent is flagged as the default in the ICC profile header.\n"
+            "Colour management systems read this to decide which intent to use when the\n"
+            "user has not specified one explicitly.\n\n"
+            "Not set — colprof does not write an explicit default; the ICC default\n"
+            "(Relative Colorimetric for output device profiles) is implied.\n\n"
+            "Perceptual — compresses the full source gamut to fit the printer. Best for\n"
+            "photographs with saturated colours that exceed the printer's gamut.\n\n"
+            "Relative Colorimetric — maps colours exactly, clipping out-of-gamut values.\n"
+            "Best for images that are mostly within the printer's gamut.\n\n"
+            "Saturation — maximises colour vividness; rarely used for photographic output.\n\n"
+            "Absolute Colorimetric — includes white point simulation; useful for proofing.\n\n"
+            "For most inkjet photo profiles, 'Perceptual' or 'Not set' are the right choices.",
+            grp,
+        ))
+        g.addLayout(m_intent_row)
 
         layout.addWidget(grp)
 
@@ -2086,10 +2192,14 @@ class TabProfile(QWidget):
         grp = QGroupBox("Color Science", layout.parentWidget())
         g = QVBoxLayout(grp)
 
-        # Illuminant
+        # Illuminant, Observer, FWA are hidden in guided mode (advanced options)
+        _adv = QWidget(grp)
+        _adv_layout = QVBoxLayout(_adv)
+        _adv_layout.setContentsMargins(0, 0, 0, 0)
+
         illum_row = QHBoxLayout()
-        illum_row.addWidget(QLabel("Illuminant (-i):", grp))
-        self._illum_combo = NoScrollComboBox(grp)
+        illum_row.addWidget(QLabel("Illuminant (-i):", _adv))
+        self._illum_combo = NoScrollComboBox(_adv)
         for label, val in _ILLUMINANTS:
             self._illum_combo.addItem(label, val)
         illum_row.addWidget(self._illum_combo, stretch=1)
@@ -2098,14 +2208,13 @@ class TabProfile(QWidget):
             "Illuminant used when converting spectral measurements to XYZ.\n"
             "D50 is the ICC standard default and correct for most workflows.\n"
             "Change only if you need a non-D50 PCS encoding (unusual).",
-            grp,
+            _adv,
         ))
-        g.addLayout(illum_row)
+        _adv_layout.addLayout(illum_row)
 
-        # Observer
         obs_row = QHBoxLayout()
-        obs_row.addWidget(QLabel("CIE Observer (-o):", grp))
-        self._obs_combo = NoScrollComboBox(grp)
+        obs_row.addWidget(QLabel("CIE Observer (-o):", _adv))
+        self._obs_combo = NoScrollComboBox(_adv)
         for label, val in [
             ("Default (1931 2° standard)", ""),
             ("1964 10° large-field observer", "1964_10"),
@@ -2120,16 +2229,15 @@ class TabProfile(QWidget):
             "The 1931 2° observer is the ICC standard default.\n"
             "The 1964 10° observer is better for large-area viewing.\n"
             "2015 observers (Stockman) are more physiologically accurate.",
-            grp,
+            _adv,
         ))
-        g.addLayout(obs_row)
+        _adv_layout.addLayout(obs_row)
 
-        # FWA compensation
         fwa_row = QHBoxLayout()
-        self._fwa_check = QCheckBox("FWA Compensation (-f):", grp)
-        self._fwa_illum_combo = NoScrollComboBox(grp)
+        self._fwa_check = QCheckBox("FWA Compensation (-f):", _adv)
+        self._fwa_illum_combo = NoScrollComboBox(_adv)
         self._fwa_illum_combo.addItem("Same as illuminant (-i)", "")
-        for label, val in _ILLUMINANTS[1:]:  # skip the "Default (D50)" entry
+        for label, val in _ILLUMINANTS[1:]:
             self._fwa_illum_combo.addItem(label, val)
         self._fwa_illum_combo.setEnabled(False)
         self._fwa_check.toggled.connect(self._fwa_illum_combo.setEnabled)
@@ -2141,12 +2249,50 @@ class TabProfile(QWidget):
             "Requires spectral measurements (not colorimetric-only).\n"
             "The illuminant selects the lighting to compute the FWA effect under.\n"
             "Use when printing on papers with optical brighteners (e.g. bright white coated papers).",
+            _adv,
+        ))
+        _adv_layout.addLayout(fwa_row)
+
+        _adv.setVisible(False)
+        g.addWidget(_adv)
+
+        # Media Surface — visible in guided mode
+        surf_row = QHBoxLayout()
+        surf_row.addWidget(QLabel("Media Surface (-Z m):", grp))
+        self._z_surface_combo = NoScrollComboBox(grp)
+        self._z_surface_combo.addItem("Glossy / Reflective (default)", "")
+        self._z_surface_combo.addItem("Matte", "m")
+        surf_row.addWidget(self._z_surface_combo, stretch=1)
+        surf_row.addWidget(TooltipButton(
+            "Media Surface (-Z m)",
+            "Marks the profile as belonging to matte or glossy media.\n"
+            "This is embedded in the ICC profile header and used by colour management\n"
+            "systems to select the correct profile when multiple are installed.\n\n"
+            "Glossy / Reflective — the ArgyllCMS default. Leave here for glossy, satin,\n"
+            "and most photo papers.\n\n"
+            "Matte — set this when profiling true matte papers. Some CMSes use this flag\n"
+            "to automatically pick the matte profile when the user selects matte media.",
             grp,
         ))
-        g.addLayout(fwa_row)
+        g.addLayout(surf_row)
+
+        # Color Type — visible in guided mode
+        cmode_row = QHBoxLayout()
+        cmode_row.addWidget(QLabel("Color Type (-Z b):", grp))
+        self._z_color_mode_combo = NoScrollComboBox(grp)
+        self._z_color_mode_combo.addItem("Color media (default)", "")
+        self._z_color_mode_combo.addItem("Black & White", "b")
+        cmode_row.addWidget(self._z_color_mode_combo, stretch=1)
+        cmode_row.addWidget(TooltipButton(
+            "Color Type (-Z b)",
+            "Marks the profile as intended for black & white output.\n"
+            "Set this only when profiling a monochrome inkset or a printer\n"
+            "in pure greyscale mode. Leave at 'Color media' for all normal RGB profiles.",
+            grp,
+        ))
+        g.addLayout(cmode_row)
 
         layout.addWidget(grp)
-        grp.setVisible(False)
 
     def _build_gamut_group(self, layout: QVBoxLayout) -> None:
         grp = QGroupBox("Gamut Mapping", layout.parentWidget())
@@ -2636,6 +2782,8 @@ class TabProfile(QWidget):
             observer         = self._obs_combo.currentData() or "",
             fwa_enabled      = self._fwa_check.isChecked(),
             fwa_illum        = (self._fwa_illum_combo.currentData() or "") if self._fwa_check.isChecked() else "",
+            z_surface        = self._z_surface_combo.currentData() or "",
+            z_color_mode     = self._z_color_mode_combo.currentData() or "",
             gamut_sat_src    = self._gam_path_edit.text().strip() if self._gam_mode_combo.currentData() == "S" else "",
             no_perc_gamut    = self._no_perc_gamut_cb.isChecked(),
             no_sat_gamut     = self._no_sat_gamut_cb.isChecked(),
@@ -2669,6 +2817,11 @@ class TabProfile(QWidget):
             observer         = self._m_obs_combo.currentData() or "",
             fwa_enabled      = self._m_fwa_check.isChecked(),
             fwa_illum        = (self._m_fwa_illum_combo.currentData() or "") if self._m_fwa_check.isChecked() else "",
+            z_surface        = self._m_z_surface_combo.currentData() or "",
+            z_media_type     = self._m_z_media_type_combo.currentData() or "",
+            z_polarity       = self._m_z_polarity_combo.currentData() or "",
+            z_color_mode     = self._m_z_color_mode_combo.currentData() or "",
+            z_default_intent = self._m_z_intent_combo.currentData() or "",
             no_perc_gamut    = self._m_no_perc_gamut_cb.isChecked(),
             no_sat_gamut     = self._m_no_sat_gamut_cb.isChecked(),
             inv_gamut_map    = self._m_inv_gamut_cb.isChecked(),
@@ -2695,6 +2848,8 @@ class TabProfile(QWidget):
             s.set("colprof_observer",           self._obs_combo.currentData() or "")
             s.set("colprof_fwa_enabled",        self._fwa_check.isChecked())
             s.set("colprof_fwa_illum",          self._fwa_illum_combo.currentData() or "")
+            s.set("colprof_z_surface",          self._z_surface_combo.currentData() or "")
+            s.set("colprof_z_color_mode",       self._z_color_mode_combo.currentData() or "")
             s.set("colprof_gamut_mode",          self._gam_mode_combo.currentData() or "")
             s.set("colprof_gamut_src",           self._gam_path_edit.text().strip())
             s.set("colprof_perc_intent_enabled",self._perc_intent_check.isChecked())
@@ -2725,6 +2880,11 @@ class TabProfile(QWidget):
             s.set("manual2_colprof_observer",           self._m_obs_combo.currentData() or "")
             s.set("manual2_colprof_fwa_enabled",        self._m_fwa_check.isChecked())
             s.set("manual2_colprof_fwa_illum",          self._m_fwa_illum_combo.currentData() or "")
+            s.set("manual2_colprof_z_surface",          self._m_z_surface_combo.currentData() or "")
+            s.set("manual2_colprof_z_media_type",       self._m_z_media_type_combo.currentData() or "")
+            s.set("manual2_colprof_z_polarity",         self._m_z_polarity_combo.currentData() or "")
+            s.set("manual2_colprof_z_color_mode",       self._m_z_color_mode_combo.currentData() or "")
+            s.set("manual2_colprof_z_intent",           self._m_z_intent_combo.currentData() or "")
             s.set("manual2_colprof_gamut_mode",         self._m_gam_mode_combo.currentData() or "")
             s.set("manual2_colprof_gamut_src",          self._m_gam_path_edit.text().strip())
             s.set("manual2_colprof_perc_intent_enabled",self._m_perc_intent_check.isChecked())
@@ -2768,6 +2928,8 @@ class TabProfile(QWidget):
         _set_combo(self._obs_combo,          "colprof_observer",   "")
         self._fwa_check.setChecked(bool(s.get("colprof_fwa_enabled", False)))
         _set_combo(self._fwa_illum_combo,    "colprof_fwa_illum",  "")
+        _set_combo(self._z_surface_combo,    "colprof_z_surface",    "")
+        _set_combo(self._z_color_mode_combo, "colprof_z_color_mode", "")
 
         gamut_mode = s.get("colprof_gamut_mode", "S")
         idx = self._gam_mode_combo.findData(gamut_mode)
@@ -2812,6 +2974,11 @@ class TabProfile(QWidget):
         _set_m_combo(self._m_obs_combo,           "manual2_colprof_observer",   "")
         self._m_fwa_check.setChecked(bool(s.get("manual2_colprof_fwa_enabled", False)))
         _set_m_combo(self._m_fwa_illum_combo,     "manual2_colprof_fwa_illum",  "")
+        _set_m_combo(self._m_z_surface_combo,    "manual2_colprof_z_surface",    "")
+        _set_m_combo(self._m_z_media_type_combo, "manual2_colprof_z_media_type", "")
+        _set_m_combo(self._m_z_polarity_combo,   "manual2_colprof_z_polarity",   "")
+        _set_m_combo(self._m_z_color_mode_combo, "manual2_colprof_z_color_mode", "")
+        _set_m_combo(self._m_z_intent_combo,     "manual2_colprof_z_intent",     "")
         m_gam_mode = s.get("manual2_colprof_gamut_mode", "S")
         idx = self._m_gam_mode_combo.findData(m_gam_mode)
         self._m_gam_mode_combo.setCurrentIndex(idx if idx >= 0 else self._m_gam_mode_combo.findData("S"))
