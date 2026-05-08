@@ -21,9 +21,14 @@ if sys.platform != "win32":
 else:
     try:
         from winpty import PtyProcess as _WinPtyProcess
+        try:
+            from winpty import Backend as _WinPtyBackend
+        except ImportError:
+            _WinPtyBackend = None
         _WINPTY_AVAILABLE = True
     except ImportError:
-        _WinPtyProcess = None  # type: ignore[assignment,misc]
+        _WinPtyProcess = None    # type: ignore[assignment,misc]
+        _WinPtyBackend = None
         _WINPTY_AVAILABLE = False
 
 if TYPE_CHECKING:
@@ -104,10 +109,11 @@ class ArgyllRunner(QObject):
             except OSError:
                 pass
         elif self._winpty_proc is not None:
+            log.debug("write_stdin → winpty: %r", text)
             try:
                 self._winpty_proc.write(text)
-            except Exception:
-                pass
+            except Exception as exc:
+                log.warning("write_stdin: winpty.write failed: %s", exc)
         elif self._pty_proc is not None and self._pty_proc.stdin:
             try:
                 self._pty_proc.stdin.write(text.encode())
@@ -116,6 +122,8 @@ class ArgyllRunner(QObject):
                 pass
         elif self._process and self._process.state() == QProcess.ProcessState.Running:
             self._process.write(text.encode())
+        else:
+            log.warning("write_stdin: no active process (text=%r)", text)
 
     def abort(self) -> None:
         if self._winpty_proc is not None:
@@ -243,7 +251,27 @@ class ArgyllRunner(QObject):
     ) -> None:
         cmd = [str(bin_path)] + args
         log.info("Run (winpty): %s  [cwd=%s]", " ".join(cmd), cwd)
-        self._winpty_proc = _WinPtyProcess.spawn(cmd, cwd=str(cwd), dimensions=(24, 200))
+
+        # Prefer the legacy WinPTY backend: it injects keystrokes via
+        # WriteConsoleInput, which _getch() reads reliably. ConPTY (the
+        # default on Win10 1809+) can emit spurious EOF on its output pipe
+        # while the child is blocked on _getch(), prematurely killing our
+        # reader thread and dropping the calibration/navigation keypresses.
+        spawned = False
+        if _WinPtyBackend is not None:
+            try:
+                self._winpty_proc = _WinPtyProcess.spawn(
+                    cmd, cwd=str(cwd), dimensions=(24, 200),
+                    backend=_WinPtyBackend.WinPTY,
+                )
+                log.info("winpty: WinPTY backend active")
+                spawned = True
+            except Exception as exc:
+                log.warning("winpty: WinPTY backend unavailable (%s), trying ConPTY", exc)
+        if not spawned:
+            self._winpty_proc = _WinPtyProcess.spawn(cmd, cwd=str(cwd), dimensions=(24, 200))
+            log.info("winpty: ConPTY backend active")
+
         self._pty_master = None
 
         self._run_on_finish = on_finish
@@ -374,10 +402,21 @@ class ArgyllRunner(QObject):
         data_q: "queue.Queue[str | None]" = queue.Queue()
 
         def _inner() -> None:
+            import time
             while True:
                 try:
                     chunk = proc.read(4096)
                 except EOFError:
+                    # ConPTY can raise EOFError when the child is blocked on
+                    # _getch() rather than writing output.  Check whether the
+                    # process has actually exited before treating this as done.
+                    try:
+                        still_alive = proc.isalive
+                    except Exception:
+                        still_alive = False
+                    if still_alive:
+                        time.sleep(0.05)
+                        continue
                     data_q.put(None)
                     break
                 except Exception:
