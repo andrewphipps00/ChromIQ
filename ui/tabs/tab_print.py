@@ -170,14 +170,14 @@ class TabPrint(QWidget):
         beast_headline.setAlignment(Qt.AlignmentFlag.AlignCenter)
         beast_headline.setStyleSheet(
             "color: #ffffff; background: transparent;"
-            " font-family: Georgia; font-size: 28pt;"
+            " font-family: Georgia; font-size: 28px;"
         )
         beast_layout.addWidget(beast_headline)
         beast_subtext = QLabel("Your printer is hungry.", beast_box)
         beast_subtext.setAlignment(Qt.AlignmentFlag.AlignCenter)
         beast_subtext.setStyleSheet(
             "color: #808080; background: transparent;"
-            " font-family: Menlo; font-size: 9pt; font-weight: 300;"
+            " font-family: Menlo; font-size: 9px; font-weight: 300;"
         )
         beast_layout.addWidget(beast_subtext)
         beast_bar = QHBoxLayout()
@@ -246,7 +246,7 @@ class TabPrint(QWidget):
         lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         lbl.setStyleSheet(
             "color: #808080; background: transparent; padding: 4px;"
-            " font-family: Menlo; font-size: 9pt; font-weight: 300;"
+            " font-family: Menlo; font-size: 9px; font-weight: 300;"
         )
         rl.addWidget(lbl)
         self._preview = TiffPreview(right)

@@ -108,7 +108,7 @@ class TabChart(QWidget):
         mode_row.setContentsMargins(0, 0, 0, 0)
         _mode_font = QFont()
         _mode_font.setFamilies(["Menlo", "Consolas", "Courier New", "monospace"])
-        _mode_font.setPointSize(11)
+        _mode_font.setPixelSize(11)
         _mode_font.setWeight(QFont.Weight.Bold)
         self._guided_btn = QPushButton("GUIDED", self)
         self._guided_btn.setCheckable(True)
@@ -181,7 +181,7 @@ class TabChart(QWidget):
         lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         lbl.setStyleSheet(
             "color: #808080; background: transparent; padding: 4px;"
-            " font-family: Menlo; font-size: 9pt; font-weight: 300;"
+            " font-family: Menlo; font-size: 9px; font-weight: 300;"
         )
         right_layout.addWidget(lbl)
         self._preview = TiffPreview(right)
@@ -344,7 +344,7 @@ class TabChart(QWidget):
         self._patch_count_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._patch_count_lbl.setStyleSheet(
             "color: #ffffff; background: transparent;"
-            " font-family: Georgia; font-size: 56pt;"
+            " font-family: Georgia; font-size: 56px;"
         )
         count_font = QFont()
         count_font.setLetterSpacing(QFont.SpacingType.PercentageSpacing, 85)
@@ -355,7 +355,7 @@ class TabChart(QWidget):
         self._patch_detail_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._patch_detail_lbl.setStyleSheet(
             "color: #808080; background: transparent;"
-            " font-family: Menlo; font-size: 9pt; font-weight: 300;"
+            " font-family: Menlo; font-size: 9px; font-weight: 300;"
         )
         count_layout.addWidget(self._patch_detail_lbl)
 

@@ -48,12 +48,13 @@ class SettingsDialog(QDialog):
         self._settings = settings
         self._update_checker: UpdateChecker | None = None
         self.setWindowTitle("ChromIQ Preferences")
-        self.setMinimumWidth(540)
+        self.setMinimumWidth(840)
         self.setWindowFlags(
             self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint
         )
         self._build_ui()
         self._load_settings()
+        self.resize(840, self.sizeHint().height())
 
     # ------------------------------------------------------------------
 
@@ -92,8 +93,6 @@ class SettingsDialog(QDialog):
         btn_row.addWidget(test_btn)
         btn_row.addWidget(detect_btn)
         btn_row.addWidget(dl_btn)
-        btn_row.addStretch()
-        ag.addLayout(btn_row)
 
         if _sys.platform == "win32":
             driver_btn = QPushButton("Install USB Driver…", self)
@@ -102,10 +101,10 @@ class SettingsDialog(QDialog):
                 "no test-signing mode required, works on x64 and ARM64"
             )
             driver_btn.clicked.connect(self._show_usb_installer)
-            driver_row = QHBoxLayout()
-            driver_row.addWidget(driver_btn)
-            driver_row.addStretch()
-            ag.addLayout(driver_row)
+            btn_row.addWidget(driver_btn)
+
+        btn_row.addStretch()
+        ag.addLayout(btn_row)
 
         self._argyll_status = QLabel("", self)
         self._argyll_status.setWordWrap(True)
@@ -195,6 +194,7 @@ class SettingsDialog(QDialog):
             self,
             min_width=620,
         ))
+        native_print_row.setContentsMargins(0, 0, 0, 0)
         native_print_container = QWidget(self)
         native_print_container.setLayout(native_print_row)
         native_print_container.setVisible(_sys.platform != "win32")

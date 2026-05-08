@@ -113,7 +113,7 @@ class ScanHighlighter(QWidget):
             p.setBrush(self._color)
             p.setPen(Qt.PenStyle.NoPen)
             font = self.font()
-            font.setPointSize(9)
+            font.setPixelSize(9)
             font.setBold(True)
             font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1.4)
             p.setFont(font)

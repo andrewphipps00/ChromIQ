@@ -174,7 +174,7 @@ class TabCheckRefine(QWidget):
         # --- Mode buttons ---
         _mode_font = QFont()
         _mode_font.setFamilies(["Menlo", "Consolas", "Courier New", "monospace"])
-        _mode_font.setPointSize(11)
+        _mode_font.setPixelSize(11)
         _mode_font.setWeight(QFont.Weight.Bold)
         self._mode_row_widget = QWidget(self)
         mode_row = QHBoxLayout(self._mode_row_widget)
@@ -251,14 +251,14 @@ class TabCheckRefine(QWidget):
         headline.setAlignment(Qt.AlignmentFlag.AlignCenter)
         headline.setStyleSheet(
             "color: #ffffff; background: transparent;"
-            " font-family: Georgia; font-size: 28pt;"
+            " font-family: Georgia; font-size: 28px;"
         )
         nervous_layout.addWidget(headline)
         subtext = QLabel("Your colors are in good hands.", nervous_box)
         subtext.setAlignment(Qt.AlignmentFlag.AlignCenter)
         subtext.setStyleSheet(
             "color: #808080; background: transparent;"
-            " font-family: Menlo; font-size: 9pt; font-weight: 300;"
+            " font-family: Menlo; font-size: 9px; font-weight: 300;"
         )
         nervous_layout.addWidget(subtext)
         bar_row = QHBoxLayout()

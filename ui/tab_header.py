@@ -35,7 +35,7 @@ class TabHeader(QWidget):
         self._step_lbl = QLabel(step_text, self)
         self._step_lbl.setStyleSheet(
             "color: #808080; background: transparent;"
-            " font-family: Menlo; font-size: 12pt; font-weight: 300;"
+            " font-family: Menlo; font-size: 12px; font-weight: 300;"
         )
         step_row.addWidget(self._step_lbl, 0, Qt.AlignmentFlag.AlignVCenter)
         step_row.addStretch()
@@ -46,7 +46,7 @@ class TabHeader(QWidget):
         self._title_lbl = QLabel(title_text, self)
         self._title_lbl.setStyleSheet(
             "color: #ffffff; background: transparent;"
-            " font-family: Georgia; font-size: 30pt;"
+            " font-family: Georgia; font-size: 30px;"
         )
         title_font = QFont()
         title_font.setLetterSpacing(QFont.SpacingType.PercentageSpacing, 85)

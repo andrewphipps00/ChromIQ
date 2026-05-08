@@ -242,6 +242,7 @@ class TabMeasure(QWidget):
         self._instrument_disconnected: bool = False
         self._device_busy: bool = False
         self._no_instrument: bool = False
+        self._usb_claimed_by_vm: bool = False
         self._ti3_mtime_before: float | None = None
 
         self._manager.stripe_changed.connect(self._on_stripe_changed)
@@ -255,6 +256,7 @@ class TabMeasure(QWidget):
         self._manager.wrong_strip.connect(self._on_wrong_strip)
         self._manager.unexpected_response.connect(self._on_unexpected_response)
         self._manager.sensor_wrong_position.connect(self._on_sensor_wrong_position)
+        self._manager.usb_claimed_by_vm.connect(self._on_usb_claimed_by_vm)
         self._build_ui()
         self._restore_defaults()
         self._start_btn.setEnabled(False)
@@ -311,7 +313,7 @@ class TabMeasure(QWidget):
         ))
         _mode_font = QFont()
         _mode_font.setFamilies(["Menlo", "Consolas", "Courier New", "monospace"])
-        _mode_font.setPointSize(11)
+        _mode_font.setPixelSize(11)
         _mode_font.setWeight(QFont.Weight.Bold)
         self._mode_row_widget = QWidget(top_widget)
         mode_row = QHBoxLayout(self._mode_row_widget)
@@ -380,14 +382,14 @@ class TabMeasure(QWidget):
         headline.setAlignment(Qt.AlignmentFlag.AlignCenter)
         headline.setStyleSheet(
             "color: #ffffff; background: transparent;"
-            " font-family: Georgia; font-size: 28pt;"
+            " font-family: Georgia; font-size: 28px;"
         )
         calm_layout.addWidget(headline)
         subtext = QLabel("Scan each strip with a slow, steady motion.", calm_box)
         subtext.setAlignment(Qt.AlignmentFlag.AlignCenter)
         subtext.setStyleSheet(
             "color: #808080; background: transparent;"
-            " font-family: Menlo; font-size: 9pt; font-weight: 300;"
+            " font-family: Menlo; font-size: 9px; font-weight: 300;"
         )
         calm_layout.addWidget(subtext)
         bar_row = QHBoxLayout()
@@ -462,7 +464,7 @@ class TabMeasure(QWidget):
         lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         lbl.setStyleSheet(
             "color: #808080; background: transparent; padding: 4px;"
-            " font-family: Menlo; font-size: 9pt; font-weight: 300;"
+            " font-family: Menlo; font-size: 9px; font-weight: 300;"
         )
         rl.addWidget(lbl)
         self._preview = TiffPreview(right)
@@ -1697,6 +1699,9 @@ class TabMeasure(QWidget):
     def _on_no_instrument(self) -> None:
         self._no_instrument = True
 
+    def _on_usb_claimed_by_vm(self) -> None:
+        self._usb_claimed_by_vm = True
+
     def _on_instrument_disconnected(self) -> None:
         if self._instrument_disconnected:
             return
@@ -2057,6 +2062,36 @@ class TabMeasure(QWidget):
         self._set_settings_enabled(True)
         self._start_btn.setEnabled(True)
         self._stop_btn.setEnabled(False)
+
+        if self._usb_claimed_by_vm:
+            self._usb_claimed_by_vm = False
+            from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QVBoxLayout
+            dlg = QDialog(self)
+            dlg.setWindowTitle("Instrument Not Accessible")
+            dlg.setMinimumWidth(500)
+            layout = QVBoxLayout(dlg)
+            layout.setSpacing(16)
+            layout.setContentsMargins(24, 20, 24, 20)
+            msg = QLabel(
+                "<b>Your measurement device could not be opened — it appears to be "
+                "connected to a virtual machine.</b><br><br>"
+                "When a device is assigned to a VM (Parallels, VMware, VirtualBox, etc.), "
+                "the host operating system cannot access it at the same time.<br><br>"
+                "To fix this:<br>"
+                "&nbsp;&nbsp;1. In your VM software, disconnect the device from the "
+                "virtual machine<br>"
+                "&nbsp;&nbsp;2. Reconnect the USB cable if needed<br>"
+                "&nbsp;&nbsp;3. Press <b>Start Measurement</b> again",
+                dlg,
+            )
+            msg.setWordWrap(True)
+            layout.addWidget(msg)
+            btn_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
+            btn_box.accepted.connect(dlg.accept)
+            layout.addWidget(btn_box)
+            tint_dialog_primary(dlg, _TAB_COLOR)
+            dlg.exec()
+            return
 
         if self._no_instrument:
             self._no_instrument = False

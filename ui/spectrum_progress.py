@@ -87,7 +87,7 @@ class SpectrumSegmentsBar(QWidget):
         # Top row: label + sub
         p.setPen(QColor(LABEL_COLOR))
         font = self.font()
-        font.setPointSize(10)
+        font.setPixelSize(10)
         font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1.2)
         font.setCapitalization(QFont.Capitalization.AllUppercase)
         p.setFont(font)
