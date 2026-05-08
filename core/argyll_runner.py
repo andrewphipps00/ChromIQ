@@ -361,11 +361,40 @@ class ArgyllRunner(QObject):
         self._pty_done.emit(code)
 
     def _winpty_reader(self) -> None:
-        TIMEOUT_MS = 150
         proc = self._winpty_proc
         if proc is None:
             self._pty_done.emit(0)
             return
+
+        # pywinpty 2.x read() is blocking with no timeout parameter.
+        # Offload reads to an inner thread and drain via a queue so the outer
+        # loop can flush partial prompt lines after 150 ms of silence —
+        # matching the macOS select() flush window.
+        FLUSH_AFTER = 0.15
+        data_q: "queue.Queue[str | None]" = queue.Queue()
+
+        def _inner() -> None:
+            while True:
+                try:
+                    chunk = proc.read(4096)
+                except EOFError:
+                    data_q.put(None)
+                    break
+                except Exception:
+                    data_q.put(None)
+                    break
+                if not chunk:
+                    try:
+                        alive = proc.isalive
+                    except Exception:
+                        alive = False
+                    if not alive:
+                        data_q.put(None)
+                        break
+                    continue
+                data_q.put(chunk)
+
+        threading.Thread(target=_inner, daemon=True).start()
 
         _last_line  = ""
         _repeat_cnt = 0
@@ -388,32 +417,25 @@ class ArgyllRunner(QObject):
         buf = ""
         while True:
             try:
-                chunk = proc.read(4096, timeout=TIMEOUT_MS)
-            except EOFError:
-                break
-            except Exception:
-                break
-
-            if chunk:
-                buf += chunk
-                while "\n" in buf:
-                    raw, buf = buf.split("\n", 1)
-                    line = _ANSI_RE.sub("", raw).rstrip("\r")
-                    if line:
-                        _emit(line)
-            else:
-                # Timeout — flush partial prompt line (no trailing newline)
+                chunk = data_q.get(timeout=FLUSH_AFTER)
+            except queue.Empty:
+                # Silence window expired — flush any partial prompt line
                 if buf:
                     line = _ANSI_RE.sub("", buf).rstrip("\r")
                     buf = ""
                     if line:
                         _emit(line)
+                continue
 
-            try:
-                if not proc.isalive:
-                    break
-            except Exception:
+            if chunk is None:
                 break
+
+            buf += chunk
+            while "\n" in buf:
+                raw, buf = buf.split("\n", 1)
+                line = _ANSI_RE.sub("", raw).rstrip("\r")
+                if line:
+                    _emit(line)
 
         if buf:
             line = _ANSI_RE.sub("", buf).rstrip("\r")

@@ -14,16 +14,18 @@ from PyInstaller.utils.hooks import collect_all
 certifi_where = certifi.where()
 
 _ic_datas, _ic_binaries, _ic_hiddenimports = collect_all('imagecodecs')
+_winpty_datas, _winpty_binaries, _winpty_hiddenimports = collect_all('winpty')
 
 a = Analysis(
     ['main.py'],
     pathex=['.'],
-    binaries=[*_ic_binaries],
+    binaries=[*_ic_binaries, *_winpty_binaries],
     datas=[
         ('assets',               'assets'),
         ('data/parameters.yaml', 'data'),
         (certifi_where,          'certifi'),
         *_ic_datas,
+        *_winpty_datas,
     ],
     hiddenimports=[
         'PyQt6.sip',
@@ -38,8 +40,8 @@ a = Analysis(
         'yaml',
         'tifffile',
         'numpy',
-        'winpty',
         *_ic_hiddenimports,
+        *_winpty_hiddenimports,
     ],
     hookspath=['hooks'],
     hooksconfig={},
