@@ -38,6 +38,7 @@ a = Analysis(
         'yaml',
         'tifffile',
         'numpy',
+        'winpty',
         *_ic_hiddenimports,
     ],
     hookspath=['hooks'],

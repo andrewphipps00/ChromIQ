@@ -95,6 +95,18 @@ class SettingsDialog(QDialog):
         btn_row.addStretch()
         ag.addLayout(btn_row)
 
+        if _sys.platform == "win32":
+            driver_btn = QPushButton("Install USB Driver…", self)
+            driver_btn.setToolTip(
+                "Install the WinUSB driver for your colorimeter — "
+                "no test-signing mode required, works on x64 and ARM64"
+            )
+            driver_btn.clicked.connect(self._show_usb_installer)
+            driver_row = QHBoxLayout()
+            driver_row.addWidget(driver_btn)
+            driver_row.addStretch()
+            ag.addLayout(driver_row)
+
         self._argyll_status = QLabel("", self)
         self._argyll_status.setWordWrap(True)
         ag.addWidget(self._argyll_status)
@@ -313,6 +325,7 @@ class SettingsDialog(QDialog):
                 try:
                     subprocess.run(
                         [str(p), "-?"], capture_output=True, timeout=5,
+                        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
                     )
                     results.append(f"✓ {tool}")
                 except Exception:
@@ -330,7 +343,7 @@ class SettingsDialog(QDialog):
     def _open_argyll_download(self) -> None:
         self._argyll_status.setStyleSheet("")
         if _sys.platform == "win32":
-            hint = "win64 for 64-bit Windows"
+            hint = "win64 for x64 (Intel/AMD) or arm64 for ARM-based devices (Snapdragon)"
         else:
             hint = "arm64 for Apple Silicon, osx64 for Intel"
         self._argyll_status.setText(
@@ -338,6 +351,131 @@ class SettingsDialog(QDialog):
             "then unpack and set the bin path above."
         )
         QDesktopServices.openUrl(QUrl(_ARGYLL_DOWNLOAD_PAGE))
+
+    def _show_usb_installer(self) -> None:
+        if _sys.platform != "win32":
+            return
+        from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QVBoxLayout
+        from core.usb_driver_installer import enumerate_connected, install_winusb, launch_zadig
+        from core.resource_path import resource_path as _rp
+        from ui.widgets import tint_dialog_primary
+
+        _wdi_available = _rp("assets/wdi_simple.exe").exists()
+
+        _COLOR = "#56d6a5"
+        _REFRESH = 2   # custom dlg.done() code, distinct from Accepted(1)/Rejected(0)
+
+        while True:
+            devices = enumerate_connected()
+            needs_install = [d for d in devices if not d.has_winusb]
+
+            dlg = QDialog(self)
+            dlg.setWindowTitle("Install USB Driver")
+            dlg.setMinimumWidth(500)
+            layout = QVBoxLayout(dlg)
+            layout.setSpacing(14)
+            layout.setContentsMargins(24, 20, 24, 20)
+
+            if not devices:
+                msg_text = (
+                    "<b>No colorimeter detected.</b><br><br>"
+                    "Make sure your device is plugged in via USB, "
+                    "then click <b>Refresh</b>."
+                )
+            else:
+                lines = [
+                    f"&nbsp;&nbsp;• {d.name} — "
+                    f"<i>{'WinUSB ✓' if d.has_winusb else 'driver not installed'}</i>"
+                    for d in devices
+                ]
+                if _wdi_available:
+                    action_text = (
+                        "Click <b>Install Driver</b> to install the Microsoft WinUSB driver "
+                        "automatically. A Windows security prompt will appear — click Yes to "
+                        "continue.<br><br>"
+                        "<i>No test-signing mode required. Works on x64 and ARM64.</i>"
+                    )
+                else:
+                    action_text = (
+                        "ChromIQ will open <b>Zadig</b>, a free USB driver tool. In Zadig:<br>"
+                        "&nbsp;&nbsp;1. Click <b>Options → List All Devices</b><br>"
+                        "&nbsp;&nbsp;2. Find your colorimeter in the dropdown<br>"
+                        "&nbsp;&nbsp;3. Select <b>WinUSB</b> as the driver and click "
+                        "<b>Install Driver</b>"
+                    )
+                msg_text = (
+                    "<b>Connected colorimeter(s):</b><br>"
+                    + "<br>".join(lines)
+                    + "<br><br>"
+                    + action_text
+                )
+
+            msg = QLabel(msg_text, dlg)
+            msg.setWordWrap(True)
+            layout.addWidget(msg)
+
+            btn_box = QDialogButtonBox()
+            if needs_install:
+                btn_label = "Install Driver" if _wdi_available else "Open Zadig"
+                install_btn = btn_box.addButton(btn_label, QDialogButtonBox.ButtonRole.AcceptRole)
+                install_btn.setObjectName("primary")
+            refresh_btn = btn_box.addButton("Refresh", QDialogButtonBox.ButtonRole.ResetRole)
+            refresh_btn.clicked.connect(lambda checked=False, d=dlg: d.done(_REFRESH))
+            btn_box.addButton(QDialogButtonBox.StandardButton.Close)
+            btn_box.rejected.connect(dlg.reject)
+            layout.addWidget(btn_box)
+            tint_dialog_primary(dlg, _COLOR)
+
+            result = dlg.exec()
+
+            if result == _REFRESH:
+                continue   # rebuild with fresh device list
+
+            if result != QDialog.DialogCode.Accepted or not needs_install:
+                break   # Close button or nothing to install
+
+            # ---- run installation ----
+            if _wdi_available:
+                all_ok = all(install_winusb(d) for d in needs_install)
+                if all_ok:
+                    outcome_text = "WinUSB driver installed successfully."
+                    offer_zadig = False
+                else:
+                    outcome_text = (
+                        "Automatic installation failed or was cancelled.<br>"
+                        "Click <b>Try Zadig</b> to install manually using the guided tool."
+                    )
+                    offer_zadig = True
+            else:
+                all_ok = launch_zadig()
+                outcome_text = (
+                    "Zadig is open. Select your colorimeter, choose WinUSB, "
+                    "then click Install Driver."
+                    if all_ok else
+                    "Could not launch Zadig. Try running ChromIQ as Administrator."
+                )
+                offer_zadig = False
+
+            outcome_dlg = QDialog(self)
+            outcome_dlg.setWindowTitle("Driver Installation")
+            outcome_dlg.setMinimumWidth(420)
+            ol = QVBoxLayout(outcome_dlg)
+            ol.setContentsMargins(24, 20, 24, 20)
+            ol.setSpacing(14)
+            lbl = QLabel(outcome_text, outcome_dlg)
+            lbl.setWordWrap(True)
+            ol.addWidget(lbl)
+            obox = QDialogButtonBox()
+            if offer_zadig:
+                zadig_btn = obox.addButton("Try Zadig", QDialogButtonBox.ButtonRole.AcceptRole)
+                zadig_btn.setObjectName("primary")
+                zadig_btn.clicked.connect(lambda: launch_zadig())
+            obox.addButton(QDialogButtonBox.StandardButton.Ok)
+            obox.accepted.connect(outcome_dlg.accept)
+            obox.rejected.connect(outcome_dlg.reject)
+            ol.addWidget(obox)
+            outcome_dlg.exec()
+            break
 
     def _restore_defaults(self) -> None:
         self._settings.reset_to_defaults()

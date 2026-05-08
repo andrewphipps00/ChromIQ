@@ -18,6 +18,13 @@ from core.resource_path import argyll_binary
 if sys.platform != "win32":
     import pty
     import select
+else:
+    try:
+        from winpty import PtyProcess as _WinPtyProcess
+        _WINPTY_AVAILABLE = True
+    except ImportError:
+        _WinPtyProcess = None  # type: ignore[assignment,misc]
+        _WINPTY_AVAILABLE = False
 
 if TYPE_CHECKING:
     from core.settings import AppSettings
@@ -43,9 +50,10 @@ class ArgyllRunner(QObject):
         self._run_on_line:   Callable[[str], None] | None = None
 
         # PTY mode state
-        self._pty_proc:   subprocess.Popen | None = None
-        self._pty_master: int | None = None
-        self._pty_thread: threading.Thread | None = None
+        self._pty_proc:    subprocess.Popen | None = None
+        self._pty_master:  int | None = None
+        self._pty_thread:  threading.Thread | None = None
+        self._winpty_proc: "_WinPtyProcess | None" = None
         self._pty_done.connect(self._on_pty_finished)
 
     # ------------------------------------------------------------------
@@ -95,6 +103,11 @@ class ArgyllRunner(QObject):
                 os.write(self._pty_master, text.encode())
             except OSError:
                 pass
+        elif self._winpty_proc is not None:
+            try:
+                self._winpty_proc.write(text)
+            except Exception:
+                pass
         elif self._pty_proc is not None and self._pty_proc.stdin:
             try:
                 self._pty_proc.stdin.write(text.encode())
@@ -105,7 +118,13 @@ class ArgyllRunner(QObject):
             self._process.write(text.encode())
 
     def abort(self) -> None:
-        if self._pty_proc is not None:
+        if self._winpty_proc is not None:
+            try:
+                self._winpty_proc.close(force=True)
+            except Exception:
+                pass
+            log.info("ArgyllRunner: winpty process killed")
+        elif self._pty_proc is not None:
             self._pty_proc.kill()
             log.info("ArgyllRunner: PTY process killed")
         elif self._process:
@@ -127,6 +146,13 @@ class ArgyllRunner(QObject):
                 pass
 
         # Kill subprocess(es).
+        if self._winpty_proc is not None:
+            try:
+                if self._winpty_proc.isalive:
+                    self._winpty_proc.close(force=True)
+            except Exception:
+                pass
+            self._winpty_proc = None
         if self._pty_proc is not None and self._pty_proc.poll() is None:
             self._pty_proc.kill()
         if self._process and self._process.state() != QProcess.ProcessState.NotRunning:
@@ -150,6 +176,12 @@ class ArgyllRunner(QObject):
 
     @property
     def is_running(self) -> bool:
+        if self._winpty_proc is not None:
+            try:
+                if self._winpty_proc.isalive:
+                    return True
+            except Exception:
+                pass
         if self._pty_proc is not None and self._pty_proc.poll() is None:
             return True
         return (
@@ -172,7 +204,11 @@ class ArgyllRunner(QObject):
         bin_path = self._resolve(tool)
 
         if sys.platform == "win32":
-            self._run_pipe(bin_path, args, cwd, on_line, on_finish)
+            if _WINPTY_AVAILABLE:
+                self._run_winpty(bin_path, args, cwd, on_line, on_finish)
+            else:
+                log.warning("pywinpty not available — interactive input will not work")
+                self._run_pipe(bin_path, args, cwd, on_line, on_finish)
             return
 
         log.info("Run (PTY): %s %s  [cwd=%s]", bin_path, " ".join(args), cwd)
@@ -194,6 +230,29 @@ class ArgyllRunner(QObject):
 
         self._pty_thread = threading.Thread(
             target=self._pty_reader, args=(master_fd,), daemon=True
+        )
+        self._pty_thread.start()
+
+    def _run_winpty(
+        self,
+        bin_path: Path,
+        args: list[str],
+        cwd: Path,
+        on_line: Callable[[str], None] | None,
+        on_finish: Callable[[int], None] | None,
+    ) -> None:
+        cmd = [str(bin_path)] + args
+        log.info("Run (winpty): %s  [cwd=%s]", " ".join(cmd), cwd)
+        self._winpty_proc = _WinPtyProcess.spawn(cmd, cwd=str(cwd), dimensions=(24, 200))
+        self._pty_master = None
+
+        self._run_on_finish = on_finish
+        self._run_on_line   = on_line
+        if on_line:
+            self.line_received.connect(on_line)
+
+        self._pty_thread = threading.Thread(
+            target=self._winpty_reader, daemon=True
         )
         self._pty_thread.start()
 
@@ -301,6 +360,74 @@ class ArgyllRunner(QObject):
 
         self._pty_done.emit(code)
 
+    def _winpty_reader(self) -> None:
+        TIMEOUT_MS = 150
+        proc = self._winpty_proc
+        if proc is None:
+            self._pty_done.emit(0)
+            return
+
+        _last_line  = ""
+        _repeat_cnt = 0
+        _MAX_REPEAT = 4
+
+        def _emit(line: str) -> None:
+            nonlocal _last_line, _repeat_cnt
+            if line == _last_line:
+                _repeat_cnt += 1
+                if _repeat_cnt == _MAX_REPEAT:
+                    self.line_received.emit("[…repeated output suppressed]")
+                if _repeat_cnt >= _MAX_REPEAT:
+                    return
+            else:
+                _last_line  = line
+                _repeat_cnt = 0
+            log.debug("[argyll-winpty] %s", line)
+            self.line_received.emit(line)
+
+        buf = ""
+        while True:
+            try:
+                chunk = proc.read(4096, timeout=TIMEOUT_MS)
+            except EOFError:
+                break
+            except Exception:
+                break
+
+            if chunk:
+                buf += chunk
+                while "\n" in buf:
+                    raw, buf = buf.split("\n", 1)
+                    line = _ANSI_RE.sub("", raw).rstrip("\r")
+                    if line:
+                        _emit(line)
+            else:
+                # Timeout — flush partial prompt line (no trailing newline)
+                if buf:
+                    line = _ANSI_RE.sub("", buf).rstrip("\r")
+                    buf = ""
+                    if line:
+                        _emit(line)
+
+            try:
+                if not proc.isalive:
+                    break
+            except Exception:
+                break
+
+        if buf:
+            line = _ANSI_RE.sub("", buf).rstrip("\r")
+            if line:
+                self.line_received.emit(line)
+
+        code = 0
+        try:
+            code = proc.exitstatus or 0
+        except Exception:
+            pass
+
+        self._pty_done.emit(code)
+
     def _pipe_reader(self) -> None:
         """Read from subprocess stdout pipe (Windows fallback for PTY).
 
@@ -390,8 +517,9 @@ class ArgyllRunner(QObject):
         self._pty_done.emit(code)
 
     def _on_pty_finished(self, code: int) -> None:
-        self._pty_master = None
-        self._pty_proc   = None
+        self._pty_master  = None
+        self._pty_proc    = None
+        self._winpty_proc = None
         on_finish = self._run_on_finish
         self._run_on_finish = None
         self._run_on_line   = None
