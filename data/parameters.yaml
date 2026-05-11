@@ -165,7 +165,7 @@ parameters:
         capped at 64 — scales with page count and instrument capacity.
 
     - flag: "-G"
-      name: "Good Distribution (recommended)"
+      name: "Good Distribution (recomm.)"
       type: boolean
       default: true
       affects_preview: true

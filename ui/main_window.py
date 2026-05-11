@@ -221,6 +221,7 @@ class MainWindow(QMainWindow):
                     background: #2a2a2a;
                     border: 1px solid #4a4a4a;
                     color: #909090;
+                    font-size: 11px;
                     font-weight: 700;
                     padding: 6px 22px;
                 }}
@@ -233,6 +234,8 @@ class MainWindow(QMainWindow):
                     background: {color};
                     border: 1px solid {color};
                     color: #0a0a0a;
+                    font-size: 11px;
+                    font-weight: 700;
                     padding: 6px 22px;
                 }}
                 QPushButton#mode_btn:checked:hover {{

@@ -133,7 +133,12 @@ class ProfileBuilder:
         return issues
 
     def expected_icc_path(self, params: ProfileParams) -> Path:
-        return params.ti3_path.with_suffix(".icc")
+        base = params.ti3_path.with_suffix("")
+        for ext in (".icc", ".icm"):
+            candidate = base.with_suffix(ext)
+            if candidate.exists():
+                return candidate
+        return base.with_suffix(".icc")
 
     # ------------------------------------------------------------------
 
