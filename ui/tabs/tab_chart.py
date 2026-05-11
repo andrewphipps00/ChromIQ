@@ -108,7 +108,7 @@ class TabChart(QWidget):
         mode_row.setContentsMargins(0, 0, 0, 0)
         _mode_font = QFont()
         _mode_font.setFamilies(["Menlo", "Consolas", "Courier New", "monospace"])
-        _mode_font.setPixelSize(11)
+        _mode_font.setPointSize(11)
         _mode_font.setWeight(QFont.Weight.Bold)
         self._guided_btn = QPushButton("GUIDED", self)
         self._guided_btn.setCheckable(True)

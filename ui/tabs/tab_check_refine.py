@@ -174,7 +174,7 @@ class TabCheckRefine(QWidget):
         # --- Mode buttons ---
         _mode_font = QFont()
         _mode_font.setFamilies(["Menlo", "Consolas", "Courier New", "monospace"])
-        _mode_font.setPixelSize(11)
+        _mode_font.setPointSize(11)
         _mode_font.setWeight(QFont.Weight.Bold)
         self._mode_row_widget = QWidget(self)
         mode_row = QHBoxLayout(self._mode_row_widget)
