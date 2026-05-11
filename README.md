@@ -56,6 +56,10 @@ Extract the ZIP, open the `ChromIQ` folder, and run `ChromIQ.exe`. Windows Smart
 |---|---|
 | ![ChromIQ Create ICC Profile](docs/5b.png) | ![ChromIQ Check & Refine](docs/6.png) |
 
+| Step 4c — Calibration & Profiling (disabled by default)  |
+|---|
+| ![ChromIQ Create ICC Profile](docs/4c.png) |
+
 ---
 
 ## Features
