@@ -67,6 +67,11 @@ jobs:
         run: |
           ARCHFLAGS="-arch x86_64 -arch arm64" pip3 install --force-reinstall --no-binary pycups pycups
 
+      # imagecodecs dropped x86_64 wheels in 2026; pin to last version that still has one.
+      - name: Pin imagecodecs to last x86_64-compatible version (universal2 only)
+        if: matrix.arch == 'universal2'
+        run: pip3 install --quiet 'imagecodecs==2025.11.11'
+
       # numpy, Pillow, PyYAML, and imagecodecs ship only arch-specific wheels — no
       # universal2 exists on PyPI for any of them. Strategy: query PyPI JSON API for
       # each package's x86_64 wheel, download it, and lipo-merge every .so/.dylib
@@ -83,7 +88,11 @@ jobs:
             local VER X86_URL TMPDIR
             VER=$(python3 -c "import importlib.metadata; print(importlib.metadata.version('${pypi_name}'))")
             X86_URL=$(curl -fsSL "https://pypi.org/pypi/${pypi_name}/${VER}/json" | \
-              python3 -c "import json,sys; vf='${ver_filter}'; d=json.load(sys.stdin); print(next(f['url'] for f in d['urls'] if 'macosx' in f['filename'] and 'x86_64' in f['filename'] and vf in f['filename'] and f['filename'].endswith('.whl')))")
+              python3 -c "import json,sys; vf='${ver_filter}'; d=json.load(sys.stdin); w=[f['url'] for f in d['urls'] if 'macosx' in f['filename'] and 'x86_64' in f['filename'] and vf in f['filename'] and f['filename'].endswith('.whl')]; print(w[0] if w else '')")
+            if [ -z "$X86_URL" ]; then
+              echo "No x86_64 wheel for ${pypi_name} ${VER} — skipping lipo"
+              return 0
+            fi
             echo "Downloading x86_64 wheel for ${pypi_name} ${VER}: $X86_URL"
             TMPDIR="/tmp/${pkg_dir}_x86"
             mkdir -p "$TMPDIR"
