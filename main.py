@@ -12,7 +12,7 @@ from core.logger import configure_logging, get_logger
 from core.resource_path import resource_path
 from core.settings import AppSettings
 from ui.main_window import MainWindow
-from ui.styles import APP_STYLESHEET, make_dark_palette
+from ui.styles import APP_STYLESHEET, WinButtonLayoutStyle, make_dark_palette
 from ui.widgets import ButtonFontFilter
 
 
@@ -32,7 +32,7 @@ def main() -> int:
     except Exception:
         pass  # fonts dir missing — app falls back to system fonts
 
-    app.setStyle("Fusion")
+    app.setStyle(WinButtonLayoutStyle("Fusion"))
     app.setPalette(make_dark_palette())
     app.setStyleSheet(APP_STYLESHEET)
 

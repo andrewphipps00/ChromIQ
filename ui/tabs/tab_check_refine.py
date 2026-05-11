@@ -85,6 +85,7 @@ class TabCheckRefine(QWidget):
     guide_refinement_requested = pyqtSignal(Path, Path)  # (ti3_path, strips_file_path)
     ti2_found                  = pyqtSignal(Path)         # emitted when a matching .ti2 exists next to the .ti3
     ti3_selected               = pyqtSignal(Path)         # emitted when the user manually browses a .ti3
+    about_to_load_ti3          = pyqtSignal()             # emitted before state changes, for snapshot saving
 
     def __init__(
         self,
@@ -137,14 +138,15 @@ class TabCheckRefine(QWidget):
             self._ti3_path is not None and self._icc_path is not None
         )
 
-    def set_paths(self, ti3: Path, icc: Path) -> None:
+    def set_paths(self, ti3: Path, icc: Path, propagate: bool = True) -> None:
         """Pre-populate both file fields after a successful profile build."""
         self._ti3_path = ti3
         self._icc_path = icc
         self._ti3_edit.setText(str(ti3))
         self._icc_edit.setText(str(icc))
         self._update_run_btn()
-        self._notify_ti2(ti3)
+        if propagate:
+            self._notify_ti2(ti3)
 
     def clear_files(self) -> None:
         self._ti3_path = None
@@ -152,6 +154,14 @@ class TabCheckRefine(QWidget):
         self._ti3_edit.clear()
         self._icc_edit.clear()
         self._update_run_btn()
+
+    @property
+    def ti3_path(self) -> "Path | None":
+        return self._ti3_path
+
+    @property
+    def icc_path(self) -> "Path | None":
+        return self._icc_path
 
     def _notify_ti2(self, ti3: Path) -> None:
         ti2 = ti3.with_suffix(".ti2")
@@ -991,6 +1001,7 @@ class TabCheckRefine(QWidget):
         if not path:
             return
         ti3 = Path(path)
+        self.about_to_load_ti3.emit()
         self._ti3_path = ti3
         self._ti3_edit.setText(str(ti3))
         self._auto_fill_icc(ti3)

@@ -85,6 +85,7 @@ class TabProfile(QWidget):
     profile_active   = pyqtSignal(bool)         # True while colprof is running, False when done
     ti2_found           = pyqtSignal(Path)  # emitted when a matching .ti2 exists next to the loaded .ti3
     ti3_manually_loaded = pyqtSignal()      # emitted when the user manually loads a .ti3 file
+    about_to_load_ti3   = pyqtSignal()      # emitted before state changes, for snapshot saving
     cal_file_created    = pyqtSignal(Path)  # printcal done; fill -K/-I silently, stay on tab
     cal_chart_requested = pyqtSignal(Path)  # user chose "Go to Create Chart" in result dialog
 
@@ -2540,6 +2541,7 @@ class TabProfile(QWidget):
             extra_path=self._settings.get("custom_output_path", ""),
         )
         if path:
+            self.about_to_load_ti3.emit()
             self.set_ti3_path(Path(path))
             self.ti3_manually_loaded.emit()
 

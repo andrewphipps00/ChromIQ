@@ -69,6 +69,7 @@ class MainWindow(QMainWindow):
         self._tab_measure = TabMeasure(self._runner, self._settings, self)
         self._tab_profile = TabProfile(self._runner, self._settings, self)
         self._tab_check   = TabCheckRefine(self._runner, self._settings, self)
+        self._load_state_snapshot: dict | None = None
 
         self._tabs.addTab(self._tab_chart,   "1. Create Chart")
         self._tabs.addTab(self._tab_print,   "2. Print Chart")
@@ -94,8 +95,11 @@ class MainWindow(QMainWindow):
         self._tab_profile.profile_active.connect(self._on_profile_active)
         self._tab_profile.profile_built.connect(self._tab_check.set_paths)
         self._tab_profile.check_requested.connect(lambda: self._tabs.setCurrentWidget(self._tab_check))
-        self._tab_profile.ti2_found.connect(self._tab_measure.set_ti1_path)
         self._tab_profile.ti2_found.connect(self._tab_print.set_ti2_path)
+        self._tab_profile.about_to_load_ti3.connect(self._save_load_state)
+        self._tab_check.about_to_load_ti3.connect(self._save_load_state)
+        self._tab_print.ti2_load_cancelled.connect(self._restore_load_state)
+        self._tab_print.chart_relocated.connect(self._on_chart_relocated)
         self._tab_check.guide_refinement_requested.connect(self._on_guide_refinement)
         self._tab_check.ti3_selected.connect(self._tab_profile.set_ti3_path)
         self._tab_check.ti2_found.connect(self._tab_measure.set_ti1_path)
@@ -298,6 +302,47 @@ class MainWindow(QMainWindow):
     def _on_guide_refinement(self, ti3: Path, strips_file: Path) -> None:
         self._tabs.setCurrentWidget(self._tab_measure)
         self._tab_measure.start_guided_refinement(ti3, strips_file)
+
+    def _save_load_state(self) -> None:
+        self._load_state_snapshot = {
+            "profile_ti3": self._tab_profile.ti3_path,
+            "measure_ti2": self._tab_measure.ti1_path,
+            "check_ti3":   self._tab_check.ti3_path,
+            "check_icc":   self._tab_check.icc_path,
+        }
+
+    def _restore_load_state(self) -> None:
+        s = self._load_state_snapshot
+        if s is None:
+            return
+        if s["profile_ti3"] is not None:
+            self._tab_profile.set_ti3_path(s["profile_ti3"], propagate=False)
+        else:
+            self._tab_profile.clear_files()
+        if s["measure_ti2"] is not None:
+            self._tab_measure.set_ti1_path(s["measure_ti2"])
+        else:
+            self._tab_measure.clear_chart_file()
+        if s["check_ti3"] is not None:
+            icc = s["check_icc"] if s["check_icc"] is not None else s["check_ti3"].with_suffix(".icc")
+            self._tab_check.set_paths(s["check_ti3"], icc, propagate=False)
+        else:
+            self._tab_check.clear_files()
+
+    def _on_chart_relocated(self, new_ti2: Path) -> None:
+        new_ti3 = new_ti2.with_suffix(".ti3")
+        if new_ti3.exists():
+            self._tab_profile.set_ti3_path(new_ti3, propagate=False)
+            for ext in (".icc", ".icm"):
+                icc = new_ti2.with_suffix(ext)
+                if icc.exists():
+                    self._tab_check.set_paths(new_ti3, icc, propagate=False)
+                    break
+            else:
+                self._tab_check.set_paths(new_ti3, new_ti3.with_suffix(".icc"), propagate=False)
+        else:
+            self._tab_profile.clear_files()
+            self._tab_check.clear_files()
 
     def _open_settings(self) -> None:
         from ui.tooltip_button import TooltipButton

@@ -1341,6 +1341,15 @@ class TabMeasure(QWidget):
         self._try_load_tiffs(path)
         self._update_resume_availability()
 
+    def clear_chart_file(self) -> None:
+        self._ti1_path = None
+        self._ti1_lbl.setText("No file selected")
+        self._ti1_lbl.setStyleSheet("color: #909090; font-size: 11px;")
+        self._start_btn.setEnabled(False)
+        self._tiff_pages = []
+        self._preview.clear()
+        self._update_resume_availability()
+
     # ------------------------------------------------------------------
     # Internal
     # ------------------------------------------------------------------

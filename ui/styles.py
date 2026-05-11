@@ -2,7 +2,16 @@
 from __future__ import annotations
 
 from PyQt6.QtGui import QColor, QPalette
+from PyQt6.QtWidgets import QProxyStyle, QStyle
 from core.resource_path import resource_path
+
+
+class WinButtonLayoutStyle(QProxyStyle):
+    """Force Windows-style button ordering in all QDialogButtonBox instances."""
+    def styleHint(self, hint, option=None, widget=None, returnData=None):
+        if hint == QStyle.StyleHint.SH_DialogButtonLayout:
+            return 0  # WinLayout: AcceptRole → ActionRole → RejectRole
+        return super().styleHint(hint, option, widget, returnData)
 
 _ARROW_DOWN = str(resource_path("assets/arrow_down.svg")).replace("\\", "/")
 _ARROW_UP   = str(resource_path("assets/arrow_up.svg")).replace("\\", "/")

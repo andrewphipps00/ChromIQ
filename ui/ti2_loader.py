@@ -94,8 +94,8 @@ def _handle_inside(
     layout.addWidget(lbl)
 
     cont_desc = QLabel(
-        "<i>Continue printing</i> — load the existing TIFF files as-is and "
-        "proceed to print and measure this chart.",
+        "<i>Continue</i> — use the chart files in this folder as-is — "
+        "nothing will be copied or moved.",
         dlg,
     )
     cont_desc.setWordWrap(True)
@@ -150,6 +150,7 @@ def _ask_profile_name(
     tiffs: list[Path],
     working_dir: Path,
 ) -> str | None:
+    from PyQt6.QtCore import QTimer
     from PyQt6.QtWidgets import (
         QDialog, QDialogButtonBox, QLabel, QLineEdit, QVBoxLayout,
     )
@@ -159,6 +160,14 @@ def _ask_profile_name(
         file_lines.append(f"  • {ti1.name}")
     for t in tiffs:
         file_lines.append(f"  • {t.name}")
+    ti3 = ti2_path.with_suffix(".ti3")
+    if ti3.exists():
+        file_lines.append(f"  • {ti3.name}")
+    for ext in (".icc", ".icm"):
+        icc = ti2_path.with_suffix(ext)
+        if icc.exists():
+            file_lines.append(f"  • {icc.name}")
+            break
 
     dlg = QDialog(parent)
     dlg.setWindowTitle("Copy Chart Files")
@@ -209,6 +218,7 @@ def _ask_profile_name(
     btn_box.accepted.connect(_on_accept)
     btn_box.rejected.connect(dlg.reject)
 
+    QTimer.singleShot(0, name_edit.setFocus)
     if dlg.exec() == QDialog.DialogCode.Accepted:
         return name_edit.text().strip()
     return None
@@ -237,5 +247,15 @@ def _copy_files(
         new_tiff = dest / f"{new_name}{suffix}"
         shutil.copy2(tiff, new_tiff)
         new_tiffs.append(new_tiff)
+
+    ti3 = ti2_path.with_suffix(".ti3")
+    if ti3.exists():
+        shutil.copy2(ti3, dest / f"{new_name}.ti3")
+
+    for ext in (".icc", ".icm"):
+        icc = ti2_path.with_suffix(ext)
+        if icc.exists():
+            shutil.copy2(icc, dest / f"{new_name}{ext}")
+            break
 
     return new_ti2, new_tiffs

@@ -42,8 +42,10 @@ from ui.styles import SPEC_AMBER, TAB_COLORS
 
 class TabPrint(QWidget):
 
-    ti2_loaded   = pyqtSignal(Path)  # emitted when the user loads a .ti2 file
-    ti2_replaced = pyqtSignal()      # emitted when a different .ti2 file is loaded by the user
+    ti2_loaded         = pyqtSignal(Path)  # emitted when the user loads a .ti2 file
+    ti2_replaced       = pyqtSignal()      # emitted when a different .ti2 file is loaded by the user
+    ti2_load_cancelled = pyqtSignal()      # emitted when the cross-tab dialog is cancelled
+    chart_relocated    = pyqtSignal(Path)  # emitted when files were copied to a new folder
     """Step 2: print the test chart via CUPS."""
 
     def __init__(
@@ -446,10 +448,13 @@ class TabPrint(QWidget):
             return
         result = resolve_ti2(self, path, self._settings)
         if result is None:
+            self.ti2_load_cancelled.emit()
             return
         ti2_path, tiffs = result
         self._current_ti2 = ti2_path
         self.ti2_loaded.emit(ti2_path)
+        if ti2_path != path:
+            self.chart_relocated.emit(ti2_path)
         if tiffs:
             self.load_tiffs(tiffs)
 
