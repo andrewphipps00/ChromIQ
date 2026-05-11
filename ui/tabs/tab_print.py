@@ -170,14 +170,14 @@ class TabPrint(QWidget):
         beast_headline.setAlignment(Qt.AlignmentFlag.AlignCenter)
         beast_headline.setStyleSheet(
             "color: #ffffff; background: transparent;"
-            " font-family: Georgia; font-size: 28pt;"
+            " font-family: Georgia; font-size: 28px;"
         )
         beast_layout.addWidget(beast_headline)
         beast_subtext = QLabel("Your printer is hungry.", beast_box)
         beast_subtext.setAlignment(Qt.AlignmentFlag.AlignCenter)
         beast_subtext.setStyleSheet(
             "color: #808080; background: transparent;"
-            " font-family: Menlo; font-size: 9pt; font-weight: 300;"
+            " font-family: Menlo; font-size: 9px; font-weight: 300;"
         )
         beast_layout.addWidget(beast_subtext)
         beast_bar = QHBoxLayout()
@@ -246,7 +246,7 @@ class TabPrint(QWidget):
         lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         lbl.setStyleSheet(
             "color: #808080; background: transparent; padding: 4px;"
-            " font-family: Menlo; font-size: 9pt; font-weight: 300;"
+            " font-family: Menlo; font-size: 9px; font-weight: 300;"
         )
         rl.addWidget(lbl)
         self._preview = TiffPreview(right)
@@ -621,12 +621,17 @@ class TabPrint(QWidget):
         self._set_native_mode(bool(self._settings.get("use_native_print_dialog", False)))
 
     def _set_native_mode(self, enabled: bool) -> None:
+        import sys as _sys
         self._printer_grp.setVisible(not enabled)
         self._opts_grp.setVisible(not enabled)
         self._native_warn_spacer.setVisible(enabled)
         if enabled:
+            if _sys.platform == "win32":
+                os_name = "Windows"
+            else:
+                os_name = "macOS"
             self._warn_lbl.setText(
-                "⚠  You are printing via the macOS printer dialog. You must disable "
+                f"⚠  You are printing via the {os_name} printer dialog. You must disable "
                 "colour management in your printer driver before printing — otherwise "
                 "the printer applies its own corrections and the chart will be unusable "
                 "for accurate ICC profiling.\n\n"

@@ -2,10 +2,10 @@
 from __future__ import annotations
 
 import os
-import pty
+import queue
 import re
-import select
 import subprocess
+import sys
 import threading
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable
@@ -13,11 +13,93 @@ from typing import TYPE_CHECKING, Callable
 from PyQt6.QtCore import QObject, QProcess, pyqtSignal
 
 from core.logger import get_logger
+from core.resource_path import argyll_binary
+
+if sys.platform != "win32":
+    import pty
+    import select
 
 if TYPE_CHECKING:
     from core.settings import AppSettings
 
 log = get_logger(__name__)
+
+_CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
+if sys.platform == "win32":
+    import ctypes as _ct
+    import ctypes.wintypes as _wt
+
+    _VK_MAP: dict[str, tuple[int, int]] = {
+        '\r':   (0x0D, 0x1C),
+        '\n':   (0x0D, 0x1C),
+        '\x1b': (0x1B, 0x01),
+        ' ':    (0x20, 0x39),
+    }
+
+    def _win_inject_key(pid: int, text: str) -> None:
+        """Inject text[0] into the console of process `pid` via WriteConsoleInputW.
+
+        Uses AttachConsole so we share the child's CONIN$ input buffer —
+        the same buffer MSVCRT's _getch() reads from.
+        """
+        if not text:
+            return
+        ch = text[0]
+        vk, scan = _VK_MAP.get(ch, (ord(ch.upper()) if ch.isalpha() else 0, 0))
+
+        class _CharUnion(_ct.Union):
+            _fields_ = [("UnicodeChar", _wt.WCHAR), ("AsciiChar", _ct.c_char)]
+
+        class _KeyEvent(_ct.Structure):
+            _fields_ = [
+                ("bKeyDown",          _wt.BOOL),
+                ("wRepeatCount",      _wt.WORD),
+                ("wVirtualKeyCode",   _wt.WORD),
+                ("wVirtualScanCode",  _wt.WORD),
+                ("uChar",             _CharUnion),
+                ("dwControlKeyState", _wt.DWORD),
+            ]
+
+        class _InputRecord(_ct.Structure):
+            class _U(_ct.Union):
+                _fields_ = [("KeyEvent", _KeyEvent)]
+            _anonymous_ = ("_u",)
+            _fields_ = [("EventType", _wt.WORD), ("_u", _U)]
+
+        k32 = _ct.windll.kernel32
+        k32.FreeConsole()
+        if not k32.AttachConsole(pid):
+            log.warning("_win_inject_key: AttachConsole(%d) failed (err %d)",
+                        pid, k32.GetLastError())
+            return
+        try:
+            h = k32.CreateFileW(
+                r"\\.\CONIN$",
+                0xC0000000,   # GENERIC_READ | GENERIC_WRITE
+                0x3,          # FILE_SHARE_READ | FILE_SHARE_WRITE
+                None, 3, 0, None,
+            )
+            if h == _wt.HANDLE(-1).value:
+                log.warning("_win_inject_key: CONIN$ open failed (err %d)", k32.GetLastError())
+                return
+            try:
+                recs = (_InputRecord * 2)()
+                for i, down in enumerate((True, False)):
+                    recs[i].EventType                   = 1   # KEY_EVENT
+                    recs[i].KeyEvent.bKeyDown            = _wt.BOOL(down)
+                    recs[i].KeyEvent.wRepeatCount        = 1
+                    recs[i].KeyEvent.wVirtualKeyCode     = vk
+                    recs[i].KeyEvent.wVirtualScanCode    = scan
+                    recs[i].KeyEvent.uChar.UnicodeChar   = ch
+                    recs[i].KeyEvent.dwControlKeyState   = 0
+                n_written = _wt.DWORD(0)
+                ok = k32.WriteConsoleInputW(h, recs, 2, _ct.byref(n_written))
+                log.debug("_win_inject_key: ch=%r ok=%s written=%d", ch, bool(ok), n_written.value)
+            finally:
+                k32.CloseHandle(h)
+        finally:
+            k32.FreeConsole()
 
 _ANSI_RE = re.compile(r"\x1b(?:\[[0-9;]*[A-Za-z]|\][^\x07]*\x07|[()][AB012]|[=>])")
 
@@ -39,6 +121,7 @@ class ArgyllRunner(QObject):
         self._pty_proc:   subprocess.Popen | None = None
         self._pty_master: int | None = None
         self._pty_thread: threading.Thread | None = None
+        self._use_console_input: bool = False   # True = inject via WriteConsoleInputW
         self._pty_done.connect(self._on_pty_finished)
 
     # ------------------------------------------------------------------
@@ -88,8 +171,19 @@ class ArgyllRunner(QObject):
                 os.write(self._pty_master, text.encode())
             except OSError:
                 pass
+        elif self._use_console_input and self._pty_proc is not None:
+            log.debug("write_stdin → inject: %r", text)
+            _win_inject_key(self._pty_proc.pid, text)
+        elif self._pty_proc is not None and self._pty_proc.stdin:
+            try:
+                self._pty_proc.stdin.write(text.encode())
+                self._pty_proc.stdin.flush()
+            except OSError:
+                pass
         elif self._process and self._process.state() == QProcess.ProcessState.Running:
             self._process.write(text.encode())
+        else:
+            log.warning("write_stdin: no active process (text=%r)", text)
 
     def abort(self) -> None:
         if self._pty_proc is not None:
@@ -145,7 +239,7 @@ class ArgyllRunner(QObject):
         )
 
     # ------------------------------------------------------------------
-    # PTY mode
+    # PTY mode (macOS/Linux) / pipe mode (Windows)
     # ------------------------------------------------------------------
 
     def _run_pty(
@@ -157,8 +251,13 @@ class ArgyllRunner(QObject):
         on_finish: Callable[[int], None] | None,
     ) -> None:
         bin_path = self._resolve(tool)
-        log.info("Run (PTY): %s %s  [cwd=%s]", bin_path, " ".join(args), cwd)
 
+        if sys.platform == "win32":
+            # _run_winpty() uses CREATE_NEW_CONSOLE + WriteConsoleInputW — no pywinpty needed.
+            self._run_winpty(bin_path, args, cwd, on_line, on_finish)
+            return
+
+        log.info("Run (PTY): %s %s  [cwd=%s]", bin_path, " ".join(args), cwd)
         master_fd, slave_fd = pty.openpty()
         self._pty_proc = subprocess.Popen(
             [str(bin_path)] + args,
@@ -177,6 +276,80 @@ class ArgyllRunner(QObject):
 
         self._pty_thread = threading.Thread(
             target=self._pty_reader, args=(master_fd,), daemon=True
+        )
+        self._pty_thread.start()
+
+    def _run_winpty(
+        self,
+        bin_path: Path,
+        args: list[str],
+        cwd: Path,
+        on_line: Callable[[str], None] | None,
+        on_finish: Callable[[int], None] | None,
+    ) -> None:
+        """Windows interactive mode: hidden real console + WriteConsoleInputW for stdin.
+
+        Pywinpty (ConPTY / WinPTY) proved unreliable in frozen PyInstaller apps
+        across multiple beta releases.  Instead we give chartread its own real
+        but invisible console (CREATE_NEW_CONSOLE + SW_HIDE) so _getch() works,
+        pipe stdout for output reading, and inject keystrokes via AttachConsole +
+        WriteConsoleInputW — the same path a physical keyboard uses.
+        """
+        cmd = [str(bin_path)] + args
+        log.info("Run (new-console): %s  [cwd=%s]", " ".join(cmd), cwd)
+
+        si = subprocess.STARTUPINFO()
+        si.dwFlags   = subprocess.STARTF_USESHOWWINDOW
+        si.wShowWindow = 0   # SW_HIDE
+
+        CREATE_NEW_CONSOLE = 0x10
+        self._pty_proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            creationflags=CREATE_NEW_CONSOLE,
+            startupinfo=si,
+            cwd=str(cwd),
+        )
+        self._pty_master        = None
+        self._use_console_input = True
+
+        self._run_on_finish = on_finish
+        self._run_on_line   = on_line
+        if on_line:
+            self.line_received.connect(on_line)
+
+        self._pty_thread = threading.Thread(
+            target=self._pipe_reader, daemon=True
+        )
+        self._pty_thread.start()
+
+    def _run_pipe(
+        self,
+        bin_path: Path,
+        args: list[str],
+        cwd: Path,
+        on_line: Callable[[str], None] | None,
+        on_finish: Callable[[int], None] | None,
+    ) -> None:
+        log.info("Run (pipe): %s %s  [cwd=%s]", bin_path, " ".join(args), cwd)
+        self._pty_proc = subprocess.Popen(
+            [str(bin_path)] + args,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            cwd=str(cwd),
+            creationflags=_CREATE_NO_WINDOW,
+        )
+        self._pty_master = None
+
+        self._run_on_finish = on_finish
+        self._run_on_line   = on_line
+        if on_line:
+            self.line_received.connect(on_line)
+
+        self._pty_thread = threading.Thread(
+            target=self._pipe_reader, daemon=True
         )
         self._pty_thread.start()
 
@@ -255,9 +428,98 @@ class ArgyllRunner(QObject):
 
         self._pty_done.emit(code)
 
+    def _pipe_reader(self) -> None:
+        """Read from subprocess stdout pipe (Windows fallback for PTY).
+
+        A helper thread feeds bytes into a queue so the main loop can apply
+        the same FLUSH_AFTER silence-window logic as the PTY reader, making
+        interactive ArgyllCMS prompts (no trailing newline) visible promptly.
+        """
+        FLUSH_AFTER = 0.15
+
+        proc = self._pty_proc
+        if proc is None or proc.stdout is None:
+            self._pty_done.emit(0)
+            return
+
+        _last_line  = ""
+        _repeat_cnt = 0
+        _MAX_REPEAT = 4
+
+        def _emit(line: str) -> None:
+            nonlocal _last_line, _repeat_cnt
+            if line == _last_line:
+                _repeat_cnt += 1
+                if _repeat_cnt == _MAX_REPEAT:
+                    self.line_received.emit("[…repeated output suppressed]")
+                if _repeat_cnt >= _MAX_REPEAT:
+                    return
+            else:
+                _last_line  = line
+                _repeat_cnt = 0
+            log.debug("[argyll-pipe] %s", line)
+            self.line_received.emit(line)
+
+        byte_q: queue.Queue[bytes | None] = queue.Queue()
+
+        def _raw_reader() -> None:
+            try:
+                while True:
+                    b = proc.stdout.read(1)
+                    byte_q.put(b if b else None)
+                    if not b:
+                        break
+            except OSError:
+                byte_q.put(None)
+
+        threading.Thread(target=_raw_reader, daemon=True).start()
+
+        buf = b""
+        while True:
+            try:
+                byte = byte_q.get(timeout=FLUSH_AFTER)
+            except queue.Empty:
+                if buf:
+                    line = _ANSI_RE.sub(
+                        "", buf.decode("utf-8", errors="replace")
+                    ).rstrip("\r")
+                    buf = b""
+                    if line:
+                        _emit(line)
+                continue
+
+            if byte is None:
+                break
+
+            buf += byte
+            if byte == b"\n":
+                raw = buf.rstrip(b"\r\n")
+                buf = b""
+                line = _ANSI_RE.sub("", raw.decode("utf-8", errors="replace"))
+                if line:
+                    _emit(line)
+
+        if buf:
+            line = _ANSI_RE.sub(
+                "", buf.decode("utf-8", errors="replace")
+            ).rstrip("\r")
+            if line:
+                self.line_received.emit(line)
+
+        code = 0
+        if proc:
+            try:
+                code = proc.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                code = proc.wait()
+
+        self._pty_done.emit(code)
+
     def _on_pty_finished(self, code: int) -> None:
-        self._pty_master = None
-        self._pty_proc   = None
+        self._pty_master        = None
+        self._pty_proc          = None
+        self._use_console_input = False
         on_finish = self._run_on_finish
         self._run_on_finish = None
         self._run_on_line   = None
@@ -323,8 +585,7 @@ class ArgyllRunner(QObject):
 
     def _resolve(self, tool: str) -> Path:
         bin_dir = Path(self._settings.get("argyll_bin_path", "/Applications/Argyll/bin"))
-        candidate = bin_dir / tool
+        candidate = bin_dir / argyll_binary(tool)
         if not candidate.exists():
-            # Try without path — rely on $PATH
-            return Path(tool)
+            return Path(argyll_binary(tool))
         return candidate

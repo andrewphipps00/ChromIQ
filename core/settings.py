@@ -1,6 +1,7 @@
 """Persistent application settings via QSettings."""
 from __future__ import annotations
 
+import sys
 from typing import Any
 
 from PyQt6.QtCore import QSettings
@@ -9,9 +10,14 @@ from core.logger import get_logger
 
 log = get_logger(__name__)
 
+def _default_argyll_path() -> str:
+    if sys.platform == "win32":
+        return r"C:\Program Files\ArgyllCMS\bin"
+    return "/Applications/Argyll/bin"
+
 DEFAULTS: dict[str, Any] = {
     # ArgyllCMS
-    "argyll_bin_path":           "/Applications/Argyll/bin",
+    "argyll_bin_path":           _default_argyll_path(),
     "custom_output_path":        "",       # "" = ~/ChromIQ/
     # Step 1 — chart creation
     "chart_mode":                "guided",
@@ -34,7 +40,7 @@ DEFAULTS: dict[str, Any] = {
     "print_media":               "",
     "print_media_type":          "",
     "print_quality":             "",
-    "use_native_print_dialog":   False,
+    "use_native_print_dialog":   sys.platform == "win32",
     # Step 3 — measure
     "measure_disable_bidir":       True,
     "measure_suppress_warnings":   True,

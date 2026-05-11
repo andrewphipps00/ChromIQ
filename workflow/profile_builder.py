@@ -1,9 +1,11 @@
 """Orchestrates colprof for ICC profile creation and installation."""
 from __future__ import annotations
 
+import os
 import re
 import shlex
 import shutil
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable
@@ -15,7 +17,12 @@ if TYPE_CHECKING:
 
 log = get_logger(__name__)
 
-_PROFILE_DIR = Path.home() / "Library" / "ColorSync" / "Profiles"
+
+def _profile_dir() -> Path:
+    if sys.platform == "win32":
+        windir = Path(os.environ.get("WINDIR", r"C:\Windows"))
+        return windir / "System32" / "spool" / "drivers" / "color"
+    return Path.home() / "Library" / "ColorSync" / "Profiles"
 
 
 @dataclass
@@ -39,6 +46,12 @@ class ProfileParams:
     observer: str = ""
     fwa_enabled: bool = False
     fwa_illum: str = ""
+    # ICC media attributes & default intent (-Z)
+    z_surface: str = ""        # "" = glossy (default), "m" = matte
+    z_media_type: str = ""     # "" = reflective (default), "t" = transparent
+    z_polarity: str = ""       # "" = positive (default), "n" = negative
+    z_color_mode: str = ""     # "" = color (default), "b" = black & white
+    z_default_intent: str = "" # "" = not set, "p"/"r"/"s"/"a"
     # Gamut mapping extended
     gamut_sat_src: str = ""
     no_perc_gamut: bool = False
@@ -81,12 +94,18 @@ class ProfileBuilder:
             on_finish=on_finish,
         )
 
-    def install_profile(self, icc_path: Path) -> None:
-        """Copy .icc file to ~/Library/ColorSync/Profiles/."""
-        _PROFILE_DIR.mkdir(parents=True, exist_ok=True)
-        dest = _PROFILE_DIR / icc_path.name
+    def install_profile(self, icc_path: Path) -> Path:
+        """Copy .icc file to the system ICC profile folder. Returns the installed path."""
+        profile_dir = _profile_dir()
+        try:
+            profile_dir.mkdir(parents=True, exist_ok=True)
+        except PermissionError:
+            log.warning("Cannot create profile dir %s — elevation may be required", profile_dir)
+            raise
+        dest = profile_dir / icc_path.name
         shutil.copy2(icc_path, dest)
         log.info("Profile installed: %s", dest)
+        return dest
 
     def sanity_check(self, icc_path: Path, log_output: str = "") -> list[str]:
         """Return list of warning strings; empty = pass."""
@@ -114,7 +133,12 @@ class ProfileBuilder:
         return issues
 
     def expected_icc_path(self, params: ProfileParams) -> Path:
-        return params.ti3_path.with_suffix(".icc")
+        base = params.ti3_path.with_suffix("")
+        for ext in (".icc", ".icm"):
+            candidate = base.with_suffix(ext)
+            if candidate.exists():
+                return candidate
+        return base.with_suffix(".icc")
 
     # ------------------------------------------------------------------
 
@@ -144,6 +168,11 @@ class ProfileBuilder:
             args += ["-o", p.observer]
         if p.fwa_enabled:
             args.append(f"-f{p.fwa_illum}" if p.fwa_illum else "-f")
+        z_attrs = "".join(filter(None, [p.z_surface, p.z_media_type, p.z_polarity, p.z_color_mode]))
+        if z_attrs:
+            args += ["-Z", z_attrs]
+        if p.z_default_intent:
+            args += ["-Z", p.z_default_intent]
         if p.gamut_sat_src:
             args += ["-S", p.gamut_sat_src]
         if p.no_perc_gamut:

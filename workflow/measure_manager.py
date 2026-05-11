@@ -32,11 +32,12 @@ _CALIBRATION_PROMPT_RE = re.compile(r"Set\s+instrument\s+sensor\s+to\s+calibrati
 _STRIP_ERROR_RE        = re.compile(r"Strip\s+read\s+failed[^(]*\(([^)]+)\)",   re.IGNORECASE)
 _USB_ERROR_RE          = re.compile(r"ReadPipeAsync\s+failed",                   re.IGNORECASE)
 _DEVICE_BUSY_RE        = re.compile(r"Device being used",                        re.IGNORECASE)
-_NO_INSTRUMENT_RE      = re.compile(r"no instrument detected",                   re.IGNORECASE)
+_NO_INSTRUMENT_RE      = re.compile(r"no instrument detected|no suitable instruments|no instruments connected", re.IGNORECASE)
 _WRONG_STRIP_RE        = re.compile(r"Seem to have read strip pass (\w+) rather than (\w+)", re.IGNORECASE)
 _UNEXPECTED_RESP_RE    = re.compile(r"unexpected response.*\(DeltaE\s*([\d.]+)\)",            re.IGNORECASE)
 _STRIP_OK_RE           = re.compile(r"strip\s+read\s+ok",                                    re.IGNORECASE)
 _SENSOR_POSITION_RE    = re.compile(r"sensor.*wrong\s+position|sensor should be in surface", re.IGNORECASE)
+_USB_VM_RE             = re.compile(r"Failed to get piif for USB device",                    re.IGNORECASE)
 
 
 @dataclass
@@ -64,6 +65,7 @@ class MeasureManager(QObject):
     wrong_strip             = pyqtSignal(str, str)  # (read_strip, expected_strip)
     unexpected_response     = pyqtSignal(str)       # carries the DeltaE value string
     sensor_wrong_position   = pyqtSignal()          # emitted when instrument is in calibration position during scan
+    usb_claimed_by_vm       = pyqtSignal()          # emitted when USB device is held exclusively by a VM
 
     def __init__(self, runner: "ArgyllRunner", parent: QObject | None = None) -> None:
         super().__init__(parent)
@@ -168,6 +170,8 @@ class MeasureManager(QObject):
             self.unexpected_response.emit(m.group(1))
         if _SENSOR_POSITION_RE.search(line):
             self.sensor_wrong_position.emit()
+        if _USB_VM_RE.search(line):
+            self.usb_claimed_by_vm.emit()
 
     # ------------------------------------------------------------------
     # Guided strip navigation

@@ -67,6 +67,41 @@ jobs:
           )
           print('Generated assets/app_icon.ico')
 
+      - name: Add MSBuild to PATH
+        uses: microsoft/setup-msbuild@v2
+
+      # Build wdi-simple from libwdi source. Only x64 is needed — x64 binaries run on
+      # ARM64 Windows via the built-in x64 emulation layer.
+      - name: Build wdi-simple from source
+        shell: cmd
+        run: |
+          git clone --depth=1 https://github.com/pbatard/libwdi.git libwdi-src
+
+          REM All prerequisites go inside libwdi-src\ — embedder resolves paths from libwdi-src\libwdi\
+          curl -fsSL -o wdk-redist.msi "https://go.microsoft.com/fwlink/p/?LinkID=253170"
+          msiexec /a wdk-redist.msi /qn TARGETDIR=%CD%\libwdi-src\wdk
+
+          curl -fsSL -o libusb0.zip "https://github.com/mcuee/libusb-win32/releases/download/release_1.4.0.0/libusb-win32-bin-1.4.0.0.zip"
+          7z x libusb0.zip -o"libwdi-src"
+
+          curl -fsSL -o libusbk.7z "https://github.com/mcuee/libusbk/releases/download/V3.1.0.0/libusbK-3.1.0.0-bin.7z"
+          7z x libusbk.7z -o"libwdi-src"
+
+          cd libwdi-src
+          ren libusb-win32-bin-1.4.0.0 libusb0
+          ren libusbK-3.1.0.0-bin libusbk
+          msbuild libwdi.sln /m /p:Configuration=Release,Platform=x64,BuildMacros="WDK_DIR=\"../wdk/Windows Kits/8.0\";LIBUSB0_DIR=\"../libusb0\";LIBUSBK_DIR=\"../libusbk/bin\""
+
+          copy x64\Release\examples\wdi-simple.exe ..\assets\wdi_simple.exe
+          dir ..\assets\wdi_simple.exe
+
+      # zadig.exe is bundled as the fallback if wdi-simple fails or is cancelled.
+      - name: Download Zadig (fallback USB driver installer)
+        shell: bash
+        run: |
+          curl -fsSL -o assets/zadig.exe \
+            "https://github.com/pbatard/libwdi/releases/download/v1.5.1/zadig-2.9.exe"
+
       - name: Build Windows executable
         run: python -m PyInstaller ChromIQWin.spec
 

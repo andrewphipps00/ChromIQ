@@ -27,7 +27,7 @@ class ButtonFontFilter(QObject):
     def eventFilter(self, obj: QObject, event: QEvent) -> bool:
         if isinstance(obj, QPushButton) and event.type() == QEvent.Type.Polish:
             font = obj.font()
-            font.setFamily("Menlo")
+            font.setFamilies(["Menlo", "Consolas", "Courier New", "monospace"])
             font.setCapitalization(QFont.Capitalization.AllUppercase)
             obj.setFont(font)
         return False
@@ -205,8 +205,10 @@ def open_dir_dialog(
     )
     _style_file_dialog_toolbar(dlg)
     dlg.setFileMode(QFileDialog.FileMode.Directory)
+    import sys as _sys
     urls = _sidebar_urls(extra_path)
-    urls.append(QUrl.fromLocalFile("/Applications"))
+    if _sys.platform == "darwin":
+        urls.append(QUrl.fromLocalFile("/Applications"))
     dlg.setSidebarUrls(urls)
     if dlg.exec() == QFileDialog.DialogCode.Accepted:
         dirs = dlg.selectedFiles()

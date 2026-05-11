@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -241,6 +242,8 @@ class TabMeasure(QWidget):
         self._instrument_disconnected: bool = False
         self._device_busy: bool = False
         self._no_instrument: bool = False
+        self._usb_claimed_by_vm: bool = False
+        self._ti3_mtime_before: float | None = None
 
         self._manager.stripe_changed.connect(self._on_stripe_changed)
         self._manager.all_stripes_done.connect(self._on_all_stripes_done)
@@ -253,6 +256,7 @@ class TabMeasure(QWidget):
         self._manager.wrong_strip.connect(self._on_wrong_strip)
         self._manager.unexpected_response.connect(self._on_unexpected_response)
         self._manager.sensor_wrong_position.connect(self._on_sensor_wrong_position)
+        self._manager.usb_claimed_by_vm.connect(self._on_usb_claimed_by_vm)
         self._build_ui()
         self._restore_defaults()
         self._start_btn.setEnabled(False)
@@ -307,7 +311,10 @@ class TabMeasure(QWidget):
         top_layout.addWidget(TabHeader(
             "STEP 03 · MEASURE TARGET", "Measure printed chart", "#56d6a5", top_widget
         ))
-        _mode_font = QFont("Menlo", 11, QFont.Weight.Medium)
+        _mode_font = QFont()
+        _mode_font.setFamilies(["Menlo", "Consolas", "Courier New", "monospace"])
+        _mode_font.setPixelSize(11)
+        _mode_font.setWeight(QFont.Weight.Bold)
         self._mode_row_widget = QWidget(top_widget)
         mode_row = QHBoxLayout(self._mode_row_widget)
         mode_row.setContentsMargins(0, 0, 0, 0)
@@ -375,14 +382,14 @@ class TabMeasure(QWidget):
         headline.setAlignment(Qt.AlignmentFlag.AlignCenter)
         headline.setStyleSheet(
             "color: #ffffff; background: transparent;"
-            " font-family: Georgia; font-size: 28pt;"
+            " font-family: Georgia; font-size: 28px;"
         )
         calm_layout.addWidget(headline)
         subtext = QLabel("Scan each strip with a slow, steady motion.", calm_box)
         subtext.setAlignment(Qt.AlignmentFlag.AlignCenter)
         subtext.setStyleSheet(
             "color: #808080; background: transparent;"
-            " font-family: Menlo; font-size: 9pt; font-weight: 300;"
+            " font-family: Menlo; font-size: 9px; font-weight: 300;"
         )
         calm_layout.addWidget(subtext)
         bar_row = QHBoxLayout()
@@ -457,7 +464,7 @@ class TabMeasure(QWidget):
         lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         lbl.setStyleSheet(
             "color: #808080; background: transparent; padding: 4px;"
-            " font-family: Menlo; font-size: 9pt; font-weight: 300;"
+            " font-family: Menlo; font-size: 9px; font-weight: 300;"
         )
         rl.addWidget(lbl)
         self._preview = TiffPreview(right)
@@ -1455,7 +1462,18 @@ class TabMeasure(QWidget):
         self._instrument_disconnected = False
         self._device_busy = False
         self._no_instrument = False
-        subprocess.run(["killall", "-q", "chartread"], capture_output=True)
+        _ti3_pre = self._ti1_path.with_suffix(".ti3") if self._ti1_path else None
+        self._ti3_mtime_before = (
+            _ti3_pre.stat().st_mtime if (_ti3_pre and _ti3_pre.exists()) else None
+        )
+        if sys.platform == "win32":
+            subprocess.run(
+                ["taskkill", "/F", "/IM", "chartread.exe"],
+                capture_output=True,
+                creationflags=subprocess.CREATE_NO_WINDOW,
+            )
+        else:
+            subprocess.run(["killall", "-q", "chartread"], capture_output=True)
         self._set_settings_enabled(False)
         self._start_btn.setEnabled(False)
         self._stop_btn.setEnabled(True)
@@ -1680,6 +1698,9 @@ class TabMeasure(QWidget):
 
     def _on_no_instrument(self) -> None:
         self._no_instrument = True
+
+    def _on_usb_claimed_by_vm(self) -> None:
+        self._usb_claimed_by_vm = True
 
     def _on_instrument_disconnected(self) -> None:
         if self._instrument_disconnected:
@@ -2042,6 +2063,36 @@ class TabMeasure(QWidget):
         self._start_btn.setEnabled(True)
         self._stop_btn.setEnabled(False)
 
+        if self._usb_claimed_by_vm:
+            self._usb_claimed_by_vm = False
+            from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QVBoxLayout
+            dlg = QDialog(self)
+            dlg.setWindowTitle("Instrument Not Accessible")
+            dlg.setMinimumWidth(500)
+            layout = QVBoxLayout(dlg)
+            layout.setSpacing(16)
+            layout.setContentsMargins(24, 20, 24, 20)
+            msg = QLabel(
+                "<b>Your measurement device could not be opened — it appears to be "
+                "connected to a virtual machine.</b><br><br>"
+                "When a device is assigned to a VM (Parallels, VMware, VirtualBox, etc.), "
+                "the host operating system cannot access it at the same time.<br><br>"
+                "To fix this:<br>"
+                "&nbsp;&nbsp;1. In your VM software, disconnect the device from the "
+                "virtual machine<br>"
+                "&nbsp;&nbsp;2. Reconnect the USB cable if needed<br>"
+                "&nbsp;&nbsp;3. Press <b>Start Measurement</b> again",
+                dlg,
+            )
+            msg.setWordWrap(True)
+            layout.addWidget(msg)
+            btn_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
+            btn_box.accepted.connect(dlg.accept)
+            layout.addWidget(btn_box)
+            tint_dialog_primary(dlg, _TAB_COLOR)
+            dlg.exec()
+            return
+
         if self._no_instrument:
             self._no_instrument = False
             from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QVBoxLayout
@@ -2051,13 +2102,25 @@ class TabMeasure(QWidget):
             layout = QVBoxLayout(dlg)
             layout.setSpacing(16)
             layout.setContentsMargins(24, 20, 24, 20)
+            _conn_bullet = (
+                "&nbsp;&nbsp;• connected to your Windows PC via USB<br>"
+                if sys.platform == "win32" else
+                "&nbsp;&nbsp;• connected to your Mac via USB<br>"
+            )
+            _driver_hint = (
+                "<br>If the instrument is connected but still not found, make sure the "
+                "Argyll WinUSB driver is installed for your device (use Argyll's "
+                "ArgyllInstallers tool or Zadig). See the Argyll documentation for details."
+                if sys.platform == "win32" else ""
+            )
             msg = QLabel(
                 "<b>No measurement instrument was detected.</b><br><br>"
                 "Please make sure your instrument is:<br>"
-                "&nbsp;&nbsp;• connected to your Mac via USB<br>"
+                + _conn_bullet +
                 "&nbsp;&nbsp;• switched on<br>"
                 "&nbsp;&nbsp;• not in use by another application<br><br>"
-                "Once the instrument is ready, press <b>Start Measurement</b> again.",
+                "Once the instrument is ready, press <b>Start Measurement</b> again."
+                + _driver_hint,
                 dlg,
             )
             msg.setWordWrap(True)
@@ -2122,9 +2185,16 @@ class TabMeasure(QWidget):
             return
 
         # chartread exits non-zero even on a clean 'd' (done) completion.
-        # Treat as success if the .ti3 file was actually written.
+        # Only count the .ti3 as valid if it was actually written during this run —
+        # a stale file from a previous session must not mask a fresh failure.
         ti3 = self._ti1_path.with_suffix(".ti3") if self._ti1_path else None
-        ti3_exists = ti3 is not None and ti3.exists()
+        if ti3 is not None and ti3.exists():
+            ti3_exists = (
+                self._ti3_mtime_before is None          # file didn't exist before → fresh
+                or ti3.stat().st_mtime > self._ti3_mtime_before
+            )
+        else:
+            ti3_exists = False
         failed = self._measure_failed or (code != 0 and not ti3_exists)
         self._measure_failed = False
 

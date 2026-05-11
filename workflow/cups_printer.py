@@ -2,16 +2,26 @@
 from __future__ import annotations
 
 import os
+import subprocess
+import sys
 import tempfile
 from dataclasses import dataclass, field as _field
 from pathlib import Path
 from typing import Callable
-import subprocess
 
 from core.logger import get_logger
 from workflow.postscript_generator import PostScriptGenerator
 
 log = get_logger(__name__)
+
+try:
+    import cups as _cups_mod
+    CUPS_AVAILABLE = True
+except ImportError:
+    _cups_mod = None  # type: ignore[assignment]
+    CUPS_AVAILABLE = False
+    if sys.platform != "win32":
+        log.warning("pycups not available — CUPS printing disabled")
 
 # Options injected into PS print jobs.
 # Colour space is declared in the PS document itself; only neutral job-ticket
@@ -181,9 +191,10 @@ class CupsRawPrinter:
 
     @staticmethod
     def _cancel_pending_jobs(printer_name: str) -> None:
+        if not CUPS_AVAILABLE:
+            return
         try:
-            import cups
-            conn = cups.Connection()
+            conn = _cups_mod.Connection()
             jobs = conn.getJobs(which_jobs="not-completed", my_jobs=False)
             for job_id, attrs in jobs.items():
                 if printer_name not in attrs.get("job-printer-uri", ""):
@@ -237,9 +248,10 @@ class CupsRawPrinter:
     @staticmethod
     def is_printer_reachable(printer_name: str) -> bool:
         """Return True if the printer is idle or printing (state 3 or 4)."""
+        if not CUPS_AVAILABLE:
+            return True  # fail open on platforms without CUPS
         try:
-            import cups
-            attrs = cups.Connection().getPrinters().get(printer_name, {})
+            attrs = _cups_mod.Connection().getPrinters().get(printer_name, {})
             return attrs.get("printer-state", 5) in (3, 4)
         except Exception:
             return True  # fail open — let lp surface the real error

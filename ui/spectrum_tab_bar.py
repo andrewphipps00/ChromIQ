@@ -99,7 +99,8 @@ class SpectrumTabBar(QTabBar):
 
                 p.setPen(QColor("#404040"))
                 font: QFont = self.font()
-                font.setPointSize(13)
+                font.setFamilies(["Inter", "Segoe UI", "system-ui", "sans-serif"])
+                font.setPixelSize(13)
                 font.setWeight(QFont.Weight.Medium)
                 p.setFont(font)
                 label_rect = rect.adjusted(8, 3, -8, -2)
@@ -143,7 +144,8 @@ class SpectrumTabBar(QTabBar):
             text_color = TEXT_ACTIVE if is_active else TEXT_INACTIVE
             p.setPen(QColor(text_color))
             font = self.font()
-            font.setPointSize(13)
+            font.setFamilies(["Inter", "Segoe UI", "system-ui", "sans-serif"])
+            font.setPixelSize(13)
             font.setWeight(QFont.Weight.DemiBold if is_active
                            else QFont.Weight.Medium)
             p.setFont(font)

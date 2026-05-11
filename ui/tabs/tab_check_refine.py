@@ -36,6 +36,7 @@ from ui.widgets import NoScrollComboBox, NoScrollDoubleSpinBox, make_browse_butt
 
 _TAB_COLOR = "#9f82ff"  # Check & Refine tab accent
 from ui.styles import SPEC_VIOLET, TAB_COLORS
+from workflow.profile_builder import _profile_dir as _get_profile_dir
 from workflow.profcheck_runner import (
     REFINE_DE_THRESHOLD,
     REFINE_START_OVER_RATIO,
@@ -171,7 +172,10 @@ class TabCheckRefine(QWidget):
         ))
 
         # --- Mode buttons ---
-        _mode_font = QFont("Menlo", 11, QFont.Weight.Medium)
+        _mode_font = QFont()
+        _mode_font.setFamilies(["Menlo", "Consolas", "Courier New", "monospace"])
+        _mode_font.setPixelSize(11)
+        _mode_font.setWeight(QFont.Weight.Bold)
         self._mode_row_widget = QWidget(self)
         mode_row = QHBoxLayout(self._mode_row_widget)
         mode_row.setContentsMargins(0, 0, 0, 0)
@@ -247,14 +251,14 @@ class TabCheckRefine(QWidget):
         headline.setAlignment(Qt.AlignmentFlag.AlignCenter)
         headline.setStyleSheet(
             "color: #ffffff; background: transparent;"
-            " font-family: Georgia; font-size: 28pt;"
+            " font-family: Georgia; font-size: 28px;"
         )
         nervous_layout.addWidget(headline)
         subtext = QLabel("Your colors are in good hands.", nervous_box)
         subtext.setAlignment(Qt.AlignmentFlag.AlignCenter)
         subtext.setStyleSheet(
             "color: #808080; background: transparent;"
-            " font-family: Menlo; font-size: 9pt; font-weight: 300;"
+            " font-family: Menlo; font-size: 9px; font-weight: 300;"
         )
         nervous_layout.addWidget(subtext)
         bar_row = QHBoxLayout()
@@ -1253,9 +1257,9 @@ class TabCheckRefine(QWidget):
 
             def _on_install():
                 try:
-                    _profile_dir = Path.home() / "Library" / "ColorSync" / "Profiles"
-                    _profile_dir.mkdir(parents=True, exist_ok=True)
-                    dest = _profile_dir / icc.name
+                    profile_dir = _get_profile_dir()
+                    profile_dir.mkdir(parents=True, exist_ok=True)
+                    dest = profile_dir / icc.name
                     shutil.copy2(icc, dest)
                     dlg.accept()
                     self._log.appendPlainText(f"[OK] Profile installed to {dest}")

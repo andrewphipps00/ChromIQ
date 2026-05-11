@@ -105,7 +105,7 @@ class MastheadHeader(QWidget):
 
         mono = QFont()
         mono.setFamilies(["JetBrains Mono", "Menlo", "SF Mono", "Courier New", "monospace"])
-        mono.setPointSizeF(9.0)
+        mono.setPixelSize(9)
 
         if self._version:
             mono_lc = QFont(mono)
@@ -120,7 +120,7 @@ class MastheadHeader(QWidget):
 
             # Left tag
             tag_font = QFont(mono)
-            tag_font.setPointSizeF(8.5)
+            tag_font.setPixelSize(9)
             tag_font.setLetterSpacing(QFont.SpacingType.PercentageSpacing, 148)
             p.setFont(tag_font)
             p.setPen(QColor(_TAG_FG))
@@ -132,14 +132,14 @@ class MastheadHeader(QWidget):
         # "Chrom" — regular weight Instrument Serif
         font_r = QFont()
         font_r.setFamilies(["Instrument Serif", "Georgia", "Times New Roman", "serif"])
-        font_r.setPointSizeF(62.0)
+        font_r.setPixelSize(62)
         font_r.setWeight(QFont.Weight.Normal)
         font_r.setItalic(False)
 
         # "IQ" — bold italic Instrument Serif
         font_i = QFont()
         font_i.setFamilies(["Instrument Serif", "Georgia", "Times New Roman", "serif"])
-        font_i.setPointSizeF(62.0)
+        font_i.setPixelSize(62)
         font_i.setWeight(QFont.Weight.Bold)
         font_i.setItalic(True)
 

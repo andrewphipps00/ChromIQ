@@ -4,10 +4,14 @@ from __future__ import annotations
 import pathlib
 import re
 import subprocess
+import sys
 from typing import Optional
 
 from core.logger import get_logger
-from workflow.cups_printer import PrintConfig
+from workflow.cups_printer import CUPS_AVAILABLE, PrintConfig
+
+if CUPS_AVAILABLE:
+    import cups as _cups_mod  # type: ignore[import]
 
 log = get_logger(__name__)
 
@@ -17,9 +21,10 @@ class PrintModule:
 
     def detect_printers(self) -> list[str]:
         """Return filtered list of non-AirPrint printer names from CUPS."""
+        if not CUPS_AVAILABLE:
+            return []
         try:
-            import cups
-            conn = cups.Connection()
+            conn = _cups_mod.Connection()
             result: list[str] = []
             for name, attrs in conn.getPrinters().items():
                 model = attrs.get("printer-make-and-model", "")
@@ -104,6 +109,8 @@ class PrintModule:
         Returns dict: CUPS_option_name → (category_label, [(display_label, raw_cups_value), ...]).
         """
         result: dict[str, tuple[str, list[tuple[str, str]]]] = {}
+        if not CUPS_AVAILABLE:
+            return result
         try:
             r = subprocess.run(
                 ["lpoptions", "-p", printer, "-l"],
@@ -212,9 +219,10 @@ class PrintModule:
         opt_name: str,
         all_values: list[str],
     ) -> list[str]:
+        if not CUPS_AVAILABLE:
+            return all_values
         try:
-            import cups
-            ppd = cups.PPD(ppd_path)
+            ppd = _cups_mod.PPD(ppd_path)
             valid: list[str] = []
             for v in all_values:
                 ppd.markDefaults()
@@ -303,9 +311,10 @@ class PrintModule:
 
     def get_stuck_jobs(self, printer: str) -> list[int]:
         """Return job IDs in definitively stuck states: held=4, stopped=6, aborted=8."""
+        if not CUPS_AVAILABLE:
+            return []
         try:
-            import cups
-            conn = cups.Connection()
+            conn = _cups_mod.Connection()
             jobs = conn.getJobs(which_jobs="not-completed", my_jobs=False)
             stuck = []
             for job_id, attrs in jobs.items():
@@ -320,9 +329,10 @@ class PrintModule:
 
     def cancel_all_jobs(self, printer: str) -> int:
         """Cancel all non-completed jobs for *printer*. Returns number cancelled."""
+        if not CUPS_AVAILABLE:
+            return 0
         try:
-            import cups
-            conn = cups.Connection()
+            conn = _cups_mod.Connection()
             jobs = conn.getJobs(which_jobs="not-completed", my_jobs=False)
             count = 0
             for job_id, attrs in jobs.items():
