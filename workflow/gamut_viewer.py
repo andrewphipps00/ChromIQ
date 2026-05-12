@@ -150,6 +150,10 @@ class GamutViewer(QObject):
         self._work_dir = work_dir
         icc_copy = work_dir / params.icc_path.name
         try:
+            if params.icc_path.stat().st_size == 0:
+                shutil.rmtree(work_dir, ignore_errors=True)
+                self.error.emit(f"empty:{params.icc_path}")
+                return
             shutil.copy2(params.icc_path, icc_copy)
         except OSError as exc:
             shutil.rmtree(work_dir, ignore_errors=True)
@@ -191,7 +195,9 @@ class GamutViewer(QObject):
             log.info("iccgamut: volume=%.1f cc, html=%s, gam=%s", volume, html_path, gam_path)
             self.finished.emit(volume, html_path, gam_path)
         elif code != 0:
-            self.error.emit(f"iccgamut exited with code {code}.")
+            tool_err = next((l for l in reversed(self._log_lines) if "Error" in l or "error" in l), "")
+            suffix = f"\niccgamut reported: {tool_err}" if tool_err else ""
+            self.error.emit(f"tool_error:{code}{suffix}")
         else:
             self.error.emit("Could not parse gamut volume from iccgamut output — try running with -v flag.")
 

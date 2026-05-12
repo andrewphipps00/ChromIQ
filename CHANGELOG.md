@@ -1,5 +1,15 @@
 # Changelog
 
+## v3.1.4
+### Fixed
+- **Gamut viewer — empty profile error dialog**: When an ICC profile file is 0 bytes
+  (e.g. from an interrupted colprof run), a clear popup now explains why the file is
+  empty and how to rebuild it, instead of showing a cryptic "iccgamut exited with code 1"
+  warning in the console.
+- **Gamut viewer — iccgamut error dialog**: Any other iccgamut failure now shows a popup
+  with the actual tool error message, common causes (corrupt or non-standard ICC file),
+  and a pointer to the full log for further diagnosis.
+
 ## v3.1.3
 ### Added
 - **Gamut viewer — 3D comparison overlay**: Profile A now keeps its natural per-vertex

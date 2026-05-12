@@ -23,7 +23,7 @@ from PyQt6.QtWidgets import (
 
 from core.logger import get_logger
 from ui.styles import SPEC_VIOLET, TEXT_DIM
-from ui.tooltip_button import TooltipButton
+from ui.tooltip_button import InfoDialog, TooltipButton
 from ui.widgets import NoScrollComboBox, NoScrollDoubleSpinBox, make_browse_button, open_file_dialog
 from workflow.gamut_viewer import GamutViewer, GamutViewerParams
 from workflow.viewgam_runner import ViewgamResult, ViewgamRunner
@@ -711,11 +711,56 @@ class GamutPanel(QWidget):
     def _on_compare_error(self, msg: str) -> None:
         log.warning("compare iccgamut: %s", msg)
         self._run_btn.setEnabled(self._icc_path is not None)
+        self._show_gamut_error_dialog(msg)
 
     def _on_viewer_error(self, msg: str) -> None:
         self._run_btn.setEnabled(self._icc_path is not None)
         self._pending_compare = False
         log.warning("GamutViewer error: %s", msg)
+        self._show_gamut_error_dialog(msg)
+
+    def _show_gamut_error_dialog(self, msg: str) -> None:
+        if msg.startswith("empty:"):
+            path = msg[len("empty:"):]
+            body = (
+                f"The ICC profile file could not be analysed because it is empty (0 bytes):\n\n"
+                f"{path}\n\n"
+                "Why this happens:\n"
+                "An empty ICC profile is usually left behind when a profiling run was\n"
+                "interrupted, aborted, or failed before colprof could finish writing the\n"
+                "output file. The file exists on disk but contains no data.\n\n"
+                "What to do:\n"
+                "• Go to the Build Profile tab and run the profiling workflow again for\n"
+                "  this printer/paper combination to generate a valid ICC profile.\n"
+                "• If the file was created by a different application, re-export or\n"
+                "  re-create it from your profiling software."
+            )
+            InfoDialog("Gamut Analysis Failed — Empty Profile File", body, self, min_width=520).exec()
+        elif msg.startswith("tool_error:"):
+            details = msg[len("tool_error:"):]
+            body = (
+                "iccgamut was not able to analyse the ICC profile and exited with an error.\n\n"
+                f"Technical detail:\n{details}\n\n"
+                "Common causes:\n"
+                "• The ICC profile file is corrupt or was not written correctly.\n"
+                "• The profile was created by an application using a non-standard ICC\n"
+                "  structure that this version of Argyll cannot parse.\n"
+                "• The file was modified or truncated after it was created.\n\n"
+                "What to do:\n"
+                "• Try rebuilding the profile via the Build Profile tab.\n"
+                "• If the file came from a different application, check whether it opens\n"
+                "  correctly in ColorSync Utility (macOS) or ICC Profile Inspector.\n"
+                "• Check the log file at ~/Library/Logs/ChromIQ/chromiq.log for the\n"
+                "  full iccgamut output."
+            )
+            InfoDialog("Gamut Analysis Failed", body, self, min_width=540).exec()
+        elif "Another process is already running" not in msg:
+            InfoDialog(
+                "Gamut Analysis Failed",
+                f"The gamut analysis could not complete:\n\n{msg}",
+                self,
+                min_width=480,
+            ).exec()
 
     def _on_app_quit(self) -> None:
         if self._web_view is not None:
