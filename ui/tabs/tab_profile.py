@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import QSize, Qt, pyqtSignal
 from PyQt6.QtGui import QFont, QIcon
 from PyQt6.QtWidgets import (
     QCheckBox,
@@ -493,6 +493,9 @@ class TabProfile(QWidget):
         self._pc_mode_combo.addItem("Verify  (check against existing .cal)", "verify")
         self._pc_mode_combo.addItem("Imitation target  (null cal from .ti3)", "imitation")
         self._pc_mode_combo.currentIndexChanged.connect(self._pc_update_mode_vis)
+        self._pc_mode_combo.setObjectName("compact_input")
+        self._pc_mode_combo.style().unpolish(self._pc_mode_combo)
+        self._pc_mode_combo.style().polish(self._pc_mode_combo)
         mode_row.addWidget(self._pc_mode_combo, stretch=1)
         mode_row.addWidget(TooltipButton(
             "Calibration Mode",
@@ -518,8 +521,16 @@ class TabProfile(QWidget):
         prev_row.addWidget(QLabel("Previous .cal file:", self._pc_prev_widget))
         self._pc_prev_edit = QLineEdit(self._pc_prev_widget)
         self._pc_prev_edit.setPlaceholderText("Path to previous calibration file…")
+        self._pc_prev_edit.setObjectName("compact_input")
+        self._pc_prev_edit.style().unpolish(self._pc_prev_edit)
+        self._pc_prev_edit.style().polish(self._pc_prev_edit)
         prev_browse = make_browse_button(self._pc_prev_widget, "Select previous .cal file", icon="folder_build")
         prev_browse.clicked.connect(self._pc_browse_prev)
+        prev_browse.setObjectName("browse_compact")
+        prev_browse.style().unpolish(prev_browse)
+        prev_browse.style().polish(prev_browse)
+        prev_browse.setIconSize(QSize(14, 14))
+        prev_browse.setFixedHeight(22)
         prev_row.addWidget(self._pc_prev_edit, stretch=1)
         prev_row.addWidget(prev_browse)
         self._pc_prev_widget.setVisible(False)
@@ -549,6 +560,9 @@ class TabProfile(QWidget):
         self._pc_smooth_spin.setDecimals(1)
         self._pc_smooth_spin.setValue(1.0)
         self._pc_smooth_spin.setMaximumWidth(80)
+        self._pc_smooth_spin.setObjectName("compact_input")
+        self._pc_smooth_spin.style().unpolish(self._pc_smooth_spin)
+        self._pc_smooth_spin.style().polish(self._pc_smooth_spin)
         smooth_row.addWidget(self._pc_smooth_spin)
         smooth_row.addStretch()
         smooth_row.addWidget(TooltipButton(
@@ -567,6 +581,9 @@ class TabProfile(QWidget):
         self._pc_verb_spin.setRange(0, 3)
         self._pc_verb_spin.setValue(1)
         self._pc_verb_spin.setMaximumWidth(60)
+        self._pc_verb_spin.setObjectName("compact_input")
+        self._pc_verb_spin.style().unpolish(self._pc_verb_spin)
+        self._pc_verb_spin.style().polish(self._pc_verb_spin)
         verb_row.addWidget(self._pc_verb_spin)
         verb_row.addStretch()
         verb_row.addWidget(TooltipButton(
@@ -774,6 +791,12 @@ class TabProfile(QWidget):
 
         self._pc_extended_cb.toggled.connect(self._pc_ext_grid_widget.setVisible)
 
+        for row in self._pc_channel_rows:
+            for sp in (row.max_spin, row.dev_spin, row.white_spin, row.t50_spin):
+                sp.setObjectName("compact_input")
+                sp.style().unpolish(sp)
+                sp.style().polish(sp)
+
         # Keep the old attribute name so restore/save code still works
         self._pc_extended_widgets: list[QWidget] = []  # unused sentinel — toggled via widget
 
@@ -782,11 +805,15 @@ class TabProfile(QWidget):
     def _build_pc_metadata_group(self, layout: QVBoxLayout, parent: QWidget) -> None:
         grp = QGroupBox("Calibration Metadata", parent)
         g = QVBoxLayout(grp)
+        g.setSpacing(8)
 
         desc_row = QHBoxLayout()
         desc_row.addWidget(QLabel("Description (-D):", grp))
         self._pc_desc_edit = QLineEdit(grp)
         self._pc_desc_edit.setPlaceholderText("e.g. EpsonP900_Cal_2026-04")
+        self._pc_desc_edit.setObjectName("compact_input")
+        self._pc_desc_edit.style().unpolish(self._pc_desc_edit)
+        self._pc_desc_edit.style().polish(self._pc_desc_edit)
         desc_row.addWidget(self._pc_desc_edit, stretch=1)
         desc_row.addWidget(TooltipButton(
             "Description (-D)",
@@ -804,6 +831,9 @@ class TabProfile(QWidget):
             edit  = QLineEdit(grp)
             edit.setPlaceholderText(placeholder)
             edit.setEnabled(False)
+            edit.setObjectName("compact_input")
+            edit.style().unpolish(edit)
+            edit.style().polish(edit)
             check.toggled.connect(edit.setEnabled)
             row = QHBoxLayout()
             row.addWidget(check)
@@ -921,6 +951,9 @@ class TabProfile(QWidget):
         self._ac_mode_combo.addItem("Apply calibration to profile  (-a)", "apply")
         self._ac_mode_combo.addItem("Remove calibration from profile  (-u)", "remove")
         self._ac_mode_combo.addItem("Check calibration (no file written)  (-c)", "check")
+        self._ac_mode_combo.setObjectName("compact_input")
+        self._ac_mode_combo.style().unpolish(self._ac_mode_combo)
+        self._ac_mode_combo.style().polish(self._ac_mode_combo)
         mode_row.addWidget(self._ac_mode_combo, stretch=1)
         mode_row.addWidget(TooltipButton(
             "applycal Mode",
@@ -940,8 +973,16 @@ class TabProfile(QWidget):
         cal_row.addWidget(QLabel("Calibration file (.cal):", grp))
         self._ac_cal_edit = QLineEdit(grp)
         self._ac_cal_edit.setPlaceholderText("Path to .cal file…")
+        self._ac_cal_edit.setObjectName("compact_input")
+        self._ac_cal_edit.style().unpolish(self._ac_cal_edit)
+        self._ac_cal_edit.style().polish(self._ac_cal_edit)
         ac_cal_browse = make_browse_button(grp, "Select .cal file", icon="folder_build")
         ac_cal_browse.clicked.connect(self._ac_browse_cal)
+        ac_cal_browse.setObjectName("browse_compact")
+        ac_cal_browse.style().unpolish(ac_cal_browse)
+        ac_cal_browse.style().polish(ac_cal_browse)
+        ac_cal_browse.setIconSize(QSize(14, 14))
+        ac_cal_browse.setFixedHeight(22)
         cal_row.addWidget(self._ac_cal_edit, stretch=1)
         cal_row.addWidget(ac_cal_browse)
         g.addLayout(cal_row)
@@ -952,8 +993,16 @@ class TabProfile(QWidget):
         self._ac_in_edit = QLineEdit(grp)
         self._ac_in_edit.setPlaceholderText("Path to input .icc / .icm…")
         self._ac_in_edit.textChanged.connect(self._ac_update_out_placeholder)
+        self._ac_in_edit.setObjectName("compact_input")
+        self._ac_in_edit.style().unpolish(self._ac_in_edit)
+        self._ac_in_edit.style().polish(self._ac_in_edit)
         ac_in_browse = make_browse_button(grp, "Select input ICC profile", icon="folder_build")
         ac_in_browse.clicked.connect(self._ac_browse_in)
+        ac_in_browse.setObjectName("browse_compact")
+        ac_in_browse.style().unpolish(ac_in_browse)
+        ac_in_browse.style().polish(ac_in_browse)
+        ac_in_browse.setIconSize(QSize(14, 14))
+        ac_in_browse.setFixedHeight(22)
         in_row.addWidget(self._ac_in_edit, stretch=1)
         in_row.addWidget(ac_in_browse)
         g.addLayout(in_row)
@@ -963,8 +1012,16 @@ class TabProfile(QWidget):
         out_row.addWidget(QLabel("Output ICC profile:", grp))
         self._ac_out_edit = QLineEdit(grp)
         self._ac_out_edit.setPlaceholderText("Leave blank to save as cal_<name>.icc")
+        self._ac_out_edit.setObjectName("compact_input")
+        self._ac_out_edit.style().unpolish(self._ac_out_edit)
+        self._ac_out_edit.style().polish(self._ac_out_edit)
         ac_out_browse = make_browse_button(grp, "Select output ICC path", icon="folder_build")
         ac_out_browse.clicked.connect(self._ac_browse_out)
+        ac_out_browse.setObjectName("browse_compact")
+        ac_out_browse.style().unpolish(ac_out_browse)
+        ac_out_browse.style().polish(ac_out_browse)
+        ac_out_browse.setIconSize(QSize(14, 14))
+        ac_out_browse.setFixedHeight(22)
         out_row.addWidget(self._ac_out_edit, stretch=1)
         out_row.addWidget(ac_out_browse)
         g.addLayout(out_row)
@@ -1554,11 +1611,15 @@ class TabProfile(QWidget):
     def _build_m_core_group(self, layout: QVBoxLayout) -> None:
         grp = QGroupBox("Profile Core", layout.parentWidget())
         g = QVBoxLayout(grp)
+        g.setSpacing(8)
 
         desc_row = QHBoxLayout()
         desc_row.addWidget(QLabel("Profile Description (-D):", grp))
         self._m_desc_edit = QLineEdit(grp)
         self._m_desc_edit.setPlaceholderText("e.g. EpsonP900_CansonBaryta_2026-04")
+        self._m_desc_edit.setObjectName("compact_input")
+        self._m_desc_edit.style().unpolish(self._m_desc_edit)
+        self._m_desc_edit.style().polish(self._m_desc_edit)
         desc_row.addWidget(self._m_desc_edit, stretch=1)
         desc_row.addWidget(TooltipButton(
             "Profile Description (-D)",
@@ -1587,6 +1648,9 @@ class TabProfile(QWidget):
             ("M", "Matrix only (forced)"),
         ]:
             self._m_algo_combo.addItem(label, code)
+        self._m_algo_combo.setObjectName("compact_input")
+        self._m_algo_combo.style().unpolish(self._m_algo_combo)
+        self._m_algo_combo.style().polish(self._m_algo_combo)
         algo_row.addWidget(self._m_algo_combo, stretch=1)
         algo_row.addWidget(TooltipButton(
             "Profile Algorithm (-a)",
@@ -1608,6 +1672,9 @@ class TabProfile(QWidget):
         ]:
             self._m_qual_combo.addItem(label, code)
         self._m_qual_combo.setCurrentIndex(1)
+        self._m_qual_combo.setObjectName("compact_input")
+        self._m_qual_combo.style().unpolish(self._m_qual_combo)
+        self._m_qual_combo.style().polish(self._m_qual_combo)
         qual_row.addWidget(self._m_qual_combo, stretch=1)
         qual_row.addWidget(TooltipButton(
             "Profile Quality (-q)",
@@ -1627,6 +1694,9 @@ class TabProfile(QWidget):
             self._m_b2a_combo.addItem(lbl, code)
         self._m_b2a_combo.setCurrentIndex(1)
         self._m_b2a_combo.setEnabled(False)
+        self._m_b2a_combo.setObjectName("compact_input")
+        self._m_b2a_combo.style().unpolish(self._m_b2a_combo)
+        self._m_b2a_combo.style().polish(self._m_b2a_combo)
         self._m_b2a_check.toggled.connect(self._m_b2a_combo.setEnabled)
         b2a_row = QHBoxLayout()
         b2a_row.addWidget(self._m_b2a_check)
@@ -1645,6 +1715,7 @@ class TabProfile(QWidget):
     def _build_m_measurement_group(self, layout: QVBoxLayout) -> None:
         grp = QGroupBox("Measurement && Smoothing", layout.parentWidget())
         g = QVBoxLayout(grp)
+        g.setSpacing(8)
 
         smooth_row = QHBoxLayout()
         smooth_row.addWidget(QLabel("Smoothing / Noise (-r):", grp))
@@ -1653,6 +1724,9 @@ class TabProfile(QWidget):
         self._m_smooth_spin.setSingleStep(0.1)
         self._m_smooth_spin.setDecimals(2)
         self._m_smooth_spin.setValue(0.5)
+        self._m_smooth_spin.setObjectName("compact_input")
+        self._m_smooth_spin.style().unpolish(self._m_smooth_spin)
+        self._m_smooth_spin.style().polish(self._m_smooth_spin)
         smooth_row.addWidget(self._m_smooth_spin)
         smooth_row.addStretch()
         smooth_row.addWidget(TooltipButton(
@@ -1673,6 +1747,9 @@ class TabProfile(QWidget):
         self._m_dark_spin.setSingleStep(0.1)
         self._m_dark_spin.setDecimals(1)
         self._m_dark_spin.setValue(1.0)
+        self._m_dark_spin.setObjectName("compact_input")
+        self._m_dark_spin.style().unpolish(self._m_dark_spin)
+        self._m_dark_spin.style().polish(self._m_dark_spin)
         dark_row.addWidget(self._m_dark_spin)
         dark_row.addStretch()
         dark_row.addWidget(TooltipButton(
@@ -1689,12 +1766,16 @@ class TabProfile(QWidget):
     def _build_m_color_science_group(self, layout: QVBoxLayout) -> None:
         grp = QGroupBox("Color Science", layout.parentWidget())
         g = QVBoxLayout(grp)
+        g.setSpacing(8)
 
         illum_row = QHBoxLayout()
         illum_row.addWidget(QLabel("Illuminant (-i):", grp))
         self._m_illum_combo = NoScrollComboBox(grp)
         for label, val in _ILLUMINANTS:
             self._m_illum_combo.addItem(label, val)
+        self._m_illum_combo.setObjectName("compact_input")
+        self._m_illum_combo.style().unpolish(self._m_illum_combo)
+        self._m_illum_combo.style().polish(self._m_illum_combo)
         illum_row.addWidget(self._m_illum_combo, stretch=1)
         illum_row.addWidget(TooltipButton(
             "Illuminant for XYZ Computation (-i)",
@@ -1715,6 +1796,9 @@ class TabProfile(QWidget):
             ("2015 10° (Stockman)", "2015_10"),
         ]:
             self._m_obs_combo.addItem(label, val)
+        self._m_obs_combo.setObjectName("compact_input")
+        self._m_obs_combo.style().unpolish(self._m_obs_combo)
+        self._m_obs_combo.style().polish(self._m_obs_combo)
         obs_row.addWidget(self._m_obs_combo, stretch=1)
         obs_row.addWidget(TooltipButton(
             "CIE Observer (-o)",
@@ -1733,6 +1817,9 @@ class TabProfile(QWidget):
         for label, val in _ILLUMINANTS[1:]:
             self._m_fwa_illum_combo.addItem(label, val)
         self._m_fwa_illum_combo.setEnabled(False)
+        self._m_fwa_illum_combo.setObjectName("compact_input")
+        self._m_fwa_illum_combo.style().unpolish(self._m_fwa_illum_combo)
+        self._m_fwa_illum_combo.style().polish(self._m_fwa_illum_combo)
         self._m_fwa_check.toggled.connect(self._m_fwa_illum_combo.setEnabled)
         fwa_row.addWidget(self._m_fwa_check)
         fwa_row.addWidget(self._m_fwa_illum_combo, stretch=1)
@@ -1752,6 +1839,9 @@ class TabProfile(QWidget):
         self._m_z_surface_combo = NoScrollComboBox(grp)
         self._m_z_surface_combo.addItem("Glossy / Reflective (default)", "")
         self._m_z_surface_combo.addItem("Matte", "m")
+        self._m_z_surface_combo.setObjectName("compact_input")
+        self._m_z_surface_combo.style().unpolish(self._m_z_surface_combo)
+        self._m_z_surface_combo.style().polish(self._m_z_surface_combo)
         m_surf_row.addWidget(self._m_z_surface_combo, stretch=1)
         m_surf_row.addWidget(TooltipButton(
             "Media Surface (-Z m)",
@@ -1772,6 +1862,9 @@ class TabProfile(QWidget):
         self._m_z_media_type_combo = NoScrollComboBox(grp)
         self._m_z_media_type_combo.addItem("Reflective (default)", "")
         self._m_z_media_type_combo.addItem("Transparent", "t")
+        self._m_z_media_type_combo.setObjectName("compact_input")
+        self._m_z_media_type_combo.style().unpolish(self._m_z_media_type_combo)
+        self._m_z_media_type_combo.style().polish(self._m_z_media_type_combo)
         m_mtype_row.addWidget(self._m_z_media_type_combo, stretch=1)
         m_mtype_row.addWidget(TooltipButton(
             "Media Type (-Z t)",
@@ -1788,6 +1881,9 @@ class TabProfile(QWidget):
         self._m_z_polarity_combo = NoScrollComboBox(grp)
         self._m_z_polarity_combo.addItem("Positive (default)", "")
         self._m_z_polarity_combo.addItem("Negative", "n")
+        self._m_z_polarity_combo.setObjectName("compact_input")
+        self._m_z_polarity_combo.style().unpolish(self._m_z_polarity_combo)
+        self._m_z_polarity_combo.style().polish(self._m_z_polarity_combo)
         m_pol_row.addWidget(self._m_z_polarity_combo, stretch=1)
         m_pol_row.addWidget(TooltipButton(
             "Media Polarity (-Z n)",
@@ -1804,6 +1900,9 @@ class TabProfile(QWidget):
         self._m_z_color_mode_combo = NoScrollComboBox(grp)
         self._m_z_color_mode_combo.addItem("Color media (default)", "")
         self._m_z_color_mode_combo.addItem("Black & White", "b")
+        self._m_z_color_mode_combo.setObjectName("compact_input")
+        self._m_z_color_mode_combo.style().unpolish(self._m_z_color_mode_combo)
+        self._m_z_color_mode_combo.style().polish(self._m_z_color_mode_combo)
         m_cmode_row.addWidget(self._m_z_color_mode_combo, stretch=1)
         m_cmode_row.addWidget(TooltipButton(
             "Color Type (-Z b)",
@@ -1823,6 +1922,9 @@ class TabProfile(QWidget):
         self._m_z_intent_combo.addItem("Relative Colorimetric", "r")
         self._m_z_intent_combo.addItem("Saturation", "s")
         self._m_z_intent_combo.addItem("Absolute Colorimetric", "a")
+        self._m_z_intent_combo.setObjectName("compact_input")
+        self._m_z_intent_combo.style().unpolish(self._m_z_intent_combo)
+        self._m_z_intent_combo.style().polish(self._m_z_intent_combo)
         m_intent_row.addWidget(self._m_z_intent_combo, stretch=1)
         m_intent_row.addWidget(TooltipButton(
             "Default Rendering Intent (-Z p/r/s/a)",
@@ -1847,6 +1949,7 @@ class TabProfile(QWidget):
     def _build_m_gamut_group(self, layout: QVBoxLayout) -> None:
         grp = QGroupBox("Gamut Mapping", layout.parentWidget())
         g = QVBoxLayout(grp)
+        g.setSpacing(8)
 
         mode_row = QHBoxLayout()
         mode_row.addWidget(QLabel("Gamut Source:", grp))
@@ -1854,6 +1957,9 @@ class TabProfile(QWidget):
         self._m_gam_mode_combo.addItem("None (colprof default)", "")
         self._m_gam_mode_combo.addItem("Perceptual only (-s)", "s")
         self._m_gam_mode_combo.addItem("Perceptual + Saturation (-S)  ← recommended", "S")
+        self._m_gam_mode_combo.setObjectName("compact_input")
+        self._m_gam_mode_combo.style().unpolish(self._m_gam_mode_combo)
+        self._m_gam_mode_combo.style().polish(self._m_gam_mode_combo)
         mode_row.addWidget(self._m_gam_mode_combo, stretch=1)
         mode_row.addWidget(TooltipButton(
             "Gamut Source (-s / -S)",
@@ -1878,8 +1984,13 @@ class TabProfile(QWidget):
         self._m_gam_path_edit.setPlaceholderText(
             "Path to source RGB profile (e.g. sRGB.icm or AdobeRGB.icm from Argyll/ref/)"
         )
-        self._m_gam_path_browse = make_browse_button(grp, "Select gamut source profile", icon="folder_build")
+        self._m_gam_path_edit.setObjectName("compact_path")
+        self._m_gam_path_browse = make_browse_button(grp, "Select gamut source profile",
+                                                     icon="folder_build")
         self._m_gam_path_browse.clicked.connect(self._browse_m_gam)
+        self._m_gam_path_browse.setObjectName("browse_compact")
+        self._m_gam_path_browse.setIconSize(QSize(14, 14))
+        self._m_gam_path_browse.setFixedHeight(22)
         path_row.addWidget(self._m_gam_path_edit, stretch=1)
         path_row.addWidget(self._m_gam_path_browse)
         g.addLayout(path_row)
@@ -1898,6 +2009,9 @@ class TabProfile(QWidget):
         for label, val in _INTENTS:
             self._m_perc_intent_combo.addItem(label, val)
         self._m_perc_intent_combo.setEnabled(False)
+        self._m_perc_intent_combo.setObjectName("compact_input")
+        self._m_perc_intent_combo.style().unpolish(self._m_perc_intent_combo)
+        self._m_perc_intent_combo.style().polish(self._m_perc_intent_combo)
         self._m_perc_intent_check.toggled.connect(self._m_perc_intent_combo.setEnabled)
         perc_intent_row.addWidget(self._m_perc_intent_check)
         perc_intent_row.addWidget(self._m_perc_intent_combo, stretch=1)
@@ -1918,6 +2032,9 @@ class TabProfile(QWidget):
         for label, val in _INTENTS:
             self._m_sat_intent_combo.addItem(label, val)
         self._m_sat_intent_combo.setEnabled(False)
+        self._m_sat_intent_combo.setObjectName("compact_input")
+        self._m_sat_intent_combo.style().unpolish(self._m_sat_intent_combo)
+        self._m_sat_intent_combo.style().polish(self._m_sat_intent_combo)
         self._m_sat_intent_check.toggled.connect(self._m_sat_intent_combo.setEnabled)
         sat_intent_row.addWidget(self._m_sat_intent_check)
         sat_intent_row.addWidget(self._m_sat_intent_combo, stretch=1)
@@ -1966,6 +2083,7 @@ class TabProfile(QWidget):
     def _build_m_metadata_group(self, layout: QVBoxLayout) -> None:
         grp = QGroupBox("Profile Metadata", layout.parentWidget())
         g = QVBoxLayout(grp)
+        g.setSpacing(8)
 
         for attr, flag, placeholder, tip in [
             ("_m_mfr",   "A", "e.g. Epson",   "Manufacturer string in the ICC profile header."),
@@ -1977,6 +2095,9 @@ class TabProfile(QWidget):
             edit  = QLineEdit(grp)
             edit.setPlaceholderText(placeholder)
             edit.setEnabled(False)
+            edit.setObjectName("compact_input")
+            edit.style().unpolish(edit)
+            edit.style().polish(edit)
             check.toggled.connect(edit.setEnabled)
             row = QHBoxLayout()
             row.addWidget(check)

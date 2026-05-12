@@ -291,6 +291,11 @@ QSpinBox#compact_input, QDoubleSpinBox#compact_input {{ padding-right: 20px; }}
 QSpinBox#compact_input::up-button,   QDoubleSpinBox#compact_input::up-button   {{ height: 10px; }}
 QSpinBox#compact_input::down-button, QDoubleSpinBox#compact_input::down-button {{ height: 10px; }}
 QComboBox#compact_input {{ padding-right: 28px; }}
+QLineEdit#compact_path {{
+    min-height: 22px;
+    max-height: 22px;
+    padding: 1px 6px;
+}}
 
 /* ---- Fallback QProgressBar (used if SpectrumSegmentsBar missing) -- */
 QProgressBar {{

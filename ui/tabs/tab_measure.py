@@ -1123,6 +1123,8 @@ class TabMeasure(QWidget):
             widget=filter_combo,
         ))
 
+        _tol_spin = _spinbox(0.1, 10.0, 0.1, 1.0, decimals=1)
+        _tol_spin.setObjectName("")
         opts.append(_ChartreadOption(
             key="tolerance", flag="-T",
             label="Patch consistency tolerance (-T)",
@@ -1137,7 +1139,7 @@ class TabMeasure(QWidget):
                 "hiding genuine mis-reads.\n\n"
                 "Values above 3.0 are rarely needed and may mask real problems."
             ),
-            widget=_spinbox(0.1, 10.0, 0.1, 1.0, decimals=1),
+            widget=_tol_spin,
         ))
 
         opts.append(_ChartreadOption(

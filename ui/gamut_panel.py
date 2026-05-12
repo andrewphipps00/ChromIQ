@@ -4,7 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from PyQt6.QtCore import QTimer, QUrl, Qt
+from PyQt6.QtCore import QSize, QTimer, QUrl, Qt
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
     QCheckBox,
@@ -120,8 +120,8 @@ class GamutPanel(QWidget):
 
         self._view_toggle_row = QWidget(self)
         toggle_layout = QHBoxLayout(self._view_toggle_row)
-        toggle_layout.setContentsMargins(8, 6, 8, 6)
-        toggle_layout.setSpacing(4)
+        toggle_layout.setContentsMargins(12, 6, 12, 6)
+        toggle_layout.setSpacing(8)
 
         self._view_primary_btn  = QPushButton("PROFILE A", self._view_toggle_row)
         self._view_combined_btn = QPushButton("COMBINED",  self._view_toggle_row)
@@ -191,28 +191,35 @@ class GamutPanel(QWidget):
         profile_grp = QGroupBox("Profiles", inner)
         pg = QVBoxLayout(profile_grp)
         pg.setContentsMargins(8, 10, 8, 8)
-        pg.setSpacing(4)
+        pg.setSpacing(8)
 
         prim_row = QHBoxLayout()
         prim_row.addWidget(QLabel("Profile:", profile_grp))
         self._primary_edit = QLineEdit(profile_grp)
+        self._primary_edit.setObjectName("compact_path")
         self._primary_edit.setReadOnly(True)
         self._primary_edit.setPlaceholderText("Auto-filled from left panel")
         prim_row.addWidget(self._primary_edit, stretch=1)
         pg.addLayout(prim_row)
 
         cmp_row = QHBoxLayout()
+        cmp_row.setSpacing(4)
         cmp_row.addWidget(QLabel("Compare with:", profile_grp))
         self._compare_edit = QLineEdit(profile_grp)
+        self._compare_edit.setObjectName("compact_path")
         self._compare_edit.setReadOnly(True)
         self._compare_edit.setPlaceholderText("Optional — browse a second ICC/ICM")
         cmp_row.addWidget(self._compare_edit, stretch=1)
         cmp_browse = make_browse_button(profile_grp, "Browse for comparison ICC/ICM", "folder_check")
+        cmp_browse.setObjectName("browse_compact")
+        cmp_browse.setIconSize(QSize(14, 14))
+        cmp_browse.setFixedHeight(22)
         cmp_browse.clicked.connect(self._on_browse_compare)
         cmp_row.addWidget(cmp_browse)
         cmp_clear = QPushButton("✕", profile_grp)
-        cmp_clear.setObjectName("browse")
+        cmp_clear.setObjectName("browse_compact")
         cmp_clear.setFixedWidth(28)
+        cmp_clear.setFixedHeight(22)
         cmp_clear.setToolTip("Clear comparison profile")
         cmp_clear.clicked.connect(self._on_clear_compare)
         cmp_row.addWidget(cmp_clear)
@@ -224,7 +231,7 @@ class GamutPanel(QWidget):
         opts_grp = QGroupBox("iccgamut Options", inner)
         og = QVBoxLayout(opts_grp)
         og.setContentsMargins(8, 10, 8, 8)
-        og.setSpacing(6)
+        og.setSpacing(8)
 
         intent_row = QHBoxLayout()
         intent_row.addWidget(QLabel("Rendering intent:", opts_grp))
@@ -233,6 +240,9 @@ class GamutPanel(QWidget):
         self._intent_combo.addItem("Relative colorimetric", "r")
         self._intent_combo.addItem("Perceptual", "p")
         self._intent_combo.addItem("Saturation", "s")
+        self._intent_combo.setObjectName("compact_input")
+        self._intent_combo.style().unpolish(self._intent_combo)
+        self._intent_combo.style().polish(self._intent_combo)
         intent_row.addWidget(self._intent_combo, stretch=1)
         intent_row.addWidget(TooltipButton(
             "Rendering Intent",
@@ -259,6 +269,9 @@ class GamutPanel(QWidget):
         self._pcs_combo = NoScrollComboBox(opts_grp)
         self._pcs_combo.addItem("Lab (default)", "l")
         self._pcs_combo.addItem("CIECAM02 Jab", "j")
+        self._pcs_combo.setObjectName("compact_input")
+        self._pcs_combo.style().unpolish(self._pcs_combo)
+        self._pcs_combo.style().polish(self._pcs_combo)
         pcs_row.addWidget(self._pcs_combo, stretch=1)
         pcs_row.addWidget(TooltipButton(
             "Profile Connection Space",
@@ -283,6 +296,9 @@ class GamutPanel(QWidget):
         self._sres_spin.setDecimals(0)
         self._sres_spin.setValue(20.0)
         self._sres_spin.setFixedWidth(70)
+        self._sres_spin.setObjectName("compact_input")
+        self._sres_spin.style().unpolish(self._sres_spin)
+        self._sres_spin.style().polish(self._sres_spin)
         sres_row.addWidget(self._sres_spin)
         sres_row.addStretch()
         sres_row.addWidget(TooltipButton(
@@ -304,6 +320,9 @@ class GamutPanel(QWidget):
         self._function_combo = NoScrollComboBox(opts_grp)
         self._function_combo.addItem("Forward — output gamut (default)", "f")
         self._function_combo.addItem("Backward — input gamut", "b")
+        self._function_combo.setObjectName("compact_input")
+        self._function_combo.style().unpolish(self._function_combo)
+        self._function_combo.style().polish(self._function_combo)
         func_row.addWidget(self._function_combo, stretch=1)
         func_row.addWidget(TooltipButton(
             "Mapping Direction",

@@ -666,6 +666,9 @@ class TabCheckRefine(QWidget):
         self._m_de_combo.addItem("CIEDE2000 (recommended)", "k")
         self._m_de_combo.addItem("CIE76 (classic)", "")
         self._m_de_combo.addItem("CIE94", "c")
+        self._m_de_combo.setObjectName("compact_input")
+        self._m_de_combo.style().unpolish(self._m_de_combo)
+        self._m_de_combo.style().polish(self._m_de_combo)
         de_row.addWidget(self._m_de_combo)
         de_row.addStretch()
         de_row.addWidget(TooltipButton(
@@ -682,6 +685,9 @@ class TabCheckRefine(QWidget):
         self._m_intent_combo = NoScrollComboBox(inner)
         self._m_intent_combo.addItem("Absolute colorimetric (default)", "a")
         self._m_intent_combo.addItem("Relative colorimetric", "r")
+        self._m_intent_combo.setObjectName("compact_input")
+        self._m_intent_combo.style().unpolish(self._m_intent_combo)
+        self._m_intent_combo.style().polish(self._m_intent_combo)
         intent_row.addWidget(self._m_intent_combo)
         intent_row.addStretch()
         intent_row.addWidget(TooltipButton(
@@ -711,6 +717,9 @@ class TabCheckRefine(QWidget):
         self._m_verb_combo = NoScrollComboBox(inner)
         self._m_verb_combo.addItem("Per-patch (required for strip analysis)", "2")
         self._m_verb_combo.addItem("Summary only", "1")
+        self._m_verb_combo.setObjectName("compact_input")
+        self._m_verb_combo.style().unpolish(self._m_verb_combo)
+        self._m_verb_combo.style().polish(self._m_verb_combo)
         verb_row.addWidget(self._m_verb_combo)
         verb_row.addStretch()
         verb_row.addWidget(TooltipButton(
@@ -729,6 +738,9 @@ class TabCheckRefine(QWidget):
         self._m_threshold_spin.setSingleStep(0.5)
         self._m_threshold_spin.setDecimals(1)
         self._m_threshold_spin.setValue(REFINE_DE_THRESHOLD)
+        self._m_threshold_spin.setObjectName("compact_input")
+        self._m_threshold_spin.style().unpolish(self._m_threshold_spin)
+        self._m_threshold_spin.style().polish(self._m_threshold_spin)
         m_threshold_row.addWidget(self._m_threshold_spin)
         m_threshold_row.addStretch()
         m_threshold_row.addWidget(TooltipButton(
@@ -767,6 +779,9 @@ class TabCheckRefine(QWidget):
             self._m_fwa_combo.addItem(label, val)
         self._m_fwa_combo.setEnabled(False)
         self._m_fwa_cb.toggled.connect(self._m_fwa_combo.setEnabled)
+        self._m_fwa_combo.setObjectName("compact_input")
+        self._m_fwa_combo.style().unpolish(self._m_fwa_combo)
+        self._m_fwa_combo.style().polish(self._m_fwa_combo)
         m_fwa_row.addWidget(self._m_fwa_combo)
         m_fwa_row.addStretch()
         m_fwa_row.addWidget(TooltipButton(
@@ -787,6 +802,9 @@ class TabCheckRefine(QWidget):
         self._m_illum_combo = NoScrollComboBox(inner)
         for label, val in _ILLUMINANTS:
             self._m_illum_combo.addItem(label, val)
+        self._m_illum_combo.setObjectName("compact_input")
+        self._m_illum_combo.style().unpolish(self._m_illum_combo)
+        self._m_illum_combo.style().polish(self._m_illum_combo)
         m_illum_row.addWidget(self._m_illum_combo)
         m_illum_row.addStretch()
         m_illum_row.addWidget(TooltipButton(
@@ -805,6 +823,9 @@ class TabCheckRefine(QWidget):
         self._m_obs_combo = NoScrollComboBox(inner)
         for label, val in _OBSERVERS:
             self._m_obs_combo.addItem(label, val)
+        self._m_obs_combo.setObjectName("compact_input")
+        self._m_obs_combo.style().unpolish(self._m_obs_combo)
+        self._m_obs_combo.style().polish(self._m_obs_combo)
         m_obs_row.addWidget(self._m_obs_combo)
         m_obs_row.addStretch()
         m_obs_row.addWidget(TooltipButton(
@@ -830,6 +851,9 @@ class TabCheckRefine(QWidget):
         self._m_prune_spin.setValue(3.0)
         self._m_prune_spin.setEnabled(False)
         self._m_prune_cb.toggled.connect(self._m_prune_spin.setEnabled)
+        self._m_prune_spin.setObjectName("compact_input")
+        self._m_prune_spin.style().unpolish(self._m_prune_spin)
+        self._m_prune_spin.style().polish(self._m_prune_spin)
         m_prune_row.addWidget(self._m_prune_spin)
         m_prune_row.addWidget(QLabel("ΔE", inner))
         m_prune_row.addStretch()
