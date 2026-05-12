@@ -4,9 +4,10 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from PyQt6.QtCore import QSize, QTimer, QUrl, Qt
+from PyQt6.QtCore import QEventLoop, QSize, QTimer, QUrl, Qt
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
+    QApplication,
     QCheckBox,
     QGroupBox,
     QHBoxLayout,
@@ -15,6 +16,7 @@ from PyQt6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QSizePolicy,
+    QSlider,
     QVBoxLayout,
     QWidget,
 )
@@ -72,6 +74,10 @@ class GamutPanel(QWidget):
 
         self._build_ui()
         self._load_defaults()
+
+        app = QApplication.instance()
+        if app:
+            app.aboutToQuit.connect(self._on_app_quit)
 
     # ------------------------------------------------------------------
     # Public API
@@ -140,6 +146,49 @@ class GamutPanel(QWidget):
         toggle_layout.addWidget(self._view_primary_btn)
         toggle_layout.addWidget(self._view_combined_btn)
         toggle_layout.addWidget(self._view_compare_btn)
+
+        # ── Per-compare-profile controls (shown only in Combined mode) ──
+        _slider_ss = (
+            "QSlider::groove:horizontal { height: 4px; background: #333333;"
+            " border-radius: 2px; }"
+            f"QSlider::handle:horizontal {{ background: {SPEC_VIOLET}; border: none;"
+            " width: 12px; height: 12px; margin: -4px 0; border-radius: 6px; }"
+            f"QSlider::sub-page:horizontal {{ background: {SPEC_VIOLET};"
+            " border-radius: 2px; }"
+        )
+        self._compare_controls = QWidget(self._view_toggle_row)
+        _cl = QHBoxLayout(self._compare_controls)
+        _cl.setContentsMargins(0, 10, 0, 0)
+        _cl.setSpacing(6)
+        _cl.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+        self._opacity_slider = QSlider(Qt.Orientation.Horizontal, self._compare_controls)
+        self._opacity_slider.setRange(0, 100)
+        self._opacity_slider.setValue(50)
+        self._opacity_slider.setFixedWidth(80)
+        self._opacity_slider.setStyleSheet(_slider_ss)
+        self._opacity_label = QLabel("50%", self._compare_controls)
+        self._opacity_label.setFixedWidth(34)
+        self._sat_slider = QSlider(Qt.Orientation.Horizontal, self._compare_controls)
+        self._sat_slider.setRange(0, 100)
+        self._sat_slider.setValue(100)
+        self._sat_slider.setFixedWidth(80)
+        self._sat_slider.setStyleSheet(_slider_ss)
+        self._sat_label = QLabel("100%", self._compare_controls)
+        self._sat_label.setFixedWidth(34)
+        _cl.addWidget(QLabel("Opacity:"))
+        _cl.addWidget(self._opacity_slider)
+        _cl.addWidget(self._opacity_label)
+        _cl.addSpacing(10)
+        _cl.addWidget(QLabel("Sat.:"))
+        _cl.addWidget(self._sat_slider)
+        _cl.addWidget(self._sat_label)
+        self._compare_controls.setVisible(False)
+        self._opacity_slider.valueChanged.connect(self._on_opacity_changed)
+        self._sat_slider.valueChanged.connect(self._on_saturation_changed)
+
+        toggle_layout.addSpacing(16)
+        toggle_layout.addWidget(self._compare_controls)
+        toggle_layout.setAlignment(self._compare_controls, Qt.AlignmentFlag.AlignVCenter)
         toggle_layout.addStretch()
 
         self._view_toggle_row.setVisible(False)
@@ -434,6 +483,7 @@ class GamutPanel(QWidget):
             except (ImportError, AttributeError):
                 pass
             view.setStyleSheet("background: #111111; border: none;")
+            view.loadFinished.connect(self._on_page_loaded)
             self._web_view = view
             self._show_placeholder()
             return view
@@ -494,15 +544,48 @@ class GamutPanel(QWidget):
 
     def _on_view_primary(self) -> None:
         self._set_toggle_checked(self._view_primary_btn)
+        self._compare_controls.setVisible(False)
         self._load_html(self._primary_html or "")
 
     def _on_view_combined(self) -> None:
         self._set_toggle_checked(self._view_combined_btn)
+        self._compare_controls.setVisible(True)
         self._load_html(self._combined_html or "")
 
     def _on_view_compare(self) -> None:
         self._set_toggle_checked(self._view_compare_btn)
+        self._compare_controls.setVisible(False)
         self._load_html(self._compare_html or "")
+
+    def _on_page_loaded(self, ok: bool) -> None:
+        if not ok or self._web_view is None or not self._view_combined_btn.isChecked():
+            return
+        t = 1.0 - self._opacity_slider.value() / 100.0
+        s = self._sat_slider.value() / 100.0
+        self._web_view.page().runJavaScript(
+            f"window._chromiqCompareOpacity={t:.2f};"
+            f" window._chromiqCompareSat={s:.2f};"
+        )
+
+    def _on_opacity_changed(self, value: int) -> None:
+        self._opacity_label.setText(f"{value}%")
+        if self._web_view is None or not self._view_combined_btn.isChecked():
+            return
+        t = 1.0 - value / 100.0
+        self._web_view.page().runJavaScript(
+            f"window._chromiqCompareOpacity={t:.2f};"
+            " if(window._chromiqApplyCompare) window._chromiqApplyCompare();"
+        )
+
+    def _on_saturation_changed(self, value: int) -> None:
+        self._sat_label.setText(f"{value}%")
+        if self._web_view is None or not self._view_combined_btn.isChecked():
+            return
+        s = value / 100.0
+        self._web_view.page().runJavaScript(
+            f"window._chromiqCompareSat={s:.2f};"
+            " if(window._chromiqApplyCompare) window._chromiqApplyCompare();"
+        )
 
     # ------------------------------------------------------------------
     # Slots — file browse
@@ -576,11 +659,13 @@ class GamutPanel(QWidget):
             return
         themed = bool(self._settings.get("gamut_themed_colors", True))
         self._viewgam_runner.run(
-            primary_gam = Path(self._primary_gam),
-            compare_gam = Path(self._compare_gam),
-            on_line     = lambda _: None,
-            on_finish   = lambda _: None,
-            themed      = themed,
+            primary_gam  = Path(self._primary_gam),
+            compare_gam  = Path(self._compare_gam),
+            primary_html = Path(self._primary_html) if self._primary_html else None,
+            compare_html = Path(self._compare_html) if self._compare_html else None,
+            on_line      = lambda _: None,
+            on_finish    = lambda _: None,
+            themed       = themed,
         )
 
     def _on_viewer_finished(self, volume: float, html_path: str, gam_path: str) -> None:
@@ -615,6 +700,7 @@ class GamutPanel(QWidget):
         if result.html_path:
             self._load_html(result.html_path)
             self._view_toggle_row.setVisible(True)
+            self._compare_controls.setVisible(True)
             self._set_toggle_checked(self._view_combined_btn)
         self._run_btn.setEnabled(self._icc_path is not None)
 
@@ -630,6 +716,14 @@ class GamutPanel(QWidget):
         self._run_btn.setEnabled(self._icc_path is not None)
         self._pending_compare = False
         log.warning("GamutViewer error: %s", msg)
+
+    def _on_app_quit(self) -> None:
+        if self._web_view is not None:
+            self._web_view.stop()
+            self._web_view.setUrl(QUrl("about:blank"))
+            _loop = QEventLoop()
+            QTimer.singleShot(200, _loop.quit)
+            _loop.exec()
 
     def _on_reset_view(self) -> None:
         if self._web_view is not None:
@@ -696,6 +790,8 @@ class GamutPanel(QWidget):
         self._axes_cb.setChecked(bool(s.get("gamut_axes", True)))
         self._cusps_cb.setChecked(bool(s.get("gamut_cusps", False)))
         self._edges_cb.setChecked(bool(s.get("gamut_edges", False)))
+        self._opacity_slider.setValue(int(s.get("gamut_compare_opacity", 50)))
+        self._sat_slider.setValue(int(s.get("gamut_compare_sat", 100)))
 
     def _on_save_defaults(self) -> None:
         s = self._settings
@@ -706,6 +802,8 @@ class GamutPanel(QWidget):
         s.set("gamut_axes",      self._axes_cb.isChecked())
         s.set("gamut_cusps",     self._cusps_cb.isChecked())
         s.set("gamut_edges",     self._edges_cb.isChecked())
+        s.set("gamut_compare_opacity", self._opacity_slider.value())
+        s.set("gamut_compare_sat",     self._sat_slider.value())
 
 
 # ---------------------------------------------------------------------------

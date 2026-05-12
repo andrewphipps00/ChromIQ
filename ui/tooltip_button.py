@@ -136,3 +136,6 @@ class _InfoDialog(QDialog):
         layout.addWidget(bb)
 
         self.adjustSize()
+
+
+InfoDialog = _InfoDialog  # public alias for use outside this module

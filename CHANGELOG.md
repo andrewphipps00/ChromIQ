@@ -1,5 +1,27 @@
 # Changelog
 
+## v3.1.3
+### Added
+- **Gamut viewer — 3D comparison overlay**: Profile A now keeps its natural per-vertex
+  colours in combined view (instead of flat red). Profile B is rendered semi-transparent
+  so both gamuts are visible simultaneously.
+- **Gamut viewer — Opacity & Saturation sliders**: Live controls for Profile B's
+  transparency and colour saturation in combined view. Values are saved as defaults.
+- **Build Profile — FWA error dialog**: When colprof reports that the instrument does
+  not support FWA compensation (ColorMunki, i1Studio, CC Studio), a clear popup
+  explains why and what to do instead.
+- **Build Profile — expanded tooltips**: All option tooltips across the manual, guided,
+  printcal, and applycal modules now contain full explanations of what each option does
+  and when to change it. Dialog widths increased where needed.
+
+### Fixed
+- **Gamut viewer — app close crash**: Closing the app while the 3D viewer was active
+  caused a SIGBUS / bus error on macOS (Chromium GPU shared-memory race). Fixed by
+  spinning a 200 ms nested event loop after navigating to about:blank on quit, giving
+  the GPU subprocess time to release framebuffers cleanly.
+- **Measure tab — instrument port spinbox**: Applied compact styling to match other
+  inputs in the manual module.
+
 ## v3.1.2
 ### Fixed
 - **Build Profile — Gamut Mapping path input**: The file-selection field in Build Profile → MANUAL → Gamut Mapping was collapsing to a ~2 px sliver. A new `compact_path` CSS rule (`min-height: 22px`) gives it a stable 22 px compact height matching the rest of the group.

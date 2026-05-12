@@ -743,6 +743,8 @@ class TabMeasure(QWidget):
         self._m_instr_spin = NoScrollSpinBox(left)
         self._m_instr_spin.setRange(1, 9)
         self._m_instr_spin.setValue(1)
+        self._m_instr_spin.setFixedWidth(55)
+        self._m_instr_spin.setObjectName("compact_input")
         m_instr_row.addWidget(self._m_instr_spin)
         m_instr_row.addStretch()
         m_instr_row.addWidget(TooltipButton(

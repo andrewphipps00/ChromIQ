@@ -33,7 +33,7 @@ from PyQt6.QtWidgets import (
 from core.logger import get_logger
 from core.resource_path import resource_path
 from ui.tab_header import TabHeader
-from ui.tooltip_button import TooltipButton
+from ui.tooltip_button import InfoDialog, TooltipButton
 from ui.widgets import NoScrollComboBox, NoScrollDoubleSpinBox, NoScrollSpinBox, load_folder_icon, make_browse_button, open_file_dialog, tint_dialog_primary
 from ui.spectrum_progress import SpectrumSegmentsBar
 from workflow.profile_builder import ProfileBuilder, ProfileParams
@@ -567,10 +567,16 @@ class TabProfile(QWidget):
         smooth_row.addStretch()
         smooth_row.addWidget(TooltipButton(
             "Curve Smoothing (-s)",
-            "Extra smoothing applied to the calibration curves.\n"
-            "Default 1.0 suits most printers.\n"
-            "Raise (e.g. 2–5) if the printer has noisy tone response.",
+            "Applies additional smoothing to the computed calibration curves, which\n"
+            "reduces the impact of measurement noise on the curve shape.\n\n"
+            "Default (1.0) is appropriate for most printers and well-controlled\n"
+            "measurement conditions.\n\n"
+            "Raise to 2–5 if your printer's tone response looks irregular — for example\n"
+            "if a matte paper gave inconsistent density readings across patches.\n"
+            "Heavier smoothing averages out these irregularities at the cost of slightly\n"
+            "less precise curve fidelity.",
             grp,
+            min_width=460,
         ))
         g.addLayout(smooth_row)
 
@@ -817,15 +823,20 @@ class TabProfile(QWidget):
         desc_row.addWidget(self._pc_desc_edit, stretch=1)
         desc_row.addWidget(TooltipButton(
             "Description (-D)",
-            "Optional description string embedded in the .cal file header.",
+            "An optional text label embedded in the .cal file header — not the filename.\n"
+            "Applications that display .cal file information will show this string.\n\n"
+            "Use it to identify the purpose of the calibration, for example:\n"
+            "\"Epson P900 KCMY linearisation 2026-04\"\n\n"
+            "If left empty, no description is written to the header.",
             grp,
+            min_width=460,
         ))
         g.addLayout(desc_row)
 
         for attr, flag, label, placeholder, tip in [
-            ("_pc_mfr",   "A", "Manufacturer", "e.g. Epson",    "Manufacturer string embedded in the .cal file header."),
-            ("_pc_model", "M", "Model",        "e.g. SC-P900",  "Model string embedded in the .cal file header."),
-            ("_pc_copy",  "C", "Copyright",    "e.g. © 2026 …", "Copyright string embedded in the .cal file header."),
+            ("_pc_mfr",   "A", "Manufacturer", "e.g. Epson",    "Optional manufacturer name embedded in the .cal file header.\nIdentifies the company or person who created this calibration.\nCan be left empty."),
+            ("_pc_model", "M", "Model",        "e.g. SC-P900",  "Optional printer model name embedded in the .cal file header.\nHelps identify which printer this calibration was built for.\nCan be left empty."),
+            ("_pc_copy",  "C", "Copyright",    "e.g. © 2026 …", "Optional copyright string embedded in the .cal file header.\nUse to record ownership or licensing terms for this calibration.\nCan be left empty."),
         ]:
             check = QCheckBox(f"{label} (-{flag}):", grp)
             edit  = QLineEdit(grp)
@@ -1654,10 +1665,17 @@ class TabProfile(QWidget):
         algo_row.addWidget(self._m_algo_combo, stretch=1)
         algo_row.addWidget(TooltipButton(
             "Profile Algorithm (-a)",
-            "Lab cLUT uses a full 3D lookup table — most accurate for inkjet printers.\n"
-            "Matrix/gamma profiles are smaller but far less accurate for inkjets.\n"
-            "Use matrix only if the destination app requires it.",
+            "Selects the mathematical model used to map device values (ink percentages)\n"
+            "to colours.\n\n"
+            "Lab cLUT — a full 3-dimensional lookup table. Captures the complex,\n"
+            "non-linear relationship between ink and colour that every real inkjet\n"
+            "printer has. This is almost always the right choice.\n\n"
+            "Matrix + gamma — a simple linear model that fits only devices with a\n"
+            "near-linear, predictable response (such as monitors). Far less accurate\n"
+            "for inkjet printers. Use only if the destination application explicitly\n"
+            "requires a matrix profile.",
             grp,
+            min_width=480,
         ))
         g.addLayout(algo_row)
 
@@ -1703,10 +1721,16 @@ class TabProfile(QWidget):
         b2a_row.addWidget(self._m_b2a_combo, stretch=1)
         b2a_row.addWidget(TooltipButton(
             "B2A Table Quality (-b)",
-            "Quality of the B→A (output→input) tables for perceptual/saturation intents.\n"
-            "Leave unchecked to inherit the same quality as -q.\n"
-            "Setting lower than -q reduces build time.",
+            "Controls the resolution of the B→A (PCS→device) lookup tables used for\n"
+            "the perceptual and saturation rendering intents.\n\n"
+            "The A→B tables (used for colorimetric intents) are controlled by the\n"
+            "main Quality setting (-q). B→A tables are computed separately and only\n"
+            "matter when you apply a perceptual or saturation intent.\n\n"
+            "Leave unchecked to match -q automatically. Setting a lower quality here\n"
+            "shortens build time if you mainly use colorimetric intents and don't\n"
+            "need high-quality B→A tables.",
             grp,
+            min_width=480,
         ))
         g.addLayout(b2a_row)
 
@@ -1779,10 +1803,16 @@ class TabProfile(QWidget):
         illum_row.addWidget(self._m_illum_combo, stretch=1)
         illum_row.addWidget(TooltipButton(
             "Illuminant for XYZ Computation (-i)",
-            "Illuminant used when converting spectral measurements to XYZ.\n"
-            "D50 is the ICC standard default and correct for most workflows.\n"
-            "Change only if you need a non-D50 PCS encoding (unusual).",
+            "When measurements are spectral, ArgyllCMS converts them to XYZ using a\n"
+            "reference illuminant. This setting controls which illuminant is used.\n\n"
+            "D50 is the ICC standard Profile Connection Space illuminant and the\n"
+            "correct choice for virtually all print profiling. The entire ICC colour\n"
+            "management pipeline is built around D50.\n\n"
+            "D65 or other illuminants are only needed for specialised workflows where\n"
+            "the profile's PCS must encode under a non-D50 illuminant — for example,\n"
+            "some cross-media proofing setups. In normal inkjet profiling, leave at D50.",
             grp,
+            min_width=500,
         ))
         g.addLayout(illum_row)
 
@@ -1802,11 +1832,18 @@ class TabProfile(QWidget):
         obs_row.addWidget(self._m_obs_combo, stretch=1)
         obs_row.addWidget(TooltipButton(
             "CIE Observer (-o)",
-            "Standard observer for colorimetric computations.\n"
-            "The 1931 2° observer is the ICC standard default.\n"
-            "The 1964 10° observer is better for large-area viewing.\n"
-            "2015 observers (Stockman) are more physiologically accurate.",
+            "Selects the CIE standard observer model used to convert spectral data\n"
+            "to XYZ tristimulus values.\n\n"
+            "1931 2° (CIE 1931) — the default for all ICC-based workflows. Use this\n"
+            "unless you have a specific reason not to.\n\n"
+            "1964 10° (CIE 1964) — designed for large-area viewing (prints that\n"
+            "subtend more than ~4° of visual angle). May suit large-format output.\n\n"
+            "2015 2° / 10° (Stockman) — based on modern cone fundamentals and more\n"
+            "physiologically accurate. Useful for research; not widely adopted in\n"
+            "production ICC pipelines.\n\n"
+            "For standard inkjet photo profiling, leave this at the 1931 default.",
             grp,
+            min_width=500,
         ))
         g.addLayout(obs_row)
 
@@ -1826,10 +1863,14 @@ class TabProfile(QWidget):
         fwa_row.addWidget(TooltipButton(
             "FWA Compensation (-f)",
             "Compensates for Fluorescent Whitening Agents (optical brighteners) in paper.\n"
-            "Requires spectral measurements (not colorimetric-only).\n"
-            "The illuminant selects the lighting to compute the FWA effect under.\n"
-            "Use when printing on papers with optical brighteners (e.g. bright white coated papers).",
+            "Requires spectral measurements — not supported by all instruments.\n\n"
+            "The illuminant sets the lighting condition used to compute the FWA effect.\n"
+            "Use for papers with optical brighteners (bright white coated stock).\n\n"
+            "Important: ColorMunki, i1Studio, and CC Studio filter out UV light and will\n"
+            "fail with an error if this option is enabled. UV-capable instruments such as\n"
+            "the X-Rite i1Pro 2/3 are required for FWA compensation.",
             grp,
+            min_width=500,
         ))
         g.addLayout(fwa_row)
 
@@ -1941,6 +1982,7 @@ class TabProfile(QWidget):
             "Absolute Colorimetric — includes white point simulation; useful for proofing.\n\n"
             "For most inkjet photo profiles, 'Perceptual' or 'Not set' are the right choices.",
             grp,
+            min_width=500,
         ))
         g.addLayout(m_intent_row)
 
@@ -2017,12 +2059,16 @@ class TabProfile(QWidget):
         perc_intent_row.addWidget(self._m_perc_intent_combo, stretch=1)
         perc_intent_row.addWidget(TooltipButton(
             "Perceptual Rendering Intent Override (-t)",
-            "Changes the mathematical algorithm used to compress out-of-gamut colours\n"
-            "for the perceptual rendering intent.\n\n"
-            "The default (unchecked) works well for most inkjet workflows.\n"
-            "Only change this if you are experimenting with different gamut-mapping\n"
-            "behaviours.",
+            "Overrides the gamut-mapping algorithm ArgyllCMS uses for the perceptual\n"
+            "rendering intent. Each algorithm compresses out-of-gamut colours differently,\n"
+            "trading saturation for lightness accuracy in different ways.\n\n"
+            "The default (unchecked) uses ArgyllCMS's built-in perceptual mapping, which\n"
+            "is well-tuned for photographic prints.\n\n"
+            "The numbered options select different mapping functions built into ArgyllCMS.\n"
+            "Only change this if you are intentionally evaluating alternative perceptual\n"
+            "behaviours. The differences are subtle. Leave unchecked for normal profiling.",
             grp,
+            min_width=500,
         ))
         g.addLayout(perc_intent_row)
 
@@ -2040,10 +2086,14 @@ class TabProfile(QWidget):
         sat_intent_row.addWidget(self._m_sat_intent_combo, stretch=1)
         sat_intent_row.addWidget(TooltipButton(
             "Saturation Rendering Intent Override (-T)",
-            "Same as the Perceptual override above, but for the saturation rendering\n"
-            "intent. The saturation intent is rarely used in photo printing — leave\n"
-            "unchecked unless you specifically need it.",
+            "Overrides the gamut-mapping algorithm for the saturation rendering intent.\n"
+            "The saturation intent maximises colour vividness rather than accuracy and\n"
+            "is rarely used for fine-art or photographic printing.\n\n"
+            "Leave unchecked unless you are specifically building profiles for graphics\n"
+            "or presentation output where vivid, saturated colour is preferred over\n"
+            "colour accuracy.",
             grp,
+            min_width=460,
         ))
         g.addLayout(sat_intent_row)
 
@@ -2054,18 +2104,25 @@ class TabProfile(QWidget):
         flags_row.addWidget(self._m_no_perc_gamut_cb)
         flags_row.addWidget(TooltipButton(
             "No Perceptual Gamut (-nP)",
-            "Forces the perceptual intent to use the same gamut boundaries as the\n"
-            "colorimetric intent, ignoring any gamut source set above.\n"
-            "Advanced — leave unchecked.",
+            "Normally, when a gamut source is set, ArgyllCMS uses it to shape the\n"
+            "perceptual rendering intent — compressing the source colour space to fit\n"
+            "the printer in a way that looks natural for images from that space.\n\n"
+            "This option disables that source gamut for the perceptual intent, making\n"
+            "it use only the printer's native colorimetric gamut boundaries instead.\n\n"
+            "Advanced diagnostic option — leave unchecked for normal profiling.",
             grp,
+            min_width=480,
         ))
         flags_row.addSpacing(12)
         flags_row.addWidget(self._m_no_sat_gamut_cb)
         flags_row.addWidget(TooltipButton(
             "No Saturation Gamut (-nS)",
-            "Same as above, but for the saturation intent.\n"
-            "Advanced — leave unchecked.",
+            "Same as No Perceptual Gamut above, but applies to the saturation rendering\n"
+            "intent. Disables the gamut source for the saturation intent, forcing it to\n"
+            "use the printer's own colorimetric gamut boundaries.\n\n"
+            "Advanced diagnostic option — leave unchecked for normal profiling.",
             grp,
+            min_width=460,
         ))
         flags_row.addSpacing(12)
         flags_row.addWidget(self._m_inv_gamut_cb)
@@ -2086,9 +2143,9 @@ class TabProfile(QWidget):
         g.setSpacing(8)
 
         for attr, flag, placeholder, tip in [
-            ("_m_mfr",   "A", "e.g. Epson",   "Manufacturer string in the ICC profile header."),
-            ("_m_model", "M", "e.g. SC-P900",  "Model string in the ICC profile header."),
-            ("_m_copy",  "C", "e.g. © 2026 …", "Copyright string in the ICC profile header."),
+            ("_m_mfr",   "A", "e.g. Epson",   "Optional manufacturer name embedded in the ICC profile header.\nIdentifies the company or person who built this profile.\nCan be left empty."),
+            ("_m_model", "M", "e.g. SC-P900",  "Optional printer model name embedded in the ICC profile header.\nHelps identify which printer this profile was built for.\nCan be left empty."),
+            ("_m_copy",  "C", "e.g. © 2026 …", "Optional copyright string embedded in the ICC profile header.\nUse to record ownership or licensing terms for this profile.\nCan be left empty."),
         ]:
             label_text = "Manufacturer" if flag == "A" else "Model" if flag == "M" else "Copyright"
             check = QCheckBox(f"{label_text} (-{flag}):", grp)
@@ -2119,17 +2176,25 @@ class TabProfile(QWidget):
         row1.addWidget(self._m_no_input_cb)
         row1.addWidget(TooltipButton(
             "No Input Shaper Curves (-ni)",
-            "Disables 1D tone curves that pre-condition device values before the 3D cLUT.\n"
-            "Disable only for diagnostic purposes — normally leave unchecked.",
+            "Input shaper curves are 1D tone curves applied to device values before\n"
+            "the 3D cLUT. They help linearise the device response so the cLUT works\n"
+            "with a more uniform distribution of input values.\n\n"
+            "Disabling them removes this pre-conditioning step. Diagnostic option —\n"
+            "leave unchecked for normal profiling.",
             grp,
+            min_width=460,
         ))
         row1.addSpacing(16)
         row1.addWidget(self._m_no_output_cb)
         row1.addWidget(TooltipButton(
             "No Output Shaper Curves (-no)",
-            "Disables 1D output curves applied after the 3D cLUT.\n"
-            "Disable only for diagnostic purposes.",
+            "Output shaper curves are 1D curves applied after the 3D cLUT to refine\n"
+            "the final device values. They smooth out the cLUT output and help achieve\n"
+            "accurate highlight and shadow rendering.\n\n"
+            "Disabling them removes this post-processing step. Diagnostic option —\n"
+            "leave unchecked for normal profiling.",
             grp,
+            min_width=460,
         ))
         row1.addStretch()
         g.addLayout(row1)
@@ -2140,9 +2205,12 @@ class TabProfile(QWidget):
         row2.addWidget(self._m_no_grid_pos_cb)
         row2.addWidget(TooltipButton(
             "No Grid Position Curves (-np)",
-            "Disables the 1D curves that position device values onto cLUT grid nodes.\n"
-            "Advanced diagnostic option.",
+            "Grid position curves remap where device values land on the cLUT grid,\n"
+            "concentrating grid nodes in regions of greater tonal importance.\n\n"
+            "Disabling forces a uniform grid distribution instead. Advanced diagnostic\n"
+            "option — leave unchecked for normal profiling.",
             grp,
+            min_width=460,
         ))
         row2.addSpacing(16)
         row2.addWidget(self._m_no_embedded_cb)
@@ -2204,10 +2272,17 @@ class TabProfile(QWidget):
         algo_row.addWidget(self._algo_combo, stretch=1)
         algo_row.addWidget(TooltipButton(
             "Profile Algorithm (-a)",
-            "Lab cLUT uses a full 3D lookup table — most accurate for inkjet printers.\n"
-            "Matrix/gamma profiles are smaller but far less accurate for inkjets.\n"
-            "Use matrix only if the destination app requires it.",
+            "Selects the mathematical model used to map device values (ink percentages)\n"
+            "to colours.\n\n"
+            "Lab cLUT — a full 3-dimensional lookup table. Captures the complex,\n"
+            "non-linear relationship between ink and colour that every real inkjet\n"
+            "printer has. This is almost always the right choice.\n\n"
+            "Matrix + gamma — a simple linear model that fits only devices with a\n"
+            "near-linear, predictable response (such as monitors). Far less accurate\n"
+            "for inkjet printers. Use only if the destination application explicitly\n"
+            "requires a matrix profile.",
             _algo_w,
+            min_width=480,
         ))
         g.addWidget(_algo_w)
         _algo_w.setVisible(False)
@@ -2255,10 +2330,16 @@ class TabProfile(QWidget):
         b2a_row.addWidget(self._b2a_combo, stretch=1)
         b2a_row.addWidget(TooltipButton(
             "B2A Table Quality (-b)",
-            "Quality of the B→A (output→input) tables for perceptual/saturation intents.\n"
-            "Leave unchecked to inherit the same quality as -q.\n"
-            "Setting lower than -q reduces build time.",
+            "Controls the resolution of the B→A (PCS→device) lookup tables used for\n"
+            "the perceptual and saturation rendering intents.\n\n"
+            "The A→B tables (used for colorimetric intents) are controlled by the\n"
+            "main Quality setting (-q). B→A tables are computed separately and only\n"
+            "matter when you apply a perceptual or saturation intent.\n\n"
+            "Leave unchecked to match -q automatically. Setting a lower quality here\n"
+            "shortens build time if you mainly use colorimetric intents and don't\n"
+            "need high-quality B→A tables.",
             _b2a_w,
+            min_width=480,
         ))
         g.addWidget(_b2a_w)
         _b2a_w.setVisible(False)
@@ -2327,10 +2408,16 @@ class TabProfile(QWidget):
         illum_row.addWidget(self._illum_combo, stretch=1)
         illum_row.addWidget(TooltipButton(
             "Illuminant for XYZ Computation (-i)",
-            "Illuminant used when converting spectral measurements to XYZ.\n"
-            "D50 is the ICC standard default and correct for most workflows.\n"
-            "Change only if you need a non-D50 PCS encoding (unusual).",
+            "When measurements are spectral, ArgyllCMS converts them to XYZ using a\n"
+            "reference illuminant. This setting controls which illuminant is used.\n\n"
+            "D50 is the ICC standard Profile Connection Space illuminant and the\n"
+            "correct choice for virtually all print profiling. The entire ICC colour\n"
+            "management pipeline is built around D50.\n\n"
+            "D65 or other illuminants are only needed for specialised workflows where\n"
+            "the profile's PCS must encode under a non-D50 illuminant — for example,\n"
+            "some cross-media proofing setups. In normal inkjet profiling, leave at D50.",
             _adv,
+            min_width=500,
         ))
         _adv_layout.addLayout(illum_row)
 
@@ -2347,11 +2434,18 @@ class TabProfile(QWidget):
         obs_row.addWidget(self._obs_combo, stretch=1)
         obs_row.addWidget(TooltipButton(
             "CIE Observer (-o)",
-            "Standard observer for colorimetric computations.\n"
-            "The 1931 2° observer is the ICC standard default.\n"
-            "The 1964 10° observer is better for large-area viewing.\n"
-            "2015 observers (Stockman) are more physiologically accurate.",
+            "Selects the CIE standard observer model used to convert spectral data\n"
+            "to XYZ tristimulus values.\n\n"
+            "1931 2° (CIE 1931) — the default for all ICC-based workflows. Use this\n"
+            "unless you have a specific reason not to.\n\n"
+            "1964 10° (CIE 1964) — designed for large-area viewing (prints that\n"
+            "subtend more than ~4° of visual angle). May suit large-format output.\n\n"
+            "2015 2° / 10° (Stockman) — based on modern cone fundamentals and more\n"
+            "physiologically accurate. Useful for research; not widely adopted in\n"
+            "production ICC pipelines.\n\n"
+            "For standard inkjet photo profiling, leave this at the 1931 default.",
             _adv,
+            min_width=500,
         ))
         _adv_layout.addLayout(obs_row)
 
@@ -2368,10 +2462,14 @@ class TabProfile(QWidget):
         fwa_row.addWidget(TooltipButton(
             "FWA Compensation (-f)",
             "Compensates for Fluorescent Whitening Agents (optical brighteners) in paper.\n"
-            "Requires spectral measurements (not colorimetric-only).\n"
-            "The illuminant selects the lighting to compute the FWA effect under.\n"
-            "Use when printing on papers with optical brighteners (e.g. bright white coated papers).",
+            "Requires spectral measurements — not supported by all instruments.\n\n"
+            "The illuminant sets the lighting condition used to compute the FWA effect.\n"
+            "Use for papers with optical brighteners (bright white coated stock).\n\n"
+            "Important: ColorMunki, i1Studio, and CC Studio filter out UV light and will\n"
+            "fail with an error if this option is enabled. UV-capable instruments such as\n"
+            "the X-Rite i1Pro 2/3 are required for FWA compensation.",
             _adv,
+            min_width=500,
         ))
         _adv_layout.addLayout(fwa_row)
 
@@ -2479,12 +2577,16 @@ class TabProfile(QWidget):
         perc_intent_row.addWidget(self._perc_intent_combo, stretch=1)
         perc_intent_row.addWidget(TooltipButton(
             "Perceptual Rendering Intent Override (-t)",
-            "Changes the mathematical algorithm used to compress out-of-gamut colours\n"
-            "for the perceptual rendering intent.\n\n"
-            "The default (unchecked) works well for most inkjet workflows.\n"
-            "Only change this if you are experimenting with different gamut-mapping\n"
-            "behaviours.",
+            "Overrides the gamut-mapping algorithm ArgyllCMS uses for the perceptual\n"
+            "rendering intent. Each algorithm compresses out-of-gamut colours differently,\n"
+            "trading saturation for lightness accuracy in different ways.\n\n"
+            "The default (unchecked) uses ArgyllCMS's built-in perceptual mapping, which\n"
+            "is well-tuned for photographic prints.\n\n"
+            "The numbered options select different mapping functions built into ArgyllCMS.\n"
+            "Only change this if you are intentionally evaluating alternative perceptual\n"
+            "behaviours. The differences are subtle. Leave unchecked for normal profiling.",
             _perc_w,
+            min_width=500,
         ))
         g.addWidget(_perc_w)
         _perc_w.setVisible(False)
@@ -2503,10 +2605,14 @@ class TabProfile(QWidget):
         sat_intent_row.addWidget(self._sat_intent_combo, stretch=1)
         sat_intent_row.addWidget(TooltipButton(
             "Saturation Rendering Intent Override (-T)",
-            "Same as the Perceptual override above, but for the saturation rendering\n"
-            "intent. The saturation intent is rarely used in photo printing — leave\n"
-            "unchecked unless you specifically need it.",
+            "Overrides the gamut-mapping algorithm for the saturation rendering intent.\n"
+            "The saturation intent maximises colour vividness rather than accuracy and\n"
+            "is rarely used for fine-art or photographic printing.\n\n"
+            "Leave unchecked unless you are specifically building profiles for graphics\n"
+            "or presentation output where vivid, saturated colour is preferred over\n"
+            "colour accuracy.",
             _sat_w,
+            min_width=460,
         ))
         g.addWidget(_sat_w)
         _sat_w.setVisible(False)
@@ -2521,18 +2627,25 @@ class TabProfile(QWidget):
         flags_row.addWidget(self._no_perc_gamut_cb)
         flags_row.addWidget(TooltipButton(
             "No Perceptual Gamut (-nP)",
-            "Forces the perceptual intent to use the same gamut boundaries as the\n"
-            "colorimetric intent, ignoring any gamut source set above.\n"
-            "Advanced — leave unchecked.",
+            "Normally, when a gamut source is set, ArgyllCMS uses it to shape the\n"
+            "perceptual rendering intent — compressing the source colour space to fit\n"
+            "the printer in a way that looks natural for images from that space.\n\n"
+            "This option disables that source gamut for the perceptual intent, making\n"
+            "it use only the printer's native colorimetric gamut boundaries instead.\n\n"
+            "Advanced diagnostic option — leave unchecked for normal profiling.",
             _flags_w,
+            min_width=480,
         ))
         flags_row.addSpacing(12)
         flags_row.addWidget(self._no_sat_gamut_cb)
         flags_row.addWidget(TooltipButton(
             "No Saturation Gamut (-nS)",
-            "Same as above, but for the saturation intent.\n"
-            "Advanced — leave unchecked.",
+            "Same as No Perceptual Gamut above, but applies to the saturation rendering\n"
+            "intent. Disables the gamut source for the saturation intent, forcing it to\n"
+            "use the printer's own colorimetric gamut boundaries.\n\n"
+            "Advanced diagnostic option — leave unchecked for normal profiling.",
             _flags_w,
+            min_width=460,
         ))
         flags_row.addSpacing(12)
         flags_row.addWidget(self._inv_gamut_cb)
@@ -2553,9 +2666,9 @@ class TabProfile(QWidget):
         g = QVBoxLayout(grp)
 
         for attr, flag, placeholder, tip in [
-            ("_mfr",   "A", "e.g. Epson",         "Manufacturer string in the ICC profile header."),
-            ("_model", "M", "e.g. SC-P900",        "Model string in the ICC profile header."),
-            ("_copy",  "C", "e.g. © 2026 …",       "Copyright string in the ICC profile header."),
+            ("_mfr",   "A", "e.g. Epson",         "Optional manufacturer name embedded in the ICC profile header.\nIdentifies the company or person who built this profile.\nCan be left empty."),
+            ("_model", "M", "e.g. SC-P900",        "Optional printer model name embedded in the ICC profile header.\nHelps identify which printer this profile was built for.\nCan be left empty."),
+            ("_copy",  "C", "e.g. © 2026 …",       "Optional copyright string embedded in the ICC profile header.\nUse to record ownership or licensing terms for this profile.\nCan be left empty."),
         ]:
             check = QCheckBox(f"{'Manufacturer' if flag=='A' else 'Model' if flag=='M' else 'Copyright'} (-{flag}):", grp)
             edit  = QLineEdit(grp)
@@ -2582,17 +2695,25 @@ class TabProfile(QWidget):
         row1.addWidget(self._no_input_cb)
         row1.addWidget(TooltipButton(
             "No Input Shaper Curves (-ni)",
-            "Disables 1D tone curves that pre-condition device values before the 3D cLUT.\n"
-            "Disable only for diagnostic purposes — normally leave unchecked.",
+            "Input shaper curves are 1D tone curves applied to device values before\n"
+            "the 3D cLUT. They help linearise the device response so the cLUT works\n"
+            "with a more uniform distribution of input values.\n\n"
+            "Disabling them removes this pre-conditioning step. Diagnostic option —\n"
+            "leave unchecked for normal profiling.",
             grp,
+            min_width=460,
         ))
         row1.addSpacing(16)
         row1.addWidget(self._no_output_cb)
         row1.addWidget(TooltipButton(
             "No Output Shaper Curves (-no)",
-            "Disables 1D output curves applied after the 3D cLUT.\n"
-            "Disable only for diagnostic purposes.",
+            "Output shaper curves are 1D curves applied after the 3D cLUT to refine\n"
+            "the final device values. They smooth out the cLUT output and help achieve\n"
+            "accurate highlight and shadow rendering.\n\n"
+            "Disabling them removes this post-processing step. Diagnostic option —\n"
+            "leave unchecked for normal profiling.",
             grp,
+            min_width=460,
         ))
         row1.addStretch()
         g.addLayout(row1)
@@ -2603,9 +2724,12 @@ class TabProfile(QWidget):
         row2.addWidget(self._no_grid_pos_cb)
         row2.addWidget(TooltipButton(
             "No Grid Position Curves (-np)",
-            "Disables the 1D curves that position device values onto cLUT grid nodes.\n"
-            "Advanced diagnostic option.",
+            "Grid position curves remap where device values land on the cLUT grid,\n"
+            "concentrating grid nodes in regions of greater tonal importance.\n\n"
+            "Disabling forces a uniform grid distribution instead. Advanced diagnostic\n"
+            "option — leave unchecked for normal profiling.",
             grp,
+            min_width=460,
         ))
         row2.addSpacing(16)
         row2.addWidget(self._no_embedded_cb)
@@ -2739,6 +2863,8 @@ class TabProfile(QWidget):
         if code != 0:
             self._log.appendPlainText(f"\n[ERROR] colprof exited with code {code}.")
             self._log.ensureCursorVisible()
+            if "doesn't have an FWA illuminent" in self._log.toPlainText():
+                self._show_fwa_instrument_error()
             return
 
         params = self._collect_params()
@@ -2758,6 +2884,28 @@ class TabProfile(QWidget):
             self.profile_built.emit(self._ti3_path, self._icc_path)
 
         self._show_build_result_dialog(self._icc_path, issues)
+
+    def _show_fwa_instrument_error(self) -> None:
+        dlg = InfoDialog(
+            "FWA Compensation Not Supported by This Instrument",
+            "FWA (Fluorescent Whitening Agent) compensation was enabled, but the instrument "
+            "used to create your ti3 file does not support it.\n\n"
+            "Why this happens:\n"
+            "FWA compensation requires a spectrophotometer that can measure the full UV "
+            "spectrum. Instruments like the ColorMunki, i1Studio, and CC Studio are "
+            "colorimetric instruments that intentionally filter out ultraviolet light — "
+            "so they cannot capture the UV data ArgyllCMS needs to model the optical "
+            "brightening effect in the paper.\n\n"
+            "What to do:\n"
+            "• Disable FWA Compensation and rebuild. This is the right choice for most "
+            "workflows. FWA is only meaningful if your paper has strong optical brighteners "
+            "and you require illuminant-specific accuracy.\n"
+            "• If you specifically need FWA compensation, use an instrument with full UV "
+            "range, such as the X-Rite i1Pro 2 or i1Pro 3.",
+            self,
+            min_width=540,
+        )
+        dlg.exec()
 
     def _show_build_result_dialog(self, icc_path: Path, issues: list[str]) -> None:
         cal_mode = bool(self._settings.get("calibration_mode", False))
