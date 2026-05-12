@@ -64,6 +64,14 @@ DEFAULTS: dict[str, Any] = {
     "profcheck_prune_value":        3.0,
     "profcheck_x3dom":              False,
     "profcheck_refine_threshold":   2.0,
+    # Step 5 — gamut viewer (iccgamut)
+    "gamut_intent":              "a",     # a=absolute, r=relative, p=perceptual, s=saturation
+    "gamut_pcs":                 "l",     # l=Lab, j=CIECAM02 Jab
+    "gamut_sres":                20.0,    # surface resolution
+    "gamut_axes":                True,    # show axes + white/black point
+    "gamut_cusps":               False,   # cusp markers
+    "gamut_edges":               False,   # edge plot
+    "gamut_function":            "f",     # f=forward, b=backward
     # Calibration workflow
     "calibration_mode":          False,
     "printcal_smoothing":        1.0,

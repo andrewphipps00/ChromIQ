@@ -22,15 +22,18 @@ _target_arch = os.environ.get("PYINSTALLER_TARGET_ARCH") or None
 # compiled C extensions that PyInstaller won't find via static analysis alone.
 _ic_datas, _ic_binaries, _ic_hiddenimports = collect_all('imagecodecs')
 
+_we_datas, _we_binaries, _we_hiddenimports = collect_all('PyQt6-WebEngine')
+
 a = Analysis(
     ['main.py'],
     pathex=['.'],
-    binaries=[*_ic_binaries],
+    binaries=[*_ic_binaries, *_we_binaries],
     datas=[
         ('assets',           'assets'),
         ('data/parameters.yaml', 'data'),
         (certifi_where, 'certifi'),
         *_ic_datas,
+        *_we_datas,
     ],
     hiddenimports=[
         'PyQt6.sip',
@@ -38,6 +41,9 @@ a = Analysis(
         'PyQt6.QtGui',
         'PyQt6.QtWidgets',
         'PyQt6.QtPrintSupport',
+        'PyQt6.QtWebEngineWidgets',
+        'PyQt6.QtWebEngineCore',
+        'PyQt6.QtWebChannel',
         'PIL.Image',
         'PIL.ImageFile',
         'PIL.ImageCms',
@@ -47,6 +53,7 @@ a = Analysis(
         'tifffile',
         'numpy',
         *_ic_hiddenimports,
+        *_we_hiddenimports,
     ],
     hookspath=['hooks'],
     hooksconfig={},
@@ -94,8 +101,8 @@ app = BUNDLE(
     info_plist={
         'CFBundleName':              'ChromIQ',
         'CFBundleDisplayName':       'ChromIQ',
-        'CFBundleShortVersionString': '3.0.0-beta.10',
-        'CFBundleVersion':           '3.0.0-beta.10',
+        'CFBundleShortVersionString': '3.1.0',
+        'CFBundleVersion':           '3.1.0',
         'NSHighResolutionCapable':   True,
         'NSPrincipalClass':          'NSApplication',
         'NSRequiresAquaSystemAppearance': False,

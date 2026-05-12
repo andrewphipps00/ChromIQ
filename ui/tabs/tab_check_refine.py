@@ -23,6 +23,7 @@ from PyQt6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QSizePolicy,
+    QSplitter,
     QStackedWidget,
     QVBoxLayout,
     QWidget,
@@ -30,6 +31,7 @@ from PyQt6.QtWidgets import (
 
 from core.logger import get_logger
 from core.resource_path import resource_path
+from ui.gamut_panel import GamutPanel
 from ui.tab_header import TabHeader
 from ui.tooltip_button import TooltipButton
 from ui.widgets import NoScrollComboBox, NoScrollDoubleSpinBox, make_browse_button, open_file_dialog, tint_dialog_primary
@@ -145,6 +147,7 @@ class TabCheckRefine(QWidget):
         self._ti3_edit.setText(str(ti3))
         self._icc_edit.setText(str(icc))
         self._update_run_btn()
+        self._gamut_panel.set_icc_path(icc)
         if propagate:
             self._notify_ti2(ti3)
 
@@ -154,6 +157,7 @@ class TabCheckRefine(QWidget):
         self._ti3_edit.clear()
         self._icc_edit.clear()
         self._update_run_btn()
+        self._gamut_panel.set_icc_path(None)
 
     @property
     def ti3_path(self) -> "Path | None":
@@ -173,12 +177,23 @@ class TabCheckRefine(QWidget):
     # ------------------------------------------------------------------
 
     def _build_ui(self) -> None:
-        root = QVBoxLayout(self)
-        root.setContentsMargins(16, 12, 16, 12)
-        root.setSpacing(8)
+        root = QHBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
 
-        root.addWidget(TabHeader(
-            "STEP 05 · SANITY CHECK", "Check & refine", "#9f82ff", self
+        splitter = QSplitter(Qt.Orientation.Horizontal, self)
+        splitter.setHandleWidth(4)
+
+        # Left panel — all existing check/refine controls
+        left = QWidget(self)
+        self._left_panel = left
+        left.setFixedWidth(580)
+        left_layout = QVBoxLayout(left)
+        left_layout.setContentsMargins(16, 12, 16, 12)
+        left_layout.setSpacing(8)
+
+        left_layout.addWidget(TabHeader(
+            "STEP 05 · SANITY CHECK", "Check & refine", "#9f82ff", left
         ))
 
         # --- Mode buttons ---
@@ -203,7 +218,7 @@ class TabCheckRefine(QWidget):
         mode_row.addWidget(self._guided_btn)
         mode_row.addWidget(self._manual_btn)
         mode_row.addStretch()
-        root.addWidget(self._mode_row_widget)
+        left_layout.addWidget(self._mode_row_widget)
 
         # ── File selection (shared, outside stack) ──────────────────────
         file_grp = QGroupBox("Test Data && Profile", self)
@@ -234,7 +249,7 @@ class TabCheckRefine(QWidget):
         icc_row.addWidget(icc_browse)
         fg.addLayout(icc_row)
 
-        root.addWidget(file_grp)
+        left_layout.addWidget(file_grp)
 
         # ── Stacked panels ──────────────────────────────────────────────
         self._stack = QStackedWidget(self)
@@ -242,7 +257,7 @@ class TabCheckRefine(QWidget):
         self._manual_panel = self._make_manual_panel()
         self._stack.addWidget(self._guided_panel)
         self._stack.addWidget(self._manual_panel)
-        root.addWidget(self._stack, stretch=1)
+        left_layout.addWidget(self._stack, stretch=1)
 
         # Nervous block — guided mode only, sits directly above buttons
         nervous_box = QGroupBox(self)
@@ -283,7 +298,7 @@ class TabCheckRefine(QWidget):
         bar_row.addStretch()
         nervous_layout.addLayout(bar_row)
         self._nervous_box = nervous_box
-        root.addWidget(nervous_box)
+        left_layout.addWidget(nervous_box)
 
         # ── Action buttons (outside stack) ──────────────────────────────
         btn_row = QHBoxLayout()
@@ -297,7 +312,7 @@ class TabCheckRefine(QWidget):
         btn_row.addWidget(self._run_btn)
         btn_row.addStretch()
         btn_row.addWidget(self._save_defaults_btn)
-        root.addLayout(btn_row)
+        left_layout.addLayout(btn_row)
 
         # ── Log (outside stack) ────────────────────────────────────────
         self._log = QPlainTextEdit(self)
@@ -305,7 +320,20 @@ class TabCheckRefine(QWidget):
         self._log.setReadOnly(True)
         self._log.setMaximumHeight(67)
         self._log.setPlaceholderText("profcheck output will appear here…")
-        root.addWidget(self._log, stretch=1)
+        left_layout.addWidget(self._log, stretch=1)
+
+        splitter.addWidget(left)
+
+        # Right panel — Gamut Volume viewer
+        self._gamut_panel = GamutPanel(
+            runner=self._runner, settings=self._settings, parent=self
+        )
+        splitter.addWidget(self._gamut_panel)
+
+        splitter.setStretchFactor(0, 0)
+        splitter.setStretchFactor(1, 1)
+
+        root.addWidget(splitter)
 
     # ------------------------------------------------------------------
     # Guided panel
@@ -1018,6 +1046,7 @@ class TabCheckRefine(QWidget):
             self._icc_path = Path(path)
             self._icc_edit.setText(str(self._icc_path))
             self._update_run_btn()
+            self._gamut_panel.set_icc_path(self._icc_path)
 
     def _auto_fill_icc(self, ti3: Path) -> None:
         """Try to find a matching ICC/ICM in the same folder."""
@@ -1027,11 +1056,13 @@ class TabCheckRefine(QWidget):
                 self._icc_path = candidate
                 self._icc_edit.setText(str(candidate))
                 self._update_run_btn()
+                self._gamut_panel.set_icc_path(candidate)
                 return
         # No match — clear ICC field and warn
         self._icc_path = None
         self._icc_edit.clear()
         self._update_run_btn()
+        self._gamut_panel.set_icc_path(None)
         from PyQt6.QtWidgets import QMessageBox
         QMessageBox.warning(
             self,

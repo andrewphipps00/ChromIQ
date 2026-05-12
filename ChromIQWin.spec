@@ -16,16 +16,19 @@ certifi_where = certifi.where()
 _ic_datas, _ic_binaries, _ic_hiddenimports = collect_all('imagecodecs')
 _winpty_datas, _winpty_binaries, _winpty_hiddenimports = collect_all('winpty')
 
+_we_datas, _we_binaries, _we_hiddenimports = collect_all('PyQt6-WebEngine')
+
 a = Analysis(
     ['main.py'],
     pathex=['.'],
-    binaries=[*_ic_binaries, *_winpty_binaries],
+    binaries=[*_ic_binaries, *_winpty_binaries, *_we_binaries],
     datas=[
         ('assets',               'assets'),
         ('data/parameters.yaml', 'data'),
         (certifi_where,          'certifi'),
         *_ic_datas,
         *_winpty_datas,
+        *_we_datas,
     ],
     hiddenimports=[
         'PyQt6.sip',
@@ -33,6 +36,8 @@ a = Analysis(
         'PyQt6.QtGui',
         'PyQt6.QtWidgets',
         'PyQt6.QtPrintSupport',
+        'PyQt6.QtWebEngineWidgets',
+        'PyQt6.QtWebEngineCore',
         'PIL.Image',
         'PIL.ImageFile',
         'PIL.ImageCms',
@@ -42,6 +47,7 @@ a = Analysis(
         'numpy',
         *_ic_hiddenimports,
         *_winpty_hiddenimports,
+        *_we_hiddenimports,
     ],
     hookspath=['hooks'],
     hooksconfig={},

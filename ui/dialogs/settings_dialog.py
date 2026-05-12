@@ -310,7 +310,7 @@ class SettingsDialog(QDialog):
         bin_dir = Path(self._argyll_edit.text().strip())
         results = []
         for tool in ("targen", "printtarg", "chartread", "colprof",
-                     "profcheck", "printcal", "applycal"):
+                     "profcheck", "printcal", "applycal", "iccgamut", "viewgam"):
             p = bin_dir / argyll_binary(tool)
             if tool == "chartread":
                 # chartread probes USB hardware even with -?, causing a hang.

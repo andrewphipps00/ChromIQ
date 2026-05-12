@@ -12,6 +12,7 @@ from core.resource_path import argyll_binary
 log = get_logger(__name__)
 
 _REQUIRED = ("targen", "printtarg", "chartread", "colprof")
+_OPTIONAL = ("profcheck", "printcal", "applycal", "iccgamut", "viewgam")
 
 
 def all_tools_present(bin_dir: Path) -> bool:

@@ -7,6 +7,13 @@ from pathlib import Path
 from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import QApplication
 
+# QtWebEngine must be imported before QApplication is instantiated.
+# Wrapped in try/except so the app still starts if the package is absent.
+try:
+    import PyQt6.QtWebEngineWidgets  # noqa: F401
+except ImportError:
+    pass
+
 from PyQt6.QtGui import QFontDatabase
 from core.logger import configure_logging, get_logger
 from core.resource_path import resource_path

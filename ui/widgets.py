@@ -98,7 +98,7 @@ class NoScrollDoubleSpinBox(QDoubleSpinBox):
             event.ignore()
 
 
-def _sidebar_urls(extra_path: str = "") -> list[QUrl]:
+def _sidebar_urls(extra_path: str = "", extra_paths: tuple | list = ()) -> list[QUrl]:
     home = Path.home()
     candidates = [
         home / "Desktop",
@@ -108,6 +108,9 @@ def _sidebar_urls(extra_path: str = "") -> list[QUrl]:
     ]
     if extra_path:
         candidates.append(Path(extra_path))
+    for p in extra_paths:
+        if p:
+            candidates.append(Path(p))
     return [QUrl.fromLocalFile(str(p)) for p in candidates if p.exists()]
 
 
@@ -167,6 +170,7 @@ def open_file_dialog(
     name_filter: str = "",
     start_dir: str = "",
     extra_path: str = "",
+    extra_paths: tuple | list = (),
 ) -> str:
     """Open a Qt file dialog with sidebar shortcuts and proper file-type filtering.
 
@@ -182,7 +186,7 @@ def open_file_dialog(
         exts = _parse_extensions(name_filter)
         if exts:
             dlg.setProxyModel(_ExtensionFilterProxy(exts, dlg))
-    dlg.setSidebarUrls(_sidebar_urls(extra_path))
+    dlg.setSidebarUrls(_sidebar_urls(extra_path, extra_paths))
     if dlg.exec() == QFileDialog.DialogCode.Accepted:
         files = dlg.selectedFiles()
         return files[0] if files else ""
