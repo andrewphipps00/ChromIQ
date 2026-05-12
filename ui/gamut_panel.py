@@ -235,10 +235,22 @@ class GamutPanel(QWidget):
         self._intent_combo.addItem("Saturation", "s")
         intent_row.addWidget(self._intent_combo, stretch=1)
         intent_row.addWidget(TooltipButton(
-            "Rendering intent",
-            "Selects which ICC table is used to compute the gamut boundary.\n"
-            "Absolute colorimetric is the standard choice for output profiling.",
+            "Rendering Intent",
+            "Selects which ICC rendering table iccgamut uses to compute the gamut boundary.\n\n"
+            "• Absolute colorimetric (default) — shows the true colorimetric gamut of the\n"
+            "  device including its media white point. Best for comparing one profile against\n"
+            "  another or against a reference colour space such as sRGB or AdobeRGB.\n\n"
+            "• Relative colorimetric — normalises to the media white before computing the gamut.\n"
+            "  Shows how much of the colour space the device covers relative to white, which\n"
+            "  reflects how colours are reproduced in a standard print workflow.\n\n"
+            "• Perceptual — uses the perceptual rendering table. The gamut may appear smaller or\n"
+            "  differently shaped because this table compresses or re-maps colours to avoid hard\n"
+            "  clipping at the gamut boundary.\n\n"
+            "• Saturation — uses the saturation rendering table, which prioritises vivid colours\n"
+            "  over colorimetric accuracy.\n\n"
+            "For most ICC profile analysis, use Absolute colorimetric.",
             opts_grp,
+            min_width=520,
         ))
         og.addLayout(intent_row)
 
@@ -250,10 +262,16 @@ class GamutPanel(QWidget):
         pcs_row.addWidget(self._pcs_combo, stretch=1)
         pcs_row.addWidget(TooltipButton(
             "Profile Connection Space",
-            "Lab computes the gamut in CIELAB space.\n"
-            "CIECAM02 Jab uses appearance correlates and is more perceptually uniform\n"
-            "but requires viewing condition parameters (Argyll defaults are used).",
+            "Controls which colour space the gamut volume is computed and displayed in.\n\n"
+            "• Lab (default) — CIELAB D50, the standard ICC profile connection space. The three\n"
+            "  axes represent L* (lightness, 0–100), a* (green↔red), and b* (blue↔yellow).\n"
+            "  Easy to interpret and the correct choice for comparing ICC profiles.\n\n"
+            "• CIECAM02 Jab — uses a modern perceptual appearance model that accounts for\n"
+            "  chromatic adaptation and luminance-level effects. More perceptually uniform across\n"
+            "  lightness levels, but harder to interpret directly and slower to compute.\n\n"
+            "For everyday profile analysis, Lab is the right choice.",
             opts_grp,
+            min_width=500,
         ))
         og.addLayout(pcs_row)
 
@@ -268,11 +286,16 @@ class GamutPanel(QWidget):
         sres_row.addWidget(self._sres_spin)
         sres_row.addStretch()
         sres_row.addWidget(TooltipButton(
-            "Surface resolution",
-            "Controls the density of vertices on the gamut surface mesh\n"
-            "(range 1–50). Higher values produce smoother 3D plots at the cost\n"
-            "of longer processing time. 20 is a good default.",
+            "Surface Resolution",
+            "Controls how densely iccgamut samples the gamut surface (range 1–50).\n\n"
+            "A higher value produces a finer mesh — the 3D shape looks smoother and more\n"
+            "accurate, but takes longer to compute.\n\n"
+            "   5–10   fast, coarse — good for quick checks\n"
+            "  15–25   balanced, suitable for most work  (default: 20)\n"
+            "  30–50   very fine and detailed — slow\n\n"
+            "If the gamut surface appears jagged or has visible holes, increase this value.",
             opts_grp,
+            min_width=460,
         ))
         og.addLayout(sres_row)
 
@@ -283,21 +306,75 @@ class GamutPanel(QWidget):
         self._function_combo.addItem("Backward — input gamut", "b")
         func_row.addWidget(self._function_combo, stretch=1)
         func_row.addWidget(TooltipButton(
-            "Mapping direction",
-            "Forward mapping visualises the profile's output (printable) gamut.\n"
-            "Backward mapping visualises the input gamut — the range of Lab values\n"
-            "the profile maps back to device values.",
+            "Mapping Direction",
+            "Controls which direction iccgamut traverses the ICC profile tables.\n\n"
+            "• Forward — output gamut (default): maps device values (e.g. RGB ink percentages)\n"
+            "  through the profile to Lab and builds the gamut from the resulting Lab points.\n"
+            "  This shows every Lab colour the device can physically reproduce.\n\n"
+            "• Backward — input gamut: maps Lab values back through the profile to device values.\n"
+            "  Shows which Lab colours can be addressed by the profile's lookup tables — this\n"
+            "  can differ from the forward gamut due to LUT quantisation or non-invertibility.\n\n"
+            "Use Forward for almost all profiling work. Backward is mainly useful for diagnosing\n"
+            "profile inversion quality or gamut mapping behaviour.",
             opts_grp,
+            min_width=520,
         ))
         og.addLayout(func_row)
 
         self._axes_cb  = QCheckBox("Show axes && white/black point", opts_grp)
-        self._cusps_cb = QCheckBox("Mark primary/secondary cusp points (-k)", opts_grp)
-        self._edges_cb = QCheckBox("Show edge plot (-e)", opts_grp)
+        self._cusps_cb = QCheckBox("Mark cusp points", opts_grp)
+        self._edges_cb = QCheckBox("Show edge plot", opts_grp)
         self._axes_cb.setChecked(True)
-        og.addWidget(self._axes_cb)
-        og.addWidget(self._cusps_cb)
-        og.addWidget(self._edges_cb)
+
+        _cb_rows = [
+            (self._axes_cb, TooltipButton(
+                "Lab Axes & Reference Points",
+                "Draws the CIELAB coordinate axes and two reference points inside the 3D viewer.\n\n"
+                "The axes show the direction of each colour dimension:\n"
+                "  • L* axis (vertical) — lightness, from black at the bottom to white at the top\n"
+                "  • a* axis — green (−a*) toward red/magenta (+a*)\n"
+                "  • b* axis — blue/violet (−b*) toward yellow/amber (+b*)\n\n"
+                "Two small spheres mark the white point (lightest reproducible colour) and the\n"
+                "black point (darkest reproducible colour) of the profile.\n\n"
+                "Keeping this enabled makes it much easier to read and orient the 3D gamut model.",
+                opts_grp,
+                min_width=460,
+            )),
+            (self._cusps_cb, TooltipButton(
+                "Mark Cusp Points",
+                "Marks the primary and secondary colour cusp points on the gamut surface\n"
+                "(iccgamut -k flag).\n\n"
+                "Cusps are the most saturated colours in each of the six main hue directions:\n"
+                "red, yellow, green, cyan, blue, and magenta. On a printer profile these represent\n"
+                "the extremes of what the ink set can achieve.\n\n"
+                "Marking them helps you:\n"
+                "  • See at a glance how far the gamut extends in each hue direction\n"
+                "  • Compare the saturation envelope of one profile against another\n"
+                "  • Spot compression or irregularities in specific hue regions",
+                opts_grp,
+                min_width=460,
+            )),
+            (self._edges_cb, TooltipButton(
+                "Show Edge Plot",
+                "Overlays the triangle edges of the gamut mesh on the 3D model\n"
+                "(iccgamut -e flag).\n\n"
+                "Instead of only showing the solid shaded surface, this draws lines along every\n"
+                "triangle edge, giving a wireframe-like appearance that can reveal:\n"
+                "  • The resolution and density of the underlying mesh\n"
+                "  • Sharp corners or unusual topology in the gamut shape\n"
+                "  • Areas where the boundary has been smoothed or interpolated\n\n"
+                "Most useful at higher surface resolution values where the mesh structure\n"
+                "is meaningful.",
+                opts_grp,
+                min_width=460,
+            )),
+        ]
+        for cb, tip in _cb_rows:
+            _row = QHBoxLayout()
+            _row.addWidget(cb)
+            _row.addStretch()
+            _row.addWidget(tip)
+            og.addLayout(_row)
 
         inner_layout.addWidget(opts_grp)
 
@@ -330,6 +407,13 @@ class GamutPanel(QWidget):
         try:
             from PyQt6.QtWebEngineWidgets import QWebEngineView
             view = QWebEngineView(self)
+            try:
+                from PyQt6.QtWebEngineCore import QWebEngineSettings
+                view.settings().setAttribute(
+                    QWebEngineSettings.WebAttribute.LocalContentCanAccessFileUrls, True
+                )
+            except (ImportError, AttributeError):
+                pass
             view.setStyleSheet("background: #111111; border: none;")
             self._web_view = view
             self._show_placeholder()
@@ -454,26 +538,30 @@ class GamutPanel(QWidget):
         self._run_primary()
 
     def _run_primary(self) -> None:
-        params = self._collect_params(self._icc_path)
-        self._viewer.run(params, on_line=lambda _: None, on_finish=lambda _: None)
+        params  = self._collect_params(self._icc_path)
+        themed  = bool(self._settings.get("gamut_themed_colors", True))
+        self._viewer.run(params, on_line=lambda _: None, on_finish=lambda _: None, themed=themed)
 
     def _run_compare(self) -> None:
         if self._compare_path is None:
             return
+        themed = bool(self._settings.get("gamut_themed_colors", True))
         params = self._collect_params(self._compare_path)
         sub = GamutViewer(self._runner, self)
         sub.finished.connect(self._on_compare_finished)
         sub.error.connect(self._on_compare_error)
-        sub.run(params, on_line=lambda _: None, on_finish=lambda _: None)
+        sub.run(params, on_line=lambda _: None, on_finish=lambda _: None, themed=themed)
 
     def _run_viewgam(self) -> None:
         if not self._primary_gam or not self._compare_gam:
             return
+        themed = bool(self._settings.get("gamut_themed_colors", True))
         self._viewgam_runner.run(
             primary_gam = Path(self._primary_gam),
             compare_gam = Path(self._compare_gam),
             on_line     = lambda _: None,
             on_finish   = lambda _: None,
+            themed      = themed,
         )
 
     def _on_viewer_finished(self, volume: float, html_path: str, gam_path: str) -> None:

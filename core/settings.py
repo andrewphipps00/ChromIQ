@@ -72,6 +72,7 @@ DEFAULTS: dict[str, Any] = {
     "gamut_cusps":               False,   # cusp markers
     "gamut_edges":               False,   # edge plot
     "gamut_function":            "f",     # f=forward, b=backward
+    "gamut_themed_colors":       True,   # remap vertex colors to app palette
     # Calibration workflow
     "calibration_mode":          False,
     "printcal_smoothing":        1.0,

@@ -19,8 +19,75 @@ log = get_logger(__name__)
 _INTERSECT_RE   = re.compile(r"Intersecting volume\s*=\s*([\d.]+)")
 
 
-def _patch_html(html_path: Path) -> None:
-    """Inject dark background and expand X3D canvas to fill the full viewport."""
+_THEMED_JS = """\
+(function () {
+  var ACCENTS = [
+    {lo: 330, hi: 360, h: 345, s: 0.995},
+    {lo:   0, hi:  30, h: 345, s: 0.995},
+    {lo:  30, hi:  80, h:  39, s: 0.990},
+    {lo:  80, hi: 165, h: 158, s: 0.600},
+    {lo: 165, hi: 210, h: 190, s: 0.630},
+    {lo: 210, hi: 330, h: 254, s: 1.000}
+  ];
+  function rgb2hsl(r, g, b) {
+    var mx = Math.max(r,g,b), mn = Math.min(r,g,b), d = mx-mn;
+    var l = (mx+mn)/2, h = 0, s = 0;
+    if (d > 0) {
+      s = l > 0.5 ? d/(2-mx-mn) : d/(mx+mn);
+      if (mx===r)      h = ((g-b)/d + (g<b?6:0))/6;
+      else if (mx===g) h = ((b-r)/d + 2)/6;
+      else             h = ((r-g)/d + 4)/6;
+    }
+    return [h*360, s, l];
+  }
+  function hq(p, q, t) {
+    if (t < 0) t += 1; if (t > 1) t -= 1;
+    if (t < 1/6) return p+(q-p)*6*t;
+    if (t < 0.5) return q;
+    if (t < 2/3) return p+(q-p)*(2/3-t)*6;
+    return p;
+  }
+  function hsl2rgb(h, s, l) {
+    h /= 360;
+    if (s === 0) return [l, l, l];
+    var q = l<0.5 ? l*(1+s) : l+s-l*s, p = 2*l-q;
+    return [hq(p,q,h+1/3), hq(p,q,h), hq(p,q,h-1/3)];
+  }
+  function remapColors(str) {
+    var v = str.trim().split(/\\s+/), out = [];
+    for (var i = 0; i+2 < v.length; i += 3) {
+      var hsl = rgb2hsl(+v[i], +v[i+1], +v[i+2]);
+      var H = hsl[0], S = hsl[1], L = hsl[2], nh = 0, ns = 0;
+      if (S >= 0.15) {
+        for (var j = 0; j < ACCENTS.length; j++) {
+          if (H >= ACCENTS[j].lo && H < ACCENTS[j].hi) {
+            nh = ACCENTS[j].h; ns = ACCENTS[j].s; break;
+          }
+        }
+      }
+      var rgb = hsl2rgb(nh, ns, L);
+      out.push(rgb[0].toFixed(5), rgb[1].toFixed(5), rgb[2].toFixed(5));
+    }
+    return out.join(' ');
+  }
+  function applyTheme() {
+    document.querySelectorAll('color[color]').forEach(function(n) {
+      n.setAttribute('color', remapColors(n.getAttribute('color')));
+    });
+    document.querySelectorAll('material[diffusecolor]').forEach(function(n) {
+      n.setAttribute('diffusecolor', remapColors(n.getAttribute('diffusecolor')));
+    });
+  }
+  document.addEventListener('DOMContentLoaded', applyTheme);
+  document.addEventListener('x3dom-initialized', function() { setTimeout(applyTheme, 50); });
+})();
+"""
+
+_COVERAGE_RE    = re.compile(r"'[^']+' volume = ([\d.]+) cubic units, intersect = ([\d.]+)%")
+
+
+def _patch_html(html_path: Path, themed: bool = True) -> None:
+    """Inject dark background, expand X3D canvas, and optionally apply theme colors."""
     try:
         text = html_path.read_text(encoding="utf-8")
         style = (
@@ -29,13 +96,15 @@ def _patch_html(html_path: Path) -> None:
             " overflow: hidden; }\n"
             "</style>\n"
         )
-        text = text.replace("</head>", style + "</head>", 1)
+        inject = style
+        if themed:
+            inject += "<script>\n" + _THEMED_JS + "</script>\n"
+        text = text.replace("</head>", inject + "</head>", 1)
         text = text.replace("height: 70%;", "height: 100vh;", 1)
         text = text.replace("height='70%'", "height='100vh'", 1)
         html_path.write_text(text, encoding="utf-8")
     except OSError:
         pass
-_COVERAGE_RE    = re.compile(r"'[^']+' volume = ([\d.]+) cubic units, intersect = ([\d.]+)%")
 
 
 @dataclass
@@ -63,12 +132,14 @@ class ViewgamRunner(QObject):
         compare_gam:  Path,
         on_line:      Callable[[str], None],
         on_finish:    Callable[[int], None],
+        themed:       bool = True,
     ) -> None:
         if self._runner.is_running:
             self.error.emit("Another process is already running.")
             return
 
         self._log_lines = []
+        self._themed    = themed
         work_dir    = Path(tempfile.mkdtemp(prefix="chromiq_viewgam_"))
         output_base = str(work_dir / "combined")
 
@@ -112,7 +183,7 @@ class ViewgamRunner(QObject):
             result.compare_coverage_pct = float(coverages[1][1])
 
         if result.html_path:
-            _patch_html(work_dir / "combined.x3d.html")
+            _patch_html(work_dir / "combined.x3d.html", self._themed)
 
         if result.html_path or result.intersection_volume is not None:
             log.info(

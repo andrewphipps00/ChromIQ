@@ -147,6 +147,11 @@ class SettingsDialog(QDialog):
         bh.addWidget(self._restore_session_check)
 
         cal_row = QHBoxLayout()
+        self._themed_colors_check = QCheckBox(
+            "Use app theme colors for 3D gamut viewer", self
+        )
+        bh.addWidget(self._themed_colors_check)
+
         self._cal_mode_check = QCheckBox("Enable calibration options", self)
         cal_row.addWidget(self._cal_mode_check)
         cal_row.addStretch()
@@ -261,6 +266,7 @@ class SettingsDialog(QDialog):
         self._folder_edit.setText(s.get("custom_output_path", ""))
         self._restore_tab_check.setChecked(s.get("restore_last_tab", True))
         self._restore_session_check.setChecked(bool(s.get("restore_last_session", False)))
+        self._themed_colors_check.setChecked(bool(s.get("gamut_themed_colors", True)))
         self._cal_mode_check.setChecked(bool(s.get("calibration_mode", False)))
         self._native_print_check.setChecked(bool(s.get("use_native_print_dialog", False)))
 
@@ -270,6 +276,7 @@ class SettingsDialog(QDialog):
         s.set("custom_output_path",    self._folder_edit.text().strip())
         s.set("restore_last_tab",          self._restore_tab_check.isChecked())
         s.set("restore_last_session",      self._restore_session_check.isChecked())
+        s.set("gamut_themed_colors",       self._themed_colors_check.isChecked())
         s.set("calibration_mode",          self._cal_mode_check.isChecked())
         s.set("use_native_print_dialog",   self._native_print_check.isChecked())
         log.info("Settings saved")

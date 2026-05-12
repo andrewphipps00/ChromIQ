@@ -1,11 +1,20 @@
 """ChromIQ — Printer Profiling GUI.  Entry point."""
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
 from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import QApplication
+
+# Windows ARM: GPU is blocklisted for WebGL but the software compositor works fine.
+# --ignore-gpu-blocklist re-enables WebGL; --disable-gpu-compositing keeps the
+# compositor on the software path so the blocklist bypass doesn't break rendering.
+if sys.platform == "win32":
+    _existing = os.environ.get("QTWEBENGINE_CHROMIUM_FLAGS", "")
+    _extra = "--ignore-gpu-blocklist --disable-gpu-compositing"
+    os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = f"{_existing} {_extra}".strip()
 
 # QtWebEngine must be imported before QApplication is instantiated.
 # Wrapped in try/except so the app still starts if the package is absent.
