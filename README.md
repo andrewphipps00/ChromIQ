@@ -48,25 +48,25 @@ Extract the ZIP, open the `ChromIQ` folder, and run `ChromIQ.exe`. Windows Smart
 |---|---|
 |![ChromIQ Guided Test Chart creation](docs/1a.png) | ![ChromIQ Manual Test Chart creation](docs/1b.png) |
 
-| Step 2 — Print Chart | Step 3a — Measure Chart (guided) |
+| Step 2a — Print Chart (ChromIQ native) | Step 2a — Print Chart (OS native) |
 |---|---|
-| ![ChromIQ Print Tab](docs/2.png) | ![ChromIQ Measurement Tab](docs/3a.png) |
+| ![ChromIQ Print Tab](docs/2a.png) | ![ChromIQ Measurement Tab](docs/2b.png) |
 
-| Step 3b — Measure Chart (manual) | Step 4a — Build Profile (guided) |
+| Step 3a — Measure Chart (guided) | Step 3b — Measure Chart (manual) |
 |---|---|
-| ![ChromIQ Create ICC Profile](docs/3b.png) | ![ChromIQ Check & Refine](docs/4a.png) |
+| ![ChromIQ Create ICC Profile](docs/3a.png) | ![ChromIQ Check & Refine](docs/3b.png) |
 
-| Step 4b — Build Profile (manual) | Step 5a — Check & Refine (guided) |
+| Step 4a — Build Profile (guided) | Step 4b — Build Profile (manual) |
 |---|---|
-| ![ChromIQ Print Tab](docs/4b.png) | ![ChromIQ Measurement Tab](docs/5a.png) |
+| ![ChromIQ Print Tab](docs/4a.png) | ![ChromIQ Measurement Tab](docs/4b.png) |
 
-| Step 5b — Check & Refine (manual)  | Settings |
+| Step 5a — Check & Refine (guided)  | Step 5b — Check & Refine (manual) |
 |---|---|
-| ![ChromIQ Create ICC Profile](docs/5b.png) | ![ChromIQ Check & Refine](docs/6.png) |
+| ![ChromIQ Create ICC Profile](docs/5a.png) | ![ChromIQ Check & Refine](docs/5b.png) |
 
-| Step 4c — Calibration & Profiling (disabled by default)  |
-|---|
-| ![ChromIQ Create ICC Profile](docs/4c.png) |
+| Settings  | Step 4c — Calibration & Profiling (disabled by default) |
+|---|---|
+| ![ChromIQ Create ICC Profile](docs/6.png) | ![ChromIQ Check & Refine](docs/4c.png) |
 
 ---
 
