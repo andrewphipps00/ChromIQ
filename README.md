@@ -355,7 +355,7 @@ Full Windows support (x64 + ARM64) shipped in v3.0.0. All macOS behaviour is unc
 
 ### Feedback
 
-If you run into any issues on Windows, please [open an issue](https://github.com/itsab1989/ChromIQ/issues).
+If you run into any issues on Windows, please [open a bug report](https://github.com/itsab1989/ChromIQ/issues/new?template=bug_report.yml).
 
 ---
 
@@ -366,6 +366,18 @@ If you run into any issues on Windows, please [open an issue](https://github.com
 - **Measurement (Step 3):** Some spectrophotometer models may require additional calibration steps not yet surfaced in the UI.
 - **Advanced color science (Step 4):** FWA compensation and custom gamut mapping intents cover a wide range of instrument/paper combinations — edge cases may exist depending on your specific hardware and media.
 - **Windows:** The CUPS-based PostScript print pipeline is not available on Windows — colour management must be disabled manually in the printer driver. See [Windows](#windows) above. Linux is not currently supported.
+
+---
+
+## Reporting issues & feedback
+
+You can also reach these directly from inside the app — open **Preferences** (⌘,) and click **Report a Bug…** in the bottom row.
+
+- **Bug?** [Open a bug report](https://github.com/itsab1989/ChromIQ/issues/new?template=bug_report.yml) — the form asks for the version, OS, ArgyllCMS install method, and repro steps. Filling it in completely is the single biggest factor in getting a fix.
+- **Feature idea?** [Open a feature request](https://github.com/itsab1989/ChromIQ/issues/new?template=feature_request.yml).
+- **Usage question or open-ended discussion?** Use [Discussions](https://github.com/itsab1989/ChromIQ/discussions) rather than the issue tracker.
+
+Please include the contents of the in-app log panel (or the file under `~/Library/Logs/ChromIQ/chromiq.log` on macOS / `%LOCALAPPDATA%\ChromIQ\Logs\` on Windows) when reporting a bug — it captures every ArgyllCMS command ChromIQ ran and is usually the fastest way to identify the cause.
 
 ---
 

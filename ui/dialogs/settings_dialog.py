@@ -48,13 +48,13 @@ class SettingsDialog(QDialog):
         self._settings = settings
         self._update_checker: UpdateChecker | None = None
         self.setWindowTitle("ChromIQ Preferences")
-        self.setMinimumWidth(840)
+        self.setMinimumWidth(900)
         self.setWindowFlags(
             self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint
         )
         self._build_ui()
         self._load_settings()
-        self.resize(840, self.sizeHint().height())
+        self.resize(900, self.sizeHint().height())
 
     # ------------------------------------------------------------------
 
@@ -256,12 +256,19 @@ class SettingsDialog(QDialog):
         )
         reset_btn.clicked.connect(self._restore_defaults)
         bottom_row.addWidget(reset_btn)
-        bottom_row.addStretch()
+        bottom_row.addSpacing(8)
+
+        bug_btn = QPushButton("Report a Bug…", self)
+        bug_btn.setToolTip("Open the bug-report form on GitHub in your browser.")
+        bug_btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(
+            "https://github.com/itsab1989/ChromIQ/issues/new?template=bug_report.yml")))
+        bottom_row.addWidget(bug_btn)
+        bottom_row.addSpacing(8)
 
         self._update_btn = QPushButton("Check for Updates", self)
         self._update_btn.clicked.connect(self._check_for_updates)
         bottom_row.addWidget(self._update_btn)
-        bottom_row.addSpacing(8)
+        bottom_row.addStretch()
 
         bb = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok |

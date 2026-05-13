@@ -1,5 +1,28 @@
 # Changelog
 
+## v3.2.5
+### Added
+- **Report a Bug button in Preferences**: the bottom row of the Preferences
+  dialog now exposes a *Report a Bug…* button that opens the GitHub bug-report
+  form (pre-filled with the right template) in the user's default browser.
+  Sits next to *Restore Factory Defaults* and *Check for Updates* so all three
+  "GitHub / external" actions cluster together on the left of the row, with
+  Cancel / OK pinned to the right as before.
+
+### Changed
+- **Preferences dialog widened from 840 → 900 px** so the bottom-row buttons
+  (Restore Factory Defaults, Report a Bug…, Check for Updates, Cancel, OK)
+  all show their full labels without truncation.
+
+### Project
+- **Reporting issues & feedback section added to the README**, with deep-links
+  that jump straight into the bug-report and feature-request forms (skipping
+  the GitHub template chooser). The lone Windows-section feedback link now
+  also points at the bug-report form rather than the issues list.
+- **`.github/SUPPORT.md` added** so GitHub surfaces a *Help* entry in the
+  new-issue chooser sidebar and on the repo's community profile, routing
+  users to bugs / features / Discussions / the ArgyllCMS mailing list.
+
 ## v3.2.4
 ### Fixed
 - **Stale files reappear after a restart**: with *Restore last session* enabled,
