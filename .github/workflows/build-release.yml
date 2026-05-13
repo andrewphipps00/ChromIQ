@@ -218,6 +218,94 @@ jobs:
       - name: Codesign DMG (ad-hoc)
         run: codesign --sign - "${{ matrix.artifact }}"
 
+      # Derive an Intel-only DMG from the universal2 build by stripping arm64
+      # slices from every Mach-O. Same source app, ~half the binary size — useful
+      # for users who know they're on Intel and want a smaller download.
+      - name: Derive x86_64-only app from universal2 bundle
+        if: matrix.arch == 'universal2'
+        run: |
+          set -euo pipefail
+          THIN_APP=dist/ChromIQ-x86_64.app
+          rm -rf "$THIN_APP"
+          ditto dist/ChromIQ.app "$THIN_APP"
+          thinned=0
+          while IFS= read -r b; do
+            [ -f "$b" ] || continue
+            case "$(file -b "$b" 2>/dev/null)" in
+              Mach-O*) ;;
+              *) continue ;;
+            esac
+            archs=$(lipo -archs "$b" 2>/dev/null || echo "")
+            if [[ "$archs" != *"x86_64"* ]]; then
+              echo "::error file=$b::No x86_64 slice in universal app: archs=[$archs]"
+              exit 1
+            fi
+            if [[ "$archs" == *"arm64"* ]]; then
+              tmp=$(mktemp)
+              lipo -thin x86_64 "$b" -output "$tmp"
+              mv "$tmp" "$b"
+              thinned=$((thinned + 1))
+            fi
+          done < <(find "$THIN_APP" -type f)
+          echo "Stripped arm64 from $thinned binaries"
+
+      - name: Verify x86_64 app contains no arm64 slices
+        if: matrix.arch == 'universal2'
+        run: |
+          set -euo pipefail
+          THIN_APP=dist/ChromIQ-x86_64.app
+          fail=0
+          while IFS= read -r b; do
+            [ -f "$b" ] || continue
+            case "$(file -b "$b" 2>/dev/null)" in
+              Mach-O*) ;;
+              *) continue ;;
+            esac
+            archs=$(lipo -archs "$b" 2>/dev/null || echo "")
+            if [[ "$archs" == *"arm64"* ]]; then
+              echo "::error file=$b::arm64 slice still present after thin: archs=[$archs]"
+              fail=1
+            fi
+          done < <(find "$THIN_APP" -type f)
+          if [ "$fail" -ne 0 ]; then exit 1; fi
+          echo "x86_64 bundle is clean of arm64 slices"
+
+      - name: Codesign x86_64 app (ad-hoc)
+        if: matrix.arch == 'universal2'
+        run: |
+          # Modifying binaries invalidates the universal app's signatures —
+          # re-sign bottom-up using the same pattern as the parent app.
+          THIN_APP=dist/ChromIQ-x86_64.app
+          find "$THIN_APP" -type f \( -name "*.so" -o -name "*.dylib" \) \
+            -exec codesign --force --sign - {} \;
+          find "$THIN_APP" -name "*.framework" -type d \
+            -exec codesign --force --sign - {} \;
+          find "$THIN_APP" -name "*.bundle" -type d \
+            -exec codesign --force --sign - {} \;
+          codesign --force --sign - "$THIN_APP"
+          codesign --verify --verbose "$THIN_APP"
+
+      - name: Create x86_64 DMG
+        if: matrix.arch == 'universal2'
+        run: |
+          THIN_APP=dist/ChromIQ-x86_64.app
+          X86_DMG=ChromIQ-macOS-x86_64.dmg
+          APP_MB=$(du -sm "$THIN_APP" | awk '{print $1}')
+          IMG_MB=$((APP_MB + 40))
+          hdiutil create -megabytes "$IMG_MB" \
+            -volname "ChromIQ" -fs HFS+ /tmp/rw_x86.dmg
+          MOUNT=$(hdiutil attach /tmp/rw_x86.dmg -nobrowse -noautoopen \
+            | awk '/Apple_HFS/{print $NF}')
+          ditto "$THIN_APP" "$MOUNT/ChromIQ.app"
+          ln -sf /Applications "$MOUNT/Applications"
+          sync
+          hdiutil detach "$MOUNT" -force
+          hdiutil convert /tmp/rw_x86.dmg \
+            -format UDZO -imagekey zlib-level=9 \
+            -o "$X86_DMG"
+          rm -f /tmp/rw_x86.dmg
+          codesign --sign - "$X86_DMG"
+
       - name: Create GitHub Release (if not exists)
         env:
           GH_TOKEN: ${{ github.token }}
@@ -238,7 +326,12 @@ jobs:
               --notes-file /tmp/release_notes.txt
           fi
 
-      - name: Upload DMG to release
+      - name: Upload DMG(s) to release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "$RELEASE_TAG" "${{ matrix.artifact }}" --clobber
+        run: |
+          gh release upload "$RELEASE_TAG" "${{ matrix.artifact }}" --clobber
+          # universal2 job also publishes the x86_64-thinned DMG.
+          if [ "${{ matrix.arch }}" = "universal2" ] && [ -f "ChromIQ-macOS-x86_64.dmg" ]; then
+            gh release upload "$RELEASE_TAG" "ChromIQ-macOS-x86_64.dmg" --clobber
+          fi
