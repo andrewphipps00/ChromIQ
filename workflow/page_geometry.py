@@ -77,16 +77,37 @@ def read_tiff_dimensions_points(tiff_path: Path, fallback_dpi: float = 300.0) ->
 
 
 def _read_dpi(page: tifffile.TiffPage, fallback: float) -> float:
+    """Pixels-per-inch from a TIFF page, honouring its ResolutionUnit.
+
+    ArgyllCMS `printtarg` writes the resolution in pixels-per-*centimetre*
+    (ResolutionUnit = 3), so the raw XResolution value (~118 for a 300-dpi
+    chart) must be scaled by 2.54 to get DPI — otherwise every derived size
+    comes out 2.54× too large.
+    """
     tag = page.tags.get("XResolution")
     if tag is None:
         return float(fallback)
     v = tag.value
     if isinstance(v, tuple) and len(v) == 2 and v[1]:
-        return float(v[0]) / float(v[1])
-    try:
-        return float(v)
-    except (TypeError, ValueError):
+        res = float(v[0]) / float(v[1])
+    else:
+        try:
+            res = float(v)
+        except (TypeError, ValueError):
+            return float(fallback)
+    if res <= 0:
         return float(fallback)
+
+    unit_tag = page.tags.get("ResolutionUnit")
+    try:
+        unit = int(getattr(unit_tag, "value", 2))
+    except (TypeError, ValueError):
+        unit = 2
+    if unit == 1:          # no absolute unit — XResolution is just an aspect ratio
+        return float(fallback)
+    if unit == 3:          # pixels per centimetre → pixels per inch
+        res *= 2.54
+    return res
 
 
 def compute_orientation(
