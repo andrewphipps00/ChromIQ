@@ -1,5 +1,35 @@
 # Changelog
 
+## v3.2.4
+### Fixed
+- **Stale files reappear after a restart**: with *Restore last session* enabled,
+  clearing a `.ti3` / `.icc` / cal-`.ti3` mid-session previously didn't take
+  effect on the next launch — the cleared paths still lived in settings and
+  were resurrected. `clear_files()` in the Build Profile tab now also nulls
+  `_cal_ti3_path` (which was being skipped) and the Measure and Build Profile
+  tab clear methods eagerly write empty values to `session_ti1_path`,
+  `session_ti3_path`, `session_icc_path`, and `session_cal_ti3_path` instead
+  of relying on the quit-time save — so a crash before quit can no longer
+  resurrect cleared files.
+
+- **Working-folder name not sanitised against filesystem-illegal characters**:
+  `FileManager.set_target_name` previously only replaced spaces with `-`. A
+  printer name containing `/` (CUPS permits it) or a manually-typed chart name
+  with `:` / `\` / control chars could create unintended subfolders or fail
+  outright on Windows. Names are now run through a single `_sanitise` rule
+  that keeps alnum / `_` / `-` / `.`, replaces everything else with `_`,
+  strips leading and trailing dots (Windows forbids them), and falls back to
+  `"session"` if the result is empty. Auto-generated session names are
+  unchanged (they were already hyphenated).
+
+- **Dead "high ΔE" warning in the Build Profile result dialog**:
+  `ProfileBuilder.sanity_check` contained a regex `r"delta E .{0,10}> 5"`
+  that looked for the literal substring `> 5` in colprof's log — which
+  colprof never emits, so the warning was unreachable. Removed the dead
+  tuple. Real ΔE evaluation already lives in Tab 5 (Check & Refine) via
+  `profcheck`. The other two sanity checks (`out of gamut`,
+  `Profile creation failed`) and the file-size checks are unchanged.
+
 ## v3.2.3
 ### Fixed
 - **Gamut Analysis failed when comparison profile was loaded from

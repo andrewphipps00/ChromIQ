@@ -123,7 +123,6 @@ class ProfileBuilder:
 
         combined = log_output or self._last_log
         for pattern, msg in [
-            (r"delta E .{0,10}> 5",      "High ΔE values detected — consider more patches."),
             (r"Warning.*out of gamut",    "Out-of-gamut warnings in measurements."),
             (r"Profile creation failed", "colprof reported a failure."),
         ]:

@@ -1353,6 +1353,7 @@ class TabMeasure(QWidget):
         self._tiff_pages = []
         self._preview.clear()
         self._update_resume_availability()
+        self._settings.set("session_ti1_path", "")
 
     # ------------------------------------------------------------------
     # Internal

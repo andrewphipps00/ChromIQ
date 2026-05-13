@@ -2763,6 +2763,7 @@ class TabProfile(QWidget):
     def clear_files(self) -> None:
         self._ti3_path = None
         self._icc_path = None
+        self._cal_ti3_path = None
         self._file_lbl.setText("")
         self._build_btn.setEnabled(False)
         for field in (
@@ -2770,6 +2771,9 @@ class TabProfile(QWidget):
             self._m_desc_edit, self._m_mfr_edit, self._m_model_edit, self._m_copy_edit,
         ):
             field.clear()
+        self._settings.set("session_ti3_path", "")
+        self._settings.set("session_icc_path", "")
+        self._settings.set("session_cal_ti3_path", "")
 
     # ------------------------------------------------------------------
     # Internal
