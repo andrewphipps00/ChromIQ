@@ -1,51 +1,17 @@
 # Changelog
 
+## v3.2.1
+### Fixed
+- **Check/Refine — 3D gamut viewer flashed white on first open**: When the
+  user opened the Check/Refine tab for the first time after launching the app,
+  the embedded QWebEngineView briefly painted its default white surface before
+  the dark `#111111` placeholder HTML rendered on top. The widget-level
+  stylesheet only styled the QWidget chrome, not the Chromium-rendered page
+  surface. `QWebEnginePage.setBackgroundColor` is now set to `#111111`
+  immediately after constructing the view, so Chromium paints its very first
+  compositor frame dark — no flash on first show.
+
 ## v3.2.0
-Final release — includes all changes from v3.2.0-beta.1 through v3.2.0-beta.3
-(macOS native print dialog with ACPU-equivalent colour-management lock, preflight
-confirmation dialog, automatic page orientation, page-size mismatch warning,
-TIFF ResolutionUnit fix), plus:
-
-### Fixed
-- **Print tab — TIFF preview "shrunk" after chart generation**: When jumping
-  straight from Create Chart to Print Chart, the preview sometimes rendered
-  with a dark border around it (pixmap scaled too small). The preview's
-  `showEvent` repainted synchronously, before Qt had activated the now-visible
-  tab's layout, so the label still reported its hidden minimum size.
-  Switching tabs and back happened to work because the second show landed
-  after layout was already settled. The repaint is now deferred until layout
-  activation completes, so the first show always uses the true label size.
-
-## v3.2.0-beta.3
-### Added
-- **Native macOS print — colour-management lock verification**: After every print, ChromIQ now
-  reads the resolved colour-management keys back from the submitted job and confirms each one
-  matches the values it locked (`AP_ColorMatchingMode = AP_ApplicationColorMatching`,
-  `APCustomColorMatchingProfile = sRGB`, plus any vendor-PPD "no colour adjustment" key
-  detected). On success, the result is recorded in `~/Library/Logs/ChromIQ/chromiq.log` as
-  *"colour management verified OFF"*; on mismatch, a warning dialog tells the user the job was
-  sent but the lock couldn't be verified, so they can check the swatch or switch print modes.
-  The macOS print-mode warning text now also explains that the system's "Color Matching" pane
-  is cosmetic (macOS doesn't let third-party apps grey it out — Adobe Color Printer Utility has
-  the same limitation), and that ChromIQ overrides it at the job level regardless of what the
-  pane visibly shows.
-
-## v3.2.0-beta.2
-### Fixed
-- **Bogus "page-size mismatch" warning**: ArgyllCMS `printtarg` writes the chart TIFF's
-  resolution in pixels-per-centimetre, which ChromIQ was reading as DPI directly — so an A4
-  chart was reported as 533 × 754 mm and the preflight dialog showed a false mismatch warning
-  (and the generated PostScript could be mis-sized). `_read_dpi` now honours the TIFF's
-  ResolutionUnit tag.
-
-### Changed
-- **Paper-mismatch check**: now compares the chart against the printer's *printable area*
-  (from the PPD's `*ImageableArea`) when available — instead of the full sheet — so the normal
-  loss of the printer's hardware margins no longer trips the warning. Falls back to comparing
-  against the full sheet with a wider tolerance when no printable-area data is available, and
-  the warning is reworded to "possible paper mismatch".
-
-## v3.2.0-beta.1
 ### Added
 - **macOS native print dialog — Adobe Color Printer Utility behaviour**: When "Use default
   macOS printer dialog" is enabled, ChromIQ now opens the real macOS print panel via PyObjC
@@ -55,6 +21,17 @@ TIFF ResolutionUnit fix), plus:
   from its PPD and locked too — so the driver's colour controls appear greyed out and cannot be
   re-enabled, exactly like ACPU. No colour transform is applied; pixel values reach the printer
   unchanged.
+- **Native macOS print — colour-management lock verification**: After every print, ChromIQ now
+  reads the resolved colour-management keys back from the submitted job and confirms each one
+  matches the values it locked (`AP_ColorMatchingMode = AP_ApplicationColorMatching`,
+  `APCustomColorMatchingProfile = sRGB`, plus any vendor-PPD "no colour adjustment" key
+  detected). On success, the result is recorded in `~/Library/Logs/ChromIQ/chromiq.log` as
+  *"colour management verified OFF"*; on mismatch, a warning dialog tells the user the job was
+  sent but the lock couldn't be verified, so they can check the swatch or switch print modes.
+  The macOS print-mode warning text also explains that the system's "Color Matching" pane is
+  cosmetic (macOS doesn't let third-party apps grey it out — Adobe Color Printer Utility has
+  the same limitation), and that ChromIQ overrides it at the job level regardless of what the
+  pane visibly shows.
 - **Preflight confirmation dialog**: Before sending a job to CUPS, ChromIQ can show a summary of
   every option that will be sent (printer, paper size, media type, quality, tray, borderless,
   auto-detected orientation, forced-off duplex/colour management, and any detected mismatches).
@@ -70,6 +47,25 @@ TIFF ResolutionUnit fix), plus:
   PS document and `lp -o PageSize=…` agree.
 - **Print options order**: The "Borderless" option now appears directly after "Paper size" in
   the Print tab (was last), which reads more naturally.
+- **Paper-mismatch check**: Now compares the chart against the printer's *printable area*
+  (from the PPD's `*ImageableArea`) when available — instead of the full sheet — so the normal
+  loss of the printer's hardware margins no longer trips the warning. Falls back to comparing
+  against the full sheet with a wider tolerance when no printable-area data is available, and
+  the warning is reworded to "possible paper mismatch".
+
+### Fixed
+- **Bogus "page-size mismatch" warning**: ArgyllCMS `printtarg` writes the chart TIFF's
+  resolution in pixels-per-centimetre, which ChromIQ was reading as DPI directly — so an A4
+  chart was reported as 533 × 754 mm and the preflight dialog showed a false mismatch warning
+  (and the generated PostScript could be mis-sized). `_read_dpi` now honours the TIFF's
+  ResolutionUnit tag.
+- **Print tab — TIFF preview "shrunk" after chart generation**: When jumping straight from
+  Create Chart to Print Chart, the preview sometimes rendered with a dark border around it
+  (pixmap scaled too small). The preview's `showEvent` repainted synchronously, before Qt
+  had activated the now-visible tab's layout, so the label still reported its hidden minimum
+  size. Switching tabs and back happened to work because the second show landed after layout
+  was already settled. The repaint is now deferred until layout activation completes, so the
+  first show always uses the true label size.
 
 ## v3.1.4
 ### Fixed
