@@ -1,5 +1,20 @@
 # Changelog
 
+## v3.2.2
+### Fixed
+- **Intermittent crash on app quit (`EXC_BAD_ACCESS` in `CrBrowserMain`)**:
+  macOS occasionally reported "Python quit unexpectedly" after closing the
+  app. The crash originated in `dealloc_QApplication` → `sip_api_visit_wrappers`
+  — SIP was walking its wrapper graph during `QApplication` teardown and
+  following a dangling pointer inside the `QWebEngineView` / Chromium subtree
+  on the gamut viewer panel. The previous `aboutToQuit` handler loaded
+  `about:blank` and slept 200 ms but never actually destroyed the view, so
+  its Chromium child objects survived into `QApplication`'s destructor where
+  the race fires. ChromIQ now also disconnects `loadFinished`, reparents the
+  `QWebEnginePage` and the view to `None`, calls `deleteLater()` on both,
+  and pumps the event loop so the deferred deletes run *before* the
+  `QApplication` destructor.
+
 ## v3.2.1
 ### Fixed
 - **Check/Refine — 3D gamut viewer flashed white on first open**: When the
