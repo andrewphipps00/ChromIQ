@@ -412,6 +412,12 @@ def print_frames(pages: list[tuple[Path, int]]) -> None:
     print_info.setBottomMargin_(0.0)
     print_info.setScalingFactor_(1.0)
     print_info.printSettings()["Duplex"] = "None"
+    # Default paper size to the chart's own dimensions. The Sequoia/Tahoe print
+    # panel hides the standalone paper-size control, so without this we'd
+    # inherit whatever was last in sharedPrintInfo and silently clip charts
+    # bigger than that.  The user can still override below via the page-setup
+    # accessory or the driver's Printer Options pane.
+    print_info.setPaperSize_(_Foundation.NSMakeSize(page_box[0], page_box[1]))
 
     # Lock "no colour management" *before* the dialog so its colour panes open
     # greyed out, then show the dialog (for paper / quality / copies), then lock
@@ -419,6 +425,15 @@ def print_frames(pages: list[tuple[Path, int]]) -> None:
     _lock_no_color_management(print_info)
 
     panel = AppKit.NSPrintPanel.printPanel()
+    # Force the paper-size / orientation / scale controls to be available in
+    # the panel even on the new macOS print dialog, which otherwise omits them.
+    panel.setOptions_(
+        panel.options()
+        | getattr(AppKit, "NSPrintPanelShowsPaperSize", 0x4)
+        | getattr(AppKit, "NSPrintPanelShowsOrientation", 0x8)
+        | getattr(AppKit, "NSPrintPanelShowsScaling", 0x10)
+        | getattr(AppKit, "NSPrintPanelShowsPageSetupAccessory", 0x100)
+    )
     ok_response = getattr(AppKit, "NSModalResponseOK", getattr(AppKit, "NSOKButton", 1))
     if panel.runModalWithPrintInfo_(print_info) != ok_response:
         log.info("native print: dialog cancelled")
