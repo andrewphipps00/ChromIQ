@@ -453,7 +453,10 @@ class TiffPreview(QWidget):
     def showEvent(self, event) -> None:  # type: ignore[override]
         super().showEvent(event)
         if self._pixmap:
-            self._repaint_label()
+            # Defer until Qt has activated the now-visible tab's layout —
+            # otherwise _img_label.size() is still the hidden minimum and the
+            # pixmap gets scaled too small, leaving a "border" around it.
+            QTimer.singleShot(0, self._repaint_label)
 
     # ------------------------------------------------------------------
     # Image loading helpers
