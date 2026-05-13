@@ -205,6 +205,27 @@ class SettingsDialog(QDialog):
         native_print_container.setVisible(_sys.platform != "win32")
         bh.addWidget(native_print_container)
 
+        confirm_row = QHBoxLayout()
+        self._confirm_print_check = QCheckBox(
+            "Confirm print settings before sending to printer", self
+        )
+        confirm_row.addWidget(self._confirm_print_check)
+        confirm_row.addStretch()
+        confirm_row.addWidget(TooltipButton(
+            "Confirm Print Settings",
+            "When enabled, ChromIQ shows a summary dialog of every option that "
+            "will be sent to CUPS before each print job:\n\n"
+            "  • Printer, paper size, media type, quality, tray, borderless\n"
+            "  • Auto-detected orientation (portrait or landscape)\n"
+            "  • The forced-off state of duplex and colour management\n"
+            "  • Any detected mismatches (e.g. paper size ≠ chart size)\n\n"
+            "Highly recommended — profiling targets waste expensive paper and "
+            "ink when printed with the wrong settings.",
+            self,
+            min_width=560,
+        ))
+        bh.addLayout(confirm_row)
+
         layout.addWidget(behaviour_grp)
 
         # ---- About / Updates ----
@@ -269,6 +290,7 @@ class SettingsDialog(QDialog):
         self._themed_colors_check.setChecked(bool(s.get("gamut_themed_colors", True)))
         self._cal_mode_check.setChecked(bool(s.get("calibration_mode", False)))
         self._native_print_check.setChecked(bool(s.get("use_native_print_dialog", False)))
+        self._confirm_print_check.setChecked(bool(s.get("confirm_before_printing", True)))
 
     def _save_and_close(self) -> None:
         s = self._settings
@@ -279,6 +301,7 @@ class SettingsDialog(QDialog):
         s.set("gamut_themed_colors",       self._themed_colors_check.isChecked())
         s.set("calibration_mode",          self._cal_mode_check.isChecked())
         s.set("use_native_print_dialog",   self._native_print_check.isChecked())
+        s.set("confirm_before_printing",   self._confirm_print_check.isChecked())
         log.info("Settings saved")
         self.accept()
 

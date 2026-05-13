@@ -1,5 +1,31 @@
 # Changelog
 
+## v3.2.0-beta.1
+### Added
+- **macOS native print dialog — Adobe Color Printer Utility behaviour**: When "Use default
+  macOS printer dialog" is enabled, ChromIQ now opens the real macOS print panel via PyObjC
+  and sends the chart as untagged device RGB at its exact generated size. The print job is put
+  into application-managed-colour mode (`AP_ColorMatchingMode` locked via PrintCore), and the
+  selected driver's own "No Color Adjustment" / "Application Managed" option is auto-detected
+  from its PPD and locked too — so the driver's colour controls appear greyed out and cannot be
+  re-enabled, exactly like ACPU. No colour transform is applied; pixel values reach the printer
+  unchanged.
+- **Preflight confirmation dialog**: Before sending a job to CUPS, ChromIQ can show a summary of
+  every option that will be sent (printer, paper size, media type, quality, tray, borderless,
+  auto-detected orientation, forced-off duplex/colour management, and any detected mismatches).
+  Toggleable in Settings → "Confirm print settings before sending to printer" (on by default).
+- **Automatic page orientation**: ChromIQ now compares the chart's aspect ratio with the
+  selected paper and requests portrait or landscape so the chart matches the media.
+- **Page-size mismatch warning**: If the selected paper size doesn't match the size the chart
+  was generated for, the preflight dialog flags it before you waste paper and ink.
+
+### Changed
+- **PostScript output**: The generated PostScript now uses the selected media's exact PageSize
+  and centres the chart on it (instead of forcing the page to the TIFF's own dimensions), so the
+  PS document and `lp -o PageSize=…` agree.
+- **Print options order**: The "Borderless" option now appears directly after "Paper size" in
+  the Print tab (was last), which reads more naturally.
+
 ## v3.1.4
 ### Fixed
 - **Gamut viewer — empty profile error dialog**: When an ICC profile file is 0 bytes

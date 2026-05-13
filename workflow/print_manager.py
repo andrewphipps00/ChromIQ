@@ -15,9 +15,32 @@ if CUPS_AVAILABLE:
 
 log = get_logger(__name__)
 
+# Synthetic option name used to surface a clean Yes/No "Borderless" toggle in
+# the UI when the driver only encodes borderless inside PageSize variants or
+# multi-choice options like EPIJ_PSrc. Resolved back to real lp options in
+# build_config().
+_BORDERLESS_SYNTH = "__BORDERLESS__"
+# Suffixes printers append to a base PageSize value to mean "borderless".
+_BORDERLESS_SIZE_SUFFIXES = (".NMgn", ".Borderless", ".FullBleed", "Borderless", "FullBleed")
+# Option names whose 3-value (Borderless) choice toggles borderless mode.
+_EPSON_PSRC_OPT = "EPIJ_PSrc"
+_EPSON_PSRC_STANDARD = "2"
+_EPSON_PSRC_BORDERLESS = "3"
+
 
 class PrintModule:
     """Detect installed printers and query their supported options."""
+
+    def __init__(self) -> None:
+        # Per-printer borderless resolution state, populated by query_options
+        # and consumed by build_config to translate __BORDERLESS__ back into
+        # real lp options before submission.
+        # value shape: {
+        #   "kind": "epij_psrc" | "pagesize_variant",
+        #   "size_opt": <CUPS option name carrying the size variant> (variant kind only),
+        #   "variant_map": { base_raw: borderless_raw },                (variant kind only),
+        # }
+        self._borderless_state: dict[str, dict] = {}
 
     def detect_printers(self) -> list[str]:
         """Return filtered list of non-AirPrint printer names from CUPS."""
@@ -38,7 +61,7 @@ class PrintModule:
             log.warning("detect_printers error: %s", exc)
             return []
 
-    # For each of the 4 print setting categories:
+    # For each print setting category:
     # (exact_cups_names_to_try_first, label_keywords_as_fallback)
     # IMPORTANT: exact_names is a tuple (not a set) so iteration order is
     # deterministic across Python invocations (sets are hash-randomised).
@@ -66,16 +89,83 @@ class PrintModule:
             ),
             ["print quality", "output quality", "quality mode", "printout mode"],
         ),
+        (
+            ("EPIJ_Brlss", "CNBorderless", "BorderlessPrint", "Borderless"),
+            ["borderless", "edge to edge", "full bleed"],
+        ),
     ]
 
     # IPP standard integer quality codes used by driverless/IPP-Everywhere printers.
     _IPP_QUALITY_LABELS: dict[str, str] = {"3": "Draft", "4": "Normal", "5": "High"}
+
+    # Fallback labels for binary borderless toggles whose PPD doesn't declare nice
+    # labels (Epson EPIJ_Brlss is the common case — raw values are True/False).
+    _BORDERLESS_LABELS: dict[str, str] = {
+        "True":  "Yes",
+        "False": "No",
+        "On":    "Yes",
+        "Off":   "No",
+    }
 
     # All option names that represent print quality (used by filtering logic).
     _QUALITY_OPT_NAMES: frozenset[str] = frozenset({
         "print-quality", "EPIJ_Qual", "CNQuality", "BrQuality",
         "OutputMode", "HPOutputMode", "PrintoutMode", "cupsPrintQuality",
     })
+
+    # Option names representing borderless toggles.
+    _BORDERLESS_OPT_NAMES: frozenset[str] = frozenset({
+        "EPIJ_Brlss", "CNBorderless", "BorderlessPrint", "Borderless",
+    })
+
+    # Option names representing a feed source / paper tray.
+    _PAPER_SOURCE_OPT_NAMES: frozenset[str] = frozenset({
+        "EPIJ_FdSo", "CNPaperSource", "InputSlot",
+    })
+
+    # Option names representing a paper size (vendor + standard).
+    _PAPER_SIZE_OPT_NAMES: frozenset[str] = frozenset({
+        "EPIJ_Size", "PageSize", "media", "media-size",
+    })
+
+    # Cassette-label keyword groups used to filter paper sizes after the
+    # user picks a feed source. Comparison is case-insensitive substring.
+    _CASSETTE_OPEN_KEYWORDS: tuple[str, ...] = (
+        # "Auto" lets the driver decide → never filter.
+        "auto",
+        # Rear / manual / specialty / multi-purpose feeds accept everything,
+        # including A3 / A3+ / large format.
+        "rear", "manual", "bypass", "multi", "specialty",
+        "mp tray", "mp-tray", "mptray",
+    )
+    _CASSETTE_PHOTO_KEYWORDS: tuple[str, ...] = (
+        "photo",
+    )
+    _CASSETTE_STANDARD_KEYWORDS: tuple[str, ...] = (
+        "cassette", "tray", "drawer", "front",
+    )
+
+    # Display-label substrings (case-insensitive) that mark a paper size as
+    # too large for a standard front cassette. Conservative — only filters
+    # well-known oversize formats.
+    _OVERSIZE_LABEL_KEYWORDS: tuple[str, ...] = (
+        "a3", "a3+", "super b",
+        "b4", "jis b4",
+        "tabloid", "11 x 17", "11x17",
+        "12 x 18", "12x18", "13 x 19", "13x19",
+        "8k",
+    )
+
+    # Display-label substrings that mark a paper size as a small photo media.
+    _PHOTO_SIZE_KEYWORDS: tuple[str, ...] = (
+        "4 x 6", "4x6", "5 x 7", "5x7", "3.5", "3,5",
+        "9 x 13", "9x13", "10 x 15", "10x15", "13 x 18", "13x18",
+        "100 x 148", "100x148", "hagaki",
+        "16:9",
+        "a6", "a7",
+        "stickers",
+        "card", "postcard",
+    )
 
     # Exact allowlists for Epson EPIJ printers, keyed by raw EPIJ_Medi value.
     # Derived from the actual combinations the Epson ET-8550 driver presents in its
@@ -152,14 +242,136 @@ class PrintModule:
                         for v in raw_vals:
                             if v not in val_labels and v in self._IPP_QUALITY_LABELS:
                                 val_labels[v] = self._IPP_QUALITY_LABELS[v]
+                    # For borderless toggles with no PPD label, map True/False/On/Off.
+                    if matched_name in self._BORDERLESS_OPT_NAMES:
+                        for v in raw_vals:
+                            if v not in val_labels and v in self._BORDERLESS_LABELS:
+                                val_labels[v] = self._BORDERLESS_LABELS[v]
                     # Pair each raw CUPS value with its human-readable display label
                     pairs = [(val_labels.get(v, v), v) for v in raw_vals]
                     result[matched_name] = (opt_label, pairs)
 
+            # Driver-aware borderless synthesis. Runs only when no real
+            # borderless option was already matched as the 5th category, so
+            # explicit EPIJ_Brlss / CNBorderless drivers keep their native
+            # toggle. Detects two encodings:
+            #   1. Multi-choice "page setup" options where a "3" value means
+            #      borderless (e.g. Epson EPIJ_PSrc).
+            #   2. PageSize values that have .NMgn / .Borderless / .FullBleed
+            #      variants (most CUPS/PWG drivers; queried directly from
+            #      lpoptions so it works even when the UI shows a vendor size
+            #      option like EPIJ_Size instead of PageSize).
+            self._borderless_state.pop(printer, None)
+            already_native = any(
+                k in self._BORDERLESS_OPT_NAMES for k in result.keys()
+            )
+            if not already_native:
+                synth = self._synthesize_borderless(printer, all_opts, ppd_labels, result)
+                if synth is not None:
+                    state, pair_label, pair_values = synth
+                    self._borderless_state[printer] = state
+                    result[_BORDERLESS_SYNTH] = (pair_label, pair_values)
+
         except Exception as exc:
             log.warning("query_options(%s) error: %s", printer, exc)
 
+        result = self._reorder_for_display(result)
         log.debug("Options for %s: %d configurable options", printer, len(result))
+        return result
+
+    @classmethod
+    def _reorder_for_display(
+        cls,
+        result: dict[str, tuple[str, list[tuple[str, str]]]],
+    ) -> dict[str, tuple[str, list[tuple[str, str]]]]:
+        """Place the borderless option right after the paper-size option.
+
+        Categories are otherwise discovered in this order: paper source, paper
+        size, media type, quality, borderless — but borderless reads more
+        naturally next to paper size in the UI.  Everything else keeps its
+        relative order.  If there is no paper-size option, borderless stays last.
+        """
+        keys = list(result.keys())
+        borderless = [
+            k for k in keys
+            if k in cls._BORDERLESS_OPT_NAMES or k == _BORDERLESS_SYNTH
+        ]
+        if not borderless:
+            return result
+        rest = [k for k in keys if k not in borderless]
+        insert_at = len(rest)
+        for i, k in enumerate(rest):
+            if k in cls._PAPER_SIZE_OPT_NAMES:
+                insert_at = i + 1
+                break
+        new_order = rest[:insert_at] + borderless + rest[insert_at:]
+        return {k: result[k] for k in new_order}
+
+    def _synthesize_borderless(
+        self,
+        printer: str,
+        all_opts: dict[str, tuple[str, list[str]]],
+        ppd_labels: dict[str, dict[str, str]],
+        matched_result: dict[str, tuple[str, list[tuple[str, str]]]],
+    ) -> tuple[dict, str, list[tuple[str, str]]] | None:
+        """Detect implicit borderless support and return (state, label, pairs).
+
+        Returns None when no borderless encoding is detected.
+        """
+        # Path 1 — Epson EPIJ_PSrc: a "Page Setup" picker that includes
+        # a Borderless choice (raw value "3"). We expose it as a Yes/No
+        # toggle and map Yes→3 / No→2 at submission time.
+        if _EPSON_PSRC_OPT in all_opts:
+            _, psrc_vals = all_opts[_EPSON_PSRC_OPT]
+            if _EPSON_PSRC_BORDERLESS in psrc_vals:
+                return (
+                    {"kind": "epij_psrc"},
+                    "Borderless",
+                    [("No", "False"), ("Yes", "True")],
+                )
+
+        # Path 2 — PageSize variants with .NMgn/.Borderless/.FullBleed.
+        # Try the standard PageSize option first (always present alongside
+        # vendor names like EPIJ_Size); fall back to whichever size option
+        # we surfaced in matched_result.
+        candidate_size_opts: list[str] = []
+        if "PageSize" in all_opts:
+            candidate_size_opts.append("PageSize")
+        for size_name in ("EPIJ_Size", "media"):
+            if size_name in all_opts and size_name not in candidate_size_opts:
+                candidate_size_opts.append(size_name)
+
+        for size_opt in candidate_size_opts:
+            _, size_vals = all_opts[size_opt]
+            variant_map = self._build_borderless_variant_map(size_vals)
+            if variant_map:
+                return (
+                    {
+                        "kind": "pagesize_variant",
+                        "size_opt": size_opt,
+                        "variant_map": variant_map,
+                    },
+                    "Borderless",
+                    [("No", "False"), ("Yes", "True")],
+                )
+        return None
+
+    @staticmethod
+    def _build_borderless_variant_map(values: list[str]) -> dict[str, str]:
+        """Return {base_value: borderless_variant_value} for every base that
+        has a matching borderless variant in *values*."""
+        value_set = set(values)
+        result: dict[str, str] = {}
+        for v in values:
+            for suffix in _BORDERLESS_SIZE_SUFFIXES:
+                if v.endswith(suffix) and len(v) > len(suffix):
+                    base = v[: -len(suffix)]
+                    # Some drivers join without the dot (e.g. "LetterBorderless"
+                    # ← "Letter"); for dotted suffixes we strip the dot.
+                    base = base.rstrip(".")
+                    if base in value_set:
+                        result[base] = v
+                    break
         return result
 
     def get_valid_option_values(
@@ -201,8 +413,46 @@ class PrintModule:
             if len(ppd_filtered) < len(all_values):
                 return ppd_filtered
 
-        # 3. General heuristics for all other drivers.
+        # 3. Paper-size filtering by feed source — Epson PPDs declare zero
+        #    UIConstraints between cassette and size, so we must heuristic.
+        if opt_name in self._PAPER_SIZE_OPT_NAMES:
+            cassette_label = next(
+                (lbl for k, lbl in preceding_labels.items()
+                 if k in self._PAPER_SOURCE_OPT_NAMES),
+                "",
+            )
+            if cassette_label:
+                size_filtered = self._filter_size_by_cassette(cassette_label, all_pairs)
+                if 0 < len(size_filtered) < len(all_values):
+                    return size_filtered
+
+        # 4. General heuristics for all other drivers.
         return self._filter_via_rules(preceding_labels, opt_name, all_pairs)
+
+    @classmethod
+    def _filter_size_by_cassette(
+        cls,
+        cassette_label: str,
+        all_pairs: list[tuple[str, str]],
+    ) -> list[str]:
+        """Return raw size values compatible with a feed-source cassette.
+
+        Classifies the cassette by display-label keyword and applies one of:
+          • OPEN  — accept everything (Auto, Rear, Manual, Specialty, MP tray)
+          • PHOTO — only small photo sizes (4×6, 5×7, A6, postcards, …)
+          • FRONT — standard front cassette: exclude A3/A3+/B4/Tabloid/etc.
+        Returns the unmodified list if classification is ambiguous.
+        """
+        cl = cassette_label.lower()
+        if any(kw in cl for kw in cls._CASSETTE_OPEN_KEYWORDS):
+            return [rv for _, rv in all_pairs]
+        if any(kw in cl for kw in cls._CASSETTE_PHOTO_KEYWORDS):
+            return [rv for disp, rv in all_pairs
+                    if any(kw in disp.lower() for kw in cls._PHOTO_SIZE_KEYWORDS)]
+        if any(kw in cl for kw in cls._CASSETTE_STANDARD_KEYWORDS):
+            return [rv for disp, rv in all_pairs
+                    if not any(kw in disp.lower() for kw in cls._OVERSIZE_LABEL_KEYWORDS)]
+        return [rv for _, rv in all_pairs]
 
     @staticmethod
     def _find_ppd_path(printer: str) -> str | None:
@@ -350,4 +600,60 @@ class PrintModule:
             return 0
 
     def build_config(self, printer: str, options: dict[str, str] | None = None) -> PrintConfig:
-        return PrintConfig(printer_name=printer, options=options or {})
+        opts = dict(options or {})
+        opts = self._resolve_synthetic_options(printer, opts)
+        return PrintConfig(printer_name=printer, options=opts)
+
+    def _resolve_synthetic_options(
+        self, printer: str, options: dict[str, str],
+    ) -> dict[str, str]:
+        """Translate UI-only synthetic option names (e.g. __BORDERLESS__) into
+        the real CUPS options the printer driver expects, then strip them."""
+        raw = options.pop(_BORDERLESS_SYNTH, "")
+        if not raw:
+            return options
+        state = self._borderless_state.get(printer)
+        if state is None:
+            return options
+        on = raw.lower() in ("true", "yes", "1", "on")
+        if state["kind"] == "epij_psrc":
+            options[_EPSON_PSRC_OPT] = (
+                _EPSON_PSRC_BORDERLESS if on else _EPSON_PSRC_STANDARD
+            )
+        elif state["kind"] == "pagesize_variant" and on:
+            size_opt = state["size_opt"]
+            variant_map = state["variant_map"]
+            # Use whichever PageSize-ish option the user actually picked,
+            # falling back to size_opt if present.
+            current_size = options.get(size_opt, "")
+            if current_size in variant_map:
+                options[size_opt] = variant_map[current_size]
+        return options
+
+    def borderless_state(self, printer: str) -> dict | None:
+        """Read-only access to the synth borderless state cached for *printer*."""
+        return self._borderless_state.get(printer)
+
+    @classmethod
+    def find_ppd_path(cls, printer: str) -> str | None:
+        """Public accessor for the printer's PPD path (or None if missing)."""
+        return cls._find_ppd_path(printer)
+
+    @classmethod
+    def get_page_size_points(cls, printer: str, *candidates: str) -> tuple[float, float] | None:
+        """Return physical (w_pt, h_pt) for a PageSize choice on *printer*.
+
+        Tries each *candidate* in order — typically the raw CUPS value first
+        (e.g. ``"A4"`` for generic drivers, ``"1"`` for vendor-coded drivers),
+        then the display label (``"A4"``) as a fallback. ``*PaperDimension``
+        entries are keyed by display name in most vendor PPDs, so caller
+        should pass both raw and display when available.
+        """
+        from workflow.page_geometry import get_page_size_points as _g
+        ppd = cls._find_ppd_path(printer)
+        for c in candidates:
+            if c:
+                dims = _g(ppd, c)
+                if dims:
+                    return dims
+        return None

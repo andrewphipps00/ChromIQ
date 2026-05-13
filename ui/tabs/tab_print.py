@@ -11,6 +11,7 @@ from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import (
     QApplication,
     QComboBox,
+    QDialog,
     QFileDialog,
     QFrame,
     QGroupBox,
@@ -26,12 +27,30 @@ from PyQt6.QtWidgets import (
 )
 
 from core.logger import get_logger
+from ui.dialogs.preflight_dialog import PreflightDialog
 from ui.tab_header import TabHeader
 from ui.tiff_preview import TiffPreview, _find_sidecar_channels
 from ui.tooltip_button import TooltipButton
 from ui.widgets import NoScrollComboBox, load_folder_icon, load_refresh_icon, open_file_dialog
 from workflow.cups_printer import CupsRawPrinter
+from workflow.page_geometry import (
+    ORIENTATION_LANDSCAPE,
+    check_size_mismatch,
+    compute_orientation,
+    read_tiff_dimensions_points,
+)
 from workflow.print_manager import PrintModule
+
+# CUPS option names that represent a paper-size selection — used to find which
+# combo value to look up in the PPD when computing orientation / mismatch.
+_PAGE_SIZE_KEYS = {"EPIJ_Size", "media", "PageSize"}
+# Option names whose "on" value means borderless is enabled (native vendor
+# toggles + the synthetic key surfaced by PrintModule for drivers that
+# encode borderless in PageSize variants or EPIJ_PSrc).
+_BORDERLESS_KEYS = {
+    "EPIJ_Brlss", "CNBorderless", "BorderlessPrint", "Borderless",
+    "__BORDERLESS__",
+}
 
 if TYPE_CHECKING:
     from core.settings import AppSettings
@@ -486,8 +505,8 @@ class TabPrint(QWidget):
             path, frame = self._preview._pages[self._preview._current]
             self._print_native([(path, frame)])
             return
-        path, frame = self._preview._pages[self._preview._current]
-        self._send_page(path, frame)
+        page = self._preview._pages[self._preview._current]
+        self._print_pages([page])
 
     def _on_print_all(self) -> None:
         if not self._preview._pages:
@@ -495,10 +514,10 @@ class TabPrint(QWidget):
         if self._settings.get("use_native_print_dialog", False):
             self._print_native(list(self._preview._pages))
             return
-        for path, frame in self._preview._pages:
-            self._send_page(path, frame)
+        self._print_pages(list(self._preview._pages))
 
-    def _send_page(self, tiff_path: Path, frame: int = 0) -> None:
+    def _print_pages(self, pages: list[tuple[Path, int]]) -> None:
+        """Run pre-send checks + preflight once, then submit each page."""
         printer = self._printer_combo.currentData() or ""
         if not printer:
             QMessageBox.warning(self, "No Printer", "Please select a printer before printing.")
@@ -512,29 +531,175 @@ class TabPrint(QWidget):
             )
             return
 
-        stuck = self._module.get_stuck_jobs(printer)
-        if stuck:
-            n = len(stuck)
-            dlg = QMessageBox(self)
-            dlg.setWindowTitle("Stuck Print Jobs Detected")
-            dlg.setIcon(QMessageBox.Icon.Warning)
-            dlg.setText(
-                f"There {'is' if n == 1 else 'are'} {n} stuck print "
-                f"job{'s' if n != 1 else ''} in the queue for \"{printer}\".\n\n"
-                "Stuck jobs can block new print jobs from being processed.\n"
-                "Clear them before printing?"
-            )
-            clear_btn  = dlg.addButton("Clear & Print",  QMessageBox.ButtonRole.AcceptRole)
-            dlg.addButton("Print Anyway", QMessageBox.ButtonRole.DestructiveRole)
-            cancel_btn = dlg.addButton(QMessageBox.StandardButton.Cancel)
-            dlg.setDefaultButton(clear_btn)
-            dlg.exec()
-            clicked = dlg.clickedButton()
-            if clicked is cancel_btn:
+        if not self._handle_stuck_jobs(printer):
+            return
+
+        selected_opts = {k: (c.currentData() or "") for k, c in self._option_combos.items()}
+        first_tiff, _ = pages[0]
+        orientation, page_size_pt, mismatch = self._compute_geometry(
+            printer, selected_opts, first_tiff
+        )
+
+        if self._settings.get("confirm_before_printing", True):
+            if not self._show_preflight(
+                printer, selected_opts, orientation, page_size_pt,
+                mismatch, len(pages),
+            ):
                 return
-            if clicked is clear_btn:
-                cleared = self._module.cancel_all_jobs(printer)
-                log.info("Cleared %d stuck job(s) before printing", cleared)
+        elif mismatch:
+            log.warning("Preflight disabled; printing despite mismatch: %s", mismatch)
+
+        for path, frame in pages:
+            self._send_page(path, frame, orientation, page_size_pt)
+
+    def _handle_stuck_jobs(self, printer: str) -> bool:
+        """Prompt to clear stuck jobs. Returns False if user cancels."""
+        stuck = self._module.get_stuck_jobs(printer)
+        if not stuck:
+            return True
+        n = len(stuck)
+        dlg = QMessageBox(self)
+        dlg.setWindowTitle("Stuck Print Jobs Detected")
+        dlg.setIcon(QMessageBox.Icon.Warning)
+        dlg.setText(
+            f"There {'is' if n == 1 else 'are'} {n} stuck print "
+            f"job{'s' if n != 1 else ''} in the queue for \"{printer}\".\n\n"
+            "Stuck jobs can block new print jobs from being processed.\n"
+            "Clear them before printing?"
+        )
+        clear_btn  = dlg.addButton("Clear & Print",  QMessageBox.ButtonRole.AcceptRole)
+        dlg.addButton("Print Anyway", QMessageBox.ButtonRole.DestructiveRole)
+        cancel_btn = dlg.addButton(QMessageBox.StandardButton.Cancel)
+        dlg.setDefaultButton(clear_btn)
+        dlg.exec()
+        clicked = dlg.clickedButton()
+        if clicked is cancel_btn:
+            return False
+        if clicked is clear_btn:
+            cleared = self._module.cancel_all_jobs(printer)
+            log.info("Cleared %d stuck job(s) before printing", cleared)
+        return True
+
+    def _compute_geometry(
+        self,
+        printer: str,
+        selected_opts: dict[str, str],
+        tiff_path: Path,
+    ) -> tuple[int | None, tuple[float, float] | None, str | None]:
+        """Return (orientation, page_size_pt, mismatch_msg) for the given selection.
+
+        Any/all may be None if PageSize is unset or the PPD doesn't declare
+        physical dimensions (typical for AirPrint/Driverless queues).
+        """
+        size_key = next(
+            (k for k in _PAGE_SIZE_KEYS if selected_opts.get(k)),
+            None,
+        )
+        if size_key is None:
+            return None, None, None
+        size_raw = selected_opts[size_key]
+        # Some vendor drivers (e.g. Epson EPIJ_Size) use opaque integer codes
+        # for raw values but key *PaperDimension by display label. Pass both.
+        size_display = ""
+        combo = self._option_combos.get(size_key)
+        if combo is not None:
+            size_display = combo.currentText()
+        page_dims = self._module.get_page_size_points(printer, size_raw, size_display)
+        if not page_dims:
+            return None, None, None
+        try:
+            tiff_w_pt, tiff_h_pt = read_tiff_dimensions_points(tiff_path)
+        except Exception as exc:
+            log.warning("Could not read TIFF dimensions for %s: %s", tiff_path.name, exc)
+            return None, page_dims, None
+        page_w_pt, page_h_pt = page_dims
+        orientation = compute_orientation(tiff_w_pt, tiff_h_pt, page_w_pt, page_h_pt)
+        mismatch = check_size_mismatch(tiff_w_pt, tiff_h_pt, page_w_pt, page_h_pt)
+        return orientation, page_dims, mismatch
+
+    def _show_preflight(
+        self,
+        printer: str,
+        selected_opts: dict[str, str],
+        orientation: int | None,
+        page_size_pt: tuple[float, float] | None,
+        mismatch: str | None,
+        page_count: int,
+    ) -> bool:
+        """Show the preflight dialog. Returns True if user accepts."""
+        rows: list[tuple[str, str]] = [("Printer", printer)]
+        # Per-option rows, using the human-readable category label and the
+        # selected combo's display text (not the raw CUPS value).
+        for opt_name, combo in self._option_combos.items():
+            raw = combo.currentData() or ""
+            if not raw:
+                continue
+            # Get the category label from the layout row's QLabel.
+            label = self._option_label_for(opt_name)
+            rows.append((label, combo.currentText()))
+        if orientation is not None:
+            rows.append((
+                "Orientation",
+                "Landscape (auto)" if orientation == ORIENTATION_LANDSCAPE
+                else "Portrait (auto)",
+            ))
+        if page_size_pt is not None:
+            w_mm = page_size_pt[0] * 25.4 / 72.0
+            h_mm = page_size_pt[1] * 25.4 / 72.0
+            rows.append(("Media size", f"{w_mm:.0f} × {h_mm:.0f} mm"))
+        rows.append(("Duplex", "Off (forced)"))
+        rows.append(("Colour management", "Off (forced)"))
+
+        warnings: list[str] = []
+        if mismatch:
+            warnings.append(mismatch)
+        # Warn if borderless is on but no photo-ish media keyword detected.
+        borderless_on = any(
+            (selected_opts.get(k, "").lower() in ("true", "on", "yes"))
+            for k in _BORDERLESS_KEYS
+        )
+        if borderless_on:
+            warnings.append(
+                "Borderless is enabled — make sure the chart was generated "
+                "for the full sheet area; standard chart margins will be clipped."
+            )
+
+        dlg = PreflightDialog(rows, warnings, page_count, self)
+        accepted = dlg.exec() == QDialog.DialogCode.Accepted
+        if accepted and dlg.dont_ask_again():
+            self._settings.set("confirm_before_printing", False)
+        return accepted
+
+    def _option_label_for(self, opt_name: str) -> str:
+        """Return the human-readable category label currently shown next to
+        the combo for *opt_name* (e.g. 'Paper Size', 'Media Type')."""
+        for i in range(self._opts_layout.count()):
+            item = self._opts_layout.itemAt(i)
+            layout = item.layout() if item else None
+            if layout is None:
+                continue
+            # First widget in the row is the QLabel, second is the QComboBox.
+            lbl_item = layout.itemAt(0)
+            combo_item = layout.itemAt(1)
+            if not lbl_item or not combo_item:
+                continue
+            if combo_item.widget() is self._option_combos.get(opt_name):
+                lbl = lbl_item.widget()
+                if isinstance(lbl, QLabel):
+                    return lbl.text().rstrip(":")
+        return opt_name
+
+    def _send_page(
+        self,
+        tiff_path: Path,
+        frame: int = 0,
+        orientation: int | None = None,
+        page_size_pt: tuple[float, float] | None = None,
+    ) -> None:
+        printer = self._printer_combo.currentData() or ""
+        if not printer:
+            QMessageBox.warning(self, "No Printer", "Please select a printer before printing.")
+            return
 
         # Extract the target frame to a temporary single-page TIFF when needed.
         tmp_path: Path | None = None
@@ -571,6 +736,8 @@ class TabPrint(QWidget):
             print_path, config,
             ink_channels=ink_channels,
             on_finish=_cleanup_and_finish,
+            orientation=orientation,
+            page_size_pt=page_size_pt,
         )
 
     def _on_print_done(self, code: int) -> None:
@@ -632,25 +799,36 @@ class TabPrint(QWidget):
         self._native_warn_spacer.setVisible(enabled)
         if enabled:
             if _sys.platform == "win32":
-                os_name = "Windows"
+                self._warn_lbl.setText(
+                    "⚠  You are printing via the Windows printer dialog. You must disable "
+                    "colour management in your printer driver before printing — otherwise "
+                    "the printer applies its own corrections and the chart will be unusable "
+                    "for accurate ICC profiling.\n\n"
+                    "How to disable colour management: after clicking Print, open the "
+                    "printer's Properties / Preferences and look for a colour-management "
+                    "section:\n"
+                    "  • Epson:  \"Epson Color Controls\" → Off (No Color Adjustment)\n"
+                    "  • Canon:  \"Color Options\" → Manual → None\n"
+                    "  • HP:     \"Color Options\" → Application Managed Colors\n"
+                    "  • Others: look for \"No Color Management\", \"Off\", or "
+                    "\"Application Controlled\"\n\n"
+                    "Allow pigment inks to dry fully before measuring "
+                    "(at least 1 h; 24 h for best accuracy)."
+                )
             else:
-                os_name = "macOS"
-            self._warn_lbl.setText(
-                f"⚠  You are printing via the {os_name} printer dialog. You must disable "
-                "colour management in your printer driver before printing — otherwise "
-                "the printer applies its own corrections and the chart will be unusable "
-                "for accurate ICC profiling.\n\n"
-                "How to disable colour management: after clicking Print, open the "
-                "dropdown in the dialog (usually labelled with your printer's name) "
-                "and look for a colour-management section:\n"
-                "  • Epson:  \"Epson Color Controls\" → Off (No Color Adjustment)\n"
-                "  • Canon:  \"Color Options\" → Manual → None\n"
-                "  • HP:     \"Color Options\" → Application Managed Colors\n"
-                "  • Others: look for \"No Color Management\", \"Off\", or "
-                "\"Application Controlled\"\n\n"
-                "Allow pigment inks to dry fully before measuring "
-                "(at least 1 h; 24 h for best accuracy)."
-            )
+                self._warn_lbl.setText(
+                    "⚠  You are printing via the macOS printer dialog. ChromIQ sends the "
+                    "chart as untagged device RGB at its exact generated size and puts the "
+                    "job in application-managed-colour mode, so the driver's own colour "
+                    "controls (Epson \"Color Settings\", Canon \"Color Options\", …) lock "
+                    "to \"Off / No Color Adjustment\" and appear greyed out — leave them.\n\n"
+                    "Just pick the correct paper / media type and print quality in the "
+                    "dialog. If the driver's colour control is NOT greyed out, or a colour "
+                    "shift shows in a print-to-PDF preview, switch to the standard "
+                    "(non-native) print mode in Settings.\n\n"
+                    "Allow pigment inks to dry fully before measuring "
+                    "(at least 1 h; 24 h for best accuracy)."
+                )
         else:
             self._warn_lbl.setText(
                 "⚠  Verify that all print settings above match the media you are printing on.\n\n"
@@ -664,6 +842,21 @@ class TabPrint(QWidget):
             )
 
     def _print_native(self, pages: list[tuple[Path, int]]) -> None:
+        import sys as _sys
+        if _sys.platform == "darwin":
+            try:
+                from workflow.native_print_macos import print_frames
+                print_frames(pages)
+            except Exception as exc:
+                log.error("Native macOS print failed: %s", exc)
+                QMessageBox.critical(
+                    self, "Print Failed",
+                    f"Could not open the macOS print dialog:\n{exc}",
+                )
+            return
+        self._print_native_qt(pages)
+
+    def _print_native_qt(self, pages: list[tuple[Path, int]]) -> None:
         from PyQt6.QtPrintSupport import QPrinter, QPrintDialog
         from PyQt6.QtGui import QPainter, QImage
         from PyQt6.QtWidgets import QDialog

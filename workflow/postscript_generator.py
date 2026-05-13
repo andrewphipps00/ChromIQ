@@ -72,6 +72,7 @@ class PostScriptGenerator:
         tiff_path: Path,
         dpi: int = 300,
         ink_channels: list[str] | None = None,
+        page_size_pt: tuple[float, float] | None = None,
     ) -> str:
         """Return a complete PS document for *tiff_path*.
 
@@ -79,23 +80,32 @@ class PostScriptGenerator:
         ink_channels: ordered ink codes matching the TIFF channels (e.g.
         ['c','m','y','k','lc','lm']) — required only for N > 4 channel DeviceN
         naming.  A sidecar .channels.json file is the usual source for this.
+        page_size_pt: physical media size (w_pt, h_pt). When set, drives the
+        PostScript setpagedevice PageSize so the PS document and any
+        `lp -o PageSize=...` agree. Defaults to the TIFF's own dimensions.
         """
         arr, actual_dpi = self._read_tiff(tiff_path, fallback_dpi=dpi)
         h, w, n_ch = arr.shape
         bits = 16 if arr.dtype == np.uint16 else 8
 
-        pts_w = w * _PT_PER_INCH / actual_dpi
-        pts_h = h * _PT_PER_INCH / actual_dpi
+        tiff_w_pt = w * _PT_PER_INCH / actual_dpi
+        tiff_h_pt = h * _PT_PER_INCH / actual_dpi
+        page_w, page_h = page_size_pt if page_size_pt else (tiff_w_pt, tiff_h_pt)
         level = 3 if (n_ch > 4 or bits > 8) else 2
 
         log.debug(
-            "PS: %s  %dx%d px  %.1f×%.1f pt  %d dpi  %d-bit  %d-ch  Level %d",
-            tiff_path.name, w, h, pts_w, pts_h, actual_dpi, bits, n_ch, level,
+            "PS: %s  %dx%d px  TIFF %.1f×%.1f pt  Page %.1f×%.1f pt  "
+            "%d dpi  %d-bit  %d-ch  Level %d",
+            tiff_path.name, w, h, tiff_w_pt, tiff_h_pt, page_w, page_h,
+            actual_dpi, bits, n_ch, level,
         )
 
         cs_block = self._colorspace_block(n_ch, ink_channels)
         hex_data = self._encode_hex(arr, bits)
-        return self._build_ps(w, h, pts_w, pts_h, bits, n_ch, cs_block, hex_data, level)
+        return self._build_ps(
+            w, h, tiff_w_pt, tiff_h_pt, page_w, page_h,
+            bits, n_ch, cs_block, hex_data, level,
+        )
 
     # ------------------------------------------------------------------
     # TIFF reading
@@ -214,23 +224,29 @@ class PostScriptGenerator:
     @staticmethod
     def _build_ps(
         w_px: int, h_px: int,
-        w_pt: float, h_pt: float,
+        tiff_w_pt: float, tiff_h_pt: float,
+        page_w_pt: float, page_h_pt: float,
         bits: int, n_ch: int,
         cs_block: str,
         hex_data: str,
         level: int,
     ) -> str:
+        # Centre the TIFF on the (possibly larger) page. When page_size_pt
+        # matches the TIFF, this collapses to the original behaviour.
+        x_off = (page_w_pt - tiff_w_pt) / 2.0
+        y_off = (page_h_pt - tiff_h_pt) / 2.0
         return (
             f"%!PS-Adobe-3.0\n"
             f"%%LanguageLevel: {level}\n"
             f"%cupsJobTicket: cups-disable-cmm\n"
             f"%%EndComments\n"
             f"\n"
-            f"<< /PageSize [{w_pt:.2f} {h_pt:.2f}] /ImagingBBox null >> setpagedevice\n"
+            f"<< /PageSize [{page_w_pt:.2f} {page_h_pt:.2f}] /ImagingBBox null >> setpagedevice\n"
             f"\n"
             f"{cs_block}\n"
             f"\n"
-            f"{w_pt:.2f} {h_pt:.2f} scale\n"
+            f"{x_off:.2f} {y_off:.2f} translate\n"
+            f"{tiff_w_pt:.2f} {tiff_h_pt:.2f} scale\n"
             f"{w_px} {h_px} {bits}\n"
             f"[{w_px} 0 0 -{h_px} 0 {h_px}]\n"
             f"currentfile /ASCIIHexDecode filter\n"

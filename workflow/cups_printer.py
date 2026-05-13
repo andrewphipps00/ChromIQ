@@ -95,15 +95,24 @@ class CupsRawPrinter:
         config: PrintConfig,
         ink_channels: list[str] | None = None,
         on_finish: Callable[[int], None] | None = None,
+        orientation: int | None = None,
+        page_size_pt: tuple[float, float] | None = None,
     ) -> None:
         """Convert *tiff_path* to PostScript and send to the printer in *config*.
 
         ink_channels: ordered ink codes for the TIFF channels — required for
         correct DeviceN naming when the target has more than 4 colorants.
-        Falls back to PDF automatically if CUPS rejects PostScript.
+        orientation: CUPS orientation-requested (3=portrait, 4=landscape).
+        page_size_pt: physical media size (w_pt, h_pt) — passed to the PS
+        setpagedevice line so the PS doc and `lp -o PageSize=...` agree.
+        Falls back to TIFF automatically if CUPS rejects PostScript.
         """
         try:
-            ps_text = PostScriptGenerator().generate(tiff_path, ink_channels=ink_channels)
+            ps_text = PostScriptGenerator().generate(
+                tiff_path,
+                ink_channels=ink_channels,
+                page_size_pt=page_size_pt,
+            )
         except Exception as exc:
             log.error("PS generation failed for %s: %s", tiff_path.name, exc)
             if on_finish:
@@ -116,7 +125,7 @@ class CupsRawPrinter:
         try:
             os.close(fd)
             ps_path.write_text(ps_text, encoding="ascii")
-            cmd = self._build_lp_command_ps(ps_path, config)
+            cmd = self._build_lp_command_ps(ps_path, config, orientation)
             log.info("CUPS PS print: %s", " ".join(str(c) for c in cmd))
             code, stderr = self._run_lp_result(cmd)
         finally:
@@ -125,7 +134,7 @@ class CupsRawPrinter:
         if code == 1 and "postscript" in stderr.lower():
             log.warning("PostScript rejected by CUPS — retrying as TIFF")
             self._cancel_pending_jobs(config.printer_name)
-            self._print_job_tiff(tiff_path, config, on_finish)
+            self._print_job_tiff(tiff_path, config, on_finish, orientation)
             return
 
         if on_finish:
@@ -136,6 +145,7 @@ class CupsRawPrinter:
         tiff_path: Path,
         config: PrintConfig,
         on_finish: Callable[[int], None] | None = None,
+        orientation: int | None = None,
     ) -> None:
         """Submit the TIFF directly with colour-space-aware CUPS raster options.
 
@@ -146,7 +156,7 @@ class CupsRawPrinter:
         only used on PostScript-capable RIPs that accept the PS path above.
         """
         n_ch = self._tiff_n_channels(tiff_path)
-        cmd = self._build_lp_command_tiff(tiff_path, config, n_ch)
+        cmd = self._build_lp_command_tiff(tiff_path, config, n_ch, orientation)
         log.info("CUPS TIFF print (fallback, %d-ch): %s", n_ch, " ".join(str(c) for c in cmd))
         self._run_lp(cmd, on_finish)
 
@@ -208,8 +218,14 @@ class CupsRawPrinter:
             log.warning("_cancel_pending_jobs error: %s", exc)
 
     @staticmethod
-    def _build_lp_command_ps(ps_path: Path, cfg: PrintConfig) -> list[str]:
+    def _build_lp_command_ps(
+        ps_path: Path,
+        cfg: PrintConfig,
+        orientation: int | None = None,
+    ) -> list[str]:
         merged = {**cfg.options, **_PS_JOB_OPTIONS}
+        if orientation is not None:
+            merged["orientation-requested"] = str(orientation)
         cmd = ["lp", "-d", cfg.printer_name]
         for key, val in merged.items():
             if val:
@@ -225,9 +241,16 @@ class CupsRawPrinter:
         return shape[2] if len(shape) == 3 else 1
 
     @staticmethod
-    def _build_lp_command_tiff(tiff_path: Path, cfg: PrintConfig, n_ch: int) -> list[str]:
+    def _build_lp_command_tiff(
+        tiff_path: Path,
+        cfg: PrintConfig,
+        n_ch: int,
+        orientation: int | None = None,
+    ) -> list[str]:
         opts = _TIFF_RASTER_OPTIONS.get(n_ch, _TIFF_RASTER_OPTIONS[3])
         merged = {**cfg.options, **opts}
+        if orientation is not None:
+            merged["orientation-requested"] = str(orientation)
         cmd = ["lp", "-d", cfg.printer_name]
         for key, val in merged.items():
             if val:

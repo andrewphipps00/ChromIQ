@@ -41,6 +41,7 @@ DEFAULTS: dict[str, Any] = {
     "print_media_type":          "",
     "print_quality":             "",
     "use_native_print_dialog":   sys.platform == "win32",
+    "confirm_before_printing":   True,
     # Step 3 — measure
     "measure_disable_bidir":       True,
     "measure_suppress_warnings":   True,

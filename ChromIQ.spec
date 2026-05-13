@@ -13,6 +13,7 @@ The result will be in dist/ChromIQ.app
 """
 
 import os
+import sys
 import certifi
 from PyInstaller.utils.hooks import collect_all
 certifi_where = certifi.where()
@@ -24,16 +25,26 @@ _ic_datas, _ic_binaries, _ic_hiddenimports = collect_all('imagecodecs')
 
 _we_datas, _we_binaries, _we_hiddenimports = collect_all('PyQt6-WebEngine')
 
+# PyObjC (macOS native print dialog) — lazily-imported submodules need help.
+if sys.platform == 'darwin':
+    _oc_datas, _oc_binaries, _oc_hiddenimports = collect_all('objc')
+    _ak_datas, _ak_binaries, _ak_hiddenimports = collect_all('AppKit')
+else:
+    _oc_datas = _oc_binaries = _oc_hiddenimports = []
+    _ak_datas = _ak_binaries = _ak_hiddenimports = []
+
 a = Analysis(
     ['main.py'],
     pathex=['.'],
-    binaries=[*_ic_binaries, *_we_binaries],
+    binaries=[*_ic_binaries, *_we_binaries, *_oc_binaries, *_ak_binaries],
     datas=[
         ('assets',           'assets'),
         ('data/parameters.yaml', 'data'),
         (certifi_where, 'certifi'),
         *_ic_datas,
         *_we_datas,
+        *_oc_datas,
+        *_ak_datas,
     ],
     hiddenimports=[
         'PyQt6.sip',
@@ -54,6 +65,8 @@ a = Analysis(
         'numpy',
         *_ic_hiddenimports,
         *_we_hiddenimports,
+        *_oc_hiddenimports,
+        *_ak_hiddenimports,
     ],
     hookspath=['hooks'],
     hooksconfig={},
@@ -101,8 +114,8 @@ app = BUNDLE(
     info_plist={
         'CFBundleName':              'ChromIQ',
         'CFBundleDisplayName':       'ChromIQ',
-        'CFBundleShortVersionString': '3.1.4',
-        'CFBundleVersion':           '3.1.4',
+        'CFBundleShortVersionString': '3.2.0-beta.1',
+        'CFBundleVersion':           '3.2.0-beta.1',
         'NSHighResolutionCapable':   True,
         'NSPrincipalClass':          'NSApplication',
         'NSRequiresAquaSystemAppearance': False,
