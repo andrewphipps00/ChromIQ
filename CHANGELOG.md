@@ -1,5 +1,21 @@
 # Changelog
 
+## v3.2.0
+Final release — includes all changes from v3.2.0-beta.1 through v3.2.0-beta.3
+(macOS native print dialog with ACPU-equivalent colour-management lock, preflight
+confirmation dialog, automatic page orientation, page-size mismatch warning,
+TIFF ResolutionUnit fix), plus:
+
+### Fixed
+- **Print tab — TIFF preview "shrunk" after chart generation**: When jumping
+  straight from Create Chart to Print Chart, the preview sometimes rendered
+  with a dark border around it (pixmap scaled too small). The preview's
+  `showEvent` repainted synchronously, before Qt had activated the now-visible
+  tab's layout, so the label still reported its hidden minimum size.
+  Switching tabs and back happened to work because the second show landed
+  after layout was already settled. The repaint is now deferred until layout
+  activation completes, so the first show always uses the true label size.
+
 ## v3.2.0-beta.3
 ### Added
 - **Native macOS print — colour-management lock verification**: After every print, ChromIQ now
