@@ -215,6 +215,49 @@ def _locked_settings_for(print_info) -> dict[str, str]:
     return settings
 
 
+class ColorManagementMismatch(RuntimeError):
+    """Raised when the post-submit verification doesn't match the values we
+    locked into the print settings — i.e. some part of the OS or driver stack
+    overrode our ``AP_ApplicationColorMatching`` request after the dialog
+    closed.  The job has already been submitted by the time this is raised;
+    the caller should warn the user but not retry.
+    """
+
+
+def _verify_color_management(print_info, stage: str) -> dict[str, tuple[str | None, str]]:
+    """Read each expected colour-management key back from *print_info*'s Cocoa
+    ``printSettings`` dict and compare against the value we locked.  Logs a
+    single ✓ line on success or a warning line on mismatch.
+
+    Returns a mapping of mismatches ``{key: (observed, expected)}``; empty if
+    every key matched.  *stage* is a short label ("post-dialog", "post-submit")
+    so we can tell at which point a mismatch crept in.
+    """
+    expected = _locked_settings_for(print_info)
+    cocoa = print_info.printSettings()
+    mismatches: dict[str, tuple[str | None, str]] = {}
+    parts: list[str] = []
+    for key, want in expected.items():
+        try:
+            raw = cocoa.objectForKey_(key)
+        except Exception:
+            raw = None
+        got = None if raw is None else str(raw)
+        if got == want:
+            parts.append(f"{key}={got}")
+        else:
+            mismatches[key] = (got, want)
+            parts.append(f"{key}={got!r}!=({want})")
+    summary = ", ".join(parts) if parts else "no keys to verify"
+    if mismatches:
+        log.warning("native print: [%s] colour-management verification FAILED — %s",
+                    stage, summary)
+    else:
+        log.info("native print: [%s] colour management verified OFF (%s)",
+                 stage, summary)
+    return mismatches
+
+
 def _lock_no_color_management(print_info) -> None:
     """Set the application-colour-matching keys (locked) on *print_info*'s
     PrintCore ``PMPrintSettings`` and sync them back into the Cocoa layer.
@@ -382,6 +425,8 @@ def print_frames(pages: list[tuple[Path, int]]) -> None:
         return
 
     _lock_no_color_management(print_info)
+    # Verify the lock survived the dialog before we hand the job to the spooler.
+    _verify_color_management(print_info, "post-dialog")
 
     op = AppKit.NSPrintOperation.printOperationWithView_printInfo_(view, print_info)
     op.setShowsPrintPanel_(False)
@@ -389,8 +434,21 @@ def print_frames(pages: list[tuple[Path, int]]) -> None:
     ok = op.runOperation()
     try:
         pi_after = op.printInfo()
-        log.info("native print: resolved printSettings = %r", dict(pi_after.printSettings()))
+        log.debug("native print: resolved printSettings = %r", dict(pi_after.printSettings()))
     except Exception as exc:  # pragma: no cover - diagnostics only
         log.warning("native print: could not dump resolved settings: %s", exc)
+        pi_after = print_info
     if not ok:
         log.warning("native print: job submission failed")
+        return
+    # Verify what the submitted job actually carried.  If something overrode
+    # the lock between our re-apply and submission, surface it to the user.
+    mismatches = _verify_color_management(pi_after, "post-submit")
+    if mismatches:
+        details = ", ".join(
+            f"{k}={got!r} (expected {want!r})" for k, (got, want) in mismatches.items()
+        )
+        raise ColorManagementMismatch(
+            "the job was submitted but ChromIQ could not verify that colour "
+            "management was disabled — " + details
+        )

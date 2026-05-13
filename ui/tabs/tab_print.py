@@ -826,9 +826,21 @@ class TabPrint(QWidget):
                     "controls (Epson \"Color Settings\", Canon \"Color Options\", …) lock "
                     "to \"Off / No Color Adjustment\" and appear greyed out — leave them.\n\n"
                     "Just pick the correct paper / media type and print quality in the "
-                    "dialog. If the driver's colour control is NOT greyed out, or a colour "
-                    "shift shows in a print-to-PDF preview, switch to the standard "
-                    "(non-native) print mode in Settings.\n\n"
+                    "dialog.\n\n"
+                    "About the \"Color Matching\" pane: macOS shows this pane (ColorSync vs "
+                    "the vendor's name) but does not let ChromIQ grey it out — that's an OS "
+                    "limitation Adobe Color Printer Utility has too. Its visible state is "
+                    "cosmetic; ChromIQ overrides it at the job level and the driver-side "
+                    "colour controls (the ones that actually shift pixels) stay locked OFF. "
+                    "After every print, ChromIQ reads the resolved settings back from the "
+                    "submitted job to confirm the lock survived — you'll get a clear warning "
+                    "dialog here if it didn't, and the result is recorded in "
+                    "~/Library/Logs/ChromIQ/chromiq.log as "
+                    "\"colour management verified OFF\". You can ignore the Color Matching "
+                    "pane.\n\n"
+                    "If the driver's colour control is NOT greyed out, or a colour shift "
+                    "shows in a print-to-PDF preview, switch to the standard (non-native) "
+                    "print mode in Settings.\n\n"
                     "Allow pigment inks to dry fully before measuring "
                     "(at least 1 h; 24 h for best accuracy)."
                 )
@@ -848,8 +860,20 @@ class TabPrint(QWidget):
         import sys as _sys
         if _sys.platform == "darwin":
             try:
-                from workflow.native_print_macos import print_frames
-                print_frames(pages)
+                from workflow.native_print_macos import print_frames, ColorManagementMismatch
+                try:
+                    print_frames(pages)
+                except ColorManagementMismatch as exc:
+                    log.warning("Native macOS print: %s", exc)
+                    QMessageBox.warning(
+                        self, "Colour Management Lock Not Verified",
+                        "The print job was sent, but ChromIQ could not verify that "
+                        "the printer driver's colour management was disabled.\n\n"
+                        f"Details: {exc}\n\n"
+                        "The print may have been colour-managed by the driver. Check "
+                        "the swatch with Digital Color Meter or reprint after switching "
+                        "to the non-native (standard) print mode in Settings.",
+                    )
             except Exception as exc:
                 log.error("Native macOS print failed: %s", exc)
                 QMessageBox.critical(

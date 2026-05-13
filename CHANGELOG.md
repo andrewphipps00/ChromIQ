@@ -1,5 +1,19 @@
 # Changelog
 
+## v3.2.0-beta.3
+### Added
+- **Native macOS print — colour-management lock verification**: After every print, ChromIQ now
+  reads the resolved colour-management keys back from the submitted job and confirms each one
+  matches the values it locked (`AP_ColorMatchingMode = AP_ApplicationColorMatching`,
+  `APCustomColorMatchingProfile = sRGB`, plus any vendor-PPD "no colour adjustment" key
+  detected). On success, the result is recorded in `~/Library/Logs/ChromIQ/chromiq.log` as
+  *"colour management verified OFF"*; on mismatch, a warning dialog tells the user the job was
+  sent but the lock couldn't be verified, so they can check the swatch or switch print modes.
+  The macOS print-mode warning text now also explains that the system's "Color Matching" pane
+  is cosmetic (macOS doesn't let third-party apps grey it out — Adobe Color Printer Utility has
+  the same limitation), and that ChromIQ overrides it at the job level regardless of what the
+  pane visibly shows.
+
 ## v3.2.0-beta.2
 ### Fixed
 - **Bogus "page-size mismatch" warning**: ArgyllCMS `printtarg` writes the chart TIFF's
