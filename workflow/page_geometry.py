@@ -25,7 +25,12 @@ ORIENTATION_LANDSCAPE = 4
 
 # Tolerances
 _ASPECT_TOL = 0.02   # 2% — treat aspects within this band as "same orientation"
-_FIT_TOL    = 0.03   # 3% — treat sizes within this band as "fits"
+# When we know the printer's printable area (from the PPD) the chart raster
+# should land inside it closely; allow a small band for printtarg's own margin.
+_FIT_TOL_IMAGEABLE = 0.04
+# Without that info we can only compare to the full sheet, which always loses
+# the printer's hardware margins, so the band has to be much wider.
+_FIT_TOL_PAPER = 0.08
 
 
 def get_page_size_points(ppd_path: str | None, value: str) -> tuple[float, float] | None:
@@ -58,6 +63,45 @@ def get_page_size_points(ppd_path: str | None, value: str) -> tuple[float, float
                 return float(m.group(1)), float(m.group(2))
             except ValueError:
                 continue
+    return None
+
+
+def get_imageable_area_points(ppd_path: str | None, value: str) -> tuple[float, float] | None:
+    """Return the printable (w_pt, h_pt) for a PageSize *value* in *ppd_path*.
+
+    Parses `*ImageableArea <value>: "<llx> <lly> <urx> <ury>"` and returns the
+    rectangle's width and height (urx-llx, ury-lly).  Returns None if the PPD is
+    unavailable or the entry is absent.  This is the closest proxy to what
+    `printtarg` actually rasters onto the page (it insets patches by a margin),
+    so it makes a more reliable "wrong paper?" check than the full sheet size.
+    """
+    if not ppd_path or not value:
+        return None
+    try:
+        text = pathlib.Path(ppd_path).read_text(errors="replace")
+    except OSError:
+        return None
+
+    candidates = [value]
+    for suffix in (".Borderless", ".FullBleed", "Borderless", "FullBleed"):
+        if value.endswith(suffix):
+            candidates.append(value[: -len(suffix)])
+
+    for cand in candidates:
+        pattern = re.compile(
+            rf'^\*ImageableArea\s+{re.escape(cand)}(?:/[^:]+)?:\s*'
+            r'"([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)"',
+            re.MULTILINE,
+        )
+        m = pattern.search(text)
+        if m:
+            try:
+                llx, lly, urx, ury = (float(g) for g in m.groups())
+            except ValueError:
+                continue
+            w, h = urx - llx, ury - lly
+            if w > 0 and h > 0:
+                return w, h
     return None
 
 
@@ -139,21 +183,30 @@ def compute_orientation(
 def check_size_mismatch(
     tiff_w_pt: float, tiff_h_pt: float,
     page_w_pt: float, page_h_pt: float,
+    imageable_pt: tuple[float, float] | None = None,
 ) -> str | None:
-    """Return a human-readable warning if the TIFF doesn't fit the page after
-    auto-rotation, else None.
+    """Return a human-readable warning if the chart doesn't match the selected
+    paper after auto-rotation, else None.
 
-    Compares both possible TIFF orientations against the page; reports
-    mismatch only when neither orientation fits within ±3% on both axes.
+    `printtarg` rasters the chart inside the printer's printable area (with its
+    own small margin), so when *imageable_pt* (the printable w×h from the PPD)
+    is supplied the chart is compared against that with a tight tolerance.
+    Otherwise it falls back to comparing against the full sheet with a much
+    wider tolerance, because the chart will always be missing the printer's
+    hardware margins.  Both chart orientations are tried.
     """
     if tiff_w_pt <= 0 or tiff_h_pt <= 0 or page_w_pt <= 0 or page_h_pt <= 0:
         return None
 
+    if imageable_pt and imageable_pt[0] > 0 and imageable_pt[1] > 0:
+        ref_w, ref_h = imageable_pt
+        tol = _FIT_TOL_IMAGEABLE
+    else:
+        ref_w, ref_h = page_w_pt, page_h_pt
+        tol = _FIT_TOL_PAPER
+
     def _fits(w: float, h: float) -> bool:
-        return (
-            abs(w - page_w_pt) / page_w_pt <= _FIT_TOL
-            and abs(h - page_h_pt) / page_h_pt <= _FIT_TOL
-        )
+        return abs(w - ref_w) / ref_w <= tol and abs(h - ref_h) / ref_h <= tol
 
     if _fits(tiff_w_pt, tiff_h_pt) or _fits(tiff_h_pt, tiff_w_pt):
         return None
@@ -161,8 +214,9 @@ def check_size_mismatch(
     tiff_mm = (tiff_w_pt * 25.4 / _PT_PER_INCH, tiff_h_pt * 25.4 / _PT_PER_INCH)
     page_mm = (page_w_pt * 25.4 / _PT_PER_INCH, page_h_pt * 25.4 / _PT_PER_INCH)
     return (
-        f"Page-size mismatch: the chart was generated for "
+        f"Possible paper mismatch: the chart raster is "
         f"{tiff_mm[0]:.0f} × {tiff_mm[1]:.0f} mm but the selected paper is "
-        f"{page_mm[0]:.0f} × {page_mm[1]:.0f} mm. The print will be scaled or "
-        f"cropped. Regenerate the chart for this paper size to avoid this."
+        f"{page_mm[0]:.0f} × {page_mm[1]:.0f} mm — it may have been generated "
+        f"for a different paper size. If you continue, the printer will scale "
+        f"or crop it. Regenerate the chart for this paper to be safe."
     )

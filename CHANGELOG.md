@@ -1,5 +1,20 @@
 # Changelog
 
+## v3.2.0-beta.2
+### Fixed
+- **Bogus "page-size mismatch" warning**: ArgyllCMS `printtarg` writes the chart TIFF's
+  resolution in pixels-per-centimetre, which ChromIQ was reading as DPI directly — so an A4
+  chart was reported as 533 × 754 mm and the preflight dialog showed a false mismatch warning
+  (and the generated PostScript could be mis-sized). `_read_dpi` now honours the TIFF's
+  ResolutionUnit tag.
+
+### Changed
+- **Paper-mismatch check**: now compares the chart against the printer's *printable area*
+  (from the PPD's `*ImageableArea`) when available — instead of the full sheet — so the normal
+  loss of the printer's hardware margins no longer trips the warning. Falls back to comparing
+  against the full sheet with a wider tolerance when no printable-area data is available, and
+  the warning is reworded to "possible paper mismatch".
+
 ## v3.2.0-beta.1
 ### Added
 - **macOS native print dialog — Adobe Color Printer Utility behaviour**: When "Use default

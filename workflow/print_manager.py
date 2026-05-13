@@ -657,3 +657,20 @@ class PrintModule:
                 if dims:
                     return dims
         return None
+
+    @classmethod
+    def get_imageable_area_points(
+        cls, printer: str, *candidates: str,
+    ) -> tuple[float, float] | None:
+        """Return the printable (w_pt, h_pt) for a PageSize choice on *printer*,
+        from the PPD's ``*ImageableArea`` entry.  Same candidate-ordering rules
+        as :meth:`get_page_size_points`.  ``None`` if the PPD or entry is absent.
+        """
+        from workflow.page_geometry import get_imageable_area_points as _g
+        ppd = cls._find_ppd_path(printer)
+        for c in candidates:
+            if c:
+                dims = _g(ppd, c)
+                if dims:
+                    return dims
+        return None

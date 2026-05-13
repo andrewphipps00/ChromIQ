@@ -607,6 +607,7 @@ class TabPrint(QWidget):
         page_dims = self._module.get_page_size_points(printer, size_raw, size_display)
         if not page_dims:
             return None, None, None
+        imageable = self._module.get_imageable_area_points(printer, size_raw, size_display)
         try:
             tiff_w_pt, tiff_h_pt = read_tiff_dimensions_points(tiff_path)
         except Exception as exc:
@@ -614,7 +615,9 @@ class TabPrint(QWidget):
             return None, page_dims, None
         page_w_pt, page_h_pt = page_dims
         orientation = compute_orientation(tiff_w_pt, tiff_h_pt, page_w_pt, page_h_pt)
-        mismatch = check_size_mismatch(tiff_w_pt, tiff_h_pt, page_w_pt, page_h_pt)
+        mismatch = check_size_mismatch(
+            tiff_w_pt, tiff_h_pt, page_w_pt, page_h_pt, imageable_pt=imageable,
+        )
         return orientation, page_dims, mismatch
 
     def _show_preflight(
