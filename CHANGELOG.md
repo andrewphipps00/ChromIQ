@@ -1,5 +1,17 @@
 # Changelog
 
+## v3.2.6
+### Fixed
+- **Universal DMG launches on Apple Silicon but crashed on Intel Macs** with
+  `dlopen … QtGui.framework/Versions/A/QtGui … incompatible architecture`.
+  The CI lipo step that fattens arch-specific wheels into universal2 only
+  matched `*.so` and `*.dylib` files, so the Qt6 framework binaries (which
+  live at `PyQt6/Qt6/lib/Qt*.framework/Versions/A/Qt*` with no extension)
+  were silently left arm64-only. `PyQt6-Qt6` and `PyQt6-WebEngine-Qt6` were
+  also missing from the merge list entirely. The lipo helper now walks the
+  x86_64 wheel by relative path and merges every Mach-O it finds, and both
+  Qt framework packages are included — restoring true universal2 builds.
+
 ## v3.2.5
 ### Added
 - **Report a Bug button in Preferences**: the bottom row of the Preferences

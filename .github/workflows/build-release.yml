@@ -72,20 +72,26 @@ jobs:
         if: matrix.arch == 'universal2'
         run: pip3 install --quiet 'imagecodecs==2025.11.11'
 
-      # numpy, Pillow, PyYAML, and imagecodecs ship only arch-specific wheels — no
-      # universal2 exists on PyPI for any of them. Strategy: query PyPI JSON API for
-      # each package's x86_64 wheel, download it, and lipo-merge every .so/.dylib
-      # with the arm64 binaries already installed by pip.
+      # numpy, Pillow, PyYAML, imagecodecs, PyQt6-Qt6 and PyQt6-WebEngine-Qt6 ship
+      # only arch-specific wheels — no universal2 exists on PyPI for any of them.
+      # Strategy: query PyPI JSON API for each package's x86_64 wheel, download it,
+      # and lipo-merge every Mach-O binary with the arm64 file already installed
+      # by pip, matching by relative path inside the wheel/site-packages tree.
+      # We match Mach-O files (not just *.so / *.dylib) because PyQt6-Qt6 ships
+      # framework binaries with no extension at e.g.
+      # PyQt6/Qt6/lib/QtGui.framework/Versions/A/QtGui — the original extension
+      # filter missed those, leaving the universal2 DMG arm64-only for Qt itself.
       # lipo_pkg args: <PyPI name> <site-packages dir> <version tag filter>
       #   ver_filter must appear in the wheel filename to select the right Python
-      #   version. Use "cp313" for cpython-tagged wheels, "abi3" for stable-ABI wheels.
+      #   version. Use "cp313" for cpython-tagged wheels, "abi3" for stable-ABI
+      #   wheels, "py3-none" for pure-tag arch-specific wheels (PyQt6-Qt6 etc).
       - name: Make C extensions universal2 via lipo (universal2 only)
         if: matrix.arch == 'universal2'
         run: |
           SITELIB=$(python3 -c "import site; print(site.getsitepackages()[0])")
           lipo_pkg() {
             local pypi_name="$1" pkg_dir="$2" ver_filter="$3"
-            local VER X86_URL TMPDIR
+            local VER X86_URL TMPDIR safe x86_root arm_root rel arm_file merged=0
             VER=$(python3 -c "import importlib.metadata; print(importlib.metadata.version('${pypi_name}'))")
             X86_URL=$(curl -fsSL "https://pypi.org/pypi/${pypi_name}/${VER}/json" | \
               python3 -c "import json,sys; vf='${ver_filter}'; d=json.load(sys.stdin); w=[f['url'] for f in d['urls'] if 'macosx' in f['filename'] and 'x86_64' in f['filename'] and vf in f['filename'] and f['filename'].endswith('.whl')]; print(w[0] if w else '')")
@@ -94,23 +100,38 @@ jobs:
               return 0
             fi
             echo "Downloading x86_64 wheel for ${pypi_name} ${VER}: $X86_URL"
-            TMPDIR="/tmp/${pkg_dir}_x86"
+            safe="${pkg_dir//\//_}"
+            TMPDIR="/tmp/${safe}_x86"
+            rm -rf "$TMPDIR"
             mkdir -p "$TMPDIR"
-            curl -fsSL -o "/tmp/${pkg_dir}.whl" "$X86_URL"
-            unzip -q "/tmp/${pkg_dir}.whl" -d "$TMPDIR"
-            find "${SITELIB}/${pkg_dir}" -type f \( -name "*.so" -o -name "*.dylib" \) | while read -r arm_bin; do
-              name=$(basename "$arm_bin")
-              x86_bin=$(find "$TMPDIR/${pkg_dir}" -type f -name "$name" 2>/dev/null | head -1)
-              if [ -n "$x86_bin" ]; then
-                lipo -create "$arm_bin" "$x86_bin" -output "$arm_bin"
-                echo "Merged ${pkg_dir}: $name"
+            curl -fsSL -o "/tmp/${safe}.whl" "$X86_URL"
+            unzip -q "/tmp/${safe}.whl" -d "$TMPDIR"
+            x86_root="$TMPDIR/${pkg_dir}"
+            arm_root="${SITELIB}/${pkg_dir}"
+            if [ ! -d "$x86_root" ]; then
+              echo "ERROR: ${pkg_dir} not found in x86_64 wheel for ${pypi_name}"
+              return 1
+            fi
+            while IFS= read -r x86_file; do
+              [ -f "$x86_file" ] || continue
+              case "$(file -b "$x86_file" 2>/dev/null)" in
+                Mach-O*) ;;
+                *) continue ;;
+              esac
+              rel="${x86_file#$x86_root/}"
+              arm_file="$arm_root/$rel"
+              if [ -f "$arm_file" ] && lipo -create "$arm_file" "$x86_file" -output "$arm_file" 2>/dev/null; then
+                merged=$((merged + 1))
               fi
-            done
+            done < <(find "$x86_root" -type f)
+            echo "Merged $merged Mach-O binaries for ${pypi_name}"
           }
-          lipo_pkg numpy    numpy       cp313
-          lipo_pkg Pillow   PIL         cp313
-          lipo_pkg PyYAML   yaml        cp313
-          lipo_pkg imagecodecs imagecodecs abi3
+          lipo_pkg numpy                numpy        cp313
+          lipo_pkg Pillow               PIL          cp313
+          lipo_pkg PyYAML               yaml         cp313
+          lipo_pkg imagecodecs          imagecodecs  abi3
+          lipo_pkg PyQt6-Qt6            PyQt6/Qt6    py3-none
+          lipo_pkg PyQt6-WebEngine-Qt6  PyQt6/Qt6    py3-none
 
       - name: Build app bundle
         env:
