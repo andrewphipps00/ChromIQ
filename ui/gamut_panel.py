@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from PyQt6.QtCore import QEventLoop, QSize, QTimer, QUrl, Qt
-from PyQt6.QtGui import QFont
+from PyQt6.QtGui import QColor, QFont
 from PyQt6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -475,6 +475,12 @@ class GamutPanel(QWidget):
         try:
             from PyQt6.QtWebEngineWidgets import QWebEngineView
             view = QWebEngineView(self)
+            # Set the Chromium page surface colour BEFORE any content loads —
+            # otherwise the first compositor frame on first tab open paints at
+            # the default white, flashing through before the placeholder HTML
+            # renders. The QWidget stylesheet below only styles the widget
+            # chrome, not the embedded Chromium surface.
+            view.page().setBackgroundColor(QColor("#111111"))
             try:
                 from PyQt6.QtWebEngineCore import QWebEngineSettings
                 view.settings().setAttribute(
