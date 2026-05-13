@@ -138,6 +138,37 @@ jobs:
           PYINSTALLER_TARGET_ARCH: ${{ matrix.target_arch_env }}
         run: python3 -m PyInstaller ChromIQ.spec
 
+      # Safety net for Intel-Mac regressions: walk every Mach-O file in the bundle
+      # and assert it contains both x86_64 and arm64 slices. Catches anything the
+      # lipo merge step missed (e.g. a new dependency that ships arch-specific wheels
+      # without us noticing). Failed checks abort the build before we ship a broken
+      # "universal" DMG to users — see issue #11 (v3.2.5) for the precedent.
+      - name: Verify universal2 bundle (every Mach-O must be fat)
+        if: matrix.arch == 'universal2'
+        run: |
+          set -euo pipefail
+          fail=0
+          checked=0
+          while IFS= read -r b; do
+            [ -f "$b" ] || continue
+            case "$(file -b "$b" 2>/dev/null)" in
+              Mach-O*) ;;
+              *) continue ;;
+            esac
+            checked=$((checked + 1))
+            archs=$(lipo -archs "$b" 2>/dev/null || echo "")
+            if [[ "$archs" != *"x86_64"* || "$archs" != *"arm64"* ]]; then
+              echo "::error file=$b::Not universal2: archs=[$archs]"
+              fail=1
+            fi
+          done < <(find dist/ChromIQ.app -type f)
+          echo "Checked $checked Mach-O binaries"
+          if [ "$fail" -ne 0 ]; then
+            echo "Universal2 verification FAILED — bundle would be broken on Intel Macs"
+            exit 1
+          fi
+          echo "All $checked Mach-O binaries are universal2"
+
       - name: Codesign app (ad-hoc)
         run: |
           # Sign bottom-up: leaf binaries first, then frameworks, then the app.
