@@ -769,12 +769,50 @@ class GamutPanel(QWidget):
             ).exec()
 
     def _on_app_quit(self) -> None:
-        if self._web_view is not None:
-            self._web_view.stop()
-            self._web_view.setUrl(QUrl("about:blank"))
-            _loop = QEventLoop()
-            QTimer.singleShot(200, _loop.quit)
-            _loop.exec()
+        # PyQt6 + QtWebEngine shutdown race: if the view (and its Chromium
+        # child objects) is still alive when QApplication enters its
+        # destructor, SIP walks the wrapper graph and follows a dangling
+        # pointer in the Chromium subtree — EXC_BAD_ACCESS inside
+        # sip_api_visit_wrappers/dealloc_QApplication. Force the view to be
+        # destroyed *before* the QApplication destructor runs.
+        view = self._web_view
+        if view is None:
+            return
+        self._web_view = None
+
+        try:
+            view.loadFinished.disconnect()
+        except (TypeError, RuntimeError):
+            pass
+        try:
+            view.stop()
+            view.setUrl(QUrl("about:blank"))
+        except RuntimeError:
+            pass
+
+        # Let about:blank settle so pending Chromium IPC drains.
+        _loop = QEventLoop()
+        QTimer.singleShot(200, _loop.quit)
+        _loop.exec()
+
+        try:
+            page = view.page()
+            if page is not None:
+                page.setParent(None)
+                page.deleteLater()
+        except RuntimeError:
+            pass
+        try:
+            view.setParent(None)
+            view.deleteLater()
+        except RuntimeError:
+            pass
+
+        # Actually run the deferred deletes before QApplication destructs.
+        app = QApplication.instance()
+        if app is not None:
+            for _ in range(3):
+                app.processEvents()
 
     def _on_reset_view(self) -> None:
         if self._web_view is not None:
