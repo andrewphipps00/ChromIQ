@@ -19,7 +19,15 @@ Pre-built DMGs are attached to each [GitHub Release](https://github.com/itsab198
 | `ChromIQ-macOS-universal.dmg` | Apple Silicon **and** Intel (recommended) |
 | `ChromIQ-macOS-arm64.dmg` | Apple Silicon only |
 
-Open the DMG, drag ChromIQ to Applications, eject, then launch. **First launch:** right-click → Open to bypass Gatekeeper (the app is ad-hoc signed, not notarized). ArgyllCMS must be installed separately — see [Requirements](#requirements).
+Open the DMG, drag ChromIQ to Applications, eject, then launch.
+
+ChromIQ is ad-hoc signed (not notarized). On macOS Sonoma+ Gatekeeper may refuse to launch the app with *"Apple cannot check it for malicious software."* If that happens, remove the quarantine flag in Terminal:
+
+```
+xattr -dr com.apple.quarantine /Applications/ChromIQ.app
+```
+
+Then double-click as normal. ArgyllCMS must be installed separately — see [Requirements](#requirements).
 
 ### Windows
 

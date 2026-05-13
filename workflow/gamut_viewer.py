@@ -154,7 +154,9 @@ class GamutViewer(QObject):
                 shutil.rmtree(work_dir, ignore_errors=True)
                 self.error.emit(f"empty:{params.icc_path}")
                 return
-            shutil.copy2(params.icc_path, icc_copy)
+            # copyfile, not copy2: macOS system ColorSync profiles carry
+            # SIP-protected BSD flags that copystat cannot replicate.
+            shutil.copyfile(params.icc_path, icc_copy)
         except OSError as exc:
             shutil.rmtree(work_dir, ignore_errors=True)
             self.error.emit(f"Cannot copy ICC file: {exc}")

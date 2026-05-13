@@ -1,0 +1,113 @@
+name: Bug report
+description: Something in ChromIQ doesn't work the way it should.
+title: "[Bug] <short summary>"
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. The more concrete detail you provide, the faster it can be fixed.
+
+  - type: input
+    id: chromiq_version
+    attributes:
+      label: ChromIQ version
+      description: From the title bar, the DMG/ZIP filename, or `About ChromIQ`.
+      placeholder: e.g. v3.2.2
+    validations:
+      required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - macOS (Apple Silicon)
+        - macOS (Intel)
+        - Windows (x64)
+        - Windows (ARM64)
+        - Linux
+        - Other / not sure
+    validations:
+      required: true
+
+  - type: input
+    id: os_version
+    attributes:
+      label: OS version
+      placeholder: e.g. macOS Sonoma 14.8.4, Windows 11 24H2
+    validations:
+      required: true
+
+  - type: input
+    id: hardware
+    attributes:
+      label: Hardware
+      description: Mac model / PC make + CPU, helpful for performance and Argyll-binary issues.
+      placeholder: e.g. MacBook Pro 13" 2019, Intel i5
+
+  - type: input
+    id: argyll_version
+    attributes:
+      label: ArgyllCMS version and install method
+      placeholder: e.g. 3.5.0, installed via Homebrew at /usr/local/bin
+    validations:
+      required: true
+
+  - type: input
+    id: instrument
+    attributes:
+      label: Spectrophotometer (if relevant)
+      placeholder: e.g. X-Rite i1Pro 2
+
+  - type: textarea
+    id: what_happened
+    attributes:
+      label: What happened?
+      description: Describe the actual behaviour you observed.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Numbered steps from a clean state. The more precise, the better.
+      placeholder: |
+        1. Open ChromIQ
+        2. Go to tab 5 (Check & Refine)
+        3. Click ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / error messages
+      description: Paste the contents of the in-app log panel and any popup error text. Drag-and-drop screenshots if helpful.
+      render: text
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity (your judgement — maintainer may adjust)
+      options:
+        - Critical — app unusable, crash, data loss, no workaround
+        - High — major feature broken, strong workflow impact
+        - Medium — moderate issue, workaround exists
+        - Low — minor / cosmetic
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Anything else?
+      description: Screenshots, sample files, environment quirks, etc.

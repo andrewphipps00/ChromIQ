@@ -1,5 +1,31 @@
 # Changelog
 
+## v3.2.3
+### Fixed
+- **Gamut Analysis failed when comparison profile was loaded from
+  `/System/Library/ColorSync/Profiles/`** (e.g. `sRGB Profile.icc`):
+  ChromIQ copies the comparison ICC into a private temp directory before
+  invoking `iccgamut`, and was using `shutil.copy2`, which copies file data
+  *and* metadata. macOS system ColorSync profiles carry the SIP-protected
+  BSD flag `SF_RESTRICTED` — the data copy succeeded but `copystat` failed
+  with `[Errno 1] Operation not permitted` when re-applying the flag to the
+  destination, surfacing as "Gamut Analysis Failed — Cannot copy ICC file".
+  User-installed profiles under `~/Library/ColorSync/Profiles/` lacked the
+  flag and were unaffected. ChromIQ now uses `shutil.copyfile`, which copies
+  only the file bytes and skips metadata. Reported by @soul-traveller in #12.
+
+### Changed
+- Installation instructions now document the
+  `xattr -dr com.apple.quarantine /Applications/ChromIQ.app` workaround for
+  macOS Sonoma+ where Gatekeeper refuses to launch the ad-hoc-signed bundle.
+  Bundled into the README and the auto-generated release notes for future
+  builds.
+
+### Project
+- Added GitHub issue templates (`bug_report.yml`, `feature_request.yml`) and
+  the supporting `platform:` / `Severity:` labels, so reports can be
+  categorised consistently. Thanks to @soul-traveller for the suggestion.
+
 ## v3.2.2
 ### Fixed
 - **Intermittent crash on app quit (`EXC_BAD_ACCESS` in `CrBrowserMain`)**:
