@@ -1,5 +1,21 @@
 # Changelog
 
+## v3.2.7
+### Fixed
+- **Native macOS print dialog ignored chart paper size**: the new
+  Sequoia/Tahoe print panel hides the standalone paper-size control, and
+  ChromIQ's native print path never called `setPaperSize_`, so the job
+  inherited whatever paper was last in `sharedPrintInfo` (typically
+  Letter/A4). With clip pagination set on the print info, charts larger
+  than that default were silently cropped at print time. The native
+  print path now sets the paper size to the chart's own dimensions
+  (computed from the TIFF's resolution tag) before opening the dialog,
+  and explicitly enables `NSPrintPanelShowsPaperSize`,
+  `NSPrintPanelShowsOrientation`, `NSPrintPanelShowsScaling` and
+  `NSPrintPanelShowsPageSetupAccessory` on the panel so the user can
+  still override paper / orientation / scale in the dialog or via the
+  driver's Printer Options pane.
+
 ## v3.2.6
 ### Fixed
 - **Universal DMG launches on Apple Silicon but crashed on Intel Macs** with
