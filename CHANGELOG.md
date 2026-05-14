@@ -1,5 +1,26 @@
 # Changelog
 
+## v3.5.0-beta.2
+### Fixed
+- **Linux: Qt xcb platform plugin crash on launch** — the beta.1 tarball
+  aborted on first run with
+  `qt.qpa.plugin: From 6.5.0, xcb-cursor0 or libxcb-cursor0 is needed to
+  load the Qt xcb platform plugin` on any distro that did not happen to
+  have `libxcb-cursor0` installed system-wide. `ChromIQLinux.spec` now
+  detects nine xcb/xkbcommon helper libs on the build host and bundles
+  them into the tarball next to the binary, so the Qt xcb plugin resolves
+  its dependencies from `$ORIGIN` and the bundle launches without any
+  system packages required. Reported by the Debian beta tester.
+
+### Docs
+- `HOW_TO_BUILD.txt`: retitled to drop the `.app` suffix; macOS-only steps
+  (4, 4b, 5, 6 — PyInstaller spec choice, `codesign --deep`, "open .app",
+  zip a `.app`) are now explicitly labeled so Linux readers stop reading
+  them as cross-platform. Added a Troubleshooting subsection with
+  apt/dnf/pacman fallback commands for the xcb-cursor error.
+- `README.md`: Linux section gains a one-line troubleshooting note with
+  the same fallback install commands.
+
 ## v3.5.0-beta.1
 ### Added
 - **Linux support (beta)**: ChromIQ now builds and runs on Debian/Ubuntu and

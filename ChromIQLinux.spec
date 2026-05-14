@@ -24,6 +24,67 @@ from PyInstaller.utils.hooks import collect_all, collect_dynamic_libs
 
 certifi_where = certifi.where()
 
+
+def _find_system_lib(name):
+    """Locate a system shared library on the build host.
+
+    Returns the absolute path of the first match found in the standard
+    multi-arch / lib64 / lib search dirs, or ``None`` if not present.
+    """
+    for d in (
+        '/usr/lib/x86_64-linux-gnu',
+        '/usr/lib/aarch64-linux-gnu',
+        '/lib/x86_64-linux-gnu',
+        '/lib/aarch64-linux-gnu',
+        '/usr/lib64',
+        '/lib64',
+        '/usr/lib',
+        '/lib',
+    ):
+        p = os.path.join(d, name)
+        if os.path.exists(p):
+            # Return the SONAME-style path (libxcb-cursor.so.0) — NOT the
+            # realpath — because PyInstaller uses the basename of the source
+            # path when bundling, and the Qt xcb plugin is linked against
+            # the SONAME, not the full version triple.
+            return p
+    return None
+
+
+# Qt 6.5+ requires libxcb-cursor.so.0 (and a handful of other xcb-* libs)
+# at runtime to load the xcb platform plugin.  PyInstaller's Qt hook ships
+# the plugin .so itself but never bundles these system deps, so on minimal
+# distros (or distros that just don't have libxcb-cursor0 installed) the
+# binary aborts with "qt.qpa.plugin: From 6.5.0, xcb-cursor0 or
+# libxcb-cursor0 is needed to load the Qt xcb platform plugin".
+# Bundle them from the build host so the tarball is self-contained.
+_xcb_runtime_libs = [
+    'libxcb-cursor.so.0',
+    'libxcb-icccm.so.4',
+    'libxcb-image.so.0',
+    'libxcb-keysyms.so.1',
+    'libxcb-randr.so.0',
+    'libxcb-render-util.so.0',
+    'libxcb-shape.so.0',
+    'libxcb-xkb.so.1',
+    'libxkbcommon-x11.so.0',
+]
+_xcb_binaries = []
+for _lib in _xcb_runtime_libs:
+    _path = _find_system_lib(_lib)
+    if _path:
+        # Land the lib in the bundle root next to the binary; PyInstaller's
+        # default RUNPATH ($ORIGIN) makes it discoverable to the Qt plugin
+        # that needs it.
+        _xcb_binaries.append((_path, '.'))
+        print(f"[ChromIQLinux.spec] Bundling {_lib} from {_path}", file=sys.stderr)
+    else:
+        print(
+            f"[ChromIQLinux.spec] WARNING: {_lib} not found on build host — "
+            "runtime may fail on distros without it pre-installed.",
+            file=sys.stderr,
+        )
+
 # imagecodecs's LZW/JPEG codecs live in compiled C extensions PyInstaller
 # can't find via static analysis alone — collect everything explicitly.
 _ic_datas, _ic_binaries, _ic_hiddenimports = collect_all('imagecodecs')
@@ -61,7 +122,7 @@ print(
 a = Analysis(
     ['main.py'],
     pathex=['.'],
-    binaries=[*_ic_binaries, *_we_binaries, *_np_binaries],
+    binaries=[*_ic_binaries, *_we_binaries, *_np_binaries, *_xcb_binaries],
     datas=[
         ('assets',               'assets'),
         ('data/parameters.yaml', 'data'),

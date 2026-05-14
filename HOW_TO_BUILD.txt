@@ -1,11 +1,17 @@
-HOW TO BUILD ChromIQ.app
-========================
+HOW TO BUILD ChromIQ
+====================
 
-These steps produce a self-contained macOS application bundle (dist/ChromIQ.app)
-that any Mac user can run without installing Python or any other tool.
+These steps produce a self-contained ChromIQ bundle for your platform:
+  - macOS  →  dist/ChromIQ.app           (Steps 1-6 below)
+  - Linux  →  dist/ChromIQ/ChromIQ       (see "Building on Linux (beta)" below)
+  - Windows → dist/ChromIQ/ChromIQ.exe   (similar to Linux; uses ChromIQWin.spec)
 
-Prerequisites
--------------
+Steps 1-3 are cross-platform.  Steps 4, 4b, 5, and 6 below are macOS-specific
+(they build with ChromIQ.spec, re-sign the .app bundle, and zip a .app).
+Linux users should follow Steps 1-3, then jump to the Linux section.
+
+Prerequisites (macOS)
+---------------------
 - macOS (Apple Silicon or Intel)
 - Python 3.11 – 3.14  (python3 from Homebrew or python.org)
 - Git  (to clone the repo)
@@ -43,8 +49,8 @@ PNG  assets/app_icon.png  by one cross-platform script:
 This uses Pillow (already installed by Step 2) and works on macOS, Linux,
 and Windows alike — no  sips / iconutil / ImageMagick / icnsutil  needed.
 
-Step 4 — Build the app
------------------------
+Step 4 — Build the app  (macOS)
+--------------------------------
     python -m PyInstaller ChromIQ.spec
 
 PyInstaller prints progress to the terminal.  The build takes about 15-30
@@ -54,8 +60,8 @@ The finished app is at:
 
     dist/ChromIQ.app
 
-Step 4b — Re-sign the bundle (required for distribution)
----------------------------------------------------------
+Step 4b — Re-sign the bundle  (macOS, required for distribution)
+-----------------------------------------------------------------
 After building, run a deep ad-hoc re-sign so macOS correctly resolves the
 bundle when the app is downloaded from the internet:
 
@@ -66,8 +72,8 @@ on launch after being downloaded (macOS enforces stricter bundle integrity
 checks on quarantined apps, and PyInstaller's per-binary signatures need to
 be unified into one consistent ad-hoc signature across the whole bundle).
 
-Step 5 — Test the app
-----------------------
+Step 5 — Test the app  (macOS)
+-------------------------------
 Double-click  dist/ChromIQ.app  in Finder, or run from Terminal:
 
     open dist/ChromIQ.app
@@ -75,8 +81,8 @@ Double-click  dist/ChromIQ.app  in Finder, or run from Terminal:
 If macOS says "unidentified developer", right-click the app → Open → Open.
 This only needs to be done once per Mac.
 
-Step 6 — Distribute the app
------------------------------
+Step 6 — Distribute the app  (macOS)
+-------------------------------------
 You can zip the app for sharing:
 
     cd dist
@@ -99,10 +105,17 @@ Building on Linux (beta)
 -------------------------
 The same source tree builds on Debian/Ubuntu and other glibc Linux distros.
 
-Prerequisites:
+Prerequisites (Debian/Ubuntu):
 
     sudo apt install python3-venv libcups2-dev libegl1 \
-        libxkbcommon-x11-0 libxcb-cursor0 libdbus-1-3
+        libxkbcommon-x11-0 libxkbcommon-x11-dev libdbus-1-3 \
+        libxcb-cursor0 libxcb-icccm4 libxcb-image0 \
+        libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 \
+        libxcb-shape0 libxcb-xkb1 libfontconfig1 libxrender1
+
+These libraries serve double duty: they let the resulting binary launch
+on the build host AND ChromIQLinux.spec bundles a copy of each into the
+output tarball so end users do not need to install them separately.
 
 Then from the repo root:
 
@@ -126,6 +139,18 @@ https://www.argyllcms.com/downloadlinux.html.  ChromIQ defaults to
 /usr/bin and also probes /usr/local/bin, /opt/argyll/bin,
 /opt/argyllcms/bin and ~/.local/bin — set the path explicitly in
 Preferences if your install lives elsewhere.
+
+Troubleshooting "qt.qpa.plugin: ... xcb-cursor0 ... is needed"
+--------------------------------------------------------------
+Qt 6.5+ depends on libxcb-cursor.so.0 to load the xcb platform plugin.
+The Linux tarball produced from ChromIQLinux.spec bundles a copy of
+this library (and the other xcb helpers Qt needs) so on most distros
+the binary "just works".  If you still hit the error on a minimal
+system, install the system package as a fallback:
+
+    Debian/Ubuntu:  sudo apt install libxcb-cursor0
+    Fedora/RHEL:    sudo dnf install xcb-util-cursor
+    Arch:           sudo pacman -S xcb-util-cursor
 
 Notes
 -----

@@ -58,6 +58,8 @@ tar xzf ChromIQ-Linux-x86_64.tar.gz
 
 Install ArgyllCMS from your distribution's package manager (`sudo apt install argyll` on Debian/Ubuntu) or from [argyllcms.com](https://www.argyllcms.com/downloadlinux.html). ChromIQ defaults to `/usr/bin` and falls back to `/usr/local/bin`, `/opt/argyll/bin`, etc. — override the path in **Preferences** if your install lives elsewhere. Logs are written to `~/.local/state/ChromIQ/logs/chromiq.log` (or `$XDG_STATE_HOME/ChromIQ/logs/` if set), and the **Install Profile** action writes to `~/.local/share/color/icc/` (or `$XDG_DATA_HOME/color/icc/`).
 
+If the binary aborts with `qt.qpa.plugin: ... xcb-cursor0 ... is needed to load the Qt xcb platform plugin`, the bundled xcb helper libs were not picked up on your distro — install the system package as a fallback: `sudo apt install libxcb-cursor0` (Debian/Ubuntu), `sudo dnf install xcb-util-cursor` (Fedora/RHEL), or `sudo pacman -S xcb-util-cursor` (Arch).
+
 Linux support is currently **beta** — please report what works and what doesn't via [Discussions](https://github.com/itsab1989/ChromIQ/discussions) or the issue tracker.
 
 ---
