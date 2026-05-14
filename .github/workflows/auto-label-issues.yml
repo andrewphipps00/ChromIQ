@@ -1,0 +1,87 @@
+name: Auto-label issues
+
+on:
+  issues:
+    types: [opened]
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: Issue number to (re-)label
+        required: true
+        type: number
+
+permissions:
+  issues: write
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Apply platform and severity labels from issue form
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          ISSUE_NUMBER: ${{ github.event.issue.number || inputs.issue_number }}
+        run: |
+          set -euo pipefail
+
+          ISSUE_BODY=$(gh issue view "$ISSUE_NUMBER" --repo "$REPO" --json body --jq .body)
+
+          if [ -z "$ISSUE_BODY" ] || [ "$ISSUE_BODY" = "null" ]; then
+            echo "Issue #$ISSUE_NUMBER has no body, nothing to label."
+            exit 0
+          fi
+
+          # Print the lines under a "### <heading>" section until the next "### ".
+          extract() {
+            printf '%s\n' "$ISSUE_BODY" | awk -v h="### $1" '
+              $0 == h { found = 1; next }
+              found && /^### / { exit }
+              found && NF { print }
+            '
+          }
+
+          labels=()
+
+          # Bug report uses "Platform" (single-select).
+          # Feature request uses "Relevant platform(s)" (multi-select, comma-separated).
+          platform_block=$(extract "Platform")
+          if [ -z "$platform_block" ]; then
+            platform_block=$(extract "Relevant platform(s)")
+          fi
+
+          if echo "$platform_block" | grep -qi 'macOS'; then
+            labels+=("platform: macos")
+          fi
+          if echo "$platform_block" | grep -qi 'Windows'; then
+            labels+=("platform: windows")
+          fi
+          if echo "$platform_block" | grep -qi 'Linux'; then
+            labels+=("platform: linux")
+          fi
+          if echo "$platform_block" | grep -qi 'Any / all'; then
+            labels+=("platform: any")
+          fi
+
+          # Bug report only: severity dropdown.
+          severity_block=$(extract "Severity (your judgement — maintainer may adjust)")
+          case "$severity_block" in
+            Critical*) labels+=("Severity: Critical") ;;
+            High*)     labels+=("Severity: High") ;;
+            Medium*)   labels+=("Severity: Medium") ;;
+            Low*)      labels+=("Severity: Low") ;;
+          esac
+
+          if [ ${#labels[@]} -eq 0 ]; then
+            echo "No matching form fields found on issue #$ISSUE_NUMBER."
+            exit 0
+          fi
+
+          printf 'Applying labels to #%s:\n' "$ISSUE_NUMBER"
+          printf '  - %s\n' "${labels[@]}"
+
+          args=()
+          for l in "${labels[@]}"; do
+            args+=(--add-label "$l")
+          done
+          gh issue edit "$ISSUE_NUMBER" --repo "$REPO" "${args[@]}"
