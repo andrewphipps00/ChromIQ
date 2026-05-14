@@ -245,7 +245,11 @@ jobs:
           # Two-step approach — avoids hdiutil create -srcfolder hanging on
           # GitHub Actions runners when bundling large app bundles.
           APP_MB=$(du -sm dist/ChromIQ.app | awk '{print $1}')
-          IMG_MB=$((APP_MB + 40))
+          # HFS+ overhead + safety headroom. 40 MB was tight before
+          # scipy-openblas64 was added; 200 MB leaves room for future deps
+          # without filling the writable image (compressed UDZO output is
+          # unaffected — empty space gets squeezed out at convert time).
+          IMG_MB=$((APP_MB + 200))
 
           # Step 1: writable sparse image
           hdiutil create -megabytes "$IMG_MB" \
