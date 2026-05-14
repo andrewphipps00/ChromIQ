@@ -103,6 +103,9 @@ class CupsRawPrinter:
         ink_channels: ordered ink codes for the TIFF channels — required for
         correct DeviceN naming when the target has more than 4 colorants.
         orientation: CUPS orientation-requested (3=portrait, 4=landscape).
+        Only used by the TIFF fallback below; the PS path bakes orientation
+        into setpagedevice instead, since pstops double-rotates if it sees
+        both a landscape PS and orientation-requested=4.
         page_size_pt: physical media size (w_pt, h_pt) — passed to the PS
         setpagedevice line so the PS doc and `lp -o PageSize=...` agree.
         Falls back to TIFF automatically if CUPS rejects PostScript.
@@ -223,9 +226,14 @@ class CupsRawPrinter:
         cfg: PrintConfig,
         orientation: int | None = None,
     ) -> list[str]:
+        # `orientation` is intentionally ignored on the PS path: the page
+        # geometry is baked into setpagedevice PageSize by PostScriptGenerator.
+        # Apple's pstops filter rotates a second time if it sees both a
+        # landscape PS and orientation-requested=4 — clipping the chart or
+        # silently dropping the job. The param stays in the signature for
+        # symmetry with _build_lp_command_tiff, which still needs it.
+        del orientation
         merged = {**cfg.options, **_PS_JOB_OPTIONS}
-        if orientation is not None:
-            merged["orientation-requested"] = str(orientation)
         cmd = ["lp", "-d", cfg.printer_name]
         for key, val in merged.items():
             if val:

@@ -90,13 +90,24 @@ class PostScriptGenerator:
 
         tiff_w_pt = w * _PT_PER_INCH / actual_dpi
         tiff_h_pt = h * _PT_PER_INCH / actual_dpi
-        page_w, page_h = page_size_pt if page_size_pt else (tiff_w_pt, tiff_h_pt)
+        if page_size_pt is None:
+            page_w, page_h = tiff_w_pt, tiff_h_pt
+            page_rotated = False
+        else:
+            page_w, page_h = page_size_pt
+            # If the declared page orientation contradicts the TIFF's, swap
+            # so setpagedevice agrees with the image we draw. Otherwise the
+            # image overhangs the page bounds and pstops double-rotates.
+            page_rotated = (page_w > page_h) != (tiff_w_pt > tiff_h_pt)
+            if page_rotated:
+                page_w, page_h = page_h, page_w
         level = 3 if (n_ch > 4 or bits > 8) else 2
 
         log.debug(
-            "PS: %s  %dx%d px  TIFF %.1f×%.1f pt  Page %.1f×%.1f pt  "
+            "PS: %s  %dx%d px  TIFF %.1f×%.1f pt  Page %.1f×%.1f pt%s  "
             "%d dpi  %d-bit  %d-ch  Level %d",
             tiff_path.name, w, h, tiff_w_pt, tiff_h_pt, page_w, page_h,
+            " (rotated to match TIFF aspect)" if page_rotated else "",
             actual_dpi, bits, n_ch, level,
         )
 
