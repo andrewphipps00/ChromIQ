@@ -15,7 +15,7 @@ The result will be in dist/ChromIQ.app
 import os
 import sys
 import certifi
-from PyInstaller.utils.hooks import collect_all
+from PyInstaller.utils.hooks import collect_all, collect_dynamic_libs
 certifi_where = certifi.where()
 _target_arch = os.environ.get("PYINSTALLER_TARGET_ARCH") or None
 
@@ -24,6 +24,14 @@ _target_arch = os.environ.get("PYINSTALLER_TARGET_ARCH") or None
 _ic_datas, _ic_binaries, _ic_hiddenimports = collect_all('imagecodecs')
 
 _we_datas, _we_binaries, _we_hiddenimports = collect_all('PyQt6-WebEngine')
+
+# numpy 2.4+ vendors a SciPy-built OpenBLAS as `libscipy_openblas64_.dylib`
+# (under numpy/.dylibs/ on macOS). PyInstaller's bundled hook-numpy.py did not
+# pick it up in the v3.2.7 universal2 build, leaving Contents/Frameworks/
+# missing the dylib and crashing at numpy import time. Collect explicitly so
+# the dylib lands where numpy/_core/_multiarray_umath.so expects it via
+# @rpath. See issue #11.
+_np_binaries = collect_dynamic_libs('numpy')
 
 # PyObjC (macOS native print dialog) — lazily-imported submodules need help.
 if sys.platform == 'darwin':
@@ -36,7 +44,7 @@ else:
 a = Analysis(
     ['main.py'],
     pathex=['.'],
-    binaries=[*_ic_binaries, *_we_binaries, *_oc_binaries, *_ak_binaries],
+    binaries=[*_ic_binaries, *_we_binaries, *_oc_binaries, *_ak_binaries, *_np_binaries],
     datas=[
         ('assets',           'assets'),
         ('data/parameters.yaml', 'data'),

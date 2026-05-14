@@ -1,5 +1,25 @@
 # Changelog
 
+## v3.2.8
+### Fixed
+- **Intel-only DMG (`ChromIQ-macOS-x86_64.dmg`) failed to launch** with
+  `[PYI-3463:ERROR] Could not load PyInstaller's embedded PKG archive from
+  the executable`. The v3.2.7 derive-x86_64 step ran `lipo -thin x86_64`
+  over every Mach-O in the universal bundle, including the PyInstaller
+  bootloader at `Contents/MacOS/ChromIQ`. The bootloader has its onedir
+  PKG archive appended *after* the Mach-O slices; `lipo` writes only the
+  Mach-O bytes and silently discards the trailing archive, bricking the
+  binary. The CI step now skips the bootloader (it stays universal2 — a
+  ~1 MB cost; macOS Intel picks the x86_64 slice at exec time anyway).
+- **Universal DMG (`ChromIQ-macOS-universal.dmg`) crashed on import numpy**
+  with `Library not loaded: @rpath/libscipy_openblas64_.dylib`. numpy 2.4+
+  vendors a SciPy-built OpenBLAS dylib that PyInstaller's bundled
+  `hook-numpy.py` did not pick up on the universal2 build, leaving
+  `Contents/Frameworks/libscipy_openblas64_.dylib` absent. The spec now
+  collects numpy's dynamic libs explicitly (`collect_dynamic_libs('numpy')`),
+  and a new CI step asserts the OpenBLAS dylib is in the bundle so a hook
+  regression can never silently ship again.
+
 ## v3.2.7
 ### Fixed
 - **Native macOS print dialog ignored chart paper size**: the new
