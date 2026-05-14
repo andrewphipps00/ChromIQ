@@ -31,6 +31,7 @@ from PyQt6.QtWidgets import (
 )
 
 from core.logger import get_logger
+from core.platform_paths import is_macos
 from core.resource_path import resource_path
 from ui.tab_header import TabHeader
 from ui.tooltip_button import InfoDialog, TooltipButton
@@ -1191,9 +1192,15 @@ class TabProfile(QWidget):
         layout.addWidget(next_lbl)
 
         install_desc = QLabel(
-            "<b>Install on this Mac</b> — adds the calibrated profile to your Mac's "
-            "colour management system so it is immediately available in Photoshop, "
-            "Lightroom, and other colour-managed apps.",
+            (
+                "<b>Install on this Mac</b> — adds the calibrated profile to your Mac's "
+                "colour management system so it is immediately available in Photoshop, "
+                "Lightroom, and other colour-managed apps."
+                if is_macos() else
+                "<b>Install Profile</b> — copies the calibrated profile to your system's "
+                "colour profile directory so it is immediately available in "
+                "colour-managed applications."
+            ),
             dlg,
         )
         install_desc.setWordWrap(True)
@@ -1201,7 +1208,7 @@ class TabProfile(QWidget):
         layout.addWidget(install_desc)
 
         btn_box = QDialogButtonBox(dlg)
-        _install_label = "Install Profile" if sys.platform == "win32" else "Install on this Mac"
+        _install_label = "Install on this Mac" if is_macos() else "Install Profile"
         install_btn = btn_box.addButton(_install_label, QDialogButtonBox.ButtonRole.ActionRole)
         done_btn    = btn_box.addButton("Done",                QDialogButtonBox.ButtonRole.AcceptRole)
         install_btn.setObjectName("primary")
@@ -2950,9 +2957,14 @@ class TabProfile(QWidget):
         layout.addWidget(next_lbl)
 
         install_desc = QLabel(
-            "<b>Install on this Mac</b> — adds the profile to your Mac's colour management "
-            "system so it is immediately available in Photoshop, Lightroom, and other "
-            "colour-managed apps.",
+            (
+                "<b>Install on this Mac</b> — adds the profile to your Mac's colour management "
+                "system so it is immediately available in Photoshop, Lightroom, and other "
+                "colour-managed apps."
+                if is_macos() else
+                "<b>Install Profile</b> — copies the profile to your system's colour profile "
+                "directory so it is immediately available in colour-managed applications."
+            ),
             dlg,
         )
         install_desc.setWordWrap(True)
@@ -2984,7 +2996,8 @@ class TabProfile(QWidget):
             layout.addWidget(apply_desc)
 
         btn_box = QDialogButtonBox(dlg)
-        install_btn = btn_box.addButton("Install on this Mac",     QDialogButtonBox.ButtonRole.ActionRole)
+        _install_label = "Install on this Mac" if is_macos() else "Install Profile"
+        install_btn = btn_box.addButton(_install_label,            QDialogButtonBox.ButtonRole.ActionRole)
         check_btn   = btn_box.addButton("Check Profile Quality →", QDialogButtonBox.ButtonRole.ActionRole)
         if cal_mode:
             apply_btn = btn_box.addButton("Apply Calibration →",   QDialogButtonBox.ButtonRole.ActionRole)

@@ -1,5 +1,41 @@
 # Changelog
 
+## v3.5.0-beta.1
+### Added
+- **Linux support (beta)**: ChromIQ now builds and runs on Debian/Ubuntu and
+  other glibc Linux distributions. Pre-built tarballs are produced for both
+  `x86_64` and `aarch64` and attached to each release
+  (`ChromIQ-Linux-x86_64.tar.gz`, `ChromIQ-Linux-aarch64.tar.gz`). Extract and
+  run `./ChromIQ/ChromIQ` — no install step required.
+- **Cross-platform icon builder**: a new `scripts/build_icons.py` script
+  generates both `assets/app_icon.icns` (macOS) and `assets/app_icon.ico`
+  (Windows) from the source PNG using Pillow only — no more macOS-only
+  `sips`/`iconutil` dependency, so the icon step in `HOW_TO_BUILD.txt` now
+  works on every platform.
+
+### Changed
+- All platform-conditional paths and URLs (Argyll bin directory defaults &
+  auto-detection candidates, log directory, ICC profile install location,
+  gamut viewer ICC profile dialog, ArgyllCMS download page, native-print
+  dialog visibility) now live in a single `core/platform_paths.py` module
+  with explicit branches for Windows, macOS, and Linux. Previously every
+  call site assumed "not Windows" meant macOS, which silently produced
+  `~/Library/Logs`, `~/Library/ColorSync/Profiles`, `/Applications/Argyll/bin`
+  etc. on Linux. macOS and Windows behavior is preserved exactly (regression
+  test: `tests/test_platform_paths.py`).
+- On Linux the log file lives at `~/.local/state/ChromIQ/logs/chromiq.log`
+  (or `$XDG_STATE_HOME/ChromIQ/logs/`), the default Argyll path is `/usr/bin`
+  (also probes `/usr/local/bin`, `/opt/argyll/bin`, `/opt/argyllcms/bin`,
+  `~/.local/bin`), installed profiles go to `~/.local/share/color/icc/`
+  (or `$XDG_DATA_HOME/color/icc/`), the gamut viewer file dialog lists the
+  XDG + colord-managed profile directories (`~/.local/share/color/icc`,
+  `~/.color/icc`, `/usr/share/color/icc`, `/usr/local/share/color/icc`,
+  `/var/lib/colord/icc`), and the **Download latest ArgyllCMS…** button
+  opens the Linux download page on argyllcms.com.
+- Profile-install dialog button text reads **Install Profile** on Windows
+  and Linux (previously hard-coded **Install on this Mac** on every
+  non-Windows OS).
+
 ## v3.2.8
 ### Fixed
 - **Intel-only DMG (`ChromIQ-macOS-x86_64.dmg`) failed to launch** with

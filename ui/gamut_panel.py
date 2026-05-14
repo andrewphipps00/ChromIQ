@@ -906,24 +906,10 @@ def _set_combo(combo: NoScrollComboBox, value: str) -> None:
 
 def _system_icc_paths() -> list[str]:
     """Return existing platform-specific ICC/ICM profile directories."""
-    import sys
-    home = Path.home()
-    if sys.platform == "win32":
-        import os
-        win = os.environ.get("WINDIR", r"C:\Windows")
-        candidates = [
-            r"C:\Windows\System32\spool\drivers\color",
-            str(Path(win) / "System32" / "spool" / "drivers" / "color"),
-        ]
-    else:
-        candidates = [
-            str(home / "Library/ColorSync/Profiles"),
-            "/Library/ColorSync/Profiles",
-            "/System/Library/ColorSync/Profiles",
-        ]
+    from core.platform_paths import icc_system_dirs
     seen: set[str] = set()
-    result = []
-    for p in candidates:
+    result: list[str] = []
+    for p in (str(d) for d in icc_system_dirs()):
         if p not in seen and Path(p).exists():
             seen.add(p)
             result.append(p)

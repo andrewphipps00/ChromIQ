@@ -24,6 +24,11 @@ from PyQt6.QtWidgets import (
 
 from core.argyll_detect import find_argyll_bin_path
 from core.logger import get_logger
+from core.platform_paths import (
+    argyll_download_page,
+    default_argyll_bin_dir,
+    native_print_supported,
+)
 from core.updater import UpdateChecker, _RELEASES_PAGE
 from core.version import APP_VERSION
 from ui.tooltip_button import TooltipButton
@@ -35,11 +40,6 @@ if TYPE_CHECKING:
 log = get_logger(__name__)
 
 import sys as _sys
-_ARGYLL_DOWNLOAD_PAGE = (
-    "https://www.argyllcms.com/downloadwin.html"
-    if _sys.platform == "win32"
-    else "https://www.argyllcms.com/downloadmac.html"
-)
 
 
 class SettingsDialog(QDialog):
@@ -77,7 +77,7 @@ class SettingsDialog(QDialog):
         path_row.addWidget(TooltipButton(
             "ArgyllCMS Binary Path",
             "Directory containing targen, printtarg, chartread, and colprof.\n"
-            "Default: /Applications/Argyll/bin\n"
+            f"Default: {default_argyll_bin_dir()}\n"
             "You can download the latest version from argyllcms.com.",
             self,
         ))
@@ -202,7 +202,7 @@ class SettingsDialog(QDialog):
         native_print_row.setContentsMargins(0, 0, 0, 0)
         native_print_container = QWidget(self)
         native_print_container.setLayout(native_print_row)
-        native_print_container.setVisible(_sys.platform != "win32")
+        native_print_container.setVisible(native_print_supported())
         bh.addWidget(native_print_container)
 
         confirm_row = QHBoxLayout()
@@ -290,7 +290,7 @@ class SettingsDialog(QDialog):
 
     def _load_settings(self) -> None:
         s = self._settings
-        self._argyll_edit.setText(s.get("argyll_bin_path", "/Applications/Argyll/bin"))
+        self._argyll_edit.setText(s.get("argyll_bin_path", default_argyll_bin_dir()))
         self._folder_edit.setText(s.get("custom_output_path", ""))
         self._restore_tab_check.setChecked(s.get("restore_last_tab", True))
         self._restore_session_check.setChecked(bool(s.get("restore_last_session", False)))
@@ -381,13 +381,16 @@ class SettingsDialog(QDialog):
         self._argyll_status.setStyleSheet("")
         if _sys.platform == "win32":
             hint = "win64 for x64 (Intel/AMD) or arm64 for ARM-based devices (Snapdragon)"
-        else:
+        elif _sys.platform == "darwin":
             hint = "arm64 for Apple Silicon, osx64 for Intel"
+        else:
+            hint = "the binary tar.bz2 matching your distro's architecture (x86_64 or aarch64) — " \
+                   "or install via your package manager (e.g. sudo apt install argyll)"
         self._argyll_status.setText(
             f"Opening argyllcms.com — download the latest version ({hint}), "
             "then unpack and set the bin path above."
         )
-        QDesktopServices.openUrl(QUrl(_ARGYLL_DOWNLOAD_PAGE))
+        QDesktopServices.openUrl(QUrl(argyll_download_page()))
 
     def _show_usb_installer(self) -> None:
         if _sys.platform != "win32":

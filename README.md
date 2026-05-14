@@ -2,7 +2,7 @@
 
 **ChromIQ** is a free, open-source desktop application for creating custom ICC profiles for RGB inkjet printers using [ArgyllCMS](https://www.argyllcms.com/). It provides a guided, five-step printer color calibration workflow that takes you from generating and printing a test chart through spectrophotometer measurement, ICC profile building with `colprof`, and quality verification with `profcheck` — without needing to touch the command line.
 
-ChromIQ runs on **macOS** and **Windows** (x64 and ARM64).
+ChromIQ runs on **macOS**, **Windows** (x64 and ARM64), and **Linux** (x86_64 and aarch64, beta).
 
 Supported instruments: X-Rite i1Pro, i1Pro 2, i1Pro 3, i1Pro 3 Plus, ColorMunki, i1Studio, ColorChecker Studio, and SpectroScan.
 
@@ -39,6 +39,26 @@ Pre-built ZIPs are attached to each [GitHub Release](https://github.com/itsab198
 | `ChromIQ-Windows-arm64.zip` | ARM64 (e.g. Snapdragon X laptops) |
 
 Extract the ZIP, open the `ChromIQ` folder, and run `ChromIQ.exe`. Windows SmartScreen may warn on first launch — click **More info → Run anyway**. See [Windows](#windows) below for ArgyllCMS setup and differences from macOS.
+
+### Linux (beta)
+
+Pre-built tarballs are attached to each [GitHub Release](https://github.com/itsab1989/ChromIQ/releases/latest):
+
+| Build | Runs on |
+|-------|---------|
+| `ChromIQ-Linux-x86_64.tar.gz` | 64-bit Intel / AMD (most desktops & laptops) |
+| `ChromIQ-Linux-aarch64.tar.gz` | 64-bit ARM (Raspberry Pi 4/5, ARM workstations) |
+
+Extract it and run the `ChromIQ` binary inside:
+
+```
+tar xzf ChromIQ-Linux-x86_64.tar.gz
+./ChromIQ/ChromIQ
+```
+
+Install ArgyllCMS from your distribution's package manager (`sudo apt install argyll` on Debian/Ubuntu) or from [argyllcms.com](https://www.argyllcms.com/downloadlinux.html). ChromIQ defaults to `/usr/bin` and falls back to `/usr/local/bin`, `/opt/argyll/bin`, etc. — override the path in **Preferences** if your install lives elsewhere. Logs are written to `~/.local/state/ChromIQ/logs/chromiq.log` (or `$XDG_STATE_HOME/ChromIQ/logs/` if set), and the **Install Profile** action writes to `~/.local/share/color/icc/` (or `$XDG_DATA_HOME/color/icc/`).
+
+Linux support is currently **beta** — please report what works and what doesn't via [Discussions](https://github.com/itsab1989/ChromIQ/discussions) or the issue tracker.
 
 ---
 
@@ -365,7 +385,8 @@ If you run into any issues on Windows, please [open a bug report](https://github
 
 - **Measurement (Step 3):** Some spectrophotometer models may require additional calibration steps not yet surfaced in the UI.
 - **Advanced color science (Step 4):** FWA compensation and custom gamut mapping intents cover a wide range of instrument/paper combinations — edge cases may exist depending on your specific hardware and media.
-- **Windows:** The CUPS-based PostScript print pipeline is not available on Windows — colour management must be disabled manually in the printer driver. See [Windows](#windows) above. Linux is not currently supported.
+- **Windows:** The CUPS-based PostScript print pipeline is not available on Windows — colour management must be disabled manually in the printer driver. See [Windows](#windows) above.
+- **Linux (beta):** ChromIQ runs but has not been exercised against the full Argyll workflow on real hardware yet. Please report what works and what doesn't.
 
 ---
 
@@ -377,7 +398,7 @@ You can also reach these directly from inside the app — open **Preferences** (
 - **Feature idea?** [Open a feature request](https://github.com/itsab1989/ChromIQ/issues/new?template=feature_request.yml).
 - **Usage question or open-ended discussion?** Use [Discussions](https://github.com/itsab1989/ChromIQ/discussions) rather than the issue tracker.
 
-Please include the contents of the in-app log panel (or the file under `~/Library/Logs/ChromIQ/chromiq.log` on macOS / `%LOCALAPPDATA%\ChromIQ\Logs\` on Windows) when reporting a bug — it captures every ArgyllCMS command ChromIQ ran and is usually the fastest way to identify the cause.
+Please include the contents of the in-app log panel (or the file under `~/Library/Logs/ChromIQ/chromiq.log` on macOS / `%LOCALAPPDATA%\ChromIQ\Logs\` on Windows / `~/.local/state/ChromIQ/logs/chromiq.log` on Linux) when reporting a bug — it captures every ArgyllCMS command ChromIQ ran and is usually the fastest way to identify the cause.
 
 ---
 

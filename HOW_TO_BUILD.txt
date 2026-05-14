@@ -32,19 +32,16 @@ IMPORTANT: Always use   python -m PyInstaller   (not the bare pyinstaller
 command) so that PyInstaller uses the same Python environment where the
 packages are installed.
 
-Step 3 — Generate the app icon (only needed once, or after the icon changes)
------------------------------------------------------------------------------
-ChromIQ.spec expects  assets/app_icon.icns.  If it doesn't exist yet, create
-it from the existing PNG with these commands:
+Step 3 — Generate the app icons (only needed once, or after the icon changes)
+------------------------------------------------------------------------------
+ChromIQ.spec expects  assets/app_icon.icns  (macOS) and ChromIQWin.spec
+expects  assets/app_icon.ico  (Windows).  Both are derived from the source
+PNG  assets/app_icon.png  by one cross-platform script:
 
-    mkdir -p /tmp/chromiq_icon.iconset
-    for size in 16 32 128 256 512; do
-        sips -z $size $size assets/app_icon.png \
-            --out /tmp/chromiq_icon.iconset/icon_${size}x${size}.png
-        sips -z $((size*2)) $((size*2)) assets/app_icon.png \
-            --out /tmp/chromiq_icon.iconset/icon_${size}x${size}@2x.png
-    done
-    iconutil -c icns /tmp/chromiq_icon.iconset -o assets/app_icon.icns
+    python scripts/build_icons.py
+
+This uses Pillow (already installed by Step 2) and works on macOS, Linux,
+and Windows alike — no  sips / iconutil / ImageMagick / icnsutil  needed.
 
 Step 4 — Build the app
 -----------------------
@@ -97,6 +94,38 @@ files or changing the spec):
 
     rm -rf build dist
     python -m PyInstaller ChromIQ.spec
+
+Building on Linux (beta)
+-------------------------
+The same source tree builds on Debian/Ubuntu and other glibc Linux distros.
+
+Prerequisites:
+
+    sudo apt install python3-venv libcups2-dev libegl1 \
+        libxkbcommon-x11-0 libxcb-cursor0 libdbus-1-3
+
+Then from the repo root:
+
+    python3 -m venv .venv
+    source .venv/bin/activate
+    pip install -r requirements.txt
+    python scripts/build_icons.py            # optional — Linux uses the PNG
+    python -m PyInstaller ChromIQLinux.spec
+
+Run with:
+
+    dist/ChromIQ/ChromIQ
+
+Package for distribution:
+
+    tar -C dist -czf ChromIQ-Linux-x86_64.tar.gz ChromIQ
+
+Argyll on Linux: install via your package manager
+(`sudo apt install argyll`) or download from
+https://www.argyllcms.com/downloadlinux.html.  ChromIQ defaults to
+/usr/bin and also probes /usr/local/bin, /opt/argyll/bin,
+/opt/argyllcms/bin and ~/.local/bin — set the path explicitly in
+Preferences if your install lives elsewhere.
 
 Notes
 -----

@@ -34,6 +34,9 @@ ChromIQ/
 chromiq.log*
 assets/exported/
 
+# CI-generated icons (rebuilt by scripts/build_icons.py during the build)
+assets/app_icon.ico
+
 # Claude Code local settings
 .claude/
 

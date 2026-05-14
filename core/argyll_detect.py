@@ -1,12 +1,11 @@
 """Auto-detect the ArgyllCMS binary directory."""
 from __future__ import annotations
 
-import os
-import sys
 from pathlib import Path
 from shutil import which
 
 from core.logger import get_logger
+from core.platform_paths import argyll_candidate_dirs
 from core.resource_path import argyll_binary
 
 log = get_logger(__name__)
@@ -31,50 +30,8 @@ def find_argyll_bin_path() -> Path | None:
                 log.info("ArgyllCMS found in PATH at %s", candidate)
                 return candidate
 
-    # 2. Fixed well-known locations (platform-specific)
-    if sys.platform == "win32":
-        local_app = Path(os.environ.get("LOCALAPPDATA", Path.home()))
-        candidates: list[Path] = [
-            Path(r"C:\Program Files\ArgyllCMS\bin"),
-            Path(r"C:\Program Files (x86)\ArgyllCMS\bin"),
-            local_app / "ArgyllCMS" / "bin",
-            Path.home() / "ArgyllCMS" / "bin",
-        ]
-        # Scan for versioned installs, e.g. %LOCALAPPDATA%\ArgyllCMS\Argyll_V3.5.0\bin
-        for _search_root in (local_app / "ArgyllCMS", Path(r"C:\Program Files\ArgyllCMS")):
-            try:
-                _versioned = sorted(
-                    (d for d in _search_root.iterdir()
-                     if d.is_dir() and "argyll" in d.name.lower()),
-                    reverse=True,
-                )
-                candidates = [d / "bin" for d in _versioned] + candidates
-            except (PermissionError, OSError):
-                pass
-    else:
-        candidates = [
-            Path("/Applications/Argyll/bin"),
-            Path("/Applications/ArgyllCMS/bin"),
-            Path("/opt/homebrew/bin"),       # Homebrew (Apple Silicon)
-            Path("/usr/local/bin"),          # Homebrew (Intel) / manual
-            Path("/opt/local/bin"),          # MacPorts
-            Path.home() / "ArgyllCMS/bin",
-            Path.home() / "Applications/Argyll/bin",
-            Path.home() / ".local/bin",
-        ]
-
-        # 3. Scan /Applications for versioned Argyll directories (e.g. Argyll_V3.5.0)
-        try:
-            versioned = sorted(
-                (d for d in Path("/Applications").iterdir()
-                 if d.is_dir() and "argyll" in d.name.lower()),
-                reverse=True,  # prefer the highest version number
-            )
-            candidates = [d / "bin" for d in versioned] + candidates
-        except (PermissionError, OSError):
-            pass
-
-    for candidate in candidates:
+    # 2. Fall back to platform-specific well-known locations
+    for candidate in argyll_candidate_dirs():
         if all_tools_present(candidate):
             log.info("ArgyllCMS auto-detected at %s", candidate)
             return candidate
