@@ -118,6 +118,12 @@ jobs:
         shell: bash
         run: |
           TAG="$RELEASE_TAG"
+          # Mark pre-release-style tags (-alpha/-beta/-rc/-pre) as
+          # GitHub prereleases; final tags (e.g. v3.5.0) stay regular.
+          PRERELEASE_FLAG=""
+          case "$TAG" in
+            *-alpha*|*-beta*|*-rc*|*-pre*) PRERELEASE_FLAG="--prerelease" ;;
+          esac
           if ! gh release view "$TAG" > /dev/null 2>&1; then
             body=$(awk "/^## ${TAG}$/{found=1; next} found && /^## /{exit} found{print}" CHANGELOG.md 2>/dev/null | sed '/^[[:space:]]*$/d' || true)
             {
@@ -131,7 +137,8 @@ jobs:
             } > /tmp/release_notes.txt
             gh release create "$TAG" \
               --title "ChromIQ $TAG" \
-              --notes-file /tmp/release_notes.txt 2>/dev/null || true
+              --notes-file /tmp/release_notes.txt \
+              $PRERELEASE_FLAG 2>/dev/null || true
           fi
 
       - name: Upload ZIP to release
