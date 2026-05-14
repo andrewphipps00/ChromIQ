@@ -99,7 +99,27 @@ class TabChart(QWidget):
         left_layout.setSpacing(8)
 
         left_layout.addWidget(TabHeader(
-            "STEP 01 · GENERATE TARGET", "Create test chart", "#ff4573", left
+            "STEP 01 · GENERATE TARGET", "Create test chart", "#ff4573", left,
+            tooltip_title="Step 1 — Make a test chart",
+            tooltip_body=(
+                "This is where you design the sheet of colour patches your printer "
+                "will print. The patches are how ChromIQ later \"learns\" how your "
+                "printer reproduces colour.\n\n"
+                "Before you start:\n"
+                "• Pick the printer and paper you actually want to profile — the "
+                "profile will only be accurate for that exact combination.\n"
+                "• Have a rough idea of how careful you want to be. More patches = "
+                "more accuracy, but also more ink and paper.\n\n"
+                "How to use this screen:\n"
+                "• Guided mode picks sensible patch counts for you based on your "
+                "paper size and instrument. Recommended if you're new.\n"
+                "• Manual mode exposes every option. Use it once you know what each "
+                "flag does.\n"
+                "• Click \"Generate\" to create the test chart. You'll get a TIFF "
+                "image (the printable chart) and a .ti2 file (the recipe ChromIQ "
+                "uses later to read it back).\n\n"
+                "Next step: print the TIFF on tab 2."
+            ),
         ))
 
         # Mode switcher (wrapped in a widget so it can be hidden in calibration mode)

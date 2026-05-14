@@ -78,6 +78,55 @@ _INTENTS = [
 ]
 
 
+_TOOLTIP_TITLE_NORMAL = "Step 4 — Build the profile"
+_TOOLTIP_BODY_NORMAL = (
+    "This screen turns the measurements from step 3 into an .icc "
+    "profile — the file that applications like Lightroom, Photoshop, "
+    "or Preview use to print accurate colour on your printer.\n\n"
+    "Before you build:\n"
+    "• You need a finished .ti3 measurement file from step 3. ChromIQ "
+    "pre-fills it for you if you came straight from tab 3.\n\n"
+    "How to use this screen:\n"
+    "• Quality controls how detailed the profile's colour tables are. "
+    "Higher = more accurate but slower to build and slightly larger. "
+    "\"Medium\" is a fine starting point.\n"
+    "• Profile description is the human-readable name you'll see in "
+    "print dialogs later. Include the printer, paper, and date so "
+    "you can tell profiles apart.\n"
+    "• Click \"Build\" and ChromIQ runs Argyll's colprof. When it's done "
+    "you'll have a .icc file you can install on macOS.\n\n"
+    "What happens next: install the .icc into ~/Library/ColorSync/"
+    "Profiles (ChromIQ can do this for you), then verify it on tab 5 "
+    "before relying on it for important prints."
+)
+
+_TOOLTIP_TITLE_CAL = "Step 4 — Calibrate, then build the profile"
+_TOOLTIP_BODY_CAL = (
+    "Calibration mode adds an extra preparation step before profiling: "
+    "first we flatten (\"linearise\") each ink channel so the printer "
+    "behaves predictably, THEN we build the ICC profile on top of that "
+    "calibrated state. The result is usually a more accurate profile, "
+    "especially on printers that drift over time.\n\n"
+    "This screen has three sub-steps. You'll use them in this order:\n\n"
+    "1. CALIBRATE — runs Argyll's printcal on a small calibration "
+    "target you already printed and measured. The output is a .cal "
+    "file that describes how to even out each ink channel.\n\n"
+    "2. APPLY — runs applycal to bake that .cal into the next chart's "
+    ".ti1 recipe. After this, you go back to tabs 1–3 and print + "
+    "measure your main profiling chart through the calibrated state.\n\n"
+    "3. BUILD PROFILE — once you've measured the calibrated chart, this "
+    "runs colprof to produce the final .icc profile.\n\n"
+    "Before you start:\n"
+    "• You need a measured calibration target (.ti3 with a \"cal_\" "
+    "prefix) for step 1.\n"
+    "• A separate, larger profiling chart for steps 2 and 3.\n\n"
+    "If you're new to calibration mode, turn it off in Settings until "
+    "you're comfortable with the basic 4-step flow. It exists for users "
+    "who want extra accuracy on inkjet printers that aren't very stable "
+    "batch-to-batch."
+)
+
+
 class TabProfile(QWidget):
     """Step 4: build and install ICC profile from .ti3 measurements."""
 
@@ -135,7 +184,9 @@ class TabProfile(QWidget):
         root.setSpacing(8)
 
         self._header = TabHeader(
-            "STEP 04 · CREATE ICC PROFILE", "Build ICC profile", "#37bcd6", self
+            "STEP 04 · CREATE ICC PROFILE", "Build ICC profile", "#37bcd6", self,
+            tooltip_title=_TOOLTIP_TITLE_NORMAL,
+            tooltip_body=_TOOLTIP_BODY_NORMAL,
         )
         root.addWidget(self._header)
 
@@ -302,10 +353,12 @@ class TabProfile(QWidget):
         self._mode_row_widget.setVisible(not enabled)
         if enabled:
             self._header.set_texts("STEP 04 · CALIBRATE & PROFILE", "Calibration & Profiling")
+            self._header.set_tooltip(_TOOLTIP_TITLE_CAL, _TOOLTIP_BODY_CAL)
             self._switch_mode("manual")
             self._switch_cal_mode(0)  # default to Build Profile
         else:
             self._header.set_texts("STEP 04 · CREATE ICC PROFILE", "Build ICC profile")
+            self._header.set_tooltip(_TOOLTIP_TITLE_NORMAL, _TOOLTIP_BODY_NORMAL)
             self._outer_stack.setCurrentIndex(0)
 
     def _switch_cal_mode(self, page: int) -> None:

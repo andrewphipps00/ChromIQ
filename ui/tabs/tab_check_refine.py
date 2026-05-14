@@ -167,6 +167,11 @@ class TabCheckRefine(QWidget):
     def icc_path(self) -> "Path | None":
         return self._icc_path
 
+    def shutdown_webengine(self) -> None:
+        panel = getattr(self, "_gamut_panel", None)
+        if panel is not None:
+            panel.shutdown_webengine()
+
     def _notify_ti2(self, ti3: Path) -> None:
         ti2 = ti3.with_suffix(".ti2")
         if ti2.exists():
@@ -193,7 +198,30 @@ class TabCheckRefine(QWidget):
         left_layout.setSpacing(8)
 
         left_layout.addWidget(TabHeader(
-            "STEP 05 · SANITY CHECK", "Check & refine", "#9f82ff", left
+            "STEP 05 · SANITY CHECK", "Check & refine", "#9f82ff", left,
+            tooltip_title="Step 5 — Check the profile",
+            tooltip_body=(
+                "On this final screen you sanity-check the profile you just built. "
+                "ChromIQ compares the measurements (.ti3) against the profile "
+                "(.icc) and reports how accurately the profile predicts your "
+                "printer's behaviour, so you know whether to trust it for real "
+                "prints.\n\n"
+                "How to use this screen:\n"
+                "• The .ti3 and .icc fields are pre-filled if you came from step 4. "
+                "You can also load any older pair to re-check an existing profile.\n"
+                "• Click \"Check\" to see the error report. Lower Delta-E (ΔE) values "
+                "mean the profile is more accurate. As a rough rule: average ΔE "
+                "under 2 is great, under 4 is fine for most uses, above 6 means "
+                "something likely went wrong earlier (bad measurements, wrong "
+                "paper, smudged patches).\n"
+                "• Use \"Refine\" if you want ChromIQ to feed the errors back and "
+                "produce a slightly improved profile. This is optional.\n\n"
+                "The 3D viewer on the right shows your profile's gamut — the volume "
+                "of colours your printer can reproduce. Bigger and smoother is "
+                "generally better; sharp dents usually indicate measurement issues.\n\n"
+                "When you're happy: install the .icc and use it in your image "
+                "editor's \"soft-proofing\" or print dialog."
+            ),
         ))
 
         # --- Mode buttons ---

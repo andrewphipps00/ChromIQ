@@ -1,5 +1,30 @@
 # Changelog
 
+## v3.5.0-beta.5
+### Added
+- **Tab-headline tooltips on every workflow tab.** Each of the five tabs
+  (Create Chart, Print Chart, Measure, Build Profile, Check & Refine)
+  now has a clickable ⓘ icon next to its big title that opens a
+  beginner-friendly explanation of what the screen does, what the user
+  needs ready (devices connected, paper loaded, …), how to use it, and
+  what comes next. The tab 4 tooltip swaps between the standard
+  `colprof` and the 3-stage `printcal → applycal → colprof` flow when
+  calibration mode is toggled in Settings. The tab 2 tooltip
+  additionally varies by OS and by the `use_native_print_dialog`
+  setting, so macOS bypass, macOS native dialog, Linux CUPS bypass, and
+  Windows QPrintDialog each get their own instructions.
+
+### Fixed
+- **Crash on quit when the gamut viewer was active.** PyQt6 plus
+  QtWebEngine raced during shutdown: SIP walked the Chromium subtree
+  in `QApplication`'s destructor and dereferenced a dangling pointer,
+  surfacing as `EXC_BAD_ACCESS` in
+  `sip_api_visit_wrappers/dealloc_QApplication`. The WebEngine teardown
+  now runs from `MainWindow.closeEvent` (while the event loop is still
+  alive) instead of from `aboutToQuit` (which fires too late for posted
+  events to drain), and the main window hides itself first so the user
+  sees no visible delay.
+
 ## v3.5.0-beta.4
 ### Fixed
 - **Check for Updates no longer crashes on pre-release builds** (#16). The

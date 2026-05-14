@@ -531,6 +531,12 @@ class MainWindow(QMainWindow):
         log.info("Session restored: target=%s", target)
 
     def closeEvent(self, event) -> None:
+        # Hide first so the window vanishes immediately; the WebEngine drain
+        # below runs invisibly. Tear down QtWebEngine before super() returns
+        # and Qt destroys the widget tree, otherwise SIP follows a dangling
+        # Chromium pointer during QApplication dealloc (EXC_BAD_ACCESS).
+        self.hide()
+        self._tab_check.shutdown_webengine()
         self._settings.set("window_geometry", self.saveGeometry())
         self._settings.set("active_tab", self._tabs.currentIndex())
         self._settings.set("session_target_name",  self._file_mgr._target_name)

@@ -75,10 +75,6 @@ class GamutPanel(QWidget):
         self._build_ui()
         self._load_defaults()
 
-        app = QApplication.instance()
-        if app:
-            app.aboutToQuit.connect(self._on_app_quit)
-
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
@@ -768,13 +764,16 @@ class GamutPanel(QWidget):
                 min_width=480,
             ).exec()
 
-    def _on_app_quit(self) -> None:
+    def shutdown_webengine(self) -> None:
         # PyQt6 + QtWebEngine shutdown race: if the view (and its Chromium
         # child objects) is still alive when QApplication enters its
         # destructor, SIP walks the wrapper graph and follows a dangling
         # pointer in the Chromium subtree — EXC_BAD_ACCESS inside
-        # sip_api_visit_wrappers/dealloc_QApplication. Force the view to be
-        # destroyed *before* the QApplication destructor runs.
+        # sip_api_visit_wrappers/dealloc_QApplication. Called from
+        # MainWindow.closeEvent so the main event loop is still running and
+        # the deleteLater/processEvents drain below actually fires before SIP
+        # tears down QApplication. (aboutToQuit is too late — events posted
+        # from that slot are not reliably delivered.)
         view = self._web_view
         if view is None:
             return
