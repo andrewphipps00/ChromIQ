@@ -72,6 +72,28 @@ jobs:
         if: matrix.arch == 'universal2'
         run: pip3 install --quiet 'imagecodecs==2025.11.11'
 
+      # Diagnostic: numpy 2.4+ vendored OpenBLAS lives in different places
+      # depending on platform/version (numpy/.dylibs/, numpy.libs/ sibling, or
+      # an external scipy_openblas64 package). Print where it actually is so
+      # spec changes can target the right path. Cheap and self-documenting.
+      - name: Locate OpenBLAS in install
+        run: |
+          set +e
+          SITELIB=$(python3 -c "import site; print(site.getsitepackages()[0])")
+          echo "Site-packages: $SITELIB"
+          echo "--- pip packages matching openblas/numpy ---"
+          pip3 list 2>/dev/null | grep -iE 'openblas|numpy' || true
+          echo "--- libscipy_openblas / libopenblas anywhere in site-packages ---"
+          find "$SITELIB" \( -name 'libscipy_openblas*.dylib' -o -name 'libopenblas*.dylib' \) 2>/dev/null || true
+          echo "--- numpy dir top-level ---"
+          ls -la "$SITELIB/numpy" 2>/dev/null | head -30 || true
+          echo "--- numpy/.dylibs/ ---"
+          ls -la "$SITELIB/numpy/.dylibs" 2>/dev/null || echo "(no numpy/.dylibs)"
+          echo "--- numpy.libs sibling ---"
+          ls -la "$SITELIB/numpy.libs" 2>/dev/null || echo "(no numpy.libs)"
+          echo "--- scipy_openblas* / scipy-openblas* ---"
+          ls -la "$SITELIB" 2>/dev/null | grep -i openblas || echo "(no openblas package)"
+
       # numpy, Pillow, PyYAML, imagecodecs, PyQt6-Qt6 and PyQt6-WebEngine-Qt6 ship
       # only arch-specific wheels — no universal2 exists on PyPI for any of them.
       # Strategy: query PyPI JSON API for each package's x86_64 wheel, download it,

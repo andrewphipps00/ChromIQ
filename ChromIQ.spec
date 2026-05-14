@@ -25,13 +25,37 @@ _ic_datas, _ic_binaries, _ic_hiddenimports = collect_all('imagecodecs')
 
 _we_datas, _we_binaries, _we_hiddenimports = collect_all('PyQt6-WebEngine')
 
-# numpy 2.4+ vendors a SciPy-built OpenBLAS as `libscipy_openblas64_.dylib`
-# (under numpy/.dylibs/ on macOS). PyInstaller's bundled hook-numpy.py did not
-# pick it up in the v3.2.7 universal2 build, leaving Contents/Frameworks/
-# missing the dylib and crashing at numpy import time. Collect explicitly so
-# the dylib lands where numpy/_core/_multiarray_umath.so expects it via
-# @rpath. See issue #11.
-_np_binaries = collect_dynamic_libs('numpy')
+# numpy 2.4+ links against a SciPy-built OpenBLAS (`libscipy_openblas64_.dylib`)
+# that may live in any of three places depending on platform / wheel layout:
+#   (a) inside numpy at `numpy/.dylibs/` (delocate-wheel macOS layout)
+#   (b) sibling `numpy.libs/` (auditwheel Linux layout — sometimes seen on macOS too)
+#   (c) external package `scipy_openblas64` (numpy as runtime dep)
+# Neither hook-numpy.py nor a plain collect_dynamic_libs('numpy') picks it up
+# reliably on the universal2 macOS build, leaving Contents/Frameworks/ missing
+# the dylib and crashing the app at `import numpy` before any GUI code runs.
+# Walk all three locations and bundle every .dylib found — destdir '.' lands
+# them at the bundle root where numpy/_core/_multiarray_umath.so resolves them
+# via `@rpath` (rpath = `@loader_path/../..`). See issue #11.
+import numpy as _np_pkg
+_np_binaries = list(collect_dynamic_libs('numpy'))
+_np_dir = os.path.dirname(_np_pkg.__file__)
+for _root, _dirs, _files in os.walk(_np_dir):
+    for _f in _files:
+        if _f.endswith('.dylib'):
+            _np_binaries.append((os.path.join(_root, _f), '.'))
+_np_libs_sibling = os.path.join(os.path.dirname(_np_dir), 'numpy.libs')
+if os.path.isdir(_np_libs_sibling):
+    for _f in os.listdir(_np_libs_sibling):
+        if _f.endswith('.dylib'):
+            _np_binaries.append((os.path.join(_np_libs_sibling, _f), '.'))
+for _candidate_pkg in ('scipy_openblas64', 'scipy_openblas32'):
+    try:
+        _np_binaries.extend(collect_dynamic_libs(_candidate_pkg))
+    except Exception:
+        pass
+print(f"[ChromIQ.spec] Bundling {len(_np_binaries)} numpy/openblas binary entries: "
+      f"{sorted({os.path.basename(p) for p, _ in _np_binaries})}",
+      file=sys.stderr)
 
 # PyObjC (macOS native print dialog) — lazily-imported submodules need help.
 if sys.platform == 'darwin':
