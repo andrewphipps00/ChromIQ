@@ -76,11 +76,15 @@ jobs:
       - name: Build Linux executable
         run: python -m PyInstaller ChromIQLinux.spec
 
-      - name: Smoke test (import only — no display)
+      - name: Inspect built binary
         run: |
-          # Ensure the bootloader at least starts and imports run without
-          # crashing.  We don't try to open a window here.
-          ./dist/ChromIQ/ChromIQ --help 2>&1 | head -1 || true
+          # Don't try to launch the GUI — there's no DISPLAY on the runner,
+          # and the binary has no --help to trigger an early exit, so
+          # actually executing it would hang the job indefinitely
+          # (especially on the aarch64 runner).  Just verify the bootloader
+          # exists, is executable, and has the right ELF architecture.
+          file dist/ChromIQ/ChromIQ
+          test -x dist/ChromIQ/ChromIQ
           ls -lh dist/ChromIQ/ChromIQ
 
       - name: Package as tar.gz
