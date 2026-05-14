@@ -1,5 +1,37 @@
 # Changelog
 
+## v3.5.0-beta.4
+### Fixed
+- **Check for Updates no longer crashes on pre-release builds** (#16). The
+  built-in version parser did `int("0-beta")` on tags like
+  `v3.5.0-beta.3` and surfaced as "Check failed: invalid literal for
+  int() with base 10: '0-beta'". The parser now follows SemVer 2.0.0
+  precedence rules (`3.5.0 > 3.5.0-rc.1 > 3.5.0-beta.3`), and the
+  checker queries `/releases` rather than `/releases/latest` so users on
+  a beta can be told about a newer beta. Users on a final release still
+  only see final releases as upgrade candidates.
+- **Landscape charts now print correctly on the CUPS PostScript path**
+  (#14, #15). When the chart aspect contradicted the selected paper
+  orientation, the generated PostScript declared a portrait page and
+  drew the landscape image on top — Apple's `pstops` filter then
+  double-rotated, which caused HP drivers to clip columns A–E (#14) or
+  silently drop the job (#15). `PostScriptGenerator` now swaps
+  `setpagedevice` to match the TIFF aspect, and the CUPS PS command no
+  longer forwards `orientation-requested`, so the document fully
+  describes its own geometry. The raw-TIFF fallback path still uses
+  `orientation-requested` because raw TIFF has no inherent page
+  geometry.
+
+### CI
+- **Issue forms now auto-apply `platform:` and `Severity:` labels.**
+  GitHub issue forms don't turn dropdown selections into labels — only
+  the template's static `labels:` array applies. A new
+  `auto-label-issues.yml` workflow parses the bug- and feature-form
+  bodies on open and adds the matching repo labels
+  (`platform: macos|windows|linux|any`,
+  `Severity: Critical|High|Medium|Low`). Includes a `workflow_dispatch`
+  entry for retroactively labelling existing issues.
+
 ## v3.5.0-beta.3
 ### Fixed
 - **Early startup failures are now captured in `chromiq.log`** (#13, rooted
