@@ -60,6 +60,15 @@ jobs:
           python3 -m pip install --upgrade pip
           pip3 install -r requirements.txt
           pip3 install pyinstaller
+          # numpy ≥2.4 dropped the in-wheel OpenBLAS and now expects the
+          # externally-vendored scipy-openblas64 package to be present at
+          # runtime, but it is *not* declared as a hard dep on PyPI — pip
+          # won't pull it via `pip install numpy`. Without it,
+          # _multiarray_umath.so dlopens libscipy_openblas64_.dylib at
+          # `import numpy` time and crashes the app before any code runs.
+          # Install explicitly so collect_dynamic_libs('scipy_openblas64')
+          # in ChromIQ.spec can bundle the dylib. See issue #11.
+          pip3 install scipy-openblas64
 
       # pycups has no macOS wheel; build from source as a fat binary.
       - name: Force universal2 fat binaries (universal2 only)
@@ -148,12 +157,16 @@ jobs:
             done < <(find "$x86_root" -type f)
             echo "Merged $merged Mach-O binaries for ${pypi_name}"
           }
-          lipo_pkg numpy                numpy        cp313
-          lipo_pkg Pillow               PIL          cp313
-          lipo_pkg PyYAML               yaml         cp313
-          lipo_pkg imagecodecs          imagecodecs  abi3
-          lipo_pkg PyQt6-Qt6            PyQt6/Qt6    py3-none
-          lipo_pkg PyQt6-WebEngine-Qt6  PyQt6/Qt6    py3-none
+          lipo_pkg numpy                numpy             cp313
+          lipo_pkg Pillow               PIL               cp313
+          lipo_pkg PyYAML               yaml              cp313
+          lipo_pkg imagecodecs          imagecodecs       abi3
+          lipo_pkg PyQt6-Qt6            PyQt6/Qt6         py3-none
+          lipo_pkg PyQt6-WebEngine-Qt6  PyQt6/Qt6         py3-none
+          # scipy-openblas64 ships a single dylib per arch in a py3-none wheel;
+          # required by numpy ≥2.4 (see Install step). Lipo so the universal2
+          # bundle has a fat libscipy_openblas64_.dylib.
+          lipo_pkg scipy-openblas64     scipy_openblas64  py3-none
 
       - name: Build app bundle
         env:
