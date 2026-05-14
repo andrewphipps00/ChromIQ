@@ -1,5 +1,24 @@
 # Changelog
 
+## v3.5.0-beta.3
+### Fixed
+- **Early startup failures are now captured in `chromiq.log`** (#13, rooted
+  in #11). The rotating file handler and a `sys.excepthook` are installed
+  at the very top of `main.py`, before `PyQt6`, `numpy`, and the UI
+  modules are imported. If a frozen bundle ships with a broken dylib
+  graph (as happened in v3.2.7 with `libscipy_openblas64_.dylib`), the
+  import-time `ImportError` is now written to disk with a full traceback
+  instead of vanishing silently. The startup banner also records python
+  version, `sys.platform`, `sys.frozen`, and `sys.argv` for diagnostics.
+
+### CI
+- macOS, Windows, and Linux release workflows now always include a
+  changelog in GitHub release notes. They first try to extract the
+  matching `## <tag>` section from `CHANGELOG.md`; if absent (e.g. the
+  maintainer forgot), they fall back to an auto-generated bulleted list
+  of commit subjects since the previous tag, so releases can never ship
+  with empty notes.
+
 ## v3.5.0-beta.2
 ### Fixed
 - **Linux: Qt xcb platform plugin crash on launch** — the beta.1 tarball

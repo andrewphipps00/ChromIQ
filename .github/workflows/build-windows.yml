@@ -38,6 +38,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.tag || github.ref_name }}
+          fetch-depth: 0  # need full history + tags for the release-notes fallback
 
       - name: Set up Python 3.13
         uses: actions/setup-python@v5
@@ -126,6 +127,18 @@ jobs:
           esac
           if ! gh release view "$TAG" > /dev/null 2>&1; then
             body=$(awk "/^## ${TAG}$/{found=1; next} found && /^## /{exit} found{print}" CHANGELOG.md 2>/dev/null | sed '/^[[:space:]]*$/d' || true)
+            if [ -z "$body" ]; then
+              # No CHANGELOG.md entry for this tag — fall back to commit subjects
+              # since the previous tag so release notes are never empty.
+              PREV_TAG=$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || true)
+              if [ -n "$PREV_TAG" ]; then
+                COMMITS=$(git log --pretty=format:'- %s' "${PREV_TAG}..${TAG}")
+                body=$(printf '### Changes since %s\n%s' "$PREV_TAG" "$COMMITS")
+              else
+                COMMITS=$(git log --pretty=format:'- %s' "$TAG")
+                body=$(printf '### Changes\n%s' "$COMMITS")
+              fi
+            fi
             {
               printf '%s\n\n---\n' "$body"
               printf '**Installation (Windows):** Download the ZIP for your architecture '
