@@ -376,6 +376,7 @@ class TabPrint(QWidget):
         right = QWidget(self)
         rl = QVBoxLayout(right)
         rl.setContentsMargins(0, 0, 0, 12)
+        rl.setSpacing(0)
         lbl = QLabel("PRINT PREVIEW", right)
         lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         lbl.setStyleSheet(

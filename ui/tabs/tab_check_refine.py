@@ -85,6 +85,7 @@ class TabCheckRefine(QWidget):
     """Step 5: check an ICC profile against .ti3 data and guide strip re-measurement."""
 
     guide_refinement_requested = pyqtSignal(Path, Path)  # (ti3_path, strips_file_path)
+    preconditioning_requested  = pyqtSignal(Path)         # user clicked "Use as pre-conditioning profile"
     ti2_found                  = pyqtSignal(Path)         # emitted when a matching .ti2 exists next to the .ti3
     ti3_selected               = pyqtSignal(Path)         # emitted when the user manually browses a .ti3
     about_to_load_ti3          = pyqtSignal()             # emitted before state changes, for snapshot saving
@@ -1240,7 +1241,7 @@ class TabCheckRefine(QWidget):
 
         dlg = QDialog(self)
         dlg.setWindowTitle("Profile Quality Assessment")
-        dlg.setMinimumWidth(560)
+        dlg.setMinimumWidth(640)
 
         layout = QVBoxLayout(dlg)
         layout.setSpacing(14)
@@ -1309,6 +1310,22 @@ class TabCheckRefine(QWidget):
             action_lbl.setWordWrap(True)
             layout.addWidget(action_lbl)
 
+        # Description for the "Use as pre-conditioning" path
+        if self._icc_path:
+            precond_desc = QLabel(
+                "<b>Use as pre-conditioning profile</b> — start a second profiling pass "
+                "that uses this profile to place the new test patches more intelligently. "
+                "The next chart will sample more in the colour regions your printer "
+                "reproduces least accurately, producing a noticeably better profile on "
+                "the second round. Your existing chart files are preserved (renamed "
+                "with a <code>pre_</code> prefix) so nothing is lost. Recommended once "
+                "you've confirmed a working profile for this paper.",
+                dlg,
+            )
+            precond_desc.setWordWrap(True)
+            precond_desc.setStyleSheet("color: #b0b0b0; font-size: 11px;")
+            layout.addWidget(precond_desc)
+
         # Buttons
         btn_box = QDialogButtonBox()
         close_btn = btn_box.addButton("Close", QDialogButtonBox.ButtonRole.RejectRole)
@@ -1324,6 +1341,14 @@ class TabCheckRefine(QWidget):
         if self._icc_path:
             install_label = _install_labels.get(grade, "Install Profile Anyway")
             install_btn = btn_box.addButton(install_label, QDialogButtonBox.ButtonRole.ActionRole)
+
+        precond_btn: QPushButton | None = None
+        if self._icc_path:
+            precond_btn = btn_box.addButton(
+                "← Use as Pre-conditioning",
+                QDialogButtonBox.ButtonRole.ActionRole,
+            )
+            precond_btn.setObjectName("primary")
 
         guide_btn: QPushButton | None = None
         if strips_file and refine_strips and not recommend_start_over and self._ti3_path:
@@ -1361,6 +1386,15 @@ class TabCheckRefine(QWidget):
                     self._log.appendPlainText(f"[ERROR] Install failed: {exc}")
 
             install_btn.clicked.connect(_on_install)
+
+        if precond_btn:
+            icc_for_precond = self._icc_path
+
+            def _on_precond():
+                dlg.accept()
+                self.preconditioning_requested.emit(icc_for_precond)
+
+            precond_btn.clicked.connect(_on_precond)
 
         tint_dialog_primary(dlg, _TAB_COLOR)
         dlg.exec()

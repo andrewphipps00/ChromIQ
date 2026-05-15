@@ -20,6 +20,7 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QInputDialog,
     QLabel,
+    QLineEdit,
     QPushButton,
     QRadioButton,
     QScrollArea,
@@ -44,7 +45,7 @@ from ui.styles import SPEC_AMBER, SPEC_CYAN, SPEC_GREEN, SPEC_MAGENTA, SPEC_VIOL
 from ui.tab_header import TabHeader
 from ui.tiff_preview import TiffPreview
 from ui.tooltip_button import TooltipButton
-from ui.widgets import NoScrollComboBox, NoScrollSpinBox, load_folder_icon, open_file_dialog
+from ui.widgets import NoScrollComboBox, NoScrollSpinBox, load_folder_icon, make_browse_button, open_file_dialog
 from workflow.chart_creator import ChartCreator, ChartParams
 
 if TYPE_CHECKING:
@@ -74,6 +75,7 @@ class TabChart(QWidget):
         self._settings = settings
         self._creator  = ChartCreator(runner, file_mgr, settings)
         self._params   = self._load_yaml_params()
+        self._preconditioning_from_dialog = False
 
         self._build_ui()
         self._restore_defaults()
@@ -197,6 +199,7 @@ class TabChart(QWidget):
         right = QWidget(self)
         right_layout = QVBoxLayout(right)
         right_layout.setContentsMargins(0, 0, 0, 12)
+        right_layout.setSpacing(0)
         lbl = QLabel("CHART PREVIEW", right)
         lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         lbl.setStyleSheet(
@@ -345,6 +348,57 @@ class TabChart(QWidget):
         lb_row.addWidget(self._lb_tooltip)
         pages_layout.addLayout(lb_row)
         layout.addWidget(pages_grp)
+
+        # Refinement / pre-conditioning (optional second-pass profile)
+        precond_grp = QGroupBox("Refinement (Optional)", inner)
+        precond_row = QHBoxLayout(precond_grp)
+        precond_row.setSpacing(6)
+
+        self._guided_precond_check = QCheckBox("Refinement profile", inner)
+        self._guided_precond_check.toggled.connect(self._on_guided_precond_toggled)
+        precond_row.addWidget(self._guided_precond_check)
+
+        self._guided_precond_path = QLineEdit(inner)
+        self._guided_precond_path.setReadOnly(True)
+        self._guided_precond_path.setPlaceholderText("No profile selected")
+        self._guided_precond_path.setEnabled(False)
+        precond_row.addWidget(self._guided_precond_path, stretch=1)
+
+        self._guided_precond_browse = make_browse_button(
+            inner, "Select pre-conditioning profile", icon="folder_create",
+        )
+        self._guided_precond_browse.setEnabled(False)
+        self._guided_precond_browse.clicked.connect(self._on_guided_precond_browse)
+        precond_row.addWidget(self._guided_precond_browse)
+
+        precond_row.addWidget(TooltipButton(
+            "Refinement Profile (Pre-conditioning)",
+            "Use this to make a second, noticeably better profile after you have "
+            "already built and confirmed a working one for the same printer + paper.\n\n"
+            "How it helps:\n"
+            "Your first profile tells ChromIQ which colours your printer gets right "
+            "and which it struggles with. When you turn this option on, ChromIQ uses "
+            "that knowledge to place the new test patches more cleverly — sampling "
+            "more in the regions your printer reproduces least accurately, and fewer "
+            "in the regions it already nails. The end result is a profile that is "
+            "more accurate where it matters, without needing more patches overall.\n\n"
+            "When to use it:\n"
+            "• You already have a first ICC profile (.icc or .icm) built from this "
+            "same printer + paper combination.\n"
+            "• You want to invest one more round of printing and measuring to get a "
+            "noticeably better profile, especially for tricky papers (matte, baryta, "
+            "fine-art).\n\n"
+            "When NOT to use it:\n"
+            "• On a first-ever profile for this paper — leave this off and just "
+            "build the normal way.\n"
+            "• If you don't have a working profile yet for this exact paper/printer.\n\n"
+            "Tip: the more pages you print on the refinement pass, the more benefit "
+            "the cleverer patch placement gives you.",
+            inner,
+            min_width=580,
+        ))
+
+        layout.addWidget(precond_grp)
 
         # Patch count display
         count_grp = QGroupBox("Calculated Patches", inner)
@@ -705,6 +759,43 @@ class TabChart(QWidget):
             self._guided_btn.setChecked(False)
             self._manual_btn.setChecked(True)
 
+    def _on_guided_precond_toggled(self, checked: bool) -> None:
+        self._guided_precond_path.setEnabled(checked)
+        self._guided_precond_browse.setEnabled(checked)
+        if not checked:
+            # Forget the "came from a result dialog" hint — only honor it while the
+            # checkbox is actively ticked so that toggling off and back on doesn't
+            # silently re-arm the rename-instead-of-wipe behavior.
+            self._preconditioning_from_dialog = False
+        self._update_patch_count()
+
+    def _on_guided_precond_browse(self) -> None:
+        start = self._guided_precond_path.text().strip()
+        if start:
+            start = str(Path(start).parent)
+        path = open_file_dialog(
+            self, "Select pre-conditioning profile",
+            "ICC / MPP profiles (*.icc *.icm *.mpp)",
+            start_dir=start,
+            extra_path=self._settings.get("custom_output_path", ""),
+        )
+        if path:
+            self._guided_precond_path.setText(path)
+            self._update_patch_count()
+
+    def apply_preconditioning(self, profile_path: Path | str) -> None:
+        """Programmatically pre-fill pre-conditioning from a result dialog.
+
+        Called by the main window when the user clicks "Use as pre-conditioning
+        profile" in the Build Profile or Check/Refine result dialog. Switches to
+        guided mode, ticks the checkbox, fills the path picker, and arms the
+        rename-instead-of-wipe behavior for the next Generate Chart click.
+        """
+        self._switch_mode("guided")
+        self._guided_precond_path.setText(str(profile_path))
+        self._guided_precond_check.setChecked(True)
+        self._preconditioning_from_dialog = True
+
     def _current_mode(self) -> str:
         return "guided" if self._stack.currentIndex() == 0 else "manual"
 
@@ -916,10 +1007,32 @@ class TabChart(QWidget):
         bp = base_black + (pages - 1) * 2
         lb_flag = "-L " if has_lb else ""
         dd_flag = "-h " if dd else ""
+        precond_path = (
+            self._guided_precond_path.text().strip()
+            if hasattr(self, "_guided_precond_path") else ""
+        )
+        precond_active = (
+            hasattr(self, "_guided_precond_check")
+            and self._guided_precond_check.isChecked()
+        )
+        precond_line = ""
+        recommendation = ""
+        if precond_active:
+            if precond_path:
+                precond_line = f" -c pre_{Path(precond_path).name}"
+                recommendation = (
+                    "\nTip: use at least as many pages as the original profile."
+                )
+            else:
+                recommendation = (
+                    "\nPick a profile to refine from (Browse… above)."
+                )
+
         info = (
             f"Guided mode applies these fixed settings:\n"
-            f"targen -d2 -G -e{wp} -B{bp} -g{grey_steps}\n"
+            f"targen -d2 -G -e{wp} -B{bp} -g{grey_steps}{precond_line}\n"
             f"printtarg -i{instr} -p{paper} -t{dpi} {lb_flag}{dd_flag}chart"
+            f"{recommendation}"
         )
         if hasattr(self, "_guided_info_lbl"):
             self._guided_info_lbl.setText(info)
@@ -1019,6 +1132,17 @@ class TabChart(QWidget):
 
     def _on_generate_finished(self, tiffs: list[Path]) -> None:
         self._generate_btn.setEnabled(True)
+        # One-shot flag: consumed by this run, don't carry over to the next.
+        was_from_dialog = self._preconditioning_from_dialog
+        self._preconditioning_from_dialog = False
+        # If a v1 promotion just happened, the path in the picker now points to
+        # a file that has been renamed away. Clear it so the user isn't left
+        # with a stale path next time they look at the panel.
+        if was_from_dialog and hasattr(self, "_guided_precond_path"):
+            picked = self._guided_precond_path.text().strip()
+            if picked and not Path(picked).is_file():
+                self._guided_precond_path.clear()
+                self._guided_precond_check.setChecked(False)
         if tiffs:
             self._preview.load_tiff(tiffs)
             log.info("Preview loaded: %d TIFF(s)", len(tiffs))
@@ -1084,6 +1208,11 @@ class TabChart(QWidget):
         base_black = int(self._settings.get("targen_black_patches", 4))
         per_sheet  = query_patches(instr, paper, dd, suppress_lb=has_lb) or 504
         grey_steps = max(8, min((per_sheet * pages) // 30, 64))
+
+        precond_path = self._guided_precond_path.text().strip()
+        precond_active = self._guided_precond_check.isChecked() and bool(precond_path)
+        extra_targen = shlex.join(["-c", precond_path]) if precond_active else ""
+
         return ChartParams(
             instrument           = instr,
             paper                = paper,
@@ -1096,9 +1225,13 @@ class TabChart(QWidget):
             black_patches        = base_black + (pages - 1) * 2,
             good_mode            = bool(self._settings.get("targen_good_mode", True)),
             grey_steps           = grey_steps,
+            extra_targen_args    = extra_targen,
             tiff_dpi             = int(self._settings.get("printtarg_dpi", 300)),
             patch_scale          = 1.0,
             margin_mm            = 6,
+            preserve_as_preconditioning = (
+                precond_active and self._preconditioning_from_dialog
+            ),
         )
 
     def _collect_manual(self) -> ChartParams:

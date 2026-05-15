@@ -51,6 +51,11 @@ class ChartParams:
 
     target_name: str = "chart"
     cal_target: bool = False          # when True, preserve existing cal_* files during cleanup
+    # When True, the .icc/.ti3 from a prior session in the same working folder
+    # are renamed to pre_*.icc/pre_*.ti3 instead of being overwritten on the
+    # following measure / colprof runs. Set by the guided tab when the user
+    # arrived via "Use as pre-conditioning profile" in a result dialog.
+    preserve_as_preconditioning: bool = False
 
 
 class ChartCreator:
@@ -93,6 +98,10 @@ class ChartCreator:
                         log.warning("Could not delete %s: %s", _f, _exc)
         else:
             # Normal profiling run — preserve any cal_* files from a prior calibration step
+            if params.preserve_as_preconditioning:
+                params.extra_targen_args = self._promote_v1_to_preconditioning(
+                    params.extra_targen_args, work_dir,
+                )
             _exts = {"ti1", "ti2", "tif", "cht", "ps", "json", "cal"}
             _deleted = 0
             for _f in work_dir.iterdir():
@@ -171,6 +180,65 @@ class ChartCreator:
             on_line=on_line,
             on_finish=lambda code: self._printtarg_done(code, work_dir, on_finish, stem),
         )
+
+    @staticmethod
+    def _promote_v1_to_preconditioning(extra_args: str, work_dir: Path) -> str:
+        """Rename a prior session's .icc/.ti3 to pre_* so the next run can use them.
+
+        Triggered when the user clicked "Use as pre-conditioning profile" in a
+        result dialog. The picked profile is the v1 .icc inside the working
+        folder; renaming it (and its matching .ti3) preserves the v1 record
+        instead of letting the upcoming measure/colprof runs overwrite it.
+
+        Any existing pre_*.icc / pre_*.ti3 from a previous refinement pass are
+        overwritten — we only keep one generation of history.
+        """
+        if not extra_args:
+            return extra_args
+        parts = shlex.split(extra_args)
+        try:
+            idx = parts.index("-c")
+        except ValueError:
+            return extra_args
+        if idx + 1 >= len(parts):
+            return extra_args
+
+        src = Path(parts[idx + 1])
+        # Only promote when the picked profile is INSIDE the working folder and
+        # not already a pre_* file. External paths are handled later by
+        # _stage_precond_profile() which copies them in.
+        try:
+            in_work = src.resolve().parent == work_dir.resolve()
+        except OSError:
+            in_work = False
+        if not in_work or src.stem.startswith("pre_"):
+            return extra_args
+        if not src.is_file():
+            return extra_args
+
+        icc_dest = work_dir / f"pre_{src.name}"
+        try:
+            if icc_dest.exists():
+                icc_dest.unlink()
+            src.rename(icc_dest)
+            log.info("Promoted v1 profile to pre-conditioning: %s", icc_dest.name)
+        except OSError as exc:
+            log.warning("Could not rename %s -> %s: %s", src, icc_dest, exc)
+            return extra_args
+
+        ti3_src = src.with_suffix(".ti3")
+        if ti3_src.is_file():
+            ti3_dest = work_dir / f"pre_{ti3_src.name}"
+            try:
+                if ti3_dest.exists():
+                    ti3_dest.unlink()
+                ti3_src.rename(ti3_dest)
+                log.info("Promoted v1 measurements to %s", ti3_dest.name)
+            except OSError as exc:
+                log.warning("Could not rename %s -> %s: %s", ti3_src, ti3_dest, exc)
+
+        parts[idx + 1] = str(icc_dest)
+        return shlex.join(parts)
 
     @staticmethod
     def _stage_precond_profile(extra_args: str, work_dir: Path) -> str:

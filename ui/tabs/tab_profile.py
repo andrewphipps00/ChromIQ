@@ -132,6 +132,7 @@ class TabProfile(QWidget):
 
     profile_built    = pyqtSignal(Path, Path)   # (ti3_path, icc_path)
     check_requested  = pyqtSignal()             # user clicked "Check Quality" in the result dialog
+    preconditioning_requested = pyqtSignal(Path)  # user clicked "Use as pre-conditioning profile"
     profile_active   = pyqtSignal(bool)         # True while colprof is running, False when done
     ti2_found           = pyqtSignal(Path)  # emitted when a matching .ti2 exists next to the loaded .ti3
     ti3_manually_loaded = pyqtSignal()      # emitted when the user manually loads a .ti3 file
@@ -2976,7 +2977,7 @@ class TabProfile(QWidget):
 
         dlg = QDialog(self)
         dlg.setWindowTitle("Profile Built")
-        dlg.setMinimumWidth(620 if cal_mode else 560)
+        dlg.setMinimumWidth(700 if cal_mode else 640)
 
         layout = QVBoxLayout(dlg)
         layout.setContentsMargins(24, 20, 24, 20)
@@ -3034,6 +3035,20 @@ class TabProfile(QWidget):
         check_desc.setStyleSheet("color: #b0b0b0; font-size: 11px;")
         layout.addWidget(check_desc)
 
+        precond_desc = QLabel(
+            "<b>Use as pre-conditioning profile</b> — start a second profiling pass that "
+            "uses this profile to place the new test patches more intelligently. "
+            "The next chart will sample more in the colour regions your printer "
+            "reproduces least accurately, producing a noticeably better profile on "
+            "the second round. Your existing chart files are preserved (renamed "
+            "with a <code>pre_</code> prefix) so nothing is lost. "
+            "Recommended once you've already built a working profile for this paper.",
+            dlg,
+        )
+        precond_desc.setWordWrap(True)
+        precond_desc.setStyleSheet("color: #b0b0b0; font-size: 11px;")
+        layout.addWidget(precond_desc)
+
         if cal_mode:
             apply_desc = QLabel(
                 "<b>Apply Calibration</b> — bakes your calibration curves (.cal file) "
@@ -3051,6 +3066,7 @@ class TabProfile(QWidget):
         btn_box = QDialogButtonBox(dlg)
         _install_label = "Install on this Mac" if is_macos() else "Install Profile"
         install_btn = btn_box.addButton(_install_label,            QDialogButtonBox.ButtonRole.ActionRole)
+        precond_btn = btn_box.addButton("← Use as Pre-conditioning", QDialogButtonBox.ButtonRole.ActionRole)
         check_btn   = btn_box.addButton("Check Profile Quality →", QDialogButtonBox.ButtonRole.ActionRole)
         if cal_mode:
             apply_btn = btn_box.addButton("Apply Calibration →",   QDialogButtonBox.ButtonRole.ActionRole)
@@ -3058,6 +3074,7 @@ class TabProfile(QWidget):
         done_btn    = btn_box.addButton("Done",                    QDialogButtonBox.ButtonRole.AcceptRole)
         install_btn.setObjectName("primary")
         check_btn.setObjectName("primary")
+        precond_btn.setObjectName("primary")
         layout.addWidget(btn_box)
 
         def _on_install() -> None:
@@ -3068,6 +3085,10 @@ class TabProfile(QWidget):
             dlg.accept()
             self.check_requested.emit()
 
+        def _on_precond() -> None:
+            dlg.accept()
+            self.preconditioning_requested.emit(icc_path)
+
         def _on_apply_cal() -> None:
             dlg.accept()
             if icc_path and not self._ac_in_edit.text().strip():
@@ -3076,6 +3097,7 @@ class TabProfile(QWidget):
 
         install_btn.clicked.connect(_on_install)
         check_btn.clicked.connect(_on_check)
+        precond_btn.clicked.connect(_on_precond)
         if cal_mode:
             apply_btn.clicked.connect(_on_apply_cal)
         done_btn.clicked.connect(dlg.accept)
