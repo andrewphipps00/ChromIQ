@@ -143,6 +143,19 @@ QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox {{
 QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus {{
     border-color: {ACCENT};
 }}
+/* Disabled inputs — dim text, subtly darker chrome to signal "off". */
+QLineEdit:disabled,
+QSpinBox:disabled, QDoubleSpinBox:disabled,
+QComboBox:disabled {{
+    color: #505050;
+    background: #1a1a1a;
+    border-color: #2a2a2a;
+}}
+QSpinBox:disabled::up-button,   QSpinBox:disabled::down-button,
+QDoubleSpinBox:disabled::up-button, QDoubleSpinBox:disabled::down-button {{
+    background: #1a1a1a;
+}}
+QComboBox:disabled::drop-down {{ background: #1a1a1a; }}
 QComboBox {{ padding-right: 28px; }}
 QComboBox::drop-down {{
     subcontrol-origin: padding;

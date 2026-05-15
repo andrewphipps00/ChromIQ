@@ -570,8 +570,15 @@ class TabChart(QWidget):
         self._manual_lb_pw: ParameterWidget | None = None
         self._manual_dd_pw: ParameterWidget | None = None
         self._manual_instr_pw: ParameterWidget | None = None
+        self._manual_paper_pw: ParameterWidget | None = None
+        self._manual_f_pw: ParameterWidget | None = None
+        self._manual_a_pw: ParameterWidget | None = None
+        self._manual_m_pw: ParameterWidget | None = None
         self._manual_cal_k_pw: ParameterWidget | None = None
         self._manual_cal_i_pw: ParameterWidget | None = None
+        self._manual_auto_patches_check: QCheckBox | None = None
+        self._manual_pages_spin: NoScrollSpinBox | None = None
+        self._manual_pages_row: QWidget | None = None
         self._bit8_radio: QRadioButton | None = None
         self._bit16_radio: QRadioButton | None = None
         self._pre_cal_snapshot: dict | None = None
@@ -608,6 +615,23 @@ class TabChart(QWidget):
                     pw.layout().insertWidget(insert_at,     self._bit8_radio)
                     pw.layout().insertWidget(insert_at + 1, self._bit16_radio)
 
+                if tool == "targen" and flag == "-f":
+                    # Shrink the patch-count spinbox and add an "Auto" checkbox
+                    # that drives live estimation from current paper/layout settings.
+                    self._manual_f_pw = pw
+                    pw._control.setMaximumWidth(90)
+                    self._manual_auto_patches_check = QCheckBox("Auto", pw)
+                    self._manual_auto_patches_check.setToolTip(
+                        "Auto-compute the patch count to fill exactly the number of\n"
+                        "pages set under printtarg → Pages, using the current paper,\n"
+                        "instrument, double-density, left-border, patch scale and margin."
+                    )
+                    insert_at = pw.layout().count() - 1
+                    pw.layout().insertWidget(insert_at, self._manual_auto_patches_check)
+                    self._manual_auto_patches_check.toggled.connect(
+                        self._on_auto_patches_toggled
+                    )
+
                 if tool == "printtarg" and flag == "-L":
                     self._manual_lb_pw = pw
                 if tool == "printtarg" and flag == "-h":
@@ -615,6 +639,12 @@ class TabChart(QWidget):
                 if tool == "printtarg" and flag == "-i":
                     self._manual_instr_pw = pw
                     pw.value_changed.connect(self._update_manual_lb_visibility)
+                if tool == "printtarg" and flag == "-p":
+                    self._manual_paper_pw = pw
+                if tool == "printtarg" and flag == "-a":
+                    self._manual_a_pw = pw
+                if tool == "printtarg" and flag == "-m":
+                    self._manual_m_pw = pw
                 if tool == "printtarg" and flag == "-K":
                     self._manual_cal_k_pw = pw
                 if tool == "printtarg" and flag == "-I":
@@ -637,6 +667,43 @@ class TabChart(QWidget):
                 else:
                     basic_layout.addWidget(pw)
                     self._manual_widgets[tool].append(pw)
+
+            # Insert the Pages row right under printtarg -p (paper size).
+            # Drives the Auto patch-count estimate; greyed out unless Auto is on.
+            if tool == "printtarg" and self._manual_paper_pw is not None:
+                pages_row_w = QWidget(basic_grp)
+                pages_row_l = QHBoxLayout(pages_row_w)
+                pages_row_l.setContentsMargins(0, 2, 0, 2)
+                pages_row_l.setSpacing(8)
+                pages_lbl = QLabel("Pages:", pages_row_w)
+                pages_lbl.setFixedWidth(190)
+                pages_lbl.setStyleSheet("color: #c8c8c8;")
+                pages_row_l.addWidget(pages_lbl)
+                self._manual_pages_spin = NoScrollSpinBox(pages_row_w)
+                self._manual_pages_spin.setObjectName("compact_input")
+                self._manual_pages_spin.setRange(1, 20)
+                self._manual_pages_spin.setValue(1)
+                self._manual_pages_spin.setMaximumWidth(90)
+                self._manual_pages_spin.setEnabled(False)
+                pages_row_l.addWidget(self._manual_pages_spin)
+                pages_row_l.addStretch()
+                pages_row_l.addWidget(TooltipButton(
+                    "Pages (Auto patch count)",
+                    "Target page count used by the Auto checkbox next to\n"
+                    "targen → Total Patch Count. When Auto is on, the patch\n"
+                    "count is sized so the chart fills exactly this many\n"
+                    "sheets — using the current paper, instrument, double\n"
+                    "density, left-border, patch scale and margin settings.\n\n"
+                    "This control is greyed out when Auto is off, because\n"
+                    "printtarg by itself just uses as many sheets as the\n"
+                    "patch count requires.",
+                    pages_row_w,
+                    min_width=480,
+                ))
+                idx = basic_layout.indexOf(self._manual_paper_pw)
+                basic_layout.insertWidget(idx + 1 if idx >= 0 else basic_layout.count(),
+                                          pages_row_w)
+                self._manual_pages_row = pages_row_w
 
             grp_layout.addWidget(basic_grp)
             grp_layout.addWidget(expert_grp)
@@ -803,6 +870,32 @@ class TabChart(QWidget):
         if self._manual_dd_pw is not None:
             self._manual_dd_pw.setVisible(is_cm)
 
+    # ------------------------------------------------------------------
+    # Auto patch-count (Manual mode)
+    # ------------------------------------------------------------------
+
+    def _on_auto_patches_toggled(self, checked: bool) -> None:
+        """Enable/disable -f and Pages spinboxes; show 'Auto' placeholder in -f.
+
+        The actual patch-count estimate runs at Generate-click — see
+        _on_generate — so this handler is purely UI state.
+        """
+        if self._manual_pages_spin is not None:
+            self._manual_pages_spin.setEnabled(checked)
+        if self._manual_f_pw is None or self._manual_f_pw._control is None:
+            return
+        spin = self._manual_f_pw._control
+        spin.setEnabled(not checked)
+        spin.blockSignals(True)
+        if checked:
+            # QSpinBox shows specialValueText whenever value == minimum.
+            # -f's min is 0 (see data/parameters.yaml), so set 0 here.
+            spin.setSpecialValueText("Auto")
+            spin.setValue(0)
+        else:
+            spin.setSpecialValueText("")
+        spin.blockSignals(False)
+
     def _connect_cal_mutex(self) -> None:
         k, i = self._manual_cal_k_pw, self._manual_cal_i_pw
         if k is None or i is None:
@@ -881,6 +974,12 @@ class TabChart(QWidget):
                 is_16bit = bool(s.get("manual_printtarg_tiff_16bit", False))
                 self._bit16_radio.setChecked(is_16bit)
                 self._bit8_radio.setChecked(not is_16bit)
+            if self._manual_pages_spin is not None:
+                self._manual_pages_spin.setValue(int(s.get("manual_pages", 1)))
+            if self._manual_auto_patches_check is not None:
+                auto_on = bool(s.get("manual_auto_patches", False))
+                self._manual_auto_patches_check.setChecked(auto_on)
+                self._on_auto_patches_toggled(auto_on)
         else:
             name = self._preset_combo.currentData()
             presets = self._load_presets_from_settings()
@@ -902,6 +1001,12 @@ class TabChart(QWidget):
                 is_16bit = bool(data.get("tiff_16bit", False))
                 self._bit16_radio.setChecked(is_16bit)
                 self._bit8_radio.setChecked(not is_16bit)
+            if self._manual_pages_spin is not None:
+                self._manual_pages_spin.setValue(int(data.get("pages", 1)))
+            if self._manual_auto_patches_check is not None:
+                auto_on = bool(data.get("auto_patches", False))
+                self._manual_auto_patches_check.setChecked(auto_on)
+                self._on_auto_patches_toggled(auto_on)
         self._update_manual_lb_visibility()
 
     def _on_preset_save(self) -> None:
@@ -918,6 +1023,14 @@ class TabChart(QWidget):
             capture[f"targen_-D_{idx}_enabled"] = pw.is_enabled_by_user
         capture["tiff_16bit"] = (
             self._bit16_radio.isChecked() if self._bit16_radio is not None else False
+        )
+        capture["auto_patches"] = (
+            self._manual_auto_patches_check.isChecked()
+            if self._manual_auto_patches_check is not None else False
+        )
+        capture["pages"] = (
+            int(self._manual_pages_spin.value())
+            if self._manual_pages_spin is not None else 1
         )
         dlg = QInputDialog(self)
         dlg.setWindowTitle("Save Preset")
@@ -1095,6 +1208,28 @@ class TabChart(QWidget):
         self._preview.clear()
         self._generate_btn.setEnabled(False)
 
+        # Auto patch count (manual mode only): estimate now, then proceed.
+        # Live re-estimation on every settings change blocks the UI for
+        # custom layouts (binary search shells out to targen/printtarg
+        # via subprocess.run), so we defer to the click.
+        if (self._current_mode() == "manual"
+                and self._manual_auto_patches_check is not None
+                and self._manual_auto_patches_check.isChecked()):
+            self._log.appendPlainText("Calculating patch count…")
+            self._log.ensureCursorVisible()
+            from PyQt6.QtWidgets import QApplication
+            QApplication.processEvents()
+            try:
+                params.patches = self._creator.estimate_patches(
+                    params, progress_cb=self._on_log_line
+                )
+            except Exception as exc:
+                log.error("Auto patch estimation failed: %s", exc)
+                self._log.appendPlainText(f"Auto patch estimation failed: {exc}")
+                self._generate_btn.setEnabled(True)
+                return
+            self._log.appendPlainText(f"Auto patch count: {params.patches}")
+
         self._creator.generate(
             params,
             on_line=self._on_log_line,
@@ -1179,6 +1314,10 @@ class TabChart(QWidget):
             s.set(f"manual_targen_-D_{idx}_enabled", pw.is_enabled_by_user)
         if self._bit16_radio is not None:
             s.set("manual_printtarg_tiff_16bit", self._bit16_radio.isChecked())
+        if self._manual_auto_patches_check is not None:
+            s.set("manual_auto_patches", self._manual_auto_patches_check.isChecked())
+        if self._manual_pages_spin is not None:
+            s.set("manual_pages", int(self._manual_pages_spin.value()))
         log.info("Chart defaults saved")
         self._log.appendPlainText("Current settings saved as defaults.")
         self._log.ensureCursorVisible()
@@ -1230,6 +1369,9 @@ class TabChart(QWidget):
 
     def _collect_manual(self) -> ChartParams:
         p = ChartParams()
+
+        if self._manual_pages_spin is not None:
+            p.pages = int(self._manual_pages_spin.value())
 
         def _get(tool: str, flag: str, default: Any) -> Any:
             for pw in self._manual_widgets.get(tool, []):
@@ -1325,6 +1467,12 @@ class TabChart(QWidget):
             is_16bit = bool(s.get("manual_printtarg_tiff_16bit", False))
             self._bit16_radio.setChecked(is_16bit)
             self._bit8_radio.setChecked(not is_16bit)
+        if self._manual_pages_spin is not None:
+            self._manual_pages_spin.setValue(int(s.get("manual_pages", 1)))
+        if self._manual_auto_patches_check is not None:
+            auto_on = bool(s.get("manual_auto_patches", False))
+            self._manual_auto_patches_check.setChecked(auto_on)
+            self._on_auto_patches_toggled(auto_on)
         self._update_manual_lb_visibility()
 
         presets = self._load_presets_from_settings()

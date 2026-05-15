@@ -419,10 +419,20 @@ class ChartCreator:
 
         pt_args_base = self._build_printtarg_args(p)[:-1]  # strip trailing target name
 
-        est = query_patches(p.instrument, p.paper, p.double_density,
-                            suppress_lb=p.disable_left_border) or 400
-        lo, hi = max(50, int(est * 0.5)), int(est * 2.5)
-        best = 50
+        est_raw = query_patches(p.instrument, p.paper, p.double_density,
+                                suppress_lb=p.disable_left_border) or 400
+        # Per-sheet capacity scales roughly as 1/patch_scale² — each patch
+        # occupies patch_scale² of the standard cell area. Without this
+        # adjustment the [0.5×, 2.5×] window misses the real value for
+        # patch_scale > ~1.4, the loop never sees pages==1, and `best`
+        # stays at its initial sentinel.
+        scale_sq = max(p.patch_scale ** 2, 0.01)
+        est = max(20, int(est_raw / scale_sq))
+
+        lo = max(20, int(est * 0.5))
+        hi = max(lo + 50, int(est * 2.5))
+        lo_init, hi_init = lo, hi
+        best = 0
 
         with tempfile.TemporaryDirectory() as tmp_str:
             tmpdir = Path(tmp_str)
@@ -447,7 +457,11 @@ class ChartCreator:
                 else:
                     hi = mid - 1
 
-        return max(best, 50)
+        if best == 0:
+            log.warning("_binary_search found no valid capacity in [%d, %d]; "
+                        "falling back to scaled estimate %d", lo_init, hi_init, est)
+            return est
+        return best
 
     @staticmethod
     def _probe(

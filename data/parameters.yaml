@@ -113,6 +113,17 @@ parameters:
           • Standard:   800–1200
           • High quality: 1500–2000
           • Very high:  2500–3000
+
+        Auto (next to the spinbox): when ticked, the patch count is
+        computed live from the chosen paper, instrument, double-density,
+        left-border, patch scale, margin, and the Pages spinbox in the
+        printtarg section — picking the largest value that fills exactly
+        that many sheets with no empty space.  The spinbox is greyed out
+        while Auto is on and shows the current estimate.  For custom
+        layouts (non-default patch scale or margin) Auto runs a short
+        binary search against targen, so the value may take a second
+        to update.
+
         In Guided mode this is computed automatically from the
         patches-per-page database × selected page count.
         Set to 0 in Guided mode to use automatic calculation.

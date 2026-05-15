@@ -1,5 +1,46 @@
 # Changelog
 
+## v3.5.3
+Quality-of-life release for the Manual chart workflow: pick a page count,
+tick **Auto**, and let ChromIQ size the patch count to fill exactly that
+many sheets. Also fixes a long-standing bug in the patch-fitting binary
+search that made custom patch scales produce partially-filled pages.
+
+### Features
+- **Auto patch count in Manual mode.** New "Auto" checkbox next to the
+  total patch count spinbox in the basic targen parameters, paired with a
+  new "Pages" spinbox under printtarg → paper size. When Auto is on, the
+  patch count is computed at Generate-target time from the current paper,
+  instrument, double-density, left-border, patch scale, and margin so the
+  chart fills the requested page count with no empty space. The patch-
+  count spinbox displays "Auto" in place of a number while the option is
+  active. The estimate is deferred to the Generate click rather than
+  running live on every settings change — custom layouts shell out to
+  `targen`/`printtarg` for a binary search, which would otherwise freeze
+  the UI on each tweak; progress now scrolls into the log as the search
+  runs. Auto state and the target Pages value persist across presets and
+  app restarts.
+
+### Fixes
+- **`_binary_search` bounds account for `patch_scale`.** The per-sheet
+  capacity search used the standard-density (`-a 1.0`) DB estimate to
+  seed its `[0.5×, 2.5×]` window. At `patch_scale = 2.0` each patch
+  occupies four times the cell area, so the true capacity is roughly a
+  quarter of that estimate — the entire search window lived above the
+  real value, every probe overflowed, and the loop fell back to its 50-
+  patch sentinel. Result: choosing a custom patch scale (or running
+  Guided mode for a non-default layout) produced too few patches and
+  partially-filled pages. The search now centres on `est / patch_scale²`
+  and logs a warning + returns the scaled estimate when no fit is found,
+  so a future stuck-loop bug surfaces instead of hiding.
+- **Disabled inputs now look disabled.** `QLineEdit`, `QSpinBox`,
+  `QDoubleSpinBox`, and `QComboBox` controls inherited their normal
+  `TEXT_MAIN` colour even when `setEnabled(False)` had been called,
+  making greyed-out fields visually indistinguishable from active ones.
+  Added a `:disabled` rule to the global stylesheet that mirrors the
+  existing `QPushButton:disabled` palette (dim grey text on a darker
+  body). Picked up automatically by every enable-toggling call site.
+
 ## v3.5.2
 Follow-up bugfix release for issue #15: 16-bit profiling targets loaded
 from external bundles now print on older PostScript hardware, and the
