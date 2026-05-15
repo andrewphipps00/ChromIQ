@@ -85,6 +85,50 @@ class GamutPanel(QWidget):
         self._primary_edit.setText(str(path) if path else "")
         self._run_btn.setEnabled(path is not None)
         self._reset_results()
+        self._update_profile_header()
+
+    def _update_profile_header(self) -> None:
+        """Show 'A: <stem>   B: <stem>' under the header, full paths on hover.
+
+        Mirrors TiffPreview's caption+filename pattern. The header→viewer gap
+        is hidden when no profile is loaded so the section title hugs the
+        viewer like it did before the change.
+        """
+        primary = self._icc_path
+        compare = self._compare_path
+        if not primary and not compare:
+            self._profile_lbl.clear()
+            self._profile_lbl.setVisible(False)
+            self._profile_gap.setVisible(False)
+            for w in (self._hdr_lbl, self._profile_lbl, self._viewer_widget):
+                w.setToolTip("")
+                w.unsetCursor()
+            return
+        parts: list[str] = []
+        tooltip_lines: list[str] = []
+        if primary:
+            parts.append(f"A: {self._elide_middle(primary.stem, 28)}")
+            tooltip_lines.append(f"A: {primary}")
+        if compare:
+            parts.append(f"B: {self._elide_middle(compare.stem, 28)}")
+            tooltip_lines.append(f"B: {compare}")
+        self._profile_lbl.setText("   ".join(parts))
+        tooltip = "\n".join(tooltip_lines)
+        for w in (self._hdr_lbl, self._profile_lbl, self._viewer_widget):
+            w.setToolTip(tooltip)
+        self._hdr_lbl.setCursor(Qt.CursorShape.WhatsThisCursor)
+        self._profile_lbl.setCursor(Qt.CursorShape.WhatsThisCursor)
+        self._profile_lbl.setVisible(True)
+        self._profile_gap.setVisible(True)
+
+    @staticmethod
+    def _elide_middle(text: str, max_len: int) -> str:
+        if len(text) <= max_len:
+            return text
+        keep = max_len - 1
+        head = keep // 2
+        tail = keep - head
+        return f"{text[:head]}…{text[-tail:]}"
 
     # ------------------------------------------------------------------
     # UI construction
@@ -95,15 +139,31 @@ class GamutPanel(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        # Section header
-        hdr = QLabel("GAMUT VOLUME", self)
-        hdr.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        hdr.setStyleSheet(
+        # Section header — caption + loaded-profile names (auto-updated)
+        self._hdr_lbl = QLabel("GAMUT VOLUME", self)
+        self._hdr_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._hdr_lbl.setStyleSheet(
             f"color: {TEXT_DIM}; background: transparent; padding: 4px;"
             " font-family: Menlo, Consolas, 'Courier New', monospace;"
             " font-size: 9px; font-weight: 300;"
         )
-        root.addWidget(hdr)
+        root.addWidget(self._hdr_lbl)
+
+        self._profile_lbl = QLabel("", self)
+        self._profile_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._profile_lbl.setStyleSheet(
+            "color: #b8b8b8; background: transparent; padding: 0 8px 0 8px;"
+            " font-family: Menlo, Consolas, 'Courier New', monospace;"
+            " font-size: 11px;"
+        )
+        self._profile_lbl.setVisible(False)
+        root.addWidget(self._profile_lbl)
+
+        # Gap below the profile row — only shown when a profile is loaded
+        self._profile_gap = QWidget(self)
+        self._profile_gap.setFixedHeight(12)
+        self._profile_gap.setVisible(False)
+        root.addWidget(self._profile_gap)
 
         # 3D viewer
         self._viewer_widget = self._make_viewer_widget()
@@ -634,6 +694,7 @@ class GamutPanel(QWidget):
             self._compare_edit.setText(path)
             self._compare_volume = None
             self._update_volume_labels()
+            self._update_profile_header()
 
     def _on_clear_compare(self) -> None:
         self._compare_path = None
@@ -645,6 +706,7 @@ class GamutPanel(QWidget):
         self._viewgam_result = None
         self._view_toggle_row.setVisible(False)
         self._update_volume_labels()
+        self._update_profile_header()
 
     # ------------------------------------------------------------------
     # Slots — analysis workflow

@@ -417,10 +417,24 @@ jobs:
               printf 'Then double-click as normal.\n\n'
               printf 'Requires macOS 12+ and ArgyllCMS 3.5.0 at `/Applications/Argyll/bin`.'
             } > /tmp/release_notes.txt
-            gh release create "$TAG" \
-              --title "ChromIQ $TAG" \
-              --notes-file /tmp/release_notes.txt \
-              $PRERELEASE_FLAG
+            # The arm64 and universal2 matrix legs run in parallel and both
+            # pass the `gh release view` check above when neither has created
+            # the release yet — a classic TOCTOU. Catch the 422 "already exists"
+            # from the loser of the race and treat it as success so its DMG
+            # upload step still runs. See v3.5.0 run 25916850655 for the
+            # incident this guards against.
+            if ! gh release create "$TAG" \
+                   --title "ChromIQ $TAG" \
+                   --notes-file /tmp/release_notes.txt \
+                   $PRERELEASE_FLAG 2>/tmp/create_err; then
+              if gh release view "$TAG" > /dev/null 2>&1; then
+                echo "Release was created concurrently by the parallel build — continuing."
+                cat /tmp/create_err || true
+              else
+                cat /tmp/create_err >&2
+                exit 1
+              fi
+            fi
           fi
 
       - name: Upload DMG(s) to release

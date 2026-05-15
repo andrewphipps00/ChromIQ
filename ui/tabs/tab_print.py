@@ -377,14 +377,8 @@ class TabPrint(QWidget):
         rl = QVBoxLayout(right)
         rl.setContentsMargins(0, 0, 0, 12)
         rl.setSpacing(0)
-        lbl = QLabel("PRINT PREVIEW", right)
-        lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        lbl.setStyleSheet(
-            "color: #808080; background: transparent; padding: 4px;"
-            " font-family: Menlo; font-size: 9px; font-weight: 300;"
-        )
-        rl.addWidget(lbl)
         self._preview = TiffPreview(right)
+        self._preview.set_caption("PRINT PREVIEW")
         rl.addWidget(self._preview, stretch=1)
         splitter.addWidget(right)
 
@@ -588,6 +582,23 @@ class TabPrint(QWidget):
         self.ti2_loaded.emit(ti2_path)
         if ti2_path != path:
             self.chart_relocated.emit(ti2_path)
+        if tiffs:
+            self.load_tiffs(tiffs)
+
+    def apply_loaded_ti2(self, ti2_path: Path) -> None:
+        """Cross-tab sync entry — path is already resolved and on disk.
+
+        Skips resolve_ti2() so the user is not re-prompted with the
+        "Continue / Use as base for a new profile" dialog when another
+        tab has already loaded this chart into the working folder.
+        Deliberately does not emit ti2_loaded — that would echo back
+        through the cross-tab graph and re-trigger the sender.
+        """
+        from ui.ti2_loader import _related_files
+        if not ti2_path.exists() or ti2_path == self._current_ti2:
+            return
+        _, tiffs = _related_files(ti2_path)
+        self._current_ti2 = ti2_path
         if tiffs:
             self.load_tiffs(tiffs)
 

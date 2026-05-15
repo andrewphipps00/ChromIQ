@@ -259,10 +259,57 @@ class TiffPreview(QWidget):
         self._active_stripe = -1
         self._stripe_rects = []
         self._update_nav()
+        self._update_filename_label(paths)
         from PyQt6.QtCore import QTimer
         QTimer.singleShot(0, self._update_display)
         self._schedule_refresh()
         log.debug("TiffPreview: loaded %d page(s)", len(self._pages))
+
+    def set_caption(self, text: str) -> None:
+        """Set the small ALL-CAPS caption above the preview (e.g. 'PRINT PREVIEW')."""
+        self._caption_lbl.setText(text)
+        self._caption_lbl.setVisible(bool(text))
+
+    def _update_filename_label(self, paths: list[Path]) -> None:
+        """Show the chart stem of the loaded files; full path on hover.
+
+        Toggles the header→image spacer and broadcasts the tooltip to the
+        caption, filename, and image labels so users find the hover info
+        wherever they happen to point at.
+        """
+        if not paths:
+            self._filename_lbl.clear()
+            self._filename_lbl.setVisible(False)
+            self._header_image_gap.setVisible(False)
+            for w in (self._caption_lbl, self._filename_lbl, self._img_label):
+                w.setToolTip("")
+                w.unsetCursor()
+            return
+        first = paths[0]
+        stem = re.sub(r"_(\d{1,3})$", "", first.stem)
+        self._filename_lbl.setText(self._elide_middle(stem, 60))
+        try:
+            folder = first.resolve().parent
+        except Exception:
+            folder = first.parent
+        tooltip = "\n".join([f"Folder: {folder}", "", *(p.name for p in paths)])
+        for w in (self._caption_lbl, self._filename_lbl, self._img_label):
+            w.setToolTip(tooltip)
+        # Help cursor on the header text only — image gets a tooltip but keeps
+        # its arrow cursor so it doesn't suggest the dark area itself is clickable.
+        self._caption_lbl.setCursor(Qt.CursorShape.WhatsThisCursor)
+        self._filename_lbl.setCursor(Qt.CursorShape.WhatsThisCursor)
+        self._filename_lbl.setVisible(True)
+        self._header_image_gap.setVisible(True)
+
+    @staticmethod
+    def _elide_middle(text: str, max_len: int) -> str:
+        if len(text) <= max_len:
+            return text
+        keep = max_len - 1
+        head = keep // 2
+        tail = keep - head
+        return f"{text[:head]}…{text[-tail:]}"
 
     def highlight_stripe(self, stripe_index: int) -> None:
         """Highlight a strip (0-based) in the current preview page."""
@@ -290,6 +337,7 @@ class TiffPreview(QWidget):
         self._ink_channels = None
         self._img_label.setText("No preview")
         self._update_nav()
+        self._update_filename_label([])
 
     # ------------------------------------------------------------------
     # UI construction
@@ -298,7 +346,42 @@ class TiffPreview(QWidget):
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(12)
+        layout.setSpacing(0)
+
+        # Header: caption (set by parent tab) + active filename (auto-updated).
+        # Spacers below are explicit so the header→image gap only appears when
+        # a filename is showing — caption alone hugs the image like the
+        # pre-load layout did.
+        header = QWidget(self)
+        hl = QVBoxLayout(header)
+        hl.setContentsMargins(0, 0, 0, 0)
+        hl.setSpacing(0)
+
+        self._caption_lbl = QLabel("", header)
+        self._caption_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._caption_lbl.setStyleSheet(
+            "color: #808080; background: transparent; padding: 4px;"
+            " font-family: Menlo; font-size: 9px; font-weight: 300;"
+        )
+        self._caption_lbl.setVisible(False)
+        hl.addWidget(self._caption_lbl)
+
+        self._filename_lbl = QLabel("", header)
+        self._filename_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._filename_lbl.setStyleSheet(
+            "color: #b8b8b8; background: transparent; padding: 0 8px 0 8px;"
+            " font-family: Menlo; font-size: 11px;"
+        )
+        self._filename_lbl.setVisible(False)
+        hl.addWidget(self._filename_lbl)
+
+        layout.addWidget(header)
+
+        # Gap between header and image — only shown when a filename is present
+        self._header_image_gap = QWidget(self)
+        self._header_image_gap.setFixedHeight(12)
+        self._header_image_gap.setVisible(False)
+        layout.addWidget(self._header_image_gap)
 
         # Image label
         self._img_label = QLabel("No preview", self)
@@ -318,6 +401,11 @@ class TiffPreview(QWidget):
         self._img_label.setFont(_lbl_font)
         self._img_label.setMinimumSize(200, 200)
         layout.addWidget(self._img_label, stretch=1)
+
+        # Gap between image and nav (replaces the old setSpacing(12))
+        image_nav_gap = QWidget(self)
+        image_nav_gap.setFixedHeight(12)
+        layout.addWidget(image_nav_gap)
 
         # Navigation bar
         nav = QWidget(self)

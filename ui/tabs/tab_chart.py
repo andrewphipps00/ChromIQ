@@ -200,14 +200,8 @@ class TabChart(QWidget):
         right_layout = QVBoxLayout(right)
         right_layout.setContentsMargins(0, 0, 0, 12)
         right_layout.setSpacing(0)
-        lbl = QLabel("CHART PREVIEW", right)
-        lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        lbl.setStyleSheet(
-            "color: #808080; background: transparent; padding: 4px;"
-            " font-family: Menlo; font-size: 9px; font-weight: 300;"
-        )
-        right_layout.addWidget(lbl)
         self._preview = TiffPreview(right)
+        self._preview.set_caption("CHART PREVIEW")
         right_layout.addWidget(self._preview, stretch=1)
 
         splitter.addWidget(right)

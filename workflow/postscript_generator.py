@@ -6,9 +6,9 @@ and 16-bit TIFFs for any channel count produced by printtarg.
 """
 from __future__ import annotations
 
-from pathlib import Path
-
+import base64
 import zlib
+from pathlib import Path
 
 import numpy as np
 import tifffile
@@ -101,21 +101,22 @@ class PostScriptGenerator:
             page_rotated = (page_w > page_h) != (tiff_w_pt > tiff_h_pt)
             if page_rotated:
                 page_w, page_h = page_h, page_w
-        level = 3 if (n_ch > 4 or bits > 8) else 2
+
+        cs_block = self._colorspace_block(n_ch, ink_channels)
+        encoded, raw_len, encoded_len = self._encode_flate_a85(arr, bits)
 
         log.debug(
             "PS: %s  %dx%d px  TIFF %.1f×%.1f pt  Page %.1f×%.1f pt%s  "
-            "%d dpi  %d-bit  %d-ch  Level %d",
+            "%d dpi  %d-bit  %d-ch  raw %d → encoded %d (%.1f%%)",
             tiff_path.name, w, h, tiff_w_pt, tiff_h_pt, page_w, page_h,
             " (rotated to match TIFF aspect)" if page_rotated else "",
-            actual_dpi, bits, n_ch, level,
+            actual_dpi, bits, n_ch, raw_len, encoded_len,
+            100.0 * encoded_len / max(raw_len, 1),
         )
 
-        cs_block = self._colorspace_block(n_ch, ink_channels)
-        hex_data = self._encode_hex(arr, bits)
         return self._build_ps(
             w, h, tiff_w_pt, tiff_h_pt, page_w, page_h,
-            bits, n_ch, cs_block, hex_data, level,
+            bits, n_ch, cs_block, encoded,
         )
 
     # ------------------------------------------------------------------
@@ -174,11 +175,21 @@ class PostScriptGenerator:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _encode_hex(arr: np.ndarray, bits: int) -> str:
-        """Return hex-encoded pixel data in 72-char lines."""
+    def _encode_flate_a85(arr: np.ndarray, bits: int) -> tuple[str, int, int]:
+        """Return (ascii85 stream, raw_len, encoded_len).
+
+        Pixel bytes are deflate-compressed (zlib) and then ASCII85-encoded.
+        The PS interpreter chains /ASCII85Decode → /FlateDecode → raw bytes,
+        so what `colorimage` receives is bit-exact identical to the
+        previous ASCII-hex-only path. Profile charts compress ~99% because
+        the patches are large uniform areas — a 90 MB ASCII-hex stream
+        becomes ~0.3 MB with this filter chain, which prevents PS interpreter
+        OOM on consumer printers (the failure reported in issue #15).
+        """
         raw = arr.astype(">u2").tobytes() if bits == 16 else arr.tobytes()
-        s = raw.hex().upper()
-        return "\n".join(s[i:i + 72] for i in range(0, len(s), 72))
+        compressed = zlib.compress(raw, 6)
+        a85 = base64.a85encode(compressed, wrapcol=72).decode("ascii")
+        return a85 + "~>", len(raw), len(a85) + 2
 
     # ------------------------------------------------------------------
     # Colour space blocks
@@ -259,16 +270,17 @@ class PostScriptGenerator:
         page_w_pt: float, page_h_pt: float,
         bits: int, n_ch: int,
         cs_block: str,
-        hex_data: str,
-        level: int,
+        encoded_data: str,
     ) -> str:
-        # Centre the TIFF on the (possibly larger) page. When page_size_pt
-        # matches the TIFF, this collapses to the original behaviour.
+        # PostScript Level 3 is required for /FlateDecode (added in PS L3,
+        # universal on every printer ChromIQ supports — HP CLJ ≥ 5550,
+        # Epson/Canon photo printers from ~2005 onward). For the rare
+        # L2-only target, CupsRawPrinter retries with the TIFF raster path.
         x_off = (page_w_pt - tiff_w_pt) / 2.0
         y_off = (page_h_pt - tiff_h_pt) / 2.0
         return (
             f"%!PS-Adobe-3.0\n"
-            f"%%LanguageLevel: {level}\n"
+            f"%%LanguageLevel: 3\n"
             f"%cupsJobTicket: cups-disable-cmm\n"
             f"%%EndComments\n"
             f"\n"
@@ -280,11 +292,10 @@ class PostScriptGenerator:
             f"{tiff_w_pt:.2f} {tiff_h_pt:.2f} scale\n"
             f"{w_px} {h_px} {bits}\n"
             f"[{w_px} 0 0 -{h_px} 0 {h_px}]\n"
-            f"currentfile /ASCIIHexDecode filter\n"
+            f"currentfile /ASCII85Decode filter /FlateDecode filter\n"
             f"false {n_ch}\n"
             f"colorimage\n"
-            f"{hex_data}\n"
-            f">\n"
+            f"{encoded_data}\n"
             f"\n"
             f"showpage\n"
             f"%%EOF\n"

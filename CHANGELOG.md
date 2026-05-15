@@ -1,5 +1,49 @@
 # Changelog
 
+## v3.5.1
+Bugfix release addressing a silent print-job failure on memory-constrained
+PostScript printers and a handful of preview-clarity rough edges reported
+against v3.5.0.
+
+### Fixes
+- **Print Chart: PostScript output now uses `/FlateDecode` + ASCII85
+  instead of raw ASCII-hex.** Profile charts compress extremely well
+  (large uniform patches), so a representative 16-bit A3 chart at 200 dpi
+  shrinks from ~90 MB to ~0.3 MB of PostScript — bit-exact identical
+  pixel data feeding `colorimage`, just a tighter wire format. Fixes
+  issue #15: HP Color LaserJet 5550 and similar PS-interpreter-
+  constrained printers were silently dropping the oversized job ~20 s
+  after accepting it. The emitted PostScript LanguageLevel bumps to 3
+  (universal on every printer ChromIQ targets); the existing TIFF
+  raster fallback in `CupsRawPrinter` still handles L2-only edge cases.
+- **Build workflow: macOS arm64 + universal2 matrix legs no longer
+  race-fail on release creation.** The loser of the `gh release create`
+  race now detects the 422 "already exists" response, continues, and
+  uploads its DMG to the release the winner created.
+
+### Preview clarity
+- **Loaded chart name shown above every TIFF preview.** Generate Chart,
+  Print Chart, and Measure tabs now display the chart stem directly
+  beneath the section caption ("CHART PREVIEW" / "PRINT PREVIEW"),
+  so it's always obvious which target is loaded. Hover the caption,
+  the filename, or the dark image area to see the working folder and
+  every per-page TIFF file name; the cursor changes to a help-style
+  pointer over the header text as a discoverability cue.
+- **Gamut Volume panel shows the loaded ICC profiles.** Under the
+  "GAMUT VOLUME" header in Check & Refine, profile A and (when set)
+  profile B stems appear as `A: <stem>   B: <stem>`. Full paths on
+  hover, same as the TIFF previews.
+- **Header height collapses when no chart is loaded** so the section
+  caption hugs the preview area like before — extra height only
+  appears when there's actually a filename to display.
+
+### Workflow
+- **Measure → Print cross-tab sync.** Loading an existing `.ti2` in
+  the Measure tab now also populates the Print tab, mirroring the
+  existing Print → Measure direction. The auto-sync skips
+  `resolve_ti2`'s "Continue / Use as base for a new profile" dialog
+  because the chart has already been resolved on the originating tab.
+
 ## v3.5.0
 First stable release of the 3.5.x line, rolling up the six 3.5.0 betas
 into a single supported build for macOS, Windows, and Linux.

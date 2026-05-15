@@ -218,6 +218,7 @@ class TabMeasure(QWidget):
     proceed_to_profile = pyqtSignal()      # emitted when user chooses to go straight to tab 4
     measurement_active = pyqtSignal(bool)  # True when chartread is running, False when done
     ti2_replaced       = pyqtSignal()      # emitted when the user manually loads a different .ti2 file
+    ti2_loaded         = pyqtSignal(Path)  # emitted when the user loads a .ti2 file (for cross-tab sync)
 
     def __init__(
         self,
@@ -485,14 +486,8 @@ class TabMeasure(QWidget):
         rl = QVBoxLayout(right)
         rl.setContentsMargins(0, 0, 0, 12)
         rl.setSpacing(0)
-        lbl = QLabel("CHART PREVIEW", right)
-        lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        lbl.setStyleSheet(
-            "color: #808080; background: transparent; padding: 4px;"
-            " font-family: Menlo; font-size: 9px; font-weight: 300;"
-        )
-        rl.addWidget(lbl)
         self._preview = TiffPreview(right)
+        self._preview.set_caption("CHART PREVIEW")
         rl.addWidget(self._preview, stretch=1)
         splitter.addWidget(right)
 
@@ -1399,6 +1394,7 @@ class TabMeasure(QWidget):
         if ti2_path != self._ti1_path:
             self.ti2_replaced.emit()
         self.set_ti1_path(ti2_path)
+        self.ti2_loaded.emit(ti2_path)
 
     def _update_resume_availability(self) -> None:
         if self._ti1_path is None:
