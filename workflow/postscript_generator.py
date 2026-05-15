@@ -85,8 +85,18 @@ class PostScriptGenerator:
         `lp -o PageSize=...` agree. Defaults to the TIFF's own dimensions.
         """
         arr, actual_dpi = self._read_tiff(tiff_path, fallback_dpi=dpi)
+        # Downcast 16-bit TIFFs (printtarg -T) to 8-bit before encoding.
+        # Older PostScript interpreters (e.g. HP CLJ 5550, firmware ~2005)
+        # silently drop jobs whose `colorimage` uses BitsPerComponent=16, even
+        # though the L3 spec supports it. Profile patches are flat fills, so
+        # dropping the low byte is lossless for downstream colprof — the .ti3
+        # measurement file is what determines profile accuracy, not the inline
+        # image data sent to the printer. (Issue #15 second failure mode.)
+        if arr.dtype == np.uint16:
+            arr = (arr >> 8).astype(np.uint8)
+            log.debug("PS: downcast 16-bit TIFF to 8-bit for colorimage compatibility")
         h, w, n_ch = arr.shape
-        bits = 16 if arr.dtype == np.uint16 else 8
+        bits = 8
 
         tiff_w_pt = w * _PT_PER_INCH / actual_dpi
         tiff_h_pt = h * _PT_PER_INCH / actual_dpi

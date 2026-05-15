@@ -1,5 +1,33 @@
 # Changelog
 
+## v3.5.2
+Follow-up bugfix release for issue #15: 16-bit profiling targets loaded
+from external bundles now print on older PostScript hardware, and the
+`Load .ti1` flow on the Generate Chart tab no longer drops the channel
+sidecar.
+
+### Fixes
+- **16-bit TIFFs are downcast to 8-bit before `colorimage`.** `printtarg
+  -T` (capital T) writes 16-bit charts — common in third-party target
+  bundles like the Argyll_Printer_Profiler project. Older HP PostScript
+  interpreters (CLJ 5550 firmware ~2005 and similar vintage) silently
+  drop jobs whose inline image uses BitsPerComponent=16, even though
+  the L3 spec supports it. The PostScript generator now right-shifts
+  16-bit samples to their high byte before encoding, so every print
+  job goes out as 8-bit `colorimage`. Lossless for profiling — patches
+  are flat fills, the 16-bit precision was redundant, and `colprof`
+  reads from the `.ti3` measurement file rather than the printed
+  image. Verified end-to-end on a synthetic of the reporter's exact
+  3307 × 2339 A3-landscape chart.
+- **`Load .ti1` on Generate Chart now writes `<stem>.channels.json`.**
+  The sidecar guard in `_printtarg_done` checks `self._pending_params`,
+  which the normal `generate()` entry point sets but
+  `load_ti1_and_generate_preview()` did not — so loading a chart from
+  an existing `.ti1` produced a working set of TIFFs but no channel
+  sidecar, leaving the preview unable to identify inks in a future
+  session. Mirrors the `generate()` path now and is covered by
+  `tests/test_chart_creator.py`.
+
 ## v3.5.1
 Bugfix release addressing a silent print-job failure on memory-constrained
 PostScript printers and a handful of preview-clarity rough edges reported

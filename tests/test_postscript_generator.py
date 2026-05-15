@@ -92,3 +92,41 @@ def test_square_tiff_keeps_portrait_page(tmp_path: Path) -> None:
     _write_tiff(tiff, w_px=1000, h_px=1000, dpi=200)
     ps = PostScriptGenerator().generate(tiff, page_size_pt=(842, 1191))
     assert _page_size(ps) == (842.0, 1191.0)
+
+
+# Issue #15 second failure mode: 16-bit TIFFs from `printtarg -T` produced PS
+# with `colorimage … 16 …`, which older HP PostScript interpreters silently
+# drop. The generator must downcast to 8-bit so the inline image is the
+# universally-accepted format.
+def test_16bit_tiff_emits_8bit_colorimage(tmp_path: Path) -> None:
+    tiff = tmp_path / "chart16.tif"
+    arr = np.full((100, 100, 3), 0x8080, dtype=np.uint16)
+    tifffile.imwrite(str(tiff), arr, resolution=(200, 200), resolutionunit="INCH")
+
+    ps = PostScriptGenerator().generate(tiff)
+    m = re.search(r"^(\d+) (\d+) (\d+)\n\[", ps, re.MULTILINE)
+    assert m, "no `W H BPC` line preceding the transform matrix"
+    bits = int(m.group(3))
+    assert bits == 8, f"expected 8-bit colorimage, got {bits}-bit"
+
+
+def test_16bit_downcast_preserves_high_byte(tmp_path: Path) -> None:
+    # The downcast right-shifts by 8, so 0xABCD becomes 0xAB. Confirms we're
+    # taking the MSB (the colorimetrically meaningful half) and not just
+    # truncating to the LSB by casting.
+    tiff = tmp_path / "msb.tif"
+    arr = np.full((50, 50, 3), 0xABCD, dtype=np.uint16)
+    tifffile.imwrite(str(tiff), arr, resolution=(200, 200), resolutionunit="INCH")
+
+    ps = PostScriptGenerator().generate(tiff)
+    # Round-trip the encoded payload back to bytes and check the high byte.
+    import base64
+    import zlib
+
+    m = re.search(r"colorimage\n(.+?)~>", ps, re.DOTALL)
+    assert m, "no colorimage payload found"
+    a85 = m.group(1).replace("\n", "") + "~>"
+    decoded = zlib.decompress(base64.a85decode(a85, adobe=True))
+    assert decoded[:6] == b"\xab" * 6, (
+        f"expected high-byte 0xAB after downcast, got {decoded[:6].hex()}"
+    )

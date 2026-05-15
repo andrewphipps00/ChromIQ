@@ -164,6 +164,11 @@ class ChartCreator:
     ) -> None:
         """Run printtarg only on an existing .ti1 file."""
         import shutil
+        # _printtarg_done writes the <stem>.channels.json sidecar only when
+        # _pending_params is set; otherwise the preview can't identify inks
+        # in a future session. Mirror the generate() path so this entry point
+        # produces the same artifacts.
+        self._pending_params = params
         work_dir = self._file_mgr.ensure_folder()
         stem = params.target_name or "chart"
         dest = work_dir / f"{stem}.ti1"
