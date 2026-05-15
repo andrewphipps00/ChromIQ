@@ -110,6 +110,28 @@ def test_16bit_tiff_emits_8bit_colorimage(tmp_path: Path) -> None:
     assert bits == 8, f"expected 8-bit colorimage, got {bits}-bit"
 
 
+# Issue #15 third failure mode: HP CLJ 5550 honoured its printer-panel duplex
+# default and ignored `lp -o Duplex=None`, so single-page chart jobs got
+# pulled back through the duplexer and "Print All Pages" paired two charts
+# onto one sheet. The PS-level setpagedevice directive overrides the device
+# default — pin it here so a future refactor can't strip it.
+def test_setpagedevice_disables_duplex(tmp_path: Path) -> None:
+    tiff = tmp_path / "chart.tif"
+    _write_tiff(tiff, w_px=1000, h_px=1000, dpi=200)
+    ps = PostScriptGenerator().generate(tiff)
+    m = re.search(r"<<[^>]*?>>\s*setpagedevice", ps)
+    assert m, "no setpagedevice block emitted"
+    block = m.group(0)
+    assert "/Duplex false" in block, (
+        f"setpagedevice must force /Duplex false to override device defaults — "
+        f"got: {block!r}"
+    )
+    assert "/Tumble false" in block, (
+        f"setpagedevice should include /Tumble false for spec correctness — "
+        f"got: {block!r}"
+    )
+
+
 def test_16bit_downcast_preserves_high_byte(tmp_path: Path) -> None:
     # The downcast right-shifts by 8, so 0xABCD becomes 0xAB. Confirms we're
     # taking the MSB (the colorimetrically meaningful half) and not just

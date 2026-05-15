@@ -288,13 +288,22 @@ class PostScriptGenerator:
         # L2-only target, CupsRawPrinter retries with the TIFF raster path.
         x_off = (page_w_pt - tiff_w_pt) / 2.0
         y_off = (page_h_pt - tiff_h_pt) / 2.0
+        # /Duplex false /Tumble false are baked into setpagedevice rather than
+        # relying on `lp -o Duplex=None`, because some older interpreters (HP
+        # CLJ 5550, firmware ~2005) honour the panel/PPD default and ignore
+        # the CUPS option — pulling each profiling sheet back through for a
+        # blank second side, or pairing two charts onto one sheet for "Print
+        # All Pages". setpagedevice is part of PS L3 and overrides the device
+        # default, so the interpreter itself disables duplex. (Issue #15
+        # third failure mode, reported after 3.5.2 fixed the colorimage bits.)
         return (
             f"%!PS-Adobe-3.0\n"
             f"%%LanguageLevel: 3\n"
             f"%cupsJobTicket: cups-disable-cmm\n"
             f"%%EndComments\n"
             f"\n"
-            f"<< /PageSize [{page_w_pt:.2f} {page_h_pt:.2f}] /ImagingBBox null >> setpagedevice\n"
+            f"<< /PageSize [{page_w_pt:.2f} {page_h_pt:.2f}] /ImagingBBox null "
+            f"/Duplex false /Tumble false >> setpagedevice\n"
             f"\n"
             f"{cs_block}\n"
             f"\n"

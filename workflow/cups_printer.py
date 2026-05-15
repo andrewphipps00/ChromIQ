@@ -26,9 +26,13 @@ except ImportError:
 # Options injected into PS print jobs.
 # Colour space is declared in the PS document itself; only neutral job-ticket
 # options go here.  ColorSync=None is PS-specific — do NOT use for PDF.
+# Duplex/sides are also baked into the PS via setpagedevice — these are the
+# CUPS-level belt-and-suspenders for PPDs that ignore the PS directive or
+# strip it during filtering.
 _PS_JOB_OPTIONS: dict[str, str] = {
     "ColorSync": "None",   # belt-and-suspenders alongside %cupsJobTicket
     "Duplex":    "None",
+    "sides":     "one-sided",
 }
 
 # TIFF fallback options per channel count.  These mirror the original
@@ -44,6 +48,7 @@ _TIFF_RASTER_OPTIONS: dict[int, dict[str, str]] = {
         "cupsCompression":  "None",
         "cupsBitsPerColor": "8",
         "Duplex":           "None",
+        "sides":            "one-sided",
     },
     3: {  # RGB — original _COLOR_MGMT_OFF, confirmed working for ET-8550
         "ColorSync":        "None",
@@ -53,6 +58,7 @@ _TIFF_RASTER_OPTIONS: dict[int, dict[str, str]] = {
         "cupsCompression":  "None",
         "cupsBitsPerColor": "8",
         "Duplex":           "None",
+        "sides":            "one-sided",
     },
     4: {  # CMYK
         "ColorSync":        "None",
@@ -62,6 +68,7 @@ _TIFF_RASTER_OPTIONS: dict[int, dict[str, str]] = {
         "cupsCompression":  "None",
         "cupsBitsPerColor": "8",
         "Duplex":           "None",
+        "sides":            "one-sided",
     },
 }
 

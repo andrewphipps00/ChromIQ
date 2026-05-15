@@ -1,5 +1,27 @@
 # Changelog
 
+## v3.5.4
+Follow-up to v3.5.2 for issue #15: after the 16-bit colorimage fix, the
+HP Color LaserJet 5550 (firmware ~2005) kept pulling each profiling
+sheet back through its duplexer, and "Print All Pages" paired two
+charts onto opposite sides of the same sheet — producing one corrupted
+half-print. The printer was honouring its panel-side duplex default
+instead of the CUPS `Duplex=None` option.
+
+### Fixes
+- **Duplex forced off at the PostScript layer.** Profiling charts are
+  always single-sided, but `lp -o Duplex=None` is just a CUPS-level
+  hint and some older firmware ignores it in favour of the printer's
+  panel/PPD default. The PS document now declares `/Duplex false
+  /Tumble false` inside its `setpagedevice` block, which the printer's
+  PostScript interpreter has to honour — same mechanism we already use
+  for `/PageSize`. Devices without a duplex unit silently ignore the
+  key per the PS spec, so the change is harmless for the rest of the
+  supported printer set. Also added `sides=one-sided` to the lp
+  options as belt-and-suspenders for PPDs that filter `setpagedevice`
+  keys but accept the IPP keyword. Regression-tested by pinning the
+  emitted block in `test_setpagedevice_disables_duplex`.
+
 ## v3.5.3
 Quality-of-life release for the Manual chart workflow: pick a page count,
 tick **Auto**, and let ChromIQ size the patch count to fill exactly that
