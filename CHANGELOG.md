@@ -1,5 +1,98 @@
 # Changelog
 
+## v3.5.5
+UX polish driven by tester feedback on the measure tab and the chart-
+import flow. The headline is a much tighter default patch-consistency
+check (so a clogged nozzle or low ink shows up at measurement time
+instead of poisoning the resulting profile) plus the ability to
+overwrite an existing profile folder when importing an external
+chart. Smaller touch-ups to the import-dialog button bar, the settings
+dialog button spacing, and the preview-header tooltip styling round
+out the release.
+
+### Features
+- **Overwrite existing folder when importing a chart.** When the
+  profile name typed into the "Copy Chart Files" dialog collides with
+  an existing folder under the working directory, the OK button is
+  swapped for an "Overwrite existing folder" action. Clicking it pops
+  a confirmation listing the full path that will be deleted before
+  the import proceeds; the previous behaviour silently rejected the
+  name with no way forward. Works for charts loaded from outside the
+  working folder (via Tab 2 → Load existing chart and via the Measure
+  tab's loader) as well as the "Use as base for a new profile" branch
+  when the chart already sits inside the working folder. Self-
+  collision (overwriting the source chart's own folder) is guarded
+  with an inline error, so `shutil.rmtree` can never delete the file
+  the user is currently importing.
+
+### Improvements
+- **Patch consistency tolerance default lowered from 1.0 → 0.5.** The
+  chartread `-T` flag is a multiplier on the built-in patch-read-
+  consistency threshold, not an absolute delta-E. A tighter setting
+  catches real problems early — clogged inkjet nozzles, low ink,
+  dirty drum rollers, drifting laser toner — at chart-read time
+  instead of letting them poison the profile silently. Argyll's stock
+  1.0 is too forgiving on healthy hardware; experienced users on
+  printerknowledge.com run 0.4 with i1 Pro 2 / 3. 0.5 leaves a little
+  headroom over the community benchmark while still flagging
+  pathological reads. The tooltip is rewritten in plain language to
+  explain what `-T` actually multiplies, when to lower it (good
+  printer, strict QA), and when to raise it to 0.8–1.5 (textured,
+  matte, or fine-art papers where the surface itself contributes
+  variance).
+- **Manual measure: patch consistency tolerance is now on by
+  default.** The guided panel already pre-activates `-T`; the manual
+  panel did not, so users had to remember to tick the checkbox every
+  session. Added `manual2_chartread_tolerance_enabled: True` to the
+  DEFAULTS dict so the manual panel matches the guided one out of the
+  box. Any value the user has explicitly saved with "Save as
+  defaults" still wins on subsequent launches — this is just about
+  the first-run state.
+- **Import dialog button bar redesigned.** Replaced the
+  `QDialogButtonBox` (which on macOS hugs the right edge) with a
+  custom layout: primary action (OK or Overwrite, depending on
+  collision state) on the left, Cancel pushed to the right by a
+  stretch. OK and Overwrite share the same slot — only one is visible
+  at any time — so the collision case reads as a clean two-button
+  layout rather than a three-button squeeze. Dialog widened from
+  500 px to 580 px so the longer Overwrite label has room. Enter
+  still confirms OK when it's visible; when only Overwrite is
+  visible, Enter is intentionally a no-op so the destructive action
+  needs an explicit click.
+- **Settings dialog button spacing.** Restore Factory Defaults,
+  Report a Bug, and Check for Updates on the left now share the same
+  gap as OK ↔ Cancel on the right, by querying
+  `bb.layout().spacing()` and applying it as the bottom-row spacing.
+  Replaces the previous mix of hard-coded 8 px gaps and the style-
+  driven 6 px QDialogButtonBox gap so the bar reads as one visually
+  unified row.
+
+### Fixes
+- **Guided panel was stuck at the old 0.7 tolerance.** A post-
+  construction `opt.widget.setValue(0.7)` in `_make_guided_panel`
+  (left over from the v3.1.2 default) was overriding the new 0.5
+  spinbox constructor default. Fixed in place. Also updated
+  `measure_tolerance_value` in `core/settings.py` DEFAULTS to 0.5 so
+  `_restore_defaults()` doesn't reseed the spinbox with the stale
+  value at startup. Users who previously clicked "Save as defaults"
+  with 0.7 will keep that saved value (intentional — respects user
+  choice); restoring factory defaults or saving 0.5 explicitly
+  refreshes it.
+- **Preview header tooltips rendered with a transparent background
+  on macOS.** When a `QLabel` carries `background: transparent` in
+  its own QSS, the global `QToolTip` rule fails to reach that
+  label's tooltip popup — the popup falls back to the macOS native
+  rendering and inherits the transparency. The image-body tooltip
+  also lost its left border because `_img_label`'s
+  `border-left: none` was bleeding into the tooltip. Added a global
+  `QToolTip { background: #262626; color: #e6e6e6;
+  border: 1px solid #404040; padding: 4px; }` rule to
+  `APP_STYLESHEET`, plus a per-widget `QToolTip` block on each
+  preview label, with the existing label declarations scoped inside
+  `QLabel { … }` so they no longer leak. All three preview tooltips
+  (caption, filename, image body) now render dark with a clean four-
+  sided border.
+
 ## v3.5.4
 Follow-up to v3.5.2 for issue #15: after the 16-bit colorimage fix, the
 HP Color LaserJet 5550 (firmware ~2005) kept pulling each profiling

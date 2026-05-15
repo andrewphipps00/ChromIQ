@@ -84,6 +84,17 @@ QDialog QLabel {{
     background: transparent;
 }}
 
+/* ---- Tooltips ----------------------------------------------------- */
+/* Forces Qt's own tooltip renderer everywhere so labels with
+ * `background: transparent` (e.g. tiff_preview header) don't fall back
+ * to the macOS-native tooltip and lose the dark palette colors. */
+QToolTip {{
+    background-color: #262626;
+    color: {TEXT_MAIN};
+    border: 1px solid #404040;
+    padding: 4px;
+}}
+
 /* ---- Tabs --------------------------------------------------------- */
 QTabWidget::pane {{
     border: none;

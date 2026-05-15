@@ -41,8 +41,9 @@ DEFAULTS: dict[str, Any] = {
     "measure_disable_bidir":       True,
     "measure_suppress_warnings":   True,
     "measure_extra_args":          "",
-    "measure_tolerance_enabled":   True,
-    "measure_tolerance_value":     0.7,
+    "measure_tolerance_enabled":           True,
+    "measure_tolerance_value":             0.5,
+    "manual2_chartread_tolerance_enabled": True,
     # Step 4 — profile
     "colprof_algorithm":         "l",
     "colprof_quality":           "m",

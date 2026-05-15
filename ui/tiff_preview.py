@@ -26,6 +26,19 @@ log = get_logger(__name__)
 _REFRESH_DELAY_MS = 80   # debounce repaint
 _BORDER = 15             # white display border: all sides (px)
 
+# QToolTip block appended to per-widget stylesheets so the tooltip popup
+# uses the dark theme even when the source label has its own QSS — on
+# macOS the global QToolTip rule fails to reach tooltips originating from
+# widgets with `background: transparent` or per-side border overrides.
+_TOOLTIP_QSS = (
+    "QToolTip { "
+    "background-color: #262626; "
+    "color: #e6e6e6; "
+    "border: 1px solid #404040; "
+    "padding: 4px;"
+    " }"
+)
+
 # ---------------------------------------------------------------------------
 # Ink channel tables
 # ---------------------------------------------------------------------------
@@ -360,8 +373,9 @@ class TiffPreview(QWidget):
         self._caption_lbl = QLabel("", header)
         self._caption_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._caption_lbl.setStyleSheet(
-            "color: #808080; background: transparent; padding: 4px;"
-            " font-family: Menlo; font-size: 9px; font-weight: 300;"
+            "QLabel { color: #808080; background: transparent; padding: 4px;"
+            " font-family: Menlo; font-size: 9px; font-weight: 300; }"
+            + _TOOLTIP_QSS
         )
         self._caption_lbl.setVisible(False)
         hl.addWidget(self._caption_lbl)
@@ -369,8 +383,9 @@ class TiffPreview(QWidget):
         self._filename_lbl = QLabel("", header)
         self._filename_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._filename_lbl.setStyleSheet(
-            "color: #b8b8b8; background: transparent; padding: 0 8px 0 8px;"
-            " font-family: Menlo; font-size: 11px;"
+            "QLabel { color: #b8b8b8; background: transparent; padding: 0 8px 0 8px;"
+            " font-family: Menlo; font-size: 11px; }"
+            + _TOOLTIP_QSS
         )
         self._filename_lbl.setVisible(False)
         hl.addWidget(self._filename_lbl)
@@ -390,11 +405,12 @@ class TiffPreview(QWidget):
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
         )
         self._img_label.setStyleSheet(
-            "background: #111111;"
+            "QLabel { background: #111111;"
             " border: 1px solid #333;"
             " border-left: none;"
             " color: #606060;"
-            " font-family: 'Menlo';"
+            " font-family: 'Menlo'; }"
+            + _TOOLTIP_QSS
         )
         _lbl_font = self._img_label.font()
         _lbl_font.setCapitalization(QFont.Capitalization.AllUppercase)

@@ -65,10 +65,11 @@ def _handle_outside(
     working_dir: Path,
 ) -> tuple[Path, list[Path]] | None:
     ti1, tiffs = _related_files(ti2_path)
-    new_name = _ask_profile_name(parent, ti2_path, ti1, tiffs, working_dir)
-    if not new_name:
+    result = _ask_profile_name(parent, ti2_path, ti1, tiffs, working_dir)
+    if result is None:
         return None
-    return _copy_files(ti2_path, ti1, tiffs, working_dir, new_name)
+    new_name, overwrite = result
+    return _copy_files(ti2_path, ti1, tiffs, working_dir, new_name, overwrite=overwrite)
 
 
 def _handle_inside(
@@ -136,10 +137,11 @@ def _handle_inside(
         return ti2_path, tiffs
     if choice[0] == "new":
         ti1, tiffs = _related_files(ti2_path)
-        new_name = _ask_profile_name(parent, ti2_path, ti1, tiffs, working_dir)
-        if not new_name:
+        result = _ask_profile_name(parent, ti2_path, ti1, tiffs, working_dir)
+        if result is None:
             return None
-        return _copy_files(ti2_path, ti1, tiffs, working_dir, new_name)
+        new_name, overwrite = result
+        return _copy_files(ti2_path, ti1, tiffs, working_dir, new_name, overwrite=overwrite)
     return None
 
 
@@ -149,10 +151,16 @@ def _ask_profile_name(
     ti1: Path | None,
     tiffs: list[Path],
     working_dir: Path,
-) -> str | None:
+) -> tuple[str, bool] | None:
+    """Ask the user for a profile name.
+
+    Returns (name, overwrite) — `overwrite=True` means the user explicitly
+    confirmed wiping an existing folder of the same name. Returns None if
+    the user cancelled.
+    """
     from PyQt6.QtCore import QTimer
     from PyQt6.QtWidgets import (
-        QDialog, QDialogButtonBox, QLabel, QLineEdit, QVBoxLayout,
+        QDialog, QHBoxLayout, QLabel, QLineEdit, QMessageBox, QPushButton, QVBoxLayout,
     )
 
     file_lines = [f"  • {ti2_path.name}"]
@@ -171,7 +179,7 @@ def _ask_profile_name(
 
     dlg = QDialog(parent)
     dlg.setWindowTitle("Copy Chart Files")
-    dlg.setMinimumWidth(500)
+    dlg.setMinimumWidth(580)
     layout = QVBoxLayout(dlg)
     layout.setContentsMargins(24, 20, 24, 20)
     layout.setSpacing(10)
@@ -194,33 +202,118 @@ def _ask_profile_name(
 
     error_lbl = QLabel("", dlg)
     error_lbl.setStyleSheet("color: #e05555;")
+    error_lbl.setWordWrap(True)
     layout.addWidget(error_lbl)
 
-    btn_box = QDialogButtonBox(
-        QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel,
-        dlg,
-    )
-    layout.addWidget(btn_box)
+    btn_row = QHBoxLayout()
+
+    ok_btn = QPushButton("OK", dlg)
+    ok_btn.setDefault(True)
+    btn_row.addWidget(ok_btn)
+
+    overwrite_btn = QPushButton("Overwrite existing folder", dlg)
+    overwrite_btn.setAutoDefault(False)
+    overwrite_btn.setVisible(False)
+    btn_row.addWidget(overwrite_btn)
+
+    btn_row.addStretch(1)
+
+    cancel_btn = QPushButton("Cancel", dlg)
+    cancel_btn.setAutoDefault(False)
+    cancel_btn.clicked.connect(dlg.reject)
+    btn_row.addWidget(cancel_btn)
+
+    layout.addLayout(btn_row)
+
+    result: dict = {"name": None, "overwrite": False}
+
+    def _is_self_collision(name: str) -> bool:
+        # Guard against rmtree'ing the .ti2's own parent folder
+        # (only possible when loading a chart that already lives inside
+        # the working folder).
+        try:
+            return (working_dir / name).resolve() == ti2_path.parent.resolve()
+        except OSError:
+            return False
+
+    def _validate(name: str) -> str | None:
+        if not name:
+            return "Please enter a name."
+        if any(c in name for c in r'/\:*?"<>|'):
+            return "Name contains invalid characters."
+        return None
+
+    def _on_name_changed(_text: str = "") -> None:
+        name = name_edit.text().strip()
+        collision = bool(name) and (working_dir / name).exists() and not _is_self_collision(name)
+        if collision:
+            error_lbl.setText(
+                f"“{name}” already exists. Click “Overwrite existing folder” to replace it."
+            )
+            ok_btn.setVisible(False)
+            overwrite_btn.setVisible(True)
+        else:
+            error_lbl.setText("")
+            ok_btn.setVisible(True)
+            overwrite_btn.setVisible(False)
+
+    name_edit.textChanged.connect(_on_name_changed)
 
     def _on_accept() -> None:
         name = name_edit.text().strip()
-        if not name:
-            error_lbl.setText("Please enter a name.")
+        err = _validate(name)
+        if err:
+            error_lbl.setText(err)
             return
-        if any(c in name for c in r'/\:*?"<>|'):
-            error_lbl.setText("Name contains invalid characters.")
+        if (working_dir / name).exists() and not _is_self_collision(name):
+            _on_name_changed()
             return
-        if (working_dir / name).exists():
-            error_lbl.setText(f"“{name}” already exists in the working folder.")
+        if _is_self_collision(name):
+            error_lbl.setText(
+                "That name points to the chart's own folder. Pick a different name."
+            )
             return
+        result["name"] = name
+        result["overwrite"] = False
         dlg.accept()
 
-    btn_box.accepted.connect(_on_accept)
-    btn_box.rejected.connect(dlg.reject)
+    def _on_overwrite() -> None:
+        name = name_edit.text().strip()
+        err = _validate(name)
+        if err:
+            error_lbl.setText(err)
+            return
+        if _is_self_collision(name):
+            error_lbl.setText(
+                "You're trying to overwrite the chart's own folder. "
+                "Pick a different name."
+            )
+            return
+        dest = working_dir / name
+        if not dest.exists():
+            result["name"] = name
+            result["overwrite"] = False
+            dlg.accept()
+            return
+        confirm = QMessageBox.warning(
+            dlg,
+            "Overwrite existing folder?",
+            f"This will permanently delete:\n\n    {dest}\n\n"
+            "and replace it with the imported chart files. Continue?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if confirm == QMessageBox.StandardButton.Yes:
+            result["name"] = name
+            result["overwrite"] = True
+            dlg.accept()
+
+    ok_btn.clicked.connect(_on_accept)
+    overwrite_btn.clicked.connect(_on_overwrite)
 
     QTimer.singleShot(0, name_edit.setFocus)
-    if dlg.exec() == QDialog.DialogCode.Accepted:
-        return name_edit.text().strip()
+    if dlg.exec() == QDialog.DialogCode.Accepted and result["name"]:
+        return result["name"], result["overwrite"]
     return None
 
 
@@ -230,9 +323,12 @@ def _copy_files(
     tiffs: list[Path],
     working_dir: Path,
     new_name: str,
+    overwrite: bool = False,
 ) -> tuple[Path, list[Path]]:
     old_stem = ti2_path.stem
     dest     = working_dir / new_name
+    if overwrite and dest.exists():
+        shutil.rmtree(dest)
     dest.mkdir(parents=True, exist_ok=True)
 
     new_ti2 = dest / f"{new_name}.ti2"

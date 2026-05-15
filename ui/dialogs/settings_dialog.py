@@ -247,7 +247,7 @@ class SettingsDialog(QDialog):
         self._update_status.setFixedHeight(QFontMetrics(self._update_status.font()).height())
         layout.addWidget(self._update_status)
 
-        # ---- Bottom row: Restore Defaults | Check for Updates | Cancel / OK ----
+        # ---- Bottom row: Restore Defaults | Report a Bug | Check for Updates  ...  Cancel / OK ----
         bottom_row = QHBoxLayout()
         reset_btn = QPushButton("Restore Factory Defaults", self)
         reset_btn.setStyleSheet(
@@ -256,14 +256,12 @@ class SettingsDialog(QDialog):
         )
         reset_btn.clicked.connect(self._restore_defaults)
         bottom_row.addWidget(reset_btn)
-        bottom_row.addSpacing(8)
 
         bug_btn = QPushButton("Report a Bug…", self)
         bug_btn.setToolTip("Open the bug-report form on GitHub in your browser.")
         bug_btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(
             "https://github.com/itsab1989/ChromIQ/issues/new?template=bug_report.yml")))
         bottom_row.addWidget(bug_btn)
-        bottom_row.addSpacing(8)
 
         self._update_btn = QPushButton("Check for Updates", self)
         self._update_btn.clicked.connect(self._check_for_updates)
@@ -278,6 +276,12 @@ class SettingsDialog(QDialog):
         bb.accepted.connect(self._save_and_close)
         bb.rejected.connect(self.reject)
         bottom_row.addWidget(bb)
+
+        # Match the gap between left-side buttons to QDialogButtonBox's own
+        # internal spacing so Restore↔Bug↔Update reads the same as OK↔Cancel.
+        bb_layout = bb.layout()
+        bottom_row.setSpacing(bb_layout.spacing() if bb_layout else 6)
+
         layout.addLayout(bottom_row)
 
         self.setStyleSheet(

@@ -684,7 +684,7 @@ class TabMeasure(QWidget):
             if opt.key == "tolerance":
                 opt.checkbox.setChecked(True)
                 if opt.widget is not None:
-                    opt.widget.setValue(0.7)
+                    opt.widget.setValue(0.5)
                     opt.widget.setEnabled(True)
             else:
                 if opt.row_widget is not None:
@@ -1145,21 +1145,26 @@ class TabMeasure(QWidget):
             widget=filter_combo,
         ))
 
-        _tol_spin = _spinbox(0.1, 10.0, 0.1, 1.0, decimals=1)
+        _tol_spin = _spinbox(0.1, 10.0, 0.1, 0.5, decimals=1)
         _tol_spin.setObjectName("")
         opts.append(_ChartreadOption(
             key="tolerance", flag="-T",
             label="Patch consistency tolerance (-T)",
             tooltip_title="Patch Tolerance Multiplier (-T)",
             tooltip_body=(
-                "Multiplies the default patch consistency tolerance.\n\n"
-                "chartread reads each patch more than once and rejects readings\n"
-                "that differ by more than the tolerance threshold. On glossy or\n"
-                "smooth papers the default of 1.0 works well. Textured or matte\n"
-                "surfaces show more natural patch variance — raising this to\n"
-                "2.0–3.0 prevents false \"inconsistent patch\" errors without\n"
-                "hiding genuine mis-reads.\n\n"
-                "Values above 3.0 are rarely needed and may mask real problems."
+                "A multiplier on chartread's built-in patch consistency\n"
+                "threshold — not a delta-E value. chartread re-reads each patch\n"
+                "and rejects strips where the readings disagree by more than\n"
+                "the threshold × this number.\n\n"
+                "Lower = stricter. A strict setting catches real problems early:\n"
+                "clogged inkjet nozzles, low ink, dirty drum rollers, drifting\n"
+                "laser toner. On a healthy printer + spectrophotometer combo\n"
+                "the default of 0.5 leaves comfortable headroom; experienced\n"
+                "users on printerknowledge.com run 0.4 with i1 Pro 2 / 3.\n\n"
+                "Raise to 0.8–1.5 if you get false \"inconsistent patch\" errors\n"
+                "on textured, matte, or fine-art papers — the surface itself\n"
+                "contributes real variance there. Values above 2 mostly mask\n"
+                "genuine issues; if you need them, fix the printer first."
             ),
             widget=_tol_spin,
         ))
@@ -1286,16 +1291,21 @@ class TabMeasure(QWidget):
             label="Patch consistency tolerance (-T)",
             tooltip_title="Patch Tolerance Multiplier (-T)",
             tooltip_body=(
-                "Multiplies the default patch consistency tolerance.\n\n"
-                "chartread reads each patch more than once and rejects readings\n"
-                "that differ by more than the tolerance threshold. On glossy or\n"
-                "smooth papers the default of 1.0 works well. Textured or matte\n"
-                "surfaces show more natural patch variance — raising this to\n"
-                "2.0–3.0 prevents false \"inconsistent patch\" errors without\n"
-                "hiding genuine mis-reads.\n\n"
-                "Values above 3.0 are rarely needed and may mask real problems."
+                "A multiplier on chartread's built-in patch consistency\n"
+                "threshold — not a delta-E value. chartread re-reads each patch\n"
+                "and rejects strips where the readings disagree by more than\n"
+                "the threshold × this number.\n\n"
+                "Lower = stricter. A strict setting catches real problems early:\n"
+                "clogged inkjet nozzles, low ink, dirty drum rollers, drifting\n"
+                "laser toner. On a healthy printer + spectrophotometer combo\n"
+                "the default of 0.5 leaves comfortable headroom; experienced\n"
+                "users on printerknowledge.com run 0.4 with i1 Pro 2 / 3.\n\n"
+                "Raise to 0.8–1.5 if you get false \"inconsistent patch\" errors\n"
+                "on textured, matte, or fine-art papers — the surface itself\n"
+                "contributes real variance there. Values above 2 mostly mask\n"
+                "genuine issues; if you need them, fix the printer first."
             ),
-            widget=_spinbox(0.1, 10.0, 0.1, 1.0, decimals=1),
+            widget=_spinbox(0.1, 10.0, 0.1, 0.5, decimals=1),
         ))
 
         opts.append(_ChartreadOption(

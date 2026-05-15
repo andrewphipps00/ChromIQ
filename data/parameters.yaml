@@ -721,14 +721,26 @@ parameters:
       type: float
       min: 0.1
       max: 5.0
-      default: 1.0
+      default: 0.5
       step: 0.1
       expert_only: true
       tooltip_title: "Patch Tolerance Multiplier (-T)"
       tooltip_body: |
-        Multiplies the default patch consistency tolerance.  Increase to
-        2.0–3.0 if you are getting false "inconsistent patch" errors on
-        textured or matte papers.  Decrease to tighten quality checks.
+        A multiplier on chartread's built-in patch consistency threshold —
+        not a delta-E value. chartread re-reads each patch and rejects
+        strips where the readings disagree by more than the threshold ×
+        this number.
+
+        Lower = stricter. A strict setting catches real problems early:
+        clogged inkjet nozzles, low ink, dirty drum rollers, drifting
+        laser toner. On a healthy printer + spectrophotometer combination
+        the default of 0.5 leaves comfortable headroom; experienced users
+        on printerknowledge.com run 0.4 with i1 Pro 2 / 3.
+
+        Raise to 0.8–1.5 if you get false "inconsistent patch" errors on
+        textured, matte, or fine-art papers — the surface itself
+        contributes real variance there. Values above 2 mostly mask
+        genuine issues; if you need them, fix the printer first.
 
     - flag: "-l"
       name: "Save D50 L*a*b* Values"
