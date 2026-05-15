@@ -1,5 +1,102 @@
 # Changelog
 
+## v3.5.0
+First stable release of the 3.5.x line, rolling up the six 3.5.0 betas
+into a single supported build for macOS, Windows, and Linux.
+
+### Highlights since v3.2.8
+- **Linux support.** Pre-built tarballs for `x86_64` and `aarch64`
+  ship with every release alongside the existing macOS DMGs and Windows
+  ZIPs. All platform-conditional paths (Argyll bin defaults, log
+  directory, ICC profile install location, gamut viewer ICC dialog)
+  now live in `core/platform_paths.py` with explicit Windows / macOS /
+  Linux branches. Linux is labelled **beta** in the README — the
+  full ArgyllCMS workflow runs, but real-hardware coverage is still
+  thin; please report what works and what doesn't.
+- **Guided pre-conditioning (second-pass) workflow.** The *Generate
+  Chart* tab gains an optional **Refinement** section: tick the box,
+  pick an existing `.icc` / `.icm` / `.mpp`, and `targen` runs with
+  `-c` for a refinement pass. The *Build Profile* and *Check & Refine*
+  result dialogs grow a **Use as Pre-conditioning** button that
+  pre-fills the chart panel with the just-built profile, and the prior
+  session's `.icc` / `.ti3` are auto-renamed `pre_*.icc` / `pre_*.ti3`
+  so v1 isn't overwritten by v2.
+- **Per-tab onboarding tooltips.** Every workflow tab now has a
+  clickable ⓘ icon next to its big title that opens a beginner-friendly
+  explanation of what the screen does, what needs to be ready, how to
+  use it, and what comes next. The *Build Profile* tooltip swaps to
+  describe the 3-stage `printcal → applycal → colprof` flow when
+  calibration mode is enabled, and the *Print Chart* tooltip varies by
+  OS and `use_native_print_dialog` (macOS bypass, macOS native dialog,
+  Linux CUPS bypass, Windows QPrintDialog).
+- **Updater understands SemVer pre-release tags.** Beta users see
+  newer betas as upgrade candidates; stable users only see stable
+  releases. The "Check for Updates" crash on pre-release builds
+  (`int("0-beta")`) is gone.
+- **Landscape charts print correctly on the CUPS PostScript path.**
+  The generated PostScript now declares its own page geometry to match
+  the TIFF aspect, so Apple's `pstops` no longer double-rotates the
+  job — HP drivers stop clipping columns A–E or silently dropping
+  jobs.
+
+### Other improvements & fixes
+- File logger + `sys.excepthook` installed at the top of `main.py`,
+  before PyQt6 / numpy are imported, so early import-time failures
+  end up in `chromiq.log` with a full traceback instead of vanishing.
+- Linux bundle ships nine xcb / xkbcommon helper libs next to the
+  binary, so the Qt xcb platform plugin resolves its deps from
+  `$ORIGIN` and the tarball launches on minimal distros without
+  requiring `libxcb-cursor0` to be installed system-wide.
+- Cross-platform icon builder (`scripts/build_icons.py`): generates
+  `app_icon.icns` and `app_icon.ico` from PNG using Pillow only, so
+  the icon step in `HOW_TO_BUILD.txt` no longer needs macOS-only
+  `sips` / `iconutil`.
+- GitHub release notes are guaranteed to be non-empty — the workflows
+  first try to extract the matching `## <tag>` section from this
+  changelog, then fall back to commit subjects since the previous tag.
+- Pre-release-style tags (`-alpha`, `-beta`, `-rc`, `-pre`) are
+  automatically flagged as GitHub prereleases by the build workflows;
+  final tags stay regular.
+- Issue forms auto-apply `platform:` and `Severity:` labels via the
+  new `auto-label-issues.yml` workflow.
+- WebEngine teardown moved from `aboutToQuit` to `MainWindow.closeEvent`
+  to dodge the SIP / Chromium shutdown race that caused
+  `EXC_BAD_ACCESS` on quit when the gamut viewer had been opened.
+
+### Updating from a 3.5.0 beta
+If you're running any 3.5.0-beta.X build, **Check for Updates** will
+recognise v3.5.0 as an upgrade and prompt you to install it (final
+releases sort above any pre-release of the same base version per
+SemVer 2.0.0 precedence rules).
+
+For the full per-beta breakdown of what landed when, see the
+`v3.5.0-beta.1` … `v3.5.0-beta.6` sections below.
+
+## v3.5.0-beta.6
+### Added
+- **Guided pre-conditioning workflow in *Generate Chart*.** A new
+  *Refinement (Optional)* section appears on the guided panel: tick
+  the checkbox + pick an existing `.icc`, `.icm`, or `.mpp` profile
+  and `targen` is invoked with `-c` for a second-pass profiling run.
+  The always-on `-G` OFPS distribution plus targen's default `-A=1.0`
+  already satisfy the man-page condition for `-c`, so no extra flag
+  plumbing is required.
+- **"Use as Pre-conditioning" button** on both the *Build Profile*
+  and *Check & Refine* result dialogs. Pressing it switches back to
+  *Generate Chart* and pre-fills the picker with the just-built
+  profile. Both dialogs were widened to fit the new button row plus
+  its explanation paragraph.
+- File-picker filter on the pre-conditioning field now accepts `.mpp`
+  in addition to `.icc` / `.icm`, per the targen man page.
+
+### Changed
+- When a refinement run starts in the same working folder, the prior
+  session's `<basename>.icc` and `<basename>.ti3` are renamed in
+  place to `pre_*.icc` / `pre_*.ti3` instead of being overwritten by
+  the upcoming `chartread` / `colprof` runs. `_stage_precond_profile`
+  already handles in-folder `pre_` files without re-copying. Only one
+  generation of history is kept — diminishing returns past v2.
+
 ## v3.5.0-beta.5
 ### Added
 - **Tab-headline tooltips on every workflow tab.** Each of the five tabs
