@@ -1,16 +1,15 @@
 """Orchestrates colprof for ICC profile creation and installation."""
 from __future__ import annotations
 
-import os
 import re
 import shlex
 import shutil
-import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
 from core.logger import get_logger
+from core.platform_paths import icc_install_dir
 
 if TYPE_CHECKING:
     from core.argyll_runner import ArgyllRunner
@@ -19,10 +18,7 @@ log = get_logger(__name__)
 
 
 def _profile_dir() -> Path:
-    if sys.platform == "win32":
-        windir = Path(os.environ.get("WINDIR", r"C:\Windows"))
-        return windir / "System32" / "spool" / "drivers" / "color"
-    return Path.home() / "Library" / "ColorSync" / "Profiles"
+    return icc_install_dir()
 
 
 @dataclass

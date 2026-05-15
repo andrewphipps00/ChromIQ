@@ -31,6 +31,7 @@ from PyQt6.QtWidgets import (
 )
 
 from core.logger import get_logger
+from core.platform_paths import is_macos
 from core.resource_path import resource_path
 from ui.tab_header import TabHeader
 from ui.tooltip_button import InfoDialog, TooltipButton
@@ -77,11 +78,61 @@ _INTENTS = [
 ]
 
 
+_TOOLTIP_TITLE_NORMAL = "Step 4 — Build the profile"
+_TOOLTIP_BODY_NORMAL = (
+    "This screen turns the measurements from step 3 into an .icc "
+    "profile — the file that applications like Lightroom, Photoshop, "
+    "or Preview use to print accurate colour on your printer.\n\n"
+    "Before you build:\n"
+    "• You need a finished .ti3 measurement file from step 3. ChromIQ "
+    "pre-fills it for you if you came straight from tab 3.\n\n"
+    "How to use this screen:\n"
+    "• Quality controls how detailed the profile's colour tables are. "
+    "Higher = more accurate but slower to build and slightly larger. "
+    "\"Medium\" is a fine starting point.\n"
+    "• Profile description is the human-readable name you'll see in "
+    "print dialogs later. Include the printer, paper, and date so "
+    "you can tell profiles apart.\n"
+    "• Click \"Build\" and ChromIQ runs Argyll's colprof. When it's done "
+    "you'll have a .icc file you can install on macOS.\n\n"
+    "What happens next: install the .icc into ~/Library/ColorSync/"
+    "Profiles (ChromIQ can do this for you), then verify it on tab 5 "
+    "before relying on it for important prints."
+)
+
+_TOOLTIP_TITLE_CAL = "Step 4 — Calibrate, then build the profile"
+_TOOLTIP_BODY_CAL = (
+    "Calibration mode adds an extra preparation step before profiling: "
+    "first we flatten (\"linearise\") each ink channel so the printer "
+    "behaves predictably, THEN we build the ICC profile on top of that "
+    "calibrated state. The result is usually a more accurate profile, "
+    "especially on printers that drift over time.\n\n"
+    "This screen has three sub-steps. You'll use them in this order:\n\n"
+    "1. CALIBRATE — runs Argyll's printcal on a small calibration "
+    "target you already printed and measured. The output is a .cal "
+    "file that describes how to even out each ink channel.\n\n"
+    "2. APPLY — runs applycal to bake that .cal into the next chart's "
+    ".ti1 recipe. After this, you go back to tabs 1–3 and print + "
+    "measure your main profiling chart through the calibrated state.\n\n"
+    "3. BUILD PROFILE — once you've measured the calibrated chart, this "
+    "runs colprof to produce the final .icc profile.\n\n"
+    "Before you start:\n"
+    "• You need a measured calibration target (.ti3 with a \"cal_\" "
+    "prefix) for step 1.\n"
+    "• A separate, larger profiling chart for steps 2 and 3.\n\n"
+    "If you're new to calibration mode, turn it off in Settings until "
+    "you're comfortable with the basic 4-step flow. It exists for users "
+    "who want extra accuracy on inkjet printers that aren't very stable "
+    "batch-to-batch."
+)
+
+
 class TabProfile(QWidget):
     """Step 4: build and install ICC profile from .ti3 measurements."""
 
     profile_built    = pyqtSignal(Path, Path)   # (ti3_path, icc_path)
     check_requested  = pyqtSignal()             # user clicked "Check Quality" in the result dialog
+    preconditioning_requested = pyqtSignal(Path)  # user clicked "Use as pre-conditioning profile"
     profile_active   = pyqtSignal(bool)         # True while colprof is running, False when done
     ti2_found           = pyqtSignal(Path)  # emitted when a matching .ti2 exists next to the loaded .ti3
     ti3_manually_loaded = pyqtSignal()      # emitted when the user manually loads a .ti3 file
@@ -134,7 +185,9 @@ class TabProfile(QWidget):
         root.setSpacing(8)
 
         self._header = TabHeader(
-            "STEP 04 · CREATE ICC PROFILE", "Build ICC profile", "#37bcd6", self
+            "STEP 04 · CREATE ICC PROFILE", "Build ICC profile", "#37bcd6", self,
+            tooltip_title=_TOOLTIP_TITLE_NORMAL,
+            tooltip_body=_TOOLTIP_BODY_NORMAL,
         )
         root.addWidget(self._header)
 
@@ -301,10 +354,12 @@ class TabProfile(QWidget):
         self._mode_row_widget.setVisible(not enabled)
         if enabled:
             self._header.set_texts("STEP 04 · CALIBRATE & PROFILE", "Calibration & Profiling")
+            self._header.set_tooltip(_TOOLTIP_TITLE_CAL, _TOOLTIP_BODY_CAL)
             self._switch_mode("manual")
             self._switch_cal_mode(0)  # default to Build Profile
         else:
             self._header.set_texts("STEP 04 · CREATE ICC PROFILE", "Build ICC profile")
+            self._header.set_tooltip(_TOOLTIP_TITLE_NORMAL, _TOOLTIP_BODY_NORMAL)
             self._outer_stack.setCurrentIndex(0)
 
     def _switch_cal_mode(self, page: int) -> None:
@@ -1191,9 +1246,15 @@ class TabProfile(QWidget):
         layout.addWidget(next_lbl)
 
         install_desc = QLabel(
-            "<b>Install on this Mac</b> — adds the calibrated profile to your Mac's "
-            "colour management system so it is immediately available in Photoshop, "
-            "Lightroom, and other colour-managed apps.",
+            (
+                "<b>Install on this Mac</b> — adds the calibrated profile to your Mac's "
+                "colour management system so it is immediately available in Photoshop, "
+                "Lightroom, and other colour-managed apps."
+                if is_macos() else
+                "<b>Install Profile</b> — copies the calibrated profile to your system's "
+                "colour profile directory so it is immediately available in "
+                "colour-managed applications."
+            ),
             dlg,
         )
         install_desc.setWordWrap(True)
@@ -1201,7 +1262,7 @@ class TabProfile(QWidget):
         layout.addWidget(install_desc)
 
         btn_box = QDialogButtonBox(dlg)
-        _install_label = "Install Profile" if sys.platform == "win32" else "Install on this Mac"
+        _install_label = "Install on this Mac" if is_macos() else "Install Profile"
         install_btn = btn_box.addButton(_install_label, QDialogButtonBox.ButtonRole.ActionRole)
         done_btn    = btn_box.addButton("Done",                QDialogButtonBox.ButtonRole.AcceptRole)
         install_btn.setObjectName("primary")
@@ -2916,7 +2977,7 @@ class TabProfile(QWidget):
 
         dlg = QDialog(self)
         dlg.setWindowTitle("Profile Built")
-        dlg.setMinimumWidth(620 if cal_mode else 560)
+        dlg.setMinimumWidth(700 if cal_mode else 640)
 
         layout = QVBoxLayout(dlg)
         layout.setContentsMargins(24, 20, 24, 20)
@@ -2950,9 +3011,14 @@ class TabProfile(QWidget):
         layout.addWidget(next_lbl)
 
         install_desc = QLabel(
-            "<b>Install on this Mac</b> — adds the profile to your Mac's colour management "
-            "system so it is immediately available in Photoshop, Lightroom, and other "
-            "colour-managed apps.",
+            (
+                "<b>Install on this Mac</b> — adds the profile to your Mac's colour management "
+                "system so it is immediately available in Photoshop, Lightroom, and other "
+                "colour-managed apps."
+                if is_macos() else
+                "<b>Install Profile</b> — copies the profile to your system's colour profile "
+                "directory so it is immediately available in colour-managed applications."
+            ),
             dlg,
         )
         install_desc.setWordWrap(True)
@@ -2969,6 +3035,20 @@ class TabProfile(QWidget):
         check_desc.setStyleSheet("color: #b0b0b0; font-size: 11px;")
         layout.addWidget(check_desc)
 
+        precond_desc = QLabel(
+            "<b>Use as pre-conditioning profile</b> — start a second profiling pass that "
+            "uses this profile to place the new test patches more intelligently. "
+            "The next chart will sample more in the colour regions your printer "
+            "reproduces least accurately, producing a noticeably better profile on "
+            "the second round. Your existing chart files are preserved (renamed "
+            "with a <code>pre_</code> prefix) so nothing is lost. "
+            "Recommended once you've already built a working profile for this paper.",
+            dlg,
+        )
+        precond_desc.setWordWrap(True)
+        precond_desc.setStyleSheet("color: #b0b0b0; font-size: 11px;")
+        layout.addWidget(precond_desc)
+
         if cal_mode:
             apply_desc = QLabel(
                 "<b>Apply Calibration</b> — bakes your calibration curves (.cal file) "
@@ -2984,7 +3064,9 @@ class TabProfile(QWidget):
             layout.addWidget(apply_desc)
 
         btn_box = QDialogButtonBox(dlg)
-        install_btn = btn_box.addButton("Install on this Mac",     QDialogButtonBox.ButtonRole.ActionRole)
+        _install_label = "Install on this Mac" if is_macos() else "Install Profile"
+        install_btn = btn_box.addButton(_install_label,            QDialogButtonBox.ButtonRole.ActionRole)
+        precond_btn = btn_box.addButton("← Use as Pre-conditioning", QDialogButtonBox.ButtonRole.ActionRole)
         check_btn   = btn_box.addButton("Check Profile Quality →", QDialogButtonBox.ButtonRole.ActionRole)
         if cal_mode:
             apply_btn = btn_box.addButton("Apply Calibration →",   QDialogButtonBox.ButtonRole.ActionRole)
@@ -2992,6 +3074,7 @@ class TabProfile(QWidget):
         done_btn    = btn_box.addButton("Done",                    QDialogButtonBox.ButtonRole.AcceptRole)
         install_btn.setObjectName("primary")
         check_btn.setObjectName("primary")
+        precond_btn.setObjectName("primary")
         layout.addWidget(btn_box)
 
         def _on_install() -> None:
@@ -3002,6 +3085,10 @@ class TabProfile(QWidget):
             dlg.accept()
             self.check_requested.emit()
 
+        def _on_precond() -> None:
+            dlg.accept()
+            self.preconditioning_requested.emit(icc_path)
+
         def _on_apply_cal() -> None:
             dlg.accept()
             if icc_path and not self._ac_in_edit.text().strip():
@@ -3010,6 +3097,7 @@ class TabProfile(QWidget):
 
         install_btn.clicked.connect(_on_install)
         check_btn.clicked.connect(_on_check)
+        precond_btn.clicked.connect(_on_precond)
         if cal_mode:
             apply_btn.clicked.connect(_on_apply_cal)
         done_btn.clicked.connect(dlg.accept)

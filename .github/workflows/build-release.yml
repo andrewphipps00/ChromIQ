@@ -36,6 +36,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.tag || github.ref_name }}
+          fetch-depth: 0  # need full history + tags for the release-notes fallback
 
       # arm64 job: GitHub-hosted Python 3.13 (stable, arm64)
       - name: Set up Python (arm64)
@@ -388,8 +389,26 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           TAG="$RELEASE_TAG"
+          # Mark pre-release-style tags (-alpha/-beta/-rc/-pre) as
+          # GitHub prereleases; final tags (e.g. v3.5.0) stay regular.
+          PRERELEASE_FLAG=""
+          case "$TAG" in
+            *-alpha*|*-beta*|*-rc*|*-pre*) PRERELEASE_FLAG="--prerelease" ;;
+          esac
           if ! gh release view "$TAG" > /dev/null 2>&1; then
             body=$(awk "/^## ${TAG}$/{found=1; next} found && /^## /{exit} found{print}" CHANGELOG.md 2>/dev/null | sed '/^[[:space:]]*$/d' || true)
+            if [ -z "$body" ]; then
+              # No CHANGELOG.md entry for this tag — fall back to commit subjects
+              # since the previous tag so release notes are never empty.
+              PREV_TAG=$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || true)
+              if [ -n "$PREV_TAG" ]; then
+                COMMITS=$(git log --pretty=format:'- %s' "${PREV_TAG}..${TAG}")
+                body=$(printf '### Changes since %s\n%s' "$PREV_TAG" "$COMMITS")
+              else
+                COMMITS=$(git log --pretty=format:'- %s' "$TAG")
+                body=$(printf '### Changes\n%s' "$COMMITS")
+              fi
+            fi
             {
               printf '%s\n\n---\n' "$body"
               printf '**Installation:** Open the DMG, drag ChromIQ to Applications, eject, then launch.\n\n'
@@ -400,7 +419,8 @@ jobs:
             } > /tmp/release_notes.txt
             gh release create "$TAG" \
               --title "ChromIQ $TAG" \
-              --notes-file /tmp/release_notes.txt
+              --notes-file /tmp/release_notes.txt \
+              $PRERELEASE_FLAG
           fi
 
       - name: Upload DMG(s) to release

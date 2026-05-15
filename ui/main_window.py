@@ -95,6 +95,8 @@ class MainWindow(QMainWindow):
         self._tab_profile.profile_active.connect(self._on_profile_active)
         self._tab_profile.profile_built.connect(self._tab_check.set_paths)
         self._tab_profile.check_requested.connect(lambda: self._tabs.setCurrentWidget(self._tab_check))
+        self._tab_profile.preconditioning_requested.connect(self._on_preconditioning_requested)
+        self._tab_check.preconditioning_requested.connect(self._on_preconditioning_requested)
         self._tab_profile.ti2_found.connect(self._tab_print.set_ti2_path)
         self._tab_profile.about_to_load_ti3.connect(self._save_load_state)
         self._tab_check.about_to_load_ti3.connect(self._save_load_state)
@@ -302,6 +304,11 @@ class MainWindow(QMainWindow):
     def _on_guide_refinement(self, ti3: Path, strips_file: Path) -> None:
         self._tabs.setCurrentWidget(self._tab_measure)
         self._tab_measure.start_guided_refinement(ti3, strips_file)
+
+    def _on_preconditioning_requested(self, icc_path: Path) -> None:
+        """User chose 'Use as pre-conditioning profile' from a result dialog."""
+        self._tabs.setCurrentWidget(self._tab_chart)
+        self._tab_chart.apply_preconditioning(icc_path)
 
     def _save_load_state(self) -> None:
         self._load_state_snapshot = {
@@ -531,6 +538,12 @@ class MainWindow(QMainWindow):
         log.info("Session restored: target=%s", target)
 
     def closeEvent(self, event) -> None:
+        # Hide first so the window vanishes immediately; the WebEngine drain
+        # below runs invisibly. Tear down QtWebEngine before super() returns
+        # and Qt destroys the widget tree, otherwise SIP follows a dangling
+        # Chromium pointer during QApplication dealloc (EXC_BAD_ACCESS).
+        self.hide()
+        self._tab_check.shutdown_webengine()
         self._settings.set("window_geometry", self.saveGeometry())
         self._settings.set("active_tab", self._tabs.currentIndex())
         self._settings.set("session_target_name",  self._file_mgr._target_name)

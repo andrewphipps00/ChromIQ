@@ -307,7 +307,11 @@ class TiffPreview(QWidget):
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
         )
         self._img_label.setStyleSheet(
-            "background: #111111; border: 1px solid #333; color: #606060; font-family: 'Menlo';"
+            "background: #111111;"
+            " border: 1px solid #333;"
+            " border-left: none;"
+            " color: #606060;"
+            " font-family: 'Menlo';"
         )
         _lbl_font = self._img_label.font()
         _lbl_font.setCapitalization(QFont.Capitalization.AllUppercase)

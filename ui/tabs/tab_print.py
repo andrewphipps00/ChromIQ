@@ -27,6 +27,7 @@ from PyQt6.QtWidgets import (
 )
 
 from core.logger import get_logger
+from core.platform_paths import is_linux, is_macos, is_windows
 from ui.dialogs.preflight_dialog import PreflightDialog
 from ui.tab_header import TabHeader
 from ui.tiff_preview import TiffPreview, _find_sidecar_channels
@@ -57,6 +58,114 @@ if TYPE_CHECKING:
 
 log = get_logger(__name__)
 from ui.styles import SPEC_AMBER, TAB_COLORS
+
+
+_TT_TITLE_PRINT = "Step 2 — Print the chart"
+
+_TT_BODY_PRINT_MACOS_BYPASS = (
+    "This step sends the TIFF from step 1 straight to your printer with "
+    "all of macOS's colour management turned off. ChromIQ converts the "
+    "chart to PostScript and sends it via the CUPS \"lp\" command, "
+    "bypassing ColorSync and the driver's own colour matching. That's "
+    "deliberate: to profile a printer we need to see how it behaves on "
+    "its own, before any correction.\n\n"
+    "Before you print:\n"
+    "• Load the exact paper you chose in step 1. Different paper = "
+    "different profile.\n"
+    "• Make sure the printer is on, has ink, and is selected below.\n"
+    "• Use the same ink, paper, and print settings every time you "
+    "re-profile this printer — the profile only matches that recipe.\n\n"
+    "How to use this screen:\n"
+    "• Pick the printer and paper size. Quality should usually be the "
+    "highest setting you'll print at in real use.\n"
+    "• Click \"Print\". No print dialog will appear — the chart goes "
+    "straight to the queue.\n\n"
+    "After printing: let the print dry fully (at least 1 hour, 24 h for "
+    "best accuracy with pigment inks) before measuring. Wet ink reads "
+    "wrong.\n\n"
+    "If you'd rather use the macOS print dialog (e.g. to pick a specific "
+    "paper feed), enable \"Use the native print dialog\" in Settings."
+)
+
+_TT_BODY_PRINT_MACOS_NATIVE = (
+    "This step opens macOS's standard print dialog so you can pick paper "
+    "feed, quality, and media type yourself. ChromIQ marks the job as "
+    "application-managed colour, which forces the driver's own colour "
+    "controls (Epson \"Color Settings\", Canon \"Color Options\", …) to "
+    "\"Off / No Color Adjustment\" and greys them out — leave them that "
+    "way.\n\n"
+    "Before you print:\n"
+    "• Load the exact paper you chose in step 1.\n"
+    "• Make sure the printer is on, has ink, and is selected.\n\n"
+    "How to use this screen:\n"
+    "• Click \"Print\". The macOS print dialog appears.\n"
+    "• Pick the right paper / media type and print quality. Do NOT "
+    "re-enable any colour-management option in the driver.\n"
+    "• About the \"Color Matching\" pane (ColorSync vs the vendor name): "
+    "macOS shows this pane but doesn't let ChromIQ grey it out — that's "
+    "an OS limitation Adobe Color Printer Utility has too. Its visible "
+    "state is cosmetic; ChromIQ overrides it at the job level. Ignore "
+    "this pane.\n\n"
+    "After printing: ChromIQ verifies that colour management really "
+    "stayed off by reading the resolved job back — you'll get a warning "
+    "here if it didn't. Let the print dry fully (1 h minimum, 24 h for "
+    "pigment inks) before measuring.\n\n"
+    "If the driver's colour control is NOT greyed out, switch back to "
+    "the standard (non-native) print mode in Settings."
+)
+
+_TT_BODY_PRINT_LINUX = (
+    "This step sends the TIFF from step 1 straight to your printer via "
+    "CUPS, with all colour management turned off. ChromIQ converts the "
+    "chart to PostScript and sends it through the \"lp\" command in raw "
+    "mode, so the printer's own driver corrections don't touch the "
+    "patches. That's deliberate: to profile a printer we need to see how "
+    "it behaves on its own, before any correction.\n\n"
+    "Before you print:\n"
+    "• Load the exact paper you chose in step 1. Different paper = "
+    "different profile.\n"
+    "• Make sure the printer is on, has ink, and shows up in CUPS "
+    "(the system print queue). If you don't see it below, check "
+    "System Settings → Printers, or visit http://localhost:631.\n"
+    "• Use the same ink, paper, and print settings every time you "
+    "re-profile this printer — the profile only matches that recipe.\n\n"
+    "How to use this screen:\n"
+    "• Pick the printer and paper size. Quality should usually be the "
+    "highest setting you'll print at in real use.\n"
+    "• Click \"Print\". No print dialog will appear — the chart goes "
+    "straight to the CUPS queue.\n\n"
+    "After printing: let the print dry fully (at least 1 hour, 24 h for "
+    "best accuracy with pigment inks) before measuring. Wet ink reads "
+    "wrong.\n\n"
+    "Note: on Linux there is no native dialog option — ChromIQ always "
+    "prints via the CUPS bypass path, which is the right choice for "
+    "profiling anyway."
+)
+
+_TT_BODY_PRINT_WINDOWS = (
+    "This step opens Windows' standard print dialog so you can pick the "
+    "printer and its options. IMPORTANT: ChromIQ cannot disable the "
+    "printer driver's colour management for you on Windows — you must "
+    "turn it off yourself before printing, or the printer will apply "
+    "its own corrections and the chart will be unusable for profiling.\n\n"
+    "Before you print:\n"
+    "• Load the exact paper you chose in step 1.\n"
+    "• Make sure the printer is on, has ink, and is selected.\n\n"
+    "How to use this screen:\n"
+    "• Click \"Print\" to open the dialog.\n"
+    "• In the dialog, open the printer's Properties / Preferences and "
+    "find its colour-management section. Set it to OFF / \"No Color "
+    "Adjustment\" / \"Application Managed Colors\":\n"
+    "    – Epson:  \"Epson Color Controls\" → Off (No Color Adjustment)\n"
+    "    – Canon:  \"Color Options\" → Manual → None\n"
+    "    – HP:     \"Color Options\" → Application Managed Colors\n"
+    "    – Others: look for \"No Color Management\", \"Off\", or "
+    "\"Application Controlled\"\n"
+    "• Pick the right paper / media type and print quality. Confirm "
+    "colour management is OFF before clicking Print.\n\n"
+    "After printing: let the print dry fully (1 h minimum, 24 h for "
+    "pigment inks) before measuring."
+)
 
 
 class TabPrint(QWidget):
@@ -102,9 +211,13 @@ class TabPrint(QWidget):
         ll.setContentsMargins(16, 12, 16, 12)
         ll.setSpacing(10)
 
-        ll.addWidget(TabHeader(
-            "STEP 02 · PRINT TARGET", "Print test chart", "#ffb42d", left
-        ))
+        _initial_tt_title, _initial_tt_body = self._compute_print_tooltip()
+        self._header = TabHeader(
+            "STEP 02 · PRINT TARGET", "Print test chart", "#ffb42d", left,
+            tooltip_title=_initial_tt_title,
+            tooltip_body=_initial_tt_body,
+        )
+        ll.addWidget(self._header)
 
         # Printer selection (pinned above scroll area)
         self._printer_grp = QGroupBox("Printer", left)
@@ -263,6 +376,7 @@ class TabPrint(QWidget):
         right = QWidget(self)
         rl = QVBoxLayout(right)
         rl.setContentsMargins(0, 0, 0, 12)
+        rl.setSpacing(0)
         lbl = QLabel("PRINT PREVIEW", right)
         lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         lbl.setStyleSheet(
@@ -794,6 +908,20 @@ class TabPrint(QWidget):
 
     def apply_native_dialog_mode(self) -> None:
         self._set_native_mode(bool(self._settings.get("use_native_print_dialog", False)))
+        header = getattr(self, "_header", None)
+        if header is not None:
+            header.set_tooltip(*self._compute_print_tooltip())
+
+    def _compute_print_tooltip(self) -> tuple[str, str]:
+        if is_windows():
+            return _TT_TITLE_PRINT, _TT_BODY_PRINT_WINDOWS
+        if is_linux():
+            return _TT_TITLE_PRINT, _TT_BODY_PRINT_LINUX
+        if is_macos():
+            if bool(self._settings.get("use_native_print_dialog", False)):
+                return _TT_TITLE_PRINT, _TT_BODY_PRINT_MACOS_NATIVE
+            return _TT_TITLE_PRINT, _TT_BODY_PRINT_MACOS_BYPASS
+        return _TT_TITLE_PRINT, _TT_BODY_PRINT_MACOS_BYPASS
 
     def _set_native_mode(self, enabled: bool) -> None:
         import sys as _sys

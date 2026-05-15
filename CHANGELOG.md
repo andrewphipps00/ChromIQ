@@ -1,5 +1,235 @@
 # Changelog
 
+## v3.5.0
+First stable release of the 3.5.x line, rolling up the six 3.5.0 betas
+into a single supported build for macOS, Windows, and Linux.
+
+### Highlights since v3.2.8
+- **Linux support.** Pre-built tarballs for `x86_64` and `aarch64`
+  ship with every release alongside the existing macOS DMGs and Windows
+  ZIPs. All platform-conditional paths (Argyll bin defaults, log
+  directory, ICC profile install location, gamut viewer ICC dialog)
+  now live in `core/platform_paths.py` with explicit Windows / macOS /
+  Linux branches. Linux is labelled **beta** in the README — the
+  full ArgyllCMS workflow runs, but real-hardware coverage is still
+  thin; please report what works and what doesn't.
+- **Guided pre-conditioning (second-pass) workflow.** The *Generate
+  Chart* tab gains an optional **Refinement** section: tick the box,
+  pick an existing `.icc` / `.icm` / `.mpp`, and `targen` runs with
+  `-c` for a refinement pass. The *Build Profile* and *Check & Refine*
+  result dialogs grow a **Use as Pre-conditioning** button that
+  pre-fills the chart panel with the just-built profile, and the prior
+  session's `.icc` / `.ti3` are auto-renamed `pre_*.icc` / `pre_*.ti3`
+  so v1 isn't overwritten by v2.
+- **Per-tab onboarding tooltips.** Every workflow tab now has a
+  clickable ⓘ icon next to its big title that opens a beginner-friendly
+  explanation of what the screen does, what needs to be ready, how to
+  use it, and what comes next. The *Build Profile* tooltip swaps to
+  describe the 3-stage `printcal → applycal → colprof` flow when
+  calibration mode is enabled, and the *Print Chart* tooltip varies by
+  OS and `use_native_print_dialog` (macOS bypass, macOS native dialog,
+  Linux CUPS bypass, Windows QPrintDialog).
+- **Updater understands SemVer pre-release tags.** Beta users see
+  newer betas as upgrade candidates; stable users only see stable
+  releases. The "Check for Updates" crash on pre-release builds
+  (`int("0-beta")`) is gone.
+- **Landscape charts print correctly on the CUPS PostScript path.**
+  The generated PostScript now declares its own page geometry to match
+  the TIFF aspect, so Apple's `pstops` no longer double-rotates the
+  job — HP drivers stop clipping columns A–E or silently dropping
+  jobs.
+
+### Other improvements & fixes
+- File logger + `sys.excepthook` installed at the top of `main.py`,
+  before PyQt6 / numpy are imported, so early import-time failures
+  end up in `chromiq.log` with a full traceback instead of vanishing.
+- Linux bundle ships nine xcb / xkbcommon helper libs next to the
+  binary, so the Qt xcb platform plugin resolves its deps from
+  `$ORIGIN` and the tarball launches on minimal distros without
+  requiring `libxcb-cursor0` to be installed system-wide.
+- Cross-platform icon builder (`scripts/build_icons.py`): generates
+  `app_icon.icns` and `app_icon.ico` from PNG using Pillow only, so
+  the icon step in `HOW_TO_BUILD.txt` no longer needs macOS-only
+  `sips` / `iconutil`.
+- GitHub release notes are guaranteed to be non-empty — the workflows
+  first try to extract the matching `## <tag>` section from this
+  changelog, then fall back to commit subjects since the previous tag.
+- Pre-release-style tags (`-alpha`, `-beta`, `-rc`, `-pre`) are
+  automatically flagged as GitHub prereleases by the build workflows;
+  final tags stay regular.
+- Issue forms auto-apply `platform:` and `Severity:` labels via the
+  new `auto-label-issues.yml` workflow.
+- WebEngine teardown moved from `aboutToQuit` to `MainWindow.closeEvent`
+  to dodge the SIP / Chromium shutdown race that caused
+  `EXC_BAD_ACCESS` on quit when the gamut viewer had been opened.
+
+### Updating from a 3.5.0 beta
+If you're running any 3.5.0-beta.X build, **Check for Updates** will
+recognise v3.5.0 as an upgrade and prompt you to install it (final
+releases sort above any pre-release of the same base version per
+SemVer 2.0.0 precedence rules).
+
+For the full per-beta breakdown of what landed when, see the
+`v3.5.0-beta.1` … `v3.5.0-beta.6` sections below.
+
+## v3.5.0-beta.6
+### Added
+- **Guided pre-conditioning workflow in *Generate Chart*.** A new
+  *Refinement (Optional)* section appears on the guided panel: tick
+  the checkbox + pick an existing `.icc`, `.icm`, or `.mpp` profile
+  and `targen` is invoked with `-c` for a second-pass profiling run.
+  The always-on `-G` OFPS distribution plus targen's default `-A=1.0`
+  already satisfy the man-page condition for `-c`, so no extra flag
+  plumbing is required.
+- **"Use as Pre-conditioning" button** on both the *Build Profile*
+  and *Check & Refine* result dialogs. Pressing it switches back to
+  *Generate Chart* and pre-fills the picker with the just-built
+  profile. Both dialogs were widened to fit the new button row plus
+  its explanation paragraph.
+- File-picker filter on the pre-conditioning field now accepts `.mpp`
+  in addition to `.icc` / `.icm`, per the targen man page.
+
+### Changed
+- When a refinement run starts in the same working folder, the prior
+  session's `<basename>.icc` and `<basename>.ti3` are renamed in
+  place to `pre_*.icc` / `pre_*.ti3` instead of being overwritten by
+  the upcoming `chartread` / `colprof` runs. `_stage_precond_profile`
+  already handles in-folder `pre_` files without re-copying. Only one
+  generation of history is kept — diminishing returns past v2.
+
+## v3.5.0-beta.5
+### Added
+- **Tab-headline tooltips on every workflow tab.** Each of the five tabs
+  (Create Chart, Print Chart, Measure, Build Profile, Check & Refine)
+  now has a clickable ⓘ icon next to its big title that opens a
+  beginner-friendly explanation of what the screen does, what the user
+  needs ready (devices connected, paper loaded, …), how to use it, and
+  what comes next. The tab 4 tooltip swaps between the standard
+  `colprof` and the 3-stage `printcal → applycal → colprof` flow when
+  calibration mode is toggled in Settings. The tab 2 tooltip
+  additionally varies by OS and by the `use_native_print_dialog`
+  setting, so macOS bypass, macOS native dialog, Linux CUPS bypass, and
+  Windows QPrintDialog each get their own instructions.
+
+### Fixed
+- **Crash on quit when the gamut viewer was active.** PyQt6 plus
+  QtWebEngine raced during shutdown: SIP walked the Chromium subtree
+  in `QApplication`'s destructor and dereferenced a dangling pointer,
+  surfacing as `EXC_BAD_ACCESS` in
+  `sip_api_visit_wrappers/dealloc_QApplication`. The WebEngine teardown
+  now runs from `MainWindow.closeEvent` (while the event loop is still
+  alive) instead of from `aboutToQuit` (which fires too late for posted
+  events to drain), and the main window hides itself first so the user
+  sees no visible delay.
+
+## v3.5.0-beta.4
+### Fixed
+- **Check for Updates no longer crashes on pre-release builds** (#16). The
+  built-in version parser did `int("0-beta")` on tags like
+  `v3.5.0-beta.3` and surfaced as "Check failed: invalid literal for
+  int() with base 10: '0-beta'". The parser now follows SemVer 2.0.0
+  precedence rules (`3.5.0 > 3.5.0-rc.1 > 3.5.0-beta.3`), and the
+  checker queries `/releases` rather than `/releases/latest` so users on
+  a beta can be told about a newer beta. Users on a final release still
+  only see final releases as upgrade candidates.
+- **Landscape charts now print correctly on the CUPS PostScript path**
+  (#14, #15). When the chart aspect contradicted the selected paper
+  orientation, the generated PostScript declared a portrait page and
+  drew the landscape image on top — Apple's `pstops` filter then
+  double-rotated, which caused HP drivers to clip columns A–E (#14) or
+  silently drop the job (#15). `PostScriptGenerator` now swaps
+  `setpagedevice` to match the TIFF aspect, and the CUPS PS command no
+  longer forwards `orientation-requested`, so the document fully
+  describes its own geometry. The raw-TIFF fallback path still uses
+  `orientation-requested` because raw TIFF has no inherent page
+  geometry.
+
+### CI
+- **Issue forms now auto-apply `platform:` and `Severity:` labels.**
+  GitHub issue forms don't turn dropdown selections into labels — only
+  the template's static `labels:` array applies. A new
+  `auto-label-issues.yml` workflow parses the bug- and feature-form
+  bodies on open and adds the matching repo labels
+  (`platform: macos|windows|linux|any`,
+  `Severity: Critical|High|Medium|Low`). Includes a `workflow_dispatch`
+  entry for retroactively labelling existing issues.
+
+## v3.5.0-beta.3
+### Fixed
+- **Early startup failures are now captured in `chromiq.log`** (#13, rooted
+  in #11). The rotating file handler and a `sys.excepthook` are installed
+  at the very top of `main.py`, before `PyQt6`, `numpy`, and the UI
+  modules are imported. If a frozen bundle ships with a broken dylib
+  graph (as happened in v3.2.7 with `libscipy_openblas64_.dylib`), the
+  import-time `ImportError` is now written to disk with a full traceback
+  instead of vanishing silently. The startup banner also records python
+  version, `sys.platform`, `sys.frozen`, and `sys.argv` for diagnostics.
+
+### CI
+- macOS, Windows, and Linux release workflows now always include a
+  changelog in GitHub release notes. They first try to extract the
+  matching `## <tag>` section from `CHANGELOG.md`; if absent (e.g. the
+  maintainer forgot), they fall back to an auto-generated bulleted list
+  of commit subjects since the previous tag, so releases can never ship
+  with empty notes.
+
+## v3.5.0-beta.2
+### Fixed
+- **Linux: Qt xcb platform plugin crash on launch** — the beta.1 tarball
+  aborted on first run with
+  `qt.qpa.plugin: From 6.5.0, xcb-cursor0 or libxcb-cursor0 is needed to
+  load the Qt xcb platform plugin` on any distro that did not happen to
+  have `libxcb-cursor0` installed system-wide. `ChromIQLinux.spec` now
+  detects nine xcb/xkbcommon helper libs on the build host and bundles
+  them into the tarball next to the binary, so the Qt xcb plugin resolves
+  its dependencies from `$ORIGIN` and the bundle launches without any
+  system packages required. Reported by the Debian beta tester.
+
+### Docs
+- `HOW_TO_BUILD.txt`: retitled to drop the `.app` suffix; macOS-only steps
+  (4, 4b, 5, 6 — PyInstaller spec choice, `codesign --deep`, "open .app",
+  zip a `.app`) are now explicitly labeled so Linux readers stop reading
+  them as cross-platform. Added a Troubleshooting subsection with
+  apt/dnf/pacman fallback commands for the xcb-cursor error.
+- `README.md`: Linux section gains a one-line troubleshooting note with
+  the same fallback install commands.
+
+## v3.5.0-beta.1
+### Added
+- **Linux support (beta)**: ChromIQ now builds and runs on Debian/Ubuntu and
+  other glibc Linux distributions. Pre-built tarballs are produced for both
+  `x86_64` and `aarch64` and attached to each release
+  (`ChromIQ-Linux-x86_64.tar.gz`, `ChromIQ-Linux-aarch64.tar.gz`). Extract and
+  run `./ChromIQ/ChromIQ` — no install step required.
+- **Cross-platform icon builder**: a new `scripts/build_icons.py` script
+  generates both `assets/app_icon.icns` (macOS) and `assets/app_icon.ico`
+  (Windows) from the source PNG using Pillow only — no more macOS-only
+  `sips`/`iconutil` dependency, so the icon step in `HOW_TO_BUILD.txt` now
+  works on every platform.
+
+### Changed
+- All platform-conditional paths and URLs (Argyll bin directory defaults &
+  auto-detection candidates, log directory, ICC profile install location,
+  gamut viewer ICC profile dialog, ArgyllCMS download page, native-print
+  dialog visibility) now live in a single `core/platform_paths.py` module
+  with explicit branches for Windows, macOS, and Linux. Previously every
+  call site assumed "not Windows" meant macOS, which silently produced
+  `~/Library/Logs`, `~/Library/ColorSync/Profiles`, `/Applications/Argyll/bin`
+  etc. on Linux. macOS and Windows behavior is preserved exactly (regression
+  test: `tests/test_platform_paths.py`).
+- On Linux the log file lives at `~/.local/state/ChromIQ/logs/chromiq.log`
+  (or `$XDG_STATE_HOME/ChromIQ/logs/`), the default Argyll path is `/usr/bin`
+  (also probes `/usr/local/bin`, `/opt/argyll/bin`, `/opt/argyllcms/bin`,
+  `~/.local/bin`), installed profiles go to `~/.local/share/color/icc/`
+  (or `$XDG_DATA_HOME/color/icc/`), the gamut viewer file dialog lists the
+  XDG + colord-managed profile directories (`~/.local/share/color/icc`,
+  `~/.color/icc`, `/usr/share/color/icc`, `/usr/local/share/color/icc`,
+  `/var/lib/colord/icc`), and the **Download latest ArgyllCMS…** button
+  opens the Linux download page on argyllcms.com.
+- Profile-install dialog button text reads **Install Profile** on Windows
+  and Linux (previously hard-coded **Install on this Mac** on every
+  non-Windows OS).
+
 ## v3.2.8
 ### Fixed
 - **Intel-only DMG (`ChromIQ-macOS-x86_64.dmg`) failed to launch** with

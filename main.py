@@ -3,10 +3,37 @@ from __future__ import annotations
 
 import os
 import sys
+import traceback
 from pathlib import Path
 
-from PyQt6.QtGui import QIcon
-from PyQt6.QtWidgets import QApplication
+# Configure logging FIRST, before any heavy third-party imports (PyQt6, numpy,
+# etc.).  If a frozen bundle ships with a broken dylib graph, the import below
+# will crash before any application code runs — and without an early file
+# handler that crash leaves no on-disk trace (see issue #11/#13).  core.logger
+# and core.platform_paths use stdlib only, so they are safe to import here.
+from core.logger import configure_logging, get_logger
+
+configure_logging()
+log = get_logger("chromiq")
+
+
+def _log_excepthook(exc_type, exc, tb):
+    log.critical(
+        "Uncaught exception:\n%s",
+        "".join(traceback.format_exception(exc_type, exc, tb)),
+    )
+    sys.__excepthook__(exc_type, exc, tb)
+
+
+sys.excepthook = _log_excepthook
+
+log.info(
+    "ChromIQ starting; python=%s platform=%s frozen=%s argv=%s",
+    sys.version.split()[0],
+    sys.platform,
+    getattr(sys, "frozen", False),
+    sys.argv,
+)
 
 # Windows ARM: GPU is blocklisted for WebGL but the software compositor works fine.
 # --ignore-gpu-blocklist re-enables WebGL; --disable-gpu-compositing keeps the
@@ -16,27 +43,29 @@ if sys.platform == "win32":
     _extra = "--ignore-gpu-blocklist --disable-gpu-compositing"
     os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = f"{_existing} {_extra}".strip()
 
-# QtWebEngine must be imported before QApplication is instantiated.
-# Wrapped in try/except so the app still starts if the package is absent.
 try:
-    import PyQt6.QtWebEngineWidgets  # noqa: F401
-except ImportError:
-    pass
+    from PyQt6.QtGui import QIcon
+    from PyQt6.QtWidgets import QApplication
 
-from PyQt6.QtGui import QFontDatabase
-from core.logger import configure_logging, get_logger
-from core.resource_path import resource_path
-from core.settings import AppSettings
-from ui.main_window import MainWindow
-from ui.styles import APP_STYLESHEET, WinButtonLayoutStyle, make_dark_palette
-from ui.widgets import ButtonFontFilter
+    # QtWebEngine must be imported before QApplication is instantiated.
+    # Wrapped in try/except so the app still starts if the package is absent.
+    try:
+        import PyQt6.QtWebEngineWidgets  # noqa: F401
+    except ImportError:
+        log.warning("QtWebEngine not available — gamut viewer will be disabled")
+
+    from PyQt6.QtGui import QFontDatabase
+    from core.resource_path import resource_path
+    from core.settings import AppSettings
+    from ui.main_window import MainWindow
+    from ui.styles import APP_STYLESHEET, WinButtonLayoutStyle, make_dark_palette
+    from ui.widgets import ButtonFontFilter
+except BaseException:
+    log.exception("Fatal error importing application modules")
+    raise
 
 
 def main() -> int:
-    configure_logging()
-    log = get_logger("chromiq")
-    log.info("ChromIQ starting")
-
     app = QApplication(sys.argv)
     app.setApplicationName("ChromIQ")
     app.setOrganizationName("ChromIQ")

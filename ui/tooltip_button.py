@@ -111,7 +111,7 @@ class _InfoDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle(title)
         self.setMinimumWidth(min_width)
-        self.setMaximumWidth(max(min_width + 120, 540))
+        self.setMaximumWidth(max(min_width + 160, 720))
         self.setWindowFlags(
             self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint
         )

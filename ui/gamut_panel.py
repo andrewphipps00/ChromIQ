@@ -75,10 +75,6 @@ class GamutPanel(QWidget):
         self._build_ui()
         self._load_defaults()
 
-        app = QApplication.instance()
-        if app:
-            app.aboutToQuit.connect(self._on_app_quit)
-
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
@@ -472,14 +468,30 @@ class GamutPanel(QWidget):
         root.addLayout(btn_row)
 
     def _make_viewer_widget(self) -> QWidget:
+        # The QWebEngineView's Chromium surface paints over the widget's own
+        # stylesheet border, so the border must live on a wrapper QWidget. The
+        # wrapper draws the border via an objectName-scoped stylesheet and uses
+        # contentsMargins to inset the view by the border thickness on the
+        # three bordered sides (top/right/bottom).
+        container = QWidget(self)
+        container.setObjectName("gamutViewerFrame")
+        container.setStyleSheet(
+            "QWidget#gamutViewerFrame {"
+            " background: #111111;"
+            " border: 1px solid #333;"
+            " border-left: none;"
+            "}"
+        )
+        wrap_layout = QVBoxLayout(container)
+        wrap_layout.setContentsMargins(0, 1, 1, 1)
+        wrap_layout.setSpacing(0)
         try:
             from PyQt6.QtWebEngineWidgets import QWebEngineView
-            view = QWebEngineView(self)
+            view = QWebEngineView(container)
             # Set the Chromium page surface colour BEFORE any content loads —
             # otherwise the first compositor frame on first tab open paints at
             # the default white, flashing through before the placeholder HTML
-            # renders. The QWidget stylesheet below only styles the widget
-            # chrome, not the embedded Chromium surface.
+            # renders.
             view.page().setBackgroundColor(QColor("#111111"))
             try:
                 from PyQt6.QtWebEngineCore import QWebEngineSettings
@@ -488,24 +500,25 @@ class GamutPanel(QWidget):
                 )
             except (ImportError, AttributeError):
                 pass
-            view.setStyleSheet("background: #111111; border: none;")
             view.loadFinished.connect(self._on_page_loaded)
             self._web_view = view
+            wrap_layout.addWidget(view)
             self._show_placeholder()
-            return view
+            return container
         except ImportError:
             log.warning("PyQt6-WebEngine not available — using fallback placeholder")
             self._web_view = None
             lbl = QLabel(
                 "Install PyQt6-WebEngine to view\nthe interactive 3D gamut",
-                self,
+                container,
             )
             lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
             lbl.setStyleSheet(
                 f"color: {TEXT_DIM}; background: #111111;"
                 " font-family: Menlo, Consolas, 'Courier New', monospace; font-size: 10px;"
             )
-            return lbl
+            wrap_layout.addWidget(lbl)
+            return container
 
     def _show_placeholder(self) -> None:
         if self._web_view is None:
@@ -768,13 +781,16 @@ class GamutPanel(QWidget):
                 min_width=480,
             ).exec()
 
-    def _on_app_quit(self) -> None:
+    def shutdown_webengine(self) -> None:
         # PyQt6 + QtWebEngine shutdown race: if the view (and its Chromium
         # child objects) is still alive when QApplication enters its
         # destructor, SIP walks the wrapper graph and follows a dangling
         # pointer in the Chromium subtree — EXC_BAD_ACCESS inside
-        # sip_api_visit_wrappers/dealloc_QApplication. Force the view to be
-        # destroyed *before* the QApplication destructor runs.
+        # sip_api_visit_wrappers/dealloc_QApplication. Called from
+        # MainWindow.closeEvent so the main event loop is still running and
+        # the deleteLater/processEvents drain below actually fires before SIP
+        # tears down QApplication. (aboutToQuit is too late — events posted
+        # from that slot are not reliably delivered.)
         view = self._web_view
         if view is None:
             return
@@ -906,24 +922,10 @@ def _set_combo(combo: NoScrollComboBox, value: str) -> None:
 
 def _system_icc_paths() -> list[str]:
     """Return existing platform-specific ICC/ICM profile directories."""
-    import sys
-    home = Path.home()
-    if sys.platform == "win32":
-        import os
-        win = os.environ.get("WINDIR", r"C:\Windows")
-        candidates = [
-            r"C:\Windows\System32\spool\drivers\color",
-            str(Path(win) / "System32" / "spool" / "drivers" / "color"),
-        ]
-    else:
-        candidates = [
-            str(home / "Library/ColorSync/Profiles"),
-            "/Library/ColorSync/Profiles",
-            "/System/Library/ColorSync/Profiles",
-        ]
+    from core.platform_paths import icc_system_dirs
     seen: set[str] = set()
-    result = []
-    for p in candidates:
+    result: list[str] = []
+    for p in (str(d) for d in icc_system_dirs()):
         if p not in seen and Path(p).exists():
             seen.add(p)
             result.append(p)

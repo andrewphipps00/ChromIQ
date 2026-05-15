@@ -3,16 +3,12 @@ from __future__ import annotations
 
 import logging
 import logging.handlers
-from pathlib import Path
+
+from core.platform_paths import log_dir
 
 
-def _log_path() -> Path:
-    import sys
-    if sys.platform == "win32":
-        import os
-        base = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "ChromIQ" / "Logs"
-    else:
-        base = Path.home() / "Library" / "Logs" / "ChromIQ"
+def _log_path():
+    base = log_dir()
     base.mkdir(parents=True, exist_ok=True)
     return base / "chromiq.log"
 

@@ -1,20 +1,29 @@
-"""Native macOS print path (PyObjC) — Adobe Color Printer Utility equivalent.
+"""Native macOS print path (PyObjC) — emulates Adobe Color Printer Utility's
+colour-off behaviour on the spool side.
 
 Opens the standard macOS print panel via ``NSPrintPanel`` / ``NSPrintOperation``
 and submits the profiling-target bitmap as **device RGB with no embedded ICC
 profile** at its exact generated size (no scaling).
 
-To stop the printer driver from colour-managing the chart it does what Adobe
-Color Printer Utility does: it sets ``AP_ColorMatchingMode`` =
-``AP_ApplicationColorMatching`` on the job's PrintCore ``PMPrintSettings`` with
-the *locked* flag, before and again after the print dialog, so the vendor's own
-colour-adjustment pane (Epson "Color Settings", Canon "Color Options", …) shows
-greyed out at "Off / No Color Adjustment".  As a vendor-independent backstop it
-also scans the selected printer's PPD for that driver's own "no colour
-adjustment" option (e.g. Epson ``EPIJ_CMat=3``) and locks it directly.
-``PMPrintSettingsSetValue`` is not wrapped by PyObjC, so it is called through
-``ctypes`` against PrintCore.  No custom colour-matching callback is registered,
-so no transform is applied: pixel values reach the driver unchanged.
+To stop the printer driver from colour-managing the chart it sets
+``AP_ColorMatchingMode`` = ``AP_ApplicationColorMatching`` on the job's
+PrintCore ``PMPrintSettings`` with the *locked* flag, before and again after
+the print dialog.  As a vendor-independent backstop it also scans the
+selected printer's PPD for that driver's own "no colour adjustment" option
+(e.g. Epson ``EPIJ_CMat=3``) and locks it directly.  ``PMPrintSettingsSetValue``
+is not wrapped by PyObjC, so it is called through ``ctypes`` against
+PrintCore.  No custom colour-matching callback is registered, so no
+transform is applied: pixel values reach the driver unchanged.
+
+On Tahoe (macOS 15) the print dialog's Color Matching pane (Epson
+"Farbanpassung") may still appear active and let the user pick driver-managed
+modes — this is cosmetic; the spool is still overridden at submit time by the
+locks above.  Reproducing ACPU's full grey-out behaviour would require running
+the raw ``PMSession*NoDialog`` lifecycle instead of ``NSPrintOperation``:
+Apple gates ``PMSessionSetColorMatchingMode`` and
+``PMSessionCopyDefaultOutputIntent`` on the session ``NSPrintInfo`` hands out
+(both SIGABRT when called).  See the ``project-native-print-acpu`` auto-memory
+entry.
 
 This module logs the resolved ``printSettings`` / ``dictionary`` after every run
 for diagnostics.
@@ -42,10 +51,11 @@ _PT_PER_INCH = 72.0
 # print framework, not the driver — and were confirmed by dumping
 # ``NSPrintInfo.printSettings()`` after selecting "Color Matching > ColorSync"
 # against an Epson ET-8550 (which then auto-locks ``EPIJ_CMat`` to "3" / Off).
-# Set with the *locked* flag so the dialog greys the controls out.  In addition,
-# `_vendor_no_cm_setting` scans the selected printer's PPD for that driver's own
-# "Off / No Color Adjustment" option and locks it too, so it doesn't matter
-# whether a given vendor's PDE honours the Apple-level keys.
+# Set with the *locked* flag so the values can't be silently rewritten between
+# dialog and submission.  In addition, `_vendor_no_cm_setting` scans the
+# selected printer's PPD for that driver's own "Off / No Color Adjustment"
+# option and locks it too, so it doesn't matter whether a given vendor's PDE
+# honours the Apple-level keys.
 _LOCKED_COLOR_SETTINGS: dict[str, str] = {
     "AP_ColorMatchingMode": "AP_ApplicationColorMatching",
     "APCustomColorMatchingProfile": "sRGB",

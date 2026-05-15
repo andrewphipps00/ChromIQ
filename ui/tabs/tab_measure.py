@@ -309,7 +309,31 @@ class TabMeasure(QWidget):
         top_layout.setContentsMargins(16, 12, 16, 6)
         top_layout.setSpacing(8)
         top_layout.addWidget(TabHeader(
-            "STEP 03 · MEASURE TARGET", "Measure printed chart", "#56d6a5", top_widget
+            "STEP 03 · MEASURE TARGET", "Measure printed chart", "#56d6a5", top_widget,
+            tooltip_title="Step 3 — Measure the print",
+            tooltip_body=(
+                "On this screen, your spectrophotometer reads every colour patch "
+                "on the printed chart and records what colour your printer actually "
+                "produced. ChromIQ pairs each measurement with the RGB value that "
+                "was requested in step 1, and saves the result as a .ti3 file.\n\n"
+                "Before you start:\n"
+                "• Your measurement device (e.g. i1Pro, ColorMunki, ColorMeter) "
+                "MUST be plugged in via USB before you open this tab. If ChromIQ "
+                "doesn't see it, unplug and replug, then restart the app.\n"
+                "• The print must be fully dry — wet ink gives wrong readings.\n"
+                "• Have the printed chart in front of you, well-lit, on a flat "
+                "surface. Avoid direct sunlight.\n\n"
+                "How to use this screen:\n"
+                "• Guided mode walks you through reading the chart one strip (row) "
+                "at a time. Recommended for first-timers.\n"
+                "• Manual mode exposes every chartread option for advanced users.\n"
+                "• Follow the on-screen prompts: place the device on the indicated "
+                "patch or strip, press the button on the device, and wait for the "
+                "beep before moving to the next.\n\n"
+                "If you misread a patch, you can usually re-do that strip from the "
+                "prompt. Don't rush — accurate reads now mean an accurate profile.\n\n"
+                "Next step: build the ICC profile on tab 4."
+            ),
         ))
         _mode_font = QFont()
         _mode_font.setFamilies(["Menlo", "Consolas", "Courier New", "monospace"])
@@ -460,6 +484,7 @@ class TabMeasure(QWidget):
         right = QWidget(self)
         rl = QVBoxLayout(right)
         rl.setContentsMargins(0, 0, 0, 12)
+        rl.setSpacing(0)
         lbl = QLabel("CHART PREVIEW", right)
         lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         lbl.setStyleSheet(
