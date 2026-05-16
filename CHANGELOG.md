@@ -1,5 +1,63 @@
 # Changelog
 
+## v3.5.10
+Follow-up on issue #23, raised by Knut on the printerknowledge forum and
+in GitHub. When a strip kept failing on his ColorMunki, the misread
+dialog's "Give Up" button quit the entire run and discarded everything
+— not what the label promised, and not what chartread actually offers
+at that prompt. This release replaces that single button with three
+honest options (Retry / Skip Stripe / Save Partial & Quit), wires up
+real auto-resume after a partial save (the checkbox auto-arms and the
+Start button relabels itself to "Continue Measurement"), and corrects
+a misleading line on the calibration-resume dialog that claimed a
+per-strip marker chartread never actually prints.
+
+### Improvements
+- **Misread dialog: Retry / Skip Stripe / Save Partial & Quit (#23).**
+  The old two-button "Retry / Give Up" dialog
+  (`_on_strip_error` in `ui/tabs/tab_measure.py`) misnamed Esc-quit
+  as "Give Up" and gave no way to skip a single bad stripe. The new
+  layout exposes three actions that match chartread's actual control
+  surface, all driven through `workflow/measure_manager.py`:
+  - **Skip Stripe** chains any-key (→ strip menu) + `n` (next unread)
+    via the existing `send_post_retry_key()` helper. Lets you bail on
+    a problem stripe and finish the rest.
+  - **Save Partial & Quit** chains any-key + `d` (done) + auto-`y`
+    against chartread's `"At least one unread patch, Are you sure
+    [y/n]"` prompt via a new `send_save_partial_and_quit()` helper
+    and a tiny `_save_partial_state` state machine driven by
+    `_ARE_YOU_SURE_RE`. This is the only sequence that makes
+    chartread write the `.ti3` with patches still unread — Esc at
+    the misread prompt discards everything, so the destructive path
+    is no longer offered in this dialog (the Stop button at the top
+    of the tab is still there as the escape hatch).
+- **Auto-resume after an interrupted measurement.** When a run ends
+  with a fresh `.ti3` on disk but chartread never emitted
+  `"ALL ROWS READ"` (Save Partial & Quit, or `d`+`y` typed manually),
+  `_on_measure_done` now re-runs `_update_resume_availability()` to
+  surface the "Refine existing measurement (-r)" checkbox, auto-ticks
+  it for the active mode, and a new `_refresh_start_button_label()`
+  flips the Start button text to **"Continue Measurement"**. One
+  click resumes chartread with `-r` against the just-saved partial
+  file — no need to reload the `.ti2` or hunt for the option.
+  Wired to `toggled` on both `_resume_cb` and `_m_resume_cb` so the
+  label tracks manual ticks too.
+
+### Fixes
+- **Calibration-resume dialog claimed a non-existent strip marker.**
+  The "Calibration Complete — Manual Re-measurement" body in
+  `_on_calibration_done` told users that already-measured strips were
+  marked with `(!! ALL ROWS READ !!)`, but that line only appears when
+  *every* strip has been read, not as a per-strip tag. Rewritten to
+  describe what the user actually does (re-scan to overwrite, scan
+  unread strips to fill them in) rather than asserting anything about
+  chartread's output formatting.
+
+### Other
+- GitHub Discussions enabled on the repo (#21) — the
+  "Question / discussion" link on the New Issue page now resolves
+  to the Discussions tab instead of returning a 404.
+
 ## v3.5.9
 Forum-feedback release driven by printerknowledge.com post #148124. The
 headline is the i1Pro family's intermittent "not enough patches read"

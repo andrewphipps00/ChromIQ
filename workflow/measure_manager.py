@@ -38,6 +38,9 @@ _UNEXPECTED_RESP_RE    = re.compile(r"unexpected response.*\(DeltaE\s*([\d.]+)\)
 _STRIP_OK_RE           = re.compile(r"strip\s+read\s+ok",                                    re.IGNORECASE)
 _SENSOR_POSITION_RE    = re.compile(r"sensor.*wrong\s+position|sensor should be in surface", re.IGNORECASE)
 _USB_VM_RE             = re.compile(r"Failed to get piif for USB device",                    re.IGNORECASE)
+# chartread asks this when 'd' (done) is pressed with unread patches remaining;
+# answering 'y' writes the partial .ti3, 'n' returns to the strip menu.
+_ARE_YOU_SURE_RE       = re.compile(r"Are\s+you\s+sure\s+\[y/n\]",                          re.IGNORECASE)
 
 
 @dataclass
@@ -75,6 +78,14 @@ class MeasureManager(QObject):
         self._guided_idx:    int  = 0
         self._guided_state:  str  = "idle"   # "idle" | "navigating" | "waiting"
         self._guided_on_line: "Callable[[str], None] | None" = None
+        # Queued key dispatched once chartread returns to the strip menu after
+        # a misread retry — see send_post_retry_key().
+        self._pending_post_retry_key: str | None = None
+        # Two-step state for "Save Partial & Quit" from the misread dialog:
+        #   None             — idle
+        #   "wait_strip_menu" — waiting for the strip-menu prompt to send 'd'
+        #   "wait_sure"       — waiting for "Are you sure [y/n]" to send 'y'
+        self._save_partial_state: str | None = None
 
     # ------------------------------------------------------------------
 
@@ -93,12 +104,17 @@ class MeasureManager(QObject):
         self._guided_idx   = 0
         self._guided_state = "idle" if self._guided_strips else "disabled"
 
+        def _on_finish(code: int) -> None:
+            self._pending_post_retry_key = None
+            self._save_partial_state = None
+            on_finish(code)
+
         self._runner.run(
             "chartread",
             args,
             cwd,
             on_line=lambda line: self._handle_line(line, on_line),
-            on_finish=on_finish,
+            on_finish=_on_finish,
             use_pty=True,
         )
 
@@ -111,6 +127,26 @@ class MeasureManager(QObject):
     def send_key(self, key: str) -> None:
         """Send a keystroke to the running chartread process."""
         self._runner.write_stdin(key)
+
+    def send_post_retry_key(self, key: str) -> None:
+        """Acknowledge a misread (any-key = retry) and queue ``key`` for the
+        strip menu that chartread shows next. Needed because the misread
+        prompt only accepts retry or Esc — f/b/n/d are accepted only at the
+        subsequent "Press 'f' to move forward…" prompt."""
+        self._pending_post_retry_key = key
+        self._runner.write_stdin("\r")
+
+    def send_save_partial_and_quit(self) -> None:
+        """Save what's been scanned so far and exit chartread cleanly.
+
+        chartread only writes the .ti3 on 'd' (done). With unread patches it
+        first prompts "Are you sure [y/n]" — we answer 'y' automatically.
+        The full chain from the misread prompt is: any-key → strip-menu → 'd'
+        → ("Are you sure" → 'y') → exit. Esc/q at any of these prompts would
+        discard the readings, which is why the misread dialog no longer
+        offers a destructive path."""
+        self._save_partial_state = "wait_strip_menu"
+        self._runner.write_stdin("\r")
 
     def abort(self) -> None:
         self._runner.abort()
@@ -143,8 +179,18 @@ class MeasureManager(QObject):
         if matches:
             current = matches[-1]
             self.stripe_changed.emit(current)
-            if self._guided_state not in ("idle_done", "disabled"):
+            if self._save_partial_state == "wait_strip_menu":
+                self._save_partial_state = "wait_sure"
+                self._runner.write_stdin("d")
+            elif self._pending_post_retry_key is not None:
+                key = self._pending_post_retry_key
+                self._pending_post_retry_key = None
+                self._runner.write_stdin(key)
+            elif self._guided_state not in ("idle_done", "disabled"):
                 self._guided_step(current, on_line)
+        if _ARE_YOU_SURE_RE.search(line) and self._save_partial_state == "wait_sure":
+            self._save_partial_state = None
+            self._runner.write_stdin("y")
         if _STRIP_OK_RE.search(line) and self._guided_state == "waiting":
             self._advance_guided_strip(on_line)
         if _ALL_DONE_RE.search(line) and not (self._is_resume and _STRIP_RE.search(line)):

@@ -288,6 +288,11 @@ class TabMeasure(QWidget):
             self._guided_btn.setChecked(False)
             self._manual_btn.setChecked(True)
         self._calm_outer.setVisible(mode == "guided")
+        # The two modes have separate resume checkboxes; reflect the active
+        # one's state on the shared Start button. Guarded because _switch_mode
+        # is also reachable during UI build before _start_btn exists.
+        if hasattr(self, "_start_btn"):
+            self._refresh_start_button_label()
 
     def _current_mode(self) -> str:
         return "guided" if self._stack.currentIndex() == 0 else "manual"
@@ -660,6 +665,7 @@ class TabMeasure(QWidget):
                 state == Qt.CheckState.Checked.value
             )
         )
+        self._resume_cb.toggled.connect(lambda _checked: self._refresh_start_button_label())
 
         ll.addWidget(core_grp)
 
@@ -899,6 +905,7 @@ class TabMeasure(QWidget):
                 state == Qt.CheckState.Checked.value
             )
         )
+        self._m_resume_cb.toggled.connect(lambda _checked: self._refresh_start_button_label())
 
         ll.addWidget(m_core_grp)
 
@@ -1456,6 +1463,17 @@ class TabMeasure(QWidget):
             for rcb in (self._refine_cb, self._m_refine_cb):
                 rcb.setEnabled(False)
                 rcb.setChecked(False)
+        self._refresh_start_button_label()
+
+    def _refresh_start_button_label(self) -> None:
+        """Show 'Continue Measurement' on the Start button when the resume
+        checkbox for the active mode is ticked (i.e. the next run will pass
+        chartread's -r flag)."""
+        cb = self._resume_cb if self._current_mode() == "guided" else self._m_resume_cb
+        if cb.isVisible() and cb.isChecked():
+            self._start_btn.setText("Continue Measurement")
+        else:
+            self._start_btn.setText("Start Measurement")
 
     def _load_refine_strips(self, path: Path) -> None:
         from workflow.profcheck_runner import parse_refine_strips
@@ -1824,13 +1842,13 @@ class TabMeasure(QWidget):
         self._manager.abort()
 
     def _on_strip_error(self, reason: str) -> None:
-        from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QVBoxLayout
+        from PyQt6.QtWidgets import QDialog, QLabel, QVBoxLayout
 
         QApplication.instance().removeEventFilter(self)
 
         dlg = QDialog(self)
         dlg.setWindowTitle("Strip Read Failed")
-        dlg.setMinimumWidth(500)
+        dlg.setMinimumWidth(520)
 
         layout = QVBoxLayout(dlg)
         layout.setSpacing(16)
@@ -1839,30 +1857,75 @@ class TabMeasure(QWidget):
         msg = QLabel(
             f"<b>The stripe could not be read:</b> {reason}<br><br>"
             "Re-position your instrument at the beginning of the stripe and try again. "
-            "If the error keeps occurring, try scanning more slowly and steadily.<br><br>"
-            "Click <b>Retry</b> to read the stripe again, or <b>Give Up</b> to skip "
-            "it and continue with the remaining stripes.",
+            "If the error keeps occurring, try scanning more slowly and steadily, or "
+            "raise the <i>Patch consistency tolerance</i> setting before the next run.<br><br>"
+            "&nbsp;&nbsp;<b>Retry</b> — read this same stripe again.<br>"
+            "&nbsp;&nbsp;<b>Skip Stripe</b> — leave this stripe unread for now and "
+            "jump to the next unread one. You can come back to it later in this session.<br>"
+            "&nbsp;&nbsp;<b>Save Partial &amp; Quit</b> — stop here and save what you "
+            "have read so far. Next time you load this chart, "
+            "<i>Continue Measurement</i> will pick up where you left off.",
             dlg,
         )
         msg.setWordWrap(True)
         layout.addWidget(msg)
 
-        btn_box = QDialogButtonBox()
-        retry_btn = btn_box.addButton("Retry", QDialogButtonBox.ButtonRole.AcceptRole)
+        # "retry" → send "\r"                                        (any key = retry)
+        # "skip"  → send "\r" then "n" via manager                   (retry → strip menu → next unread)
+        # "save"  → send "\r" then "d" then auto-"y" on Are-you-sure (retry → strip menu → done → confirm)
+        chosen = ["retry"]
+
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(8)
+
+        retry_btn = QPushButton("Retry",              dlg)
+        skip_btn  = QPushButton("Skip Stripe",        dlg)
+        save_btn  = QPushButton("Save Partial && Quit", dlg)
         retry_btn.setObjectName("primary")
-        btn_box.addButton("Give Up", QDialogButtonBox.ButtonRole.RejectRole)
-        btn_box.accepted.connect(dlg.accept)
-        btn_box.rejected.connect(dlg.reject)
-        layout.addWidget(btn_box)
+        retry_btn.setFixedHeight(32)
+        skip_btn.setFixedHeight(32)
+        save_btn.setFixedHeight(32)
+
+        def _retry():
+            chosen[0] = "retry"
+            dlg.accept()
+
+        def _skip():
+            chosen[0] = "skip"
+            dlg.accept()
+
+        def _save():
+            chosen[0] = "save"
+            dlg.accept()
+
+        retry_btn.clicked.connect(_retry)
+        skip_btn.clicked.connect(_skip)
+        save_btn.clicked.connect(_save)
+
+        btn_row.addWidget(retry_btn)
+        btn_row.addWidget(skip_btn)
+        btn_row.addStretch()
+        btn_row.addWidget(save_btn)
+        layout.addLayout(btn_row)
 
         tint_dialog_primary(dlg, _TAB_COLOR)
-        if dlg.exec() == QDialog.DialogCode.Accepted:
-            self._manager.send_key("\r")   # any key = retry
-        else:
-            self._manager.send_key("\x1b") # Esc = give up on this stripe
-        self._arm_key_watchdog()
+        dlg.exec()
 
+        if chosen[0] == "retry":
+            self._manager.send_key("\r")
+        elif chosen[0] == "skip":
+            # Two-step: retry returns chartread to the strip menu, then 'n'
+            # jumps to the next unread stripe.
+            self._manager.send_post_retry_key("n")
+        else:  # save partial and quit
+            # Three-step chain inside the manager: \r → strip menu → 'd' →
+            # ("Are you sure" → 'y') → chartread writes the .ti3 and exits.
+            self._manager.send_save_partial_and_quit()
+
+        self._arm_key_watchdog()
         QApplication.instance().installEventFilter(self)
+        # On the save path chartread will exit on its own once 'y' is sent,
+        # and _on_measure_done will then re-enable the UI and auto-arm resume.
 
     def _on_calibration_prompt(self) -> None:
         from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QVBoxLayout
@@ -1979,8 +2042,9 @@ class TabMeasure(QWidget):
 
             msg = QLabel(
                 "<b>Calibration complete. You are ready to re-measure strips manually.</b><br><br>"
-                "chartread will show you each strip in order. Strips already measured are "
-                "marked with <i>(!! ALL ROWS READ !!)</i> — skip or re-scan as needed.",
+                "chartread is resuming from your existing measurement. Re-scan any strip "
+                "to overwrite it, or scan unread strips to fill them in — follow the steps "
+                "below to pick which one.",
                 dlg,
             )
             msg.setWordWrap(True)
@@ -2320,6 +2384,24 @@ class TabMeasure(QWidget):
         )
         if failed:
             self._log.appendPlainText("\n[ERROR] Measurement failed — see output above.")
+        elif ti3_exists and not self._all_done_shown:
+            # chartread wrote a .ti3 but never emitted "ALL ROWS READ" —
+            # the user pressed 'd' (Save Partial & Quit, or manually in the
+            # log) with some patches still unread. Refresh the resume
+            # checkbox visibility and auto-tick it so the next click on the
+            # Start button (now relabelled "Continue Measurement") resumes
+            # chartread with -r against this partial file.
+            self._update_resume_availability()
+            cb = self._resume_cb if self._current_mode() == "guided" else self._m_resume_cb
+            if cb.isVisible():
+                cb.setChecked(True)
+            self._log.appendPlainText(
+                "\n[INFO] Measurement was interrupted — partial readings saved.\n"
+                f"Saved: {ti3}\n\n"
+                "→ Press Continue Measurement to resume where you left off, "
+                "or untick 'Refine existing measurement (-r)' to start over."
+            )
+            self.measure_finished.emit(ti3)
         else:
             if is_cal:
                 next_step = "→ Next step: go to the '4. Calibration & Profiling' tab to create your calibration file."
