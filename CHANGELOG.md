@@ -1,5 +1,67 @@
 # Changelog
 
+## v3.5.7
+Windows reliability work driven by tester reports against v3.5.6. The
+headline is a defensive rewrite of the chartread keystroke path on
+Windows (#20): a missing ctypes `restype` truncated `CreateFileW`'s
+HANDLE on 64-bit Windows, so calibration prompts and `<esc>` could
+silently fail. The new bindings, INFO-level send-key logging, and a
+12-second no-response watchdog mean the next time chartread stops
+responding the log file actually shows what happened and the user
+sees a recoverable warning instead of a frozen dialog. A second
+Windows fix forces the native OS print dialog regardless of stored
+setting, so a stale `use_native_print_dialog=False` carried over
+from an older install can't strand a Windows user on the CUPS/
+PostScript bypass UI (the Settings checkbox is hidden on Windows
+because the bypass UI has no working path there).
+
+### Fixes
+- **Chartread keystrokes silently dropped on Windows (#20).** The
+  Windows interactive path attaches to chartread's hidden console
+  and injects keystrokes via `WriteConsoleInputW`. The supporting
+  `CreateFileW(\\.\CONIN$)` call had no `restype` declared, so
+  ctypes treated its pointer-sized HANDLE return as a 32-bit signed
+  int and truncated the high bits on 64-bit Windows — the
+  subsequent invalid-handle check then misfired and the
+  `WriteConsoleInputW` call could write into the wrong handle or
+  return silently. All Win32 bindings (`AttachConsole`,
+  `FreeConsole`, `CreateFileW`, `WriteConsoleInputW`,
+  `CloseHandle`, `GetLastError`) now have explicit `argtypes` and
+  `restype`, and the invalid-handle sentinel is derived from
+  `c_void_p(-1).value` so it survives the pointer width.
+  `_win_inject_key` returns a bool that propagates out via a new
+  `ArgyllRunner.keypress_failed` signal.
+- **Native print dialog forced on Windows.** A stale
+  `use_native_print_dialog=False` carried over from older installs
+  stranded Windows users on the CUPS/PostScript bypass UI, which
+  has no working path on Windows. The Settings checkbox is hidden
+  there (gated on `native_print_supported()`, macOS-only), so
+  users had no way to flip it back. `AppSettings.get` now
+  overrides the value at read time so Windows always reports True
+  regardless of what QSettings has stored.
+
+### Improvements
+- **Diagnostics for chartread interactive sessions.** Every
+  keystroke sent to chartread is now logged at INFO with the human
+  label (`ESC`/`CR`/`SPACE`/`LEFT`/`RIGHT`/letter), the chartread
+  PID, and the outcome (`OK`/`FAIL`), so the local app log
+  (`%LOCALAPPDATA%\ChromIQ\Logs\` on Windows,
+  `~/Library/Application Support/ChromIQ/Logs/` on macOS) contains
+  an audit trail of what the user pressed and whether it reached
+  the instrument. Previously this was at DEBUG and absent from the
+  user-facing log file, which is why the v3.5.6 hang report in
+  #20 could not be diagnosed from the user's logs.
+- **No-response watchdog on the Measure tab.** When a dialog
+  sends a keystroke to chartread (calibration, retry, give-up,
+  "press d to finish"…) and no output comes back within 12
+  seconds, the tab now prints a `[WARN]` line and flashes the
+  status bar telling the user the key may not have reached the
+  instrument and suggesting they retry or click Stop. Doesn't
+  auto-abort — the Stop button stays in their hands — but the
+  app no longer pretends to be working when it isn't. Injection
+  failures returned by the new Win32 path also surface
+  immediately via the same `[WARN]` channel.
+
 ## v3.5.6
 Tab 2 (Print Chart) fixes from tester reports against v3.5.5. The
 headline is the macOS "ChromIQ quit unexpectedly" crash at app shutdown

@@ -37,14 +37,41 @@ if sys.platform == "win32":
         ' ':    (0x20, 0x39),
     }
 
-    def _win_inject_key(pid: int, text: str) -> None:
+    # Pointer-sized sentinel; HANDLE is c_void_p, so -1 → 0xFFFFFFFFFFFFFFFF on 64-bit.
+    _INVALID_HANDLE_VALUE = _ct.c_void_p(-1).value
+
+    # Bind argtypes/restype once so ctypes does not silently truncate handles
+    # (HANDLE is pointer-sized; the default c_int return type loses the high
+    # 32 bits on 64-bit Windows and the invalid-handle check then misfires).
+    _k32 = _ct.windll.kernel32
+    _k32.AttachConsole.argtypes       = [_wt.DWORD]
+    _k32.AttachConsole.restype        = _wt.BOOL
+    _k32.FreeConsole.argtypes         = []
+    _k32.FreeConsole.restype          = _wt.BOOL
+    _k32.GetLastError.argtypes        = []
+    _k32.GetLastError.restype         = _wt.DWORD
+    _k32.CreateFileW.argtypes         = [
+        _wt.LPCWSTR, _wt.DWORD, _wt.DWORD,
+        _ct.c_void_p, _wt.DWORD, _wt.DWORD, _wt.HANDLE,
+    ]
+    _k32.CreateFileW.restype          = _wt.HANDLE
+    _k32.WriteConsoleInputW.argtypes  = [
+        _wt.HANDLE, _ct.c_void_p, _wt.DWORD, _ct.POINTER(_wt.DWORD),
+    ]
+    _k32.WriteConsoleInputW.restype   = _wt.BOOL
+    _k32.CloseHandle.argtypes         = [_wt.HANDLE]
+    _k32.CloseHandle.restype          = _wt.BOOL
+
+    def _win_inject_key(pid: int, text: str) -> bool:
         """Inject text[0] into the console of process `pid` via WriteConsoleInputW.
 
         Uses AttachConsole so we share the child's CONIN$ input buffer —
-        the same buffer MSVCRT's _getch() reads from.
+        the same buffer MSVCRT's _getch() reads from. Returns True on success,
+        False if the keystroke could not be delivered (AttachConsole denied,
+        CONIN$ open failed, or WriteConsoleInputW did not write both events).
         """
         if not text:
-            return
+            return False
         ch = text[0]
         vk, scan = _VK_MAP.get(ch, (ord(ch.upper()) if ch.isalpha() else 0, 0))
 
@@ -67,12 +94,13 @@ if sys.platform == "win32":
             _anonymous_ = ("_u",)
             _fields_ = [("EventType", _wt.WORD), ("_u", _U)]
 
-        k32 = _ct.windll.kernel32
+        k32 = _k32
         k32.FreeConsole()
         if not k32.AttachConsole(pid):
-            log.warning("_win_inject_key: AttachConsole(%d) failed (err %d)",
-                        pid, k32.GetLastError())
-            return
+            err = k32.GetLastError()
+            log.warning("_win_inject_key: AttachConsole(%d) failed (err %d)", pid, err)
+            return False
+        ok_full = False
         try:
             h = k32.CreateFileW(
                 r"\\.\CONIN$",
@@ -80,9 +108,10 @@ if sys.platform == "win32":
                 0x3,          # FILE_SHARE_READ | FILE_SHARE_WRITE
                 None, 3, 0, None,
             )
-            if h == _wt.HANDLE(-1).value:
-                log.warning("_win_inject_key: CONIN$ open failed (err %d)", k32.GetLastError())
-                return
+            if not h or h == _INVALID_HANDLE_VALUE:
+                err = k32.GetLastError()
+                log.warning("_win_inject_key: CONIN$ open failed (err %d)", err)
+                return False
             try:
                 recs = (_InputRecord * 2)()
                 for i, down in enumerate((True, False)):
@@ -95,19 +124,50 @@ if sys.platform == "win32":
                     recs[i].KeyEvent.dwControlKeyState   = 0
                 n_written = _wt.DWORD(0)
                 ok = k32.WriteConsoleInputW(h, recs, 2, _ct.byref(n_written))
-                log.debug("_win_inject_key: ch=%r ok=%s written=%d", ch, bool(ok), n_written.value)
+                ok_full = bool(ok) and n_written.value == 2
+                if not ok_full:
+                    err = k32.GetLastError()
+                    log.warning(
+                        "_win_inject_key: WriteConsoleInputW ok=%s written=%d err=%d",
+                        bool(ok), n_written.value, err,
+                    )
             finally:
                 k32.CloseHandle(h)
         finally:
             k32.FreeConsole()
+        return ok_full
+else:
+    def _win_inject_key(pid: int, text: str) -> bool:  # pragma: no cover - non-Windows
+        return False
 
 _ANSI_RE = re.compile(r"\x1b(?:\[[0-9;]*[A-Za-z]|\][^\x07]*\x07|[()][AB012]|[=>])")
 
 
 class ArgyllRunner(QObject):
-    line_received = pyqtSignal(str)
-    finished      = pyqtSignal(int)   # exit code
-    _pty_done     = pyqtSignal(int)   # internal: PTY reader → main thread
+    line_received   = pyqtSignal(str)
+    finished        = pyqtSignal(int)   # exit code
+    keypress_failed = pyqtSignal(str, str)  # (key_label, reason) — Windows injection failed
+    _pty_done       = pyqtSignal(int)   # internal: PTY reader → main thread
+
+    # Map control bytes to human labels for logs and UI warnings.
+    _KEY_LABELS = {
+        "\r":     "CR",
+        "\n":     "LF",
+        "\x1b":   "ESC",
+        " ":      "SPACE",
+        "\x1b[D": "LEFT",
+        "\x1b[C": "RIGHT",
+    }
+
+    @classmethod
+    def _label_key(cls, text: str) -> str:
+        if not text:
+            return "<empty>"
+        if text in cls._KEY_LABELS:
+            return cls._KEY_LABELS[text]
+        if len(text) == 1 and text.isprintable():
+            return repr(text)
+        return repr(text)
 
     def __init__(self, settings: "AppSettings", parent: QObject | None = None) -> None:
         super().__init__(parent)
@@ -166,24 +226,38 @@ class ArgyllRunner(QObject):
         self._process.start(str(bin_path), args)
 
     def write_stdin(self, text: str) -> None:
+        label = self._label_key(text)
         if self._pty_master is not None:
             try:
                 os.write(self._pty_master, text.encode())
-            except OSError:
-                pass
+                log.info("send_key %s → pty OK", label)
+            except OSError as e:
+                log.warning("send_key %s → pty FAIL: %s", label, e)
+                self.keypress_failed.emit(label, f"PTY write failed: {e}")
         elif self._use_console_input and self._pty_proc is not None:
-            log.debug("write_stdin → inject: %r", text)
-            _win_inject_key(self._pty_proc.pid, text)
+            pid = self._pty_proc.pid
+            ok  = _win_inject_key(pid, text)
+            log.info("send_key %s pid=%d → inject %s", label, pid, "OK" if ok else "FAIL")
+            if not ok:
+                self.keypress_failed.emit(
+                    label,
+                    "Windows console injection failed (AttachConsole or "
+                    "WriteConsoleInputW). Keypress did not reach chartread.",
+                )
         elif self._pty_proc is not None and self._pty_proc.stdin:
             try:
                 self._pty_proc.stdin.write(text.encode())
                 self._pty_proc.stdin.flush()
-            except OSError:
-                pass
+                log.info("send_key %s → pipe OK", label)
+            except OSError as e:
+                log.warning("send_key %s → pipe FAIL: %s", label, e)
+                self.keypress_failed.emit(label, f"pipe write failed: {e}")
         elif self._process and self._process.state() == QProcess.ProcessState.Running:
             self._process.write(text.encode())
+            log.info("send_key %s → QProcess OK", label)
         else:
-            log.warning("write_stdin: no active process (text=%r)", text)
+            log.warning("send_key %s: no active process", label)
+            self.keypress_failed.emit(label, "no active process")
 
     def abort(self) -> None:
         if self._pty_proc is not None:

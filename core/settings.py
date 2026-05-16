@@ -97,6 +97,13 @@ class AppSettings:
         log.debug("Settings loaded from %s", self._qs.fileName())
 
     def get(self, key: str, default: Any = None) -> Any:
+        # On Windows the OS print dialog is the only path that works (no CUPS,
+        # no driver-side colour-management toggle we can reach from PostScript).
+        # Force the setting True regardless of stored value so a stale False
+        # carried over from an older install can't strand the user on the
+        # non-functional bypass UI.
+        if key == "use_native_print_dialog" and is_windows():
+            return True
         fallback = DEFAULTS.get(key, default)
         val = self._qs.value(key, fallback)
         # QSettings can return strings for booleans — coerce

@@ -4,11 +4,12 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from PyQt6.QtCore import QEvent, QObject, QRect, Qt, pyqtSignal
+from PyQt6.QtCore import QEvent, QObject, QRect, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QFont, QIcon
 from PyQt6.QtWidgets import (
     QApplication,
@@ -258,6 +259,17 @@ class TabMeasure(QWidget):
         self._manager.unexpected_response.connect(self._on_unexpected_response)
         self._manager.sensor_wrong_position.connect(self._on_sensor_wrong_position)
         self._manager.usb_claimed_by_vm.connect(self._on_usb_claimed_by_vm)
+        self._runner.keypress_failed.connect(self._on_keypress_failed)
+
+        # Watchdog: if a dialog sends a key but chartread emits no new output
+        # within KEY_WATCHDOG_MS, surface a recoverable warning so the user is
+        # not left staring at a frozen dialog when a keystroke vanishes
+        # (e.g. Windows AttachConsole failure — issue #20).
+        self._last_chartread_output_ts: float = 0.0
+        self._key_watchdog = QTimer(self)
+        self._key_watchdog.setSingleShot(True)
+        self._key_watchdog.setInterval(12000)
+        self._key_watchdog.timeout.connect(self._on_key_watchdog_timeout)
         self._build_ui()
         self._restore_defaults()
         self._start_btn.setEnabled(False)
@@ -1548,11 +1560,63 @@ class TabMeasure(QWidget):
         self.measurement_active.emit(True)
 
     def _on_stop(self) -> None:
+        self._key_watchdog.stop()
         self._manager.abort()
+
+    def _arm_key_watchdog(self) -> None:
+        """Start the no-response watchdog after sending a keystroke from a dialog.
+
+        If chartread does not emit any output within the timer interval, the
+        watchdog assumes the keystroke did not reach the instrument and warns
+        the user (without auto-aborting — the Stop button stays in their hands).
+        """
+        self._last_chartread_output_ts = time.monotonic()
+        self._key_watchdog.start()
+
+    def _on_key_watchdog_timeout(self) -> None:
+        # Only warn if chartread is still expected to be running and no output
+        # arrived between arming and now.
+        if not self._stop_btn.isEnabled():
+            return
+        idle = time.monotonic() - self._last_chartread_output_ts
+        if idle < self._key_watchdog.interval() / 1000.0 - 0.5:
+            return
+        self._log.appendPlainText(
+            "[WARN] No response from chartread after sending a key. "
+            "The keystroke may not have reached the instrument. "
+            "Try pressing the key again, or click Stop and restart the measurement."
+        )
+        self._log.ensureCursorVisible()
+        self._flash_status(
+            "chartread is not responding — the last keystroke may have been lost.",
+            duration_ms=8000,
+        )
+
+    def _on_keypress_failed(self, key_label: str, reason: str) -> None:
+        self._log.appendPlainText(
+            f"[WARN] Could not send '{key_label}' to chartread: {reason} "
+            "Click Stop and restart the measurement; if the problem persists, "
+            "please report it with the log file."
+        )
+        self._log.ensureCursorVisible()
+        self._flash_status(
+            f"Keypress '{key_label}' could not be delivered to chartread.",
+            duration_ms=8000,
+        )
+
+    def _flash_status(self, text: str, duration_ms: int = 8000) -> None:
+        self._status_bar_lbl.setText(text)
+        self._status_bar_lbl.setVisible(True)
+        QTimer.singleShot(duration_ms, lambda: self._status_bar_lbl.setVisible(False))
 
     def _on_log_line(self, line: str) -> None:
         self._log.appendPlainText(line)
         self._log.ensureCursorVisible()
+        # chartread produced output → it is alive and processed (or never needed)
+        # the last keystroke. Cancel the watchdog so it cannot misfire mid-scan.
+        self._last_chartread_output_ts = time.monotonic()
+        if self._key_watchdog.isActive():
+            self._key_watchdog.stop()
         # Only flag fatal errors — strip read failures are recoverable and handled
         # separately via the strip_error signal / dialog.
         if "communications failure" in line.lower():
@@ -1624,6 +1688,7 @@ class TabMeasure(QWidget):
         tint_dialog_primary(dlg, _TAB_COLOR)
         dlg.exec()
         self._manager.send_key(chosen[0])
+        self._arm_key_watchdog()
 
         if chosen[0] != "\x1b":
             QApplication.instance().installEventFilter(self)
@@ -1696,6 +1761,7 @@ class TabMeasure(QWidget):
         tint_dialog_primary(dlg, _TAB_COLOR)
         dlg.exec()
         self._manager.send_key(chosen[0])
+        self._arm_key_watchdog()
 
         if chosen[0] != "\x1b":
             QApplication.instance().installEventFilter(self)
@@ -1794,6 +1860,7 @@ class TabMeasure(QWidget):
             self._manager.send_key("\r")   # any key = retry
         else:
             self._manager.send_key("\x1b") # Esc = give up on this stripe
+        self._arm_key_watchdog()
 
         QApplication.instance().installEventFilter(self)
 
@@ -1832,6 +1899,7 @@ class TabMeasure(QWidget):
         dlg.exec()
         # Send any key to tell chartread to proceed with calibration.
         self._manager.send_key("\r")
+        self._arm_key_watchdog()
         QApplication.instance().installEventFilter(self)
 
     def _on_calibration_done(self) -> None:
@@ -2093,6 +2161,7 @@ class TabMeasure(QWidget):
         if dlg.exec() == QDialog.DialogCode.Accepted:
             self._auto_proceed = True
             self._manager.send_key("d")
+            self._arm_key_watchdog()
             # Event filter stays off — chartread will finish momentarily.
         else:
             if self._guided_refinement_active:
@@ -2102,6 +2171,7 @@ class TabMeasure(QWidget):
             QApplication.instance().installEventFilter(self)
 
     def _on_measure_done(self, code: int) -> None:
+        self._key_watchdog.stop()
         self.measurement_active.emit(False)
         QApplication.instance().removeEventFilter(self)
         self._set_settings_enabled(True)
@@ -2270,6 +2340,7 @@ class TabMeasure(QWidget):
     def eventFilter(self, obj: QObject, event: QEvent) -> bool:
         if event.type() == QEvent.Type.KeyPress:
             key = event.key()
+            sent = True
             if key == Qt.Key.Key_Escape:
                 self._manager.send_key("\x1b")
             elif key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
@@ -2284,6 +2355,10 @@ class TabMeasure(QWidget):
                 text = event.text()
                 if text:
                     self._manager.send_key(text)
+                else:
+                    sent = False
+            if sent:
+                self._arm_key_watchdog()
             return True   # consume — don't let widgets act on it
         return False
 
