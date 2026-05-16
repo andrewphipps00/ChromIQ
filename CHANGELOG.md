@@ -1,5 +1,48 @@
 # Changelog
 
+## v3.5.6
+Tab 2 (Print Chart) fixes from tester reports against v3.5.5. The
+headline is the macOS "ChromIQ quit unexpectedly" crash at app shutdown
+after switching printers (#19): the root cause was orphaned option-row
+widgets accumulating across printer changes and surviving into
+`QApplication` teardown with live signal connections, where SIP could
+then follow a half-freed wrapper. Along the way, two visible Tab 2
+quirks from the same tester (#18) — a stray unlabeled combo box drifting
+above the option list, and being forced to pick a paper tray on the HP
+Bonjour driver even when wanting the printer default — are gone too.
+
+### Fixes
+- **macOS quit-unexpectedly after printer change on Tab 2 (#19).**
+  `_rebuild_option_rows` builds each option row as a nested
+  `QHBoxLayout` whose `QLabel` and `QComboBox` are parented to the
+  `TabPrint` widget, not the layout. The old cleanup loop only deleted
+  top-level widgets in the options layout, so the inner widgets were
+  detached from the layout but kept alive as orphan children of
+  `TabPrint` — one extra set on every printer switch, each still
+  holding a `currentIndexChanged` lambda connection. At quit, Qt's
+  parent-child teardown plus the live connections gave SIP a window to
+  follow a dangling wrapper and `EXC_BAD_ACCESS`. Two-part fix: the
+  rebuild cleanup now recursively deletes nested layouts and
+  disconnects each combo's signal before `deleteLater`, and a new
+  `TabPrint.shutdown()` runs from `MainWindow.closeEvent` to reparent
+  and drain the option widgets via the same `processEvents` pump
+  already used for the `QtWebEngine` shutdown race. Models on
+  `ui/gamut_panel.py::shutdown_webengine`.
+- **Stray unlabeled combo box above the option list (#18).** Same
+  orphaned-widget bug above, surfaced visually: leftover combos from
+  prior printer selections stayed as children of `TabPrint`, drifting
+  into view as a small label-less "A3" pulldown over the Printer row.
+  The recursive layout cleanup removes them at the moment of rebuild
+  instead of letting them accumulate.
+- **HP Bonjour driver no longer forces a tray selection (#18).** When
+  the user picked `(not set)` on the Paper Source combo — the only way
+  to defer to the printer default on drivers that ship no "Auto"
+  option — the sequential-enable logic in `_on_option_changed` kept
+  Paper Size disabled, so the user was stuck. `(not set)` now unlocks
+  the next combo with its full value list (nothing to filter against
+  when there's no preceding choice), matching the behaviour the user
+  would expect from leaving an option at its default.
+
 ## v3.5.5
 UX polish driven by tester feedback on the measure tab and the chart-
 import flow. The headline is a much tighter default patch-consistency

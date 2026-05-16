@@ -545,6 +545,7 @@ class MainWindow(QMainWindow):
         # Chromium pointer during QApplication dealloc (EXC_BAD_ACCESS).
         self.hide()
         self._tab_check.shutdown_webengine()
+        self._tab_print.shutdown()
         self._settings.set("window_geometry", self.saveGeometry())
         self._settings.set("active_tab", self._tabs.currentIndex())
         self._settings.set("session_target_name",  self._file_mgr._target_name)

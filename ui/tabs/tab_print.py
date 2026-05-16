@@ -425,11 +425,36 @@ class TabPrint(QWidget):
         printer = self._printer_combo.currentData() or ""
         self._rebuild_option_rows(printer)
 
+    @classmethod
+    def _clear_layout(cls, layout) -> None:
+        """Recursively delete every widget and sub-layout inside *layout*.
+
+        Rows in the Print Options group are nested QHBoxLayouts whose inner
+        QLabel/QComboBox are parented to the tab widget, not the layout — so
+        deleting only the top-level layout items leaks them across rebuilds.
+        Signals are disconnected before deleteLater so a queued slot can't
+        fire into a wrapper that's about to disappear.
+        """
+        while layout.count():
+            item = layout.takeAt(0)
+            if item is None:
+                break
+            w = item.widget()
+            if w is not None:
+                if isinstance(w, QComboBox):
+                    try:
+                        w.currentIndexChanged.disconnect()
+                    except (TypeError, RuntimeError):
+                        pass
+                w.deleteLater()
+                continue
+            sub = item.layout()
+            if sub is not None:
+                cls._clear_layout(sub)
+                sub.deleteLater()
+
     def _rebuild_option_rows(self, printer: str) -> None:
-        while self._opts_layout.count():
-            item = self._opts_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
+        self._clear_layout(self._opts_layout)
         self._option_combos.clear()
         self._ordered_opts.clear()
         self._raw_value_pairs.clear()
@@ -540,24 +565,31 @@ class TabPrint(QWidget):
                 c.setCurrentIndex(0)
                 c.blockSignals(False)
 
-        if not has_val or combo_index + 1 >= len(self._ordered_opts):
+        if combo_index + 1 >= len(self._ordered_opts):
             return
 
-        preceding = {
-            self._ordered_opts[k][0]: self._ordered_opts[k][2].currentData() or ""
-            for k in range(combo_index + 1)
-        }
-        preceding_labels = {
-            self._ordered_opts[k][0]: self._ordered_opts[k][2].currentText() or ""
-            for k in range(combo_index + 1)
-        }
         next_opt, next_all_vals, next_combo = self._ordered_opts[combo_index + 1]
         next_all_pairs = self._raw_value_pairs.get(next_opt, [])
 
-        valid_vals = set(self._module.get_valid_option_values(
-            self._printer_combo.currentData() or "",
-            preceding, preceding_labels, next_opt, next_all_vals, next_all_pairs,
-        ))
+        if has_val:
+            preceding = {
+                self._ordered_opts[k][0]: self._ordered_opts[k][2].currentData() or ""
+                for k in range(combo_index + 1)
+            }
+            preceding_labels = {
+                self._ordered_opts[k][0]: self._ordered_opts[k][2].currentText() or ""
+                for k in range(combo_index + 1)
+            }
+            valid_vals = set(self._module.get_valid_option_values(
+                self._printer_combo.currentData() or "",
+                preceding, preceding_labels, next_opt, next_all_vals, next_all_pairs,
+            ))
+        else:
+            # '(not set)' = use the driver default. There's nothing to filter
+            # against, so unlock the next combo with every value it offers —
+            # otherwise drivers like HP Bonjour (no Auto in Paper Source)
+            # would force the user to pick a tray to reach Paper Size.
+            valid_vals = set(next_all_vals)
 
         next_combo.blockSignals(True)
         next_combo.clear()
@@ -912,6 +944,46 @@ class TabPrint(QWidget):
 
     def _restore_defaults(self) -> None:
         pass
+
+    def shutdown(self) -> None:
+        """Tear down option widgets and signals before QApplication destructs.
+
+        Mirrors the QtWebEngine shutdown pattern in
+        ui/gamut_panel.py::shutdown_webengine: disconnect signals, reparent
+        children to None, deleteLater, then pump the event loop so the
+        deferred deletes actually run while the main loop is still alive.
+        Without this, SIP can follow a half-freed wrapper for one of the
+        option combos during QApplication dealloc and EXC_BAD_ACCESS the
+        process (issue #19 — macOS "ChromIQ quit unexpectedly").
+        """
+        try:
+            self._printer_combo.currentIndexChanged.disconnect()
+        except (TypeError, RuntimeError):
+            pass
+
+        for combo in list(self._option_combos.values()):
+            try:
+                combo.currentIndexChanged.disconnect()
+            except (TypeError, RuntimeError):
+                pass
+            try:
+                combo.setParent(None)
+                combo.deleteLater()
+            except RuntimeError:
+                pass
+
+        # Clear the options group's layout so any sibling labels / placeholder
+        # widgets get the same reparent + deleteLater treatment as the combos.
+        self._clear_layout(self._opts_layout)
+
+        self._option_combos.clear()
+        self._ordered_opts.clear()
+        self._raw_value_pairs.clear()
+
+        app = QApplication.instance()
+        if app is not None:
+            for _ in range(3):
+                app.processEvents()
 
     # ------------------------------------------------------------------
     # Native macOS print dialog
