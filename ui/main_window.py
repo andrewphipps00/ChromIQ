@@ -170,6 +170,8 @@ class MainWindow(QMainWindow):
         from ui.styles import TAB_COLORS
         from ui.tooltip_button import TooltipButton
 
+        log.info("---- Tab → %s ----", self._tabs.tabText(index))
+
         color = TAB_COLORS[index] if index < len(TAB_COLORS) else TAB_COLORS[-1]
 
         # Compute variants without broken hex-alpha (Qt reads #AARRGGBB, not #RRGGBBAA)

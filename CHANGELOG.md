@@ -1,5 +1,38 @@
 # Changelog
 
+## v3.5.8
+Log readability pass driven by tester feedback against v3.5.7. The
+on-disk log file (`~/Library/Logs/ChromIQ/chromiq.log` on macOS,
+`%LOCALAPPDATA%\ChromIQ\Logs\chromiq.log` on Windows) accumulates
+output from every session back-to-back, and with no visual cue for
+session boundaries or in-app navigation it had become hard to tell
+which lines belonged to which run, or which tab was active when an
+error happened. This release adds two scannable markers and bumps
+the rotation cap so a typical day of use stays in one file.
+
+### Improvements
+- **Session banner on every startup.** `configure_logging` now
+  writes a three-line `===` banner to `chromiq.log` before any
+  log handlers are attached, stamped with the local time, app
+  version, platform, and Python version. The banner is appended
+  directly to the file (not routed through the logging
+  framework) so it lands above the first log line of the new
+  session and visually separates it from the tail of the
+  previous one. Failures to write the banner are swallowed so a
+  read-only log dir can never block app startup.
+- **Tab-change marker in the log.** `MainWindow._on_tab_changed`
+  now logs `---- Tab → <name> ----` at INFO on every switch,
+  including the initial tab restored from settings at startup.
+  The `----` prefix scans visually when scrolling a long log,
+  so it's quick to find the section of output that belongs to a
+  given step in the workflow.
+- **Rotation cap raised from 2 MB × 4 to 5 MB × 5.** The
+  `RotatingFileHandler` previously kept ~8 MB of history; a
+  long session with verbose `chartread`/`colprof` output could
+  rotate the earliest part of the day out before the user
+  noticed a problem. The new ~25 MB ceiling keeps a typical
+  day in a single file while still bounding disk use.
+
 ## v3.5.7
 Windows reliability work driven by tester reports against v3.5.6. The
 headline is a defensive rewrite of the chartread keystroke path on
