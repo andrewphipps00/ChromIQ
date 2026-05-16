@@ -1531,6 +1531,7 @@ class TabMeasure(QWidget):
             return
 
         params = self._collect_params()
+        self._preview.set_bidirectional(not params.disable_bidir)
         self._log.clear()
         self._auto_proceed = False
         self._all_done_shown = False
@@ -2236,6 +2237,7 @@ class TabMeasure(QWidget):
 
     def _on_measure_done(self, code: int) -> None:
         self._preview.highlight_stripe(-1)
+        self._preview.set_bidirectional(False)
         self._key_watchdog.stop()
         self.measurement_active.emit(False)
         QApplication.instance().removeEventFilter(self)

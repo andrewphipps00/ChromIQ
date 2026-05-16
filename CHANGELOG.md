@@ -1,5 +1,36 @@
 # Changelog
 
+## v3.5.13
+Small visual addition to the Measure preview. The green
+downward-pointing triangle that marks the active strip at the top of
+the chart now gets an upward-pointing twin at the chart's bottom edge
+whenever bidirectional strip recognition is enabled — so the user
+sees an arrow at each end of the strip's column, reflecting that
+chartread will accept the scan from either direction. With the option
+checked (bidirectional disabled, the current default) nothing
+changes.
+
+### Improvements
+- **Bidirectional indicator on the chart preview.** When
+  "Disable bidirectional strip recognition (-B)" is **unchecked** in
+  either the Guided or Manual Measure panel, `TiffPreview` now draws
+  a second `#56d6a5` triangle of the same width and height as the
+  existing top arrow, anchored 5 px above the chart image's bottom
+  edge with the apex pointing up. The bottom arrow's horizontal
+  column tracks the active strip exactly like the top arrow does, so
+  the two stay visually paired as chartread advances. When the
+  checkbox is **checked** (the default — bidirectional disabled)
+  rendering is identical to v3.5.12, just the single top arrow.
+  Driven by a new `set_bidirectional(enabled: bool)` setter on
+  `TiffPreview`; `_on_start` in `ui/tabs/tab_measure.py` pushes
+  `not params.disable_bidir` into the preview just after
+  `_collect_params()`, and `_on_measure_done` clears the flag
+  alongside the existing `highlight_stripe(-1)` reset so a stale
+  bidir state never carries into the next run. Pinning the bottom
+  arrow's Y to the chart's bottom edge (instead of mirroring the
+  strip's own bottom) keeps it out of the patch grid on multi-strip
+  layouts where strip rects sit flush against each other.
+
 ## v3.5.12
 Three small UX papercuts across the Check/Refine, Measure, and Create
 Chart tabs. The result dialog after a profile analysis was clumping its

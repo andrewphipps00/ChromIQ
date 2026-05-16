@@ -238,6 +238,7 @@ class TiffPreview(QWidget):
         self._pages: list[tuple[Path, int]] = []   # (file_path, frame_index)
         self._current: int = 0
         self._active_stripe: int = -1
+        self._bidirectional: bool = False
         self._stripe_rects: list[QRect] = []
         self._pixmap: QPixmap | None = None
         self._ink_channels: list[str] | None = None
@@ -329,6 +330,13 @@ class TiffPreview(QWidget):
         self._active_stripe = stripe_index
         self._schedule_refresh()
 
+    def set_bidirectional(self, enabled: bool) -> None:
+        """Toggle the second (bottom, upward-pointing) strip arrow."""
+        if self._bidirectional == enabled:
+            return
+        self._bidirectional = enabled
+        self._schedule_refresh()
+
     def set_stripe_rects(self, rects: list[QRect]) -> None:
         """Provide precomputed pixel rects for each stripe on current page."""
         self._stripe_rects = rects
@@ -345,6 +353,7 @@ class TiffPreview(QWidget):
         self._pages = []
         self._current = 0
         self._active_stripe = -1
+        self._bidirectional = False
         self._stripe_rects = []
         self._pixmap = None
         self._ink_channels = None
@@ -550,6 +559,21 @@ class TiffPreview(QWidget):
                 path.lineTo(cx, y + arrow_h)
                 path.closeSubpath()
                 painter.fillPath(path, QColor("#56d6a5"))
+
+                # Bidirectional reading: mirror a second arrow near the
+                # chart's bottom edge (not the strip's own bottom — that
+                # overlaps patches on multi-strip layouts). Horizontal
+                # extent still tracks the active strip so the two arrows
+                # stay visually paired.
+                if self._bidirectional:
+                    chart_bottom = scaled.height() / dpr + B
+                    y_bot = chart_bottom - 5
+                    bot = QPainterPath()
+                    bot.moveTo(cx - rw / 2, y_bot)
+                    bot.lineTo(cx + rw / 2, y_bot)
+                    bot.lineTo(cx, y_bot - arrow_h)
+                    bot.closeSubpath()
+                    painter.fillPath(bot, QColor("#56d6a5"))
 
         painter.end()
         self._img_label.setPixmap(canvas)
