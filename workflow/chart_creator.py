@@ -50,6 +50,8 @@ class ChartParams:
     extra_printtarg_args: str = ""
 
     target_name: str = "chart"
+    chart_notes: str = ""             # free-text user notes stamped onto the TIFF
+    stamp_commands: bool = True       # also stamp the targen + printtarg commands used
     cal_target: bool = False          # when True, preserve existing cal_* files during cleanup
     # When True, the .icc/.ti3 from a prior session in the same working folder
     # are renamed to pre_*.icc/pre_*.ti3 instead of being overwritten on the
@@ -138,9 +140,10 @@ class ChartCreator:
         progress_cb: Callable[[str], None] | None = None,
     ) -> int:
         """Return max patches for the given params (fast lookup or binary search)."""
-        if abs(params.patch_scale - 1.0) <= 0.01 and params.margin_mm == 6:
+        if abs(params.patch_scale - 1.0) <= 0.01:
             per_sheet = query_patches(params.instrument, params.paper, params.double_density,
-                                      suppress_lb=params.disable_left_border)
+                                      suppress_lb=params.disable_left_border,
+                                      margin_mm=params.margin_mm)
             if per_sheet is not None:
                 n = per_sheet * params.pages
                 if progress_cb:
@@ -149,7 +152,7 @@ class ChartCreator:
                     )
                 return n
 
-        # Binary search for non-default patch_scale or margin_mm
+        # Binary search for non-default patch_scale or unsupported margin_mm
         if progress_cb:
             progress_cb("Custom layout detected — running binary search…")
         per_sheet = self._binary_search(params, progress_cb)
@@ -314,20 +317,66 @@ class ChartCreator:
             return
 
         stem = target_name or "chart"
-        tiffs = sorted([
+        # Set-comprehension dedupes Windows' case-insensitive glob matches
+        # (chart.tif matches both *.tif and *.TIF), which otherwise made the
+        # preview display "Page 1/2" for a single-file chart (forum #148124).
+        tiffs = sorted({
             *work_dir.glob(f"{stem}*.tif"),
             *work_dir.glob(f"{stem}*.TIF"),
             *work_dir.glob(f"{stem}*.tiff"),
-        ])
+        })
         log.info("printtarg produced %d TIFF(s) in %s", len(tiffs), work_dir)
         if not tiffs:
             log.warning("No TIFFs found; searched %s for chart*.tif", work_dir)
 
         if tiffs and self._pending_params is not None:
             self._write_channel_sidecar(work_dir, stem, self._pending_params)
+            self._stamp_tiff_metadata(tiffs, self._pending_params)
 
         if on_finish:
             on_finish(tiffs)
+
+    def _stamp_tiff_metadata(self, tiffs: list[Path], params: "ChartParams") -> None:
+        """Stamp the actual targen/printtarg commands (and optional notes) into each TIFF."""
+        try:
+            from core.version import APP_VERSION
+            from workflow.tiff_metadata import stamp_chart_metadata
+        except Exception as exc:
+            log.warning("Could not import metadata stamper: %s", exc)
+            return
+
+        lines: list[str] = []
+        if params.chart_notes:
+            lines.append(params.chart_notes)
+        if params.stamp_commands:
+            patch_count = self._count_patches_in_ti1(
+                tiffs[0].parent / f"{params.target_name}.ti1"
+            )
+            targen_cmd = "targen " + shlex.join(
+                self._build_targen_args(params, patch_count or params.patches or 0)
+            )
+            printtarg_cmd = "printtarg " + shlex.join(
+                self._build_printtarg_args(params)
+            )
+            lines.append(targen_cmd)
+            lines.append(printtarg_cmd)
+            lines.append(f"ChromIQ {APP_VERSION}")
+
+        if lines:
+            stamp_chart_metadata(tiffs, lines)
+
+    @staticmethod
+    def _count_patches_in_ti1(ti1_path: Path) -> int | None:
+        """Best-effort patch-count parse from a targen .ti1 file (NUMBER_OF_SETS)."""
+        if not ti1_path.is_file():
+            return None
+        try:
+            for line in ti1_path.read_text(encoding="utf-8", errors="ignore").splitlines():
+                if line.strip().startswith("NUMBER_OF_SETS"):
+                    return int(line.split()[-1])
+        except Exception as exc:
+            log.debug("Could not parse patch count from %s: %s", ti1_path, exc)
+        return None
 
     def _write_channel_sidecar(
         self, work_dir: Path, stem: str, params: "ChartParams"
@@ -396,9 +445,10 @@ class ChartCreator:
     # ------------------------------------------------------------------
 
     def _lookup_patches(self, p: ChartParams) -> int:
-        if abs(p.patch_scale - 1.0) <= 0.01 and p.margin_mm == 6:
+        if abs(p.patch_scale - 1.0) <= 0.01:
             per_sheet = query_patches(p.instrument, p.paper, p.double_density,
-                                      suppress_lb=p.disable_left_border)
+                                      suppress_lb=p.disable_left_border,
+                                      margin_mm=p.margin_mm)
             if per_sheet is not None:
                 return per_sheet * p.pages
         return self._binary_search(p) * p.pages
@@ -414,13 +464,21 @@ class ChartCreator:
 
         if not targen_bin.exists():
             log.warning("targen not found for binary search, returning estimate")
-            return query_patches(p.instrument, p.paper, p.double_density,
-                                 suppress_lb=p.disable_left_border) or 500
+            return (query_patches(p.instrument, p.paper, p.double_density,
+                                  suppress_lb=p.disable_left_border,
+                                  margin_mm=p.margin_mm)
+                    or query_patches(p.instrument, p.paper, p.double_density,
+                                     suppress_lb=p.disable_left_border)
+                    or 500)
 
         pt_args_base = self._build_printtarg_args(p)[:-1]  # strip trailing target name
 
-        est_raw = query_patches(p.instrument, p.paper, p.double_density,
-                                suppress_lb=p.disable_left_border) or 400
+        est_raw = (query_patches(p.instrument, p.paper, p.double_density,
+                                 suppress_lb=p.disable_left_border,
+                                 margin_mm=p.margin_mm)
+                   or query_patches(p.instrument, p.paper, p.double_density,
+                                    suppress_lb=p.disable_left_border)
+                   or 400)
         # Per-sheet capacity scales roughly as 1/patch_scale² — each patch
         # occupies patch_scale² of the standard cell area. Without this
         # adjustment the [0.5×, 2.5×] window misses the real value for

@@ -2841,9 +2841,40 @@ class TabProfile(QWidget):
     # ------------------------------------------------------------------
 
     def _default_gamut_src(self) -> str:
+        """Prefer Argyll's ref/sRGB.icm if present; fall back to ChromIQ's bundled copy."""
         bin_path = self._settings.get("argyll_bin_path", "/Applications/Argyll/bin")
         candidate = Path(bin_path).parent / "ref" / "sRGB.icm"
-        return str(candidate) if candidate.exists() else ""
+        if candidate.exists():
+            return str(candidate)
+        bundled = resource_path("assets/profiles/sRGB.icm")
+        if Path(bundled).exists():
+            return str(bundled)
+        return ""
+
+    def _validate_gamut_source(self, params: "ProfileParams") -> bool:
+        """Block the build if Perceptual / Perc+Sat is selected but the source profile is missing.
+
+        Returns True when it's safe to proceed; shows a dialog and returns
+        False otherwise. Without this, colprof receives `-s` / `-S` followed
+        by an invalid path and crashes mid-build, which is what the forum
+        post #148124 user was hitting.
+        """
+        src = params.gamut_src or params.gamut_sat_src
+        if not src:
+            return True
+        if Path(src).is_file():
+            return True
+        from PyQt6.QtWidgets import QMessageBox
+        flag = "-S (Perceptual + Saturation)" if params.gamut_sat_src else "-s (Perceptual only)"
+        QMessageBox.critical(
+            self,
+            "Gamut source profile not found",
+            f"The gamut-mapping source profile required by {flag} could not be located:\n\n"
+            f"    {src or '(empty path)'}\n\n"
+            f"Browse to a valid .icm/.icc file (e.g. sRGB.icm in your Argyll ref folder), "
+            f"or switch the Gamut Mapping mode to 'None' to build without it.",
+        )
+        return False
 
     def _on_load_ti3(self) -> None:
         path = open_file_dialog(
@@ -2884,6 +2915,8 @@ class TabProfile(QWidget):
             return
 
         params = self._collect_params()
+        if not self._validate_gamut_source(params):
+            return
         self._log.clear()
         self._build_headline.setText(
             f'Working hard<span style="color: {SPEC_CYAN}; font-style: italic;">…</span>'

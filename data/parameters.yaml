@@ -408,8 +408,17 @@ parameters:
         Sets the margin in millimetres for both the printable area (-m)
         and the TIFF file dimensions (-M).  Both are kept in sync.
         6 mm matches most printer minimum margins.  Reduce only if
-        your printer supports borderless printing.  Changing this
-        from the default triggers a recalculation.
+        your printer supports borderless printing.
+
+        Selecting an i1Pro / i1Pro 2 / i1Pro 3 / i1Pro 3 Plus instrument
+        auto-bumps this to 10 mm so the strip-reader optics don't drift
+        onto the bare paper edge ("not enough patches read" errors).
+        Switching to ColorMunki / SpectroScan returns it to 6 mm. A
+        custom value (anything other than 6 or 10) is preserved across
+        instrument changes.
+
+        Patch-per-page lookup tables exist for 6 and 10 mm only — other
+        values trigger a live binary-search recalculation.
 
     - flag: "-r"
       name: "Preserve Patch Order (no randomise)"

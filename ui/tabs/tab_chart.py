@@ -34,6 +34,7 @@ from core.logger import get_logger
 from core.resource_path import resource_path
 from data.patch_db import (
     EXCLUDED_PAPERS,
+    INSTRUMENT_DEFAULT_MARGIN,
     INSTRUMENT_LABELS,
     PAPER_FALLBACK,
     PAPER_LABELS,
@@ -54,6 +55,60 @@ if TYPE_CHECKING:
     from core.settings import AppSettings
 
 log = get_logger(__name__)
+
+
+def _value_compatible_with_pw(v: Any, pw: "ParameterWidget") -> bool:
+    """True if v can be set on the widget without raising / warning.
+
+    Used to suppress the noisy "set_value(-g, 'true')" warning that would
+    otherwise fire while migrating a Windows-registry-corrupted legacy key.
+    """
+    t = getattr(pw, "_param", {}).get("type", "string")
+    try:
+        if t == "boolean":
+            return v is not None
+        if t in ("int",):
+            int(v)
+            return True
+        if t in ("float",):
+            float(v)
+            return True
+        return True
+    except (TypeError, ValueError):
+        return False
+
+
+def _pw_settings_key(tool: str, flag: str) -> str:
+    """Storage key for a tool parameter, case-disambiguated for Windows.
+
+    QSettings on Windows uses HKCU which is case-insensitive, so the bare
+    keys for -g (Grey Axis Steps, int) and -G (Good Mode, bool) collide and
+    last-write-wins corrupts whichever was written first. Appending a one-char
+    case marker after single-letter alpha flags eliminates the collision while
+    leaving multi-character / non-alpha flags unchanged.
+    """
+    if len(flag) == 2 and flag.startswith("-") and flag[1].isalpha():
+        return f"manual_{tool}_{flag}_{'u' if flag[1].isupper() else 'l'}"
+    return f"manual_{tool}_{flag}"
+
+
+def _extra_args_have_patch_source(extra: str) -> bool:
+    """True if extra targen args contain a flag that produces patches on its own.
+
+    targen needs at least one of -f, -g, -s, -c (preconditioning profile) or
+    -m to produce a valid output. The first three live on dedicated widgets;
+    this guard handles -c / -m / -V / -D buried in extra_targen_args.
+    """
+    if not extra:
+        return False
+    try:
+        toks = shlex.split(extra)
+    except ValueError:
+        return False
+    for tok in toks:
+        if tok.startswith(("-c", "-V", "-D", "-m")):
+            return True
+    return False
 
 
 class TabChart(QWidget):
@@ -500,8 +555,13 @@ class TabChart(QWidget):
         # Output (target name)
         output_grp = QGroupBox("Output", w)
         output_layout = QVBoxLayout(output_grp)
+        # Shared label width keeps the "Target name:" and "Chart notes:"
+        # input fields aligned vertically.
+        _OUTPUT_LBL_W = 96
         name_row = QHBoxLayout()
-        name_row.addWidget(QLabel("Target name:", w))
+        _name_lbl = QLabel("Target name:", w)
+        _name_lbl.setFixedWidth(_OUTPUT_LBL_W)
+        name_row.addWidget(_name_lbl)
         self._manual_target_name_edit = self._make_lineedit("", w)
         name_row.addWidget(self._manual_target_name_edit, stretch=1)
         name_row.addWidget(TooltipButton(
@@ -517,6 +577,52 @@ class TabChart(QWidget):
             min_width=540,
         ))
         output_layout.addLayout(name_row)
+
+        m_notes_row = QHBoxLayout()
+        _notes_lbl = QLabel("Chart notes:", w)
+        _notes_lbl.setFixedWidth(_OUTPUT_LBL_W)
+        m_notes_row.addWidget(_notes_lbl)
+        self._manual_chart_notes_edit = self._make_lineedit("", w)
+        self._manual_chart_notes_edit.setPlaceholderText("e.g. Canon Pro-1000 / Hahnemühle Photo Rag 308")
+        m_notes_row.addWidget(self._manual_chart_notes_edit, stretch=1)
+        m_notes_row.addWidget(TooltipButton(
+            "Chart Notes",
+            "Optional free-text label stamped onto the right edge of the chart "
+            "TIFFs alongside the targen and printtarg commands that produced them. "
+            "Useful for recording the exact printer/paper combination this chart "
+            "was made for, so you can match it to the right ICC profile months "
+            "later. Patch pixels are not modified — only the white margin to the "
+            "right of the patches is stamped.",
+            w,
+            min_width=540,
+        ))
+        output_layout.addLayout(m_notes_row)
+
+        stamp_row = QHBoxLayout()
+        _stamp_lbl_spacer = QLabel("", w)
+        _stamp_lbl_spacer.setFixedWidth(_OUTPUT_LBL_W)
+        stamp_row.addWidget(_stamp_lbl_spacer)
+        self._manual_stamp_cmd_check = QCheckBox(
+            "Stamp targen and printtarg commands on the chart", w
+        )
+        self._manual_stamp_cmd_check.setChecked(True)
+        stamp_row.addWidget(self._manual_stamp_cmd_check)
+        stamp_row.addStretch()
+        stamp_row.addWidget(TooltipButton(
+            "Stamp Commands",
+            "When enabled, the exact targen and printtarg commands used to "
+            "produce the chart — plus the ChromIQ version — are stamped onto "
+            "the right edge of the generated TIFF (alongside Argyll's own "
+            "vertical ID line). This makes the chart self-documenting: months "
+            "later you can read the printed sheet and recreate the same chart "
+            "exactly. Disable if you'd rather keep the right margin clean and "
+            "only stamp your own notes (or leave the chart fully unstamped if "
+            "you also clear the notes field).",
+            w,
+            min_width=540,
+        ))
+        output_layout.addLayout(stamp_row)
+
         layout.addWidget(output_grp)
 
         # Presets
@@ -639,6 +745,7 @@ class TabChart(QWidget):
                 if tool == "printtarg" and flag == "-i":
                     self._manual_instr_pw = pw
                     pw.value_changed.connect(self._update_manual_lb_visibility)
+                    pw.value_changed.connect(self._apply_instrument_default_margin)
                 if tool == "printtarg" and flag == "-p":
                     self._manual_paper_pw = pw
                 if tool == "printtarg" and flag == "-a":
@@ -710,6 +817,7 @@ class TabChart(QWidget):
             inner_layout.addWidget(grp)
 
         self._update_manual_lb_visibility()
+        self._apply_instrument_default_margin()
         self._connect_cal_mutex()
         self._connect_d_cascade()
         self._preset_combo.currentIndexChanged.connect(self._on_preset_selected)
@@ -869,6 +977,23 @@ class TabChart(QWidget):
             self._manual_lb_pw.setVisible(not is_cm)
         if self._manual_dd_pw is not None:
             self._manual_dd_pw.setVisible(is_cm)
+
+    def _apply_instrument_default_margin(self) -> None:
+        """Auto-update -m widget to the per-instrument default on instrument change.
+
+        Only overwrites known defaults (6 or 10) so a user who deliberately set a
+        custom margin (e.g. 12) keeps their value when flipping instruments.
+        """
+        if self._manual_instr_pw is None or self._manual_m_pw is None:
+            return
+        instr = self._manual_instr_pw.get_raw_value() or "i1"
+        target = INSTRUMENT_DEFAULT_MARGIN.get(instr, 6)
+        try:
+            current = int(self._manual_m_pw.get_raw_value() or 6)
+        except (TypeError, ValueError):
+            return
+        if current in (6, 10) and current != target:
+            self._manual_m_pw.set_value(target)
 
     # ------------------------------------------------------------------
     # Auto patch-count (Manual mode)
@@ -1093,8 +1218,9 @@ class TabChart(QWidget):
         pages  = self._pages_spin.value()
         has_lb = self._lb_check.isChecked()  # True = -L active (left border suppressed)
         dpi    = int(self._settings.get("printtarg_dpi", 300))
+        eff_margin = INSTRUMENT_DEFAULT_MARGIN.get(instr, 6)
 
-        per_sheet = query_patches(instr, paper, dd, suppress_lb=has_lb)
+        per_sheet = query_patches(instr, paper, dd, suppress_lb=has_lb, margin_mm=eff_margin)
         if per_sheet is not None:
             total = per_sheet * pages
             self._patch_count_lbl.setText(str(total))
@@ -1114,6 +1240,7 @@ class TabChart(QWidget):
         bp = base_black + (pages - 1) * 2
         lb_flag = "-L " if has_lb else ""
         dd_flag = "-h " if dd else ""
+        margin_flag = f"-m{eff_margin} -M{eff_margin} " if eff_margin != 6 else ""
         precond_path = (
             self._guided_precond_path.text().strip()
             if hasattr(self, "_guided_precond_path") else ""
@@ -1138,7 +1265,7 @@ class TabChart(QWidget):
         info = (
             f"Guided mode applies these fixed settings:\n"
             f"targen -d2 -G -e{wp} -B{bp} -g{grey_steps}{precond_line}\n"
-            f"printtarg -i{instr} -p{paper} -t{dpi} {lb_flag}{dd_flag}chart"
+            f"printtarg -i{instr} -p{paper} -t{dpi} {lb_flag}{dd_flag}{margin_flag}chart"
             f"{recommendation}"
         )
         if hasattr(self, "_guided_info_lbl"):
@@ -1230,6 +1357,24 @@ class TabChart(QWidget):
                 return
             self._log.appendPlainText(f"Auto patch count: {params.patches}")
 
+        # Pre-flight: targen exits with code 1 ("Must have some single or multi
+        # dimensional RGB or CMY steps") if -f is 0 and no -g / -s / -c steps
+        # provide patches either. Catch this before launching the subprocess so
+        # the user sees an actionable message instead of a cryptic exit code.
+        if (self._current_mode() == "manual"
+                and params.patches <= 0
+                and params.grey_steps <= 0
+                and params.single_channel_steps <= 0
+                and not _extra_args_have_patch_source(params.extra_targen_args)):
+            self._log.appendPlainText(
+                "[ERROR] Nothing for targen to generate.\n"
+                "        Set a non-zero Total Patch Count (-f), enable the Auto checkbox,\n"
+                "        or set Grey Axis Steps (-g) / Single Channel Steps (-s) to a positive value."
+            )
+            self._log.ensureCursorVisible()
+            self._generate_btn.setEnabled(True)
+            return
+
         self._creator.generate(
             params,
             on_line=self._on_log_line,
@@ -1291,6 +1436,7 @@ class TabChart(QWidget):
             else self._manual_target_name_edit.text().strip()
         )
         s.set("chart_target_name",         name or "ChromIQ Test Chart")
+        s.set("chart_stamp_commands",      bool(params.stamp_commands))
         s.set("chart_instrument",          params.instrument)
         s.set("chart_paper",               params.paper)
         s.set("chart_pages",               params.pages)
@@ -1308,7 +1454,7 @@ class TabChart(QWidget):
                     continue
                 v = pw.get_raw_value()
                 if v is not None:
-                    s.set(f"manual_{tool}_{pw.flag}", v)
+                    s.set(_pw_settings_key(tool, pw.flag), v)
         for idx, pw in enumerate(self._d_cascade_widgets):
             s.set(f"manual_targen_-D_{idx}", pw.get_raw_value())
             s.set(f"manual_targen_-D_{idx}_enabled", pw.is_enabled_by_user)
@@ -1337,9 +1483,10 @@ class TabChart(QWidget):
         paper   = self._paper_combo.currentData() or "A4"
         dd      = self._dd_check.isChecked()
         has_lb  = self._lb_check.isChecked()
+        margin  = INSTRUMENT_DEFAULT_MARGIN.get(instr, 6)
         base_white = int(self._settings.get("targen_white_patches", 4))
         base_black = int(self._settings.get("targen_black_patches", 4))
-        per_sheet  = query_patches(instr, paper, dd, suppress_lb=has_lb) or 504
+        per_sheet  = query_patches(instr, paper, dd, suppress_lb=has_lb, margin_mm=margin) or 504
         grey_steps = max(8, min((per_sheet * pages) // 30, 64))
 
         precond_path = self._guided_precond_path.text().strip()
@@ -1361,7 +1508,7 @@ class TabChart(QWidget):
             extra_targen_args    = extra_targen,
             tiff_dpi             = int(self._settings.get("printtarg_dpi", 300)),
             patch_scale          = 1.0,
-            margin_mm            = 6,
+            margin_mm            = margin,
             preserve_as_preconditioning = (
                 precond_active and self._preconditioning_from_dialog
             ),
@@ -1418,6 +1565,8 @@ class TabChart(QWidget):
         if extra_pt:
             p.extra_printtarg_args = shlex.join(extra_pt)
 
+        p.chart_notes          = self._manual_chart_notes_edit.text().strip()
+        p.stamp_commands       = self._manual_stamp_cmd_check.isChecked()
         p.is_manual            = True
         return p
 
@@ -1431,6 +1580,19 @@ class TabChart(QWidget):
         default_name = s.get("chart_target_name", "ChromIQ Test Chart")
         self._target_name_edit.setText(default_name)
         self._manual_target_name_edit.setText(default_name)
+
+        # Chart notes are per-chart, not a session default — always start empty.
+        # Also evict any stale value that an older session may have persisted
+        # under the now-unused "chart_notes" key.
+        try:
+            if s._qs.contains("chart_notes"):
+                s._qs.remove("chart_notes")
+        except AttributeError:
+            pass
+        if hasattr(self, "_manual_chart_notes_edit"):
+            self._manual_chart_notes_edit.setText("")
+        if hasattr(self, "_manual_stamp_cmd_check"):
+            self._manual_stamp_cmd_check.setChecked(bool(s.get("chart_stamp_commands", True)))
 
         instr = s.get("chart_instrument", "i1")
         idx = self._instr_combo.findData(instr)
@@ -1449,12 +1611,29 @@ class TabChart(QWidget):
         self._update_dd_visibility()
         self._update_patch_count()
 
-        # Restore manual widget values
+        # Restore manual widget values. Prefer the case-disambiguated key;
+        # fall through to the legacy bare key for backward compatibility, then
+        # evict the bare key so it can't keep colliding with its case-twin in
+        # the Windows registry (HKCU is case-insensitive). Legacy values that
+        # don't type-coerce to the widget's expected type are discarded
+        # silently — they are leftover bytes from a clobbering case-twin.
         for tool, widgets in self._manual_widgets.items():
             for pw in widgets:
                 if pw in self._d_cascade_widgets:
                     continue
-                v = s.get(f"manual_{tool}_{pw.flag}")
+                new_key = _pw_settings_key(tool, pw.flag)
+                v = s.get(new_key)
+                if v is None:
+                    legacy_key = f"manual_{tool}_{pw.flag}"
+                    if legacy_key != new_key:
+                        v = s.get(legacy_key)
+                        try:
+                            if s._qs.contains(legacy_key):
+                                s._qs.remove(legacy_key)
+                        except AttributeError:
+                            pass
+                        if v is not None and not _value_compatible_with_pw(v, pw):
+                            v = None
                 if v is not None:
                     pw.set_value(v)
         for idx, pw in enumerate(self._d_cascade_widgets):
@@ -1474,6 +1653,7 @@ class TabChart(QWidget):
             self._manual_auto_patches_check.setChecked(auto_on)
             self._on_auto_patches_toggled(auto_on)
         self._update_manual_lb_visibility()
+        self._apply_instrument_default_margin()
 
         presets = self._load_presets_from_settings()
         self._populate_preset_combo(presets)

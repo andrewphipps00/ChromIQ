@@ -18,6 +18,7 @@ import tifffile
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from data.patch_db import INSTRUMENT_DEFAULT_MARGIN, query_patches
 from workflow.chart_creator import ChartCreator, ChartParams
 
 
@@ -77,6 +78,68 @@ def test_generate_writes_channels_sidecar(tmp_path: Path) -> None:
     sidecar = work_dir / "mychart.channels.json"
     assert sidecar.exists(), "generate() must write the channels sidecar"
     assert json.loads(sidecar.read_text())["ink_channels"] == ["r", "g", "b"]
+
+
+def test_query_patches_margin10_i1_a4_with_left_border() -> None:
+    """margin=10 i1/A4 must return the measured table value (not the m=6 baseline)."""
+    n_m6 = query_patches("i1", "A4", suppress_lb=True, margin_mm=6)
+    n_m10 = query_patches("i1", "A4", suppress_lb=True, margin_mm=10)
+    assert n_m6 is not None and n_m10 is not None
+    assert n_m10 < n_m6, "margin=10 must fit fewer patches than margin=6"
+    assert n_m10 == 483, "regression guard against accidental table edits"
+
+
+def test_query_patches_margin10_respects_left_border_flag() -> None:
+    """The -L vs no-L distinction must propagate through margin=10 lookups."""
+    with_l = query_patches("i1", "A4", suppress_lb=True, margin_mm=10)
+    without_l = query_patches("i1", "A4", suppress_lb=False, margin_mm=10)
+    assert with_l is not None and without_l is not None
+    assert with_l > without_l, "-L must yield more patches than no-L"
+
+
+def test_query_patches_unsupported_margin_returns_none() -> None:
+    """Margin values outside {6, 10} must return None so callers fall back to binary search."""
+    assert query_patches("i1", "A4", margin_mm=8) is None
+    assert query_patches("i1", "A4", margin_mm=15) is None
+
+
+def test_query_patches_margin10_only_for_i1_and_p3() -> None:
+    """CM and SS don't change defaults, so their margin=10 lookups should be missing."""
+    assert query_patches("CM", "A4", margin_mm=10) is None
+    assert query_patches("SS", "A4", margin_mm=10) is None
+
+
+def test_instrument_default_margin_keys() -> None:
+    """i1/p3 default to 10mm; CM/SS keep 6mm."""
+    assert INSTRUMENT_DEFAULT_MARGIN["i1"] == 10
+    assert INSTRUMENT_DEFAULT_MARGIN["p3"] == 10
+    assert INSTRUMENT_DEFAULT_MARGIN["CM"] == 6
+    assert INSTRUMENT_DEFAULT_MARGIN["SS"] == 6
+
+
+def test_printtarg_done_dedupes_case_insensitive_glob(tmp_path: Path) -> None:
+    """Single chart.tif must not appear twice in the preview list on Windows.
+
+    Regression guard for forum bug #148124's "Page 1/2 from one file" symptom:
+    pathlib.Path.glob is case-insensitive on Windows, so the prior code's
+    sorted([*glob('*.tif'), *glob('*.TIF'), *glob('*.tiff')]) returned the
+    same file two or three times.
+    """
+    creator, work_dir = _make_creator(tmp_path)
+    work_dir.mkdir(parents=True, exist_ok=True)
+    # Pretend printtarg produced a single TIFF for a one-page chart
+    arr = np.zeros((100, 100, 3), dtype=np.uint8)
+    tifffile.imwrite(
+        str(work_dir / "single.tif"), arr,
+        resolution=(200, 200), resolutionunit="INCH",
+    )
+
+    captured: list[list[Path]] = []
+    creator._pending_params = ChartParams(target_name="single", device_type="2")
+    creator._printtarg_done(0, work_dir, lambda t: captured.append(t), "single")
+
+    assert captured, "on_finish was never called"
+    assert len(captured[0]) == 1, f"expected 1 TIFF, got {len(captured[0])}: {captured[0]}"
 
 
 def test_load_ti1_writes_channels_sidecar(tmp_path: Path) -> None:

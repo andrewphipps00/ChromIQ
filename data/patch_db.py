@@ -102,6 +102,21 @@ LOOKUP_BASELINE: dict[str, object] = {
     "-M": 6,
 }
 
+# Per-instrument default margin in mm. The i1Pro family's strip optics drift
+# onto the bare paper edge when the last patch sits ~6 mm from it, ending the
+# strip early ("not enough patches read"). Bumping to 10 mm reclaims the
+# headroom. CM/SS read individual patches and aren't affected.
+INSTRUMENT_DEFAULT_MARGIN: dict[str, int] = {
+    "i1": 10,
+    "p3": 10,
+    "CM": 6,
+    "SS": 6,
+}
+
+# Margins for which we have measured per-sheet capacity tables. Other margin
+# values fall back to live binary search via workflow/chart_creator._binary_search.
+SUPPORTED_MARGINS: tuple[int, ...] = (6, 10)
+
 # Human-readable labels for UI combos
 INSTRUMENT_LABELS: dict[str, str] = {
     "i1": "i1Pro / i1Pro 2 / i1Pro 3",
@@ -255,20 +270,99 @@ _PER_SHEET_CAPACITY_NO_LB: dict[tuple[str, bool, str], int] = {
 }
 
 
+# ---------------------------------------------------------------------------
+# Per-sheet capacity at margin = 10 mm (-m10 -M10), for i1 / p3 only.
+# CM and SS keep their margin=6 tables (their default margin doesn't change).
+# Measured by scripts/measure_margin10_capacity.py.
+# ---------------------------------------------------------------------------
+
+# Measured values (scripts/measure_margin10_capacity.py against Argyll 3.5.0).
+# 127x178 and 4x6 are omitted on i1 and p3: margin=10 leaves no room for a
+# single instrument strip on those paper sizes. query_patches returns None
+# for those combos, and the chart workflow falls back to live binary search.
+_PER_SHEET_CAPACITY_M10: dict[tuple[str, bool, str], int] = {
+    # ---- i1Pro / i1Pro 2 / i1Pro 3 --------------------------------
+    ("i1", False, "A2"):       1029,
+    ("i1", False, "329x483"):   798,
+    ("i1", False, "483x329"):  1197,
+    ("i1", False, "A3"):        714,
+    ("i1", False, "420x297"):  1029,
+    ("i1", False, "11x17"):     651,
+    ("i1", False, "Legal"):     483,
+    ("i1", False, "A4"):        483,
+    ("i1", False, "A4R"):       510,
+    ("i1", False, "Letter"):    483,
+    ("i1", False, "LetterR"):   496,
+    ("i1", False, "203x254"):   418,
+    # ---- i1Pro 3 Plus ---------------------------------------------
+    ("p3", False, "A2"):        216,
+    ("p3", False, "329x483"):   171,
+    ("p3", False, "483x329"):   252,
+    ("p3", False, "A3"):        153,
+    ("p3", False, "420x297"):   216,
+    ("p3", False, "11x17"):     135,
+    ("p3", False, "Legal"):      99,
+    ("p3", False, "A4"):         99,
+    ("p3", False, "A4R"):       102,
+    ("p3", False, "Letter"):     99,
+    ("p3", False, "LetterR"):   105,
+    ("p3", False, "203x254"):    88,
+}
+
+_PER_SHEET_CAPACITY_M10_NO_LB: dict[tuple[str, bool, str], int] = {
+    # ---- i1Pro / i1Pro 2 / i1Pro 3 --------------------------------
+    ("i1", False, "A2"):        987,
+    ("i1", False, "329x483"):   756,
+    ("i1", False, "483x329"):  1155,
+    ("i1", False, "A3"):        672,
+    ("i1", False, "420x297"):   987,
+    ("i1", False, "11x17"):     609,
+    ("i1", False, "Legal"):     441,
+    ("i1", False, "A4"):        441,
+    ("i1", False, "A4R"):       480,
+    ("i1", False, "Letter"):    441,
+    ("i1", False, "LetterR"):   464,
+    ("i1", False, "203x254"):   380,
+    # ---- i1Pro 3 Plus ---------------------------------------------
+    ("p3", False, "A2"):        207,
+    ("p3", False, "329x483"):   162,
+    ("p3", False, "483x329"):   243,
+    ("p3", False, "A3"):        144,
+    ("p3", False, "420x297"):   207,
+    ("p3", False, "11x17"):     126,
+    ("p3", False, "Legal"):      90,
+    ("p3", False, "A4"):         90,
+    ("p3", False, "A4R"):        96,
+    ("p3", False, "Letter"):     90,
+    ("p3", False, "LetterR"):    98,
+    ("p3", False, "203x254"):    80,
+}
+
+
 def query_patches(
     instrument: str,
     paper: str,
     double_density: bool = False,
     suppress_lb: bool = True,
+    margin_mm: int = 6,
 ) -> int | None:
     """Return patches-per-sheet for the given combination, or None if unknown.
 
     suppress_lb=True  → values measured with -L (left-clip border suppressed, default).
     suppress_lb=False → values measured without -L (left-clip border present).
+    margin_mm         → must be one of SUPPORTED_MARGINS, else returns None
+                        and the caller falls back to a live binary search.
     """
     # Normalise: SS never has double_density
     dd = double_density if instrument == "CM" else False
-    db = _PER_SHEET_CAPACITY if suppress_lb else _PER_SHEET_CAPACITY_NO_LB
+
+    if margin_mm == 6:
+        db = _PER_SHEET_CAPACITY if suppress_lb else _PER_SHEET_CAPACITY_NO_LB
+    elif margin_mm == 10:
+        db = _PER_SHEET_CAPACITY_M10 if suppress_lb else _PER_SHEET_CAPACITY_M10_NO_LB
+    else:
+        return None
+
     return db.get((instrument, dd, paper))
 
 

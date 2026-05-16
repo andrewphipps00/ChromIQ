@@ -1,5 +1,107 @@
 # Changelog
 
+## v3.5.9
+Forum-feedback release driven by printerknowledge.com post #148124. The
+headline is the i1Pro family's intermittent "not enough patches read"
+error during chartread: the default 6 mm page margin left so little room
+past the last patch that the strip-reader optics drifted onto the bare
+paper edge and ended the strip early. This release auto-bumps the
+margin to 10 mm for i1Pro / i1Pro 2 / i1Pro 3 / i1Pro 3 Plus, recomputes
+the per-sheet patch capacity tables for the new margin (measured against
+real printtarg output, not estimated), folds the same fix into the
+guided workflow silently, and rolls in three adjacent forum complaints
+about preview duplication, Perceptual+Saturation profile builds, and
+chart traceability.
+
+### Fixes
+- **i1Pro "not enough patches read" — margin auto-set to 10 mm.** The
+  per-instrument default margin map (`data/patch_db.py`) now reports
+  10 mm for `i1` and `p3` and the original 6 mm for `CM` / `SS`.
+  Guided mode applies it transparently (info label shows `-m10 -M10`
+  for i1Pro / A3+ runs); Manual mode pre-selects it in the `-m` widget
+  the moment the user picks an i1Pro instrument, but never overwrites
+  a non-default value the user typed by hand (so a deliberate 12 mm
+  survives flipping instruments back and forth). The patch-per-sheet
+  database gained `_PER_SHEET_CAPACITY_M10` and
+  `_PER_SHEET_CAPACITY_M10_NO_LB` with 56 measured values covering
+  every paper size that still fits patches at 10 mm; `query_patches`
+  takes an explicit `margin_mm` kwarg so live patch-count displays and
+  chart generation share the same numbers. Tiny papers (127×178,
+  4×6) drop out of the i1/p3 tables at -m10 because the strip simply
+  doesn't fit — those combos fall through to the binary-search
+  fallback in `workflow/chart_creator.py`.
+- **Single-page chart showed "Page 1/2" in the preview** — the
+  forum-reported "two pages, next button still active" symptom on a
+  single-file chart. Root cause: `pathlib.Path.glob` is
+  case-insensitive on Windows, so `glob("*.tif")` and `glob("*.TIF")`
+  both matched the same file and the preview received each path twice.
+  `_printtarg_done` now wraps the glob results in a set comprehension
+  before sorting (`tests/test_chart_creator.py::test_printtarg_done_dedupes_case_insensitive_glob`
+  guards the regression).
+- **Perceptual + Saturation profile build no longer crashes colprof
+  with a missing source profile.** `_default_gamut_src` now prefers
+  Argyll's `ref/sRGB.icm` and falls back to a newly-bundled
+  `assets/profiles/sRGB.icm` so fresh installs without Argyll's ref
+  folder still get a valid default. A pre-flight `_validate_gamut_source`
+  in `_on_build` aborts with a clear dialog ("Gamut source profile not
+  found at <path>. Browse to a valid .icm/.icc or switch to None.")
+  whenever the field is empty or the path no longer exists, instead of
+  letting colprof exit non-zero mid-build.
+- **`targen failed with code 1` in Manual mode** when the user clicked
+  Generate with `-f0` and no `-g` / `-s` patches either. Targen exits
+  with "Must have some single or multi dimensional RGB or CMY steps".
+  A pre-flight check in `_on_generate` now catches this and writes a
+  clear message into the log ("Set a non-zero Total Patch Count, enable
+  the Auto checkbox, or set Grey/Single steps") without spawning the
+  subprocess.
+- **Manual chart parameter settings corrupted by Windows registry
+  case-insensitivity.** `manual_targen_-g` (Grey Axis Steps, int) and
+  `manual_targen_-G` (Good Mode, bool) collided in HKCU; `-G='true'`
+  overwrote `-g`'s int slot and triggered `set_value(-g, 'true')`
+  warnings on every restore. Single-letter alpha flag keys now get a
+  `_u` / `_l` case suffix in storage (`manual_targen_-g_l`,
+  `manual_targen_-G_u`), one-time migration silently discards
+  type-incompatible legacy values and deletes the bare-flag key. The
+  same trap existed latently for every other case-twin flag (`-d/-D`,
+  `-c/-C`, `-b/-B`, `-s/-S`, ...) and is now closed off.
+
+### Improvements
+- **Chart TIFFs are self-documenting via right-edge metadata stamp.**
+  Forum feature request: after printtarg writes its own vertical ID
+  line on the long edge (`ArgyllCMS — Chart "name" (Random Start NNN)
+  <date>`), ChromIQ now stamps a parallel rotated line containing the
+  exact `targen` and `printtarg` commands used to produce the chart
+  plus the ChromIQ version, in the widest white run of the right
+  margin. Pixel-level guarantees: every column to the left of the
+  detected writable band is byte-identical pre/post; bit depth (uint8
+  /uint16), photometric, compression, ICC profile, ImageDescription,
+  Orientation, XPosition/YPosition, ResolutionUnit (cm stays cm), and
+  effective DPI are all preserved exactly. Strip layout
+  (StripOffsets/StripByteCounts/RowsPerStrip) is the only unavoidable
+  re-encoding artefact; the image renders identically. Implementation
+  in `workflow/tiff_metadata.py`, tested under both 8-bit and 16-bit
+  in `tests/test_tiff_metadata.py`.
+- **Manual chart tab gained a "Chart notes" field and a "Stamp commands"
+  toggle.** Notes (e.g. *Canon Pro-1000 / Hahnemühle Photo Rag 308*)
+  ride along on the same right-edge stamp when filled. The checkbox
+  defaults to on and persists across sessions; turn it off to keep the
+  stamp clean (notes-only, or empty entirely). The notes field
+  intentionally does not persist between sessions — notes are
+  per-chart context, not a default.
+- **Bundled `assets/profiles/sRGB.icm`** (Argyll's AGPL-redistributable
+  source profile, 3 kB) so a fresh ChromIQ install gives a working
+  Perceptual+Saturation default without needing the user to point at
+  Argyll's ref folder first.
+- **Guided info label now shows the effective margin flag** —
+  `printtarg -ii1 -pA4 -t300 -L -m10 -M10 chart` — so users can see at
+  a glance which margin is being applied and why the patch count
+  differs from a fresh ColorMunki run on the same paper.
+- **New `scripts/measure_margin10_capacity.py`** automates the
+  binary-search measurement of per-sheet patch capacity at any margin
+  for any instrument × paper × `-L` combination. Used to populate the
+  margin-10 tables in this release; ready to reuse if a future tester
+  reports the same scanning-jig issue at a different margin.
+
 ## v3.5.8
 Log readability pass driven by tester feedback against v3.5.7. The
 on-disk log file (`~/Library/Logs/ChromIQ/chromiq.log` on macOS,
