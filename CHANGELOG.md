@@ -1,5 +1,58 @@
 # Changelog
 
+## v3.5.12
+Three small UX papercuts across the Check/Refine, Measure, and Create
+Chart tabs. The result dialog after a profile analysis was clumping its
+buttons against the left edge, the green stripe-arrow overlay on the
+Measure preview stayed on screen after chartread had already exited
+(advertising state that was no longer live), and the file picker for
+pre-conditioning profiles dropped the user in `~` with no shortcut to
+the OS's ColorSync / Color folder where ICC profiles actually live.
+
+### Fixes
+- **Profile Quality Assessment dialog: buttons left-aligned.** The
+  popup raised by `_show_result_dialog` in
+  `ui/tabs/tab_check_refine.py` was packing Close / Install / Use as
+  Pre-conditioning (and optionally Guide Me Through Refinement) into a
+  bare `QDialogButtonBox` added straight to the dialog's vertical
+  layout. Qt's default packing left-aligned the row, so on the
+  Excellent grade where only three buttons render, the right two-thirds
+  of the dialog sat empty. The buttons are now individual
+  `QPushButton`s laid out in a `QHBoxLayout` with stretches between
+  every entry, so they distribute evenly across the dialog width
+  regardless of how many actions are visible for the current grade.
+- **Measure preview: green stripe-arrow stuck after chartread exited.**
+  `_on_stripe_changed` in `ui/tabs/tab_measure.py` calls
+  `TiffPreview.highlight_stripe(...)` on every `stripe_changed`
+  signal to point at the strip chartread is currently waiting for,
+  but `_on_measure_done` never cleared it. The arrow stayed pinned to
+  the last-read strip even after the measurement finished, was
+  stopped, or errored out — visually claiming the run was still
+  active. `_on_measure_done` now resets the highlighter with
+  `highlight_stripe(-1)` at the top of the handler so the overlay
+  goes away in all three exit paths (clean finish, user-stop,
+  instrument error).
+
+### Improvements
+- **Pre-conditioning profile picker: ICC/ICM folder shortcuts in the
+  sidebar.** Both the Guided wizard's pre-conditioning step
+  (`_on_guided_precond_browse` in `ui/tabs/tab_chart.py`) and the
+  Manual panel's `-c` Pre-conditioning Profile row (driven by
+  `ParameterWidget._browse` reading the new `icc_sidebar: true` flag
+  in `data/parameters.yaml`) now seed the file dialog's sidebar with
+  the OS-appropriate ICC profile directories — `/Library/ColorSync/Profiles`,
+  `/System/Library/ColorSync/Profiles`, and `~/Library/ColorSync/Profiles`
+  on macOS; `C:\Windows\System32\spool\drivers\color` and
+  `%LOCALAPPDATA%\Microsoft\Windows\Color` on Windows; `/usr/share/color/icc`,
+  `/usr/local/share/color/icc`, and `~/.color/icc` on Linux.
+  Non-existent paths are silently dropped by the existing
+  `_sidebar_urls` filter, so platform-mismatched entries don't show
+  up. A new `icc_profile_paths()` helper in `ui/widgets.py` keeps the
+  list in one place. Scope is deliberately narrow — only the
+  pre-conditioning entry opts in via the YAML flag; the other
+  ICC-filtered parameters on the Build Profile tab (colprof's `-s` /
+  `-S` gamut-mapping sources) are unchanged.
+
 ## v3.5.11
 Point release for issue #18 follow-up from soul-traveller: on the HP
 Color LaserJet 5550 Bonjour driver, the Print Chart tab still forced

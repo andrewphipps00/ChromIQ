@@ -1326,41 +1326,48 @@ class TabCheckRefine(QWidget):
             precond_desc.setStyleSheet("color: #b0b0b0; font-size: 11px;")
             layout.addWidget(precond_desc)
 
-        # Buttons
-        btn_box = QDialogButtonBox()
-        close_btn = btn_box.addButton("Close", QDialogButtonBox.ButtonRole.RejectRole)
-        close_btn.clicked.connect(dlg.reject)
-
+        # Buttons — laid out individually with stretches between each so they
+        # spread evenly across the dialog width regardless of how many are shown.
         _install_labels = {
             "Excellent":  "Install Profile",
             "Good":       "Install Profile As Is",
             "Acceptable": "Install Profile As Is",
             "Needs Work": "Install Profile Anyway",
         }
+
+        buttons: list[QPushButton] = []
+
+        close_btn = QPushButton("Close", dlg)
+        close_btn.clicked.connect(dlg.reject)
+        buttons.append(close_btn)
+
         install_btn: QPushButton | None = None
         if self._icc_path:
             install_label = _install_labels.get(grade, "Install Profile Anyway")
-            install_btn = btn_box.addButton(install_label, QDialogButtonBox.ButtonRole.ActionRole)
+            install_btn = QPushButton(install_label, dlg)
+            buttons.append(install_btn)
 
         precond_btn: QPushButton | None = None
         if self._icc_path:
-            precond_btn = btn_box.addButton(
-                "← Use as Pre-conditioning",
-                QDialogButtonBox.ButtonRole.ActionRole,
-            )
+            precond_btn = QPushButton("← Use as Pre-conditioning", dlg)
             precond_btn.setObjectName("primary")
+            buttons.append(precond_btn)
 
         guide_btn: QPushButton | None = None
         if strips_file and refine_strips and not recommend_start_over and self._ti3_path:
-            guide_btn = btn_box.addButton(
-                "Guide Me Through Refinement",
-                QDialogButtonBox.ButtonRole.ActionRole,
-            )
+            guide_btn = QPushButton("Guide Me Through Refinement", dlg)
             guide_btn.setObjectName("primary")
+            buttons.append(guide_btn)
         elif install_btn and grade == "Excellent":
             install_btn.setObjectName("primary")
 
-        layout.addWidget(btn_box)
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(0)
+        btn_row.addStretch()
+        for b in buttons:
+            btn_row.addWidget(b)
+            btn_row.addStretch()
+        layout.addLayout(btn_row)
 
         if guide_btn:
             ti3 = self._ti3_path

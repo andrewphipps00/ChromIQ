@@ -2235,6 +2235,7 @@ class TabMeasure(QWidget):
             QApplication.instance().installEventFilter(self)
 
     def _on_measure_done(self, code: int) -> None:
+        self._preview.highlight_stripe(-1)
         self._key_watchdog.stop()
         self.measurement_active.emit(False)
         QApplication.instance().removeEventFilter(self)

@@ -46,7 +46,7 @@ from ui.styles import SPEC_AMBER, SPEC_CYAN, SPEC_GREEN, SPEC_MAGENTA, SPEC_VIOL
 from ui.tab_header import TabHeader
 from ui.tiff_preview import TiffPreview
 from ui.tooltip_button import TooltipButton
-from ui.widgets import NoScrollComboBox, NoScrollSpinBox, load_folder_icon, make_browse_button, open_file_dialog
+from ui.widgets import NoScrollComboBox, NoScrollSpinBox, icc_profile_paths, load_folder_icon, make_browse_button, open_file_dialog
 from workflow.chart_creator import ChartCreator, ChartParams
 
 if TYPE_CHECKING:
@@ -947,6 +947,7 @@ class TabChart(QWidget):
             "ICC / MPP profiles (*.icc *.icm *.mpp)",
             start_dir=start,
             extra_path=self._settings.get("custom_output_path", ""),
+            extra_paths=icc_profile_paths(),
         )
         if path:
             self._guided_precond_path.setText(path)

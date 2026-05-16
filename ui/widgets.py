@@ -98,6 +98,30 @@ class NoScrollDoubleSpinBox(QDoubleSpinBox):
             event.ignore()
 
 
+def icc_profile_paths() -> list[str]:
+    """Common OS-level ICC/ICM profile directories for file-dialog sidebars."""
+    import os
+    import sys
+    home = Path.home()
+    if sys.platform == "darwin":
+        return [
+            "/Library/ColorSync/Profiles",
+            "/System/Library/ColorSync/Profiles",
+            str(home / "Library/ColorSync/Profiles"),
+        ]
+    if sys.platform.startswith("win"):
+        paths = [r"C:\Windows\System32\spool\drivers\color"]
+        local = os.environ.get("LOCALAPPDATA", "")
+        if local:
+            paths.append(str(Path(local) / "Microsoft" / "Windows" / "Color"))
+        return paths
+    return [
+        "/usr/share/color/icc",
+        "/usr/local/share/color/icc",
+        str(home / ".color/icc"),
+    ]
+
+
 def _sidebar_urls(extra_path: str = "", extra_paths: tuple | list = ()) -> list[QUrl]:
     home = Path.home()
     candidates = [

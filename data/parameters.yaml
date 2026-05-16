@@ -208,6 +208,7 @@ parameters:
       type: file_path
       default: ""
       filter: "ICC profiles (*.icc *.icm)"
+      icc_sidebar: true
       affects_preview: true
       expert_only: true
       tooltip_title: "Pre-conditioning Profile (-c)"
