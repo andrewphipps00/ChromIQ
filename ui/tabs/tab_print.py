@@ -527,11 +527,13 @@ class TabPrint(QWidget):
             row.addWidget(lbl)
             combo = NoScrollComboBox(self)
             combo.setMaxVisibleItems(12)
-            combo.addItem("(not set)", "")
+            combo.addItem("Printer Default", "")
             for display, raw_val in value_pairs:
                 combo.addItem(display, raw_val)
-            # Only the first combo starts enabled; the rest unlock sequentially.
-            combo.setEnabled(i == 0)
+            # All combos start enabled — "Printer Default" on a leading combo means
+            # "let the driver decide", so downstream combos must be reachable without
+            # forcing the user to pick a tray/size they don't care about.
+            combo.setEnabled(True)
             row.addWidget(combo, stretch=1)
             self._opts_layout.addLayout(row)
             self._option_combos[opt_name] = combo
@@ -540,11 +542,12 @@ class TabPrint(QWidget):
                 lambda _, idx=i: self._on_option_changed(idx)
             )
 
-        # Restore saved values in insertion order so the enable-chain fires naturally.
+        # Restore saved values in insertion order so each restore re-filters the
+        # next combo's value list before that combo is itself restored.
         self._restoring = True
         for opt_name, _, combo in self._ordered_opts:
             saved_val = saved_printer_opts.get(opt_name, "")
-            if saved_val and combo.isEnabled():
+            if saved_val:
                 found = combo.findData(saved_val)
                 if found >= 0:
                     combo.setCurrentIndex(found)
@@ -553,21 +556,25 @@ class TabPrint(QWidget):
     def _on_option_changed(self, combo_index: int) -> None:
         if not self._ordered_opts:
             return
-        _, _, changed_combo = self._ordered_opts[combo_index]
-        has_val = bool(changed_combo.currentData())
 
-        # When the user changes a combo interactively, reset all later combos.
+        # When the user changes a combo interactively, reset all later combos
+        # so stale selections don't leak through into newly-invalid contexts.
         if not self._restoring:
             for j in range(combo_index + 1, len(self._ordered_opts)):
                 _, _, c = self._ordered_opts[j]
-                c.setEnabled(False)
                 c.blockSignals(True)
                 c.setCurrentIndex(0)
                 c.blockSignals(False)
 
-        if combo_index + 1 >= len(self._ordered_opts):
-            return
+        # Re-filter every downstream combo so its value list matches the
+        # current preceding selections — not just combo_index + 1.
+        for j in range(combo_index, len(self._ordered_opts) - 1):
+            self._repopulate_next(j)
 
+    def _repopulate_next(self, combo_index: int) -> None:
+        """Repopulate the combo at *combo_index + 1* based on selections 0..combo_index."""
+        _, _, changed_combo = self._ordered_opts[combo_index]
+        has_val = bool(changed_combo.currentData())
         next_opt, next_all_vals, next_combo = self._ordered_opts[combo_index + 1]
         next_all_pairs = self._raw_value_pairs.get(next_opt, [])
 
@@ -585,20 +592,19 @@ class TabPrint(QWidget):
                 preceding, preceding_labels, next_opt, next_all_vals, next_all_pairs,
             ))
         else:
-            # '(not set)' = use the driver default. There's nothing to filter
-            # against, so unlock the next combo with every value it offers —
+            # 'Printer Default' = let the driver decide. Nothing to filter
+            # against, so the next combo shows every value it offers —
             # otherwise drivers like HP Bonjour (no Auto in Paper Source)
             # would force the user to pick a tray to reach Paper Size.
             valid_vals = set(next_all_vals)
 
         next_combo.blockSignals(True)
         next_combo.clear()
-        next_combo.addItem("(not set)", "")
-        for display, raw_val in self._raw_value_pairs.get(next_opt, []):
+        next_combo.addItem("Printer Default", "")
+        for display, raw_val in next_all_pairs:
             if raw_val in valid_vals:
                 next_combo.addItem(display, raw_val)
         next_combo.blockSignals(False)
-        next_combo.setEnabled(True)
 
     def set_ti2_path(self, path: Path) -> None:
         """Programmatically load a .ti2 file (cross-tab auto-population)."""

@@ -1,5 +1,48 @@
 # Changelog
 
+## v3.5.11
+Point release for issue #18 follow-up from soul-traveller: on the HP
+Color LaserJet 5550 Bonjour driver, the Print Chart tab still forced
+the user to pick a paper tray to reach Page Size and Media Type even
+though Paper Source already showed "(not set)" as its default. The
+v3.5.6 fix only covered the case where the user *changed* a combo to
+"(not set)" — it didn't unlock anything on first build, because the
+combo was already at index 0 and `currentIndexChanged` never fired.
+This release enables every option combo from the start, renames the
+neutral label so its meaning is obvious, and reworks the downstream
+re-filter so changing an upstream combo refreshes every combo below
+it (not just the immediate next one).
+
+### Fixes
+- **HP Bonjour: Page Size / Media Type stayed locked at default (#18).**
+  `_rebuild_option_rows` in `ui/tabs/tab_print.py` used to enable only
+  the first combo and rely on `currentIndexChanged` to unlock the rest
+  sequentially. That signal never fires for the initial selection, so
+  drivers whose Paper Source has no "Auto" entry left the user staring
+  at two greyed-out controls. All combos now start enabled; the cascade
+  still resets and re-filters downstream selections when an upstream
+  combo changes interactively.
+- **Downstream combos re-filtered too late.** `_on_option_changed` only
+  repopulated `combo_index + 1`, leaving combo `+2` with whatever value
+  list it had on initial build. With all combos live from the start
+  that became visible — a user who flipped Paper Source could see
+  stale Media Type entries until they touched Paper Size. Split out a
+  `_repopulate_next` helper and walked the cascade forward across every
+  remaining combo so the value lists stay in sync with preceding
+  selections.
+
+### Other
+- **"(not set)" → "Printer Default" on Print Chart option combos.**
+  Per soul-traveller's suggestion on #18: the literal label read as
+  "this is broken / nothing chosen", but the actual semantic is "let
+  the driver decide" — which is also exactly what macOS's own print
+  dialog calls "Auto Select" for `InputSlot`. Same behaviour, clearer
+  word. Also dissolves the parallel "Auto Select is missing from
+  ChromIQ's Paper Source combo" complaint — `InputSlot` "Auto Select"
+  isn't a PPD-declared value, it's the macOS dialog's name for passing
+  no `InputSlot` at all, which is what selecting Printer Default now
+  does.
+
 ## v3.5.10
 Follow-up on issue #23, raised by Knut on the printerknowledge forum and
 in GitHub. When a strip kept failing on his ColorMunki, the misread
