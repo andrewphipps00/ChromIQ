@@ -1,6 +1,7 @@
 """Main application window."""
 from __future__ import annotations
 
+import colorsys
 from pathlib import Path
 
 from PyQt6.QtCore import Qt, QTimer
@@ -31,6 +32,26 @@ from ui.tabs.tab_print import TabPrint
 from ui.tabs.tab_profile import TabProfile
 
 log = get_logger(__name__)
+
+
+def _darken_for_light_log(hex_color: str) -> str:
+    """Return a tab accent darkened for readable log text on the light-mode
+    log background. Preserves hue, reduces lightness, and tames very
+    saturated inputs so they don't read as a deep indigo / scarlet after
+    crushing."""
+    r = int(hex_color[1:3], 16) / 255
+    g = int(hex_color[3:5], 16) / 255
+    b = int(hex_color[5:7], 16) / 255
+    h, l, s = colorsys.rgb_to_hls(r, g, b)
+    l = max(0.22, l * 0.55)
+    if s > 0.85:
+        s = 0.70
+    else:
+        s = max(s, 0.75)
+        if 0.48 <= h <= 0.60:
+            s = max(s, 0.92)
+    r, g, b = colorsys.hls_to_rgb(h, l, s)
+    return "#{:02x}{:02x}{:02x}".format(int(r * 255), int(g * 255), int(b * 255))
 
 
 class MainWindow(QMainWindow):
@@ -204,7 +225,7 @@ class MainWindow(QMainWindow):
             # don't tint it with the tab's spectrum color, the user spec calls
             # for a single dark color regardless of which tab is active.
             patch_count_color    = "#22211f"
-            log_color            = color
+            log_color            = _darken_for_light_log(color)
         else:
             mode_inactive_bg     = "#2a2a2a"
             mode_inactive_border = "#4a4a4a"

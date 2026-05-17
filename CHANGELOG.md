@@ -1,5 +1,33 @@
 # Changelog
 
+## v3.6.3
+Small polish patch: ArgyllCMS output streamed into the four tab log
+panes is now readable in Light mode. Previously the per-tab QSS
+injector copied the bright spectrum accent (`#ffb42d` amber,
+`#56d6a5` green, `#37bcd6` cyan, `#9f82ff` violet) directly into the
+log-text colour, which sat at roughly 2–2.5:1 contrast against the
+light-mode log background (`LM_LOG_BG = #f4f8f5`) and made streaming
+output hard to read until the user toggled back to Dark mode. Dark
+mode is unchanged.
+
+### Fixes
+- **Light-mode log text now hue-preserved but darkened per tab.**
+  New `_darken_for_light_log()` helper in `ui/main_window.py`
+  converts the tab's accent hex into HSL, drops lightness to ~55 %
+  of the original (floor 0.22), tames fully-saturated inputs from
+  S=1.0 down to 0.70 so violet doesn't crush into deep indigo, and
+  applies a small saturation floor (0.75) for medium-sat hues with
+  an extra bump (0.92) in the cyan/blue band (0.48 ≤ H ≤ 0.60) so
+  the Build Profile tab's teal stays vivid. Resulting per-tab log
+  colours: Create Chart `#8c6318` (amber), Measure `#149061`
+  (green), Build Profile `#05778e` (teal), Check & Refine
+  `#421fb3` (violet). All four land comfortably above the 4.5:1
+  WCAG contrast threshold against the log background while staying
+  recognisably the same hue family as the tab accent. The QSS
+  injector already re-runs on every Light ↔ Dark switch
+  (`apply_theme()` calls it directly), so the colour swaps live
+  without an app restart.
+
 ## v3.6.2
 Quality-focused patch for the Build Profile tab. Adds the two CIECAM02
 viewing-condition flags that `colprof` needs to build correct
