@@ -85,23 +85,27 @@ Linux support is currently **beta** — please report what works and what doesn'
 
 | Step 2a — Print Chart (ChromIQ native) | Step 2a — Print Chart (OS native) |
 |---|---|
-| ![ChromIQ Print Tab](docs/2a.png) | ![ChromIQ Measurement Tab](docs/2b.png) |
+| ![ChromIQ Print Tab ChromIQ native](docs/2a.png) | ![ChromIQ Print Tab OS native](docs/2b.png) |
 
 | Step 3a — Measure Chart (guided) | Step 3b — Measure Chart (manual) |
 |---|---|
-| ![ChromIQ Create ICC Profile](docs/3a.png) | ![ChromIQ Check & Refine](docs/3b.png) |
+| ![ChromIQ Measure Chart guided](docs/3a.png) | ![ChromIQ Measure Chart manual](docs/3b.png) |
 
 | Step 4a — Build Profile (guided) | Step 4b — Build Profile (manual) |
 |---|---|
-| ![ChromIQ Print Tab](docs/4a.png) | ![ChromIQ Measurement Tab](docs/4b.png) |
+| ![ChromIQ Create ICC Profile guided](docs/4a.png) | ![ChromIQ Create ICC Profile manual](docs/4b.png) |
 
 | Step 5a — Check & Refine (guided)  | Step 5b — Check & Refine (manual) |
 |---|---|
-| ![ChromIQ Create ICC Profile](docs/5a.png) | ![ChromIQ Check & Refine](docs/5b.png) |
+| ![ChromIQ Check & Refine guided](docs/5a.png) | ![ChromIQ Check & Refine manual](docs/5b.png) |
 
-| Settings  | Step 4c — Calibration & Profiling (disabled by default) |
+| Settings light mode  | Settings dark mode |
 |---|---|
-| ![ChromIQ Create ICC Profile](docs/6.png) | ![ChromIQ Check & Refine](docs/4c.png) |
+| ![Settings light mode](docs/6.png) | ![ChromIQ Check & Refine](docs/6b.png) |
+
+| Step 4c — Calibration & Profiling (disabled by default) |
+|---|
+| ![Calibration & Profiling](docs/4c.png) |
 
 ---
 
