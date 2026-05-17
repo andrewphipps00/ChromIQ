@@ -1,14 +1,12 @@
 # Changelog
 
 ## v3.6.3
-Small polish patch: ArgyllCMS output streamed into the four tab log
-panes is now readable in Light mode. Previously the per-tab QSS
-injector copied the bright spectrum accent (`#ffb42d` amber,
-`#56d6a5` green, `#37bcd6` cyan, `#9f82ff` violet) directly into the
-log-text colour, which sat at roughly 2–2.5:1 contrast against the
-light-mode log background (`LM_LOG_BG = #f4f8f5`) and made streaming
-output hard to read until the user toggled back to Dark mode. Dark
-mode is unchanged.
+Polish patch covering three small but visible items: Light-mode log
+text is now readable across all four tabs, the Measure tab's
+existing-`.ti3` checkbox is honest about supporting both refine and
+resume, and the macOS app bundle's Info.plist no longer reports the
+wrong version in Finder Get Info / About. No workflow-affecting
+behaviour changes.
 
 ### Fixes
 - **Light-mode log text now hue-preserved but darkened per tab.**
@@ -26,7 +24,32 @@ mode is unchanged.
   recognisably the same hue family as the tab accent. The QSS
   injector already re-runs on every Light ↔ Dark switch
   (`apply_theme()` calls it directly), so the colour swaps live
-  without an app restart.
+  without an app restart. Dark mode is unchanged.
+- **Measure tab — "Refine / resume existing measurement (-r)".**
+  The chartread `-r` flag covers both re-measuring problem strips
+  and continuing an interrupted measurement, but the checkbox label
+  in both the Guided and Manual modules only advertised "Refine".
+  The post-interruption log message at
+  `ui/tabs/tab_measure.py:2475` already pointed users at this same
+  checkbox to resume, so the label was actively misleading. Renamed
+  the checkbox and its TooltipButton title in both modules, reworded
+  the tooltip body's opening line from "Resumes from the existing
+  .ti3 file…" to the neutral "Reuses the existing .ti3 file…" so
+  it doesn't bias toward one of the two cases, and updated the log
+  message string to quote the new label. Body text already mentioned
+  both use cases ("re-measure problem strips" and "continue a
+  measurement that was interrupted") and stays otherwise unchanged.
+- **macOS bundle Info.plist now reports the real version.**
+  `ChromIQ.spec` had `CFBundleShortVersionString` and
+  `CFBundleVersion` hardcoded to `'3.5.0'`, so every release since
+  3.5.0 shipped a bundle that displayed the wrong version in Finder
+  Get Info, the macOS "About" sheet, and any system-level version
+  query (Spotlight, mdls, etc.) — even though the in-app masthead,
+  Settings dialog and log header all read `APP_VERSION` correctly
+  via `core/version.py`. The spec now `exec()`s `core/version.py`
+  at build time and feeds `APP_VERSION` into both plist keys, so the
+  bundle version follows `APP_VERSION` automatically on every
+  future release with no second place to remember to bump.
 
 ## v3.6.2
 Quality-focused patch for the Build Profile tab. Adds the two CIECAM02

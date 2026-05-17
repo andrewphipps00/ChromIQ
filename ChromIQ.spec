@@ -19,6 +19,15 @@ from PyInstaller.utils.hooks import collect_all, collect_dynamic_libs
 certifi_where = certifi.where()
 _target_arch = os.environ.get("PYINSTALLER_TARGET_ARCH") or None
 
+# Read APP_VERSION from core/version.py so the macOS bundle's Info.plist
+# stays in sync with the in-app masthead/About strings — hardcoding here
+# silently shipped 3.5.0 in Finder Get Info for every release since 3.5.0.
+_version_ns = {}
+with open(os.path.join(os.path.dirname(os.path.abspath(SPEC)), 'core', 'version.py'),
+          'r', encoding='utf-8') as _vf:
+    exec(_vf.read(), _version_ns)
+_APP_VERSION = _version_ns['APP_VERSION']
+
 # Collect all imagecodecs binaries/data: its LZW and other codecs live in
 # compiled C extensions that PyInstaller won't find via static analysis alone.
 _ic_datas, _ic_binaries, _ic_hiddenimports = collect_all('imagecodecs')
@@ -146,8 +155,8 @@ app = BUNDLE(
     info_plist={
         'CFBundleName':              'ChromIQ',
         'CFBundleDisplayName':       'ChromIQ',
-        'CFBundleShortVersionString': '3.5.0',
-        'CFBundleVersion':           '3.5.0',
+        'CFBundleShortVersionString': _APP_VERSION,
+        'CFBundleVersion':           _APP_VERSION,
         'NSHighResolutionCapable':   True,
         'NSPrincipalClass':          'NSApplication',
         'NSRequiresAquaSystemAppearance': False,

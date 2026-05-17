@@ -679,14 +679,14 @@ class TabMeasure(QWidget):
         _pbp_tip.setVisible(False)
 
         resume_row = QHBoxLayout()
-        self._resume_cb = QCheckBox("Refine existing measurement (-r)", left)
+        self._resume_cb = QCheckBox("Refine / resume existing measurement (-r)", left)
         self._resume_cb.setChecked(False)
         self._resume_cb.setVisible(False)
         resume_row.addWidget(self._resume_cb)
         resume_row.addStretch()
         self._resume_tip = TooltipButton(
-            "Refine Existing Measurement (-r)",
-            "Resumes from the existing .ti3 file in the same folder as the\n"
+            "Refine / Resume Existing Measurement (-r)",
+            "Reuses the existing .ti3 file in the same folder as the\n"
             ".ti2 file. Previously measured strips are kept — you only need\n"
             "to scan the strips you want to update or add.\n\n"
             "Use this after a quality check to re-measure problem strips,\n"
@@ -920,14 +920,14 @@ class TabMeasure(QWidget):
         )
 
         m_resume_row = QHBoxLayout()
-        self._m_resume_cb = QCheckBox("Refine existing measurement (-r)", left)
+        self._m_resume_cb = QCheckBox("Refine / resume existing measurement (-r)", left)
         self._m_resume_cb.setChecked(False)
         self._m_resume_cb.setVisible(False)
         m_resume_row.addWidget(self._m_resume_cb)
         m_resume_row.addStretch()
         self._m_resume_tip = TooltipButton(
-            "Refine Existing Measurement (-r)",
-            "Resumes from the existing .ti3 file in the same folder as the\n"
+            "Refine / Resume Existing Measurement (-r)",
+            "Reuses the existing .ti3 file in the same folder as the\n"
             ".ti2 file. Previously measured strips are kept — you only need\n"
             "to scan the strips you want to update or add.\n\n"
             "Use this after a quality check to re-measure problem strips,\n"
@@ -2472,7 +2472,7 @@ class TabMeasure(QWidget):
                 "\n[INFO] Measurement was interrupted — partial readings saved.\n"
                 f"Saved: {ti3}\n\n"
                 "→ Press Continue Measurement to resume where you left off, "
-                "or untick 'Refine existing measurement (-r)' to start over."
+                "or untick 'Refine / resume existing measurement (-r)' to start over."
             )
             self.measure_finished.emit(ti3)
         else:
