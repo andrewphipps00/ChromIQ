@@ -781,7 +781,11 @@ class TabChart(QWidget):
                 pages_row_l.setSpacing(8)
                 pages_lbl = QLabel("Pages:", pages_row_w)
                 pages_lbl.setFixedWidth(190)
-                pages_lbl.setStyleSheet("color: #c8c8c8;")
+                from ui.theme import resolve_mode
+                _pages_mode = resolve_mode(self._settings.get("appearance", "auto"))
+                pages_lbl.setStyleSheet(
+                    f"color: {'#22211F' if _pages_mode == 'light' else '#c8c8c8'};"
+                )
                 pages_row_l.addWidget(pages_lbl)
                 self._manual_pages_spin = NoScrollSpinBox(pages_row_w)
                 self._manual_pages_spin.setObjectName("compact_input")
@@ -823,10 +827,114 @@ class TabChart(QWidget):
         self._manual_target_name_edit.textChanged.connect(self._check_for_cal_file)
         self._cal_target_check.toggled.connect(self._on_cal_target_toggled)
 
+        # Live command preview — mirrors the guided info box but reflects the
+        # actual targen / printtarg args the workflow will build from the
+        # current ParameterWidget state.  Sits at the bottom of the scrollable
+        # area so it follows the last parameter group.
+        self._manual_info_lbl = QLabel("", inner)
+        self._manual_info_lbl.setObjectName("info")
+        self._manual_info_lbl.setWordWrap(True)
+        inner_layout.addWidget(self._manual_info_lbl)
+
+        # Wire every parameter widget to refresh the live command preview.
+        for tool in ("targen", "printtarg"):
+            for pw in self._manual_widgets.get(tool, []):
+                pw.value_changed.connect(self._refresh_manual_command_preview)
+        if self._manual_pages_spin is not None:
+            self._manual_pages_spin.valueChanged.connect(
+                self._refresh_manual_command_preview
+            )
+        if self._manual_auto_patches_check is not None:
+            self._manual_auto_patches_check.toggled.connect(
+                self._refresh_manual_command_preview
+            )
+        if self._bit16_radio is not None:
+            self._bit16_radio.toggled.connect(self._refresh_manual_command_preview)
+        self._refresh_manual_command_preview()
+
         inner_layout.addStretch()
         scroll.setWidget(inner)
         layout.addWidget(scroll)
         return w
+
+    def _refresh_manual_command_preview(self) -> None:
+        """Rebuild the manual info label from the current ParameterWidget state.
+
+        Mirrors workflow/chart_creator.py:_build_targen_args /
+        _build_printtarg_args so the preview matches exactly what runs."""
+        if getattr(self, "_manual_info_lbl", None) is None:
+            return
+        try:
+            p = self._collect_manual()
+        except Exception:
+            self._manual_info_lbl.setText("Manual mode — preview unavailable.")
+            return
+
+        # targen
+        targen_args: list[str] = [f"-d{p.device_type}"]
+        patches = int(p.patches)
+        if self._manual_auto_patches_check is not None \
+                and self._manual_auto_patches_check.isChecked() \
+                and self._manual_f_pw is not None:
+            try:
+                patches = int(self._manual_f_pw.get_raw_value() or 0)
+            except (TypeError, ValueError):
+                pass
+        targen_args += [f"-f{patches}"]
+        targen_args += [f"-e{p.white_patches}", f"-B{p.black_patches}"]
+        if p.good_mode:
+            targen_args.append("-G")
+        if p.grey_steps > 0:
+            targen_args += [f"-g{p.grey_steps}"]
+        if p.single_channel_steps > 0:
+            targen_args += [f"-s{p.single_channel_steps}"]
+        if p.extra_targen_args:
+            targen_args += shlex.split(p.extra_targen_args)
+        targen_args.append(p.target_name or "chart")
+
+        # printtarg
+        pt_args: list[str] = []
+        pt_instr = "3p" if p.instrument == "p3" else p.instrument
+        pt_args.append(f"-i{pt_instr}")
+        pt_args.append(f"-p{p.paper}")
+        dpi_flag = "-T" if p.tiff_16bit else "-t"
+        pt_args.append(f"{dpi_flag}{p.tiff_dpi}")
+        if p.double_density:
+            pt_args.append("-h")
+        if p.disable_left_border:
+            pt_args.append("-L")
+        if abs(p.patch_scale - 1.0) > 0.01:
+            pt_args.append(f"-a{p.patch_scale:.2f}")
+        if p.margin_mm != 6:
+            pt_args.append(f"-m{p.margin_mm}")
+        pt_args.append(f"-M{p.margin_mm}")
+        if p.no_randomise:
+            pt_args.append("-r")
+        if p.bw_spacers:
+            pt_args.append("-b")
+        if p.no_strip_limit:
+            pt_args.append("-P")
+        if p.extra_printtarg_args:
+            pt_args += shlex.split(p.extra_printtarg_args)
+        pt_args.append(p.target_name or "chart")
+
+        pages = (
+            self._manual_pages_spin.value()
+            if self._manual_pages_spin is not None else 1
+        )
+        notes = [f"{pages} page{'s' if pages != 1 else ''}"]
+        if self._manual_auto_patches_check is not None \
+                and self._manual_auto_patches_check.isChecked():
+            notes.append("Auto patch count")
+        if p.tiff_16bit:
+            notes.append("16-bit TIFF")
+
+        info = (
+            f"Manual mode — your current configuration ({' · '.join(notes)}):\n"
+            f"targen {' '.join(targen_args)}\n"
+            f"printtarg {' '.join(pt_args)}"
+        )
+        self._manual_info_lbl.setText(info)
 
     # ------------------------------------------------------------------
     # Helpers
@@ -1008,7 +1116,7 @@ class TabChart(QWidget):
         if self._manual_f_pw is None or self._manual_f_pw._control is None:
             return
         spin = self._manual_f_pw._control
-        spin.setEnabled(not checked)
+        self._manual_f_pw.set_control_enabled(not checked)
         spin.blockSignals(True)
         if checked:
             # QSpinBox shows specialValueText whenever value == minimum.

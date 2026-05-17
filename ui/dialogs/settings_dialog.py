@@ -312,11 +312,17 @@ class SettingsDialog(QDialog):
 
         layout.addLayout(bottom_row)
 
-        self.setStyleSheet(
-            "QLineEdit:focus { border-color: #f4f4f4; }"
-            "QCheckBox::indicator:checked { background: #f4f4f4; border-color: #d0d0d0; }"
-            "QCheckBox::indicator:hover { border-color: #f4f4f4; }"
-        )
+        from ui.theme import resolve_mode
+        _mode = resolve_mode(self._settings.get("appearance", "auto"))
+        if _mode == "light":
+            self.setStyleSheet(
+                "QLineEdit:focus { border-color: #22211F; }"
+                "QCheckBox::indicator:checked { background: #22211F; border-color: #22211F; }"
+                "QCheckBox::indicator:hover { border-color: #22211F; }"
+            )
+        else:
+            # Dark mode: drop the local override so the global APP_STYLESHEET wins.
+            self.setStyleSheet("")
 
     # ------------------------------------------------------------------
 

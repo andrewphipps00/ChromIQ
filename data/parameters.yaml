@@ -242,6 +242,55 @@ parameters:
         Leave blank for most workflows — only needed when you are managing
         a separate calibration curve independently from the profile.
 
+    - flag: "-n"
+      name: "Neutral Axis Steps"
+      type: int
+      min: 0
+      max: 256
+      default: 0
+      step: 8
+      no_space: true
+      affects_preview: false
+      expert_only: true
+      tooltip_title: "Neutral Axis Steps (-n)"
+      tooltip_body: |
+        Adds extra wedge patches along the perceptually-true neutral
+        axis of your printer + paper, as defined by the pre-conditioning
+        ICC profile loaded via -c.
+
+        How it differs from -g (Grey Axis Steps):
+          • -g walks RGB device values (R = G = B): 0/0/0, 32/32/32,
+            64/64/64 … That assumes equal device values print as a
+            neutral grey, which is only true on a perfectly linearised
+            printer.  On a real printer the "device grey ramp" usually
+            has a colour cast.
+          • -n asks the supplied profile: "what RGB values does THIS
+            printer actually need to reproduce a neutral L*a*b*
+            (a* = b* = 0) patch at each lightness step?"  Those
+            (typically non-equal) RGB values get added as patches.
+
+        How it differs from -N (Neutral Axis Emphasis):
+          • -N is a 0–1 dial that biases the existing OFPS patch
+            distribution toward the neutral region.  It does not add
+            named steps.
+          • -n adds explicit, profile-derived neutral patches on top
+            of whatever the rest of the distribution produces.
+
+        When to use it:
+          • You already have a first-pass ICC profile for this paper
+            and you're building a refinement chart.  Load that profile
+            under Pre-conditioning Profile (-c), then set -n to 32–64
+            to densely characterise the corrected neutral axis.
+          • For a first-time chart with no -c, leave this at 0 —
+            without a pre-conditioning profile there is no "true"
+            neutral axis to sample from, and -g already covers the
+            device-space ramp.
+
+        Typical refinement values: 32 for routine work, 64 for
+        fine-art / proofing where neutrality is critical.
+
+        Requires -c to be set; has no effect otherwise.
+
     - flag: "-N"
       name: "Neutral Axis Emphasis"
       type: float

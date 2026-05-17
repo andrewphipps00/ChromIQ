@@ -91,7 +91,10 @@ def _detect_stripe_rects(tiff_path: Path) -> list[QRect]:
         MIN_LABEL_DARK  = max(5, aw // 200)   # at least this many dark px/row
         MAX_LABEL_FRAC  = 0.30                 # exclude separator lines (>30% dark)
         EMPTY_STOP      = 8                    # white rows before stopping label scan
-        MERGE_GAP       = max(3, aw // 200)   # merge within-label character gaps
+        # Merge within-label character gaps. Must be large enough to bridge the
+        # faint crossbar gap in letters like "H" (~5 px at aw=1000) but well
+        # below the inter-letter gap (~22+ px on standard printtarg charts).
+        MERGE_GAP       = max(8, aw // 100)
 
         # ── 1. Locate the label zone ─────────────────────────────────────────
         max_label_dark = int(aw * MAX_LABEL_FRAC)
@@ -140,12 +143,47 @@ def _detect_stripe_rects(tiff_path: Path) -> list[QRect]:
             else:
                 merged.append([s, e])
 
-        n_strips = len(merged)
-        if n_strips < 1:
+        if not merged:
             log.debug("Strip detection: no label clusters found")
             return []
 
-        centers = [(s + e) / 2 for s, e in merged]
+        raw_centers = [(s + e) / 2 for s, e in merged]
+
+        # Robustify against split letters ("H" crossbar, narrow "I" cluttering
+        # the neighbour) and merged adjacent two-character labels (page 3 has
+        # "AW AX AY …"): derive the true column pitch from the MEDIAN gap
+        # between adjacent cluster centres — both kinds of artefact only
+        # distort a minority of gaps, so the median stays correct.  Then
+        # generate a uniform grid between the leftmost and rightmost real
+        # cluster (trimming clusters whose nearest neighbour is implausibly
+        # close, since those are likely spurious edge clusters).
+        if len(raw_centers) >= 3:
+            gaps_sorted = sorted(raw_centers[i + 1] - raw_centers[i]
+                                 for i in range(len(raw_centers) - 1))
+            median_pitch = gaps_sorted[len(gaps_sorted) // 2]
+            # Drop a leading cluster whose gap to neighbour is < 60% of median
+            # (almost certainly a spurious mark, not a strip label).
+            left_centers = list(raw_centers)
+            while len(left_centers) >= 2 and \
+                    (left_centers[1] - left_centers[0]) < 0.6 * median_pitch:
+                left_centers.pop(0)
+            while len(left_centers) >= 2 and \
+                    (left_centers[-1] - left_centers[-2]) < 0.6 * median_pitch:
+                left_centers.pop()
+            if len(left_centers) >= 2 and median_pitch > 0:
+                left, right = left_centers[0], left_centers[-1]
+                n_strips = round((right - left) / median_pitch) + 1
+                # Hard sanity bound — never invent or drop more than 25% of
+                # what was raw-detected.
+                n_strips = max(int(len(raw_centers) * 0.75),
+                               min(int(len(raw_centers) * 1.25) + 2, n_strips))
+                centers = [left + i * (right - left) / max(1, n_strips - 1)
+                           for i in range(n_strips)]
+            else:
+                centers = raw_centers
+        else:
+            centers = raw_centers
+        n_strips = len(centers)
 
         # ── 3. Vertical extent ───────────────────────────────────────────────
         y_top_a    = next((y for y in range(ah)
@@ -2005,14 +2043,21 @@ class TabMeasure(QWidget):
         layout.setSpacing(14)
         layout.setContentsMargins(24, 20, 24, 20)
 
+        from ui.theme import resolve_mode
+        _mode = resolve_mode(self._settings.get("appearance", "auto"))
+        if _mode == "light":
+            _frame_bg, _frame_border, _dim_text = "#f7f4ef", "#d0ccc6", "#7a7570"
+        else:
+            _frame_bg, _frame_border, _dim_text = "#181818", "#2a2a2a", "#909090"
         _frame_style = (
-            "QFrame { background: #181818; border: 1px solid #2a2a2a; border-radius: 6px; }"
+            f"QFrame {{ background: {_frame_bg}; border: 1px solid {_frame_border};"
+            " border-radius: 6px; }}"
         )
         _key_style = (
             f"font-family: Menlo, monospace; font-weight: 700; color: {_TAB_COLOR};"
             " background: transparent; border: none;"
         )
-        _dim_style = "color: #909090; background: transparent; border: none;"
+        _dim_style = f"color: {_dim_text}; background: transparent; border: none;"
         _plain_style = "background: transparent; border: none;"
 
         if self._guided_refinement_active and self._strip_list:
@@ -2486,6 +2531,14 @@ class TabMeasure(QWidget):
         page            = global_idx // strips_per_page
         local_idx       = global_idx % strips_per_page
         n_pages         = max(1, len(self._tiff_pages))
+        if bool(self._settings.get("debug_highlighter", False)):
+            msg = (
+                f"[highlighter] id={strip_id} letter={letter} "
+                f"global_idx={global_idx} strips_per_page={strips_per_page} "
+                f"page={page + 1}/{n_pages} local_idx={local_idx}"
+            )
+            self._log.appendPlainText(msg)
+            log.warning(msg)  # also goes to chromiq.log file
         if 0 <= page < n_pages:
             self._preview.show_page(page)
         self._preview.highlight_stripe(local_idx)

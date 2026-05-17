@@ -84,13 +84,13 @@ _THEMED_JS = """\
 """
 
 
-def _patch_html(html_path: Path, themed: bool = True) -> None:
-    """Inject dark background, expand X3D canvas, and optionally apply theme colors."""
+def _patch_html(html_path: Path, themed: bool = True, bg: str = "#111111") -> None:
+    """Inject page background, expand X3D canvas, and optionally apply theme colors."""
     try:
         text = html_path.read_text(encoding="utf-8")
         style = (
             "<style>\n"
-            "  html, body { background: #111111; margin: 0; padding: 0;"
+            f"  html, body {{ background: {bg}; margin: 0; padding: 0;"
             " overflow: hidden; }\n"
             "</style>\n"
         )
@@ -101,6 +101,26 @@ def _patch_html(html_path: Path, themed: bool = True) -> None:
         text = text.replace("height: 70%;", "height: 100vh;", 1)
         text = text.replace("height='70%'", "height='100vh'", 1)
         html_path.write_text(text, encoding="utf-8")
+    except OSError:
+        pass
+
+
+_CHROMIQ_BG_RE = re.compile(
+    r"(html, body \{ background: )#[0-9A-Fa-f]{3,8}", re.IGNORECASE
+)
+
+
+def repatch_background(html_path: Path, bg: str) -> None:
+    """Swap the already-injected page background to ``bg`` (no re-injection).
+
+    Safe to call repeatedly on a previously-patched file; a no-op on files
+    where ``_patch_html`` has not run.
+    """
+    try:
+        text = html_path.read_text(encoding="utf-8")
+        new_text, n = _CHROMIQ_BG_RE.subn(rf"\g<1>{bg}", text, count=1)
+        if n:
+            html_path.write_text(new_text, encoding="utf-8")
     except OSError:
         pass
 
@@ -135,6 +155,7 @@ class GamutViewer(QObject):
         on_line:   Callable[[str], None],
         on_finish: Callable[[int], None],
         themed:    bool = True,
+        bg:        str  = "#111111",
     ) -> None:
         if self._runner.is_running:
             self.error.emit("Another process is already running.")
@@ -143,6 +164,7 @@ class GamutViewer(QObject):
         self._log_lines = []
         self._params    = params
         self._themed    = themed
+        self._bg        = bg
 
         # iccgamut writes output next to the input file — use a temp dir to
         # avoid polluting the profile folder and to get a known output path.
@@ -193,7 +215,7 @@ class GamutViewer(QObject):
             if not html_path:
                 log.warning("iccgamut: HTML not found at %s", html)
             else:
-                _patch_html(html, self._themed)
+                _patch_html(html, self._themed, self._bg)
             log.info("iccgamut: volume=%.1f cc, html=%s, gam=%s", volume, html_path, gam_path)
             self.finished.emit(volume, html_path, gam_path)
         elif code != 0:

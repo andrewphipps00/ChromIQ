@@ -89,6 +89,10 @@ DEFAULTS: dict[str, Any] = {
     "session_ti3_path":          "",
     "session_icc_path":          "",
     "session_cal_ti3_path":      "",
+    # Diagnostics — off by default; flip to True to log per-strip highlighter
+    # math (id, global_idx, page, local_idx) to chromiq.log for investigating
+    # detection drift.
+    "debug_highlighter":         False,
 }
 
 

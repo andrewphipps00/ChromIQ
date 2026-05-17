@@ -8,6 +8,7 @@ from PyQt6.QtWidgets import (
     QApplication,
     QFrame,
     QMainWindow,
+    QPlainTextEdit,
     QTabWidget,
     QVBoxLayout,
     QWidget,
@@ -532,6 +533,24 @@ class MainWindow(QMainWindow):
         # baked in per-mode, so a theme switch needs to regenerate them.
         if hasattr(self, "_tabs"):
             self._on_tab_changed(self._tabs.currentIndex())
+        # Boost the log-widget weight in light mode — QSS font-weight on
+        # QPlainTextEdit text is unreliable on Windows because the document
+        # uses its own default font, so set it via QFont directly. Done AFTER
+        # the per-tab QSS re-injection so the stylesheet's font cascade
+        # doesn't overwrite our heavier weight.
+        from PyQt6.QtGui import QFont
+        _log_weight = QFont.Weight.Black if mode == "light" else QFont.Weight.Normal
+        for log in self.findChildren(QPlainTextEdit, "log"):
+            f = log.font()
+            f.setWeight(_log_weight)
+            log.setFont(f)
+            # The QTextDocument keeps its own default font that may have been
+            # initialised before our widget setFont call — sync it explicitly.
+            doc = log.document()
+            if doc is not None:
+                df = doc.defaultFont()
+                df.setWeight(_log_weight)
+                doc.setDefaultFont(df)
 
     def _apply_title_bar(self, mode: str) -> None:
         """Set the macOS native title bar appearance to match `mode`."""

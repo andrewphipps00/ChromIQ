@@ -116,18 +116,24 @@ class _InfoDialog(QDialog):
             self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint
         )
 
+        from core.settings import AppSettings
+        from ui.theme import resolve_mode
+        mode = resolve_mode(AppSettings().get("appearance", "auto"))
+        heading_color = "#22211F" if mode == "light" else "#ffffff"
+        body_color    = "#22211F" if mode == "light" else "#c8c8c8"
+
         layout = QVBoxLayout(self)
         layout.setSpacing(12)
         layout.setContentsMargins(20, 20, 20, 16)
 
         heading = QLabel(title, self)
-        heading.setStyleSheet("font-size: 15px; font-weight: bold; color: #ffffff;")
+        heading.setStyleSheet(f"font-size: 15px; font-weight: bold; color: {heading_color};")
         heading.setWordWrap(True)
         layout.addWidget(heading)
 
         text = QLabel(body, self)
         text.setWordWrap(True)
-        text.setStyleSheet("color: #c8c8c8; line-height: 1.5;")
+        text.setStyleSheet(f"color: {body_color}; line-height: 1.5;")
         text.setTextFormat(Qt.TextFormat.PlainText)
         layout.addWidget(text)
 

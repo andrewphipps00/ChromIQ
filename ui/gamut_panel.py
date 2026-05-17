@@ -49,7 +49,8 @@ class GamutPanel(QWidget):
         super().__init__(parent)
         self._runner   = runner
         self._settings = settings
-        self._mode: str = "dark"
+        from ui.theme import resolve_mode
+        self._mode: str = resolve_mode(settings.get("appearance", "auto"))
 
         # Workflow objects
         self._viewer         = GamutViewer(runner, self)
@@ -77,6 +78,10 @@ class GamutPanel(QWidget):
         self._load_defaults()
 
     # ------------------------------------------------------------------
+    def _current_bg(self) -> str:
+        """Page background that should match the surrounding viewer frame."""
+        return "#efebe6" if self._mode == "light" else "#111111"
+
     def set_appearance(self, mode: str) -> None:
         """Switch viewer + header colors between dark and light themes."""
         new_mode = "light" if mode == "light" else "dark"
@@ -110,6 +115,13 @@ class GamutPanel(QWidget):
             )
         if getattr(self, "_web_view", None) is not None:
             self._web_view.page().setBackgroundColor(QColor(frame_bg))
+            # Re-patch the bg in any HTML the runners have already written to
+            # disk, so reloading picks up the new theme without re-running the
+            # gamut tools.
+            from workflow.gamut_viewer import repatch_background
+            for html_path in (self._primary_html, self._compare_html, self._combined_html):
+                if html_path:
+                    repatch_background(Path(html_path), frame_bg)
             # Refresh whichever HTML is loaded so the in-page bg matches.
             current_html = (
                 self._combined_html if self._view_combined_btn.isChecked()
@@ -593,12 +605,14 @@ class GamutPanel(QWidget):
         # three bordered sides (top/right/bottom).
         container = QWidget(self)
         container.setObjectName("gamutViewerFrame")
-        # Initial dark styling — _apply_mode_styles() rewrites this when
-        # the theme is light. Kept here so the very first paint isn't bare.
+        # Initial styling — _apply_mode_styles() can rewrite this on theme
+        # switch. Kept here so the very first paint isn't bare.
+        _init_bg = self._current_bg()
+        _init_border = "#d0ccc6" if self._mode == "light" else "#333"
         container.setStyleSheet(
             "QWidget#gamutViewerFrame {"
-            " background: #111111;"
-            " border: 1px solid #333;"
+            f" background: {_init_bg};"
+            f" border: 1px solid {_init_border};"
             " border-left: none;"
             "}"
         )
@@ -612,7 +626,7 @@ class GamutPanel(QWidget):
             # otherwise the first compositor frame on first tab open paints at
             # the default white, flashing through before the placeholder HTML
             # renders.
-            view.page().setBackgroundColor(QColor("#111111"))
+            view.page().setBackgroundColor(QColor(_init_bg))
             try:
                 from PyQt6.QtWebEngineCore import QWebEngineSettings
                 view.settings().setAttribute(
@@ -633,8 +647,9 @@ class GamutPanel(QWidget):
                 container,
             )
             lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            _fallback_color = "#7a7570" if self._mode == "light" else TEXT_DIM
             lbl.setStyleSheet(
-                f"color: {TEXT_DIM}; background: #111111;"
+                f"color: {_fallback_color}; background: {_init_bg};"
                 " font-family: Menlo, Consolas, 'Courier New', monospace; font-size: 10px;"
             )
             wrap_layout.addWidget(lbl)
@@ -786,7 +801,8 @@ class GamutPanel(QWidget):
     def _run_primary(self) -> None:
         params  = self._collect_params(self._icc_path)
         themed  = bool(self._settings.get("gamut_themed_colors", True))
-        self._viewer.run(params, on_line=lambda _: None, on_finish=lambda _: None, themed=themed)
+        self._viewer.run(params, on_line=lambda _: None, on_finish=lambda _: None,
+                         themed=themed, bg=self._current_bg())
 
     def _run_compare(self) -> None:
         if self._compare_path is None:
@@ -796,7 +812,8 @@ class GamutPanel(QWidget):
         sub = GamutViewer(self._runner, self)
         sub.finished.connect(self._on_compare_finished)
         sub.error.connect(self._on_compare_error)
-        sub.run(params, on_line=lambda _: None, on_finish=lambda _: None, themed=themed)
+        sub.run(params, on_line=lambda _: None, on_finish=lambda _: None,
+                themed=themed, bg=self._current_bg())
 
     def _run_viewgam(self) -> None:
         if not self._primary_gam or not self._compare_gam:
@@ -810,6 +827,7 @@ class GamutPanel(QWidget):
             on_line      = lambda _: None,
             on_finish    = lambda _: None,
             themed       = themed,
+            bg           = self._current_bg(),
         )
 
     def _on_viewer_finished(self, volume: float, html_path: str, gam_path: str) -> None:

@@ -218,6 +218,19 @@ QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox {{
 QLineEdit:focus, QComboBox:focus {{
     border-color: {ACCENT_BLUE};
 }}
+/* Disabled inputs — dim text + slightly warmer chrome to signal "off". */
+QLineEdit:disabled,
+QSpinBox:disabled, QDoubleSpinBox:disabled,
+QComboBox:disabled {{
+    color: {LM_TEXT_FAINT};
+    background: {LM_BG_SURFACE};
+    border-color: {LM_BORDER};
+}}
+QSpinBox:disabled::up-button,   QSpinBox:disabled::down-button,
+QDoubleSpinBox:disabled::up-button, QDoubleSpinBox:disabled::down-button {{
+    background: {LM_BG_SURFACE};
+}}
+QComboBox:disabled::drop-down {{ background: {LM_BG_SURFACE}; }}
 QComboBox {{
     padding-right: 28px;
 }}
@@ -313,8 +326,9 @@ QCheckBox::indicator:hover {{
 QPlainTextEdit#log {{
     background: {LM_LOG_BG};
     color: {LM_LOG_TEXT};
-    font-family: "Menlo", "Courier New", monospace;
+    font-family: "JetBrains Mono", "Menlo", "SF Mono", "Courier New", monospace;
     font-size: 12px;
+    font-weight: 800;
     border: 1px solid {LM_LOG_BORDER};
     border-radius: 3px;
 }}
@@ -400,6 +414,7 @@ QLabel#section_title {{
     color: {LM_TEXT_MAIN};
 }}
 QLabel#param_label, QCheckBox#param_label {{ color: {LM_TEXT_MAIN}; }}
+QLabel#param_label:disabled, QCheckBox#param_label:disabled {{ color: {LM_TEXT_FAINT}; }}
 
 /* -- Mode buttons (Guided / Manual / Expert) --------------------- */
 /* Default appearance. The per-tab QSS injection in main_window also

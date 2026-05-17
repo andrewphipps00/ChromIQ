@@ -1,5 +1,120 @@
 # Changelog
 
+## v3.6.1
+Follow-up release after v3.6.0 — fixes a visible strip-highlighter
+drift during chartread on charts with letters that have thin
+crossbars (notably "H") and on multi-character labels (AW, AX, … on
+later pages), adds the missing targen `-n` (Neutral Axis Steps) flag
+in Manual mode, and finishes the light-mode polish that v3.6.0 left
+incomplete around the gamut viewer, parameter dialogs, and disabled
+input states.
+
+### New
+- **targen `-n` (Neutral Axis Steps) in Manual mode.** New expert
+  parameter under Create Chart → Manual → targen, immediately after
+  Pre-conditioning Profile (`-c`) since the two work together. Adds
+  extra wedge patches along the perceptually-true neutral axis of
+  your printer + paper as defined by the pre-conditioning profile,
+  rather than the device-space grey ramp that `-g` walks. Useful
+  for refinement passes once you already have a first-pass ICC
+  profile loaded under `-c`. Tooltip body spells out the
+  distinction between `-n` (profile-derived steps), `-g` (device
+  RGB ramp), and `-N` (neutral-axis emphasis dial) with worked
+  examples. Auto-wires through Save-as-Defaults, the Default
+  preset, and named preset save/restore via the existing YAML-driven
+  `_manual_widgets` pipeline — no extra plumbing.
+- **Live command preview in Manual mode.** A footer info box at the
+  bottom of the Manual scroll area now mirrors the guided info box,
+  showing the exact `targen` and `printtarg` commands the workflow
+  will run, built from the current ParameterWidget state via the
+  same `_build_targen_args` / `_build_printtarg_args` logic.
+  Updates live on any parameter change (instrument, paper,
+  double-density, `-L`, patch scale, margin, 16-bit toggle, pages
+  spin, auto-patches toggle). Importantly the preview reflects the
+  auto-bumped i1Pro margin (`-m10 -M10`) even though the margin
+  widget is expert-only — by mirroring the actual collector instead
+  of `ParameterWidget.build_args()` it shows what runs, not just
+  what's user-enabled.
+
+### Fixes
+- **Strip highlighter no longer drifts after letter "H" or with
+  two-character labels.** The TIFF strip-detection algorithm in
+  `_detect_stripe_rects` previously split labels with thin
+  horizontal crossbars (the letter "H" is the canonical case) into
+  two clusters because the column-dark merge gap
+  (`max(3, aw // 200)`, ≈4 px at the 1000-px analysis width) was
+  tighter than the gap between the two vertical strokes of "H" at
+  that scale. From "H" onwards every subsequent strip was off by
+  one — reading "J" highlighted "I". The merge gap is now
+  `max(8, aw // 100)` (≈10 px at aw=1000), comfortably above
+  intra-letter gaps (~5 px) and well below inter-letter gaps
+  (~22 px). On top of that, the detector now runs a **median-pitch
+  + endpoint regularisation** pass: it computes the median
+  centre-to-centre gap, trims leading/trailing clusters whose
+  neighbour gap is < 60 % of the median (likely spurious edge
+  marks), and resamples a uniform grid between the remaining
+  endpoints with `round((right − left) / pitch) + 1` strips.
+  Validated end-to-end on three-page A4 charts where page 3 uses
+  two-character labels (AW AX AY … BT) — all three pages now
+  detect 24 strips with column centres aligned to within 1–2 px.
+  Hard-clamped to ±25 % of the raw cluster count as a sanity bound.
+- **Settings dialog focus + checkbox colours follow the active
+  theme.** The dialog previously hardcoded a near-white focus
+  border and indicator fill that read fine in dark mode but
+  appeared as low-contrast pale-on-pale in light mode. Now resolves
+  the active appearance via `ui.theme.resolve_mode` and either
+  applies an ink-coloured (`#22211F`) light variant or drops the
+  local override so the global stylesheet cascades through in dark
+  mode.
+- **Tooltip dialog text colours follow the active theme.** The
+  `TooltipButton → _InfoDialog` heading + body were hardcoded to
+  white / light-grey and disappeared on the light-mode info-dialog
+  background. Now `#22211F` in light mode, original palette in
+  dark.
+- **Gamut viewer page + frame backgrounds follow the active theme.**
+  The WebEngine page background, the surrounding
+  `QWidget#gamutViewerFrame`, and the "no data" fallback label all
+  baked `#111111` directly. They now read the panel's mode
+  (`_current_bg()`) and switch to `#efebe6` in light mode with a
+  matching `#d0ccc6` border. The viewer also re-patches the
+  background of already-rendered HTML files on theme switch via a
+  new `repatch_background()` helper in `workflow/gamut_viewer.py` —
+  flipping themes mid-session refreshes the X3DOM canvas without
+  re-running `iccgamut`. The `bg` colour is plumbed through
+  `GamutViewer.run()` and `ViewgamRunner.run()` so freshly-rendered
+  HTML is patched with the right colour from the start.
+
+### Improvements
+- **Disabled inputs are visibly greyed in light mode.** Added
+  `:disabled` QSS for `QLineEdit`, `QSpinBox`, `QDoubleSpinBox`,
+  `QComboBox` (text + chrome dim to `LM_TEXT_FAINT` /
+  `LM_BG_SURFACE`), and for `QLabel#param_label` /
+  `QCheckBox#param_label` (`#6a6a6a` in dark, `LM_TEXT_FAINT` in
+  light), so the off state is obvious in both themes.
+  `ParameterWidget` was refactored to route enable/disable through
+  a single `set_control_enabled(enabled)` helper that toggles the
+  control, the browse button, **and** the row label together —
+  without this the label's `:disabled` selector never matched
+  because labels weren't being disabled.
+- **Log widget uses a bolder mono font in light mode.** Switched to
+  `JetBrains Mono` → `Menlo` → `SF Mono` → `Courier New` with
+  weight 800 in light mode. Because Qt's QSS `font-weight` doesn't
+  always reach a `QPlainTextEdit`'s underlying document on Windows,
+  the weight is also pushed via `QFont` directly in `_apply_theme`
+  on every theme switch — both the widget font and the
+  `QTextDocument` default font are bumped, so the heavier weight
+  survives the per-tab QSS re-injection that runs right after.
+
+### Internal
+- **`debug_highlighter` setting (default off).** New diagnostic
+  flag in `core/settings.py` that, when true, makes
+  `_on_stripe_changed` log one line per strip update to both the
+  in-app log widget and `chromiq.log` (id, letter, global_idx,
+  strips_per_page, page, local_idx). Used to confirm the
+  strip-drift diagnosis above; left in place for future detection
+  debugging. Page index is rendered 1-based in the log message for
+  readability while the internal `page` variable stays 0-based.
+
 ## v3.6.0
 First minor-version bump in the 3.x line: ChromIQ now ships a full
 **Light Mode**, selectable as Light, Dark, or System (Auto) from a new

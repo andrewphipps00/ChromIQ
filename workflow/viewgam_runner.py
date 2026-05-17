@@ -209,13 +209,13 @@ def _build_compare_overlay_html(
         return False
 
 
-def _patch_html(html_path: Path, themed: bool = True) -> None:
-    """Inject dark background, expand X3D canvas, and optionally apply theme colors."""
+def _patch_html(html_path: Path, themed: bool = True, bg: str = "#111111") -> None:
+    """Inject page background, expand X3D canvas, and optionally apply theme colors."""
     try:
         text = html_path.read_text(encoding="utf-8")
         style = (
             "<style>\n"
-            "  html, body { background: #111111; margin: 0; padding: 0;"
+            f"  html, body {{ background: {bg}; margin: 0; padding: 0;"
             " overflow: hidden; }\n"
             "</style>\n"
         )
@@ -258,6 +258,7 @@ class ViewgamRunner(QObject):
         themed:       bool = True,
         primary_html: Path | None = None,
         compare_html: Path | None = None,
+        bg:           str  = "#111111",
     ) -> None:
         if self._runner.is_running:
             self.error.emit("Another process is already running.")
@@ -265,6 +266,7 @@ class ViewgamRunner(QObject):
 
         self._log_lines   = []
         self._themed      = themed
+        self._bg          = bg
         self._primary_html = primary_html
         self._compare_html = compare_html
         work_dir    = Path(tempfile.mkdtemp(prefix="chromiq_viewgam_"))
@@ -316,7 +318,7 @@ class ViewgamRunner(QObject):
             viewgam_html = work_dir / "combined.x3d.html"
             if viewgam_html.exists():
                 result.html_path = str(viewgam_html)
-                _patch_html(viewgam_html, self._themed)
+                _patch_html(viewgam_html, self._themed, self._bg)
 
         if result.html_path or result.intersection_volume is not None:
             log.info(

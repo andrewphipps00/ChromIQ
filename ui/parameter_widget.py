@@ -37,6 +37,7 @@ class ParameterWidget(QWidget):
         self._param = param
         self._browse_icon = browse_icon
         self._control: QWidget | None = None
+        self._label: QLabel | None = None
         self._browse_btn: QPushButton | None = None
         self._enable_check: QCheckBox | None = None
         self._custom_combo: NoScrollComboBox | None = None
@@ -237,6 +238,7 @@ class ParameterWidget(QWidget):
             lbl.setFixedWidth(190)
             lbl.setWordWrap(False)
             lbl.setObjectName("param_label")
+            self._label = lbl
             layout.addWidget(lbl)
 
         # Control
@@ -257,16 +259,24 @@ class ParameterWidget(QWidget):
 
         # Wire enable-checkbox to control enabled state
         if self._enable_check is not None:
-            self._control.setEnabled(False)
-            if self._browse_btn:
-                self._browse_btn.setEnabled(False)
+            self.set_control_enabled(False)
             self._enable_check.toggled.connect(self._on_enable_toggled)
 
+    def set_control_enabled(self, enabled: bool) -> None:
+        """Enable/disable the control + browse button + label as a unit.
+
+        The label tracks the control so the ``:disabled`` QSS selector
+        greys it out in both light and dark themes.
+        """
+        if self._control is not None:
+            self._control.setEnabled(enabled)
+        if self._browse_btn is not None:
+            self._browse_btn.setEnabled(enabled)
+        if self._label is not None:
+            self._label.setEnabled(enabled)
+
     def _on_enable_toggled(self, checked: bool) -> None:
-        if self._control:
-            self._control.setEnabled(checked)
-        if self._browse_btn:
-            self._browse_btn.setEnabled(checked)
+        self.set_control_enabled(checked)
         self.value_changed.emit()
 
     def _make_control(self) -> QWidget:
