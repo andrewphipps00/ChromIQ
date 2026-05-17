@@ -1,5 +1,109 @@
 # Changelog
 
+## v3.6.2
+Quality-focused patch for the Build Profile tab. Adds the two CIECAM02
+viewing-condition flags that `colprof` needs to build correct
+perceptual / saturation gamut-mapping tables when a Gamut Source is
+supplied, replaces a cluster of three checkboxes in the Manual
+gamut-mapping section with one combobox + standalone checkbox, and
+flips the default Gamut Source to ClayRGB1998 (Argyll's bit-for-bit
+AdobeRGB 1998 equivalent) so fresh installs match the source profile
+serious print workflows actually use. Tooltips across the section are
+rewritten as plain-English paragraphs and given enough horizontal
+room to read.
+
+### New
+- **CIECAM02 source / destination viewing conditions (`-c` / `-d`)
+  in Manual mode.** Two new combo rows in the Manual panel's Color
+  Science group, directly under FWA, exposing the full list of
+  colprof viewing-condition presets — `pp` (practical office print),
+  `pc` (critical print booth), `mt` (monitor in typical work
+  environment), `md`/`mb`, `jm`/`jd` (projector), `pcd`, `ob`, `cx`,
+  plus the two `pe` variants. Empty default keeps current behaviour;
+  set them to e.g. `mt` (source) + `pp` (destination) and the
+  emitted command picks up `-cmt -dpp`, matching the reference
+  invocation pros use. This is the bit that materially affects
+  profile quality when a Gamut Source profile is supplied via
+  `-s`/`-S` — without `-c`/`-d`, colprof falls back to generic
+  viewing-condition defaults that don't match any real
+  screen-to-print workflow, and the perceptual / saturation tables
+  end up wrong. New `src_viewing_cond` / `dst_viewing_cond` fields
+  on `ProfileParams` flow through `_build_args` via the same
+  `f"-c{val}"` / `f"-d{val}"` no-space append pattern used by
+  `-a` / `-q` / `-V`. Wired through all five Manual save/restore
+  sites (collect, preset save, preset restore, save-defaults, both
+  default-restore paths) so the choice round-trips through named
+  Manual presets and the Save-as-Defaults flow. Guided panel
+  untouched.
+- **Colorimetric-gamut combobox replaces the `-nP` / `-nS`
+  checkboxes in Manual mode.** The two side-by-side checkboxes
+  (`-nP` "Use colorimetric gamut — perceptual" and `-nS` "Use
+  colorimetric gamut — saturation") collapse into one combobox
+  with four entries: *Gamut mapping for both* (default), *-nP
+  only*, *-nS only*, *-nP -nS* (both intents colorimetric). Every
+  combination the old checkboxes could express remains reachable
+  — verified end-to-end against the emitted command line. `-nI`
+  (Inverse gamut mapping) is conceptually orthogonal (it controls
+  B2A inversion, not which gamut shapes an intent) and stays as
+  its own checkbox on a second row. Two tiny helpers,
+  `_m_colorimetric_combo_values` and `_m_set_colorimetric_combo`,
+  translate between the combo's `(bool, bool)` userData and the
+  two existing `ProfileParams.no_perc_gamut` / `.no_sat_gamut`
+  booleans, so `_build_args` is unchanged and **existing Manual
+  presets and saved defaults round-trip into the new combo
+  without a migration step** (the on-disk preset JSON and
+  `manual2_colprof_no_perc_gamut` / `_no_sat_gamut` /
+  `_inv_gamut` settings keys keep their existing names and
+  shapes).
+
+### Changed
+- **ClayRGB1998 is now the default Gamut Source.** Fresh installs
+  now point the Gamut Source path at `ref/ClayRGB1998.icm` (Argyll
+  ships this as its bit-for-bit AdobeRGB 1998 equivalent —
+  identical R/G/B primaries, gamma 2.2, D65 white point; renamed
+  because Adobe won't license the "AdobeRGB1998.icc" name for
+  redistribution). Previously the default was `ref/sRGB.icm`. The
+  switch matches how serious print workflows actually drive
+  colprof: AdobeRGB is the working space photo apps default to,
+  and an AdobeRGB-sourced profile renders sRGB images correctly
+  too (sRGB fits entirely inside AdobeRGB), while the reverse —
+  AdobeRGB images through an sRGB-sourced profile — clips wide
+  hues. `_default_gamut_src()` now tries
+  `ref/ClayRGB1998.icm → ref/sRGB.icm → assets/profiles/ClayRGB1998.icm →
+  assets/profiles/sRGB.icm`, so installs with an older Argyll
+  layout still get a sensible default. **Existing users with a
+  saved Gamut Source path are untouched** — the new default only
+  fires when the user has never saved a value.
+- **Bundled `assets/profiles/ClayRGB1998.icm`** alongside the
+  existing bundled `sRGB.icm`, on the same Argyll-AGPL
+  redistribution basis. `ChromIQ.spec` already bundles the whole
+  `assets/` directory, so the new file is packed into frozen
+  builds without any spec change.
+- **Gamut-mapping tooltips rewritten and widened.** All five
+  tooltips touched in this area (`-c`, `-d`, the new colorimetric
+  combo, `-nI`, and the Gamut Source `-s`/`-S` description) are
+  rewritten as plain-English paragraphs separated by `\n\n` —
+  Qt word-wraps each paragraph automatically, so the previous
+  hand-wrapped-every-70-chars style was actively fighting the
+  auto-wrap when the dialog widened. `min_width` is bumped to
+  540–580 px on the long bodies (the `_InfoDialog` cap is
+  `max(min_width + 160, 720)`, so passing the larger min gives a
+  comfortable ~720 px wrap width). Each new body explains what
+  the flag does, when it matters, and which preset to pick for
+  the common photographic workflow.
+
+### Fixes
+- **"Browse to AdobeRGB.icm in the Argyll ref folder" hint no
+  longer points at a non-existent file.** Four places (Manual +
+  Guided Gamut Source tooltips, both path-edit placeholders) used
+  to advise the user to browse to `AdobeRGB.icm`, which Argyll
+  doesn't ship — Adobe doesn't license the name for
+  redistribution, so the file is called `ClayRGB1998.icm`
+  instead. Updated all four to name the file that actually
+  exists, with a one-paragraph note in each tooltip explaining
+  why ClayRGB1998 = AdobeRGB so users aren't thrown by the
+  unfamiliar name.
+
 ## v3.6.1
 Follow-up release after v3.6.0 — fixes a visible strip-highlighter
 drift during chartread on charts with letters that have thin

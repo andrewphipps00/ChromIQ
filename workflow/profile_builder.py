@@ -42,6 +42,8 @@ class ProfileParams:
     observer: str = ""
     fwa_enabled: bool = False
     fwa_illum: str = ""
+    src_viewing_cond: str = ""
+    dst_viewing_cond: str = ""
     # ICC media attributes & default intent (-Z)
     z_surface: str = ""        # "" = glossy (default), "m" = matte
     z_media_type: str = ""     # "" = reflective (default), "t" = transparent
@@ -161,6 +163,10 @@ class ProfileBuilder:
             args += ["-i", p.illuminant]
         if p.observer:
             args += ["-o", p.observer]
+        if p.src_viewing_cond:
+            args.append(f"-c{p.src_viewing_cond}")
+        if p.dst_viewing_cond:
+            args.append(f"-d{p.dst_viewing_cond}")
         if p.fwa_enabled:
             args.append(f"-f{p.fwa_illum}" if p.fwa_illum else "-f")
         z_attrs = "".join(filter(None, [p.z_surface, p.z_media_type, p.z_polarity, p.z_color_mode]))

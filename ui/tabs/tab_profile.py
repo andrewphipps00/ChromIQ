@@ -77,6 +77,24 @@ _INTENTS = [
     ("Lab Colorimetric (al)", "al"),
 ]
 
+# CIECAM02 viewing-condition presets used by colprof's -c (source) and -d
+# (destination) flags. Only affect output when a gamut source profile is
+# supplied via -s or -S.
+_VIEWING_CONDITIONS = [
+    ("Default (none)", ""),
+    ("Practical reflection print viewing (pe)", "pe"),
+    ("Critical reflection print viewing (pc)", "pc"),
+    ("Practical reflection print, typical office (pp)", "pp"),
+    ("Monitor in typical work environment (mt)", "mt"),
+    ("Monitor in bright work environment (mb)", "mb"),
+    ("Monitor in darkened work environment (md)", "md"),
+    ("Projector in dim environment (jm)", "jm"),
+    ("Projector in dark environment (jd)", "jd"),
+    ("Photo CD viewing booth (pcd)", "pcd"),
+    ("Original scene, bright outdoors (ob)", "ob"),
+    ("Cut sheet transparencies on a viewing box (cx)", "cx"),
+]
+
 
 _TOOLTIP_TITLE_NORMAL = "Step 4 — Build the profile"
 _TOOLTIP_BODY_NORMAL = (
@@ -1481,6 +1499,19 @@ class TabProfile(QWidget):
     def _m_save_presets(self, presets: dict) -> None:
         self._settings.set("manual2_profile_presets", json.dumps(presets))
 
+    def _m_colorimetric_combo_values(self) -> tuple[bool, bool]:
+        data = self._m_colorimetric_gamut_combo.currentData()
+        if isinstance(data, (list, tuple)) and len(data) == 2:
+            return (bool(data[0]), bool(data[1]))
+        return (False, False)
+
+    def _m_set_colorimetric_combo(self, no_perc: bool, no_sat: bool) -> None:
+        target = (bool(no_perc), bool(no_sat))
+        for i in range(self._m_colorimetric_gamut_combo.count()):
+            if tuple(self._m_colorimetric_gamut_combo.itemData(i)) == target:
+                self._m_colorimetric_gamut_combo.setCurrentIndex(i)
+                return
+
     def _m_populate_preset_combo(self, presets: dict, select_name: str | None = None) -> None:
         self._m_preset_combo.blockSignals(True)
         self._m_preset_combo.clear()
@@ -1507,6 +1538,8 @@ class TabProfile(QWidget):
             "observer":            self._m_obs_combo.currentData() or "",
             "fwa_enabled":         self._m_fwa_check.isChecked(),
             "fwa_illum":           self._m_fwa_illum_combo.currentData() or "",
+            "src_viewing":         self._m_src_viewing_combo.currentData() or "",
+            "dst_viewing":         self._m_dst_viewing_combo.currentData() or "",
             "z_surface":           self._m_z_surface_combo.currentData() or "",
             "z_media_type":        self._m_z_media_type_combo.currentData() or "",
             "z_polarity":          self._m_z_polarity_combo.currentData() or "",
@@ -1518,8 +1551,8 @@ class TabProfile(QWidget):
             "perc_intent":         self._m_perc_intent_combo.currentData() or "",
             "sat_intent_enabled":  self._m_sat_intent_check.isChecked(),
             "sat_intent":          self._m_sat_intent_combo.currentData() or "",
-            "no_perc_gamut":       self._m_no_perc_gamut_cb.isChecked(),
-            "no_sat_gamut":        self._m_no_sat_gamut_cb.isChecked(),
+            "no_perc_gamut":       self._m_colorimetric_combo_values()[0],
+            "no_sat_gamut":        self._m_colorimetric_combo_values()[1],
             "inv_gamut":           self._m_inv_gamut_cb.isChecked(),
             "mfr_enabled":         self._m_mfr_check.isChecked(),
             "mfr":                 self._m_mfr_edit.text().strip(),
@@ -1548,6 +1581,8 @@ class TabProfile(QWidget):
         _set_combo(self._m_obs_combo,           "observer",   "")
         self._m_fwa_check.setChecked(bool(data.get("fwa_enabled", False)))
         _set_combo(self._m_fwa_illum_combo,     "fwa_illum",        "")
+        _set_combo(self._m_src_viewing_combo,   "src_viewing",      "")
+        _set_combo(self._m_dst_viewing_combo,   "dst_viewing",      "")
         _set_combo(self._m_z_surface_combo,    "z_surface",         "")
         _set_combo(self._m_z_media_type_combo, "z_media_type",      "")
         _set_combo(self._m_z_polarity_combo,   "z_polarity",        "")
@@ -1562,8 +1597,10 @@ class TabProfile(QWidget):
         _set_combo(self._m_perc_intent_combo,   "perc_intent", "")
         self._m_sat_intent_check.setChecked(bool(data.get("sat_intent_enabled", False)))
         _set_combo(self._m_sat_intent_combo,    "sat_intent",  "")
-        self._m_no_perc_gamut_cb.setChecked(bool(data.get("no_perc_gamut", False)))
-        self._m_no_sat_gamut_cb.setChecked(bool(data.get("no_sat_gamut",   False)))
+        self._m_set_colorimetric_combo(
+            data.get("no_perc_gamut", False),
+            data.get("no_sat_gamut",  False),
+        )
         self._m_inv_gamut_cb.setChecked(bool(data.get("inv_gamut",         False)))
         self._m_mfr_check.setChecked(bool(data.get("mfr_enabled",   False)))
         self._m_mfr_edit.setText(data.get("mfr", ""))
@@ -1594,6 +1631,8 @@ class TabProfile(QWidget):
             _set_combo(self._m_obs_combo,           "manual2_colprof_observer",   "")
             self._m_fwa_check.setChecked(bool(s.get("manual2_colprof_fwa_enabled", False)))
             _set_combo(self._m_fwa_illum_combo,     "manual2_colprof_fwa_illum",  "")
+            _set_combo(self._m_src_viewing_combo,   "manual2_colprof_src_viewing", "")
+            _set_combo(self._m_dst_viewing_combo,   "manual2_colprof_dst_viewing", "")
             gam_mode = s.get("manual2_colprof_gamut_mode", "S")
             idx = self._m_gam_mode_combo.findData(gam_mode)
             if idx >= 0:
@@ -1603,8 +1642,10 @@ class TabProfile(QWidget):
             _set_combo(self._m_perc_intent_combo,   "manual2_colprof_perc_intent", "")
             self._m_sat_intent_check.setChecked(bool(s.get("manual2_colprof_sat_intent_enabled", False)))
             _set_combo(self._m_sat_intent_combo,    "manual2_colprof_sat_intent",  "")
-            self._m_no_perc_gamut_cb.setChecked(bool(s.get("manual2_colprof_no_perc_gamut", False)))
-            self._m_no_sat_gamut_cb.setChecked(bool(s.get("manual2_colprof_no_sat_gamut",   False)))
+            self._m_set_colorimetric_combo(
+                s.get("manual2_colprof_no_perc_gamut", False),
+                s.get("manual2_colprof_no_sat_gamut",  False),
+            )
             self._m_inv_gamut_cb.setChecked(bool(s.get("manual2_colprof_inv_gamut",         False)))
             self._m_mfr_check.setChecked(bool(s.get("manual2_colprof_mfr_enabled",   False)))
             self._m_mfr_edit.setText(s.get("manual2_colprof_mfr", ""))
@@ -1935,6 +1976,95 @@ class TabProfile(QWidget):
         ))
         g.addLayout(fwa_row)
 
+        src_vc_row = QHBoxLayout()
+        src_vc_row.addWidget(QLabel("Source viewing (-c):", grp))
+        self._m_src_viewing_combo = NoScrollComboBox(grp)
+        for label, val in _VIEWING_CONDITIONS:
+            self._m_src_viewing_combo.addItem(label, val)
+        self._m_src_viewing_combo.setObjectName("compact_input")
+        self._m_src_viewing_combo.style().unpolish(self._m_src_viewing_combo)
+        self._m_src_viewing_combo.style().polish(self._m_src_viewing_combo)
+        src_vc_row.addWidget(self._m_src_viewing_combo, stretch=1)
+        src_vc_row.addWidget(TooltipButton(
+            "Source Viewing Conditions (-c)",
+            "Describes the lighting environment that the SOURCE image was "
+            "designed to be viewed in — typically the space where your image "
+            "originated. For a photograph being prepared in Lightroom or "
+            "Photoshop, that's the monitor in your editing room.\n\n"
+            "Colprof uses this together with the destination viewing condition "
+            "below to perform a CIECAM02 colour-appearance calculation when it "
+            "builds the perceptual (and saturation) gamut-mapping tables. "
+            "Matching this to where your source image actually lives makes the "
+            "print look more like what you saw on screen.\n\n"
+            "Important: this setting ONLY does anything when you've also set a "
+            "Gamut Source profile (the -s or -S row above). Without a gamut "
+            "source there is no gamut mapping, so there is nothing for these "
+            "viewing conditions to influence.\n\n"
+            "Which one to pick:\n\n"
+            "• Monitor in typical work environment (mt) — the default for "
+            "screen-to-print workflows. Assumes a normally-lit office or studio "
+            "with a monitor at typical brightness.\n\n"
+            "• Monitor in bright work environment (mb) — bright office, near a "
+            "window or under strong room lights.\n\n"
+            "• Monitor in darkened work environment (md) — for retouching in "
+            "a dim or blacked-out room.\n\n"
+            "• Practical / Critical reflection print viewing (pe / pc) — pick "
+            "these if your source is itself a print being reproduced, not a "
+            "monitor image.\n\n"
+            "• Photo CD viewing booth (pcd), Original scene (ob), Projector "
+            "(jm / jd), Transparencies on a light box (cx) — for the specific "
+            "non-monitor source types each name describes.\n\n"
+            "If you're not sure, \"Monitor in typical work environment (mt)\" "
+            "is the right pick for almost all photographic profiling workflows.",
+            grp,
+            min_width=560,
+        ))
+        g.addLayout(src_vc_row)
+
+        dst_vc_row = QHBoxLayout()
+        dst_vc_row.addWidget(QLabel("Destination viewing (-d):", grp))
+        self._m_dst_viewing_combo = NoScrollComboBox(grp)
+        for label, val in _VIEWING_CONDITIONS:
+            self._m_dst_viewing_combo.addItem(label, val)
+        self._m_dst_viewing_combo.setObjectName("compact_input")
+        self._m_dst_viewing_combo.style().unpolish(self._m_dst_viewing_combo)
+        self._m_dst_viewing_combo.style().polish(self._m_dst_viewing_combo)
+        dst_vc_row.addWidget(self._m_dst_viewing_combo, stretch=1)
+        dst_vc_row.addWidget(TooltipButton(
+            "Destination Viewing Conditions (-d)",
+            "Describes the lighting environment that the PRINTED output will "
+            "be viewed in. Colprof uses this together with the source viewing "
+            "condition above to do a CIECAM02 colour-appearance calculation "
+            "when it builds the perceptual (and saturation) gamut-mapping "
+            "tables — so that the print looks correct to a viewer in that "
+            "specific lighting.\n\n"
+            "Important: this setting ONLY does anything when you've also set a "
+            "Gamut Source profile (the -s or -S row above). Without a gamut "
+            "source there is no gamut mapping, so there is nothing for these "
+            "viewing conditions to influence.\n\n"
+            "Which one to pick:\n\n"
+            "• Practical reflection print, typical office (pp) — the default "
+            "for everyday photographic prints viewed on a wall, on a desk, or "
+            "in mixed office lighting. Pick this unless you have a specific "
+            "viewing setup in mind.\n\n"
+            "• Critical reflection print viewing (pc) — for fine-art or "
+            "contract-proof prints viewed in a colour-managed booth (e.g. a "
+            "D50 light box). Tighter assumptions than pp; not the right choice "
+            "if the print will live in normal room light.\n\n"
+            "• Practical reflection print viewing (pe) — between pp and pc; "
+            "for prints viewed in a reasonably controlled but not booth-grade "
+            "environment.\n\n"
+            "• Projector in dim / dark environment (jm / jd) — if the "
+            "\"print\" is actually a projection.\n\n"
+            "• Other entries (mt / mb / md, pcd, ob, cx) — for the specific "
+            "non-print destination types each name describes.\n\n"
+            "If you're not sure, \"Practical reflection print, typical office "
+            "(pp)\" is the right pick for almost all photographic printing.",
+            grp,
+            min_width=560,
+        ))
+        g.addLayout(dst_vc_row)
+
         # Media Surface
         m_surf_row = QHBoxLayout()
         m_surf_row.addWidget(QLabel("Media Surface (-Z m):", grp))
@@ -2066,26 +2196,47 @@ class TabProfile(QWidget):
         mode_row.addWidget(self._m_gam_mode_combo, stretch=1)
         mode_row.addWidget(TooltipButton(
             "Gamut Source (-s / -S)",
-            "When printing, colours that fall outside your printer's range must be\n"
-            "compressed to fit. This setting tells ChromIQ which colour space your\n"
-            "images live in, so the compression is tuned to that space and looks\n"
-            "natural in prints.\n\n"
-            "None — colprof uses a large internal default. Works, but the perceptual\n"
-            "intent is not optimised for any real working space.\n\n"
-            "Perceptual only (-s) — applies the source gamut to the perceptual\n"
+            "When printing, colours that fall outside your printer's range must "
+            "be compressed to fit. This setting tells ChromIQ which colour "
+            "space your images live in, so the compression is tuned to that "
+            "space and looks natural in prints.\n\n"
+            "None — colprof uses a large internal default. Works, but the "
+            "perceptual intent is not optimised for any real working space.\n\n"
+            "Perceptual only (-s) — applies the source gamut to the perceptual "
             "rendering intent only.\n\n"
-            "Perceptual + Saturation (-S, recommended) — applies it to both intents.\n"
-            "Use this unless you have a specific reason to treat them differently.\n\n"
-            "Leave set to 'Perc+Sat' and sRGB unless you edit your images in\n"
-            "AdobeRGB, in which case browse to AdobeRGB.icm in the Argyll ref folder.",
+            "Perceptual + Saturation (-S, recommended) — applies it to both "
+            "intents. Use this unless you have a specific reason to treat them "
+            "differently.\n\n"
+            "Which source profile to point at:\n\n"
+            "• ClayRGB1998.icm (the new default) — this is Argyll's bit-for-bit "
+            "AdobeRGB 1998 equivalent. The rename is a trademark workaround; "
+            "Adobe doesn't license the \"AdobeRGB1998.icc\" name for "
+            "redistribution, so Argyll ships the same profile under a different "
+            "name. AdobeRGB is the right default for most photographic "
+            "workflows — Lightroom, Photoshop, Capture One, and most pro RAW "
+            "converters all default to AdobeRGB (or a wider space like "
+            "ProPhoto). An AdobeRGB source profile also handles sRGB-tagged "
+            "images correctly, since sRGB fits entirely inside AdobeRGB.\n\n"
+            "• sRGB.icm — pick this if your source images are sRGB-tagged "
+            "(web exports, smartphone JPEGs, most consumer images). It's a "
+            "smaller working space, so the perceptual mapping is slightly "
+            "tighter for sRGB sources than the AdobeRGB-sourced profile would "
+            "be.\n\n"
+            "• ProPhoto.icm or a wider space — only if you specifically edit "
+            "in ProPhoto. The wider the source space, the more compression "
+            "the perceptual intent has to do, which can desaturate colours "
+            "that would have printed fine.\n\n"
+            "Browse to the file in Argyll's ref folder, or use any standard "
+            "RGB working-space ICC profile you have installed.",
             grp,
+            min_width=560,
         ))
         g.addLayout(mode_row)
 
         path_row = QHBoxLayout()
         self._m_gam_path_edit = QLineEdit(grp)
         self._m_gam_path_edit.setPlaceholderText(
-            "Path to source RGB profile (e.g. sRGB.icm or AdobeRGB.icm from Argyll/ref/)"
+            "Path to source RGB profile (e.g. ClayRGB1998.icm or sRGB.icm from Argyll/ref/)"
         )
         self._m_gam_path_edit.setObjectName("compact_path")
         self._m_gam_path_browse = make_browse_button(grp, "Select gamut source profile",
@@ -2158,43 +2309,77 @@ class TabProfile(QWidget):
         ))
         g.addLayout(sat_intent_row)
 
-        flags_row = QHBoxLayout()
-        self._m_no_perc_gamut_cb = QCheckBox("Use colorimetric gamut — perceptual (-nP)", grp)
-        self._m_no_sat_gamut_cb  = QCheckBox("Use colorimetric gamut — saturation (-nS)", grp)
-        self._m_inv_gamut_cb     = QCheckBox("Inverse gamut mapping (-nI)", grp)
-        flags_row.addWidget(self._m_no_perc_gamut_cb)
-        flags_row.addWidget(TooltipButton(
-            "No Perceptual Gamut (-nP)",
-            "Normally, when a gamut source is set, ArgyllCMS uses it to shape the\n"
-            "perceptual rendering intent — compressing the source colour space to fit\n"
-            "the printer in a way that looks natural for images from that space.\n\n"
-            "This option disables that source gamut for the perceptual intent, making\n"
-            "it use only the printer's native colorimetric gamut boundaries instead.\n\n"
-            "Advanced diagnostic option — leave unchecked for normal profiling.",
+        colorimetric_row = QHBoxLayout()
+        colorimetric_row.addWidget(QLabel("Colorimetric gamut (-nP / -nS):", grp))
+        self._m_colorimetric_gamut_combo = NoScrollComboBox(grp)
+        for label, data in (
+            ("Gamut mapping for both perceptual and saturation (default)", (False, False)),
+            ("Colorimetric for perceptual, gamut mapping for saturation (-nP)", (True, False)),
+            ("Gamut mapping for perceptual, colorimetric for saturation (-nS)", (False, True)),
+            ("Colorimetric for both perceptual and saturation (-nP -nS)", (True, True)),
+        ):
+            self._m_colorimetric_gamut_combo.addItem(label, data)
+        self._m_colorimetric_gamut_combo.setObjectName("compact_input")
+        self._m_colorimetric_gamut_combo.style().unpolish(self._m_colorimetric_gamut_combo)
+        self._m_colorimetric_gamut_combo.style().polish(self._m_colorimetric_gamut_combo)
+        colorimetric_row.addWidget(self._m_colorimetric_gamut_combo, stretch=1)
+        colorimetric_row.addWidget(TooltipButton(
+            "Colorimetric Gamut for Perceptual / Saturation (-nP, -nS)",
+            "When you supply a Gamut Source profile (above), colprof normally uses "
+            "it to compress the source colour space into your printer's gamut in a "
+            "perceptually pleasing way. This produces the perceptual rendering "
+            "intent (used for photographs) and, if you chose the -S source, the "
+            "saturation intent too.\n\n"
+            "This setting lets you turn that gamut compression OFF for either or "
+            "both of those intents. When it's off, the intent in question just "
+            "uses straight colorimetric mapping (clipping out-of-gamut colours to "
+            "the nearest in-gamut colour) instead of the perceptual remap.\n\n"
+            "The four options:\n\n"
+            "• Default — gamut mapping is used for both intents. This is what "
+            "almost every printer profile should use. Pick this unless you have a "
+            "specific reason not to.\n\n"
+            "• -nP only — perceptual intent uses colorimetric (no remap); "
+            "saturation intent still uses gamut mapping. Useful if perceptual "
+            "renderings are coming out too dull or shifted and you'd rather see "
+            "hard clipping than the gamut-mapped compromise.\n\n"
+            "• -nS only — saturation intent uses colorimetric; perceptual still "
+            "uses gamut mapping. Rare. Mostly useful for diagnosing whether the "
+            "saturation table is the cause of an artefact.\n\n"
+            "• -nP -nS — both intents use colorimetric, no gamut remap anywhere. "
+            "Effectively disables perceptual/saturation rendering — the profile "
+            "behaves the same for every intent. Diagnostic only.\n\n"
+            "If you didn't set a Gamut Source above, this setting has no effect "
+            "(there is no gamut mapping to disable).",
             grp,
-            min_width=480,
+            min_width=580,
         ))
-        flags_row.addSpacing(12)
-        flags_row.addWidget(self._m_no_sat_gamut_cb)
-        flags_row.addWidget(TooltipButton(
-            "No Saturation Gamut (-nS)",
-            "Same as No Perceptual Gamut above, but applies to the saturation rendering\n"
-            "intent. Disables the gamut source for the saturation intent, forcing it to\n"
-            "use the printer's own colorimetric gamut boundaries.\n\n"
-            "Advanced diagnostic option — leave unchecked for normal profiling.",
-            grp,
-            min_width=460,
-        ))
-        flags_row.addSpacing(12)
-        flags_row.addWidget(self._m_inv_gamut_cb)
-        flags_row.addWidget(TooltipButton(
+        g.addLayout(colorimetric_row)
+
+        inv_row = QHBoxLayout()
+        self._m_inv_gamut_cb = QCheckBox("Inverse gamut mapping (-nI)", grp)
+        inv_row.addWidget(self._m_inv_gamut_cb)
+        inv_row.addWidget(TooltipButton(
             "Inverse Gamut Mapping (-nI)",
-            "Applies gamut mapping in reverse on the A→B tables.\n"
-            "Highly experimental — only use if you know exactly what this does.",
+            "The B2A tables in an ICC profile go from the Profile Connection "
+            "Space (PCS) back into device values — they tell an application "
+            "\"to print this CIELAB colour, send these RGB numbers to the "
+            "printer.\" colprof normally builds those B2A tables by inverting "
+            "the forward (A2B) gamut mapping, so that round-tripping a colour "
+            "through A2B then B2A lands you back where you started.\n\n"
+            "This option disables that inversion. The B2A tables are built "
+            "directly from the device-to-PCS measurements without the matching "
+            "inverse gamut mapping, so a colour pushed through A2B and then "
+            "B2A may no longer round-trip cleanly.\n\n"
+            "This is an experimental diagnostic flag from the ArgyllCMS "
+            "developer toolkit. There is no normal printing workflow where "
+            "enabling it improves the profile. Leave it unchecked unless you "
+            "are specifically investigating B2A inversion behaviour and "
+            "understand what changes it produces.",
             grp,
+            min_width=540,
         ))
-        flags_row.addStretch()
-        g.addLayout(flags_row)
+        inv_row.addStretch()
+        g.addLayout(inv_row)
 
         layout.addWidget(grp)
 
@@ -2589,26 +2774,47 @@ class TabProfile(QWidget):
         mode_row.addWidget(self._gam_mode_combo, stretch=1)
         mode_row.addWidget(TooltipButton(
             "Gamut Source (-s / -S)",
-            "When printing, colours that fall outside your printer's range must be\n"
-            "compressed to fit. This setting tells ChromIQ which colour space your\n"
-            "images live in, so the compression is tuned to that space and looks\n"
-            "natural in prints.\n\n"
-            "None — colprof uses a large internal default. Works, but the perceptual\n"
-            "intent is not optimised for any real working space.\n\n"
-            "Perceptual only (-s) — applies the source gamut to the perceptual\n"
+            "When printing, colours that fall outside your printer's range must "
+            "be compressed to fit. This setting tells ChromIQ which colour "
+            "space your images live in, so the compression is tuned to that "
+            "space and looks natural in prints.\n\n"
+            "None — colprof uses a large internal default. Works, but the "
+            "perceptual intent is not optimised for any real working space.\n\n"
+            "Perceptual only (-s) — applies the source gamut to the perceptual "
             "rendering intent only.\n\n"
-            "Perceptual + Saturation (-S, recommended) — applies it to both intents.\n"
-            "Use this unless you have a specific reason to treat them differently.\n\n"
-            "Leave set to 'Perc+Sat' and sRGB unless you edit your images in\n"
-            "AdobeRGB, in which case browse to AdobeRGB.icm in the Argyll ref folder.",
+            "Perceptual + Saturation (-S, recommended) — applies it to both "
+            "intents. Use this unless you have a specific reason to treat them "
+            "differently.\n\n"
+            "Which source profile to point at:\n\n"
+            "• ClayRGB1998.icm (the new default) — this is Argyll's bit-for-bit "
+            "AdobeRGB 1998 equivalent. The rename is a trademark workaround; "
+            "Adobe doesn't license the \"AdobeRGB1998.icc\" name for "
+            "redistribution, so Argyll ships the same profile under a different "
+            "name. AdobeRGB is the right default for most photographic "
+            "workflows — Lightroom, Photoshop, Capture One, and most pro RAW "
+            "converters all default to AdobeRGB (or a wider space like "
+            "ProPhoto). An AdobeRGB source profile also handles sRGB-tagged "
+            "images correctly, since sRGB fits entirely inside AdobeRGB.\n\n"
+            "• sRGB.icm — pick this if your source images are sRGB-tagged "
+            "(web exports, smartphone JPEGs, most consumer images). It's a "
+            "smaller working space, so the perceptual mapping is slightly "
+            "tighter for sRGB sources than the AdobeRGB-sourced profile would "
+            "be.\n\n"
+            "• ProPhoto.icm or a wider space — only if you specifically edit "
+            "in ProPhoto. The wider the source space, the more compression "
+            "the perceptual intent has to do, which can desaturate colours "
+            "that would have printed fine.\n\n"
+            "Browse to the file in Argyll's ref folder, or use any standard "
+            "RGB working-space ICC profile you have installed.",
             grp,
+            min_width=560,
         ))
         g.addLayout(mode_row)
 
         path_row = QHBoxLayout()
         self._gam_path_edit = QLineEdit(grp)
         self._gam_path_edit.setPlaceholderText(
-            "Path to source RGB profile (e.g. sRGB.icm or AdobeRGB.icm from Argyll/ref/)"
+            "Path to source RGB profile (e.g. ClayRGB1998.icm or sRGB.icm from Argyll/ref/)"
         )
         self._gam_path_browse = make_browse_button(grp, "Select gamut source profile", icon="folder_build")
         self._gam_path_browse.clicked.connect(self._browse_gam)
@@ -2841,14 +3047,19 @@ class TabProfile(QWidget):
     # ------------------------------------------------------------------
 
     def _default_gamut_src(self) -> str:
-        """Prefer Argyll's ref/sRGB.icm if present; fall back to ChromIQ's bundled copy."""
+        """Prefer Argyll's ref/ClayRGB1998.icm (Argyll's AdobeRGB 1998 equivalent,
+        renamed for trademark reasons); fall back to ref/sRGB.icm, then ChromIQ's
+        bundled copies."""
         bin_path = self._settings.get("argyll_bin_path", "/Applications/Argyll/bin")
-        candidate = Path(bin_path).parent / "ref" / "sRGB.icm"
-        if candidate.exists():
-            return str(candidate)
-        bundled = resource_path("assets/profiles/sRGB.icm")
-        if Path(bundled).exists():
-            return str(bundled)
+        ref_dir  = Path(bin_path).parent / "ref"
+        for name in ("ClayRGB1998.icm", "sRGB.icm"):
+            candidate = ref_dir / name
+            if candidate.exists():
+                return str(candidate)
+        for bundled_name in ("ClayRGB1998.icm", "sRGB.icm"):
+            bundled = resource_path(f"assets/profiles/{bundled_name}")
+            if Path(bundled).exists():
+                return str(bundled)
         return ""
 
     def _validate_gamut_source(self, params: "ProfileParams") -> bool:
@@ -3213,13 +3424,15 @@ class TabProfile(QWidget):
             observer         = self._m_obs_combo.currentData() or "",
             fwa_enabled      = self._m_fwa_check.isChecked(),
             fwa_illum        = (self._m_fwa_illum_combo.currentData() or "") if self._m_fwa_check.isChecked() else "",
+            src_viewing_cond = self._m_src_viewing_combo.currentData() or "",
+            dst_viewing_cond = self._m_dst_viewing_combo.currentData() or "",
             z_surface        = self._m_z_surface_combo.currentData() or "",
             z_media_type     = self._m_z_media_type_combo.currentData() or "",
             z_polarity       = self._m_z_polarity_combo.currentData() or "",
             z_color_mode     = self._m_z_color_mode_combo.currentData() or "",
             z_default_intent = self._m_z_intent_combo.currentData() or "",
-            no_perc_gamut    = self._m_no_perc_gamut_cb.isChecked(),
-            no_sat_gamut     = self._m_no_sat_gamut_cb.isChecked(),
+            no_perc_gamut    = self._m_colorimetric_combo_values()[0],
+            no_sat_gamut     = self._m_colorimetric_combo_values()[1],
             inv_gamut_map    = self._m_inv_gamut_cb.isChecked(),
             perc_intent      = (self._m_perc_intent_combo.currentData() or "") if self._m_perc_intent_check.isChecked() else "",
             sat_intent       = (self._m_sat_intent_combo.currentData() or "") if self._m_sat_intent_check.isChecked() else "",
@@ -3276,6 +3489,8 @@ class TabProfile(QWidget):
             s.set("manual2_colprof_observer",           self._m_obs_combo.currentData() or "")
             s.set("manual2_colprof_fwa_enabled",        self._m_fwa_check.isChecked())
             s.set("manual2_colprof_fwa_illum",          self._m_fwa_illum_combo.currentData() or "")
+            s.set("manual2_colprof_src_viewing",        self._m_src_viewing_combo.currentData() or "")
+            s.set("manual2_colprof_dst_viewing",        self._m_dst_viewing_combo.currentData() or "")
             s.set("manual2_colprof_z_surface",          self._m_z_surface_combo.currentData() or "")
             s.set("manual2_colprof_z_media_type",       self._m_z_media_type_combo.currentData() or "")
             s.set("manual2_colprof_z_polarity",         self._m_z_polarity_combo.currentData() or "")
@@ -3287,8 +3502,8 @@ class TabProfile(QWidget):
             s.set("manual2_colprof_perc_intent",        self._m_perc_intent_combo.currentData() or "")
             s.set("manual2_colprof_sat_intent_enabled", self._m_sat_intent_check.isChecked())
             s.set("manual2_colprof_sat_intent",         self._m_sat_intent_combo.currentData() or "")
-            s.set("manual2_colprof_no_perc_gamut",      self._m_no_perc_gamut_cb.isChecked())
-            s.set("manual2_colprof_no_sat_gamut",       self._m_no_sat_gamut_cb.isChecked())
+            s.set("manual2_colprof_no_perc_gamut",      self._m_colorimetric_combo_values()[0])
+            s.set("manual2_colprof_no_sat_gamut",       self._m_colorimetric_combo_values()[1])
             s.set("manual2_colprof_inv_gamut",          self._m_inv_gamut_cb.isChecked())
             s.set("manual2_colprof_mfr_enabled",        self._m_mfr_check.isChecked())
             s.set("manual2_colprof_mfr",                self._m_mfr_edit.text().strip())
@@ -3370,6 +3585,8 @@ class TabProfile(QWidget):
         _set_m_combo(self._m_obs_combo,           "manual2_colprof_observer",   "")
         self._m_fwa_check.setChecked(bool(s.get("manual2_colprof_fwa_enabled", False)))
         _set_m_combo(self._m_fwa_illum_combo,     "manual2_colprof_fwa_illum",  "")
+        _set_m_combo(self._m_src_viewing_combo,   "manual2_colprof_src_viewing", "")
+        _set_m_combo(self._m_dst_viewing_combo,   "manual2_colprof_dst_viewing", "")
         _set_m_combo(self._m_z_surface_combo,    "manual2_colprof_z_surface",    "")
         _set_m_combo(self._m_z_media_type_combo, "manual2_colprof_z_media_type", "")
         _set_m_combo(self._m_z_polarity_combo,   "manual2_colprof_z_polarity",   "")
@@ -3386,8 +3603,10 @@ class TabProfile(QWidget):
         _set_m_combo(self._m_perc_intent_combo,  "manual2_colprof_perc_intent", "")
         self._m_sat_intent_check.setChecked(bool(s.get("manual2_colprof_sat_intent_enabled", False)))
         _set_m_combo(self._m_sat_intent_combo,   "manual2_colprof_sat_intent",  "")
-        self._m_no_perc_gamut_cb.setChecked(bool(s.get("manual2_colprof_no_perc_gamut", False)))
-        self._m_no_sat_gamut_cb.setChecked(bool(s.get("manual2_colprof_no_sat_gamut",   False)))
+        self._m_set_colorimetric_combo(
+            s.get("manual2_colprof_no_perc_gamut", False),
+            s.get("manual2_colprof_no_sat_gamut",  False),
+        )
         self._m_inv_gamut_cb.setChecked(bool(s.get("manual2_colprof_inv_gamut",         False)))
         self._m_mfr_check.setChecked(bool(s.get("manual2_colprof_mfr_enabled",   False)))
         self._m_mfr_edit.setText(s.get("manual2_colprof_mfr", ""))
