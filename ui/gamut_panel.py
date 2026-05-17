@@ -49,6 +49,7 @@ class GamutPanel(QWidget):
         super().__init__(parent)
         self._runner   = runner
         self._settings = settings
+        self._mode: str = "dark"
 
         # Workflow objects
         self._viewer         = GamutViewer(runner, self)
@@ -74,6 +75,63 @@ class GamutPanel(QWidget):
 
         self._build_ui()
         self._load_defaults()
+
+    # ------------------------------------------------------------------
+    def set_appearance(self, mode: str) -> None:
+        """Switch viewer + header colors between dark and light themes."""
+        new_mode = "light" if mode == "light" else "dark"
+        if new_mode == self._mode:
+            return
+        self._mode = new_mode
+        self._apply_mode_styles()
+
+    def _apply_mode_styles(self) -> None:
+        if self._mode == "light":
+            frame_bg     = "#efebe6"
+            frame_border = "#d0ccc6"
+            hdr_color    = "#7a7570"
+            profile_color = "#7a7570"
+            placeholder_text = "#7a7570"
+        else:
+            frame_bg     = "#111111"
+            frame_border = "#333"
+            hdr_color    = TEXT_DIM
+            profile_color = "#b8b8b8"
+            placeholder_text = TEXT_DIM
+
+        viewer_frame = self.findChild(QWidget, "gamutViewerFrame")
+        if viewer_frame is not None:
+            viewer_frame.setStyleSheet(
+                "QWidget#gamutViewerFrame {"
+                f" background: {frame_bg};"
+                f" border: 1px solid {frame_border};"
+                " border-left: none;"
+                "}"
+            )
+        if getattr(self, "_web_view", None) is not None:
+            self._web_view.page().setBackgroundColor(QColor(frame_bg))
+            # Refresh whichever HTML is loaded so the in-page bg matches.
+            current_html = (
+                self._combined_html if self._view_combined_btn.isChecked()
+                else self._primary_html if self._view_primary_btn.isChecked()
+                else self._compare_html if self._view_compare_btn.isChecked()
+                else None
+            )
+            if current_html:
+                self._load_html(current_html)
+            else:
+                self._show_placeholder()
+        self._hdr_lbl.setStyleSheet(
+            f"color: {hdr_color}; background: transparent; padding: 4px;"
+            " font-family: Menlo, Consolas, 'Courier New', monospace;"
+            " font-size: 9px; font-weight: 300;"
+        )
+        self._profile_lbl.setStyleSheet(
+            f"color: {profile_color}; background: transparent; padding: 0 8px 0 8px;"
+            " font-family: Menlo, Consolas, 'Courier New', monospace;"
+            " font-size: 11px;"
+        )
+        self._placeholder_text_color = placeholder_text
 
     # ------------------------------------------------------------------
     # Public API
@@ -535,6 +593,8 @@ class GamutPanel(QWidget):
         # three bordered sides (top/right/bottom).
         container = QWidget(self)
         container.setObjectName("gamutViewerFrame")
+        # Initial dark styling — _apply_mode_styles() rewrites this when
+        # the theme is light. Kept here so the very first paint isn't bare.
         container.setStyleSheet(
             "QWidget#gamutViewerFrame {"
             " background: #111111;"
@@ -583,10 +643,13 @@ class GamutPanel(QWidget):
     def _show_placeholder(self) -> None:
         if self._web_view is None:
             return
+        bg = "#efebe6" if self._mode == "light" else "#111111"
+        fg = getattr(self, "_placeholder_text_color",
+                     "#7a7570" if self._mode == "light" else TEXT_DIM)
         html = (
-            "<html><body style='background:#111111; margin:0; display:flex;"
+            f"<html><body style='background:{bg}; margin:0; display:flex;"
             " align-items:center; justify-content:center; height:100vh;'>"
-            f"<p style='color:{TEXT_DIM}; font-family:monospace; font-size:12px;"
+            f"<p style='color:{fg}; font-family:monospace; font-size:12px;"
             " text-align:center;'>Run gamut analysis<br>to view the 3D gamut</p>"
             "</body></html>"
         )

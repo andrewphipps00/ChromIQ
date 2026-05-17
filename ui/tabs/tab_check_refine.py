@@ -290,9 +290,9 @@ class TabCheckRefine(QWidget):
 
         # Nervous block — guided mode only, sits directly above buttons
         nervous_box = QGroupBox(self)
+        # Only override layout; let border + radius come from the global theme.
         nervous_box.setStyleSheet(
-            "QGroupBox { margin-top: 0px; padding: 14px 8px 12px 8px;"
-            " border: 1px solid #333333; border-radius: 4px; }"
+            "QGroupBox { margin-top: 0px; padding: 14px 8px 12px 8px; }"
         )
         nervous_layout = QVBoxLayout(nervous_box)
         nervous_layout.setContentsMargins(0, 0, 0, 0)
@@ -304,7 +304,7 @@ class TabCheckRefine(QWidget):
         headline.setTextFormat(Qt.TextFormat.RichText)
         headline.setAlignment(Qt.AlignmentFlag.AlignCenter)
         headline.setStyleSheet(
-            "color: #ffffff; background: transparent;"
+            "background: transparent;"
             " font-family: Georgia; font-size: 28px;"
         )
         nervous_layout.addWidget(headline)

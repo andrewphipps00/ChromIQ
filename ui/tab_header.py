@@ -57,8 +57,10 @@ class TabHeader(QWidget):
         title_row.setSpacing(10)
 
         self._title_lbl = QLabel(title_text, self)
+        # No color rule — inherit from active theme (LM_TEXT_MAIN in light,
+        # TEXT_MAIN in dark) so the title stays legible on either bg.
         self._title_lbl.setStyleSheet(
-            "color: #ffffff; background: transparent;"
+            "background: transparent;"
             " font-family: Georgia; font-size: 30px;"
         )
         title_font = QFont()

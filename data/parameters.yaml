@@ -744,7 +744,7 @@ parameters:
         Lower = stricter. A strict setting catches real problems early:
         clogged inkjet nozzles, low ink, dirty drum rollers, drifting
         laser toner. On a healthy printer + spectrophotometer combination
-        the default of 0.5 leaves comfortable headroom; experienced users
+        the default of 0.7 leaves comfortable headroom; experienced users
         on printerknowledge.com run 0.4 with i1 Pro 2 / 3.
 
         Raise to 0.8–1.5 if you get false "inconsistent patch" errors on

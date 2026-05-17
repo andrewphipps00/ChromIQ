@@ -74,7 +74,7 @@ APP_STYLESHEET = f"""
 QWidget {{
     background: {BG_PANEL};
     color: {TEXT_MAIN};
-    font-family: "Inter", system-ui, -apple-system, sans-serif;
+    font-family: "Inter";
     font-size: 13px;
 }}
 QMainWindow, QDialog {{

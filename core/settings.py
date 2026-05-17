@@ -42,7 +42,7 @@ DEFAULTS: dict[str, Any] = {
     "measure_suppress_warnings":   True,
     "measure_extra_args":          "",
     "measure_tolerance_enabled":           True,
-    "measure_tolerance_value":             0.5,
+    "measure_tolerance_value":             0.7,
     "manual2_chartread_tolerance_enabled": True,
     # Step 4 — profile
     "colprof_algorithm":         "l",
@@ -82,6 +82,7 @@ DEFAULTS: dict[str, Any] = {
     "active_tab":                0,
     "restore_last_tab":          True,
     "restore_last_session":      False,
+    "appearance":                "auto",   # "light" | "dark" | "auto"
     # Session restore paths (only used when restore_last_session is True)
     "session_target_name":       "",
     "session_ti1_path":          "",

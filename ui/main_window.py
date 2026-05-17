@@ -41,6 +41,7 @@ class MainWindow(QMainWindow):
 
         self.setWindowTitle("ChromIQ — Printer Profiling")
         self.setMinimumSize(900, 650)
+        self._title_bar_mode: str = "dark"
         screen = QApplication.primaryScreen().availableGeometry()
         w = min(1440, screen.width())
         h = min(1025, screen.height())
@@ -152,7 +153,7 @@ class MainWindow(QMainWindow):
 
         self._check_argyll_binaries(initial=True)
         self._startup_update_checker: UpdateChecker | None = None
-        QTimer.singleShot(0, self._apply_dark_title_bar)
+        QTimer.singleShot(0, lambda: self._apply_title_bar(self._title_bar_mode))
         QTimer.singleShot(0, self._apply_calibration_mode)
         QTimer.singleShot(3000, self._check_for_updates_on_startup)
         log.info("MainWindow initialised")
@@ -184,12 +185,45 @@ class MainWindow(QMainWindow):
 
 
         tab_w = self._tabs.widget(index)
+        is_light = getattr(self, "_title_bar_mode", "dark") == "light"
+
+        if is_light:
+            # Light theme — keep the colored chip readable on a light bg.
+            mode_inactive_bg     = "#eeeae5"
+            mode_inactive_border = "#ccc9c3"
+            mode_inactive_text   = "#989490"
+            mode_hover_bg        = "#e4e0da"
+            mode_hover_border    = "#b0aba4"
+            mode_hover_text      = "#22211f"
+            primary_text         = "#ffffff"
+            primary_disabled_bg  = "#e8e6e1"
+            primary_disabled_fg  = "#a8a4a0"
+            pane_bg              = "#ffffff"
+            # Keep the big "Calculated Patches" number dark in light mode —
+            # don't tint it with the tab's spectrum color, the user spec calls
+            # for a single dark color regardless of which tab is active.
+            patch_count_color    = "#22211f"
+            log_color            = color
+        else:
+            mode_inactive_bg     = "#2a2a2a"
+            mode_inactive_border = "#4a4a4a"
+            mode_inactive_text   = "#909090"
+            mode_hover_bg        = "#383838"
+            mode_hover_border    = "#5a5a5a"
+            mode_hover_text      = "#e6e6e6"
+            primary_text         = "#0a0a0a"
+            primary_disabled_bg  = "#1e1e1e"
+            primary_disabled_fg  = "#484848"
+            pane_bg              = "#181818"
+            patch_count_color    = color
+            log_color            = color
+
         if tab_w:
             tab_w.setStyleSheet(f"""
                 QPushButton#primary {{
                     background: {color};
                     border: 1px solid {color};
-                    color: #0a0a0a;
+                    color: {primary_text};
                     font-weight: 700;
                 }}
                 QPushButton#primary:hover {{
@@ -197,9 +231,9 @@ class MainWindow(QMainWindow):
                     border-color: {color_hover};
                 }}
                 QPushButton#primary:disabled {{
-                    background: #1e1e1e;
+                    background: {primary_disabled_bg};
                     border: 1px solid {color};
-                    color: #484848;
+                    color: {primary_disabled_fg};
                 }}
                 QCheckBox::indicator:checked {{
                     background: {color};
@@ -217,32 +251,35 @@ class MainWindow(QMainWindow):
                     border-color: {color};
                 }}
                 QLabel#patch_count {{
-                    color: {color};
+                    color: {patch_count_color};
                 }}
                 QLabel#info {{
                     color: {color};
                     border-color: {color};
                 }}
+                QLabel#warning {{
+                    border-color: {color};
+                }}
                 QPlainTextEdit#log {{
-                    color: {color};
+                    color: {log_color};
                 }}
                 QPushButton#mode_btn {{
-                    background: #2a2a2a;
-                    border: 1px solid #4a4a4a;
-                    color: #909090;
+                    background: {mode_inactive_bg};
+                    border: 1px solid {mode_inactive_border};
+                    color: {mode_inactive_text};
                     font-size: 13px;
                     font-weight: 700;
                     padding: 6px 22px;
                 }}
                 QPushButton#mode_btn:hover {{
-                    background: #383838;
-                    border-color: #5a5a5a;
-                    color: #e6e6e6;
+                    background: {mode_hover_bg};
+                    border-color: {mode_hover_border};
+                    color: {mode_hover_text};
                 }}
                 QPushButton#mode_btn:checked {{
                     background: {color};
                     border: 1px solid {color};
-                    color: #0a0a0a;
+                    color: {primary_text};
                     font-size: 13px;
                     font-weight: 700;
                     padding: 6px 22px;
@@ -250,7 +287,7 @@ class MainWindow(QMainWindow):
                 QPushButton#mode_btn:checked:hover {{
                     background: {color_hover};
                     border-color: {color_hover};
-                    color: #0a0a0a;
+                    color: {primary_text};
                 }}
             """)
 
@@ -258,7 +295,7 @@ class MainWindow(QMainWindow):
             QTabWidget::pane {{
                 border: none;
                 border-top: 1px solid {color_glow};
-                background: #181818;
+                background: {pane_bg};
             }}
         """)
 
@@ -470,11 +507,34 @@ class MainWindow(QMainWindow):
     # Window events
     # ------------------------------------------------------------------
 
-    def _apply_dark_title_bar(self) -> None:
-        """Force the macOS title bar to use dark (black) appearance."""
+    def apply_theme(self, mode: str) -> None:
+        """Sync widgets that aren't covered by the global QSS (masthead, title bar,
+        TIFF preview, gamut viewer) and re-run the per-tab QSS injector so its
+        hardcoded mode-button / primary-button colors match the new theme."""
+        self._title_bar_mode = mode
+        if hasattr(self._masthead, "set_appearance"):
+            self._masthead.set_appearance(mode)
+        self._apply_title_bar(mode)
+        # Broadcast to any descendant widget that opts in via set_appearance().
+        # Used by TiffPreview and GamutPanel to swap their non-QSS bg colors.
+        for w in self.findChildren(QWidget):
+            fn = getattr(w, "set_appearance", None)
+            if callable(fn) and w is not self._masthead:
+                try:
+                    fn(mode)
+                except Exception:
+                    pass
+        # Re-run the per-tab QSS injector — its mode_btn / primary colors are
+        # baked in per-mode, so a theme switch needs to regenerate them.
+        if hasattr(self, "_tabs"):
+            self._on_tab_changed(self._tabs.currentIndex())
+
+    def _apply_title_bar(self, mode: str) -> None:
+        """Set the macOS native title bar appearance to match `mode`."""
         import sys
         if sys.platform != "darwin":
             return
+        ns_name = b"NSAppearanceNameAqua" if mode == "light" else b"NSAppearanceNameDarkAqua"
         try:
             import ctypes, ctypes.util
             objc = ctypes.cdll.LoadLibrary(ctypes.util.find_library("objc"))
@@ -495,14 +555,14 @@ class MainWindow(QMainWindow):
                 )
                 return objc.objc_msgSend(obj, _S(sel), *args)
 
-            dark_str = _msg(
+            name_str = _msg(
                 _C("NSString"), "stringWithUTF8String:",
-                b"NSAppearanceNameDarkAqua",
+                ns_name,
                 argtypes=[ctypes.c_char_p],
             )
             appearance = _msg(
                 _C("NSAppearance"), "appearanceNamed:",
-                ctypes.c_void_p(dark_str),
+                ctypes.c_void_p(name_str),
             )
             ns_view   = ctypes.c_void_p(int(self.winId()))
             ns_window = _msg(ns_view, "window")

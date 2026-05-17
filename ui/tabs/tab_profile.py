@@ -268,9 +268,9 @@ class TabProfile(QWidget):
         cc.addWidget(self._stack, stretch=1)
 
         build_box = QGroupBox(colprof_container)
+        # Only override layout; let border + radius come from the global theme.
         build_box.setStyleSheet(
-            "QGroupBox { margin-top: 0px; padding: 14px 8px 12px 8px;"
-            " border: 1px solid #333333; border-radius: 4px; }"
+            "QGroupBox { margin-top: 0px; padding: 14px 8px 12px 8px; }"
         )
         build_layout = QVBoxLayout(build_box)
         build_layout.setContentsMargins(0, 0, 0, 0)
@@ -282,7 +282,7 @@ class TabProfile(QWidget):
         self._build_headline.setTextFormat(Qt.TextFormat.RichText)
         self._build_headline.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._build_headline.setStyleSheet(
-            "color: #ffffff; background: transparent;"
+            "background: transparent;"
             " font-family: Georgia; font-size: 28px;"
         )
         build_layout.addWidget(self._build_headline)

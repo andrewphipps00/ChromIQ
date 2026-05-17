@@ -23,12 +23,30 @@ _STOPS = (
     "#9f82ff",  # Check & Refine
 )
 
-_BG         = "#0a0a0a"
-_VER_BG     = "#070707"
-_VER_FG     = "#6a6a6a"
-_TAG_FG     = "#4a4a4a"
-_WHITE      = "#ffffff"
-_ACCENT     = "#ff4573"  # tab-1 tint for "IQ"
+_ACCENT     = "#ff4573"  # tab-1 tint for "IQ" — unchanged in both modes
+
+# Per-mode palettes. Dark values are historical; light values per the
+# light-mode v2 handoff design.
+_PALETTE_DARK = {
+    "bg":             "#0a0a0a",
+    "ver_bg":         "#070707",
+    "ver_fg":         "#6a6a6a",
+    "tag_fg":         "#4a4a4a",
+    "wordmark":       "#ffffff",   # "Chrom"
+    "ver_separator":  "#000000",
+    "icon_track":     "#555555",   # programmatic fallback icon
+    "wordmark_dy":    0,           # vertical fine-tune for the wordmark baseline
+}
+_PALETTE_LIGHT = {
+    "bg":             "#f5f3ef",
+    "ver_bg":         "#eeebe5",
+    "ver_fg":         "#7a7570",
+    "tag_fg":         "#b8b4ae",
+    "wordmark":       "#1c1b18",
+    "ver_separator":  "#d8d4ce",
+    "icon_track":     "#c8c4be",
+    "wordmark_dy":    -5,          # nudge "ChromIQ" 5 px up in light mode
+}
 
 
 class MastheadHeader(QWidget):
@@ -47,6 +65,8 @@ class MastheadHeader(QWidget):
     ) -> None:
         super().__init__(parent)
         self._version = version
+        self._mode    = "dark"
+        self._palette = _PALETTE_DARK
         self.setFixedHeight(110)
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
         self.setAutoFillBackground(False)
@@ -58,6 +78,17 @@ class MastheadHeader(QWidget):
         self._btn.setFixedSize(QSize(44, 44))
         self._btn.clicked.connect(self.settings_clicked)
         self._load_settings_icon()
+
+    # ------------------------------------------------------------------
+    def set_appearance(self, mode: str) -> None:
+        """Switch between 'light' and 'dark' palettes and repaint."""
+        new_mode = "light" if mode == "light" else "dark"
+        if new_mode == self._mode:
+            return
+        self._mode = new_mode
+        self._palette = _PALETTE_LIGHT if new_mode == "light" else _PALETTE_DARK
+        self._load_settings_icon()
+        self.update()
 
     # ------------------------------------------------------------------
     def setVersion(self, v: str) -> None:
@@ -87,8 +118,10 @@ class MastheadHeader(QWidget):
         w = self.width()
         h = self.height()
 
+        pal = self._palette
+
         # Background
-        p.fillRect(self.rect(), QColor(_BG))
+        p.fillRect(self.rect(), QColor(pal["bg"]))
 
         # Spectrum stripe
         n = len(_STOPS)
@@ -99,8 +132,8 @@ class MastheadHeader(QWidget):
 
         # Version rail
         ver_y = h - self.VERSION_H
-        p.fillRect(0, ver_y, w, self.VERSION_H, QColor(_VER_BG))
-        p.setPen(QPen(QColor("#000000"), 1))
+        p.fillRect(0, ver_y, w, self.VERSION_H, QColor(pal["ver_bg"]))
+        p.setPen(QPen(QColor(pal["ver_separator"]), 1))
         p.drawLine(0, ver_y, w, ver_y)
 
         mono = QFont()
@@ -115,7 +148,7 @@ class MastheadHeader(QWidget):
             ver_text = f"v{self._version}"
             ver_tw = fm.horizontalAdvance(ver_text)
             base = int(ver_y + (self.VERSION_H + fm.ascent() - fm.descent()) / 2)
-            p.setPen(QColor(_VER_FG))
+            p.setPen(QColor(pal["ver_fg"]))
             p.drawText(int(w - ver_tw - 18), base, ver_text)
 
             # Left tag
@@ -123,7 +156,7 @@ class MastheadHeader(QWidget):
             tag_font.setPixelSize(9)
             tag_font.setLetterSpacing(QFont.SpacingType.PercentageSpacing, 148)
             p.setFont(tag_font)
-            p.setPen(QColor(_TAG_FG))
+            p.setPen(QColor(pal["tag_fg"]))
             p.drawText(18, base, "PRINTER PROFILING")
 
         # ---- Centred wordmark ----
@@ -150,10 +183,10 @@ class MastheadHeader(QWidget):
         total_w = chrom_w + iq_w - 1   # -1 optical kern
 
         x_start  = (w - total_w) / 2
-        baseline = body_cy + (fm_r.ascent() - fm_r.descent()) / 2 + 8
+        baseline = body_cy + (fm_r.ascent() - fm_r.descent()) / 2 + 8 + pal.get("wordmark_dy", 0)
 
         p.setFont(font_r)
-        p.setPen(QColor(_WHITE))
+        p.setPen(QColor(pal["wordmark"]))
         p.drawText(int(x_start), int(baseline), "Chrom")
 
         p.setFont(font_i)
@@ -164,9 +197,25 @@ class MastheadHeader(QWidget):
 
     # ------------------------------------------------------------------
     def _load_settings_icon(self) -> None:
-        """Load settings_v2.png if it exists, fall back to sliders drawn in code."""
-        px = QPixmap(str(resource_path("assets/settings_v2.png")))
-        if not px.isNull():
+        """Load the settings icon matching the current mode.
+
+        Order of preference:
+          1. mode-specific PNG asset (settings_v2_light.png in light mode)
+          2. default settings_v2.png (in dark mode, or as fallback)
+          3. programmatic sliders icon, tinted for the current mode
+        """
+        candidates: list[str] = []
+        if self._mode == "light":
+            candidates.append("assets/settings_v2_light.png")
+        candidates.append("assets/settings_v2.png")
+
+        for rel in candidates:
+            path = resource_path(rel)
+            if not path.exists():
+                continue
+            px = QPixmap(str(path))
+            if px.isNull():
+                continue
             dpr  = QGuiApplication.primaryScreen().devicePixelRatio()
             phys = round(26 * dpr)
             scaled = px.scaled(
@@ -177,10 +226,14 @@ class MastheadHeader(QWidget):
             scaled.setDevicePixelRatio(dpr)
             self._btn.setIcon(QIcon(scaled))
             self._btn.setIconSize(QSize(26, 26))
-        else:
-            # Fallback: draw sliders icon programmatically
-            self._btn.setIcon(self._draw_sliders_icon())
-            self._btn.setIconSize(QSize(26, 26))
+            # In light mode skip the dark-tuned PNG and fall through to the
+            # programmatic icon, which we can re-tint to match.
+            if self._mode == "light" and rel == "assets/settings_v2.png":
+                break
+            return
+
+        self._btn.setIcon(self._draw_sliders_icon())
+        self._btn.setIconSize(QSize(26, 26))
 
     def _draw_sliders_icon(self) -> QIcon:
         dpr  = QGuiApplication.primaryScreen().devicePixelRatio()
@@ -191,10 +244,11 @@ class MastheadHeader(QWidget):
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         track_cols = ["#ff4573", "#37bcd6", "#ffb42d"]
         knob_x     = [0.65, 0.30, 0.50]
+        track_color = self._palette["icon_track"]
         for i, (col, kx) in enumerate(zip(track_cols, knob_x)):
             y = int(phys * (0.28 + i * 0.22))
             # Track
-            p.setPen(QPen(QColor("#555555"), max(1, int(phys * 0.07)),
+            p.setPen(QPen(QColor(track_color), max(1, int(phys * 0.07)),
                           Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
             p.drawLine(int(phys * 0.12), y, int(phys * 0.88), y)
             # Knob

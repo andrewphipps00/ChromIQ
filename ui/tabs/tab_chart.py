@@ -451,13 +451,10 @@ class TabChart(QWidget):
 
         # Patch count display
         count_grp = QGroupBox("Calculated Patches", inner)
-        count_grp.setStyleSheet(
-            "QGroupBox { margin-top: 14px; padding-top: 0px;"
-            " border: 1px solid #333333; border-radius: 4px; }"
-            "QGroupBox::title { subcontrol-origin: margin; left: 10px; top: 2px;"
-            " color: #8a8a8a; font-size: 11px; text-transform: uppercase;"
-            " letter-spacing: 1px; }"
-        )
+        # Only override what differs from the global QGroupBox QSS (zero top-padding
+        # so the big number sits tight under the title). Border + title color come
+        # from the active theme.
+        count_grp.setStyleSheet("QGroupBox { padding-top: 0px; }")
         count_layout = QVBoxLayout(count_grp)
         count_layout.setContentsMargins(8, 0, 8, 12)
         count_layout.setSpacing(4)
@@ -466,7 +463,7 @@ class TabChart(QWidget):
         self._patch_count_lbl.setObjectName("patch_count")
         self._patch_count_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._patch_count_lbl.setStyleSheet(
-            "color: #ffffff; background: transparent;"
+            "background: transparent;"
             " font-family: Georgia; font-size: 56px;"
         )
         count_font = QFont()

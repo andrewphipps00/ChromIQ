@@ -27,10 +27,10 @@ _REFRESH_DELAY_MS = 80   # debounce repaint
 _BORDER = 15             # white display border: all sides (px)
 
 # QToolTip block appended to per-widget stylesheets so the tooltip popup
-# uses the dark theme even when the source label has its own QSS — on
+# uses the active theme even when the source label has its own QSS — on
 # macOS the global QToolTip rule fails to reach tooltips originating from
 # widgets with `background: transparent` or per-side border overrides.
-_TOOLTIP_QSS = (
+_TOOLTIP_QSS_DARK = (
     "QToolTip { "
     "background-color: #262626; "
     "color: #e6e6e6; "
@@ -38,6 +38,16 @@ _TOOLTIP_QSS = (
     "padding: 4px;"
     " }"
 )
+_TOOLTIP_QSS_LIGHT = (
+    "QToolTip { "
+    "background-color: #ffffff; "
+    "color: #22211f; "
+    "border: 1px solid #d0ccc6; "
+    "padding: 4px;"
+    " }"
+)
+# Back-compat alias: existing dark stylesheet strings concatenate this.
+_TOOLTIP_QSS = _TOOLTIP_QSS_DARK
 
 # ---------------------------------------------------------------------------
 # Ink channel tables
@@ -242,12 +252,59 @@ class TiffPreview(QWidget):
         self._stripe_rects: list[QRect] = []
         self._pixmap: QPixmap | None = None
         self._ink_channels: list[str] | None = None
+        self._mode: str = "dark"
         self._refresh_timer = QTimer(self)
         self._refresh_timer.setSingleShot(True)
         self._refresh_timer.setInterval(_REFRESH_DELAY_MS)
         self._refresh_timer.timeout.connect(self._update_display)
 
         self._build_ui()
+
+    # ------------------------------------------------------------------
+    def set_appearance(self, mode: str) -> None:
+        """Switch between dark and light visuals (called by MainWindow.apply_theme)."""
+        new_mode = "light" if mode == "light" else "dark"
+        if new_mode == self._mode:
+            return
+        self._mode = new_mode
+        self._apply_mode_styles()
+
+    def _apply_mode_styles(self) -> None:
+        if self._mode == "light":
+            tooltip = _TOOLTIP_QSS_LIGHT
+            caption_color  = "#7a7570"
+            filename_color = "#7a7570"
+            page_color     = "#7a7570"
+            img_bg         = "#efebe6"
+            img_border     = "#d0ccc6"
+            img_text       = "#a8a4a0"
+        else:
+            tooltip = _TOOLTIP_QSS_DARK
+            caption_color  = "#808080"
+            filename_color = "#b8b8b8"
+            page_color     = "#909090"
+            img_bg         = "#111111"
+            img_border     = "#333"
+            img_text       = "#606060"
+        self._caption_lbl.setStyleSheet(
+            f"QLabel {{ color: {caption_color}; background: transparent; padding: 4px;"
+            " font-family: Menlo; font-size: 9px; font-weight: 300; }"
+            + tooltip
+        )
+        self._filename_lbl.setStyleSheet(
+            f"QLabel {{ color: {filename_color}; background: transparent; padding: 0 8px 0 8px;"
+            " font-family: Menlo; font-size: 11px; }"
+            + tooltip
+        )
+        self._img_label.setStyleSheet(
+            f"QLabel {{ background: {img_bg};"
+            f" border: 1px solid {img_border};"
+            " border-left: none;"
+            f" color: {img_text};"
+            " font-family: 'Menlo'; }"
+            + tooltip
+        )
+        self._page_label.setStyleSheet(f"color: {page_color}; font-size: 12px;")
 
     # ------------------------------------------------------------------
     # Public API
@@ -455,6 +512,10 @@ class TiffPreview(QWidget):
         nav_layout.addWidget(self._next_btn)
 
         layout.addWidget(nav)
+
+        # Replace the inline dark styles set above with mode-aware versions.
+        # No-op for dark (values match); swaps to light palette when active.
+        self._apply_mode_styles()
 
     # ------------------------------------------------------------------
     # Navigation

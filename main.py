@@ -58,7 +58,8 @@ try:
     from core.resource_path import resource_path
     from core.settings import AppSettings
     from ui.main_window import MainWindow
-    from ui.styles import APP_STYLESHEET, WinButtonLayoutStyle, make_dark_palette
+    from ui.styles import WinButtonLayoutStyle
+    from ui.theme import apply_appearance
     from ui.widgets import ButtonFontFilter
 except BaseException:
     log.exception("Fatal error importing application modules")
@@ -78,13 +79,13 @@ def main() -> int:
         pass  # fonts dir missing — app falls back to system fonts
 
     app.setStyle(WinButtonLayoutStyle("Fusion"))
-    app.setPalette(make_dark_palette())
-    app.setStyleSheet(APP_STYLESHEET)
 
     _btn_font_filter = ButtonFontFilter(app)
     app.installEventFilter(_btn_font_filter)
 
     settings = AppSettings()
+    appearance = settings.get("appearance", "auto")
+    apply_appearance(app, None, appearance)
 
     icon_path = resource_path("assets/app_icon.png")
     log.debug("App icon: %s  exists=%s", icon_path, icon_path.exists())
@@ -92,6 +93,15 @@ def main() -> int:
         app.setWindowIcon(QIcon(str(icon_path)))
 
     win = MainWindow(settings)
+    apply_appearance(app, win, settings.get("appearance", "auto"))
+
+    def _on_system_color_scheme_changed(_scheme=None) -> None:
+        # Only re-apply when user is following the system; explicit picks stay put.
+        if settings.get("appearance", "auto") == "auto":
+            apply_appearance(app, win, "auto")
+
+    app.styleHints().colorSchemeChanged.connect(_on_system_color_scheme_changed)
+
     win.show()
 
     log.info("Event loop starting")

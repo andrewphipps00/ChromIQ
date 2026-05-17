@@ -9,7 +9,9 @@ from typing import TYPE_CHECKING
 from PyQt6.QtCore import Qt, QUrl
 from PyQt6.QtGui import QDesktopServices, QFontMetrics
 from PyQt6.QtWidgets import (
+    QApplication,
     QCheckBox,
+    QComboBox,
     QDialog,
     QDialogButtonBox,
     QFileDialog,
@@ -228,6 +230,32 @@ class SettingsDialog(QDialog):
 
         layout.addWidget(behaviour_grp)
 
+        # ---- Appearance ----
+        appearance_grp = QGroupBox("Appearance", self)
+        ap = QHBoxLayout(appearance_grp)
+        ap.addWidget(QLabel("Theme:", self))
+        self._appearance_combo = QComboBox(self)
+        # data values map combo index -> setting string
+        self._appearance_combo.addItem("System (Auto)", "auto")
+        self._appearance_combo.addItem("Light",        "light")
+        self._appearance_combo.addItem("Dark",         "dark")
+        self._appearance_combo.setMinimumWidth(180)
+        self._appearance_combo.currentIndexChanged.connect(self._on_appearance_preview)
+        ap.addWidget(self._appearance_combo)
+        ap.addStretch()
+        ap.addWidget(TooltipButton(
+            "Appearance",
+            "Switches the entire app between light and dark visuals.\n\n"
+            "  • System (Auto) — follow your macOS Appearance setting and "
+            "react if you change it while ChromIQ is running.\n"
+            "  • Light — force the light theme even if your system is dark.\n"
+            "  • Dark  — force the dark theme even if your system is light.\n\n"
+            "Changes preview instantly. Click OK to keep them, or Cancel to revert.",
+            self,
+            min_width=520,
+        ))
+        layout.addWidget(appearance_grp)
+
         # ---- About / Updates ----
         credit1 = QLabel(f"ChromIQ v{APP_VERSION} · Created by Sebastian Reiprich", self)
         credit1.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -302,6 +330,34 @@ class SettingsDialog(QDialog):
         self._cal_mode_check.setChecked(bool(s.get("calibration_mode", False)))
         self._native_print_check.setChecked(bool(s.get("use_native_print_dialog", False)))
         self._confirm_print_check.setChecked(bool(s.get("confirm_before_printing", True)))
+        # Appearance: capture current value so Cancel can revert any live preview.
+        current = str(s.get("appearance", "auto"))
+        self._appearance_original = current
+        idx = self._appearance_combo.findData(current)
+        # Block signals so loading the saved value doesn't fire a preview.
+        self._appearance_combo.blockSignals(True)
+        self._appearance_combo.setCurrentIndex(idx if idx >= 0 else 0)
+        self._appearance_combo.blockSignals(False)
+
+    def _on_appearance_preview(self, _index: int) -> None:
+        """Apply the picked theme immediately without persisting it."""
+        from ui.theme import apply_appearance
+        app = QApplication.instance()
+        if app is None:
+            return
+        # The dialog is parented to the main window — use that for masthead/title-bar updates.
+        main_window = self.parent()
+        setting = self._appearance_combo.currentData()
+        apply_appearance(app, main_window, str(setting))
+
+    def reject(self) -> None:  # type: ignore[override]
+        # Revert any live theme preview to whatever was persisted on open.
+        if getattr(self, "_appearance_original", None) is not None:
+            from ui.theme import apply_appearance
+            app = QApplication.instance()
+            if app is not None:
+                apply_appearance(app, self.parent(), self._appearance_original)
+        super().reject()
 
     def _save_and_close(self) -> None:
         s = self._settings
@@ -313,6 +369,7 @@ class SettingsDialog(QDialog):
         s.set("calibration_mode",          self._cal_mode_check.isChecked())
         s.set("use_native_print_dialog",   self._native_print_check.isChecked())
         s.set("confirm_before_printing",   self._confirm_print_check.isChecked())
+        s.set("appearance",                str(self._appearance_combo.currentData()))
         log.info("Settings saved")
         self.accept()
 

@@ -247,20 +247,56 @@ def open_dir_dialog(
 def load_folder_icon(name: str) -> QIcon:
     """Load a colored folder icon from assets/folder/<name>.png.
 
-    Falls back to the OS system folder icon if the file is not found.
+    For the plain "folder" icon (used in the Preferences dialog), if the
+    active palette is light, take the same PNG and re-tint every
+    non-transparent pixel to #22211f so the shape stays identical to the
+    coloured variants — just in a dark hue that reads on the warm-white
+    Preferences background. The tab-specific coloured variants
+    (folder_build, folder_print, …) are kept as-is since their hues
+    already read on either background.
+
+    Falls back to the OS system folder icon if no asset is found.
     """
     from core.resource_path import resource_path
     from PyQt6.QtGui import QGuiApplication
-    px = QPixmap(str(resource_path(f"assets/folder/{name}.png")))
-    if not px.isNull():
-        dpr  = QGuiApplication.primaryScreen().devicePixelRatio()
-        phys = round(20 * dpr)
-        scaled = px.scaled(phys, phys,
-                           Qt.AspectRatioMode.KeepAspectRatio,
-                           Qt.TransformationMode.SmoothTransformation)
+
+    dpr  = QGuiApplication.primaryScreen().devicePixelRatio()
+    phys = round(20 * dpr)
+
+    src = resource_path(f"assets/folder/{name}.png")
+    src_px = QPixmap(str(src))
+    if not src_px.isNull():
+        scaled = src_px.scaled(phys, phys,
+                               Qt.AspectRatioMode.KeepAspectRatio,
+                               Qt.TransformationMode.SmoothTransformation)
+        # Light-theme: recolour the bare "folder" icon to #22211f. Compose
+        # the new colour using SourceIn so the icon's existing alpha mask
+        # (the line work) is preserved exactly — every line that was
+        # rendered in the dark PNG is repainted in the new colour.
+        if name == "folder" and _is_light_palette():
+            from PyQt6.QtGui import QImage, QPainter
+            img = scaled.toImage().convertToFormat(
+                QImage.Format.Format_ARGB32_Premultiplied
+            )
+            painter = QPainter(img)
+            painter.setCompositionMode(
+                QPainter.CompositionMode.CompositionMode_SourceIn
+            )
+            painter.fillRect(img.rect(), QColor("#22211f"))
+            painter.end()
+            recoloured = QPixmap.fromImage(img)
+            recoloured.setDevicePixelRatio(dpr)
+            return QIcon(recoloured)
         scaled.setDevicePixelRatio(dpr)
         return QIcon(scaled)
     return QApplication.style().standardIcon(QStyle.StandardPixmap.SP_DirOpenIcon)
+
+
+def _is_light_palette() -> bool:
+    """True when the active app palette is a light theme."""
+    from PyQt6.QtGui import QGuiApplication
+    pal = QGuiApplication.palette()
+    return pal.window().color().lightness() > 150
 
 
 def tint_dialog_primary(dlg: "QWidget", color: str) -> None:

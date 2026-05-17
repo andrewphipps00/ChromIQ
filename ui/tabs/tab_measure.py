@@ -246,6 +246,7 @@ class TabMeasure(QWidget):
         self._no_instrument: bool = False
         self._usb_claimed_by_vm: bool = False
         self._ti3_mtime_before: float | None = None
+        self._mode: str = "dark"
 
         self._manager.stripe_changed.connect(self._on_stripe_changed)
         self._manager.all_stripes_done.connect(self._on_all_stripes_done)
@@ -302,6 +303,34 @@ class TabMeasure(QWidget):
         self._mode_row_widget.setVisible(not enabled)
         if enabled:
             self._switch_mode("manual")
+
+    # ------------------------------------------------------------------
+    def set_appearance(self, mode: str) -> None:
+        """Re-tint the Stop button's disabled background for the active theme."""
+        new_mode = "light" if mode == "light" else "dark"
+        if new_mode == self._mode:
+            return
+        self._mode = new_mode
+        if hasattr(self, "_stop_btn"):
+            self._apply_stop_btn_style()
+
+    def _apply_stop_btn_style(self) -> None:
+        # The button keeps its light-grey "always-stand-out" base in both
+        # themes; only the disabled state changes so it doesn't paint a
+        # dark slab over the light tab background.
+        if self._mode == "light":
+            disabled_bg     = "#eeeae5"
+            disabled_fg     = "#a8a4a0"
+            disabled_border = "#ccc9c3"
+        else:
+            disabled_bg     = "#2a2a2a"
+            disabled_fg     = "#555555"
+            disabled_border = "#333333"
+        self._stop_btn.setStyleSheet(
+            "QPushButton { background: #f4f4f4; color: #121212; border: 1px solid #cccccc; font-weight: 600; }"
+            "QPushButton:hover { background: #e0e0e0; border-color: #bbbbbb; }"
+            f"QPushButton:disabled {{ background: {disabled_bg}; color: {disabled_fg}; border-color: {disabled_border}; }}"
+        )
 
     # ------------------------------------------------------------------
     # UI build
@@ -412,9 +441,9 @@ class TabMeasure(QWidget):
         co_layout = QVBoxLayout(calm_outer)
         co_layout.setContentsMargins(16, 8, 16, 0)
         calm_box = QGroupBox(calm_outer)
+        # Only override layout; let border + radius come from the global theme.
         calm_box.setStyleSheet(
-            "QGroupBox { margin-top: 0px; padding: 14px 8px 12px 8px;"
-            " border: 1px solid #333333; border-radius: 4px; }"
+            "QGroupBox { margin-top: 0px; padding: 14px 8px 12px 8px; }"
         )
         calm_layout = QVBoxLayout(calm_box)
         calm_layout.setContentsMargins(0, 0, 0, 0)
@@ -423,7 +452,7 @@ class TabMeasure(QWidget):
         headline.setTextFormat(Qt.TextFormat.RichText)
         headline.setAlignment(Qt.AlignmentFlag.AlignCenter)
         headline.setStyleSheet(
-            "color: #ffffff; background: transparent;"
+            "background: transparent;"
             " font-family: Georgia; font-size: 28px;"
         )
         calm_layout.addWidget(headline)
@@ -460,11 +489,7 @@ class TabMeasure(QWidget):
         self._start_btn.clicked.connect(self._on_start)
         self._stop_btn = QPushButton("Stop", btn_outer)
         self._stop_btn.setFixedHeight(36)
-        self._stop_btn.setStyleSheet(
-            "QPushButton { background: #f4f4f4; color: #121212; border: 1px solid #cccccc; font-weight: 600; }"
-            "QPushButton:hover { background: #e0e0e0; border-color: #bbbbbb; }"
-            "QPushButton:disabled { background: #2a2a2a; color: #555555; border-color: #333333; }"
-        )
+        self._apply_stop_btn_style()
         self._stop_btn.clicked.connect(self._on_stop)
         self._stop_btn.setEnabled(False)
         self._save_defaults_btn = QPushButton("Save as Defaults", btn_outer)
@@ -702,7 +727,7 @@ class TabMeasure(QWidget):
             if opt.key == "tolerance":
                 opt.checkbox.setChecked(True)
                 if opt.widget is not None:
-                    opt.widget.setValue(0.5)
+                    opt.widget.setValue(0.7)
                     opt.widget.setEnabled(True)
             else:
                 if opt.row_widget is not None:
@@ -1178,7 +1203,7 @@ class TabMeasure(QWidget):
                 "Lower = stricter. A strict setting catches real problems early:\n"
                 "clogged inkjet nozzles, low ink, dirty drum rollers, drifting\n"
                 "laser toner. On a healthy printer + spectrophotometer combo\n"
-                "the default of 0.5 leaves comfortable headroom; experienced\n"
+                "the default of 0.7 leaves comfortable headroom; experienced\n"
                 "users on printerknowledge.com run 0.4 with i1 Pro 2 / 3.\n\n"
                 "Raise to 0.8–1.5 if you get false \"inconsistent patch\" errors\n"
                 "on textured, matte, or fine-art papers — the surface itself\n"
@@ -1317,7 +1342,7 @@ class TabMeasure(QWidget):
                 "Lower = stricter. A strict setting catches real problems early:\n"
                 "clogged inkjet nozzles, low ink, dirty drum rollers, drifting\n"
                 "laser toner. On a healthy printer + spectrophotometer combo\n"
-                "the default of 0.5 leaves comfortable headroom; experienced\n"
+                "the default of 0.7 leaves comfortable headroom; experienced\n"
                 "users on printerknowledge.com run 0.4 with i1 Pro 2 / 3.\n\n"
                 "Raise to 0.8–1.5 if you get false \"inconsistent patch\" errors\n"
                 "on textured, matte, or fine-art papers — the surface itself\n"

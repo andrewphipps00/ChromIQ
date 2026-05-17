@@ -1,5 +1,75 @@
 # Changelog
 
+## v3.6.0
+First minor-version bump in the 3.x line: ChromIQ now ships a full
+**Light Mode**, selectable as Light, Dark, or System (Auto) from a new
+Appearance picker in Preferences. Auto follows the macOS Appearance
+setting and re-skins live when the user flips it. Beyond the new
+theme, the guided Measure panel ships with a slightly safer
+patch-tolerance default and a long-standing Qt startup warning about
+missing font families is gone.
+
+![ChromIQ in Light Mode — Create Chart tab](docs/v3.6.0-light-mode.png)
+
+### New
+- **Appearance: Light / Dark / System (Auto).** A new `ui/theme.py`
+  central applier wraps every theme switch: it selects the palette
+  (`make_dark_palette` / `make_light_palette`) and stylesheet
+  (`APP_STYLESHEET` / `LIGHT_STYLESHEET`) for the requested mode,
+  broadcasts a `set_appearance(mode)` call to every descendant widget
+  that opts in, retints the macOS title bar via NSAppearance
+  (`Aqua` for light, `DarkAqua` for dark), and re-runs the per-tab
+  QSS injector so its hardcoded primary-button and mode-button
+  colours track the new theme. The setting persists under
+  `appearance` in `core/settings.py` (defaults to `auto`). Auto
+  resolves to light/dark via `QStyleHints.colorScheme()` and listens
+  for `colorSchemeChanged` in `main.py`, so flipping macOS System
+  Settings → Appearance re-skins ChromIQ without restart.
+- **Preferences → Appearance picker.** A new `QGroupBox("Appearance")`
+  in `ui/dialogs/settings_dialog.py` exposes a single combobox with
+  three items — System (Auto) / Light / Dark. Changes preview live;
+  OK persists, Cancel reverts to whatever was saved when the dialog
+  opened.
+- **Full v2 light visuals.** Beyond palette + QSS, the light variant
+  re-tints surfaces that paint outside the global stylesheet: the
+  `MastheadHeader` swaps to a warm-white header with dark wordmark,
+  the `SpectrumTabBar` paints active tabs `#ffffff` / `#22211f` and
+  inactive `#e5e2dd` / `#989490`, the `TiffPreview` and `GamutPanel`
+  use a `#efebe6` viewer fill (with the WebEngine page background
+  matched so the X3DOM canvas doesn't flash dark on first paint),
+  the terminal `QPlainTextEdit#log` uses a pale-green
+  `#f4f8f5 / #2a6e2a` palette, and `assets/folder/folder_light.svg`
+  drives a `#22211f`-tinted folder icon in the Preferences dialog
+  (recoloured at load time from the same PNG mask used by the dark
+  variant so the line work matches exactly).
+
+### Improvements
+- **Patch consistency tolerance default → 0.7.** The guided Measure
+  panel now ships with `-T 0.7` instead of `0.5`. The previous
+  default was tuned for lab-grade conditions on an i1 Pro 2/3; in
+  the field on consumer inkjet + cheaper colorimeters it produced
+  too many "inconsistent patch" interruptions. 0.7 still catches
+  real ink/printer faults while leaving more headroom for paper
+  texture and slight scanning-speed variation. Updated in three
+  places — `core/settings.py`, the guided panel's hardcoded init in
+  `ui/tabs/tab_measure.py`, and the tooltip body / `parameters.yaml`
+  documentation that referenced the old number.
+
+### Other
+- **No more `qt.qpa.fonts: Populating font family aliases …` at
+  startup.** The QSS font-family chains in `ui/styles.py` and
+  `ui/light_styles.py`, plus the `QFont.setFamilies(...)` calls in
+  `ui/spectrum_tab_bar.py`, used to list `system-ui`,
+  `-apple-system`, `Segoe UI`, `Helvetica Neue`, and the generic
+  `sans-serif`. Qt's parser treats every entry as a literal family
+  name (no CSS-generic resolution) and pays a ~73 ms alias lookup
+  for each one it can't find on the current platform, then prints a
+  warning. Trimmed down to just `"Inter"`, which is bundled and
+  registered via `QFontDatabase.addApplicationFont(...)` in
+  `main.py`, so Qt finds it on the first try, falls back to its
+  own default sans-serif if the application font ever fails to
+  load, and no longer warns or stalls on startup.
+
 ## v3.5.13
 Small visual addition to the Measure preview. The green
 downward-pointing triangle that marks the active strip at the top of

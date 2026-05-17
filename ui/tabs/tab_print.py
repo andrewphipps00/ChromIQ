@@ -191,8 +191,21 @@ class TabPrint(QWidget):
         self._ordered_opts: list[tuple[str, list[str], QComboBox]] = []
         self._raw_value_pairs: dict[str, list[tuple[str, str]]] = {}
         self._restoring: bool = False
+        self._mode: str = "dark"
 
         self._build_ui()
+
+    # ------------------------------------------------------------------
+    def set_appearance(self, mode: str) -> None:
+        """Restyle the AirPrint info box when the theme changes."""
+        new_mode = "light" if mode == "light" else "dark"
+        if new_mode == self._mode:
+            return
+        self._mode = new_mode
+        # If the AirPrint box is currently shown, restyle it in place.
+        box = self.findChild(QFrame, "airprintInfoBox")
+        if box is not None:
+            self._apply_airprint_box_styles(box)
 
     # ------------------------------------------------------------------
 
@@ -289,9 +302,10 @@ class TabPrint(QWidget):
 
         # Feed the beast block
         beast_box = QGroupBox(left)
+        # Only override layout (no title → zero top-margin + tight padding);
+        # let border + radius come from the global QGroupBox theme.
         beast_box.setStyleSheet(
-            "QGroupBox { margin-top: 0px; padding: 14px 8px 12px 8px;"
-            " border: 1px solid #333333; border-radius: 4px; }"
+            "QGroupBox { margin-top: 0px; padding: 14px 8px 12px 8px; }"
         )
         beast_layout = QVBoxLayout(beast_box)
         beast_layout.setContentsMargins(0, 0, 0, 0)
@@ -303,7 +317,7 @@ class TabPrint(QWidget):
         beast_headline.setTextFormat(Qt.TextFormat.RichText)
         beast_headline.setAlignment(Qt.AlignmentFlag.AlignCenter)
         beast_headline.setStyleSheet(
-            "color: #ffffff; background: transparent;"
+            "background: transparent;"
             " font-family: Georgia; font-size: 28px;"
         )
         beast_layout.addWidget(beast_headline)
@@ -453,6 +467,42 @@ class TabPrint(QWidget):
                 cls._clear_layout(sub)
                 sub.deleteLater()
 
+    def _apply_airprint_box_styles(self, box: "QFrame") -> None:
+        """Paint the 'No configurable options detected' info box.
+
+        Dark mode keeps the original dark-olive / amber treatment; light mode
+        reuses the same chrome as QLabel#warning so the box and the
+        'Verify that all print settings…' warning above match.
+        """
+        if self._mode == "light":
+            from ui.light_styles import LM_WARN_BG, LM_WARN_TEXT
+            # Border + title pick up the Print Chart tab's spectrum colour so
+            # the box matches the rest of the tab's accents (amber).
+            bg          = LM_WARN_BG
+            border      = SPEC_AMBER
+            body_color  = LM_WARN_TEXT
+            title_color = SPEC_AMBER
+        else:
+            bg, border    = "#2a2000", "#f9a825"
+            body_color    = "#e0d5b0"
+            title_color   = "#fdd835"
+        box.setStyleSheet(
+            f"#airprintInfoBox {{"
+            f"  background-color: {bg};"
+            f"  border: 1px solid {border};"
+            "  border-radius: 6px;"
+            "}"
+            "#airprintInfoBox QLabel {"
+            "  background: transparent;"
+            "}"
+            f"#airprintInfoBox QLabel#airprintInfoTitle {{"
+            f"  font-weight: bold; color: {title_color};"
+            "}"
+            f"#airprintInfoBox QLabel#airprintInfoBody {{"
+            f"  color: {body_color};"
+            "}"
+        )
+
     def _rebuild_option_rows(self, printer: str) -> None:
         self._clear_layout(self._opts_layout)
         self._option_combos.clear()
@@ -468,22 +518,12 @@ class TabPrint(QWidget):
             box = QFrame(self)
             box.setFrameShape(QFrame.Shape.NoFrame)
             box.setObjectName("airprintInfoBox")
-            box.setStyleSheet(
-                "#airprintInfoBox {"
-                "  background-color: #2a2000;"
-                "  border: 1px solid #f9a825;"
-                "  border-radius: 6px;"
-                "}"
-                "#airprintInfoBox QLabel {"
-                "  background: transparent;"
-                "}"
-            )
             box_layout = QVBoxLayout(box)
             box_layout.setContentsMargins(10, 8, 10, 8)
             box_layout.setSpacing(6)
 
             title = QLabel("No configurable options detected", box)
-            title.setStyleSheet("font-weight: bold; color: #fdd835;")
+            title.setObjectName("airprintInfoTitle")
             box_layout.addWidget(title)
 
             body = QLabel(
@@ -505,9 +545,10 @@ class TabPrint(QWidget):
             )
             body.setWordWrap(True)
             body.setTextFormat(Qt.TextFormat.RichText)
-            body.setStyleSheet("color: #e0d5b0;")
+            body.setObjectName("airprintInfoBody")
             box_layout.addWidget(body)
 
+            self._apply_airprint_box_styles(box)
             self._opts_layout.addWidget(box)
             return
 

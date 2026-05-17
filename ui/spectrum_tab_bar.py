@@ -28,12 +28,33 @@ SPECTRUM = [
     "#9f82ff",  # 5 Check & Refine
 ]
 
-BG_BAR     = "#0f0f0f"
+# Per-mode palette. Values for "dark" preserve the historical look.
+_PALETTE_DARK = {
+    "bar_bg":        "#0f0f0f",
+    "active_bg":     "#1e1e1e",
+    "text_inactive": "#909090",
+    "text_active":   "#ffffff",
+    "sep":           "#2a2a2a",
+    "disabled_overlay": "#0f0f0f",
+    "disabled_text":    "#404040",
+}
+_PALETTE_LIGHT = {
+    "bar_bg":        "#e5e2dd",   # inactive tab bg per design spec
+    "active_bg":     "#ffffff",   # active tab bg per design spec
+    "text_inactive": "#989490",
+    "text_active":   "#22211f",
+    "sep":           "#d0ccc6",
+    "disabled_overlay": "#e5e2dd",
+    "disabled_text":    "#b8b4ae",
+}
+
+# Module-level back-compat (read by anything still importing these names).
+BG_BAR     = _PALETTE_DARK["bar_bg"]
 BG_INACTIVE = "transparent"
-BG_ACTIVE   = "#1e1e1e"
-TEXT_INACTIVE = "#909090"
-TEXT_ACTIVE   = "#ffffff"
-SEP           = "#2a2a2a"
+BG_ACTIVE   = _PALETTE_DARK["active_bg"]
+TEXT_INACTIVE = _PALETTE_DARK["text_inactive"]
+TEXT_ACTIVE   = _PALETTE_DARK["text_active"]
+SEP           = _PALETTE_DARK["sep"]
 
 
 class SpectrumTabBar(QTabBar):
@@ -41,11 +62,23 @@ class SpectrumTabBar(QTabBar):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
+        self._mode = "dark"
+        self._palette = _PALETTE_DARK
         self.setExpanding(True)        # spread tabs to fill the bar
         self.setDrawBase(False)        # we paint our own bottom line
         self.setUsesScrollButtons(False)
         self.setDocumentMode(True)
         self.setFixedHeight(48)
+
+    # ------------------------------------------------------------------
+    def set_appearance(self, mode: str) -> None:
+        """Switch between dark and light palettes; called by MainWindow.apply_theme."""
+        new_mode = "light" if mode == "light" else "dark"
+        if new_mode == self._mode:
+            return
+        self._mode = new_mode
+        self._palette = _PALETTE_LIGHT if new_mode == "light" else _PALETTE_DARK
+        self.update()
 
     # ------------------------------------------------------------------
     # Sizing — each tab gets equal share of total width
@@ -68,11 +101,13 @@ class SpectrumTabBar(QTabBar):
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing, False)
 
+        pal = self._palette
+
         # Fill the entire bar background — covers any gap to the right
-        p.fillRect(self.rect(), QColor(BG_BAR))
+        p.fillRect(self.rect(), QColor(pal["bar_bg"]))
 
         # Bottom border line
-        p.setPen(QPen(QColor(SEP), 1))
+        p.setPen(QPen(QColor(pal["sep"]), 1))
         p.drawLine(0, self.height() - 1, self.width(), self.height() - 1)
 
         for i in range(self.count()):
@@ -87,19 +122,19 @@ class SpectrumTabBar(QTabBar):
 
             # Disabled tab: dim background overlay and skip accent
             if not is_enabled:
-                overlay = QColor("#0f0f0f")
+                overlay = QColor(pal["disabled_overlay"])
                 overlay.setAlpha(160)
                 p.fillRect(rect, overlay)
 
                 if i < self.count() - 1:
-                    p.setPen(QPen(QColor(SEP), 1))
+                    p.setPen(QPen(QColor(pal["sep"]), 1))
                     p.drawLine(rect.x() + rect.width() - 1, rect.y() + 8,
                                rect.x() + rect.width() - 1,
                                rect.y() + rect.height() - 8)
 
-                p.setPen(QColor("#404040"))
+                p.setPen(QColor(pal["disabled_text"]))
                 font: QFont = self.font()
-                font.setFamilies(["Inter", "Segoe UI", "system-ui", "sans-serif"])
+                font.setFamilies(["Inter"])
                 font.setPixelSize(13)
                 font.setWeight(QFont.Weight.Medium)
                 p.setFont(font)
@@ -109,7 +144,7 @@ class SpectrumTabBar(QTabBar):
 
             # Active tab: subtle color-tint background
             if is_active:
-                p.fillRect(rect, QColor(BG_ACTIVE))
+                p.fillRect(rect, QColor(pal["active_bg"]))
                 tint = QColor(color)
                 tint.setAlpha(15)
                 p.fillRect(rect, tint)
@@ -128,7 +163,7 @@ class SpectrumTabBar(QTabBar):
 
             # Vertical separator on the right edge of every tab except last
             if i < self.count() - 1:
-                p.setPen(QPen(QColor(SEP), 1))
+                p.setPen(QPen(QColor(pal["sep"]), 1))
                 p.drawLine(rect.x() + rect.width() - 1, rect.y() + 8,
                            rect.x() + rect.width() - 1,
                            rect.y() + rect.height() - 8)
@@ -141,10 +176,10 @@ class SpectrumTabBar(QTabBar):
                            rect.width() - 28, 1, under)
 
             # Label
-            text_color = TEXT_ACTIVE if is_active else TEXT_INACTIVE
+            text_color = pal["text_active"] if is_active else pal["text_inactive"]
             p.setPen(QColor(text_color))
             font = self.font()
-            font.setFamilies(["Inter", "Segoe UI", "system-ui", "sans-serif"])
+            font.setFamilies(["Inter"])
             font.setPixelSize(13)
             font.setWeight(QFont.Weight.DemiBold if is_active
                            else QFont.Weight.Medium)
