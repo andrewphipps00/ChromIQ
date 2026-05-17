@@ -78,8 +78,36 @@ _THEMED_JS = """\
       n.setAttribute('diffusecolor', remapColors(n.getAttribute('diffusecolor')));
     });
   }
-  document.addEventListener('DOMContentLoaded', applyTheme);
-  document.addEventListener('x3dom-initialized', function() { setTimeout(applyTheme, 50); });
+  function applyBackground() {
+    // viewgam emits no <Background> node, so X3DOM falls back to its
+    // default near-black sky. Mirror the CSS body background into the
+    // scene so the 3D canvas blends with the surrounding panel frame.
+    var bgStr = window.getComputedStyle(document.body).backgroundColor;
+    var m = bgStr.match(/rgba?\\(\\s*(\\d+)\\s*,\\s*(\\d+)\\s*,\\s*(\\d+)/);
+    if (!m) return;
+    var sky = (+m[1]/255).toFixed(5) + ' '
+            + (+m[2]/255).toFixed(5) + ' '
+            + (+m[3]/255).toFixed(5);
+    var scene = document.querySelector('scene');
+    if (!scene) return;
+    var bgNode = scene.querySelector('background');
+    if (bgNode) {
+      bgNode.setAttribute('skyColor', sky);
+      bgNode.setAttribute('groundColor', sky);
+    } else {
+      // X3D Background has TWO hemispheres (sky + ground). Setting only
+      // skyColor leaves groundColor at its default (pure black), giving
+      // a half-black horizon split. Set both to the same colour for a
+      // uniform background that matches the surrounding panel frame.
+      bgNode = document.createElement('background');
+      bgNode.setAttribute('skyColor', sky);
+      bgNode.setAttribute('groundColor', sky);
+      scene.insertBefore(bgNode, scene.firstChild);
+    }
+  }
+  function applyAll() { applyTheme(); applyBackground(); }
+  document.addEventListener('DOMContentLoaded', applyAll);
+  document.addEventListener('x3dom-initialized', function() { setTimeout(applyAll, 50); });
 })();
 """
 

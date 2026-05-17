@@ -82,6 +82,27 @@ class GamutPanel(QWidget):
         """Page background that should match the surrounding viewer frame."""
         return "#efebe6" if self._mode == "light" else "#111111"
 
+    def _slider_stylesheet(self) -> str:
+        """QSlider QSS for the opacity / saturation sliders, theme-aware.
+
+        The unfilled groove uses the masthead wordmark colour for the
+        current mode (#1c1b18 light "Chrom" / #ffffff dark "Chrom") so
+        the dark portion of the track harmonises with the rest of the
+        light-mode palette instead of staying at the hardcoded cool
+        #333333 that looked out of place against the warm light frame.
+        Dark mode falls back to the original #333333 — a white groove
+        would clash with the dark surround.
+        """
+        groove = "#1c1b18" if self._mode == "light" else "#333333"
+        return (
+            f"QSlider::groove:horizontal {{ height: 4px; background: {groove};"
+            " border-radius: 2px; }"
+            f"QSlider::handle:horizontal {{ background: {SPEC_VIOLET}; border: none;"
+            " width: 12px; height: 12px; margin: -4px 0; border-radius: 6px; }"
+            f"QSlider::sub-page:horizontal {{ background: {SPEC_VIOLET};"
+            " border-radius: 2px; }"
+        )
+
     def set_appearance(self, mode: str) -> None:
         """Switch viewer + header colors between dark and light themes."""
         new_mode = "light" if mode == "light" else "dark"
@@ -144,6 +165,12 @@ class GamutPanel(QWidget):
             " font-size: 11px;"
         )
         self._placeholder_text_color = placeholder_text
+        # Re-tint the opacity / saturation slider grooves to match the
+        # new mode's wordmark colour.
+        if getattr(self, "_opacity_slider", None) is not None:
+            ss = self._slider_stylesheet()
+            self._opacity_slider.setStyleSheet(ss)
+            self._sat_slider.setStyleSheet(ss)
 
     # ------------------------------------------------------------------
     # Public API
@@ -274,14 +301,6 @@ class GamutPanel(QWidget):
         toggle_layout.addWidget(self._view_compare_btn)
 
         # ── Per-compare-profile controls (shown only in Combined mode) ──
-        _slider_ss = (
-            "QSlider::groove:horizontal { height: 4px; background: #333333;"
-            " border-radius: 2px; }"
-            f"QSlider::handle:horizontal {{ background: {SPEC_VIOLET}; border: none;"
-            " width: 12px; height: 12px; margin: -4px 0; border-radius: 6px; }"
-            f"QSlider::sub-page:horizontal {{ background: {SPEC_VIOLET};"
-            " border-radius: 2px; }"
-        )
         self._compare_controls = QWidget(self._view_toggle_row)
         _cl = QHBoxLayout(self._compare_controls)
         _cl.setContentsMargins(0, 10, 0, 0)
@@ -291,14 +310,14 @@ class GamutPanel(QWidget):
         self._opacity_slider.setRange(0, 100)
         self._opacity_slider.setValue(50)
         self._opacity_slider.setFixedWidth(80)
-        self._opacity_slider.setStyleSheet(_slider_ss)
+        self._opacity_slider.setStyleSheet(self._slider_stylesheet())
         self._opacity_label = QLabel("50%", self._compare_controls)
         self._opacity_label.setFixedWidth(34)
         self._sat_slider = QSlider(Qt.Orientation.Horizontal, self._compare_controls)
         self._sat_slider.setRange(0, 100)
         self._sat_slider.setValue(100)
         self._sat_slider.setFixedWidth(80)
-        self._sat_slider.setStyleSheet(_slider_ss)
+        self._sat_slider.setStyleSheet(self._slider_stylesheet())
         self._sat_label = QLabel("100%", self._compare_controls)
         self._sat_label.setFixedWidth(34)
         _cl.addWidget(QLabel("Opacity:"))

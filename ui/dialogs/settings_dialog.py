@@ -314,15 +314,18 @@ class SettingsDialog(QDialog):
 
         from ui.theme import resolve_mode
         _mode = resolve_mode(self._settings.get("appearance", "auto"))
-        if _mode == "light":
-            self.setStyleSheet(
-                "QLineEdit:focus { border-color: #22211F; }"
-                "QCheckBox::indicator:checked { background: #22211F; border-color: #22211F; }"
-                "QCheckBox::indicator:hover { border-color: #22211F; }"
-            )
-        else:
-            # Dark mode: drop the local override so the global APP_STYLESHEET wins.
-            self.setStyleSheet("")
+        # Always override the global APP_STYLESHEET — its ACCENT (SPEC_CYAN)
+        # for checkbox-checked / QLineEdit:focus reads as the Build Profile
+        # cyan inside a dialog body where there's no tab accent to anchor
+        # it. Use a neutral indicator colour in both modes:
+        #   Light: masthead "Chrom" wordmark (_PALETTE_LIGHT["wordmark"]).
+        #   Dark:  neutral grey matching the Restore Factory Defaults border.
+        _indicator = "#1c1b18" if _mode == "light" else "#d0d0d0"
+        self.setStyleSheet(
+            f"QLineEdit:focus {{ border-color: {_indicator}; }}"
+            f"QCheckBox::indicator:checked {{ background: {_indicator}; border-color: {_indicator}; }}"
+            f"QCheckBox::indicator:hover {{ border-color: {_indicator}; }}"
+        )
 
     # ------------------------------------------------------------------
 

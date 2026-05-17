@@ -221,10 +221,10 @@ class MainWindow(QMainWindow):
             primary_disabled_bg  = "#e8e6e1"
             primary_disabled_fg  = "#a8a4a0"
             pane_bg              = "#ffffff"
-            # Keep the big "Calculated Patches" number dark in light mode —
-            # don't tint it with the tab's spectrum color, the user spec calls
-            # for a single dark color regardless of which tab is active.
-            patch_count_color    = "#22211f"
+            # Big "Calculated Patches" number anchors to the masthead
+            # "Chrom" wordmark colour, not the tab's spectrum accent, so
+            # it reads as a text anchor rather than a per-tab tint.
+            patch_count_color    = "#1c1b18"   # _PALETTE_LIGHT["wordmark"]
             log_color            = _darken_for_light_log(color)
         else:
             mode_inactive_bg     = "#2a2a2a"
@@ -237,7 +237,7 @@ class MainWindow(QMainWindow):
             primary_disabled_bg  = "#1e1e1e"
             primary_disabled_fg  = "#484848"
             pane_bg              = "#181818"
-            patch_count_color    = color
+            patch_count_color    = "#ffffff"   # _PALETTE_DARK["wordmark"]
             log_color            = color
 
         if tab_w:
