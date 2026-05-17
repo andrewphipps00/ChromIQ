@@ -101,7 +101,7 @@ Linux support is currently **beta** — please report what works and what doesn'
 
 | Settings light mode  | Settings dark mode |
 |---|---|
-| ![Settings light mode](docs/6.png) | ![ChromIQ Check & Refine](docs/6b.png) |
+| ![Settings light mode](docs/6a.png) | ![ChromIQ Check & Refine](docs/6b.png) |
 
 | Step 4c — Calibration & Profiling (disabled by default) |
 |---|
