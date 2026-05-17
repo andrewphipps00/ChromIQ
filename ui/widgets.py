@@ -299,6 +299,48 @@ def _is_light_palette() -> bool:
     return pal.window().color().lightness() > 150
 
 
+def load_preset_icon(name: str) -> QIcon:
+    """Load a preset +/- icon, switching to the *_dark variant in light mode.
+
+    `name` is the bare asset stem ("plus" or "minus"). On a light palette,
+    we load the *_dark.svg sibling so the glyph reads on the warm-white
+    Presets row.
+    """
+    from core.resource_path import resource_path
+    stem = f"{name}_dark" if _is_light_palette() else name
+    return QIcon(str(resource_path(f"assets/{stem}.svg")))
+
+
+def set_folder_icon(btn: QPushButton, name: str) -> None:
+    """Set a folder-glyph icon on `btn` and tag it for live theme refresh."""
+    btn.setIcon(load_folder_icon(name))
+    btn.setProperty("themed_folder_icon", name)
+
+
+def set_preset_icon(btn: QPushButton, name: str) -> None:
+    """Set a preset +/- icon on `btn` and tag it for live theme refresh."""
+    btn.setIcon(load_preset_icon(name))
+    btn.setProperty("themed_preset_icon", name)
+
+
+def apply_themed_icons(root: QWidget) -> None:
+    """Reload every theme-aware icon under `root`.
+
+    Walks all QPushButtons and re-runs the appropriate loader for buttons
+    tagged by set_folder_icon / set_preset_icon / make_browse_button. Call
+    from MainWindow.apply_theme so palette-dependent icons repaint without
+    requiring an app restart.
+    """
+    for btn in root.findChildren(QPushButton):
+        folder_name = btn.property("themed_folder_icon")
+        if folder_name:
+            btn.setIcon(load_folder_icon(str(folder_name)))
+            continue
+        preset_name = btn.property("themed_preset_icon")
+        if preset_name:
+            btn.setIcon(load_preset_icon(str(preset_name)))
+
+
 def tint_dialog_primary(dlg: "QWidget", color: str) -> None:
     """Stamp tab accent color onto every QPushButton#primary inside a dialog (v2 only).
 
@@ -349,5 +391,6 @@ def make_browse_button(
     btn.setFixedWidth(36)
     btn.setToolTip(tooltip)
     btn.setIcon(load_folder_icon(icon))
+    btn.setProperty("themed_folder_icon", icon)
     btn.setIconSize(QSize(20, 20))
     return btn

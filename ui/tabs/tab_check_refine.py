@@ -34,7 +34,7 @@ from core.resource_path import resource_path
 from ui.gamut_panel import GamutPanel
 from ui.tab_header import TabHeader
 from ui.tooltip_button import TooltipButton
-from ui.widgets import NoScrollComboBox, NoScrollDoubleSpinBox, make_browse_button, open_file_dialog, tint_dialog_primary
+from ui.widgets import NoScrollComboBox, NoScrollDoubleSpinBox, make_browse_button, open_file_dialog, set_preset_icon, tint_dialog_primary
 
 _TAB_COLOR = "#9f82ff"  # Check & Refine tab accent
 from ui.styles import SPEC_VIOLET, TAB_COLORS
@@ -646,12 +646,12 @@ class TabCheckRefine(QWidget):
         self._m_preset_add_btn = QPushButton(container)
         self._m_preset_add_btn.setObjectName("icon_btn")
         self._m_preset_add_btn.setFixedSize(28, 28)
-        self._m_preset_add_btn.setIcon(QIcon(str(resource_path("assets/plus.svg"))))
+        set_preset_icon(self._m_preset_add_btn, "plus")
         self._m_preset_add_btn.setToolTip("Save current settings as a new preset")
         self._m_preset_del_btn = QPushButton(container)
         self._m_preset_del_btn.setObjectName("icon_btn")
         self._m_preset_del_btn.setFixedSize(28, 28)
-        self._m_preset_del_btn.setIcon(QIcon(str(resource_path("assets/minus.svg"))))
+        set_preset_icon(self._m_preset_del_btn, "minus")
         self._m_preset_del_btn.setToolTip("Delete selected preset")
         self._m_preset_del_btn.setEnabled(False)
         presets_row.addWidget(self._m_preset_add_btn)

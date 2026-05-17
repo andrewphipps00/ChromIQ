@@ -46,7 +46,7 @@ from ui.styles import SPEC_AMBER, SPEC_CYAN, SPEC_GREEN, SPEC_MAGENTA, SPEC_VIOL
 from ui.tab_header import TabHeader
 from ui.tiff_preview import TiffPreview
 from ui.tooltip_button import TooltipButton
-from ui.widgets import NoScrollComboBox, NoScrollSpinBox, icc_profile_paths, load_folder_icon, make_browse_button, open_file_dialog
+from ui.widgets import NoScrollComboBox, NoScrollSpinBox, icc_profile_paths, make_browse_button, open_file_dialog, set_folder_icon, set_preset_icon
 from workflow.chart_creator import ChartCreator, ChartParams
 
 if TYPE_CHECKING:
@@ -220,7 +220,7 @@ class TabChart(QWidget):
 
         self._load_ti1_btn = QPushButton("Load existing .ti1…", self)
         self._load_ti1_btn.setFixedHeight(36)
-        self._load_ti1_btn.setIcon(load_folder_icon("folder_create"))
+        set_folder_icon(self._load_ti1_btn, "folder_create")
         self._load_ti1_btn.clicked.connect(self._on_load_ti1)
 
         self._save_defaults_btn = QPushButton("Save as Defaults", self)
@@ -633,13 +633,13 @@ class TabChart(QWidget):
         self._preset_add_btn = QPushButton(w)
         self._preset_add_btn.setObjectName("icon_btn")
         self._preset_add_btn.setFixedSize(28, 28)
-        self._preset_add_btn.setIcon(QIcon(str(resource_path("assets/plus.svg"))))
+        set_preset_icon(self._preset_add_btn, "plus")
         self._preset_add_btn.setIconSize(QSize(14, 14))
         self._preset_add_btn.setToolTip("Save current settings as a new preset")
         self._preset_del_btn = QPushButton(w)
         self._preset_del_btn.setObjectName("icon_btn")
         self._preset_del_btn.setFixedSize(28, 28)
-        self._preset_del_btn.setIcon(QIcon(str(resource_path("assets/minus.svg"))))
+        set_preset_icon(self._preset_del_btn, "minus")
         self._preset_del_btn.setIconSize(QSize(14, 14))
         self._preset_del_btn.setToolTip("Delete selected preset")
         self._preset_del_btn.setEnabled(False)
@@ -700,7 +700,7 @@ class TabChart(QWidget):
             expert_layout = QVBoxLayout(expert_grp)
 
             for p in params:
-                pw = ParameterWidget(p, inner)
+                pw = ParameterWidget(p, inner, browse_icon="folder_create")
                 pw.make_compact()
                 flag = p.get("flag", "")
 

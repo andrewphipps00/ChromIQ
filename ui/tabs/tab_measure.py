@@ -39,7 +39,7 @@ from core.resource_path import resource_path
 from core.strip_utils import letter_to_idx
 from ui.tab_header import TabHeader
 from ui.tooltip_button import TooltipButton
-from ui.widgets import NoScrollComboBox, NoScrollDoubleSpinBox, NoScrollSpinBox, load_folder_icon, make_browse_button, open_file_dialog, tint_dialog_primary
+from ui.widgets import NoScrollComboBox, NoScrollDoubleSpinBox, NoScrollSpinBox, make_browse_button, open_file_dialog, set_folder_icon, set_preset_icon, tint_dialog_primary
 
 _TAB_COLOR = "#56d6a5"  # Measure tab accent
 from ui.styles import SPEC_GREEN, TAB_COLORS
@@ -417,7 +417,7 @@ class TabMeasure(QWidget):
         fg.setContentsMargins(8, 6, 8, 8)
         file_row = QHBoxLayout()
         self._load_ti1_btn = QPushButton("Load .ti2 file…", file_outer)
-        self._load_ti1_btn.setIcon(load_folder_icon("folder_measure"))
+        set_folder_icon(self._load_ti1_btn, "folder_measure")
         self._load_ti1_btn.clicked.connect(self._on_load_ti2)
         self._ti1_lbl = QLabel("No file selected", file_outer)
         self._ti1_lbl.setStyleSheet("color: #909090; font-size: 11px;")
@@ -760,12 +760,12 @@ class TabMeasure(QWidget):
         self._m_preset_add_btn = QPushButton(container)
         self._m_preset_add_btn.setObjectName("icon_btn")
         self._m_preset_add_btn.setFixedSize(28, 28)
-        self._m_preset_add_btn.setIcon(QIcon(str(resource_path("assets/plus.svg"))))
+        set_preset_icon(self._m_preset_add_btn, "plus")
         self._m_preset_add_btn.setToolTip("Save current settings as a new preset")
         self._m_preset_del_btn = QPushButton(container)
         self._m_preset_del_btn.setObjectName("icon_btn")
         self._m_preset_del_btn.setFixedSize(28, 28)
-        self._m_preset_del_btn.setIcon(QIcon(str(resource_path("assets/minus.svg"))))
+        set_preset_icon(self._m_preset_del_btn, "minus")
         self._m_preset_del_btn.setToolTip("Delete selected preset")
         self._m_preset_del_btn.setEnabled(False)
         presets_row.addWidget(self._m_preset_add_btn)

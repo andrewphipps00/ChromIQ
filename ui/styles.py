@@ -282,6 +282,7 @@ QLabel#error {{
 }}
 QLabel#patch_count {{ font-size: 24px; font-weight: bold; color: {SPEC_MAGENTA}; }}
 QLabel#section_title {{ font-size: 14px; font-weight: bold; color: #ffffff; }}
+QLabel#param_label, QCheckBox#param_label {{ color: #c8c8c8; }}
 
 /* ---- Browse buttons ----------------------------------------------- */
 QPushButton#browse {{

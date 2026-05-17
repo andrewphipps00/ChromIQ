@@ -167,8 +167,9 @@ QPushButton {{
     color: {LM_TEXT_MAIN};
     border: 1px solid {LM_BORDER_HI};
     border-radius: 4px;
-    padding: 6px 16px;
+    padding: 6px 18px;
     min-height: 28px;
+    min-width: 72px;
 }}
 QPushButton:hover {{
     background: #e4e0da;
@@ -398,6 +399,7 @@ QLabel#section_title {{
     font-weight: bold;
     color: {LM_TEXT_MAIN};
 }}
+QLabel#param_label, QCheckBox#param_label {{ color: {LM_TEXT_MAIN}; }}
 
 /* -- Mode buttons (Guided / Manual / Expert) --------------------- */
 /* Default appearance. The per-tab QSS injection in main_window also
@@ -430,6 +432,20 @@ QPushButton#browse {{
 QPushButton#browse:hover {{
     background: #e4e0da;
 }}
+QPushButton#browse_compact {{
+    background: {LM_BG_WIDGET};
+    color: {LM_TEXT_MAIN};
+    border: 1px solid {LM_BORDER_HI};
+    border-radius: 3px;
+    padding: 1px 4px;
+    min-width: 32px;
+    min-height: 0;
+    max-height: 22px;
+    font-size: 14px;
+}}
+QPushButton#browse_compact:hover {{
+    background: #e4e0da;
+}}
 
 /* -- Icon-only square buttons ------------------------------------- */
 QPushButton#icon_btn {{
@@ -450,6 +466,7 @@ QToolButton#tooltip_btn:hover {{
 }}
 
 /* -- Compact inputs (Measure tab: Additional Options) ------------- */
+QLineEdit#compact_input,
 QSpinBox#compact_input, QDoubleSpinBox#compact_input, QComboBox#compact_input {{
     min-height: 0;
     max-height: 22px;
@@ -466,5 +483,10 @@ QSpinBox#compact_input::down-button, QDoubleSpinBox#compact_input::down-button {
 }}
 QComboBox#compact_input {{
     padding-right: 28px;
+}}
+QLineEdit#compact_path {{
+    min-height: 22px;
+    max-height: 22px;
+    padding: 1px 6px;
 }}
 """

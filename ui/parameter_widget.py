@@ -31,9 +31,11 @@ class ParameterWidget(QWidget):
         self,
         param: dict[str, Any],
         parent: QWidget | None = None,
+        browse_icon: str = "folder",
     ) -> None:
         super().__init__(parent)
         self._param = param
+        self._browse_icon = browse_icon
         self._control: QWidget | None = None
         self._browse_btn: QPushButton | None = None
         self._enable_check: QCheckBox | None = None
@@ -213,7 +215,7 @@ class ParameterWidget(QWidget):
         if self.expert_only and t == "boolean":
             self._enable_check = QCheckBox(name, self)
             self._enable_check.setChecked(False)
-            self._enable_check.setStyleSheet("color: #c8c8c8;")
+            self._enable_check.setObjectName("param_label")
             self._enable_check.toggled.connect(self.value_changed)
             layout.addWidget(self._enable_check)
             # No separate control widget; tooltip button only
@@ -228,13 +230,13 @@ class ParameterWidget(QWidget):
             self._enable_check = QCheckBox(name + ":", self)
             self._enable_check.setChecked(False)
             self._enable_check.setFixedWidth(190)
-            self._enable_check.setStyleSheet("color: #c8c8c8;")
+            self._enable_check.setObjectName("param_label")
             layout.addWidget(self._enable_check)
         else:
             lbl = QLabel(name + ":", self)
             lbl.setFixedWidth(190)
             lbl.setWordWrap(False)
-            lbl.setStyleSheet("color: #c8c8c8;")
+            lbl.setObjectName("param_label")
             layout.addWidget(lbl)
 
         # Control
@@ -243,7 +245,7 @@ class ParameterWidget(QWidget):
 
         # Browse button for file_path
         if self._param.get("type") == "file_path":
-            self._browse_btn = make_browse_button(self, "Browse…")
+            self._browse_btn = make_browse_button(self, "Browse…", icon=self._browse_icon)
             self._browse_btn.clicked.connect(self._browse)
             layout.addWidget(self._browse_btn)
 
@@ -362,7 +364,7 @@ class ParameterWidget(QWidget):
         hbox.setSpacing(6)
 
         lbl_w = QLabel("W (mm):", dim_row)
-        lbl_w.setStyleSheet("color: #c8c8c8;")
+        lbl_w.setObjectName("param_label")
         hbox.addWidget(lbl_w)
 
         w_spin = NoScrollSpinBox(dim_row)
@@ -373,7 +375,7 @@ class ParameterWidget(QWidget):
         hbox.addWidget(w_spin)
 
         lbl_h = QLabel("H (mm):", dim_row)
-        lbl_h.setStyleSheet("color: #c8c8c8;")
+        lbl_h.setObjectName("param_label")
         hbox.addWidget(lbl_h)
 
         h_spin = NoScrollSpinBox(dim_row)

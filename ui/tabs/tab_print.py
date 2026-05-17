@@ -32,7 +32,7 @@ from ui.dialogs.preflight_dialog import PreflightDialog
 from ui.tab_header import TabHeader
 from ui.tiff_preview import TiffPreview, _find_sidecar_channels
 from ui.tooltip_button import TooltipButton
-from ui.widgets import NoScrollComboBox, load_folder_icon, load_refresh_icon, open_file_dialog
+from ui.widgets import NoScrollComboBox, load_refresh_icon, open_file_dialog, set_folder_icon
 from workflow.cups_printer import CupsRawPrinter
 from workflow.page_geometry import (
     ORIENTATION_LANDSCAPE,
@@ -343,7 +343,7 @@ class TabPrint(QWidget):
 
         # Load existing target button
         self._load_btn = QPushButton("Load existing target — select .ti2 file", left)
-        self._load_btn.setIcon(load_folder_icon("folder_print"))
+        set_folder_icon(self._load_btn, "folder_print")
         self._load_btn.clicked.connect(self._on_load_ti2)
         ll.addWidget(self._load_btn)
 

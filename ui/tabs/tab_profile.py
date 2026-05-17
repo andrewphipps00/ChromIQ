@@ -35,7 +35,7 @@ from core.platform_paths import is_macos
 from core.resource_path import resource_path
 from ui.tab_header import TabHeader
 from ui.tooltip_button import InfoDialog, TooltipButton
-from ui.widgets import NoScrollComboBox, NoScrollDoubleSpinBox, NoScrollSpinBox, load_folder_icon, make_browse_button, open_file_dialog, tint_dialog_primary
+from ui.widgets import NoScrollComboBox, NoScrollDoubleSpinBox, NoScrollSpinBox, make_browse_button, open_file_dialog, set_folder_icon, set_preset_icon, tint_dialog_primary
 from ui.spectrum_progress import SpectrumSegmentsBar
 from workflow.profile_builder import ProfileBuilder, ProfileParams
 from workflow.printcal_runner import PrintcalRunner, PrintcalParams, ChannelTarget
@@ -251,7 +251,7 @@ class TabProfile(QWidget):
         self._file_grp = file_grp = QGroupBox("Measurement Data (.ti3)", colprof_container)
         fg = QHBoxLayout(file_grp)
         self._load_btn = QPushButton("Load .ti3 file…", file_grp)
-        self._load_btn.setIcon(load_folder_icon("folder_build"))
+        set_folder_icon(self._load_btn, "folder_build")
         self._load_btn.clicked.connect(self._on_load_ti3)
         self._file_lbl = QLabel("No file selected", file_grp)
         self._file_lbl.setStyleSheet("color: #909090; font-size: 11px;")
@@ -522,7 +522,7 @@ class TabProfile(QWidget):
         ti3_g.setSpacing(8)
         in_row = QHBoxLayout()
         self._pc_load_btn = QPushButton("Load cal_*.ti3…", grp_ti3)
-        self._pc_load_btn.setIcon(load_folder_icon("folder_build"))
+        set_folder_icon(self._pc_load_btn, "folder_build")
         self._pc_load_btn.clicked.connect(self._pc_browse_ti3)
         self._pc_ti3_lbl = QLabel("No file selected — measure a calibration target first.", grp_ti3)
         self._pc_ti3_lbl.setStyleSheet("color: #909090; font-size: 11px;")
@@ -1417,12 +1417,12 @@ class TabProfile(QWidget):
         self._m_preset_add_btn = QPushButton(container)
         self._m_preset_add_btn.setObjectName("icon_btn")
         self._m_preset_add_btn.setFixedSize(28, 28)
-        self._m_preset_add_btn.setIcon(QIcon(str(resource_path("assets/plus.svg"))))
+        set_preset_icon(self._m_preset_add_btn, "plus")
         self._m_preset_add_btn.setToolTip("Save current settings as a new preset")
         self._m_preset_del_btn = QPushButton(container)
         self._m_preset_del_btn.setObjectName("icon_btn")
         self._m_preset_del_btn.setFixedSize(28, 28)
-        self._m_preset_del_btn.setIcon(QIcon(str(resource_path("assets/minus.svg"))))
+        set_preset_icon(self._m_preset_del_btn, "minus")
         self._m_preset_del_btn.setToolTip("Delete selected preset")
         self._m_preset_del_btn.setEnabled(False)
         presets_row.addWidget(self._m_preset_add_btn)
