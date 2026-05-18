@@ -6,7 +6,7 @@ What sets ChromIQ apart:
 
 - **Light / Dark / System (Auto) appearance** that follows your OS theme live.
 - **Interactive 3D gamut viewer** with profile-vs-profile comparison (delta %, intersection volume, bidirectional coverage).
-- **Print pipeline that bypasses colour management automatically** — PostScript Level 2/3 with TIFF fallback for AirPrint, plus an optional native OS print dialog.
+- **Print pipeline that bypasses colour management automatically** — PostScript Level 2/3 with TIFF fallback (macOS only), plus an optional native OS print dialog.
 - **RGB, CMYK, and DeviceN multi-channel targets** up to 11 inks (e.g. CMYK + Orange + Green + Light Cyan).
 
 ChromIQ runs on **macOS**, **Windows** (x64 and ARM64), and **Linux** (x86_64 and aarch64, beta).
