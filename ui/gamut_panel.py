@@ -636,7 +636,7 @@ class GamutPanel(QWidget):
             "}"
         )
         wrap_layout = QVBoxLayout(container)
-        wrap_layout.setContentsMargins(0, 1, 1, 1)
+        wrap_layout.setContentsMargins(1, 1, 1, 1)
         wrap_layout.setSpacing(0)
         try:
             from PyQt6.QtWebEngineWidgets import QWebEngineView

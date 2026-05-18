@@ -193,6 +193,10 @@ def _patch_html(html_path: Path, themed: bool = True, bg: str = "#111111") -> No
             "<style>\n"
             f"  html, body {{ background: {bg}; margin: 0; padding: 0;"
             " overflow: hidden; }\n"
+            "  x3d, x3d > canvas, x3d > div {"
+            " border: 0 !important; outline: 0 !important;"
+            " margin: 0 !important; padding: 0 !important; }\n"
+            "  canvas { border: 0 !important; outline: 0 !important; }\n"
             "</style>\n"
         )
         # JS always runs — applyBackground needs to set the X3D scene
