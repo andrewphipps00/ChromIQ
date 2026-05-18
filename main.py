@@ -60,7 +60,7 @@ try:
     from ui.main_window import MainWindow
     from ui.styles import WinButtonLayoutStyle
     from ui.theme import apply_appearance
-    from ui.widgets import ButtonFontFilter
+    from ui.widgets import ButtonFontFilter, GroupBoxSurfaceFilter
 except BaseException:
     log.exception("Fatal error importing application modules")
     raise
@@ -85,6 +85,9 @@ def main() -> int:
 
     _btn_font_filter = ButtonFontFilter(app)
     app.installEventFilter(_btn_font_filter)
+
+    _gb_surface_filter = GroupBoxSurfaceFilter(app)
+    app.installEventFilter(_gb_surface_filter)
 
     settings = AppSettings()
     appearance = settings.get("appearance", "auto")

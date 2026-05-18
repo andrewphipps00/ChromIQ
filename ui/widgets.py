@@ -5,12 +5,13 @@ import re
 from pathlib import Path
 
 from PyQt6.QtCore import QEvent, QModelIndex, QObject, QSize, QSortFilterProxyModel, Qt, QUrl
-from PyQt6.QtGui import QColor, QFont, QIcon, QPainter, QPixmap
+from PyQt6.QtGui import QColor, QFont, QIcon, QPainter, QPalette, QPixmap
 from PyQt6.QtWidgets import (
     QApplication,
     QComboBox,
     QDoubleSpinBox,
     QFileDialog,
+    QGroupBox,
     QPushButton,
     QSizeGrip,
     QSpinBox,
@@ -62,10 +63,25 @@ def _parse_extensions(name_filter: str) -> list[str]:
     return ["." + e.lower() for e in re.findall(r"\*\.(\w+)", name_filter)]
 
 
+def _input_bg_qss() -> str:
+    """Per-widget QSS rule forcing the body of QComboBox / QSpinBox /
+    QDoubleSpinBox to the current theme's input background colour
+    (white in light, BG_INPUT #1f1f1f in dark). App-wide QSS for these
+    rules is silently ignored by Qt's QStyleSheetStyle for compound
+    widgets, but per-widget setStyleSheet bypasses that quirk."""
+    bg = QApplication.palette().base().color().name()
+    return (
+        "QComboBox:enabled, QSpinBox:enabled, QDoubleSpinBox:enabled {"
+        f" background-color: {bg};"
+        "}"
+    )
+
+
 class NoScrollComboBox(QComboBox):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.setStyleSheet(_input_bg_qss())
 
     def wheelEvent(self, event):
         if self.hasFocus():
@@ -78,6 +94,7 @@ class NoScrollSpinBox(QSpinBox):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.setStyleSheet(_input_bg_qss())
 
     def wheelEvent(self, event):
         if self.hasFocus():
@@ -90,12 +107,65 @@ class NoScrollDoubleSpinBox(QDoubleSpinBox):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.setStyleSheet(_input_bg_qss())
 
     def wheelEvent(self, event):
         if self.hasFocus():
             super().wheelEvent(event)
         else:
             event.ignore()
+
+
+def reapply_input_stylesheet(root: QWidget) -> None:
+    """Re-apply the per-widget input-bg QSS on every combo/spin descendant.
+    Called from MainWindow.apply_theme on every theme switch so the
+    hardcoded colour in the existing per-widget stylesheet is refreshed
+    for the new theme."""
+    qss = _input_bg_qss()
+    for cls in (QComboBox, QSpinBox, QDoubleSpinBox):
+        for w in root.findChildren(cls):
+            w.setStyleSheet(qss)
+
+
+def _apply_groupbox_surface(gb: QGroupBox) -> None:
+    """Paint the GroupBox surface via QPalette + autoFillBackground instead
+    of QSS. The QSS rule `QGroupBox { background: ... }` causes Qt's
+    QStyleSheetStyle to propagate the colour into descendants' palette
+    roles (including QPalette.Base), which makes QComboBox / QSpinBox
+    bodies render the same surface colour as the section. Setting only
+    palette.Window via setPalette() does not contaminate descendants'
+    Base role, so inputs stay white per their own QSS rule."""
+    app_pal = QApplication.palette()
+    is_light = app_pal.window().color().lightness() > 150
+    if is_light:
+        from ui.light_styles import LM_BG_SURFACE
+        gb.setAutoFillBackground(True)
+        pal = gb.palette()
+        pal.setColor(QPalette.ColorRole.Window, QColor(LM_BG_SURFACE))
+        gb.setPalette(pal)
+    else:
+        gb.setAutoFillBackground(False)
+        gb.setPalette(QPalette())  # revert to inherited
+
+
+class GroupBoxSurfaceFilter(QObject):
+    """Installs on QApplication. Whenever a QGroupBox is polished, applies
+    the cream surface colour via setPalette + autoFillBackground so the
+    QSS rule for QGroupBox can stay background-less and not contaminate
+    descendant input widgets' palette.Base."""
+
+    def eventFilter(self, obj: QObject, event: QEvent) -> bool:
+        if event.type() == QEvent.Type.Polish and isinstance(obj, QGroupBox):
+            _apply_groupbox_surface(obj)
+        return False
+
+
+def reapply_groupbox_surface(root: QWidget) -> None:
+    """Walk every QGroupBox descendant of `root` and re-apply the surface
+    colour. Called from MainWindow.apply_theme on every theme switch
+    because Polish only fires once per widget."""
+    for gb in root.findChildren(QGroupBox):
+        _apply_groupbox_surface(gb)
 
 
 def icc_profile_paths() -> list[str]:
