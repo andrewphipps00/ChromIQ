@@ -10,7 +10,7 @@ Key: (instrument_code, double_density, paper_size)
     "p3"  = i1Pro 3 Plus (measured with -i3p; much larger patches than i1 — ~5× fewer per sheet)
     "CM"  = ColorMunki / i1Studio / ColorChecker Studio
     "SS"  = SpectroScan (flatbed XY scanner)
-  double_density: True only meaningful for CM (-h flag)
+  double_density: -h flag — for CM means double density (rig), for SS means hexagon patches
   paper_size: A2, 329x483, 483x329, A3, 420x297, 11x17, Legal,
               A4, A4R, Letter, LetterR, 203x254, 127x178, 4x6
 """
@@ -78,7 +78,10 @@ _PER_SHEET_CAPACITY: dict[tuple[str, bool, str], int] = {
     ("CM", True,  "127x178"):    56,
     ("CM", True,  "4x6"):        30,
     # ---- SpectroScan (flatbed XY scanner) --------------------------
-    ("SS", False, "A2"):       4000,
+    # Re-measured via scripts/measure_ss_capacity.py against Argyll 3.5.0.
+    # SS layout is independent of -L (flatbed reads individual patches,
+    # not strips), so these values are identical to _PER_SHEET_CAPACITY_NO_LB.
+    ("SS", False, "A2"):       4592,
     ("SS", False, "329x483"):  2838,
     ("SS", False, "483x329"):  2860,
     ("SS", False, "A3"):       2166,
@@ -92,6 +95,22 @@ _PER_SHEET_CAPACITY: dict[tuple[str, bool, str], int] = {
     ("SS", False, "203x254"):   825,
     ("SS", False, "127x178"):   308,
     ("SS", False, "4x6"):       209,
+    # ---- SpectroScan + hexagon (-h): ~14% denser packing ------------
+    # Measured via scripts/measure_ss_hex_capacity.py.
+    ("SS", True,  "A2"):       5264,
+    ("SS", True,  "329x483"):  3268,
+    ("SS", True,  "483x329"):  3250,
+    ("SS", True,  "A3"):       2470,
+    ("SS", True,  "420x297"):  2520,
+    ("SS", True,  "11x17"):    2345,
+    ("SS", True,  "Legal"):    1430,
+    ("SS", True,  "A4"):       1170,
+    ("SS", True,  "A4R"):      1178,
+    ("SS", True,  "Letter"):   1092,
+    ("SS", True,  "LetterR"):  1120,
+    ("SS", True,  "203x254"):   950,
+    ("SS", True,  "127x178"):   350,
+    ("SS", True,  "4x6"):       210,
 }
 
 # Baseline printtarg layout parameters these values were measured with
@@ -253,20 +272,37 @@ _PER_SHEET_CAPACITY_NO_LB: dict[tuple[str, bool, str], int] = {
     ("CM", True,  "127x178"):    56,
     ("CM", True,  "4x6"):        30,
     # ---- SpectroScan (flatbed XY scanner) --------------------------
-    ("SS", False, "A2"):       4588,
+    # Re-measured via scripts/measure_ss_capacity.py against Argyll 3.5.0.
+    # -L has no effect on SS layout — values identical to the with-L table.
+    ("SS", False, "A2"):       4592,
     ("SS", False, "329x483"):  2838,
     ("SS", False, "483x329"):  2860,
-    ("SS", False, "A3"):       2164,
+    ("SS", False, "A3"):       2166,
     ("SS", False, "420x297"):  2184,
     ("SS", False, "11x17"):    2088,
-    ("SS", False, "Legal"):    1294,
-    ("SS", False, "A4"):       1010,
-    ("SS", False, "A4R"):      1025,
-    ("SS", False, "Letter"):    996,
-    ("SS", False, "LetterR"):  1006,
+    ("SS", False, "Legal"):    1296,
+    ("SS", False, "A4"):       1014,
+    ("SS", False, "A4R"):      1026,
+    ("SS", False, "Letter"):    999,
+    ("SS", False, "LetterR"):  1008,
     ("SS", False, "203x254"):   825,
     ("SS", False, "127x178"):   308,
     ("SS", False, "4x6"):       209,
+    # ---- SpectroScan + hexagon (-h): -L is still a no-op on SS ------
+    ("SS", True,  "A2"):       5264,
+    ("SS", True,  "329x483"):  3268,
+    ("SS", True,  "483x329"):  3250,
+    ("SS", True,  "A3"):       2470,
+    ("SS", True,  "420x297"):  2520,
+    ("SS", True,  "11x17"):    2345,
+    ("SS", True,  "Legal"):    1430,
+    ("SS", True,  "A4"):       1170,
+    ("SS", True,  "A4R"):      1178,
+    ("SS", True,  "Letter"):   1092,
+    ("SS", True,  "LetterR"):  1120,
+    ("SS", True,  "203x254"):   950,
+    ("SS", True,  "127x178"):   350,
+    ("SS", True,  "4x6"):       210,
 }
 
 
@@ -353,8 +389,9 @@ def query_patches(
     margin_mm         → must be one of SUPPORTED_MARGINS, else returns None
                         and the caller falls back to a live binary search.
     """
-    # Normalise: SS never has double_density
-    dd = double_density if instrument == "CM" else False
+    # Normalise: -h is meaningful on CM (double density via rig) and on
+    # SS (hexagon patches). Strip instruments (i1, p3) never use it.
+    dd = double_density if instrument in {"CM", "SS"} else False
 
     if margin_mm == 6:
         db = _PER_SHEET_CAPACITY if suppress_lb else _PER_SHEET_CAPACITY_NO_LB

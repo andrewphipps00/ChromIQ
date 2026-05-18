@@ -1,5 +1,68 @@
 # Changelog
 
+## v3.7.0
+SpectroScan capacity overhaul. The patch-count database underreported
+SS+A2 by 13% (4000 → 4592) and had small off-by-N drift on the no-LB
+side for several papers; both tables have been re-measured against
+Argyll 3.5.0. Hexagon patches (-h) are now a first-class option for
+the SpectroScan in both Guided and Pro mode, with capacities measured
+across all 14 paper sizes (typically +14% more patches per sheet). The
+chart UI has been tidied so each instrument only exposes the printtarg
+flags that actually affect its layout, and a state-leak bug that
+silently injected -h into SS charts after the user had previously
+enabled Double Density on ColorMunki is fixed.
+
+### Features
+- **Hexagon patches (-h) exposed for SpectroScan.** A new checkbox
+  appears in both Guided ("Hexagon patches (packs ~15% more per
+  sheet)") and Pro mode ("Hexagon patches"), with a tooltip that
+  reflects the SS-specific semantics (hexagonal layout vs. ColorMunki's
+  double-density rig). Patch-count display and Auto-estimation in
+  Pro mode both honour the new option; e.g. SS+A4 jumps from 1014 to
+  1170 patches per sheet when hex is enabled.
+- **SpectroScan hex capacity database.** 14 paper sizes × hex on/off,
+  measured by `scripts/measure_ss_hex_capacity.py` (binary-searches
+  `targen -d2 -f<n>` + `printtarg -iSS -h ... -t300 -m6 -M6 [-L]` for
+  the largest count that still fits exactly one page). Values land in
+  both `_PER_SHEET_CAPACITY` and `_PER_SHEET_CAPACITY_NO_LB` because
+  SS is a flatbed and ignores `-L`.
+
+### Fixes
+- **`-h` no longer leaks into SpectroScan charts.** Previously, if you
+  enabled Double Density while on ColorMunki and then switched to
+  SpectroScan, the checkbox was hidden but its checked state persisted
+  and silently added `-h` to the printtarg command. On SS that
+  invokes hexagonal layout (23×45 patches on A4 instead of 26×39),
+  visually identifiable by columns running only A–W on a 1014-patch
+  chart with three columns of empty space. The visibility logic for
+  both Guided (`_update_dd_visibility`) and Pro (`_update_manual_lb_visibility`)
+  now force-unchecks `-h` whenever the row is hidden, so the state
+  can't survive an instrument switch. The arg builders in
+  `workflow/chart_creator.py:_build_printtarg_args` and
+  `ui/tabs/tab_chart.py` defensively filter `-h` to instruments where
+  it's meaningful (CM, SS) and `-L` to strip instruments (i1, p3) so
+  even a stale param dict can't reintroduce a no-op flag into the
+  command stamped in TIFF metadata.
+- **SpectroScan + A2 patch count was 13% under reality.** The
+  `_PER_SHEET_CAPACITY` row read 4000 patches/sheet, but printtarg
+  actually packs an 82×56 grid = 4592 on A2 with the default margin.
+  Re-measured against Argyll 3.5.0 by `scripts/measure_ss_capacity.py`
+  and corrected. Smaller no-LB drift on A3/Legal/A4/A4R/Letter/LetterR
+  (each off by 1–4) was also corrected; all SS rows now agree between
+  the with-L and no-LB tables because SS is `-L`-independent (flatbed
+  reads individual patches, not strips).
+- **Suppress-left-clip-border (`-L`) hidden for SpectroScan and
+  ColorMunki.** It already had no effect on either instrument's
+  layout but the checkbox was visible for SS, which was confusing.
+  Now only strip instruments (i1, p3) expose the option in both
+  Guided and Pro mode.
+- **Dynamic relabelling for the `-h` row.** ParameterWidget gained
+  `set_display_text(label, tooltip_title, tooltip_body)` so the same
+  underlying widget can advertise *"Double density (for measuring
+  rig)"* on ColorMunki and *"Hexagon patches"* on SpectroScan,
+  matching what the flag actually does for each instrument. Tooltip
+  title and body update in lockstep with the label.
+
 ## v3.6.7
 Light-mode polish across the parameter panels and the Check/Refine
 gamut viewer. Every combobox and spinbox body now renders white in

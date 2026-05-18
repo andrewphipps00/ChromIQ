@@ -420,9 +420,13 @@ class ChartCreator:
         args.append(f"-p{p.paper}")
         dpi_flag = "-T" if p.tiff_16bit else "-t"
         args.append(f"{dpi_flag}{p.tiff_dpi}")
-        if p.double_density:
+        # -h is only meaningful for CM (double density) and SS (hexagon
+        # patches). -L only affects strip instruments (i1, p3). Filter
+        # so leftover UI state can't append no-op flags to the recorded
+        # command in stamped TIFF metadata.
+        if p.double_density and p.instrument in {"CM", "SS"}:
             args.append("-h")
-        if p.disable_left_border:
+        if p.disable_left_border and p.instrument in {"i1", "p3"}:
             args.append("-L")
         if abs(p.patch_scale - 1.0) > 0.01:
             args += [f"-a{p.patch_scale:.2f}"]

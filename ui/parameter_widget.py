@@ -40,6 +40,7 @@ class ParameterWidget(QWidget):
         self._label: QLabel | None = None
         self._browse_btn: QPushButton | None = None
         self._enable_check: QCheckBox | None = None
+        self._tooltip_btn: TooltipButton | None = None
         self._custom_combo: NoScrollComboBox | None = None
         self._custom_w_spin: NoScrollSpinBox | None = None
         self._custom_h_spin: NoScrollSpinBox | None = None
@@ -255,12 +256,32 @@ class ParameterWidget(QWidget):
         tt_title = self._param.get("tooltip_title", name)
         tt_body  = self._param.get("tooltip_body", "No description available.")
         btn = TooltipButton(tt_title, tt_body, self)
+        self._tooltip_btn = btn
         layout.addWidget(btn)
 
         # Wire enable-checkbox to control enabled state
         if self._enable_check is not None:
             self.set_control_enabled(False)
             self._enable_check.toggled.connect(self._on_enable_toggled)
+
+    def set_display_text(self, label: str, tooltip_title: str | None = None,
+                          tooltip_body: str | None = None) -> None:
+        """Repurpose the row's visible label and tooltip without rebuilding.
+
+        Used when one CLI flag has different meanings per context (e.g. -h
+        is "Double density" for ColorMunki but "Hexagon patches" for
+        SpectroScan). Leaves the underlying control widget untouched.
+        """
+        if self._label is not None:
+            self._label.setText(label + ":")
+        elif self._enable_check is not None:
+            suffix = ":" if not (self.expert_only and self._param.get("type") == "boolean") else ""
+            self._enable_check.setText(label + suffix)
+        if self._tooltip_btn is not None and tooltip_title is not None:
+            self._tooltip_btn._title = tooltip_title
+            if tooltip_body is not None:
+                self._tooltip_btn._body = tooltip_body.strip()
+            self._tooltip_btn.setToolTip(f"{tooltip_title}\n\nClick for details")
 
     def set_control_enabled(self, enabled: bool) -> None:
         """Enable/disable the control + browse button + label as a unit.

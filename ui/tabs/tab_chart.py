@@ -899,9 +899,9 @@ class TabChart(QWidget):
         pt_args.append(f"-p{p.paper}")
         dpi_flag = "-T" if p.tiff_16bit else "-t"
         pt_args.append(f"{dpi_flag}{p.tiff_dpi}")
-        if p.double_density:
+        if p.double_density and p.instrument in {"CM", "SS"}:
             pt_args.append("-h")
-        if p.disable_left_border:
+        if p.disable_left_border and p.instrument in {"i1", "p3"}:
             pt_args.append("-L")
         if abs(p.patch_scale - 1.0) > 0.01:
             pt_args.append(f"-a{p.patch_scale:.2f}")
@@ -1078,11 +1078,35 @@ class TabChart(QWidget):
         if self._manual_instr_pw is None:
             return
         instr = self._manual_instr_pw.get_raw_value() or "i1"
-        is_cm = instr == "CM"
+        # -L only matters for strip instruments. CM (patch-by-patch) and SS
+        # (XY flatbed) ignore it, so hide the row for both.
         if self._manual_lb_pw is not None:
-            self._manual_lb_pw.setVisible(not is_cm)
+            self._manual_lb_pw.setVisible(instr in {"i1", "p3"})
+        # -h is offered on CM (double density) and SS (hexagon patches);
+        # relabel per instrument so the meaning is clear.
         if self._manual_dd_pw is not None:
-            self._manual_dd_pw.setVisible(is_cm)
+            if instr == "CM":
+                self._manual_dd_pw.setVisible(True)
+                self._manual_dd_pw.set_display_text(
+                    "Double density (for measuring rig)",
+                    "Double Density (-h)",
+                    "Uses the measuring rig to double the number of patches per strip for "
+                    "ColorMunki / i1Studio / ColorChecker Studio. Requires the physical rig.",
+                )
+            elif instr == "SS":
+                self._manual_dd_pw.setVisible(True)
+                self._manual_dd_pw.set_display_text(
+                    "Hexagon patches",
+                    "Hexagon Patches (-h)",
+                    "Uses hexagonal patches instead of rectangular ones for the "
+                    "SpectroScan, packing ~15% more patches on the same sheet.",
+                )
+            else:
+                self._manual_dd_pw.setVisible(False)
+                # Clear hidden -h so it can't leak into printtarg the next time
+                # the user switches back to CM/SS. Mirror of guided mode.
+                if self._manual_dd_pw.get_raw_value():
+                    self._manual_dd_pw.set_value(False)
 
     def _apply_instrument_default_margin(self) -> None:
         """Auto-update -m widget to the per-instrument default on instrument change.
@@ -1344,8 +1368,11 @@ class TabChart(QWidget):
         grey_steps = max(8, min((ps * pages) // 30, 64))
         wp = base_white + (pages - 1) * 2
         bp = base_black + (pages - 1) * 2
-        lb_flag = "-L " if has_lb else ""
-        dd_flag = "-h " if dd else ""
+        # -L only matters for strip instruments; -h only for CM/SS. Hide
+        # both from the command preview when not applicable so the user
+        # sees exactly what printtarg will run.
+        lb_flag = "-L " if has_lb and instr in {"i1", "p3"} else ""
+        dd_flag = "-h " if dd and instr in {"CM", "SS"} else ""
         margin_flag = f"-m{eff_margin} -M{eff_margin} " if eff_margin != 6 else ""
         precond_path = (
             self._guided_precond_path.text().strip()
@@ -1396,10 +1423,39 @@ class TabChart(QWidget):
 
     def _update_dd_visibility(self) -> None:
         instr = self._instr_combo.currentData() or "i1"
-        visible = instr == "CM"
-        self._dd_check.setVisible(visible)
-        self._dd_tooltip.setVisible(visible)
-        lb_visible = instr != "CM"
+        # -h is meaningful on CM (double density via rig) and SS (hexagon
+        # patches), but has different semantics → relabel and retitle.
+        if instr == "CM":
+            self._dd_check.setVisible(True)
+            self._dd_tooltip.setVisible(True)
+            self._dd_check.setText("Double density (requires measuring rig)")
+            self._dd_tooltip._title = "Double Density (-h)"
+            self._dd_tooltip._body  = (
+                "Uses the measuring rig to double the number of patches per strip for "
+                "ColorMunki / i1Studio / ColorChecker Studio. Requires the physical rig."
+            )
+            self._dd_tooltip.setToolTip("Double Density (-h)\n\nClick for details")
+        elif instr == "SS":
+            self._dd_check.setVisible(True)
+            self._dd_tooltip.setVisible(True)
+            self._dd_check.setText("Hexagon patches (packs ~15% more per sheet)")
+            self._dd_tooltip._title = "Hexagon Patches (-h)"
+            self._dd_tooltip._body  = (
+                "Uses hexagonal patches instead of rectangular ones for the SpectroScan, "
+                "packing ~15% more patches on the same sheet. Layout still reads "
+                "patch-by-patch via the XY scanner."
+            )
+            self._dd_tooltip.setToolTip("Hexagon Patches (-h)\n\nClick for details")
+        else:
+            self._dd_check.setVisible(False)
+            self._dd_tooltip.setVisible(False)
+            # Force-uncheck when hidden so the state can't leak into printtarg
+            # the next time the user goes back to CM/SS without re-touching it.
+            if self._dd_check.isChecked():
+                self._dd_check.setChecked(False)
+        # -L only affects strip instruments (i1, p3). CM reads patches
+        # individually and SS is an XY flatbed — both ignore -L.
+        lb_visible = instr in {"i1", "p3"}
         self._lb_check.setVisible(lb_visible)
         self._lb_tooltip.setVisible(lb_visible)
 
