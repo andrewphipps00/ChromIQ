@@ -548,8 +548,10 @@ class MainWindow(QMainWindow):
                     pass
         # Reload theme-aware icons (folder glyphs, preset +/-) so their palette-
         # dependent variants repaint without needing an app restart.
-        from ui.widgets import apply_themed_icons
+        from ui.widgets import apply_themed_icons, reapply_groupbox_surface, reapply_input_stylesheet
         apply_themed_icons(self)
+        reapply_groupbox_surface(self)
+        reapply_input_stylesheet(self)
         # Re-run the per-tab QSS injector — its mode_btn / primary colors are
         # baked in per-mode, so a theme switch needs to regenerate them.
         if hasattr(self, "_tabs"):

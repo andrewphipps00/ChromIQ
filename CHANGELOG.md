@@ -1,5 +1,66 @@
 # Changelog
 
+## v3.6.7
+Light-mode polish across the parameter panels and the Check/Refine
+gamut viewer. Every combobox and spinbox body now renders white in
+light mode (matching the QLineEdit path fields next to them) and
+`BG_INPUT` in dark mode (matching dark-mode QLineEdits), instead of
+inheriting the warm-cream surface of the GroupBox they sit inside.
+The gamut viewer no longer shows the thin dark line at the top and
+left edges in light mode.
+
+### Fixes
+- **Light-mode combobox & spinbox bodies are now white when enabled.**
+  Two root causes had to be addressed together. (1) The QSS rule
+  `QGroupBox { background: LM_BG_SURFACE }` in `ui/light_styles.py`
+  was being propagated by Qt's QStyleSheetStyle into descendants'
+  `palette.Base`, so every QComboBox / QSpinBox / QDoubleSpinBox body
+  inherited the cream section colour — proven via a diagnostic that
+  showed `widget.palette().base() = #f7f4ef` on enabled inputs
+  despite the input QSS rule setting `background: #ffffff`. The QSS
+  rule has been removed; the cream surface is now repainted by a
+  new `GroupBoxSurfaceFilter` in `ui/widgets.py` that runs on every
+  QGroupBox Polish event and calls `setAutoFillBackground(True)` +
+  `palette.Window = LM_BG_SURFACE`. That mechanism does not
+  contaminate descendants' Base role, so input widgets inherit the
+  app palette's white Base again. `MainWindow.apply_theme` calls
+  `reapply_groupbox_surface()` on every theme switch so light↔dark
+  toggles update correctly. (2) Even after the contamination was
+  fixed, the bodies rendered the warm-grey LM_BG_WIDGET because
+  Fusion's `PE_PanelButtonCommand` paints a gradient using
+  palette.Light/Mid/Button. Diagnostics on `drawPrimitive`,
+  `drawComplexControl`, and `drawControl` overrides in the
+  `WinButtonLayoutStyle` QProxyStyle confirmed Qt's QSS engine
+  handles QComboBox / QSpinBox painting entirely internally for
+  compound widgets and never delegates to the base style — and
+  per-widget `setPalette()` calls were being silently reset by the
+  QSS engine on the next polish cycle. The fix that did stick is a
+  per-widget stylesheet attached in each NoScroll wrapper's
+  `__init__`:
+  `QComboBox:enabled, QSpinBox:enabled, QDoubleSpinBox:enabled
+  { background-color: <palette.base> }`. Per-widget stylesheets
+  bypass the QStyleSheetStyle quirk that affects app-wide rules.
+  `reapply_input_stylesheet()` rewrites the rule with the current
+  theme's `palette.base()` on every `apply_theme()` call, so dark
+  mode picks up `#1f1f1f` and light picks up `#ffffff` without
+  flicker. The `:enabled` selector scoping leaves the disabled-state
+  appearance unchanged.
+- **Dark line on the top and left of the gamut viewer in light mode.**
+  Two contributing causes addressed. (1) X3DOM applies a default
+  2 px dark border to the `<x3d>` element; the wrapper bumps the
+  height to `100vh`, so the right and bottom edges were clipped by
+  `overflow: hidden` but the top and left remained visible. The
+  injected `<style>` in `workflow/gamut_viewer.py:_patch_html()` now
+  zeroes border, outline, margin, and padding on `<x3d>` and its
+  inner canvas so the X3DOM-supplied border no longer paints at all.
+  (2) The wrapper widget in `ui/gamut_panel.py:_make_viewer_widget()`
+  used `setContentsMargins(0, 1, 1, 1)` with `border-left: none`, so
+  the QWebEngineView sat flush against the container's left edge
+  with no frame-bg buffer to hide Chromium surface-edge artefacts.
+  The contentsMargins are now symmetric `(1, 1, 1, 1)`; `border-left:
+  none` is preserved so the "open on the left" design intent toward
+  the splitter handle stays the same.
+
 ## v3.6.6
 Dialog button-layout polish across the Check/Refine and Build Profile
 tabs. Every result dialog now uses the same arrangement: action buttons

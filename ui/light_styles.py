@@ -334,12 +334,16 @@ QPlainTextEdit#log {{
 }}
 
 /* -- GroupBox ------------------------------------------------------ */
+/* Surface colour applied via QPalette + autoFillBackground in
+ * ui/widgets.py (GroupBoxSurfaceFilter) — using QSS `background:` here
+ * propagates the colour into descendants' palette.Base, making
+ * QComboBox / QSpinBox bodies render the cream surface instead of
+ * the input QSS rule's white. */
 QGroupBox {{
     border: 1px solid {LM_BORDER};
     border-radius: 4px;
     margin-top: 14px;
     padding-top: 4px;
-    background: {LM_BG_SURFACE};
 }}
 QGroupBox::title {{
     subcontrol-origin: margin;
