@@ -1,5 +1,36 @@
 # Changelog
 
+## v3.7.1
+Spinbox button polish — both themes. The up/down buttons on non-compact
+spinboxes used to leave a noticeable gap between them at the actual
+rendered widget height, and the up-button looked ~2 px shorter than the
+down-button because Qt's QSS sub-control rendering rounded the heights
+in a way that made the down-button overpaint the up-button's lower
+edge. Buttons are now flush, equally tall, and a few pixels wider for
+a friendlier click target. Compact spinboxes are unchanged.
+
+### Fixes
+- **No more gap between up/down buttons (non-compact spinboxes).**
+  The buttons were sized for the 28 px minimum spinbox height, but
+  inside form rows the spinbox actually renders at ~38 px, leaving a
+  visible empty band between the two buttons. Heights have been
+  retuned and `subcontrol-origin` switched from `padding` to `border`
+  in dark mode (light mode already used `border`) so each button spans
+  exactly half of the rendered widget height.
+- **Up and down buttons are now the same visible size.** Qt's stylesheet
+  engine was adding 1 px to each button's height, causing a 2 px overlap
+  in the middle that the down-button painted over. Heights are now
+  tuned so the rendered halves meet exactly with no overlap.
+
+### Tweaks
+- **Wider spin buttons.** Up/down buttons grew from 18 px to 22 px wide
+  and the spinbox text padding from 20 px to 24 px so the value still
+  has room.
+- **Light-mode arrow micro-nudge.** Up arrow shifted 1 px up, down
+  arrow 1 px down, so each icon sits closer to its respective outer
+  edge. Dark mode arrows stay centered. Compact spinbox arrows are
+  explicitly reset to centered so the offset is non-compact only.
+
 ## v3.7.0
 SpectroScan capacity overhaul. The patch-count database underreported
 SS+A2 by 13% (4000 → 4592) and had small off-by-N drift on the no-LB

@@ -259,14 +259,14 @@ QComboBox QAbstractItemView {{
     outline: none;
 }}
 QSpinBox, QDoubleSpinBox {{
-    padding-right: 20px;
+    padding-right: 24px;
     min-height: 28px;
 }}
 QSpinBox::up-button, QDoubleSpinBox::up-button {{
     subcontrol-origin: border;
     subcontrol-position: top right;
-    width: 18px;
-    height: 14px;
+    width: 22px;
+    height: 18px;
     border-left: 1px solid {LM_BORDER};
     border-top: 1px solid transparent;
     border-right: 1px solid transparent;
@@ -280,8 +280,8 @@ QSpinBox::up-button:hover, QDoubleSpinBox::up-button:hover {{
 QSpinBox::down-button, QDoubleSpinBox::down-button {{
     subcontrol-origin: border;
     subcontrol-position: bottom right;
-    width: 18px;
-    height: 14px;
+    width: 22px;
+    height: 18px;
     border-left: 1px solid {LM_BORDER};
     border-top: 1px solid {LM_BORDER};
     border-right: 1px solid transparent;
@@ -296,11 +296,13 @@ QSpinBox::up-arrow, QDoubleSpinBox::up-arrow {{
     image: url({_ARROW_UP_DARK});
     width: 10px;
     height: 6px;
+    top: -1px;
 }}
 QSpinBox::down-arrow, QDoubleSpinBox::down-arrow {{
     image: url({_ARROW_DOWN_DARK});
     width: 10px;
     height: 6px;
+    top: 1px;
 }}
 
 /* -- CheckBox ------------------------------------------------------ */
@@ -510,6 +512,12 @@ QSpinBox#compact_input::up-button, QDoubleSpinBox#compact_input::up-button {{
 }}
 QSpinBox#compact_input::down-button, QDoubleSpinBox#compact_input::down-button {{
     height: 10px;
+}}
+QSpinBox#compact_input::up-arrow, QDoubleSpinBox#compact_input::up-arrow {{
+    top: 0;
+}}
+QSpinBox#compact_input::down-arrow, QDoubleSpinBox#compact_input::down-arrow {{
+    top: 0;
 }}
 QComboBox#compact_input {{
     padding-right: 28px;

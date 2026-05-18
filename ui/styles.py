@@ -195,10 +195,10 @@ QComboBox QAbstractItemView {{
     selection-color: #0a0a0a;
     outline: none;
 }}
-QSpinBox, QDoubleSpinBox {{ padding-right: 20px; min-height: 28px; }}
+QSpinBox, QDoubleSpinBox {{ padding-right: 24px; min-height: 28px; }}
 QSpinBox::up-button, QDoubleSpinBox::up-button {{
-    subcontrol-origin: padding; subcontrol-position: top right;
-    width: 18px; height: 13px;
+    subcontrol-origin: border; subcontrol-position: top right;
+    width: 22px; height: 18px;
     border-left: 1px solid {BORDER};
     border-bottom: 1px solid {BORDER};
     border-top-right-radius: 2px;
@@ -206,8 +206,8 @@ QSpinBox::up-button, QDoubleSpinBox::up-button {{
 }}
 QSpinBox::up-button:hover, QDoubleSpinBox::up-button:hover {{ background: #3a3a3a; }}
 QSpinBox::down-button, QDoubleSpinBox::down-button {{
-    subcontrol-origin: padding; subcontrol-position: bottom right;
-    width: 18px; height: 13px;
+    subcontrol-origin: border; subcontrol-position: bottom right;
+    width: 22px; height: 18px;
     border-left: 1px solid {BORDER};
     border-top: 1px solid {BORDER};
     border-bottom-right-radius: 2px;
@@ -325,6 +325,8 @@ QSpinBox#compact_input, QDoubleSpinBox#compact_input, QComboBox#compact_input {{
 QSpinBox#compact_input, QDoubleSpinBox#compact_input {{ padding-right: 20px; }}
 QSpinBox#compact_input::up-button,   QDoubleSpinBox#compact_input::up-button   {{ height: 10px; }}
 QSpinBox#compact_input::down-button, QDoubleSpinBox#compact_input::down-button {{ height: 10px; }}
+QSpinBox#compact_input::up-arrow,   QDoubleSpinBox#compact_input::up-arrow   {{ top: 0; }}
+QSpinBox#compact_input::down-arrow, QDoubleSpinBox#compact_input::down-arrow {{ top: 0; }}
 QComboBox#compact_input {{ padding-right: 28px; }}
 QLineEdit#compact_path {{
     min-height: 22px;
