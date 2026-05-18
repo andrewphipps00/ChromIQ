@@ -97,7 +97,7 @@ Linux support is currently **beta** — please report what works and what doesn'
 
 | Step 4c — Calibration & Profiling (disabled by default) | Step 4d — Calibration & Profiling (disabled by default) |
 |---|---|
-| ![Calibration & Profiling](docs/4c.png) | ![Calibration & Profiling](docs/4c.png) |
+| ![Calibration & Profiling](docs/4c.png) | ![Calibration & Profiling](docs/4d.png) |
 
 | Step 5a — Check & Refine (guided)  | Step 5b — Check & Refine (manual) |
 |---|---|
