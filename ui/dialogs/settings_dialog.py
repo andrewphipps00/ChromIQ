@@ -11,7 +11,6 @@ from PyQt6.QtGui import QDesktopServices, QFontMetrics
 from PyQt6.QtWidgets import (
     QApplication,
     QCheckBox,
-    QComboBox,
     QDialog,
     QDialogButtonBox,
     QFileDialog,
@@ -34,7 +33,7 @@ from core.platform_paths import (
 from core.updater import UpdateChecker, _RELEASES_PAGE
 from core.version import APP_VERSION
 from ui.tooltip_button import TooltipButton
-from ui.widgets import make_browse_button, open_dir_dialog
+from ui.widgets import NoScrollComboBox, make_browse_button, open_dir_dialog
 
 if TYPE_CHECKING:
     from core.settings import AppSettings
@@ -234,7 +233,7 @@ class SettingsDialog(QDialog):
         appearance_grp = QGroupBox("Appearance", self)
         ap = QHBoxLayout(appearance_grp)
         ap.addWidget(QLabel("Theme:", self))
-        self._appearance_combo = QComboBox(self)
+        self._appearance_combo = NoScrollComboBox(self)
         # data values map combo index -> setting string
         self._appearance_combo.addItem("System (Auto)", "auto")
         self._appearance_combo.addItem("Light",        "light")
@@ -278,10 +277,7 @@ class SettingsDialog(QDialog):
         # ---- Bottom row: Restore Defaults | Report a Bug | Check for Updates  ...  Cancel / OK ----
         bottom_row = QHBoxLayout()
         reset_btn = QPushButton("Restore Factory Defaults", self)
-        reset_btn.setStyleSheet(
-            "QPushButton { background: #f4f4f4; color: #121212; border: 1px solid #d0d0d0; }"
-            "QPushButton:hover { background: #e0e0e0; border-color: #bbbbbb; }"
-        )
+        reset_btn.setObjectName("reset_defaults")
         reset_btn.clicked.connect(self._restore_defaults)
         bottom_row.addWidget(reset_btn)
 

@@ -878,15 +878,13 @@ class TabMeasure(QWidget):
             return cb
 
         self._m_bidir_cb = _bool_row_m(
-            "Disable bidirectional strip recognition (-B)", True,
+            "Disable bidirectional strip recognition (-B)", False,
             "Disable Bidirectional Reading (-B)",
-            "Disables automatic bidirectional strip direction detection.\n\n"
-            "With this ON, chartread always expects strips to be scanned in\n"
-            "one direction. This prevents false-direction mis-reads that can\n"
-            "occur on some paper/instrument combinations when the algorithm\n"
-            "guesses the scan direction incorrectly.\n\n"
-            "Leave this checked. Only disable if chartread repeatedly flags\n"
-            "the wrong direction when you are scanning correctly.",
+            "Stops chartread from auto-detecting whether you scanned a strip\n"
+            "forwards or backwards. ChromIQ leaves this off by default so the\n"
+            "instrument can read strips in either direction.\n\n"
+            "Turn it on only if chartread repeatedly flags the wrong scan\n"
+            "direction during measurement.",
         )
         self._m_suppress_cb = _bool_row_m(
             "Suppress warning messages (-S)", True,
@@ -1053,7 +1051,7 @@ class TabMeasure(QWidget):
             self._m_instr_spin.setValue(int(data.get("instr", 1)))
         except (ValueError, TypeError):
             pass
-        self._m_bidir_cb.setChecked(bool(data.get("bidir", True)))
+        self._m_bidir_cb.setChecked(bool(data.get("bidir", False)))
         self._m_suppress_cb.setChecked(bool(data.get("suppress", True)))
         self._m_nocal_cb.setChecked(bool(data.get("nocal", False)))
         self._m_pbp_cb.setChecked(bool(data.get("pbp", False)))
@@ -1082,7 +1080,7 @@ class TabMeasure(QWidget):
                 self._m_instr_spin.setValue(int(s.get("manual2_chartread_instr", 1)))
             except (ValueError, TypeError):
                 pass
-            self._m_bidir_cb.setChecked(bool(s.get("manual2_chartread_bidir", True)))
+            self._m_bidir_cb.setChecked(bool(s.get("manual2_chartread_bidir", False)))
             self._m_suppress_cb.setChecked(bool(s.get("manual2_chartread_suppress", True)))
             self._m_nocal_cb.setChecked(bool(s.get("manual2_chartread_nocal", False)))
             self._m_pbp_cb.setChecked(bool(s.get("manual2_chartread_pbp", False)))
@@ -2650,7 +2648,7 @@ class TabMeasure(QWidget):
                 self._m_instr_spin.setValue(int(m_instr))
             except (ValueError, TypeError):
                 pass
-        self._m_bidir_cb.setChecked(bool(s.get("manual2_chartread_bidir", True)))
+        self._m_bidir_cb.setChecked(bool(s.get("manual2_chartread_bidir", False)))
         self._m_suppress_cb.setChecked(bool(s.get("manual2_chartread_suppress", True)))
         self._m_nocal_cb.setChecked(bool(s.get("manual2_chartread_nocal", False)))
         self._m_pbp_cb.setChecked(bool(s.get("manual2_chartread_pbp", False)))

@@ -119,12 +119,16 @@ class SpectrumTabBar(QTabBar):
             color = QColor(color_hex)
             is_active = (i == self.currentIndex())
             is_enabled = self.isTabEnabled(i)
+            # Reserve 1px on the right of every tab except the last so per-tab
+            # fills don't paint into the leading pixel of the next tab.
+            right_inset = 0 if i == self.count() - 1 else 1
+            paint_w = rect.width() - right_inset
 
             # Disabled tab: dim background overlay and skip accent
             if not is_enabled:
                 overlay = QColor(pal["disabled_overlay"])
                 overlay.setAlpha(160)
-                p.fillRect(rect, overlay)
+                p.fillRect(rect.x(), rect.y(), paint_w, rect.height(), overlay)
 
                 if i < self.count() - 1:
                     p.setPen(QPen(QColor(pal["sep"]), 1))
@@ -142,24 +146,38 @@ class SpectrumTabBar(QTabBar):
                 p.drawText(label_rect, int(Qt.AlignmentFlag.AlignCenter), self.tabText(i))
                 continue
 
-            # Active tab: subtle color-tint background
+            # Active tab: per-mode 1px shift so the colored overlay reads
+            # correctly aligned in each theme. Light mode shrinks the right
+            # edge by 1; dark mode extends the left edge by 1 (when there's
+            # a previous tab to extend into).
             if is_active:
-                p.fillRect(rect, QColor(pal["active_bg"]))
+                if self._mode == "light":
+                    overlay_x = rect.x()
+                    overlay_w = paint_w - 1
+                elif i > 0:
+                    overlay_x = rect.x() - 1
+                    overlay_w = paint_w + 1
+                else:
+                    overlay_x = rect.x()
+                    overlay_w = paint_w
+
+                p.fillRect(overlay_x, rect.y(), overlay_w, rect.height(),
+                           QColor(pal["active_bg"]))
                 tint = QColor(color)
                 tint.setAlpha(15)
-                p.fillRect(rect, tint)
+                p.fillRect(overlay_x, rect.y(), overlay_w, rect.height(), tint)
 
             # Top accent strip (3px)
             strip_h = 3
             if is_active:
-                p.fillRect(rect.x(), rect.y(),
-                           rect.width(), strip_h, color)
+                p.fillRect(overlay_x, rect.y(),
+                           overlay_w, strip_h, color)
             else:
                 # Inactive: very faint colored hint
                 hint = QColor(color)
                 hint.setAlpha(60)
                 p.fillRect(rect.x(), rect.y() + 1,
-                           rect.width(), 2, hint)
+                           paint_w, 2, hint)
 
             # Vertical separator on the right edge of every tab except last
             if i < self.count() - 1:
@@ -172,8 +190,8 @@ class SpectrumTabBar(QTabBar):
             if is_active:
                 under = QColor(color)
                 under.setAlpha(120)
-                p.fillRect(rect.x() + 14, rect.y() + rect.height() - 4,
-                           rect.width() - 28, 1, under)
+                p.fillRect(overlay_x + 14, rect.y() + rect.height() - 4,
+                           overlay_w - 28, 1, under)
 
             # Label
             text_color = pal["text_active"] if is_active else pal["text_inactive"]

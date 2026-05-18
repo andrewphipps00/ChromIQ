@@ -47,7 +47,7 @@ _ARE_YOU_SURE_RE       = re.compile(r"Are\s+you\s+sure\s+\[y/n\]",              
 class MeasureParams:
     ti1_path: Path
     instrument: str = "1"
-    disable_bidir: bool = True
+    disable_bidir: bool = False
     suppress_warnings: bool = True
     disable_initial_cal: bool = False
     patch_by_patch: bool = False

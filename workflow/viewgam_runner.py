@@ -19,69 +19,18 @@ log = get_logger(__name__)
 _INTERSECT_RE   = re.compile(r"Intersecting volume\s*=\s*([\d.]+)")
 
 
+# Colour remap moved to Python (see gamut_viewer._apply_chromiq_colors) —
+# JS-side mutation didn't reliably propagate to X3DOM's GPU buffers after
+# the scene was parsed via body-script init, so individual profile views
+# showed default colours while the combined view (which gets a second
+# setAttribute pass from _COMPARE_CONTROLS_JS at +150 ms) accidentally
+# worked. The X3D Background still has to be JS-driven because it reads
+# the CSS body background at runtime and needs to follow live theme swaps.
+from workflow.gamut_viewer import _apply_chromiq_colors
+
 _THEMED_JS = """\
 (function () {
-  var ACCENTS = [
-    {lo: 330, hi: 360, h: 345, s: 0.995},
-    {lo:   0, hi:  30, h: 345, s: 0.995},
-    {lo:  30, hi:  80, h:  39, s: 0.990},
-    {lo:  80, hi: 165, h: 158, s: 0.600},
-    {lo: 165, hi: 210, h: 190, s: 0.630},
-    {lo: 210, hi: 330, h: 254, s: 1.000}
-  ];
-  function rgb2hsl(r, g, b) {
-    var mx = Math.max(r,g,b), mn = Math.min(r,g,b), d = mx-mn;
-    var l = (mx+mn)/2, h = 0, s = 0;
-    if (d > 0) {
-      s = l > 0.5 ? d/(2-mx-mn) : d/(mx+mn);
-      if (mx===r)      h = ((g-b)/d + (g<b?6:0))/6;
-      else if (mx===g) h = ((b-r)/d + 2)/6;
-      else             h = ((r-g)/d + 4)/6;
-    }
-    return [h*360, s, l];
-  }
-  function hq(p, q, t) {
-    if (t < 0) t += 1; if (t > 1) t -= 1;
-    if (t < 1/6) return p+(q-p)*6*t;
-    if (t < 0.5) return q;
-    if (t < 2/3) return p+(q-p)*(2/3-t)*6;
-    return p;
-  }
-  function hsl2rgb(h, s, l) {
-    h /= 360;
-    if (s === 0) return [l, l, l];
-    var q = l<0.5 ? l*(1+s) : l+s-l*s, p = 2*l-q;
-    return [hq(p,q,h+1/3), hq(p,q,h), hq(p,q,h-1/3)];
-  }
-  function remapColors(str) {
-    var v = str.trim().split(/\\s+/), out = [];
-    for (var i = 0; i+2 < v.length; i += 3) {
-      var hsl = rgb2hsl(+v[i], +v[i+1], +v[i+2]);
-      var H = hsl[0], S = hsl[1], L = hsl[2], nh = 0, ns = 0;
-      if (S >= 0.15) {
-        for (var j = 0; j < ACCENTS.length; j++) {
-          if (H >= ACCENTS[j].lo && H < ACCENTS[j].hi) {
-            nh = ACCENTS[j].h; ns = ACCENTS[j].s; break;
-          }
-        }
-      }
-      var rgb = hsl2rgb(nh, ns, L);
-      out.push(rgb[0].toFixed(5), rgb[1].toFixed(5), rgb[2].toFixed(5));
-    }
-    return out.join(' ');
-  }
-  function applyTheme() {
-    document.querySelectorAll('color[color]').forEach(function(n) {
-      n.setAttribute('color', remapColors(n.getAttribute('color')));
-    });
-    document.querySelectorAll('material[diffusecolor]').forEach(function(n) {
-      n.setAttribute('diffusecolor', remapColors(n.getAttribute('diffusecolor')));
-    });
-  }
   function applyBackground() {
-    // viewgam emits no <Background> node, so X3DOM falls back to its
-    // default near-black sky. Mirror the CSS body background into the
-    // scene so the 3D canvas blends with the surrounding panel frame.
     var bgStr = window.getComputedStyle(document.body).backgroundColor;
     var m = bgStr.match(/rgba?\\(\\s*(\\d+)\\s*,\\s*(\\d+)\\s*,\\s*(\\d+)/);
     if (!m) return;
@@ -95,19 +44,14 @@ _THEMED_JS = """\
       bgNode.setAttribute('skyColor', sky);
       bgNode.setAttribute('groundColor', sky);
     } else {
-      // X3D Background has TWO hemispheres (sky + ground). Setting only
-      // skyColor leaves groundColor at its default (pure black), giving
-      // a half-black horizon split. Set both to the same colour for a
-      // uniform background that matches the surrounding panel frame.
       bgNode = document.createElement('background');
       bgNode.setAttribute('skyColor', sky);
       bgNode.setAttribute('groundColor', sky);
       scene.insertBefore(bgNode, scene.firstChild);
     }
   }
-  function applyAll() { applyTheme(); applyBackground(); }
-  document.addEventListener('DOMContentLoaded', applyAll);
-  document.addEventListener('x3dom-initialized', function() { setTimeout(applyAll, 50); });
+  document.addEventListener('DOMContentLoaded', applyBackground);
+  document.addEventListener('x3dom-initialized', function() { setTimeout(applyBackground, 50); });
 })();
 """
 
@@ -194,6 +138,29 @@ def _add_material_transparency(mo: re.Match, value: float = 0.5) -> str:
     return re.sub(r"\s*(/?>)$", rf' transparency="{value}"\1', tag)
 
 
+_SCENE_DUPE_TAGS = ("Environment", "Background", "NavigationInfo",
+                    "Viewpoint", "DirectionalLight", "PointLight", "SpotLight")
+
+
+def _strip_scene_level_dupes(scene_content: str) -> str:
+    """Remove the scene-level bindable / lighting / environment nodes
+    iccgamut emits inside <Scene>. When the compare scene is merged into
+    primary's as an overlay Group, these duplicate the equivalent nodes
+    from primary's scene — most importantly the 6 DirectionalLight nodes,
+    which double up and roughly double the illumination on every shape
+    in the combined view, making both profiles look much brighter than
+    they do alone. Strip them so only the gamut geometry (Transforms /
+    Shapes) carries over.
+    """
+    for tag in _SCENE_DUPE_TAGS:
+        pattern = re.compile(
+            rf"<{tag}\b[^>]*?(?:/>|>.*?</{tag}>)\s*",
+            re.DOTALL | re.IGNORECASE,
+        )
+        scene_content = pattern.sub("", scene_content)
+    return scene_content
+
+
 def _build_compare_overlay_html(
     primary_html: Path,
     compare_html: Path,
@@ -213,7 +180,7 @@ def _build_compare_overlay_html(
         m = re.search(r"<[Ss]cene[^>]*>(.*?)</[Ss]cene>", compare_text, re.DOTALL | re.IGNORECASE)
         if not m:
             return False
-        compare_scene = m.group(1)
+        compare_scene = _strip_scene_level_dupes(m.group(1))
 
         # Add transparency to every Material element in the compare scene.
         # Shapes that omit Material (relying on per-vertex Color alone) are
@@ -247,12 +214,15 @@ def _patch_html(html_path: Path, themed: bool = True, bg: str = "#111111") -> No
             " overflow: hidden; }\n"
             "</style>\n"
         )
-        inject = style
-        if themed:
-            inject += "<script>\n" + _THEMED_JS + "</script>\n"
+        # JS always runs — applyBackground needs the X3D <Background> set
+        # in both themed and untinted modes. Colour remap is themed-only
+        # and applied in Python below, before write.
+        inject = style + "<script>\n" + _THEMED_JS + "</script>\n"
         text = text.replace("</head>", inject + "</head>", 1)
         text = text.replace("height: 70%;", "height: 100vh;", 1)
         text = text.replace("height='70%'", "height='100vh'", 1)
+        if themed:
+            text = _apply_chromiq_colors(text)
         html_path.write_text(text, encoding="utf-8")
     except OSError:
         pass

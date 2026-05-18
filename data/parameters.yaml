@@ -719,15 +719,16 @@ parameters:
     - flag: "-B"
       name: "Disable Bidirectional Strip Recognition"
       type: boolean
-      default: true
+      default: false
       expert_only: false
       tooltip_title: "Disable Bidirectional Reading (-B)"
       tooltip_body: |
-        Disables automatic bidirectional strip direction detection.
-        It is strongly recommended to leave this ON (checked) to avoid
-        mis-reads caused by scanning strips in the wrong direction.
-        Only disable if you experience false strip direction errors
-        with your specific instrument.
+        Stops chartread from auto-detecting whether you scanned a strip
+        forwards or backwards. ChromIQ leaves this off by default so the
+        instrument can read strips in either direction.
+
+        Turn it on only if your instrument reports false strip-direction
+        errors during measurement.
 
     - flag: "-S"
       name: "Suppress Warning Messages"

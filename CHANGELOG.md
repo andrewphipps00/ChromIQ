@@ -1,5 +1,95 @@
 # Changelog
 
+## v3.6.5
+Polish patch with three visual fixes and one default flip. The
+gamut viewer now reliably picks up ChromIQ's tinted accent colours
+on every profile and the combined view's illumination is back to
+normal, the main tab bar's active-tab colour no longer bleeds into
+the next tab (and now reads symmetrically in both themes), the
+Settings dialog's Restore Factory Defaults button is readable in
+Light mode, and Manual measurement defaults the bidirectional-strip
+checkbox off so the instrument can read strips in either direction
+without configuration.
+
+### Fixes
+- **Gamut viewer colours now reliably tinted on every individual
+  profile.** The JS-side ChromIQ accent remap in
+  `workflow/gamut_viewer.py:_THEMED_JS` ran at `DOMContentLoaded`,
+  but X3DOM had already parsed and cached the GPU buffers via a
+  body-script-triggered init by then — so individual profile views
+  often showed iccgamut's default colours, while the combined view
+  accidentally worked thanks to a second mutation pass from
+  `_COMPARE_CONTROLS_JS` at +150 ms. The remap now runs in Python
+  via `_apply_chromiq_colors()` against the raw X3D markup before
+  X3DOM ever sees the file; the JS only handles the `<Background>`
+  node (which has to stay runtime-driven because it reads the CSS
+  body background to follow live Light/Dark switches). Mirrored in
+  `workflow/viewgam_runner.py` for the combined view. A new
+  `_L_CAP = 0.92` clamp keeps the gamut's white tip visibly tinted
+  with the accent hue instead of blowing out to pure white.
+- **Combined-profile gamut view is no longer doubly-lit.** When
+  iccgamut's compare scene was merged into the primary scene as an
+  overlay group in `workflow/viewgam_runner.py`, its scene-level
+  `DirectionalLight` nodes carried over too — six on top of
+  primary's six, roughly doubling illumination on every shape in
+  the combined view and making both profiles look much brighter
+  than they do alone. New `_strip_scene_level_dupes()` removes
+  `Background`, `NavigationInfo`, `Viewpoint`, `Environment`, and
+  all three `Light` subtypes from the compare scene before
+  merging, so only the gamut geometry carries over.
+- **Main tab bar's active-tab colour no longer bleeds into the
+  next tab.** `SpectrumTabBar.paintEvent` in
+  `ui/spectrum_tab_bar.py` painted every per-tab fill (active body,
+  body tint, top accent strip, inactive hint, disabled overlay)
+  using `tabRect(i).width()`, which — with `setExpanding(True)`
+  plus a custom `tabSizeHint` of `total // n` — produces tabRects
+  whose right edge lands on the next tab's first pixel. Each fill
+  now reserves 1 px on the right of every tab except the last
+  (`paint_w = rect.width() - right_inset`), so the accent strip
+  and active body stop cleanly before the separator instead of
+  crossing it.
+- **Active-tab overlay 1 px shift, per theme.** Building on the
+  bleed fix above, the active colour overlay had a residual 1 px
+  asymmetry: in Light mode the right edge read as overshooting the
+  white body by 1 px; in Dark mode the left edge read as falling
+  1 px short of the visible active region. Both observations
+  describe the same physical pixel arrangement but contrast
+  against opposite-colour reserved columns in each theme. The
+  active overlay (body + tint + top accent strip + underline glow)
+  now applies a mode-specific 1 px shift: Light mode shrinks the
+  right edge by 1; Dark mode (non-first tab) extends the left edge
+  by 1 into the previous tab's reserved column. First tab in Dark
+  mode is left flush — there's no previous tab to extend into.
+- **Restore Factory Defaults button is readable in Light mode.**
+  The button in `ui/dialogs/settings_dialog.py` had a hard-coded
+  inline `setStyleSheet` of `#f4f4f4` background / `#121212` text
+  — i.e. near-white on the near-white settings dialog. Removed
+  the inline rule, added `setObjectName("reset_defaults")`, and
+  moved the styling into the theme stylesheets. Light mode now
+  uses inverted colours (dark `#121212` background, bright
+  `#f4f4f4` text) so the button stands out against the warm
+  dialog surround; Dark mode keeps the prior light-on-dark
+  appearance unchanged. Same dialog: the appearance combo is now
+  a `NoScrollComboBox` so accidental scroll-wheel events don't
+  change the theme.
+
+### Behavior changes
+- **Manual measurement defaults bidirectional-strip recognition
+  to enabled.** Under Measure → Manual → Measurement Options,
+  "Disable bidirectional strip recognition (-B)" used to ship
+  checked by default — meaning chartread always expected strips
+  scanned in one direction. It now ships unchecked, so the
+  instrument can auto-detect scan direction without
+  configuration. Affects the initial UI default
+  (`ui/tabs/tab_measure.py:881`), the preset-restore fallback,
+  the settings-restore fallbacks, and the
+  `MeasureParams.disable_bidir` dataclass default in
+  `workflow/measure_manager.py`. The hardcoded tooltip is
+  rewritten to match: enable only if chartread repeatedly flags
+  the wrong scan direction. The corresponding YAML entry in
+  `data/parameters.yaml:-B` and its tooltip were also updated to
+  match. Guided-mode bidirectional default is unchanged.
+
 ## v3.6.4
 Light-mode polish patch covering the gamut viewer and a few widgets
 whose colours had drifted from the masthead wordmark. No

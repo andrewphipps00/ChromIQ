@@ -141,6 +141,15 @@ QPushButton#primary:hover    {{ background: {ACCENT_HOVER}; border-color: {ACCEN
 QPushButton#primary:disabled {{ background: #1e1e1e; border-color: #383838; color: #484848; }}
 QPushButton#danger           {{ background: #4a1818; color: #ff9090; border-color: #7a2424; }}
 QPushButton#danger:hover     {{ background: #5a1e1e; }}
+QPushButton#reset_defaults {{
+    background: #f4f4f4;
+    color: #121212;
+    border: 1px solid #d0d0d0;
+}}
+QPushButton#reset_defaults:hover {{
+    background: #e0e0e0;
+    border-color: #bbbbbb;
+}}
 
 /* ---- Inputs ------------------------------------------------------- */
 QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox {{

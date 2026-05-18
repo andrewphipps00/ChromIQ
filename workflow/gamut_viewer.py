@@ -19,70 +19,17 @@ log = get_logger(__name__)
 
 _VOLUME_RE = re.compile(r"Total volume of gamut is ([\d.]+)")
 
+# JS for the X3D <Background> node only. The colour remap that used to
+# live here ran at DOMContentLoaded but X3DOM had already parsed the X3D
+# nodes via a body-script-triggered init and cached the GPU buffers, so
+# late attribute mutations on <color> / <material> did not propagate. The
+# remap now runs in Python at patch time (see _apply_chromiq_colors), so
+# X3DOM reads the final colours straight from disk. The background needs
+# to remain JS-driven because it reads the CSS body background at runtime
+# and has to follow live Light/Dark switches.
 _THEMED_JS = """\
 (function () {
-  var ACCENTS = [
-    {lo: 330, hi: 360, h: 345, s: 0.995},
-    {lo:   0, hi:  30, h: 345, s: 0.995},
-    {lo:  30, hi:  80, h:  39, s: 0.990},
-    {lo:  80, hi: 165, h: 158, s: 0.600},
-    {lo: 165, hi: 210, h: 190, s: 0.630},
-    {lo: 210, hi: 330, h: 254, s: 1.000}
-  ];
-  function rgb2hsl(r, g, b) {
-    var mx = Math.max(r,g,b), mn = Math.min(r,g,b), d = mx-mn;
-    var l = (mx+mn)/2, h = 0, s = 0;
-    if (d > 0) {
-      s = l > 0.5 ? d/(2-mx-mn) : d/(mx+mn);
-      if (mx===r)      h = ((g-b)/d + (g<b?6:0))/6;
-      else if (mx===g) h = ((b-r)/d + 2)/6;
-      else             h = ((r-g)/d + 4)/6;
-    }
-    return [h*360, s, l];
-  }
-  function hq(p, q, t) {
-    if (t < 0) t += 1; if (t > 1) t -= 1;
-    if (t < 1/6) return p+(q-p)*6*t;
-    if (t < 0.5) return q;
-    if (t < 2/3) return p+(q-p)*(2/3-t)*6;
-    return p;
-  }
-  function hsl2rgb(h, s, l) {
-    h /= 360;
-    if (s === 0) return [l, l, l];
-    var q = l<0.5 ? l*(1+s) : l+s-l*s, p = 2*l-q;
-    return [hq(p,q,h+1/3), hq(p,q,h), hq(p,q,h-1/3)];
-  }
-  function remapColors(str) {
-    var v = str.trim().split(/\\s+/), out = [];
-    for (var i = 0; i+2 < v.length; i += 3) {
-      var hsl = rgb2hsl(+v[i], +v[i+1], +v[i+2]);
-      var H = hsl[0], S = hsl[1], L = hsl[2], nh = 0, ns = 0;
-      if (S >= 0.15) {
-        for (var j = 0; j < ACCENTS.length; j++) {
-          if (H >= ACCENTS[j].lo && H < ACCENTS[j].hi) {
-            nh = ACCENTS[j].h; ns = ACCENTS[j].s; break;
-          }
-        }
-      }
-      var rgb = hsl2rgb(nh, ns, L);
-      out.push(rgb[0].toFixed(5), rgb[1].toFixed(5), rgb[2].toFixed(5));
-    }
-    return out.join(' ');
-  }
-  function applyTheme() {
-    document.querySelectorAll('color[color]').forEach(function(n) {
-      n.setAttribute('color', remapColors(n.getAttribute('color')));
-    });
-    document.querySelectorAll('material[diffusecolor]').forEach(function(n) {
-      n.setAttribute('diffusecolor', remapColors(n.getAttribute('diffusecolor')));
-    });
-  }
   function applyBackground() {
-    // iccgamut emits no <Background> node, so X3DOM falls back to its
-    // default near-black sky and the X3D canvas (which fills the viewer)
-    // looks black in Light mode. Mirror the CSS body background into the
-    // scene so the 3D canvas blends with the surrounding panel frame.
     var bgStr = window.getComputedStyle(document.body).backgroundColor;
     var m = bgStr.match(/rgba?\\(\\s*(\\d+)\\s*,\\s*(\\d+)\\s*,\\s*(\\d+)/);
     if (!m) return;
@@ -106,11 +53,136 @@ _THEMED_JS = """\
       scene.insertBefore(bgNode, scene.firstChild);
     }
   }
-  function applyAll() { applyTheme(); applyBackground(); }
-  document.addEventListener('DOMContentLoaded', applyAll);
-  document.addEventListener('x3dom-initialized', function() { setTimeout(applyAll, 50); });
+  document.addEventListener('DOMContentLoaded', applyBackground);
+  document.addEventListener('x3dom-initialized', function() { setTimeout(applyBackground, 50); });
 })();
 """
+
+
+# ChromIQ accent palette — same six hue bands the JS used to define, ported
+# to Python so the remap runs at patch time (before X3DOM parses the file)
+# instead of as a DOM mutation that X3DOM ignores after init.
+# Tuple: (hue_lo, hue_hi, accent_hue, accent_saturation).
+_THEME_ACCENTS = (
+    (330, 360, 345, 0.995),
+    (  0,  30, 345, 0.995),
+    ( 30,  80,  39, 0.990),
+    ( 80, 165, 158, 0.600),
+    (165, 210, 190, 0.630),
+    (210, 330, 254, 1.000),
+)
+
+# Cap applied to vertex lightness when remapping. The original JS kept L
+# unchanged, so vertices at the gamut's white tip (L≈1.0) rendered pure
+# white regardless of the accent hue. Capping keeps the bright top
+# visibly tinted with the accent colour instead of blowing out to white.
+# Low-L (dark tip) is left untouched — pure black there is fine.
+# 0.92 balances: tip is still slightly off-white (visible tint) while
+# overall surface brightness reads close to the combined-view
+# transparency-lifted appearance for parity between alone and combined.
+_L_CAP = 0.92
+
+
+def _rgb_to_hsl(r: float, g: float, b: float) -> tuple[float, float, float]:
+    mx, mn = max(r, g, b), min(r, g, b)
+    d = mx - mn
+    l = (mx + mn) / 2
+    h = 0.0
+    s = 0.0
+    if d > 0:
+        s = d / (2 - mx - mn) if l > 0.5 else d / (mx + mn)
+        if mx == r:
+            h = ((g - b) / d + (6 if g < b else 0)) / 6
+        elif mx == g:
+            h = ((b - r) / d + 2) / 6
+        else:
+            h = ((r - g) / d + 4) / 6
+    return h * 360, s, l
+
+
+def _hue_helper(p: float, q: float, t: float) -> float:
+    if t < 0:
+        t += 1
+    if t > 1:
+        t -= 1
+    if t < 1 / 6:
+        return p + (q - p) * 6 * t
+    if t < 0.5:
+        return q
+    if t < 2 / 3:
+        return p + (q - p) * (2 / 3 - t) * 6
+    return p
+
+
+def _hsl_to_rgb(h: float, s: float, l: float) -> tuple[float, float, float]:
+    if s == 0:
+        return l, l, l
+    h_norm = h / 360
+    q = l * (1 + s) if l < 0.5 else l + s - l * s
+    p = 2 * l - q
+    return (
+        _hue_helper(p, q, h_norm + 1 / 3),
+        _hue_helper(p, q, h_norm),
+        _hue_helper(p, q, h_norm - 1 / 3),
+    )
+
+
+def _remap_chromiq_color(rgb_str: str) -> str:
+    """Remap a space-separated RGB triplet string to ChromIQ accents.
+
+    Mirrors the JS remapColors() this module used to ship in _THEMED_JS,
+    with a max-lightness cap to keep the brightest gamut vertices from
+    rendering as pure white.
+    """
+    parts = rgb_str.split()
+    out: list[str] = []
+    for i in range(0, len(parts) - 2, 3):
+        try:
+            r = float(parts[i])
+            g = float(parts[i + 1])
+            b = float(parts[i + 2])
+        except ValueError:
+            continue
+        h, s, l = _rgb_to_hsl(r, g, b)
+        if l > _L_CAP:
+            l = _L_CAP
+        nh, ns = 0.0, 0.0
+        if s >= 0.15:
+            for lo, hi, ah, ays in _THEME_ACCENTS:
+                if lo <= h < hi:
+                    nh, ns = ah, ays
+                    break
+        nr, ng, nb = _hsl_to_rgb(nh, ns, l)
+        out.append(f"{nr:.5f}")
+        out.append(f"{ng:.5f}")
+        out.append(f"{nb:.5f}")
+    return " ".join(out)
+
+
+# X3D allows both <Color color='r g b r g b ...'> per-vertex arrays and
+# <Material diffuseColor='r g b'> per-shape solid colours. iccgamut emits
+# both — Color for the gamut surface, Material for axes/labels.
+_COLOR_TAG_RE = re.compile(
+    r"(<\s*[Cc]olor\b[^>]*?\bcolor\s*=\s*['\"])([^'\"]*)(['\"])",
+    re.DOTALL,
+)
+_MATERIAL_TAG_RE = re.compile(
+    r"(<\s*[Mm]aterial\b[^>]*?\b[Dd]iffuse[Cc]olor\s*=\s*['\"])([^'\"]*)(['\"])",
+    re.DOTALL,
+)
+
+
+def _apply_chromiq_colors(html_text: str) -> str:
+    """Rewrite every X3D Color/Material colour attribute in-place."""
+    html_text = _COLOR_TAG_RE.sub(
+        lambda m: m.group(1) + _remap_chromiq_color(m.group(2)) + m.group(3),
+        html_text,
+    )
+    html_text = _MATERIAL_TAG_RE.sub(
+        lambda m: m.group(1) + _remap_chromiq_color(m.group(2)) + m.group(3),
+        html_text,
+    )
+    return html_text
 
 
 def _patch_html(html_path: Path, themed: bool = True, bg: str = "#111111") -> None:
@@ -123,12 +195,15 @@ def _patch_html(html_path: Path, themed: bool = True, bg: str = "#111111") -> No
             " overflow: hidden; }\n"
             "</style>\n"
         )
-        inject = style
-        if themed:
-            inject += "<script>\n" + _THEMED_JS + "</script>\n"
+        # JS always runs — applyBackground needs to set the X3D scene
+        # background in both themed and untinted modes. The colour remap
+        # is themed-only and applies in Python below, before write.
+        inject = style + "<script>\n" + _THEMED_JS + "</script>\n"
         text = text.replace("</head>", inject + "</head>", 1)
         text = text.replace("height: 70%;", "height: 100vh;", 1)
         text = text.replace("height='70%'", "height='100vh'", 1)
+        if themed:
+            text = _apply_chromiq_colors(text)
         html_path.write_text(text, encoding="utf-8")
     except OSError:
         pass

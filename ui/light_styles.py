@@ -462,6 +462,17 @@ QPushButton#browse_compact:hover {{
     background: #e4e0da;
 }}
 
+/* -- Settings dialog: Restore Factory Defaults (dark button, bright text) */
+QPushButton#reset_defaults {{
+    background: #121212;
+    color: #f4f4f4;
+    border: 1px solid #2a2a2a;
+}}
+QPushButton#reset_defaults:hover {{
+    background: #1f1f1f;
+    border-color: #3a3a3a;
+}}
+
 /* -- Icon-only square buttons ------------------------------------- */
 QPushButton#icon_btn {{
     padding: 0;
