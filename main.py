@@ -67,8 +67,11 @@ except BaseException:
 
 
 def main() -> int:
+    from core.version import APP_VERSION
+
     app = QApplication(sys.argv)
     app.setApplicationName("ChromIQ")
+    app.setApplicationVersion(APP_VERSION)
     app.setOrganizationName("ChromIQ")
     app.setApplicationDisplayName("ChromIQ — Printer Profiling")
 

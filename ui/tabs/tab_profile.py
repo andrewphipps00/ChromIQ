@@ -1243,7 +1243,7 @@ class TabProfile(QWidget):
     def _show_applycal_result_dialog(self, icc_path: Path) -> None:
         dlg = QDialog(self)
         dlg.setWindowTitle("Calibration Applied")
-        dlg.setMinimumWidth(520)
+        dlg.setMinimumWidth(580)
 
         layout = QVBoxLayout(dlg)
         layout.setContentsMargins(24, 20, 24, 20)
@@ -1279,12 +1279,18 @@ class TabProfile(QWidget):
         install_desc.setStyleSheet("color: #b0b0b0; font-size: 11px;")
         layout.addWidget(install_desc)
 
-        btn_box = QDialogButtonBox(dlg)
         _install_label = "Install on this Mac" if is_macos() else "Install Profile"
-        install_btn = btn_box.addButton(_install_label, QDialogButtonBox.ButtonRole.ActionRole)
-        done_btn    = btn_box.addButton("Done",                QDialogButtonBox.ButtonRole.AcceptRole)
+        install_btn = QPushButton(_install_label, dlg)
         install_btn.setObjectName("primary")
-        layout.addWidget(btn_box)
+        done_btn = QPushButton("Done", dlg)
+        done_btn.setDefault(True)
+
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(8)
+        btn_row.addWidget(install_btn)
+        btn_row.addStretch()
+        btn_row.addWidget(done_btn)
+        layout.addLayout(btn_row)
 
         def _on_install() -> None:
             dlg.accept()
@@ -1304,7 +1310,7 @@ class TabProfile(QWidget):
     def _show_printcal_result_dialog(self, cal_path: Path) -> None:
         dlg = QDialog(self)
         dlg.setWindowTitle("Calibration File Created")
-        dlg.setMinimumWidth(560)
+        dlg.setMinimumWidth(600)
 
         layout = QVBoxLayout(dlg)
         layout.setContentsMargins(24, 20, 24, 20)
@@ -1368,11 +1374,17 @@ class TabProfile(QWidget):
         note_lbl.setTextFormat(Qt.TextFormat.RichText)
         layout.addWidget(note_lbl)
 
-        btn_box = QDialogButtonBox(dlg)
-        chart_btn = btn_box.addButton("Go to Create Chart →", QDialogButtonBox.ButtonRole.ActionRole)
-        done_btn  = btn_box.addButton("Done",                  QDialogButtonBox.ButtonRole.AcceptRole)
+        chart_btn = QPushButton("← Go to Create Chart", dlg)
         chart_btn.setObjectName("primary")
-        layout.addWidget(btn_box)
+        done_btn = QPushButton("Done", dlg)
+        done_btn.setDefault(True)
+
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(8)
+        btn_row.addWidget(chart_btn)
+        btn_row.addStretch()
+        btn_row.addWidget(done_btn)
+        layout.addLayout(btn_row)
 
         def _on_chart() -> None:
             dlg.accept()
@@ -3221,7 +3233,7 @@ class TabProfile(QWidget):
 
         dlg = QDialog(self)
         dlg.setWindowTitle("Profile Built")
-        dlg.setMinimumWidth(700 if cal_mode else 640)
+        dlg.setMinimumWidth(880 if cal_mode else 740)
 
         layout = QVBoxLayout(dlg)
         layout.setContentsMargins(24, 20, 24, 20)
@@ -3307,19 +3319,30 @@ class TabProfile(QWidget):
             apply_desc.setStyleSheet("color: #b0b0b0; font-size: 11px;")
             layout.addWidget(apply_desc)
 
-        btn_box = QDialogButtonBox(dlg)
         _install_label = "Install on this Mac" if is_macos() else "Install Profile"
-        install_btn = btn_box.addButton(_install_label,            QDialogButtonBox.ButtonRole.ActionRole)
-        precond_btn = btn_box.addButton("← Use as Pre-conditioning", QDialogButtonBox.ButtonRole.ActionRole)
-        check_btn   = btn_box.addButton("Check Profile Quality →", QDialogButtonBox.ButtonRole.ActionRole)
-        if cal_mode:
-            apply_btn = btn_box.addButton("Apply Calibration →",   QDialogButtonBox.ButtonRole.ActionRole)
-            apply_btn.setObjectName("primary")
-        done_btn    = btn_box.addButton("Done",                    QDialogButtonBox.ButtonRole.AcceptRole)
+        install_btn = QPushButton(_install_label, dlg)
         install_btn.setObjectName("primary")
-        check_btn.setObjectName("primary")
+        precond_btn = QPushButton("← Use as Pre-conditioning", dlg)
         precond_btn.setObjectName("primary")
-        layout.addWidget(btn_box)
+        check_btn = QPushButton("Check Profile Quality →", dlg)
+        check_btn.setObjectName("primary")
+        apply_btn = None
+        if cal_mode:
+            apply_btn = QPushButton("Apply Calibration →", dlg)
+            apply_btn.setObjectName("primary")
+        done_btn = QPushButton("Done", dlg)
+        done_btn.setDefault(True)
+
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(8)
+        btn_row.addWidget(install_btn)
+        btn_row.addWidget(precond_btn)
+        btn_row.addWidget(check_btn)
+        if apply_btn is not None:
+            btn_row.addWidget(apply_btn)
+        btn_row.addStretch()
+        btn_row.addWidget(done_btn)
+        layout.addLayout(btn_row)
 
         def _on_install() -> None:
             dlg.accept()

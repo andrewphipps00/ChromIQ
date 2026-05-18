@@ -1,27 +1,62 @@
 # Changelog
 
 ## v3.6.6
-Small Check/Refine polish: the Profile Quality Assessment dialog now
-pins its **Close** button to the right edge of the window and clusters
-the action buttons on the left with a small gap between them, instead
-of spreading every button evenly across the dialog width. The Close
-button stays in the same place regardless of how many action buttons
-are shown (1–4 depending on whether an `.icc` is loaded and whether
-refinement is applicable), giving the dialog a stable visual anchor in
-both Light and Dark mode.
+Dialog button-layout polish across the Check/Refine and Build Profile
+tabs. Every result dialog now uses the same arrangement: action buttons
+clustered on the left with an 8 px gap between them, and the
+dismissal button (**Close** or **Done**) pinned to the right edge of
+the window — instead of the previous "everything spread evenly" or
+"everything grouped right" layouts that made the dismiss button land
+in a different place each time the dialog opened. Also fixes one
+button arrow that pointed the wrong way and wires the macOS bundle's
+version into the OS-level *About ChromIQ* menu item.
 
 ### Fixes
 - **Profile Quality Assessment dialog button layout.** The button row
-  in `ui/tabs/tab_check_refine.py` previously used
-  `addStretch()` between every button, so the Close button drifted to
-  a new horizontal position every time the dialog opened with a
-  different combination of action buttons (Install Profile, Use as
+  in `ui/tabs/tab_check_refine.py` previously used `addStretch()`
+  between every button, so the Close button drifted to a new
+  horizontal position every time the dialog opened with a different
+  combination of action buttons (Install Profile, Use as
   Pre-conditioning, Guide Me Through Refinement). The layout now adds
   the action buttons first with an 8 px gap, a single stretch, then
   the Close button — yielding a consistent "actions left, Close right"
   arrangement that also right-aligns Close when it is the only button
   shown. Styling via `tint_dialog_primary()` is unchanged, so primary
   accent buttons continue to render correctly in both themes.
+- **Build Profile result dialogs pin Done to the right edge.** The
+  three result dialogs in `ui/tabs/tab_profile.py` (Apply Calibration
+  result, Calibration File Created, Profile Built) all used
+  `QDialogButtonBox` with ActionRole + AcceptRole buttons, which on
+  macOS groups every button together on the right side of the row.
+  Each now uses the same manual `QHBoxLayout` pattern as the
+  Check/Refine fix: action buttons (Install, Pre-conditioning, Check
+  Profile Quality, Apply Calibration, Go to Create Chart) clustered
+  left with an 8 px gap, a single stretch, then Done on the right.
+  `done_btn.setDefault(True)` preserves the Enter-key activation that
+  `QDialogButtonBox` provided automatically; QDialog's built-in
+  Escape-to-reject handling continues to work unchanged. Each
+  dialog's `setMinimumWidth()` was bumped (520→580, 560→600,
+  640→740 / 700→880) so the new stretch space has room without
+  squeezing buttons.
+- **Calibration File Created button arrow flipped.** The
+  *Go to Create Chart →* button in `_show_printcal_result_dialog()`
+  is now labelled **← Go to Create Chart** — the Create Chart tab
+  sits to the *left* of Build Profile in the main tab strip, so the
+  arrow on the left of the label pointing left matches the existing
+  navigation convention used by `← Use as Pre-conditioning` and the
+  forward-pointing `Check Profile Quality →` / `Apply Calibration →`.
+- **macOS *About ChromIQ* menu now shows the version.** `main.py`
+  set `QApplication.setApplicationName()` and
+  `setApplicationDisplayName()` but never called
+  `setApplicationVersion()` — so macOS's auto-generated *About
+  ChromIQ* menu item, which reads
+  `QCoreApplication.applicationVersion()`, displayed an empty version
+  field. `APP_VERSION` is now imported from `core/version.py` and
+  passed to `setApplicationVersion()`. The bundle's Info.plist already
+  carried the version (`CFBundleShortVersionString` /
+  `CFBundleVersion`, both set from `APP_VERSION` by `ChromIQ.spec`),
+  so Finder *Get Info* and the masthead always showed it — this fixes
+  the one place that didn't.
 
 ## v3.6.5
 Polish patch with three visual fixes and one default flip. The
