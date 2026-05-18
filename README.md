@@ -304,7 +304,7 @@ Copy `dist/ChromIQ.app` to `/Applications` and launch like any other macOS app. 
 - Select your printer from the dropdown (click ↺ to refresh the list)
 - Configure paper slot, media type, and print quality if needed
 - Click **Print Page X** for each page of the chart — color management is disabled automatically via the PostScript pipeline; no driver settings need changing
-- For AirPrint/driverless printers, ChromIQ falls back to TIFF automatically if the printer rejects PostScript
+- For unsupported printers, ChromIQ falls back to TIFF automatically if the printer rejects PostScript
 - The **native OS print sheet** is used on Windows and Linux, and on macOS when "Use default macOS printer dialog" is enabled in Preferences — when it opens, disable colour management manually in the driver panel (per-brand instructions are shown in the Print tab)
 - Before each job a **Confirm Print Settings** dialog summarises printer, paper, media, quality, orientation, duplex, and colour-management status; toggle via *Confirm Print Settings* in Preferences (on by default)
 - If the printer is offline or has held / stuck jobs, ChromIQ flags it before sending — use the **Clear Print Queue** button (top right of the Print tab) to cancel held jobs and retry
