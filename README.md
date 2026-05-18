@@ -95,6 +95,10 @@ Linux support is currently **beta** — please report what works and what doesn'
 |---|---|
 | ![ChromIQ Create ICC Profile guided](docs/4a.png) | ![ChromIQ Create ICC Profile manual](docs/4b.png) |
 
+| Step 4c — Calibration & Profiling (disabled by default) | Step 4d — Calibration & Profiling (disabled by default) |
+|---|---|
+| ![Calibration & Profiling](docs/4c.png) | ![Calibration & Profiling](docs/4c.png) |
+
 | Step 5a — Check & Refine (guided)  | Step 5b — Check & Refine (manual) |
 |---|---|
 | ![ChromIQ Check & Refine guided](docs/5a.png) | ![ChromIQ Check & Refine manual](docs/5b.png) |
@@ -102,10 +106,6 @@ Linux support is currently **beta** — please report what works and what doesn'
 | Settings light mode  | Settings dark mode |
 |---|---|
 | ![Settings light mode](docs/6a.png) | ![ChromIQ Check & Refine](docs/6b.png) |
-
-| Step 4c — Calibration & Profiling (disabled by default) |
-|---|
-| ![Calibration & Profiling](docs/4c.png) |
 
 ---
 
