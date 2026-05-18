@@ -30,6 +30,11 @@ a friendlier click target. Compact spinboxes are unchanged.
   arrow 1 px down, so each icon sits closer to its respective outer
   edge. Dark mode arrows stay centered. Compact spinbox arrows are
   explicitly reset to centered so the offset is non-compact only.
+- **Instrument-port spinbox in Manual measure module widened.** The
+  fixed-width compact spinbox on the Measure tab's Manual module was
+  clipping its value at the new wider button size. Bumped from 55 px
+  to 61 px so the digit, frame, and buttons all fit without
+  overlapping.
 
 ## v3.7.0
 SpectroScan capacity overhaul. The patch-count database underreported
