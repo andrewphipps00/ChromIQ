@@ -1,5 +1,28 @@
 # Changelog
 
+## v3.6.6
+Small Check/Refine polish: the Profile Quality Assessment dialog now
+pins its **Close** button to the right edge of the window and clusters
+the action buttons on the left with a small gap between them, instead
+of spreading every button evenly across the dialog width. The Close
+button stays in the same place regardless of how many action buttons
+are shown (1–4 depending on whether an `.icc` is loaded and whether
+refinement is applicable), giving the dialog a stable visual anchor in
+both Light and Dark mode.
+
+### Fixes
+- **Profile Quality Assessment dialog button layout.** The button row
+  in `ui/tabs/tab_check_refine.py` previously used
+  `addStretch()` between every button, so the Close button drifted to
+  a new horizontal position every time the dialog opened with a
+  different combination of action buttons (Install Profile, Use as
+  Pre-conditioning, Guide Me Through Refinement). The layout now adds
+  the action buttons first with an 8 px gap, a single stretch, then
+  the Close button — yielding a consistent "actions left, Close right"
+  arrangement that also right-aligns Close when it is the only button
+  shown. Styling via `tint_dialog_primary()` is unchanged, so primary
+  accent buttons continue to render correctly in both themes.
+
 ## v3.6.5
 Polish patch with three visual fixes and one default flip. The
 gamut viewer now reliably picks up ChromIQ's tinted accent colours

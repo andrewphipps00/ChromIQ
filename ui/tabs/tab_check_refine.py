@@ -1362,11 +1362,11 @@ class TabCheckRefine(QWidget):
             install_btn.setObjectName("primary")
 
         btn_row = QHBoxLayout()
-        btn_row.setSpacing(0)
-        btn_row.addStretch()
-        for b in buttons:
+        btn_row.setSpacing(8)
+        for b in buttons[1:]:
             btn_row.addWidget(b)
-            btn_row.addStretch()
+        btn_row.addStretch()
+        btn_row.addWidget(buttons[0])
         layout.addLayout(btn_row)
 
         if guide_btn:
