@@ -14,6 +14,7 @@ from PyQt6.QtGui import (
 from PyQt6.QtWidgets import QToolButton, QWidget
 
 from core.resource_path import resource_path
+from ui.welcome_button import WelcomeButton
 
 _STOPS = (
     "#ff4573",  # Create Chart
@@ -54,6 +55,7 @@ class MastheadHeader(QWidget):
     + embedded settings button (no layout gap to the right)."""
 
     settings_clicked = pyqtSignal()
+    help_clicked     = pyqtSignal()
 
     STRIPE_H  = 6
     VERSION_H = 22
@@ -79,6 +81,10 @@ class MastheadHeader(QWidget):
         self._btn.clicked.connect(self.settings_clicked)
         self._load_settings_icon()
 
+        # ---- Embedded "?" help button (absolute child, left of settings) ----
+        self._help_btn = WelcomeButton(self)
+        self._help_btn.help_clicked.connect(self.help_clicked)
+
     # ------------------------------------------------------------------
     def set_appearance(self, mode: str) -> None:
         """Switch between 'light' and 'dark' palettes and repaint."""
@@ -99,12 +105,14 @@ class MastheadHeader(QWidget):
     # ------------------------------------------------------------------
     def resizeEvent(self, event) -> None:  # noqa: N802
         super().resizeEvent(event)
-        # Keep settings button pinned to top-right, vertically centred in body
+        # Right edge: [ Settings ] [ ? ] — help icon sits on the far right.
         bw, bh = self._btn.width(), self._btn.height()
         body_top  = self.STRIPE_H
         body_bot  = self.height() - self.VERSION_H
         btn_y = body_top + (body_bot - body_top - bh) // 2
-        self._btn.move(self.width() - bw - 12, btn_y)
+        help_x = self.width() - self._help_btn.width() - 12
+        self._help_btn.move(help_x, btn_y)
+        self._btn.move(help_x - bw - 8, btn_y)
 
     def sizeHint(self) -> QSize:  # noqa: N802
         return QSize(900, 110)

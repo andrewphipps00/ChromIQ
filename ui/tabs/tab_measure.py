@@ -37,6 +37,7 @@ from PyQt6.QtWidgets import (
 from core.logger import get_logger
 from core.resource_path import resource_path
 from core.strip_utils import letter_to_idx
+from ui.fade_scroll import FadeScrollArea
 from ui.tab_header import TabHeader
 from ui.tooltip_button import TooltipButton
 from ui.widgets import NoScrollComboBox, NoScrollDoubleSpinBox, NoScrollSpinBox, make_browse_button, open_file_dialog, set_folder_icon, set_preset_icon, tint_dialog_primary
@@ -580,7 +581,7 @@ class TabMeasure(QWidget):
     # ------------------------------------------------------------------
 
     def _make_guided_panel(self) -> QWidget:
-        scroll = QScrollArea()
+        scroll = FadeScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(scroll.Shape.NoFrame)
 
@@ -825,7 +826,7 @@ class TabMeasure(QWidget):
         cl.addWidget(presets_grp)
         cl.addSpacing(8)
 
-        scroll = QScrollArea()
+        scroll = FadeScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(scroll.Shape.NoFrame)
 

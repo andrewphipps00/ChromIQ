@@ -31,6 +31,7 @@ from PyQt6.QtWidgets import (
 
 from core.logger import get_logger
 from core.resource_path import resource_path
+from ui.fade_scroll import FadeScrollArea
 from ui.gamut_panel import GamutPanel
 from ui.tab_header import TabHeader
 from ui.tooltip_button import TooltipButton
@@ -369,7 +370,7 @@ class TabCheckRefine(QWidget):
     # ------------------------------------------------------------------
 
     def _make_guided_panel(self) -> QWidget:
-        scroll = QScrollArea()
+        scroll = FadeScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(scroll.Shape.NoFrame)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -673,7 +674,7 @@ class TabCheckRefine(QWidget):
         cl.addWidget(presets_grp)
         cl.addSpacing(8)
 
-        scroll = QScrollArea()
+        scroll = FadeScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(scroll.Shape.NoFrame)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)

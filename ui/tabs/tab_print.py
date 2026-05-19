@@ -29,6 +29,7 @@ from PyQt6.QtWidgets import (
 from core.logger import get_logger
 from core.platform_paths import is_linux, is_macos, is_windows
 from ui.dialogs.preflight_dialog import PreflightDialog
+from ui.fade_scroll import FadeScrollArea
 from ui.tab_header import TabHeader
 from ui.tiff_preview import TiffPreview, _find_sidecar_channels
 from ui.tooltip_button import TooltipButton
@@ -265,7 +266,7 @@ class TabPrint(QWidget):
         ll.addWidget(printer_grp)
 
         # Scrollable content area (options + warning)
-        scroll = QScrollArea(left)
+        scroll = FadeScrollArea(left)
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)

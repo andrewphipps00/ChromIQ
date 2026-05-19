@@ -1,5 +1,28 @@
 # Changelog
 
+## v3.7.2
+Visual polish across both themes. Window and dialog chrome no longer
+reads as pure black in dark mode, and every scrollable panel now
+fades softly into its surrounding background at the top and bottom
+edges instead of being clipped by a hard line.
+
+### Tweaks
+- **Dark-mode chrome moved off pure black.** `QMainWindow`, `QDialog`,
+  `QTabWidget` and `QTabBar` now use the panel grey (`#181818`)
+  instead of near-black (`#101010`) for their outer surfaces. The
+  masthead surround, dialog bodies and the strip behind the tab bar
+  no longer ring the content in hard black. Light mode is unchanged.
+- **Soft fade at scroll edges.** Every scrollable panel — the four
+  parameter panes, the gamut volume controls, and any future modal
+  scrolls — now gets a vertical gradient at top and bottom that fades
+  scrolled content into the surrounding background colour. The fades
+  only appear when content actually overflows and hide at the
+  top/bottom extremes so they never sit as decoration on a short
+  list. Theme-aware: dark mode fades to `#181818`, light mode to the
+  warm `#eeece8`. Implemented as a single `FadeScrollArea` widget
+  (`ui/fade_scroll.py`) that picks up its colour from the existing
+  `apply_theme()` broadcast.
+
 ## v3.7.1
 Spinbox button polish — both themes. The up/down buttons on non-compact
 spinboxes used to leave a noticeable gap between them at the actual

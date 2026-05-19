@@ -78,7 +78,7 @@ QWidget {{
     font-size: 13px;
 }}
 QMainWindow, QDialog {{
-    background: {BG_DARK};
+    background: {BG_PANEL};
 }}
 QDialog QLabel {{
     background: transparent;
@@ -102,11 +102,11 @@ QTabWidget::pane {{
     background: {BG_PANEL};
 }}
 QTabWidget {{
-    background: {BG_DARK};
+    background: {BG_PANEL};
 }}
 /* SpectrumTabBar paints itself — only override the leftover area */
 QTabBar {{
-    background: {BG_DARK};
+    background: {BG_PANEL};
 }}
 
 /* ---- Buttons ------------------------------------------------------ */
