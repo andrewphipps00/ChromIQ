@@ -1,13 +1,9 @@
 # Changelog
 
 ## v3.7.4
-Follow-up to v3.7.3: the window-state restoration fix from the v3.7.3
-release notes works in a dev `venv` but did not take effect in the
-bundled `.app` on macOS — the welcome dialog's modal `exec()` was still
-preempting the parent window's maximize / fullscreen animation. The
-save side of the fix (capturing geometry before `hide()` plus the
-explicit `window_maximized` / `window_fullscreen` flags) was working
-correctly; only the restore side was failing.
+Follow-up to v3.7.3 that fixes how the welcome dialog interacts with
+the main window's saved size / state on startup, plus a small visual
+fix to one of the workflow-card icons.
 
 ### Fixes
 - **Welcome dialog is now non-modal.** The startup popup used to be
@@ -27,6 +23,11 @@ correctly; only the restore side was failing.
 - **Welcome-dialog startup delay reduced to 100 ms.** With the modal
   preemption gone, the 250 ms safety margin from v3.7.3 is no longer
   needed; the dialog just waits for the main window's initial paint.
+- **"Measure a chart I already printed" card icon has even spacing.**
+  The patches in the strip below the spectrophotometer head were
+  drawn with floating-point cell widths that rounded inconsistently,
+  producing a visibly wider gap between two of them. The strip is now
+  laid out on an integer grid so every patch and gap is identical.
 
 ## v3.7.3
 **New help window for first-time users.** ChromIQ now opens a welcome /

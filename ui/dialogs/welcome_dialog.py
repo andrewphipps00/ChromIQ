@@ -489,13 +489,14 @@ class WorkflowIcon(QWidget):
             p.setPen(Qt.PenStyle.NoPen)
             ap = 7
             p.drawEllipse(int(s / 2 - ap / 2), int(head_y + head_h - 4), ap, ap)
-            # Patches strip
-            strip_y = 53
-            strip_h = 18
+            # Patches strip — integer dimensions keep every cell and gap uniform.
             n = 6
-            strip_w = 68
-            pad = (s - strip_w) / 2
-            cell = strip_w / n
+            cell = 12          # 12 * 6 = 72
+            strip_w = n * cell  # 72
+            strip_h = 18
+            strip_y = 53
+            pad = (s - strip_w) // 2  # 12
+            patch_w = cell - 2  # 10 — leaves a 2 px gap to the next patch
             for i in range(n):
                 if i == 2:
                     p.setBrush(accent)
@@ -503,10 +504,11 @@ class WorkflowIcon(QWidget):
                     col = QColor(fg)
                     col.setAlpha(110)
                     p.setBrush(col)
-                p.drawRect(int(pad + i * cell + 1), strip_y, int(cell - 2), strip_h)
+                p.setPen(Qt.PenStyle.NoPen)
+                p.drawRect(pad + i * cell + 1, strip_y, patch_w, strip_h)
             p.setPen(QPen(fg, stroke))
             p.setBrush(QColor(0, 0, 0, 0))
-            p.drawRect(int(pad), strip_y, int(strip_w), strip_h)
+            p.drawRect(pad, strip_y, strip_w, strip_h)
 
         elif self._key == "build_from_measurement":
             # Document glyph (folded corner) → arrow → cube. Tightened so the
