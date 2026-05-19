@@ -31,7 +31,14 @@ fix to one of the workflow-card icons.
 
 ### Welcome-dialog content pass
 - **Build my first ICC profile** — step 1 now mentions choosing the
-  number of pages alongside instrument, paper and chart name.
+  number of pages alongside instrument, paper and chart name, and
+  recommends two or three A4 pages (around 1000–1500 patches with an
+  i1Pro) as a sensible starting point — more pages = more patches =
+  more accuracy.
+- **Build a high-quality profile (2-pass)** — step 1 now explains
+  that one page is plenty for the pre-conditioning pass, since that
+  profile is throwaway and its only job is to map where the printer
+  is most non-linear. Save the paper and ink for the second pass.
 - **OS-specific colour-management note** in every print step (first
   profile, 2-pass first and second passes, improve existing). On macOS
   ChromIQ disables driver colour management automatically and the user
