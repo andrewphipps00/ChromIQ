@@ -84,6 +84,8 @@ DEFAULTS: dict[str, Any] = {
     "restore_last_session":      False,
     "appearance":                "auto",   # "light" | "dark" | "auto"
     "show_welcome_dialog":       True,
+    "window_maximized":          False,
+    "window_fullscreen":         False,
     # Session restore paths (only used when restore_last_session is True)
     "session_target_name":       "",
     "session_ti1_path":          "",

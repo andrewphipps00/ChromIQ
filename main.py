@@ -110,9 +110,22 @@ def main() -> int:
 
     win.show()
 
+    # Belt-and-braces re-apply for the maximize/fullscreen state. The bytes
+    # from saveGeometry() carry it on most platforms, but explicit re-apply
+    # avoids edge cases where the OS misses the transition (notably macOS
+    # when a modal dialog opens during the show animation — see below).
+    if settings.get("window_fullscreen", False):
+        win.showFullScreen()
+    elif settings.get("window_maximized", False):
+        win.showMaximized()
+
     if settings.get("show_welcome_dialog", True):
         from PyQt6.QtCore import QTimer
-        QTimer.singleShot(0, win.open_welcome_dialog)
+        # Delay enough for the main window's maximize / fullscreen transition
+        # to complete on macOS before the modal exec() blocks the event loop;
+        # singleShot(0) opens the dialog mid-transition and the OS aborts the
+        # window-state change, leaving the main window at its plain geometry.
+        QTimer.singleShot(250, win.open_welcome_dialog)
 
     log.info("Event loop starting")
     return app.exec()

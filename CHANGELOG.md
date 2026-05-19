@@ -72,6 +72,19 @@ release activates it by default and finishes the content pass.
   pre-conditioning profile" to match the rest of the dialog's
   ChromIQ-doing-things voice.
 
+### Fixes
+- **Window maximize / fullscreen state preserved across launches.** The
+  welcome dialog opening on startup used to interrupt the main window's
+  show transition on macOS, dropping the maximize / fullscreen state and
+  leaving the window at its plain saved geometry. Two coordinated fixes:
+  `closeEvent` now captures `saveGeometry()` (and an explicit
+  `window_maximized` / `window_fullscreen` flag) before `self.hide()`,
+  so the snapshot reflects the actual window state; and the welcome
+  dialog's startup timer is now 250 ms instead of 0 ms, giving the
+  show animation time to complete before the modal blocks the event
+  loop. After `show()` the main window also re-applies the explicit
+  maximize / fullscreen flag as a belt-and-braces guard.
+
 ## v3.7.2
 Visual polish across both themes. Window and dialog chrome no longer
 reads as pure black in dark mode, and every scrollable panel now
