@@ -29,6 +29,32 @@ fix to one of the workflow-card icons.
   producing a visibly wider gap between two of them. The strip is now
   laid out on an integer grid so every patch and gap is identical.
 
+### Welcome-dialog content pass
+- **Build my first ICC profile** — step 1 now mentions choosing the
+  number of pages alongside instrument, paper and chart name.
+- **OS-specific colour-management note** in every print step (first
+  profile, 2-pass first and second passes, improve existing). On macOS
+  ChromIQ disables driver colour management automatically and the user
+  just needs to verify nothing in the dialog re-enabled it; on Windows
+  and other systems they still have to switch it off themselves.
+- **Build a high-quality profile (2-pass)** — step 3 (measure) now
+  contains the full bidirectional-reading and white-surface guidance
+  instead of pointing back at workflow 1. Old steps 4 and 5 (build
+  first .icc + click "Use as Pre-conditioning Profile") are merged
+  into one Build-Profile step. The old combined "Print and measure
+  the new chart" step is split into separate print + measure steps,
+  each with the full guidance.
+- **Improve an existing ICC profile** — steps 2 (print) and 3 (measure)
+  receive the same full-text treatment as the other workflows; no more
+  "see note in workflow 1" cross-references.
+- **Build Profile step no longer mentions algorithm / quality.** Those
+  pickers are not visible in guided mode (the default), so beginners
+  couldn't act on the advice. Every workflow's Build Profile step now
+  suggests filling in the optional metadata fields (Description,
+  Manufacturer, Copyright) instead — these *are* visible in guided
+  mode and get embedded in the .icc header so colour-management apps
+  can identify the profile later.
+
 ## v3.7.3
 **New help window for first-time users.** ChromIQ now opens a welcome /
 help dialog on launch that shows eight clickable workflow cards —
