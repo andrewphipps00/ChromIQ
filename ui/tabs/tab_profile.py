@@ -33,6 +33,7 @@ from PyQt6.QtWidgets import (
 from core.logger import get_logger
 from core.platform_paths import is_macos
 from core.resource_path import resource_path
+from ui.fade_scroll import FadeScrollArea
 from ui.tab_header import TabHeader
 from ui.tooltip_button import InfoDialog, TooltipButton
 from ui.widgets import NoScrollComboBox, NoScrollDoubleSpinBox, NoScrollSpinBox, make_browse_button, open_file_dialog, set_folder_icon, set_preset_icon, tint_dialog_primary
@@ -524,7 +525,7 @@ class TabProfile(QWidget):
         cc.setSpacing(8)
 
         # ---- Scrollable groupbox ----
-        scroll = QScrollArea(container)
+        scroll = FadeScrollArea(container)
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
         scroll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
@@ -1405,7 +1406,7 @@ class TabProfile(QWidget):
     # ------------------------------------------------------------------
 
     def _make_guided_panel(self) -> QWidget:
-        scroll = QScrollArea()
+        scroll = FadeScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(scroll.Shape.NoFrame)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -1475,7 +1476,7 @@ class TabProfile(QWidget):
         cl.addWidget(presets_grp)
         cl.addSpacing(8)
 
-        scroll = QScrollArea()
+        scroll = FadeScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(scroll.Shape.NoFrame)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)

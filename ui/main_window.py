@@ -22,6 +22,7 @@ from core.logger import get_logger
 from core.settings import AppSettings
 from core.updater import UpdateChecker
 from ui.dialogs.settings_dialog import SettingsDialog
+from ui.dialogs.welcome_dialog import WelcomeDialog
 from ui.gradient_overlay import GradientOverlay
 from ui.masthead_header import MastheadHeader
 from ui.spectrum_tab_bar import SpectrumTabBar
@@ -80,6 +81,7 @@ class MainWindow(QMainWindow):
         from core.version import APP_VERSION
         self._masthead = MastheadHeader(version=APP_VERSION, parent=central)
         self._masthead.settings_clicked.connect(self._open_settings)
+        self._masthead.help_clicked.connect(self.open_welcome_dialog)
         main_layout.addWidget(self._masthead)
 
         # Tabs
@@ -412,6 +414,14 @@ class MainWindow(QMainWindow):
         else:
             self._tab_profile.clear_files()
             self._tab_check.clear_files()
+
+    def open_welcome_dialog(self) -> None:
+        dlg = WelcomeDialog(
+            self._settings,
+            parent=self,
+            initial_mode=self._title_bar_mode,
+        )
+        dlg.exec()
 
     def _open_settings(self) -> None:
         from ui.tooltip_button import TooltipButton

@@ -22,6 +22,7 @@ from PyQt6.QtWidgets import (
 )
 
 from core.logger import get_logger
+from ui.fade_scroll import FadeScrollArea
 from ui.styles import SPEC_VIOLET, TEXT_DIM
 from ui.tooltip_button import InfoDialog, TooltipButton
 from ui.widgets import NoScrollComboBox, NoScrollDoubleSpinBox, make_browse_button, open_file_dialog
@@ -340,7 +341,7 @@ class GamutPanel(QWidget):
         root.addWidget(self._view_toggle_row)
 
         # ── Scrollable options area ─────────────────────────────────────
-        scroll = QScrollArea(self)
+        scroll = FadeScrollArea(self)
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(scroll.Shape.NoFrame)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)

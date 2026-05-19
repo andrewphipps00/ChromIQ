@@ -41,6 +41,7 @@ from data.patch_db import (
     PAPER_SIZES,
     query_patches,
 )
+from ui.fade_scroll import FadeScrollArea
 from ui.parameter_widget import ParameterWidget
 from ui.styles import SPEC_AMBER, SPEC_CYAN, SPEC_GREEN, SPEC_MAGENTA, SPEC_VIOLET
 from ui.tab_header import TabHeader
@@ -274,7 +275,7 @@ class TabChart(QWidget):
         outer_layout = QVBoxLayout(outer)
         outer_layout.setContentsMargins(0, 0, 0, 0)
 
-        scroll = QScrollArea(outer)
+        scroll = FadeScrollArea(outer)
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(scroll.Shape.NoFrame)
 
@@ -659,7 +660,7 @@ class TabChart(QWidget):
         ))
         layout.addWidget(presets_grp)
 
-        scroll = QScrollArea(w)
+        scroll = FadeScrollArea(w)
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(scroll.Shape.NoFrame)
         inner = QWidget()

@@ -110,6 +110,10 @@ def main() -> int:
 
     win.show()
 
+    if settings.get("show_welcome_dialog", True):
+        from PyQt6.QtCore import QTimer
+        QTimer.singleShot(0, win.open_welcome_dialog)
+
     log.info("Event loop starting")
     return app.exec()
 
