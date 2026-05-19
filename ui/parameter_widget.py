@@ -252,10 +252,12 @@ class ParameterWidget(QWidget):
             self._browse_btn.clicked.connect(self._browse)
             layout.addWidget(self._browse_btn)
 
-        # Tooltip button
+        # Tooltip button — honour optional `tooltip_min_width:` from YAML so a
+        # parameter with extensive prose can request a wider info dialog.
         tt_title = self._param.get("tooltip_title", name)
         tt_body  = self._param.get("tooltip_body", "No description available.")
-        btn = TooltipButton(tt_title, tt_body, self)
+        tt_min_w = int(self._param.get("tooltip_min_width", 420))
+        btn = TooltipButton(tt_title, tt_body, self, min_width=tt_min_w)
         self._tooltip_btn = btn
         layout.addWidget(btn)
 
@@ -265,7 +267,8 @@ class ParameterWidget(QWidget):
             self._enable_check.toggled.connect(self._on_enable_toggled)
 
     def set_display_text(self, label: str, tooltip_title: str | None = None,
-                          tooltip_body: str | None = None) -> None:
+                          tooltip_body: str | None = None,
+                          tooltip_min_width: int | None = None) -> None:
         """Repurpose the row's visible label and tooltip without rebuilding.
 
         Used when one CLI flag has different meanings per context (e.g. -h
@@ -281,6 +284,8 @@ class ParameterWidget(QWidget):
             self._tooltip_btn._title = tooltip_title
             if tooltip_body is not None:
                 self._tooltip_btn._body = tooltip_body.strip()
+            if tooltip_min_width is not None:
+                self._tooltip_btn._min_width = tooltip_min_width
             self._tooltip_btn.setToolTip(f"{tooltip_title}\n\nClick for details")
 
     def set_control_enabled(self, enabled: bool) -> None:

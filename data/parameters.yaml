@@ -340,12 +340,32 @@ parameters:
       affects_preview: true
       expert_only: false
       tooltip_title: "Measurement Instrument (-i)"
+      tooltip_min_width: 600
       tooltip_body: |
-        Selects the strip layout optimised for your measurement device.
-        Each instrument has different strip widths, patch sizes and
-        spacing requirements.  Choosing the wrong instrument results in
-        a chart the device cannot read reliably.
-        In Guided mode this is set automatically.
+        Tells the chart generator which spectrophotometer you will use to
+        read the printed chart. The patch grid is built around that
+        instrument's strip width, patch size and spacing — so getting
+        this right is essential.
+
+          •  i1Pro / i1Pro 2 / i1Pro 3 — handheld strip reader, the most
+             common choice. Reads a column of patches in one sweep.
+
+          •  i1Pro 3 Plus — larger-aperture version of the i1Pro 3.
+             Reads bigger patches, so far fewer fit per sheet (~5× less
+             than the regular i1Pro).
+
+          •  ColorMunki / i1Studio / ColorChecker Studio — entry-level
+             device. Reads one patch at a time on its own; with the
+             optional measuring rig it pairs them up (see Double Density).
+
+          •  SpectroScan — flatbed XY scanner. A motorised arm reads
+             each patch individually, so it packs far more colours per
+             sheet than any strip reader.
+
+        Picking the wrong instrument produces a chart your device cannot
+        align to or read reliably — you'll see "patches not found" or
+        alignment errors when measuring. In Guided mode the layout
+        adapts to this choice automatically.
 
     - flag: "-h"
       name: "Double density (for measuring rig)"
@@ -354,11 +374,23 @@ parameters:
       affects_preview: true
       expert_only: false
       tooltip_title: "Double Density (-h)"
+      tooltip_min_width: 600
       tooltip_body: |
-        Doubles the number of patches per strip for ColorMunki /
-        i1Studio / ColorChecker Studio by using the measuring rig.
-        This roughly doubles the patches per page but requires the
-        physical rig accessory.  Has no effect for other instruments.
+        Modifies the per-strip patch density of the printtarg layout.
+        The exact meaning depends on the active instrument:
+
+          •  ColorMunki / i1Studio / ColorChecker Studio — doubles the
+             number of patches that fit in each measurement strip.
+             REQUIRES the physical measuring rig accessory; without it
+             the device cannot align to the tighter spacing and will
+             misread.
+
+          •  SpectroScan — switches the chart layout from rectangular
+             to hexagonal patches. Hexagons tessellate more tightly, so
+             ~14% more patches fit per sheet. No extra hardware needed.
+
+        Has no effect on i1Pro or i1Pro 3 Plus and is normally hidden
+        when one of those is selected.
 
     - flag: "-p"
       name: "Paper Size"
@@ -386,13 +418,27 @@ parameters:
       affects_preview: true
       expert_only: false
       tooltip_title: "Paper Size (-p)"
+      tooltip_min_width: 600
       tooltip_body: |
-        Physical paper size to be used for printing.  The chart layout
-        is calculated to fill the selected size.  In Guided mode this
-        controls how many patches fit per page (from the database).
-        Use landscape variants (A4R, 420x297, LetterR) when your
-        printer feeds landscape more reliably.
-        Select "Custom" to enter exact width and height in millimetres.
+        Sets the dimensions of each sheet in the printed chart. The chart
+        always fills the page edge to edge — bigger paper fits more
+        patches, which means a more detailed profile from fewer sheets.
+
+        Pick the same size you will actually print on, including its
+        orientation. Strip readers (i1Pro family) read top-to-bottom, so:
+
+          •  Portrait — longer strips, fewer of them. Standard choice.
+
+          •  Landscape (A4R, LetterR, 420×297…) — shorter strips, more
+             of them. Use this when your printer feeds landscape more
+             reliably, or when a portrait sheet would leave the last
+             strip too close to the paper edge.
+
+        Select "Custom" to enter exact width and height in millimetres
+        when none of the named sizes match the paper you're using.
+
+        If you change paper size, the patch count and page count in the
+        command preview update automatically.
 
     - flag: "-t"
       name: "TIFF Output DPI"

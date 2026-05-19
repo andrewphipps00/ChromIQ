@@ -134,6 +134,40 @@ class SettingsDialog(QDialog):
 
         layout.addWidget(folder_grp)
 
+        # ---- i1Pro chart defaults ----
+        from data.patch_db import I1PRO_DEFAULT_PRESETS, I1PRO_PRESET_LABELS
+        i1pro_grp = QGroupBox("i1Pro Chart Defaults", self)
+        i1g = QHBoxLayout(i1pro_grp)
+        i1g.addWidget(QLabel("Default layout:", self))
+        self._i1pro_preset_combo = NoScrollComboBox(self)
+        for key in ("m10_a0.95", "m10_a1.0", "m6_a1.0"):
+            self._i1pro_preset_combo.addItem(I1PRO_PRESET_LABELS[key], key)
+        self._i1pro_preset_combo.setMinimumWidth(320)
+        i1g.addWidget(self._i1pro_preset_combo)
+        i1g.addStretch()
+        i1g.addWidget(TooltipButton(
+            "i1Pro Chart Defaults",
+            "Sets the default printtarg layout flags (−m / −M margin and −a patch "
+            "scale) used by the Create Chart tab whenever the active instrument is "
+            "an i1Pro (i1Pro / i1Pro 2 / i1Pro 3).\n\n"
+            "  • −m 10  −a 0.95  — recommended. Wider margin protects strip optics "
+            "from drifting onto paper at the trailing edge; smaller patches let "
+            "~9% more colours fit per sheet.\n"
+            "  • −m 10  −a 1.0   — full-size patches with the wider margin.\n"
+            "  • −m 6   −a 1.0   — tightest layout. Higher risk of 'not enough "
+            "patches read' errors on some printers when the strip's last patch "
+            "lands too close to the bare paper edge.\n\n"
+            "Other instruments (i1Pro 3 Plus, ColorMunki, SpectroScan) are not "
+            "affected by this setting — they keep their own defaults.\n\n"
+            "Changes apply to both Guided and Manual mode. A custom margin or "
+            "patch-scale you set manually is preserved — switching instruments "
+            "only updates the value if it currently matches one of the three "
+            "preset values above.",
+            self,
+            min_width=620,
+        ))
+        layout.addWidget(i1pro_grp)
+
         # ---- Behaviour ----
         behaviour_grp = QGroupBox("Behaviour", self)
         bh = QVBoxLayout(behaviour_grp)
@@ -335,6 +369,10 @@ class SettingsDialog(QDialog):
         self._cal_mode_check.setChecked(bool(s.get("calibration_mode", False)))
         self._native_print_check.setChecked(bool(s.get("use_native_print_dialog", False)))
         self._confirm_print_check.setChecked(bool(s.get("confirm_before_printing", True)))
+        from data.patch_db import I1PRO_DEFAULT_PRESET_KEY
+        i1pro_key = str(s.get("i1pro_default_preset", I1PRO_DEFAULT_PRESET_KEY))
+        idx = self._i1pro_preset_combo.findData(i1pro_key)
+        self._i1pro_preset_combo.setCurrentIndex(idx if idx >= 0 else 0)
         # Appearance: capture current value so Cancel can revert any live preview.
         current = str(s.get("appearance", "auto"))
         self._appearance_original = current
@@ -375,6 +413,7 @@ class SettingsDialog(QDialog):
         s.set("use_native_print_dialog",   self._native_print_check.isChecked())
         s.set("confirm_before_printing",   self._confirm_print_check.isChecked())
         s.set("appearance",                str(self._appearance_combo.currentData()))
+        s.set("i1pro_default_preset",      str(self._i1pro_preset_combo.currentData()))
         log.info("Settings saved")
         self.accept()
 

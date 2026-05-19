@@ -29,6 +29,11 @@ DEFAULTS: dict[str, Any] = {
     "targen_extra_args":         "",
     "printtarg_dpi":             300,
     "printtarg_extra_args":      "",
+    # i1Pro chart layout default: combined -m/-M margin + -a patch scale preset.
+    # Applied when instrument == "i1" in both guided and manual modes. Other
+    # instruments (p3, CM, SS) are unaffected and keep their existing defaults.
+    # See data/patch_db.I1PRO_DEFAULT_PRESETS for the available preset keys.
+    "i1pro_default_preset":      "m10_a0.95",
     # Step 2 — print
     "last_printer":              "",
     "print_input_slot":          "",

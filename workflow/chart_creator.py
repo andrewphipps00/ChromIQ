@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Optional
 
 from core.logger import get_logger
-from data.patch_db import query_patches
+from data.patch_db import SUPPORTED_PATCH_SCALES, query_patches
 
 if TYPE_CHECKING:
     from core.argyll_runner import ArgyllRunner
@@ -140,10 +140,11 @@ class ChartCreator:
         progress_cb: Callable[[str], None] | None = None,
     ) -> int:
         """Return max patches for the given params (fast lookup or binary search)."""
-        if abs(params.patch_scale - 1.0) <= 0.01:
+        if any(abs(params.patch_scale - s) <= 0.01 for s in SUPPORTED_PATCH_SCALES):
             per_sheet = query_patches(params.instrument, params.paper, params.double_density,
                                       suppress_lb=params.disable_left_border,
-                                      margin_mm=params.margin_mm)
+                                      margin_mm=params.margin_mm,
+                                      patch_scale=params.patch_scale)
             if per_sheet is not None:
                 n = per_sheet * params.pages
                 if progress_cb:
@@ -152,7 +153,7 @@ class ChartCreator:
                     )
                 return n
 
-        # Binary search for non-default patch_scale or unsupported margin_mm
+        # Binary search for unsupported patch_scale / margin_mm
         if progress_cb:
             progress_cb("Custom layout detected — running binary search…")
         per_sheet = self._binary_search(params, progress_cb)
@@ -449,10 +450,11 @@ class ChartCreator:
     # ------------------------------------------------------------------
 
     def _lookup_patches(self, p: ChartParams) -> int:
-        if abs(p.patch_scale - 1.0) <= 0.01:
+        if any(abs(p.patch_scale - s) <= 0.01 for s in SUPPORTED_PATCH_SCALES):
             per_sheet = query_patches(p.instrument, p.paper, p.double_density,
                                       suppress_lb=p.disable_left_border,
-                                      margin_mm=p.margin_mm)
+                                      margin_mm=p.margin_mm,
+                                      patch_scale=p.patch_scale)
             if per_sheet is not None:
                 return per_sheet * p.pages
         return self._binary_search(p) * p.pages
@@ -470,7 +472,8 @@ class ChartCreator:
             log.warning("targen not found for binary search, returning estimate")
             return (query_patches(p.instrument, p.paper, p.double_density,
                                   suppress_lb=p.disable_left_border,
-                                  margin_mm=p.margin_mm)
+                                  margin_mm=p.margin_mm,
+                                  patch_scale=p.patch_scale)
                     or query_patches(p.instrument, p.paper, p.double_density,
                                      suppress_lb=p.disable_left_border)
                     or 500)
@@ -479,7 +482,8 @@ class ChartCreator:
 
         est_raw = (query_patches(p.instrument, p.paper, p.double_density,
                                  suppress_lb=p.disable_left_border,
-                                 margin_mm=p.margin_mm)
+                                 margin_mm=p.margin_mm,
+                                 patch_scale=p.patch_scale)
                    or query_patches(p.instrument, p.paper, p.double_density,
                                     suppress_lb=p.disable_left_border)
                    or 400)

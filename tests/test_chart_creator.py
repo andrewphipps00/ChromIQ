@@ -18,7 +18,13 @@ import tifffile
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from data.patch_db import INSTRUMENT_DEFAULT_MARGIN, query_patches
+from data.patch_db import (
+    I1PRO_DEFAULT_PRESET_KEY,
+    I1PRO_DEFAULT_PRESETS,
+    INSTRUMENT_DEFAULT_MARGIN,
+    i1_defaults_from_preset,
+    query_patches,
+)
 from workflow.chart_creator import ChartCreator, ChartParams
 
 
@@ -107,6 +113,71 @@ def test_query_patches_margin10_only_for_i1_and_p3() -> None:
     """CM and SS don't change defaults, so their margin=10 lookups should be missing."""
     assert query_patches("CM", "A4", margin_mm=10) is None
     assert query_patches("SS", "A4", margin_mm=10) is None
+
+
+def test_query_patches_scale095_i1_a4_with_left_border() -> None:
+    """scale=0.95 must return a measured value bigger than the scale=1.0 baseline."""
+    n_10 = query_patches("i1", "A4", suppress_lb=True, margin_mm=6, patch_scale=1.0)
+    n_95 = query_patches("i1", "A4", suppress_lb=True, margin_mm=6, patch_scale=0.95)
+    assert n_10 is not None and n_95 is not None
+    assert n_95 > n_10, "smaller patches must fit more per sheet"
+    assert n_95 == 550, "regression guard against accidental table edits"
+
+
+def test_query_patches_scale095_respects_margin_and_lb() -> None:
+    """scale=0.95 dispatch must propagate margin and -L flags."""
+    m6_lb  = query_patches("i1", "A4", suppress_lb=True,  margin_mm=6,  patch_scale=0.95)
+    m6_nolb = query_patches("i1", "A4", suppress_lb=False, margin_mm=6,  patch_scale=0.95)
+    m10_lb = query_patches("i1", "A4", suppress_lb=True,  margin_mm=10, patch_scale=0.95)
+    assert m6_lb is not None and m6_nolb is not None and m10_lb is not None
+    assert m6_lb > m6_nolb, "-L must yield more patches than no-L"
+    assert m6_lb > m10_lb,  "m=6 must yield more patches than m=10"
+
+
+def test_query_patches_scale095_covers_cm_double_density() -> None:
+    """CM at scale=0.95 must be covered for both -h states; -h gives ~2× capacity."""
+    cm_std = query_patches("CM", "A4", double_density=False, margin_mm=6, patch_scale=0.95)
+    cm_dd  = query_patches("CM", "A4", double_density=True,  margin_mm=6, patch_scale=0.95)
+    assert cm_std is not None and cm_dd is not None
+    assert cm_dd > cm_std, "-h must roughly double CM capacity"
+
+
+def test_query_patches_scale095_no_cm_at_margin10() -> None:
+    """CM doesn't have m=10 entries at any scale — must return None to trigger fallback."""
+    assert query_patches("CM", "A4", margin_mm=10, patch_scale=0.95) is None
+
+
+def test_query_patches_unsupported_scale_returns_none() -> None:
+    """Scales outside SUPPORTED_PATCH_SCALES must return None so callers fall back."""
+    assert query_patches("i1", "A4", margin_mm=6, patch_scale=0.85) is None
+    assert query_patches("i1", "A4", margin_mm=6, patch_scale=1.10) is None
+
+
+def test_i1_defaults_from_preset_known_keys() -> None:
+    """All three documented preset keys must return the printtarg values they encode."""
+    assert i1_defaults_from_preset("m6_a1.0")   == (6,  1.0)
+    assert i1_defaults_from_preset("m10_a1.0")  == (10, 1.0)
+    assert i1_defaults_from_preset("m10_a0.95") == (10, 0.95)
+
+
+def test_i1_defaults_from_preset_app_default() -> None:
+    """The app-wide default key must resolve to m=10, a=0.95."""
+    assert I1PRO_DEFAULT_PRESET_KEY == "m10_a0.95"
+    assert i1_defaults_from_preset(I1PRO_DEFAULT_PRESET_KEY) == (10, 0.95)
+
+
+def test_i1_defaults_from_preset_unknown_falls_back() -> None:
+    """An unknown / corrupted preset key falls back to the recommended default."""
+    assert i1_defaults_from_preset("bogus")    == (10, 0.95)
+    assert i1_defaults_from_preset("")         == (10, 0.95)
+
+
+def test_i1_defaults_only_uses_supported_values() -> None:
+    """All preset outputs must be in SUPPORTED_MARGINS × SUPPORTED_PATCH_SCALES."""
+    from data.patch_db import SUPPORTED_MARGINS, SUPPORTED_PATCH_SCALES
+    for margin, scale in I1PRO_DEFAULT_PRESETS.values():
+        assert margin in SUPPORTED_MARGINS
+        assert any(abs(scale - s) <= 0.01 for s in SUPPORTED_PATCH_SCALES)
 
 
 def test_instrument_default_margin_keys() -> None:

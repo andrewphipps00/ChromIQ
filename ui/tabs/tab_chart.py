@@ -34,11 +34,13 @@ from core.logger import get_logger
 from core.resource_path import resource_path
 from data.patch_db import (
     EXCLUDED_PAPERS,
+    I1PRO_DEFAULT_PRESET_KEY,
     INSTRUMENT_DEFAULT_MARGIN,
     INSTRUMENT_LABELS,
     PAPER_FALLBACK,
     PAPER_LABELS,
     PAPER_SIZES,
+    i1_defaults_from_preset,
     query_patches,
 )
 from ui.fade_scroll import FadeScrollArea
@@ -291,6 +293,8 @@ class TabChart(QWidget):
         name_row = QHBoxLayout()
         name_row.addWidget(QLabel("Target name:", inner))
         self._target_name_edit = self._make_lineedit("", inner)
+        # Live-update the guided command preview as the user types.
+        self._target_name_edit.textChanged.connect(self._update_patch_count)
         name_row.addWidget(self._target_name_edit, stretch=1)
         name_row.addWidget(TooltipButton(
             "Target Name",
@@ -322,9 +326,27 @@ class TabChart(QWidget):
         row.addWidget(self._instr_combo, stretch=1)
         row.addWidget(TooltipButton(
             "Measurement Instrument",
-            "Select the spectrophotometer you will use to measure the printed chart.\n"
-            "The patch layout is optimised for the selected instrument's strip geometry.",
+            "Tells the chart generator which spectrophotometer you will use to read "
+            "the printed chart. The patch grid is built around that instrument's "
+            "strip width, patch size and spacing — so getting this right is "
+            "essential.\n\n"
+            "  •  i1Pro / i1Pro 2 / i1Pro 3 — handheld strip reader, the most "
+            "common choice. Reads a column of patches in one sweep.\n\n"
+            "  •  i1Pro 3 Plus — larger-aperture version of the i1Pro 3. Reads "
+            "bigger patches, so far fewer fit per sheet (~5× less than the "
+            "regular i1Pro).\n\n"
+            "  •  ColorMunki / i1Studio / ColorChecker Studio — entry-level "
+            "device. Reads one patch at a time on its own; with the optional "
+            "measuring rig it pairs them up (see the Double Density option).\n\n"
+            "  •  SpectroScan — flatbed XY scanner. A motorised arm reads each "
+            "patch individually, so it packs far more colours per sheet than any "
+            "strip reader.\n\n"
+            "Picking the wrong instrument produces a chart your device cannot "
+            "align to or read reliably — you'll see \"patches not found\" or "
+            "alignment errors when measuring.\n\n"
+            "In Guided mode the layout adapts to this choice automatically.",
             inner,
+            min_width=600,
         ))
         instr_layout.addLayout(row)
 
@@ -334,9 +356,19 @@ class TabChart(QWidget):
         self._dd_check.toggled.connect(self._update_patch_count)
         self._dd_tooltip = TooltipButton(
             "Double Density (-h)",
-            "Uses the measuring rig to double the number of patches per strip for "
-            "ColorMunki / i1Studio / ColorChecker Studio. Requires the physical rig.",
+            "Doubles the number of patches that fit in each measurement strip when "
+            "using a ColorMunki / i1Studio / ColorChecker Studio.\n\n"
+            "REQUIRES the physical measuring rig accessory — a clear plastic guide "
+            "that mounts the instrument over the chart. Without the rig the device "
+            "cannot align to the tighter patch spacing and will misread.\n\n"
+            "With the rig you get roughly twice as many patches per page, which "
+            "means either a more detailed profile from the same number of sheets, "
+            "or the same profile quality on fewer sheets. Recommended for anyone "
+            "with the rig — it's a strict upgrade on patch density.\n\n"
+            "Has no effect on i1Pro, i1Pro 3 Plus or SpectroScan — the option is "
+            "hidden when those are selected.",
             inner,
+            min_width=600,
         )
         dd_row.addWidget(self._dd_check)
         dd_row.addStretch()
@@ -354,9 +386,24 @@ class TabChart(QWidget):
         paper_row.addWidget(self._paper_combo, stretch=1)
         paper_row.addWidget(TooltipButton(
             "Paper Size",
-            "Select the paper size you will print on.  The chart fills the page.\n"
-            "Use landscape variants when your printer feeds landscape more reliably.",
+            "Sets the dimensions of each sheet in the printed chart. The chart "
+            "always fills the page edge to edge — bigger paper fits more "
+            "patches, which means a more detailed profile from fewer sheets.\n\n"
+            "Pick the same size you will actually print on, including its "
+            "orientation. Strip readers (i1Pro family) read top-to-bottom, so:\n\n"
+            "  •  Portrait — longer strips, fewer of them. Standard choice.\n\n"
+            "  •  Landscape — shorter strips, more of them. Use this when your "
+            "printer feeds landscape more reliably, or when a portrait sheet "
+            "would leave the last strip too close to the paper edge.\n\n"
+            "Some paper sizes are hidden depending on the selected instrument:\n\n"
+            "  •  A3 Portrait is hidden for i1Pro — the landscape variant fits "
+            "~43% more patches.\n\n"
+            "  •  Small photo formats (5×7\", 4×6\") are hidden for i1Pro 3 "
+            "Plus — its large patches don't leave a usable profile on those.\n\n"
+            "If you change paper size mid-workflow, the recommended patch count "
+            "and page count update automatically.",
             inner,
+            min_width=600,
         ))
         paper_layout.addLayout(paper_row)
         layout.addWidget(paper_grp)
@@ -376,10 +423,24 @@ class TabChart(QWidget):
         pages_row.addStretch()
         pages_row.addWidget(TooltipButton(
             "Number of Pages",
-            "How many physical sheets to print.  Each sheet contains as many\n"
-            "patches as fit for the selected instrument and paper size.\n"
-            "Total patches = patches/page × pages.",
+            "How many physical sheets the chart spans. Each sheet is filled with "
+            "as many patches as fit for the selected paper, instrument and layout "
+            "— so total patches = patches-per-page × pages.\n\n"
+            "More pages means more colour samples, which produces a more accurate "
+            "profile. The trade-off is more ink, more paper and a longer reading "
+            "session. Rough guide:\n\n"
+            "  •  1 page — quick check or single-sheet workflows (~500 patches on "
+            "A4 with an i1Pro). Fine for casual profiling.\n\n"
+            "  •  2-3 pages — recommended for everyday photo printing. Good "
+            "balance of accuracy versus effort.\n\n"
+            "  •  4-5+ pages — professional or fine-art workflows where the "
+            "profile needs to nail tricky tonal transitions and out-of-gamut "
+            "colours.\n\n"
+            "How many patches you actually need depends on your printer's colour "
+            "gamut, ink set and how non-linear it behaves. When in doubt, more is "
+            "better.",
             inner,
+            min_width=600,
         ))
         pages_layout.addLayout(pages_row)
 
@@ -561,6 +622,10 @@ class TabChart(QWidget):
         _name_lbl.setFixedWidth(_OUTPUT_LBL_W)
         name_row.addWidget(_name_lbl)
         self._manual_target_name_edit = self._make_lineedit("", w)
+        # Live-update the manual command preview as the user types.
+        self._manual_target_name_edit.textChanged.connect(
+            self._refresh_manual_command_preview
+        )
         name_row.addWidget(self._manual_target_name_edit, stretch=1)
         name_row.addWidget(TooltipButton(
             "Target Name",
@@ -798,16 +863,29 @@ class TabChart(QWidget):
                 pages_row_l.addStretch()
                 pages_row_l.addWidget(TooltipButton(
                     "Pages (Auto patch count)",
-                    "Target page count used by the Auto checkbox next to\n"
-                    "targen → Total Patch Count. When Auto is on, the patch\n"
-                    "count is sized so the chart fills exactly this many\n"
-                    "sheets — using the current paper, instrument, double\n"
-                    "density, left-border, patch scale and margin settings.\n\n"
-                    "This control is greyed out when Auto is off, because\n"
-                    "printtarg by itself just uses as many sheets as the\n"
-                    "patch count requires.",
+                    "How many physical sheets the chart should span. This control "
+                    "drives the Auto checkbox next to targen → Total Patch Count "
+                    "above: when Auto is on, ChromIQ picks the patch count that "
+                    "fills exactly this many sheets — using the current paper, "
+                    "instrument, double-density / hexagon, left-border, patch "
+                    "scale and margin settings. Total patches = patches-per-page "
+                    "× pages.\n\n"
+                    "More pages means more colour samples, which produces a more "
+                    "accurate profile. The trade-off is more ink, more paper and "
+                    "a longer reading session. Rough guide:\n\n"
+                    "  •  1 page — quick check or single-sheet workflows "
+                    "(~500 patches on A4 with an i1Pro). Fine for casual "
+                    "profiling.\n\n"
+                    "  •  2-3 pages — recommended for everyday photo printing. "
+                    "Good balance of accuracy versus effort.\n\n"
+                    "  •  4-5+ pages — professional or fine-art workflows where "
+                    "the profile needs to nail tricky tonal transitions and "
+                    "out-of-gamut colours.\n\n"
+                    "This control is greyed out when Auto is off — without Auto, "
+                    "printtarg just uses as many sheets as the explicit Total "
+                    "Patch Count requires.",
                     pages_row_w,
-                    min_width=480,
+                    min_width=600,
                 ))
                 idx = basic_layout.indexOf(self._manual_paper_pw)
                 basic_layout.insertWidget(idx + 1 if idx >= 0 else basic_layout.count(),
@@ -827,6 +905,8 @@ class TabChart(QWidget):
         self._preset_del_btn.clicked.connect(self._on_preset_delete)
         self._manual_target_name_edit.textChanged.connect(self._check_for_cal_file)
         self._cal_target_check.toggled.connect(self._on_cal_target_toggled)
+        # Cal-target prefix changes the displayed name — refresh the preview too.
+        self._cal_target_check.toggled.connect(self._refresh_manual_command_preview)
 
         # Live command preview — mirrors the guided info box but reflects the
         # actual targen / printtarg args the workflow will build from the
@@ -891,7 +971,7 @@ class TabChart(QWidget):
             targen_args += [f"-s{p.single_channel_steps}"]
         if p.extra_targen_args:
             targen_args += shlex.split(p.extra_targen_args)
-        targen_args.append(p.target_name or "chart")
+        targen_args.append(self._preview_target_name("manual"))
 
         # printtarg
         pt_args: list[str] = []
@@ -917,7 +997,7 @@ class TabChart(QWidget):
             pt_args.append("-P")
         if p.extra_printtarg_args:
             pt_args += shlex.split(p.extra_printtarg_args)
-        pt_args.append(p.target_name or "chart")
+        pt_args.append(self._preview_target_name("manual"))
 
         pages = (
             self._manual_pages_spin.value()
@@ -981,6 +1061,26 @@ class TabChart(QWidget):
             self._cal_status_lbl.setVisible(True)
         else:
             self._cal_status_lbl.setVisible(False)
+
+    def _preview_target_name(self, mode: str) -> str:
+        """Return the target name as it will appear in the command preview.
+
+        Falls back to "chart" when the name field is empty, matching the
+        default that ChartCreator uses at generate time. Prefixes "cal_"
+        when the Calibration Target checkbox is active (manual mode only).
+        """
+        if mode == "guided":
+            edit = getattr(self, "_target_name_edit", None)
+        else:
+            edit = getattr(self, "_manual_target_name_edit", None)
+        name = (edit.text().strip() if edit is not None else "") or "chart"
+
+        if mode == "manual" and getattr(self, "_cal_target_check", None) is not None:
+            grp = getattr(self, "_cal_target_grp", None)
+            if (self._cal_target_check.isChecked()
+                    and grp is not None and grp.isVisible()):
+                name = f"cal_{name}"
+        return name
 
     def _on_cal_target_toggled(self, checked: bool) -> None:
         _CAL_VALUES: list[tuple[str, str, Any]] = [
@@ -1091,16 +1191,38 @@ class TabChart(QWidget):
                 self._manual_dd_pw.set_display_text(
                     "Double density (for measuring rig)",
                     "Double Density (-h)",
-                    "Uses the measuring rig to double the number of patches per strip for "
-                    "ColorMunki / i1Studio / ColorChecker Studio. Requires the physical rig.",
+                    "Doubles the number of patches that fit in each measurement "
+                    "strip when using a ColorMunki / i1Studio / ColorChecker "
+                    "Studio.\n\n"
+                    "REQUIRES the physical measuring rig accessory — a clear "
+                    "plastic guide that mounts the instrument over the chart. "
+                    "Without the rig the device cannot align to the tighter "
+                    "patch spacing and will misread.\n\n"
+                    "With the rig you get roughly twice as many patches per "
+                    "page, which means either a more detailed profile from the "
+                    "same number of sheets, or the same profile quality on "
+                    "fewer sheets. Recommended for anyone with the rig — it's "
+                    "a strict upgrade on patch density.\n\n"
+                    "Has no effect on i1Pro, i1Pro 3 Plus or SpectroScan — the "
+                    "option is hidden when those are selected.",
+                    tooltip_min_width=600,
                 )
             elif instr == "SS":
                 self._manual_dd_pw.setVisible(True)
                 self._manual_dd_pw.set_display_text(
                     "Hexagon patches",
                     "Hexagon Patches (-h)",
-                    "Uses hexagonal patches instead of rectangular ones for the "
-                    "SpectroScan, packing ~15% more patches on the same sheet.",
+                    "Switches the SpectroScan chart layout from rectangular to "
+                    "hexagonal patches. Hexagons tessellate more tightly than "
+                    "rectangles, so roughly 14% more patches fit on the same "
+                    "sheet — useful for squeezing extra colour samples out of "
+                    "large papers.\n\n"
+                    "No extra hardware is required. The SpectroScan's XY scanner "
+                    "reads each patch individually under a motorised arm, so it "
+                    "doesn't care whether the patch is square or hexagonal.\n\n"
+                    "Has no effect on i1Pro, i1Pro 3 Plus or ColorMunki — the "
+                    "option is hidden when those are selected.",
+                    tooltip_min_width=600,
                 )
             else:
                 self._manual_dd_pw.setVisible(False)
@@ -1110,21 +1232,50 @@ class TabChart(QWidget):
                     self._manual_dd_pw.set_value(False)
 
     def _apply_instrument_default_margin(self) -> None:
-        """Auto-update -m widget to the per-instrument default on instrument change.
+        """Auto-update -m (and -a, for i1) widgets to the per-instrument default
+        on instrument change.
 
-        Only overwrites known defaults (6 or 10) so a user who deliberately set a
-        custom margin (e.g. 12) keeps their value when flipping instruments.
+        Only overwrites known preset values so a user who deliberately set a
+        custom margin (e.g. 12) or scale (e.g. 0.85) keeps their value when
+        flipping instruments.
+
+        For instrument == "i1" the (margin, scale) pair comes from the
+        Preferences → i1Pro Chart Defaults setting. For other instruments only
+        the margin is touched (legacy behaviour).
         """
         if self._manual_instr_pw is None or self._manual_m_pw is None:
             return
         instr = self._manual_instr_pw.get_raw_value() or "i1"
-        target = INSTRUMENT_DEFAULT_MARGIN.get(instr, 6)
+
+        if instr == "i1":
+            preset_key = str(self._settings.get(
+                "i1pro_default_preset", I1PRO_DEFAULT_PRESET_KEY
+            ))
+            target_margin, target_scale = i1_defaults_from_preset(preset_key)
+        else:
+            target_margin = INSTRUMENT_DEFAULT_MARGIN.get(instr, 6)
+            # Non-i1 instruments use the printtarg native default (-a 1.0).
+            # Switching away from i1 must undo any 0.95 the i1pro preset set.
+            target_scale = 1.0
+
         try:
-            current = int(self._manual_m_pw.get_raw_value() or 6)
+            current_m = int(self._manual_m_pw.get_raw_value() or 6)
         except (TypeError, ValueError):
-            return
-        if current in (6, 10) and current != target:
-            self._manual_m_pw.set_value(target)
+            current_m = None
+        if current_m in (6, 10) and current_m != target_margin:
+            self._manual_m_pw.set_value(target_margin)
+
+        if self._manual_a_pw is not None:
+            try:
+                current_a = float(self._manual_a_pw.get_raw_value() or 1.0)
+            except (TypeError, ValueError):
+                current_a = None
+            # Only override if the current scale is one of the known preset
+            # values — leave custom scales (e.g. 0.85, 1.1) intact.
+            if current_a is not None and any(
+                abs(current_a - known) <= 0.01 for known in (1.0, 0.95)
+            ) and abs(current_a - target_scale) > 0.01:
+                self._manual_a_pw.set_value(target_scale)
 
     # ------------------------------------------------------------------
     # Auto patch-count (Manual mode)
@@ -1349,9 +1500,17 @@ class TabChart(QWidget):
         pages  = self._pages_spin.value()
         has_lb = self._lb_check.isChecked()  # True = -L active (left border suppressed)
         dpi    = int(self._settings.get("printtarg_dpi", 300))
-        eff_margin = INSTRUMENT_DEFAULT_MARGIN.get(instr, 6)
+        if instr == "i1":
+            preset_key = str(self._settings.get(
+                "i1pro_default_preset", I1PRO_DEFAULT_PRESET_KEY
+            ))
+            eff_margin, eff_scale = i1_defaults_from_preset(preset_key)
+        else:
+            eff_margin = INSTRUMENT_DEFAULT_MARGIN.get(instr, 6)
+            eff_scale = 1.0
 
-        per_sheet = query_patches(instr, paper, dd, suppress_lb=has_lb, margin_mm=eff_margin)
+        per_sheet = query_patches(instr, paper, dd, suppress_lb=has_lb,
+                                  margin_mm=eff_margin, patch_scale=eff_scale)
         if per_sheet is not None:
             total = per_sheet * pages
             self._patch_count_lbl.setText(str(total))
@@ -1375,6 +1534,7 @@ class TabChart(QWidget):
         lb_flag = "-L " if has_lb and instr in {"i1", "p3"} else ""
         dd_flag = "-h " if dd and instr in {"CM", "SS"} else ""
         margin_flag = f"-m{eff_margin} -M{eff_margin} " if eff_margin != 6 else ""
+        scale_flag = f"-a{eff_scale:.2f} " if abs(eff_scale - 1.0) > 0.01 else ""
         precond_path = (
             self._guided_precond_path.text().strip()
             if hasattr(self, "_guided_precond_path") else ""
@@ -1396,10 +1556,11 @@ class TabChart(QWidget):
                     "\nPick a profile to refine from (Browse… above)."
                 )
 
+        target_name = self._preview_target_name("guided")
         info = (
             f"Guided mode applies these fixed settings:\n"
-            f"targen -d2 -G -e{wp} -B{bp} -g{grey_steps}{precond_line}\n"
-            f"printtarg -i{instr} -p{paper} -t{dpi} {lb_flag}{dd_flag}{margin_flag}chart"
+            f"targen -d2 -G -e{wp} -B{bp} -g{grey_steps}{precond_line} {target_name}\n"
+            f"printtarg -i{instr} -p{paper} -t{dpi} {scale_flag}{lb_flag}{dd_flag}{margin_flag}{target_name}"
             f"{recommendation}"
         )
         if hasattr(self, "_guided_info_lbl"):
@@ -1431,21 +1592,40 @@ class TabChart(QWidget):
             self._dd_tooltip.setVisible(True)
             self._dd_check.setText("Double density (requires measuring rig)")
             self._dd_tooltip._title = "Double Density (-h)"
-            self._dd_tooltip._body  = (
-                "Uses the measuring rig to double the number of patches per strip for "
-                "ColorMunki / i1Studio / ColorChecker Studio. Requires the physical rig."
+            self._dd_tooltip._body = (
+                "Doubles the number of patches that fit in each measurement strip "
+                "when using a ColorMunki / i1Studio / ColorChecker Studio.\n\n"
+                "REQUIRES the physical measuring rig accessory — a clear plastic "
+                "guide that mounts the instrument over the chart. Without the rig "
+                "the device cannot align to the tighter patch spacing and will "
+                "misread.\n\n"
+                "With the rig you get roughly twice as many patches per page, "
+                "which means either a more detailed profile from the same number "
+                "of sheets, or the same profile quality on fewer sheets. "
+                "Recommended for anyone with the rig — it's a strict upgrade on "
+                "patch density.\n\n"
+                "Has no effect on i1Pro, i1Pro 3 Plus or SpectroScan — the option "
+                "is hidden when those are selected."
             )
+            self._dd_tooltip._min_width = 600
             self._dd_tooltip.setToolTip("Double Density (-h)\n\nClick for details")
         elif instr == "SS":
             self._dd_check.setVisible(True)
             self._dd_tooltip.setVisible(True)
             self._dd_check.setText("Hexagon patches (packs ~15% more per sheet)")
             self._dd_tooltip._title = "Hexagon Patches (-h)"
-            self._dd_tooltip._body  = (
-                "Uses hexagonal patches instead of rectangular ones for the SpectroScan, "
-                "packing ~15% more patches on the same sheet. Layout still reads "
-                "patch-by-patch via the XY scanner."
+            self._dd_tooltip._body = (
+                "Switches the SpectroScan chart layout from rectangular to "
+                "hexagonal patches. Hexagons tessellate more tightly than "
+                "rectangles, so roughly 14% more patches fit on the same sheet — "
+                "useful for squeezing extra colour samples out of large papers.\n\n"
+                "No extra hardware is required. The SpectroScan's XY scanner "
+                "reads each patch individually under a motorised arm, so it "
+                "doesn't care whether the patch is square or hexagonal.\n\n"
+                "Has no effect on i1Pro, i1Pro 3 Plus or ColorMunki — the option "
+                "is hidden when those are selected."
             )
+            self._dd_tooltip._min_width = 600
             self._dd_tooltip.setToolTip("Hexagon Patches (-h)\n\nClick for details")
         else:
             self._dd_check.setVisible(False)
@@ -1646,10 +1826,18 @@ class TabChart(QWidget):
         paper   = self._paper_combo.currentData() or "A4"
         dd      = self._dd_check.isChecked()
         has_lb  = self._lb_check.isChecked()
-        margin  = INSTRUMENT_DEFAULT_MARGIN.get(instr, 6)
+        if instr == "i1":
+            preset_key = str(self._settings.get(
+                "i1pro_default_preset", I1PRO_DEFAULT_PRESET_KEY
+            ))
+            margin, patch_scale = i1_defaults_from_preset(preset_key)
+        else:
+            margin = INSTRUMENT_DEFAULT_MARGIN.get(instr, 6)
+            patch_scale = 1.0
         base_white = int(self._settings.get("targen_white_patches", 4))
         base_black = int(self._settings.get("targen_black_patches", 4))
-        per_sheet  = query_patches(instr, paper, dd, suppress_lb=has_lb, margin_mm=margin) or 504
+        per_sheet  = query_patches(instr, paper, dd, suppress_lb=has_lb,
+                                   margin_mm=margin, patch_scale=patch_scale) or 504
         grey_steps = max(8, min((per_sheet * pages) // 30, 64))
 
         precond_path = self._guided_precond_path.text().strip()
@@ -1670,7 +1858,7 @@ class TabChart(QWidget):
             grey_steps           = grey_steps,
             extra_targen_args    = extra_targen,
             tiff_dpi             = int(self._settings.get("printtarg_dpi", 300)),
-            patch_scale          = 1.0,
+            patch_scale          = patch_scale,
             margin_mm            = margin,
             preserve_as_preconditioning = (
                 precond_active and self._preconditioning_from_dialog

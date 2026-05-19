@@ -1,8 +1,11 @@
 """Empirical per-sheet patch capacity database.
 
 Values measured with Argyll 3.5.0 using:
-    printtarg -i<instr> -p<paper> -t300 -L <file>
-i.e. default patch scale (-a 1.0), 300 DPI TIFF, left-clip border suppressed.
+    printtarg -i<instr> -p<paper> -t300 [-a<scale>] -m<margin> -M<margin> [-L] <file>
+
+The tables cover the lookup baseline (-a 1.0, -m6/-M6, -L) plus expansions for
+-m10 and -a 0.95 (i1 / p3 only). Other layout parameter values fall back to a
+live binary search.
 
 Key: (instrument_code, double_density, paper_size)
   instrument codes:
@@ -135,6 +138,36 @@ INSTRUMENT_DEFAULT_MARGIN: dict[str, int] = {
 # Margins for which we have measured per-sheet capacity tables. Other margin
 # values fall back to live binary search via workflow/chart_creator._binary_search.
 SUPPORTED_MARGINS: tuple[int, ...] = (6, 10)
+
+# Patch scales (-a flag) for which we have measured per-sheet capacity tables.
+# Other scales fall back to live binary search.
+SUPPORTED_PATCH_SCALES: tuple[float, ...] = (1.0, 0.95)
+
+# i1Pro chart-layout presets exposed in the Preferences dialog. The setting
+# `i1pro_default_preset` stores one of these keys; the tuple is (margin_mm,
+# patch_scale). Applied only when the active instrument is "i1" — other
+# instruments keep their existing defaults.
+I1PRO_DEFAULT_PRESETS: dict[str, tuple[int, float]] = {
+    "m6_a1.0":   (6,  1.0),
+    "m10_a1.0":  (10, 1.0),
+    "m10_a0.95": (10, 0.95),
+}
+
+I1PRO_PRESET_LABELS: dict[str, str] = {
+    "m6_a1.0":   "−m 6  −a 1.0  (legacy)",
+    "m10_a1.0":  "−m 10  −a 1.0",
+    "m10_a0.95": "−m 10  −a 0.95  (default — denser packing)",
+}
+
+I1PRO_DEFAULT_PRESET_KEY: str = "m10_a0.95"
+
+
+def i1_defaults_from_preset(preset_key: str) -> tuple[int, float]:
+    """Return (margin_mm, patch_scale) for the given preset key.
+
+    Unknown keys fall back to the recommended default (m10_a0.95).
+    """
+    return I1PRO_DEFAULT_PRESETS.get(preset_key, I1PRO_DEFAULT_PRESETS[I1PRO_DEFAULT_PRESET_KEY])
 
 # Human-readable labels for UI combos
 INSTRUMENT_LABELS: dict[str, str] = {
@@ -375,28 +408,238 @@ _PER_SHEET_CAPACITY_M10_NO_LB: dict[tuple[str, bool, str], int] = {
 }
 
 
+# ---------------------------------------------------------------------------
+# Per-sheet capacity at patch-scale -a 0.95.
+# i1 / p3 measured by scripts/measure_scale095_capacity.py (with m=6 and m=10).
+# CM (both -h states) measured by scripts/measure_scale095_cm_capacity.py at m=6.
+# SS isn't covered — falls back to live binary search at -a 0.95.
+# ---------------------------------------------------------------------------
+
+_PER_SHEET_CAPACITY_A095: dict[tuple[str, bool, str], int] = {
+    # ---- i1Pro / i1Pro 2 / i1Pro 3 --------------------------------
+    ("i1", False, "A2"):       1166,
+    ("i1", False, "329x483"):   902,
+    ("i1", False, "483x329"):  1342,
+    ("i1", False, "A3"):        792,
+    ("i1", False, "420x297"):  1166,
+    ("i1", False, "11x17"):     748,
+    ("i1", False, "Legal"):     572,
+    ("i1", False, "A4"):        550,
+    ("i1", False, "A4R"):       576,
+    ("i1", False, "Letter"):    572,
+    ("i1", False, "LetterR"):   578,
+    ("i1", False, "203x254"):   504,
+    ("i1", False, "127x178"):   182,
+    ("i1", False, "4x6"):       121,
+    # ---- i1Pro 3 Plus ---------------------------------------------
+    ("p3", False, "A2"):        260,
+    ("p3", False, "329x483"):   200,
+    ("p3", False, "483x329"):   300,
+    ("p3", False, "A3"):        180,
+    ("p3", False, "420x297"):   260,
+    ("p3", False, "11x17"):     170,
+    ("p3", False, "Legal"):     130,
+    ("p3", False, "A4"):        120,
+    ("p3", False, "A4R"):       126,
+    ("p3", False, "Letter"):    130,
+    ("p3", False, "LetterR"):   119,
+    ("p3", False, "203x254"):   108,
+    ("p3", False, "127x178"):    35,
+    ("p3", False, "4x6"):        20,
+    # ---- ColorMunki / i1Studio / ColorChecker Studio — standard ----
+    # -L has no effect on CM layout; values identical to no-LB table.
+    ("CM", False, "A2"):        555,
+    ("CM", False, "329x483"):   319,
+    ("CM", False, "483x329"):   306,
+    ("CM", False, "A3"):        250,
+    ("CM", False, "420x297"):   240,
+    ("CM", False, "11x17"):     234,
+    ("CM", False, "Legal"):     140,
+    ("CM", False, "A4"):        112,
+    ("CM", False, "A4R"):       100,
+    ("CM", False, "Letter"):    105,
+    ("CM", False, "LetterR"):    99,
+    ("CM", False, "203x254"):    78,
+    ("CM", False, "127x178"):    32,
+    # ("CM", False, "4x6") omitted: infeasible at -a 0.95
+    # ---- ColorMunki + rig / double density (-h) --------------------
+    ("CM", True,  "A2"):       1110,
+    ("CM", True,  "329x483"):   667,
+    ("CM", True,  "483x329"):   630,
+    ("CM", True,  "A3"):        504,
+    ("CM", True,  "420x297"):   480,
+    ("CM", True,  "11x17"):     500,
+    ("CM", True,  "Legal"):     300,
+    ("CM", True,  "A4"):        224,
+    ("CM", True,  "A4R"):       210,
+    ("CM", True,  "Letter"):    225,
+    ("CM", True,  "LetterR"):   200,
+    ("CM", True,  "203x254"):   182,
+    ("CM", True,  "127x178"):    56,
+    ("CM", True,  "4x6"):        36,
+}
+
+_PER_SHEET_CAPACITY_A095_NO_LB: dict[tuple[str, bool, str], int] = {
+    # ---- i1Pro / i1Pro 2 / i1Pro 3 --------------------------------
+    ("i1", False, "A2"):       1100,
+    ("i1", False, "329x483"):   836,
+    ("i1", False, "483x329"):  1276,
+    ("i1", False, "A3"):        748,
+    ("i1", False, "420x297"):  1100,
+    ("i1", False, "11x17"):     682,
+    ("i1", False, "Legal"):     506,
+    ("i1", False, "A4"):        484,
+    ("i1", False, "A4R"):       544,
+    ("i1", False, "Letter"):    506,
+    ("i1", False, "LetterR"):   527,
+    ("i1", False, "203x254"):   441,
+    ("i1", False, "127x178"):   143,
+    ("i1", False, "4x6"):        88,
+    # ---- i1Pro 3 Plus ---------------------------------------------
+    ("p3", False, "A2"):        250,
+    ("p3", False, "329x483"):   190,
+    ("p3", False, "483x329"):   290,
+    ("p3", False, "A3"):        170,
+    ("p3", False, "420x297"):   250,
+    ("p3", False, "11x17"):     150,
+    ("p3", False, "Legal"):     110,
+    ("p3", False, "A4"):        110,
+    ("p3", False, "A4R"):       119,
+    ("p3", False, "Letter"):    110,
+    ("p3", False, "LetterR"):   105,
+    ("p3", False, "203x254"):    90,
+    ("p3", False, "127x178"):    25,
+    # ("p3", False, "4x6") omitted: infeasible at -a 0.95 without -L
+    # ---- ColorMunki / i1Studio / ColorChecker Studio — standard ----
+    # -L has no effect on CM layout; values identical to with-L table.
+    ("CM", False, "A2"):        555,
+    ("CM", False, "329x483"):   319,
+    ("CM", False, "483x329"):   306,
+    ("CM", False, "A3"):        250,
+    ("CM", False, "420x297"):   240,
+    ("CM", False, "11x17"):     234,
+    ("CM", False, "Legal"):     140,
+    ("CM", False, "A4"):        112,
+    ("CM", False, "A4R"):       100,
+    ("CM", False, "Letter"):    105,
+    ("CM", False, "LetterR"):    99,
+    ("CM", False, "203x254"):    78,
+    ("CM", False, "127x178"):    32,
+    # ("CM", False, "4x6") omitted: infeasible at -a 0.95
+    # ---- ColorMunki + rig / double density (-h) --------------------
+    ("CM", True,  "A2"):       1110,
+    ("CM", True,  "329x483"):   667,
+    ("CM", True,  "483x329"):   630,
+    ("CM", True,  "A3"):        504,
+    ("CM", True,  "420x297"):   480,
+    ("CM", True,  "11x17"):     500,
+    ("CM", True,  "Legal"):     300,
+    ("CM", True,  "A4"):        224,
+    ("CM", True,  "A4R"):       210,
+    ("CM", True,  "Letter"):    225,
+    ("CM", True,  "LetterR"):   200,
+    ("CM", True,  "203x254"):   182,
+    ("CM", True,  "127x178"):    56,
+    ("CM", True,  "4x6"):        36,
+}
+
+_PER_SHEET_CAPACITY_A095_M10: dict[tuple[str, bool, str], int] = {
+    # ---- i1Pro / i1Pro 2 / i1Pro 3 --------------------------------
+    ("i1", False, "A2"):       1122,
+    ("i1", False, "329x483"):   880,
+    ("i1", False, "483x329"):  1320,
+    ("i1", False, "A3"):        770,
+    ("i1", False, "420x297"):  1122,
+    ("i1", False, "11x17"):     726,
+    ("i1", False, "Legal"):     550,
+    ("i1", False, "A4"):        528,
+    ("i1", False, "A4R"):       560,
+    ("i1", False, "Letter"):    550,
+    ("i1", False, "LetterR"):   561,
+    ("i1", False, "203x254"):   460,
+    # 127x178 / 4x6 omitted: infeasible at margin=10
+    # ---- i1Pro 3 Plus ---------------------------------------------
+    ("p3", False, "A2"):        250,
+    ("p3", False, "329x483"):   200,
+    ("p3", False, "483x329"):   300,
+    ("p3", False, "A3"):        170,
+    ("p3", False, "420x297"):   250,
+    ("p3", False, "11x17"):     160,
+    ("p3", False, "Legal"):     120,
+    ("p3", False, "A4"):        120,
+    ("p3", False, "A4R"):       119,
+    ("p3", False, "Letter"):    120,
+    ("p3", False, "LetterR"):   112,
+    ("p3", False, "203x254"):    99,
+    # 127x178 / 4x6 omitted: infeasible at margin=10
+}
+
+_PER_SHEET_CAPACITY_A095_M10_NO_LB: dict[tuple[str, bool, str], int] = {
+    # ---- i1Pro / i1Pro 2 / i1Pro 3 --------------------------------
+    ("i1", False, "A2"):       1078,
+    ("i1", False, "329x483"):   814,
+    ("i1", False, "483x329"):  1276,
+    ("i1", False, "A3"):        726,
+    ("i1", False, "420x297"):  1078,
+    ("i1", False, "11x17"):     682,
+    ("i1", False, "Legal"):     506,
+    ("i1", False, "A4"):        484,
+    ("i1", False, "A4R"):       528,
+    ("i1", False, "Letter"):    506,
+    ("i1", False, "LetterR"):   527,
+    ("i1", False, "203x254"):   420,
+    # 127x178 / 4x6 omitted: infeasible at margin=10
+    # ---- i1Pro 3 Plus ---------------------------------------------
+    ("p3", False, "A2"):        240,
+    ("p3", False, "329x483"):   180,
+    ("p3", False, "483x329"):   290,
+    ("p3", False, "A3"):        160,
+    ("p3", False, "420x297"):   240,
+    ("p3", False, "11x17"):     150,
+    ("p3", False, "Legal"):     110,
+    ("p3", False, "A4"):        110,
+    ("p3", False, "A4R"):       112,
+    ("p3", False, "Letter"):    110,
+    ("p3", False, "LetterR"):   105,
+    ("p3", False, "203x254"):    90,
+    # 127x178 / 4x6 omitted: infeasible at margin=10
+}
+
+
 def query_patches(
     instrument: str,
     paper: str,
     double_density: bool = False,
     suppress_lb: bool = True,
     margin_mm: int = 6,
+    patch_scale: float = 1.0,
 ) -> int | None:
     """Return patches-per-sheet for the given combination, or None if unknown.
 
     suppress_lb=True  → values measured with -L (left-clip border suppressed, default).
     suppress_lb=False → values measured without -L (left-clip border present).
-    margin_mm         → must be one of SUPPORTED_MARGINS, else returns None
-                        and the caller falls back to a live binary search.
+    margin_mm         → must be one of SUPPORTED_MARGINS, else returns None.
+    patch_scale       → must be one of SUPPORTED_PATCH_SCALES, else returns None.
+    Callers fall back to a live binary search on a None result.
     """
     # Normalise: -h is meaningful on CM (double density via rig) and on
     # SS (hexagon patches). Strip instruments (i1, p3) never use it.
     dd = double_density if instrument in {"CM", "SS"} else False
 
-    if margin_mm == 6:
-        db = _PER_SHEET_CAPACITY if suppress_lb else _PER_SHEET_CAPACITY_NO_LB
-    elif margin_mm == 10:
-        db = _PER_SHEET_CAPACITY_M10 if suppress_lb else _PER_SHEET_CAPACITY_M10_NO_LB
+    if abs(patch_scale - 1.0) <= 0.01:
+        if margin_mm == 6:
+            db = _PER_SHEET_CAPACITY if suppress_lb else _PER_SHEET_CAPACITY_NO_LB
+        elif margin_mm == 10:
+            db = _PER_SHEET_CAPACITY_M10 if suppress_lb else _PER_SHEET_CAPACITY_M10_NO_LB
+        else:
+            return None
+    elif abs(patch_scale - 0.95) <= 0.01:
+        if margin_mm == 6:
+            db = _PER_SHEET_CAPACITY_A095 if suppress_lb else _PER_SHEET_CAPACITY_A095_NO_LB
+        elif margin_mm == 10:
+            db = _PER_SHEET_CAPACITY_A095_M10 if suppress_lb else _PER_SHEET_CAPACITY_A095_M10_NO_LB
+        else:
+            return None
     else:
         return None
 

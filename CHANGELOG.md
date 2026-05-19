@@ -1,5 +1,83 @@
 # Changelog
 
+## v3.7.5
+Adds a configurable i1Pro chart-layout default to Preferences, rewrites the
+tooltips for the most-asked-about Create-Chart options, makes the bottom
+command preview track the live target-name field, and extends the patch-
+capacity database to cover `-a 0.95` so non-default patch scales now hit
+the fast lookup table instead of triggering a live binary search.
+
+### Features
+- **i1Pro Chart Defaults setting.** Preferences gains a new combobox under
+  the "i1Pro Chart Defaults" group with three presets — `−m 10  −a 0.95`
+  (recommended, denser packing), `−m 10  −a 1.0`, and `−m 6  −a 1.0`
+  (legacy). The new app default is `−m 10  −a 0.95`: the wider margin
+  keeps the strip optics off the bare paper edge that otherwise causes
+  "not enough patches read" errors on some printers, and the 5% patch
+  shrink fits roughly 9% more patches per sheet. The setting applies
+  only when the active instrument is `i1Pro / i1Pro 2 / i1Pro 3` —
+  i1Pro 3 Plus, ColorMunki and SpectroScan are unaffected and keep
+  their own defaults. Applies to both Guided and Manual mode; changes
+  take effect immediately after closing the dialog. A custom margin or
+  patch scale you typed in Manual mode is preserved across instrument
+  switches — only recognised preset values are overwritten.
+- **Patch-capacity database now covers `-a 0.95`.** All 168 new entries
+  were measured directly against `printtarg` via two binary-search
+  scripts (`scripts/measure_scale095_capacity.py` for i1Pro / i1Pro 3
+  Plus across margins 6 mm and 10 mm, `scripts/measure_scale095_cm_capacity.py`
+  for ColorMunki with both `-h` states). Selecting `-a 0.95` in Manual
+  mode now hits the fast lookup instantly instead of running a live
+  binary search every time you tweak the page count.
+- **Auto patch-count uses the active patch scale.** Guided mode's
+  recommended-patch label and the auto-patch flow in both modes now
+  feed `patch_scale` into the capacity lookup, so the recommendation
+  matches the actual chart that will be generated.
+
+### Tooltip rewrites
+- **Measurement Instrument tooltip** — short bullet for each of the four
+  instruments (i1Pro family, i1Pro 3 Plus, ColorMunki / i1Studio /
+  ColorChecker Studio, SpectroScan) describing how it reads charts and
+  why picking the wrong one fails (e.g. "patches not found" errors).
+- **Paper Size tooltip** — explains the portrait-versus-landscape trade-
+  off for strip readers, notes which papers are hidden per instrument
+  (A3 Portrait for i1Pro, 5×7" / 4×6" for i1Pro 3 Plus) and why, and
+  reminds the user that paper-size changes refresh the recommended
+  patch and page counts automatically.
+- **Number of Pages tooltip** — rough guide for picking a page count
+  (1 = quick check, 2–3 = everyday photo printing, 4+ = pro / fine-art)
+  with the ink / paper / time trade-off spelled out instead of leaving
+  the user to guess. The Manual-mode Auto-page tooltip also explains
+  why the Pages spinbox greys out when the Auto checkbox is off.
+- **Double Density / Hexagon tooltip** — clearly separates the two
+  meanings of the `-h` flag: ColorMunki requires the physical measuring
+  rig accessory (called out in caps so the prerequisite is impossible
+  to miss); SpectroScan needs no extra hardware and just switches to
+  hexagonal patches for ~14% denser packing.
+- **Tooltip dialogs are now sized for the new content.** All four
+  affected tooltips request `min_width=600` so the longer bodies don't
+  get squeezed. `parameters.yaml` learnt an optional `tooltip_min_width:`
+  key so the Manual-mode `ParameterWidget` can request the same width
+  declaratively, and the dynamic CM ↔ SS relabel path now propagates
+  the width too.
+
+### Fixes
+- **Patch scale resets to 1.0 when leaving i1Pro in Manual mode.**
+  Previously, switching from i1Pro to ColorMunki / SpectroScan / i1Pro 3
+  Plus would leave the `-a` widget at whatever the i1pro preset had
+  set it to (often 0.95), even though `-a` has no documented use case
+  for those instruments. The instrument switch now resets `-a` to 1.0
+  alongside `-m`. Custom scales the user typed in (e.g. `0.85`) are
+  still preserved — only recognised preset values are overwritten.
+- **Bottom command preview shows the actual target name.** The info
+  box under each Create-Chart mode used to render `… chart` regardless
+  of what was typed into the "Target name" field above. Both previews
+  now read the field live as the user types, fall back to `chart` only
+  when the field is empty, and prefix `cal_` when the Calibration
+  Target checkbox is active so the displayed command mirrors exactly
+  what runs at Generate-click. Also fixes an existing minor bug where
+  the Guided preview's `targen` line was missing the target-name
+  positional argument entirely.
+
 ## v3.7.4
 Follow-up to v3.7.3 that fixes how the welcome dialog interacts with
 the main window's saved size / state on startup, plus a small visual

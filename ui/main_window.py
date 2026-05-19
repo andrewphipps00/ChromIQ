@@ -452,6 +452,12 @@ class MainWindow(QMainWindow):
         self._check_argyll_binaries()
         self._apply_calibration_mode()
         self._tab_print.apply_native_dialog_mode()
+        # Pick up an updated i1Pro chart-defaults preset immediately so the user
+        # doesn't have to toggle instruments to see the new margin / scale.
+        if hasattr(self._tab_chart, "_apply_instrument_default_margin"):
+            self._tab_chart._apply_instrument_default_margin()
+        if hasattr(self._tab_chart, "_update_patch_count"):
+            self._tab_chart._update_patch_count()
 
     def _apply_calibration_mode(self) -> None:
         enabled = bool(self._settings.get("calibration_mode", False))
