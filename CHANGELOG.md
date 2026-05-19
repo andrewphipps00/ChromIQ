@@ -1,5 +1,33 @@
 # Changelog
 
+## v3.7.4
+Follow-up to v3.7.3: the window-state restoration fix from the v3.7.3
+release notes works in a dev `venv` but did not take effect in the
+bundled `.app` on macOS — the welcome dialog's modal `exec()` was still
+preempting the parent window's maximize / fullscreen animation. The
+save side of the fix (capturing geometry before `hide()` plus the
+explicit `window_maximized` / `window_fullscreen` flags) was working
+correctly; only the restore side was failing.
+
+### Fixes
+- **Welcome dialog is now non-modal.** The startup popup used to be
+  shown via `dlg.exec()`, which blocks the Qt event loop. On macOS that
+  block preempts the OS-level fullscreen / maximize animation triggered
+  by `showFullScreen()` / `showMaximized()` during launch, leaving the
+  main window at its plain geometry. The dialog now opens via `show()`
+  with a stored reference (cleared on close) so it never blocks the
+  event loop. A repeat click on the masthead "?" raises the existing
+  dialog instead of opening a second one.
+- **Explicit state re-apply is now deferred.** `showFullScreen()` /
+  `showMaximized()` on launch are scheduled via
+  `QTimer.singleShot(0, ...)` rather than called inline immediately
+  after `win.show()`. On macOS a same-tick state change request can be
+  dropped because the OS hasn't yet processed the show; a 0-timer
+  guarantees we run on the next event-loop iteration.
+- **Welcome-dialog startup delay reduced to 100 ms.** With the modal
+  preemption gone, the 250 ms safety margin from v3.7.3 is no longer
+  needed; the dialog just waits for the main window's initial paint.
+
 ## v3.7.3
 **New help window for first-time users.** ChromIQ now opens a welcome /
 help dialog on launch that shows eight clickable workflow cards —

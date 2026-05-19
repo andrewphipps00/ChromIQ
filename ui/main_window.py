@@ -416,12 +416,31 @@ class MainWindow(QMainWindow):
             self._tab_check.clear_files()
 
     def open_welcome_dialog(self) -> None:
+        # Non-modal so the dialog never blocks the event loop while it's up.
+        # A modal exec() during startup preempts macOS's window-state animation
+        # (maximize / fullscreen), causing the main window to revert to its
+        # plain geometry. Storing a reference on self keeps the dialog alive
+        # since show() does not block; clearing it on finished prevents leaks
+        # when the user re-opens via the "?" button.
+        if getattr(self, "_welcome_dialog", None) is not None:
+            try:
+                self._welcome_dialog.raise_()
+                self._welcome_dialog.activateWindow()
+                return
+            except RuntimeError:
+                self._welcome_dialog = None
         dlg = WelcomeDialog(
             self._settings,
             parent=self,
             initial_mode=self._title_bar_mode,
         )
-        dlg.exec()
+        dlg.setModal(False)
+        dlg.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
+        dlg.finished.connect(lambda _: setattr(self, "_welcome_dialog", None))
+        self._welcome_dialog = dlg
+        dlg.show()
+        dlg.raise_()
+        dlg.activateWindow()
 
     def _open_settings(self) -> None:
         from ui.tooltip_button import TooltipButton

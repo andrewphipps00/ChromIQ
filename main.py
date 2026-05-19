@@ -110,22 +110,25 @@ def main() -> int:
 
     win.show()
 
-    # Belt-and-braces re-apply for the maximize/fullscreen state. The bytes
+    # Belt-and-braces re-apply for the maximize / fullscreen state. The bytes
     # from saveGeometry() carry it on most platforms, but explicit re-apply
-    # avoids edge cases where the OS misses the transition (notably macOS
-    # when a modal dialog opens during the show animation — see below).
+    # avoids edge cases where the OS misses the transition. Scheduled via
+    # QTimer.singleShot(0, ...) rather than called inline so the show() above
+    # has actually been processed by the OS before we request a state change
+    # — calling showFullScreen() in the same tick as show() can be dropped
+    # on macOS.
+    from PyQt6.QtCore import QTimer
     if settings.get("window_fullscreen", False):
-        win.showFullScreen()
+        QTimer.singleShot(0, win.showFullScreen)
     elif settings.get("window_maximized", False):
-        win.showMaximized()
+        QTimer.singleShot(0, win.showMaximized)
 
     if settings.get("show_welcome_dialog", True):
-        from PyQt6.QtCore import QTimer
-        # Delay enough for the main window's maximize / fullscreen transition
-        # to complete on macOS before the modal exec() blocks the event loop;
-        # singleShot(0) opens the dialog mid-transition and the OS aborts the
-        # window-state change, leaving the main window at its plain geometry.
-        QTimer.singleShot(250, win.open_welcome_dialog)
+        # Welcome dialog is non-modal (see MainWindow.open_welcome_dialog),
+        # so it no longer blocks the event loop or preempts the maximize /
+        # fullscreen animation. A small delay still lets the main window
+        # finish its initial paint before the dialog steals focus.
+        QTimer.singleShot(100, win.open_welcome_dialog)
 
     log.info("Event loop starting")
     return app.exec()
