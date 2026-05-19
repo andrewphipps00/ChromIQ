@@ -40,9 +40,11 @@ if TYPE_CHECKING:
 # Workflow content
 # ---------------------------------------------------------------------------
 
-# Each step is (tab_index_1based, text). tab_index drives the coloured badge.
-# The displayed number inside the badge is the step count, not the tab number —
-# the colour already tells you which tab.
+# Each step is (tab_index_1based, text) or (tab_index_1based, text, optional_bool).
+# tab_index drives the coloured badge. The displayed number inside the badge is
+# the step count, not the tab number — the colour already tells you which tab.
+# optional=True renders the badge outlined (rather than filled) and dims the
+# text slightly, marking steps that improve quality but aren't required.
 WORKFLOWS: list[dict] = [
     {
         "key": "first_profile",
@@ -50,45 +52,74 @@ WORKFLOWS: list[dict] = [
         "subtitle": "The full walk-through from blank chart to finished profile.",
         "steps": [
             (1, "On the Create Chart tab, pick which instrument you'll measure "
-                "with (e.g. i1Pro) and choose your paper size. Click "
-                "“Create Chart”. ChromIQ writes a chart TIFF plus a .ti2 file "
-                "that records exactly where every patch sits on the page."),
+                "with (e.g. i1Pro) and choose your paper size. Give the chart "
+                "a descriptive name — it carries through to every file "
+                "downstream (.ti2, .ti3 and the final .icc). A good convention "
+                "is printer + paper + date, e.g. "
+                "“EpsonP900_HahnemuhlePhotoRag_2026-05”; avoid spaces and "
+                "special characters. Click “Create Chart”. ChromIQ writes a "
+                "chart TIFF plus a .ti2 file that records exactly where every "
+                "patch sits on the page."),
             (2, "Move to the Print Chart tab and pick your printer and media. "
                 "Important: switch OFF any colour management in your driver "
                 "dialog — if the driver re-maps colours the patches won't "
                 "match their definition and the profile will be wrong. "
                 "Click “Print”."),
-            (3, "Before you scan, take a moment for the “Disable "
-                "bidirectional reading” option. It's ON by default, which "
-                "is the safest setting for any spectrophotometer. If you "
-                "use an i1Pro and you're used to scanning each strip in "
-                "one continuous down-and-up motion, turn this option OFF "
-                "first — leaving it on while you sweep bidirectionally is "
-                "the classic cause of mis-recognised strips and bad data."),
             (3, "On the Measure tab, connect and switch on your "
-                "spectrophotometer, then place the printed chart on a flat "
-                "dark surface. Click “Measure Chart” and follow the "
+                "spectrophotometer, then place the printed chart on a white "
+                "surface (a plain sheet of paper underneath works perfectly) — "
+                "a coloured or dark backing can bleed through thin stock and "
+                "skew the reading. Before you scan, check the “Disable "
+                "bidirectional reading” option: it's ON by default, the safest "
+                "setting for any spectro. If you use an i1Pro and you're used "
+                "to scanning each strip in one continuous left-and-right "
+                "motion, turn this option OFF first — leaving it on while you "
+                "sweep bidirectionally is the classic cause of mis-recognised "
+                "strips and bad data. Click “Measure Chart” and follow the "
                 "strip-by-strip prompts."),
             (4, "On the Build Profile tab the new .ti3 measurement is "
                 "already loaded. Pick the profile quality (medium is a fine "
                 "first try) and algorithm (Lab CLUT is the safe default for "
-                "printers). Click “Build Profile”."),
-            (5, "When the build finishes a result popup appears. From there "
-                "you can install the .icc system-wide, jump to Check & "
-                "Refine to verify its accuracy, or feed it back as a pre-"
-                "conditioning profile for a higher-quality second-pass "
-                "build (see workflow 2)."),
+                "printers), then click “Build Profile”. When the build "
+                "finishes a result popup appears — install the .icc system-"
+                "wide from there, or jump to Check & Refine to verify its "
+                "accuracy and start guided refinement (the steps below) for "
+                "a noticeably more accurate profile."),
+            (5, "Optional — On the Check & Refine tab click “Analyse”. "
+                "ChromIQ runs profcheck and flags any patches whose ΔE is "
+                "above your refinement threshold (2.0 is a sensible starting "
+                "point). If outliers are found, ChromIQ offers to send you "
+                "back to the Measure tab to re-read only the affected strips.",
+                True),
+            (3, "Optional — Re-measure the strips ChromIQ marks. The new "
+                "readings are merged into the .ti3; patches that were already "
+                "good are kept as they are.",
+                True),
+            (4, "Optional — Click “Build Profile” again. The refined .ti3 "
+                "produces a more accurate profile.",
+                True),
+            (5, "Optional — Run “Analyse” one more time to confirm the "
+                "worst outliers are now below threshold. Repeat the refine "
+                "loop as often as you like — each pass should reduce ΔE "
+                "further.",
+                True),
         ],
     },
     {
         "key": "two_pass",
-        "title": "Build a high-quality profile (two-pass)",
+        "title": "Build a high-quality profile (2-pass)",
         "subtitle": "A pre-conditioning pass produces a sharper second profile.",
         "steps": [
             (1, "Start a fresh chart on the Create Chart tab. Pick the "
-                "instrument and paper size as normal and click “Create "
-                "Chart”. This first chart will produce the pre-"
-                "conditioning profile — not yet the final one."),
+                "instrument and paper size as normal, then give the chart a "
+                "descriptive name — it carries through to every file "
+                "downstream (.ti2, .ti3 and the final .icc). A good "
+                "convention is printer + paper + a “_pre” suffix for this "
+                "pre-conditioning pass, e.g. "
+                "“EpsonP900_HahnemuhlePhotoRag_pre_2026-05”; avoid spaces "
+                "and special characters. Click “Create Chart”. This first "
+                "chart will produce the pre-conditioning profile — not yet "
+                "the final one."),
             (2, "On the Print Chart tab print this chart with driver "
                 "colour management OFF, exactly as in workflow 1."),
             (3, "On the Measure tab check the “Disable bidirectional "
@@ -99,8 +130,8 @@ WORKFLOWS: list[dict] = [
                 "space map rather than a finished result."),
             (4, "In the result popup (or in Check & Refine) click “Use as "
                 "Pre-conditioning Profile”. ChromIQ jumps back to the "
-                "Create Chart tab with the new .icc wired into targen's "
-                "-c flag."),
+                "Create Chart tab with the new .icc loaded as the "
+                "pre-conditioning profile."),
             (1, "Optionally raise the patch count — a second-pass chart "
                 "benefits from more patches because they're placed where "
                 "the printer is most non-linear. Click “Create Chart” to "
@@ -112,6 +143,73 @@ WORKFLOWS: list[dict] = [
                 "noticeably more accurate than the first-pass profile "
                 "because targen could place patches where they actually "
                 "mattered. This is the profile to install."),
+            (5, "Optional — On the Check & Refine tab click “Analyse”. "
+                "ChromIQ runs profcheck and flags any patches whose ΔE is "
+                "above your refinement threshold. After a clean 2-pass build "
+                "the result is often already good enough; the steps below "
+                "are for squeezing out the last few outliers.",
+                True),
+            (3, "Optional — Re-measure the strips ChromIQ marks. The new "
+                "readings are merged into the .ti3; patches that were already "
+                "good are kept as they are.",
+                True),
+            (4, "Optional — Click “Build Profile” again. The refined .ti3 "
+                "produces a more accurate profile.",
+                True),
+            (5, "Optional — Run “Analyse” one more time to confirm the "
+                "worst outliers are now below threshold. Repeat the refine "
+                "loop as often as you like — each pass should reduce ΔE "
+                "further.",
+                True),
+        ],
+    },
+    {
+        "key": "improve_existing_profile",
+        "title": "Improve an existing ICC profile",
+        "subtitle": "Seed ChromIQ with a current profile to build a sharper one.",
+        "steps": [
+            (1, "On the Create Chart tab, find the “Refinement (Optional)” "
+                "section, tick “Refinement profile”, then click “Select "
+                "pre-conditioning profile” and pick the existing .icc for "
+                "this printer + paper combination. Choose the instrument "
+                "and paper size as usual, and give the chart a descriptive "
+                "name with a “_v2” (or similar) suffix, e.g. "
+                "“EpsonP900_HahnemuhlePhotoRag_v2_2026-05”. Because the "
+                "seed profile tells ChromIQ exactly where your printer is "
+                "most non-linear, raise the patch count so those tricky "
+                "regions get more samples. Click “Create Chart”."),
+            (2, "On the Print Chart tab, print the new chart with driver "
+                "colour management OFF, exactly as for any profiling print."),
+            (3, "On the Measure tab, check the “Disable bidirectional "
+                "reading” option (see note in workflow 1), place the chart "
+                "on a white surface, and click “Measure Chart”."),
+            (4, "On the Build Profile tab the new .ti3 is already loaded. "
+                "Pick the profile quality — raising it from the seed "
+                "profile's setting is worth the build time, because the "
+                "smarter patch placement deserves a smarter build. Click "
+                "“Build Profile”. When the build finishes a result popup "
+                "appears — the new .icc is more accurate than the seed "
+                "profile because ChromIQ placed patches where they mattered. "
+                "Install it from the popup, or jump to Check & Refine to "
+                "verify it before installing."),
+            (5, "Optional — On the Check & Refine tab click “Analyse”. "
+                "ChromIQ runs profcheck and flags any patches whose ΔE is "
+                "above your refinement threshold (2.0 is a sensible starting "
+                "point). If outliers are found, ChromIQ offers to send you "
+                "back to the Measure tab to re-read only the affected strips.",
+                True),
+            (3, "Optional — Re-measure the strips ChromIQ marks. The new "
+                "readings are merged into the .ti3; patches that were already "
+                "good are kept as they are.",
+                True),
+            (4, "Optional — Click “Build Profile” again. The refined .ti3 "
+                "produces a more accurate profile.",
+                True),
+            (5, "Optional — Run “Analyse” one more time to confirm the "
+                "worst outliers are now below threshold. Repeat the refine "
+                "loop as often as you like — each pass should reduce ΔE "
+                "further.",
+                True),
         ],
     },
     {
@@ -128,6 +226,41 @@ WORKFLOWS: list[dict] = [
             (2, "Click “Print”. The TIFF is sent as raw PostScript so no "
                 "driver filter alters the patches on the way to the "
                 "printer."),
+            (3, "Once the print is dry, head to the Measure tab and connect "
+                "your spectrophotometer, then place the chart on a white "
+                "surface (a plain sheet of paper underneath works). Before "
+                "scanning, check the “Disable bidirectional reading” option "
+                "— it's ON by default which is safest, but if you use an "
+                "i1Pro and you're used to scanning each strip in one "
+                "continuous left-and-right motion, turn it OFF first. "
+                "Click “Measure Chart” and follow the strip-by-strip "
+                "prompts."),
+            (4, "On the Build Profile tab the new .ti3 is already loaded. "
+                "Pick the profile quality (medium is a fine first try) and "
+                "algorithm (Lab CLUT is the safe default for printers), "
+                "then click “Build Profile”. When the build finishes a "
+                "result popup appears — install the .icc system-wide from "
+                "there, or jump to Check & Refine to verify its accuracy "
+                "and start guided refinement (the steps below) for a "
+                "noticeably more accurate profile."),
+            (5, "Optional — On the Check & Refine tab click “Analyse”. "
+                "ChromIQ runs profcheck and flags any patches whose ΔE is "
+                "above your refinement threshold (2.0 is a sensible starting "
+                "point). If outliers are found, ChromIQ offers to send you "
+                "back to the Measure tab to re-read only the affected strips.",
+                True),
+            (3, "Optional — Re-measure the strips ChromIQ marks. The new "
+                "readings are merged into the .ti3; patches that were already "
+                "good are kept as they are.",
+                True),
+            (4, "Optional — Click “Build Profile” again. The refined .ti3 "
+                "produces a more accurate profile.",
+                True),
+            (5, "Optional — Run “Analyse” one more time to confirm the "
+                "worst outliers are now below threshold. Repeat the refine "
+                "loop as often as you like — each pass should reduce ΔE "
+                "further.",
+                True),
         ],
     },
     {
@@ -145,12 +278,38 @@ WORKFLOWS: list[dict] = [
             (3, "Check the “Disable bidirectional reading” option before "
                 "you start. It's ON by default — safe for any spectro but "
                 "slower. If you use an i1Pro and you're used to scanning "
-                "each strip in one continuous down-and-up sweep, turn it "
-                "OFF first; leaving it on while you scan bidirectionally "
+                "each strip in one continuous left-and-right sweep, turn "
+                "it OFF first; leaving it on while you scan bidirectionally "
                 "causes mis-recognised strips and bad measurements."),
             (3, "Click “Measure Chart” and follow the strip-by-strip "
                 "prompts. Results save as a .ti3 next to the chart, "
                 "ready for the Build Profile tab."),
+            (4, "On the Build Profile tab the new .ti3 is already loaded. "
+                "Pick the profile quality (medium is a fine first try) and "
+                "algorithm (Lab CLUT is the safe default for printers), "
+                "then click “Build Profile”. When the build finishes a "
+                "result popup appears — install the .icc system-wide from "
+                "there, or jump to Check & Refine to verify its accuracy "
+                "and start guided refinement (the steps below) for a "
+                "noticeably more accurate profile."),
+            (5, "Optional — On the Check & Refine tab click “Analyse”. "
+                "ChromIQ runs profcheck and flags any patches whose ΔE is "
+                "above your refinement threshold (2.0 is a sensible starting "
+                "point). If outliers are found, ChromIQ offers to send you "
+                "back to the Measure tab to re-read only the affected strips.",
+                True),
+            (3, "Optional — Re-measure the strips ChromIQ marks. The new "
+                "readings are merged into the .ti3; patches that were already "
+                "good are kept as they are.",
+                True),
+            (4, "Optional — Click “Build Profile” again. The refined .ti3 "
+                "produces a more accurate profile.",
+                True),
+            (5, "Optional — Run “Analyse” one more time to confirm the "
+                "worst outliers are now below threshold. Repeat the refine "
+                "loop as often as you like — each pass should reduce ΔE "
+                "further.",
+                True),
         ],
     },
     {
@@ -172,6 +331,24 @@ WORKFLOWS: list[dict] = [
                 "Refine to inspect its accuracy, or feed it back as a "
                 "pre-conditioning profile (workflow 2). You can dismiss "
                 "the popup and come back to any of these later."),
+            (5, "Optional — On the Check & Refine tab click “Analyse”. "
+                "ChromIQ runs profcheck and flags any patches whose ΔE is "
+                "above your refinement threshold (2.0 is a sensible starting "
+                "point). If outliers are found, ChromIQ offers to send you "
+                "back to the Measure tab to re-read only the affected strips.",
+                True),
+            (3, "Optional — Re-measure the strips ChromIQ marks. The new "
+                "readings are merged into the .ti3; patches that were already "
+                "good are kept as they are.",
+                True),
+            (4, "Optional — Click “Build Profile” again. The refined .ti3 "
+                "produces a more accurate profile.",
+                True),
+            (5, "Optional — Run “Analyse” one more time to confirm the "
+                "worst outliers are now below threshold. Repeat the refine "
+                "loop as often as you like — each pass should reduce ΔE "
+                "further.",
+                True),
         ],
     },
     {
@@ -303,7 +480,7 @@ class WorkflowIcon(QWidget):
             # Sized to leave a generous gap to the card title below.
             head_w, head_h = 50, 24
             head_x = (s - head_w) / 2
-            head_y = 14
+            head_y = 19
             p.setPen(QPen(fg, stroke))
             p.setBrush(QColor(0, 0, 0, 0))
             p.drawRoundedRect(int(head_x), int(head_y), head_w, head_h, 7, 7)
@@ -313,7 +490,7 @@ class WorkflowIcon(QWidget):
             ap = 7
             p.drawEllipse(int(s / 2 - ap / 2), int(head_y + head_h - 4), ap, ap)
             # Patches strip
-            strip_y = 48
+            strip_y = 53
             strip_h = 18
             n = 6
             strip_w = 68
@@ -338,7 +515,7 @@ class WorkflowIcon(QWidget):
             p.setPen(QPen(fg, stroke))
             p.setBrush(QColor(0, 0, 0, 0))
             # Document
-            dx, dy, dw, dh = 10, 18, 28, 52
+            dx, dy, dw, dh = 10, 13, 28, 52
             p.drawLine(dx, dy, dx + dw - 9, dy)
             p.drawLine(dx + dw - 9, dy, dx + dw, dy + 9)
             p.drawLine(dx + dw, dy + 9, dx + dw, dy + dh)
@@ -434,6 +611,60 @@ class WorkflowIcon(QWidget):
                        int(x1 + csz + 5), int(y0 + csz - 5))
             p.drawLine(int(x1 + csz), int(y0 + csz),
                        int(x1 + csz + 5), int(y0 + csz - 5))
+
+        elif self._key == "improve_existing_profile":
+            # Existing profile (filled grey cube) → arrow → improved profile
+            # (outlined cube with magenta "+"). Distinct from two_pass which
+            # uses two cubes both being internally produced; here the first
+            # cube is the *given* input, not built in-app.
+            csz = 24
+            gap = 10
+            x0 = (s - (2 * csz + gap + 10)) / 2
+            y0 = (s - csz) / 2 + 3
+            # Cube 1 — filled in fg colour (the seed profile you bring in)
+            seed = QColor(fg)
+            seed.setAlpha(180)
+            p.setPen(QPen(fg, stroke))
+            p.setBrush(seed)
+            p.drawRect(int(x0), int(y0), csz, csz)
+            faded = QColor(fg)
+            faded.setAlpha(160)
+            p.setPen(QPen(faded, stroke))
+            p.setBrush(QColor(0, 0, 0, 0))
+            p.drawLine(int(x0 + 5), int(y0 - 5), int(x0 + csz + 5), int(y0 - 5))
+            p.drawLine(int(x0 + csz), int(y0), int(x0 + csz + 5), int(y0 - 5))
+            p.drawLine(int(x0 + csz + 5), int(y0 - 5),
+                       int(x0 + csz + 5), int(y0 + csz - 5))
+            p.drawLine(int(x0 + csz), int(y0 + csz),
+                       int(x0 + csz + 5), int(y0 + csz - 5))
+            # Arrow
+            ay = y0 + csz / 2
+            ax0 = x0 + csz + 7
+            ax1 = x0 + csz + gap + 6
+            p.setPen(QPen(accent, stroke, Qt.PenStyle.SolidLine,
+                          Qt.PenCapStyle.RoundCap))
+            p.drawLine(int(ax0), int(ay), int(ax1), int(ay))
+            p.drawLine(int(ax1), int(ay), int(ax1 - 4), int(ay - 4))
+            p.drawLine(int(ax1), int(ay), int(ax1 - 4), int(ay + 4))
+            # Cube 2 — outlined in accent, with a magenta "+" inside
+            x1 = x0 + csz + gap + 6
+            p.setPen(QPen(accent, stroke))
+            p.setBrush(QColor(0, 0, 0, 0))
+            p.drawRect(int(x1), int(y0), csz, csz)
+            p.drawLine(int(x1 + 5), int(y0 - 5), int(x1 + csz + 5), int(y0 - 5))
+            p.drawLine(int(x1 + csz), int(y0), int(x1 + csz + 5), int(y0 - 5))
+            p.drawLine(int(x1 + csz + 5), int(y0 - 5),
+                       int(x1 + csz + 5), int(y0 + csz - 5))
+            p.drawLine(int(x1 + csz), int(y0 + csz),
+                       int(x1 + csz + 5), int(y0 + csz - 5))
+            # "+" mark — improvement
+            cx2 = x1 + csz / 2
+            cy2 = y0 + csz / 2
+            arm = 5
+            p.setPen(QPen(accent, stroke + 0.4, Qt.PenStyle.SolidLine,
+                          Qt.PenCapStyle.RoundCap))
+            p.drawLine(int(cx2 - arm), int(cy2), int(cx2 + arm), int(cy2))
+            p.drawLine(int(cx2), int(cy2 - arm), int(cx2), int(cy2 + arm))
 
         elif self._key == "check_visualise":
             # Isometric wireframe cube
@@ -570,13 +801,19 @@ class WorkflowCard(QFrame):
 # ---------------------------------------------------------------------------
 
 class StepBadge(QLabel):
-    """Step-number chip — the number is the step count; colour = tab."""
+    """Step-number chip — the number is the step count; colour = tab.
+
+    Optional steps render outlined (transparent fill + coloured ring) so they
+    read as suggestions rather than required steps in the sequence.
+    """
 
     def __init__(
         self,
         step_number: int,
         tab_index_1based: int,
         parent: QWidget | None = None,
+        *,
+        optional: bool = False,
     ) -> None:
         super().__init__(parent)
         self.setFixedSize(30, 30)
@@ -587,10 +824,18 @@ class StepBadge(QLabel):
         f.setPixelSize(14)
         f.setWeight(QFont.Weight.Bold)
         self.setFont(f)
-        self.setStyleSheet(
-            f"background: {color}; color: #0a0a0a; "
-            f"border-radius: 15px; border: none;"
-        )
+        if optional:
+            # Outlined: ring in the tab colour, text in the tab colour,
+            # transparent fill — visually quieter than a filled chip.
+            self.setStyleSheet(
+                f"background: transparent; color: {color}; "
+                f"border-radius: 15px; border: 2px solid {color};"
+            )
+        else:
+            self.setStyleSheet(
+                f"background: {color}; color: #0a0a0a; "
+                f"border-radius: 15px; border: none;"
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -687,25 +932,33 @@ class WelcomeDialog(QDialog):
         self._subtitle.setFont(sf)
         v.addWidget(self._subtitle)
 
-        # Card grid — 3 columns; 7 cards laid out as 3+3+1 (last centred).
+        # Card grid — 3 columns. Layout adapts to the workflow count:
+        #   • 6 cards: 3+3
+        #   • 7 cards: 3+3+1 (last centred)
+        #   • 8 cards: 3+3+2 (last row at cols 0 and 2, col 1 empty for
+        #     symmetry — mirrors the centred-bottom feel of the 7-card case)
         # Wrapped in a FadeScrollArea so the dialog can be shorter than the
-        # full 3-row height; users scroll to reach the lower workflows, and
-        # the edges fade to dialog bg instead of being cut by a hard line.
-        # Right padding leaves room for the vertical scrollbar.
+        # full grid height; users scroll to reach lower workflows and the
+        # edges fade to dialog bg instead of being cut by a hard line.
         grid_host = QWidget(page)
         grid = QGridLayout(grid_host)
         grid.setContentsMargins(0, 8, 12, 16)
         grid.setHorizontalSpacing(14)
         grid.setVerticalSpacing(14)
+        n_cards = len(WORKFLOWS)
+        last_row_count = n_cards - 6 if n_cards > 6 else 0
         for i, wf in enumerate(WORKFLOWS):
             card = WorkflowCard(wf, grid_host)
             card.clicked.connect(self._on_card_clicked)
             self._cards.append(card)
             if i < 6:
                 grid.addWidget(card, i // 3, i % 3)
-            else:
-                # 7th card — centre column of the third row
+            elif last_row_count == 1:
+                # Solo extra card — centre column of the third row.
                 grid.addWidget(card, 2, 1)
+            else:
+                # Two extra cards — sit at cols 0 and 2, leaving col 1 empty.
+                grid.addWidget(card, 2, 0 if i == 6 else 2)
 
         self._menu_scroll = FadeScrollArea(page, surface="dialog")
         self._menu_scroll.setWidget(grid_host)
@@ -816,30 +1069,43 @@ class WelcomeDialog(QDialog):
             w = item.widget()
             if w is not None:
                 w.deleteLater()
-        # Build new rows
-        for i, (tab_idx, text) in enumerate(wf["steps"], start=1):
-            row = self._make_step_row(i, tab_idx, text)
+        # Build new rows. Steps are (tab_idx, text) or (tab_idx, text, optional).
+        for i, step in enumerate(wf["steps"], start=1):
+            tab_idx, text = step[0], step[1]
+            optional = bool(step[2]) if len(step) > 2 else False
+            row = self._make_step_row(i, tab_idx, text, optional=optional)
             self._steps_layout.addWidget(row)
         self._steps_layout.addStretch(1)
         self._apply_detail_text_colors()
         self._stack.setCurrentIndex(1)
 
     # ------------------------------------------------------------------
-    def _make_step_row(self, number: int, tab_index: int, text: str) -> QWidget:
+    def _make_step_row(
+        self,
+        number: int,
+        tab_index: int,
+        text: str,
+        *,
+        optional: bool = False,
+    ) -> QWidget:
         row = QWidget(self._steps_host)
         h = QHBoxLayout(row)
         h.setContentsMargins(0, 0, 0, 0)
         h.setSpacing(14)
 
-        badge = StepBadge(number, tab_index, row)
+        badge = StepBadge(number, tab_index, row, optional=optional)
         h.addWidget(badge, alignment=Qt.AlignmentFlag.AlignTop)
 
         body = QLabel(text, row)
         body.setWordWrap(True)
         bf = QFont()
         bf.setPixelSize(13)
+        if optional:
+            bf.setItalic(True)
         body.setFont(bf)
         body.setObjectName("welcome_step_body")
+        # Tag the label so theme re-tinting can dim optional steps.
+        body.setProperty("welcome_optional", optional)
         h.addWidget(body, stretch=1)
         return row
 
@@ -889,9 +1155,11 @@ class WelcomeDialog(QDialog):
     def _apply_detail_text_colors(self) -> None:
         if not hasattr(self, "_steps_host"):
             return
-        body_fg = "#22211f" if self._mode == "light" else "#e6e6e6"
+        body_fg     = "#22211f" if self._mode == "light" else "#e6e6e6"
+        optional_fg = "#7a7570" if self._mode == "light" else "#9a9a9a"
         title_fg = body_fg
         for lbl in self._steps_host.findChildren(QLabel, "welcome_step_body"):
-            lbl.setStyleSheet(f"color: {body_fg};")
+            fg = optional_fg if bool(lbl.property("welcome_optional")) else body_fg
+            lbl.setStyleSheet(f"color: {fg};")
         if hasattr(self, "_detail_title"):
             self._detail_title.setStyleSheet(f"color: {title_fg};")

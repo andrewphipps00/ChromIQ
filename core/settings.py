@@ -83,7 +83,7 @@ DEFAULTS: dict[str, Any] = {
     "restore_last_tab":          True,
     "restore_last_session":      False,
     "appearance":                "auto",   # "light" | "dark" | "auto"
-    "show_welcome_dialog":       False,
+    "show_welcome_dialog":       True,
     # Session restore paths (only used when restore_last_session is True)
     "session_target_name":       "",
     "session_ti1_path":          "",

@@ -1,5 +1,77 @@
 # Changelog
 
+## v3.7.3
+**New help window for first-time users.** ChromIQ now opens a welcome /
+help dialog on launch that shows eight clickable workflow cards —
+"Build my first ICC profile", "Build a high-quality profile (2-pass)",
+"Improve an existing ICC profile", "Print an existing test chart",
+"Measure a chart I already printed", "Build a profile from an existing
+measurement", "Refine an existing profile" and "Visualise a profile's
+gamut". Each card opens a numbered step-by-step walkthrough that names
+the exact buttons and settings to use on each tab, tinted by the
+spectrum stripe so the badge colour tells you which tab you're on.
+Optional steps (the guided refinement loop that follows every build)
+render with an outlined badge and dimmed italic body. Re-openable any
+time from the magenta "?" button in the masthead, next to the
+preferences gear. A "Show this on startup" checkbox in the footer
+opts out for return users.
+
+The dialog shipped quietly in v3.7.2 marked as work-in-progress; this
+release activates it by default and finishes the content pass.
+
+### Features
+- **Help window enabled by default.** First-launch onboarding is now
+  active out of the box. Existing v3.7.2 users who toggled the
+  "Show this on startup" checkbox keep their preference.
+- **New workflow card: "Improve an existing ICC profile".** Walks a user
+  who already has a working profile for their printer + paper through
+  loading it as a pre-conditioning seed on the Create Chart tab and
+  building a noticeably more accurate second profile. Painted icon: a
+  filled seed cube → magenta arrow → outlined cube with a magenta "+"
+  accent, distinct from the two-cube `two_pass` icon. Grid now lays out
+  as 3+3+2, with the bottom row anchored to columns 0 and 2 for
+  symmetry with the previous 3+3+1 layout.
+
+### Tweaks
+- **Full walkthroughs on every workflow card.** The "Print an existing
+  test chart", "Measure a chart I already printed" and the two
+  build-from-profile cards used to stop at their named step. They now
+  carry the user through the remaining tabs explicitly — Measure → Build
+  Profile → optional guided refinement — so a beginner never lands at a
+  dead end and has to guess which workflow card to open next.
+- **Optional refinement steps visually distinct.** Steps marked as
+  optional (the Analyse → re-measure → rebuild → re-analyse loop that
+  follows every "Build Profile" workflow) now render with an outlined
+  step badge and italic, dimmed body text, separating them from the
+  required steps in the same sequence.
+- **Chart-naming guidance in step 1.** The two full-build cards now
+  suggest a chart-naming convention (`Printer_Paper_Date`, no spaces or
+  special characters) since that name carries through to every
+  downstream file (.ti2, .ti3, .icc).
+- **i1Pro sweep direction clarified.** The bidirectional-reading note
+  used to say "down-and-up motion"; corrected to "left-and-right" to
+  match how chart strips are actually scanned.
+- **Chart backing surface clarified.** Switched from "flat dark surface"
+  to "white surface (a plain sheet of paper underneath works)" — a
+  coloured or dark backing can bleed through thin stock and skew the
+  reading.
+- **Build Profile result popup wording fixed.** Steps that described the
+  install / jump-to-Check-&-Refine popup were tagged as Tab 5 (Check &
+  Refine) even though the popup is shown from the Build Profile tab.
+  Folded those steps into the Build Profile step so the badge colour
+  matches the tab the popup actually appears on.
+- **`two_pass` renamed in the title.** "Build a high-quality profile
+  (two-pass)" → "Build a high-quality profile (2-pass)", matching how
+  the workflow is referred to elsewhere.
+- **Card-icon nudges.** The "Build a profile from an existing
+  measurement" icon shifted 5 px up; the "Measure a chart I already
+  printed" icon shifted 5 px down — both for a calmer visual fit
+  against the card title below.
+- **No more `targen` jargon in beginner copy.** The `two_pass` card no
+  longer mentions targen's `-c` flag; rephrased to "loaded as the
+  pre-conditioning profile" to match the rest of the dialog's
+  ChromIQ-doing-things voice.
+
 ## v3.7.2
 Visual polish across both themes. Window and dialog chrome no longer
 reads as pure black in dark mode, and every scrollable panel now
