@@ -1062,12 +1062,18 @@ class TabChart(QWidget):
         else:
             self._cal_status_lbl.setVisible(False)
 
+    _PREVIEW_NAME_MAX_LEN = 32
+
     def _preview_target_name(self, mode: str) -> str:
         """Return the target name as it will appear in the command preview.
 
         Falls back to "chart" when the name field is empty, matching the
         default that ChartCreator uses at generate time. Prefixes "cal_"
         when the Calibration Target checkbox is active (manual mode only).
+        Truncates with an ellipsis when longer than _PREVIEW_NAME_MAX_LEN
+        characters so an unbroken name can't force the info-box wider than
+        its container — the *actual* target name used at Generate-click is
+        read directly from the line edit, not from this helper.
         """
         if mode == "guided":
             edit = getattr(self, "_target_name_edit", None)
@@ -1080,6 +1086,9 @@ class TabChart(QWidget):
             if (self._cal_target_check.isChecked()
                     and grp is not None and grp.isVisible()):
                 name = f"cal_{name}"
+
+        if len(name) > self._PREVIEW_NAME_MAX_LEN:
+            name = name[: self._PREVIEW_NAME_MAX_LEN - 1] + "…"
         return name
 
     def _on_cal_target_toggled(self, checked: bool) -> None:

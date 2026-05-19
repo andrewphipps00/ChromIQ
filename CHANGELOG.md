@@ -77,6 +77,13 @@ the fast lookup table instead of triggering a live binary search.
   what runs at Generate-click. Also fixes an existing minor bug where
   the Guided preview's `targen` line was missing the target-name
   positional argument entirely.
+- **Long target names in the preview are truncated with an ellipsis.**
+  Names over 32 characters with no whitespace would otherwise force
+  the QLabel wider than its container, pushing the whole bottom info
+  section out of alignment. The displayed name is now clipped to the
+  first 31 characters + `…` once it exceeds the threshold. The full
+  name is still used on disk and in the actual `targen` / `printtarg`
+  invocations — the truncation is purely cosmetic.
 
 ## v3.7.4
 Follow-up to v3.7.3 that fixes how the welcome dialog interacts with
