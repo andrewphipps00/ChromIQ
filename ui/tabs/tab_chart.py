@@ -51,6 +51,7 @@ from ui.tiff_preview import TiffPreview
 from ui.tooltip_button import TooltipButton
 from ui.widgets import NoScrollComboBox, NoScrollSpinBox, icc_profile_paths, make_browse_button, open_file_dialog, set_folder_icon, set_preset_icon
 from workflow.chart_creator import ChartCreator, ChartParams
+from workflow.tiff_metadata import ALLOWED_LEFT_CLIP_PAPERS
 
 if TYPE_CHECKING:
     from core.argyll_runner import ArgyllRunner
@@ -383,6 +384,9 @@ class TabChart(QWidget):
         paper_row.addWidget(QLabel("Paper size:", inner))
         self._paper_combo = NoScrollComboBox(inner)
         self._paper_combo.currentIndexChanged.connect(self._update_patch_count)
+        # Paper changes also affect ChromIQ-style gating, which decides whether
+        # the guided -L checkbox is visible.
+        self._paper_combo.currentIndexChanged.connect(self._update_dd_visibility)
         paper_row.addWidget(self._paper_combo, stretch=1)
         paper_row.addWidget(TooltipButton(
             "Paper Size",
@@ -641,11 +645,16 @@ class TabChart(QWidget):
         ))
         output_layout.addLayout(name_row)
 
-        m_notes_row = QHBoxLayout()
-        _notes_lbl = QLabel("Chart notes:", w)
+        # Chart notes row — wrapped in a QWidget so it can be hidden when
+        # ChromIQ-style clipping border is on (the right margin it targets
+        # gets pushed off-page by the patch shift).
+        self._manual_chart_notes_row = QWidget(w)
+        m_notes_row = QHBoxLayout(self._manual_chart_notes_row)
+        m_notes_row.setContentsMargins(0, 0, 0, 0)
+        _notes_lbl = QLabel("Chart notes:", self._manual_chart_notes_row)
         _notes_lbl.setFixedWidth(_OUTPUT_LBL_W)
         m_notes_row.addWidget(_notes_lbl)
-        self._manual_chart_notes_edit = self._make_lineedit("", w)
+        self._manual_chart_notes_edit = self._make_lineedit("", self._manual_chart_notes_row)
         self._manual_chart_notes_edit.setPlaceholderText("e.g. Canon Pro-1000 / Hahnemühle Photo Rag 308")
         m_notes_row.addWidget(self._manual_chart_notes_edit, stretch=1)
         m_notes_row.addWidget(TooltipButton(
@@ -656,17 +665,20 @@ class TabChart(QWidget):
             "was made for, so you can match it to the right ICC profile months "
             "later. Patch pixels are not modified — only the white margin to the "
             "right of the patches is stamped.",
-            w,
+            self._manual_chart_notes_row,
             min_width=540,
         ))
-        output_layout.addLayout(m_notes_row)
+        output_layout.addWidget(self._manual_chart_notes_row)
 
-        stamp_row = QHBoxLayout()
-        _stamp_lbl_spacer = QLabel("", w)
+        # Stamp-commands row — also wrapped for ChromIQ-style hiding.
+        self._manual_stamp_cmd_row = QWidget(w)
+        stamp_row = QHBoxLayout(self._manual_stamp_cmd_row)
+        stamp_row.setContentsMargins(0, 0, 0, 0)
+        _stamp_lbl_spacer = QLabel("", self._manual_stamp_cmd_row)
         _stamp_lbl_spacer.setFixedWidth(_OUTPUT_LBL_W)
         stamp_row.addWidget(_stamp_lbl_spacer)
         self._manual_stamp_cmd_check = QCheckBox(
-            "Stamp targen and printtarg commands on the chart", w
+            "Stamp targen and printtarg commands on the chart", self._manual_stamp_cmd_row
         )
         self._manual_stamp_cmd_check.setChecked(True)
         stamp_row.addWidget(self._manual_stamp_cmd_check)
@@ -681,10 +693,52 @@ class TabChart(QWidget):
             "exactly. Disable if you'd rather keep the right margin clean and "
             "only stamp your own notes (or leave the chart fully unstamped if "
             "you also clear the notes field).",
-            w,
+            self._manual_stamp_cmd_row,
             min_width=540,
         ))
-        output_layout.addLayout(stamp_row)
+        output_layout.addWidget(self._manual_stamp_cmd_row)
+
+        # Left-clip info row: only meaningful when -L is off on an i1Pro chart
+        # with a large-enough paper. Wrap in a QWidget so setVisible(False)
+        # collapses the empty space when the gating conditions aren't met.
+        self._manual_left_clip_row = QWidget(w)
+        left_clip_row = QHBoxLayout(self._manual_left_clip_row)
+        left_clip_row.setContentsMargins(0, 0, 0, 0)
+        _left_clip_lbl_spacer = QLabel("", self._manual_left_clip_row)
+        _left_clip_lbl_spacer.setFixedWidth(_OUTPUT_LBL_W)
+        left_clip_row.addWidget(_left_clip_lbl_spacer)
+        self._manual_left_clip_check = QCheckBox(
+            "Print info in left clip area", self._manual_left_clip_row
+        )
+        left_clip_row.addWidget(self._manual_left_clip_check)
+        left_clip_row.addStretch()
+        left_clip_row.addWidget(TooltipButton(
+            "Left Clip Info",
+            "Fills the wide blank strip on the LEFT side of the chart — the "
+            "space printtarg reserves for the i1Pro 2 / i1Pro 3 Plus scanning-"
+            "table clip — with two rotated text columns:\n\n"
+            "• Outer column: a one-line chart summary (patch count + paper "
+            "size), a print-driver reminder (borderless, no expansion, retain "
+            "size, color management off), and a fill-in-the-blank form line "
+            "for date, printer, ink set, profile name, paper and driver "
+            "settings.\n"
+            "• Inner column: orientation instructions for the i1Pro scanning "
+            "table — which edge faces up and how to seat the sheet in the "
+            "clip.\n\n"
+            "This option is only available when:\n"
+            "  • The instrument is i1Pro / i1Pro 2 or i1Pro 3 Plus.\n"
+            "  • 'Suppress left clip border' is OFF (so the clip strip is "
+            "actually reserved).\n"
+            "  • The paper size is A4 / Letter or larger — smaller sheets "
+            "have no room for legible rotated text.\n\n"
+            "The row hides automatically when these conditions aren't met. "
+            "Patch pixels are never modified — only the otherwise-empty left "
+            "clip strip is stamped.",
+            self._manual_left_clip_row,
+            min_width=560,
+        ))
+        output_layout.addWidget(self._manual_left_clip_row)
+        self._manual_left_clip_row.setVisible(False)
 
         layout.addWidget(output_grp)
 
@@ -803,6 +857,7 @@ class TabChart(QWidget):
 
                 if tool == "printtarg" and flag == "-L":
                     self._manual_lb_pw = pw
+                    pw.value_changed.connect(self._update_manual_lb_visibility)
                 if tool == "printtarg" and flag == "-h":
                     self._manual_dd_pw = pw
                 if tool == "printtarg" and flag == "-i":
@@ -811,6 +866,7 @@ class TabChart(QWidget):
                     pw.value_changed.connect(self._apply_instrument_default_margin)
                 if tool == "printtarg" and flag == "-p":
                     self._manual_paper_pw = pw
+                    pw.value_changed.connect(self._update_manual_lb_visibility)
                 if tool == "printtarg" and flag == "-a":
                     self._manual_a_pw = pw
                 if tool == "printtarg" and flag == "-m":
@@ -982,7 +1038,12 @@ class TabChart(QWidget):
         pt_args.append(f"{dpi_flag}{p.tiff_dpi}")
         if p.double_density and p.instrument in {"CM", "SS"}:
             pt_args.append("-h")
-        if p.disable_left_border and p.instrument in {"i1", "p3"}:
+        # Mirror chart_creator._build_printtarg_args: ChromIQ-style clipping
+        # border forces -L regardless of the per-chart toggle, so the preview
+        # has to reflect that too.
+        from workflow.chart_creator import _chromiq_clip_active
+        force_l = _chromiq_clip_active(p)
+        if (p.disable_left_border or force_l) and p.instrument in {"i1", "p3"}:
             pt_args.append("-L")
         if abs(p.patch_scale - 1.0) > 0.01:
             pt_args.append(f"-a{p.patch_scale:.2f}")
@@ -1184,14 +1245,79 @@ class TabChart(QWidget):
     def _current_mode(self) -> str:
         return "guided" if self._stack.currentIndex() == 0 else "manual"
 
+    def refresh_chromiq_clip_visibility(self) -> None:
+        """Re-evaluate ChromIQ-style-driven UI visibility.
+
+        Called by MainWindow after the Settings dialog closes so toggling the
+        'Use ChromIQ-style clipping border' preference takes effect on the
+        Create Chart tab without needing the user to bump instrument or paper.
+        """
+        if hasattr(self, "_update_dd_visibility"):
+            self._update_dd_visibility()
+        self._update_manual_lb_visibility()
+
+    def _chromiq_force_l(self, instr: str, paper: str) -> bool:
+        """True iff ChromIQ-style clipping border forces -L for this instr+paper.
+
+        Mirrors workflow.chart_creator._chromiq_clip_active gating so patch-
+        count lookups and command previews agree with what actually runs.
+        """
+        return (
+            bool(self._settings.get("i1pro_chromiq_clip_style", False))
+            and instr in {"i1", "p3"}
+            and paper in ALLOWED_LEFT_CLIP_PAPERS
+        )
+
+    def _chromiq_clip_active_in_ui(self) -> bool:
+        """True iff ChromIQ-style clipping border setting is on AND the current
+        UI selection meets the gating conditions (i1Pro family + paper >= A4).
+        """
+        if self._current_mode() == "guided":
+            instr = self._instr_combo.currentData() or "i1"
+            paper = self._paper_combo.currentData() or "A4"
+        else:
+            instr = (self._manual_instr_pw.get_raw_value()
+                     if self._manual_instr_pw is not None else "i1") or "i1"
+            paper = (self._manual_paper_pw.get_raw_value()
+                     if self._manual_paper_pw is not None else "A4") or "A4"
+        return self._chromiq_force_l(instr, paper)
+
     def _update_manual_lb_visibility(self) -> None:
         if self._manual_instr_pw is None:
             return
         instr = self._manual_instr_pw.get_raw_value() or "i1"
-        # -L only matters for strip instruments. CM (patch-by-patch) and SS
-        # (XY flatbed) ignore it, so hide the row for both.
+        chromiq_clip = self._chromiq_clip_active_in_ui()
+
+        # ChromIQ-style hides the -L row entirely (-L is forced behind the
+        # scenes). Otherwise -L only matters for strip instruments.
         if self._manual_lb_pw is not None:
-            self._manual_lb_pw.setVisible(instr in {"i1", "p3"})
+            self._manual_lb_pw.setVisible(
+                instr in {"i1", "p3"} and not chromiq_clip
+            )
+
+        # Chart notes + stamp-commands rows stay available in all modes. Under
+        # ChromIQ-style their content is routed into a clip-border column
+        # instead of the right margin (handled in chart_creator).
+        if getattr(self, "_manual_chart_notes_row", None) is not None:
+            self._manual_chart_notes_row.setVisible(True)
+        if getattr(self, "_manual_stamp_cmd_row", None) is not None:
+            self._manual_stamp_cmd_row.setVisible(True)
+
+        # Left clip info row: hidden under ChromIQ-style (the stamp always
+        # runs there, no opt-in needed). Otherwise visible only when -L is
+        # OFF on a suitable i1Pro chart.
+        if getattr(self, "_manual_left_clip_row", None) is not None:
+            paper = (self._manual_paper_pw.get_raw_value()
+                     if self._manual_paper_pw is not None else "A4") or "A4"
+            lb_on = (bool(self._manual_lb_pw.get_raw_value())
+                     if self._manual_lb_pw is not None else False)
+            show_left_clip = (
+                not chromiq_clip
+                and instr in {"i1", "p3"}
+                and not lb_on
+                and paper in ALLOWED_LEFT_CLIP_PAPERS
+            )
+            self._manual_left_clip_row.setVisible(show_left_clip)
         # -h is offered on CM (double density) and SS (hexagon patches);
         # relabel per instrument so the meaning is clear.
         if self._manual_dd_pw is not None:
@@ -1396,6 +1522,9 @@ class TabChart(QWidget):
                 auto_on = bool(s.get("manual_auto_patches", False))
                 self._manual_auto_patches_check.setChecked(auto_on)
                 self._on_auto_patches_toggled(auto_on)
+            self._manual_left_clip_check.setChecked(
+                bool(s.get("chart_left_clip_info", False))
+            )
         else:
             name = self._preset_combo.currentData()
             presets = self._load_presets_from_settings()
@@ -1423,6 +1552,9 @@ class TabChart(QWidget):
                 auto_on = bool(data.get("auto_patches", False))
                 self._manual_auto_patches_check.setChecked(auto_on)
                 self._on_auto_patches_toggled(auto_on)
+            self._manual_left_clip_check.setChecked(
+                bool(data.get("left_clip_info", False))
+            )
         self._update_manual_lb_visibility()
 
     def _on_preset_save(self) -> None:
@@ -1448,6 +1580,7 @@ class TabChart(QWidget):
             int(self._manual_pages_spin.value())
             if self._manual_pages_spin is not None else 1
         )
+        capture["left_clip_info"] = bool(self._manual_left_clip_check.isChecked())
         dlg = QInputDialog(self)
         dlg.setWindowTitle("Save Preset")
         dlg.setLabelText(
@@ -1508,6 +1641,10 @@ class TabChart(QWidget):
         dd     = self._dd_check.isChecked()
         pages  = self._pages_spin.value()
         has_lb = self._lb_check.isChecked()  # True = -L active (left border suppressed)
+        # ChromIQ-style forces -L, so capacity must be computed at -L-enabled
+        # values even when the user left the checkbox unchecked.
+        chromiq_force_l = self._chromiq_force_l(instr, paper)
+        eff_lb = has_lb or chromiq_force_l
         dpi    = int(self._settings.get("printtarg_dpi", 300))
         if instr == "i1":
             preset_key = str(self._settings.get(
@@ -1518,7 +1655,7 @@ class TabChart(QWidget):
             eff_margin = INSTRUMENT_DEFAULT_MARGIN.get(instr, 6)
             eff_scale = 1.0
 
-        per_sheet = query_patches(instr, paper, dd, suppress_lb=has_lb,
+        per_sheet = query_patches(instr, paper, dd, suppress_lb=eff_lb,
                                   margin_mm=eff_margin, patch_scale=eff_scale)
         if per_sheet is not None:
             total = per_sheet * pages
@@ -1539,8 +1676,9 @@ class TabChart(QWidget):
         bp = base_black + (pages - 1) * 2
         # -L only matters for strip instruments; -h only for CM/SS. Hide
         # both from the command preview when not applicable so the user
-        # sees exactly what printtarg will run.
-        lb_flag = "-L " if has_lb and instr in {"i1", "p3"} else ""
+        # sees exactly what printtarg will run. ChromIQ-style clipping
+        # border forces -L regardless of the per-chart toggle (eff_lb).
+        lb_flag = "-L " if eff_lb and instr in {"i1", "p3"} else ""
         dd_flag = "-h " if dd and instr in {"CM", "SS"} else ""
         margin_flag = f"-m{eff_margin} -M{eff_margin} " if eff_margin != 6 else ""
         scale_flag = f"-a{eff_scale:.2f} " if abs(eff_scale - 1.0) > 0.01 else ""
@@ -1644,8 +1782,10 @@ class TabChart(QWidget):
             if self._dd_check.isChecked():
                 self._dd_check.setChecked(False)
         # -L only affects strip instruments (i1, p3). CM reads patches
-        # individually and SS is an XY flatbed — both ignore -L.
-        lb_visible = instr in {"i1", "p3"}
+        # individually and SS is an XY flatbed — both ignore -L. Also hidden
+        # when ChromIQ-style clipping border is on (it forces -L behind the
+        # scenes, so the per-chart toggle becomes a no-op).
+        lb_visible = instr in {"i1", "p3"} and not self._chromiq_clip_active_in_ui()
         self._lb_check.setVisible(lb_visible)
         self._lb_tooltip.setVisible(lb_visible)
 
@@ -1789,6 +1929,7 @@ class TabChart(QWidget):
         )
         s.set("chart_target_name",         name or "ChromIQ Test Chart")
         s.set("chart_stamp_commands",      bool(params.stamp_commands))
+        s.set("chart_left_clip_info",      bool(params.left_clip_info))
         s.set("chart_instrument",          params.instrument)
         s.set("chart_paper",               params.paper)
         s.set("chart_pages",               params.pages)
@@ -1845,7 +1986,9 @@ class TabChart(QWidget):
             patch_scale = 1.0
         base_white = int(self._settings.get("targen_white_patches", 4))
         base_black = int(self._settings.get("targen_black_patches", 4))
-        per_sheet  = query_patches(instr, paper, dd, suppress_lb=has_lb,
+        # ChromIQ-style forces -L → size grey ramp from -L-enabled capacity.
+        eff_lb = has_lb or self._chromiq_force_l(instr, paper)
+        per_sheet  = query_patches(instr, paper, dd, suppress_lb=eff_lb,
                                    margin_mm=margin, patch_scale=patch_scale) or 504
         grey_steps = max(8, min((per_sheet * pages) // 30, 64))
 
@@ -1869,6 +2012,8 @@ class TabChart(QWidget):
             tiff_dpi             = int(self._settings.get("printtarg_dpi", 300)),
             patch_scale          = patch_scale,
             margin_mm            = margin,
+            left_clip_info       = bool(self._settings.get("chart_left_clip_info", False)),
+            chromiq_clip_style   = bool(self._settings.get("i1pro_chromiq_clip_style", False)),
             preserve_as_preconditioning = (
                 precond_active and self._preconditioning_from_dialog
             ),
@@ -1927,6 +2072,8 @@ class TabChart(QWidget):
 
         p.chart_notes          = self._manual_chart_notes_edit.text().strip()
         p.stamp_commands       = self._manual_stamp_cmd_check.isChecked()
+        p.left_clip_info       = self._manual_left_clip_check.isChecked()
+        p.chromiq_clip_style   = bool(self._settings.get("i1pro_chromiq_clip_style", False))
         p.is_manual            = True
         return p
 
@@ -1953,6 +2100,8 @@ class TabChart(QWidget):
             self._manual_chart_notes_edit.setText("")
         if hasattr(self, "_manual_stamp_cmd_check"):
             self._manual_stamp_cmd_check.setChecked(bool(s.get("chart_stamp_commands", True)))
+        if hasattr(self, "_manual_left_clip_check"):
+            self._manual_left_clip_check.setChecked(bool(s.get("chart_left_clip_info", False)))
 
         instr = s.get("chart_instrument", "i1")
         idx = self._instr_combo.findData(instr)

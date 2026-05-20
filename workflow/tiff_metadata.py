@@ -1,22 +1,23 @@
-"""Byte-safe stamping of a one-line metadata caption onto the right edge of a chart TIFF.
+"""Byte-safe stamping of caption text onto a chart TIFF.
 
-Printtarg already writes a vertical ID line along the page's right edge
-(`ArgyllCMS — Chart "name" (Random Start NNN) <date>`). This module appends
-ChromIQ-side context — user notes and/or the actual targen+printtarg commands
-used — as a **single rotated text line** placed in the widest white run of
-the right margin (typically between Argyll's column and the page edge).
+Two entry points share the same TIFF re-write machinery:
 
-Color-integrity guarantees:
-- Every pixel column strictly to the **left** of the writable band is
-  byte-identical before/after stamping. Argyll's existing text column and
-  the patch area are never touched.
-- The image's pixel dimensions, bit depth (uint8/uint16), photometric,
-  compression, ICC profile tag, **and raw XResolution/YResolution/
-  ResolutionUnit values** are preserved exactly (no inch↔centimeter
-  rewrite). The output is byte-equivalent to the input in every metadata
-  field; only the pixels inside the chosen white band change.
-- If the right margin has no usable white run of at least _MIN_STRIP_WIDTH_PX,
-  the stamper logs a warning and leaves the TIFF unchanged.
+- `stamp_chart_metadata()` — appends user notes / commands as a single rotated
+  text line in the right margin (between Argyll's own vertical ID column and
+  the page edge).
+- `stamp_left_clip_info()` — fills the left clip strip (reserved by `printtarg`
+  when `-L` is not set on an i1Pro / i1Pro 3+ chart) with two rotated text
+  sub-columns: an outer column with chart context + archival form fields, and
+  an inner column with i1Pro jig orientation instructions.
+
+Color-integrity guarantees (apply to both stampers):
+- Every pixel column outside the targeted band(s) is byte-identical
+  before/after stamping. Argyll's existing text column and the patch area are
+  never touched.
+- Pixel dimensions, bit depth (uint8/uint16), photometric, compression, ICC
+  profile tag, and XResolution/YResolution/ResolutionUnit are preserved.
+- If a target band has no usable white run of at least _MIN_STRIP_WIDTH_PX,
+  that stamper logs an info line and leaves the TIFF unchanged.
 """
 from __future__ import annotations
 
@@ -32,14 +33,38 @@ from core.logger import get_logger
 log = get_logger(__name__)
 
 # Per-column ink threshold (fraction of rows) above which a column belongs
-# to the patch area, not the right margin.
+# to the patch area, not the margin.
 _PATCH_COL_DENSITY_THRESHOLD = 0.30
 _PATCH_SAFETY_PAD_PX = 4
 _MIN_STRIP_WIDTH_PX = 24
 _LINE_GAP_PX = 6
+# Gap between the three left-clip text sub-columns.
+_LEFT_CLIP_GAP_PX = 8
+# White padding on each side of the spectrum accent bar placed at the
+# page-edge side of the outermost text column.
+_SPECTRUM_BAR_PAD_PX = 6
 
-# Joiner between concatenated metadata pieces in the single stamped line.
+# Joiner between concatenated metadata pieces in a single stamped line.
 _JOIN = "    |    "
+
+# Paper keys for which the left-clip info stamp is enabled. Smaller sheets are
+# excluded because the rotated text becomes too cramped to be useful.
+ALLOWED_LEFT_CLIP_PAPERS: frozenset[str] = frozenset({
+    "A2", "A3", "11x17", "Legal", "A4", "A4R", "Letter", "LetterR",
+    "329x483", "420x297", "483x329", "custom",
+})
+
+# ChromIQ spectrum (matches ui.styles.TAB_COLORS). Drawn as a thin 5-segment
+# vertical stripe between the text sub-columns of the left clip stamp — a
+# small branded accent that doesn't interfere with text readability.
+_SPECTRUM_COLORS_RGB: tuple[tuple[int, int, int], ...] = (
+    (0xFF, 0x45, 0x73),  # magenta
+    (0xFF, 0xB4, 0x2D),  # amber
+    (0x56, 0xD6, 0xA5),  # green
+    (0x37, 0xBC, 0xD6),  # cyan
+    (0x9F, 0x82, 0xFF),  # violet
+)
+_SPECTRUM_BAR_WIDTH_PX = 6
 
 
 def stamp_chart_metadata(
@@ -58,45 +83,176 @@ def stamp_chart_metadata(
             log.warning("Right-edge stamp failed for %s: %s", path, exc)
 
 
+# Target width of the manufactured left clip strip, and the safety margin to
+# keep between the rightmost patch and the page edge after the shift.
+_LEFT_CLIP_TARGET_MM = 28.0
+_RIGHT_SAFETY_MM = 3.0
+# Minimum strip width worth stamping into; below this the shift is skipped.
+_LEFT_CLIP_MIN_MM = 14.0
+
+
+def shift_patches_for_chromiq_clip(
+    tiff_paths: Iterable[Path],
+    target_strip_mm: float = _LEFT_CLIP_TARGET_MM,
+) -> None:
+    """Shift the patch block right to open a ChromIQ left clip strip.
+
+    Used with the ChromIQ-style clipping border feature: `printtarg` runs with
+    `-L` (no native clip strip), packing patches near the left edge; this then
+    shifts the whole image right so the total left white strip reaches
+    `target_strip_mm` — BUT never far enough to push any patch off the page.
+    Patch survival takes priority: if the right gap can't accommodate the full
+    target, the strip is made narrower instead (capped at
+    `right_gap − _RIGHT_SAFETY_MM`).
+
+    Argyll's vertical ID text on the right is dropped (shifted off-page and/or
+    blanked by the right-edge cleanup). All metadata tags are preserved via
+    the shared `_capture_page_state` / `_write_preserving` helpers.
+    """
+    for path in tiff_paths:
+        try:
+            _shift_patches_one(Path(path), target_strip_mm)
+        except Exception as exc:
+            log.warning("Patch shift failed for %s: %s", path, exc)
+
+
+def _shift_patches_one(path: Path, target_strip_mm: float) -> None:
+    with tifffile.TiffFile(str(path)) as tf:
+        page = tf.pages[0]
+        state = _capture_page_state(page)
+        arr = np.array(page.asarray(), copy=True)
+
+    if arr.ndim != 3 or arr.shape[2] not in (1, 3, 4):
+        log.warning("Patch shift: unexpected array shape %s for %s", arr.shape, path)
+        return
+    dtype = arr.dtype
+    if dtype not in (np.uint8, np.uint16):
+        log.warning("Patch shift: unsupported dtype %s for %s", dtype, path)
+        return
+
+    H, W = arr.shape[:2]
+    dpi = _dpi_from_state(state)
+    px_per_mm = dpi / 25.4
+    max_val = np.iinfo(dtype).max
+
+    # Locate the patch block by column ink density (low-density glyph columns
+    # like Argyll's right-edge text are excluded by the threshold).
+    ink_cutoff = int(max_val * 240 / 255)
+    if arr.shape[2] == 1:
+        ink_mask = arr[..., 0] < ink_cutoff
+    else:
+        ink_mask = (arr < ink_cutoff).any(axis=2)
+    col_density = ink_mask.sum(axis=0) / max(1, H)
+    patch_cols = np.where(col_density >= _PATCH_COL_DENSITY_THRESHOLD)[0]
+    if len(patch_cols) == 0:
+        log.info("Patch shift skipped (no patch block detected) for %s", path)
+        return
+    patch_left = int(patch_cols[0])
+    patch_right = int(patch_cols[-1])
+
+    # Shift to reach the target total strip width, but never far enough to push
+    # the rightmost patch past (W − safety). Patch survival wins over strip width.
+    target_px = int(round(target_strip_mm * px_per_mm))
+    safety_px = int(round(_RIGHT_SAFETY_MM * px_per_mm))
+    shift_needed = target_px - patch_left
+    max_safe_shift = (W - patch_right) - safety_px
+    shift_px = max(0, min(shift_needed, max_safe_shift))
+
+    strip_mm = (patch_left + shift_px) / px_per_mm
+    if shift_px <= 0 or strip_mm < _LEFT_CLIP_MIN_MM:
+        log.info(
+            "Patch shift skipped (no room: left margin %.1fmm, right gap %.1fmm, "
+            "would-be strip %.1fmm) for %s",
+            patch_left / px_per_mm, (W - patch_right) / px_per_mm, strip_mm, path,
+        )
+        return
+
+    log.info(
+        "Patch shift: %dpx (%.1fmm) → left strip %.1fmm; rightmost patch %d/%d for %s",
+        shift_px, shift_px / px_per_mm, strip_mm, patch_right + shift_px, W, path,
+    )
+
+    shifted = np.full_like(arr, max_val)   # white background
+    shifted[:, shift_px:, :] = arr[:, :-shift_px, :]
+
+    # Right-edge cleanup: blank any content past the rightmost patch column
+    # with white. Catches Argyll's vertical ID text the shift didn't fully
+    # push off the page so the chart always ends with a clean right edge.
+    if shifted.shape[2] == 1:
+        ink_mask2 = shifted[..., 0] < ink_cutoff
+    else:
+        ink_mask2 = (shifted < ink_cutoff).any(axis=2)
+    col_density2 = ink_mask2.sum(axis=0) / max(1, H)
+    patch_cols2 = np.where(col_density2 >= _PATCH_COL_DENSITY_THRESHOLD)[0]
+    if len(patch_cols2):
+        blank_start = int(patch_cols2[-1]) + _PATCH_SAFETY_PAD_PX
+        if blank_start < W:
+            shifted[:, blank_start:, :] = max_val
+
+    _write_preserving(path, shifted, state)
+
+
+def _dpi_from_state(state: dict) -> float:
+    """Return horizontal DPI from captured page state, defaulting to 300.
+
+    Handles TIFF ResolutionUnit: 2 = inches (native dpi), 3 = centimeters
+    (convert dots/cm → dots/inch by ×2.54), other values fall back to inches.
+    """
+    xres = state.get("xres_val")
+    if not xres or xres[1] == 0:
+        return 300.0
+    dpi = xres[0] / xres[1]
+    if state.get("runit_val") == 3:
+        dpi *= 2.54
+    return dpi
+
+
+def stamp_left_clip_info(
+    tiff_paths: Iterable[Path],
+    outer_header_lines: Sequence[str],
+    form_fields: Sequence[str],
+    inner_lines: Sequence[str],
+    command_lines: Sequence[str] | None = None,
+) -> None:
+    """Stamp the left clip strip with rotated text sub-columns.
+
+    The detected left clip band is divided into equal-width sub-columns
+    separated by `_LEFT_CLIP_GAP_PX` gaps, with a ChromIQ spectrum accent bar
+    at the page-edge side. Columns, page-edge → patch-side:
+
+      - Header: `outer_header_lines` joined with `_JOIN` (chart context +
+        print reminder).
+      - Commands: `command_lines` joined with `_JOIN` (targen / printtarg
+        commands + chart notes) — only when supplied; this is the ChromIQ-
+        style replacement for the right-margin command stamp.
+      - Form: a fill-in-the-blank form line built from `form_fields` with
+        underscore writing space sized to the paper.
+      - Inner (patch side): `inner_lines` joined with `_JOIN` (jig
+        orientation note).
+
+    Empty inputs are skipped (their column simply isn't created); the
+    remaining columns share the band evenly.
+    """
+    header_text = _JOIN.join(s.strip() for s in outer_header_lines if s and s.strip())
+    inner_text = _JOIN.join(s.strip() for s in inner_lines if s and s.strip())
+    command_text = _JOIN.join(s.strip() for s in (command_lines or []) if s and s.strip())
+    form_fields_clean = [s.strip() for s in form_fields if s and s.strip()]
+    if not (header_text or form_fields_clean or inner_text or command_text):
+        return
+    for path in tiff_paths:
+        try:
+            _stamp_left_clip_one(
+                Path(path), header_text, command_text, form_fields_clean, inner_text
+            )
+        except Exception as exc:
+            log.warning("Left-clip stamp failed for %s: %s", path, exc)
+
+
 def _stamp_one(path: Path, text: str) -> None:
     with tifffile.TiffFile(str(path)) as tf:
         page = tf.pages[0]
+        state = _capture_page_state(page)
         arr = np.array(page.asarray(), copy=True)
-        photometric = page.photometric
-        compression = page.compression
-        xres_tag = page.tags.get("XResolution")
-        yres_tag = page.tags.get("YResolution")
-        runit_tag = page.tags.get("ResolutionUnit")
-        icc_tag = page.tags.get(34675)
-        xres_val = tuple(xres_tag.value) if xres_tag else None
-        yres_val = tuple(yres_tag.value) if yres_tag else None
-        runit_val = int(runit_tag.value) if runit_tag else None
-        icc_bytes = bytes(icc_tag.value) if icc_tag else None
-
-        # Capture informational tags so we can rewrite them after the
-        # tifffile re-encode. Tags tifffile owns natively (270/305) go through
-        # their dedicated kwargs; the rest go through extratags.
-        description_val = _str_tag_value(page.tags.get(270))   # ImageDescription
-        software_val   = _str_tag_value(page.tags.get(305))   # Software
-        orientation_val = page.tags.get(274).value if page.tags.get(274) else None
-        xpos_val = (tuple(page.tags.get(286).value)
-                    if page.tags.get(286) else None)
-        ypos_val = (tuple(page.tags.get(287).value)
-                    if page.tags.get(287) else None)
-        artist_val = _str_tag_value(page.tags.get(315))
-        copyright_val = _str_tag_value(page.tags.get(33432))
-
-        preserved_tags: list[tuple] = []
-        if orientation_val is not None:
-            preserved_tags.append((274, 3, 1, int(orientation_val), True))
-        if xpos_val:
-            preserved_tags.append((286, 5, 1, (int(xpos_val[0]), int(xpos_val[1])), True))
-        if ypos_val:
-            preserved_tags.append((287, 5, 1, (int(ypos_val[0]), int(ypos_val[1])), True))
-        if artist_val:
-            preserved_tags.append((315, 2, len(artist_val) + 1, artist_val + "\x00", True))
-        if copyright_val:
-            preserved_tags.append((33432, 2, len(copyright_val) + 1, copyright_val + "\x00", True))
 
     if arr.ndim != 3 or arr.shape[2] not in (1, 3, 4):
         log.warning("Right-edge stamp: unexpected array shape %s for %s", arr.shape, path)
@@ -133,27 +289,260 @@ def _stamp_one(path: Path, text: str) -> None:
     y0 = _PATCH_SAFETY_PAD_PX
     arr[y0 : y0 + strip_h, x0 : x0 + strip_w, :] = strip
 
+    _write_preserving(path, arr, state)
+
+
+def _stamp_left_clip_one(
+    path: Path,
+    header_text: str,
+    command_text: str,
+    form_fields: Sequence[str],
+    inner_text: str,
+) -> None:
+    with tifffile.TiffFile(str(path)) as tf:
+        page = tf.pages[0]
+        state = _capture_page_state(page)
+        arr = np.array(page.asarray(), copy=True)
+
+    if arr.ndim != 3 or arr.shape[2] not in (1, 3, 4):
+        log.warning("Left-clip stamp: unexpected array shape %s for %s", arr.shape, path)
+        return
+
+    dtype = arr.dtype
+    if dtype not in (np.uint8, np.uint16):
+        log.warning("Left-clip stamp: unsupported dtype %s for %s", dtype, path)
+        return
+
+    H, W, C = arr.shape
+    band = _detect_writable_band(arr, side="left")
+    if band is None:
+        log.info("Left-clip stamp skipped (no usable left margin) for %s", path)
+        return
+    band_left, band_right = band
+    band_w = band_right - band_left
+
+    strip_h = H - 2 * _PATCH_SAFETY_PAD_PX
+    if strip_h < 100:
+        log.info("Left-clip stamp skipped (image too short) for %s", path)
+        return
+
+    # Build the ordered list of columns (page-edge → patch-side). Each entry is
+    # (kind, content, weight): "text" for a joined rotated line, "form" for the
+    # fill-in-the-blank line. The form column carries extra weight so it gets
+    # more width for handwriting. Empty pieces are omitted.
+    columns: list[tuple[str, object, float]] = []
+    if header_text:
+        columns.append(("text", header_text, 1.0))
+    if command_text:
+        columns.append(("text", command_text, 1.0))
+    if form_fields:
+        columns.append(("form", form_fields, _FORM_COL_WEIGHT))
+    if inner_text:
+        columns.append(("text", inner_text, 1.0))
+    if not columns:
+        return
+
+    # Layout (page-edge → patch-side):
+    #   [pad] bar [pad]  col0  [gap]  col1 ...  [gap]  colN
+    # A ChromIQ spectrum bar sits at the page-edge side; the remaining width is
+    # distributed across columns proportional to their weight.
+    n = len(columns)
+    bar_overhead = _SPECTRUM_BAR_WIDTH_PX + 2 * _SPECTRUM_BAR_PAD_PX
+    avail = band_w - bar_overhead - (n - 1) * _LEFT_CLIP_GAP_PX
+    total_weight = sum(w for _, _, w in columns)
+    widths = [int(avail * w / total_weight) for _, _, w in columns]
+    widths[-1] += avail - sum(widths)   # last column absorbs rounding remainder
+    if min(widths) < _MIN_STRIP_WIDTH_PX:
+        log.info(
+            "Left-clip stamp skipped (band %d px too narrow for %d columns) for %s",
+            band_w, n, path,
+        )
+        return
+
+    y0 = _PATCH_SAFETY_PAD_PX
+
+    # ChromIQ spectrum accent, framing the first text line from the page-edge side.
+    bar_x0 = band_left + _SPECTRUM_BAR_PAD_PX
+    bar = _render_spectrum_bar(strip_h, _SPECTRUM_BAR_WIDTH_PX, dtype, C)
+    arr[y0 : y0 + strip_h, bar_x0 : bar_x0 + _SPECTRUM_BAR_WIDTH_PX, :] = bar
+
+    x = bar_x0 + _SPECTRUM_BAR_WIDTH_PX + _SPECTRUM_BAR_PAD_PX
+    for (kind, content, _), w in zip(columns, widths):
+        if kind == "form":
+            text = _build_form_line(
+                content,  # type: ignore[arg-type]
+                available_text_px=strip_h - 2 * _PATCH_SAFETY_PAD_PX,
+                font_px=max(_FORM_FONT_FLOOR, min(_FORM_FONT_CEIL, w - 8)),
+            )
+        else:
+            text = content  # type: ignore[assignment]
+        if text:
+            strip = _render_fitted_rotated_line(text, strip_h, w, dtype, C)
+            arr[y0 : y0 + strip_h, x : x + w, :] = strip
+        x += w + _LEFT_CLIP_GAP_PX
+
+    _write_preserving(path, arr, state)
+
+
+def _render_spectrum_bar(
+    strip_h: int,
+    strip_w: int,
+    dtype,
+    channels: int,
+) -> np.ndarray:
+    """Vertical 5-segment spectrum stripe matching `ui.styles.TAB_COLORS`.
+
+    Returns an (strip_h, strip_w, channels) array. Each of the 5 spectrum
+    colors fills `strip_h // 5` rows; the bottom segment absorbs any
+    integer-division remainder so the bar fills the full strip height.
+    """
+    rgb = np.zeros((strip_h, strip_w, 3), dtype=np.uint8)
+    n = len(_SPECTRUM_COLORS_RGB)
+    seg_h = strip_h // n
+    for i, (r, g, b) in enumerate(_SPECTRUM_COLORS_RGB):
+        s = i * seg_h
+        e = strip_h if i == n - 1 else (i + 1) * seg_h
+        rgb[s:e, :, 0] = r
+        rgb[s:e, :, 1] = g
+        rgb[s:e, :, 2] = b
+
+    if dtype == np.uint16:
+        rgb = (rgb.astype(np.uint32) * 257).astype(np.uint16)
+
+    if channels == 3:
+        return rgb
+    if channels == 1:
+        gray = (0.299 * rgb[..., 0]
+                + 0.587 * rgb[..., 1]
+                + 0.114 * rgb[..., 2]).astype(rgb.dtype)
+        return gray[..., None]
+    if channels == 4:
+        out = np.zeros((strip_h, strip_w, 4), dtype=rgb.dtype)
+        out[..., :3] = rgb
+        out[..., 3] = np.iinfo(rgb.dtype).max
+        return out
+    return rgb
+
+
+# Form-line font sizing bounds. The actual font used is clamped to the
+# form sub-column width so the rotated text doesn't overflow horizontally;
+# these bounds limit how big or small the rendered glyphs can get on very
+# wide / very narrow clip strips. The form (handwriting) line is the most
+# important column, so it runs a little larger than the reference columns.
+_FORM_FONT_FLOOR = 16
+_FORM_FONT_CEIL = 30
+# Width weighting: the form column is rendered wider than the plain text
+# columns to leave more room for handwriting.
+_FORM_COL_WEIGHT = 1.6
+
+
+def _build_form_line(
+    fields: Sequence[str],
+    available_text_px: int,
+    font_px: int,
+) -> str:
+    """Build a fill-in-the-blank form line sized to `available_text_px`.
+
+    Each entry in `fields` becomes `"label: ____...____"` with the underscore
+    count picked so the joined line — all fields separated by three spaces —
+    fills the available rotated-text length. Bigger paper → wider available
+    range → more underscores per field. Minimum 8 underscores per field;
+    maximum 80 (above that the line becomes silly-long).
+    """
+    if not fields:
+        return ""
+
+    font = _pick_font(font_px)
+    probe = Image.new("L", (10, 10), 255)
+    draw = ImageDraw.Draw(probe)
+
+    def text_w(s: str) -> int:
+        bbox = _text_bbox(draw, s, font)
+        return bbox[2] - bbox[0]
+
+    sep = "   "
+    sep_w = text_w(sep)
+    underscore_w = max(1, text_w("_"))
+    label_widths = [text_w(f"{f}: ") for f in fields]
+
+    total_label_w = sum(label_widths)
+    total_sep_w = sep_w * (len(fields) - 1)
+    remaining_px = available_text_px - total_label_w - total_sep_w
+    if remaining_px <= 0:
+        underscores = 8
+    else:
+        underscores = remaining_px // (underscore_w * len(fields))
+    underscores = max(8, min(80, int(underscores)))
+
+    return sep.join(f"{label}: {'_' * underscores}" for label in fields)
+
+
+def _capture_page_state(page) -> dict:
+    """Capture every TIFF tag we need to reproduce in the rewritten file."""
+    xres_tag = page.tags.get("XResolution")
+    yres_tag = page.tags.get("YResolution")
+    runit_tag = page.tags.get("ResolutionUnit")
+    icc_tag = page.tags.get(34675)
+
+    # tifffile owns 270 (ImageDescription) and 305 (Software) natively — pass
+    # them through dedicated kwargs. All other ancillary tags ride along in
+    # extratags.
+    description_val = _str_tag_value(page.tags.get(270))
+    software_val = _str_tag_value(page.tags.get(305))
+    orientation_val = page.tags.get(274).value if page.tags.get(274) else None
+    xpos_val = (tuple(page.tags.get(286).value)
+                if page.tags.get(286) else None)
+    ypos_val = (tuple(page.tags.get(287).value)
+                if page.tags.get(287) else None)
+    artist_val = _str_tag_value(page.tags.get(315))
+    copyright_val = _str_tag_value(page.tags.get(33432))
+
+    preserved_tags: list[tuple] = []
+    if orientation_val is not None:
+        preserved_tags.append((274, 3, 1, int(orientation_val), True))
+    if xpos_val:
+        preserved_tags.append((286, 5, 1, (int(xpos_val[0]), int(xpos_val[1])), True))
+    if ypos_val:
+        preserved_tags.append((287, 5, 1, (int(ypos_val[0]), int(ypos_val[1])), True))
+    if artist_val:
+        preserved_tags.append((315, 2, len(artist_val) + 1, artist_val + "\x00", True))
+    if copyright_val:
+        preserved_tags.append((33432, 2, len(copyright_val) + 1, copyright_val + "\x00", True))
+
+    return {
+        "photometric": page.photometric,
+        "compression": page.compression,
+        "xres_val": tuple(xres_tag.value) if xres_tag else None,
+        "yres_val": tuple(yres_tag.value) if yres_tag else None,
+        "runit_val": int(runit_tag.value) if runit_tag else None,
+        "icc_bytes": bytes(icc_tag.value) if icc_tag else None,
+        "description_val": description_val,
+        "software_val": software_val,
+        "preserved_tags": preserved_tags,
+    }
+
+
+def _write_preserving(path: Path, arr: np.ndarray, state: dict) -> None:
+    """Rewrite `path` with `arr` while preserving every tag captured in `state`."""
     # Preserve resolution and unit. tifffile owns tags 282/283/296 (extratags
     # for them are silently dropped), so we use the resolution kwargs with the
     # exact unit string that matches the original ResolutionUnit value. The
     # rational form may differ by ulps but the unit and effective DPI are
     # preserved, so the image's physical print dimensions are unchanged.
-    res_unit_str = _resunit_str(runit_val)
-    res_pair = _rational_to_float_pair(xres_val, yres_val)
-    extratags: list[tuple] = list(preserved_tags)
+    res_unit_str = _resunit_str(state["runit_val"])
+    res_pair = _rational_to_float_pair(state["xres_val"], state["yres_val"])
+    extratags: list[tuple] = list(state["preserved_tags"])
 
     write_kwargs: dict = {
-        "photometric": photometric,
-        "compression": compression,
+        "photometric": state["photometric"],
+        "compression": state["compression"],
         "extratags": extratags or None,
         "metadata": None,
-        # tifffile-owned tags: pass through their dedicated kwargs so they
-        # don't get silently overwritten with defaults.
-        "description": description_val or None,
-        "software":    software_val if software_val is not None else False,
+        "description": state["description_val"] or None,
+        "software": state["software_val"] if state["software_val"] is not None else False,
     }
-    if icc_bytes:
-        write_kwargs["iccprofile"] = icc_bytes
+    if state["icc_bytes"]:
+        write_kwargs["iccprofile"] = state["icc_bytes"]
     if res_pair is not None and res_unit_str is not None:
         write_kwargs["resolution"] = res_pair
         write_kwargs["resolutionunit"] = res_unit_str
@@ -194,8 +583,16 @@ def _rational_to_float_pair(
     return (xres[0] / xres[1], yres[0] / yres[1])
 
 
-def _detect_writable_band(arr: np.ndarray) -> tuple[int, int] | None:
-    """Return (left_x, right_x) of the widest white column run in the right margin."""
+def _detect_writable_band(
+    arr: np.ndarray,
+    side: str = "right",
+) -> tuple[int, int] | None:
+    """Return (left_x, right_x) of the widest white column run in the requested margin.
+
+    `side="right"` scans the column band to the right of the patch area (the
+    page's right edge). `side="left"` scans the column band to the left of the
+    patch area (the page's left clip strip).
+    """
     if arr.size == 0:
         return None
     H, W = arr.shape[:2]
@@ -208,13 +605,22 @@ def _detect_writable_band(arr: np.ndarray) -> tuple[int, int] | None:
 
     col_density = mask.sum(axis=0) / max(1, H)
     patch_cols = np.where(col_density >= _PATCH_COL_DENSITY_THRESHOLD)[0]
-    patch_right = (int(patch_cols[-1]) + _PATCH_SAFETY_PAD_PX
-                   if len(patch_cols) else W // 2)
-    if patch_right >= W - _MIN_STRIP_WIDTH_PX:
-        return None
+
+    if side == "left":
+        patch_left = (int(patch_cols[0]) - _PATCH_SAFETY_PAD_PX
+                      if len(patch_cols) else W // 2)
+        if patch_left <= _MIN_STRIP_WIDTH_PX:
+            return None
+        scan_lo, scan_hi = 0, patch_left
+    else:
+        patch_right = (int(patch_cols[-1]) + _PATCH_SAFETY_PAD_PX
+                       if len(patch_cols) else W // 2)
+        if patch_right >= W - _MIN_STRIP_WIDTH_PX:
+            return None
+        scan_lo, scan_hi = patch_right, W
 
     mid_top, mid_bottom = H // 6, 5 * H // 6
-    margin_inked = mask[mid_top:mid_bottom, patch_right:W].any(axis=0)
+    margin_inked = mask[mid_top:mid_bottom, scan_lo:scan_hi].any(axis=0)
 
     runs: list[tuple[int, int]] = []
     in_run = False
@@ -222,12 +628,12 @@ def _detect_writable_band(arr: np.ndarray) -> tuple[int, int] | None:
     for i, inked in enumerate(margin_inked):
         if not inked and not in_run:
             in_run = True
-            run_start = patch_right + i
+            run_start = scan_lo + i
         elif inked and in_run:
             in_run = False
-            runs.append((run_start, patch_right + i))
+            runs.append((run_start, scan_lo + i))
     if in_run:
-        runs.append((run_start, W))
+        runs.append((run_start, scan_hi))
 
     runs = [(a, b) for (a, b) in runs if b - a >= _MIN_STRIP_WIDTH_PX]
     if not runs:
@@ -269,6 +675,37 @@ def _render_rotated_line(
     if channels == 1:
         return band_l[..., None]
     return np.repeat(band_l[..., None], channels, axis=2)
+
+
+def _render_fitted_rotated_line(
+    text: str,
+    strip_h: int,
+    strip_w: int,
+    dtype,
+    channels: int,
+) -> np.ndarray:
+    """Render `text` into a (strip_h, strip_w) sub-band, shrinking font until it fits.
+
+    Targets the left-clip stamp where the band is wider than the right-margin
+    case and font sizing must adapt to the available rotated text length.
+    Initial size is 28 px (or strip_w-8 if narrower); floor is 9 px. Once the
+    floor is hit the text is rendered anyway — overflow is centered and crops
+    against the strip edges rather than corrupting the patch area, since the
+    strip width is bounded.
+    """
+    floor_px = 9
+    available_text_w = strip_h - 2 * _PATCH_SAFETY_PAD_PX
+    font_px = max(floor_px, min(28, strip_w - 8))
+
+    probe = Image.new("L", (10, 10), 255)
+    draw = ImageDraw.Draw(probe)
+    while True:
+        font = _pick_font(font_px)
+        bbox = _text_bbox(draw, text, font)
+        text_w = bbox[2] - bbox[0]
+        if text_w <= available_text_w or font_px <= floor_px:
+            return _render_rotated_line(text, strip_h, strip_w, font, dtype, channels)
+        font_px = max(floor_px, int(font_px * 0.9))
 
 
 def _pick_font(size_px: int) -> ImageFont.ImageFont:

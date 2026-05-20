@@ -19,6 +19,30 @@ if TYPE_CHECKING:
 log = get_logger(__name__)
 
 
+def _chromiq_clip_active(p: "ChartParams") -> bool:
+    """True when ChromIQ-style clipping border applies to this chart.
+
+    Gating: setting enabled AND instrument is i1Pro family AND paper is large
+    enough for the rotated text to be legible. Mirrors the gating used by the
+    plain left-clip-info stamp so the two features stay in sync.
+    """
+    from workflow.tiff_metadata import ALLOWED_LEFT_CLIP_PAPERS
+    return (
+        p.chromiq_clip_style
+        and p.instrument in {"i1", "p3"}
+        and p.paper in ALLOWED_LEFT_CLIP_PAPERS
+    )
+
+
+def _effective_suppress_lb(p: "ChartParams") -> bool:
+    """The -L state used for patch-capacity lookups.
+
+    ChromIQ-style forces -L, so the page is laid out at full (-L-enabled)
+    capacity even when the user left "Suppress left clip border" unchecked.
+    """
+    return p.disable_left_border or _chromiq_clip_active(p)
+
+
 @dataclass
 class ChartParams:
     # Guided-mode selections
@@ -52,6 +76,17 @@ class ChartParams:
     target_name: str = "chart"
     chart_notes: str = ""             # free-text user notes stamped onto the TIFF
     stamp_commands: bool = True       # also stamp the targen + printtarg commands used
+    # When True (and gating holds: instrument in {i1, p3}, -L off, paper in
+    # ALLOWED_LEFT_CLIP_PAPERS), fill the left clip strip with two rotated
+    # info columns: chart context + archival form fields + jig-orientation note.
+    left_clip_info: bool = False
+    # ChromIQ-style clipping border (Preferences → i1Pro). When True and gating
+    # holds (instrument in {i1, p3} + paper in ALLOWED_LEFT_CLIP_PAPERS), the
+    # workflow forces -L, shifts patches right by ~28 mm to create a fresh
+    # left strip, and always stamps the ChromIQ left-clip content there. The
+    # right-margin command/notes stamp is skipped because its target area
+    # gets pushed off the page by the shift.
+    chromiq_clip_style: bool = False
     cal_target: bool = False          # when True, preserve existing cal_* files during cleanup
     # When True, the .icc/.ti3 from a prior session in the same working folder
     # are renamed to pre_*.icc/pre_*.ti3 instead of being overwritten on the
@@ -142,7 +177,7 @@ class ChartCreator:
         """Return max patches for the given params (fast lookup or binary search)."""
         if any(abs(params.patch_scale - s) <= 0.01 for s in SUPPORTED_PATCH_SCALES):
             per_sheet = query_patches(params.instrument, params.paper, params.double_density,
-                                      suppress_lb=params.disable_left_border,
+                                      suppress_lb=_effective_suppress_lb(params),
                                       margin_mm=params.margin_mm,
                                       patch_scale=params.patch_scale)
             if per_sheet is not None:
@@ -341,30 +376,83 @@ class ChartCreator:
         """Stamp the actual targen/printtarg commands (and optional notes) into each TIFF."""
         try:
             from core.version import APP_VERSION
-            from workflow.tiff_metadata import stamp_chart_metadata
+            from workflow.tiff_metadata import (
+                ALLOWED_LEFT_CLIP_PAPERS,
+                shift_patches_for_chromiq_clip,
+                stamp_chart_metadata,
+                stamp_left_clip_info,
+            )
         except Exception as exc:
             log.warning("Could not import metadata stamper: %s", exc)
             return
 
-        lines: list[str] = []
-        if params.chart_notes:
-            lines.append(params.chart_notes)
-        if params.stamp_commands:
-            patch_count = self._count_patches_in_ti1(
-                tiffs[0].parent / f"{params.target_name}.ti1"
-            )
-            targen_cmd = "targen " + shlex.join(
-                self._build_targen_args(params, patch_count or params.patches or 0)
-            )
-            printtarg_cmd = "printtarg " + shlex.join(
-                self._build_printtarg_args(params)
-            )
-            lines.append(targen_cmd)
-            lines.append(printtarg_cmd)
-            lines.append(f"ChromIQ {APP_VERSION}")
+        patch_count = self._count_patches_in_ti1(
+            tiffs[0].parent / f"{params.target_name}.ti1"
+        ) or params.patches or 0
 
-        if lines:
-            stamp_chart_metadata(tiffs, lines)
+        chromiq_clip = _chromiq_clip_active(params)
+
+        # Build the command/notes lines once. They go to the right margin in
+        # normal mode, or into a clip-border column under ChromIQ-style.
+        cmd_lines: list[str] = []
+        if params.chart_notes:
+            cmd_lines.append(params.chart_notes)
+        if params.stamp_commands:
+            cmd_lines.append("targen " + shlex.join(
+                self._build_targen_args(params, patch_count)
+            ))
+            cmd_lines.append("printtarg " + shlex.join(
+                self._build_printtarg_args(params)
+            ))
+            cmd_lines.append(f"ChromIQ {APP_VERSION}")
+
+        if not chromiq_clip:
+            # Normal mode: commands/notes go to the right margin.
+            if cmd_lines:
+                stamp_chart_metadata(tiffs, cmd_lines)
+        else:
+            # ChromIQ-style: shift the patch block right by ~28 mm so the left
+            # side becomes a fresh white strip ready for the left-clip stamp.
+            shift_patches_for_chromiq_clip(tiffs)
+
+        # Left clip info stamp. Active when:
+        #   • ChromIQ-style clipping border is on (always stamp the branded
+        #     content into the freshly-shifted white strip), OR
+        #   • the user opted in via the per-chart "Print info in left clip
+        #     area" toggle AND -L is off (the native i1Pro clip strip exists).
+        instrument_ok = params.instrument in {"i1", "p3"}
+        paper_ok = params.paper in ALLOWED_LEFT_CLIP_PAPERS
+        plain_left_clip = (
+            params.left_clip_info
+            and instrument_ok
+            and not params.disable_left_border
+            and paper_ok
+        )
+        if chromiq_clip or plain_left_clip:
+            from data.patch_db import PAPER_LABELS
+            paper_label = PAPER_LABELS.get(params.paper, params.paper)
+            patches_label = f"{patch_count}-patch" if patch_count else "RGB"
+            header_lines = [
+                f"ArgyllCMS {patches_label} RGB target on {paper_label}",
+                "PRINT: borderless, 100% size (no scaling), color management OFF",
+            ]
+            # Each field gets its own ": ___" with the underscore length
+            # sized to the paper inside stamp_left_clip_info().
+            form_fields = [
+                "date",
+                "printer",
+                "ink set",
+                "profile name",
+                "paper type",
+                "driver/resolution",
+            ]
+            # Under ChromIQ-style the commands/notes become a clip-border
+            # column instead of the (now off-page) right margin.
+            command_lines = cmd_lines if chromiq_clip else None
+            stamp_left_clip_info(
+                tiffs, header_lines, form_fields, inner_lines=[],
+                command_lines=command_lines,
+            )
 
     @staticmethod
     def _count_patches_in_ti1(ti1_path: Path) -> int | None:
@@ -427,7 +515,11 @@ class ChartCreator:
         # command in stamped TIFF metadata.
         if p.double_density and p.instrument in {"CM", "SS"}:
             args.append("-h")
-        if p.disable_left_border and p.instrument in {"i1", "p3"}:
+        # ChromIQ-style clipping border forces -L regardless of the per-chart
+        # toggle so printtarg fills the page with patches; we manufacture the
+        # clip strip post-process in _stamp_tiff_metadata.
+        force_l = _chromiq_clip_active(p)
+        if (p.disable_left_border or force_l) and p.instrument in {"i1", "p3"}:
             args.append("-L")
         if abs(p.patch_scale - 1.0) > 0.01:
             args += [f"-a{p.patch_scale:.2f}"]
@@ -450,9 +542,10 @@ class ChartCreator:
     # ------------------------------------------------------------------
 
     def _lookup_patches(self, p: ChartParams) -> int:
+        eff_lb = _effective_suppress_lb(p)
         if any(abs(p.patch_scale - s) <= 0.01 for s in SUPPORTED_PATCH_SCALES):
             per_sheet = query_patches(p.instrument, p.paper, p.double_density,
-                                      suppress_lb=p.disable_left_border,
+                                      suppress_lb=eff_lb,
                                       margin_mm=p.margin_mm,
                                       patch_scale=p.patch_scale)
             if per_sheet is not None:
@@ -468,24 +561,25 @@ class ChartCreator:
         targen_bin    = bin_dir / "targen"
         printtarg_bin = bin_dir / "printtarg"
 
+        eff_lb = _effective_suppress_lb(p)
         if not targen_bin.exists():
             log.warning("targen not found for binary search, returning estimate")
             return (query_patches(p.instrument, p.paper, p.double_density,
-                                  suppress_lb=p.disable_left_border,
+                                  suppress_lb=eff_lb,
                                   margin_mm=p.margin_mm,
                                   patch_scale=p.patch_scale)
                     or query_patches(p.instrument, p.paper, p.double_density,
-                                     suppress_lb=p.disable_left_border)
+                                     suppress_lb=eff_lb)
                     or 500)
 
         pt_args_base = self._build_printtarg_args(p)[:-1]  # strip trailing target name
 
         est_raw = (query_patches(p.instrument, p.paper, p.double_density,
-                                 suppress_lb=p.disable_left_border,
+                                 suppress_lb=eff_lb,
                                  margin_mm=p.margin_mm,
                                  patch_scale=p.patch_scale)
                    or query_patches(p.instrument, p.paper, p.double_density,
-                                    suppress_lb=p.disable_left_border)
+                                    suppress_lb=eff_lb)
                    or 400)
         # Per-sheet capacity scales roughly as 1/patch_scale² — each patch
         # occupies patch_scale² of the standard cell area. Without this

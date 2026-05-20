@@ -1,5 +1,52 @@
 # Changelog
 
+## v3.7.6
+Turns the otherwise-blank i1Pro left clip strip into useful, ChromIQ-branded
+chart documentation: a chart summary, a fill-in-the-blank archival form, the
+exact targen / printtarg commands, and a spectrum accent — all rotated into
+the margin without touching a single patch. An opt-in "ChromIQ-style clipping
+border" goes further and manufactures that strip even on charts printed at
+full -L width, shifting the patches to make room while guaranteeing none are
+clipped.
+
+_Feature requested by @pharmacist on the [printerknowledge](https://www.printerknowledge.com) forum._
+
+### Features
+- **Left clip-area info stamp.** When the left clip border is *not* suppressed
+  on an i1Pro / i1Pro 2 / i1Pro 3 / i1Pro 3 Plus chart (paper A4 / Letter or
+  larger), ChromIQ can fill the reserved clip strip with rotated text columns:
+  a one-line chart summary (patch count + paper) and print-driver reminder
+  (borderless · 100% size · color management off), plus a fill-in-the-blank
+  form line for archival notes — date, printer, ink set, profile name, paper
+  type, driver/resolution — with the underscore writing space auto-sized to
+  the paper. A thin ChromIQ spectrum bar frames the strip. The patch pixels and
+  Argyll's own annotations are never modified. Auto-applies in Guided mode;
+  Manual mode adds a "Print info in left clip area" checkbox. Saveable as a
+  default (both modes) and inside Manual presets. The row hides automatically
+  when the conditions aren't met (wrong instrument, clip border suppressed,
+  paper too small).
+- **ChromIQ-style clipping border** (Preferences → i1Pro Chart Defaults).
+  Replaces printtarg's plain white i1Pro clip strip with the branded version
+  above, even when packing patches at full width. It forces `-L` so printtarg
+  uses the whole page, then shifts the patch block right inside the TIFF to
+  open a fresh strip on the left — capped so the rightmost patch always stays
+  on the page (the strip auto-shrinks rather than ever clipping a patch), with
+  a 3 mm safety margin. The targen / printtarg commands and chart notes
+  (available again in this mode) move into a dedicated clip-border column
+  instead of the right margin, and Argyll's vertical right-edge ID text is
+  dropped. Patch-count estimates and the grey-ramp sizing use the `-L`-enabled
+  capacity to match what actually prints. Takes effect only for i1Pro-family
+  instruments on A4 / Letter or larger; otherwise the chart is generated
+  normally.
+
+### Fixes / details
+- The Create-Chart command preview (both Guided and Manual) now reflects the
+  forced `-L` when ChromIQ-style clipping border is enabled, so the previewed
+  `printtarg` line matches the command that runs.
+- The Measure-tab strip-detection highlighter was verified to work unchanged on
+  ChromIQ-style charts — strips track the shifted patch positions and the
+  branded clip text does not interfere with column-label detection.
+
 ## v3.7.5
 Adds a configurable i1Pro chart-layout default to Preferences, rewrites the
 tooltips for the most-asked-about Create-Chart options, makes the bottom

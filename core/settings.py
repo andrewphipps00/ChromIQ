@@ -21,6 +21,9 @@ DEFAULTS: dict[str, Any] = {
     "chart_pages":               1,
     "chart_double_density":      False,
     "chart_disable_left_border": False,
+    # Print info into the i1Pro left clip strip (auto-applies in guided when
+    # gating holds: instrument i1/p3, -L off, paper >= A4/Letter).
+    "chart_left_clip_info":      False,
     "targen_device_type":        "2",      # Print RGB
     "targen_patches":            0,        # 0 = auto-computed
     "targen_white_patches":      4,
@@ -34,6 +37,15 @@ DEFAULTS: dict[str, Any] = {
     # instruments (p3, CM, SS) are unaffected and keep their existing defaults.
     # See data/patch_db.I1PRO_DEFAULT_PRESETS for the available preset keys.
     "i1pro_default_preset":      "m10_a0.95",
+    # When True, on i1Pro / i1Pro 3+ charts at paper >= A4/Letter:
+    #   • Force printtarg -L (no native clip strip).
+    #   • Post-process the TIFF to shift patches right by ~28 mm, creating a
+    #     fresh white strip on the left.
+    #   • Always stamp ChromIQ left-clip content (spectrum bar + 3 text columns)
+    #     into that strip.
+    #   • Skip the right-margin command/notes stamp (its area is now off-page).
+    # Outside those conditions the setting has no effect.
+    "i1pro_chromiq_clip_style":  False,
     # Step 2 — print
     "last_printer":              "",
     "print_input_slot":          "",

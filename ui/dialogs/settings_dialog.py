@@ -137,15 +137,18 @@ class SettingsDialog(QDialog):
         # ---- i1Pro chart defaults ----
         from data.patch_db import I1PRO_DEFAULT_PRESETS, I1PRO_PRESET_LABELS
         i1pro_grp = QGroupBox("i1Pro Chart Defaults", self)
-        i1g = QHBoxLayout(i1pro_grp)
-        i1g.addWidget(QLabel("Default layout:", self))
+        i1g = QVBoxLayout(i1pro_grp)
+
+        # Row 1: default layout preset
+        i1_preset_row = QHBoxLayout()
+        i1_preset_row.addWidget(QLabel("Default layout:", self))
         self._i1pro_preset_combo = NoScrollComboBox(self)
         for key in ("m10_a0.95", "m10_a1.0", "m6_a1.0"):
             self._i1pro_preset_combo.addItem(I1PRO_PRESET_LABELS[key], key)
         self._i1pro_preset_combo.setMinimumWidth(320)
-        i1g.addWidget(self._i1pro_preset_combo)
-        i1g.addStretch()
-        i1g.addWidget(TooltipButton(
+        i1_preset_row.addWidget(self._i1pro_preset_combo)
+        i1_preset_row.addStretch()
+        i1_preset_row.addWidget(TooltipButton(
             "i1Pro Chart Defaults",
             "Sets the default printtarg layout flags (−m / −M margin and −a patch "
             "scale) used by the Create Chart tab whenever the active instrument is "
@@ -166,6 +169,43 @@ class SettingsDialog(QDialog):
             self,
             min_width=620,
         ))
+        i1g.addLayout(i1_preset_row)
+
+        # Row 2: ChromIQ-style clipping border checkbox
+        i1_clip_row = QHBoxLayout()
+        self._chromiq_clip_check = QCheckBox(
+            "Use ChromIQ-style clipping border", self
+        )
+        i1_clip_row.addWidget(self._chromiq_clip_check)
+        i1_clip_row.addStretch()
+        i1_clip_row.addWidget(TooltipButton(
+            "ChromIQ-Style Clipping Border",
+            "Replaces printtarg's plain white i1Pro clip strip with a "
+            "ChromIQ-branded version that includes a spectrum accent and "
+            "three columns of useful info (chart summary + print reminders, "
+            "a fill-in-the-blank form for archival notes, and scanning-table "
+            "orientation instructions).\n\n"
+            "How it works behind the scenes:\n"
+            "  1. printtarg is always told to suppress the native clip strip "
+            "(-L), so it can use the whole page width for patches.\n"
+            "  2. ChromIQ then shifts the patch block to the right inside the "
+            "TIFF, opening up roughly the same amount of space on the LEFT as "
+            "printtarg would have reserved natively (~28 mm).\n"
+            "  3. The ChromIQ left-strip content is stamped into that new "
+            "white area.\n\n"
+            "Trade-off: Argyll's small vertical ID line on the RIGHT edge of "
+            "the chart gets pushed off the page by the shift, so the right-"
+            "margin command/notes stamp is disabled while this is on (those "
+            "options are hidden in the Create Chart tab).\n\n"
+            "Only takes effect when the chart uses an i1Pro / i1Pro 2 / "
+            "i1Pro 3 / i1Pro 3 Plus AND paper is A4 / Letter or larger. "
+            "On smaller paper or other instruments the setting is silently "
+            "ignored and the chart is generated normally.",
+            self,
+            min_width=620,
+        ))
+        i1g.addLayout(i1_clip_row)
+
         layout.addWidget(i1pro_grp)
 
         # ---- Behaviour ----
@@ -373,6 +413,9 @@ class SettingsDialog(QDialog):
         i1pro_key = str(s.get("i1pro_default_preset", I1PRO_DEFAULT_PRESET_KEY))
         idx = self._i1pro_preset_combo.findData(i1pro_key)
         self._i1pro_preset_combo.setCurrentIndex(idx if idx >= 0 else 0)
+        self._chromiq_clip_check.setChecked(
+            bool(s.get("i1pro_chromiq_clip_style", False))
+        )
         # Appearance: capture current value so Cancel can revert any live preview.
         current = str(s.get("appearance", "auto"))
         self._appearance_original = current
@@ -414,6 +457,7 @@ class SettingsDialog(QDialog):
         s.set("confirm_before_printing",   self._confirm_print_check.isChecked())
         s.set("appearance",                str(self._appearance_combo.currentData()))
         s.set("i1pro_default_preset",      str(self._i1pro_preset_combo.currentData()))
+        s.set("i1pro_chromiq_clip_style",  self._chromiq_clip_check.isChecked())
         log.info("Settings saved")
         self.accept()
 
