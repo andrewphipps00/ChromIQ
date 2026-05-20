@@ -368,7 +368,7 @@ parameters:
         adapts to this choice automatically.
 
     - flag: "-h"
-      name: "Double density (for measuring rig)"
+      name: "Double density"
       type: boolean
       default: false
       affects_preview: true

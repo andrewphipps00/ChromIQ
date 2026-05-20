@@ -357,10 +357,11 @@ class TabChart(QWidget):
         ))
         instr_layout.addLayout(row)
 
-        # Double density (CM only)
+        # Double density / Triple density (CM only — mutually exclusive)
         dd_row = QHBoxLayout()
-        self._dd_check = QCheckBox("Double density (requires measuring rig)", inner)
+        self._dd_check = QCheckBox("Double density", inner)
         self._dd_check.toggled.connect(self._update_patch_count)
+        self._dd_check.toggled.connect(self._on_guided_dd_toggled)
         self._dd_tooltip = TooltipButton(
             "Double Density (-h)",
             "Doubles the number of patches that fit in each measurement strip when "
@@ -377,9 +378,32 @@ class TabChart(QWidget):
             inner,
             min_width=600,
         )
+        self._td_check = QCheckBox("Triple density", inner)
+        self._td_check.toggled.connect(self._update_patch_count)
+        self._td_check.toggled.connect(self._on_guided_td_toggled)
+        self._td_tooltip = TooltipButton(
+            "Triple Density (i1Pro layout emulation)",
+            "ColorMunki + rig only. The chart is generated with the i1Pro strip "
+            "layout (tighter, smaller patches than a native ColorMunki chart), "
+            "then the produced .ti2 is rewritten so chartread still talks to "
+            "your ColorMunki. Result: roughly 3× the patch count of a plain "
+            "ColorMunki chart at the same paper size — a more detailed profile "
+            "from the same number of sheets, or the same profile quality on far "
+            "fewer sheets.\n\n"
+            "REQUIRES the physical measuring rig accessory. Without the rig the "
+            "ColorMunki cannot track the tighter i1-style strips.\n\n"
+            "Mutually exclusive with Double density — pick one or the other.\n\n"
+            "Has no effect on i1Pro, i1Pro 3 Plus or SpectroScan — the option is "
+            "hidden when those are selected.",
+            inner,
+            min_width=600,
+        )
         dd_row.addWidget(self._dd_check)
-        dd_row.addStretch()
         dd_row.addWidget(self._dd_tooltip)
+        dd_row.addSpacing(20)
+        dd_row.addWidget(self._td_check)
+        dd_row.addWidget(self._td_tooltip)
+        dd_row.addStretch()
         instr_layout.addLayout(dd_row)
         layout.addWidget(instr_grp)
 
@@ -825,6 +849,7 @@ class TabChart(QWidget):
         self._manual_f_pw: ParameterWidget | None = None
         self._manual_a_pw: ParameterWidget | None = None
         self._manual_m_pw: ParameterWidget | None = None
+        self._manual_P_pw: ParameterWidget | None = None
         self._manual_cal_k_pw: ParameterWidget | None = None
         self._manual_cal_i_pw: ParameterWidget | None = None
         self._manual_n_pw: ParameterWidget | None = None
@@ -837,6 +862,12 @@ class TabChart(QWidget):
         self._bit16_radio: QRadioButton | None = None
         self._pre_cal_snapshot: dict | None = None
         self._d_cascade_widgets: list[ParameterWidget] = []
+        # Triple-density mode (CM-only synthetic option; no Argyll flag of its
+        # own). The checkbox lives below the -h ParameterWidget in basic_layout
+        # and stashes/restores -a / -m / -P widget values across toggles.
+        self._manual_td_check: QCheckBox | None = None
+        self._manual_td_row: QWidget | None = None
+        self._td_saved_layout: dict | None = None
 
         for tool, params in [
             ("targen",    self._params.get("targen", [])),
@@ -902,6 +933,8 @@ class TabChart(QWidget):
                     self._manual_a_pw = pw
                 if tool == "printtarg" and flag == "-m":
                     self._manual_m_pw = pw
+                if tool == "printtarg" and flag == "-P":
+                    self._manual_P_pw = pw
                 if tool == "printtarg" and flag == "-K":
                     self._manual_cal_k_pw = pw
                 if tool == "printtarg" and flag == "-I":
@@ -930,6 +963,14 @@ class TabChart(QWidget):
                 else:
                     basic_layout.addWidget(pw)
                     self._manual_widgets[tool].append(pw)
+
+                # Immediately below the -h ParameterWidget, drop in the
+                # Triple-density row. Same parent layout (basic_layout, since
+                # -h is not expert_only) so it sits visually under the
+                # Double density row in both light and dark layouts.
+                if tool == "printtarg" and flag == "-h":
+                    self._manual_td_row = self._make_manual_td_row(inner)
+                    basic_layout.addWidget(self._manual_td_row)
 
             # Insert the Pages row right under printtarg -p (paper size).
             # Drives the Auto patch-count estimate; greyed out unless Auto is on.
@@ -1069,30 +1110,41 @@ class TabChart(QWidget):
 
         # printtarg
         pt_args: list[str] = []
-        pt_instr = "3p" if p.instrument == "p3" else p.instrument
+        # Triple density emulates the i1Pro layout — mirror the override path
+        # in chart_creator._build_printtarg_args.
+        triple = p.triple_density and p.instrument == "CM"
+        if triple:
+            pt_instr = "i1"
+        else:
+            pt_instr = "3p" if p.instrument == "p3" else p.instrument
         pt_args.append(f"-i{pt_instr}")
         pt_args.append(f"-p{p.paper}")
         dpi_flag = "-T" if p.tiff_16bit else "-t"
         pt_args.append(f"{dpi_flag}{p.tiff_dpi}")
-        if p.double_density and p.instrument in {"CM", "SS"}:
+        if not triple and p.double_density and p.instrument in {"CM", "SS"}:
             pt_args.append("-h")
         # Mirror chart_creator._build_printtarg_args: ChromIQ-style clipping
         # border forces -L regardless of the per-chart toggle, so the preview
-        # has to reflect that too.
+        # has to reflect that too. Triple density also forces -L (suppress
+        # widget is hidden in that mode).
         from workflow.chart_creator import _chromiq_clip_active
-        force_l = _chromiq_clip_active(p)
-        if (p.disable_left_border or force_l) and p.instrument in {"i1", "p3"}:
+        force_l = _chromiq_clip_active(p) or triple
+        l_applies = p.instrument in {"i1", "p3"} or triple
+        if (p.disable_left_border or force_l) and l_applies:
             pt_args.append("-L")
-        if abs(p.patch_scale - 1.0) > 0.01:
-            pt_args.append(f"-a{p.patch_scale:.2f}")
-        if p.margin_mm != 6:
-            pt_args.append(f"-m{p.margin_mm}")
-        pt_args.append(f"-M{p.margin_mm}")
+        scale_eff = 1.3 if triple else p.patch_scale
+        margin_eff = 5 if triple else p.margin_mm
+        no_strip_limit_eff = True if triple else p.no_strip_limit
+        if abs(scale_eff - 1.0) > 0.01:
+            pt_args.append(f"-a{scale_eff:.2f}")
+        if margin_eff != 6:
+            pt_args.append(f"-m{margin_eff}")
+        pt_args.append(f"-M{margin_eff}")
         if p.no_randomise:
             pt_args.append("-r")
         if p.bw_spacers:
             pt_args.append("-b")
-        if p.no_strip_limit:
+        if no_strip_limit_eff:
             pt_args.append("-P")
         if p.extra_printtarg_args:
             pt_args += shlex.split(p.extra_printtarg_args)
@@ -1337,8 +1389,11 @@ class TabChart(QWidget):
         # -L only matters for strip instruments. Even with ChromIQ-style on,
         # the row stays visible: unchecked = branded strip, checked = no
         # border (commands/notes route to the right margin as usual).
+        # Triple density forces -L internally — hide the row in that mode.
+        td_on = (self._manual_td_check is not None
+                 and self._manual_td_check.isChecked())
         if self._manual_lb_pw is not None:
-            self._manual_lb_pw.setVisible(instr in {"i1", "p3"})
+            self._manual_lb_pw.setVisible(instr in {"i1", "p3"} and not td_on)
 
         # Chart notes + stamp-commands rows stay available in all modes. Under
         # ChromIQ-style their content is routed into a clip-border column
@@ -1369,7 +1424,7 @@ class TabChart(QWidget):
             if instr == "CM":
                 self._manual_dd_pw.setVisible(True)
                 self._manual_dd_pw.set_display_text(
-                    "Double density (for measuring rig)",
+                    "Double density",
                     "Double Density (-h)",
                     "Doubles the number of patches that fit in each measurement "
                     "strip when using a ColorMunki / i1Studio / ColorChecker "
@@ -1410,6 +1465,94 @@ class TabChart(QWidget):
                 # the user switches back to CM/SS. Mirror of guided mode.
                 if self._manual_dd_pw.get_raw_value():
                     self._manual_dd_pw.set_value(False)
+
+        # Triple density: CM-only synthetic option. Hide on every other
+        # instrument and force it off (restoring any stashed layout values)
+        # so it can't leak across an instrument switch.
+        if self._manual_td_row is not None and self._manual_td_check is not None:
+            td_visible = instr == "CM"
+            self._manual_td_row.setVisible(td_visible)
+            if not td_visible and self._manual_td_check.isChecked():
+                self._manual_td_check.setChecked(False)
+
+    def _make_manual_td_row(self, parent: QWidget) -> QWidget:
+        """Build the Triple-density row that sits below the -h widget.
+
+        It's a plain QCheckBox + tooltip rather than a ParameterWidget because
+        there's no underlying Argyll flag — triple-density is ChromIQ-internal
+        and rewrites -i / -a / -m / -P at command-build time.
+        """
+        row_w = QWidget(parent)
+        row = QHBoxLayout(row_w)
+        # Match the ParameterWidget compact layout so the checkbox aligns
+        # under "Double density (for measuring rig)" above it.
+        row.setContentsMargins(0, 2, 0, 2)
+        row.setSpacing(8)
+        lbl = QLabel("Triple density", row_w)
+        lbl.setFixedWidth(190)
+        self._manual_td_check = QCheckBox(row_w)
+        self._manual_td_check.toggled.connect(self._on_manual_td_toggled)
+        self._manual_td_check.toggled.connect(self._refresh_manual_command_preview)
+        row.addWidget(lbl)
+        row.addWidget(self._manual_td_check)
+        row.addStretch()
+        row.addWidget(TooltipButton(
+            "Triple Density (i1Pro layout emulation)",
+            "ColorMunki + rig only. Generates the chart with the i1Pro strip "
+            "layout (printtarg -ii1) plus the tuned scale / margin / strip-"
+            "limit overrides needed for the ColorMunki to read it, then "
+            "rewrites the produced .ti2 so chartread still talks to your "
+            "ColorMunki. Result: roughly 3× the patch count of a plain "
+            "ColorMunki chart at the same paper size.\n\n"
+            "REQUIRES the physical measuring rig accessory.\n\n"
+            "Mutually exclusive with Double density. Ticking this stashes "
+            "the current -a / -m / -P widget values and sets them to the "
+            "triple-density preset (1.3 / 5 / on); unticking restores the "
+            "stashed values.\n\n"
+            "Has no effect on i1Pro, i1Pro 3 Plus or SpectroScan — the option "
+            "is hidden when those are selected.",
+            row_w,
+            min_width=600,
+        ))
+        return row_w
+
+    def _on_manual_td_toggled(self, checked: bool) -> None:
+        """Apply / undo the triple-density layout overrides on the -a / -m / -P widgets."""
+        # Mutual exclusion with the manual Double density widget.
+        if self._manual_dd_pw is not None:
+            if checked and self._manual_dd_pw.get_raw_value():
+                self._manual_dd_pw.set_value(False)
+            self._manual_dd_pw.setEnabled(not checked)
+
+        if checked:
+            stash: dict = {}
+            if self._manual_a_pw is not None:
+                stash["-a"] = self._manual_a_pw.get_raw_value()
+                self._manual_a_pw.set_value(1.3)
+            if self._manual_m_pw is not None:
+                stash["-m"] = self._manual_m_pw.get_raw_value()
+                self._manual_m_pw.set_value(5)
+            if self._manual_P_pw is not None:
+                stash["-P"] = self._manual_P_pw.get_raw_value()
+                self._manual_P_pw.set_value(True)
+            if self._manual_lb_pw is not None:
+                stash["-L"] = self._manual_lb_pw.get_raw_value()
+                self._manual_lb_pw.set_value(True)
+            self._td_saved_layout = stash
+        else:
+            stash = self._td_saved_layout or {}
+            if self._manual_a_pw is not None and "-a" in stash:
+                self._manual_a_pw.set_value(stash["-a"] if stash["-a"] is not None else 1.0)
+            if self._manual_m_pw is not None and "-m" in stash:
+                self._manual_m_pw.set_value(stash["-m"] if stash["-m"] is not None else 6)
+            if self._manual_P_pw is not None and "-P" in stash:
+                self._manual_P_pw.set_value(bool(stash["-P"]))
+            if self._manual_lb_pw is not None and "-L" in stash:
+                self._manual_lb_pw.set_value(bool(stash["-L"]))
+            self._td_saved_layout = None
+
+        # Hide/show the suppress-LB row in sync with the toggle.
+        self._update_manual_lb_visibility()
 
     def _apply_instrument_default_margin(self) -> None:
         """Auto-update -m (and -a, for i1) widgets to the per-instrument default
@@ -1585,6 +1728,10 @@ class TabChart(QWidget):
             self._manual_left_clip_check.setChecked(
                 bool(s.get("chart_left_clip_info", False))
             )
+            if self._manual_td_check is not None:
+                self._manual_td_check.setChecked(
+                    bool(s.get("manual_printtarg__triple_density", False))
+                )
         else:
             name = self._preset_combo.currentData()
             presets = self._load_presets_from_settings()
@@ -1615,6 +1762,12 @@ class TabChart(QWidget):
             self._manual_left_clip_check.setChecked(
                 bool(data.get("left_clip_info", False))
             )
+            # Apply triple-density last so its toggle handler sees the
+            # restored -a / -m / -P values and stashes them correctly.
+            if self._manual_td_check is not None:
+                self._manual_td_check.setChecked(
+                    bool(data.get("triple_density", False))
+                )
         self._update_manual_lb_visibility()
 
     def _on_preset_save(self) -> None:
@@ -1641,6 +1794,9 @@ class TabChart(QWidget):
             if self._manual_pages_spin is not None else 1
         )
         capture["left_clip_info"] = bool(self._manual_left_clip_check.isChecked())
+        capture["triple_density"] = bool(
+            self._manual_td_check is not None and self._manual_td_check.isChecked()
+        )
         dlg = QInputDialog(self)
         dlg.setWindowTitle("Save Preset")
         dlg.setLabelText(
@@ -1699,14 +1855,21 @@ class TabChart(QWidget):
         instr  = self._instr_combo.currentData() or "i1"
         paper  = self._paper_combo.currentData() or "A4"
         dd     = self._dd_check.isChecked()
+        td     = self._td_check.isChecked() and instr == "CM"
         pages  = self._pages_spin.value()
         has_lb = self._lb_check.isChecked()  # True = -L active (left border suppressed)
         # ChromIQ-style forces -L, so capacity must be computed at -L-enabled
-        # values even when the user left the checkbox unchecked.
+        # values even when the user left the checkbox unchecked. Triple
+        # density also forces -L (and the suppress widget is hidden).
         chromiq_force_l = self._chromiq_force_l(instr, paper)
-        eff_lb = has_lb or chromiq_force_l
+        eff_lb = has_lb or chromiq_force_l or td
         dpi    = int(self._settings.get("printtarg_dpi", 300))
-        if instr == "i1":
+        if td:
+            # Triple density bypasses the per-instrument defaults and locks
+            # the layout to the i1Pro emulation preset.
+            eff_margin = 5
+            eff_scale = 1.3
+        elif instr == "i1":
             preset_key = str(self._settings.get(
                 "i1pro_default_preset", I1PRO_DEFAULT_PRESET_KEY
             ))
@@ -1716,7 +1879,8 @@ class TabChart(QWidget):
             eff_scale = 1.0
 
         per_sheet = query_patches(instr, paper, dd, suppress_lb=eff_lb,
-                                  margin_mm=eff_margin, patch_scale=eff_scale)
+                                  margin_mm=eff_margin, patch_scale=eff_scale,
+                                  triple_density=td)
         if per_sheet is not None:
             total = per_sheet * pages
             self._patch_count_lbl.setText(str(total))
@@ -1738,10 +1902,14 @@ class TabChart(QWidget):
         # both from the command preview when not applicable so the user
         # sees exactly what printtarg will run. ChromIQ-style clipping
         # border forces -L regardless of the per-chart toggle (eff_lb).
-        lb_flag = "-L " if eff_lb and instr in {"i1", "p3"} else ""
-        dd_flag = "-h " if dd and instr in {"CM", "SS"} else ""
+        # Triple density: emulate the i1Pro layout with -ii1, force -L,
+        # and append -P (strip-limit removal); the -h flag is gated off.
+        preview_instr = "i1" if td else instr
+        lb_flag = "-L " if eff_lb and (preview_instr in {"i1", "p3"}) else ""
+        dd_flag = "-h " if (dd and not td) and instr in {"CM", "SS"} else ""
         margin_flag = f"-m{eff_margin} -M{eff_margin} " if eff_margin != 6 else ""
         scale_flag = f"-a{eff_scale:.2f} " if abs(eff_scale - 1.0) > 0.01 else ""
+        strip_flag = "-P " if td else ""
         precond_path = (
             self._guided_precond_path.text().strip()
             if hasattr(self, "_guided_precond_path") else ""
@@ -1767,7 +1935,7 @@ class TabChart(QWidget):
         info = (
             f"Guided mode applies these fixed settings:\n"
             f"targen -d2 -G -e{wp} -B{bp} -g{grey_steps}{precond_line} {target_name}\n"
-            f"printtarg -i{instr} -p{paper} -t{dpi} {scale_flag}{lb_flag}{dd_flag}{margin_flag}{target_name}"
+            f"printtarg -i{preview_instr} -p{paper} -t{dpi} {scale_flag}{lb_flag}{dd_flag}{margin_flag}{strip_flag}{target_name}"
             f"{recommendation}"
         )
         if hasattr(self, "_guided_info_lbl"):
@@ -1797,7 +1965,7 @@ class TabChart(QWidget):
         if instr == "CM":
             self._dd_check.setVisible(True)
             self._dd_tooltip.setVisible(True)
-            self._dd_check.setText("Double density (requires measuring rig)")
+            self._dd_check.setText("Double density")
             self._dd_tooltip._title = "Double Density (-h)"
             self._dd_tooltip._body = (
                 "Doubles the number of patches that fit in each measurement strip "
@@ -1841,15 +2009,45 @@ class TabChart(QWidget):
             # the next time the user goes back to CM/SS without re-touching it.
             if self._dd_check.isChecked():
                 self._dd_check.setChecked(False)
+        # Triple density: CM-only, hidden everywhere else.
+        td_visible = instr == "CM"
+        self._td_check.setVisible(td_visible)
+        self._td_tooltip.setVisible(td_visible)
+        if not td_visible and self._td_check.isChecked():
+            self._td_check.setChecked(False)
         # -L only affects strip instruments (i1, p3). CM reads patches
         # individually and SS is an XY flatbed — both ignore -L. Even with
         # the ChromIQ-style clipping border on, the toggle stays visible:
         # leaving it unchecked yields the branded strip; checking it
         # suppresses the border entirely and routes commands/notes to the
         # right margin as usual.
-        lb_visible = instr in {"i1", "p3"}
+        # Triple density forces -L internally and the user can't influence
+        # it — hide the row entirely in that mode.
+        lb_visible = instr in {"i1", "p3"} and not self._td_check.isChecked()
         self._lb_check.setVisible(lb_visible)
         self._lb_tooltip.setVisible(lb_visible)
+
+    def _on_guided_dd_toggled(self, checked: bool) -> None:
+        if checked and self._td_check.isChecked():
+            self._td_check.setChecked(False)
+        self._td_check.setEnabled(not checked)
+
+    def _on_guided_td_toggled(self, checked: bool) -> None:
+        if checked and self._dd_check.isChecked():
+            self._dd_check.setChecked(False)
+        self._dd_check.setEnabled(not checked)
+        # Triple density forces -L internally — stash the user's lb_check
+        # value and force it on; restore on untoggle.
+        if checked:
+            self._td_saved_lb_check = self._lb_check.isChecked()
+            self._lb_check.setChecked(True)
+        else:
+            saved = getattr(self, "_td_saved_lb_check", None)
+            if saved is not None:
+                self._lb_check.setChecked(bool(saved))
+            self._td_saved_lb_check = None
+        # -L visibility depends on td state now — refresh.
+        self._update_dd_visibility()
 
     # ------------------------------------------------------------------
     # Actions
@@ -1996,6 +2194,7 @@ class TabChart(QWidget):
         s.set("chart_paper",               params.paper)
         s.set("chart_pages",               params.pages)
         s.set("chart_double_density",      params.double_density)
+        s.set("chart_triple_density",      params.triple_density)
         s.set("chart_disable_left_border", params.disable_left_border)
         s.set("targen_device_type",        params.device_type)
         s.set("targen_good_mode",          params.good_mode)
@@ -2019,6 +2218,9 @@ class TabChart(QWidget):
             s.set("manual_auto_patches", self._manual_auto_patches_check.isChecked())
         if self._manual_pages_spin is not None:
             s.set("manual_pages", int(self._manual_pages_spin.value()))
+        if self._manual_td_check is not None:
+            s.set("manual_printtarg__triple_density",
+                  self._manual_td_check.isChecked())
         log.info("Chart defaults saved")
         self._log.appendPlainText("Current settings saved as defaults.")
         self._log.ensureCursorVisible()
@@ -2037,21 +2239,33 @@ class TabChart(QWidget):
         instr   = self._instr_combo.currentData() or "i1"
         paper   = self._paper_combo.currentData() or "A4"
         dd      = self._dd_check.isChecked()
+        td      = self._td_check.isChecked() and instr == "CM"
         has_lb  = self._lb_check.isChecked()
-        if instr == "i1":
+        if td:
+            # Triple-density forces i1Pro layout params; the arg builder also
+            # applies these, but we set them on ChartParams so patch-count
+            # lookup, command preview and TIFF metadata stay consistent.
+            margin = 5
+            patch_scale = 1.3
+            no_strip_limit = True
+            dd = False  # mutual exclusion (UI also enforces)
+        elif instr == "i1":
             preset_key = str(self._settings.get(
                 "i1pro_default_preset", I1PRO_DEFAULT_PRESET_KEY
             ))
             margin, patch_scale = i1_defaults_from_preset(preset_key)
+            no_strip_limit = False
         else:
             margin = INSTRUMENT_DEFAULT_MARGIN.get(instr, 6)
             patch_scale = 1.0
+            no_strip_limit = False
         base_white = int(self._settings.get("targen_white_patches", 4))
         base_black = int(self._settings.get("targen_black_patches", 4))
         # ChromIQ-style forces -L → size grey ramp from -L-enabled capacity.
         eff_lb = has_lb or self._chromiq_force_l(instr, paper)
         per_sheet  = query_patches(instr, paper, dd, suppress_lb=eff_lb,
-                                   margin_mm=margin, patch_scale=patch_scale) or 504
+                                   margin_mm=margin, patch_scale=patch_scale,
+                                   triple_density=td) or 504
         grey_steps = max(8, min((per_sheet * pages) // 30, 64))
 
         precond_path = self._guided_precond_path.text().strip()
@@ -2063,6 +2277,7 @@ class TabChart(QWidget):
             paper                = paper,
             pages                = pages,
             double_density       = dd,
+            triple_density       = td,
             disable_left_border  = has_lb,
             device_type          = self._settings.get("targen_device_type", "2"),
             patches              = 0,
@@ -2074,6 +2289,7 @@ class TabChart(QWidget):
             tiff_dpi             = int(self._settings.get("printtarg_dpi", 300)),
             patch_scale          = patch_scale,
             margin_mm            = margin,
+            no_strip_limit       = no_strip_limit,
             left_clip_info       = bool(self._settings.get("chart_left_clip_info", False)),
             chromiq_clip_style   = bool(self._settings.get("i1pro_chromiq_clip_style", False)),
             preserve_as_preconditioning = (
@@ -2120,6 +2336,15 @@ class TabChart(QWidget):
         p.no_randomise         = bool(_get("printtarg", "-r",  False))
         p.bw_spacers           = bool(_get("printtarg", "-b",  False))
         p.no_strip_limit       = bool(_get("printtarg", "-P",  False))
+        # Triple density is a ChromIQ-internal flag (no Argyll mapping); the
+        # arg builder substitutes -i / -a / -m / -P at command time. UI also
+        # already stashes the prior layout values, so reading the widget
+        # state here is enough.
+        p.triple_density = (
+            self._manual_td_check is not None
+            and self._manual_td_check.isChecked()
+            and p.instrument == "CM"
+        )
 
         # All remaining printtarg params (e.g. -N, -K, -I, -C, -D, -U, -R, -Q, -A, -n, -c)
         # are collected here and passed through extra_printtarg_args, which
@@ -2178,6 +2403,7 @@ class TabChart(QWidget):
 
         self._pages_spin.setValue(int(s.get("chart_pages", 1)))
         self._dd_check.setChecked(bool(s.get("chart_double_density", False)))
+        self._td_check.setChecked(bool(s.get("chart_triple_density", False)))
         self._lb_check.setChecked(bool(s.get("chart_disable_left_border", True)))
         self._update_dd_visibility()
         self._update_patch_count()
@@ -2223,6 +2449,14 @@ class TabChart(QWidget):
             auto_on = bool(s.get("manual_auto_patches", False))
             self._manual_auto_patches_check.setChecked(auto_on)
             self._on_auto_patches_toggled(auto_on)
+        # Restore manual triple-density. The toggle handler stashes the
+        # current -a / -m / -P widget values; that's fine even when the
+        # restore loop above just wrote those — the stash will capture
+        # the just-restored user values, which is exactly what we want.
+        if self._manual_td_check is not None:
+            self._manual_td_check.setChecked(
+                bool(s.get("manual_printtarg__triple_density", False))
+            )
         self._update_manual_lb_visibility()
         self._apply_instrument_default_margin()
 

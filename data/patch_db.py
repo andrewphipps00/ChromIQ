@@ -608,6 +608,51 @@ _PER_SHEET_CAPACITY_A095_M10_NO_LB: dict[tuple[str, bool, str], int] = {
 }
 
 
+# ---------------------------------------------------------------------------
+# Triple-density mode: ColorMunki + rig, but chart laid out as i1Pro
+# (printtarg -ii1 -a1.3 -m5 -M5 -P) so the ColorMunki reads a much denser
+# i1-style strip layout. Keyed by paper alone since the instrument is fixed
+# (CM) and double-density is mutually exclusive with triple-density.
+# Measured via scripts/measure_triple_density_capacity.py.
+# ---------------------------------------------------------------------------
+
+_PER_SHEET_CAPACITY_TRIPLE: dict[str, int] = {
+    # Measured via scripts/measure_triple_density_capacity.py against Argyll 3.5.0.
+    "A2":      1482,
+    "329x483":  930,
+    "483x329":  900,
+    "A3":       729,
+    "420x297":  684,
+    "11x17":    675,
+    "Legal":    418,
+    "A4":       324,
+    "A4R":      324,
+    "Letter":   323,
+    "LetterR":  300,
+    "203x254":  270,
+    "127x178":  100,
+    "4x6":       64,
+}
+
+_PER_SHEET_CAPACITY_TRIPLE_NO_LB: dict[str, int] = {
+    # Measured via scripts/measure_triple_density_capacity.py against Argyll 3.5.0.
+    "A2":      1404,
+    "329x483":  868,
+    "483x329":  840,
+    "A3":       675,
+    "420x297":  648,
+    "11x17":    621,
+    "Legal":    374,
+    "A4":       288,
+    "A4R":      300,
+    "Letter":   289,
+    "LetterR":  276,
+    "203x254":  240,
+    "127x178":   80,
+    "4x6":       48,
+}
+
+
 def query_patches(
     instrument: str,
     paper: str,
@@ -615,6 +660,7 @@ def query_patches(
     suppress_lb: bool = True,
     margin_mm: int = 6,
     patch_scale: float = 1.0,
+    triple_density: bool = False,
 ) -> int | None:
     """Return patches-per-sheet for the given combination, or None if unknown.
 
@@ -622,8 +668,15 @@ def query_patches(
     suppress_lb=False → values measured without -L (left-clip border present).
     margin_mm         → must be one of SUPPORTED_MARGINS, else returns None.
     patch_scale       → must be one of SUPPORTED_PATCH_SCALES, else returns None.
+    triple_density    → ColorMunki-only synthetic mode (i1 layout). When True,
+                        the other layout params are ignored and the triple
+                        table is consulted directly.
     Callers fall back to a live binary search on a None result.
     """
+    if triple_density and instrument == "CM":
+        db = _PER_SHEET_CAPACITY_TRIPLE if suppress_lb else _PER_SHEET_CAPACITY_TRIPLE_NO_LB
+        return db.get(paper)
+
     # Normalise: -h is meaningful on CM (double density via rig) and on
     # SS (hexagon patches). Strip instruments (i1, p3) never use it.
     dd = double_density if instrument in {"CM", "SS"} else False

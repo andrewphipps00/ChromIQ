@@ -46,8 +46,11 @@ def _effective_suppress_lb(p: "ChartParams") -> bool:
 
     ChromIQ-style forces -L, so the page is laid out at full (-L-enabled)
     capacity even when the user left "Suppress left clip border" unchecked.
+    Triple-density also forces -L: the i1Pro layout has no useful clip border
+    on a ColorMunki workflow, and the patch tables for that mode assume -L.
     """
-    return p.disable_left_border or _chromiq_clip_active(p)
+    triple = p.triple_density and p.instrument == "CM"
+    return p.disable_left_border or _chromiq_clip_active(p) or triple
 
 
 @dataclass
@@ -79,6 +82,12 @@ class ChartParams:
     bw_spacers: bool = False
     no_strip_limit: bool = False
     extra_printtarg_args: str = ""
+
+    # ChromIQ-only synthetic option (ColorMunki + rig only). When True we
+    # generate the chart with -ii1 (i1Pro strip geometry) plus -a 1.3 / -m 5 /
+    # -P so a ColorMunki + rig can read the tighter layout, then rewrite the
+    # produced .ti2 so TARGET_INSTRUMENT references the ColorMunki again.
+    triple_density: bool = False
 
     target_name: str = "chart"
     chart_notes: str = ""             # free-text user notes stamped onto the TIFF
@@ -182,11 +191,13 @@ class ChartCreator:
         progress_cb: Callable[[str], None] | None = None,
     ) -> int:
         """Return max patches for the given params (fast lookup or binary search)."""
-        if any(abs(params.patch_scale - s) <= 0.01 for s in SUPPORTED_PATCH_SCALES):
+        triple = params.triple_density and params.instrument == "CM"
+        if triple or any(abs(params.patch_scale - s) <= 0.01 for s in SUPPORTED_PATCH_SCALES):
             per_sheet = query_patches(params.instrument, params.paper, params.double_density,
                                       suppress_lb=_effective_suppress_lb(params),
                                       margin_mm=params.margin_mm,
-                                      patch_scale=params.patch_scale)
+                                      patch_scale=params.patch_scale,
+                                      triple_density=triple)
             if per_sheet is not None:
                 n = per_sheet * params.pages
                 if progress_cb:
@@ -373,11 +384,36 @@ class ChartCreator:
             log.warning("No TIFFs found; searched %s for chart*.tif", work_dir)
 
         if tiffs and self._pending_params is not None:
+            # Triple-density: printtarg saw -ii1 so it wrote TARGET_INSTRUMENT
+            # "GretagMacbeth i1 Pro" into the .ti2 — rewrite it so chartread
+            # opens the ColorMunki the user actually owns.
+            if self._pending_params.triple_density:
+                self._patch_ti2_instrument(work_dir, stem)
             self._write_channel_sidecar(work_dir, stem, self._pending_params)
             self._stamp_tiff_metadata(tiffs, self._pending_params)
 
         if on_finish:
             on_finish(tiffs)
+
+    def _patch_ti2_instrument(self, work_dir: Path, stem: str) -> None:
+        """Rewrite TARGET_INSTRUMENT from i1 Pro to ColorMunki for triple density."""
+        ti2 = work_dir / f"{stem}.ti2"
+        if not ti2.is_file():
+            log.warning("ti2 not found for triple-density patch: %s", ti2)
+            return
+        try:
+            text = ti2.read_text(encoding="utf-8", errors="ignore")
+            new = text.replace(
+                'TARGET_INSTRUMENT "GretagMacbeth i1 Pro"',
+                'TARGET_INSTRUMENT "X-Rite ColorMunki"',
+            )
+            if new != text:
+                ti2.write_text(new, encoding="utf-8")
+                log.info("Patched %s: i1 Pro → ColorMunki (triple density)", ti2.name)
+            else:
+                log.warning("ti2 had no i1 Pro line to patch: %s", ti2)
+        except OSError as exc:
+            log.error("Could not patch ti2 %s: %s", ti2, exc)
 
     def _stamp_tiff_metadata(self, tiffs: list[Path], params: "ChartParams") -> None:
         """Stamp the actual targen/printtarg commands (and optional notes) into each TIFF."""
@@ -510,8 +546,15 @@ class ChartCreator:
 
     def _build_printtarg_args(self, p: ChartParams) -> list[str]:
         args: list[str] = []
-        # printtarg uses "3p" for i1Pro 3 Plus; help text lists "p3" but that's a typo
-        pt_instr = "3p" if p.instrument == "p3" else p.instrument
+        # Triple-density (CM + rig) emulates the i1Pro layout: force -ii1 plus
+        # the tuned scale/margin/strip-limit; mutual exclusion in the UI keeps
+        # -h off, but we re-check defensively below.
+        triple = p.triple_density and p.instrument == "CM"
+        if triple:
+            pt_instr = "i1"
+        else:
+            # printtarg uses "3p" for i1Pro 3 Plus; help text lists "p3" but that's a typo
+            pt_instr = "3p" if p.instrument == "p3" else p.instrument
         args.append(f"-i{pt_instr}")
         args.append(f"-p{p.paper}")
         dpi_flag = "-T" if p.tiff_16bit else "-t"
@@ -520,24 +563,30 @@ class ChartCreator:
         # patches). -L only affects strip instruments (i1, p3). Filter
         # so leftover UI state can't append no-op flags to the recorded
         # command in stamped TIFF metadata.
-        if p.double_density and p.instrument in {"CM", "SS"}:
+        if not triple and p.double_density and p.instrument in {"CM", "SS"}:
             args.append("-h")
         # ChromIQ-style clipping border forces -L regardless of the per-chart
         # toggle so printtarg fills the page with patches; we manufacture the
-        # clip strip post-process in _stamp_tiff_metadata.
-        force_l = _chromiq_clip_active(p)
-        if (p.disable_left_border or force_l) and p.instrument in {"i1", "p3"}:
+        # clip strip post-process in _stamp_tiff_metadata. Triple density
+        # uses the i1 strip layout and the suppress-LB widget is hidden in
+        # that mode, so -L is forced unconditionally too.
+        force_l = _chromiq_clip_active(p) or triple
+        l_applies = p.instrument in {"i1", "p3"} or triple
+        if (p.disable_left_border or force_l) and l_applies:
             args.append("-L")
-        if abs(p.patch_scale - 1.0) > 0.01:
-            args += [f"-a{p.patch_scale:.2f}"]
-        if p.margin_mm != 6:
-            args += [f"-m{p.margin_mm}"]
-        args.append(f"-M{p.margin_mm}")
+        scale_eff = 1.3 if triple else p.patch_scale
+        margin_eff = 5 if triple else p.margin_mm
+        no_strip_limit_eff = True if triple else p.no_strip_limit
+        if abs(scale_eff - 1.0) > 0.01:
+            args += [f"-a{scale_eff:.2f}"]
+        if margin_eff != 6:
+            args += [f"-m{margin_eff}"]
+        args.append(f"-M{margin_eff}")
         if p.no_randomise:
             args.append("-r")
         if p.bw_spacers:
             args.append("-b")
-        if p.no_strip_limit:
+        if no_strip_limit_eff:
             args.append("-P")
         if p.extra_printtarg_args:
             args += shlex.split(p.extra_printtarg_args)
@@ -550,11 +599,13 @@ class ChartCreator:
 
     def _lookup_patches(self, p: ChartParams) -> int:
         eff_lb = _effective_suppress_lb(p)
-        if any(abs(p.patch_scale - s) <= 0.01 for s in SUPPORTED_PATCH_SCALES):
+        triple = p.triple_density and p.instrument == "CM"
+        if triple or any(abs(p.patch_scale - s) <= 0.01 for s in SUPPORTED_PATCH_SCALES):
             per_sheet = query_patches(p.instrument, p.paper, p.double_density,
                                       suppress_lb=eff_lb,
                                       margin_mm=p.margin_mm,
-                                      patch_scale=p.patch_scale)
+                                      patch_scale=p.patch_scale,
+                                      triple_density=triple)
             if per_sheet is not None:
                 return per_sheet * p.pages
         return self._binary_search(p) * p.pages
@@ -569,14 +620,17 @@ class ChartCreator:
         printtarg_bin = bin_dir / "printtarg"
 
         eff_lb = _effective_suppress_lb(p)
+        triple = p.triple_density and p.instrument == "CM"
         if not targen_bin.exists():
             log.warning("targen not found for binary search, returning estimate")
             return (query_patches(p.instrument, p.paper, p.double_density,
                                   suppress_lb=eff_lb,
                                   margin_mm=p.margin_mm,
-                                  patch_scale=p.patch_scale)
+                                  patch_scale=p.patch_scale,
+                                  triple_density=triple)
                     or query_patches(p.instrument, p.paper, p.double_density,
-                                     suppress_lb=eff_lb)
+                                     suppress_lb=eff_lb,
+                                     triple_density=triple)
                     or 500)
 
         pt_args_base = self._build_printtarg_args(p)[:-1]  # strip trailing target name
@@ -584,16 +638,20 @@ class ChartCreator:
         est_raw = (query_patches(p.instrument, p.paper, p.double_density,
                                  suppress_lb=eff_lb,
                                  margin_mm=p.margin_mm,
-                                 patch_scale=p.patch_scale)
+                                 patch_scale=p.patch_scale,
+                                 triple_density=triple)
                    or query_patches(p.instrument, p.paper, p.double_density,
-                                    suppress_lb=eff_lb)
+                                    suppress_lb=eff_lb,
+                                    triple_density=triple)
                    or 400)
         # Per-sheet capacity scales roughly as 1/patch_scale² — each patch
         # occupies patch_scale² of the standard cell area. Without this
         # adjustment the [0.5×, 2.5×] window misses the real value for
         # patch_scale > ~1.4, the loop never sees pages==1, and `best`
-        # stays at its initial sentinel.
-        scale_sq = max(p.patch_scale ** 2, 0.01)
+        # stays at its initial sentinel. Triple-density forces -a1.3
+        # regardless of the dataclass field, so account for that here.
+        scale_for_search = 1.3 if triple else p.patch_scale
+        scale_sq = max(scale_for_search ** 2, 0.01)
         est = max(20, int(est_raw / scale_sq))
 
         lo = max(20, int(est * 0.5))

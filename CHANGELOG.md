@@ -1,5 +1,48 @@
 # Changelog
 
+## v3.7.9
+ColorMunki + rig users get a new **Triple density** option in Create Chart
+that generates the chart with the i1Pro strip layout (`-ii1 -a1.3 -m5 -M5
+-P`) then rewrites the produced `.ti2` so chartread still talks to the
+ColorMunki — roughly **3×** the patch count of a plain ColorMunki chart at
+the same paper size, with no extra hardware beyond the existing measuring
+rig. Available in both Guided and Manual modules, mutually exclusive with
+Double density.
+
+### Features
+- **Triple density (ColorMunki + rig).** A new checkbox appears next to
+  Double density when ColorMunki is selected as the instrument in either
+  module. With it on, ChromIQ runs printtarg with `-ii1` (i1Pro strip
+  geometry) plus the tuned scale / margin / strip-limit overrides
+  (`-a 1.3 -m 5 -M 5 -P`) needed for the ColorMunki to read the denser
+  layout, then patches the produced `.ti2` so its `TARGET_INSTRUMENT`
+  line names the ColorMunki — chartread therefore selects the right
+  driver and the user sees their actual hardware in the dropdown.
+  Mutually exclusive with Double density: ticking one auto-unticks and
+  greys out the other. The suppress-left-clip-border control is hidden
+  while Triple density is active (it forces `-L` internally) and the
+  prior value is restored on untoggle. Saveable as a default in both
+  modules and as part of a Manual preset.
+- **Empirical patch-capacity table for Triple density.** New
+  `_PER_SHEET_CAPACITY_TRIPLE` / `_TRIPLE_NO_LB` tables in
+  `data/patch_db.py`, populated for all 14 supported paper sizes via the
+  new `scripts/measure_triple_density_capacity.py` helper. The guided
+  patch-count display, hidden-defaults info box and live Manual-mode
+  command preview all react to the toggle and show the correct count
+  and printtarg invocation.
+
+### Fixes / details
+- Disabled `QCheckBox` controls now actually look disabled — both the
+  indicator and the label dim under the dark and light themes. Prior to
+  this only `QCheckBox#param_label` (the manual-mode ParameterWidget
+  labels) had a `:disabled` rule, so plain QCheckBoxes (e.g. guided-mode
+  Double / Triple density) stayed visually enabled even when their
+  exclusion partner was ticked.
+- `data/parameters.yaml` and the manual-mode UI now label the `-h`
+  printtarg flag simply "Double density" instead of "Double density
+  (for measuring rig)" — the parenthetical didn't fit in the column and
+  is already covered in detail by the tooltip.
+
 ## v3.7.8
 Manual-mode presets now live on disk as plain `.json` files in a per-tab
 folder you can browse, copy and share with a normal file manager, and the

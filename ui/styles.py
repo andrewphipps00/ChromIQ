@@ -228,6 +228,8 @@ QCheckBox::indicator {{
 /* :checked color is overridden per-tab via setStyleSheet */
 QCheckBox::indicator:checked  {{ background: {ACCENT}; border-color: {ACCENT}; }}
 QCheckBox::indicator:hover    {{ border-color: {ACCENT_HOVER}; }}
+QCheckBox:disabled            {{ color: #6a6a6a; }}
+QCheckBox::indicator:disabled {{ background: #1f1f1f; border-color: #3a3a3a; }}
 QRadioButton {{ spacing: 6px; }}
 QRadioButton::indicator {{
     width: 14px; height: 14px;

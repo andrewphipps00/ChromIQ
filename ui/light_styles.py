@@ -323,6 +323,13 @@ QCheckBox::indicator:checked {{
 QCheckBox::indicator:hover {{
     border-color: {ACCENT_HOVER};
 }}
+QCheckBox:disabled {{
+    color: {LM_TEXT_FAINT};
+}}
+QCheckBox::indicator:disabled {{
+    background: {LM_BG_WINDOW};
+    border-color: {LM_BORDER};
+}}
 
 /* -- Log / terminal output — v2 light variant --------------------- */
 QPlainTextEdit#log {{
