@@ -278,10 +278,13 @@ def _stamp_one(path: Path, text: str) -> None:
     font_px = max(12, strip_w - 6)
     font = _pick_font(font_px)
     strip = _render_rotated_line(text, strip_h, strip_w, font, dtype, C)
-    # Center the strip horizontally inside the band so the text sits roughly
-    # equidistant from Argyll's existing text and the page edge.
-    band_center = (band_left + band_right) // 2
-    x0 = band_center - strip_w // 2
+    # Anchor the strip to the patch-side (left) edge of the band, not its
+    # center. The band is the widest white column run right of the patches;
+    # when the chart doesn't fill the sheet that run is a large empty area, so
+    # centering would strand the text mid-void. Left-anchoring keeps it snug
+    # against Argyll's vertical ID column / the patch block regardless of how
+    # much blank space follows.
+    x0 = band_left + _LINE_GAP_PX
     if x0 < band_left:
         x0 = band_left
     if x0 + strip_w > band_right:
