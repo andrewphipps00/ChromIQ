@@ -1269,18 +1269,26 @@ class TabChart(QWidget):
         )
 
     def _chromiq_clip_active_in_ui(self) -> bool:
-        """True iff ChromIQ-style clipping border setting is on AND the current
-        UI selection meets the gating conditions (i1Pro family + paper >= A4).
+        """True iff the ChromIQ-style clipping border WILL be applied.
+
+        Mirrors `workflow.chart_creator._chromiq_clip_active`: setting on AND
+        instrument is i1Pro family AND paper >= A4 AND the user did NOT
+        suppress the left clip border. Checking the suppress toggle disables
+        the ChromIQ branded strip even when the setting is on, so the per-
+        chart toggle remains the user's escape hatch.
         """
         if self._current_mode() == "guided":
             instr = self._instr_combo.currentData() or "i1"
             paper = self._paper_combo.currentData() or "A4"
+            suppress = self._lb_check.isChecked()
         else:
             instr = (self._manual_instr_pw.get_raw_value()
                      if self._manual_instr_pw is not None else "i1") or "i1"
             paper = (self._manual_paper_pw.get_raw_value()
                      if self._manual_paper_pw is not None else "A4") or "A4"
-        return self._chromiq_force_l(instr, paper)
+            suppress = (bool(self._manual_lb_pw.get_raw_value())
+                        if self._manual_lb_pw is not None else False)
+        return self._chromiq_force_l(instr, paper) and not suppress
 
     def _update_manual_lb_visibility(self) -> None:
         if self._manual_instr_pw is None:
@@ -1288,12 +1296,11 @@ class TabChart(QWidget):
         instr = self._manual_instr_pw.get_raw_value() or "i1"
         chromiq_clip = self._chromiq_clip_active_in_ui()
 
-        # ChromIQ-style hides the -L row entirely (-L is forced behind the
-        # scenes). Otherwise -L only matters for strip instruments.
+        # -L only matters for strip instruments. Even with ChromIQ-style on,
+        # the row stays visible: unchecked = branded strip, checked = no
+        # border (commands/notes route to the right margin as usual).
         if self._manual_lb_pw is not None:
-            self._manual_lb_pw.setVisible(
-                instr in {"i1", "p3"} and not chromiq_clip
-            )
+            self._manual_lb_pw.setVisible(instr in {"i1", "p3"})
 
         # Chart notes + stamp-commands rows stay available in all modes. Under
         # ChromIQ-style their content is routed into a clip-border column
@@ -1782,10 +1789,12 @@ class TabChart(QWidget):
             if self._dd_check.isChecked():
                 self._dd_check.setChecked(False)
         # -L only affects strip instruments (i1, p3). CM reads patches
-        # individually and SS is an XY flatbed — both ignore -L. Also hidden
-        # when ChromIQ-style clipping border is on (it forces -L behind the
-        # scenes, so the per-chart toggle becomes a no-op).
-        lb_visible = instr in {"i1", "p3"} and not self._chromiq_clip_active_in_ui()
+        # individually and SS is an XY flatbed — both ignore -L. Even with
+        # the ChromIQ-style clipping border on, the toggle stays visible:
+        # leaving it unchecked yields the branded strip; checking it
+        # suppresses the border entirely and routes commands/notes to the
+        # right margin as usual.
+        lb_visible = instr in {"i1", "p3"}
         self._lb_check.setVisible(lb_visible)
         self._lb_tooltip.setVisible(lb_visible)
 

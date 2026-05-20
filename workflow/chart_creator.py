@@ -22,13 +22,20 @@ log = get_logger(__name__)
 def _chromiq_clip_active(p: "ChartParams") -> bool:
     """True when ChromIQ-style clipping border applies to this chart.
 
-    Gating: setting enabled AND instrument is i1Pro family AND paper is large
-    enough for the rotated text to be legible. Mirrors the gating used by the
-    plain left-clip-info stamp so the two features stay in sync.
+    Gating: setting enabled AND the user did NOT suppress the left clip border
+    AND instrument is i1Pro family AND paper is large enough for the rotated
+    text to be legible.
+
+    The suppress toggle stays meaningful even with the setting on: leaving it
+    unchecked yields the ChromIQ branded strip (we force -L internally and
+    shift the patches to make room); checking it suppresses the border
+    entirely (-L, no shift, no strip) and routes commands/notes to the right
+    margin as usual.
     """
     from workflow.tiff_metadata import ALLOWED_LEFT_CLIP_PAPERS
     return (
         p.chromiq_clip_style
+        and not p.disable_left_border
         and p.instrument in {"i1", "p3"}
         and p.paper in ALLOWED_LEFT_CLIP_PAPERS
     )
