@@ -47,6 +47,11 @@ Supported instruments: X-Rite i1Pro, i1Pro 2, i1Pro 3, i1Pro 3 Plus, ColorMunki,
 > **Windows SmartScreen says "Windows protected your PC"?**
 > This is expected for apps without a paid code-signing certificate. Click **More info**, then **Run anyway**.
 
+> **Windows Defender flagged or removed `ChromIQ.exe`?**
+> ChromIQ is an open-source app packaged with PyInstaller and isn't code-signed yet, so Defender's heuristics sometimes report a false positive — this is common for unsigned PyInstaller apps and isn't specific to ChromIQ. The full source is public in this repo and each release is built by the GitHub Actions workflow from the matching tag.
+> - **If the EXE disappears after extracting:** open **Windows Security → Virus & threat protection → Protection history**, find the ChromIQ item, and choose **Restore** (or **Allow on device**).
+> - **If it keeps recurring:** add the extracted ChromIQ folder under **Virus & threat protection → Manage settings → Exclusions → Add an exclusion → Folder**.
+
 4. On first launch, ChromIQ automatically searches for ArgyllCMS in `C:\Program Files\ArgyllCMS\bin` and `%LOCALAPPDATA%\ArgyllCMS\bin`. If it isn't found, a setup guide opens — see [First-time setup](#first-time-setup) below.
 
 ---
