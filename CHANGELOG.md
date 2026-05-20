@@ -1,5 +1,31 @@
 # Changelog
 
+## v3.7.10
+Patch follow-up to v3.7.9: Triple density's pre-TD widget values
+(margin, patch scale, suppress-LB, don't-limit-strip-length) survive
+"Save defaults" and preset saves, so switching instruments later
+actually restores them.
+
+### Fixes
+- **Triple density defaults / preset round-trip.** Previously, clicking
+  "Save defaults" or "Save preset" while Triple density was active
+  persisted the i1Pro-emulation overrides (`-a 1.3 / -m 5 / -P on / -L
+  on`) as the saved widget values, clobbering the user's pre-TD
+  preferences. On the next launch the stash captured those override
+  values as if they were the "natural" state, so when the user later
+  switched away from ColorMunki the auto-untoggle's restore was a
+  visible no-op — values appeared to "stick". Save paths now persist
+  the stashed pre-TD values for those four flags when TD is on (both
+  Manual `_on_save_defaults` / `_on_preset_save` and the guided `-L`
+  default).
+- **Heal existing corrupted defaults on load.** If saved widget values
+  match the TD-override fingerprint (`a≈1.3`, `m=5`, `P=on`, `L=on`)
+  and the saved TD flag is on, the restore path substitutes Argyll
+  defaults (`1.0 / 6 / off / on`) before the toggle handler captures
+  the stash, so anyone who saved defaults under v3.7.9 with TD on gets
+  back into working shape on the first launch of v3.7.10 without
+  having to manually reset.
+
 ## v3.7.9
 ColorMunki + rig users get a new **Triple density** option in Create Chart
 that generates the chart with the i1Pro strip layout (`-ii1 -a1.3 -m5 -M5

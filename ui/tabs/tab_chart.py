@@ -1772,11 +1772,23 @@ class TabChart(QWidget):
 
     def _on_preset_save(self) -> None:
         capture: dict = {}
+        # When Triple density is active the four widgets it owns currently
+        # show the i1Pro-emulation overrides; persisting those into the
+        # preset would corrupt the stash on load and trap the preset in
+        # TD-shaped values. Use the stashed pre-TD values for those flags.
+        td_stash = (self._td_saved_layout
+                    if (self._manual_td_check is not None
+                        and self._manual_td_check.isChecked()
+                        and self._td_saved_layout)
+                    else None)
         for tool, widgets in self._manual_widgets.items():
             for pw in widgets:
                 if pw in self._d_cascade_widgets:
                     continue
-                v = pw.get_raw_value()
+                if td_stash is not None and tool == "printtarg" and pw.flag in td_stash:
+                    v = td_stash[pw.flag]
+                else:
+                    v = pw.get_raw_value()
                 if v is not None:
                     capture[f"{tool}_{pw.flag}"] = v
         for idx, pw in enumerate(self._d_cascade_widgets):
@@ -2195,18 +2207,37 @@ class TabChart(QWidget):
         s.set("chart_pages",               params.pages)
         s.set("chart_double_density",      params.double_density)
         s.set("chart_triple_density",      params.triple_density)
-        s.set("chart_disable_left_border", params.disable_left_border)
+        # If Triple density is on, the lb_check shows TD's forced True;
+        # save the stashed pre-TD value so the user's preference round-trips.
+        guided_lb_save = params.disable_left_border
+        if (params.triple_density
+                and getattr(self, "_td_saved_lb_check", None) is not None):
+            guided_lb_save = bool(self._td_saved_lb_check)
+        s.set("chart_disable_left_border", guided_lb_save)
         s.set("targen_device_type",        params.device_type)
         s.set("targen_good_mode",          params.good_mode)
         s.set("targen_white_patches",      params.white_patches)
         s.set("targen_black_patches",      params.black_patches)
         s.set("printtarg_dpi",             params.tiff_dpi)
-        # Save all manual widget values individually
+        # Save all manual widget values individually. When Triple density is
+        # active the four widgets it owns (-a / -m / -P / -L) currently show
+        # the i1Pro-emulation overrides; persisting those would clobber the
+        # user's pre-TD preferences and trap the next session in TD-shaped
+        # values that no longer round-trip through the stash. Save the
+        # stashed pre-TD values instead for those four flags.
+        td_stash = (self._td_saved_layout
+                    if (self._manual_td_check is not None
+                        and self._manual_td_check.isChecked()
+                        and self._td_saved_layout)
+                    else None)
         for tool, widgets in self._manual_widgets.items():
             for pw in widgets:
                 if pw in self._d_cascade_widgets:
                     continue
-                v = pw.get_raw_value()
+                if td_stash is not None and tool == "printtarg" and pw.flag in td_stash:
+                    v = td_stash[pw.flag]
+                else:
+                    v = pw.get_raw_value()
                 if v is not None:
                     s.set(_pw_settings_key(tool, pw.flag), v)
         for idx, pw in enumerate(self._d_cascade_widgets):
@@ -2450,13 +2481,36 @@ class TabChart(QWidget):
             self._manual_auto_patches_check.setChecked(auto_on)
             self._on_auto_patches_toggled(auto_on)
         # Restore manual triple-density. The toggle handler stashes the
-        # current -a / -m / -P widget values; that's fine even when the
-        # restore loop above just wrote those — the stash will capture
-        # the just-restored user values, which is exactly what we want.
-        if self._manual_td_check is not None:
-            self._manual_td_check.setChecked(
-                bool(s.get("manual_printtarg__triple_density", False))
+        # current -a / -m / -P / -L widget values, so they need to reflect
+        # the user's pre-TD preferences at this point — not the TD overrides
+        # themselves. Older builds (and the very first 3.7.9 build, before
+        # the save-time fix) persisted the override values directly when
+        # defaults were saved while TD was on; heal that on the way in by
+        # detecting the TD-override fingerprint and substituting sane
+        # defaults for the stash.
+        td_saved = bool(s.get("manual_printtarg__triple_density", False))
+        if td_saved and self._manual_td_check is not None:
+            def _approx(a, b, eps=0.01) -> bool:
+                try:
+                    return abs(float(a) - float(b)) <= eps
+                except (TypeError, ValueError):
+                    return False
+            looks_overridden = (
+                self._manual_a_pw is not None and _approx(self._manual_a_pw.get_raw_value(), 1.3)
+                and self._manual_m_pw is not None and int(self._manual_m_pw.get_raw_value() or 0) == 5
+                and self._manual_P_pw is not None and bool(self._manual_P_pw.get_raw_value())
+                and self._manual_lb_pw is not None and bool(self._manual_lb_pw.get_raw_value())
             )
+            if looks_overridden:
+                # Pretend the user had Argyll defaults pre-TD. Anything more
+                # specific is unrecoverable — the override values clobbered
+                # the original on save.
+                self._manual_a_pw.set_value(1.0)
+                self._manual_m_pw.set_value(6)
+                self._manual_P_pw.set_value(False)
+                self._manual_lb_pw.set_value(True)
+        if self._manual_td_check is not None:
+            self._manual_td_check.setChecked(td_saved)
         self._update_manual_lb_visibility()
         self._apply_instrument_default_margin()
 
