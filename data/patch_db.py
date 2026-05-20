@@ -188,18 +188,20 @@ PAPER_SIZES: list[str] = [
 ]
 
 # Paper sizes hidden in guided mode for specific instruments.
-# A3 portrait excluded for i1/p3: landscape variant (420x297) has ~43% more capacity.
+# A3 / A3+ portrait excluded for i1/p3: landscape variants (420x297 / 483x329)
+# have substantially more capacity on a strip reader.
 # Smallest photo formats excluded for p3: patch counts too low for a usable profile.
 EXCLUDED_PAPERS: dict[str, set[str]] = {
-    "i1": {"A3"},
+    "i1": {"A3", "329x483"},
     "p3": {"A3", "329x483", "127x178", "4x6"},
 }
 
 # When the selected paper becomes excluded on instrument switch, use this fallback.
 PAPER_FALLBACK: dict[str, str] = {
-    "A3":     "420x297",
+    "A3":      "420x297",
+    "329x483": "483x329",
     "127x178": "A4",
-    "4x6":    "A4",
+    "4x6":     "A4",
 }
 
 PAPER_LABELS: dict[str, str] = {
