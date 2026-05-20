@@ -1,5 +1,42 @@
 # Changelog
 
+## v3.7.8
+Manual-mode presets now live on disk as plain `.json` files in a per-tab
+folder you can browse, copy and share with a normal file manager, and the
+printtarg spacer options in Create Chart's Manual module stop fighting
+each other when "No spacers" is enabled.
+
+### Features
+- **Manual presets stored as `.json` files on disk.** Every saved preset
+  in Create Chart, Measure, Build Profile and Check & Refine is now an
+  individual `.json` file under
+  `~/Library/Preferences/ChromIQ/presets/<Tab>/` on macOS,
+  `%APPDATA%\ChromIQ\presets\<Tab>\` on Windows or
+  `$XDG_CONFIG_HOME/ChromIQ/presets/<Tab>/` on Linux — one file per
+  preset, one subfolder per tab. The preset row in each tab gets a new
+  folder-icon button that opens that subfolder in Finder / Explorer. To
+  share a preset, copy the `.json` and send it to a colleague; to
+  install a shared preset, drop the file into the matching folder on the
+  target machine and ChromIQ picks it up on next launch. First launch of
+  v3.7.8 silently migrates any presets that were previously kept inside
+  the QSettings plist into the new folder, so nothing is lost; the
+  legacy key is left in place as a safety net. Malformed files are
+  skipped at load time instead of crashing the tab.
+- **Mutually-exclusive printtarg spacer options** in the Create Chart
+  Manual module. Enabling "No spacers" (`-n`) now automatically greys
+  out and excludes "Force B&W spacers" (`-b`) and "Spacer-only scale"
+  (`-A`) — both of those only affect spacers, so under `-n` they were
+  silent no-ops that still appeared in the printtarg command if
+  previously set. The dependent rows become interactive again when
+  `-n` is turned off (unchecked, matching the existing `-K` / `-I`
+  calibration mutex). Tooltips on all three options now reference the
+  relationship.
+
+### Fixes / details
+- The "Manual Presets" tooltip dialog in all four tabs documents the
+  new folder button, file locations and sharing flow, and was widened
+  so the longer body fits without awkward re-wrapping.
+
 ## v3.7.7
 Polish pass on the v3.7.6 i1Pro clip-border work: the per-chart
 "suppress left clip border" toggle is honored again under ChromIQ-style

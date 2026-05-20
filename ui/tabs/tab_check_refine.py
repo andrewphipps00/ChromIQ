@@ -30,12 +30,18 @@ from PyQt6.QtWidgets import (
 )
 
 from core.logger import get_logger
+from core.preset_store import (
+    load_presets as _load_tab_presets,
+    reveal_in_file_manager,
+    save_presets as _save_tab_presets,
+    tab_dir,
+)
 from core.resource_path import resource_path
 from ui.fade_scroll import FadeScrollArea
 from ui.gamut_panel import GamutPanel
 from ui.tab_header import TabHeader
 from ui.tooltip_button import TooltipButton
-from ui.widgets import NoScrollComboBox, NoScrollDoubleSpinBox, make_browse_button, open_file_dialog, set_preset_icon, tint_dialog_primary
+from ui.widgets import NoScrollComboBox, NoScrollDoubleSpinBox, make_browse_button, open_file_dialog, set_folder_icon, set_preset_icon, tint_dialog_primary
 
 _TAB_COLOR = "#9f82ff"  # Check & Refine tab accent
 from ui.styles import SPEC_VIOLET, TAB_COLORS
@@ -655,18 +661,39 @@ class TabCheckRefine(QWidget):
         set_preset_icon(self._m_preset_del_btn, "minus")
         self._m_preset_del_btn.setToolTip("Delete selected preset")
         self._m_preset_del_btn.setEnabled(False)
+        self._m_preset_reveal_btn = QPushButton(container)
+        self._m_preset_reveal_btn.setObjectName("icon_btn")
+        self._m_preset_reveal_btn.setFixedSize(28, 28)
+        set_folder_icon(self._m_preset_reveal_btn, "folder")
+        self._m_preset_reveal_btn.setToolTip(
+            "Open this tab's presets folder in Finder/Explorer.\n"
+            "Each preset is a plain .json file — copy one to a colleague\n"
+            "and they can drop it into their own folder to share."
+        )
+        self._m_preset_reveal_btn.clicked.connect(
+            lambda: reveal_in_file_manager(tab_dir("check_refine"))
+        )
         presets_row.addWidget(self._m_preset_add_btn)
         presets_row.addWidget(self._m_preset_del_btn)
+        presets_row.addWidget(self._m_preset_reveal_btn)
         presets_row.addWidget(TooltipButton(
             "Manual Presets",
             "Save and recall named snapshots of all Manual mode settings.\n\n"
             "  +  Save current parameter values as a new named preset.\n"
-            "  −  Delete the currently selected preset.\n\n"
+            "  −  Delete the currently selected preset.\n"
+            "  ▢  Open this tab's presets folder in Finder/Explorer.\n\n"
             "Select a preset from the dropdown to instantly restore all\n"
             "values. The Default entry always resets to built-in defaults.\n\n"
+            "Presets are stored as plain .json files — one per preset —\n"
+            "in a ChromIQ folder under your system's Preferences / AppData\n"
+            "/ config location. Use the folder button (▢) on the right of\n"
+            "the preset row to open it. To share a preset, copy the .json\n"
+            "out of that folder and send it to a colleague; to install a\n"
+            "shared preset, drop the .json into the matching folder on the\n"
+            "target machine and ChromIQ will pick it up on the next launch.\n\n"
             "Presets persist between sessions.",
             container,
-            min_width=520,
+            min_width=600,
         ))
         self._m_preset_combo.currentIndexChanged.connect(self._on_m_preset_selected)
         self._m_preset_add_btn.clicked.connect(self._on_m_preset_save)
@@ -929,14 +956,10 @@ class TabCheckRefine(QWidget):
     # ------------------------------------------------------------------
 
     def _m_load_presets(self) -> dict:
-        raw = self._settings.get("manual2_check_presets", "")
-        try:
-            return json.loads(raw) if raw else {}
-        except Exception:
-            return {}
+        return _load_tab_presets("check_refine", self._settings)
 
     def _m_save_presets(self, presets: dict) -> None:
-        self._settings.set("manual2_check_presets", json.dumps(presets))
+        _save_tab_presets("check_refine", presets)
 
     def _m_populate_preset_combo(self, presets: dict, select_name: str | None = None) -> None:
         self._m_preset_combo.blockSignals(True)

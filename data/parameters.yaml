@@ -540,6 +540,10 @@ parameters:
         Forces inter-strip spacers to be black/white instead of
         coloured.  Does not affect patch count or layout geometry.
 
+        Has no effect when "No Spacers" (-n) is enabled — this option
+        is greyed out and excluded from the printtarg command in that
+        case.
+
     - flag: "-P"
       name: "Don't Limit Strip Length"
       type: boolean
@@ -729,6 +733,10 @@ parameters:
         between strips or when you want to reclaim space by narrowing
         spacers while keeping patch size constant.
 
+        Has no effect when "No Spacers" (-n) is enabled — this option
+        is greyed out and excluded from the printtarg command in that
+        case.
+
     - flag: "-n"
       name: "No Spacers"
       type: boolean
@@ -742,6 +750,9 @@ parameters:
         direction.
         Disable spacers only if your measurement workflow explicitly
         does not rely on them (e.g. some flatbed scanner setups).
+
+        When enabled, "Force B&W Spacers" (-b) and "Spacer-Only Scale"
+        (-A) are automatically disabled since both only affect spacers.
 
     - flag: "-c"
       name: "Force Colored Spacers"

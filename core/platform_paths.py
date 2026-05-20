@@ -132,6 +132,22 @@ def log_dir() -> Path:
     return base
 
 
+def presets_dir() -> Path:
+    """Root directory for user-visible manual-tab preset .json files.
+
+    One subfolder per tab lives under this root. Users can browse, copy
+    and share preset files with a normal file manager.
+    """
+    if is_windows():
+        base = Path(os.environ.get("APPDATA", str(Path.home()))) / "ChromIQ"
+    elif is_macos():
+        base = Path.home() / "Library" / "Preferences" / "ChromIQ"
+    else:
+        xdg = os.environ.get("XDG_CONFIG_HOME")
+        base = (Path(xdg) if xdg else Path.home() / ".config") / "ChromIQ"
+    return base / "presets"
+
+
 def icc_install_dir() -> Path:
     """Where ``Install Profile`` writes the freshly built .icc."""
     if is_windows():

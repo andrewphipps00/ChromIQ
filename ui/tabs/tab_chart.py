@@ -31,6 +31,12 @@ from PyQt6.QtWidgets import (
 )
 
 from core.logger import get_logger
+from core.preset_store import (
+    load_presets as _load_tab_presets,
+    reveal_in_file_manager,
+    save_presets as _save_tab_presets,
+    tab_dir,
+)
 from core.resource_path import resource_path
 from data.patch_db import (
     EXCLUDED_PAPERS,
@@ -763,19 +769,41 @@ class TabChart(QWidget):
         self._preset_del_btn.setIconSize(QSize(14, 14))
         self._preset_del_btn.setToolTip("Delete selected preset")
         self._preset_del_btn.setEnabled(False)
+        self._preset_reveal_btn = QPushButton(w)
+        self._preset_reveal_btn.setObjectName("icon_btn")
+        self._preset_reveal_btn.setFixedSize(28, 28)
+        set_folder_icon(self._preset_reveal_btn, "folder")
+        self._preset_reveal_btn.setIconSize(QSize(14, 14))
+        self._preset_reveal_btn.setToolTip(
+            "Open this tab's presets folder in Finder/Explorer.\n"
+            "Each preset is a plain .json file — copy one to a colleague\n"
+            "and they can drop it into their own folder to share."
+        )
+        self._preset_reveal_btn.clicked.connect(
+            lambda: reveal_in_file_manager(tab_dir("create_chart"))
+        )
         presets_row.addWidget(self._preset_add_btn)
         presets_row.addWidget(self._preset_del_btn)
+        presets_row.addWidget(self._preset_reveal_btn)
         presets_row.addWidget(TooltipButton(
             "Manual Presets",
             "Save and recall named snapshots of all Manual mode settings.\n\n"
             "  +  Save current parameter values as a new named preset.\n"
-            "  −  Delete the currently selected preset.\n\n"
+            "  −  Delete the currently selected preset.\n"
+            "  ▢  Open this tab's presets folder in Finder/Explorer.\n\n"
             "Select a preset from the dropdown to instantly restore all\n"
             "values. The Default entry always resets to built-in defaults.\n\n"
+            "Presets are stored as plain .json files — one per preset —\n"
+            "in a ChromIQ folder under your system's Preferences / AppData\n"
+            "/ config location. Use the folder button (▢) on the right of\n"
+            "the preset row to open it. To share a preset, copy the .json\n"
+            "out of that folder and send it to a colleague; to install a\n"
+            "shared preset, drop the .json into the matching folder on the\n"
+            "target machine and ChromIQ will pick it up on the next launch.\n\n"
             "The target name field is not saved with presets.\n"
             "Presets persist between sessions.",
             w,
-            min_width=520,
+            min_width=600,
         ))
         layout.addWidget(presets_grp)
 
@@ -799,6 +827,9 @@ class TabChart(QWidget):
         self._manual_m_pw: ParameterWidget | None = None
         self._manual_cal_k_pw: ParameterWidget | None = None
         self._manual_cal_i_pw: ParameterWidget | None = None
+        self._manual_n_pw: ParameterWidget | None = None
+        self._manual_b_pw: ParameterWidget | None = None
+        self._manual_A_pw: ParameterWidget | None = None
         self._manual_auto_patches_check: QCheckBox | None = None
         self._manual_pages_spin: NoScrollSpinBox | None = None
         self._manual_pages_row: QWidget | None = None
@@ -875,6 +906,12 @@ class TabChart(QWidget):
                     self._manual_cal_k_pw = pw
                 if tool == "printtarg" and flag == "-I":
                     self._manual_cal_i_pw = pw
+                if tool == "printtarg" and flag == "-n":
+                    self._manual_n_pw = pw
+                if tool == "printtarg" and flag == "-b":
+                    self._manual_b_pw = pw
+                if tool == "printtarg" and flag == "-A":
+                    self._manual_A_pw = pw
 
                 if tool == "targen" and flag == "-D":
                     self._d_cascade_widgets.append(pw)
@@ -955,6 +992,7 @@ class TabChart(QWidget):
         self._update_manual_lb_visibility()
         self._apply_instrument_default_margin()
         self._connect_cal_mutex()
+        self._connect_spacer_mutex()
         self._connect_d_cascade()
         self._preset_combo.currentIndexChanged.connect(self._on_preset_selected)
         self._preset_add_btn.clicked.connect(self._on_preset_save)
@@ -1452,6 +1490,25 @@ class TabChart(QWidget):
         k.value_changed.connect(lambda: i.set_user_enabled(False) if k.is_enabled_by_user else None)
         i.value_changed.connect(lambda: k.set_user_enabled(False) if i.is_enabled_by_user else None)
 
+    def _connect_spacer_mutex(self) -> None:
+        n = self._manual_n_pw
+        if n is None:
+            return
+        n.value_changed.connect(self._apply_spacer_mutex)
+        self._apply_spacer_mutex()
+
+    def _apply_spacer_mutex(self) -> None:
+        n = self._manual_n_pw
+        if n is None:
+            return
+        suppress = n.is_enabled_by_user
+        for dep in (self._manual_b_pw, self._manual_A_pw):
+            if dep is None:
+                continue
+            if suppress and dep.is_enabled_by_user:
+                dep.set_user_enabled(False)
+            dep.setEnabled(not suppress)
+
     def _connect_d_cascade(self) -> None:
         for i, pw in enumerate(self._d_cascade_widgets):
             pw.value_changed.connect(lambda _=None, idx=i: self._on_d_cascade(idx))
@@ -1480,14 +1537,10 @@ class TabChart(QWidget):
     # ------------------------------------------------------------------
 
     def _load_presets_from_settings(self) -> dict:
-        raw = self._settings.get("manual_presets", "")
-        try:
-            return json.loads(raw) if raw else {}
-        except Exception:
-            return {}
+        return _load_tab_presets("create_chart", self._settings)
 
     def _save_presets_to_settings(self, presets: dict) -> None:
-        self._settings.set("manual_presets", json.dumps(presets))
+        _save_tab_presets("create_chart", presets)
 
     def _populate_preset_combo(self, presets: dict, select_name: str | None = None) -> None:
         self._preset_combo.blockSignals(True)
