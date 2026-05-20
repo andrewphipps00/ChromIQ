@@ -1,5 +1,46 @@
 # Changelog
 
+## v3.7.7
+Polish pass on the v3.7.6 i1Pro clip-border work: the per-chart
+"suppress left clip border" toggle is honored again under ChromIQ-style
+(was previously hidden and force-on), the right-margin command / notes
+stamp now hugs the patch block on sparse charts instead of floating in
+empty space, and A3+ portrait is removed from the i1Pro guided paper
+list since its landscape twin holds substantially more patches.
+
+_Follow-up to v3.7.6, in response to user feedback from @pharmacist on
+the [printerknowledge](https://www.printerknowledge.com) forum._
+
+### Features
+- **Suppress-left-clip toggle respected under ChromIQ-style.** With the
+  "ChromIQ-style clipping border" preference enabled, the per-chart
+  "Suppress left clip border (-L)" control stays visible and functional
+  in both Guided and Manual. Unchecked → the branded clip strip applies
+  as before (forces `-L` internally, shifts the patches, routes commands
+  and notes into a clip-border column). Checked → the border is fully
+  suppressed: `-L` passes through, no patch shift, no branded stamp, and
+  the targen / printtarg commands and chart notes print on the right
+  margin as usual. The toggle now acts as a clean opt-out per chart
+  instead of an all-or-nothing preference.
+
+### Fixes / details
+- **Right-margin stamp anchored to the patch side.** The targen /
+  printtarg command line and chart notes were previously centered inside
+  the widest white run right of the patches. On charts whose patch
+  block doesn't fill the page (e.g. a small custom target), that run is
+  a huge empty area, so centering stranded the text mid-void. The stamp
+  now left-anchors to the patch-side edge of the band with a small gap,
+  clamped so it can't run past the page edge — it sits snug against
+  Argyll's vertical ID column regardless of how much blank space
+  follows. Full-page charts are essentially unchanged.
+- **A3+ portrait removed from the i1Pro guided paper list.** The
+  i1Pro strip reader gets substantially more patches per sheet on the
+  landscape variant (483 × 329) than the portrait one (329 × 483) at
+  the same physical paper size. A3+ portrait was already excluded for
+  i1Pro 3 Plus; do the same for i1Pro, and fall back to the landscape
+  variant on instrument switch so the user doesn't drop back to A4
+  unintentionally. Manual mode is unchanged.
+
 ## v3.7.6
 Turns the otherwise-blank i1Pro left clip strip into useful, ChromIQ-branded
 chart documentation: a chart summary, a fill-in-the-blank archival form, the
