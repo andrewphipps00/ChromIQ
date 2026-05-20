@@ -46,15 +46,22 @@ class TooltipButton(QToolButton):
         self.setObjectName("tooltip_btn")
         self.setToolTip(f"{title}\n\nClick for details")
         self.setFixedSize(QSize(_ICON_SIZE + 4, _ICON_SIZE + 4))
+        self._explicitly_disabled = False
         self._set_icon()
         self.clicked.connect(self._show_dialog)
         log.debug("TooltipButton created: %s", title)
 
     # ------------------------------------------------------------------
+    def setEnabled(self, enabled: bool) -> None:
+        self._explicitly_disabled = not enabled
+        super().setEnabled(enabled)
+
     def changeEvent(self, event: QEvent) -> None:
         super().changeEvent(event)
-        if event.type() == QEvent.Type.EnabledChange and not self.isEnabled():
-            self.setEnabled(True)
+        if (event.type() == QEvent.Type.EnabledChange
+                and not self.isEnabled()
+                and not self._explicitly_disabled):
+            super().setEnabled(True)
 
     def _set_icon(self) -> None:
         color = getattr(self, "_color_override", None) or self.__class__.ACCENT

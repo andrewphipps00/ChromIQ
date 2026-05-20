@@ -4,7 +4,9 @@
 Patch follow-up to v3.7.9: Triple density's pre-TD widget values
 (margin, patch scale, suppress-LB, don't-limit-strip-length) survive
 "Save defaults" and preset saves, so switching instruments later
-actually restores them.
+actually restores them. Plus a round of polish on disabled-state
+indicators in Create Chart so greying actually matches what's
+clickable.
 
 ### Fixes
 - **Triple density defaults / preset round-trip.** Previously, clicking
@@ -25,6 +27,32 @@ actually restores them.
   the stash, so anyone who saved defaults under v3.7.9 with TD on gets
   back into working shape on the first launch of v3.7.10 without
   having to manually reset.
+- **Tooltip ⓘ icons grey out with their option.** In the guided
+  Create Chart Double-/Triple-density row, ticking one option
+  greyed the *checkbox* of the other but left its tooltip ⓘ
+  fully active — visually inconsistent with the rest of the row.
+  `TooltipButton` had a `changeEvent` override that silently
+  re-enabled itself the moment anything tried to disable it,
+  which cancelled direct `setEnabled(False)` calls. The override
+  now tracks whether the disable was explicit (preserved) versus
+  an incidental parent-cascade (still re-enabled as a safety net),
+  and the guided / manual toggle handlers explicitly disable the
+  paired ⓘ button on the inactive option.
+- **Manual Double-density now greys out Triple-density too.** The
+  mutex was wired one direction only (toggling Triple disabled the
+  Double `ParameterWidget` and its tooltip via parent cascade).
+  Ticking Double now also disables the whole Triple-density row
+  — label, checkbox and ⓘ tooltip — and unticks Triple if it was
+  active, so values previously stashed by the TD handler get
+  properly restored.
+- **Spacer options are fully mutually exclusive in Manual mode.**
+  Force B&W Spacers (`-b`) and Force Colored Spacers (`-c`) now
+  grey each other out when one is checked, so only one can be
+  active at a time. When No Spacers (`-n`) is enabled, all three
+  spacer-related options — `-b`, `-c` and Spacer-Only Scale
+  (`-A`) — are unchecked and greyed out, since none of them have
+  any effect without spacers. Previously `-c` was unwired and
+  stayed clickable in all states.
 
 ## v3.7.9
 ColorMunki + rig users get a new **Triple density** option in Create Chart

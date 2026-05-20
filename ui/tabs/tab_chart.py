@@ -854,6 +854,7 @@ class TabChart(QWidget):
         self._manual_cal_i_pw: ParameterWidget | None = None
         self._manual_n_pw: ParameterWidget | None = None
         self._manual_b_pw: ParameterWidget | None = None
+        self._manual_c_pw: ParameterWidget | None = None
         self._manual_A_pw: ParameterWidget | None = None
         self._manual_auto_patches_check: QCheckBox | None = None
         self._manual_pages_spin: NoScrollSpinBox | None = None
@@ -922,6 +923,7 @@ class TabChart(QWidget):
                     pw.value_changed.connect(self._update_manual_lb_visibility)
                 if tool == "printtarg" and flag == "-h":
                     self._manual_dd_pw = pw
+                    pw.value_changed.connect(self._on_manual_dd_toggled)
                 if tool == "printtarg" and flag == "-i":
                     self._manual_instr_pw = pw
                     pw.value_changed.connect(self._update_manual_lb_visibility)
@@ -943,6 +945,8 @@ class TabChart(QWidget):
                     self._manual_n_pw = pw
                 if tool == "printtarg" and flag == "-b":
                     self._manual_b_pw = pw
+                if tool == "printtarg" and flag == "-c":
+                    self._manual_c_pw = pw
                 if tool == "printtarg" and flag == "-A":
                     self._manual_A_pw = pw
 
@@ -1516,6 +1520,17 @@ class TabChart(QWidget):
         ))
         return row_w
 
+    def _on_manual_dd_toggled(self) -> None:
+        """Mutual exclusion: toggling manual -h must grey out the Triple-density row."""
+        if self._manual_dd_pw is None:
+            return
+        dd_on = bool(self._manual_dd_pw.get_raw_value())
+        if (dd_on and self._manual_td_check is not None
+                and self._manual_td_check.isChecked()):
+            self._manual_td_check.setChecked(False)
+        if self._manual_td_row is not None:
+            self._manual_td_row.setEnabled(not dd_on)
+
     def _on_manual_td_toggled(self, checked: bool) -> None:
         """Apply / undo the triple-density layout overrides on the -a / -m / -P widgets."""
         # Mutual exclusion with the manual Double density widget.
@@ -1638,6 +1653,10 @@ class TabChart(QWidget):
         if n is None:
             return
         n.value_changed.connect(self._apply_spacer_mutex)
+        if self._manual_b_pw is not None:
+            self._manual_b_pw.value_changed.connect(self._apply_spacer_mutex)
+        if self._manual_c_pw is not None:
+            self._manual_c_pw.value_changed.connect(self._apply_spacer_mutex)
         self._apply_spacer_mutex()
 
     def _apply_spacer_mutex(self) -> None:
@@ -1645,12 +1664,26 @@ class TabChart(QWidget):
         if n is None:
             return
         suppress = n.is_enabled_by_user
-        for dep in (self._manual_b_pw, self._manual_A_pw):
-            if dep is None:
-                continue
-            if suppress and dep.is_enabled_by_user:
-                dep.set_user_enabled(False)
-            dep.setEnabled(not suppress)
+        b, c, A = self._manual_b_pw, self._manual_c_pw, self._manual_A_pw
+
+        if suppress:
+            for dep in (b, c, A):
+                if dep is None:
+                    continue
+                if dep.is_enabled_by_user:
+                    dep.set_user_enabled(False)
+                dep.setEnabled(False)
+            return
+
+        if A is not None:
+            A.setEnabled(True)
+
+        b_on = b is not None and b.is_enabled_by_user
+        c_on = c is not None and c.is_enabled_by_user
+        if b is not None:
+            b.setEnabled(not c_on)
+        if c is not None:
+            c.setEnabled(not b_on)
 
     def _connect_d_cascade(self) -> None:
         for i, pw in enumerate(self._d_cascade_widgets):
@@ -2043,11 +2076,13 @@ class TabChart(QWidget):
         if checked and self._td_check.isChecked():
             self._td_check.setChecked(False)
         self._td_check.setEnabled(not checked)
+        self._td_tooltip.setEnabled(not checked)
 
     def _on_guided_td_toggled(self, checked: bool) -> None:
         if checked and self._dd_check.isChecked():
             self._dd_check.setChecked(False)
         self._dd_check.setEnabled(not checked)
+        self._dd_tooltip.setEnabled(not checked)
         # Triple density forces -L internally — stash the user's lb_check
         # value and force it on; restore on untoggle.
         if checked:
