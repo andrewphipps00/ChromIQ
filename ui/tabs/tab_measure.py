@@ -643,31 +643,41 @@ class TabMeasure(QWidget):
             cg.addLayout(row)
             return cb, tip
 
-        # Bidirectional row: the -B checkbox, an "Auto" toggle a short gap to
-        # its right (derives -B from the loaded chart's instrument via
-        # _refresh_bidir_autodetect and greys out the checkbox while on), and
-        # the tooltip pinned to the row's right edge.
+        # Bidirectional row: the -B checkbox with its own tooltip on the left,
+        # then an "Auto" toggle with its own tooltip on the right (Auto derives
+        # -B from the loaded chart's instrument via _refresh_bidir_autodetect
+        # and greys out the checkbox while on). A stretch between the two
+        # option/tooltip groups spreads them across the column width.
         bidir_row = QHBoxLayout()
         self._bidir_cb = QCheckBox("Disable bidirectional strip recognition (-B)", left)
         self._bidir_cb.setChecked(True)
         bidir_row.addWidget(self._bidir_cb)
-        bidir_row.addSpacing(24)
+        bidir_row.addSpacing(18)
+        bidir_row.addWidget(TooltipButton(
+            "Bidirectional reading (-B)",
+            "Sets whether a strip can be read in both directions or only one.\n\n"
+            "Tick the box to force one-direction reading (-B); untick it to\n"
+            "allow scanning a strip either way. The i1 Pro (including i1 Pro 3)\n"
+            "can read both directions, while the ColorMunki reads one only.\n\n"
+            "While Auto is on this is decided for you and the box is locked —\n"
+            "turn Auto off to choose it yourself.",
+            left,
+        ))
+        bidir_row.addStretch()
         self._bidir_auto_cb = QCheckBox("Auto", left)
         self._bidir_auto_cb.setChecked(True)
         self._bidir_auto_cb.toggled.connect(
             lambda _checked: self._apply_bidir_auto_state("guided")
         )
         bidir_row.addWidget(self._bidir_auto_cb)
-        bidir_row.addStretch()
+        bidir_row.addSpacing(18)
         bidir_row.addWidget(TooltipButton(
-            "Bidirectional reading (-B)",
-            "Sets whether the chart can be read in both directions or only one.\n\n"
-            "Auto (recommended) reads the instrument saved in your loaded chart\n"
-            "and decides for you: i1 Pro (including i1 Pro 3) reads both\n"
-            "directions, the ColorMunki reads one direction only. While Auto is\n"
-            "on, the checkbox is locked and shows the chosen setting.\n\n"
-            "Turn Auto off to choose yourself — tick the box to force\n"
-            "one-direction reading (-B), untick it to allow both directions.",
+            "Auto (recommended)",
+            "Sets the bidirectional option for you from the instrument saved\n"
+            "in your loaded chart: the i1 Pro (including i1 Pro 3) reads both\n"
+            "directions, the ColorMunki reads one direction only.\n\n"
+            "While Auto is on, the checkbox to the left is locked and shows\n"
+            "the chosen setting. Turn Auto off to set it yourself.",
             left,
         ))
         cg.addLayout(bidir_row)
@@ -926,29 +936,40 @@ class TabMeasure(QWidget):
             mcg.addLayout(row)
             return cb
 
-        # Bidirectional row with an "Auto" toggle a short gap to the right
-        # (mirrors guided).
+        # Bidirectional row (mirrors guided): the -B checkbox with its own
+        # tooltip on the left, then an "Auto" toggle with its own tooltip on
+        # the right, a stretch between the two groups spreads them across the
+        # column width.
         m_bidir_row = QHBoxLayout()
         self._m_bidir_cb = QCheckBox("Disable bidirectional strip recognition (-B)", left)
         self._m_bidir_cb.setChecked(False)
         m_bidir_row.addWidget(self._m_bidir_cb)
-        m_bidir_row.addSpacing(24)
+        m_bidir_row.addSpacing(18)
+        m_bidir_row.addWidget(TooltipButton(
+            "Bidirectional reading (-B)",
+            "Sets whether a strip can be read in both directions or only one.\n\n"
+            "Tick the box to force one-direction reading (-B); untick it to\n"
+            "allow scanning a strip either way. The i1 Pro (including i1 Pro 3)\n"
+            "can read both directions, while the ColorMunki reads one only.\n\n"
+            "While Auto is on this is decided for you and the box is locked —\n"
+            "turn Auto off to choose it yourself.",
+            left,
+        ))
+        m_bidir_row.addStretch()
         self._m_bidir_auto_cb = QCheckBox("Auto", left)
         self._m_bidir_auto_cb.setChecked(True)
         self._m_bidir_auto_cb.toggled.connect(
             lambda _checked: self._apply_bidir_auto_state("manual")
         )
         m_bidir_row.addWidget(self._m_bidir_auto_cb)
-        m_bidir_row.addStretch()
+        m_bidir_row.addSpacing(18)
         m_bidir_row.addWidget(TooltipButton(
-            "Bidirectional reading (-B)",
-            "Sets whether the chart can be read in both directions or only one.\n\n"
-            "Auto (recommended) reads the instrument saved in your loaded chart\n"
-            "and decides for you: i1 Pro (including i1 Pro 3) reads both\n"
-            "directions, the ColorMunki reads one direction only. While Auto is\n"
-            "on, the checkbox is locked and shows the chosen setting.\n\n"
-            "Turn Auto off to choose yourself — tick the box to force\n"
-            "one-direction reading (-B), untick it to allow both directions.",
+            "Auto (recommended)",
+            "Sets the bidirectional option for you from the instrument saved\n"
+            "in your loaded chart: the i1 Pro (including i1 Pro 3) reads both\n"
+            "directions, the ColorMunki reads one direction only.\n\n"
+            "While Auto is on, the checkbox to the left is locked and shows\n"
+            "the chosen setting. Turn Auto off to set it yourself.",
             left,
         ))
         mcg.addLayout(m_bidir_row)

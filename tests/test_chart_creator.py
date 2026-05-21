@@ -188,6 +188,35 @@ def test_query_patches_no_strip_limit_ignored_for_cm_and_ss() -> None:
             == query_patches("SS", "A4", no_strip_limit=False))
 
 
+def test_query_patches_a2_landscape_all_instruments() -> None:
+    """A2 landscape (594x420) is measured for every instrument + dd combo."""
+    assert query_patches("i1", "594x420", suppress_lb=True, margin_mm=6) is not None
+    assert query_patches("p3", "594x420", suppress_lb=True, margin_mm=6) is not None
+    assert query_patches("CM", "594x420", double_density=False) is not None
+    assert query_patches("CM", "594x420", double_density=True) is not None
+    assert query_patches("SS", "594x420", double_density=False) is not None
+    assert query_patches("SS", "594x420", double_density=True) is not None
+    assert query_patches("CM", "594x420", triple_density=True) is not None
+
+
+def test_query_patches_a2_landscape_beats_portrait_for_strip_readers() -> None:
+    """Landscape A2 packs more strips than portrait A2 on i1/p3 (the whole point)."""
+    for instr in ("i1", "p3"):
+        port = query_patches(instr, "A2", suppress_lb=True, margin_mm=6)
+        land = query_patches(instr, "594x420", suppress_lb=True, margin_mm=6)
+        assert port is not None and land is not None
+        assert land > port, f"{instr}: landscape A2 should beat portrait"
+
+
+def test_query_patches_a2_landscape_regression_guard() -> None:
+    """Exact-value guards against accidental table edits."""
+    assert query_patches("i1", "594x420", suppress_lb=True, margin_mm=6) == 1512
+    assert query_patches("p3", "594x420", suppress_lb=True, margin_mm=6) == 324
+    assert query_patches("i1", "594x420", suppress_lb=True, margin_mm=6,
+                         no_strip_limit=True) == 2520
+    assert query_patches("CM", "594x420", triple_density=True) == 1485
+
+
 def test_grey_ramp_reference_default_anchor() -> None:
     """At the default anchor (560 patches) the result is the classic -g32 -e4 -B4."""
     assert manual_neutrals(560) == (32, 4, 4)
@@ -249,9 +278,9 @@ def test_i1_defaults_only_uses_supported_values() -> None:
 
 
 def test_instrument_default_margin_keys() -> None:
-    """i1/p3 default to 10mm; CM/SS keep 6mm."""
+    """i1 defaults to 10mm (edge-drift headroom); p3/CM/SS use printtarg's 6mm."""
     assert INSTRUMENT_DEFAULT_MARGIN["i1"] == 10
-    assert INSTRUMENT_DEFAULT_MARGIN["p3"] == 10
+    assert INSTRUMENT_DEFAULT_MARGIN["p3"] == 6
     assert INSTRUMENT_DEFAULT_MARGIN["CM"] == 6
     assert INSTRUMENT_DEFAULT_MARGIN["SS"] == 6
 

@@ -446,9 +446,10 @@ parameters:
     - flag: "-p"
       name: "Paper Size"
       type: choice
-      choices: ["A2", "329x483", "483x329", "A3", "420x297", "11x17", "Legal", "A4", "A4R", "Letter", "LetterR", "203x254", "127x178", "4x6", "custom"]
+      choices: ["A2", "594x420", "329x483", "483x329", "A3", "420x297", "11x17", "Legal", "A4", "A4R", "Letter", "LetterR", "203x254", "127x178", "4x6", "custom"]
       labels:
-        - "A2 (420 × 594 mm)"
+        - "A2 Portrait (420 × 594 mm)"
+        - "A2 Landscape (594 × 420 mm)"
         - "A3+ Portrait (329 × 483 mm)"
         - "A3+ Landscape (483 × 329 mm)"
         - "A3 Portrait (297 × 420 mm)"
