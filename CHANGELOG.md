@@ -1,5 +1,37 @@
 # Changelog
 
+## v3.7.13
+Manual mode now has the same smart neutral-axis defaults that Guided
+mode uses — opt-in per row. Each of White patches, Black patches and
+Grey axis steps gets an **Auto** checkbox: tick it and ChromIQ sizes
+that value from the chart's total patch count, so it scales as you
+change paper, pages or instrument. Untick to type your own number any
+time.
+
+### Features
+- **Auto White / Black / Grey in Manual mode.** New Auto checkboxes
+  next to `-e`, `-B` and `-g`, mirroring the existing Auto patch-count
+  option. When on, the value is computed from the chart's total patch
+  count (whether you set it by hand or it's auto-estimated):
+  a ~560-patch chart gets `-g32 -e4 -B4`; each doubling of the total
+  doubles the grey steps (cap 128, floor 8) and grows the white/black
+  anchors by 50 % (cap 8, floor 2). The values update live in the
+  command preview and re-resolve against the real patch count at
+  Generate. State is saved with defaults and presets.
+- **Extensive plain-language tooltips** for White / Black / Grey
+  patches explaining what each does and exactly how the Auto option
+  picks its number, with wider info windows so the text fits.
+
+### Changes
+- **Unified neutral anchor at 560 patches across both modes.** Guided
+  mode now shares Manual's anchor and the same compounding curve for
+  white/black. Practical effect on Guided: i1Pro + A4 portrait reads
+  `-g30` (the new anchor is A4 *landscape* = 560 → `-g32`), and A3
+  landscape lands on a clean `-g64` (exactly 2× A4 landscape).
+- **Auto checkboxes grey only the input, not the row name.** Ticking
+  any Auto box (including the existing patch-count one) now keeps the
+  parameter label readable and greys out just its spinbox.
+
 ## v3.7.12
 Follow-up to v3.7.11's capacity-aware neutrals. Two real-world gaps in
 the formula are now closed: bigger paper sizes increase the grey ramp

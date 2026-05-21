@@ -288,17 +288,21 @@ class ParameterWidget(QWidget):
                 self._tooltip_btn._min_width = tooltip_min_width
             self._tooltip_btn.setToolTip(f"{tooltip_title}\n\nClick for details")
 
-    def set_control_enabled(self, enabled: bool) -> None:
-        """Enable/disable the control + browse button + label as a unit.
+    def set_control_enabled(self, enabled: bool,
+                            include_label: bool = True) -> None:
+        """Enable/disable the control + browse button (+ label by default).
 
         The label tracks the control so the ``:disabled`` QSS selector
-        greys it out in both light and dark themes.
+        greys it out in both light and dark themes. Pass
+        ``include_label=False`` to leave the label at full strength — used
+        by the Auto checkboxes, where the row name should stay readable
+        while only the input is greyed out.
         """
         if self._control is not None:
             self._control.setEnabled(enabled)
         if self._browse_btn is not None:
             self._browse_btn.setEnabled(enabled)
-        if self._label is not None:
+        if include_label and self._label is not None:
             self._label.setEnabled(enabled)
 
     def _on_enable_toggled(self, checked: bool) -> None:

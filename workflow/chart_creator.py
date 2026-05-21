@@ -1,6 +1,7 @@
 """Orchestrates targen + printtarg to create a test chart."""
 from __future__ import annotations
 
+import math
 import shlex
 import subprocess
 import tempfile
@@ -53,44 +54,90 @@ def _effective_suppress_lb(p: "ChartParams") -> bool:
     return p.disable_left_border or _chromiq_clip_active(p) or triple
 
 
-# Guided-mode neutrals: -g, -e, -B targets. Manual Mode is the escape hatch
-# and stays untouched.
+# Auto neutrals: -g, -e, -B targets. Shared between Guided Mode (always
+# auto-computed from instrument+paper+pages) and Manual Mode (opt-in per
+# row via Auto checkboxes).
 #
-# Anchor: i1Pro + A4, margin=10, patch_scale=0.95, clip suppressed (-L). That
-# combo yields 528 patches and is the configuration where -g32 must land.
+# Anchor: 560 total patches → -g32 -e4 -B4. 560 matches i1Pro+A4 landscape
+# at the m10_a0.95 -L reference layout and gives a clean "A3 landscape =
+# 2× A4 landscape" ratio in Guided Mode.
 #
-# Scaling key: "effective sheets" = nominal_patches(instrument, paper) / 528.
-# A bigger paper or a higher-capacity instrument has more effective sheets,
-# so neutrals scale up; a smaller paper or low-capacity rig has fewer, so
-# they scale down. Multi-page just multiplies the nominal.
+# Scaling: "effective sheets" = total_patches / 560.
+#   -g  scales linearly: 32 × eff_sheets, capped at 128.
+#   -e/-B compound ×1.5 per doubling of eff_sheets, capped at 8.
+#   floors: -g ≥ 8, -e/-B ≥ 2.
 #
-# Layout knobs (margin, patch_scale) do NOT move neutrals — the nominal
-# lookup pins them at the reference values. suppress_lb does follow the
-# chart's actual state, because on i1Pro/p3 the clip strip eats real space
-# and the resulting budget is genuinely smaller.
+# For Guided Mode the total_patches is the patch_db nominal × pages, with
+# layout knobs (margin, patch_scale) pinned to reference values and
+# suppress_lb / density flags following the chart's actual state. For
+# Manual Mode the user supplies total_patches directly (or it's the auto-
+# estimated patch count from -f Auto).
+REF_BUDGET                = 560   # query_patches("i1","A4R", suppress_lb=True,
+                                  #                margin_mm=10, patch_scale=0.95)
 GUIDED_REF_MARGIN_MM      = 10
 GUIDED_REF_PATCH_SCALE    = 0.95
-GUIDED_REF_BUDGET         = 528   # query_patches("i1","A4", suppress_lb=True,
-                                  #                margin_mm=10, patch_scale=0.95)
 GUIDED_GREY_REF_STEPS     = 32    # "1 effective sheet → 32 grey steps"
 GUIDED_GREY_MAX           = 128
 GUIDED_GREY_MIN           = 8
-GUIDED_NEUTRAL_PER_SHEET  = 2     # +2 anchors per extra effective sheet
+GUIDED_NEUTRAL_BASE       = 4     # -e/-B reference at eff_sheets = 1
+GUIDED_NEUTRAL_DOUBLE_X   = 1.5   # multiplier per doubling of eff_sheets
 GUIDED_NEUTRAL_MAX        = 8
 GUIDED_NEUTRAL_MIN        = 2
-GUIDED_NEUTRAL_BUDGET_FRC = 0.50  # neutrals consume ≤ 50 % of nominal budget
-# Low-capacity charts (ColorMunki single density, i1Pro 3 Plus on small
-# paper) drop the -e/-B base by 1 so the small budget isn't dominated by
-# anchors.
-GUIDED_LOW_CAPACITY_PS    = 200
+GUIDED_NEUTRAL_BUDGET_FRC = 0.50  # Guided-only: neutrals ≤ 50 % of nominal
+GUIDED_LOW_CAPACITY_PS    = 200   # Guided-only: drop -e/-B base by 1 here
 
-# Sanity check: keep GUIDED_REF_BUDGET in sync with patch_db.
-assert query_patches("i1", "A4", suppress_lb=True,
+# Back-compat alias (older import sites).
+GUIDED_REF_BUDGET         = REF_BUDGET
+
+# Sanity check: keep REF_BUDGET in sync with patch_db.
+assert query_patches("i1", "A4R", suppress_lb=True,
                      margin_mm=GUIDED_REF_MARGIN_MM,
-                     patch_scale=GUIDED_REF_PATCH_SCALE) == GUIDED_REF_BUDGET, (
-    "GUIDED_REF_BUDGET out of sync with patch_db — update the constant "
-    "or the patch_db entry."
+                     patch_scale=GUIDED_REF_PATCH_SCALE) == REF_BUDGET, (
+    "REF_BUDGET out of sync with patch_db — update the constant or the "
+    "patch_db entry."
 )
+
+
+def _neutrals_from_eff_sheets(eff_sheets: float,
+                              base_white: int,
+                              base_black: int) -> tuple[int, int, int]:
+    """Core math shared by Guided and Manual neutrals.
+
+    grey scales linearly (32 × eff_sheets); -e/-B compound by ×1.5 per
+    doubling. Floors and caps applied at the boundaries.
+    """
+    grey  = max(GUIDED_GREY_MIN,
+                min(GUIDED_GREY_MAX,
+                    round(GUIDED_GREY_REF_STEPS * eff_sheets)))
+    if eff_sheets > 0:
+        # 1.5^log2(eff) — equivalent to eff^log2(1.5). At eff=1 → 1×,
+        # at eff=2 → 1.5×, at eff=0.5 → 1/1.5×.
+        factor = GUIDED_NEUTRAL_DOUBLE_X ** math.log2(eff_sheets)
+    else:
+        factor = 0.0
+    white = max(GUIDED_NEUTRAL_MIN,
+                min(GUIDED_NEUTRAL_MAX, round(base_white * factor)))
+    black = max(GUIDED_NEUTRAL_MIN,
+                min(GUIDED_NEUTRAL_MAX, round(base_black * factor)))
+    return grey, white, black
+
+
+def manual_neutrals(total_patches: int,
+                    base_white: int = GUIDED_NEUTRAL_BASE,
+                    base_black: int = GUIDED_NEUTRAL_BASE) -> tuple[int, int, int]:
+    """Return (grey_steps, white_patches, black_patches) for Manual Mode.
+
+    Drives the per-row Auto checkboxes on -g / -e / -B. Total patches is
+    whatever the user (or the -f Auto estimator) currently has set. At the
+    anchor of 560 patches the result is the original suggester's
+    -g32 -e4 -B4.
+    """
+    if total_patches <= 0:
+        # Sentinel for the live preview when -f itself is still being
+        # auto-estimated and we don't have a real total to work from.
+        return GUIDED_GREY_MIN, base_white, base_black
+    eff = total_patches / REF_BUDGET
+    return _neutrals_from_eff_sheets(eff, base_white, base_black)
 
 
 def guided_neutrals(instrument: str,
@@ -134,7 +181,7 @@ def guided_neutrals(instrument: str,
         # the chart still gets sensible neutrals.
         eff_sheets = float(pages)
     else:
-        eff_sheets = (nominal * pages) / GUIDED_REF_BUDGET
+        eff_sheets = (nominal * pages) / REF_BUDGET
 
     if nominal is not None and nominal < GUIDED_LOW_CAPACITY_PS:
         eff_white = max(base_white - 1, GUIDED_NEUTRAL_MIN)
@@ -143,15 +190,9 @@ def guided_neutrals(instrument: str,
         eff_white = base_white
         eff_black = base_black
 
-    grey_ideal  = max(GUIDED_GREY_MIN,
-                      min(GUIDED_GREY_MAX,
-                          round(GUIDED_GREY_REF_STEPS * eff_sheets)))
-    white_ideal = max(GUIDED_NEUTRAL_MIN,
-                      min(GUIDED_NEUTRAL_MAX,
-                          round(eff_white + GUIDED_NEUTRAL_PER_SHEET * (eff_sheets - 1))))
-    black_ideal = max(GUIDED_NEUTRAL_MIN,
-                      min(GUIDED_NEUTRAL_MAX,
-                          round(eff_black + GUIDED_NEUTRAL_PER_SHEET * (eff_sheets - 1))))
+    grey_ideal, white_ideal, black_ideal = _neutrals_from_eff_sheets(
+        eff_sheets, eff_white, eff_black
+    )
 
     if nominal is None:
         return grey_ideal, white_ideal, black_ideal

@@ -865,6 +865,15 @@ class TabChart(QWidget):
         self._manual_c_pw: ParameterWidget | None = None
         self._manual_A_pw: ParameterWidget | None = None
         self._manual_auto_patches_check: QCheckBox | None = None
+        # Auto checkboxes for -e/-B/-g: when on, the value is auto-computed
+        # from the chart's total patch count via manual_neutrals() at submit
+        # and preview time. Mirrors the -f Auto pattern.
+        self._manual_e_pw: ParameterWidget | None = None
+        self._manual_B_pw: ParameterWidget | None = None
+        self._manual_g_pw: ParameterWidget | None = None
+        self._manual_auto_white_check: QCheckBox | None = None
+        self._manual_auto_black_check: QCheckBox | None = None
+        self._manual_auto_grey_check:  QCheckBox | None = None
         self._manual_pages_spin: NoScrollSpinBox | None = None
         self._manual_pages_row: QWidget | None = None
         self._bit8_radio: QRadioButton | None = None
@@ -924,6 +933,54 @@ class TabChart(QWidget):
                     pw.layout().insertWidget(insert_at, self._manual_auto_patches_check)
                     self._manual_auto_patches_check.toggled.connect(
                         self._on_auto_patches_toggled
+                    )
+
+                # White / Black / Grey-steps Auto checkboxes — mirror the -f
+                # pattern. When checked, the value is auto-computed from the
+                # chart's total patch count (whether user-set or itself auto).
+                if tool == "targen" and flag == "-e":
+                    self._manual_e_pw = pw
+                    pw._control.setMaximumWidth(90)
+                    self._manual_auto_white_check = QCheckBox("Auto", pw)
+                    self._manual_auto_white_check.setToolTip(
+                        "Auto-compute white patches (-e) from the chart's total\n"
+                        "patch count. Anchor: 560 patches → 4 whites. Doubling the\n"
+                        "total adds 50 % to the count, capped at 8 (min 2)."
+                    )
+                    insert_at = pw.layout().count() - 1
+                    pw.layout().insertWidget(insert_at, self._manual_auto_white_check)
+                    self._manual_auto_white_check.toggled.connect(
+                        lambda v: self._on_auto_neutral_toggled("white", v)
+                    )
+
+                if tool == "targen" and flag == "-B":
+                    self._manual_B_pw = pw
+                    pw._control.setMaximumWidth(90)
+                    self._manual_auto_black_check = QCheckBox("Auto", pw)
+                    self._manual_auto_black_check.setToolTip(
+                        "Auto-compute black patches (-B) from the chart's total\n"
+                        "patch count. Anchor: 560 patches → 4 blacks. Doubling the\n"
+                        "total adds 50 % to the count, capped at 8 (min 2)."
+                    )
+                    insert_at = pw.layout().count() - 1
+                    pw.layout().insertWidget(insert_at, self._manual_auto_black_check)
+                    self._manual_auto_black_check.toggled.connect(
+                        lambda v: self._on_auto_neutral_toggled("black", v)
+                    )
+
+                if tool == "targen" and flag == "-g":
+                    self._manual_g_pw = pw
+                    pw._control.setMaximumWidth(90)
+                    self._manual_auto_grey_check = QCheckBox("Auto", pw)
+                    self._manual_auto_grey_check.setToolTip(
+                        "Auto-compute grey-axis steps (-g) from the chart's total\n"
+                        "patch count. Anchor: 560 patches → 32 steps. Doubling the\n"
+                        "total doubles the steps, capped at 128 (min 8)."
+                    )
+                    insert_at = pw.layout().count() - 1
+                    pw.layout().insertWidget(insert_at, self._manual_auto_grey_check)
+                    self._manual_auto_grey_check.toggled.connect(
+                        lambda v: self._on_auto_neutral_toggled("grey", v)
                     )
 
                 if tool == "printtarg" and flag == "-L":
@@ -1170,6 +1227,15 @@ class TabChart(QWidget):
         if self._manual_auto_patches_check is not None \
                 and self._manual_auto_patches_check.isChecked():
             notes.append("Auto patch count")
+        auto_neutrals = [
+            lbl for lbl, chk in (
+                ("grey",  self._manual_auto_grey_check),
+                ("white", self._manual_auto_white_check),
+                ("black", self._manual_auto_black_check),
+            ) if chk is not None and chk.isChecked()
+        ]
+        if auto_neutrals:
+            notes.append("Auto " + "/".join(auto_neutrals))
         if p.tiff_16bit:
             notes.append("16-bit TIFF")
 
@@ -1638,7 +1704,7 @@ class TabChart(QWidget):
         if self._manual_f_pw is None or self._manual_f_pw._control is None:
             return
         spin = self._manual_f_pw._control
-        self._manual_f_pw.set_control_enabled(not checked)
+        self._manual_f_pw.set_control_enabled(not checked, include_label=False)
         spin.blockSignals(True)
         if checked:
             # QSpinBox shows specialValueText whenever value == minimum.
@@ -1648,6 +1714,48 @@ class TabChart(QWidget):
         else:
             spin.setSpecialValueText("")
         spin.blockSignals(False)
+        self._refresh_manual_command_preview()
+
+    # -- Auto -e / -B / -g checkboxes ----------------------------------
+    _AUTO_NEUTRAL_MAP = {
+        "white": ("_manual_e_pw", "_manual_auto_white_check"),
+        "black": ("_manual_B_pw", "_manual_auto_black_check"),
+        "grey":  ("_manual_g_pw", "_manual_auto_grey_check"),
+    }
+
+    def _on_auto_neutral_toggled(self, which: str, checked: bool) -> None:
+        """Grey out the matching -e/-B/-g spinbox and show 'Auto' in it.
+
+        The auto value itself is computed in _collect_manual /
+        _refresh_manual_command_preview from the chart's total patch
+        count via workflow.chart_creator.manual_neutrals.
+        """
+        pw_attr, _ = self._AUTO_NEUTRAL_MAP[which]
+        pw = getattr(self, pw_attr, None)
+        if pw is None or pw._control is None:
+            return
+        spin = pw._control
+        pw.set_control_enabled(not checked, include_label=False)
+        spin.blockSignals(True)
+        if checked:
+            # All three params have min 0 (see data/parameters.yaml), so
+            # setting value to 0 lets specialValueText display "Auto".
+            spin.setSpecialValueText("Auto")
+            spin.setValue(0)
+        else:
+            spin.setSpecialValueText("")
+        spin.blockSignals(False)
+        self._refresh_manual_command_preview()
+
+    def _load_auto_neutral_states(self, grey: bool, white: bool,
+                                  black: bool) -> None:
+        """Restore the three Auto checkbox states (settings or preset)."""
+        for which, on in (("grey", grey), ("white", white), ("black", black)):
+            _, chk_attr = self._AUTO_NEUTRAL_MAP[which]
+            chk = getattr(self, chk_attr, None)
+            if chk is not None:
+                chk.setChecked(on)
+                self._on_auto_neutral_toggled(which, on)
 
     def _connect_cal_mutex(self) -> None:
         k, i = self._manual_cal_k_pw, self._manual_cal_i_pw
@@ -1766,6 +1874,11 @@ class TabChart(QWidget):
                 auto_on = bool(s.get("manual_auto_patches", False))
                 self._manual_auto_patches_check.setChecked(auto_on)
                 self._on_auto_patches_toggled(auto_on)
+            self._load_auto_neutral_states(
+                grey  = bool(s.get("manual_auto_grey",  False)),
+                white = bool(s.get("manual_auto_white", False)),
+                black = bool(s.get("manual_auto_black", False)),
+            )
             self._manual_left_clip_check.setChecked(
                 bool(s.get("chart_left_clip_info", False))
             )
@@ -1800,6 +1913,11 @@ class TabChart(QWidget):
                 auto_on = bool(data.get("auto_patches", False))
                 self._manual_auto_patches_check.setChecked(auto_on)
                 self._on_auto_patches_toggled(auto_on)
+            self._load_auto_neutral_states(
+                grey  = bool(data.get("auto_grey",  False)),
+                white = bool(data.get("auto_white", False)),
+                black = bool(data.get("auto_black", False)),
+            )
             self._manual_left_clip_check.setChecked(
                 bool(data.get("left_clip_info", False))
             )
@@ -1841,6 +1959,18 @@ class TabChart(QWidget):
         capture["auto_patches"] = (
             self._manual_auto_patches_check.isChecked()
             if self._manual_auto_patches_check is not None else False
+        )
+        capture["auto_grey"] = (
+            self._manual_auto_grey_check.isChecked()
+            if self._manual_auto_grey_check is not None else False
+        )
+        capture["auto_white"] = (
+            self._manual_auto_white_check.isChecked()
+            if self._manual_auto_white_check is not None else False
+        )
+        capture["auto_black"] = (
+            self._manual_auto_black_check.isChecked()
+            if self._manual_auto_black_check is not None else False
         )
         capture["pages"] = (
             int(self._manual_pages_spin.value())
@@ -2167,6 +2297,9 @@ class TabChart(QWidget):
                 self._generate_btn.setEnabled(True)
                 return
             self._log.appendPlainText(f"Auto patch count: {params.patches}")
+            # Now that the real patch count is known, recompute any Auto
+            # -e/-B/-g from it (the preview used a cheap patch_db estimate).
+            self._apply_auto_neutrals(params, use_estimate=True)
 
         # Pre-flight: targen exits with code 1 ("Must have some single or multi
         # dimensional RGB or CMY steps") if -f is 0 and no -g / -s / -c steps
@@ -2294,6 +2427,12 @@ class TabChart(QWidget):
             s.set("manual_printtarg_tiff_16bit", self._bit16_radio.isChecked())
         if self._manual_auto_patches_check is not None:
             s.set("manual_auto_patches", self._manual_auto_patches_check.isChecked())
+        if self._manual_auto_grey_check is not None:
+            s.set("manual_auto_grey", self._manual_auto_grey_check.isChecked())
+        if self._manual_auto_white_check is not None:
+            s.set("manual_auto_white", self._manual_auto_white_check.isChecked())
+        if self._manual_auto_black_check is not None:
+            s.set("manual_auto_black", self._manual_auto_black_check.isChecked())
         if self._manual_pages_spin is not None:
             s.set("manual_pages", int(self._manual_pages_spin.value()))
         if self._manual_td_check is not None:
@@ -2392,6 +2531,10 @@ class TabChart(QWidget):
 
         p.device_type          = str(_get("targen",    "-d",  "2"))
         p.patches              = int(_get("targen",    "-f",  0))
+        # -e / -B / -g read the raw widget value; Auto-checked rows return
+        # 0 from the spinbox (specialValueText "Auto"), and we substitute
+        # the manual_neutrals() value at the end of _collect_manual once
+        # the rest of ChartParams is populated.
         p.white_patches        = int(_get("targen",    "-e",  4))
         p.black_patches        = int(_get("targen",    "-B",  4))
         p.good_mode            = bool(_get("targen",   "-G",  True))
@@ -2442,7 +2585,64 @@ class TabChart(QWidget):
         p.left_clip_info       = self._manual_left_clip_check.isChecked()
         p.chromiq_clip_style   = bool(self._settings.get("i1pro_chromiq_clip_style", False))
         p.is_manual            = True
+
+        # Auto -e / -B / -g substitution. For the live preview we use a
+        # cheap patch_db estimate when -f itself is auto; the real
+        # estimate_patches() value is re-applied in _on_generate.
+        self._apply_auto_neutrals(p, use_estimate=False)
         return p
+
+    def _resolve_total_patches(self, p: ChartParams, use_estimate: bool) -> int:
+        """Return the total patch count to feed manual_neutrals().
+
+        When -f is set manually, use it. When -f is on Auto, fall back to
+        a cheap patch_db lookup for the live preview (use_estimate=False)
+        or the real targen-driven estimate at Generate-click
+        (use_estimate=True; caller is responsible for having already
+        called estimate_patches and updated p.patches).
+        """
+        if not (self._manual_auto_patches_check is not None
+                and self._manual_auto_patches_check.isChecked()):
+            return int(p.patches)
+        if use_estimate:
+            return int(p.patches)
+        # Cheap preview path: patch_db lookup × pages.
+        from workflow.chart_creator import _chromiq_clip_active
+        triple = p.triple_density and p.instrument == "CM"
+        force_l = _chromiq_clip_active(p) or triple
+        eff_lb = p.disable_left_border or force_l
+        nominal = query_patches(p.instrument, p.paper,
+                                double_density=p.double_density,
+                                suppress_lb=eff_lb,
+                                margin_mm=p.margin_mm,
+                                patch_scale=p.patch_scale,
+                                triple_density=triple)
+        if nominal is None:
+            return 0
+        return int(nominal * max(1, p.pages))
+
+    def _apply_auto_neutrals(self, p: ChartParams, use_estimate: bool) -> None:
+        """Overwrite -e / -B / -g on `p` for any Auto checkbox that's on."""
+        from workflow.chart_creator import manual_neutrals
+        if not any((
+            self._manual_auto_grey_check  is not None and self._manual_auto_grey_check.isChecked(),
+            self._manual_auto_white_check is not None and self._manual_auto_white_check.isChecked(),
+            self._manual_auto_black_check is not None and self._manual_auto_black_check.isChecked(),
+        )):
+            return
+        total = self._resolve_total_patches(p, use_estimate=use_estimate)
+        # Pull bases from any user-set values (so an Auto checkbox respects
+        # a non-default starting base if the user typed one before checking
+        # Auto). Falls back to 4 / 4 — same as targen's default.
+        base_w = p.white_patches if p.white_patches > 0 else 4
+        base_b = p.black_patches if p.black_patches > 0 else 4
+        g, w, b = manual_neutrals(total, base_w, base_b)
+        if self._manual_auto_grey_check is not None and self._manual_auto_grey_check.isChecked():
+            p.grey_steps    = g
+        if self._manual_auto_white_check is not None and self._manual_auto_white_check.isChecked():
+            p.white_patches = w
+        if self._manual_auto_black_check is not None and self._manual_auto_black_check.isChecked():
+            p.black_patches = b
 
     # ------------------------------------------------------------------
     # Restore saved defaults
@@ -2529,6 +2729,11 @@ class TabChart(QWidget):
             auto_on = bool(s.get("manual_auto_patches", False))
             self._manual_auto_patches_check.setChecked(auto_on)
             self._on_auto_patches_toggled(auto_on)
+        self._load_auto_neutral_states(
+            grey  = bool(s.get("manual_auto_grey",  False)),
+            white = bool(s.get("manual_auto_white", False)),
+            black = bool(s.get("manual_auto_black", False)),
+        )
         # Restore manual triple-density. The toggle handler stashes the
         # current -a / -m / -P / -L widget values, so they need to reflect
         # the user's pre-TD preferences at this point — not the TD overrides

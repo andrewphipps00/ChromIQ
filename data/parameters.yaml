@@ -138,10 +138,28 @@ parameters:
       affects_preview: false
       expert_only: false
       tooltip_title: "White Patches (-e)"
+      tooltip_min_width: 480
       tooltip_body: |
-        Number of device-white (full paper white) patches to include.
-        These help calibrate the measurement instrument to the paper.
-        4 is a good default; increase to 8 for very glossy papers.
+        How many pure paper-white patches to add to the chart. The
+        instrument measures these to learn exactly how white your paper
+        is, which anchors the bright end of the profile. 4 is a good
+        default; very glossy papers can benefit from a few more.
+
+        Auto (checkbox):
+        Turn on "Auto" and ChromIQ picks this number for you, based on
+        how many patches the whole chart holds — so a small one-page
+        chart gets a few white patches and a big multi-page chart gets
+        more, without you having to think about it.
+
+        How the Auto number is worked out:
+          • A chart of about 560 patches gets 4 white patches.
+          • Every time the chart roughly doubles in size, the count
+            grows by 50 % (4 → 6 → 8 …).
+          • It never goes above 8 (more than that just wastes space)
+            and never below 2.
+
+        When Auto is on, this box is greyed out and shows "Auto". Turn
+        it off any time to type your own number.
 
     - flag: "-B"
       name: "Black Patches"
@@ -153,9 +171,26 @@ parameters:
       affects_preview: false
       expert_only: false
       tooltip_title: "Black Patches (-B)"
+      tooltip_min_width: 480
       tooltip_body: |
-        Number of device-black (maximum ink) patches to include.
+        How many maximum-ink (device black) patches to add to the chart.
+        The instrument measures these to learn the darkest tone your
+        printer can produce, which anchors the shadow end of the profile.
         4 is a good default for RGB printers.
+
+        Auto (checkbox):
+        Turn on "Auto" and ChromIQ picks this number for you, based on
+        how many patches the whole chart holds — a small chart gets a
+        few black patches, a big chart gets more.
+
+        How the Auto number is worked out:
+          • A chart of about 560 patches gets 4 black patches.
+          • Every time the chart roughly doubles in size, the count
+            grows by 50 % (4 → 6 → 8 …).
+          • It never goes above 8 and never below 2.
+
+        When Auto is on, this box is greyed out and shows "Auto". Turn
+        it off any time to type your own number.
 
     - flag: "-g"
       name: "Grey Axis Steps"
@@ -167,13 +202,29 @@ parameters:
       affects_preview: false
       expert_only: false
       tooltip_title: "Grey Axis Steps (-g)"
+      tooltip_min_width: 480
       tooltip_body: |
-        Extra neutral grey steps added along the grey axis.
-        Helps the profile engine better characterise the neutral
-        reproduction of the printer.  Typical: 0 for quick profiles,
-        50–100 for standard, 128–200 for high quality.
-        In Guided mode this is set automatically: max(8, total_patches // 30),
-        capped at 64 — scales with page count and instrument capacity.
+        Extra neutral grey patches placed evenly from white to black.
+        These help the profile reproduce greys cleanly, without colour
+        casts — important for black-and-white photos and neutral tones.
+        Rough guide if you set it by hand: 0 for a quick profile,
+        50–100 for a standard one, 128+ for high quality.
+
+        Auto (checkbox):
+        Turn on "Auto" and ChromIQ picks this number for you, scaled to
+        how many patches the whole chart holds — a bigger chart gets a
+        longer, finer grey ramp.
+
+        How the Auto number is worked out:
+          • A chart of about 560 patches gets 32 grey steps.
+          • Every time the chart roughly doubles in size, the steps
+            double too (32 → 64 → 128).
+          • It never goes above 128 and never below 8.
+
+        When Auto is on, this box is greyed out and shows "Auto". Turn
+        it off any time to type your own number.
+
+        (Guided mode always sets this automatically using the same idea.)
 
     - flag: "-G"
       name: "Good Distribution (recomm.)"
