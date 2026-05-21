@@ -643,20 +643,22 @@ class TabMeasure(QWidget):
             cg.addLayout(row)
             return cb, tip
 
-        # Bidirectional row: the -B checkbox plus an "Auto" toggle on the right
-        # that derives -B from the loaded chart's instrument (see
-        # _refresh_bidir_autodetect) and greys out the checkbox while on.
+        # Bidirectional row: the -B checkbox, an "Auto" toggle a short gap to
+        # its right (derives -B from the loaded chart's instrument via
+        # _refresh_bidir_autodetect and greys out the checkbox while on), and
+        # the tooltip pinned to the row's right edge.
         bidir_row = QHBoxLayout()
         self._bidir_cb = QCheckBox("Disable bidirectional strip recognition (-B)", left)
         self._bidir_cb.setChecked(True)
         bidir_row.addWidget(self._bidir_cb)
-        bidir_row.addStretch()
+        bidir_row.addSpacing(24)
         self._bidir_auto_cb = QCheckBox("Auto", left)
         self._bidir_auto_cb.setChecked(True)
         self._bidir_auto_cb.toggled.connect(
             lambda _checked: self._apply_bidir_auto_state("guided")
         )
         bidir_row.addWidget(self._bidir_auto_cb)
+        bidir_row.addStretch()
         bidir_row.addWidget(TooltipButton(
             "Bidirectional reading (-B)",
             "Sets whether the chart can be read in both directions or only one.\n\n"
@@ -924,18 +926,20 @@ class TabMeasure(QWidget):
             mcg.addLayout(row)
             return cb
 
-        # Bidirectional row with an "Auto" toggle on the right (mirrors guided).
+        # Bidirectional row with an "Auto" toggle a short gap to the right
+        # (mirrors guided).
         m_bidir_row = QHBoxLayout()
         self._m_bidir_cb = QCheckBox("Disable bidirectional strip recognition (-B)", left)
         self._m_bidir_cb.setChecked(False)
         m_bidir_row.addWidget(self._m_bidir_cb)
-        m_bidir_row.addStretch()
+        m_bidir_row.addSpacing(24)
         self._m_bidir_auto_cb = QCheckBox("Auto", left)
         self._m_bidir_auto_cb.setChecked(True)
         self._m_bidir_auto_cb.toggled.connect(
             lambda _checked: self._apply_bidir_auto_state("manual")
         )
         m_bidir_row.addWidget(self._m_bidir_auto_cb)
+        m_bidir_row.addStretch()
         m_bidir_row.addWidget(TooltipButton(
             "Bidirectional reading (-B)",
             "Sets whether the chart can be read in both directions or only one.\n\n"

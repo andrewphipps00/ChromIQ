@@ -54,6 +54,42 @@ def _effective_suppress_lb(p: "ChartParams") -> bool:
     return p.disable_left_border or _chromiq_clip_active(p) or triple
 
 
+# Stamped-text shortening: long target names and -c/-K filenames blow out the
+# right-margin command lines on the TIFF, so we truncate them for display only.
+# The argv handed to ArgyllRunner is unchanged — only the strings rendered by
+# the stamper see the shortened form.
+_STAMP_NAME_CAP = 16
+_STAMP_ELLIPSIS = "(…)"
+_STAMP_PATH_FLAGS = frozenset({"-c", "-K", "-k"})
+
+
+def _shorten_for_stamp(token: str) -> str:
+    """Path → basename → truncate at _STAMP_NAME_CAP, append `(…)` if cut."""
+    base = Path(token).name if ("/" in token or "\\" in token) else token
+    if len(base) <= _STAMP_NAME_CAP:
+        return base
+    return base[:_STAMP_NAME_CAP] + _STAMP_ELLIPSIS
+
+
+def _shorten_argv_for_stamp(args: list[str]) -> list[str]:
+    """Return a copy of argv with long names shortened for the printed stamp.
+
+    Affects the trailing positional (target name) and the value following any
+    path-bearing short flag (-c preconditioning profile, -K/-k calibration).
+    """
+    out = list(args)
+    i = 0
+    while i < len(out) - 1:
+        if out[i] in _STAMP_PATH_FLAGS:
+            out[i + 1] = _shorten_for_stamp(out[i + 1])
+            i += 2
+            continue
+        i += 1
+    if out and not out[-1].startswith("-"):
+        out[-1] = _shorten_for_stamp(out[-1])
+    return out
+
+
 # Auto neutrals: -g, -e, -B targets. Shared between Guided Mode (always
 # auto-computed from instrument+paper+pages) and Manual Mode (opt-in per
 # row via Auto checkboxes).
@@ -147,7 +183,8 @@ def guided_neutrals(instrument: str,
                     base_black: int,
                     suppress_lb: bool,
                     double_density: bool = False,
-                    triple_density: bool = False) -> tuple[int, int, int]:
+                    triple_density: bool = False,
+                    no_strip_limit: bool = False) -> tuple[int, int, int]:
     """Return (grey_steps, white_patches, black_patches) for Guided Mode.
 
     All three values are driven by a single number — "effective sheets" —
@@ -166,7 +203,8 @@ def guided_neutrals(instrument: str,
                             suppress_lb=suppress_lb,
                             margin_mm=GUIDED_REF_MARGIN_MM,
                             patch_scale=GUIDED_REF_PATCH_SCALE,
-                            triple_density=triple_density)
+                            triple_density=triple_density,
+                            no_strip_limit=no_strip_limit)
     if nominal is None:
         # ColorMunki and SpectroScan have fixed layouts in patch_db —
         # margin/patch_scale aren't honored, so the reference kwargs miss.
@@ -175,7 +213,8 @@ def guided_neutrals(instrument: str,
         nominal = query_patches(instrument, paper,
                                 double_density=double_density,
                                 suppress_lb=suppress_lb,
-                                triple_density=triple_density)
+                                triple_density=triple_density,
+                                no_strip_limit=no_strip_limit)
     if nominal is None:
         # Genuinely unknown combo — fall back to a page-based ladder so
         # the chart still gets sensible neutrals.
@@ -352,12 +391,14 @@ class ChartCreator:
     ) -> int:
         """Return max patches for the given params (fast lookup or binary search)."""
         triple = params.triple_density and params.instrument == "CM"
+        nsl_eff = triple or params.no_strip_limit
         if triple or any(abs(params.patch_scale - s) <= 0.01 for s in SUPPORTED_PATCH_SCALES):
             per_sheet = query_patches(params.instrument, params.paper, params.double_density,
                                       suppress_lb=_effective_suppress_lb(params),
                                       margin_mm=params.margin_mm,
                                       patch_scale=params.patch_scale,
-                                      triple_density=triple)
+                                      triple_density=triple,
+                                      no_strip_limit=nsl_eff)
             if per_sheet is not None:
                 n = per_sheet * params.pages
                 if progress_cb:
@@ -601,11 +642,16 @@ class ChartCreator:
         if params.chart_notes:
             cmd_lines.append(params.chart_notes)
         if params.stamp_commands:
-            cmd_lines.append("targen " + shlex.join(
-                self._build_targen_args(params, patch_count)
+            # Display-only shortening of long target names / -c profile paths /
+            # -K calibration paths. The argv actually handed to ArgyllRunner
+            # stays full-length; this only rewrites the string that gets
+            # rendered onto the TIFF. " ".join (not shlex.join) so the "(…)"
+            # marker doesn't trigger shell quoting in the rendered line.
+            cmd_lines.append("targen " + " ".join(
+                _shorten_argv_for_stamp(self._build_targen_args(params, patch_count))
             ))
-            cmd_lines.append("printtarg " + shlex.join(
-                self._build_printtarg_args(params)
+            cmd_lines.append("printtarg " + " ".join(
+                _shorten_argv_for_stamp(self._build_printtarg_args(params))
             ))
             cmd_lines.append(f"ChromIQ {APP_VERSION}")
 
@@ -763,12 +809,14 @@ class ChartCreator:
     def _lookup_patches(self, p: ChartParams) -> int:
         eff_lb = _effective_suppress_lb(p)
         triple = p.triple_density and p.instrument == "CM"
+        nsl_eff = triple or p.no_strip_limit
         if triple or any(abs(p.patch_scale - s) <= 0.01 for s in SUPPORTED_PATCH_SCALES):
             per_sheet = query_patches(p.instrument, p.paper, p.double_density,
                                       suppress_lb=eff_lb,
                                       margin_mm=p.margin_mm,
                                       patch_scale=p.patch_scale,
-                                      triple_density=triple)
+                                      triple_density=triple,
+                                      no_strip_limit=nsl_eff)
             if per_sheet is not None:
                 return per_sheet * p.pages
         return self._binary_search(p) * p.pages
@@ -784,16 +832,19 @@ class ChartCreator:
 
         eff_lb = _effective_suppress_lb(p)
         triple = p.triple_density and p.instrument == "CM"
+        nsl_eff = triple or p.no_strip_limit
         if not targen_bin.exists():
             log.warning("targen not found for binary search, returning estimate")
             return (query_patches(p.instrument, p.paper, p.double_density,
                                   suppress_lb=eff_lb,
                                   margin_mm=p.margin_mm,
                                   patch_scale=p.patch_scale,
-                                  triple_density=triple)
+                                  triple_density=triple,
+                                  no_strip_limit=nsl_eff)
                     or query_patches(p.instrument, p.paper, p.double_density,
                                      suppress_lb=eff_lb,
-                                     triple_density=triple)
+                                     triple_density=triple,
+                                     no_strip_limit=nsl_eff)
                     or 500)
 
         pt_args_base = self._build_printtarg_args(p)[:-1]  # strip trailing target name
@@ -802,10 +853,12 @@ class ChartCreator:
                                  suppress_lb=eff_lb,
                                  margin_mm=p.margin_mm,
                                  patch_scale=p.patch_scale,
-                                 triple_density=triple)
+                                 triple_density=triple,
+                                 no_strip_limit=nsl_eff)
                    or query_patches(p.instrument, p.paper, p.double_density,
                                     suppress_lb=eff_lb,
-                                    triple_density=triple)
+                                    triple_density=triple,
+                                    no_strip_limit=nsl_eff)
                    or 400)
         # Per-sheet capacity scales roughly as 1/patch_scale² — each patch
         # occupies patch_scale² of the standard cell area. Without this

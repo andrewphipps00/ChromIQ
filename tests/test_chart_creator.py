@@ -153,6 +153,36 @@ def test_query_patches_unsupported_scale_returns_none() -> None:
     assert query_patches("i1", "A4", margin_mm=6, patch_scale=1.10) is None
 
 
+def test_query_patches_no_strip_limit_i1_big_paper() -> None:
+    """-P removes the strip-length cap; big papers gain a lot of capacity."""
+    base = query_patches("i1", "A2", suppress_lb=True, margin_mm=6, patch_scale=1.0)
+    nsl  = query_patches("i1", "A2", suppress_lb=True, margin_mm=6, patch_scale=1.0,
+                         no_strip_limit=True)
+    assert base is not None and nsl is not None
+    assert nsl > base, "-P must add patches when the cap previously bit"
+    assert nsl == 2500, "regression guard against accidental table edits"
+
+
+def test_query_patches_no_strip_limit_respects_margin_scale_lb() -> None:
+    """-P dispatch must propagate margin, scale and -L through to the right table."""
+    m6_lb   = query_patches("i1", "A2", suppress_lb=True,  margin_mm=6,  patch_scale=1.0,  no_strip_limit=True)
+    m6_nolb = query_patches("i1", "A2", suppress_lb=False, margin_mm=6,  patch_scale=1.0,  no_strip_limit=True)
+    m10_lb  = query_patches("i1", "A2", suppress_lb=True,  margin_mm=10, patch_scale=1.0,  no_strip_limit=True)
+    a095_lb = query_patches("i1", "A2", suppress_lb=True,  margin_mm=6,  patch_scale=0.95, no_strip_limit=True)
+    assert all(v is not None for v in (m6_lb, m6_nolb, m10_lb, a095_lb))
+    assert m6_lb > m6_nolb, "-L must yield more patches than no-L under -P"
+    assert m6_lb >= m10_lb, "m=6 must yield at least as many patches as m=10 under -P"
+    assert a095_lb > m6_lb, "smaller patches (-a 0.95) must fit more per sheet under -P"
+
+
+def test_query_patches_no_strip_limit_ignored_for_cm_and_ss() -> None:
+    """-P only affects i1/p3 strip layouts; CM/SS must return their normal values."""
+    assert (query_patches("CM", "A4", no_strip_limit=True)
+            == query_patches("CM", "A4", no_strip_limit=False))
+    assert (query_patches("SS", "A4", no_strip_limit=True)
+            == query_patches("SS", "A4", no_strip_limit=False))
+
+
 def test_i1_defaults_from_preset_known_keys() -> None:
     """All three documented preset keys must return the printtarg values they encode."""
     assert i1_defaults_from_preset("m6_a1.0")   == (6,  1.0)

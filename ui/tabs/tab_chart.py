@@ -490,15 +490,43 @@ class TabChart(QWidget):
         self._lb_check = QCheckBox("Suppress left clip border (-L)", inner)
         self._lb_check.setChecked(True)
         self._lb_check.toggled.connect(self._update_patch_count)
-        lb_row.addWidget(self._lb_check)
-        lb_row.addStretch()
         self._lb_tooltip = TooltipButton(
             "Suppress Left Clip Border (-L)",
             "Removes the left-edge paper-clip border, gaining ~15 mm for extra patches.\n"
             "Enable unless you use a physical page-clamp jig.  Recommended: ON.",
             inner,
         )
+        self._nsl_check = QCheckBox("Don't limit strip length (-P)", inner)
+        self._nsl_check.toggled.connect(self._update_patch_count)
+        self._nsl_tooltip = TooltipButton(
+            "Don't Limit Strip Length (-P)",
+            "Removes printtarg's built-in strip-length cap (~250 mm) so each "
+            "measurement strip runs full-bleed across the paper.\n\n"
+            "Why it helps:\n"
+            "On larger papers (A2, A3+, 11×17, Legal, A3-landscape) the cap "
+            "ends strips early — well before the page edge — and printtarg "
+            "rebalances the layout to keep strips equal-length. With -P the "
+            "strips can use the full paper width/height, so noticeably more "
+            "patches fit per sheet — up to ~2.5× more on A2, smaller gains "
+            "on A4 (where the cap barely bit anyway).\n\n"
+            "Trade-off:\n"
+            "Long strips take longer to read in one sweep. Most i1Pro / "
+            "i1Pro 3 / i1Pro 3 Plus users will be fine — modern hardware "
+            "tracks long strips reliably. If you have an older instrument "
+            "that struggles with strips near the paper edge, leave this off.\n\n"
+            "Only affects i1Pro family strip readers. Hidden for ColorMunki "
+            "(per-patch reader) and SpectroScan (XY flatbed) — -P has no "
+            "effect on either layout.",
+            inner,
+            min_width=600,
+        )
+        lb_row.addWidget(self._lb_check)
         lb_row.addWidget(self._lb_tooltip)
+        # Push the -P option to the right edge so its tooltip icon lines up
+        # directly under the "Number of pages" tooltip in the row above.
+        lb_row.addStretch()
+        lb_row.addWidget(self._nsl_check)
+        lb_row.addWidget(self._nsl_tooltip)
         pages_layout.addLayout(lb_row)
         layout.addWidget(pages_grp)
 
@@ -2041,11 +2069,19 @@ class TabChart(QWidget):
         td     = self._td_check.isChecked() and instr == "CM"
         pages  = self._pages_spin.value()
         has_lb = self._lb_check.isChecked()  # True = -L active (left border suppressed)
+        # -P only matters for strip instruments; for CM/SS the layout
+        # is fixed and the checkbox is hidden anyway.
+        nsl    = (self._nsl_check.isChecked()
+                  and instr in {"i1", "p3"}
+                  and not td)
         # ChromIQ-style forces -L, so capacity must be computed at -L-enabled
         # values even when the user left the checkbox unchecked. Triple
         # density also forces -L (and the suppress widget is hidden).
         chromiq_force_l = self._chromiq_force_l(instr, paper)
         eff_lb = has_lb or chromiq_force_l or td
+        # Triple density forces -P; reflect that in the lookup so the
+        # patch counter agrees with what printtarg will actually do.
+        nsl_eff = nsl or td
         dpi    = int(self._settings.get("printtarg_dpi", 300))
         if td:
             # Triple density bypasses the per-instrument defaults and locks
@@ -2063,7 +2099,7 @@ class TabChart(QWidget):
 
         per_sheet = query_patches(instr, paper, dd, suppress_lb=eff_lb,
                                   margin_mm=eff_margin, patch_scale=eff_scale,
-                                  triple_density=td)
+                                  triple_density=td, no_strip_limit=nsl_eff)
         if per_sheet is not None:
             total = per_sheet * pages
             self._patch_count_lbl.setText(str(total))
@@ -2079,7 +2115,7 @@ class TabChart(QWidget):
         base_black = int(self._settings.get("targen_black_patches", 4))
         grey_steps, wp, bp = guided_neutrals(
             instr, paper, pages, base_white, base_black, eff_lb,
-            double_density=dd, triple_density=td,
+            double_density=dd, triple_density=td, no_strip_limit=nsl_eff,
         )
         # -L only matters for strip instruments; -h only for CM/SS. Hide
         # both from the command preview when not applicable so the user
@@ -2092,7 +2128,7 @@ class TabChart(QWidget):
         dd_flag = "-h " if (dd and not td) and instr in {"CM", "SS"} else ""
         margin_flag = f"-m{eff_margin} -M{eff_margin} " if eff_margin != 6 else ""
         scale_flag = f"-a{eff_scale:.2f} " if abs(eff_scale - 1.0) > 0.01 else ""
-        strip_flag = "-P " if td else ""
+        strip_flag = "-P " if nsl_eff else ""
         precond_path = (
             self._guided_precond_path.text().strip()
             if hasattr(self, "_guided_precond_path") else ""
@@ -2217,6 +2253,15 @@ class TabChart(QWidget):
         lb_visible = instr in {"i1", "p3"} and not self._td_check.isChecked()
         self._lb_check.setVisible(lb_visible)
         self._lb_tooltip.setVisible(lb_visible)
+        # -P (no strip-length limit) is only meaningful on strip readers.
+        # CM reads patches individually and SS is an XY flatbed — both
+        # ignore -P. Triple density forces -P internally and the
+        # checkbox would be confusing, so hide it in that mode too.
+        nsl_visible = instr in {"i1", "p3"} and not self._td_check.isChecked()
+        self._nsl_check.setVisible(nsl_visible)
+        self._nsl_tooltip.setVisible(nsl_visible)
+        if not nsl_visible and self._nsl_check.isChecked():
+            self._nsl_check.setChecked(False)
 
     def _on_guided_dd_toggled(self, checked: bool) -> None:
         if checked and self._td_check.isChecked():
@@ -2398,6 +2443,12 @@ class TabChart(QWidget):
                 and getattr(self, "_td_saved_lb_check", None) is not None):
             guided_lb_save = bool(self._td_saved_lb_check)
         s.set("chart_disable_left_border", guided_lb_save)
+        # Triple density forces -P internally; persist the user's standalone
+        # -P preference rather than the TD-derived True.
+        guided_nsl_save = (False if params.triple_density
+                           else bool(self._nsl_check.isChecked()
+                                     and (params.instrument in {"i1", "p3"})))
+        s.set("chart_no_strip_limit", guided_nsl_save)
         s.set("targen_device_type",        params.device_type)
         s.set("targen_good_mode",          params.good_mode)
         s.set("targen_white_patches",      params.white_patches)
@@ -2462,6 +2513,9 @@ class TabChart(QWidget):
         dd      = self._dd_check.isChecked()
         td      = self._td_check.isChecked() and instr == "CM"
         has_lb  = self._lb_check.isChecked()
+        nsl_ui  = (self._nsl_check.isChecked()
+                   and instr in {"i1", "p3"}
+                   and not td)
         if td:
             # Triple-density forces i1Pro layout params; the arg builder also
             # applies these, but we set them on ChartParams so patch-count
@@ -2475,11 +2529,11 @@ class TabChart(QWidget):
                 "i1pro_default_preset", I1PRO_DEFAULT_PRESET_KEY
             ))
             margin, patch_scale = i1_defaults_from_preset(preset_key)
-            no_strip_limit = False
+            no_strip_limit = nsl_ui
         else:
             margin = INSTRUMENT_DEFAULT_MARGIN.get(instr, 6)
             patch_scale = 1.0
-            no_strip_limit = False
+            no_strip_limit = nsl_ui
         base_white = int(self._settings.get("targen_white_patches", 4))
         base_black = int(self._settings.get("targen_black_patches", 4))
         # ChromIQ-style and triple-density both force -L; mirror the chart's
@@ -2489,6 +2543,7 @@ class TabChart(QWidget):
         grey_steps, white_patches, black_patches = guided_neutrals(
             instr, paper, pages, base_white, base_black, eff_lb,
             double_density=dd, triple_density=td,
+            no_strip_limit=no_strip_limit,
         )
 
         precond_path = self._guided_precond_path.text().strip()
@@ -2618,12 +2673,14 @@ class TabChart(QWidget):
         triple = p.triple_density and p.instrument == "CM"
         force_l = _chromiq_clip_active(p) or triple
         eff_lb = p.disable_left_border or force_l
+        nsl_eff = triple or p.no_strip_limit
         nominal = query_patches(p.instrument, p.paper,
                                 double_density=p.double_density,
                                 suppress_lb=eff_lb,
                                 margin_mm=p.margin_mm,
                                 patch_scale=p.patch_scale,
-                                triple_density=triple)
+                                triple_density=triple,
+                                no_strip_limit=nsl_eff)
         if nominal is None:
             return 0
         return int(nominal * max(1, p.pages))
@@ -2692,6 +2749,7 @@ class TabChart(QWidget):
         self._dd_check.setChecked(bool(s.get("chart_double_density", False)))
         self._td_check.setChecked(bool(s.get("chart_triple_density", False)))
         self._lb_check.setChecked(bool(s.get("chart_disable_left_border", True)))
+        self._nsl_check.setChecked(bool(s.get("chart_no_strip_limit", False)))
         self._update_dd_visibility()
         self._update_patch_count()
 
