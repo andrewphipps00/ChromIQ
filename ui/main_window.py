@@ -443,11 +443,9 @@ class MainWindow(QMainWindow):
         dlg.activateWindow()
 
     def _open_settings(self) -> None:
-        from ui.tooltip_button import TooltipButton
+        # SettingsDialog tints its own tooltip ⓘ icons to the dialog's neutral
+        # indicator colour (see SettingsDialog.__init__).
         dlg = SettingsDialog(self._settings, self)
-        for btn in dlg.findChildren(TooltipButton):
-            btn._color_override = "#f4f4f4"
-            btn._set_icon()
         dlg.exec()
         self._check_argyll_binaries()
         self._apply_calibration_mode()

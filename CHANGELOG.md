@@ -1,5 +1,39 @@
 # Changelog
 
+## v3.7.15
+Two quality-of-life fixes: the Measure tab now auto-sets bidirectional
+strip reading from the instrument baked into the loaded chart, and the
+Settings window's tooltip icons and popup text are now legible and
+theme-correct in both light and dark mode.
+
+### Features
+- **Auto bidirectional reading from the loaded chart.** Next to the
+  *Disable bidirectional strip recognition (-B)* checkbox in both Guided
+  and Manual modes there is now an **Auto** toggle (on by default).
+  When on, ChromIQ reads the chart's `TARGET_INSTRUMENT` from the .ti2
+  and decides for you: the i1 Pro family (incl. i1 Pro 3 / 3+) reads in
+  both directions, the ColorMunki / i1Studio reads in one direction
+  only. While Auto is on the -B checkbox is locked and shows the chosen
+  setting. Turn Auto off to control it yourself — the value and the
+  Auto state are saved with defaults and presets, so any preset or
+  default you set wins.
+
+### Fixes
+- **Settings tooltip ⓘ icons are legible in light mode.** They were
+  hard-coded to near-white (`#f4f4f4`), which all but disappeared on
+  the light dialog background. The icons now use the Settings window's
+  neutral indicator colour — the same colour as a checked checkbox in
+  that dialog (`#1c1b18` in light, `#d0d0d0` in dark).
+- **Tooltip popup text uses the standard themed colour.** The ⓘ popup
+  was re-resolving the appearance setting to pick its text colour, but
+  the Settings appearance combo applies the theme live and only
+  persists on Save — so previewing Dark could paint dark text on a dark
+  background. The popup now reads the live applied palette's text
+  colour, identical to every other dialog.
+- **Settings checkboxes and tooltip icons recolour live** when
+  switching the appearance combo, instead of waiting for the dialog to
+  be closed and reopened.
+
 ## v3.7.14
 Guided mode now characterises the neutral axis more accurately when you
 refine an existing profile. A big thanks again to **@pharmacist on the

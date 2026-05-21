@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from PyQt6.QtCore import QEvent, QRect, QSize, Qt
 from PyQt6.QtGui import (
-    QColor, QFont, QGuiApplication, QIcon, QPainter, QPen, QPixmap,
+    QColor, QFont, QGuiApplication, QIcon, QPainter, QPalette, QPen, QPixmap,
 )
 from PyQt6.QtWidgets import (
     QDialog,
@@ -123,24 +123,24 @@ class _InfoDialog(QDialog):
             self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint
         )
 
-        from core.settings import AppSettings
-        from ui.theme import resolve_mode
-        mode = resolve_mode(AppSettings().get("appearance", "auto"))
-        heading_color = "#22211F" if mode == "light" else "#ffffff"
-        body_color    = "#22211F" if mode == "light" else "#c8c8c8"
+        # Use the live applied palette's text colour — the same colour every
+        # other dialog/popup uses — rather than re-resolving the appearance
+        # setting (which can be stale during a live theme preview and paint
+        # dark text on a dark background).
+        text_color = self.palette().color(QPalette.ColorRole.WindowText).name()
 
         layout = QVBoxLayout(self)
         layout.setSpacing(12)
         layout.setContentsMargins(20, 20, 20, 16)
 
         heading = QLabel(title, self)
-        heading.setStyleSheet(f"font-size: 15px; font-weight: bold; color: {heading_color};")
+        heading.setStyleSheet(f"font-size: 15px; font-weight: bold; color: {text_color};")
         heading.setWordWrap(True)
         layout.addWidget(heading)
 
         text = QLabel(body, self)
         text.setWordWrap(True)
-        text.setStyleSheet(f"color: {body_color}; line-height: 1.5;")
+        text.setStyleSheet(f"color: {text_color};")
         text.setTextFormat(Qt.TextFormat.PlainText)
         layout.addWidget(text)
 

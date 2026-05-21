@@ -383,19 +383,7 @@ class SettingsDialog(QDialog):
         layout.addLayout(bottom_row)
 
         from ui.theme import resolve_mode
-        _mode = resolve_mode(self._settings.get("appearance", "auto"))
-        # Always override the global APP_STYLESHEET — its ACCENT (SPEC_CYAN)
-        # for checkbox-checked / QLineEdit:focus reads as the Build Profile
-        # cyan inside a dialog body where there's no tab accent to anchor
-        # it. Use a neutral indicator colour in both modes:
-        #   Light: masthead "Chrom" wordmark (_PALETTE_LIGHT["wordmark"]).
-        #   Dark:  neutral grey matching the Restore Factory Defaults border.
-        _indicator = "#1c1b18" if _mode == "light" else "#d0d0d0"
-        self.setStyleSheet(
-            f"QLineEdit:focus {{ border-color: {_indicator}; }}"
-            f"QCheckBox::indicator:checked {{ background: {_indicator}; border-color: {_indicator}; }}"
-            f"QCheckBox::indicator:hover {{ border-color: {_indicator}; }}"
-        )
+        self._apply_indicator_theme(resolve_mode(self._settings.get("appearance", "auto")))
 
     # ------------------------------------------------------------------
 
@@ -425,6 +413,26 @@ class SettingsDialog(QDialog):
         self._appearance_combo.setCurrentIndex(idx if idx >= 0 else 0)
         self._appearance_combo.blockSignals(False)
 
+    def _apply_indicator_theme(self, mode: str) -> None:
+        """Apply the neutral indicator colour to checkboxes, line-edit focus and
+        tooltip ⓘ icons for the given resolved mode ('light'/'dark').
+
+        Overrides the global APP_STYLESHEET ACCENT (SPEC_CYAN), which would read
+        as the Build Profile cyan inside a dialog body where there's no tab
+        accent to anchor it. Re-run on live theme preview so the colours switch
+        without reopening the dialog.
+          Light: masthead "Chrom" wordmark.  Dark: neutral grey (Restore border).
+        """
+        indicator = "#1c1b18" if mode == "light" else "#d0d0d0"
+        self.setStyleSheet(
+            f"QLineEdit:focus {{ border-color: {indicator}; }}"
+            f"QCheckBox::indicator:checked {{ background: {indicator}; border-color: {indicator}; }}"
+            f"QCheckBox::indicator:hover {{ border-color: {indicator}; }}"
+        )
+        for btn in self.findChildren(TooltipButton):
+            btn._color_override = indicator
+            btn._set_icon()
+
     def _on_appearance_preview(self, _index: int) -> None:
         """Apply the picked theme immediately without persisting it."""
         from ui.theme import apply_appearance
@@ -434,7 +442,8 @@ class SettingsDialog(QDialog):
         # The dialog is parented to the main window — use that for masthead/title-bar updates.
         main_window = self.parent()
         setting = self._appearance_combo.currentData()
-        apply_appearance(app, main_window, str(setting))
+        mode = apply_appearance(app, main_window, str(setting))
+        self._apply_indicator_theme(mode)
 
     def reject(self) -> None:  # type: ignore[override]
         # Revert any live theme preview to whatever was persisted on open.
