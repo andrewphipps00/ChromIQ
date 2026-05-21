@@ -56,7 +56,9 @@ from ui.tab_header import TabHeader
 from ui.tiff_preview import TiffPreview
 from ui.tooltip_button import TooltipButton
 from ui.widgets import NoScrollComboBox, NoScrollSpinBox, icc_profile_paths, make_browse_button, open_file_dialog, set_folder_icon, set_preset_icon
-from workflow.chart_creator import ChartCreator, ChartParams, guided_neutrals, REF_BUDGET
+from workflow.chart_creator import (
+    ChartCreator, ChartParams, guided_neutrals, GUIDED_NEUTRAL_BASE, REF_BUDGET,
+)
 from workflow.tiff_metadata import ALLOWED_LEFT_CLIP_PAPERS
 
 if TYPE_CHECKING:
@@ -2112,11 +2114,12 @@ class TabChart(QWidget):
             self._patch_count_lbl.setText("?")
             self._patch_detail_lbl.setText("CUSTOM LAYOUT")
 
-        # Hidden-defaults info label (values mirror _collect_guided logic)
-        base_white = int(self._settings.get("targen_white_patches", 4))
-        base_black = int(self._settings.get("targen_black_patches", 4))
+        # Hidden-defaults info label (values mirror _collect_guided logic).
+        # The base is fixed (no settings UI exposes it); reading it from settings
+        # used to round-trip the auto-computed result back into the base via
+        # "Save as defaults", which collapsed -e/-B toward the floor of 2.
         grey_steps, wp, bp = guided_neutrals(
-            instr, paper, pages, base_white, base_black, eff_lb,
+            instr, paper, pages, GUIDED_NEUTRAL_BASE, GUIDED_NEUTRAL_BASE, eff_lb,
             double_density=dd, triple_density=td, no_strip_limit=nsl_eff,
             ref_budget=int(self._settings.get("grey_ramp_reference", REF_BUDGET)),
         )
@@ -2454,8 +2457,6 @@ class TabChart(QWidget):
         s.set("chart_no_strip_limit", guided_nsl_save)
         s.set("targen_device_type",        params.device_type)
         s.set("targen_good_mode",          params.good_mode)
-        s.set("targen_white_patches",      params.white_patches)
-        s.set("targen_black_patches",      params.black_patches)
         s.set("printtarg_dpi",             params.tiff_dpi)
         # Save all manual widget values individually. When Triple density is
         # active the four widgets it owns (-a / -m / -P / -L) currently show
@@ -2537,14 +2538,12 @@ class TabChart(QWidget):
             margin = INSTRUMENT_DEFAULT_MARGIN.get(instr, 6)
             patch_scale = 1.0
             no_strip_limit = nsl_ui
-        base_white = int(self._settings.get("targen_white_patches", 4))
-        base_black = int(self._settings.get("targen_black_patches", 4))
         # ChromIQ-style and triple-density both force -L; mirror the chart's
         # effective suppress_lb state so guided_neutrals sees what targen/
         # printtarg will actually run.
         eff_lb = has_lb or self._chromiq_force_l(instr, paper) or td
         grey_steps, white_patches, black_patches = guided_neutrals(
-            instr, paper, pages, base_white, base_black, eff_lb,
+            instr, paper, pages, GUIDED_NEUTRAL_BASE, GUIDED_NEUTRAL_BASE, eff_lb,
             double_density=dd, triple_density=td,
             no_strip_limit=no_strip_limit,
             ref_budget=int(self._settings.get("grey_ramp_reference", REF_BUDGET)),

@@ -26,8 +26,6 @@ DEFAULTS: dict[str, Any] = {
     "chart_left_clip_info":      False,
     "targen_device_type":        "2",      # Print RGB
     "targen_patches":            0,        # 0 = auto-computed
-    "targen_white_patches":      4,
-    "targen_black_patches":      4,
     # Neutral-patch anchor: the total patch count at which a chart gets the
     # standard 32 grey / 4 white / 4 black. Neutral counts scale relative to
     # this in both Guided and Manual mode (lower = denser, higher = sparser).

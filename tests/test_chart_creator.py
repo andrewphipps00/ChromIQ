@@ -28,6 +28,7 @@ from data.patch_db import (
 from workflow.chart_creator import (
     ChartCreator,
     ChartParams,
+    GUIDED_NEUTRAL_BASE,
     guided_neutrals,
     manual_neutrals,
 )
@@ -248,6 +249,19 @@ def test_grey_ramp_reference_applies_to_guided() -> None:
     g0, _, _ = guided_neutrals("i1", "A4", 1, 4, 4, True)
     g1, _, _ = guided_neutrals("i1", "A4", 1, 4, 4, True, ref_budget=280)
     assert g1 > g0
+
+
+def test_guided_anchor_returns_full_base_at_reference_layout() -> None:
+    """i1Pro + A4 landscape + 1 page must produce the classic -g32 -e4 -B4.
+
+    Regression guard: the tab used to read the white/black base from a
+    settings key that "Save as defaults" round-tripped from the auto-computed
+    result, collapsing -e/-B toward 2 across save cycles. The base is now
+    fixed at GUIDED_NEUTRAL_BASE; pin the anchor outcome here.
+    """
+    assert guided_neutrals(
+        "i1", "A4R", 1, GUIDED_NEUTRAL_BASE, GUIDED_NEUTRAL_BASE, True
+    ) == (32, 4, 4)
 
 
 def test_i1_defaults_from_preset_known_keys() -> None:

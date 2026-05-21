@@ -1,6 +1,25 @@
 # Changelog
 
-## v3.7.18
+## v3.7.19
+Fixes a Guided-mode regression where the white / black patch base (-e / -B)
+quietly shrank toward 2 across "Save as defaults" cycles, leaving even the
+reference 560-patch chart on i1 Pro + A4 landscape generating `-e2 -B2`
+instead of the documented `-e4 -B4` at the anchor.
+
+### Fixes
+- **Guided mode no longer collapses -e / -B toward 2 over time.** "Save as
+  defaults" used to round-trip the **auto-computed** white / black patch
+  counts back into the *base* setting that Guided then reread on the next
+  computation. If you saved while a low-capacity config was selected
+  (i1 Pro 3+ on small paper, ColorMunki, a single-page strip-reader chart),
+  the base shrank to 2 and stayed there for every subsequent chart on every
+  instrument — even the reference i1 Pro + A4 landscape + 1 page case that
+  is supposed to land on `-g32 -e4 -B4`. The base is now fixed at the
+  documented value of 4 in Guided mode and no longer round-trips through
+  Save as defaults; affected installs self-heal on next launch (the stale
+  settings keys are no longer read). Manual mode was never affected — its
+  -e / -B widgets use a separate storage path and already fell back to 4
+  whenever the Auto checkbox was on.
 A2 Landscape (594 × 420 mm) joins the paper-size list — a much better fit
 for strip readers than the existing A2 portrait. The i1 Pro 3+ also goes
 back to printtarg's native 6 mm margin default, and the Measure tab's
