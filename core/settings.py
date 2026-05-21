@@ -28,6 +28,12 @@ DEFAULTS: dict[str, Any] = {
     "targen_patches":            0,        # 0 = auto-computed
     "targen_white_patches":      4,
     "targen_black_patches":      4,
+    # Neutral-patch anchor: the total patch count at which a chart gets the
+    # standard 32 grey / 4 white / 4 black. Neutral counts scale relative to
+    # this in both Guided and Manual mode (lower = denser, higher = sparser).
+    # Default 560 = the i1Pro+A4-landscape reference layout; see
+    # workflow.chart_creator.REF_BUDGET. Floors/caps still apply.
+    "grey_ramp_reference":       560,
     "targen_good_mode":          True,
     "targen_extra_args":         "",
     "printtarg_dpi":             300,

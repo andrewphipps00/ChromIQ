@@ -1,5 +1,26 @@
 # Changelog
 
+## v3.7.17
+You can now tune how many neutral patches (grey ramp + white/black) ChromIQ
+adds relative to chart size, from a single setting.
+
+### Features
+- **Grey ramp reference setting.** A new field under
+  *Settings → Neutral Patches* sets the patch count at which a chart gets
+  the standard 32 grey / 4 white / 4 black. Lower it for denser neutrals on
+  every chart (better grey balance and shadow detail, fewer colour patches);
+  raise it for sparser neutrals. Applies to both Guided mode and Manual mode
+  (Manual when the Auto −g / −e / −B checkboxes are on), and updates the
+  live patch preview as soon as you change it. Default 560 — unchanged
+  behaviour out of the box. Small charts always keep the minimum neutral set
+  (grey ≥ 8, white/black ≥ 2, and in Guided mode neutrals never exceed half
+  the total patches), so a tiny target is never swamped by greys.
+
+### Fixes
+- **Guided mode: wider gap** between the *Suppress left clip border (-L)*
+  and *Don't limit strip length (-P)* checkbox labels and their tooltip
+  icons, so each icon reads as belonging to its option.
+
 ## v3.7.16
 The patch-capacity database now knows about *Don't limit strip length*
 (`-P`) for the i1 Pro family, so the calculated patch count reflects the

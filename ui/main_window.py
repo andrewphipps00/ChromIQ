@@ -456,6 +456,10 @@ class MainWindow(QMainWindow):
             self._tab_chart._apply_instrument_default_margin()
         if hasattr(self._tab_chart, "_update_patch_count"):
             self._tab_chart._update_patch_count()
+        # Manual mode's Auto -g/-e/-B reflect the grey-ramp-reference anchor;
+        # refresh its preview so a changed anchor takes effect immediately.
+        if hasattr(self._tab_chart, "_refresh_manual_command_preview"):
+            self._tab_chart._refresh_manual_command_preview()
         # Refresh visibility of -L / chart notes / stamp-commands / left-clip
         # rows so toggling 'Use ChromIQ-style clipping border' takes effect
         # immediately on the Create Chart tab.

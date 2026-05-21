@@ -33,7 +33,7 @@ from core.platform_paths import (
 from core.updater import UpdateChecker, _RELEASES_PAGE
 from core.version import APP_VERSION
 from ui.tooltip_button import TooltipButton
-from ui.widgets import NoScrollComboBox, make_browse_button, open_dir_dialog
+from ui.widgets import NoScrollComboBox, NoScrollSpinBox, make_browse_button, open_dir_dialog
 
 if TYPE_CHECKING:
     from core.settings import AppSettings
@@ -207,6 +207,39 @@ class SettingsDialog(QDialog):
         i1g.addLayout(i1_clip_row)
 
         layout.addWidget(i1pro_grp)
+
+        # ---- Neutral patches ----
+        neutral_grp = QGroupBox("Neutral Patches", self)
+        ng = QVBoxLayout(neutral_grp)
+        gr_row = QHBoxLayout()
+        gr_row.addWidget(QLabel("Grey ramp reference:", self))
+        self._grey_ref_spin = NoScrollSpinBox(self)
+        self._grey_ref_spin.setRange(200, 2000)
+        self._grey_ref_spin.setSingleStep(10)
+        self._grey_ref_spin.setSuffix(" patches")
+        self._grey_ref_spin.setMinimumWidth(140)
+        gr_row.addWidget(self._grey_ref_spin)
+        gr_row.addStretch()
+        gr_row.addWidget(TooltipButton(
+            "Grey Ramp Reference",
+            "Controls how many neutral patches (the grey ramp plus the white and "
+            "black anchors) ChromIQ adds, relative to the size of the chart.\n\n"
+            "It is the patch count at which a chart gets the standard set of "
+            "32 grey + 4 white + 4 black. Bigger charts get proportionally more; "
+            "smaller charts get fewer.\n\n"
+            "  • Lower this number for DENSER neutrals on every chart — better "
+            "grey balance and shadow detail, at the cost of fewer colour patches.\n"
+            "  • Raise it for SPARSER neutrals — more of the chart spent on "
+            "colour, fewer on greys.\n\n"
+            "Small charts always keep a sensible minimum — they never receive the "
+            "full neutral set, so a tiny target won't be swamped by greys.\n\n"
+            "Applies to both Guided and Manual mode (Manual only when the "
+            "Auto −g / −e / −B checkboxes are on). Default: 560.",
+            self,
+            min_width=600,
+        ))
+        ng.addLayout(gr_row)
+        layout.addWidget(neutral_grp)
 
         # ---- Behaviour ----
         behaviour_grp = QGroupBox("Behaviour", self)
@@ -404,6 +437,7 @@ class SettingsDialog(QDialog):
         self._chromiq_clip_check.setChecked(
             bool(s.get("i1pro_chromiq_clip_style", False))
         )
+        self._grey_ref_spin.setValue(int(s.get("grey_ramp_reference", 560)))
         # Appearance: capture current value so Cancel can revert any live preview.
         current = str(s.get("appearance", "auto"))
         self._appearance_original = current
@@ -467,6 +501,7 @@ class SettingsDialog(QDialog):
         s.set("appearance",                str(self._appearance_combo.currentData()))
         s.set("i1pro_default_preset",      str(self._i1pro_preset_combo.currentData()))
         s.set("i1pro_chromiq_clip_style",  self._chromiq_clip_check.isChecked())
+        s.set("grey_ramp_reference",       int(self._grey_ref_spin.value()))
         log.info("Settings saved")
         self.accept()
 

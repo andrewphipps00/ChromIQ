@@ -56,7 +56,7 @@ from ui.tab_header import TabHeader
 from ui.tiff_preview import TiffPreview
 from ui.tooltip_button import TooltipButton
 from ui.widgets import NoScrollComboBox, NoScrollSpinBox, icc_profile_paths, make_browse_button, open_file_dialog, set_folder_icon, set_preset_icon
-from workflow.chart_creator import ChartCreator, ChartParams, guided_neutrals
+from workflow.chart_creator import ChartCreator, ChartParams, guided_neutrals, REF_BUDGET
 from workflow.tiff_metadata import ALLOWED_LEFT_CLIP_PAPERS
 
 if TYPE_CHECKING:
@@ -2118,6 +2118,7 @@ class TabChart(QWidget):
         grey_steps, wp, bp = guided_neutrals(
             instr, paper, pages, base_white, base_black, eff_lb,
             double_density=dd, triple_density=td, no_strip_limit=nsl_eff,
+            ref_budget=int(self._settings.get("grey_ramp_reference", REF_BUDGET)),
         )
         # -L only matters for strip instruments; -h only for CM/SS. Hide
         # both from the command preview when not applicable so the user
@@ -2546,6 +2547,7 @@ class TabChart(QWidget):
             instr, paper, pages, base_white, base_black, eff_lb,
             double_density=dd, triple_density=td,
             no_strip_limit=no_strip_limit,
+            ref_budget=int(self._settings.get("grey_ramp_reference", REF_BUDGET)),
         )
 
         precond_path = self._guided_precond_path.text().strip()
@@ -2702,7 +2704,10 @@ class TabChart(QWidget):
         # Auto). Falls back to 4 / 4 — same as targen's default.
         base_w = p.white_patches if p.white_patches > 0 else 4
         base_b = p.black_patches if p.black_patches > 0 else 4
-        g, w, b = manual_neutrals(total, base_w, base_b)
+        g, w, b = manual_neutrals(
+            total, base_w, base_b,
+            ref_budget=int(self._settings.get("grey_ramp_reference", REF_BUDGET)),
+        )
         if self._manual_auto_grey_check is not None and self._manual_auto_grey_check.isChecked():
             p.grey_steps    = g
         if self._manual_auto_white_check is not None and self._manual_auto_white_check.isChecked():

@@ -96,9 +96,12 @@ def _shorten_argv_for_stamp(args: list[str]) -> list[str]:
 #
 # Anchor: 560 total patches → -g32 -e4 -B4. 560 matches i1Pro+A4 landscape
 # at the m10_a0.95 -L reference layout and gives a clean "A3 landscape =
-# 2× A4 landscape" ratio in Guided Mode.
+# 2× A4 landscape" ratio in Guided Mode. This is the *default* anchor; the
+# user can override it via the "Grey ramp reference" setting, which is passed
+# in as ref_budget to manual_neutrals() / guided_neutrals() (lower = denser
+# neutrals, higher = sparser). The floors/caps below are unaffected.
 #
-# Scaling: "effective sheets" = total_patches / 560.
+# Scaling: "effective sheets" = total_patches / ref_budget (default 560).
 #   -g  scales linearly: 32 × eff_sheets, capped at 128.
 #   -e/-B compound ×1.5 per doubling of eff_sheets, capped at 8.
 #   floors: -g ≥ 8, -e/-B ≥ 2.
@@ -160,19 +163,20 @@ def _neutrals_from_eff_sheets(eff_sheets: float,
 
 def manual_neutrals(total_patches: int,
                     base_white: int = GUIDED_NEUTRAL_BASE,
-                    base_black: int = GUIDED_NEUTRAL_BASE) -> tuple[int, int, int]:
+                    base_black: int = GUIDED_NEUTRAL_BASE,
+                    ref_budget: int = REF_BUDGET) -> tuple[int, int, int]:
     """Return (grey_steps, white_patches, black_patches) for Manual Mode.
 
     Drives the per-row Auto checkboxes on -g / -e / -B. Total patches is
     whatever the user (or the -f Auto estimator) currently has set. At the
-    anchor of 560 patches the result is the original suggester's
-    -g32 -e4 -B4.
+    anchor (ref_budget, default 560) the result is the original suggester's
+    -g32 -e4 -B4. ref_budget is the user-configurable "Grey ramp reference".
     """
     if total_patches <= 0:
         # Sentinel for the live preview when -f itself is still being
         # auto-estimated and we don't have a real total to work from.
         return GUIDED_GREY_MIN, base_white, base_black
-    eff = total_patches / REF_BUDGET
+    eff = total_patches / max(1, ref_budget)
     return _neutrals_from_eff_sheets(eff, base_white, base_black)
 
 
@@ -184,7 +188,8 @@ def guided_neutrals(instrument: str,
                     suppress_lb: bool,
                     double_density: bool = False,
                     triple_density: bool = False,
-                    no_strip_limit: bool = False) -> tuple[int, int, int]:
+                    no_strip_limit: bool = False,
+                    ref_budget: int = REF_BUDGET) -> tuple[int, int, int]:
     """Return (grey_steps, white_patches, black_patches) for Guided Mode.
 
     All three values are driven by a single number — "effective sheets" —
@@ -220,7 +225,7 @@ def guided_neutrals(instrument: str,
         # the chart still gets sensible neutrals.
         eff_sheets = float(pages)
     else:
-        eff_sheets = (nominal * pages) / REF_BUDGET
+        eff_sheets = (nominal * pages) / max(1, ref_budget)
 
     if nominal is not None and nominal < GUIDED_LOW_CAPACITY_PS:
         eff_white = max(base_white - 1, GUIDED_NEUTRAL_MIN)
