@@ -50,7 +50,7 @@ _JOIN = "    |    "
 # Paper keys for which the left-clip info stamp is enabled. Smaller sheets are
 # excluded because the rotated text becomes too cramped to be useful.
 ALLOWED_LEFT_CLIP_PAPERS: frozenset[str] = frozenset({
-    "A2", "A3", "11x17", "Legal", "A4", "A4R", "Letter", "LetterR",
+    "A2", "594x420", "A3", "11x17", "Legal", "A4", "A4R", "Letter", "LetterR",
     "329x483", "420x297", "483x329", "custom",
 })
 

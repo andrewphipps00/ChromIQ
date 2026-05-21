@@ -1,5 +1,41 @@
 # Changelog
 
+## v3.7.18
+A2 Landscape (594 × 420 mm) joins the paper-size list — a much better fit
+for strip readers than the existing A2 portrait. The i1 Pro 3+ also goes
+back to printtarg's native 6 mm margin default, and the Measure tab's
+bidirectional row gets a small tooltip tidy-up.
+
+### Features
+- **A2 Landscape (594 × 420 mm) paper size.** A new entry in the Paper
+  size combo. Strip readers pack far more strips on a 594-wide sheet
+  than on a 420-wide one — A2 landscape on i1 Pro lifts the base capacity
+  from 1050 to 1512 patches (+44%), and on i1 Pro 3+ from 225 to 324
+  (+44%). Per-instrument visibility in Guided mode: **i1 Pro / i1 Pro 3+**
+  show landscape and hide A2 portrait (mirrors the existing A3 / A3+
+  portrait-hidden behaviour for strip readers); **ColorMunki** shows both
+  orientations; **SpectroScan** keeps portrait only (its bed can't reach
+  the far edge of a 594 mm-wide sheet). Manual mode shows it for every
+  instrument. The patch-capacity database has measured values for the new
+  paper across every instrument + option combination already covered
+  (margin 6/10, scale 1.0/0.95, `-L` / no-`-L`, `-P`, ColorMunki double
+  density + triple density, SpectroScan hex), produced by a new
+  `scripts/measure_a2_landscape_capacity.py` companion script.
+- **i1 Pro 3+ default page margin is now 6 mm.** The original i1 Pro keeps
+  10 mm to avoid its strip optics drifting onto the paper edge near
+  the last patch ("not enough patches read"), but the i1 Pro 3+ doesn't
+  need that headroom and goes back to printtarg's native 6 mm default in
+  both Guided and Manual modes. Side benefit: slightly higher patch counts
+  at the same paper size (A4 base 108 vs 99, A2 landscape 324 vs 315).
+
+### Fixes
+- **Measure tab: separate tooltip icons for *Disable bidirectional strip
+  recognition (-B)* and *Auto*.** Each option now has its own ⓘ icon with
+  option-specific text (one explains the `-B` checkbox itself, the other
+  explains what Auto does), and the row spreads the two option-and-icon
+  groups across the column width — the `-B` group on the left, Auto on
+  the right. Applies to both Guided and Manual modes.
+
 ## v3.7.17
 You can now tune how many neutral patches (grey ramp + white/black) ChromIQ
 adds relative to chart size, from a single setting.

@@ -14,7 +14,7 @@ Key: (instrument_code, double_density, paper_size)
     "CM"  = ColorMunki / i1Studio / ColorChecker Studio
     "SS"  = SpectroScan (flatbed XY scanner)
   double_density: -h flag — for CM means double density (rig), for SS means hexagon patches
-  paper_size: A2, 329x483, 483x329, A3, 420x297, 11x17, Legal,
+  paper_size: A2, 594x420, 329x483, 483x329, A3, 420x297, 11x17, Legal,
               A4, A4R, Letter, LetterR, 203x254, 127x178, 4x6
 """
 from __future__ import annotations
@@ -22,6 +22,7 @@ from __future__ import annotations
 _PER_SHEET_CAPACITY: dict[tuple[str, bool, str], int] = {
     # ---- i1Pro / i1Pro 2 / i1Pro 3 --------------------------------
     ("i1", False, "A2"):       1050,
+    ("i1", False, "594x420"):     1512,
     ("i1", False, "329x483"):   819,
     ("i1", False, "483x329"):  1218,
     ("i1", False, "A3"):        735,
@@ -37,6 +38,7 @@ _PER_SHEET_CAPACITY: dict[tuple[str, bool, str], int] = {
     ("i1", False, "4x6"):       100,
     # ---- i1Pro 3 Plus (measured with -i3p; ~5× fewer per sheet than i1) --------
     ("p3", False, "A2"):        225,
+    ("p3", False, "594x420"):      324,
     ("p3", False, "329x483"):   171,
     ("p3", False, "483x329"):   261,
     ("p3", False, "A3"):        153,
@@ -52,6 +54,7 @@ _PER_SHEET_CAPACITY: dict[tuple[str, bool, str], int] = {
     ("p3", False, "4x6"):        20,
     # ---- ColorMunki / i1Studio / ColorChecker Studio — standard ----
     ("CM", False, "A2"):        490,
+    ("CM", False, "594x420"):      480,
     ("CM", False, "329x483"):   308,
     ("CM", False, "483x329"):   288,
     ("CM", False, "A3"):        240,
@@ -67,6 +70,7 @@ _PER_SHEET_CAPACITY: dict[tuple[str, bool, str], int] = {
     ("CM", False, "4x6"):        18,
     # ---- ColorMunki + rig / double density (-h) --------------------
     ("CM", True,  "A2"):       1015,
+    ("CM", True,  "594x420"):      966,
     ("CM", True,  "329x483"):   594,
     ("CM", True,  "483x329"):   578,
     ("CM", True,  "A3"):        460,
@@ -85,6 +89,7 @@ _PER_SHEET_CAPACITY: dict[tuple[str, bool, str], int] = {
     # SS layout is independent of -L (flatbed reads individual patches,
     # not strips), so these values are identical to _PER_SHEET_CAPACITY_NO_LB.
     ("SS", False, "A2"):       4592,
+    ("SS", False, "594x420"):     4617,
     ("SS", False, "329x483"):  2838,
     ("SS", False, "483x329"):  2860,
     ("SS", False, "A3"):       2166,
@@ -101,6 +106,7 @@ _PER_SHEET_CAPACITY: dict[tuple[str, bool, str], int] = {
     # ---- SpectroScan + hexagon (-h): ~14% denser packing ------------
     # Measured via scripts/measure_ss_hex_capacity.py.
     ("SS", True,  "A2"):       5264,
+    ("SS", True,  "594x420"):     5200,
     ("SS", True,  "329x483"):  3268,
     ("SS", True,  "483x329"):  3250,
     ("SS", True,  "A3"):       2470,
@@ -124,13 +130,14 @@ LOOKUP_BASELINE: dict[str, object] = {
     "-M": 6,
 }
 
-# Per-instrument default margin in mm. The i1Pro family's strip optics drift
+# Per-instrument default margin in mm. The original i1Pro's strip optics drift
 # onto the bare paper edge when the last patch sits ~6 mm from it, ending the
-# strip early ("not enough patches read"). Bumping to 10 mm reclaims the
-# headroom. CM/SS read individual patches and aren't affected.
+# strip early ("not enough patches read"); bumping i1 to 10 mm reclaims the
+# headroom. The i1Pro3+ (p3) doesn't need this, so it uses printtarg's native
+# 6 mm default. CM/SS read individual patches and aren't affected.
 INSTRUMENT_DEFAULT_MARGIN: dict[str, int] = {
     "i1": 10,
-    "p3": 10,
+    "p3": 6,
     "CM": 6,
     "SS": 6,
 }
@@ -178,7 +185,7 @@ INSTRUMENT_LABELS: dict[str, str] = {
 }
 
 PAPER_SIZES: list[str] = [
-    "A2",
+    "A2", "594x420",
     "329x483", "483x329",
     "A3", "420x297",
     "11x17", "Legal",
@@ -188,16 +195,22 @@ PAPER_SIZES: list[str] = [
 ]
 
 # Paper sizes hidden in guided mode for specific instruments.
-# A3 / A3+ portrait excluded for i1/p3: landscape variants (420x297 / 483x329)
-# have substantially more capacity on a strip reader.
+# A2 / A3 / A3+ portrait excluded for i1/p3: landscape variants (594x420 /
+# 420x297 / 483x329) have substantially more capacity on a strip reader.
 # Smallest photo formats excluded for p3: patch counts too low for a usable profile.
+# A2 landscape (594x420) hidden for SS: the SpectroScan's flatbed bed can't reach
+# the far edge of a 594 mm-wide sheet, so only A2 portrait is offered.
+# CM is absent from this map: it shows every paper, including both A2 orientations.
 EXCLUDED_PAPERS: dict[str, set[str]] = {
-    "i1": {"A3", "329x483"},
-    "p3": {"A3", "329x483", "127x178", "4x6"},
+    "i1": {"A2", "A3", "329x483"},
+    "p3": {"A2", "A3", "329x483", "127x178", "4x6"},
+    "SS": {"594x420"},
 }
 
 # When the selected paper becomes excluded on instrument switch, use this fallback.
 PAPER_FALLBACK: dict[str, str] = {
+    "A2":      "594x420",
+    "594x420": "A2",
     "A3":      "420x297",
     "329x483": "483x329",
     "127x178": "A4",
@@ -205,7 +218,8 @@ PAPER_FALLBACK: dict[str, str] = {
 }
 
 PAPER_LABELS: dict[str, str] = {
-    "A2":      "A2 (420 × 594 mm)",
+    "A2":      "A2 (420 × 594 mm) Portrait",
+    "594x420": "A2 (594 × 420 mm) Landscape",
     "329x483": "A3+ (329 × 483 mm) Portrait",
     "483x329": "A3+ (483 × 329 mm) Landscape",
     "A3":      "A3 (297 × 420 mm) Portrait",
@@ -224,6 +238,7 @@ PAPER_LABELS: dict[str, str] = {
 # printtarg -p argument for each paper key
 PAPER_PRINTTARG_ARG: dict[str, str] = {
     "A2":      "A2",
+    "594x420": "594x420",
     "329x483": "329x483",
     "483x329": "483x329",
     "A3":      "A3",
@@ -247,6 +262,7 @@ PAPER_PRINTTARG_ARG: dict[str, str] = {
 _PER_SHEET_CAPACITY_NO_LB: dict[tuple[str, bool, str], int] = {
     # ---- i1Pro / i1Pro 2 / i1Pro 3 --------------------------------
     ("i1", False, "A2"):        986,
+    ("i1", False, "594x420"):     1449,
     ("i1", False, "329x483"):   756,
     ("i1", False, "483x329"):  1155,
     ("i1", False, "A3"):        670,
@@ -262,6 +278,7 @@ _PER_SHEET_CAPACITY_NO_LB: dict[tuple[str, bool, str], int] = {
     ("i1", False, "4x6"):        80,
     # ---- i1Pro 3 Plus (measured with -i3p; ~5× fewer per sheet than i1) --------
     ("p3", False, "A2"):        207,
+    ("p3", False, "594x420"):      306,
     ("p3", False, "329x483"):   162,
     ("p3", False, "483x329"):   243,
     ("p3", False, "A3"):        144,
@@ -278,6 +295,7 @@ _PER_SHEET_CAPACITY_NO_LB: dict[tuple[str, bool, str], int] = {
     # ---- ColorMunki / i1Studio / ColorChecker Studio — standard ----
     # -L has no effect on CM layout; values identical to with-L baseline
     ("CM", False, "A2"):        490,
+    ("CM", False, "594x420"):      480,
     ("CM", False, "329x483"):   308,
     ("CM", False, "483x329"):   288,
     ("CM", False, "A3"):        240,
@@ -293,6 +311,7 @@ _PER_SHEET_CAPACITY_NO_LB: dict[tuple[str, bool, str], int] = {
     ("CM", False, "4x6"):        18,
     # ---- ColorMunki + rig / double density (-h) --------------------
     ("CM", True,  "A2"):       1015,
+    ("CM", True,  "594x420"):      966,
     ("CM", True,  "329x483"):   594,
     ("CM", True,  "483x329"):   578,
     ("CM", True,  "A3"):        460,
@@ -310,6 +329,7 @@ _PER_SHEET_CAPACITY_NO_LB: dict[tuple[str, bool, str], int] = {
     # Re-measured via scripts/measure_ss_capacity.py against Argyll 3.5.0.
     # -L has no effect on SS layout — values identical to the with-L table.
     ("SS", False, "A2"):       4592,
+    ("SS", False, "594x420"):     4617,
     ("SS", False, "329x483"):  2838,
     ("SS", False, "483x329"):  2860,
     ("SS", False, "A3"):       2166,
@@ -325,6 +345,7 @@ _PER_SHEET_CAPACITY_NO_LB: dict[tuple[str, bool, str], int] = {
     ("SS", False, "4x6"):       209,
     # ---- SpectroScan + hexagon (-h): -L is still a no-op on SS ------
     ("SS", True,  "A2"):       5264,
+    ("SS", True,  "594x420"):     5200,
     ("SS", True,  "329x483"):  3268,
     ("SS", True,  "483x329"):  3250,
     ("SS", True,  "A3"):       2470,
@@ -354,6 +375,7 @@ _PER_SHEET_CAPACITY_NO_LB: dict[tuple[str, bool, str], int] = {
 _PER_SHEET_CAPACITY_M10: dict[tuple[str, bool, str], int] = {
     # ---- i1Pro / i1Pro 2 / i1Pro 3 --------------------------------
     ("i1", False, "A2"):       1029,
+    ("i1", False, "594x420"):     1491,
     ("i1", False, "329x483"):   798,
     ("i1", False, "483x329"):  1197,
     ("i1", False, "A3"):        714,
@@ -367,6 +389,7 @@ _PER_SHEET_CAPACITY_M10: dict[tuple[str, bool, str], int] = {
     ("i1", False, "203x254"):   418,
     # ---- i1Pro 3 Plus ---------------------------------------------
     ("p3", False, "A2"):        216,
+    ("p3", False, "594x420"):      315,
     ("p3", False, "329x483"):   171,
     ("p3", False, "483x329"):   252,
     ("p3", False, "A3"):        153,
@@ -383,6 +406,7 @@ _PER_SHEET_CAPACITY_M10: dict[tuple[str, bool, str], int] = {
 _PER_SHEET_CAPACITY_M10_NO_LB: dict[tuple[str, bool, str], int] = {
     # ---- i1Pro / i1Pro 2 / i1Pro 3 --------------------------------
     ("i1", False, "A2"):        987,
+    ("i1", False, "594x420"):     1449,
     ("i1", False, "329x483"):   756,
     ("i1", False, "483x329"):  1155,
     ("i1", False, "A3"):        672,
@@ -396,6 +420,7 @@ _PER_SHEET_CAPACITY_M10_NO_LB: dict[tuple[str, bool, str], int] = {
     ("i1", False, "203x254"):   380,
     # ---- i1Pro 3 Plus ---------------------------------------------
     ("p3", False, "A2"):        207,
+    ("p3", False, "594x420"):      306,
     ("p3", False, "329x483"):   162,
     ("p3", False, "483x329"):   243,
     ("p3", False, "A3"):        144,
@@ -420,6 +445,7 @@ _PER_SHEET_CAPACITY_M10_NO_LB: dict[tuple[str, bool, str], int] = {
 _PER_SHEET_CAPACITY_A095: dict[tuple[str, bool, str], int] = {
     # ---- i1Pro / i1Pro 2 / i1Pro 3 --------------------------------
     ("i1", False, "A2"):       1166,
+    ("i1", False, "594x420"):     1650,
     ("i1", False, "329x483"):   902,
     ("i1", False, "483x329"):  1342,
     ("i1", False, "A3"):        792,
@@ -435,6 +461,7 @@ _PER_SHEET_CAPACITY_A095: dict[tuple[str, bool, str], int] = {
     ("i1", False, "4x6"):       121,
     # ---- i1Pro 3 Plus ---------------------------------------------
     ("p3", False, "A2"):        260,
+    ("p3", False, "594x420"):      370,
     ("p3", False, "329x483"):   200,
     ("p3", False, "483x329"):   300,
     ("p3", False, "A3"):        180,
@@ -451,6 +478,7 @@ _PER_SHEET_CAPACITY_A095: dict[tuple[str, bool, str], int] = {
     # ---- ColorMunki / i1Studio / ColorChecker Studio — standard ----
     # -L has no effect on CM layout; values identical to no-LB table.
     ("CM", False, "A2"):        555,
+    ("CM", False, "594x420"):      525,
     ("CM", False, "329x483"):   319,
     ("CM", False, "483x329"):   306,
     ("CM", False, "A3"):        250,
@@ -466,6 +494,7 @@ _PER_SHEET_CAPACITY_A095: dict[tuple[str, bool, str], int] = {
     # ("CM", False, "4x6") omitted: infeasible at -a 0.95
     # ---- ColorMunki + rig / double density (-h) --------------------
     ("CM", True,  "A2"):       1110,
+    ("CM", True,  "594x420"):     1056,
     ("CM", True,  "329x483"):   667,
     ("CM", True,  "483x329"):   630,
     ("CM", True,  "A3"):        504,
@@ -484,6 +513,7 @@ _PER_SHEET_CAPACITY_A095: dict[tuple[str, bool, str], int] = {
 _PER_SHEET_CAPACITY_A095_NO_LB: dict[tuple[str, bool, str], int] = {
     # ---- i1Pro / i1Pro 2 / i1Pro 3 --------------------------------
     ("i1", False, "A2"):       1100,
+    ("i1", False, "594x420"):     1606,
     ("i1", False, "329x483"):   836,
     ("i1", False, "483x329"):  1276,
     ("i1", False, "A3"):        748,
@@ -499,6 +529,7 @@ _PER_SHEET_CAPACITY_A095_NO_LB: dict[tuple[str, bool, str], int] = {
     ("i1", False, "4x6"):        88,
     # ---- i1Pro 3 Plus ---------------------------------------------
     ("p3", False, "A2"):        250,
+    ("p3", False, "594x420"):      360,
     ("p3", False, "329x483"):   190,
     ("p3", False, "483x329"):   290,
     ("p3", False, "A3"):        170,
@@ -515,6 +546,7 @@ _PER_SHEET_CAPACITY_A095_NO_LB: dict[tuple[str, bool, str], int] = {
     # ---- ColorMunki / i1Studio / ColorChecker Studio — standard ----
     # -L has no effect on CM layout; values identical to with-L table.
     ("CM", False, "A2"):        555,
+    ("CM", False, "594x420"):      525,
     ("CM", False, "329x483"):   319,
     ("CM", False, "483x329"):   306,
     ("CM", False, "A3"):        250,
@@ -530,6 +562,7 @@ _PER_SHEET_CAPACITY_A095_NO_LB: dict[tuple[str, bool, str], int] = {
     # ("CM", False, "4x6") omitted: infeasible at -a 0.95
     # ---- ColorMunki + rig / double density (-h) --------------------
     ("CM", True,  "A2"):       1110,
+    ("CM", True,  "594x420"):     1056,
     ("CM", True,  "329x483"):   667,
     ("CM", True,  "483x329"):   630,
     ("CM", True,  "A3"):        504,
@@ -548,6 +581,7 @@ _PER_SHEET_CAPACITY_A095_NO_LB: dict[tuple[str, bool, str], int] = {
 _PER_SHEET_CAPACITY_A095_M10: dict[tuple[str, bool, str], int] = {
     # ---- i1Pro / i1Pro 2 / i1Pro 3 --------------------------------
     ("i1", False, "A2"):       1122,
+    ("i1", False, "594x420"):     1628,
     ("i1", False, "329x483"):   880,
     ("i1", False, "483x329"):  1320,
     ("i1", False, "A3"):        770,
@@ -562,6 +596,7 @@ _PER_SHEET_CAPACITY_A095_M10: dict[tuple[str, bool, str], int] = {
     # 127x178 / 4x6 omitted: infeasible at margin=10
     # ---- i1Pro 3 Plus ---------------------------------------------
     ("p3", False, "A2"):        250,
+    ("p3", False, "594x420"):      370,
     ("p3", False, "329x483"):   200,
     ("p3", False, "483x329"):   300,
     ("p3", False, "A3"):        170,
@@ -579,6 +614,7 @@ _PER_SHEET_CAPACITY_A095_M10: dict[tuple[str, bool, str], int] = {
 _PER_SHEET_CAPACITY_A095_M10_NO_LB: dict[tuple[str, bool, str], int] = {
     # ---- i1Pro / i1Pro 2 / i1Pro 3 --------------------------------
     ("i1", False, "A2"):       1078,
+    ("i1", False, "594x420"):     1584,
     ("i1", False, "329x483"):   814,
     ("i1", False, "483x329"):  1276,
     ("i1", False, "A3"):        726,
@@ -593,6 +629,7 @@ _PER_SHEET_CAPACITY_A095_M10_NO_LB: dict[tuple[str, bool, str], int] = {
     # 127x178 / 4x6 omitted: infeasible at margin=10
     # ---- i1Pro 3 Plus ---------------------------------------------
     ("p3", False, "A2"):        240,
+    ("p3", False, "594x420"):      360,
     ("p3", False, "329x483"):   180,
     ("p3", False, "483x329"):   290,
     ("p3", False, "A3"):        160,
@@ -619,6 +656,7 @@ _PER_SHEET_CAPACITY_A095_M10_NO_LB: dict[tuple[str, bool, str], int] = {
 _PER_SHEET_CAPACITY_TRIPLE: dict[str, int] = {
     # Measured via scripts/measure_triple_density_capacity.py against Argyll 3.5.0.
     "A2":      1482,
+    "594x420": 1485,
     "329x483":  930,
     "483x329":  900,
     "A3":       729,
@@ -637,6 +675,7 @@ _PER_SHEET_CAPACITY_TRIPLE: dict[str, int] = {
 _PER_SHEET_CAPACITY_TRIPLE_NO_LB: dict[str, int] = {
     # Measured via scripts/measure_triple_density_capacity.py against Argyll 3.5.0.
     "A2":      1404,
+    "594x420": 1431,
     "329x483":  868,
     "483x329":  840,
     "A3":       675,
@@ -665,6 +704,7 @@ _PER_SHEET_CAPACITY_TRIPLE_NO_LB: dict[str, int] = {
 _PER_SHEET_CAPACITY_P: dict[tuple[str, bool, str], int] = {
     # ---- i1Pro / i1Pro 2 / i1Pro 3 --------------------------------
     ("i1", False, "A2"):       2500,
+    ("i1", False, "594x420"):     2520,
     ("i1", False, "329x483"):  1560,
     ("i1", False, "483x329"):  1508,
     ("i1", False, "A3"):       1225,
@@ -680,6 +720,7 @@ _PER_SHEET_CAPACITY_P: dict[tuple[str, bool, str], int] = {
     ("i1", False, "4x6"):       100,
     # ---- i1Pro 3 Plus ---------------------------------------------
     ("p3", False, "A2"):        600,
+    ("p3", False, "594x420"):      576,
     ("p3", False, "329x483"):   361,
     ("p3", False, "483x329"):   348,
     ("p3", False, "A3"):        272,
@@ -698,6 +739,7 @@ _PER_SHEET_CAPACITY_P: dict[tuple[str, bool, str], int] = {
 _PER_SHEET_CAPACITY_NO_LB_P: dict[tuple[str, bool, str], int] = {
     # ---- i1Pro / i1Pro 2 / i1Pro 3 --------------------------------
     ("i1", False, "A2"):       2350,
+    ("i1", False, "594x420"):     2415,
     ("i1", False, "329x483"):  1440,
     ("i1", False, "483x329"):  1430,
     ("i1", False, "A3"):       1120,
@@ -713,6 +755,7 @@ _PER_SHEET_CAPACITY_NO_LB_P: dict[tuple[str, bool, str], int] = {
     ("i1", False, "4x6"):        80,
     # ---- i1Pro 3 Plus ---------------------------------------------
     ("p3", False, "A2"):        552,
+    ("p3", False, "594x420"):      544,
     ("p3", False, "329x483"):   342,
     ("p3", False, "483x329"):   324,
     ("p3", False, "A3"):        256,
@@ -731,6 +774,7 @@ _PER_SHEET_CAPACITY_NO_LB_P: dict[tuple[str, bool, str], int] = {
 _PER_SHEET_CAPACITY_M10_P: dict[tuple[str, bool, str], int] = {
     # ---- i1Pro / i1Pro 2 / i1Pro 3 --------------------------------
     ("i1", False, "A2"):       2450,
+    ("i1", False, "594x420"):     2414,
     ("i1", False, "329x483"):  1520,
     ("i1", False, "483x329"):  1482,
     ("i1", False, "A3"):       1156,
@@ -745,6 +789,7 @@ _PER_SHEET_CAPACITY_M10_P: dict[tuple[str, bool, str], int] = {
     # 127x178 / 4x6 omitted: infeasible at margin=10
     # ---- i1Pro 3 Plus ---------------------------------------------
     ("p3", False, "A2"):        576,
+    ("p3", False, "594x420"):      560,
     ("p3", False, "329x483"):   361,
     ("p3", False, "483x329"):   336,
     ("p3", False, "A3"):        272,
@@ -762,6 +807,7 @@ _PER_SHEET_CAPACITY_M10_P: dict[tuple[str, bool, str], int] = {
 _PER_SHEET_CAPACITY_M10_NO_LB_P: dict[tuple[str, bool, str], int] = {
     # ---- i1Pro / i1Pro 2 / i1Pro 3 --------------------------------
     ("i1", False, "A2"):       2350,
+    ("i1", False, "594x420"):     2346,
     ("i1", False, "329x483"):  1440,
     ("i1", False, "483x329"):  1430,
     ("i1", False, "A3"):       1088,
@@ -776,6 +822,7 @@ _PER_SHEET_CAPACITY_M10_NO_LB_P: dict[tuple[str, bool, str], int] = {
     # 127x178 / 4x6 omitted: infeasible at margin=10
     # ---- i1Pro 3 Plus ---------------------------------------------
     ("p3", False, "A2"):        552,
+    ("p3", False, "594x420"):      544,
     ("p3", False, "329x483"):   342,
     ("p3", False, "483x329"):   324,
     ("p3", False, "A3"):        256,
@@ -793,6 +840,7 @@ _PER_SHEET_CAPACITY_M10_NO_LB_P: dict[tuple[str, bool, str], int] = {
 _PER_SHEET_CAPACITY_A095_P: dict[tuple[str, bool, str], int] = {
     # ---- i1Pro / i1Pro 2 / i1Pro 3 --------------------------------
     ("i1", False, "A2"):       2809,
+    ("i1", False, "594x420"):     2700,
     ("i1", False, "329x483"):  1722,
     ("i1", False, "483x329"):  1708,
     ("i1", False, "A3"):       1296,
@@ -808,6 +856,7 @@ _PER_SHEET_CAPACITY_A095_P: dict[tuple[str, bool, str], int] = {
     ("i1", False, "4x6"):       121,
     # ---- i1Pro 3 Plus ---------------------------------------------
     ("p3", False, "A2"):        650,
+    ("p3", False, "594x420"):      629,
     ("p3", False, "329x483"):   400,
     ("p3", False, "483x329"):   390,
     ("p3", False, "A3"):        306,
@@ -826,6 +875,7 @@ _PER_SHEET_CAPACITY_A095_P: dict[tuple[str, bool, str], int] = {
 _PER_SHEET_CAPACITY_A095_NO_LB_P: dict[tuple[str, bool, str], int] = {
     # ---- i1Pro / i1Pro 2 / i1Pro 3 --------------------------------
     ("i1", False, "A2"):       2650,
+    ("i1", False, "594x420"):     2628,
     ("i1", False, "329x483"):  1596,
     ("i1", False, "483x329"):  1624,
     ("i1", False, "A3"):       1224,
@@ -841,6 +891,7 @@ _PER_SHEET_CAPACITY_A095_NO_LB_P: dict[tuple[str, bool, str], int] = {
     ("i1", False, "4x6"):        88,
     # ---- i1Pro 3 Plus ---------------------------------------------
     ("p3", False, "A2"):        625,
+    ("p3", False, "594x420"):      612,
     ("p3", False, "329x483"):   380,
     ("p3", False, "483x329"):   377,
     ("p3", False, "A3"):        289,
@@ -859,6 +910,7 @@ _PER_SHEET_CAPACITY_A095_NO_LB_P: dict[tuple[str, bool, str], int] = {
 _PER_SHEET_CAPACITY_A095_M10_P: dict[tuple[str, bool, str], int] = {
     # ---- i1Pro / i1Pro 2 / i1Pro 3 --------------------------------
     ("i1", False, "A2"):       2703,
+    ("i1", False, "594x420"):     2664,
     ("i1", False, "329x483"):  1680,
     ("i1", False, "483x329"):  1620,
     ("i1", False, "A3"):       1260,
@@ -873,6 +925,7 @@ _PER_SHEET_CAPACITY_A095_M10_P: dict[tuple[str, bool, str], int] = {
     # 127x178 / 4x6 omitted: infeasible at margin=10
     # ---- i1Pro 3 Plus ---------------------------------------------
     ("p3", False, "A2"):        625,
+    ("p3", False, "594x420"):      629,
     ("p3", False, "329x483"):   400,
     ("p3", False, "483x329"):   360,
     ("p3", False, "A3"):        289,
@@ -890,6 +943,7 @@ _PER_SHEET_CAPACITY_A095_M10_P: dict[tuple[str, bool, str], int] = {
 _PER_SHEET_CAPACITY_A095_M10_NO_LB_P: dict[tuple[str, bool, str], int] = {
     # ---- i1Pro / i1Pro 2 / i1Pro 3 --------------------------------
     ("i1", False, "A2"):       2597,
+    ("i1", False, "594x420"):     2592,
     ("i1", False, "329x483"):  1554,
     ("i1", False, "483x329"):  1566,
     ("i1", False, "A3"):       1188,
@@ -904,6 +958,7 @@ _PER_SHEET_CAPACITY_A095_M10_NO_LB_P: dict[tuple[str, bool, str], int] = {
     # 127x178 / 4x6 omitted: infeasible at margin=10
     # ---- i1Pro 3 Plus ---------------------------------------------
     ("p3", False, "A2"):        600,
+    ("p3", False, "594x420"):      612,
     ("p3", False, "329x483"):   360,
     ("p3", False, "483x329"):   348,
     ("p3", False, "A3"):        272,
