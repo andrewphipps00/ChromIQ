@@ -1,5 +1,38 @@
 # Changelog
 
+## v3.7.11
+Smarter neutral-axis defaults in Create Chart's Guided mode, plus a
+small label tweak in the ColorMunki density row. The grey-ramp (`-g`)
+and white/black anchor (`-e`/`-B`) counts now scale to the actual
+patch budget of the selected instrument + paper combo. Based on a
+suggestion from **@pharmacist on the printerknowledge forum**.
+
+### Features
+- **Capacity-aware grey / white / black in Guided mode.** The grey-axis
+  step count is sized from the chart's patch budget, anchored on the
+  suggester's reference of i1Pro + A4 ≈ 441 patches → `-g32`. For
+  i1Pro, ColorMunki and i1Pro 3 Plus the result is also capped at the
+  literal per-page table (`32 / 64 / 96 / 128` for 1–4 pages, hard max
+  128), so layout knobs like margin, patch scale and the `-L` flag
+  can't push grey above spec. SpectroScan skips that per-page cap and
+  only obeys the absolute 128 ceiling, since one SpectroScan sheet
+  genuinely represents several i1Pro page-equivalents of colour
+  sampling. `-e` / `-B` follow the same page-based ladder
+  (`4 / 6 / 8 / 8` with the +50 % per-page step) but drop the starting
+  base from 4 to 3 on low-capacity combos (`per_sheet < 200` — i.e.
+  ColorMunki single density, i1Pro 3 Plus on A4, i1Pro on 4×6, etc.)
+  so the anchors don't crowd out the random colour patches on tight
+  charts. A final proportional-scale guardrail kicks in only for
+  degenerate combos (e.g. ColorMunki on 4×6, 18 patches per sheet) and
+  pulls all three values down together. Manual mode is untouched —
+  power users still pick their own values there.
+- **"For rig:" prefix on the Double / Triple density row.** When
+  ColorMunki is the selected instrument both density options require
+  the optional measuring rig accessory; the new label makes that
+  explicit and aligns the first checkbox with the left edge of the
+  Instrument combobox above it. Hidden for SpectroScan (where the
+  same checkbox toggles hexagon patches, unrelated to the rig).
+
 ## v3.7.10
 Patch follow-up to v3.7.9: Triple density's pre-TD widget values
 (margin, patch scale, suppress-LB, don't-limit-strip-length) survive

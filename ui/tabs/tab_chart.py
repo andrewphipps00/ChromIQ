@@ -56,7 +56,7 @@ from ui.tab_header import TabHeader
 from ui.tiff_preview import TiffPreview
 from ui.tooltip_button import TooltipButton
 from ui.widgets import NoScrollComboBox, NoScrollSpinBox, icc_profile_paths, make_browse_button, open_file_dialog, set_folder_icon, set_preset_icon
-from workflow.chart_creator import ChartCreator, ChartParams
+from workflow.chart_creator import ChartCreator, ChartParams, guided_neutrals
 from workflow.tiff_metadata import ALLOWED_LEFT_CLIP_PAPERS
 
 if TYPE_CHECKING:
@@ -323,7 +323,8 @@ class TabChart(QWidget):
         instr_layout = QVBoxLayout(instr_grp)
         instr_layout.setSpacing(6)
         row = QHBoxLayout()
-        row.addWidget(QLabel("Instrument:", inner))
+        instr_label = QLabel("Instrument:", inner)
+        row.addWidget(instr_label)
         self._instr_combo = NoScrollComboBox(inner)
         for code, label in INSTRUMENT_LABELS.items():
             self._instr_combo.addItem(label, code)
@@ -359,6 +360,13 @@ class TabChart(QWidget):
 
         # Double density / Triple density (CM only — mutually exclusive)
         dd_row = QHBoxLayout()
+        # "For rig:" prefix aligns the dd checkbox with the combobox above —
+        # both density options require the ColorMunki measuring rig accessory.
+        # Shown only when ColorMunki is selected (hidden for SpectroScan's
+        # hexagon-patches reuse of the same checkbox).
+        self._for_rig_label = QLabel("For rig:", inner)
+        self._for_rig_label.setMinimumWidth(instr_label.sizeHint().width())
+        dd_row.addWidget(self._for_rig_label)
         self._dd_check = QCheckBox("Double density", inner)
         self._dd_check.toggled.connect(self._update_patch_count)
         self._dd_check.toggled.connect(self._on_guided_dd_toggled)
@@ -1940,9 +1948,8 @@ class TabChart(QWidget):
         base_white = int(self._settings.get("targen_white_patches", 4))
         base_black = int(self._settings.get("targen_black_patches", 4))
         ps = per_sheet or 504
-        grey_steps = max(8, min((ps * pages) // 30, 64))
-        wp = base_white + (pages - 1) * 2
-        bp = base_black + (pages - 1) * 2
+        grey_steps, wp, bp = guided_neutrals(ps, pages, base_white, base_black,
+                                              instrument=instr)
         # -L only matters for strip instruments; -h only for CM/SS. Hide
         # both from the command preview when not applicable so the user
         # sees exactly what printtarg will run. ChromIQ-style clipping
@@ -2058,6 +2065,10 @@ class TabChart(QWidget):
         td_visible = instr == "CM"
         self._td_check.setVisible(td_visible)
         self._td_tooltip.setVisible(td_visible)
+        # "For rig:" prefix is meaningful only when both density options
+        # represent the ColorMunki rig accessory. For SS the dd checkbox
+        # is hexagon-patches (no rig involved) so we hide the label.
+        self._for_rig_label.setVisible(instr == "CM")
         if not td_visible and self._td_check.isChecked():
             self._td_check.setChecked(False)
         # -L only affects strip instruments (i1, p3). CM reads patches
@@ -2332,7 +2343,9 @@ class TabChart(QWidget):
         per_sheet  = query_patches(instr, paper, dd, suppress_lb=eff_lb,
                                    margin_mm=margin, patch_scale=patch_scale,
                                    triple_density=td) or 504
-        grey_steps = max(8, min((per_sheet * pages) // 30, 64))
+        grey_steps, white_patches, black_patches = guided_neutrals(
+            per_sheet, pages, base_white, base_black, instrument=instr
+        )
 
         precond_path = self._guided_precond_path.text().strip()
         precond_active = self._guided_precond_check.isChecked() and bool(precond_path)
@@ -2347,8 +2360,8 @@ class TabChart(QWidget):
             disable_left_border  = has_lb,
             device_type          = self._settings.get("targen_device_type", "2"),
             patches              = 0,
-            white_patches        = base_white + (pages - 1) * 2,
-            black_patches        = base_black + (pages - 1) * 2,
+            white_patches        = white_patches,
+            black_patches        = black_patches,
             good_mode            = bool(self._settings.get("targen_good_mode", True)),
             grey_steps           = grey_steps,
             extra_targen_args    = extra_targen,
