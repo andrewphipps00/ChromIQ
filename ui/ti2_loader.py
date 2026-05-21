@@ -1,6 +1,7 @@
 """Shared ti2 file loading workflow: working-folder detection, copy/rename dialogs."""
 from __future__ import annotations
 
+import re
 import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -8,6 +9,37 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from PyQt6.QtWidgets import QWidget
     from core.settings import AppSettings
+
+
+# Matches:  TARGET_INSTRUMENT "GretagMacbeth i1 Pro"
+_TARGET_INSTRUMENT_RE = re.compile(r'TARGET_INSTRUMENT\s+"([^"]*)"')
+
+
+def read_target_instrument(ti2_path: Path) -> str | None:
+    """Return the TARGET_INSTRUMENT value from a .ti2 (CGATS) file, or None.
+
+    ArgyllCMS records the instrument a chart was laid out for in this keyword,
+    e.g. ``TARGET_INSTRUMENT "GretagMacbeth i1 Pro"`` (i1 Pro family, incl.
+    i1Pro3+) or ``TARGET_INSTRUMENT "X-Rite ColorMunki"`` (ColorMunki/i1Studio).
+    """
+    try:
+        text = ti2_path.read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return None
+    m = _TARGET_INSTRUMENT_RE.search(text)
+    return m.group(1).strip() if m else None
+
+
+def disable_bidir_for_instrument(name: str | None) -> bool:
+    """Whether bidirectional strip recognition should be disabled (chartread -B).
+
+    The ColorMunki (and its i1Studio rebrand) can only read strips reliably in
+    one direction, so it needs ``-B``. The i1 Pro family — i1 Pro / Pro 2 /
+    Pro 3 / Pro 3+, all tagged ``"GretagMacbeth i1 Pro"`` — reads in either
+    direction, so it does not. Unknown / missing instruments fall back to
+    bidirectional allowed (no ``-B``).
+    """
+    return bool(name) and "colormunki" in name.lower()
 
 
 def resolve_ti2(

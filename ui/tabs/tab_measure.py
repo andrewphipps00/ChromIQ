@@ -279,6 +279,10 @@ class TabMeasure(QWidget):
         self._ti1_path: Path | None = None
         self._tiff_pages: list[Path] = []
         self._chartread_opts: list[_ChartreadOption] = []
+        # Auto bidir-detection: resolved -B value for the loaded .ti2 (False =
+        # bidirectional allowed; the no-file / unknown-instrument fallback).
+        self._detected_disable_bidir: bool = False
+        self._detected_instrument: str | None = None
         self._measure_failed: bool = False
         self._strip_list: list[str] = []
         self._refine_strips_path: Path | None = None
@@ -639,17 +643,32 @@ class TabMeasure(QWidget):
             cg.addLayout(row)
             return cb, tip
 
-        self._bidir_cb, _ = _bool_row(
-            "Disable bidirectional strip recognition (-B)", True,
-            "Disable Bidirectional Reading (-B)",
-            "Disables automatic bidirectional strip direction detection.\n\n"
-            "With this ON, chartread always expects strips to be scanned in\n"
-            "one direction. This prevents false-direction mis-reads that can\n"
-            "occur on some paper/instrument combinations when the algorithm\n"
-            "guesses the scan direction incorrectly.\n\n"
-            "Leave this checked. Only disable if chartread repeatedly flags\n"
-            "the wrong direction when you are scanning correctly.",
+        # Bidirectional row: the -B checkbox plus an "Auto" toggle on the right
+        # that derives -B from the loaded chart's instrument (see
+        # _refresh_bidir_autodetect) and greys out the checkbox while on.
+        bidir_row = QHBoxLayout()
+        self._bidir_cb = QCheckBox("Disable bidirectional strip recognition (-B)", left)
+        self._bidir_cb.setChecked(True)
+        bidir_row.addWidget(self._bidir_cb)
+        bidir_row.addStretch()
+        self._bidir_auto_cb = QCheckBox("Auto", left)
+        self._bidir_auto_cb.setChecked(True)
+        self._bidir_auto_cb.toggled.connect(
+            lambda _checked: self._apply_bidir_auto_state("guided")
         )
+        bidir_row.addWidget(self._bidir_auto_cb)
+        bidir_row.addWidget(TooltipButton(
+            "Bidirectional reading (-B)",
+            "Sets whether the chart can be read in both directions or only one.\n\n"
+            "Auto (recommended) reads the instrument saved in your loaded chart\n"
+            "and decides for you: i1 Pro (including i1 Pro 3) reads both\n"
+            "directions, the ColorMunki reads one direction only. While Auto is\n"
+            "on, the checkbox is locked and shows the chosen setting.\n\n"
+            "Turn Auto off to choose yourself — tick the box to force\n"
+            "one-direction reading (-B), untick it to allow both directions.",
+            left,
+        ))
+        cg.addLayout(bidir_row)
         self._suppress_cb, _ = _bool_row(
             "Suppress warning messages (-S)", True,
             "Suppress Warnings (-S)",
@@ -905,15 +924,30 @@ class TabMeasure(QWidget):
             mcg.addLayout(row)
             return cb
 
-        self._m_bidir_cb = _bool_row_m(
-            "Disable bidirectional strip recognition (-B)", False,
-            "Disable Bidirectional Reading (-B)",
-            "Stops chartread from auto-detecting whether you scanned a strip\n"
-            "forwards or backwards. ChromIQ leaves this off by default so the\n"
-            "instrument can read strips in either direction.\n\n"
-            "Turn it on only if chartread repeatedly flags the wrong scan\n"
-            "direction during measurement.",
+        # Bidirectional row with an "Auto" toggle on the right (mirrors guided).
+        m_bidir_row = QHBoxLayout()
+        self._m_bidir_cb = QCheckBox("Disable bidirectional strip recognition (-B)", left)
+        self._m_bidir_cb.setChecked(False)
+        m_bidir_row.addWidget(self._m_bidir_cb)
+        m_bidir_row.addStretch()
+        self._m_bidir_auto_cb = QCheckBox("Auto", left)
+        self._m_bidir_auto_cb.setChecked(True)
+        self._m_bidir_auto_cb.toggled.connect(
+            lambda _checked: self._apply_bidir_auto_state("manual")
         )
+        m_bidir_row.addWidget(self._m_bidir_auto_cb)
+        m_bidir_row.addWidget(TooltipButton(
+            "Bidirectional reading (-B)",
+            "Sets whether the chart can be read in both directions or only one.\n\n"
+            "Auto (recommended) reads the instrument saved in your loaded chart\n"
+            "and decides for you: i1 Pro (including i1 Pro 3) reads both\n"
+            "directions, the ColorMunki reads one direction only. While Auto is\n"
+            "on, the checkbox is locked and shows the chosen setting.\n\n"
+            "Turn Auto off to choose yourself — tick the box to force\n"
+            "one-direction reading (-B), untick it to allow both directions.",
+            left,
+        ))
+        mcg.addLayout(m_bidir_row)
         self._m_suppress_cb = _bool_row_m(
             "Suppress warning messages (-S)", True,
             "Suppress Warnings (-S)",
@@ -1054,11 +1088,12 @@ class TabMeasure(QWidget):
 
     def _m_collect_preset_data(self) -> dict:
         data: dict = {
-            "instr":    self._m_instr_spin.value(),
-            "bidir":    self._m_bidir_cb.isChecked(),
-            "suppress": self._m_suppress_cb.isChecked(),
-            "nocal":    self._m_nocal_cb.isChecked(),
-            "pbp":      self._m_pbp_cb.isChecked(),
+            "instr":      self._m_instr_spin.value(),
+            "bidir":      self._m_bidir_cb.isChecked(),
+            "bidir_auto": self._m_bidir_auto_cb.isChecked(),
+            "suppress":   self._m_suppress_cb.isChecked(),
+            "nocal":      self._m_nocal_cb.isChecked(),
+            "pbp":        self._m_pbp_cb.isChecked(),
         }
         for opt in self._m_chartread_opts:
             if opt.checkbox:
@@ -1076,6 +1111,7 @@ class TabMeasure(QWidget):
         except (ValueError, TypeError):
             pass
         self._m_bidir_cb.setChecked(bool(data.get("bidir", False)))
+        self._m_bidir_auto_cb.setChecked(bool(data.get("bidir_auto", True)))
         self._m_suppress_cb.setChecked(bool(data.get("suppress", True)))
         self._m_nocal_cb.setChecked(bool(data.get("nocal", False)))
         self._m_pbp_cb.setChecked(bool(data.get("pbp", False)))
@@ -1094,6 +1130,7 @@ class TabMeasure(QWidget):
                         idx = opt.widget.findData(str(val))
                         if idx >= 0:
                             opt.widget.setCurrentIndex(idx)
+        self._apply_bidir_auto_state("manual")
 
     def _on_m_preset_selected(self, index: int) -> None:
         self._m_preset_del_btn.setEnabled(index > 0)
@@ -1105,6 +1142,7 @@ class TabMeasure(QWidget):
             except (ValueError, TypeError):
                 pass
             self._m_bidir_cb.setChecked(bool(s.get("manual2_chartread_bidir", False)))
+            self._m_bidir_auto_cb.setChecked(bool(s.get("manual2_chartread_bidir_auto", True)))
             self._m_suppress_cb.setChecked(bool(s.get("manual2_chartread_suppress", True)))
             self._m_nocal_cb.setChecked(bool(s.get("manual2_chartread_nocal", False)))
             self._m_pbp_cb.setChecked(bool(s.get("manual2_chartread_pbp", False)))
@@ -1123,6 +1161,7 @@ class TabMeasure(QWidget):
                             idx = opt.widget.findData(str(val))
                             if idx >= 0:
                                 opt.widget.setCurrentIndex(idx)
+            self._apply_bidir_auto_state("manual")
         else:
             name = self._m_preset_combo.currentData()
             presets = self._m_load_presets()
@@ -1478,6 +1517,7 @@ class TabMeasure(QWidget):
         self._start_btn.setEnabled(True)
         self._try_load_tiffs(path)
         self._update_resume_availability()
+        self._refresh_bidir_autodetect()
 
     def clear_chart_file(self) -> None:
         self._ti1_path = None
@@ -1488,6 +1528,65 @@ class TabMeasure(QWidget):
         self._preview.clear()
         self._update_resume_availability()
         self._settings.set("session_ti1_path", "")
+        self._refresh_bidir_autodetect()
+
+    # ------------------------------------------------------------------
+    # Auto bidirectional (-B) detection
+    # ------------------------------------------------------------------
+
+    def _refresh_bidir_autodetect(self) -> None:
+        """Re-read the loaded chart's TARGET_INSTRUMENT and refresh -B state.
+
+        Called whenever the chart file changes. Resolves the -B value the
+        Auto toggle will apply, logs the decision, and updates both modes'
+        (greyed) checkboxes so they show what will happen.
+        """
+        from ui.ti2_loader import disable_bidir_for_instrument, read_target_instrument
+
+        instr = None
+        if self._ti1_path is not None and self._ti1_path.exists():
+            instr = read_target_instrument(self._ti1_path)
+        self._detected_instrument    = instr
+        self._detected_disable_bidir = disable_bidir_for_instrument(instr)
+
+        if instr and hasattr(self, "_log"):
+            direction = ("one direction only (-B)" if self._detected_disable_bidir
+                         else "both directions")
+            self._log.appendPlainText(
+                f"Chart instrument: {instr} → reading {direction}."
+            )
+
+        self._apply_bidir_auto_state("guided")
+        self._apply_bidir_auto_state("manual")
+
+    def _apply_bidir_auto_state(self, mode: str) -> None:
+        """Grey out and sync a mode's -B checkbox according to its Auto toggle.
+
+        While Auto is on the checkbox is disabled and mirrors the detected
+        value (so the locked box shows the effective setting); its own state
+        is ignored when the command is built (see _collect_*).
+        """
+        if mode == "guided":
+            auto_cb, bidir_cb = self._bidir_auto_cb, self._bidir_cb
+        else:
+            auto_cb, bidir_cb = self._m_bidir_auto_cb, self._m_bidir_cb
+        auto_on = auto_cb.isChecked()
+        bidir_cb.setEnabled(not auto_on)
+        if auto_on:
+            bidir_cb.blockSignals(True)
+            bidir_cb.setChecked(self._detected_disable_bidir)
+            bidir_cb.blockSignals(False)
+
+    def _resolve_disable_bidir(self, mode: str) -> bool:
+        """The -B value to pass to chartread: auto-detected when Auto is on,
+        else the user's checkbox (its saved preset/default)."""
+        if mode == "guided":
+            auto_cb, bidir_cb = self._bidir_auto_cb, self._bidir_cb
+        else:
+            auto_cb, bidir_cb = self._m_bidir_auto_cb, self._m_bidir_cb
+        if auto_cb.isChecked():
+            return self._detected_disable_bidir
+        return bidir_cb.isChecked()
 
     # ------------------------------------------------------------------
     # Internal
@@ -2577,7 +2676,7 @@ class TabMeasure(QWidget):
         return MeasureParams(
             ti1_path            = self._ti1_path,
             instrument          = str(self._instr_spin.value()),
-            disable_bidir       = self._bidir_cb.isChecked(),
+            disable_bidir       = self._resolve_disable_bidir("guided"),
             suppress_warnings   = self._suppress_cb.isChecked(),
             disable_initial_cal = self._nocal_cb.isChecked(),
             patch_by_patch      = self._pbp_cb.isChecked(),
@@ -2593,7 +2692,7 @@ class TabMeasure(QWidget):
         return MeasureParams(
             ti1_path            = self._ti1_path,
             instrument          = str(self._m_instr_spin.value()),
-            disable_bidir       = self._m_bidir_cb.isChecked(),
+            disable_bidir       = self._resolve_disable_bidir("manual"),
             suppress_warnings   = self._m_suppress_cb.isChecked(),
             disable_initial_cal = self._m_nocal_cb.isChecked(),
             patch_by_patch      = self._m_pbp_cb.isChecked(),
@@ -2614,6 +2713,7 @@ class TabMeasure(QWidget):
         s = self._settings
         if self._current_mode() == "guided":
             s.set("measure_disable_bidir",     self._bidir_cb.isChecked())
+            s.set("measure_bidir_auto",        self._bidir_auto_cb.isChecked())
             s.set("measure_suppress_warnings", self._suppress_cb.isChecked())
             s.set("measure_no_cal",            self._nocal_cb.isChecked())
             s.set("measure_patch_by_patch",    self._pbp_cb.isChecked())
@@ -2628,6 +2728,7 @@ class TabMeasure(QWidget):
         else:
             s.set("manual2_chartread_instr",    self._m_instr_spin.value())
             s.set("manual2_chartread_bidir",    self._m_bidir_cb.isChecked())
+            s.set("manual2_chartread_bidir_auto", self._m_bidir_auto_cb.isChecked())
             s.set("manual2_chartread_suppress", self._m_suppress_cb.isChecked())
             s.set("manual2_chartread_nocal",    self._m_nocal_cb.isChecked())
             s.set("manual2_chartread_pbp",      self._m_pbp_cb.isChecked())
@@ -2646,6 +2747,7 @@ class TabMeasure(QWidget):
         s = self._settings
         # Guided defaults
         self._bidir_cb.setChecked(bool(s.get("measure_disable_bidir", True)))
+        self._bidir_auto_cb.setChecked(bool(s.get("measure_bidir_auto", True)))
         self._suppress_cb.setChecked(bool(s.get("measure_suppress_warnings", True)))
         self._nocal_cb.setChecked(bool(s.get("measure_no_cal", False)))
         self._pbp_cb.setChecked(bool(s.get("measure_patch_by_patch", False)))
@@ -2673,6 +2775,7 @@ class TabMeasure(QWidget):
             except (ValueError, TypeError):
                 pass
         self._m_bidir_cb.setChecked(bool(s.get("manual2_chartread_bidir", False)))
+        self._m_bidir_auto_cb.setChecked(bool(s.get("manual2_chartread_bidir_auto", True)))
         self._m_suppress_cb.setChecked(bool(s.get("manual2_chartread_suppress", True)))
         self._m_nocal_cb.setChecked(bool(s.get("manual2_chartread_nocal", False)))
         self._m_pbp_cb.setChecked(bool(s.get("manual2_chartread_pbp", False)))
@@ -2694,3 +2797,6 @@ class TabMeasure(QWidget):
                             opt.widget.setCurrentIndex(idx)
         presets = self._m_load_presets()
         self._m_populate_preset_combo(presets)
+        # Reflect the restored Auto toggles (grey out / sync the -B checkboxes).
+        self._apply_bidir_auto_state("guided")
+        self._apply_bidir_auto_state("manual")
