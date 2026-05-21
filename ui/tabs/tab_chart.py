@@ -1947,9 +1947,10 @@ class TabChart(QWidget):
         # Hidden-defaults info label (values mirror _collect_guided logic)
         base_white = int(self._settings.get("targen_white_patches", 4))
         base_black = int(self._settings.get("targen_black_patches", 4))
-        ps = per_sheet or 504
-        grey_steps, wp, bp = guided_neutrals(ps, pages, base_white, base_black,
-                                              instrument=instr)
+        grey_steps, wp, bp = guided_neutrals(
+            instr, paper, pages, base_white, base_black, eff_lb,
+            double_density=dd, triple_density=td,
+        )
         # -L only matters for strip instruments; -h only for CM/SS. Hide
         # both from the command preview when not applicable so the user
         # sees exactly what printtarg will run. ChromIQ-style clipping
@@ -2338,13 +2339,13 @@ class TabChart(QWidget):
             no_strip_limit = False
         base_white = int(self._settings.get("targen_white_patches", 4))
         base_black = int(self._settings.get("targen_black_patches", 4))
-        # ChromIQ-style forces -L → size grey ramp from -L-enabled capacity.
-        eff_lb = has_lb or self._chromiq_force_l(instr, paper)
-        per_sheet  = query_patches(instr, paper, dd, suppress_lb=eff_lb,
-                                   margin_mm=margin, patch_scale=patch_scale,
-                                   triple_density=td) or 504
+        # ChromIQ-style and triple-density both force -L; mirror the chart's
+        # effective suppress_lb state so guided_neutrals sees what targen/
+        # printtarg will actually run.
+        eff_lb = has_lb or self._chromiq_force_l(instr, paper) or td
         grey_steps, white_patches, black_patches = guided_neutrals(
-            per_sheet, pages, base_white, base_black, instrument=instr
+            instr, paper, pages, base_white, base_black, eff_lb,
+            double_density=dd, triple_density=td,
         )
 
         precond_path = self._guided_precond_path.text().strip()

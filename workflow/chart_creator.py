@@ -56,83 +56,116 @@ def _effective_suppress_lb(p: "ChartParams") -> bool:
 # Guided-mode neutrals: -g, -e, -B targets. Manual Mode is the escape hatch
 # and stays untouched.
 #
-# -g is scaled to the actual patch budget, anchored on the original
-# suggester's "32 grey steps for i1Pro+A4 (~441 patches)" — i.e. one grey
-# step per ~14 budget patches. Low-capacity instruments (ColorMunki, p3)
-# scale down; high-capacity (SpectroScan) scales up, capped at 128.
-GUIDED_GREY_REF_STEPS     = 32
-GUIDED_GREY_REF_BUDGET    = 441   # i1Pro + A4 (no -L) per_sheet
+# Anchor: i1Pro + A4, margin=10, patch_scale=0.95, clip suppressed (-L). That
+# combo yields 528 patches and is the configuration where -g32 must land.
+#
+# Scaling key: "effective sheets" = nominal_patches(instrument, paper) / 528.
+# A bigger paper or a higher-capacity instrument has more effective sheets,
+# so neutrals scale up; a smaller paper or low-capacity rig has fewer, so
+# they scale down. Multi-page just multiplies the nominal.
+#
+# Layout knobs (margin, patch_scale) do NOT move neutrals — the nominal
+# lookup pins them at the reference values. suppress_lb does follow the
+# chart's actual state, because on i1Pro/p3 the clip strip eats real space
+# and the resulting budget is genuinely smaller.
+GUIDED_REF_MARGIN_MM      = 10
+GUIDED_REF_PATCH_SCALE    = 0.95
+GUIDED_REF_BUDGET         = 528   # query_patches("i1","A4", suppress_lb=True,
+                                  #                margin_mm=10, patch_scale=0.95)
+GUIDED_GREY_REF_STEPS     = 32    # "1 effective sheet → 32 grey steps"
 GUIDED_GREY_MAX           = 128
 GUIDED_GREY_MIN           = 8
-GUIDED_NEUTRAL_PER_PAGE   = 2     # +50 % of base 4 per extra page
+GUIDED_NEUTRAL_PER_SHEET  = 2     # +2 anchors per extra effective sheet
 GUIDED_NEUTRAL_MAX        = 8
 GUIDED_NEUTRAL_MIN        = 2
-GUIDED_NEUTRAL_BUDGET_FRC = 0.50  # neutrals consume ≤ 50 % of total patch budget
-# Low-capacity charts (e.g. ColorMunki single density, i1Pro 3 Plus on A4)
-# drop the -e/-B base by 1 so the small budget isn't dominated by anchors.
+GUIDED_NEUTRAL_BUDGET_FRC = 0.50  # neutrals consume ≤ 50 % of nominal budget
+# Low-capacity charts (ColorMunki single density, i1Pro 3 Plus on small
+# paper) drop the -e/-B base by 1 so the small budget isn't dominated by
+# anchors.
 GUIDED_LOW_CAPACITY_PS    = 200
 
+# Sanity check: keep GUIDED_REF_BUDGET in sync with patch_db.
+assert query_patches("i1", "A4", suppress_lb=True,
+                     margin_mm=GUIDED_REF_MARGIN_MM,
+                     patch_scale=GUIDED_REF_PATCH_SCALE) == GUIDED_REF_BUDGET, (
+    "GUIDED_REF_BUDGET out of sync with patch_db — update the constant "
+    "or the patch_db entry."
+)
 
-def guided_neutrals(per_sheet: int | None,
+
+def guided_neutrals(instrument: str,
+                    paper: str,
                     pages: int,
                     base_white: int,
                     base_black: int,
-                    instrument: str | None = None) -> tuple[int, int, int]:
+                    suppress_lb: bool,
+                    double_density: bool = False,
+                    triple_density: bool = False) -> tuple[int, int, int]:
     """Return (grey_steps, white_patches, black_patches) for Guided Mode.
 
-    -g is sized from the patch budget so low-capacity instruments
-    (ColorMunki, i1Pro 3 Plus) get a proportionally smaller grey ramp.
-    For i1Pro and ColorMunki/p3 the result is also capped at the
-    suggester's literal table (32×pages, max 128), so layout knobs
-    (margin/-L/patch scale) can't push -g above spec. SpectroScan
-    skips that per-page cap and only obeys the absolute 128 ceiling,
-    since its per-sheet budget genuinely represents multiple i1Pro
-    page-equivalents of color sampling.
+    All three values are driven by a single number — "effective sheets" —
+    so they scale together with the instrument+paper+pages combo. The
+    nominal lookup uses the chart's actual suppress_lb (clip strip eats
+    real space on i1Pro/p3) plus density flags (ColorMunki rig modes
+    multiply the budget significantly), but otherwise pins margin and
+    patch_scale to the reference values so layout knobs don't perturb
+    neutrals.
 
-    -e/-B follow a fixed page-based ladder (anchors, not coverage).
     A final proportional-scale guardrail kicks in only for degenerate
-    tiny-budget combos where the trio would still crowd out color patches.
+    tiny-budget combos where the trio would still crowd out colour patches.
     """
-    if per_sheet is not None and per_sheet < GUIDED_LOW_CAPACITY_PS:
+    nominal = query_patches(instrument, paper,
+                            double_density=double_density,
+                            suppress_lb=suppress_lb,
+                            margin_mm=GUIDED_REF_MARGIN_MM,
+                            patch_scale=GUIDED_REF_PATCH_SCALE,
+                            triple_density=triple_density)
+    if nominal is None:
+        # ColorMunki and SpectroScan have fixed layouts in patch_db —
+        # margin/patch_scale aren't honored, so the reference kwargs miss.
+        # Retry with patch_db's default layout (those instruments ignore
+        # the layout knobs internally anyway).
+        nominal = query_patches(instrument, paper,
+                                double_density=double_density,
+                                suppress_lb=suppress_lb,
+                                triple_density=triple_density)
+    if nominal is None:
+        # Genuinely unknown combo — fall back to a page-based ladder so
+        # the chart still gets sensible neutrals.
+        eff_sheets = float(pages)
+    else:
+        eff_sheets = (nominal * pages) / GUIDED_REF_BUDGET
+
+    if nominal is not None and nominal < GUIDED_LOW_CAPACITY_PS:
         eff_white = max(base_white - 1, GUIDED_NEUTRAL_MIN)
         eff_black = max(base_black - 1, GUIDED_NEUTRAL_MIN)
     else:
         eff_white = base_white
         eff_black = base_black
 
-    white_ideal = min(eff_white + GUIDED_NEUTRAL_PER_PAGE * (pages - 1),
-                      GUIDED_NEUTRAL_MAX)
-    black_ideal = min(eff_black + GUIDED_NEUTRAL_PER_PAGE * (pages - 1),
-                      GUIDED_NEUTRAL_MAX)
+    grey_ideal  = max(GUIDED_GREY_MIN,
+                      min(GUIDED_GREY_MAX,
+                          round(GUIDED_GREY_REF_STEPS * eff_sheets)))
+    white_ideal = max(GUIDED_NEUTRAL_MIN,
+                      min(GUIDED_NEUTRAL_MAX,
+                          round(eff_white + GUIDED_NEUTRAL_PER_SHEET * (eff_sheets - 1))))
+    black_ideal = max(GUIDED_NEUTRAL_MIN,
+                      min(GUIDED_NEUTRAL_MAX,
+                          round(eff_black + GUIDED_NEUTRAL_PER_SHEET * (eff_sheets - 1))))
 
-    # SpectroScan can exploit its huge per-sheet budget; everyone else
-    # is capped at the suggester's literal per-page table.
-    if instrument == "SS":
-        grey_cap = GUIDED_GREY_MAX
-    else:
-        grey_cap = min(GUIDED_GREY_REF_STEPS * pages, GUIDED_GREY_MAX)
-
-    if per_sheet is None:
-        # Custom layout — no budget to scale from. Fall back to the
-        # i1Pro-style per-page target.
-        grey_ideal = min(GUIDED_GREY_REF_STEPS * pages, GUIDED_GREY_MAX)
+    if nominal is None:
         return grey_ideal, white_ideal, black_ideal
 
-    total_budget = per_sheet * pages
-    grey_ideal = max(GUIDED_GREY_MIN, min(grey_cap, round(
-        total_budget * GUIDED_GREY_REF_STEPS / GUIDED_GREY_REF_BUDGET
-    )))
-
-    neutrals = grey_ideal + white_ideal + black_ideal
-    cap      = int(total_budget * GUIDED_NEUTRAL_BUDGET_FRC)
+    total_budget = nominal * pages
+    neutrals     = grey_ideal + white_ideal + black_ideal
+    cap          = int(total_budget * GUIDED_NEUTRAL_BUDGET_FRC)
     if neutrals <= cap or neutrals == 0:
         return grey_ideal, white_ideal, black_ideal
 
     scale = cap / neutrals
-    grey  = max(GUIDED_GREY_MIN,    int(grey_ideal  * scale))
-    white = max(GUIDED_NEUTRAL_MIN, int(white_ideal * scale))
-    black = max(GUIDED_NEUTRAL_MIN, int(black_ideal * scale))
-    return grey, white, black
+    return (max(GUIDED_GREY_MIN,    int(grey_ideal  * scale)),
+            max(GUIDED_NEUTRAL_MIN, int(white_ideal * scale)),
+            max(GUIDED_NEUTRAL_MIN, int(black_ideal * scale)))
 
 
 @dataclass

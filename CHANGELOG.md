@@ -1,5 +1,35 @@
 # Changelog
 
+## v3.7.12
+Follow-up to v3.7.11's capacity-aware neutrals. Two real-world gaps in
+the formula are now closed: bigger paper sizes increase the grey ramp
+and white/black anchors as you'd expect, and ColorMunki's rig
+(double / triple density) feeds into the same calculation so a rig user
+gets the bigger budget reflected in the chart. Same feature request
+chain from **@pharmacist on the printerknowledge forum**.
+
+### Fixes
+- **Paper area now scales the neutrals.** Before, switching from A4 to
+  A3 landscape on i1Pro left `-g32 -e4 -B4` unchanged — the pages-only
+  formula ignored that A3 landscape carries roughly 2× the patches.
+  The new "effective sheets" math compares the chart's nominal patch
+  budget against the anchor (i1Pro + A4, margin 10, patch scale 0.95,
+  clip border suppressed = 528 patches). i1Pro + A3 landscape now lands
+  on `-g68 -e6 -B6`; A2 the same. ColorMunki + A2 climbs from `-g8` to
+  `-g30 -e4 -B4`. Multi-page combinations stack the same way.
+- **Non-suppressed clip border respected.** When you leave the clip
+  border visible on i1Pro / i1Pro 3 Plus charts, fewer patches fit per
+  sheet, and the neutrals now drop proportionally. i1Pro + A4 with the
+  clip strip visible lands on `-g29` instead of `-g32`. Layout-only
+  knobs (margin, patch scale) still don't move neutrals — the anchor is
+  fixed.
+- **ColorMunki double / triple density honoured.** Engaging the
+  measuring rig multiplies the per-sheet capacity (CM + A4 goes 90 →
+  210 → 324 patches across single / double / triple). The grey ramp and
+  anchors now follow: CM + A4 with the rig produces `-g13 -e3 -B3` in
+  double density and `-g20 -e3 -B3` in triple, instead of staying at
+  the single-density `-g8 -e2 -B2`.
+
 ## v3.7.11
 Smarter neutral-axis defaults in Create Chart's Guided mode, plus a
 small label tweak in the ColorMunki density row. The grey-ramp (`-g`)
