@@ -25,7 +25,12 @@ from data.patch_db import (
     i1_defaults_from_preset,
     query_patches,
 )
-from workflow.chart_creator import ChartCreator, ChartParams
+from workflow.chart_creator import (
+    ChartCreator,
+    ChartParams,
+    guided_neutrals,
+    manual_neutrals,
+)
 
 
 class _MockRunner:
@@ -181,6 +186,39 @@ def test_query_patches_no_strip_limit_ignored_for_cm_and_ss() -> None:
             == query_patches("CM", "A4", no_strip_limit=False))
     assert (query_patches("SS", "A4", no_strip_limit=True)
             == query_patches("SS", "A4", no_strip_limit=False))
+
+
+def test_grey_ramp_reference_default_anchor() -> None:
+    """At the default anchor (560 patches) the result is the classic -g32 -e4 -B4."""
+    assert manual_neutrals(560) == (32, 4, 4)
+
+
+def test_grey_ramp_reference_lower_anchor_is_denser() -> None:
+    """Halving the anchor must roughly double neutral density (eff_sheets doubles)."""
+    g0, w0, b0 = manual_neutrals(560)
+    g1, w1, b1 = manual_neutrals(560, ref_budget=280)
+    assert g1 > g0 and w1 >= w0 and b1 >= b0
+
+
+def test_grey_ramp_reference_higher_anchor_is_sparser() -> None:
+    """Doubling the anchor must reduce neutral density (eff_sheets halves)."""
+    g0, _, _ = manual_neutrals(560)
+    g1, _, _ = manual_neutrals(560, ref_budget=1120)
+    assert g1 < g0
+
+
+def test_grey_ramp_reference_floors_hold_for_tiny_targets() -> None:
+    """A tiny target must keep the minimum neutral set regardless of the anchor."""
+    # 50 patches with a low anchor must still floor at grey>=8, white/black>=2.
+    g, w, b = manual_neutrals(50, ref_budget=280)
+    assert g == 8 and w == 2 and b == 2
+
+
+def test_grey_ramp_reference_applies_to_guided() -> None:
+    """The anchor must propagate through guided_neutrals too."""
+    g0, _, _ = guided_neutrals("i1", "A4", 1, 4, 4, True)
+    g1, _, _ = guided_neutrals("i1", "A4", 1, 4, 4, True, ref_budget=280)
+    assert g1 > g0
 
 
 def test_i1_defaults_from_preset_known_keys() -> None:
