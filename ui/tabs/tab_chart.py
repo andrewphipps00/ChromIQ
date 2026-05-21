@@ -521,11 +521,13 @@ class TabChart(QWidget):
             min_width=600,
         )
         lb_row.addWidget(self._lb_check)
+        lb_row.addSpacing(10)
         lb_row.addWidget(self._lb_tooltip)
         # Push the -P option to the right edge so its tooltip icon lines up
         # directly under the "Number of pages" tooltip in the row above.
         lb_row.addStretch()
         lb_row.addWidget(self._nsl_check)
+        lb_row.addSpacing(10)
         lb_row.addWidget(self._nsl_tooltip)
         pages_layout.addLayout(lb_row)
         layout.addWidget(pages_grp)
