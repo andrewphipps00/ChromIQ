@@ -2114,10 +2114,14 @@ class TabChart(QWidget):
                     "\nPick a profile to refine from (Browse… above)."
                 )
 
+        # With a refinement profile (-c) the neutral ramp samples the profile-
+        # defined neutral axis (-n) rather than naïve device grey (-g).
+        grey_flag = "-n" if (precond_active and precond_path) else "-g"
+
         target_name = self._preview_target_name("guided")
         info = (
             f"Guided mode applies these fixed settings:\n"
-            f"targen -d2 -G -e{wp} -B{bp} -g{grey_steps}{precond_line} {target_name}\n"
+            f"targen -d2 -G -e{wp} -B{bp} {grey_flag}{grey_steps}{precond_line} {target_name}\n"
             f"printtarg -i{preview_instr} -p{paper} -t{dpi} {scale_flag}{lb_flag}{dd_flag}{margin_flag}{strip_flag}{target_name}"
             f"{recommendation}"
         )
@@ -2504,6 +2508,9 @@ class TabChart(QWidget):
             black_patches        = black_patches,
             good_mode            = bool(self._settings.get("targen_good_mode", True)),
             grey_steps           = grey_steps,
+            # When a refinement profile is supplied, the corrected neutral axis
+            # is known, so sample it with targen -n instead of device-grey -g.
+            neutral_axis_from_profile = precond_active,
             extra_targen_args    = extra_targen,
             tiff_dpi             = int(self._settings.get("printtarg_dpi", 300)),
             patch_scale          = patch_scale,

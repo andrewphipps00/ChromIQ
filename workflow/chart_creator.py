@@ -227,6 +227,10 @@ class ChartParams:
     good_mode: bool = True
     grey_steps: int = 0
     single_channel_steps: int = 0
+    # When True, emit the neutral ramp as targen -n (profile-derived neutral
+    # axis) instead of -g (device-space grey). Set by Guided Mode when a
+    # refinement / pre-conditioning profile (-c) is supplied; -n requires it.
+    neutral_axis_from_profile: bool = False
     extra_targen_args: str = ""
 
     # printtarg params
@@ -692,7 +696,10 @@ class ChartCreator:
         if p.good_mode:
             args.append("-G")
         if p.grey_steps > 0:
-            args += [f"-g{p.grey_steps}"]
+            # -n samples the profile-defined neutral axis; only valid with -c,
+            # which Guided Mode pairs it with. Otherwise the naïve device grey -g.
+            flag = "-n" if p.neutral_axis_from_profile else "-g"
+            args += [f"{flag}{p.grey_steps}"]
         if p.single_channel_steps > 0:
             args += [f"-s{p.single_channel_steps}"]
         if p.extra_targen_args:

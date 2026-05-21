@@ -1,5 +1,22 @@
 # Changelog
 
+## v3.7.14
+Guided mode now characterises the neutral axis more accurately when you
+refine an existing profile. A big thanks again to **@pharmacist on the
+printerknowledge forum** for the steady stream of sharp suggestions.
+
+### Changes
+- **Refinement passes sample the profile's neutral axis (`-n`), not
+  device grey (`-g`).** When the **Refinement profile** option is active
+  in Guided mode (and a profile is selected), the neutral ramp is now
+  emitted as targen `-n<steps>` instead of `-g<steps>`, using the exact
+  same step count ChromIQ already calculates. `-g` places naïve
+  device-space greys (R=G=B); `-n` places patches along the
+  *perceptually-true* neutral axis defined by the pre-conditioning
+  profile (`-c`), so the second pass densely characterises the corrected
+  neutral — exactly where refinement matters most. White (`-e`) and
+  black (`-B`) anchors are unchanged, and Manual mode is untouched.
+
 ## v3.7.13
 Manual mode now has the same smart neutral-axis defaults that Guided
 mode uses — opt-in per row. Each of White patches, Black patches and
