@@ -1,5 +1,43 @@
 # Changelog
 
+## v3.7.16
+The patch-capacity database now knows about *Don't limit strip length*
+(`-P`) for the i1 Pro family, so the calculated patch count reflects the
+larger number of patches that fit when the strip-length cap is removed.
+A new guided-mode checkbox exposes the same control.
+
+### Features
+- **`-P` (Don't limit strip length) factored into the patch-count
+  database.** Previously the *Calculated Patches* number was always
+  computed at the `-P`-off layout, regardless of whether the chart you
+  were about to generate would actually have the cap removed. The
+  database now contains measured per-sheet values for every
+  i1 Pro / i1 Pro 3 / i1 Pro 3 Plus combination across `-m6 / -m10`
+  and `-a 1.0 / -a 0.95`, with and without `-L` — and `-P` flips
+  through to the new tables transparently. Big papers (A2, A3+,
+  Tabloid, A3 landscape, Legal) gain up to ~2.5× more patches per
+  sheet; A4 and smaller see modest gains where the strip-length cap
+  barely bit.
+- **Guided-mode *Don't limit strip length* checkbox.** A new option
+  sits next to *Suppress left clip border* in Guided mode, visible
+  only when an i1 Pro family instrument is selected. Toggling it
+  immediately re-computes the patch count and shows `-P` in the
+  command preview. Saveable as a default. Hidden on ColorMunki and
+  SpectroScan (their layouts ignore `-P`) and on triple-density mode
+  (which forces `-P` internally).
+
+### Fixes
+- **TIFF command stamp truncates long names.** When the stamped
+  command line includes a long target name or a long `-c` / `-K`
+  pre-conditioning/calibration filename, it no longer overruns the
+  right margin — the displayed stamp shortens those tokens to their
+  basename and caps the length. The actual command passed to ArgyllCMS
+  is unchanged; only the printed stamp is shortened.
+- **Bidirectional *Auto* checkbox layout.** In the Measure tab the
+  *Auto* toggle now sits a short gap to the right of the
+  *Disable bidirectional strip recognition (-B)* checkbox, with the
+  tooltip pinned to the row's right edge (both Guided and Manual).
+
 ## v3.7.15
 Two quality-of-life fixes: the Measure tab now auto-sets bidirectional
 strip reading from the instrument baked into the loaded chart, and the
