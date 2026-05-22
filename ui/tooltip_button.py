@@ -12,7 +12,10 @@ from PyQt6.QtGui import (
 from PyQt6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
+    QFrame,
     QLabel,
+    QScrollArea,
+    QStyle,
     QToolButton,
     QVBoxLayout,
     QWidget,
@@ -107,6 +110,24 @@ class TooltipButton(QToolButton):
         dlg.exec()
 
 
+class _BodyScrollArea(QScrollArea):
+    """Scroll area that advertises its content's full preferred height as its
+    own size hint.
+
+    This lets the dialog's ``adjustSize()`` grow tall enough to show the whole
+    body when it fits. Only once the dialog hits its screen-height cap does the
+    scroll area shrink below that and reveal a scrollbar — so content is never
+    clipped, no matter how long it is or how small the display."""
+
+    def sizeHint(self) -> QSize:
+        base = super().sizeHint()
+        w = self.widget()
+        if w is not None:
+            h = max(w.sizeHint().height(), w.minimumHeight()) + 2 * self.frameWidth()
+            return QSize(base.width(), h)
+        return base
+
+
 class _InfoDialog(QDialog):
     def __init__(
         self,
@@ -133,38 +154,70 @@ class _InfoDialog(QDialog):
         layout.setSpacing(12)
         layout.setContentsMargins(20, 20, 20, 16)
 
+        # Heading stays pinned above the scroll region so it never scrolls away.
         heading = QLabel(title, self)
         heading.setStyleSheet(f"font-size: 15px; font-weight: bold; color: {text_color};")
         heading.setWordWrap(True)
         layout.addWidget(heading)
 
+        # Body lives inside a scroll area: the dialog grows to show it in full
+        # when it fits, and scrolls instead of overflowing the screen when it
+        # doesn't.
         text = QLabel(body, self)
         text.setWordWrap(True)
         text.setStyleSheet(f"color: {text_color};")
         text.setTextFormat(Qt.TextFormat.PlainText)
-        layout.addWidget(text)
+        text.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+
+        scroll = _BodyScrollArea(self)
+        scroll.setWidget(text)
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setStyleSheet("QScrollArea { background: transparent; }")
+        scroll.viewport().setStyleSheet("background: transparent;")
+        layout.addWidget(scroll, 1)
 
         bb = QDialogButtonBox(QDialogButtonBox.StandardButton.Close, self)
         bb.rejected.connect(self.accept)
         layout.addWidget(bb)
 
-        self.adjustSize()
+        self.adjustSize()  # settle the width (clamped between min/max width) first
 
         # QLabel word-wrap pitfall: a wrapping label's sizeHint height assumes a
         # wider layout than it actually gets, so at the dialog's constrained
         # width a long paragraph wraps to more lines than budgeted and the body
-        # is clipped top and bottom. Pin each wrapping label's minimum height to
-        # its true height at the final content width, then re-size. (We can't
-        # compare against the label's current height — before the dialog is
-        # shown the layout hasn't distributed geometry yet, so that value is
-        # unreliable.)
+        # is clipped top and bottom. Measure each wrapping label's true height at
+        # the final content width and size the dialog from those numbers. (We
+        # can't trust the labels' current geometry — before the dialog is shown
+        # the layout hasn't distributed it yet.)
         margins = layout.contentsMargins()
         avail = self.width() - margins.left() - margins.right()
-        for lbl in (heading, text):
-            needed = lbl.heightForWidth(avail)
-            if needed > 0:
-                lbl.setMinimumHeight(needed)
-        self.adjustSize()
+
+        heading_h = max(0, heading.heightForWidth(avail))
+        heading.setMinimumHeight(heading_h)
+
+        # The body wraps inside the scroll viewport; reserve room for a vertical
+        # scrollbar so the text still fits horizontally if one ever appears.
+        sb = self.style().pixelMetric(QStyle.PixelMetric.PM_ScrollBarExtent)
+        body_h = max(0, text.heightForWidth(max(1, avail - sb)))
+        text.setMinimumHeight(body_h)
+
+        # Resize explicitly to the full height the content wants — adjustSize()
+        # can't be used here because it silently caps a dialog to ~2/3 of the
+        # screen, which would clip a long body even when the screen has room.
+        # Cap at 90 % of the available screen instead; past that the scroll area
+        # takes over so the body is never clipped or pushed off-screen.
+        chrome = (margins.top() + margins.bottom()
+                  + heading_h
+                  + bb.sizeHint().height()
+                  + 2 * layout.spacing())
+        desired = chrome + body_h
+        screen = self.screen() or QGuiApplication.primaryScreen()
+        cap = (int(screen.availableGeometry().height() * 0.9)
+               if screen is not None else desired)
+        self.setMaximumHeight(cap)
+        self.resize(self.width(), min(desired, cap))
 
 
 InfoDialog = _InfoDialog  # public alias for use outside this module

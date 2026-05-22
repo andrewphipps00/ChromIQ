@@ -1,5 +1,28 @@
 # Changelog
 
+## v3.7.23
+Corrects the Calibration & Profiling tab's help text so it describes the real
+order of operations, and makes every ⓘ info dialog size itself to its content
+so longer help text can no longer be cut off.
+
+### Changes
+- **Longer help text never gets clipped.** The shared info dialog behind every
+  ⓘ button now grows to show its full content instead of being silently capped
+  to two-thirds of the screen, and falls back to scrolling only when the text
+  would exceed the display — so even long, multi-step explanations are fully
+  readable on any screen size.
+
+### Fixes
+- **Calibration & Profiling help now lists the steps in the correct order.**
+  The tab's tooltip previously implied the *Apply Calibration* button (Argyll's
+  `applycal`) was used before printing the profiling chart. In fact `applycal`
+  folds the calibration into the *finished* ICC profile as the last step, while
+  the calibration is put to use back on the Create Chart tab (printtarg `-I` /
+  `-K`). The help text now walks through the true sequence: create the
+  calibration file → use it for a new target or load it into the printer →
+  print → measure → build the profile → apply the calibration to the profile if
+  needed, with a warning against double-applying it.
+
 ## v3.7.22
 Adds measurement-instrument detection to the Build Profile and Check & Refine
 tabs and tidies how the detected instrument is shown across the app. ChromIQ
