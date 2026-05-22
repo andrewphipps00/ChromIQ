@@ -1,5 +1,18 @@
 # Changelog
 
+## v3.7.25
+Hotfix for the Windows USB-driver dialog: the install button did nothing when
+clicked.
+
+### Fixes
+- **The driver dialog's primary button now works.** Clicking *Install Driver* /
+  *Open Zadig* / *Reinstall Driver* did nothing — the dialog's button box never
+  connected its `accepted` signal, so the AcceptRole button left the dialog open
+  and never ran the action. It's now wired to the dialog's accept handler, so the
+  install / Zadig / reinstall step runs as intended. (The bug was latent since the
+  USB driver installer was introduced; it only became visible once a connected
+  instrument actually needed the driver, e.g. a freshly attached i1Studio.)
+
 ## v3.7.24
 Fixes Windows colorimeter detection and the USB-driver dialog, and clears up a
 cosmetic page count when loading an existing target. The instrument list the

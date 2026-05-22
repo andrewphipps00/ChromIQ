@@ -671,6 +671,10 @@ class SettingsDialog(QDialog):
             refresh_btn = btn_box.addButton("Refresh", QDialogButtonBox.ButtonRole.ResetRole)
             refresh_btn.clicked.connect(lambda checked=False, d=dlg: d.done(_REFRESH))
             btn_box.addButton(QDialogButtonBox.StandardButton.Close)
+            # The install/reinstall/Open-Zadig button uses AcceptRole, which
+            # fires QDialogButtonBox.accepted — wire it to the dialog's accept()
+            # or clicking it does nothing (the dialog never returns Accepted).
+            btn_box.accepted.connect(dlg.accept)
             btn_box.rejected.connect(dlg.reject)
             layout.addWidget(btn_box)
             tint_dialog_primary(dlg, _COLOR)
