@@ -283,6 +283,9 @@ class TabMeasure(QWidget):
         # bidirectional allowed; the no-file / unknown-instrument fallback).
         self._detected_disable_bidir: bool = False
         self._detected_instrument: str | None = None
+        # Text of the last "Chart instrument:" line logged, so a new chart can
+        # replace it instead of letting the messages accumulate.
+        self._instr_log_text: str | None = None
         self._measure_failed: bool = False
         self._strip_list: list[str] = []
         self._refine_strips_path: Path | None = None
@@ -1588,7 +1591,9 @@ class TabMeasure(QWidget):
         Auto toggle will apply, logs the decision, and updates both modes'
         (greyed) checkboxes so they show what will happen.
         """
-        from ui.ti2_loader import disable_bidir_for_instrument, read_target_instrument
+        from ui.ti2_loader import (
+            disable_bidir_for_instrument, instrument_label, is_spectroscan, read_target_instrument,
+        )
 
         instr = None
         if self._ti1_path is not None and self._ti1_path.exists():
@@ -1596,15 +1601,56 @@ class TabMeasure(QWidget):
         self._detected_instrument    = instr
         self._detected_disable_bidir = disable_bidir_for_instrument(instr)
 
-        if instr and hasattr(self, "_log"):
-            direction = ("one direction only (-B)" if self._detected_disable_bidir
-                         else "both directions")
-            self._log.appendPlainText(
-                f"Chart instrument: {instr} → reading {direction}."
-            )
+        if hasattr(self, "_log"):
+            # Drop the previous instrument line so only the most recent
+            # detection stays visible across repeated chart generation.
+            self._clear_previous_instrument_log()
+            if instr:
+                label = instrument_label(instr)
+                if is_spectroscan(instr):
+                    # XY table — reads patches individually, so the
+                    # bidirectional "reading direction" note does not apply.
+                    msg = f"Chart instrument: {label}."
+                else:
+                    direction = ("one direction only (-B)" if self._detected_disable_bidir
+                                 else "both directions")
+                    msg = f"Chart instrument: {label} → reading {direction}."
+                self._log.appendPlainText(msg)
+                self._instr_log_text = msg
 
         self._apply_bidir_auto_state("guided")
         self._apply_bidir_auto_state("manual")
+
+    def _clear_previous_instrument_log(self) -> None:
+        """Remove the last logged "Chart instrument:" line, if still present.
+
+        Lets repeated chart generation replace the instrument/-B notice in
+        place rather than stacking up identical lines in the output field.
+        """
+        if not self._instr_log_text or not hasattr(self, "_log"):
+            return
+        from PyQt6.QtGui import QTextCursor
+
+        doc = self._log.document()
+        found = doc.find(self._instr_log_text)
+        if not found.isNull():
+            # Remove the whole line plus exactly one adjacent block separator
+            # (the trailing one if anything follows, else the leading one) so
+            # no blank line is left behind wherever the line sits.
+            block = found.block()
+            keep = QTextCursor.MoveMode.KeepAnchor
+            cursor = QTextCursor(doc)
+            if block.next().isValid():
+                cursor.setPosition(block.position())
+                cursor.setPosition(block.next().position(), keep)
+            elif block.previous().isValid():
+                cursor.setPosition(block.position() - 1)
+                cursor.setPosition(block.position() + len(block.text()), keep)
+            else:
+                cursor.setPosition(0)
+                cursor.setPosition(len(block.text()), keep)
+            cursor.removeSelectedText()
+        self._instr_log_text = None
 
     def _apply_bidir_auto_state(self, mode: str) -> None:
         """Grey out and sync a mode's -B checkbox according to its Auto toggle.

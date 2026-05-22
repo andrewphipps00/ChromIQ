@@ -1,5 +1,33 @@
 # Changelog
 
+## v3.7.22
+Adds measurement-instrument detection to the Build Profile and Check & Refine
+tabs and tidies how the detected instrument is shown across the app. ChromIQ
+reads the instrument a chart or measurement was made with from the
+`TARGET_INSTRUMENT` field ArgyllCMS records in `.ti2` / `.ti3` files and
+surfaces it — together with whether the `.ti3` carries spectral data — in each
+tab's output. This is the groundwork for automatically disabling options an
+instrument can't support.
+
+### Changes
+- **Instrument detection in Build Profile and Check & Refine.** When a `.ti3`
+  is loaded its instrument, and whether it contains spectral data, is detected
+  and shown in the output field — for both the measurement `.ti3` and, in Build
+  Profile, the calibration `cal_*.ti3`. Lays the groundwork for greying out and
+  stripping options the detected instrument can't use.
+- **Friendly instrument names in all output fields.** Argyll's family tags are
+  expanded to the models users recognise: "X-Rite ColorMunki" becomes
+  "ColorMunki / i1Studio / CCStudio" and "GretagMacbeth i1 Pro" becomes
+  "i1Pro / i1Pro2 / i1Pro3(+)".
+- **SpectroScan reading note removed.** The SpectroScan is an XY table that
+  reads patches individually, so its Create Chart message no longer mentions a
+  bidirectional "reading direction".
+
+### Fixes
+- **Create Chart instrument notice no longer stacks up.** Generating several
+  targets in one session now keeps only the most recent "Chart instrument: …"
+  line in the output field instead of accumulating one per target.
+
 ## v3.7.21
 Expands ChromIQ's coverage of chartread's interactive prompts so that more
 mid-measurement situations surface a clear dialog with buttons that send the

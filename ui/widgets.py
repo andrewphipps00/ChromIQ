@@ -2,16 +2,19 @@
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any, Callable
 
 from PyQt6.QtCore import QEvent, QModelIndex, QObject, QSize, QSortFilterProxyModel, Qt, QUrl
-from PyQt6.QtGui import QColor, QFont, QIcon, QPainter, QPalette, QPixmap
+from PyQt6.QtGui import QColor, QFont, QIcon, QPainter, QPalette, QPixmap, QTextCursor
 from PyQt6.QtWidgets import (
     QApplication,
     QComboBox,
     QDoubleSpinBox,
     QFileDialog,
     QGroupBox,
+    QPlainTextEdit,
     QPushButton,
     QSizeGrip,
     QSpinBox,
@@ -464,3 +467,54 @@ def make_browse_button(
     btn.setProperty("themed_folder_icon", icon)
     btn.setIconSize(QSize(20, 20))
     return btn
+
+
+def replace_log_line(
+    log: QPlainTextEdit,
+    prev_text: str | None,
+    new_text: str | None,
+) -> str | None:
+    """Replace a single tracked status line in a QPlainTextEdit log, in place.
+
+    Removes ``prev_text``'s block (if still present) along with exactly one
+    adjacent block separator — the trailing one when anything follows, otherwise
+    the leading one — so no blank line is left wherever the line sits. Then
+    appends ``new_text`` when it is non-empty. Returns the text now being tracked
+    (``new_text`` or ``None``), to store for the next call.
+
+    Lets a tab show only the most recent of a recurring notice (e.g. the detected
+    instrument) instead of stacking identical lines as files are reloaded.
+    """
+    if prev_text:
+        found = log.document().find(prev_text)
+        if not found.isNull():
+            block = found.block()
+            keep = QTextCursor.MoveMode.KeepAnchor
+            cursor = QTextCursor(log.document())
+            if block.next().isValid():
+                cursor.setPosition(block.position())
+                cursor.setPosition(block.next().position(), keep)
+            elif block.previous().isValid():
+                cursor.setPosition(block.position() - 1)
+                cursor.setPosition(block.position() + len(block.text()), keep)
+            else:
+                cursor.setPosition(0)
+                cursor.setPosition(len(block.text()), keep)
+            cursor.removeSelectedText()
+    if new_text:
+        log.appendPlainText(new_text)
+        log.ensureCursorVisible()
+        return new_text
+    return None
+
+
+@dataclass
+class GatedOption:
+    """An option disabled when a tab's instrument/data gate is active.
+
+    ``widgets`` are greyed out while the gate is active; ``neutralise`` clears the
+    option in the collected params object right before the tool runs, so a flag
+    enabled before the gate became active is never passed to colprof/profcheck.
+    """
+    widgets: list[QWidget] = field(default_factory=list)
+    neutralise: Callable[[Any], None] = lambda params: None

@@ -13,21 +13,70 @@ if TYPE_CHECKING:
 
 # Matches:  TARGET_INSTRUMENT "GretagMacbeth i1 Pro"
 _TARGET_INSTRUMENT_RE = re.compile(r'TARGET_INSTRUMENT\s+"([^"]*)"')
+# Matches:  SPECTRAL_BANDS "36"   (number of spectral bands recorded per patch)
+_SPECTRAL_BANDS_RE = re.compile(r'SPECTRAL_BANDS\s+"?(\d+)"?')
+
+# The exact TARGET_INSTRUMENT strings ChromIQ lays out charts for. ArgyllCMS
+# writes the same value into the resulting .ti3, so detection works on either.
+KNOWN_INSTRUMENTS: tuple[str, ...] = (
+    "X-Rite ColorMunki",          # ColorMunki / i1Studio / ColorChecker Studio
+    "GretagMacbeth i1 Pro",       # i1 Pro family (i1 Pro / Pro 2 / Pro 3 / Pro 3+)
+    "GretagMacbeth SpectroScan",  # motorized XY table (patch-by-patch, not strips)
+)
 
 
-def read_target_instrument(ti2_path: Path) -> str | None:
-    """Return the TARGET_INSTRUMENT value from a .ti2 (CGATS) file, or None.
+def read_target_instrument(cgats_path: Path) -> str | None:
+    """Return the TARGET_INSTRUMENT value from a CGATS file (.ti1/.ti2/.ti3), or None.
 
-    ArgyllCMS records the instrument a chart was laid out for in this keyword,
-    e.g. ``TARGET_INSTRUMENT "GretagMacbeth i1 Pro"`` (i1 Pro family, incl.
-    i1Pro3+) or ``TARGET_INSTRUMENT "X-Rite ColorMunki"`` (ColorMunki/i1Studio).
+    ArgyllCMS records the instrument a chart was laid out for in this keyword and
+    carries it through into the measured .ti3, e.g.
+    ``TARGET_INSTRUMENT "GretagMacbeth i1 Pro"`` (i1 Pro family, incl. i1Pro3+),
+    ``TARGET_INSTRUMENT "X-Rite ColorMunki"`` (ColorMunki/i1Studio) or
+    ``TARGET_INSTRUMENT "GretagMacbeth SpectroScan"`` (XY table). See
+    ``KNOWN_INSTRUMENTS`` for the values ChromIQ produces.
     """
     try:
-        text = ti2_path.read_text(encoding="utf-8", errors="ignore")
+        text = cgats_path.read_text(encoding="utf-8", errors="ignore")
     except OSError:
         return None
     m = _TARGET_INSTRUMENT_RE.search(text)
     return m.group(1).strip() if m else None
+
+
+def is_colormunki(name: str | None) -> bool:
+    """Whether the instrument is a ColorMunki (incl. its i1Studio rebrand).
+
+    Single source of truth for the ColorMunki check used both by the chartread
+    -B decision and by the option-gating in the Build-Profile / Check-Refine tabs.
+    """
+    return bool(name) and "colormunki" in name.lower()
+
+
+def is_spectroscan(name: str | None) -> bool:
+    """Whether the instrument is a GretagMacbeth SpectroScan.
+
+    The SpectroScan is a motorized XY table that reads each patch individually
+    rather than scanning strips, so the bidirectional (-B) concept does not apply.
+    """
+    return bool(name) and "spectroscan" in name.lower()
+
+
+def instrument_label(name: str | None) -> str | None:
+    """Friendly display name for a TARGET_INSTRUMENT value (UI output only).
+
+    ArgyllCMS tags whole instrument families under one string; this expands them
+    to the model names users recognise. Detection/gating still use the raw value
+    (see ``is_colormunki`` / ``is_spectroscan``) — this is purely for display.
+    Unrecognised instruments (incl. the SpectroScan) are shown unchanged.
+    """
+    if not name:
+        return None
+    if is_colormunki(name):
+        return "ColorMunki / i1Studio / CCStudio"
+    low = name.lower()
+    if "i1 pro" in low or "i1pro" in low:
+        return "i1Pro / i1Pro2 / i1Pro3(+)"
+    return name
 
 
 def disable_bidir_for_instrument(name: str | None) -> bool:
@@ -36,10 +85,26 @@ def disable_bidir_for_instrument(name: str | None) -> bool:
     The ColorMunki (and its i1Studio rebrand) can only read strips reliably in
     one direction, so it needs ``-B``. The i1 Pro family — i1 Pro / Pro 2 /
     Pro 3 / Pro 3+, all tagged ``"GretagMacbeth i1 Pro"`` — reads in either
-    direction, so it does not. Unknown / missing instruments fall back to
+    direction, and the SpectroScan is an XY table that reads patches individually,
+    so neither needs ``-B``. Unknown / missing instruments fall back to
     bidirectional allowed (no ``-B``).
     """
-    return bool(name) and "colormunki" in name.lower()
+    return is_colormunki(name)
+
+
+def has_spectral_data(cgats_path: Path) -> bool:
+    """Whether a CGATS file (.ti3) contains spectral measurements.
+
+    Spectral-dependent options (FWA compensation, illuminant, observer) only work
+    when the .ti3 carries per-patch spectral readings, flagged by a positive
+    ``SPECTRAL_BANDS`` keyword. Returns False on a missing/unreadable file.
+    """
+    try:
+        text = cgats_path.read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return False
+    m = _SPECTRAL_BANDS_RE.search(text)
+    return bool(m) and int(m.group(1)) > 0
 
 
 def resolve_ti2(
