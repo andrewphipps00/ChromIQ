@@ -369,18 +369,12 @@ class SettingsDialog(QDialog):
         layout.addWidget(credit1)
 
         credit2 = QLabel(
-            "Built on ArgyllCMS by Graeme Gill · Made possible by Knut Georg Larsson", self
+            "Built on ArgyllCMS by Graeme Gill · Made possible by Knut Georg Larsson · "
+            "Testing & feedback: Nelson (Pharmacist), Alan Goldhammer", self
         )
         credit2.setAlignment(Qt.AlignmentFlag.AlignCenter)
         credit2.setStyleSheet("color: #606060; font-size: 11px;")
         layout.addWidget(credit2)
-
-        credit3 = QLabel(
-            "With thanks to Nelson (Pharmacist) and Alan Goldhammer for testing and feedback", self
-        )
-        credit3.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        credit3.setStyleSheet("color: #606060; font-size: 11px;")
-        layout.addWidget(credit3)
 
         self._update_status = QLabel("", self)
         self._update_status.setStyleSheet("font-size: 11px;")
