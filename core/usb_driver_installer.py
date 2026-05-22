@@ -211,6 +211,23 @@ def install_winusb(device: UsbDevice) -> bool:
     return code.value == 0
 
 
+def unbound_targets(targets: list[UsbDevice]) -> list[UsbDevice]:
+    """Re-enumerate and return which *targets* still lack a WinUSB/libusb0 driver.
+
+    wdi-simple can exit 0 without actually binding the driver to the live device
+    — e.g. a stale "ghost" instance from a previous USB port misdirects it — so
+    the exit code alone can't be trusted. Call this after install_winusb() to
+    confirm the driver really bound: an empty result means every target is now
+    driven; a non-empty result means the install silently failed and the caller
+    should fall back to Zadig.
+    """
+    target_ids = {(t.vid, t.pid) for t in targets}
+    return [
+        d for d in enumerate_connected()
+        if (d.vid, d.pid) in target_ids and not d.has_winusb
+    ]
+
+
 # Public Zadig download page, used as a fallback when the bundled zadig.exe
 # isn't present — e.g. running from source, where assets/zadig.exe is only
 # fetched by the Windows CI build (.github/workflows/build-windows.yml).

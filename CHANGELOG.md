@@ -1,5 +1,20 @@
 # Changelog
 
+## v3.7.26
+Makes the Windows USB driver installer trustworthy: it now verifies the driver
+actually bound and falls back to Zadig when the automatic install silently fails.
+
+### Fixes
+- **The automatic driver install no longer reports false success.** `wdi-simple`,
+  the silent WinUSB installer, can exit with "success" without actually binding
+  the driver to the instrument — for example when a stale device instance left
+  over from a previous USB port misdirects it. ChromIQ now re-checks the device
+  after installing and, if the driver didn't bind, says so plainly and offers the
+  **Zadig** fallback (pick the instrument, choose WinUSB / libusb-win32, then
+  *Replace Driver*) instead of claiming the install worked. Zadig's forced,
+  interactive driver replacement reliably handles the cases the silent installer
+  can't.
+
 ## v3.7.25
 Hotfix for the Windows USB-driver dialog: the install button did nothing when
 clicked.

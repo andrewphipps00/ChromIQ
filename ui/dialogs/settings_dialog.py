@@ -590,7 +590,9 @@ class SettingsDialog(QDialog):
         if _sys.platform != "win32":
             return
         from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QVBoxLayout
-        from core.usb_driver_installer import enumerate_connected, install_winusb, launch_zadig
+        from core.usb_driver_installer import (
+            enumerate_connected, install_winusb, launch_zadig, unbound_targets,
+        )
         from core.resource_path import resource_path as _rp
         from ui.widgets import tint_dialog_primary
 
@@ -692,14 +694,31 @@ class SettingsDialog(QDialog):
             # device; otherwise only the ones missing a driver are targeted.
             targets = needs_install or devices
             if _wdi_available:
-                all_ok = all(install_winusb(d) for d in targets)
-                if all_ok:
+                ran_ok = all(install_winusb(d) for d in targets)
+                # wdi-simple can report success (exit 0) without actually binding
+                # the driver to the live device — a stale ghost instance from a
+                # previous USB port can misdirect it. Verify by re-enumerating
+                # before claiming success, and fall back to Zadig if it didn't bind.
+                still_unbound = unbound_targets(targets)
+                if ran_ok and not still_unbound:
                     outcome_text = "WinUSB driver installed successfully."
                     offer_zadig = False
-                else:
+                elif not ran_ok:
                     outcome_text = (
                         "Automatic installation failed or was cancelled.<br>"
-                        "Click <b>Try Zadig</b> to install manually using the guided tool."
+                        "Click <b>Try Zadig</b> to install it manually using the guided tool."
+                    )
+                    offer_zadig = True
+                else:
+                    names = ", ".join(d.name for d in still_unbound) or "the instrument"
+                    outcome_text = (
+                        "Windows reported the install finished, but the driver still "
+                        f"isn't bound to {names}. This often happens when the device "
+                        "was previously plugged into a different USB port.<br><br>"
+                        "Click <b>Try Zadig</b> to install it reliably: pick your "
+                        "instrument in Zadig, choose <b>WinUSB</b> (or libusb-win32), "
+                        "then click <b>Replace Driver</b>. Unplugging and replugging the "
+                        "instrument first can also help."
                     )
                     offer_zadig = True
             else:

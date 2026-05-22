@@ -131,3 +131,36 @@ def test_table_matches_argyll_inf_inclusions() -> None:
 def test_table_excludes_hid_and_commented_devices() -> None:
     for key in _EXPECTED_ABSENT:
         assert key not in udi.KNOWN_COLORIMETERS, f"{key} should not be in allowlist"
+
+
+def _dev(vid: str, pid: str, has_winusb: bool) -> udi.UsbDevice:
+    return udi.UsbDevice(vid=vid, pid=pid, name=f"{vid}:{pid}", has_winusb=has_winusb)
+
+
+def test_unbound_targets_flags_device_that_did_not_bind(monkeypatch) -> None:
+    """After install, a target still reporting no driver must be flagged.
+
+    Reproduces the i1Studio case: wdi-simple exits 0 but the device (0765:6008)
+    is still driverless, so the dialog must treat it as a failure and offer Zadig.
+    """
+    target = _dev("0765", "6008", has_winusb=False)
+    # Re-enumeration still shows it without a WinUSB/libusb0 driver.
+    monkeypatch.setattr(udi, "enumerate_connected", lambda: [_dev("0765", "6008", False)])
+    assert udi.unbound_targets([target]) == [_dev("0765", "6008", False)]
+
+
+def test_unbound_targets_empty_when_bind_succeeded(monkeypatch) -> None:
+    target = _dev("0765", "6008", has_winusb=False)
+    # Re-enumeration now shows the driver bound.
+    monkeypatch.setattr(udi, "enumerate_connected", lambda: [_dev("0765", "6008", True)])
+    assert udi.unbound_targets([target]) == []
+
+
+def test_unbound_targets_only_considers_requested_devices(monkeypatch) -> None:
+    target = _dev("0765", "6008", has_winusb=False)
+    # An unrelated driverless device must not be reported as a failed target.
+    monkeypatch.setattr(
+        udi, "enumerate_connected",
+        lambda: [_dev("0765", "6008", True), _dev("085c", "0a00", False)],
+    )
+    assert udi.unbound_targets([target]) == []
