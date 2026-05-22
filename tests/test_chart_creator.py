@@ -197,7 +197,9 @@ def test_query_patches_a2_landscape_all_instruments() -> None:
     assert query_patches("CM", "594x420", double_density=True) is not None
     assert query_patches("SS", "594x420", double_density=False) is not None
     assert query_patches("SS", "594x420", double_density=True) is not None
-    assert query_patches("CM", "594x420", triple_density=True) is not None
+    assert query_patches("CM", "594x420", triple_density=True,
+                         margin_mm=5, patch_scale=1.3,
+                         no_strip_limit=True) is not None
 
 
 def test_query_patches_a2_landscape_beats_portrait_for_strip_readers() -> None:
@@ -215,7 +217,176 @@ def test_query_patches_a2_landscape_regression_guard() -> None:
     assert query_patches("p3", "594x420", suppress_lb=True, margin_mm=6) == 324
     assert query_patches("i1", "594x420", suppress_lb=True, margin_mm=6,
                          no_strip_limit=True) == 2520
-    assert query_patches("CM", "594x420", triple_density=True) == 1485
+    assert query_patches("CM", "594x420", triple_density=True,
+                         margin_mm=5, patch_scale=1.3,
+                         no_strip_limit=True) == 1485
+
+
+def test_query_patches_triple_density_returns_none_on_override() -> None:
+    """Triple table only applies at its measurement preset (-a1.3 -m5 -P).
+
+    When the manual UI lets the user edit -a / -m / -P after toggling
+    Triple density on, query_patches must return None so callers fall back
+    to a live binary search via _build_printtarg_args.
+    """
+    base = query_patches("CM", "A4", triple_density=True,
+                         margin_mm=5, patch_scale=1.3, no_strip_limit=True)
+    assert base is not None, "preset lookup must succeed"
+    assert query_patches("CM", "A4", triple_density=True,
+                         margin_mm=6, patch_scale=1.3, no_strip_limit=True) is None
+    assert query_patches("CM", "A4", triple_density=True,
+                         margin_mm=5, patch_scale=1.0, no_strip_limit=True) is None
+    assert query_patches("CM", "A4", triple_density=True,
+                         margin_mm=5, patch_scale=1.3, no_strip_limit=False) is None
+
+
+def test_build_printtarg_args_triple_honors_user_overrides(tmp_path: Path) -> None:
+    """Triple density must pass user-edited -a / -m / -P through to printtarg.
+
+    Bug fix: previously _build_printtarg_args hard-coded -a1.30 -m5 -M5 -P
+    whenever triple_density was on, silently discarding manual-mode widget
+    overrides of those flags.
+    """
+    creator, _ = _make_creator(tmp_path)
+    p = ChartParams(
+        instrument="CM",
+        paper="A4",
+        triple_density=True,
+        patch_scale=1.5,        # user overrode 1.3 → 1.5
+        margin_mm=8,            # user overrode 5 → 8
+        no_strip_limit=False,   # user unticked -P
+        disable_left_border=True,
+        target_name="t",
+    )
+    args = creator._build_printtarg_args(p)
+    assert "-ii1" in args, "triple still swaps instrument to -ii1"
+    assert "-L" in args, "triple still forces -L"
+    assert "-a1.50" in args, "user's -a override must flow through"
+    assert "-m8" in args and "-M8" in args, "user's -m override must flow through"
+    assert "-P" not in args, "user's unchecked -P must be respected"
+
+
+def test_estimate_patches_routes_to_binary_search_on_spacer_extras(tmp_path: Path) -> None:
+    """-A != 1.0 (spacer-only scale) and -n (no spacers) must trigger the
+    binary search path so the override actually changes the patch count.
+
+    Previously the fast patch_db lookup ran unconditionally on supported
+    patch_scale values, ignoring extra_printtarg_args entirely.
+    """
+    from workflow import chart_creator as cc
+
+    creator, _ = _make_creator(tmp_path)
+
+    binary_called: list[bool] = []
+
+    def fake_binary(p, progress_cb=None):
+        binary_called.append(True)
+        return 123
+
+    # Override the binary search so we can observe whether it was invoked.
+    creator._binary_search = fake_binary  # type: ignore[method-assign]
+
+    # Baseline: no layout-affecting extras → fast lookup should still win.
+    p_default = ChartParams(instrument="i1", paper="A4", pages=1,
+                            patch_scale=1.0, margin_mm=6)
+    n_default = creator.estimate_patches(p_default)
+    assert not binary_called, "no extras → fast lookup expected"
+    assert n_default == query_patches("i1", "A4", suppress_lb=True,
+                                      margin_mm=6, patch_scale=1.0)
+
+    # -A 0.5: layout-affecting extra → must route to binary search.
+    binary_called.clear()
+    p_spacer = ChartParams(instrument="i1", paper="A4", pages=1,
+                           patch_scale=1.0, margin_mm=6,
+                           extra_printtarg_args="-A 0.5")
+    assert creator.estimate_patches(p_spacer) == 123
+    assert binary_called == [True], "-A 0.5 must trigger binary search"
+
+    # -n (no spacers): also layout-affecting.
+    binary_called.clear()
+    p_nospacer = ChartParams(instrument="i1", paper="A4", pages=1,
+                             patch_scale=1.0, margin_mm=6,
+                             extra_printtarg_args="-n")
+    assert creator.estimate_patches(p_nospacer) == 123
+    assert binary_called == [True], "-n must trigger binary search"
+
+    # -A 1.0 (default value) and layout-neutral extras must NOT force binary.
+    binary_called.clear()
+    p_neutral = ChartParams(instrument="i1", paper="A4", pages=1,
+                            patch_scale=1.0, margin_mm=6,
+                            extra_printtarg_args="-A 1.0 -Q 8")
+    creator.estimate_patches(p_neutral)
+    assert not binary_called, "layout-neutral extras must not force binary search"
+
+
+def test_parameter_widget_float_get_value_avoids_ulp_noise() -> None:
+    """Stepping a -A spinbox must produce "1.20", not "1.2000000000000002".
+
+    QDoubleSpinBox tracks the value as a binary double, so stepping
+    1.0 → 1.1 → 1.2 lands on 1.2000000000000002. setDecimals(2) hides this
+    in the spinbox display, but str(c.value()) would otherwise leak the
+    noise into extra_printtarg_args and from there into the live preview
+    and the actual printtarg call.
+    """
+    from PyQt6.QtWidgets import QApplication
+    app = QApplication.instance() or QApplication([])  # noqa: F841
+
+    from ui.parameter_widget import ParameterWidget
+    pw = ParameterWidget({
+        "flag": "-A",
+        "name": "Spacer-Only Scale",
+        "type": "float",
+        "min": 0.1,
+        "max": 4.0,
+        "default": 1.0,
+        "step": 0.1,
+    })
+    spin = pw._control
+    spin.setValue(1.0)
+    spin.stepBy(1)  # 1.0 → 1.1
+    spin.stepBy(1)  # 1.1 → 1.2 (raw double picks up ULP noise here)
+    assert pw.get_value() == "1.20"
+    assert pw.build_args() == ["-A", "1.20"]
+
+
+def test_extra_printtarg_affects_layout_helper() -> None:
+    """The detector accepts both -A 1.5 and -A1.5 spellings."""
+    from workflow.chart_creator import _extra_printtarg_affects_layout
+    assert _extra_printtarg_affects_layout("") is False
+    assert _extra_printtarg_affects_layout("-Q 8") is False
+    assert _extra_printtarg_affects_layout("-A 1.0") is False
+    assert _extra_printtarg_affects_layout("-A 0.5") is True
+    assert _extra_printtarg_affects_layout("-A0.5") is True
+    assert _extra_printtarg_affects_layout("-A 2.0") is True
+    assert _extra_printtarg_affects_layout("-n") is True
+    assert _extra_printtarg_affects_layout("-K cal.cal") is False
+
+
+def test_guided_neutrals_still_works_with_triple_density() -> None:
+    """guided_neutrals must keep returning a patch_db lookup for triple density.
+
+    Bug-fix follow-up: with query_patches now returning None on non-preset
+    triple_density calls, guided_neutrals needs an explicit retry at the
+    triple preset (-a1.3 -m5 -P). Without that retry the function would
+    fall back to the page-count ladder and produce noticeably different
+    neutrals for triple-density charts.
+    """
+    g_triple, w_triple, b_triple = guided_neutrals(
+        "CM", "A4", pages=1,
+        base_white=GUIDED_NEUTRAL_BASE, base_black=GUIDED_NEUTRAL_BASE,
+        suppress_lb=True, triple_density=True,
+    )
+    g_page_ladder, _, _ = guided_neutrals(
+        "??", "A4", pages=1,
+        base_white=GUIDED_NEUTRAL_BASE, base_black=GUIDED_NEUTRAL_BASE,
+        suppress_lb=True,
+    )
+    # If the triple retry is missing, g_triple collapses to the page ladder
+    # (eff_sheets = 1 → grey = 32). The real triple anchor for CM/A4 is
+    # ~324 patches → eff = 0.58 → grey ≈ 18, well below 32.
+    assert g_triple < g_page_ladder, (
+        "triple density must use its patch_db anchor, not the page ladder"
+    )
 
 
 def test_grey_ramp_reference_default_anchor() -> None:

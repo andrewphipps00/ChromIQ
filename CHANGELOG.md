@@ -1,5 +1,43 @@
 # Changelog
 
+## v3.7.27
+Fixes three Create Chart bugs that silently mis-handed parameters to printtarg:
+Triple density now respects manual overrides of the strip-limit, margin and
+patch-size flags; the spacer-only scale and other layout-affecting extras now
+participate in the Auto patch-count estimate; and float spinboxes no longer
+leak floating-point noise into the generated command.
+
+### Fixes
+- **Triple density now respects your manual overrides of `-P`, `-m` and `-a`.**
+  In Manual mode, ticking *Triple density* still seeds the i1Pro-emulation
+  preset into the *Don't limit strip length*, *Margin* and *Patch size scale*
+  widgets — but if you then edited any of those, the build code silently
+  threw the edits away and handed `-a 1.30 -m 5 -P` to printtarg regardless.
+  Your edits now flow through unchanged. The patch-count lookup is aware of
+  the override and falls back to a live binary search when the values no
+  longer match the preset the dedicated triple-density patch table was
+  measured at. The `-i i1` instrument swap and the `-L` clip-border
+  suppression remain forced — they're load-bearing for the .ti2 rewrite that
+  makes the ColorMunki read an i1Pro-shaped chart.
+- **Spacer-only scale (`-A`) and *No spacers* (`-n`) now actually change the
+  Auto patch count.** The Manual-mode *Auto* patch-count estimate took a
+  fast lookup path through the per-sheet patch database, which only covers
+  the headline layout knobs (`-a`, `-m`, `-L`, `-P`, `-h`). Anything else
+  that affects how much fits per page — most visibly the spacer-only scale
+  flag and the *No spacers* toggle — was silently ignored, so changing
+  spacer width or removing spacers entirely produced the same patch count
+  as the default. ChromIQ now detects layout-affecting extras and routes
+  the estimate through the live binary search so the override actually
+  participates. Layout-neutral extras like `-Q`, `-R`, `-K`, `-I` still
+  take the fast path.
+- **Float spinboxes no longer leak `1.2000000000000002`-style noise into
+  the printtarg command.** Stepping a `-A` (or `-a`, `-r`, `-V`, `-T`, `-N`)
+  spinbox accumulates binary floating-point rounding error in the
+  underlying value — `setDecimals(2)` hides it in the widget display, but
+  the live command preview and the actual printtarg call would show the
+  noisy raw value. ChromIQ now formats float widget values with their
+  declared decimals when building the command line.
+
 ## v3.7.26
 Makes the Windows USB driver installer trustworthy — it verifies the driver
 actually bound and falls back to Zadig when the automatic install silently

@@ -139,6 +139,44 @@ def _effective_suppress_lb(p: "ChartParams") -> bool:
     return p.disable_left_border or _chromiq_clip_active(p) or triple
 
 
+def _extra_printtarg_affects_layout(extra: str) -> bool:
+    """True when extra_printtarg_args contains a flag that changes capacity.
+
+    -A <scale != 1.0>  → spacer-bar width changes, capacity shifts.
+    -n                 → no spacers at all, more room per patch.
+    Other printtarg extras the manual mode collects (-Q, -N, -K, -I, -R, -D,
+    -U, -C, -c) leave the layout untouched and are safe for the fast
+    patch_db lookup. When this returns True the caller routes to the binary
+    search so the override actually participates in the patch count.
+    """
+    if not extra:
+        return False
+    try:
+        toks = shlex.split(extra)
+    except ValueError:
+        return False
+    i = 0
+    while i < len(toks):
+        tok = toks[i]
+        if tok == "-n":
+            return True
+        scale_val: str | None = None
+        consumed = 1
+        if tok == "-A" and i + 1 < len(toks):
+            scale_val = toks[i + 1]
+            consumed = 2
+        elif tok.startswith("-A") and len(tok) > 2:
+            scale_val = tok[2:]
+        if scale_val is not None:
+            try:
+                if abs(float(scale_val) - 1.0) > 0.01:
+                    return True
+            except ValueError:
+                pass
+        i += consumed
+    return False
+
+
 # Stamped-text shortening: long target names and -c/-K filenames blow out the
 # right-margin command lines on the TIFF, so we truncate them for display only.
 # The argv handed to ArgyllRunner is unchanged — only the strings rendered by
@@ -305,6 +343,16 @@ def guided_neutrals(instrument: str,
                                 suppress_lb=suppress_lb,
                                 triple_density=triple_density,
                                 no_strip_limit=no_strip_limit)
+    if nominal is None and triple_density and instrument == "CM":
+        # Triple table was measured at -a 1.3 -m 5 -P; the reference and
+        # default kwargs above don't match those values, so query_patches
+        # now returns None on a non-preset call. Guided mode always uses
+        # the preset, so retry with it explicitly.
+        nominal = query_patches(instrument, paper,
+                                double_density=False,
+                                suppress_lb=suppress_lb,
+                                margin_mm=5, patch_scale=1.3,
+                                triple_density=True, no_strip_limit=True)
     if nominal is None:
         # Genuinely unknown combo — fall back to a page-based ladder so
         # the chart still gets sensible neutrals.
@@ -491,14 +539,21 @@ class ChartCreator:
     ) -> int:
         """Return max patches for the given params (fast lookup or binary search)."""
         triple = params.triple_density and params.instrument == "CM"
-        nsl_eff = triple or params.no_strip_limit
-        if triple or any(abs(params.patch_scale - s) <= 0.01 for s in SUPPORTED_PATCH_SCALES):
+        # The patch_db only covers the headline layout knobs (-a, -m, -L, -P,
+        # -h). Anything else that influences capacity (-A spacer scale, -n
+        # no-spacers, custom paper dimensions) lives in extra_printtarg_args
+        # and would be silently ignored by the fast lookup, so detect it
+        # here and route to the binary search instead.
+        layout_extras = _extra_printtarg_affects_layout(params.extra_printtarg_args)
+        if (not layout_extras
+                and (triple or any(abs(params.patch_scale - s) <= 0.01
+                                   for s in SUPPORTED_PATCH_SCALES))):
             per_sheet = query_patches(params.instrument, params.paper, params.double_density,
                                       suppress_lb=_effective_suppress_lb(params),
                                       margin_mm=params.margin_mm,
                                       patch_scale=params.patch_scale,
                                       triple_density=triple,
-                                      no_strip_limit=nsl_eff)
+                                      no_strip_limit=params.no_strip_limit)
             if per_sheet is not None:
                 n = per_sheet * params.pages
                 if progress_cb:
@@ -507,7 +562,8 @@ class ChartCreator:
                     )
                 return n
 
-        # Binary search for unsupported patch_scale / margin_mm
+        # Binary search for unsupported patch_scale / margin_mm, or whenever
+        # extra_printtarg_args contains a layout-affecting flag.
         if progress_cb:
             progress_cb("Custom layout detected — running binary search…")
         per_sheet = self._binary_search(params, progress_cb)
@@ -891,9 +947,13 @@ class ChartCreator:
 
     def _build_printtarg_args(self, p: ChartParams) -> list[str]:
         args: list[str] = []
-        # Triple-density (CM + rig) emulates the i1Pro layout: force -ii1 plus
-        # the tuned scale/margin/strip-limit; mutual exclusion in the UI keeps
-        # -h off, but we re-check defensively below.
+        # Triple-density (CM + rig) emulates the i1Pro layout by swapping the
+        # instrument to -ii1 and forcing -L; the matching -a / -m / -P preset
+        # (1.3 / 5 / on) is seeded into the manual widgets when the user
+        # toggles Triple density on but the user can override those values
+        # afterwards, so we pass p.patch_scale / p.margin_mm / p.no_strip_limit
+        # through verbatim. Guided mode sets the same preset values directly
+        # on ChartParams.
         triple = p.triple_density and p.instrument == "CM"
         if triple:
             pt_instr = "i1"
@@ -919,19 +979,16 @@ class ChartCreator:
         l_applies = p.instrument in {"i1", "p3"} or triple
         if (p.disable_left_border or force_l) and l_applies:
             args.append("-L")
-        scale_eff = 1.3 if triple else p.patch_scale
-        margin_eff = 5 if triple else p.margin_mm
-        no_strip_limit_eff = True if triple else p.no_strip_limit
-        if abs(scale_eff - 1.0) > 0.01:
-            args += [f"-a{scale_eff:.2f}"]
-        if margin_eff != 6:
-            args += [f"-m{margin_eff}"]
-        args.append(f"-M{margin_eff}")
+        if abs(p.patch_scale - 1.0) > 0.01:
+            args += [f"-a{p.patch_scale:.2f}"]
+        if p.margin_mm != 6:
+            args += [f"-m{p.margin_mm}"]
+        args.append(f"-M{p.margin_mm}")
         if p.no_randomise:
             args.append("-r")
         if p.bw_spacers:
             args.append("-b")
-        if no_strip_limit_eff:
+        if p.no_strip_limit:
             args.append("-P")
         if p.extra_printtarg_args:
             args += shlex.split(p.extra_printtarg_args)
@@ -945,14 +1002,16 @@ class ChartCreator:
     def _lookup_patches(self, p: ChartParams) -> int:
         eff_lb = _effective_suppress_lb(p)
         triple = p.triple_density and p.instrument == "CM"
-        nsl_eff = triple or p.no_strip_limit
-        if triple or any(abs(p.patch_scale - s) <= 0.01 for s in SUPPORTED_PATCH_SCALES):
+        layout_extras = _extra_printtarg_affects_layout(p.extra_printtarg_args)
+        if (not layout_extras
+                and (triple or any(abs(p.patch_scale - s) <= 0.01
+                                   for s in SUPPORTED_PATCH_SCALES))):
             per_sheet = query_patches(p.instrument, p.paper, p.double_density,
                                       suppress_lb=eff_lb,
                                       margin_mm=p.margin_mm,
                                       patch_scale=p.patch_scale,
                                       triple_density=triple,
-                                      no_strip_limit=nsl_eff)
+                                      no_strip_limit=p.no_strip_limit)
             if per_sheet is not None:
                 return per_sheet * p.pages
         return self._binary_search(p) * p.pages
@@ -968,7 +1027,6 @@ class ChartCreator:
 
         eff_lb = _effective_suppress_lb(p)
         triple = p.triple_density and p.instrument == "CM"
-        nsl_eff = triple or p.no_strip_limit
         if not targen_bin.exists():
             log.warning("targen not found for binary search, returning estimate")
             return (query_patches(p.instrument, p.paper, p.double_density,
@@ -976,11 +1034,11 @@ class ChartCreator:
                                   margin_mm=p.margin_mm,
                                   patch_scale=p.patch_scale,
                                   triple_density=triple,
-                                  no_strip_limit=nsl_eff)
+                                  no_strip_limit=p.no_strip_limit)
                     or query_patches(p.instrument, p.paper, p.double_density,
                                      suppress_lb=eff_lb,
                                      triple_density=triple,
-                                     no_strip_limit=nsl_eff)
+                                     no_strip_limit=p.no_strip_limit)
                     or 500)
 
         pt_args_base = self._build_printtarg_args(p)[:-1]  # strip trailing target name
@@ -990,20 +1048,18 @@ class ChartCreator:
                                  margin_mm=p.margin_mm,
                                  patch_scale=p.patch_scale,
                                  triple_density=triple,
-                                 no_strip_limit=nsl_eff)
+                                 no_strip_limit=p.no_strip_limit)
                    or query_patches(p.instrument, p.paper, p.double_density,
                                     suppress_lb=eff_lb,
                                     triple_density=triple,
-                                    no_strip_limit=nsl_eff)
+                                    no_strip_limit=p.no_strip_limit)
                    or 400)
         # Per-sheet capacity scales roughly as 1/patch_scale² — each patch
         # occupies patch_scale² of the standard cell area. Without this
         # adjustment the [0.5×, 2.5×] window misses the real value for
         # patch_scale > ~1.4, the loop never sees pages==1, and `best`
-        # stays at its initial sentinel. Triple-density forces -a1.3
-        # regardless of the dataclass field, so account for that here.
-        scale_for_search = 1.3 if triple else p.patch_scale
-        scale_sq = max(scale_for_search ** 2, 0.01)
+        # stays at its initial sentinel.
+        scale_sq = max(p.patch_scale ** 2, 0.01)
         est = max(20, int(est_raw / scale_sq))
 
         lo = max(20, int(est * 0.5))

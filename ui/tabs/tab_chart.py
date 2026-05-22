@@ -1233,19 +1233,19 @@ class TabChart(QWidget):
         l_applies = p.instrument in {"i1", "p3"} or triple
         if (p.disable_left_border or force_l) and l_applies:
             pt_args.append("-L")
-        scale_eff = 1.3 if triple else p.patch_scale
-        margin_eff = 5 if triple else p.margin_mm
-        no_strip_limit_eff = True if triple else p.no_strip_limit
-        if abs(scale_eff - 1.0) > 0.01:
-            pt_args.append(f"-a{scale_eff:.2f}")
-        if margin_eff != 6:
-            pt_args.append(f"-m{margin_eff}")
-        pt_args.append(f"-M{margin_eff}")
+        # Triple density seeds -a 1.3 / -m 5 / -P on toggle but the user can
+        # still override those widgets — mirror chart_creator and pass the
+        # ChartParams values through verbatim.
+        if abs(p.patch_scale - 1.0) > 0.01:
+            pt_args.append(f"-a{p.patch_scale:.2f}")
+        if p.margin_mm != 6:
+            pt_args.append(f"-m{p.margin_mm}")
+        pt_args.append(f"-M{p.margin_mm}")
         if p.no_randomise:
             pt_args.append("-r")
         if p.bw_spacers:
             pt_args.append("-b")
-        if no_strip_limit_eff:
+        if p.no_strip_limit:
             pt_args.append("-P")
         if p.extra_printtarg_args:
             pt_args += shlex.split(p.extra_printtarg_args)
@@ -2680,19 +2680,23 @@ class TabChart(QWidget):
             return int(p.patches)
         if use_estimate:
             return int(p.patches)
-        # Cheap preview path: patch_db lookup × pages.
+        # Cheap preview path: patch_db lookup × pages. Returns 0 when the
+        # combination isn't in the lookup tables (custom patch_scale/margin,
+        # or layout-affecting extras like -A / -n) — _apply_auto_neutrals
+        # then falls back to default neutrals for the live preview; the
+        # real estimate at Generate-click reruns this via estimate_patches
+        # which routes such cases to a binary search.
         from workflow.chart_creator import _chromiq_clip_active
         triple = p.triple_density and p.instrument == "CM"
         force_l = _chromiq_clip_active(p) or triple
         eff_lb = p.disable_left_border or force_l
-        nsl_eff = triple or p.no_strip_limit
         nominal = query_patches(p.instrument, p.paper,
                                 double_density=p.double_density,
                                 suppress_lb=eff_lb,
                                 margin_mm=p.margin_mm,
                                 patch_scale=p.patch_scale,
                                 triple_density=triple,
-                                no_strip_limit=nsl_eff)
+                                no_strip_limit=p.no_strip_limit)
         if nominal is None:
             return 0
         return int(nominal * max(1, p.pages))

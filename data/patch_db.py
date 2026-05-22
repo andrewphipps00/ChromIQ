@@ -990,9 +990,14 @@ def query_patches(
     suppress_lb=False → values measured without -L (left-clip border present).
     margin_mm         → must be one of SUPPORTED_MARGINS, else returns None.
     patch_scale       → must be one of SUPPORTED_PATCH_SCALES, else returns None.
-    triple_density    → ColorMunki-only synthetic mode (i1 layout). When True,
-                        the other layout params are ignored and the triple
-                        table is consulted directly.
+    triple_density    → ColorMunki-only synthetic mode (i1 layout). The table
+                        was measured at -a 1.3 -m 5 -P (the i1Pro emulation
+                        preset the UI seeds when the user enables Triple
+                        density). When the caller has overridden any of those
+                        layout knobs the table no longer applies — this
+                        function returns None and the caller falls back to a
+                        live binary search via _build_printtarg_args, which
+                        honors the overrides.
     no_strip_limit    → i1/p3 only: printtarg -P removes the strip-length cap.
                         When True for i1/p3, the dedicated _P variant tables
                         are consulted. Ignored for CM (per-patch reader) and
@@ -1000,6 +1005,13 @@ def query_patches(
     Callers fall back to a live binary search on a None result.
     """
     if triple_density and instrument == "CM":
+        # Triple table was measured at the i1Pro emulation preset; any
+        # override (manual mode lets the user edit -a / -m / -P after
+        # toggling Triple density on) invalidates the lookup.
+        if (abs(patch_scale - 1.3) > 0.01
+                or margin_mm != 5
+                or not no_strip_limit):
+            return None
         db = _PER_SHEET_CAPACITY_TRIPLE if suppress_lb else _PER_SHEET_CAPACITY_TRIPLE_NO_LB
         return db.get(paper)
 

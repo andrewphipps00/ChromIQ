@@ -87,7 +87,14 @@ class ParameterWidget(QWidget):
         if t == "int":
             return str(c.value()) if c.value() != self._param.get("default", 0) else str(c.value())
         if t == "float":
-            return str(c.value())
+            # QDoubleSpinBox stores the value as a binary double, so stepping
+            # 1.0 → 1.1 → 1.2 lands on 1.2000000000000002 even though
+            # setDecimals(2) renders it as "1.20" in the spinbox itself.
+            # str(c.value()) would otherwise leak the noisy form into the
+            # live command preview (extras like -A go through build_args
+            # rather than the explicitly-formatted f"-a{...:.2f}" path).
+            decimals = c.decimals() if hasattr(c, "decimals") else 2
+            return f"{c.value():.{decimals}f}"
         if t in ("string", "file_path"):
             return c.text().strip()
         return ""
