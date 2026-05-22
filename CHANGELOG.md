@@ -7,10 +7,13 @@ of Knut Georg Larsson to better reflect his role as the original inspiration
 for the app.
 
 ### Changes
-- **Settings credits expanded.** The build/library line now reads "Made
-  possible by Knut Georg Larsson" instead of "With thanks to…", and a new
-  line beneath it thanks Nelson (Pharmacist) and Alan Goldhammer for
-  testing and feedback.
+- **Settings credits expanded.** The build/library credit line now reads
+  *"Built on ArgyllCMS by Graeme Gill · Made possible by Knut Georg Larsson
+  · Testing & feedback: Nelson (Pharmacist), Alan Goldhammer"* — "With
+  thanks to…" is reworded to "Made possible by…" to better reflect Knut's
+  role as the original inspiration for the app, and the two testers are
+  appended on the same line (separated by the same `·` used elsewhere) to
+  keep the dialog footer compact.
 
 ## v3.7.19
 Fixes a Guided-mode regression where the white / black patch base (-e / -B)
