@@ -17,10 +17,11 @@ against the Argyll 3.5.0 chartread.c source.
   and rejected mode changes now show a titled dialog with Argyll's reported
   reason, instead of falling through to the generic "measurement failed"
   path.
-- **Status-bar messages for informational chartread output.** Battery level,
-  chart-vs-instrument mismatch warning, "high-resolution ignored", "UV
-  ignored", "no spectral mode", and "scan tolerance ignored" now flash a
-  short non-blocking status message.
+- **Status-bar messages for informational chartread output.** Chart-vs-instrument
+  mismatch warning, "high-resolution ignored", "UV ignored", "no spectral
+  mode", and "scan tolerance ignored" now flash a short non-blocking status
+  message. (Battery level is written to the log but not flashed, to avoid
+  noise on every instrument start-up.)
 - **Defensive dialogs for spot / XY-table modes.** If chartread is invoked
   in a non-strip mode through extra-args, the user now sees friendly dialogs
   for sheet placement, spot-mode readiness, and abort confirmation, rather
