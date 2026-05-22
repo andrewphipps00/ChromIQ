@@ -1,5 +1,17 @@
 # Changelog
 
+## v3.7.20
+Expands the Settings-dialog credits to acknowledge two more people who
+helped shape ChromIQ, and slightly strengthens the existing acknowledgement
+of Knut Georg Larsson to better reflect his role as the original inspiration
+for the app.
+
+### Changes
+- **Settings credits expanded.** The build/library line now reads "Made
+  possible by Knut Georg Larsson" instead of "With thanks to…", and a new
+  line beneath it thanks Nelson (Pharmacist) and Alan Goldhammer for
+  testing and feedback.
+
 ## v3.7.19
 Fixes a Guided-mode regression where the white / black patch base (-e / -B)
 quietly shrank toward 2 across "Save as defaults" cycles, leaving even the
