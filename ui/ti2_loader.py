@@ -148,11 +148,16 @@ def _related_files(ti2_path: Path) -> tuple[Path | None, list[Path]]:
     folder = ti2_path.parent
     stem   = ti2_path.stem
     ti1    = folder / f"{stem}.ti1"
-    tiffs  = sorted([
+    # Set-comprehension dedupes Windows' case-insensitive glob matches
+    # (chart.tif matches both *.tif and *.TIF), which otherwise made the
+    # preview show "Page 1/2 and 2/2" for a single-file chart when *loading an
+    # existing target* (forum #148275 — same root cause as the generation-path
+    # fix in chart_creator._printtarg_done for #148124).
+    tiffs  = sorted({
         *folder.glob(f"{stem}*.tif"),
         *folder.glob(f"{stem}*.TIF"),
         *folder.glob(f"{stem}*.tiff"),
-    ])
+    })
     return (ti1 if ti1.exists() else None), tiffs
 
 

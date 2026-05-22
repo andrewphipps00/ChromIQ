@@ -622,7 +622,18 @@ class SettingsDialog(QDialog):
                     f"<i>{'WinUSB ✓' if d.has_winusb else 'driver not installed'}</i>"
                     for d in devices
                 ]
-                if _wdi_available:
+                if not needs_install:
+                    # Every detected device already has a WinUSB/libusb0 driver.
+                    # Don't promise an installer the old code wouldn't show a
+                    # button for; explain that and still offer a manual repair
+                    # path (forum #148275: dialog mentioned Zadig but had no
+                    # button when the device reported the driver as installed).
+                    action_text = (
+                        "The driver is already installed for the device(s) above. "
+                        "If ChromIQ or Argyll still can't open your instrument, click "
+                        "<b>Reinstall Driver</b> to run the installer again."
+                    )
+                elif _wdi_available:
                     action_text = (
                         "Click <b>Install Driver</b> to install the Microsoft WinUSB driver "
                         "automatically. A Windows security prompt will appear — click Yes to "
@@ -631,7 +642,8 @@ class SettingsDialog(QDialog):
                     )
                 else:
                     action_text = (
-                        "ChromIQ will open <b>Zadig</b>, a free USB driver tool. In Zadig:<br>"
+                        "Click <b>Open Zadig</b> and ChromIQ will launch <b>Zadig</b>, a free "
+                        "USB driver tool. In Zadig:<br>"
                         "&nbsp;&nbsp;1. Click <b>Options → List All Devices</b><br>"
                         "&nbsp;&nbsp;2. Find your colorimeter in the dropdown<br>"
                         "&nbsp;&nbsp;3. Select <b>WinUSB</b> as the driver and click "
@@ -649,8 +661,11 @@ class SettingsDialog(QDialog):
             layout.addWidget(msg)
 
             btn_box = QDialogButtonBox()
-            if needs_install:
-                btn_label = "Install Driver" if _wdi_available else "Open Zadig"
+            if devices:
+                if not needs_install:
+                    btn_label = "Reinstall Driver" if _wdi_available else "Open Zadig"
+                else:
+                    btn_label = "Install Driver" if _wdi_available else "Open Zadig"
                 install_btn = btn_box.addButton(btn_label, QDialogButtonBox.ButtonRole.AcceptRole)
                 install_btn.setObjectName("primary")
             refresh_btn = btn_box.addButton("Refresh", QDialogButtonBox.ButtonRole.ResetRole)
@@ -665,12 +680,15 @@ class SettingsDialog(QDialog):
             if result == _REFRESH:
                 continue   # rebuild with fresh device list
 
-            if result != QDialog.DialogCode.Accepted or not needs_install:
-                break   # Close button or nothing to install
+            if result != QDialog.DialogCode.Accepted or not devices:
+                break   # Close button or nothing connected
 
             # ---- run installation ----
+            # "Reinstall Driver" (no device needs install) repairs every detected
+            # device; otherwise only the ones missing a driver are targeted.
+            targets = needs_install or devices
             if _wdi_available:
-                all_ok = all(install_winusb(d) for d in needs_install)
+                all_ok = all(install_winusb(d) for d in targets)
                 if all_ok:
                     outcome_text = "WinUSB driver installed successfully."
                     offer_zadig = False
@@ -681,13 +699,25 @@ class SettingsDialog(QDialog):
                     )
                     offer_zadig = True
             else:
-                all_ok = launch_zadig()
-                outcome_text = (
-                    "Zadig is open. Select your colorimeter, choose WinUSB, "
-                    "then click Install Driver."
-                    if all_ok else
-                    "Could not launch Zadig. Try running ChromIQ as Administrator."
-                )
+                status = launch_zadig()
+                if status == "launched":
+                    outcome_text = (
+                        "Zadig is open. Select your colorimeter, choose WinUSB, "
+                        "then click Install Driver."
+                    )
+                elif status == "download_page":
+                    outcome_text = (
+                        "Zadig isn't bundled with this build, so its download page "
+                        "has been opened in your browser.<br>"
+                        "Download and run <b>Zadig</b>, then: Options → List All Devices → "
+                        "select your colorimeter → choose WinUSB → Install Driver."
+                    )
+                else:
+                    outcome_text = (
+                        "Could not open Zadig or its download page. Visit "
+                        "<b>https://zadig.akeo.ie</b> manually, or try running ChromIQ "
+                        "as Administrator."
+                    )
                 offer_zadig = False
 
             outcome_dlg = QDialog(self)

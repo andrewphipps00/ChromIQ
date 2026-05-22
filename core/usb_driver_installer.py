@@ -13,27 +13,61 @@ from core.resource_path import resource_path
 
 log = get_logger(__name__)
 
-# VID/PID → display name for every device ArgyllCMS supports.
-# Source: ArgyllCMS usb/ArgyllCMS_USB_driver/*.inf files.
+# VID/PID → display name for every instrument that needs ArgyllCMS's WinUSB /
+# libusb0 driver. This table mirrors the *active* device lines in the
+# usb/ArgyllCMS.inf shipped with ArgyllCMS 3.5.0 — i.e. exactly the devices
+# Argyll's own driver binds to. Keeping it equal to the inf means ChromIQ
+# offers to install the driver for precisely the devices Argyll can then use.
+# VID/PID are lower-case hex to match enumerate_connected(), which lower-cases
+# what it reads from the registry.
+#
+# Deliberately NOT included:
+#   • Devices the inf comments out: 0765:5020 (Eye-One Display 3) and
+#     0765:600A (D123).
+#   • HID colorimeters Argyll reads without libusb (i1 Display Pro, ColorMunki
+#     Display, etc.) — they must stay on their HID driver, so prompting to
+#     install WinUSB for them would break them.
+#
+# i1 Pro family note: the i1 Pro and i1 Pro 2 share GretagMacbeth 0971:2000
+# ("Eye-One Pro"); the i1 Pro 3 and i1 Pro 3+ share X-Rite 0765:6009
+# ("i1 Pro3"). One mapping covers each pair — the inf has no separate i1 Pro 2
+# or i1 Pro 3+ line.
 KNOWN_COLORIMETERS: dict[tuple[str, str], str] = {
-    ("0765", "5020"): "X-Rite Eye-One Pro (i1 Pro 1)",
-    ("0765", "d020"): "X-Rite Eye-One Pro 2 (i1 Pro 2)",
-    ("0765", "d0a0"): "X-Rite i1 Pro 3",
-    ("0765", "d0a4"): "X-Rite i1 Pro 3+",
-    ("0765", "d094"): "X-Rite ColorMunki Photo/Design",
-    ("0765", "d095"): "X-Rite ColorMunki Display",
-    ("0765", "d0c0"): "X-Rite i1 Studio",
-    ("0765", "6008"): "X-Rite i1 Studio (Argyll)",
-    ("0765", "d065"): "X-Rite i1 Display Pro / ColorMunki Display (HID)",
+    # --- Gretag Macbeth / X-Rite spectrophotometers (VID 0971) ---
+    ("0971", "2000"): "GretagMacbeth i1 Pro / i1 Pro 2",
+    ("0971", "2001"): "GretagMacbeth Eye-One Monitor",
+    ("0971", "2003"): "GretagMacbeth Eye-One Display 2",
+    ("0971", "2005"): "GretagMacbeth Huey",
+    ("0971", "2007"): "X-Rite ColorMunki Photo/Design",
+    # --- X-Rite (VID 0765) ---
+    ("0765", "6009"): "X-Rite i1 Pro 3 / i1 Pro 3+",
+    ("0765", "6008"): "X-Rite i1 Studio",
+    ("0765", "6003"): "X-Rite ColorMunki Smile",
+    ("0765", "5001"): "X-Rite Huey (HueyL)",
+    ("0765", "5010"): "X-Rite Huey (HueyL)",
+    ("0765", "d020"): "X-Rite DTP20 (Pulse)",
+    ("0765", "d092"): "X-Rite DTP92Q",
+    ("0765", "d094"): "X-Rite DTP94",
+    # --- Datacolor / ColorVision (VID 085C) ---
+    ("085c", "0100"): "Datacolor Spyder 1",
     ("085c", "0200"): "Datacolor Spyder 2",
     ("085c", "0300"): "Datacolor Spyder 3",
     ("085c", "0400"): "Datacolor Spyder 4",
     ("085c", "0500"): "Datacolor Spyder 5",
     ("085c", "0a00"): "Datacolor SpyderX",
-    ("085c", "0b00"): "Datacolor SpyderX Pro",
-    ("085c", "0c00"): "Datacolor Spyder X2",
-    ("04db", "005b"): "Colorvision Spyder 1",
-    ("0670", "0001"): "Sequel Chroma 5",
+    ("085c", "0a0a"): "Datacolor SpyderX2",
+    ("085c", "0a0b"): "Datacolor Spyder 2024",
+    # --- Sequel Imaging (VID 0670) ---
+    ("0670", "0001"): "Eye-One Display 1",
+    # --- HCFR Association (VID 04DB / 04D8) ---
+    ("04db", "005b"): "HCFR Colorimeter V3.1",
+    ("04d8", "fe17"): "HCFR Colorimeter V4.0",
+    # --- Hughski (VID 273F / 04D8) ---
+    ("273f", "1004"): "Hughski ColorHug 2",
+    ("273f", "1001"): "Hughski ColorHug",
+    ("04d8", "f8da"): "Hughski ColorHug",
+    # --- Image Engineering (VID 2457) ---
+    ("2457", "4000"): "Image Engineering EX1",
 }
 
 
@@ -177,16 +211,36 @@ def install_winusb(device: UsbDevice) -> bool:
     return code.value == 0
 
 
-def launch_zadig() -> bool:
-    """Launch the bundled Zadig GUI as a fallback USB driver installer."""
+# Public Zadig download page, used as a fallback when the bundled zadig.exe
+# isn't present — e.g. running from source, where assets/zadig.exe is only
+# fetched by the Windows CI build (.github/workflows/build-windows.yml).
+ZADIG_URL = "https://zadig.akeo.ie"
+
+
+def launch_zadig() -> str:
+    """Launch the bundled Zadig GUI, or fall back to its download page.
+
+    Returns one of:
+      "launched"      — the bundled zadig.exe was started.
+      "download_page" — zadig.exe wasn't bundled (or failed to start), so the
+                        Zadig download page was opened in the browser instead.
+      "failed"        — neither the executable nor the download page could be opened.
+    """
     zadig = resource_path("assets/zadig.exe")
-    if not zadig.exists() or zadig.stat().st_size == 0:
-        log.error("zadig.exe not found at %s", zadig)
-        return False
-    import subprocess
+    if zadig.exists() and zadig.stat().st_size > 0:
+        import subprocess
+        try:
+            subprocess.Popen([str(zadig)], close_fds=True)
+            return "launched"
+        except OSError as exc:
+            log.error("Failed to launch zadig.exe: %s — opening download page", exc)
+    else:
+        log.info("zadig.exe not bundled at %s; opening download page", zadig)
+
     try:
-        subprocess.Popen([str(zadig)], close_fds=True)
-        return True
-    except OSError as exc:
-        log.error("Failed to launch zadig.exe: %s", exc)
-        return False
+        import webbrowser
+        if webbrowser.open(ZADIG_URL):
+            return "download_page"
+    except Exception as exc:   # pragma: no cover - platform browser quirks
+        log.error("Failed to open Zadig download page: %s", exc)
+    return "failed"

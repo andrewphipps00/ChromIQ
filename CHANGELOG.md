@@ -1,5 +1,49 @@
 # Changelog
 
+## v3.7.24
+Fixes Windows colorimeter detection and the USB-driver dialog, and clears up a
+cosmetic page count when loading an existing target. The instrument list the
+driver installer recognises now matches ArgyllCMS 3.5.0 exactly. Addresses
+feedback from the ChromIQ thread (post #148275).
+
+### Changes
+- **The i1 Pro family is now detected by the USB driver installer.** The i1 Pro
+  and i1 Pro 2 (GretagMacbeth `0971:2000`) and the i1 Pro 3 / i1 Pro 3+ (X-Rite
+  `0765:6009`) were missing from ChromIQ's device list, so they weren't
+  recognised and couldn't be offered the WinUSB driver. They are now included —
+  one entry covers each pair, exactly as Argyll's own driver does.
+- **The recognised-instrument list now mirrors ArgyllCMS 3.5.0.** The whole
+  VID/PID table was rebuilt from the active entries in Argyll's own
+  `usb/ArgyllCMS.inf`. This adds the ColorMunki Photo/Design, ColorMunki Smile,
+  Eye-One Monitor / Eye-One Display 1 & 2, HueyL, DTP20 / DTP92Q, Spyder 1 and
+  Spyder 2024, the HCFR colorimeters, ColorHug / ColorHug 2 and the Image
+  Engineering EX1 — and corrects several wrong entries (the device previously
+  labelled "Spyder 1" was actually an HCFR colorimeter, and the SpyderX2 product
+  ID was wrong). HID-only colorimeters that must keep their HID driver are
+  deliberately excluded so ChromIQ never offers to replace a driver they need.
+- **The Zadig fallback now opens its download page when not bundled.** If the
+  bundled Zadig tool isn't present, ChromIQ opens the Zadig download page in your
+  browser and tells you, instead of failing silently.
+
+### Fixes
+- **The USB driver dialog no longer promises an action it can't perform.** When
+  a connected colorimeter already had its driver installed, the dialog still
+  showed driver-install instructions but offered only *Close* / *Refresh* — with
+  no install button. It now always shows a working button whenever a device is
+  connected (labelled *Reinstall Driver* when the driver is already present), and
+  only shows install instructions when there's a matching button.
+- **Loading an existing target no longer shows a phantom second page.** A
+  one-page chart loaded back in (e.g. to reprint or re-measure) showed "Page 1 /
+  2" with both pages identical. On Windows `pathlib`'s glob is case-insensitive,
+  so the chart's single `.tif` was matched twice — once by the `*.tif` pattern
+  and again by `*.TIF` — and counted as two pages. The file list is now
+  de-duplicated, so a single-sheet chart shows one page. This mirrors the fix
+  already applied to the chart-*generation* path; the load path shared the same
+  root cause.
+
+The SpectroScan is a serial (RS-232) instrument rather than USB, so it isn't
+part of the USB driver installer and needs no device entry.
+
 ## v3.7.23
 Corrects the Calibration & Profiling tab's help text so it describes the real
 order of operations, and makes every ⓘ info dialog size itself to its content

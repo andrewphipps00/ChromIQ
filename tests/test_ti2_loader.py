@@ -14,6 +14,7 @@ import pytest
 
 from ui.ti2_loader import (
     KNOWN_INSTRUMENTS,
+    _related_files,
     disable_bidir_for_instrument,
     has_spectral_data,
     instrument_label,
@@ -149,3 +150,35 @@ def test_has_spectral_data_zero_bands(tmp_path: Path) -> None:
 
 def test_has_spectral_data_missing_file(tmp_path: Path) -> None:
     assert has_spectral_data(tmp_path / "nope.ti3") is False
+
+
+def test_related_files_dedupes_case_insensitive_glob(tmp_path: Path) -> None:
+    """A single chart TIFF must appear once when loading an existing target.
+
+    Regression guard for forum #148275's "Page 1/2 and 2/2 (same)" symptom:
+    pathlib.Path.glob is case-insensitive on Windows, so the prior code's
+    sorted([*glob('*.tif'), *glob('*.TIF'), *glob('*.tiff')]) returned the
+    same file two or three times, doubling the page count in the preview.
+    (On case-sensitive filesystems this passes trivially; it bites on Windows,
+    which is where the bug was reported.)
+    """
+    ti2 = tmp_path / "chart.ti2"
+    ti2.write_text('TARGET_INSTRUMENT "GretagMacbeth i1 Pro"\n', encoding="utf-8")
+    (tmp_path / "chart.tif").write_bytes(b"II*\x00")  # one-page chart
+
+    _, tiffs = _related_files(ti2)
+
+    assert len(tiffs) == 1, f"expected 1 TIFF, got {len(tiffs)}: {tiffs}"
+    resolved = [p.resolve() for p in tiffs]
+    assert len(resolved) == len(set(resolved)), f"duplicate paths returned: {tiffs}"
+
+
+def test_related_files_finds_tiff_extension(tmp_path: Path) -> None:
+    """The dedup must not drop the legitimate .tiff extension variant."""
+    ti2 = tmp_path / "chart.ti2"
+    ti2.write_text("CTI2\n", encoding="utf-8")
+    (tmp_path / "chart.tiff").write_bytes(b"II*\x00")
+
+    _, tiffs = _related_files(ti2)
+
+    assert [p.name for p in tiffs] == ["chart.tiff"]
