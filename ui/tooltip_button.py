@@ -150,5 +150,21 @@ class _InfoDialog(QDialog):
 
         self.adjustSize()
 
+        # QLabel word-wrap pitfall: a wrapping label's sizeHint height assumes a
+        # wider layout than it actually gets, so at the dialog's constrained
+        # width a long paragraph wraps to more lines than budgeted and the body
+        # is clipped top and bottom. Pin each wrapping label's minimum height to
+        # its true height at the final content width, then re-size. (We can't
+        # compare against the label's current height — before the dialog is
+        # shown the layout hasn't distributed geometry yet, so that value is
+        # unreliable.)
+        margins = layout.contentsMargins()
+        avail = self.width() - margins.left() - margins.right()
+        for lbl in (heading, text):
+            needed = lbl.heightForWidth(avail)
+            if needed > 0:
+                lbl.setMinimumHeight(needed)
+        self.adjustSize()
+
 
 InfoDialog = _InfoDialog  # public alias for use outside this module

@@ -1,5 +1,66 @@
 # Changelog
 
+## v3.7.21
+Expands ChromIQ's coverage of chartread's interactive prompts so that more
+mid-measurement situations surface a clear dialog with buttons that send the
+right keystroke, rather than only being visible in the raw log. Audited
+against the Argyll 3.5.0 chartread.c source.
+
+### Changes
+- **New mid-measurement recovery dialogs.** *Strip Read Interrupted* (after
+  an accidental instrument-switch trigger), *Patches Still Unread* (when the
+  user presses `d` early), and a generic *Instrument Error* retry dialog for
+  transient errors raised by Argyll's `ierror()` helper. Buttons emulate the
+  exact keys chartread's own prompt accepts.
+- **Friendlier terminal dialogs for chartread startup failures.** Comms /
+  init failures, reflection-incapable instruments, CCMX/CCSS load failures,
+  and rejected mode changes now show a titled dialog with Argyll's reported
+  reason, instead of falling through to the generic "measurement failed"
+  path.
+- **Status-bar messages for informational chartread output.** Battery level,
+  chart-vs-instrument mismatch warning, "high-resolution ignored", "UV
+  ignored", "no spectral mode", and "scan tolerance ignored" now flash a
+  short non-blocking status message.
+- **Defensive dialogs for spot / XY-table modes.** If chartread is invoked
+  in a non-strip mode through extra-args, the user now sees friendly dialogs
+  for sheet placement, spot-mode readiness, and abort confirmation, rather
+  than a stuck UI.
+- **Regression coverage for the "ALL ROWS READ" detection.** Tests pin the
+  current behaviour against Argyll 3.5.0's inline-suffix form on the "Ready
+  to read strip pass …" line, in both normal and resume modes.
+- **Friendly failure dialogs for colprof, printcal and applycal.** When one
+  of these batch tools fails, ChromIQ now identifies the underlying reason
+  (illuminant mismatch, unreadable .ti3, no white patch, calibration /
+  profile colour-space mismatch, etc.) and shows a dialog explaining what
+  to do, instead of just "see output above". Audited against Argyll 3.5.0
+  colprof.c / printcal.c / applycal.c. The existing FWA-instrument dialog
+  for colprof is preserved as a bespoke case.
+- **More colprof warnings surfaced in the Build Profile result dialog.**
+  Intent-override hints, FWA-ignored-in-emissive-mode, and ink-limit-over-chart
+  warnings now show up alongside the existing out-of-gamut / failure
+  warnings, so users don't need to hunt for them in the raw log.
+- **Friendly failure dialogs for the chart pipeline (targen + printtarg).**
+  Common errors — preconditioning ICC profile mismatch, MPP profile
+  mismatch, paper too small for the TID strip / patch row / row width,
+  unsupported instrument, wrong device colour encoding — now show a titled
+  dialog explaining what to change in the Chart tab.
+- **Friendly failure dialog for profcheck.** Wrong illuminant for the
+  reference type, unreadable / empty .ti3, unhandled colour representation,
+  and missing-field errors now produce a "Profile Quality Check Failed"
+  dialog instead of just a log line.
+- **Friendlier iccgamut and viewgam error messages.** The Gamut Analysis
+  dialog now includes the structured reason (VRML write failure, ICC read
+  error, etc.) instead of a scraped "Error: …" line. viewgam's most common
+  failure — incompatible gamut colour spaces — is now explained in plain
+  language.
+
+### Fixes
+- **Info dialogs no longer clip long wrapped text.** The shared info/error
+  dialog under-counted the height of word-wrapped paragraphs, so longer
+  messages could be cut off at the top and bottom. It now measures each
+  wrapping label at its real width and grows to fit. Affects every
+  info/error dialog in the app.
+
 ## v3.7.20
 Expands the Settings-dialog credits to acknowledge two more people who
 helped shape ChromIQ, and slightly strengthens the existing acknowledgement

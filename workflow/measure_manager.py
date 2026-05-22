@@ -42,6 +42,46 @@ _USB_VM_RE             = re.compile(r"Failed to get piif for USB device",       
 # answering 'y' writes the partial .ti3, 'n' returns to the strip menu.
 _ARE_YOU_SURE_RE       = re.compile(r"Are\s+you\s+sure\s+\[y/n\]",                          re.IGNORECASE)
 
+# --- A. Mid-measurement recovery prompts ---------------------------------
+# chartread.c 3.5.0 L1608: user hit the instrument switch / Ctrl-C mid-strip.
+_STRIP_INTERRUPTED_RE  = re.compile(r"Strip read stopped at user request",      re.IGNORECASE)
+# chartread.c 3.5.0 L1593: user pressed 'd' while patches are still unread.
+# Captures the "id, loc" payload so we can show the user which patch is missing.
+_UNREAD_CONFIRM_RE     = re.compile(r"Done\s*\?\s*-\s*At least one unread patch \(([^)]+)\)", re.IGNORECASE)
+# chartread.c 3.5.0 L396: generic ierror() — transient instrument error outside the strip-read fast path.
+_GENERIC_IERROR_RE     = re.compile(r"Got\s+'([^']+)'\s*\(([^)]+)\)\s+error\.", re.IGNORECASE)
+
+# --- B. Startup / config failure messages --------------------------------
+_INIT_COMS_FAIL_RE     = re.compile(r"Establishing communications with instrument failed with message\s+'([^']+)'", re.IGNORECASE)
+_INIT_INST_FAIL_RE     = re.compile(r"Initialising instrument failed with message\s+'([^']+)'", re.IGNORECASE)
+_CAPABILITY_FAIL_RE    = re.compile(r"Need (reflection|transmission|emissive)\s[^\n]*?reading capability", re.IGNORECASE)
+_CCMX_FAIL_RE          = re.compile(
+    r"Setting Colorimeter Correction Matrix failed"
+    r"|Reading CCMX/CCSS File\s+'[^']+' failed"
+    r"|Instrument doesn't have Colorimeter Correction Matrix capability"
+    r"|Instrument doesn't have Colorimeter Calibration Spectral Sample capability",
+    re.IGNORECASE,
+)
+_MODE_SET_FAIL_RE      = re.compile(r"Setting instrument mode failed with error\s*:?\s*'([^']+)'", re.IGNORECASE)
+
+# --- B-status. Informational lines surfaced as status-bar messages -------
+_INFO_CHART_INST_MISMATCH_RE = re.compile(r"Warning:\s*chart is for\s+(\S+),\s*using instrument\s+(\S+)", re.IGNORECASE)
+# Battery level fires at the start of every chartread session on i1Pro and
+# Spectro2 — surfacing it would be noisy. Logged via the normal log line, not
+# flashed as a status message.
+_INFO_BATTERY_RE             = re.compile(r"(?!x)x", re.IGNORECASE)   # disabled
+_INFO_NO_SPECTRAL_RE         = re.compile(r"Instrument isn't capable of spectral measurement", re.IGNORECASE)
+_INFO_HIGHRES_IGNORED_RE     = re.compile(r"high resolution ignored", re.IGNORECASE)
+_INFO_UV_IGNORED_RE          = re.compile(r"UV measurement mode requested, but instrument doesn't support", re.IGNORECASE)
+_INFO_SCAN_TOL_IGNORED_RE    = re.compile(r"Modified patch consistency tolerance ignored", re.IGNORECASE)
+
+# --- D. Spot / XY mode defensive handlers --------------------------------
+_XY_PLACE_SHEET_RE     = re.compile(r"Please place sheet\s+(\d+)\s+of\s+(\d+)\s+on table", re.IGNORECASE)
+_XY_SHEET_OK_RE        = re.compile(r"Sheet\s+(\d+)\s+of\s+(\d+)\s+read OK", re.IGNORECASE)
+_SPOT_READY_RE         = re.compile(r"Ready to read patch\s+'([^']+)'", re.IGNORECASE)
+_ABORT_CONFIRM_RE      = re.compile(r"Abort\s*\?\s*-\s*Are you sure\s*\?\s*\[y/n\]", re.IGNORECASE)
+_PATCH_NOT_FOUND_RE    = re.compile(r"Patch\s+'([^']+)'\s+not found", re.IGNORECASE)
+
 
 @dataclass
 class MeasureParams:
@@ -69,6 +109,26 @@ class MeasureManager(QObject):
     unexpected_response     = pyqtSignal(str)       # carries the DeltaE value string
     sensor_wrong_position   = pyqtSignal()          # emitted when instrument is in calibration position during scan
     usb_claimed_by_vm       = pyqtSignal()          # emitted when USB device is held exclusively by a VM
+
+    # A. Mid-measurement recovery prompts
+    strip_interrupted          = pyqtSignal()       # chartread reports the strip read was interrupted by user
+    unread_confirm             = pyqtSignal(str)    # user pressed 'd' with unread patches; carries "id, loc"
+    generic_instrument_error   = pyqtSignal(str, str)  # (friendly_msg, technical_detail) from ierror()
+
+    # B. Startup / config failures (terminal — chartread exits)
+    coms_init_failed           = pyqtSignal(str)    # serial/USB init failed
+    inst_init_failed           = pyqtSignal(str)    # init_inst() failed
+    instrument_wrong_type      = pyqtSignal(str)    # instrument can't do reflection/transmission/emissive as needed
+    ccmx_load_failed           = pyqtSignal(str)    # CCMX/CCSS load failed
+    mode_set_failed            = pyqtSignal(str)    # setting instrument mode failed
+
+    # B-status. Non-blocking informational messages
+    info_message               = pyqtSignal(str, str)  # (category, text)
+
+    # D. Spot / XY mode (defensive coverage — won't fire in strip mode)
+    xy_place_sheet             = pyqtSignal(int, int)  # (sheet_n, total_sheets)
+    spot_ready                 = pyqtSignal(str)       # patch id
+    abort_confirm              = pyqtSignal()
 
     def __init__(self, runner: "ArgyllRunner", parent: QObject | None = None) -> None:
         super().__init__(parent)
@@ -188,6 +248,13 @@ class MeasureManager(QObject):
                 self._runner.write_stdin(key)
             elif self._guided_state not in ("idle_done", "disabled"):
                 self._guided_step(current, on_line)
+        # IMPORTANT: handle the user-initiated "unread patch" prompt BEFORE the
+        # generic _ARE_YOU_SURE_RE auto-answer below, otherwise that branch
+        # resets _save_partial_state to None and the gate here would let the
+        # dialog fire even when our Save-Partial flow is in control.
+        m = _UNREAD_CONFIRM_RE.search(line)
+        if m and self._save_partial_state is None:
+            self.unread_confirm.emit(m.group(1).strip())
         if _ARE_YOU_SURE_RE.search(line) and self._save_partial_state == "wait_sure":
             self._save_partial_state = None
             self._runner.write_stdin("y")
@@ -218,6 +285,86 @@ class MeasureManager(QObject):
             self.sensor_wrong_position.emit()
         if _USB_VM_RE.search(line):
             self.usb_claimed_by_vm.emit()
+
+        # A. Mid-measurement recovery prompts ------------------------------
+        # (note: _UNREAD_CONFIRM_RE is handled above, before _ARE_YOU_SURE_RE,
+        # so the Save-Partial state machine and the user-driven dialog don't
+        # race each other when the prompt arrives.)
+        if _STRIP_INTERRUPTED_RE.search(line):
+            self.strip_interrupted.emit()
+        m = _GENERIC_IERROR_RE.search(line)
+        if m:
+            self.generic_instrument_error.emit(m.group(1).strip(), m.group(2).strip())
+
+        # B. Startup / config failures -------------------------------------
+        m = _INIT_COMS_FAIL_RE.search(line)
+        if m:
+            self.coms_init_failed.emit(m.group(1).strip())
+        m = _INIT_INST_FAIL_RE.search(line)
+        if m:
+            self.inst_init_failed.emit(m.group(1).strip())
+        m = _CAPABILITY_FAIL_RE.search(line)
+        if m:
+            self.instrument_wrong_type.emit(m.group(1).lower())
+        if _CCMX_FAIL_RE.search(line):
+            self.ccmx_load_failed.emit(line.strip())
+        m = _MODE_SET_FAIL_RE.search(line)
+        if m:
+            self.mode_set_failed.emit(m.group(1).strip())
+
+        # B-status. Informational ------------------------------------------
+        m = _INFO_CHART_INST_MISMATCH_RE.search(line)
+        if m:
+            self.info_message.emit(
+                "chart_instrument_mismatch",
+                f"Note: chart was generated for {m.group(1)}; reading with {m.group(2)} anyway.",
+            )
+        m = _INFO_BATTERY_RE.search(line)
+        if m:
+            try:
+                pct = round(float(m.group(1)))
+                self.info_message.emit("battery", f"Instrument battery: {pct}%")
+            except ValueError:
+                pass
+        if _INFO_NO_SPECTRAL_RE.search(line):
+            self.info_message.emit(
+                "no_spectral",
+                "Spectral measurement not available on this instrument — colorimetric only.",
+            )
+        if _INFO_HIGHRES_IGNORED_RE.search(line):
+            self.info_message.emit(
+                "highres_ignored",
+                "High-resolution mode requested but not supported — using normal resolution.",
+            )
+        if _INFO_UV_IGNORED_RE.search(line):
+            self.info_message.emit(
+                "uv_ignored",
+                "UV mode requested but not supported on this instrument.",
+            )
+        if _INFO_SCAN_TOL_IGNORED_RE.search(line):
+            self.info_message.emit(
+                "scan_tol_ignored",
+                "Patch consistency tolerance setting ignored — instrument doesn't support it.",
+            )
+
+        # D. Spot / XY mode ------------------------------------------------
+        m = _XY_PLACE_SHEET_RE.search(line)
+        if m:
+            self.xy_place_sheet.emit(int(m.group(1)), int(m.group(2)))
+        m = _XY_SHEET_OK_RE.search(line)
+        if m:
+            self.info_message.emit(
+                "xy_sheet_ok",
+                f"Sheet {m.group(1)} of {m.group(2)} read successfully.",
+            )
+        m = _SPOT_READY_RE.search(line)
+        if m:
+            self.spot_ready.emit(m.group(1))
+        if _ABORT_CONFIRM_RE.search(line):
+            self.abort_confirm.emit()
+        m = _PATCH_NOT_FOUND_RE.search(line)
+        if m:
+            self.info_message.emit("patch_not_found", f"Patch '{m.group(1)}' not found.")
 
     # ------------------------------------------------------------------
     # Guided strip navigation

@@ -19,6 +19,53 @@ log = get_logger(__name__)
 _INTERSECT_RE   = re.compile(r"Intersecting volume\s*=\s*([\d.]+)")
 
 
+# Structured error patterns for viewgam (Argyll 3.5.0 gamut/viewgam.c).
+# Many error()s in viewgam are about per-field validation of the .gam files —
+# we collapse them into a single "gamut file format" pattern.
+_VIEWGAM_ERROR_PATTERNS: list[tuple[re.Pattern[str], str, str]] = [
+    # L523 — most common: the two gamuts can't be compared
+    (re.compile(r"Gamuts are not compatible!"),
+     "gamuts_incompatible",
+     "The two gamut files use different colour spaces or have incompatible "
+     "centres — viewgam can't combine them. Make sure both gamuts were built "
+     "from profiles in the same colour space (e.g. both RGB or both CMYK)."),
+    # L364 — input file read error
+    (re.compile(r"Input file '([^']+)' error\s*:\s*(.+)$"),
+     "gam_read",
+     "Could not read the gamut file '{0}'.\n\nArgyll reported: {1}"),
+    # L514 / L517 — gamut load failure with no Argyll message
+    (re.compile(r"Input file '([^']+)' read failed"),
+     "gam_read_generic",
+     "Could not load the gamut file '{0}'. The file may be corrupt or in an "
+     "older format — re-export the gamut from the source ICC profile."),
+    # L367 — wrong file type
+    (re.compile(r"Input file isn't a GAMUT format file"),
+     "wrong_filetype",
+     "One of the selected files isn't a .gam file. Pick a gamut (.gam) file "
+     "exported by iccgamut."),
+    # L369 / L372 / L374 / L377-414 — corrupt / wrong-version .gam files
+    (re.compile(r"Input file doesn't contain (?:exactly two tables|field \w+)|"
+                r"No (?:vertices|triangles)|"
+                r"Field \w+ is wrong type"),
+     "gam_corrupt",
+     "The gamut file is missing required data or has an unexpected format — "
+     "regenerate it from the ICC profile."),
+    # L347 / L497 — output file failures
+    (re.compile(r"(?:Error creating|Closing) (?:.+) object '([^']+)'"),
+     "output_write",
+     "Could not write the combined gamut output to '{0}'. Check temp-folder "
+     "writability."),
+]
+
+_VIEWGAM_WARNING_PATTERNS: list[tuple[re.Pattern[str], str, str]] = [
+    # viewgam emits one user-facing warning (~L463) about non-LAB combinations.
+    # Currently a generic catch — only surfaces if viewgam prints it verbatim.
+    (re.compile(r"^Warning(?:\s*:\s*|\s+)(.+)$", re.IGNORECASE),
+     "viewgam_warning",
+     "{0}"),
+]
+
+
 # Colour remap moved to Python (see gamut_viewer._apply_chromiq_colors) —
 # JS-side mutation didn't reliably propagate to X3DOM's GPU buffers after
 # the scene was parsed via body-script init, so individual profile views
@@ -246,6 +293,8 @@ class ViewgamRunner(QObject):
         super().__init__(parent)
         self._runner    = runner
         self._log_lines: list[str] = []
+        self._matched_errors: list[tuple[str, str]] = []
+        self._matched_warnings: list[tuple[str, str]] = []
 
     def run(
         self,
@@ -263,6 +312,8 @@ class ViewgamRunner(QObject):
             return
 
         self._log_lines   = []
+        self._matched_errors = []
+        self._matched_warnings = []
         self._themed      = themed
         self._bg          = bg
         self._primary_html = primary_html
@@ -280,12 +331,29 @@ class ViewgamRunner(QObject):
 
         def _accumulate(line: str) -> None:
             self._log_lines.append(line)
+            self._scan_line(line)
             on_line(line)
 
         def _done(code: int) -> None:
             self._on_done(code, work_dir, on_finish)
 
         self._runner.run("viewgam", args, work_dir, on_line=_accumulate, on_finish=_done)
+
+    def _scan_line(self, line: str) -> None:
+        for pattern, key, fmt in _VIEWGAM_ERROR_PATTERNS:
+            m = pattern.search(line)
+            if m:
+                self._matched_errors.append((key, fmt.format(*m.groups())))
+        for pattern, key, fmt in _VIEWGAM_WARNING_PATTERNS:
+            m = pattern.search(line)
+            if m:
+                self._matched_warnings.append((key, fmt.format(*m.groups())))
+
+    def primary_failure(self) -> tuple[str, str] | None:
+        return self._matched_errors[0] if self._matched_errors else None
+
+    def captured_warnings(self) -> list[tuple[str, str]]:
+        return list(self._matched_warnings)
 
     def _on_done(
         self,
@@ -327,7 +395,11 @@ class ViewgamRunner(QObject):
             )
             self.finished.emit(result)
         elif code != 0:
-            self.error.emit(f"viewgam exited with code {code}.")
+            failure = self.primary_failure()
+            if failure is not None:
+                self.error.emit(failure[1])
+            else:
+                self.error.emit(f"viewgam exited with code {code}.")
         else:
             self.error.emit("viewgam produced no usable output.")
 

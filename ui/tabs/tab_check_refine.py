@@ -40,7 +40,7 @@ from core.resource_path import resource_path
 from ui.fade_scroll import FadeScrollArea
 from ui.gamut_panel import GamutPanel
 from ui.tab_header import TabHeader
-from ui.tooltip_button import TooltipButton
+from ui.tooltip_button import InfoDialog, TooltipButton
 from ui.widgets import NoScrollComboBox, NoScrollDoubleSpinBox, make_browse_button, open_file_dialog, set_folder_icon, set_preset_icon, tint_dialog_primary
 
 _TAB_COLOR = "#9f82ff"  # Check & Refine tab accent
@@ -1187,6 +1187,9 @@ class TabCheckRefine(QWidget):
 
         if code != 0 and result.avg_de is None:
             self._log.appendPlainText(f"\n[ERROR] profcheck exited with code {code} and produced no results.")
+            failure = self._checker.primary_failure()
+            if failure is not None:
+                InfoDialog("Profile Quality Check Failed", failure[1], self, min_width=520).exec()
             return
 
         if code != 0:

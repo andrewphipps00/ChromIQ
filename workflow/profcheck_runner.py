@@ -18,6 +18,55 @@ _SUMMARY_RE   = re.compile(r"max\.\s*=\s*([\d.]+).*?avg\.\s*=\s*([\d.]+)", re.IG
 _PATCH_RE     = re.compile(r"^\s*\[([\d.]+)\]\s+\d+\s+@\s+([A-Za-z0-9]+):", re.MULTILINE)
 _STRIP_LETTER = re.compile(r"^([A-Za-z]+)")
 
+
+# Structured error / warning patterns for profcheck (Argyll 3.5.0
+# spectro/profile/profcheck.c). Many error()s are per-field "Input file
+# doesn't contain field X" variants — we collapse them into a single
+# pattern below.
+_PROFCHECK_ERROR_PATTERNS: list[tuple[re.Pattern[str], str, str]] = [
+    # L307 / L353 — wrong illuminant for the measurement reference type
+    (re.compile(r"(?:Target|CIE) illuminant '([^']+)' is wrong measurement type"),
+     "illum_type",
+     "The illuminant '{0}' isn't compatible with the reference data in the "
+     ".ti3 file. Change or clear the illuminant in the Check & Refine "
+     "options."),
+    # L433
+    (re.compile(r"CGATS file read error on '([^']+)'\s*:\s*(.+)$"),
+     "ti3_read",
+     "The measurement file ({0}) could not be read.\n\nArgyll reported: {1}"),
+    # L501
+    (re.compile(r"Input file '([^']+)' doesn't contain keyword COLOR_REPS"),
+     "ti3_no_color_reps",
+     "The file '{0}' isn't a measured .ti3 file — it's missing the "
+     "COLOR_REPS keyword. Did you pick a chart definition (.ti1/.ti2) "
+     "instead?"),
+    # L578
+    (re.compile(r"Device input file '([^']+)' has unhandled color representation '([^']+)'"),
+     "unhandled_colorrep",
+     "profcheck doesn't know how to handle the colour representation '{1}' "
+     "in '{0}'. Use a chart in RGB, CMYK or another standard colour space."),
+    # L583
+    (re.compile(r"Input file '([^']+)' has no sets of data"),
+     "ti3_empty",
+     "The measurement file '{0}' contains no data sets. Re-measure the chart."),
+    # L608-655 — all "Input file 'X' doesn't contain field Y" / "field Y is wrong type"
+    (re.compile(r"Input file(?: '([^']+)')? (?:doesn't contain field|field) (\S+)(?: is wrong type)?"),
+     "field_missing",
+     "The measurement file is missing or has the wrong type for a required "
+     "field ({1}). Re-measure the chart, or check the .ti3 wasn't edited."),
+]
+
+_PROFCHECK_WARNING_PATTERNS: list[tuple[re.Pattern[str], str, str]] = [
+    # L465
+    (re.compile(r"-i illuminant ignored for emissive reference type"),
+     "illum_ignored_emissive",
+     "Illuminant setting was ignored — this measurement was made in emissive mode."),
+    # L468
+    (re.compile(r"-f FWA compensation ignored for emissive reference type"),
+     "fwa_ignored_emissive",
+     "FWA compensation was ignored — this measurement was made in emissive mode."),
+]
+
 REFINE_DE_THRESHOLD          = 2.0   # flag a strip if any single patch exceeds this ΔE
 REFINE_START_OVER_RATIO      = 0.5   # recommend start-over if patch ratio exceeds this
 REFINE_START_OVER_STRIP_RATIO = 0.75  # recommend start-over if strip ratio exceeds this
@@ -53,6 +102,8 @@ class ProfcheckRunner:
     def __init__(self, runner: "ArgyllRunner") -> None:
         self._runner   = runner
         self._last_log = ""
+        self._matched_errors: list[tuple[str, str]] = []
+        self._matched_warnings: list[tuple[str, str]] = []
 
     def run(
         self,
@@ -64,9 +115,12 @@ class ProfcheckRunner:
         cwd  = params.ti3_path.parent
         log.info("profcheck: %s  [cwd=%s]", " ".join(args), cwd)
         self._last_log = ""
+        self._matched_errors = []
+        self._matched_warnings = []
 
         def _accumulate(line: str) -> None:
             self._last_log += line + "\n"
+            self._scan_line(line)
             on_line(line)
 
         self._runner.run(
@@ -76,6 +130,23 @@ class ProfcheckRunner:
             on_line=_accumulate,
             on_finish=on_finish,
         )
+
+    def _scan_line(self, line: str) -> None:
+        for pattern, key, fmt in _PROFCHECK_ERROR_PATTERNS:
+            m = pattern.search(line)
+            if m:
+                groups = tuple(g or "" for g in m.groups())
+                self._matched_errors.append((key, fmt.format(*groups)))
+        for pattern, key, fmt in _PROFCHECK_WARNING_PATTERNS:
+            m = pattern.search(line)
+            if m:
+                self._matched_warnings.append((key, fmt.format(*m.groups())))
+
+    def primary_failure(self) -> tuple[str, str] | None:
+        return self._matched_errors[0] if self._matched_errors else None
+
+    def captured_warnings(self) -> list[tuple[str, str]]:
+        return list(self._matched_warnings)
 
     @property
     def last_log(self) -> str:
