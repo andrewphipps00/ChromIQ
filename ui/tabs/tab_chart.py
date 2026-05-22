@@ -54,7 +54,7 @@ from ui.parameter_widget import ParameterWidget
 from ui.styles import SPEC_AMBER, SPEC_CYAN, SPEC_GREEN, SPEC_MAGENTA, SPEC_VIOLET
 from ui.tab_header import TabHeader
 from ui.tiff_preview import TiffPreview
-from ui.tooltip_button import TooltipButton
+from ui.tooltip_button import InfoDialog, TooltipButton
 from ui.widgets import NoScrollComboBox, NoScrollSpinBox, icc_profile_paths, make_browse_button, open_file_dialog, set_folder_icon, set_preset_icon
 from workflow.chart_creator import (
     ChartCreator, ChartParams, guided_neutrals, GUIDED_NEUTRAL_BASE, REF_BUDGET,
@@ -2425,6 +2425,15 @@ class TabChart(QWidget):
         else:
             self._log.appendPlainText("[ERROR] Chart generation failed.")
             self._log.ensureCursorVisible()
+            failure = self._creator.primary_failure()
+            if failure is not None:
+                tool, _key, friendly = failure
+                title = (
+                    "Chart Generation Failed (targen)"
+                    if tool == "targen"
+                    else "Chart Layout Failed (printtarg)"
+                )
+                InfoDialog(title, friendly, self, min_width=520).exec()
 
     def _on_save_defaults(self) -> None:
         params = self._collect_params()

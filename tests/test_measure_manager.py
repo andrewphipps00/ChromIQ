@@ -1,0 +1,319 @@
+"""Parser tests for MeasureManager — confirms each chartread line pattern
+produces the right signal with the right payload.
+
+Fixture lines are copied verbatim from Argyll 3.5.0 chartread.c (the printf
+format strings concretised with example values). See the plan file for the
+exact source line references.
+"""
+from __future__ import annotations
+
+import sys
+from typing import Any, List, Tuple
+
+import pytest
+
+# pytest-qt isn't a dependency; we drive signals through a manual collector.
+from PyQt6.QtCore import QCoreApplication
+
+from workflow.measure_manager import MeasureManager, MeasureParams
+
+
+# QApplication is required for QObject signals to work at all.
+@pytest.fixture(scope="module", autouse=True)
+def _qapp():
+    app = QCoreApplication.instance() or QCoreApplication(sys.argv)
+    yield app
+
+
+class _StubRunner:
+    """Minimal ArgyllRunner stand-in. Records every write_stdin call so we can
+    verify the auto-answer behaviour for the Save-Partial state machine."""
+
+    def __init__(self) -> None:
+        self.writes: List[str] = []
+
+    def write_stdin(self, text: str) -> None:
+        self.writes.append(text)
+
+    # Nothing else in MeasureManager._handle_line uses the runner.
+    def run(self, *a, **k) -> None:
+        pass
+
+    def abort(self) -> None:
+        pass
+
+
+def _make_manager() -> Tuple[MeasureManager, _StubRunner, dict]:
+    """Build a manager and attach a `signals` dict that collects every emit."""
+    runner = _StubRunner()
+    mgr = MeasureManager(runner)
+    # Guided-strip navigation is normally configured by Tab Measure before
+    # start(); for parser-only tests we disable it explicitly so seeing a
+    # strip line doesn't make _guided_step index into an empty list.
+    mgr._guided_state = "disabled"
+    sigs: dict = {}
+
+    def _collect(name: str):
+        sigs.setdefault(name, [])
+        return lambda *args: sigs[name].append(args)
+
+    for name in (
+        "stripe_changed", "all_stripes_done", "calibration_prompt",
+        "calibration_done", "strip_error", "instrument_disconnected",
+        "device_busy", "no_instrument", "wrong_strip", "unexpected_response",
+        "sensor_wrong_position", "usb_claimed_by_vm",
+        "strip_interrupted", "unread_confirm", "generic_instrument_error",
+        "coms_init_failed", "inst_init_failed", "instrument_wrong_type",
+        "ccmx_load_failed", "mode_set_failed",
+        "info_message",
+        "xy_place_sheet", "spot_ready", "abort_confirm",
+    ):
+        getattr(mgr, name).connect(_collect(name))
+    return mgr, runner, sigs
+
+
+def _feed(mgr: MeasureManager, line: str) -> None:
+    """Push a line through the same path chartread output takes."""
+    mgr._handle_line(line, lambda _l: None)
+
+
+# ---------------------------------------------------------------------------
+# A. Mid-measurement recovery prompts
+# ---------------------------------------------------------------------------
+
+def test_strip_interrupted_fires_signal():
+    mgr, _, sigs = _make_manager()
+    _feed(mgr, "Strip read stopped at user request!")
+    assert sigs.get("strip_interrupted") == [()]
+
+
+def test_unread_confirm_fires_with_patch_info_when_state_idle():
+    mgr, _, sigs = _make_manager()
+    _feed(mgr, "Done ? - At least one unread patch (45, B12), Are you sure [y/n]: ")
+    assert sigs.get("unread_confirm") == [("45, B12",)]
+
+
+def test_unread_confirm_suppressed_during_save_partial_flow():
+    mgr, runner, sigs = _make_manager()
+    # Simulate the state the Save-Partial flow leaves the manager in once
+    # chartread has been driven from the strip menu into "Are you sure".
+    mgr._save_partial_state = "wait_sure"
+    _feed(mgr, "Done ? - At least one unread patch (45, B12), Are you sure [y/n]: ")
+    # No user-facing dialog signal, and the auto-'y' answer is sent.
+    assert not sigs.get("unread_confirm")
+    assert runner.writes == ["y"]
+    assert mgr._save_partial_state is None
+
+
+def test_generic_ierror_fires_with_friendly_and_technical():
+    mgr, _, sigs = _make_manager()
+    _feed(mgr, "Got 'Communication error' (USB read timeout) error.")
+    assert sigs.get("generic_instrument_error") == [("Communication error", "USB read timeout")]
+
+
+# ---------------------------------------------------------------------------
+# B. Startup / config failure messages
+# ---------------------------------------------------------------------------
+
+def test_coms_init_failed_fires():
+    mgr, _, sigs = _make_manager()
+    _feed(mgr, "Establishing communications with instrument failed with message 'COM port not found' (open failed)")
+    assert sigs.get("coms_init_failed") == [("COM port not found",)]
+
+
+def test_inst_init_failed_fires():
+    mgr, _, sigs = _make_manager()
+    _feed(mgr, "Initialising instrument failed with message 'No response from device' (timeout)")
+    assert sigs.get("inst_init_failed") == [("No response from device",)]
+
+
+@pytest.mark.parametrize("line,expected", [
+    ("Need reflection spot, strip, xy or chart reading capability,", "reflection"),
+    ("Need transmission reading capability,", "transmission"),
+    ("Need emissive spot or strip reading capability", "emissive"),
+    ("Need emissive reading capability", "emissive"),
+])
+def test_capability_mismatch_classified(line: str, expected: str):
+    mgr, _, sigs = _make_manager()
+    _feed(mgr, line)
+    assert sigs.get("instrument_wrong_type") == [(expected,)]
+
+
+@pytest.mark.parametrize("line", [
+    "Setting Colorimeter Correction Matrix failed with error :'Bad data' (corrupt)",
+    "Reading CCMX/CCSS File '/tmp/x.ccmx' failed with error 5:'no such file'",
+    "Instrument doesn't have Colorimeter Correction Matrix capability",
+    "Instrument doesn't have Colorimeter Calibration Spectral Sample capability",
+])
+def test_ccmx_failure_variants(line: str):
+    mgr, _, sigs = _make_manager()
+    _feed(mgr, line)
+    assert "ccmx_load_failed" in sigs and len(sigs["ccmx_load_failed"]) == 1
+
+
+def test_mode_set_failed_fires():
+    mgr, _, sigs = _make_manager()
+    _feed(mgr, "Setting instrument mode failed with error :'mode not supported' (refused)")
+    assert sigs.get("mode_set_failed") == [("mode not supported",)]
+
+
+# ---------------------------------------------------------------------------
+# B-status. Informational messages
+# ---------------------------------------------------------------------------
+
+def test_info_battery_status_disabled():
+    # Battery percentage flashes were felt to be noisy (fires on every i1Pro/
+    # Spectro2 start-up). The pattern is intentionally inert; this test pins
+    # that decision.
+    mgr, _, sigs = _make_manager()
+    _feed(mgr, "The battery charged level is 47.0%")
+    assert not sigs.get("info_message")
+
+
+def test_info_chart_instrument_mismatch():
+    mgr, _, sigs = _make_manager()
+    _feed(mgr, "Warning: chart is for i1pro2, using instrument i1pro3")
+    assert sigs.get("info_message") == [
+        ("chart_instrument_mismatch",
+         "Note: chart was generated for i1pro2; reading with i1pro3 anyway."),
+    ]
+
+
+@pytest.mark.parametrize("line,category", [
+    ("Warning: Instrument isn't capable of spectral measurement", "no_spectral"),
+    ("high resolution ignored - instrument doesn't support high res. mode", "highres_ignored"),
+    ("UV measurement mode requested, but instrument doesn't support this mode", "uv_ignored"),
+    ("Modified patch consistency tolerance ignored - instrument doesn't support it", "scan_tol_ignored"),
+])
+def test_other_info_messages_categorised(line: str, category: str):
+    mgr, _, sigs = _make_manager()
+    _feed(mgr, line)
+    assert sigs.get("info_message") is not None
+    assert sigs["info_message"][0][0] == category
+
+
+# ---------------------------------------------------------------------------
+# D. Spot / XY mode defensive coverage
+# ---------------------------------------------------------------------------
+
+def test_xy_place_sheet_carries_sheet_numbers():
+    mgr, _, sigs = _make_manager()
+    _feed(mgr, "Please place sheet 2 of 5 on table, then")
+    assert sigs.get("xy_place_sheet") == [(2, 5)]
+
+
+def test_xy_sheet_ok_emits_info_message():
+    mgr, _, sigs = _make_manager()
+    _feed(mgr, "Sheet 2 of 5 read OK")
+    assert sigs.get("info_message") == [("xy_sheet_ok", "Sheet 2 of 5 read successfully.")]
+
+
+def test_spot_ready_carries_patch_id():
+    mgr, _, sigs = _make_manager()
+    _feed(mgr, "Ready to read patch 'A07'")
+    assert sigs.get("spot_ready") == [("A07",)]
+
+
+def test_abort_confirm_fires_signal():
+    mgr, _, sigs = _make_manager()
+    _feed(mgr, "Abort ? - Are you sure ? [y/n]:")
+    assert sigs.get("abort_confirm") == [()]
+
+
+def test_patch_not_found_emits_info_message():
+    mgr, _, sigs = _make_manager()
+    _feed(mgr, "Patch 'ZZ99' not found")
+    assert sigs.get("info_message") == [("patch_not_found", "Patch 'ZZ99' not found.")]
+
+
+# ---------------------------------------------------------------------------
+# E. ALL ROWS READ — verify the existing detection survives the 3.5.0
+# inline-suffix form on the "Ready to read strip pass" prompt.
+# ---------------------------------------------------------------------------
+
+def test_all_rows_read_inline_suffix_in_normal_mode():
+    """In normal (non-resume) mode, the inline suffix should still fire
+    all_stripes_done so the user can be offered the Build Profile dialog."""
+    mgr, _, sigs = _make_manager()
+    mgr._is_resume = False
+    _feed(mgr, "Ready to read strip pass A (!! ALL ROWS READ !!)")
+    assert sigs.get("stripe_changed") == [("A",)]
+    assert sigs.get("all_stripes_done") == [()]
+
+
+def test_all_rows_read_inline_suffix_suppressed_in_resume_mode():
+    """In resume mode the same line just means we're revisiting a fully-read
+    chart — must NOT prematurely show 'Build Profile'."""
+    mgr, _, sigs = _make_manager()
+    mgr._is_resume = True
+    _feed(mgr, "Ready to read strip pass A (!! ALL ROWS READ !!)")
+    assert sigs.get("stripe_changed") == [("A",)]
+    assert not sigs.get("all_stripes_done")
+
+
+def test_all_rows_read_standalone_line_fires_in_both_modes():
+    """Older Argyll printed ALL ROWS READ on its own line. The detection must
+    keep firing for that historical form too."""
+    for resume in (False, True):
+        mgr, _, sigs = _make_manager()
+        mgr._is_resume = resume
+        _feed(mgr, "    (!! ALL ROWS READ !!)")
+        assert sigs.get("all_stripes_done") == [()], f"resume={resume}"
+
+
+# ---------------------------------------------------------------------------
+# Guided refinement navigation — regression coverage to ensure the new
+# message-coverage patterns don't disturb the auto-navigation state machine.
+# ---------------------------------------------------------------------------
+
+def _make_guided_manager():
+    """Like _make_manager but leaves guided navigation enabled."""
+    mgr, runner, sigs = _make_manager()
+    mgr._guided_state = "idle"  # re-enable (default test helper disables it)
+    return mgr, runner, sigs
+
+
+def test_guided_single_target_navigates_and_finishes():
+    mgr, runner, sigs = _make_guided_manager()
+    mgr.set_guided_strips(["C"])  # target strip C
+    _feed(mgr, "Ready to read strip pass A")   # idle -> navigating, press 'f'
+    _feed(mgr, "Ready to read strip pass B")   # still navigating, press 'f'
+    _feed(mgr, "Ready to read strip pass C")   # arrived -> waiting
+    _feed(mgr, " Strip read OK")               # advance -> done
+    assert runner.writes == ["f", "f"]
+    assert mgr._guided_state == "idle_done"
+    assert sigs.get("all_stripes_done") == [()]
+
+
+def test_guided_multi_target_with_backward_move():
+    mgr, runner, sigs = _make_guided_manager()
+    mgr.set_guided_strips(["B", "D"])
+    _feed(mgr, "Ready to read strip pass E")   # nav back to B -> 'b'
+    _feed(mgr, "Ready to read strip pass B")   # arrived B -> waiting
+    _feed(mgr, " Strip read OK")               # advance idx -> D
+    _feed(mgr, "Ready to read strip pass B")   # nav to D -> 'f'
+    _feed(mgr, "Ready to read strip pass C")   # nav -> 'f'
+    _feed(mgr, "Ready to read strip pass D")   # arrived D -> waiting
+    _feed(mgr, " Strip read OK")               # advance -> done
+    assert runner.writes == ["b", "f", "f"]
+    assert mgr._guided_state == "idle_done"
+    assert sigs.get("all_stripes_done") == [()]
+
+
+def test_guided_run_emits_no_spurious_dialog_signals():
+    """A clean guided run must not trip any of the new error/recovery patterns."""
+    mgr, runner, sigs = _make_guided_manager()
+    mgr.set_guided_strips(["B"])
+    for line in (
+        "Ready to read strip pass A",
+        "Ready to read strip pass B",
+        " Strip read OK",
+    ):
+        _feed(mgr, line)
+    for noisy in (
+        "strip_interrupted", "unread_confirm", "generic_instrument_error",
+        "coms_init_failed", "inst_init_failed", "instrument_wrong_type",
+        "ccmx_load_failed", "mode_set_failed", "info_message",
+        "xy_place_sheet", "spot_ready", "abort_confirm", "strip_error",
+    ):
+        assert not sigs.get(noisy), f"{noisy} fired during a clean guided run"

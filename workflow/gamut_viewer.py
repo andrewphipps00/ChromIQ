@@ -19,6 +19,27 @@ log = get_logger(__name__)
 
 _VOLUME_RE = re.compile(r"Total volume of gamut is ([\d.]+)")
 
+
+# iccgamut prints only 2 explicit error() calls (both about VRML output write
+# failures), but icclib upstream can also print "Error: " prefixed lines when
+# the ICC file is unreadable or missing a LUT. Cover both.
+_ICCGAMUT_ERROR_PATTERNS: list[tuple[re.Pattern[str], str, str]] = [
+    # L835 / L966 — VRML / X3D / DRM file creation/close failures (Argyll typo: "faile")
+    (re.compile(r"new_vrml fail(?:e|ed) for file '([^']+)'"),
+     "vrml_write",
+     "Could not write the gamut visualisation file '{0}'. Check that the "
+     "temporary folder is writable."),
+    (re.compile(r"Error closing output file '([^']+)'"),
+     "vrml_close",
+     "Could not finalise the gamut visualisation file '{0}'."),
+    # Generic icclib "Error: X" or "ICC profile error" lines that iccgamut
+    # forwards. Surface as a structured reason if no more specific pattern
+    # matched first.
+    (re.compile(r"(?:^|\s)(?:Error|ICC profile error)\s*:\s*(.+)$"),
+     "icc_read",
+     "iccgamut could not read the ICC profile.\n\nArgyll reported: {0}"),
+]
+
 # JS for the X3D <Background> node only. The colour remap that used to
 # live here ran at DOMContentLoaded but X3DOM had already parsed the X3D
 # nodes via a body-script-triggered init and cached the GPU buffers, so
@@ -256,6 +277,7 @@ class GamutViewer(QObject):
         self._runner    = runner
         self._log_lines: list[str] = []
         self._work_dir: Path | None = None
+        self._matched_errors: list[tuple[str, str]] = []
 
     def run(
         self,
@@ -295,14 +317,26 @@ class GamutViewer(QObject):
         args = self._build_args(params, icc_copy)
         log.info("iccgamut: %s  [cwd=%s]", " ".join(args), work_dir)
 
+        self._matched_errors = []
+
         def _accumulate(line: str) -> None:
             self._log_lines.append(line)
+            self._scan_line(line)
             on_line(line)
 
         def _done(code: int) -> None:
             self._on_done(code, icc_copy, on_finish)
 
         self._runner.run("iccgamut", args, work_dir, on_line=_accumulate, on_finish=_done)
+
+    def _scan_line(self, line: str) -> None:
+        for pattern, key, fmt in _ICCGAMUT_ERROR_PATTERNS:
+            m = pattern.search(line)
+            if m:
+                self._matched_errors.append((key, fmt.format(*m.groups())))
+
+    def primary_failure(self) -> tuple[str, str] | None:
+        return self._matched_errors[0] if self._matched_errors else None
 
     def _on_done(
         self,
@@ -327,9 +361,17 @@ class GamutViewer(QObject):
             log.info("iccgamut: volume=%.1f cc, html=%s, gam=%s", volume, html_path, gam_path)
             self.finished.emit(volume, html_path, gam_path)
         elif code != 0:
-            tool_err = next((l for l in reversed(self._log_lines) if "Error" in l or "error" in l), "")
-            suffix = f"\niccgamut reported: {tool_err}" if tool_err else ""
-            self.error.emit(f"tool_error:{code}{suffix}")
+            failure = self.primary_failure()
+            if failure is not None:
+                self.error.emit(f"tool_error:{code}\n{failure[1]}")
+            else:
+                tool_err = next(
+                    (l for l in reversed(self._log_lines)
+                     if "Error" in l or "error" in l),
+                    "",
+                )
+                suffix = f"\niccgamut reported: {tool_err}" if tool_err else ""
+                self.error.emit(f"tool_error:{code}{suffix}")
         else:
             self.error.emit("Could not parse gamut volume from iccgamut output — try running with -v flag.")
 

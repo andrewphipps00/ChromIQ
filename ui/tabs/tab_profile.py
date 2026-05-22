@@ -1013,6 +1013,11 @@ class TabProfile(QWidget):
             if cal_path is None:
                 self._pc_log.appendPlainText("\n[ERROR] printcal failed — see output above.")
                 self._pc_log.ensureCursorVisible()
+                failure = self._printcal_runner.primary_failure()
+                if failure is not None:
+                    self._show_tool_failure_dialog(
+                        "Create Calibration Failed", failure[1]
+                    )
             else:
                 self._pc_log.appendPlainText(f"\n[OK] Calibration file created: {cal_path}")
                 self._pc_log.ensureCursorVisible()
@@ -1231,6 +1236,11 @@ class TabProfile(QWidget):
             if result is None:
                 self._ac_log.appendPlainText("\n[ERROR] applycal failed — see output above.")
                 self._ac_log.ensureCursorVisible()
+                failure = self._applycal_runner.primary_failure()
+                if failure is not None:
+                    self._show_tool_failure_dialog(
+                        "Apply Calibration Failed", failure[1]
+                    )
             else:
                 self._ac_log.appendPlainText(f"\n[OK] Done. Output: {result}")
                 self._ac_log.ensureCursorVisible()
@@ -3208,8 +3218,17 @@ class TabProfile(QWidget):
         if code != 0:
             self._log.appendPlainText(f"\n[ERROR] colprof exited with code {code}.")
             self._log.ensureCursorVisible()
-            if "doesn't have an FWA illuminent" in self._log.toPlainText():
+            failure = self._builder.primary_failure()
+            if failure is not None and failure[0] == "fwa_no_uv":
                 self._show_fwa_instrument_error()
+            elif failure is not None:
+                self._show_tool_failure_dialog("Profile Build Failed", failure[1])
+            else:
+                # Fall back to the historical string-search so older Argyll
+                # versions whose wording doesn't match our patterns still trigger
+                # the bespoke FWA dialog.
+                if "doesn't have an FWA illuminent" in self._log.toPlainText():
+                    self._show_fwa_instrument_error()
             return
 
         params = self._collect_params()
@@ -3229,6 +3248,13 @@ class TabProfile(QWidget):
             self.profile_built.emit(self._ti3_path, self._icc_path)
 
         self._show_build_result_dialog(self._icc_path, issues)
+
+    def _show_tool_failure_dialog(self, title: str, body: str) -> None:
+        """Show a friendly failure dialog with the structured reason from the
+        runner. Used for colprof / printcal / applycal when an error pattern
+        matches and there isn't a bespoke dialog for that specific case."""
+        dlg = InfoDialog(title, body, self, min_width=520)
+        dlg.exec()
 
     def _show_fwa_instrument_error(self) -> None:
         dlg = InfoDialog(

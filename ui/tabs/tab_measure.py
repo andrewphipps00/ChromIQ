@@ -294,6 +294,12 @@ class TabMeasure(QWidget):
         self._device_busy: bool = False
         self._no_instrument: bool = False
         self._usb_claimed_by_vm: bool = False
+        # Pending terminal dialogs for group-B startup failures (shown by _on_measure_done).
+        self._coms_init_failed_msg: str | None = None
+        self._inst_init_failed_msg: str | None = None
+        self._instrument_wrong_type: str | None = None
+        self._ccmx_load_failed_msg: str | None = None
+        self._mode_set_failed_msg: str | None = None
         self._ti3_mtime_before: float | None = None
         self._mode: str = "dark"
 
@@ -309,6 +315,22 @@ class TabMeasure(QWidget):
         self._manager.unexpected_response.connect(self._on_unexpected_response)
         self._manager.sensor_wrong_position.connect(self._on_sensor_wrong_position)
         self._manager.usb_claimed_by_vm.connect(self._on_usb_claimed_by_vm)
+        # A. Mid-measurement recovery dialogs
+        self._manager.strip_interrupted.connect(self._on_strip_interrupted)
+        self._manager.unread_confirm.connect(self._on_unread_confirm)
+        self._manager.generic_instrument_error.connect(self._on_generic_instrument_error)
+        # B. Startup / config error capture (dialogs shown in _on_measure_done)
+        self._manager.coms_init_failed.connect(self._on_coms_init_failed)
+        self._manager.inst_init_failed.connect(self._on_inst_init_failed)
+        self._manager.instrument_wrong_type.connect(self._on_instrument_wrong_type)
+        self._manager.ccmx_load_failed.connect(self._on_ccmx_load_failed)
+        self._manager.mode_set_failed.connect(self._on_mode_set_failed)
+        # B-status. Non-blocking informational messages
+        self._manager.info_message.connect(self._on_info_message)
+        # D. Spot / XY mode defensive handlers
+        self._manager.xy_place_sheet.connect(self._on_xy_place_sheet)
+        self._manager.spot_ready.connect(self._on_spot_ready)
+        self._manager.abort_confirm.connect(self._on_abort_confirm)
         self._runner.keypress_failed.connect(self._on_keypress_failed)
 
         # Watchdog: if a dialog sends a key but chartread emits no new output
@@ -2030,6 +2052,177 @@ class TabMeasure(QWidget):
         dlg.exec()
         QApplication.instance().installEventFilter(self)
 
+    def _on_strip_interrupted(self) -> None:
+        QApplication.instance().removeEventFilter(self)
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Strip Read Interrupted")
+        dlg.setMinimumWidth(500)
+
+        layout = QVBoxLayout(dlg)
+        layout.setSpacing(16)
+        layout.setContentsMargins(24, 20, 24, 20)
+
+        msg = QLabel(
+            "<b>The strip read was stopped before it finished.</b><br><br>"
+            "This usually happens if the instrument switch is pressed mid-scan "
+            "or if scanning is interrupted by another process.<br><br>"
+            "&nbsp;&nbsp;<b>Resume</b> — chartread is still waiting; "
+            "re-position the instrument at the start of the current strip and continue.<br><br>"
+            "&nbsp;&nbsp;<b>Give Up</b> — stop the measurement without saving.",
+            dlg,
+        )
+        msg.setWordWrap(True)
+        layout.addWidget(msg)
+
+        chosen = ["\r"]
+
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(8)
+        resume_btn = QPushButton("Resume", dlg)
+        give_btn   = QPushButton("Give Up", dlg)
+        resume_btn.setObjectName("primary")
+        resume_btn.setFixedHeight(32)
+        give_btn.setFixedHeight(32)
+
+        def _resume():
+            chosen[0] = "\r"
+            dlg.accept()
+
+        def _give_up():
+            chosen[0] = "\x1b"
+            dlg.accept()
+
+        resume_btn.clicked.connect(_resume)
+        give_btn.clicked.connect(_give_up)
+
+        btn_row.addWidget(resume_btn)
+        btn_row.addStretch()
+        btn_row.addWidget(give_btn)
+        layout.addLayout(btn_row)
+
+        tint_dialog_primary(dlg, _TAB_COLOR)
+        dlg.exec()
+        self._manager.send_key(chosen[0])
+        self._arm_key_watchdog()
+
+        if chosen[0] != "\x1b":
+            QApplication.instance().installEventFilter(self)
+
+    def _on_unread_confirm(self, patch_info: str) -> None:
+        QApplication.instance().removeEventFilter(self)
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Patches Still Unread")
+        dlg.setMinimumWidth(500)
+
+        layout = QVBoxLayout(dlg)
+        layout.setSpacing(16)
+        layout.setContentsMargins(24, 20, 24, 20)
+
+        msg = QLabel(
+            "<b>The chart is not fully measured yet.</b><br><br>"
+            f"At least one patch is still unread: <b>{patch_info}</b>.<br><br>"
+            "&nbsp;&nbsp;<b>Save Partial</b> — save what's been measured so far. "
+            "You can resume later by ticking <i>Refine / resume existing measurement (-r)</i>.<br><br>"
+            "&nbsp;&nbsp;<b>Keep Measuring</b> — return to the strip menu and continue.",
+            dlg,
+        )
+        msg.setWordWrap(True)
+        layout.addWidget(msg)
+
+        chosen = ["n"]
+
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(8)
+        save_btn = QPushButton("Save Partial", dlg)
+        keep_btn = QPushButton("Keep Measuring", dlg)
+        save_btn.setObjectName("primary")
+        save_btn.setFixedHeight(32)
+        keep_btn.setFixedHeight(32)
+
+        def _save():
+            chosen[0] = "y"
+            dlg.accept()
+
+        def _keep():
+            chosen[0] = "n"
+            dlg.accept()
+
+        save_btn.clicked.connect(_save)
+        keep_btn.clicked.connect(_keep)
+
+        btn_row.addWidget(save_btn)
+        btn_row.addStretch()
+        btn_row.addWidget(keep_btn)
+        layout.addLayout(btn_row)
+
+        tint_dialog_primary(dlg, _TAB_COLOR)
+        dlg.exec()
+        self._manager.send_key(chosen[0])
+        self._arm_key_watchdog()
+
+        # 'y' makes chartread write the partial .ti3 and exit; 'n' returns
+        # to the strip menu where the event filter is needed again.
+        if chosen[0] == "n":
+            QApplication.instance().installEventFilter(self)
+
+    def _on_generic_instrument_error(self, friendly: str, technical: str) -> None:
+        QApplication.instance().removeEventFilter(self)
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Instrument Error")
+        dlg.setMinimumWidth(500)
+
+        layout = QVBoxLayout(dlg)
+        layout.setSpacing(16)
+        layout.setContentsMargins(24, 20, 24, 20)
+
+        # Show the friendly message first, with the technical detail as a smaller line.
+        msg = QLabel(
+            f"<b>{friendly}</b><br>"
+            f"<span style='color:#888;'>({technical})</span><br><br>"
+            "&nbsp;&nbsp;<b>Retry</b> — try the operation again.<br><br>"
+            "&nbsp;&nbsp;<b>Give Up</b> — stop the measurement without saving.",
+            dlg,
+        )
+        msg.setWordWrap(True)
+        layout.addWidget(msg)
+
+        chosen = ["\r"]
+
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(8)
+        retry_btn = QPushButton("Retry", dlg)
+        give_btn  = QPushButton("Give Up", dlg)
+        retry_btn.setObjectName("primary")
+        retry_btn.setFixedHeight(32)
+        give_btn.setFixedHeight(32)
+
+        def _retry():
+            chosen[0] = "\r"
+            dlg.accept()
+
+        def _give_up():
+            chosen[0] = "\x1b"
+            dlg.accept()
+
+        retry_btn.clicked.connect(_retry)
+        give_btn.clicked.connect(_give_up)
+
+        btn_row.addWidget(retry_btn)
+        btn_row.addStretch()
+        btn_row.addWidget(give_btn)
+        layout.addLayout(btn_row)
+
+        tint_dialog_primary(dlg, _TAB_COLOR)
+        dlg.exec()
+        self._manager.send_key(chosen[0])
+        self._arm_key_watchdog()
+
+        if chosen[0] != "\x1b":
+            QApplication.instance().installEventFilter(self)
+
     def _on_device_busy(self) -> None:
         if self._device_busy:
             return
@@ -2040,6 +2233,145 @@ class TabMeasure(QWidget):
 
     def _on_usb_claimed_by_vm(self) -> None:
         self._usb_claimed_by_vm = True
+
+    # Group B: capture startup-failure messages so _on_measure_done can show
+    # a friendly terminal dialog instead of the generic "measurement failed".
+    def _on_coms_init_failed(self, msg: str) -> None:
+        self._coms_init_failed_msg = msg
+
+    def _on_inst_init_failed(self, msg: str) -> None:
+        self._inst_init_failed_msg = msg
+
+    def _on_instrument_wrong_type(self, capability: str) -> None:
+        self._instrument_wrong_type = capability
+
+    def _on_ccmx_load_failed(self, msg: str) -> None:
+        self._ccmx_load_failed_msg = msg
+
+    def _on_mode_set_failed(self, msg: str) -> None:
+        self._mode_set_failed_msg = msg
+
+    def _on_info_message(self, category: str, text: str) -> None:
+        # Log it and flash a status bar message (non-blocking).
+        self._log.appendPlainText(f"[INFO] {text}")
+        self._log.ensureCursorVisible()
+        self._flash_status(text, duration_ms=6000)
+
+    # Group D: spot/XY mode defensive dialogs. They only fire if someone
+    # invokes chartread in a non-strip mode (e.g. through extra-args). In
+    # strip mode these signals are never emitted.
+    def _on_xy_place_sheet(self, sheet_n: int, total: int) -> None:
+        QApplication.instance().removeEventFilter(self)
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Place Sheet on XY Table")
+        dlg.setMinimumWidth(460)
+
+        layout = QVBoxLayout(dlg)
+        layout.setSpacing(16)
+        layout.setContentsMargins(24, 20, 24, 20)
+        msg = QLabel(
+            f"<b>Place sheet {sheet_n} of {total} on the XY table.</b><br><br>"
+            "Press <b>Continue</b> when the sheet is positioned, or <b>Give Up</b> "
+            "to stop without saving.",
+            dlg,
+        )
+        msg.setWordWrap(True)
+        layout.addWidget(msg)
+
+        chosen = ["\r"]
+
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(8)
+        cont_btn = QPushButton("Continue", dlg)
+        give_btn = QPushButton("Give Up", dlg)
+        cont_btn.setObjectName("primary")
+        cont_btn.setFixedHeight(32)
+        give_btn.setFixedHeight(32)
+
+        def _cont():
+            chosen[0] = "\r"
+            dlg.accept()
+
+        def _give_up():
+            chosen[0] = "\x1b"
+            dlg.accept()
+
+        cont_btn.clicked.connect(_cont)
+        give_btn.clicked.connect(_give_up)
+
+        btn_row.addWidget(cont_btn)
+        btn_row.addStretch()
+        btn_row.addWidget(give_btn)
+        layout.addLayout(btn_row)
+
+        tint_dialog_primary(dlg, _TAB_COLOR)
+        dlg.exec()
+        self._manager.send_key(chosen[0])
+        self._arm_key_watchdog()
+        if chosen[0] != "\x1b":
+            QApplication.instance().installEventFilter(self)
+
+    def _on_spot_ready(self, patch_id: str) -> None:
+        # Spot mode isn't ChromIQ's default workflow; a status-bar hint is
+        # enough — the keyboard event filter still passes f/b/n/d/Enter/Esc
+        # through to chartread so the user can drive it manually.
+        self._flash_status(
+            f"Spot mode: ready to read patch '{patch_id}'. "
+            "Press Enter to read, f/b to navigate, d when done.",
+            duration_ms=10000,
+        )
+
+    def _on_abort_confirm(self) -> None:
+        QApplication.instance().removeEventFilter(self)
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Confirm Abort")
+        dlg.setMinimumWidth(420)
+
+        layout = QVBoxLayout(dlg)
+        layout.setSpacing(16)
+        layout.setContentsMargins(24, 20, 24, 20)
+        msg = QLabel(
+            "<b>Stop measuring without saving?</b><br><br>"
+            "Choose <b>Yes</b> to abort, or <b>No</b> to keep measuring.",
+            dlg,
+        )
+        msg.setWordWrap(True)
+        layout.addWidget(msg)
+
+        chosen = ["n"]
+
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(8)
+        yes_btn = QPushButton("Yes — Abort", dlg)
+        no_btn  = QPushButton("No — Keep Measuring", dlg)
+        no_btn.setObjectName("primary")
+        yes_btn.setFixedHeight(32)
+        no_btn.setFixedHeight(32)
+
+        def _yes():
+            chosen[0] = "y"
+            dlg.accept()
+
+        def _no():
+            chosen[0] = "n"
+            dlg.accept()
+
+        yes_btn.clicked.connect(_yes)
+        no_btn.clicked.connect(_no)
+
+        btn_row.addWidget(yes_btn)
+        btn_row.addStretch()
+        btn_row.addWidget(no_btn)
+        layout.addLayout(btn_row)
+
+        tint_dialog_primary(dlg, _TAB_COLOR)
+        dlg.exec()
+        self._manager.send_key(chosen[0])
+        self._arm_key_watchdog()
+        if chosen[0] == "n":
+            QApplication.instance().installEventFilter(self)
 
     def _on_instrument_disconnected(self) -> None:
         if self._instrument_disconnected:
@@ -2571,6 +2903,119 @@ class TabMeasure(QWidget):
                 "The measurement has been stopped automatically. Please check "
                 "the USB connection, reconnect your instrument, and start a "
                 "new measurement.",
+                dlg,
+            )
+            msg.setWordWrap(True)
+            layout.addWidget(msg)
+            btn_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
+            btn_box.accepted.connect(dlg.accept)
+            layout.addWidget(btn_box)
+            tint_dialog_primary(dlg, _TAB_COLOR)
+            dlg.exec()
+            return
+
+        # Group B: friendly terminal dialogs for chartread startup failures.
+        # The communications/init failures share a dialog body — the only
+        # difference is which Argyll error string is shown.
+        _b_init_msg = self._coms_init_failed_msg or self._inst_init_failed_msg
+        if _b_init_msg:
+            self._coms_init_failed_msg = None
+            self._inst_init_failed_msg = None
+            from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QVBoxLayout
+            dlg = QDialog(self)
+            dlg.setWindowTitle("Instrument Failed to Initialize")
+            dlg.setMinimumWidth(480)
+            layout = QVBoxLayout(dlg)
+            layout.setSpacing(16)
+            layout.setContentsMargins(24, 20, 24, 20)
+            msg = QLabel(
+                "<b>The instrument could not be initialised.</b><br><br>"
+                f"Argyll reported: <i>{_b_init_msg}</i><br><br>"
+                "Try the following:<br>"
+                "&nbsp;&nbsp;• Unplug and replug the USB cable<br>"
+                "&nbsp;&nbsp;• Make sure the instrument is switched on<br>"
+                "&nbsp;&nbsp;• Close any other application that might be using it<br><br>"
+                "Then press <b>Start Measurement</b> again.",
+                dlg,
+            )
+            msg.setWordWrap(True)
+            layout.addWidget(msg)
+            btn_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
+            btn_box.accepted.connect(dlg.accept)
+            layout.addWidget(btn_box)
+            tint_dialog_primary(dlg, _TAB_COLOR)
+            dlg.exec()
+            return
+
+        if self._instrument_wrong_type:
+            cap = self._instrument_wrong_type
+            self._instrument_wrong_type = None
+            from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QVBoxLayout
+            dlg = QDialog(self)
+            dlg.setWindowTitle("Instrument Type Mismatch")
+            dlg.setMinimumWidth(480)
+            layout = QVBoxLayout(dlg)
+            layout.setSpacing(16)
+            layout.setContentsMargins(24, 20, 24, 20)
+            msg = QLabel(
+                f"<b>This instrument cannot measure in {cap} mode.</b><br><br>"
+                "ChromIQ measures printed test charts, which need a "
+                "<b>reflection-capable</b> instrument (e.g. i1Pro, i1Pro 2, "
+                "i1Pro 3, ColorMunki, SpectroScan).<br><br>"
+                "Display-only colorimeters (e.g. i1Display) cannot read paper. "
+                "Connect a reflection-capable instrument and try again.",
+                dlg,
+            )
+            msg.setWordWrap(True)
+            layout.addWidget(msg)
+            btn_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
+            btn_box.accepted.connect(dlg.accept)
+            layout.addWidget(btn_box)
+            tint_dialog_primary(dlg, _TAB_COLOR)
+            dlg.exec()
+            return
+
+        if self._ccmx_load_failed_msg:
+            err = self._ccmx_load_failed_msg
+            self._ccmx_load_failed_msg = None
+            from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QVBoxLayout
+            dlg = QDialog(self)
+            dlg.setWindowTitle("Correction File Failed to Load")
+            dlg.setMinimumWidth(500)
+            layout = QVBoxLayout(dlg)
+            layout.setSpacing(16)
+            layout.setContentsMargins(24, 20, 24, 20)
+            msg = QLabel(
+                "<b>The colorimeter correction file could not be applied.</b><br><br>"
+                f"Argyll reported: <i>{err}</i><br><br>"
+                "Check the path in <b>Settings → Argyll Options</b>, or remove the "
+                "CCMX / CCSS reference from the extra-args field and try again.",
+                dlg,
+            )
+            msg.setWordWrap(True)
+            layout.addWidget(msg)
+            btn_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
+            btn_box.accepted.connect(dlg.accept)
+            layout.addWidget(btn_box)
+            tint_dialog_primary(dlg, _TAB_COLOR)
+            dlg.exec()
+            return
+
+        if self._mode_set_failed_msg:
+            err = self._mode_set_failed_msg
+            self._mode_set_failed_msg = None
+            from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QVBoxLayout
+            dlg = QDialog(self)
+            dlg.setWindowTitle("Instrument Mode Rejected")
+            dlg.setMinimumWidth(480)
+            layout = QVBoxLayout(dlg)
+            layout.setSpacing(16)
+            layout.setContentsMargins(24, 20, 24, 20)
+            msg = QLabel(
+                "<b>The instrument refused the requested measurement mode.</b><br><br>"
+                f"Argyll reported: <i>{err}</i><br><br>"
+                "Check the instrument-specific flags in your settings (high-res, UV mode, "
+                "scan tolerance, etc.) and try again.",
                 dlg,
             )
             msg.setWordWrap(True)

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import math
+import re
 import shlex
 import subprocess
 import tempfile
@@ -18,6 +19,90 @@ if TYPE_CHECKING:
     from core.settings import AppSettings
 
 log = get_logger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Structured error / warning patterns for targen and printtarg.
+# Line refs target Argyll 3.5.0 target/targen.c and target/printtarg.c.
+# Most error()s in these files are internal asserts (malloc / RSPL / sobol
+# failures) — we surface only the ones with a user-actionable fix.
+# ---------------------------------------------------------------------------
+
+_TARGEN_ERROR_PATTERNS: list[tuple[re.Pattern[str], str, str]] = [
+    # L824 / L863 — preconditioning profile mismatched
+    (re.compile(r"ICC profile doesn't match device!"),
+     "icc_profile_mismatch",
+     "The preconditioning ICC profile doesn't match the chart's colour space. "
+     "Pick a profile that was built for the same printer / colour space (RGB vs "
+     "CMYK), or clear the preconditioning profile setting."),
+    (re.compile(r"MPP profile doesn't match device!"),
+     "mpp_profile_mismatch",
+     "The MPP profile doesn't match the chart's colour space. Choose an MPP "
+     "file generated for the same device."),
+    # L659 — cal curve broken
+    (re.compile(r"calibration curve is non-invertable"),
+     "cal_noninvertable",
+     "The calibration file's transfer curve isn't invertible. The .cal file "
+     "may be corrupt — regenerate it with printcal."),
+    # L1985 — wrong -p flag for the colour space
+    (re.compile(r"Composite grey wedges aren't appropriate for (\S+) device"),
+     "grey_wedges_wrong_device",
+     "Composite grey wedges aren't appropriate for a '{0}' device. Disable "
+     "the composite-grey-wedge option for this colour space."),
+    # L1497 — Argyll doesn't know the colorant set
+    (re.compile(r"Don't know how to deal with inverted colorant combination 0x([0-9a-fA-F]+)"),
+     "unknown_inverted_colorants",
+     "Argyll doesn't recognise the inverted colorant combination 0x{0}. "
+     "Check the printer / colour-space combo in the Chart tab."),
+    # L2454
+    (re.compile(r"N-channel must be 16 or less than channels"),
+     "too_many_channels",
+     "Multi-channel charts can request at most 16 channels and must be less "
+     "than the device's channel count. Reduce the N-channel setting."),
+    # L3209
+    (re.compile(r"Write error\s*:\s*(.+)$"),
+     "write_error",
+     "Could not write the chart file.\n\nArgyll reported: {0}\n\nCheck that the "
+     "output folder is writable and has enough free space."),
+]
+
+_TARGEN_WARNING_PATTERNS: list[tuple[re.Pattern[str], str, str]] = [
+    # L826
+    (re.compile(r"Profile '([^']+)' no\. channels match, but colorant types have not been checked"),
+     "profile_unchecked_colorants",
+     "Profile '{0}' has the right number of channels for this chart, but its "
+     "colorant types weren't verified — make sure it really targets this printer."),
+]
+
+_PRINTTARG_ERROR_PATTERNS: list[tuple[re.Pattern[str], str, str]] = [
+    # L2287 — paper too short for the TID strip
+    (re.compile(r"Paper size not long enough for target identification row \(need ([\d.]+) mm, got ([\d.]+) mm\)"),
+     "paper_too_short_tid",
+     "The paper isn't long enough for the chart's identification row "
+     "(need {0} mm, paper is only {1} mm). Use larger paper, or pick a chart "
+     "instrument that doesn't require a TID strip."),
+    # L2293
+    (re.compile(r"Paper size not long enough for a single patch per row"),
+     "paper_too_short_row",
+     "The paper isn't long enough for even one patch row. Reduce the patch "
+     "scale, switch to a smaller instrument, or use larger paper."),
+    # L2331
+    (re.compile(r"Not enough width for even one row"),
+     "paper_too_narrow",
+     "The paper isn't wide enough for even one patch row. Rotate to landscape "
+     "or use wider paper."),
+    # L2247
+    (re.compile(r"Unsupported instrument type"),
+     "unsupported_instrument",
+     "printtarg doesn't support the selected instrument for chart layout. "
+     "Pick a different chart instrument in the Chart tab."),
+    # L347 / L364 / L379 (PostScript path) and L752/L768/L786 (TIFF path) and
+    # L971/L987/L1005 (Render2D path)
+    (re.compile(r"Device (white|black|CMY) encoding not appropriate"),
+     "device_encoding",
+     "The selected instrument's '{0}' colour encoding isn't appropriate for "
+     "the chart's colour space — change the instrument or colour space."),
+]
 
 
 def _chromiq_clip_active(p: "ChartParams") -> bool:
@@ -328,6 +413,10 @@ class ChartCreator:
 
         self._pending_on_finish: Callable[[list[Path]], None] | None = None
         self._pending_params: ChartParams | None = None
+        # Captured structured errors/warnings from the most-recent run.
+        # Tagged with the tool name so the dispatcher knows which dialog to show.
+        self._matched_errors: list[tuple[str, str, str]] = []   # (tool, key, friendly)
+        self._matched_warnings: list[tuple[str, str, str]] = []
 
     # ------------------------------------------------------------------
     # Public API
@@ -380,12 +469,18 @@ class ChartCreator:
 
         targen_args = self._build_targen_args(params, patch_count)
         log.info("targen args: %s", targen_args)
+        self._matched_errors = []
+        self._matched_warnings = []
+
+        def _targen_scan(line: str) -> None:
+            self._scan_line("targen", line)
+            on_line(line)
 
         self._runner.run(
             "targen",
             targen_args,
             work_dir,
-            on_line=on_line,
+            on_line=_targen_scan,
             on_finish=lambda code: self._targen_done(code, params, on_line, work_dir),
         )
 
@@ -441,11 +536,18 @@ class ChartCreator:
         self._file_mgr.clean_folder(["ti2", "tif", "cht", "ps"])
         pt_args = self._build_printtarg_args(params)
         log.debug("printtarg args (from ti1): %s", pt_args)
+        self._matched_errors = []
+        self._matched_warnings = []
+
+        def _printtarg_scan(line: str) -> None:
+            self._scan_line("printtarg", line)
+            on_line(line)
+
         self._runner.run(
             "printtarg",
             pt_args,
             work_dir,
-            on_line=on_line,
+            on_line=_printtarg_scan,
             on_finish=lambda code: self._printtarg_done(code, work_dir, on_finish, stem),
         )
 
@@ -537,6 +639,30 @@ class ChartCreator:
     # Internal
     # ------------------------------------------------------------------
 
+    def _scan_line(self, tool: str, line: str) -> None:
+        if tool == "targen":
+            for pattern, key, fmt in _TARGEN_ERROR_PATTERNS:
+                m = pattern.search(line)
+                if m:
+                    self._matched_errors.append((tool, key, fmt.format(*m.groups())))
+            for pattern, key, fmt in _TARGEN_WARNING_PATTERNS:
+                m = pattern.search(line)
+                if m:
+                    self._matched_warnings.append((tool, key, fmt.format(*m.groups())))
+        elif tool == "printtarg":
+            for pattern, key, fmt in _PRINTTARG_ERROR_PATTERNS:
+                m = pattern.search(line)
+                if m:
+                    self._matched_errors.append((tool, key, fmt.format(*m.groups())))
+
+    def primary_failure(self) -> tuple[str, str, str] | None:
+        """Return (tool, key, friendly_message) of the first structured error,
+        or None if no known pattern matched."""
+        return self._matched_errors[0] if self._matched_errors else None
+
+    def captured_warnings(self) -> list[tuple[str, str, str]]:
+        return list(self._matched_warnings)
+
     def _targen_done(
         self,
         exit_code: int,
@@ -553,11 +679,16 @@ class ChartCreator:
 
         pt_args = self._build_printtarg_args(params)
         log.info("printtarg args: %s", pt_args)
+
+        def _printtarg_scan(line: str) -> None:
+            self._scan_line("printtarg", line)
+            on_line(line)
+
         self._runner.run(
             "printtarg",
             pt_args,
             work_dir,
-            on_line=on_line,
+            on_line=_printtarg_scan,
             on_finish=lambda code: self._printtarg_done(
                 code, work_dir, self._pending_on_finish, params.target_name
             ),
