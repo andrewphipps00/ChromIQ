@@ -39,6 +39,20 @@ log.info(
 # --ignore-gpu-blocklist re-enables WebGL; --disable-gpu-compositing keeps the
 # compositor on the software path so the blocklist bypass doesn't break rendering.
 if sys.platform == "win32":
+    # Give Windows an explicit AppUserModelID before any window appears, so the
+    # taskbar treats ChromIQ as its own app and shows the window icon set below
+    # via setWindowIcon(). Without it the taskbar button inherits the host
+    # process's icon (python.exe when run from source, the PyInstaller
+    # bootloader when frozen), so the app icon never shows. Must run before the
+    # first window is created — doing it at import is the earliest safe point.
+    try:
+        import ctypes
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+            "ChromIQ.PrinterProfiling"
+        )
+    except Exception:
+        log.debug("Could not set Windows AppUserModelID", exc_info=True)
+
     _existing = os.environ.get("QTWEBENGINE_CHROMIUM_FLAGS", "")
     _extra = "--ignore-gpu-blocklist --disable-gpu-compositing"
     os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = f"{_existing} {_extra}".strip()

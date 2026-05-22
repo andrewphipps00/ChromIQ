@@ -1,8 +1,9 @@
 # Changelog
 
 ## v3.7.26
-Makes the Windows USB driver installer trustworthy: it now verifies the driver
-actually bound and falls back to Zadig when the automatic install silently fails.
+Makes the Windows USB driver installer trustworthy — it verifies the driver
+actually bound and falls back to Zadig when the automatic install silently
+fails — and shows the ChromIQ icon in the Windows taskbar.
 
 ### Fixes
 - **The automatic driver install no longer reports false success.** `wdi-simple`,
@@ -14,6 +15,12 @@ actually bound and falls back to Zadig when the automatic install silently fails
   *Replace Driver*) instead of claiming the install worked. Zadig's forced,
   interactive driver replacement reliably handles the cases the silent installer
   can't.
+- **The Windows taskbar now shows the ChromIQ icon.** ChromIQ didn't set a
+  Windows AppUserModelID, so the taskbar button inherited the host process's
+  icon — the Python interpreter when run from source, or the PyInstaller
+  bootloader when frozen — and the app's own icon never appeared. ChromIQ now
+  sets an explicit AppUserModelID at startup, so the taskbar uses the app's
+  window icon.
 
 ## v3.7.25
 Hotfix for the Windows USB-driver dialog: the install button did nothing when
