@@ -42,7 +42,8 @@ from core.resource_path import resource_path
 from ui.fade_scroll import FadeScrollArea
 from ui.tab_header import TabHeader
 from ui.tooltip_button import InfoDialog, TooltipButton
-from ui.widgets import NoScrollComboBox, NoScrollDoubleSpinBox, NoScrollSpinBox, make_browse_button, open_file_dialog, set_folder_icon, set_preset_icon, tint_dialog_primary
+from ui.widgets import GatedOption, NoScrollComboBox, NoScrollDoubleSpinBox, NoScrollSpinBox, make_browse_button, open_file_dialog, replace_log_line, set_folder_icon, set_preset_icon, tint_dialog_primary
+from ui.ti2_loader import has_spectral_data, instrument_label, is_colormunki, read_target_instrument
 from ui.spectrum_progress import SpectrumSegmentsBar
 from workflow.profile_builder import ProfileBuilder, ProfileParams
 from workflow.printcal_runner import PrintcalRunner, PrintcalParams, ChannelTarget
@@ -181,6 +182,20 @@ class TabProfile(QWidget):
         self._icc_path: Path | None = None
         self._cal_ti3_path: Path | None = None
 
+        # Instrument detected from the loaded measurement .ti3 (and whether it
+        # carries spectral data), used to gate options colprof can't apply.
+        self._detected_instrument: str | None = None
+        self._detected_has_spectral: bool = False
+        self._instr_log_text: str | None = None
+        # Same, detected separately from the calibration cal_*.ti3 (printcal).
+        self._detected_cal_instrument: str | None = None
+        self._detected_cal_has_spectral: bool = False
+        self._cal_instr_log_text: str | None = None
+        # Options greyed out / stripped from the colprof command while the gate is
+        # active. EMPTY for now — populate once the incompatible options are
+        # confirmed (e.g. FWA -f, illuminant -i, observer).
+        self._gated_options: list[GatedOption] = []
+
         self._build_ui()
         self._restore_defaults()
 
@@ -198,6 +213,7 @@ class TabProfile(QWidget):
             self._guided_btn.setChecked(False)
             self._manual_btn.setChecked(True)
         self._build_state_box.setVisible(mode == "guided")
+        self._apply_instrument_constraints()
 
     def _current_mode(self) -> str:
         return "guided" if self._stack.currentIndex() == 0 else "manual"
@@ -437,6 +453,26 @@ class TabProfile(QWidget):
     def cal_ti3_path(self) -> Path | None:
         return self._cal_ti3_path
 
+    @property
+    def detected_instrument(self) -> str | None:
+        """TARGET_INSTRUMENT read from the loaded measurement .ti3, or None."""
+        return self._detected_instrument
+
+    @property
+    def detected_has_spectral(self) -> bool:
+        """Whether the loaded measurement .ti3 contains spectral data."""
+        return self._detected_has_spectral
+
+    @property
+    def detected_cal_instrument(self) -> str | None:
+        """TARGET_INSTRUMENT read from the loaded calibration cal_*.ti3, or None."""
+        return self._detected_cal_instrument
+
+    @property
+    def detected_cal_has_spectral(self) -> bool:
+        """Whether the loaded calibration cal_*.ti3 contains spectral data."""
+        return self._detected_cal_has_spectral
+
     def set_icc_path(self, path: Path) -> None:
         self._icc_path = path
 
@@ -447,6 +483,7 @@ class TabProfile(QWidget):
         self._pc_ti3_lbl.setStyleSheet("color: #e6e6e6; font-size: 11px;")
         self._pc_run_btn.setEnabled(True)
         self._switch_cal_mode(1)  # jump straight to Create Calibration File
+        self._detect_instrument(ti3, cal=True)
         log.info("Printcal input set to %s", ti3)
 
     # ------------------------------------------------------------------
@@ -953,6 +990,7 @@ class TabProfile(QWidget):
             if not self._pc_desc_edit.text():
                 stem = Path(p).stem
                 self._pc_desc_edit.setText(stem[4:] if stem.startswith("cal_") else stem)
+            self._detect_instrument(self._cal_ti3_path, cal=True)
 
     def _pc_browse_prev(self) -> None:
         p = open_file_dialog(self, "Load previous .cal file", "CAL files (*.cal)",
@@ -3068,6 +3106,7 @@ class TabProfile(QWidget):
         self._build_btn.setEnabled(True)
         self._desc_edit.setText(path.stem)
         self._m_desc_edit.setText(path.stem)
+        self._detect_instrument(path)
         if propagate:
             ti2 = path.with_suffix(".ti2")
             if ti2.exists():
@@ -3084,9 +3123,61 @@ class TabProfile(QWidget):
             self._m_desc_edit, self._m_mfr_edit, self._m_model_edit, self._m_copy_edit,
         ):
             field.clear()
+        self._detect_instrument(None)
+        self._detect_instrument(None, cal=True)
         self._settings.set("session_ti3_path", "")
         self._settings.set("session_icc_path", "")
         self._settings.set("session_cal_ti3_path", "")
+
+    # ------------------------------------------------------------------
+    # Instrument detection / option gating
+    # ------------------------------------------------------------------
+
+    def _detect_instrument(self, path: Path | None, *, cal: bool = False) -> None:
+        """Read TARGET_INSTRUMENT + spectral flag from a loaded .ti3 and record it.
+
+        Stores the result (separately for the primary measurement .ti3 and the
+        calibration cal_*.ti3), shows a single replace-in-place log line, and
+        re-applies the option gate. Pass ``path=None`` to reset (e.g. on clear).
+        """
+        instr = read_target_instrument(path) if path and path.exists() else None
+        spectral = has_spectral_data(path) if path and path.exists() else False
+        if cal:
+            self._detected_cal_instrument = instr
+            self._detected_cal_has_spectral = spectral
+            prefix, prev = "Detected calibration instrument", self._cal_instr_log_text
+        else:
+            self._detected_instrument = instr
+            self._detected_has_spectral = spectral
+            prefix, prev = "Detected instrument", self._instr_log_text
+
+        msg = None
+        if instr:
+            spectral_note = "spectral data present" if spectral else "no spectral data"
+            msg = f"{prefix}: {instrument_label(instr)} ({spectral_note})."
+        new_tracked = replace_log_line(self._log, prev, msg)
+        if cal:
+            self._cal_instr_log_text = new_tracked
+        else:
+            self._instr_log_text = new_tracked
+
+        self._apply_instrument_constraints()
+
+    def _gate_active(self) -> bool:
+        """Whether incompatible options should be disabled for the loaded .ti3.
+
+        Defaults to "the measurement instrument is a ColorMunki". Both the
+        instrument name and the spectral flag are stored, so this can later become
+        ``not self._detected_has_spectral`` or a combination per option.
+        """
+        return is_colormunki(self._detected_instrument)
+
+    def _apply_instrument_constraints(self) -> None:
+        """Grey out the gated option widgets according to the active gate."""
+        active = self._gate_active()
+        for opt in self._gated_options:
+            for w in opt.widgets:
+                w.setEnabled(not active)
 
     # ------------------------------------------------------------------
     # Internal
@@ -3438,9 +3529,14 @@ class TabProfile(QWidget):
     # ------------------------------------------------------------------
 
     def _collect_params(self) -> ProfileParams:
-        if self._current_mode() == "guided":
-            return self._collect_guided_profile()
-        return self._collect_manual_profile()
+        params = (self._collect_guided_profile() if self._current_mode() == "guided"
+                  else self._collect_manual_profile())
+        # Strip options the detected instrument can't support, even if they were
+        # enabled before the .ti3 was loaded (the widgets are also greyed out).
+        if self._gate_active():
+            for opt in self._gated_options:
+                opt.neutralise(params)
+        return params
 
     def _collect_guided_profile(self) -> ProfileParams:
         return ProfileParams(

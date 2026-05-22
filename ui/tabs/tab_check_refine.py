@@ -41,7 +41,8 @@ from ui.fade_scroll import FadeScrollArea
 from ui.gamut_panel import GamutPanel
 from ui.tab_header import TabHeader
 from ui.tooltip_button import InfoDialog, TooltipButton
-from ui.widgets import NoScrollComboBox, NoScrollDoubleSpinBox, make_browse_button, open_file_dialog, set_folder_icon, set_preset_icon, tint_dialog_primary
+from ui.widgets import GatedOption, NoScrollComboBox, NoScrollDoubleSpinBox, make_browse_button, open_file_dialog, replace_log_line, set_folder_icon, set_preset_icon, tint_dialog_primary
+from ui.ti2_loader import has_spectral_data, instrument_label, is_colormunki, read_target_instrument
 
 _TAB_COLOR = "#9f82ff"  # Check & Refine tab accent
 from ui.styles import SPEC_VIOLET, TAB_COLORS
@@ -111,6 +112,16 @@ class TabCheckRefine(QWidget):
         self._icc_path: Path | None = None
         self._last_result = None
 
+        # Instrument detected from the loaded .ti3 (and whether it carries
+        # spectral data), used to gate options profcheck can't apply.
+        self._detected_instrument: str | None = None
+        self._detected_has_spectral: bool = False
+        self._instr_log_text: str | None = None
+        # Options greyed out / stripped from the profcheck command while the gate
+        # is active. EMPTY for now — populate once the incompatible options are
+        # confirmed (e.g. the spectral-only options).
+        self._gated_options: list[GatedOption] = []
+
         self._build_ui()
         self._restore_defaults()
         self._run_btn.setEnabled(False)
@@ -129,6 +140,7 @@ class TabCheckRefine(QWidget):
             self._guided_btn.setChecked(False)
             self._manual_btn.setChecked(True)
         self._nervous_box.setVisible(mode == "guided")
+        self._apply_instrument_constraints()
 
     def _current_mode(self) -> str:
         return "guided" if self._stack.currentIndex() == 0 else "manual"
@@ -156,6 +168,7 @@ class TabCheckRefine(QWidget):
         self._icc_edit.setText(str(icc))
         self._update_run_btn()
         self._gamut_panel.set_icc_path(icc)
+        self._detect_instrument(ti3)
         if propagate:
             self._notify_ti2(ti3)
 
@@ -166,6 +179,7 @@ class TabCheckRefine(QWidget):
         self._icc_edit.clear()
         self._update_run_btn()
         self._gamut_panel.set_icc_path(None)
+        self._detect_instrument(None)
 
     @property
     def ti3_path(self) -> "Path | None":
@@ -174,6 +188,16 @@ class TabCheckRefine(QWidget):
     @property
     def icc_path(self) -> "Path | None":
         return self._icc_path
+
+    @property
+    def detected_instrument(self) -> str | None:
+        """TARGET_INSTRUMENT read from the loaded .ti3, or None."""
+        return self._detected_instrument
+
+    @property
+    def detected_has_spectral(self) -> bool:
+        """Whether the loaded .ti3 contains spectral data."""
+        return self._detected_has_spectral
 
     def shutdown_webengine(self) -> None:
         panel = getattr(self, "_gamut_panel", None)
@@ -184,6 +208,45 @@ class TabCheckRefine(QWidget):
         ti2 = ti3.with_suffix(".ti2")
         if ti2.exists():
             self.ti2_found.emit(ti2)
+
+    # ------------------------------------------------------------------
+    # Instrument detection / option gating
+    # ------------------------------------------------------------------
+
+    def _detect_instrument(self, path: Path | None) -> None:
+        """Read TARGET_INSTRUMENT + spectral flag from the loaded .ti3 and record it.
+
+        Stores the result, shows a single replace-in-place log line, and re-applies
+        the option gate. Pass ``path=None`` to reset (e.g. on clear).
+        """
+        instr = read_target_instrument(path) if path and path.exists() else None
+        spectral = has_spectral_data(path) if path and path.exists() else False
+        self._detected_instrument = instr
+        self._detected_has_spectral = spectral
+
+        msg = None
+        if instr:
+            spectral_note = "spectral data present" if spectral else "no spectral data"
+            msg = f"Detected instrument: {instrument_label(instr)} ({spectral_note})."
+        self._instr_log_text = replace_log_line(self._log, self._instr_log_text, msg)
+
+        self._apply_instrument_constraints()
+
+    def _gate_active(self) -> bool:
+        """Whether incompatible options should be disabled for the loaded .ti3.
+
+        Defaults to "the instrument is a ColorMunki". Both the instrument name and
+        the spectral flag are stored, so this can later become
+        ``not self._detected_has_spectral`` or a combination per option.
+        """
+        return is_colormunki(self._detected_instrument)
+
+    def _apply_instrument_constraints(self) -> None:
+        """Grey out the gated option widgets according to the active gate."""
+        active = self._gate_active()
+        for opt in self._gated_options:
+            for w in opt.widgets:
+                w.setEnabled(not active)
 
     # ------------------------------------------------------------------
     # UI construction
@@ -1112,6 +1175,7 @@ class TabCheckRefine(QWidget):
         self._auto_fill_icc(ti3)
         self._notify_ti2(ti3)
         self._update_run_btn()
+        self._detect_instrument(ti3)
         self.ti3_selected.emit(ti3)
 
     def _on_browse_icc(self) -> None:
@@ -1438,9 +1502,14 @@ class TabCheckRefine(QWidget):
     # ------------------------------------------------------------------
 
     def _collect_params(self) -> ProfcheckParams:
-        if self._current_mode() == "guided":
-            return self._collect_guided_check()
-        return self._collect_manual_check()
+        params = (self._collect_guided_check() if self._current_mode() == "guided"
+                  else self._collect_manual_check())
+        # Strip options the detected instrument can't support, even if they were
+        # enabled before the .ti3 was loaded (the widgets are also greyed out).
+        if self._gate_active():
+            for opt in self._gated_options:
+                opt.neutralise(params)
+        return params
 
     def _collect_guided_check(self) -> ProfcheckParams:
         de_map = {"k": "-k", "c": "-c", "": ""}

@@ -12,7 +12,15 @@ from pathlib import Path
 
 import pytest
 
-from ui.ti2_loader import disable_bidir_for_instrument, read_target_instrument
+from ui.ti2_loader import (
+    KNOWN_INSTRUMENTS,
+    disable_bidir_for_instrument,
+    has_spectral_data,
+    instrument_label,
+    is_colormunki,
+    is_spectroscan,
+    read_target_instrument,
+)
 
 
 def _write(tmp_path: Path, body: str) -> Path:
@@ -54,3 +62,90 @@ def test_read_target_instrument_missing_file(tmp_path: Path) -> None:
 )
 def test_disable_bidir_for_instrument(name, expected) -> None:
     assert disable_bidir_for_instrument(name) is expected
+
+
+@pytest.mark.parametrize(
+    "name, expected",
+    [
+        ("X-Rite ColorMunki", True),
+        ("colormunki photo", True),        # case-insensitive substring match
+        ("GretagMacbeth i1 Pro", False),
+        ("GretagMacbeth SpectroScan", False),
+        (None, False),
+        ("", False),
+    ],
+)
+def test_is_colormunki(name, expected) -> None:
+    assert is_colormunki(name) is expected
+
+
+@pytest.mark.parametrize(
+    "name, expected",
+    [
+        ("GretagMacbeth SpectroScan", True),
+        ("spectroscan", True),             # case-insensitive substring match
+        ("X-Rite ColorMunki", False),
+        ("GretagMacbeth i1 Pro", False),
+        (None, False),
+        ("", False),
+    ],
+)
+def test_is_spectroscan(name, expected) -> None:
+    assert is_spectroscan(name) is expected
+
+
+def test_disable_bidir_delegates_to_is_colormunki() -> None:
+    # disable_bidir_for_instrument is now defined in terms of is_colormunki.
+    for name in (*KNOWN_INSTRUMENTS, None, "", "Unknown device"):
+        assert disable_bidir_for_instrument(name) is is_colormunki(name)
+
+
+@pytest.mark.parametrize(
+    "name, expected",
+    [
+        ("X-Rite ColorMunki", "ColorMunki / i1Studio / CCStudio"),
+        ("ColorMunki Photo", "ColorMunki / i1Studio / CCStudio"),
+        ("GretagMacbeth i1 Pro", "i1Pro / i1Pro2 / i1Pro3(+)"),
+        ("X-Rite i1Pro3", "i1Pro / i1Pro2 / i1Pro3(+)"),
+        # SpectroScan and unknowns are shown unchanged.
+        ("GretagMacbeth SpectroScan", "GretagMacbeth SpectroScan"),
+        ("Some Other Device", "Some Other Device"),
+        (None, None),
+        ("", None),
+    ],
+)
+def test_instrument_label(name, expected) -> None:
+    assert instrument_label(name) == expected
+
+
+def test_known_instruments_registry() -> None:
+    assert KNOWN_INSTRUMENTS == (
+        "X-Rite ColorMunki",
+        "GretagMacbeth i1 Pro",
+        "GretagMacbeth SpectroScan",
+    )
+
+
+def test_read_target_instrument_works_on_ti3(tmp_path: Path) -> None:
+    p = tmp_path / "measured.ti3"
+    p.write_text('CTI3\nTARGET_INSTRUMENT "GretagMacbeth SpectroScan"\n', encoding="utf-8")
+    assert read_target_instrument(p) == "GretagMacbeth SpectroScan"
+
+
+def test_has_spectral_data_present(tmp_path: Path) -> None:
+    p = _write(tmp_path, 'CTI3\nSPECTRAL_BANDS "36"\nSPECTRAL_START_NM "380.0"\n')
+    assert has_spectral_data(p) is True
+
+
+def test_has_spectral_data_absent(tmp_path: Path) -> None:
+    p = _write(tmp_path, "CTI3\nNUMBER_OF_SETS 100\n")
+    assert has_spectral_data(p) is False
+
+
+def test_has_spectral_data_zero_bands(tmp_path: Path) -> None:
+    p = _write(tmp_path, 'CTI3\nSPECTRAL_BANDS "0"\n')
+    assert has_spectral_data(p) is False
+
+
+def test_has_spectral_data_missing_file(tmp_path: Path) -> None:
+    assert has_spectral_data(tmp_path / "nope.ti3") is False
