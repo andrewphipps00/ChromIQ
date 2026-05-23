@@ -14,9 +14,11 @@ from PyQt6.QtWidgets import (
     QDoubleSpinBox,
     QFileDialog,
     QGroupBox,
+    QLabel,
     QPlainTextEdit,
     QPushButton,
     QSizeGrip,
+    QSizePolicy,
     QSpinBox,
     QStyle,
     QToolBar,
@@ -117,6 +119,72 @@ class NoScrollDoubleSpinBox(QDoubleSpinBox):
             super().wheelEvent(event)
         else:
             event.ignore()
+
+
+class ElidingLabel(QLabel):
+    """Single-line label that middle-elides overflowing text with ``(...)``.
+
+    A long file path used to expand the label to its full natural width and
+    squeeze the adjacent "Load" button. This label reports a zero minimum
+    width (size policy ``Ignored``) so it never pushes its neighbours, and
+    middle-elides whatever no longer fits the available width — keeping the
+    start of the path and the filename at the end both visible. The full,
+    un-elided text is preserved and exposed as a hover tooltip and via
+    ``text()``.
+    """
+
+    _SEP = "(...)"
+
+    def __init__(self, text: str = "", parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._full_text = ""
+        self.setWordWrap(False)
+        self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        self.setText(text)
+
+    def setText(self, text: str) -> None:  # type: ignore[override]
+        self._full_text = text or ""
+        self._apply_elision()
+
+    def text(self) -> str:  # type: ignore[override]
+        """Return the full, un-elided text (not what is currently painted)."""
+        return self._full_text
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._apply_elision()
+
+    def _apply_elision(self) -> None:
+        fm = self.fontMetrics()
+        avail = self.width()
+        full = self._full_text
+        if avail <= 0 or fm.horizontalAdvance(full) <= avail:
+            super().setText(full)
+            self.setToolTip("")
+            return
+        budget = avail - fm.horizontalAdvance(self._SEP)
+        if budget <= 0:
+            super().setText(self._SEP)
+            self.setToolTip(full)
+            return
+        # Grow head and tail one character at a time, alternating, until the
+        # next character would overflow the budget either side of the separator.
+        head, tail = "", ""
+        i, j = 0, len(full) - 1
+        take_head = True
+        while i <= j:
+            ch = full[i] if take_head else full[j]
+            if fm.horizontalAdvance(head + ch + tail) > budget:
+                break
+            if take_head:
+                head += ch
+                i += 1
+            else:
+                tail = ch + tail
+                j -= 1
+            take_head = not take_head
+        super().setText(f"{head}{self._SEP}{tail}")
+        self.setToolTip(full)
 
 
 def reapply_input_stylesheet(root: QWidget) -> None:

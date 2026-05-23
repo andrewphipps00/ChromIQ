@@ -16,6 +16,20 @@ log = get_logger(__name__)
 _ILLEGAL = re.compile(r"[^\w\-.]+", re.UNICODE)
 _TRAIL   = re.compile(r"^[._]+|[._]+$")
 
+# Extensions ChromIQ itself generates during a session. A user-entered target
+# name (or a loaded file's stem) must never carry one of these: the name is
+# used verbatim as the working-folder name and the stem of every derived file,
+# so a name ending in e.g. ".icm" produces "<name>.icm.ti3", and colprof then
+# writes "<name>.icm.icc" — which the Build-Profile step looks for under the
+# wrong name and reports as "Profile file was not created".
+# See workflow.profile_builder.expected_icc_path for the matching sink-side fix.
+_WORKFILE_EXTS = frozenset({
+    ".icc", ".icm", ".mpp",
+    ".ti1", ".ti2", ".ti3",
+    ".tif", ".tiff",
+    ".cal",
+})
+
 
 class FileManager:
     def __init__(self, settings: "AppSettings") -> None:
@@ -27,6 +41,22 @@ class FileManager:
     # ------------------------------------------------------------------
 
     @staticmethod
+    def strip_workfile_ext(name: str) -> str:
+        """Strip any trailing ChromIQ work-file extension(s) from a target name.
+
+        Handles stacked extensions ("chart.icm.ti3" -> "chart") so a name
+        pasted from an existing generated file can't poison a new session.
+        Dots that are not a known extension (e.g. "Pro.1000") are preserved.
+        """
+        s = name.strip()
+        while True:
+            stem, dot, ext = s.rpartition(".")
+            if dot and ("." + ext.lower()) in _WORKFILE_EXTS:
+                s = stem.rstrip()
+                continue
+            return s
+
+    @staticmethod
     def _sanitise(name: str) -> str:
         s = name.strip().replace(" ", "-")
         s = _ILLEGAL.sub("_", s)
@@ -34,10 +64,11 @@ class FileManager:
         return s or "session"
 
     def set_target_name(self, name: str) -> None:
-        if not name.strip():
+        cleaned = self.strip_workfile_ext(name)
+        if not cleaned.strip():
             self._target_name = self._auto_name()
         else:
-            self._target_name = self._sanitise(name)
+            self._target_name = self._sanitise(cleaned)
         log.debug("Target name set to: %s", self._target_name)
 
     def get_target_name(self) -> str:

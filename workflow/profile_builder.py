@@ -243,12 +243,23 @@ class ProfileBuilder:
         return issues
 
     def expected_icc_path(self, params: ProfileParams) -> Path:
+        # colprof APPENDS the ICC extension to the basename it is handed (the
+        # same basename _build_args passes in). For a normal name that equals
+        # base.with_suffix(ext); but when the basename itself still carries a
+        # dotted token — e.g. a stray ".icm" left in the target name, giving a
+        # "<name>.icm.ti3" measurement file — colprof writes "<name>.icm.icc",
+        # whereas with_suffix() would instead look for "<name>.icc". Check the
+        # literal appended form first so such a profile is still found, then the
+        # legacy replace form for plain names.
         base = params.ti3_path.with_suffix("")
+        candidates: list[Path] = []
         for ext in (".icc", ".icm"):
-            candidate = base.with_suffix(ext)
+            candidates.append(Path(str(base) + ext))   # what colprof actually writes
+            candidates.append(base.with_suffix(ext))   # legacy / extension-free names
+        for candidate in candidates:
             if candidate.exists():
                 return candidate
-        return base.with_suffix(".icc")
+        return Path(str(base) + ".icc")
 
     # ------------------------------------------------------------------
 

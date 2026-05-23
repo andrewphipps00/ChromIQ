@@ -323,6 +323,16 @@ class TabChart(QWidget):
             min_width=540,
         ))
         folder_layout.addLayout(name_row)
+        self._target_name_hint = QLabel("", inner)
+        self._target_name_hint.setWordWrap(True)
+        self._target_name_hint.setStyleSheet("color: #d08a3a; font-size: 11px;")
+        self._target_name_hint.setVisible(False)
+        folder_layout.addWidget(self._target_name_hint)
+        self._target_name_edit.editingFinished.connect(
+            lambda: self._clean_target_name_field(
+                self._target_name_edit, self._target_name_hint
+            )
+        )
         layout.addWidget(folder_grp)
 
         # Instrument
@@ -725,6 +735,16 @@ class TabChart(QWidget):
             min_width=540,
         ))
         output_layout.addLayout(name_row)
+        self._manual_target_name_hint = QLabel("", w)
+        self._manual_target_name_hint.setWordWrap(True)
+        self._manual_target_name_hint.setStyleSheet("color: #d08a3a; font-size: 11px;")
+        self._manual_target_name_hint.setVisible(False)
+        output_layout.addWidget(self._manual_target_name_hint)
+        self._manual_target_name_edit.editingFinished.connect(
+            lambda: self._clean_target_name_field(
+                self._manual_target_name_edit, self._manual_target_name_hint
+            )
+        )
 
         # Chart notes row — wrapped in a QWidget so it can be hidden when
         # ChromIQ-style clipping border is on (the right margin it targets
@@ -1398,6 +1418,28 @@ class TabChart(QWidget):
         le = QLineEdit(parent)
         le.setText(text)
         return le
+
+    def _clean_target_name_field(self, edit: Any, hint: QLabel) -> None:
+        """Strip a stray work-file extension from a target-name field on edit.
+
+        The name is reused verbatim as the working-folder name and the stem of
+        every generated file, so an extension (e.g. a pasted ".icm" profile
+        name) would contaminate the whole session. Remove it and tell the user
+        why so the correction isn't silent.
+        """
+        raw     = edit.text().strip()
+        cleaned = self._file_mgr.strip_workfile_ext(raw)
+        if cleaned == raw:
+            hint.setVisible(False)
+            return
+        removed = raw[len(cleaned):]
+        edit.setText(cleaned)
+        hint.setText(
+            f"Removed “{removed}” — the target name is used for the output "
+            f"folder and every generated file, so it shouldn't include a file "
+            f"extension."
+        )
+        hint.setVisible(True)
 
     def _load_yaml_params(self) -> dict:
         path = resource_path("data/parameters.yaml")
@@ -2591,7 +2633,7 @@ class TabChart(QWidget):
     def _on_save_defaults(self) -> None:
         params = self._collect_params()
         s = self._settings
-        name = (
+        name = self._file_mgr.strip_workfile_ext(
             self._target_name_edit.text().strip()
             if self._current_mode() == "guided"
             else self._manual_target_name_edit.text().strip()
@@ -2887,7 +2929,11 @@ class TabChart(QWidget):
     def _restore_defaults(self) -> None:
         s = self._settings
 
-        default_name = s.get("chart_target_name", "ChromIQ Test Chart")
+        # Strip any stray extension a pre-fix session may have persisted, so a
+        # contaminated default (e.g. "…_target.icm") doesn't reappear on launch.
+        default_name = self._file_mgr.strip_workfile_ext(
+            s.get("chart_target_name", "ChromIQ Test Chart")
+        )
         self._target_name_edit.setText(default_name)
         self._manual_target_name_edit.setText(default_name)
 

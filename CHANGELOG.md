@@ -1,5 +1,29 @@
 # Changelog
 
+## v3.7.29
+Fixes a Build Profile failure where a profile that was actually created was
+reported as "Profile file was not created", and stops a long file path from
+squeezing the Load button on the Measure tab.
+
+### Fixes
+- **Build Profile no longer fails when the target name contains a file
+  extension.** If a chart/target name ended in an extension (for example a
+  pasted ".icm" profile name), it was reused verbatim as the working-folder
+  name and the stem of every generated file — producing "<name>.icm.ti3".
+  colprof then wrote "<name>.icm.icc" (it appends, never replaces, the
+  extension), while ChromIQ looked for "<name>.icc" and reported a phantom
+  "Profile file was not created" even though the profile had built fine.
+  ChromIQ now (a) strips known work-file extensions
+  (.icc/.icm/.mpp/.ti1/.ti2/.ti3/.tif/.cal) from the target name — showing a
+  hint in the Create Chart name field when it does — so new sessions can't be
+  contaminated, and (b) recognises colprof's actual appended output (both .icc
+  and .icm), so existing measurements with a stray extension build correctly
+  too. Verified against ArgyllCMS 3.5.0 on Windows, where colprof writes .icm.
+- **Long file paths no longer squeeze the "Load" button on the Measure tab.**
+  The selected .ti2 path is now middle-elided with "(...)" — keeping the start
+  of the path and the filename both visible — instead of word-wrapping onto
+  several lines and crushing the button. The full path is shown on hover.
+
 ## v3.7.28
 First step of i1iSis support. ChromIQ cannot drive the i1iSis directly —
 that scanner only works through X-Rite's i1Profiler — so this release adds

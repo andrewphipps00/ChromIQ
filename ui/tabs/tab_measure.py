@@ -46,7 +46,7 @@ from core.strip_utils import letter_to_idx
 from ui.fade_scroll import FadeScrollArea
 from ui.tab_header import TabHeader
 from ui.tooltip_button import TooltipButton
-from ui.widgets import NoScrollComboBox, NoScrollDoubleSpinBox, NoScrollSpinBox, make_browse_button, open_file_dialog, set_folder_icon, set_preset_icon, tint_dialog_primary
+from ui.widgets import ElidingLabel, NoScrollComboBox, NoScrollDoubleSpinBox, NoScrollSpinBox, make_browse_button, open_file_dialog, set_folder_icon, set_preset_icon, tint_dialog_primary
 
 _TAB_COLOR = "#56d6a5"  # Measure tab accent
 from ui.styles import SPEC_GREEN, TAB_COLORS
@@ -493,9 +493,8 @@ class TabMeasure(QWidget):
         self._load_ti1_btn = QPushButton("Load .ti2 file…", file_outer)
         set_folder_icon(self._load_ti1_btn, "folder_measure")
         self._load_ti1_btn.clicked.connect(self._on_load_ti2)
-        self._ti1_lbl = QLabel("No file selected", file_outer)
+        self._ti1_lbl = ElidingLabel("No file selected", file_outer)
         self._ti1_lbl.setStyleSheet("color: #909090; font-size: 11px;")
-        self._ti1_lbl.setWordWrap(True)
         file_row.addWidget(self._load_ti1_btn)
         file_row.addWidget(self._ti1_lbl, stretch=1)
         fg.addLayout(file_row)
