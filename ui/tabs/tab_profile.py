@@ -321,9 +321,9 @@ class TabProfile(QWidget):
         cc.setContentsMargins(0, 0, 0, 0)
         cc.setSpacing(8)
 
-        self._file_grp = file_grp = QGroupBox("Measurement Data (.ti3)", colprof_container)
+        self._file_grp = file_grp = QGroupBox("Measurement Data (.ti3 / i1Profiler .txt)", colprof_container)
         fg = QHBoxLayout(file_grp)
-        self._load_btn = QPushButton("Load .ti3 file…", file_grp)
+        self._load_btn = QPushButton("Load .ti3 or .txt…", file_grp)
         set_folder_icon(self._load_btn, "folder_build")
         self._load_btn.clicked.connect(self._on_load_ti3)
         self._file_lbl = QLabel("No file selected", file_grp)
@@ -3258,13 +3258,103 @@ class TabProfile(QWidget):
 
     def _on_load_ti3(self) -> None:
         path = open_file_dialog(
-            self, "Load .ti3 file", "TI3 files (*.ti3)",
+            self, "Load measurement data",
+            "Measurement data (*.ti3 *.txt)",
             extra_path=self._settings.get("custom_output_path", ""),
         )
-        if path:
+        if not path:
+            return
+        p = Path(path)
+        if p.suffix.lower() == ".txt":
+            self._import_i1profiler_txt(p)
+        else:
             self.about_to_load_ti3.emit()
-            self.set_ti3_path(Path(path))
+            self.set_ti3_path(p)
             self.ti3_manually_loaded.emit()
+
+    # ------------------------------------------------------------------
+    # i1Profiler .txt import  (txt2ti3 → .ti3)
+    # ------------------------------------------------------------------
+
+    def _import_i1profiler_txt(self, txt_path: Path) -> None:
+        """Bring an i1Profiler measurement .txt into the working folder and
+        convert it to a .ti3 with Argyll's txt2ti3, then load that .ti3."""
+        from ui.txt_loader import resolve_txt
+
+        if self._runner.is_running:
+            self._log.appendPlainText(
+                "[BUSY] Another operation is running — try again once it finishes."
+            )
+            self._log.ensureCursorVisible()
+            return
+
+        resolved = resolve_txt(self, txt_path, self._settings)
+        if resolved is None:
+            return  # user cancelled
+        work_txt, base_name = resolved
+
+        # State for the finish callback.
+        self._txt_convert_dir   = work_txt.parent
+        self._txt_convert_base  = base_name
+        self._txt_convert_lines = []
+
+        self._log.clear()
+        self._log.appendPlainText(f"Converting i1Profiler measurement: {work_txt.name} …")
+        self._log.ensureCursorVisible()
+
+        # txt2ti3 -v <base>.txt <base>  → writes <base>.ti3 in the same folder.
+        # We deliberately omit -2 (dummy .ti2): the build flow needs only the
+        # .ti3, and a dummy .ti2 would overwrite any real chart of that name and
+        # mislead the Print tab.
+        self._runner.run(
+            "txt2ti3",
+            ["-v", work_txt.name, base_name],
+            cwd=work_txt.parent,
+            on_line=self._txt_convert_lines.append,
+            on_finish=self._on_txt2ti3_done,
+        )
+
+    def _on_txt2ti3_done(self, code: int) -> None:
+        ti3 = self._txt_convert_dir / f"{self._txt_convert_base}.ti3"
+        output = "\n".join(self._txt_convert_lines)
+        if output:
+            self._log.appendPlainText(output)
+        if code != 0 or not ti3.exists():
+            self._log.appendPlainText("[ERROR] Could not convert the measurement file.")
+            self._log.ensureCursorVisible()
+            self._show_txt_import_error(output)
+            return
+        self._log.appendPlainText(f"[OK] Converted to {ti3.name}")
+        self._log.ensureCursorVisible()
+        self.about_to_load_ti3.emit()
+        self.set_ti3_path(ti3)
+        self.ti3_manually_loaded.emit()
+
+    def _show_txt_import_error(self, tool_output: str) -> None:
+        # Surface the raw txt2ti3 reason (e.g. "txt2ti3: Error - No patches")
+        # underneath the plain-language explanation, when we have one.
+        detail = ""
+        for line in tool_output.splitlines():
+            if "error" in line.lower():
+                detail = line.strip()
+                break
+        body = (
+            "ChromIQ tried to convert this file into measurement data it can use, "
+            "but the conversion failed. This usually means the file isn't an "
+            "i1Profiler measurement export — for example it's a patch or reference "
+            "list rather than actual readings, or it's missing the colour "
+            "measurements.\n\n"
+            "What to do:\n"
+            "• In i1Profiler, make sure you have actually measured the chart, then "
+            "save the measured data.\n"
+            "• The saved file must contain both the device values (RGB or CMYK) and "
+            "the measured colour (Lab/XYZ or spectral) for every patch.\n"
+            "• Load that saved measurement file here."
+        )
+        if detail:
+            body += f"\n\nTechnical detail:\n{detail}"
+        dlg = InfoDialog("This file couldn't be read as measurement data", body, self, min_width=540)
+        dlg.exec()
 
     def _browse_gam(self) -> None:
         bin_path = self._settings.get("argyll_bin_path", "/Applications/Argyll/bin")

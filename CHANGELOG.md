@@ -1,5 +1,30 @@
 # Changelog
 
+## v3.7.33
+Adds an import path for i1Profiler measurement data to the Build Profile tab.
+The Load button now also accepts the `.txt` measurement files i1Profiler exports,
+converts them to an Argyll `.ti3` with `txt2ti3`, and loads the result into the
+normal profile-building flow — so charts read on an i1iSis (or any other
+i1Profiler-driven instrument) can be profiled in ChromIQ.
+
+### Features
+- **Build Profile loads i1Profiler measurement `.txt` files.** The load button on
+  the Build Profile tab now accepts both `.ti3` and i1Profiler `.txt` measurement
+  exports. Picking a `.txt` runs Argyll's `txt2ti3` to produce a `.ti3`, which is
+  then loaded exactly like a measured `.ti3` — instrument and spectral-data
+  detection, option gating and build all behave as before.
+- **Imported measurements are filed into a named profile folder.** As with
+  loading a chart, a `.txt` from outside your working folder prompts for a profile
+  name and is copied, renamed, into its own `<working>/<name>/` subfolder before
+  conversion. A `.txt` already inside the working folder offers *Continue*
+  (convert in place) or *Use as base for a new profile* (copy to a fresh folder),
+  reusing the existing chart-loading dialogs.
+- **Plain-language error when a `.txt` can't be read.** If `txt2ti3` can't make
+  measurement data from the file — for example a patch/reference list rather than
+  actual readings, or one missing the colour measurements — ChromIQ shows a clear
+  dialog explaining what to export from i1Profiler, with the underlying `txt2ti3`
+  error included as technical detail.
+
 ## v3.7.32
 Fixes the Create Chart manual module's Neutral Axis Steps (`-n`) option, which
 the UI accepted but never passed to targen or showed in the bottom-of-tab
