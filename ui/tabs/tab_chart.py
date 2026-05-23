@@ -40,6 +40,7 @@ from core.preset_store import (
 from core.resource_path import resource_path
 from data.patch_db import (
     EXCLUDED_PAPERS,
+    EXTERNAL_INSTRUMENTS,
     I1PRO_DEFAULT_PRESET_KEY,
     INSTRUMENT_DEFAULT_MARGIN,
     INSTRUMENT_LABELS,
@@ -56,6 +57,7 @@ from ui.tab_header import TabHeader
 from ui.tiff_preview import TiffPreview
 from ui.tooltip_button import InfoDialog, TooltipButton
 from ui.widgets import NoScrollComboBox, NoScrollSpinBox, icc_profile_paths, make_browse_button, open_file_dialog, set_folder_icon, set_preset_icon
+from workflow.i1profiler_export import export_from_ti1
 from workflow.chart_creator import (
     ChartCreator, ChartParams, guided_neutrals, GUIDED_NEUTRAL_BASE, REF_BUDGET,
 )
@@ -126,7 +128,10 @@ def _extra_args_have_patch_source(extra: str) -> bool:
 class TabChart(QWidget):
     """Step 1: create targen/printtarg test chart."""
 
-    chart_finished  = pyqtSignal(object, object)  # (list[Path] tiffs, Path ti2)
+    # (list[Path] tiffs, Path ti2, bool is_external_workflow)
+    # is_external_workflow is True for i1iSis (i1Profiler hand-off); main_window
+    # uses it to skip routing TIFFs/TI2 to the Print and Measure tabs.
+    chart_finished  = pyqtSignal(object, object, bool)
     target_started  = pyqtSignal()
 
     def __init__(
@@ -328,7 +333,13 @@ class TabChart(QWidget):
         instr_label = QLabel("Instrument:", inner)
         row.addWidget(instr_label)
         self._instr_combo = NoScrollComboBox(inner)
+        # External-workflow instruments (i1iSis) are intentionally absent from
+        # Guided mode: Guided's job is to optimise the chart layout for the
+        # instrument, but for these devices the layout is recomputed by an
+        # external tool (i1Profiler) — so there's nothing to optimise here.
         for code, label in INSTRUMENT_LABELS.items():
+            if code in EXTERNAL_INSTRUMENTS:
+                continue
             self._instr_combo.addItem(label, code)
         self._instr_combo.currentIndexChanged.connect(self._update_patch_count)
         self._instr_combo.currentIndexChanged.connect(self._update_dd_visibility)
@@ -1025,6 +1036,7 @@ class TabChart(QWidget):
                     self._manual_instr_pw = pw
                     pw.value_changed.connect(self._update_manual_lb_visibility)
                     pw.value_changed.connect(self._apply_instrument_default_margin)
+                    pw.value_changed.connect(self._update_isis_preview_banner)
                 if tool == "printtarg" and flag == "-p":
                     self._manual_paper_pw = pw
                     pw.value_changed.connect(self._update_manual_lb_visibility)
@@ -1133,6 +1145,9 @@ class TabChart(QWidget):
 
         self._update_manual_lb_visibility()
         self._apply_instrument_default_margin()
+        # Note: _update_isis_preview_banner() is NOT called here — self._preview
+        # doesn't exist yet during _make_manual_panel(). It's wired to the
+        # instrument-selector signal and called once more after settings load.
         self._connect_cal_mutex()
         self._connect_spacer_mutex()
         self._connect_d_cascade()
@@ -1403,6 +1418,7 @@ class TabChart(QWidget):
             self._stack.setCurrentIndex(1)
             self._guided_btn.setChecked(False)
             self._manual_btn.setChecked(True)
+        self._update_isis_preview_banner()
 
     def _on_guided_precond_toggled(self, checked: bool) -> None:
         self._guided_precond_path.setEnabled(checked)
@@ -1720,6 +1736,29 @@ class TabChart(QWidget):
                 abs(current_a - known) <= 0.01 for known in (1.0, 0.95)
             ) and abs(current_a - target_scale) > 0.01:
                 self._manual_a_pw.set_value(target_scale)
+
+        # i1iSis: default to A3+ portrait, no spacers, and unlimited strip
+        # length — i1Profiler re-lays-out the chart anyway, so the values
+        # printtarg ends up using only affect the layout preview. The
+        # matched-default guards mirror the margin logic above so a user
+        # who picked different values keeps their choice when flipping
+        # instruments.
+        if self._manual_paper_pw is not None:
+            current_paper = self._manual_paper_pw.get_raw_value() or ""
+            if instr == "isis" and current_paper == "A4":
+                self._manual_paper_pw.set_value("329x483")
+            elif instr != "isis" and current_paper == "329x483":
+                self._manual_paper_pw.set_value("A4")
+
+        for pw_attr in ("_manual_n_pw", "_manual_P_pw"):
+            pw = getattr(self, pw_attr, None)
+            if pw is None:
+                continue
+            current = bool(pw.get_raw_value())
+            if instr == "isis" and not current:
+                pw.set_value(True)
+            elif instr != "isis" and current:
+                pw.set_value(False)
 
     # ------------------------------------------------------------------
     # Auto patch-count (Manual mode)
@@ -2403,6 +2442,102 @@ class TabChart(QWidget):
         self._log.appendPlainText(line)
         self._log.ensureCursorVisible()
 
+    def _is_isis_selected(self) -> bool:
+        """Read the instrument from the *active* mode's selector.
+
+        i1iSis is intentionally absent from the Guided combo, so this only
+        returns True from Manual mode in practice — but consulting the active
+        selector keeps the check robust if that ever changes.
+        """
+        if self._current_mode() == "guided":
+            code = (self._instr_combo.currentData() or "") if hasattr(self, "_instr_combo") else ""
+        else:
+            code = (self._manual_instr_pw.get_raw_value() or "") if self._manual_instr_pw else ""
+        return code == "isis"
+
+    def _update_isis_preview_banner(self) -> None:
+        # The instrument signal can fire before _build_ui finishes constructing
+        # the preview pane (during _make_manual_panel). Guard accordingly.
+        if getattr(self, "_preview", None) is None:
+            return
+        if self._is_isis_selected():
+            self._preview.set_banner(
+                "Layout preview only — i1Profiler will lay out the actual chart "
+                "from the patch list when you load the .pxf, so the printed "
+                "chart will look different from what's shown here."
+            )
+        else:
+            self._preview.set_banner(None)
+
+    def _export_for_i1profiler_and_notify(
+        self, work_dir: Path, stem: str, preview_available: bool
+    ) -> bool:
+        """Convert the TI1 to .txt + .pxf and show the i1Profiler hand-off popup.
+
+        Returns True if the export succeeded (so the caller can suppress the
+        generic "chart generation failed" path when printtarg crashed but the
+        TI1 from targen is still usable).
+        """
+        ti1 = work_dir / f"{stem}.ti1"
+        if not ti1.is_file():
+            self._log.appendPlainText(
+                f"[i1iSis] expected TI1 not found: {ti1}; skipping i1Profiler export."
+            )
+            return False
+        try:
+            txt_path, pxf_path = export_from_ti1(ti1)
+        except Exception as exc:  # noqa: BLE001
+            log.exception("i1Profiler export failed")
+            self._log.appendPlainText(f"[i1iSis] export failed: {exc}")
+            InfoDialog(
+                "i1Profiler export failed",
+                f"ChromIQ could not write the i1Profiler patch-set files:\n\n{exc}",
+                self,
+                min_width=520,
+            ).exec()
+            return False
+
+        self._log.appendPlainText(f"[i1iSis] wrote {txt_path.name}")
+        self._log.appendPlainText(f"[i1iSis] wrote {pxf_path.name}")
+
+        preview_note = (
+            "\n\nNote on the preview shown to the right: it is ChromIQ's own "
+            "layout, meant only as a sanity check of the patches. The actual "
+            "chart that gets printed will be laid out by i1Profiler and will "
+            "look different."
+            if preview_available else
+            "\n\nNote: ChromIQ couldn't render a layout preview for this run, "
+            "but the patch-set files above are still valid — i1Profiler builds "
+            "its own layout from them, so the missing preview doesn't affect "
+            "the workflow."
+        )
+        body = (
+            f"Your chart is ready for i1Profiler. Two files were saved next to "
+            f"the chart:\n\n"
+            f"  • {pxf_path.name}   (recommended — i1Profiler's native format)\n"
+            f"  • {txt_path.name}   (CGATS text, as a fallback)\n\n"
+            f"Folder:  {work_dir}\n\n"
+            f"Next steps in i1Profiler:\n"
+            f"  1. Connect your i1iSis and open i1Profiler.\n"
+            f"  2. On the start screen, choose Advanced User Mode.\n"
+            f"  3. In the menu on the left, under Printer, click Profiling.\n"
+            f"  4. In the Patch Set window, click Load and select the .pxf\n"
+            f"     file above.\n"
+            f"  5. Continue through i1Profiler's wizard — it will lay out and\n"
+            f"     print the chart, then ask you to scan it on the i1iSis and\n"
+            f"     build the ICC profile.\n\n"
+            f"ChromIQ's Print, Measure and Profile tabs are not used for this\n"
+            f"instrument — the rest of the workflow happens entirely in i1Profiler."
+            f"{preview_note}"
+        )
+        InfoDialog(
+            "Next steps in i1Profiler",
+            body,
+            self,
+            min_width=620,
+        ).exec()
+        return True
+
     def _on_generate_finished(self, tiffs: list[Path]) -> None:
         self._generate_btn.setEnabled(True)
         # One-shot flag: consumed by this run, don't carry over to the next.
@@ -2416,24 +2551,42 @@ class TabChart(QWidget):
             if picked and not Path(picked).is_file():
                 self._guided_precond_path.clear()
                 self._guided_precond_check.setChecked(False)
+        is_isis = self._is_isis_selected()
+        stem = getattr(self, "_last_target_name", None) or "chart"
+        # For i1iSis the load-bearing artifact is the TI1 from targen, not the
+        # printtarg TIFF. Run the export off the TI1 so users still get their
+        # patch-set files even if printtarg fails for an unrelated reason
+        # (e.g. paper-size validation crash). work_dir is wherever the TI1 lives
+        # — derive from tiffs when present, else from the FileManager.
+        isis_export_ok = False
+        if is_isis:
+            work_dir = tiffs[0].parent if tiffs else self._file_mgr.ensure_folder()
+            isis_export_ok = self._export_for_i1profiler_and_notify(
+                work_dir, stem, preview_available=bool(tiffs),
+            )
+
         if tiffs:
             self._preview.load_tiff(tiffs)
             log.info("Preview loaded: %d TIFF(s)", len(tiffs))
-            stem = getattr(self, "_last_target_name", None) or "chart"
             ti2 = tiffs[0].parent / f"{stem}.ti2"
-            self.chart_finished.emit(tiffs, ti2)
+            self.chart_finished.emit(tiffs, ti2, is_isis)
         else:
             self._log.appendPlainText("[ERROR] Chart generation failed.")
             self._log.ensureCursorVisible()
-            failure = self._creator.primary_failure()
-            if failure is not None:
-                tool, _key, friendly = failure
-                title = (
-                    "Chart Generation Failed (targen)"
-                    if tool == "targen"
-                    else "Chart Layout Failed (printtarg)"
-                )
-                InfoDialog(title, friendly, self, min_width=520).exec()
+            # When the i1iSis hand-off already succeeded the user doesn't need
+            # a second failure dialog telling them printtarg crashed — the
+            # popup we already showed explained that the preview is optional
+            # and the workflow continues in i1Profiler.
+            if not isis_export_ok:
+                failure = self._creator.primary_failure()
+                if failure is not None:
+                    tool, _key, friendly = failure
+                    title = (
+                        "Chart Generation Failed (targen)"
+                        if tool == "targen"
+                        else "Chart Layout Failed (printtarg)"
+                    )
+                    InfoDialog(title, friendly, self, min_width=520).exec()
 
     def _on_save_defaults(self) -> None:
         params = self._collect_params()
@@ -2851,6 +3004,7 @@ class TabChart(QWidget):
             self._manual_td_check.setChecked(td_saved)
         self._update_manual_lb_visibility()
         self._apply_instrument_default_margin()
+        self._update_isis_preview_banner()
 
         presets = self._load_presets_from_settings()
         self._populate_preset_combo(presets)

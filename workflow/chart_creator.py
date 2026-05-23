@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Optional
 
 from core.logger import get_logger
-from data.patch_db import SUPPORTED_PATCH_SCALES, query_patches
+from data.patch_db import EXTERNAL_INSTRUMENTS, SUPPORTED_PATCH_SCALES, query_patches
 
 if TYPE_CHECKING:
     from core.argyll_runner import ArgyllRunner
@@ -483,7 +483,9 @@ class ChartCreator:
         work_dir = self._file_mgr.ensure_folder()
         if params.cal_target:
             # Starting a calibration target run — full wipe, no exceptions
-            self._file_mgr.clean_folder(["ti1", "ti2", "tif", "cht", "ps", "json", "cal"])
+            self._file_mgr.clean_folder(
+                ["ti1", "ti2", "tif", "cht", "ps", "json", "cal", "txt", "pxf"]
+            )
             for _f in work_dir.iterdir():
                 if _f.is_file() and _f.stem.startswith("pre_") and _f.suffix.lower() in (".icc", ".icm"):
                     try:
@@ -496,7 +498,7 @@ class ChartCreator:
                 params.extra_targen_args = self._promote_v1_to_preconditioning(
                     params.extra_targen_args, work_dir,
                 )
-            _exts = {"ti1", "ti2", "tif", "cht", "ps", "json", "cal"}
+            _exts = {"ti1", "ti2", "tif", "cht", "ps", "json", "cal", "txt", "pxf"}
             _deleted = 0
             for _f in work_dir.iterdir():
                 if _f.is_file() and _f.suffix.lstrip(".").lower() in _exts and not _f.stem.startswith("cal_"):
@@ -956,6 +958,12 @@ class ChartCreator:
         # on ChartParams.
         triple = p.triple_density and p.instrument == "CM"
         if triple:
+            pt_instr = "i1"
+        elif p.instrument in EXTERNAL_INSTRUMENTS:
+            # i1iSis is driven by i1Profiler, not Argyll. We still run printtarg
+            # to give the user a layout preview, but i1Profiler re-lays-out the
+            # actual chart from the patch list, so a generic strip layout (i1)
+            # is fine here.
             pt_instr = "i1"
         else:
             # printtarg uses "3p" for i1Pro 3 Plus; help text lists "p3" but that's a typo

@@ -341,6 +341,15 @@ class TiffPreview(QWidget):
         self._caption_lbl.setText(text)
         self._caption_lbl.setVisible(bool(text))
 
+    def set_banner(self, text: str | None) -> None:
+        """Show an advisory banner above the image, or hide it (text=None/empty)."""
+        if text:
+            self._banner_lbl.setText(text)
+            self._banner_lbl.setVisible(True)
+        else:
+            self._banner_lbl.clear()
+            self._banner_lbl.setVisible(False)
+
     def _update_filename_label(self, paths: list[Path]) -> None:
         """Show the chart stem of the loaded files; full path on hover.
 
@@ -455,6 +464,21 @@ class TiffPreview(QWidget):
         )
         self._filename_lbl.setVisible(False)
         hl.addWidget(self._filename_lbl)
+
+        # Advisory banner — shown only when something noteworthy needs to be
+        # communicated about the preview (e.g. i1iSis layout-only preview).
+        # Hidden by default so it consumes no vertical space.
+        self._banner_lbl = QLabel("", header)
+        self._banner_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._banner_lbl.setWordWrap(True)
+        self._banner_lbl.setStyleSheet(
+            "QLabel { color: #2a1a00; background: #f0c674;"
+            " border: 1px solid #b88a2a; border-radius: 4px;"
+            " padding: 6px 10px; margin: 6px 4px 0 4px;"
+            " font-size: 11px; }"
+        )
+        self._banner_lbl.setVisible(False)
+        hl.addWidget(self._banner_lbl)
 
         layout.addWidget(header)
 

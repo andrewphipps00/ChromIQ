@@ -328,7 +328,13 @@ class MainWindow(QMainWindow):
             for btn in tab_w.findChildren(TooltipButton):
                 btn._set_icon()
 
-    def _on_chart_generated(self, tiffs: object, ti2: object) -> None:
+    def _on_chart_generated(
+        self, tiffs: object, ti2: object, is_external_workflow: bool = False
+    ) -> None:
+        if is_external_workflow:
+            # i1iSis: i1Profiler drives print + measure, so don't push the
+            # ChromIQ preview TIFFs or TI2 into those tabs.
+            return
         self._tab_print.load_tiffs(list(tiffs))
         if ti2 and Path(ti2).exists():
             self._tab_measure.set_ti1_path(Path(ti2))

@@ -380,12 +380,13 @@ parameters:
     - flag: "-i"
       name: "Measurement Instrument"
       type: choice
-      choices: ["i1", "p3", "CM", "SS"]
+      choices: ["i1", "p3", "CM", "SS", "isis"]
       labels:
         - "i1Pro / i1Pro 2 / i1Pro 3"
         - "i1Pro 3 Plus"
         - "ColorMunki / i1Studio / ColorChecker Studio"
         - "SpectroScan (flatbed)"
+        - "i1iSis (via i1Profiler)"
       default: "i1"
       no_space: true
       affects_preview: true
@@ -412,6 +413,13 @@ parameters:
           •  SpectroScan — flatbed XY scanner. A motorised arm reads
              each patch individually, so it packs far more colours per
              sheet than any strip reader.
+
+          •  i1iSis (via i1Profiler) — automatic sheet-fed chart reader.
+             ChromIQ cannot drive this device directly: instead it will
+             save the patch list in i1Profiler's own format alongside
+             the chart, and you finish the workflow there (print, scan,
+             build profile). ChromIQ's Print and Measure tabs are not
+             used for this device.
 
         Picking the wrong instrument produces a chart your device cannot
         align to or read reliably — you'll see "patches not found" or

@@ -1,5 +1,43 @@
 # Changelog
 
+## v3.7.28
+First step of i1iSis support. ChromIQ cannot drive the i1iSis directly —
+that scanner only works through X-Rite's i1Profiler — so this release adds
+a hand-off: select i1iSis in Manual mode and ChromIQ writes the patch list
+in the two file formats i1Profiler reads, alongside the regular chart. The
+user prints, scans and builds the profile in i1Profiler. Future releases
+will close the loop further; for now this removes the i1iSis as a hard
+blocker for ChromIQ users.
+
+### Features
+- **New "i1iSis (via i1Profiler)" instrument option in Manual mode.**
+  Picking this runs targen as usual to build the patch list, then writes
+  a CGATS `.txt` and a CxF3 `.pxf` next to the chart — both formats
+  i1Profiler accepts as a custom patch set. The printtarg layout
+  preview still renders, with a banner clarifying that it's a preview
+  only; i1Profiler lays out the actual chart from the patch list when
+  you load the `.pxf`. A popup at the end of generation walks through
+  the next steps in i1Profiler (Advanced User Mode → Printer →
+  Profiling → Patch Set window → Load). ChromIQ's Print, Measure and
+  Profile tabs are not used for this instrument — the rest of the
+  workflow happens entirely in i1Profiler.
+- **Sensible printtarg defaults pre-applied when i1iSis is selected.**
+  Paper jumps to A3+ Portrait, *No Spacers* and *Don't Limit Strip
+  Length* tick on automatically, since the printtarg run is purely for
+  the preview and i1Profiler re-lays-out the actual chart anyway. All
+  four are still editable if you want a different preview shape;
+  switching back to another instrument resets them to printtarg's
+  normal defaults.
+- **i1iSis is intentionally absent from Guided mode.** Guided's job is
+  to optimise the chart layout for the instrument, but for i1iSis the
+  layout is recomputed by i1Profiler — so there is nothing to optimise
+  there. The Manual-mode flow is the supported path.
+- **Defensive hand-off if printtarg fails.** The `.txt` / `.pxf` export
+  fires off the targen output (the patch list), not the printtarg
+  TIFF. If printtarg crashes for an unrelated reason the user still
+  gets a working patch-set file pair, with the popup noting that the
+  preview was unavailable but the i1Profiler workflow is unaffected.
+
 ## v3.7.27
 Fixes three Create Chart bugs that silently mis-handed parameters to printtarg:
 Triple density now respects manual overrides of the strip-limit, margin and

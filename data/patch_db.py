@@ -182,7 +182,12 @@ INSTRUMENT_LABELS: dict[str, str] = {
     "p3": "i1Pro 3 Plus",
     "CM": "ColorMunki / i1Studio / ColorChecker Studio",
     "SS": "SpectroScan",
+    "isis": "i1iSis (via i1Profiler)",
 }
+
+# ChromIQ-only sentinel instrument codes that must NOT be passed to printtarg.
+# These represent devices ChromIQ supports through an external workflow.
+EXTERNAL_INSTRUMENTS: frozenset[str] = frozenset({"isis"})
 
 PAPER_SIZES: list[str] = [
     "A2", "594x420",
