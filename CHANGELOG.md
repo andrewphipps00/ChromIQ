@@ -1,5 +1,36 @@
 # Changelog
 
+## v3.7.31
+Extends the i1iSis hand-off (added in v3.7.28) beyond RGB. ChromIQ now writes
+the i1Profiler patch set in the colour space of the target you generated — RGB,
+CMYK, or extended-gamut CMYK+N (for example CMYK + Orange + Green + Violet) —
+so the hand-off works for CMYK and multi-ink printers, not just RGB. Also folds
+in a Create Chart command-preview fix.
+
+### Features
+- **i1Profiler export is colour-space aware (RGB / CMYK / CMYK+N).** When i1iSis
+  is the selected instrument, ChromIQ reads the device channels straight from the
+  generated target and writes the matching i1Profiler structure: RGB patches
+  scaled to 0–255, CMYK and extended-gamut CMYK+N patches on the 0–100 ink scale.
+  The CMYK and CMYK+N files carry the colour-space tag, ink limit and per-ink
+  definitions, matching the patch sets i1Profiler ships, so its CMYK and
+  extended-gamut loaders read them. Extended gamut is written as a CxF3 `.pxf`
+  only — i1Profiler has no CGATS `.txt` for it. RGB output is byte-for-byte
+  unchanged from v3.7.28.
+- **The hand-off instructions adapt to the colour space.** The pop-up now names
+  the colour space, lists the right file(s), and — because i1Profiler does not
+  read the colour space from the patch set itself — reminds you to set the
+  printer colour space (and define the extra inks, for CMYK+N) *before* loading,
+  and to leave i1Profiler's Smart patch generator alone afterwards so it doesn't
+  replace the loaded patches.
+
+### Fixes
+- **Create Chart command preview shows the staged pre-conditioning filename.**
+  The guided info label unconditionally prepended `pre_`, so picking an
+  already-archived `pre_*.icm` rendered as `-c pre_pre_…`; the manual preview
+  emitted the picked absolute path, burying the rest of the arguments. Both sites
+  now mirror what targen actually receives.
+
 ## v3.7.30
 The back, forward and "go to parent folder" arrows in ChromIQ's file
 open/save dialogs were almost invisible in Light mode — they now use a

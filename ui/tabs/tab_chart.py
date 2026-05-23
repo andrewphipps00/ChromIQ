@@ -57,7 +57,7 @@ from ui.tab_header import TabHeader
 from ui.tiff_preview import TiffPreview
 from ui.tooltip_button import InfoDialog, TooltipButton
 from ui.widgets import NoScrollComboBox, NoScrollSpinBox, icc_profile_paths, make_browse_button, open_file_dialog, set_folder_icon, set_preset_icon
-from workflow.i1profiler_export import export_from_ti1
+from workflow.i1profiler_export import EXTRA_INK, export_from_ti1, parse_ti1
 from workflow.chart_creator import (
     ChartCreator, ChartParams, guided_neutrals, GUIDED_NEUTRAL_BASE, REF_BUDGET,
 )
@@ -2539,6 +2539,7 @@ class TabChart(QWidget):
             )
             return False
         try:
+            target = parse_ti1(ti1)
             txt_path, pxf_path = export_from_ti1(ti1)
         except Exception as exc:  # noqa: BLE001
             log.exception("i1Profiler export failed")
@@ -2551,8 +2552,53 @@ class TabChart(QWidget):
             ).exec()
             return False
 
-        self._log.appendPlainText(f"[i1iSis] wrote {txt_path.name}")
+        if txt_path is not None:
+            self._log.appendPlainText(f"[i1iSis] wrote {txt_path.name}")
         self._log.appendPlainText(f"[i1iSis] wrote {pxf_path.name}")
+
+        # Colorspace label for the popup. i1Profiler does not read the colour
+        # space from the patch set — the user must select it in the workflow —
+        # so spell out which one this chart is for.
+        if target.kind == "RGB":
+            cs_label = "RGB"
+        elif target.kind == "CMYK":
+            cs_label = "CMYK"
+        else:
+            cs_label = f"CMYK + {len(target.extras)}"
+
+        files_lines = [
+            f"  • {pxf_path.name}   (recommended — i1Profiler's native format)"
+        ]
+        if txt_path is not None:
+            files_lines.append(f"  • {txt_path.name}   (CGATS text, as a fallback)")
+        files_block = "\n".join(files_lines)
+
+        steps = [
+            "Connect your i1iSis and open i1Profiler.",
+            "On the start screen, choose Advanced User Mode.",
+            "In the menu on the left, under Printer, click Profiling.",
+        ]
+        if target.kind != "RGB":
+            ink_note = ""
+            if target.extras:
+                inks = ", ".join(EXTRA_INK[c][0] for c in target.extras)
+                ink_note = f", and define the {len(target.extras)} extra inks ({inks})"
+            steps.append(
+                f'Set the printer colour space to "{cs_label}" first — i1Profiler '
+                f"does not read it from the file, so you must choose it here"
+                f"{ink_note}."
+            )
+        steps.append(
+            "In the Patch Set window, click Load and select the .pxf file above. "
+            "Leave i1Profiler's Smart patch generator alone afterwards — changing "
+            "its patch count or Scramble option replaces the loaded patches with "
+            "freshly generated ones."
+        )
+        steps.append(
+            "Continue through i1Profiler's wizard — it will lay out and print the "
+            "chart, then ask you to scan it on the i1iSis and build the ICC profile."
+        )
+        steps_block = "\n".join(f"  {i}. {s}" for i, s in enumerate(steps, 1))
 
         preview_note = (
             "\n\nNote on the preview shown to the right: it is ChromIQ's own "
@@ -2565,22 +2611,15 @@ class TabChart(QWidget):
             "its own layout from them, so the missing preview doesn't affect "
             "the workflow."
         )
+        file_word = "file was" if txt_path is None else "files were"
         body = (
-            f"Your chart is ready for i1Profiler. Two files were saved next to "
-            f"the chart:\n\n"
-            f"  • {pxf_path.name}   (recommended — i1Profiler's native format)\n"
-            f"  • {txt_path.name}   (CGATS text, as a fallback)\n\n"
+            f"Your {cs_label} chart is ready for i1Profiler. The following "
+            f"{file_word} saved next to the chart:\n\n"
+            f"{files_block}\n\n"
             f"Folder:  {work_dir}\n\n"
             f"Next steps in i1Profiler:\n"
-            f"  1. Connect your i1iSis and open i1Profiler.\n"
-            f"  2. On the start screen, choose Advanced User Mode.\n"
-            f"  3. In the menu on the left, under Printer, click Profiling.\n"
-            f"  4. In the Patch Set window, click Load and select the .pxf\n"
-            f"     file above.\n"
-            f"  5. Continue through i1Profiler's wizard — it will lay out and\n"
-            f"     print the chart, then ask you to scan it on the i1iSis and\n"
-            f"     build the ICC profile.\n\n"
-            f"ChromIQ's Print, Measure and Profile tabs are not used for this\n"
+            f"{steps_block}\n\n"
+            f"ChromIQ's Print, Measure and Profile tabs are not used for this "
             f"instrument — the rest of the workflow happens entirely in i1Profiler."
             f"{preview_note}"
         )
