@@ -1241,7 +1241,15 @@ class TabChart(QWidget):
         if p.single_channel_steps > 0:
             targen_args += [f"-s{p.single_channel_steps}"]
         if p.extra_targen_args:
-            targen_args += shlex.split(p.extra_targen_args)
+            _extra = shlex.split(p.extra_targen_args)
+            # Render -c <picked path> as the staged filename — matches what
+            # chart_creator._stage_precond_profile will actually run with and
+            # avoids burying the rest of the args under a long absolute path.
+            for _i, _tok in enumerate(_extra):
+                if _tok == "-c" and _i + 1 < len(_extra) and _extra[_i + 1]:
+                    _pp = Path(_extra[_i + 1])
+                    _extra[_i + 1] = _pp.name if _pp.stem.startswith("pre_") else f"pre_{_pp.name}"
+            targen_args += _extra
         targen_args.append(self._preview_target_name("manual"))
 
         # printtarg
@@ -2228,7 +2236,11 @@ class TabChart(QWidget):
         recommendation = ""
         if precond_active:
             if precond_path:
-                precond_line = f" -c pre_{Path(precond_path).name}"
+                # Mirror chart_creator._stage_precond_profile guard so a
+                # already-pre_-prefixed pick doesn't render as pre_pre_*.
+                _pp = Path(precond_path)
+                _staged = _pp.name if _pp.stem.startswith("pre_") else f"pre_{_pp.name}"
+                precond_line = f" -c {_staged}"
                 recommendation = (
                     "\nTip: use at least as many pages as the original profile."
                 )
