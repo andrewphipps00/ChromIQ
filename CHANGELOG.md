@@ -1,5 +1,17 @@
 # Changelog
 
+## v3.7.30
+The back, forward and "go to parent folder" arrows in ChromIQ's file
+open/save dialogs were almost invisible in Light mode — they now use a
+dark, high-contrast arrow.
+
+### Fixes
+- **File-dialog navigation arrows are legible in Light mode.** The back,
+  forward and parent-folder arrows in ChromIQ's file dialogs were recoloured
+  to a single light grey that suited Dark mode's dark toolbar but washed out
+  against Light mode's pale toolbar. They now switch to a near-black arrow
+  (#1C1B18) in Light mode, while Dark mode is unchanged.
+
 ## v3.7.29
 Fixes a Build Profile failure where a profile that was actually created was
 reported as "Profile file was not created", and stops a long file path from

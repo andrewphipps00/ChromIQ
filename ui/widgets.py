@@ -315,7 +315,13 @@ def _nav_icon(icon: QIcon, color: QColor) -> QIcon:
 
 
 def _style_file_dialog_toolbar(dlg: QFileDialog) -> None:
-    arrow_color = QColor("#e0e0e0")
+    from core.settings import AppSettings
+    from ui.theme import APPEARANCE_LIGHT, resolve_mode
+
+    # Light mode's pale toolbar washes out the light arrows that read fine on
+    # Dark mode's dark toolbar — use a near-black arrow there instead.
+    mode = resolve_mode(AppSettings().get("appearance", "auto"))
+    arrow_color = QColor("#1C1B18" if mode == APPEARANCE_LIGHT else "#e0e0e0")
     style = dlg.style()
     for name, sp in _NAV_BUTTONS.items():
         btn = dlg.findChild(QToolButton, name)
