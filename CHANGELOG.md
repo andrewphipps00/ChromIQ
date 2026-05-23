@@ -1,5 +1,22 @@
 # Changelog
 
+## v3.7.32
+Fixes the Create Chart manual module's Neutral Axis Steps (`-n`) option, which
+the UI accepted but never passed to targen or showed in the bottom-of-tab
+command preview.
+
+### Fixes
+- **Neutral Axis Steps (`-n`) is honoured in manual mode.** The manual panel
+  collected the expert targen extras `-D`/`-c`/`-C`/`-N`/`-V` but omitted `-n`,
+  so any value set for Neutral Axis Steps was silently dropped from both the
+  generated `targen` command and the live command preview. `-n` now flows
+  through to both, and is emitted ahead of `-c` for readability (targen parses
+  options order-independently, so the chart is unchanged).
+- **Neutral Axis Steps is gated on a pre-conditioning profile.** targen's `-n`
+  samples the neutral axis of the profile supplied via `-c`, so the field now
+  stays greyed out (and unchecked) until a pre-conditioning profile is set —
+  preventing a no-op configuration.
+
 ## v3.7.31
 Extends the i1iSis hand-off (added in v3.7.28) beyond RGB. ChromIQ now writes
 the i1Profiler patch set in the colour space of the target you generated — RGB,

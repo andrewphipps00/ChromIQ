@@ -927,6 +927,10 @@ class TabChart(QWidget):
         self._manual_b_pw: ParameterWidget | None = None
         self._manual_c_pw: ParameterWidget | None = None
         self._manual_A_pw: ParameterWidget | None = None
+        # targen -c / -n: -n (Neutral Axis Steps) only does anything when a
+        # pre-conditioning profile (-c) is supplied, so -n tracks -c's state.
+        self._manual_targen_c_pw: ParameterWidget | None = None
+        self._manual_targen_n_pw: ParameterWidget | None = None
         self._manual_auto_patches_check: QCheckBox | None = None
         # Auto checkboxes for -e/-B/-g: when on, the value is auto-computed
         # from the chart's total patch count via manual_neutrals() at submit
@@ -1045,6 +1049,15 @@ class TabChart(QWidget):
                     self._manual_auto_grey_check.toggled.connect(
                         lambda v: self._on_auto_neutral_toggled("grey", v)
                     )
+
+                # targen -c / -n dependency: -n (Neutral Axis Steps) samples
+                # the profile-defined neutral axis and is a no-op unless -c
+                # (Pre-conditioning Profile) is set.  Capture both so -n can
+                # track -c's state (see _connect_neutral_dep).
+                if tool == "targen" and flag == "-c":
+                    self._manual_targen_c_pw = pw
+                if tool == "targen" and flag == "-n":
+                    self._manual_targen_n_pw = pw
 
                 if tool == "printtarg" and flag == "-L":
                     self._manual_lb_pw = pw
@@ -1170,6 +1183,7 @@ class TabChart(QWidget):
         # instrument-selector signal and called once more after settings load.
         self._connect_cal_mutex()
         self._connect_spacer_mutex()
+        self._connect_neutral_dep()
         self._connect_d_cascade()
         self._preset_combo.currentIndexChanged.connect(self._on_preset_selected)
         self._preset_add_btn.clicked.connect(self._on_preset_save)
@@ -1921,6 +1935,30 @@ class TabChart(QWidget):
             b.setEnabled(not c_on)
         if c is not None:
             c.setEnabled(not b_on)
+
+    def _connect_neutral_dep(self) -> None:
+        """Grey out targen -n (Neutral Axis Steps) unless -c is supplied.
+
+        targen's -n samples the profile-defined neutral axis and has no
+        effect without a pre-conditioning profile (-c), so we disable the
+        widget — and uncheck it — whenever -c is empty."""
+        c, n = self._manual_targen_c_pw, self._manual_targen_n_pw
+        if c is None or n is None:
+            return
+        c.value_changed.connect(self._apply_neutral_dep)
+        self._apply_neutral_dep()
+
+    def _apply_neutral_dep(self) -> None:
+        c, n = self._manual_targen_c_pw, self._manual_targen_n_pw
+        if c is None or n is None:
+            return
+        c_active = c.is_enabled_by_user and bool(c.get_value())
+        if c_active:
+            n.setEnabled(True)
+        else:
+            if n.is_enabled_by_user:
+                n.set_user_enabled(False)
+            n.setEnabled(False)
 
     def _connect_d_cascade(self) -> None:
         for i, pw in enumerate(self._d_cascade_widgets):
@@ -2861,10 +2899,16 @@ class TabChart(QWidget):
         p.grey_steps           = int(_get("targen",    "-g",  0))
         p.single_channel_steps = int(_get("targen",    "-s",  0))
 
+        # Emit extras in an explicit order rather than widget order so -n
+        # (Neutral Axis Steps) reads ahead of -c (pre-conditioning profile)
+        # in the command. targen parses options order-independently and the
+        # -c path-staging/rewrite logic scans for the "-c" token wherever it
+        # sits, so the order is purely cosmetic.
         extra = []
-        for pw in self._manual_widgets.get("targen", []):
-            if pw.flag in {"-D", "-c", "-C", "-N", "-V"}:
-                extra.extend(pw.build_args())
+        for flag in ("-n", "-c", "-C", "-N", "-V", "-D"):
+            for pw in self._manual_widgets.get("targen", []):
+                if pw.flag == flag:
+                    extra.extend(pw.build_args())
         if extra:
             p.extra_targen_args = shlex.join(extra)
 
