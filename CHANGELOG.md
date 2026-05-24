@@ -1,5 +1,27 @@
 # Changelog
 
+## v3.8.0-beta.1
+Beta: optional "ChromIQ-style refinement process" — reuse the measurements from
+an earlier profile to build a more accurate one. Off by default; enable it in
+Settings. When off, ChromIQ behaves exactly as before.
+
+### Added
+- **ChromIQ-style refinement (Settings toggle, off by default).** When enabled,
+  the measurement data from a pre-conditioning profile you select in Create Chart
+  is preserved (as a `pre_*.json` beside the chart) and can be merged into your
+  new measurements at profile-build time, so colprof builds from a larger,
+  combined set of patches. A new Measure-tab option, *"Also use measurement data
+  from the pre-conditioning profile"*, appears only when such data is present.
+- **`workflow/ti3_merge.py`** — combines the two measurement sets into a separate
+  `<name>_merged.ti3` (your freshly measured file is never altered), renumbering
+  patches and refusing to merge data measured in a different colour space/format.
+  The profile is written as `<name>_merged.icc` so it's clear it used the extra
+  data.
+
+### Notes
+- Guided Check & Refine still analyses only the strips you physically printed, so
+  it never asks you to re-measure a patch that came from the earlier run.
+
 ## v3.7.38
 Your own Create Chart presets can now generate as soon as you pick them.
 

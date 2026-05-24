@@ -226,6 +226,24 @@ def _detect_stripe_rects(tiff_path: Path) -> list[QRect]:
 # Per-option chartread row helper
 # ---------------------------------------------------------------------------
 
+# Tooltip for the optional "also use pre-conditioning data" checkbox (shown only
+# when ChromIQ-style refinement is on and a pre_*.json sits beside the .ti2).
+_PRECOND_TOOLTIP = (
+    "Also Use Pre-conditioning Measurement Data",
+    "ChromIQ found saved measurement data from the pre-conditioning profile you\n"
+    "selected when creating this chart (a \"pre_…\" file in this folder).\n\n"
+    "Tick this to fold those earlier measurements into your profile. When you\n"
+    "build the profile, ChromIQ combines the patches you just measured with the\n"
+    "saved earlier ones and builds from the larger set — generally a more\n"
+    "accurate profile.\n\n"
+    "Your freshly measured file is not changed: the combining happens on a\n"
+    "separate copy only at build time. You can still re-measure individual\n"
+    "strips in Check && Refine exactly as usual.\n\n"
+    "This option only appears when ChromIQ-style refinement is enabled in\n"
+    "Settings and saved pre-conditioning data is present.",
+)
+
+
 @dataclass
 class _ChartreadOption:
     """One chartread option row with enable-checkbox and optional value widget."""
@@ -279,6 +297,9 @@ class TabMeasure(QWidget):
         self._ti1_path: Path | None = None
         self._tiff_pages: list[Path] = []
         self._chartread_opts: list[_ChartreadOption] = []
+        # ChromIQ-style refinement: the single pre_*.json sitting beside the
+        # loaded .ti2, if any (the pre-conditioning profile's measurement data).
+        self._precond_json: Path | None = None
         # Auto bidir-detection: resolved -B value for the loaded .ti2 (False =
         # bidirectional allowed; the no-file / unknown-instrument fallback).
         self._detected_disable_bidir: bool = False
@@ -785,6 +806,19 @@ class TabMeasure(QWidget):
         self._refine_row.setVisible(False)
         cg.addWidget(self._refine_row)
 
+        precond_row = QHBoxLayout()
+        self._use_precond_cb = QCheckBox(
+            "Also use measurement data from the pre-conditioning profile", left
+        )
+        self._use_precond_cb.setChecked(False)
+        self._use_precond_cb.setVisible(False)
+        precond_row.addWidget(self._use_precond_cb)
+        precond_row.addStretch()
+        self._precond_tip = TooltipButton(*_PRECOND_TOOLTIP, left)
+        self._precond_tip.setVisible(False)
+        precond_row.addWidget(self._precond_tip)
+        cg.addLayout(precond_row)
+
         self._resume_cb.stateChanged.connect(
             lambda state: self._refine_row.setVisible(
                 state == Qt.CheckState.Checked.value
@@ -1071,6 +1105,19 @@ class TabMeasure(QWidget):
         ))
         self._m_refine_row.setVisible(False)
         mcg.addWidget(self._m_refine_row)
+
+        m_precond_row = QHBoxLayout()
+        self._m_use_precond_cb = QCheckBox(
+            "Also use measurement data from the pre-conditioning profile", left
+        )
+        self._m_use_precond_cb.setChecked(False)
+        self._m_use_precond_cb.setVisible(False)
+        m_precond_row.addWidget(self._m_use_precond_cb)
+        m_precond_row.addStretch()
+        self._m_precond_tip = TooltipButton(*_PRECOND_TOOLTIP, left)
+        self._m_precond_tip.setVisible(False)
+        m_precond_row.addWidget(self._m_precond_tip)
+        mcg.addLayout(m_precond_row)
 
         self._m_resume_cb.stateChanged.connect(
             lambda state: self._m_refine_row.setVisible(
@@ -1566,6 +1613,7 @@ class TabMeasure(QWidget):
         self._start_btn.setEnabled(True)
         self._try_load_tiffs(path)
         self._update_resume_availability()
+        self._update_precond_availability()
         self._refresh_bidir_autodetect()
 
     def clear_chart_file(self) -> None:
@@ -1740,6 +1788,43 @@ class TabMeasure(QWidget):
                 rcb.setEnabled(False)
                 rcb.setChecked(False)
         self._refresh_start_button_label()
+
+    def _update_precond_availability(self) -> None:
+        """Show the 'also use pre-conditioning data' option when ChromIQ-style
+        refinement is enabled and exactly one pre_*.json sits beside the .ti2."""
+        found: Path | None = None
+        if (
+            self._ti1_path is not None
+            and bool(self._settings.get("chromiq_refinement", False))
+        ):
+            candidates = sorted(self._ti1_path.parent.glob("pre_*.json"))
+            if len(candidates) == 1:
+                found = candidates[0]
+        self._precond_json = found
+        visible = found is not None
+        for cb, tip in [
+            (self._use_precond_cb, self._precond_tip),
+            (self._m_use_precond_cb, self._m_precond_tip),
+        ]:
+            cb.setVisible(visible)
+            tip.setVisible(visible)
+            if not visible:
+                cb.setChecked(False)
+
+    def preconditioning_choice(self) -> Path | None:
+        """The pre_*.json the user opted into merging, or None.
+
+        Returns the discovered file only when its checkbox is visible AND ticked
+        in the active mode — the main window forwards this to Build Profile.
+        """
+        if self._precond_json is None:
+            return None
+        cb = self._use_precond_cb if self._current_mode() == "guided" else self._m_use_precond_cb
+        # isHidden() reflects the explicit show/hide state set in
+        # _update_precond_availability, independent of which tab is front-most.
+        if not cb.isHidden() and cb.isChecked():
+            return self._precond_json
+        return None
 
     def _refresh_start_button_label(self) -> None:
         """Show 'Continue Measurement' on the Start button when the resume

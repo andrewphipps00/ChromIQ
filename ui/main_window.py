@@ -346,6 +346,11 @@ class MainWindow(QMainWindow):
             self._tabs.setCurrentWidget(self._tab_profile)
         else:
             self._tab_profile.set_ti3_path(ti3, propagate=False)
+            # Forward the Measure-tab opt-in so Build Profile can merge the
+            # pre-conditioning data (ChromIQ-style refinement). None when off.
+            self._tab_profile.set_preconditioning_source(
+                self._tab_measure.preconditioning_choice()
+            )
 
     def _on_measurement_active(self, active: bool) -> None:
         measure_idx = self._tabs.indexOf(self._tab_measure)

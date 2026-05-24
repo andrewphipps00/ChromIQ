@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import sys
+from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -46,6 +47,7 @@ from ui.widgets import GatedOption, NoScrollComboBox, NoScrollDoubleSpinBox, NoS
 from ui.ti2_loader import has_spectral_data, instrument_label, is_colormunki, read_target_instrument
 from ui.spectrum_progress import SpectrumSegmentsBar
 from workflow.profile_builder import ProfileBuilder, ProfileParams
+from workflow.ti3_merge import merge_preconditioning, Ti3MergeError
 from workflow.printcal_runner import PrintcalRunner, PrintcalParams, ChannelTarget
 from workflow.applycal_runner import ApplycalRunner
 
@@ -248,6 +250,13 @@ class TabProfile(QWidget):
         self._ti3_path: Path | None = None
         self._icc_path: Path | None = None
         self._cal_ti3_path: Path | None = None
+        # ChromIQ-style refinement: pre-conditioning measurement data (pre_*.json)
+        # selected in the Measure tab, merged with the fresh .ti3 at build time.
+        self._preconditioning_source: Path | None = None
+        # The params actually handed to colprof for the current build (its
+        # ti3_path may be a derived _merged.ti3). Used by _on_build_done so the
+        # ICC path is resolved against the file we really built from.
+        self._active_params: ProfileParams | None = None
 
         # Instrument detected from the loaded measurement .ti3 (and whether it
         # carries spectral data), used to gate options colprof can't apply.
@@ -542,6 +551,16 @@ class TabProfile(QWidget):
 
     def set_icc_path(self, path: Path) -> None:
         self._icc_path = path
+
+    def set_preconditioning_source(self, path: Path | None) -> None:
+        """Pre-conditioning measurement data (pre_*.json) to merge at build time.
+
+        Set by the main window from the Measure tab's opt-in. ``None`` clears it.
+        Only honoured while the ``chromiq_refinement`` setting is enabled.
+        """
+        self._preconditioning_source = path
+        if path is not None:
+            log.info("Pre-conditioning merge source set to %s", path)
 
     def set_cal_ti3_path(self, ti3: Path) -> None:
         """Receive a cal_*.ti3 from the measure tab, pre-fill printcal, and switch to it."""
@@ -3170,6 +3189,9 @@ class TabProfile(QWidget):
 
     def set_ti3_path(self, path: Path, propagate: bool = True) -> None:
         self._ti3_path = path
+        # A newly selected measurement file invalidates any prior merge source;
+        # the main window re-sets it afterwards on the measure handoff if opted in.
+        self._preconditioning_source = None
         self._file_lbl.setText(str(path))
         self._build_btn.setEnabled(True)
         self._desc_edit.setText(path.stem)
@@ -3184,6 +3206,8 @@ class TabProfile(QWidget):
         self._ti3_path = None
         self._icc_path = None
         self._cal_ti3_path = None
+        self._preconditioning_source = None
+        self._active_params = None
         self._file_lbl.setText("")
         self._build_btn.setEnabled(False)
         for field in (
@@ -3412,6 +3436,34 @@ class TabProfile(QWidget):
         if path:
             self._m_gam_path_edit.setText(path)
 
+    def _apply_preconditioning_merge(self, params: ProfileParams) -> ProfileParams:
+        """When ChromIQ-style refinement is on and pre-conditioning data was
+        selected, merge it with the fresh .ti3 into a separate <stem>_merged.ti3
+        and return params pointing at that file. Otherwise return params as-is.
+
+        On a colour-space / format mismatch the merge is skipped, the user is
+        told, and the profile is built from the fresh measurements only.
+        """
+        if not bool(self._settings.get("chromiq_refinement", False)):
+            return params
+        src = self._preconditioning_source
+        fresh = params.ti3_path
+        if not src or not src.exists() or not fresh.exists():
+            return params
+
+        merged = fresh.with_name(f"{fresh.stem}_merged{fresh.suffix}")
+        try:
+            total = merge_preconditioning(fresh, src, merged)
+        except Ti3MergeError as exc:
+            self._show_tool_failure_dialog("Pre-conditioning data not merged", exc.message)
+            return params
+
+        self._log.appendPlainText(
+            f"[INFO] ChromIQ refinement: merged pre-conditioning data from "
+            f"{src.name} — building from {total} patches ({merged.name})."
+        )
+        return replace(params, ti3_path=merged)
+
     def _on_build(self) -> None:
         if not self._ti3_path or not self._ti3_path.exists():
             self._log.appendPlainText("[ERROR] No valid .ti3 file selected.")
@@ -3423,6 +3475,11 @@ class TabProfile(QWidget):
         params = self._collect_params()
         if not self._validate_gamut_source(params):
             return
+        # ChromIQ-style refinement: build from fresh + pre-conditioning data when
+        # opted in. Returns params unchanged otherwise. self._ti3_path stays the
+        # fresh file so Check & Refine keeps working on the physical chart.
+        params = self._apply_preconditioning_merge(params)
+        self._active_params = params
         self._log.clear()
         self._build_headline.setText(
             f'Working hard<span style="color: {SPEC_CYAN}; font-style: italic;">…</span>'
@@ -3480,7 +3537,9 @@ class TabProfile(QWidget):
                     self._show_fwa_instrument_error()
             return
 
-        params = self._collect_params()
+        # Resolve the ICC against the file we actually built from (a _merged.ti3
+        # when pre-conditioning data was merged), not a freshly collected params.
+        params = self._active_params or self._collect_params()
         self._icc_path = self._builder.expected_icc_path(params)
         issues = self._builder.sanity_check(self._icc_path)
 

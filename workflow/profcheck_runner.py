@@ -319,7 +319,12 @@ def strips_to_refine(
     strip_max: dict[str, float] = {}
     for patch_id, de in patch_errors:
         m = _STRIP_LETTER.match(patch_id)
-        letter = m.group(1).upper() if m else patch_id.upper()
+        if not m:
+            # Patches with no leading strip letter (e.g. the neutralised "0"
+            # rows a pre-conditioning file contributes to a merged .ti3) have no
+            # physical strip on the printed chart to re-measure — skip them.
+            continue
+        letter = m.group(1).upper()
         if de > threshold:
             strip_max[letter] = max(strip_max.get(letter, 0.0), de)
     return sorted(strip_max.items(), key=lambda x: letter_to_idx(x[0]))

@@ -98,6 +98,9 @@ DEFAULTS: dict[str, Any] = {
     "printcal_mode":             "initial",
     "applycal_mode":             "apply",
     "applycal_verbose":          False,
+    # ChromIQ-style refinement: merge a pre-conditioning profile's measurement
+    # data into the freshly measured chart before building (see workflow/ti3_merge.py)
+    "chromiq_refinement":        False,
     # UI state
     "window_geometry":           None,
     "active_tab":                0,

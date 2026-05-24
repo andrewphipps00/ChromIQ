@@ -501,7 +501,14 @@ class ChartCreator:
             _exts = {"ti1", "ti2", "tif", "cht", "ps", "json", "cal", "txt", "pxf"}
             _deleted = 0
             for _f in work_dir.iterdir():
-                if _f.is_file() and _f.suffix.lstrip(".").lower() in _exts and not _f.stem.startswith("cal_"):
+                # pre_* files hold pre-conditioning data (profile + measurements)
+                # that must survive chart regeneration (ChromIQ-style refinement).
+                if (
+                    _f.is_file()
+                    and _f.suffix.lstrip(".").lower() in _exts
+                    and not _f.stem.startswith("cal_")
+                    and not _f.stem.startswith("pre_")
+                ):
                     try:
                         _f.unlink()
                         _deleted += 1
@@ -609,14 +616,18 @@ class ChartCreator:
             on_finish=lambda code: self._printtarg_done(code, work_dir, on_finish, stem),
         )
 
-    @staticmethod
-    def _promote_v1_to_preconditioning(extra_args: str, work_dir: Path) -> str:
+    def _promote_v1_to_preconditioning(self, extra_args: str, work_dir: Path) -> str:
         """Rename a prior session's .icc/.ti3 to pre_* so the next run can use them.
 
         Triggered when the user clicked "Use as pre-conditioning profile" in a
         result dialog. The picked profile is the v1 .icc inside the working
         folder; renaming it (and its matching .ti3) preserves the v1 record
         instead of letting the upcoming measure/colprof runs overwrite it.
+
+        With ChromIQ-style refinement enabled, the measurements are kept as
+        pre_*.json so the Measure tab can offer to merge them (matching the
+        external-pick path in _stage_precond_profile); otherwise they stay as the
+        legacy pre_*.ti3 record, so toggle-off behaviour is unchanged.
 
         Any existing pre_*.icc / pre_*.ti3 from a previous refinement pass are
         overwritten — we only keep one generation of history.
@@ -656,7 +667,12 @@ class ChartCreator:
 
         ti3_src = src.with_suffix(".ti3")
         if ti3_src.is_file():
-            ti3_dest = work_dir / f"pre_{ti3_src.name}"
+            # ChromIQ-style refinement consumes the measurements as pre_*.json;
+            # otherwise keep the legacy pre_*.ti3 record (off = unchanged).
+            if bool(self._settings.get("chromiq_refinement", False)):
+                ti3_dest = work_dir / f"pre_{ti3_src.stem}.json"
+            else:
+                ti3_dest = work_dir / f"pre_{ti3_src.name}"
             try:
                 if ti3_dest.exists():
                     ti3_dest.unlink()
@@ -668,9 +684,14 @@ class ChartCreator:
         parts[idx + 1] = str(icc_dest)
         return shlex.join(parts)
 
-    @staticmethod
-    def _stage_precond_profile(extra_args: str, work_dir: Path) -> str:
-        """Copy the -c ICC/ICM file into work_dir with a pre_ prefix if needed."""
+    def _stage_precond_profile(self, extra_args: str, work_dir: Path) -> str:
+        """Copy the -c ICC/ICM file into work_dir with a pre_ prefix if needed.
+
+        When ChromIQ-style refinement is enabled, also copy the profile's sibling
+        .ti3 measurement file (if present) into work_dir as a pre_*.json, so it
+        survives chart-regeneration cleanup and can later be merged into the new
+        measurements (see workflow/ti3_merge.py).
+        """
         if not extra_args:
             return extra_args
         parts = shlex.split(extra_args)
@@ -683,6 +704,10 @@ class ChartCreator:
         src = Path(parts[idx + 1])
         if not src.is_file():
             return extra_args
+
+        if bool(self._settings.get("chromiq_refinement", False)):
+            self._stage_precond_measurements(src, work_dir)
+
         dest_name = src.name if src.stem.startswith("pre_") else f"pre_{src.name}"
         dest = work_dir / dest_name
         if src != dest:
@@ -692,6 +717,35 @@ class ChartCreator:
             parts[idx + 1] = str(dest)
             return shlex.join(parts)
         return extra_args
+
+    @staticmethod
+    def _stage_precond_measurements(profile_src: Path, work_dir: Path) -> None:
+        """Copy a pre-conditioning profile's sibling .ti3 into work_dir as a
+        pre_*.json so it survives cleanup (ChromIQ-style refinement).
+
+        The .json extension keeps the file from being mistaken for the session's
+        own measurement .ti3 by anything globbing *.ti3; it still holds CGATS
+        content, which workflow.ti3_merge reads regardless of extension.
+        """
+        ti3_src = profile_src.with_suffix(".ti3")
+        if not ti3_src.is_file():
+            return
+        stem = ti3_src.stem if ti3_src.stem.startswith("pre_") else f"pre_{ti3_src.stem}"
+        dest = work_dir / f"{stem}.json"
+        try:
+            if ti3_src.resolve() == dest.resolve():
+                return
+        except OSError:
+            pass
+        import shutil
+        try:
+            shutil.copy2(ti3_src, dest)
+            log.info("Staged pre-conditioning measurements to %s", dest.name)
+        except OSError as exc:
+            log.warning(
+                "Could not stage pre-conditioning measurements %s -> %s: %s",
+                ti3_src, dest, exc,
+            )
 
     # ------------------------------------------------------------------
     # Internal

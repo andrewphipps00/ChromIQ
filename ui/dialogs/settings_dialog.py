@@ -281,6 +281,46 @@ class SettingsDialog(QDialog):
         ))
         bh.addLayout(cal_row)
 
+        refine_row = QHBoxLayout()
+        self._chromiq_refine_check = QCheckBox(
+            "ChromIQ-style refinement process", self
+        )
+        refine_row.addWidget(self._chromiq_refine_check)
+        refine_row.addStretch()
+        refine_row.addWidget(TooltipButton(
+            "ChromIQ-style refinement process",
+            "Builds a more accurate profile by REUSING the measurements you "
+            "already made for an earlier profile, instead of throwing them away.\n\n"
+            "Normally, every profiling run starts from scratch: you print a chart, "
+            "measure it, and build a profile from only those patches. If you later "
+            "make a second, refined chart for the same printer and paper, the "
+            "measurements from the first run are not used again.\n\n"
+            "With this option ON, ChromIQ can carry those earlier measurements "
+            "forward. Here is the whole journey, step by step:\n\n"
+            "  1. In Create Chart, you tick \"Refinement profile\" and pick the ICC "
+            "profile from your earlier run. ChromIQ quietly keeps a copy of that "
+            "profile's measurement data (a \"pre_…\" file) inside the working folder, "
+            "so it is not deleted when the new chart is generated.\n\n"
+            "  2. You print and measure the new chart as usual. In the Measure tab a "
+            "new option appears: \"Also use measurement data from the pre-conditioning "
+            "profile\". It only shows up when such saved data is actually present.\n\n"
+            "  3. When you build the profile, ChromIQ combines the new measurements "
+            "with the saved earlier ones and builds from the larger, combined set. "
+            "More measured colours generally means a more accurate profile.\n\n"
+            "Your freshly measured file is never altered — the combining happens on a "
+            "separate copy only at build time, so you can re-measure or refine "
+            "individual strips in Check & Refine exactly as before. The guided "
+            "Check & Refine analysis still looks only at the strips you physically "
+            "printed, so it will never ask you to re-measure a patch that came from "
+            "the earlier run.\n\n"
+            "When this option is OFF, ChromIQ behaves exactly as it always has — "
+            "nothing in your normal workflow changes. Leave it off unless you "
+            "specifically want to reuse measurements across refinement runs.",
+            self,
+            min_width=680,
+        ))
+        bh.addLayout(refine_row)
+
         native_print_row = QHBoxLayout()
         self._native_print_check = QCheckBox("Use default macOS printer dialog", self)
         native_print_row.addWidget(self._native_print_check)
@@ -436,6 +476,7 @@ class SettingsDialog(QDialog):
         self._restore_session_check.setChecked(bool(s.get("restore_last_session", False)))
         self._themed_colors_check.setChecked(bool(s.get("gamut_themed_colors", True)))
         self._cal_mode_check.setChecked(bool(s.get("calibration_mode", False)))
+        self._chromiq_refine_check.setChecked(bool(s.get("chromiq_refinement", False)))
         self._native_print_check.setChecked(bool(s.get("use_native_print_dialog", False)))
         self._confirm_print_check.setChecked(bool(s.get("confirm_before_printing", True)))
         from data.patch_db import I1PRO_DEFAULT_PRESET_KEY
@@ -504,6 +545,7 @@ class SettingsDialog(QDialog):
         s.set("restore_last_session",      self._restore_session_check.isChecked())
         s.set("gamut_themed_colors",       self._themed_colors_check.isChecked())
         s.set("calibration_mode",          self._cal_mode_check.isChecked())
+        s.set("chromiq_refinement",        self._chromiq_refine_check.isChecked())
         s.set("use_native_print_dialog",   self._native_print_check.isChecked())
         s.set("confirm_before_printing",   self._confirm_print_check.isChecked())
         s.set("appearance",                str(self._appearance_combo.currentData()))
