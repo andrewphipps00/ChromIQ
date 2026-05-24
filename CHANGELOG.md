@@ -1,5 +1,21 @@
 # Changelog
 
+## v3.7.38
+Your own Create Chart presets can now generate as soon as you pick them.
+
+### Added
+- **"Generate immediately when selected" option for your own presets.** The Save
+  Preset dialog now has a checkbox to make a preset start its chart the moment you
+  pick it from the list (after asking for a target name, just like the built-in
+  presets). Such presets are marked with a ▶ in the dropdown. The setting is saved
+  inside the preset file, so it's respected even when you share the preset with
+  someone else. Picking the preset and cancelling the name prompt simply loads its
+  values without generating, so the preset stays available to edit or delete.
+
+### Changed
+- **The Save Preset dialog was rebuilt** with a roomier layout and clearer text to
+  make space for the new option.
+
 ## v3.7.37
 Built-in presets now ask you to name the target before they generate.
 

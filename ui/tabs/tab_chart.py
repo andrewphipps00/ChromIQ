@@ -18,7 +18,6 @@ from PyQt6.QtWidgets import (
     QFrame,
     QGroupBox,
     QHBoxLayout,
-    QInputDialog,
     QLabel,
     QLineEdit,
     QPushButton,
@@ -2132,11 +2131,15 @@ class TabChart(QWidget):
         self._preset_combo.blockSignals(True)
         self._preset_combo.clear()
         self._preset_combo.addItem("Default", userData=None)
-        # User presets first, then the built-ins below them.
+        # User presets first, then the built-ins below them. A preset saved with
+        # "generate on select" gets a ▶ prefix so the user knows picking it
+        # starts the chart, not just loads values. userData stays the bare name.
         for name in presets:
             if name in BUILTIN_PRESET_LABELS or name in BUILTIN_PRESET_KEYS:
                 continue  # never let a user file shadow a built-in entry
-            self._preset_combo.addItem(name, userData=name)
+            label = f"▶  {name}" if (isinstance(presets[name], dict)
+                                     and presets[name].get("auto_run")) else name
+            self._preset_combo.addItem(label, userData=name)
         # Built-in presets, pinned below the user's own. Bold + tooltip so they
         # read as special, fixed entries rather than user presets.
         self._add_builtin_preset_item(
@@ -2156,7 +2159,9 @@ class TabChart(QWidget):
             self._munki_tooltip(*MUNKI_TARGEN[MUNKI648_PRESET_KEY]),
         )
         if select_name is not None:
-            idx = self._preset_combo.findText(select_name)
+            # Match by userData (the bare name), not the shown text, which may
+            # carry a ▶ prefix for auto-run presets.
+            idx = self._preset_combo.findData(select_name)
             if idx >= 0:
                 self._preset_combo.setCurrentIndex(idx)
         self._preset_combo.blockSignals(False)
@@ -2319,45 +2324,61 @@ class TabChart(QWidget):
         else:
             name = self._preset_combo.currentData()
             presets = self._load_presets_from_settings()
-            data = presets.get(name, {})
-            for tool, widgets in self._manual_widgets.items():
-                for pw in widgets:
-                    if pw in self._d_cascade_widgets:
-                        continue
-                    v = data.get(f"{tool}_{pw.flag}")
-                    if v is not None:
-                        pw.set_value(v)
-            for idx, pw in enumerate(self._d_cascade_widgets):
-                v = data.get(f"targen_-D_{idx}")
+            self._restore_user_preset(presets.get(name, {}))
+        self._update_manual_lb_visibility()
+
+        # A user preset flagged "generate on select" (▶) prompts for a target
+        # name and then generates — same prompt as the built-ins. The values are
+        # already loaded above, so cancel just leaves the preset selected without
+        # generating (keeping it selectable for delete / re-save).
+        if data is not None and data not in BUILTIN_PRESET_KEYS:
+            presets = self._load_presets_from_settings()
+            pdata = presets.get(data, {})
+            if isinstance(pdata, dict) and pdata.get("auto_run"):
+                if self._runner.is_running:
+                    return
+                tname = self._prompt_target_name(str(data))
+                if tname is None:
+                    return
+                if self._manual_target_name_edit is not None:
+                    self._manual_target_name_edit.setText(tname)
+                self._on_generate()
+
+    def _restore_user_preset(self, data: dict) -> None:
+        """Apply a saved user preset's stored values to the manual widgets."""
+        for tool, widgets in self._manual_widgets.items():
+            for pw in widgets:
+                if pw in self._d_cascade_widgets:
+                    continue
+                v = data.get(f"{tool}_{pw.flag}")
                 if v is not None:
                     pw.set_value(v)
-                pw.set_user_enabled(bool(data.get(f"targen_-D_{idx}_enabled", False)))
-            self._rebuild_d_cascade_visibility()
-            if self._bit8_radio is not None and self._bit16_radio is not None:
-                is_16bit = bool(data.get("tiff_16bit", False))
-                self._bit16_radio.setChecked(is_16bit)
-                self._bit8_radio.setChecked(not is_16bit)
-            if self._manual_pages_spin is not None:
-                self._manual_pages_spin.setValue(int(data.get("pages", 1)))
-            if self._manual_auto_patches_check is not None:
-                auto_on = bool(data.get("auto_patches", False))
-                self._manual_auto_patches_check.setChecked(auto_on)
-                self._on_auto_patches_toggled(auto_on)
-            self._load_auto_neutral_states(
-                grey  = bool(data.get("auto_grey",  False)),
-                white = bool(data.get("auto_white", False)),
-                black = bool(data.get("auto_black", False)),
-            )
-            self._manual_left_clip_check.setChecked(
-                bool(data.get("left_clip_info", False))
-            )
-            # Apply triple-density last so its toggle handler sees the
-            # restored -a / -m / -P values and stashes them correctly.
-            if self._manual_td_check is not None:
-                self._manual_td_check.setChecked(
-                    bool(data.get("triple_density", False))
-                )
-        self._update_manual_lb_visibility()
+        for idx, pw in enumerate(self._d_cascade_widgets):
+            v = data.get(f"targen_-D_{idx}")
+            if v is not None:
+                pw.set_value(v)
+            pw.set_user_enabled(bool(data.get(f"targen_-D_{idx}_enabled", False)))
+        self._rebuild_d_cascade_visibility()
+        if self._bit8_radio is not None and self._bit16_radio is not None:
+            is_16bit = bool(data.get("tiff_16bit", False))
+            self._bit16_radio.setChecked(is_16bit)
+            self._bit8_radio.setChecked(not is_16bit)
+        if self._manual_pages_spin is not None:
+            self._manual_pages_spin.setValue(int(data.get("pages", 1)))
+        if self._manual_auto_patches_check is not None:
+            auto_on = bool(data.get("auto_patches", False))
+            self._manual_auto_patches_check.setChecked(auto_on)
+            self._on_auto_patches_toggled(auto_on)
+        self._load_auto_neutral_states(
+            grey  = bool(data.get("auto_grey",  False)),
+            white = bool(data.get("auto_white", False)),
+            black = bool(data.get("auto_black", False)),
+        )
+        self._manual_left_clip_check.setChecked(bool(data.get("left_clip_info", False)))
+        # Apply triple-density last so its toggle handler sees the restored
+        # -a / -m / -P values and stashes them correctly.
+        if self._manual_td_check is not None:
+            self._manual_td_check.setChecked(bool(data.get("triple_density", False)))
 
     def _on_preset_save(self) -> None:
         capture: dict = {}
@@ -2410,19 +2431,73 @@ class TabChart(QWidget):
         capture["triple_density"] = bool(
             self._manual_td_check is not None and self._manual_td_check.isChecked()
         )
-        dlg = QInputDialog(self)
+        # Pre-fill name + checkbox from the currently-selected user preset, so
+        # re-saving to tweak it (e.g. just toggling auto-run) is one step.
+        cur_key = self._preset_combo.currentData()
+        prefill_name, prefill_run = "", False
+        if cur_key is not None and cur_key not in BUILTIN_PRESET_KEYS:
+            prefill_name = str(cur_key)
+            existing = self._load_presets_from_settings().get(cur_key, {})
+            prefill_run = bool(isinstance(existing, dict) and existing.get("auto_run"))
+
+        dlg = QDialog(self)
         dlg.setWindowTitle("Save Preset")
-        dlg.setLabelText(
-            "Give this preset a name.\n"
-            "All current Manual mode parameter values will be saved under that name\n"
-            "and can be recalled at any time from the preset list."
+        dlg.setMinimumWidth(500)
+        lay = QVBoxLayout(dlg)
+        lay.setContentsMargins(22, 20, 22, 16)
+        lay.setSpacing(10)
+
+        heading = QLabel("Save preset", dlg)
+        heading.setStyleSheet("font-weight: bold;")
+        lay.addWidget(heading)
+        info = QLabel(
+            "Give this preset a name. All current Manual-mode parameter values are "
+            "saved under it and can be recalled any time from the preset list. "
+            "Re-saving with an existing name overwrites it.",
+            dlg,
         )
-        dlg.setMinimumWidth(460)
-        if not dlg.exec():
+        info.setWordWrap(True)
+        lay.addWidget(info)
+
+        lay.addSpacing(6)
+        edit = QLineEdit(prefill_name, dlg)
+        edit.setMinimumHeight(28)
+        edit.setPlaceholderText("Preset name")
+        edit.selectAll()
+        lay.addWidget(edit)
+
+        run_chk = QCheckBox(
+            "Generate the chart immediately when this preset is selected", dlg)
+        run_chk.setChecked(prefill_run)
+        lay.addWidget(run_chk)
+        run_note = QLabel(
+            "When on, picking this preset asks for a target name and then creates "
+            "the chart straight away (it's shown with a ▶ in the list), instead of "
+            "only loading the values. This is saved inside the preset file, so it "
+            "travels with a shared preset.",
+            dlg,
+        )
+        run_note.setWordWrap(True)
+        run_note.setObjectName("info")
+        lay.addWidget(run_note)
+
+        lay.addSpacing(4)
+        bb = QDialogButtonBox(dlg)
+        bb.addButton("Cancel", QDialogButtonBox.ButtonRole.RejectRole)
+        bb.addButton("Save", QDialogButtonBox.ButtonRole.AcceptRole)
+        bb.rejected.connect(dlg.reject)
+        bb.accepted.connect(dlg.accept)
+        lay.addWidget(bb)
+        edit.returnPressed.connect(dlg.accept)
+        edit.setFocus()
+        dlg.adjustSize()
+
+        if dlg.exec() != QDialog.DialogCode.Accepted:
             return
-        name = dlg.textValue().strip()
+        name = edit.text().strip()
         if not name:
             return
+        capture["auto_run"] = bool(run_chk.isChecked())
         presets = self._load_presets_from_settings()
         presets[name] = capture
         self._save_presets_to_settings(presets)
@@ -2430,8 +2505,9 @@ class TabChart(QWidget):
 
     def _on_preset_delete(self) -> None:
         if not self._is_deletable_preset(self._preset_combo.currentIndex()):
-            return  # Default and the built-in TC9.18 preset are protected
-        name = self._preset_combo.currentText()
+            return  # Default and the built-in presets are protected
+        # Use userData (bare name), not the shown text which may carry a ▶ prefix.
+        name = self._preset_combo.currentData()
         dlg = QDialog(self)
         dlg.setWindowTitle("Delete Preset")
         dlg.setMinimumWidth(460)

@@ -41,6 +41,26 @@ The ti1-based TC9.18 preset additionally pins its patch set to a **bundled
 `.ti1`** and runs `printtarg` only (skipping `targen`), because its OFPS patch
 set can't be recreated reliably by re-running `targen`.
 
+### User presets: "generate on select" (auto-run)
+
+Separate from built-ins, a **user** preset can opt into the same generate-on-
+select behavior via a checkbox in the Save dialog (`_on_preset_save`). The flag
+is stored as `data["auto_run"]` *inside the preset's own `.json`*, so it travels
+with a shared preset — `preset_store` round-trips the whole `data` dict, and the
+restore loop ignores keys that don't match a `{tool}_{flag}` widget.
+
+- Combo: auto-run user presets get a `▶ ` prefix in `_populate_preset_combo`
+  (`userData` stays the bare name).
+- Identity-by-text was therefore replaced with identity-by-`userData`:
+  `_populate_preset_combo` reselect uses `findData`, `_on_preset_delete` uses
+  `currentData()`. (Restore already used `currentData()`.)
+- Selection (`_on_preset_selected`, end of method): the values are restored
+  normally first, *then* if `auto_run` it shows `_prompt_target_name` and, on
+  confirm, sets the target name and calls `_on_generate()`. **Cancel keeps the
+  preset selected with its values loaded but doesn't generate** — deliberately
+  different from a built-in's full revert, so an auto-run user preset stays
+  selectable for delete / re-save.
+
 ## Moving parts (TC9.18)
 
 Module-level constants (top of `tab_chart.py`):
