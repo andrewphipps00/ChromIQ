@@ -177,6 +177,20 @@ class ParameterWidget(QWidget):
         if self._enable_check is not None:
             self._enable_check.setChecked(checked)
 
+    def reset_to_default(self) -> None:
+        """Restore the YAML default and clear any expert enable-checkbox.
+
+        For an expert *non-boolean* row the enable-checkbox is separate from the
+        value control, so it must be unticked explicitly — otherwise a flag left
+        ticked by a preset keeps being emitted even after its value reverts. For
+        an expert *boolean* row the checkbox is the value control, so set_value
+        already handles it and we must not override it here."""
+        d = self._param.get("default")
+        if d is not None:
+            self.set_value(d)
+        if self._enable_check is not None and self._control is not None:
+            self._enable_check.setChecked(False)
+
     def make_compact(self) -> None:
         """Apply compact_input styling to any spinbox, combobox, or line edit in this widget."""
         from PyQt6.QtWidgets import QAbstractSpinBox, QComboBox, QLineEdit

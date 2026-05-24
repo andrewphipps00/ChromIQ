@@ -70,6 +70,34 @@ if TYPE_CHECKING:
 
 log = get_logger(__name__)
 
+# Built-in, read-only preset for the Create Chart → Manual presets dropdown.
+# Unlike user presets (one .json file each under presets_dir()), this one is
+# baked into the app: it can't be deleted, and selecting it loads a fixed
+# patch set (assets/charts/tc918-grays.ti1) and lays it out with a fixed set
+# of printtarg options. The combo entry is identified by its sentinel userData
+# (TC918_PRESET_KEY) rather than its display text.
+TC918_PRESET_KEY = "__chromiq_tc918_builtin__"
+TC918_PRESET_LABEL = "★  TC9.18 by Pharmacist  ·  built-in"
+TC918_TI1_ASSET = "assets/charts/tc918-grays.ti1"
+TC918_TARGET_NAME = "tc918-grays"
+# Fixed printtarg layout for the TC9.18 preset (matches the Pharmacist recipe
+# printtarg -ii1 -pA4 -L -a0.95 -m10 -M10 -r -P -c -A0.90). -m drives both -m
+# and -M in the UI; -P removes the strip-length limit; -c forces colored
+# spacers; -A scales spacers only.
+TC918_PRINTTARG = {
+    "-i": "i1",
+    "-p": "A4",
+    "-L": True,
+    "-a": 0.95,
+    "-m": 10,
+    "-r": True,
+    "-P": True,
+    "-c": True,
+    "-A": 0.90,
+    "-b": False,
+    "-h": False,
+}
+
 
 def _value_compatible_with_pw(v: Any, pw: "ParameterWidget") -> bool:
     """True if v can be set on the widget without raising / warning.
@@ -148,6 +176,13 @@ class TabChart(QWidget):
         self._creator  = ChartCreator(runner, file_mgr, settings)
         self._params   = self._load_yaml_params()
         self._preconditioning_from_dialog = False
+        # TC9.18 built-in preset state. While active, "Generate Chart" reproduces
+        # the bundled patch set (printtarg-only) instead of running targen, unless
+        # the user has since changed a targen-affecting setting (see
+        # _tc918_targen_signature). Cleared when another preset / Default is
+        # chosen, or a different .ti1 is loaded.
+        self._tc918_active = False
+        self._tc918_targen_sig: list | None = None
 
         self._build_ui()
         self._restore_defaults()
@@ -1329,11 +1364,27 @@ class TabChart(QWidget):
         if p.tiff_16bit:
             notes.append("16-bit TIFF")
 
-        info = (
-            f"Manual mode — your current configuration ({' · '.join(notes)}):\n"
-            f"targen {' '.join(targen_args)}\n"
-            f"printtarg {' '.join(pt_args)}"
+        # While the TC9.18 built-in chart is the active patch source, "Generate"
+        # runs printtarg only on the bundled .ti1 — targen is skipped. Say so,
+        # unless the user has changed a targen setting (which re-enables targen).
+        tc918_repro = (
+            getattr(self, "_tc918_active", False)
+            and self._tc918_targen_sig is not None
+            and self._tc918_targen_signature() == self._tc918_targen_sig
         )
+        if tc918_repro:
+            info = (
+                f"TC9.18 by Pharmacist — fixed patch set ({' · '.join(notes)}):\n"
+                f"Uses the bundled tc918-grays.ti1 (targen skipped).\n"
+                f"printtarg {' '.join(pt_args)}\n"
+                "Change a targen setting above to build a fresh chart instead."
+            )
+        else:
+            info = (
+                f"Manual mode — your current configuration ({' · '.join(notes)}):\n"
+                f"targen {' '.join(targen_args)}\n"
+                f"printtarg {' '.join(pt_args)}"
+            )
         self._manual_info_lbl.setText(info)
 
     # ------------------------------------------------------------------
@@ -2011,21 +2062,61 @@ class TabChart(QWidget):
     def _save_presets_to_settings(self, presets: dict) -> None:
         _save_tab_presets("create_chart", presets)
 
+    def _is_deletable_preset(self, index: int) -> bool:
+        """True only for user presets (Default and the built-in can't be deleted)."""
+        data = self._preset_combo.itemData(index)
+        return data is not None and data != TC918_PRESET_KEY
+
     def _populate_preset_combo(self, presets: dict, select_name: str | None = None) -> None:
         self._preset_combo.blockSignals(True)
         self._preset_combo.clear()
         self._preset_combo.addItem("Default", userData=None)
+        # Built-in TC9.18 preset, pinned just under Default. Bold + tooltip so
+        # it reads as a special, fixed entry rather than a user preset.
+        self._preset_combo.addItem(TC918_PRESET_LABEL, userData=TC918_PRESET_KEY)
+        bi = self._preset_combo.count() - 1
+        bi_font = self._preset_combo.font()
+        bi_font.setBold(True)
+        self._preset_combo.setItemData(bi, bi_font, Qt.ItemDataRole.FontRole)
+        self._preset_combo.setItemData(
+            bi,
+            "Built-in chart — cannot be deleted.\n"
+            "Loads the fixed TC9.18 grey patch set and lays it out with\n"
+            "printtarg -ii1 -pA4 -L -a0.95 -m10 -M10 -r -P -c -A0.90, then\n"
+            "creates the target right away. You can adjust any setting\n"
+            "afterwards and regenerate.",
+            Qt.ItemDataRole.ToolTipRole,
+        )
         for name in presets:
+            if name in (TC918_PRESET_LABEL, TC918_PRESET_KEY):
+                continue  # never let a user file shadow the built-in entry
             self._preset_combo.addItem(name, userData=name)
         if select_name is not None:
             idx = self._preset_combo.findText(select_name)
             if idx >= 0:
                 self._preset_combo.setCurrentIndex(idx)
         self._preset_combo.blockSignals(False)
-        self._preset_del_btn.setEnabled(self._preset_combo.currentIndex() > 0)
+        self._preset_del_btn.setEnabled(
+            self._is_deletable_preset(self._preset_combo.currentIndex())
+        )
 
     def _on_preset_selected(self, index: int) -> None:
-        self._preset_del_btn.setEnabled(index > 0)
+        # Built-in TC9.18 preset: not a stored parameter set — it seeds a fixed
+        # layout and creates the target from the bundled .ti1 immediately.
+        if self._preset_combo.itemData(index) == TC918_PRESET_KEY:
+            self._preset_del_btn.setEnabled(False)
+            self._apply_tc918_preset()
+            return
+        # Leaving the built-in chart for Default or a user preset: clear the
+        # expert printtarg overrides it forced on (spacer scale -A, colored
+        # spacers -c, strip-length -P, no-randomise -r, margin -m, …). The
+        # normal restore below only *sets* flags that the target preset stores,
+        # so without this the spacer options would bleed through.
+        if self._tc918_active:
+            self._reset_tc918_overrides()
+        self._tc918_active = False
+        self._tc918_targen_sig = None
+        self._preset_del_btn.setEnabled(self._is_deletable_preset(index))
         s = self._settings
         if index == 0:
             for tool, widgets in self._manual_widgets.items():
@@ -2176,6 +2267,8 @@ class TabChart(QWidget):
         self._populate_preset_combo(presets, select_name=name)
 
     def _on_preset_delete(self) -> None:
+        if not self._is_deletable_preset(self._preset_combo.currentIndex()):
+            return  # Default and the built-in TC9.18 preset are protected
         name = self._preset_combo.currentText()
         dlg = QDialog(self)
         dlg.setWindowTitle("Delete Preset")
@@ -2206,6 +2299,146 @@ class TabChart(QWidget):
         presets.pop(name, None)
         self._save_presets_to_settings(presets)
         self._populate_preset_combo(presets)
+
+    # ------------------------------------------------------------------
+    # TC9.18 built-in preset
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _tc918_ti1_path() -> Path:
+        """Absolute path to the bundled TC9.18 patch set (dev + frozen)."""
+        return resource_path(TC918_TI1_ASSET)
+
+    def _reset_tc918_overrides(self) -> None:
+        """Revert the printtarg flags the TC9.18 preset forces to YAML defaults.
+
+        Run when the user switches away from the built-in chart so its expert
+        overrides (notably -A spacer scale and -c colored spacers, which stay
+        ticked otherwise) don't carry into Default or another preset."""
+        for flag in TC918_PRINTTARG:
+            for pw in self._manual_widgets.get("printtarg", []):
+                if pw.flag == flag:
+                    pw.reset_to_default()
+
+    def _set_manual_value(self, tool: str, flag: str, value: Any) -> None:
+        """Set the value of a single manual ParameterWidget, if present."""
+        for pw in self._manual_widgets.get(tool, []):
+            if pw.flag == flag:
+                pw.set_value(value)
+                # Expert non-boolean rows (e.g. -m, -A) only emit their flag
+                # when their enable-checkbox is ticked; turn it on for any
+                # value we deliberately set so it reaches the command.
+                if value not in (None, False):
+                    pw.set_user_enabled(True)
+                return
+
+    def _tc918_targen_signature(self) -> list:
+        """Snapshot of every targen-affecting control.
+
+        printtarg controls are excluded on purpose: changing the *layout*
+        (patch size, margins, spacers…) should still re-lay-out the same
+        bundled patches, while changing anything that would alter the patch
+        *set* means the user wants a fresh targen-generated chart.
+        """
+        sig: list = []
+        for pw in self._manual_widgets.get("targen", []):
+            sig.append((pw.flag, pw.get_raw_value(), pw.is_enabled_by_user))
+        for label, chk in (
+            ("auto_patches", self._manual_auto_patches_check),
+            ("auto_grey",    self._manual_auto_grey_check),
+            ("auto_white",   self._manual_auto_white_check),
+            ("auto_black",   self._manual_auto_black_check),
+        ):
+            if chk is not None:
+                sig.append((label, chk.isChecked()))
+        if self._manual_pages_spin is not None:
+            sig.append(("pages", int(self._manual_pages_spin.value())))
+        return sig
+
+    def _apply_tc918_preset(self) -> None:
+        """Seed the fixed TC9.18 layout and create the target from the bundled .ti1."""
+        if self._runner.is_running:
+            log.warning("TC9.18 preset: a process is already running")
+            return
+        ti1 = self._tc918_ti1_path()
+        if not ti1.is_file():
+            InfoDialog(
+                "TC9.18 chart not found",
+                "The built-in TC9.18 patch set could not be located:\n\n"
+                f"{ti1}\n\nThe app bundle may be incomplete.",
+                self, min_width=520,
+            ).exec()
+            return
+
+        # Triple density / Auto patch count must be off before seeding values,
+        # otherwise they hijack the -a / -m / -e / -B widgets we set below.
+        if self._manual_td_check is not None:
+            self._manual_td_check.setChecked(False)
+        if self._manual_auto_patches_check is not None:
+            self._manual_auto_patches_check.setChecked(False)
+            self._on_auto_patches_toggled(False)
+        self._load_auto_neutral_states(grey=False, white=False, black=False)
+
+        # Fixed printtarg layout (the Pharmacist recipe).
+        for flag, value in TC918_PRINTTARG.items():
+            self._set_manual_value("printtarg", flag, value)
+
+        # Best-effort targen description of the bundled chart (white/black
+        # patches and total set size read straight from the .ti1 header). The
+        # chart is built from the .ti1 itself, so these are descriptive only —
+        # but they make the panel reflect what was loaded, and changing any of
+        # them is what tells "Generate Chart" to switch to a fresh targen run.
+        self._set_manual_value("targen", "-f", 1156)
+        self._set_manual_value("targen", "-e", 4)
+        self._set_manual_value("targen", "-B", 4)
+
+        # 8-bit output (the recipe doesn't ask for 16-bit).
+        if self._bit8_radio is not None:
+            self._bit8_radio.setChecked(True)
+
+        # Give the output a recognisable name the user can rename afterwards.
+        if self._manual_target_name_edit is not None:
+            self._manual_target_name_edit.setText(TC918_TARGET_NAME)
+
+        self._tc918_active = True
+        self._tc918_targen_sig = self._tc918_targen_signature()
+        self._refresh_manual_command_preview()
+        self._generate_from_ti1(ti1)
+
+    def _generate_from_ti1(self, ti1_path: Path) -> None:
+        """Create the target by running printtarg only on an existing .ti1.
+
+        Used by the TC9.18 preset both for its initial creation and for every
+        later "Generate Chart" click while the bundled patch set is still the
+        active source. Shares _on_generate_finished with the normal path.
+        """
+        if self._runner.is_running:
+            log.warning("A process is already running")
+            return
+        if not ti1_path.is_file():
+            InfoDialog(
+                "TC9.18 chart not found",
+                f"The patch set could not be located:\n\n{ti1_path}",
+                self, min_width=520,
+            ).exec()
+            return
+        self.target_started.emit()
+        name = (self._manual_target_name_edit.text().strip()
+                if self._manual_target_name_edit is not None else "")
+        if name:
+            self._file_mgr.set_target_name(name)
+        base_name = self._file_mgr.get_target_name() or TC918_TARGET_NAME
+        params = self._collect_params()
+        params.target_name = base_name
+        self._last_target_name = base_name
+        self._log.clear()
+        self._preview.clear()
+        self._generate_btn.setEnabled(False)
+        self._creator.load_ti1_and_generate_preview(
+            ti1_path, params,
+            on_line=self._on_log_line,
+            on_finish=self._on_generate_finished,
+        )
 
     # ------------------------------------------------------------------
     # Patch count display
@@ -2450,6 +2683,17 @@ class TabChart(QWidget):
         if self._runner.is_running:
             log.warning("A process is already running")
             return
+        # TC9.18 built-in preset: while it's active and the user hasn't touched
+        # any targen setting, reproduce the exact bundled chart (printtarg only).
+        # The OFPS patch set can't be recreated reliably by re-running targen, so
+        # this is the only way to guarantee an identical target. Once a targen
+        # setting changes the user has opted into a fresh chart, so fall through.
+        if self._tc918_active and self._current_mode() == "manual":
+            if self._tc918_targen_signature() == self._tc918_targen_sig:
+                self._generate_from_ti1(self._tc918_ti1_path())
+                return
+            self._tc918_active = False
+            self._tc918_targen_sig = None
         self.target_started.emit()
 
         params = self._collect_params()
@@ -2537,6 +2781,9 @@ class TabChart(QWidget):
         if not path:
             return
         ti1 = Path(path)
+        # Loading a different patch set means we're no longer on the TC9.18 chart.
+        self._tc918_active = False
+        self._tc918_targen_sig = None
         self._file_mgr.set_target_name(ti1.stem)
         params = self._collect_params()
         self._log.clear()

@@ -1,5 +1,19 @@
 # Changelog
 
+## v3.7.35
+Adds a ready-made grayscale test chart to the Create Chart tab.
+
+### Added
+- **"TC9.18 by Pharmacist" built-in preset (Create Chart → Manual → Presets).**
+  A fixed, ready-to-use TC9.18 grey patch set. Selecting it loads the bundled
+  chart and creates the target right away with a proven printtarg layout
+  (`-ii1 -pA4 -L -a0.95 -m10 -M10 -r -P -c -A0.90`). It's pinned to the top of
+  the preset list, marked as built-in, and can't be deleted. Everything stays
+  editable afterwards: clicking Generate again re-lays-out the very same chart,
+  while changing a patch-count (targen) setting builds a fresh one instead.
+  Switching back to Default or another preset cleanly restores all layout
+  options.
+
 ## v3.7.34
 Small UI polish across three tabs: friendlier Profile Metadata tooltips, tidier
 command previews when filenames get long, and a Windows-only tweak to the

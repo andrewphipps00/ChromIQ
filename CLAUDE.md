@@ -75,3 +75,11 @@ Configurable in Settings dialog. The app shows a statusbar warning if binaries a
 2. Set `no_space: true` if value must be appended directly to flag (e.g. `-il` not `-i l`).
 3. Set `expert_only: true` to hide in collapsed "Expert" section.
 4. No code changes needed — `ParameterWidget` picks it up automatically.
+
+### Adding a built-in (non-deletable) Create Chart preset
+
+The Create Chart → Manual **Presets** dropdown can host hard-coded presets that
+the user can't delete (e.g. "TC9.18 by Pharmacist", which loads a bundled `.ti1`
+and runs printtarg only). The full mechanism, file/function map, gotchas, and a
+step-by-step recipe are in **`docs/dev_builtin_presets.md`** — read it before
+adding another.
