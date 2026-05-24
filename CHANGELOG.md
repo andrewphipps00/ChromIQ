@@ -9,15 +9,18 @@ and a layout fix for the preset row.
   Presets).** A 324-patch *standard quality* and a 648-patch *high quality*
   ColorMunki target. Both select the ColorMunki with Triple density on, so the
   chart is laid out with the denser i1Pro geometry and the measurement file is
-  set back to the ColorMunki automatically. Selecting one loads its settings
-  (e.g. `targen -d2 -f648 -e4 -B4 -G -g64`, A4 landscape, 16-bit TIFF); review
-  them and click Generate. Like the other built-ins they can't be deleted.
+  set back to the ColorMunki automatically (e.g. `targen -d2 -f648 -e4 -B4 -G
+  -g64`, A4 landscape, 16-bit TIFF). Like the other built-ins they can't be
+  deleted, and selecting one **creates the chart right away** — every setting
+  stays editable for a regenerate afterwards.
 
 ### Changed
 - **The TC9.18 built-in preset now names its instrument:** "i1Pro TC9.18 +
   Extended grays by Pharmacist" (was "TC9.18 by Pharmacist").
 - **Built-in presets are now listed below your own saved presets** in the preset
   dropdown, instead of above them.
+- **Selecting any built-in preset now generates its chart immediately,** without
+  a separate click on Generate (the ColorMunki presets now match TC9.18).
 
 ### Fixed
 - **Long built-in preset names no longer stretch the preset row.** The preset

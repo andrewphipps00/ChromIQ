@@ -12,14 +12,15 @@ There are three built-in presets today, of **two different kinds**:
    immediately on selection.
 2. **params-based** — *ColorMunki 324 patch standard quality* and *ColorMunki
    648 patch high quality*. Plain parameter sets (normal `targen→printtarg`);
-   selecting one only loads settings and the user clicks Generate. Both select
-   the ColorMunki and turn on **Triple density**, so `printtarg` lays the chart
-   out with the denser i1Pro geometry (`-ii1`) and
-   `chart_creator._patch_ti2_instrument` rewrites the `.ti2` `TARGET_INSTRUMENT`
-   back to `X-Rite ColorMunki`. The two share one apply method
-   (`_apply_colormunki_td_preset`) and a `MUNKI_TARGEN` table that maps each key
-   to its `(patches, white, black, grey)` targen counts — add more by adding a
-   row, no new method needed.
+   selecting one seeds the settings and then **auto-generates** by calling
+   `_on_generate()` (the preset combo is manual-only, so `_collect_params`
+   routes to `_collect_manual`). Both select the ColorMunki and turn on **Triple
+   density**, so `printtarg` lays the chart out with the denser i1Pro geometry
+   (`-ii1`) and `chart_creator._patch_ti2_instrument` rewrites the `.ti2`
+   `TARGET_INSTRUMENT` back to `X-Rite ColorMunki`. The two share one apply
+   method (`_apply_colormunki_td_preset`) and a `MUNKI_TARGEN` table that maps
+   each key to its `(patches, white, black, grey)` targen counts — add more by
+   adding a row, no new method needed.
 
 In the dropdown the order is **Default → user presets → built-ins** (built-ins
 pinned at the bottom).
@@ -140,10 +141,11 @@ shared `_apply_colormunki_td_preset`, and `BUILTIN_PRESET_KEYS` is derived from
   constants, drop the `.ti1` into `assets/charts/`, and have `_apply_foo_preset`
   seed the layout + call `_generate_from_ti1`. Wire `_on_generate()` reproduce
   routing, the preview note, and `_reset_*_overrides()` like TC9.18.
-- **params-based** (clone `_apply_colormunki_td_preset`): just call
+- **params-based** (clone `_apply_colormunki_td_preset`): call
   `_set_manual_value(...)` per flag (turn Auto patches/neutrals off first), set
-  pages / bit-depth, and return — the normal Generate flow runs `targen→printtarg`.
-  No ti1, no reproduce routing.
+  pages / bit-depth / target name, then call `self._on_generate()` to create the
+  target immediately. No ti1, no reproduce routing — the normal targen→printtarg
+  flow runs. (Guard `self._runner.is_running` first.)
 
 The ti1-based and params-based kinds still have one `if` branch each in
 `_on_preset_selected`; only add a third branch for a genuinely new *kind*, not

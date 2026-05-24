@@ -2121,8 +2121,8 @@ class TabChart(QWidget):
             f"targen -d2 -f{patches} -e{white} -B{black} -G -g{grey}\n"
             "printtarg -ii1 -pA4R -T300 -L -a1.30 -m5 -M5 -b -P\n"
             "printtarg lays it out with the denser i1Pro geometry and the\n"
-            ".ti2 instrument is rewritten back to ColorMunki. Review the\n"
-            "settings, then click Generate Chart."
+            ".ti2 instrument is rewritten back to ColorMunki. Creates the\n"
+            "target right away; you can adjust any setting and regenerate."
         )
 
     def _populate_preset_combo(self, presets: dict, select_name: str | None = None) -> None:
@@ -2478,14 +2478,18 @@ class TabChart(QWidget):
     def _apply_colormunki_td_preset(
         self, patches: int, white: int, black: int, grey: int
     ) -> None:
-        """Load a ColorMunki + Triple-density recipe with the given targen counts.
+        """Load a ColorMunki + Triple-density recipe and generate it immediately.
 
-        Produces, at Generate time (example for 324 / 2 / 2 / 16):
+        Produces (example for 324 / 2 / 2 / 16):
             targen   -d2 -f324 -e2 -B2 -G -g16
             printtarg -ii1 -pA4R -T300 -L -a1.30 -m5 -M5 -b -P
         Triple density makes printtarg use the denser i1Pro geometry (-ii1) while
         chart_creator rewrites the .ti2 TARGET_INSTRUMENT back to ColorMunki.
-        Unlike TC9.18 this only loads settings — the user clicks Generate."""
+        Like TC9.18, selecting the preset creates the target right away; all
+        settings stay editable for a regenerate afterwards."""
+        if self._runner.is_running:
+            log.warning("ColorMunki preset: a process is already running")
+            return
         # Clear modes that would otherwise hijack the seeded -f / -e / -B / -g.
         if self._manual_auto_patches_check is not None:
             self._manual_auto_patches_check.setChecked(False)
@@ -2516,6 +2520,14 @@ class TabChart(QWidget):
         # above means those four are deliberately TD-driven (matching the recipe).
         if self._manual_td_check is not None:
             self._manual_td_check.setChecked(True)
+
+        # Give the output a recognisable name the user can rename afterwards.
+        if self._manual_target_name_edit is not None:
+            self._manual_target_name_edit.setText(f"ColorMunki-{patches}")
+
+        self._refresh_manual_command_preview()
+        # Auto-generate immediately, like the TC9.18 preset.
+        self._on_generate()
 
         self._refresh_manual_command_preview()
 
