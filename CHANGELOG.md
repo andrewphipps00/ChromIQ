@@ -1,5 +1,30 @@
 # Changelog
 
+## v3.7.34
+Small UI polish across three tabs: friendlier Profile Metadata tooltips, tidier
+command previews when filenames get long, and a Windows-only tweak to the
+Settings dialog.
+
+### Improved
+- **Friendlier Profile Metadata tooltips on the Build Profile tab.** The
+  Manufacturer, Model and Copyright info boxes (in both the guided and manual
+  modules) have been rewritten in plain, beginner-friendly language — each now
+  explains what the field is for, reassures that it's optional and has no effect
+  on colour, and gives a concrete example. The info dialogs also open with a
+  proper title (e.g. *Manufacturer (-A)*) and are sized a little wider so the
+  longer text has room to breathe.
+- **Tidier command previews in Create Chart.** The `targen`/`printtarg` command
+  boxes (both modules) now shorten long names — the target name and the
+  pre-conditioning profile filename — with a middle ellipsis capped at 23
+  characters, keeping both the start and the tail (extension/date) visible so a
+  single long name can no longer stretch the box. Only the preview text is
+  affected; the real filename used at Generate is unchanged.
+
+### Fixed
+- **"Confirm print settings before sending to printer" is now hidden on
+  Windows.** The CUPS preflight summary is a macOS/Linux concept, so the Settings
+  option no longer appears on Windows, where printing uses a different path.
+
 ## v3.7.33
 Adds an import path for i1Profiler measurement data to the Build Profile tab.
 The Load button now also accepts the `.txt` measurement files i1Profiler exports,

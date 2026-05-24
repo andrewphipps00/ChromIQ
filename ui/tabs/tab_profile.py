@@ -58,6 +58,41 @@ log = get_logger(__name__)
 _TAB_COLOR = "#37bcd6"  # Build Profile tab accent
 from ui.styles import SPEC_CYAN, TAB_COLORS
 
+# ---------------------------------------------------------------------------
+# Profile Metadata tooltips (shared by the guided and manual panels).
+# These three fields are written into the ICC profile as plain text labels —
+# they help you and anyone you share the profile with recognise where it came
+# from, and have no effect on colour. Tone: friendly and beginner-oriented.
+# ---------------------------------------------------------------------------
+_META_MFR_TIP = (
+    "The maker of your printer — or simply whoever built this profile. It's "
+    "saved inside the ICC profile as a plain text label, so later on you (or "
+    "anyone you share the profile with) can see at a glance where it came "
+    "from.\n\n"
+    "This is purely a note for humans: it has no effect on colour accuracy, "
+    "and you can safely leave it switched off.\n\n"
+    "Examples: \"Epson\", \"Canon\", or your own name or studio."
+)
+
+_META_MODEL_TIP = (
+    "The printer this profile was built for. Filling it in makes your profiles "
+    "much easier to tell apart later — especially handy once you've built a "
+    "few for different printers or papers.\n\n"
+    "Like the other metadata fields, it's just a label stored in the profile "
+    "and changes nothing about how colours are reproduced. Leave it off if you "
+    "prefer.\n\n"
+    "Examples: \"SC-P900\", \"Pro-1000\"."
+)
+
+_META_COPY_TIP = (
+    "An optional ownership or copyright note saved inside the profile. Reach "
+    "for it if you'd like to record who created the profile, or set out how "
+    "others may use it — useful when you share profiles publicly.\n\n"
+    "It's informational only and has no effect on colour, so most people can "
+    "happily leave it switched off.\n\n"
+    "Example: \"© 2026 Your Name. All rights reserved.\""
+)
+
 _ILLUMINANTS = [
     ("Default (D50)", ""),
     ("D50M2 (D50 with UV filter)", "D50M2"),
@@ -2505,9 +2540,9 @@ class TabProfile(QWidget):
         g.setSpacing(8)
 
         for attr, flag, placeholder, tip in [
-            ("_m_mfr",   "A", "e.g. Epson",   "Optional manufacturer name embedded in the ICC profile header.\nIdentifies the company or person who built this profile.\nCan be left empty."),
-            ("_m_model", "M", "e.g. SC-P900",  "Optional printer model name embedded in the ICC profile header.\nHelps identify which printer this profile was built for.\nCan be left empty."),
-            ("_m_copy",  "C", "e.g. © 2026 …", "Optional copyright string embedded in the ICC profile header.\nUse to record ownership or licensing terms for this profile.\nCan be left empty."),
+            ("_m_mfr",   "A", "e.g. Epson",   _META_MFR_TIP),
+            ("_m_model", "M", "e.g. SC-P900",  _META_MODEL_TIP),
+            ("_m_copy",  "C", "e.g. © 2026 …", _META_COPY_TIP),
         ]:
             label_text = "Manufacturer" if flag == "A" else "Model" if flag == "M" else "Copyright"
             check = QCheckBox(f"{label_text} (-{flag}):", grp)
@@ -2521,7 +2556,7 @@ class TabProfile(QWidget):
             row = QHBoxLayout()
             row.addWidget(check)
             row.addWidget(edit, stretch=1)
-            row.addWidget(TooltipButton(f"-{flag}", tip, grp))
+            row.addWidget(TooltipButton(f"{label_text} (-{flag})", tip, grp, min_width=460))
             g.addLayout(row)
             setattr(self, attr + "_check", check)
             setattr(self, attr + "_edit",  edit)
@@ -3049,11 +3084,12 @@ class TabProfile(QWidget):
         g = QVBoxLayout(grp)
 
         for attr, flag, placeholder, tip in [
-            ("_mfr",   "A", "e.g. Epson",         "Optional manufacturer name embedded in the ICC profile header.\nIdentifies the company or person who built this profile.\nCan be left empty."),
-            ("_model", "M", "e.g. SC-P900",        "Optional printer model name embedded in the ICC profile header.\nHelps identify which printer this profile was built for.\nCan be left empty."),
-            ("_copy",  "C", "e.g. © 2026 …",       "Optional copyright string embedded in the ICC profile header.\nUse to record ownership or licensing terms for this profile.\nCan be left empty."),
+            ("_mfr",   "A", "e.g. Epson",         _META_MFR_TIP),
+            ("_model", "M", "e.g. SC-P900",        _META_MODEL_TIP),
+            ("_copy",  "C", "e.g. © 2026 …",       _META_COPY_TIP),
         ]:
-            check = QCheckBox(f"{'Manufacturer' if flag=='A' else 'Model' if flag=='M' else 'Copyright'} (-{flag}):", grp)
+            label_text = "Manufacturer" if flag == "A" else "Model" if flag == "M" else "Copyright"
+            check = QCheckBox(f"{label_text} (-{flag}):", grp)
             edit  = QLineEdit(grp)
             edit.setPlaceholderText(placeholder)
             edit.setEnabled(False)
@@ -3061,7 +3097,7 @@ class TabProfile(QWidget):
             row = QHBoxLayout()
             row.addWidget(check)
             row.addWidget(edit, stretch=1)
-            row.addWidget(TooltipButton(f"-{flag}", tip, grp))
+            row.addWidget(TooltipButton(f"{label_text} (-{flag})", tip, grp, min_width=460))
             g.addLayout(row)
             setattr(self, attr + "_check", check)
             setattr(self, attr + "_edit",  edit)

@@ -28,6 +28,7 @@ from core.logger import get_logger
 from core.platform_paths import (
     argyll_download_page,
     default_argyll_bin_dir,
+    is_windows,
     native_print_supported,
 )
 from core.updater import UpdateChecker, _RELEASES_PAGE
@@ -332,7 +333,13 @@ class SettingsDialog(QDialog):
             self,
             min_width=560,
         ))
-        bh.addLayout(confirm_row)
+        confirm_row.setContentsMargins(0, 0, 0, 0)
+        # The CUPS preflight summary is a macOS/Linux concept; hide this option
+        # on Windows, where printing goes through a different path.
+        confirm_container = QWidget(self)
+        confirm_container.setLayout(confirm_row)
+        confirm_container.setVisible(not is_windows())
+        bh.addWidget(confirm_container)
 
         layout.addWidget(behaviour_grp)
 

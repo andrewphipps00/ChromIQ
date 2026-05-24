@@ -1262,7 +1262,8 @@ class TabChart(QWidget):
             for _i, _tok in enumerate(_extra):
                 if _tok == "-c" and _i + 1 < len(_extra) and _extra[_i + 1]:
                     _pp = Path(_extra[_i + 1])
-                    _extra[_i + 1] = _pp.name if _pp.stem.startswith("pre_") else f"pre_{_pp.name}"
+                    _staged = _pp.name if _pp.stem.startswith("pre_") else f"pre_{_pp.name}"
+                    _extra[_i + 1] = self._shorten_for_preview(_staged)
             targen_args += _extra
         targen_args.append(self._preview_target_name("manual"))
 
@@ -1380,7 +1381,26 @@ class TabChart(QWidget):
         else:
             self._cal_status_lbl.setVisible(False)
 
-    _PREVIEW_NAME_MAX_LEN = 32
+    _PREVIEW_NAME_MAX_LEN = 23
+
+    @classmethod
+    def _shorten_for_preview(cls, name: str, max_len: int | None = None) -> str:
+        """Shorten a long file/target name for the command-preview info boxes.
+
+        Uses a *middle* ellipsis so both the meaningful start and the tail stay
+        visible — the tail carries the extension (.icc/.icm) for profiles and
+        the date-like suffix that usually distinguishes one chart from the next,
+        both of which an end-ellipsis would hide. Only the displayed text is
+        affected; the real name used at Generate-click is read from the input
+        field, not from here.
+        """
+        limit = cls._PREVIEW_NAME_MAX_LEN if max_len is None else max_len
+        if len(name) <= limit:
+            return name
+        keep = limit - 1  # room for the ellipsis
+        head = keep // 2
+        tail = keep - head
+        return f"{name[:head]}…{name[-tail:]}"
 
     def _preview_target_name(self, mode: str) -> str:
         """Return the target name as it will appear in the command preview.
@@ -1388,7 +1408,7 @@ class TabChart(QWidget):
         Falls back to "chart" when the name field is empty, matching the
         default that ChartCreator uses at generate time. Prefixes "cal_"
         when the Calibration Target checkbox is active (manual mode only).
-        Truncates with an ellipsis when longer than _PREVIEW_NAME_MAX_LEN
+        Shortens with a middle ellipsis when longer than _PREVIEW_NAME_MAX_LEN
         characters so an unbroken name can't force the info-box wider than
         its container — the *actual* target name used at Generate-click is
         read directly from the line edit, not from this helper.
@@ -1405,9 +1425,7 @@ class TabChart(QWidget):
                     and grp is not None and grp.isVisible()):
                 name = f"cal_{name}"
 
-        if len(name) > self._PREVIEW_NAME_MAX_LEN:
-            name = name[: self._PREVIEW_NAME_MAX_LEN - 1] + "…"
-        return name
+        return self._shorten_for_preview(name)
 
     def _on_cal_target_toggled(self, checked: bool) -> None:
         _CAL_VALUES: list[tuple[str, str, Any]] = [
@@ -2278,7 +2296,7 @@ class TabChart(QWidget):
                 # already-pre_-prefixed pick doesn't render as pre_pre_*.
                 _pp = Path(precond_path)
                 _staged = _pp.name if _pp.stem.startswith("pre_") else f"pre_{_pp.name}"
-                precond_line = f" -c {_staged}"
+                precond_line = f" -c {self._shorten_for_preview(_staged)}"
                 recommendation = (
                     "\nTip: use at least as many pages as the original profile."
                 )
