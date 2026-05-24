@@ -24,6 +24,7 @@ from PyQt6.QtWidgets import (
     QPushButton,
     QRadioButton,
     QScrollArea,
+    QSizePolicy,
     QSplitter,
     QStackedWidget,
     QVBoxLayout,
@@ -77,7 +78,7 @@ log = get_logger(__name__)
 # of printtarg options. The combo entry is identified by its sentinel userData
 # (TC918_PRESET_KEY) rather than its display text.
 TC918_PRESET_KEY = "__chromiq_tc918_builtin__"
-TC918_PRESET_LABEL = "★  TC9.18 by Pharmacist  ·  built-in"
+TC918_PRESET_LABEL = "★  i1Pro TC9.18 + Extended grays by Pharmacist  ·  built-in"
 TC918_TI1_ASSET = "assets/charts/tc918-grays.ti1"
 TC918_TARGET_NAME = "tc918-grays"
 # Fixed printtarg layout for the TC9.18 preset (matches the Pharmacist recipe
@@ -97,6 +98,31 @@ TC918_PRINTTARG = {
     "-b": False,
     "-h": False,
 }
+
+# ColorMunki built-in presets: plain parameter presets (normal targen→printtarg,
+# no bundled .ti1). Each selects the ColorMunki and turns on Triple density, so
+# printtarg lays the chart out with the denser i1Pro geometry (-ii1) and
+# chart_creator rewrites the .ti2 TARGET_INSTRUMENT back to "X-Rite ColorMunki".
+# They share one printtarg recipe and differ only in the targen patch counts
+# below: (patches -f, white -e, black -B, grey-axis steps -g). Selecting one only
+# loads the settings — the user reviews them and clicks Generate.
+MUNKI324_PRESET_KEY = "__chromiq_munki324_builtin__"
+MUNKI324_PRESET_LABEL = "★  ColorMunki 324 patch standard quality target by Pharmacist  ·  built-in"
+MUNKI648_PRESET_KEY = "__chromiq_munki648_builtin__"
+MUNKI648_PRESET_LABEL = "★  ColorMunki 648 patch high quality target by Pharmacist  ·  built-in"
+
+# key -> (patches, white, black, grey_steps) for the shared ColorMunki recipe.
+MUNKI_TARGEN = {
+    MUNKI324_PRESET_KEY: (324, 2, 2, 16),
+    MUNKI648_PRESET_KEY: (648, 4, 4, 64),
+}
+
+# Every built-in (non-deletable) preset key. Used to protect them from the
+# delete button and to keep disk presets from shadowing them.
+BUILTIN_PRESET_KEYS = frozenset({TC918_PRESET_KEY, *MUNKI_TARGEN})
+BUILTIN_PRESET_LABELS = frozenset({
+    TC918_PRESET_LABEL, MUNKI324_PRESET_LABEL, MUNKI648_PRESET_LABEL,
+})
 
 
 def _value_compatible_with_pw(v: Any, pw: "ParameterWidget") -> bool:
@@ -884,6 +910,17 @@ class TabChart(QWidget):
         presets_row.setContentsMargins(8, 4, 8, 8)
         presets_row.addWidget(QLabel("Select preset:", w))
         self._preset_combo = NoScrollComboBox(w)
+        # Long built-in preset names must not stretch the row and squeeze the
+        # +/−/folder buttons: ignore the combo's content width, let it take only
+        # the leftover space (stretch=1) and elide the closed text. The full
+        # name still shows in the open dropdown and as a hover tooltip.
+        self._preset_combo.setSizeAdjustPolicy(
+            NoScrollComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
+        )
+        self._preset_combo.setMinimumContentsLength(8)
+        self._preset_combo.setSizePolicy(
+            QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed
+        )
         self._preset_combo.addItem("Default", userData=None)
         presets_row.addWidget(self._preset_combo, stretch=1)
         self._preset_add_btn = QPushButton(w)
@@ -1374,7 +1411,7 @@ class TabChart(QWidget):
         )
         if tc918_repro:
             info = (
-                f"TC9.18 by Pharmacist — fixed patch set ({' · '.join(notes)}):\n"
+                f"i1Pro TC9.18 + Extended grays by Pharmacist — fixed patch set ({' · '.join(notes)}):\n"
                 f"Uses the bundled tc918-grays.ti1 (targen skipped).\n"
                 f"printtarg {' '.join(pt_args)}\n"
                 "Change a targen setting above to build a fresh chart instead."
@@ -2063,34 +2100,58 @@ class TabChart(QWidget):
         _save_tab_presets("create_chart", presets)
 
     def _is_deletable_preset(self, index: int) -> bool:
-        """True only for user presets (Default and the built-in can't be deleted)."""
+        """True only for user presets (Default and built-ins can't be deleted)."""
         data = self._preset_combo.itemData(index)
-        return data is not None and data != TC918_PRESET_KEY
+        return data is not None and data not in BUILTIN_PRESET_KEYS
+
+    def _add_builtin_preset_item(self, label: str, key: str, tooltip: str) -> None:
+        """Append a pinned, non-deletable preset entry (bold + tooltip)."""
+        self._preset_combo.addItem(label, userData=key)
+        bi = self._preset_combo.count() - 1
+        bi_font = self._preset_combo.font()
+        bi_font.setBold(True)
+        self._preset_combo.setItemData(bi, bi_font, Qt.ItemDataRole.FontRole)
+        self._preset_combo.setItemData(bi, tooltip, Qt.ItemDataRole.ToolTipRole)
+
+    def _munki_tooltip(self, patches: int, white: int, black: int, grey: int) -> str:
+        """Tooltip text for a ColorMunki built-in preset."""
+        return (
+            "Built-in preset — cannot be deleted.\n"
+            f"Loads a {patches}-patch ColorMunki recipe with Triple density on:\n"
+            f"targen -d2 -f{patches} -e{white} -B{black} -G -g{grey}\n"
+            "printtarg -ii1 -pA4R -T300 -L -a1.30 -m5 -M5 -b -P\n"
+            "printtarg lays it out with the denser i1Pro geometry and the\n"
+            ".ti2 instrument is rewritten back to ColorMunki. Review the\n"
+            "settings, then click Generate Chart."
+        )
 
     def _populate_preset_combo(self, presets: dict, select_name: str | None = None) -> None:
         self._preset_combo.blockSignals(True)
         self._preset_combo.clear()
         self._preset_combo.addItem("Default", userData=None)
-        # Built-in TC9.18 preset, pinned just under Default. Bold + tooltip so
-        # it reads as a special, fixed entry rather than a user preset.
-        self._preset_combo.addItem(TC918_PRESET_LABEL, userData=TC918_PRESET_KEY)
-        bi = self._preset_combo.count() - 1
-        bi_font = self._preset_combo.font()
-        bi_font.setBold(True)
-        self._preset_combo.setItemData(bi, bi_font, Qt.ItemDataRole.FontRole)
-        self._preset_combo.setItemData(
-            bi,
+        # User presets first, then the built-ins below them.
+        for name in presets:
+            if name in BUILTIN_PRESET_LABELS or name in BUILTIN_PRESET_KEYS:
+                continue  # never let a user file shadow a built-in entry
+            self._preset_combo.addItem(name, userData=name)
+        # Built-in presets, pinned below the user's own. Bold + tooltip so they
+        # read as special, fixed entries rather than user presets.
+        self._add_builtin_preset_item(
+            TC918_PRESET_LABEL, TC918_PRESET_KEY,
             "Built-in chart — cannot be deleted.\n"
             "Loads the fixed TC9.18 grey patch set and lays it out with\n"
             "printtarg -ii1 -pA4 -L -a0.95 -m10 -M10 -r -P -c -A0.90, then\n"
             "creates the target right away. You can adjust any setting\n"
             "afterwards and regenerate.",
-            Qt.ItemDataRole.ToolTipRole,
         )
-        for name in presets:
-            if name in (TC918_PRESET_LABEL, TC918_PRESET_KEY):
-                continue  # never let a user file shadow the built-in entry
-            self._preset_combo.addItem(name, userData=name)
+        self._add_builtin_preset_item(
+            MUNKI324_PRESET_LABEL, MUNKI324_PRESET_KEY,
+            self._munki_tooltip(*MUNKI_TARGEN[MUNKI324_PRESET_KEY]),
+        )
+        self._add_builtin_preset_item(
+            MUNKI648_PRESET_LABEL, MUNKI648_PRESET_KEY,
+            self._munki_tooltip(*MUNKI_TARGEN[MUNKI648_PRESET_KEY]),
+        )
         if select_name is not None:
             idx = self._preset_combo.findText(select_name)
             if idx >= 0:
@@ -2101,21 +2162,30 @@ class TabChart(QWidget):
         )
 
     def _on_preset_selected(self, index: int) -> None:
+        data = self._preset_combo.itemData(index)
+        # Leaving the TC9.18 built-in chart (for anything else) clears the expert
+        # printtarg overrides it forced on (spacer scale -A, colored spacers -c,
+        # strip-length -P, no-randomise -r, margin -m, …). The restores below
+        # only *set* flags the target preset stores, so without this they bleed
+        # through. Done before any branch so it runs whatever we switch to.
+        if self._tc918_active and data != TC918_PRESET_KEY:
+            self._reset_tc918_overrides()
+            self._tc918_active = False
+            self._tc918_targen_sig = None
+
         # Built-in TC9.18 preset: not a stored parameter set — it seeds a fixed
         # layout and creates the target from the bundled .ti1 immediately.
-        if self._preset_combo.itemData(index) == TC918_PRESET_KEY:
+        if data == TC918_PRESET_KEY:
             self._preset_del_btn.setEnabled(False)
             self._apply_tc918_preset()
             return
-        # Leaving the built-in chart for Default or a user preset: clear the
-        # expert printtarg overrides it forced on (spacer scale -A, colored
-        # spacers -c, strip-length -P, no-randomise -r, margin -m, …). The
-        # normal restore below only *sets* flags that the target preset stores,
-        # so without this the spacer options would bleed through.
-        if self._tc918_active:
-            self._reset_tc918_overrides()
-        self._tc918_active = False
-        self._tc918_targen_sig = None
+        # Built-in ColorMunki presets: plain parameter presets — load their
+        # settings (ColorMunki + Triple density) and let the user click Generate.
+        if data in MUNKI_TARGEN:
+            self._preset_del_btn.setEnabled(False)
+            self._apply_colormunki_td_preset(*MUNKI_TARGEN[data])
+            return
+
         self._preset_del_btn.setEnabled(self._is_deletable_preset(index))
         s = self._settings
         if index == 0:
@@ -2404,6 +2474,50 @@ class TabChart(QWidget):
         self._tc918_targen_sig = self._tc918_targen_signature()
         self._refresh_manual_command_preview()
         self._generate_from_ti1(ti1)
+
+    def _apply_colormunki_td_preset(
+        self, patches: int, white: int, black: int, grey: int
+    ) -> None:
+        """Load a ColorMunki + Triple-density recipe with the given targen counts.
+
+        Produces, at Generate time (example for 324 / 2 / 2 / 16):
+            targen   -d2 -f324 -e2 -B2 -G -g16
+            printtarg -ii1 -pA4R -T300 -L -a1.30 -m5 -M5 -b -P
+        Triple density makes printtarg use the denser i1Pro geometry (-ii1) while
+        chart_creator rewrites the .ti2 TARGET_INSTRUMENT back to ColorMunki.
+        Unlike TC9.18 this only loads settings — the user clicks Generate."""
+        # Clear modes that would otherwise hijack the seeded -f / -e / -B / -g.
+        if self._manual_auto_patches_check is not None:
+            self._manual_auto_patches_check.setChecked(False)
+            self._on_auto_patches_toggled(False)
+        self._load_auto_neutral_states(grey=False, white=False, black=False)
+
+        # Instrument must be ColorMunki *before* Triple density is enabled — TD
+        # is gated to CM and the TD row is hidden (and force-unchecked) otherwise.
+        self._set_manual_value("printtarg", "-i", "CM")
+        self._set_manual_value("printtarg", "-p", "A4R")
+        if self._bit16_radio is not None:
+            self._bit16_radio.setChecked(True)          # 16-bit TIFF (→ -T300)
+        self._set_manual_value("printtarg", "-b", True)  # B&W spacers
+
+        # targen recipe.
+        self._set_manual_value("targen", "-d", "2")
+        self._set_manual_value("targen", "-f", patches)
+        self._set_manual_value("targen", "-e", white)
+        self._set_manual_value("targen", "-B", black)
+        self._set_manual_value("targen", "-G", True)
+        self._set_manual_value("targen", "-g", grey)
+
+        if self._manual_pages_spin is not None:
+            self._manual_pages_spin.setValue(1)
+
+        # Enable Triple density LAST: its toggle handler seeds -a1.3 / -m5 / -P /
+        # -L and arms the .ti2 ColorMunki rewrite. Seeding it after the values
+        # above means those four are deliberately TD-driven (matching the recipe).
+        if self._manual_td_check is not None:
+            self._manual_td_check.setChecked(True)
+
+        self._refresh_manual_command_preview()
 
     def _generate_from_ti1(self, ti1_path: Path) -> None:
         """Create the target by running printtarg only on an existing .ti1.

@@ -1,9 +1,28 @@
 # Developer note — built-in Create Chart presets
 
-How the **TC9.18 by Pharmacist** preset was implemented, and how to add another
-built-in preset quickly. "Built-in" means: it always appears in the Create Chart
-→ Manual **Presets** dropdown, the user can't delete it, and selecting it does
-something fixed (here: load a bundled `.ti1` and create the target immediately).
+How the built-in "by Pharmacist" presets were implemented, and how to add
+another quickly. "Built-in" means: it always appears in the Create Chart →
+Manual **Presets** dropdown, the user can't delete it, and selecting it does
+something fixed.
+
+There are three built-in presets today, of **two different kinds**:
+
+1. **ti1-based** — *i1Pro TC9.18 + Extended grays by Pharmacist*. Loads a bundled
+   `.ti1` and runs `printtarg` only (targen skipped), creating the target
+   immediately on selection.
+2. **params-based** — *ColorMunki 324 patch standard quality* and *ColorMunki
+   648 patch high quality*. Plain parameter sets (normal `targen→printtarg`);
+   selecting one only loads settings and the user clicks Generate. Both select
+   the ColorMunki and turn on **Triple density**, so `printtarg` lays the chart
+   out with the denser i1Pro geometry (`-ii1`) and
+   `chart_creator._patch_ti2_instrument` rewrites the `.ti2` `TARGET_INSTRUMENT`
+   back to `X-Rite ColorMunki`. The two share one apply method
+   (`_apply_colormunki_td_preset`) and a `MUNKI_TARGEN` table that maps each key
+   to its `(patches, white, black, grey)` targen counts — add more by adding a
+   row, no new method needed.
+
+In the dropdown the order is **Default → user presets → built-ins** (built-ins
+pinned at the bottom).
 
 All of this lives in `ui/tabs/tab_chart.py` unless noted.
 
@@ -13,10 +32,13 @@ A normal preset is one `.json` file under `presets_dir()` (see
 `core/preset_store.py`) holding captured parameter values. A built-in preset is
 **not** a file — it's a hard-coded combo entry identified by a sentinel
 `userData` value, so the disk-backed save/load/delete code never touches it.
+All built-in keys live in `BUILTIN_PRESET_KEYS` (labels in
+`BUILTIN_PRESET_LABELS`); `_is_deletable_preset()`, the disk-shadow filter, and
+`_add_builtin_preset_item()` (bold + tooltip) all key off those sets.
 
-The TC9.18 preset additionally pins its patch set to a **bundled `.ti1`** and
-runs `printtarg` only (skipping `targen`), because its OFPS patch set can't be
-recreated reliably by re-running `targen`.
+The ti1-based TC9.18 preset additionally pins its patch set to a **bundled
+`.ti1`** and runs `printtarg` only (skipping `targen`), because its OFPS patch
+set can't be recreated reliably by re-running `targen`.
 
 ## Moving parts (TC9.18)
 
@@ -89,19 +111,40 @@ Supporting code:
   pick one. Verify the real `printtarg` help before trusting a copied command.
 - **Reproducibility.** Don't try to recreate an OFPS chart by guessing `targen`
   flags; bundle the `.ti1` and run printtarg on it.
+- **Triple density ordering (params-based).** Triple density is gated to the
+  ColorMunki: set the instrument to `CM` *first*, then tick `_manual_td_check`.
+  `_on_manual_td_toggled` then seeds `-a1.3 / -m5 / -P / -L` and stashes the
+  prior values, and `chart_creator` rewrites the `.ti2` to ColorMunki at
+  generate time (because `p.triple_density` is True). Enabling TD on a non-CM
+  instrument is force-unchecked by `_update_manual_lb_visibility`.
 
-## Recipe — add another bundled-chart preset
+## Recipe — add another built-in preset
 
-1. Drop the `.ti1` into `assets/charts/`.
-2. Add a parallel set of constants (`FOO_PRESET_KEY`, `_LABEL`, `_TI1_ASSET`,
-   `_TARGET_NAME`, `_PRINTTARG`).
-3. Add the combo item + styling in `_populate_preset_combo()`, and exclude its
-   key/label from disk presets.
-4. Branch on its key in `_on_preset_selected()` and `_is_deletable_preset()`.
-5. Add a `_apply_foo_preset()` (clone `_apply_tc918_preset`), and route
-   `_on_generate()` / the preview note / `_reset_*_overrides()` the same way.
+**Another ColorMunki variant (easiest):** add one row to `MUNKI_TARGEN`
+(`key -> (patches, white, black, grey)`), a `*_PRESET_KEY` + `*_PRESET_LABEL`
+constant, include the label in `BUILTIN_PRESET_LABELS`, and add one
+`_add_builtin_preset_item(LABEL, KEY, self._munki_tooltip(*MUNKI_TARGEN[KEY]))`
+call. `_on_preset_selected` already dispatches anything in `MUNKI_TARGEN` to the
+shared `_apply_colormunki_td_preset`, and `BUILTIN_PRESET_KEYS` is derived from
+`MUNKI_TARGEN`, so no new branch or method is needed.
 
-If you end up with **more than two** built-in presets, refactor first: replace
-the per-preset constants and `if key == …` branches with a list of small spec
-objects (key, label, ti1 asset, printtarg map) and loop over it. The single
-hard-coded preset above is deliberately the simplest thing that works for one.
+**A different kind of preset:**
+
+1. Add `FOO_PRESET_KEY` + `FOO_PRESET_LABEL` and include them in
+   `BUILTIN_PRESET_KEYS` / `BUILTIN_PRESET_LABELS`.
+2. Add a `_add_builtin_preset_item(...)` call in `_populate_preset_combo()`.
+3. Branch on the key in `_on_preset_selected()` and call its `_apply_foo_preset`.
+   `_is_deletable_preset()` and the disk-shadow filter pick it up automatically.
+
+- **ti1-based** (clone TC9.18): add `_TI1_ASSET` / `_TARGET_NAME` / `_PRINTTARG`
+  constants, drop the `.ti1` into `assets/charts/`, and have `_apply_foo_preset`
+  seed the layout + call `_generate_from_ti1`. Wire `_on_generate()` reproduce
+  routing, the preview note, and `_reset_*_overrides()` like TC9.18.
+- **params-based** (clone `_apply_colormunki_td_preset`): just call
+  `_set_manual_value(...)` per flag (turn Auto patches/neutrals off first), set
+  pages / bit-depth, and return — the normal Generate flow runs `targen→printtarg`.
+  No ti1, no reproduce routing.
+
+The ti1-based and params-based kinds still have one `if` branch each in
+`_on_preset_selected`; only add a third branch for a genuinely new *kind*, not
+for more variants of an existing one.

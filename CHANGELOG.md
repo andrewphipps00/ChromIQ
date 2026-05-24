@@ -1,5 +1,30 @@
 # Changelog
 
+## v3.7.36
+Two more ready-made ColorMunki targets in Create Chart, a clearer preset list,
+and a layout fix for the preset row.
+
+### Added
+- **Two built-in "ColorMunki by Pharmacist" presets (Create Chart → Manual →
+  Presets).** A 324-patch *standard quality* and a 648-patch *high quality*
+  ColorMunki target. Both select the ColorMunki with Triple density on, so the
+  chart is laid out with the denser i1Pro geometry and the measurement file is
+  set back to the ColorMunki automatically. Selecting one loads its settings
+  (e.g. `targen -d2 -f648 -e4 -B4 -G -g64`, A4 landscape, 16-bit TIFF); review
+  them and click Generate. Like the other built-ins they can't be deleted.
+
+### Changed
+- **The TC9.18 built-in preset now names its instrument:** "i1Pro TC9.18 +
+  Extended grays by Pharmacist" (was "TC9.18 by Pharmacist").
+- **Built-in presets are now listed below your own saved presets** in the preset
+  dropdown, instead of above them.
+
+### Fixed
+- **Long built-in preset names no longer stretch the preset row.** The preset
+  dropdown now keeps a fixed width and shortens an over-long name with an
+  ellipsis (the full name still shows when the list is open), so the +, − and
+  folder buttons next to it are no longer squashed together.
+
 ## v3.7.35
 Adds a ready-made grayscale test chart to the Create Chart tab.
 
