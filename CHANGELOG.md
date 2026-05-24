@@ -1,5 +1,45 @@
 # Changelog
 
+## v3.8.0-beta.2
+Second beta of the optional **ChromIQ-style refinement process**. Same headline
+feature as beta.1 — reuse the measurements from an earlier profile to build a more
+accurate one — now with a fix so calculating the patch count for an unusual chart
+layout no longer freezes the window. Still off by default; with the setting off,
+ChromIQ behaves exactly as it did in 3.7.x.
+
+### What ChromIQ-style refinement does
+It builds a profile in two passes for higher accuracy:
+1. Print and measure a first chart and build a profile from it — this becomes your
+   *pre-conditioning* profile.
+2. In Create Chart, create a second chart and point it at that profile. ChromIQ
+   keeps the first run's measurements alongside the new chart.
+3. After you measure the second chart, the Measure tab offers *"Also use measurement
+   data from the pre-conditioning profile"*. Accept it and the final profile is built
+   from both measurement sets combined.
+
+Your freshly measured file is never changed — the combined data goes into separate
+`*_merged.ti3` / `*_merged.icc` files. Turn the feature on in Settings (off by
+default).
+
+### Fixed
+- **Patch-count calculation no longer freezes the window.** In Create Chart →
+  Manual with *Auto* patch count, a layout that isn't in the built-in capacity
+  database makes ChromIQ run targen/printtarg several times to find the exact fit.
+  This used to lock the UI (spinning beach ball on macOS) until it finished. The
+  log now updates step by step ("Step 3/8 — probing 412 patches…") so you can see
+  it working.
+
+### What to test
+- **The refinement round-trip.** With the setting on, build a first profile, create
+  a second chart using it as the pre-conditioning profile, measure, and confirm the
+  Measure tab offers the merge and produces a `*_merged.icc`. Check the merged
+  profile is at least as good as the single-pass one.
+- **Toggle off = unchanged.** With the setting off, confirm the workflow behaves
+  exactly as in 3.7.x — no merge prompt, no `pre_*` files left behind.
+- **Custom-layout patch count.** In Manual mode with Auto patch count on, choose a
+  patch scale or margin that isn't a standard value and click Generate — the window
+  should stay responsive and show the search progress live.
+
 ## v3.8.0-beta.1
 Beta: optional "ChromIQ-style refinement process" — reuse the measurements from
 an earlier profile to build a more accurate one. Off by default; enable it in
