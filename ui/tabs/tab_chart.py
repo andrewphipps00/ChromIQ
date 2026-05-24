@@ -209,6 +209,9 @@ class TabChart(QWidget):
         # chosen, or a different .ti1 is loaded.
         self._tc918_active = False
         self._tc918_targen_sig: list | None = None
+        # Last committed preset-combo index. Lets a cancelled built-in prompt
+        # revert the dropdown to the prior selection.
+        self._last_preset_index = 0
 
         self._build_ui()
         self._restore_defaults()
@@ -2157,35 +2160,124 @@ class TabChart(QWidget):
             if idx >= 0:
                 self._preset_combo.setCurrentIndex(idx)
         self._preset_combo.blockSignals(False)
+        self._last_preset_index = self._preset_combo.currentIndex()
         self._preset_del_btn.setEnabled(
             self._is_deletable_preset(self._preset_combo.currentIndex())
         )
 
+    @staticmethod
+    def _builtin_default_name(key: str) -> str:
+        """Default target name suggested in the prompt for a built-in preset."""
+        if key == TC918_PRESET_KEY:
+            return TC918_TARGET_NAME
+        if key in MUNKI_TARGEN:
+            return f"ColorMunki-{MUNKI_TARGEN[key][0]}"
+        return "chart"
+
+    def _prompt_target_name(self, default_name: str) -> str | None:
+        """Ask for a target name before generating a built-in preset.
+
+        Returns the chosen name, or None if the user cancelled. An empty entry
+        falls back to `default_name`."""
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Name this target")
+        dlg.setMinimumWidth(540)
+        lay = QVBoxLayout(dlg)
+        lay.setContentsMargins(22, 20, 22, 16)
+        lay.setSpacing(10)
+
+        heading = QLabel("Name this target", dlg)
+        heading.setStyleSheet("font-weight: bold;")
+        lay.addWidget(heading)
+
+        info = QLabel(
+            "ChromIQ creates a folder with this name and reuses it for everything "
+            "that follows — the printed chart, the measurements, and the finished "
+            "ICC profile. Choose a name you'll still recognise weeks from now.\n\n"
+            "A good name usually combines the things that make this profile unique:\n"
+            "  •  the printer (e.g. EpsonP900)\n"
+            "  •  the paper or media (e.g. CansonPlatine)\n"
+            "  •  and the date or quality level (e.g. 2026-05 or HighQ)\n\n"
+            "Example:  EpsonP900-CansonPlatine-2026-05\n\n"
+            "Stick to letters, numbers, spaces and hyphens — avoid slashes and "
+            "other punctuation so the folder name stays valid.",
+            dlg,
+        )
+        info.setWordWrap(True)
+        lay.addWidget(info)
+
+        lay.addSpacing(8)               # breathing room above the field
+        edit = QLineEdit(default_name, dlg)
+        edit.setMinimumHeight(28)
+        edit.selectAll()
+        lay.addWidget(edit)
+        lay.addSpacing(8)               # breathing room below the field
+
+        bb = QDialogButtonBox(dlg)
+        bb.addButton("Cancel", QDialogButtonBox.ButtonRole.RejectRole)
+        bb.addButton("Generate", QDialogButtonBox.ButtonRole.AcceptRole)
+        bb.rejected.connect(dlg.reject)
+        bb.accepted.connect(dlg.accept)
+        lay.addWidget(bb)
+
+        edit.returnPressed.connect(dlg.accept)
+        edit.setFocus()
+        dlg.adjustSize()                # size to fit the wrapped content
+
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return None
+        return self._file_mgr.strip_workfile_ext(edit.text().strip()) or default_name
+
+    def _revert_preset_combo(self) -> None:
+        """Restore the dropdown to the last committed selection (no re-apply)."""
+        self._preset_combo.blockSignals(True)
+        self._preset_combo.setCurrentIndex(self._last_preset_index)
+        self._preset_combo.blockSignals(False)
+        self._preset_del_btn.setEnabled(
+            self._is_deletable_preset(self._last_preset_index)
+        )
+
     def _on_preset_selected(self, index: int) -> None:
         data = self._preset_combo.itemData(index)
-        # Leaving the TC9.18 built-in chart (for anything else) clears the expert
-        # printtarg overrides it forced on (spacer scale -A, colored spacers -c,
-        # strip-length -P, no-randomise -r, margin -m, …). The restores below
-        # only *set* flags the target preset stores, so without this they bleed
-        # through. Done before any branch so it runs whatever we switch to.
-        if self._tc918_active and data != TC918_PRESET_KEY:
+
+        # Built-in presets generate immediately, so prompt for a target name
+        # first — otherwise the output folder is created under the preset's
+        # default name. Cancel reverts the dropdown to the previous selection
+        # and leaves everything (values, target name) untouched.
+        if data in BUILTIN_PRESET_KEYS:
+            if self._runner.is_running:
+                log.warning("Built-in preset: a process is already running")
+                self._revert_preset_combo()
+                return
+            name = self._prompt_target_name(self._builtin_default_name(data))
+            if name is None:
+                self._revert_preset_combo()
+                return
+            # Switching from the TC9.18 chart to another built-in clears the
+            # expert printtarg overrides it forced on (spacer scale, etc.).
+            if self._tc918_active and data != TC918_PRESET_KEY:
+                self._reset_tc918_overrides()
+                self._tc918_active = False
+                self._tc918_targen_sig = None
+            self._preset_del_btn.setEnabled(False)
+            self._last_preset_index = index
+            if data == TC918_PRESET_KEY:
+                self._apply_tc918_preset(name)
+            else:
+                self._apply_colormunki_td_preset(*MUNKI_TARGEN[data], target_name=name)
+            return
+
+        # Leaving the TC9.18 built-in chart for Default or a user preset clears
+        # the expert printtarg overrides it forced on (spacer scale -A, colored
+        # spacers -c, strip-length -P, no-randomise -r, margin -m, …). The
+        # restores below only *set* flags the target preset stores, so without
+        # this they would bleed through.
+        if self._tc918_active:
             self._reset_tc918_overrides()
             self._tc918_active = False
             self._tc918_targen_sig = None
 
-        # Built-in TC9.18 preset: not a stored parameter set — it seeds a fixed
-        # layout and creates the target from the bundled .ti1 immediately.
-        if data == TC918_PRESET_KEY:
-            self._preset_del_btn.setEnabled(False)
-            self._apply_tc918_preset()
-            return
-        # Built-in ColorMunki presets: plain parameter presets — load their
-        # settings (ColorMunki + Triple density) and let the user click Generate.
-        if data in MUNKI_TARGEN:
-            self._preset_del_btn.setEnabled(False)
-            self._apply_colormunki_td_preset(*MUNKI_TARGEN[data])
-            return
-
+        self._last_preset_index = index
         self._preset_del_btn.setEnabled(self._is_deletable_preset(index))
         s = self._settings
         if index == 0:
@@ -2425,7 +2517,7 @@ class TabChart(QWidget):
             sig.append(("pages", int(self._manual_pages_spin.value())))
         return sig
 
-    def _apply_tc918_preset(self) -> None:
+    def _apply_tc918_preset(self, target_name: str | None = None) -> None:
         """Seed the fixed TC9.18 layout and create the target from the bundled .ti1."""
         if self._runner.is_running:
             log.warning("TC9.18 preset: a process is already running")
@@ -2466,9 +2558,10 @@ class TabChart(QWidget):
         if self._bit8_radio is not None:
             self._bit8_radio.setChecked(True)
 
-        # Give the output a recognisable name the user can rename afterwards.
+        # Output name: the one the user typed in the prompt (falls back to the
+        # default). Stays editable in the Target name field for a regenerate.
         if self._manual_target_name_edit is not None:
-            self._manual_target_name_edit.setText(TC918_TARGET_NAME)
+            self._manual_target_name_edit.setText(target_name or TC918_TARGET_NAME)
 
         self._tc918_active = True
         self._tc918_targen_sig = self._tc918_targen_signature()
@@ -2476,7 +2569,8 @@ class TabChart(QWidget):
         self._generate_from_ti1(ti1)
 
     def _apply_colormunki_td_preset(
-        self, patches: int, white: int, black: int, grey: int
+        self, patches: int, white: int, black: int, grey: int,
+        target_name: str | None = None,
     ) -> None:
         """Load a ColorMunki + Triple-density recipe and generate it immediately.
 
@@ -2521,9 +2615,10 @@ class TabChart(QWidget):
         if self._manual_td_check is not None:
             self._manual_td_check.setChecked(True)
 
-        # Give the output a recognisable name the user can rename afterwards.
+        # Output name: the one the user typed in the prompt (falls back to the
+        # default). Stays editable in the Target name field for a regenerate.
         if self._manual_target_name_edit is not None:
-            self._manual_target_name_edit.setText(f"ColorMunki-{patches}")
+            self._manual_target_name_edit.setText(target_name or f"ColorMunki-{patches}")
 
         self._refresh_manual_command_preview()
         # Auto-generate immediately, like the TC9.18 preset.

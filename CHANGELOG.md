@@ -1,5 +1,17 @@
 # Changelog
 
+## v3.7.37
+Built-in presets now ask you to name the target before they generate.
+
+### Changed
+- **Selecting a built-in preset now prompts for a target name first.** Instead of
+  generating straight into a folder named after the preset (e.g. `ColorMunki-648`),
+  ChromIQ asks you to name the target — with guidance on picking a name that stays
+  meaningful later (printer + paper + date/quality, e.g.
+  `EpsonP900-CansonPlatine-2026-05`). It then creates the chart and fills that name
+  into the Output → Target name field so you can regenerate. Cancelling the prompt
+  returns to the previously selected preset and changes nothing.
+
 ## v3.7.36
 Two more ready-made ColorMunki targets in Create Chart, a clearer preset list,
 and a layout fix for the preset row.

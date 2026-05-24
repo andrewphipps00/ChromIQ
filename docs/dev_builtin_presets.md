@@ -8,8 +8,8 @@ something fixed.
 There are three built-in presets today, of **two different kinds**:
 
 1. **ti1-based** — *i1Pro TC9.18 + Extended grays by Pharmacist*. Loads a bundled
-   `.ti1` and runs `printtarg` only (targen skipped), creating the target
-   immediately on selection.
+   `.ti1` and runs `printtarg` only (targen skipped), creating the target right
+   after the name prompt (see below).
 2. **params-based** — *ColorMunki 324 patch standard quality* and *ColorMunki
    648 patch high quality*. Plain parameter sets (normal `targen→printtarg`);
    selecting one seeds the settings and then **auto-generates** by calling
@@ -63,9 +63,13 @@ Methods:
 - `_is_deletable_preset(index)` — gates the − button; returns `False` for
   "Default" (data `None`) and the built-in (data == `TC918_PRESET_KEY`). Also
   guards `_on_preset_delete()`.
-- `_on_preset_selected(index)` — if `itemData == TC918_PRESET_KEY`, calls
-  `_apply_tc918_preset()` and returns. Otherwise, if we were on the built-in,
-  calls `_reset_tc918_overrides()` first, then runs the normal restore.
+- `_on_preset_selected(index)` — for any `data in BUILTIN_PRESET_KEYS`, first
+  prompts for a target name (`_prompt_target_name`, default from
+  `_builtin_default_name`). **Cancel** → `_revert_preset_combo()` (restore the
+  dropdown to `_last_preset_index`, apply/generate nothing). **Confirm** → apply
+  the preset with that name and generate. Non-built-in selections run the normal
+  restore. `_last_preset_index` is updated on every committed selection (and in
+  `_populate_preset_combo`) so a cancel can revert to it.
 - `_apply_tc918_preset()` — turns off Triple density / Auto patch count / Auto
   neutrals, seeds `TC918_PRINTTARG` via `_set_manual_value()`, writes the targen
   "description" fields, snapshots `_tc918_targen_signature()`, sets
