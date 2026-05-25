@@ -421,6 +421,7 @@ class TabChart(QWidget):
         scroll = FadeScrollArea(outer)
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(scroll.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
         inner = QWidget()
         layout = QVBoxLayout(inner)
@@ -1048,6 +1049,11 @@ class TabChart(QWidget):
         scroll = FadeScrollArea(w)
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(scroll.Shape.NoFrame)
+        # Without this the word-wrapped command-preview label reports its full
+        # single-line sizeHint, so a long printtarg line widens the inner widget
+        # and triggers a horizontal scrollbar instead of wrapping. Match the
+        # other tabs (tab_print etc.) and pin the horizontal bar off.
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         inner = QWidget()
         inner_layout = QVBoxLayout(inner)
         inner_layout.setSpacing(4)
