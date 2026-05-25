@@ -3369,7 +3369,7 @@ class TabMeasure(QWidget):
                 "or untick 'Refine / resume existing measurement (-r)' to start over."
             )
             self.measure_finished.emit(ti3)
-        else:
+        elif ti3_exists:
             if is_cal:
                 next_step = "→ Next step: go to the '4. Calibration & Profiling' tab to create your calibration file."
             else:
@@ -3379,10 +3379,17 @@ class TabMeasure(QWidget):
                 f"Saved: {ti3}\n\n"
                 + next_step
             )
-            if ti3_exists:
-                self.measure_finished.emit(ti3)
-                if self._auto_proceed:
-                    self.proceed_to_profile.emit()
+            self.measure_finished.emit(ti3)
+            if self._auto_proceed:
+                self.proceed_to_profile.emit()
+        else:
+            # chartread exited cleanly but wrote no fresh .ti3 — e.g. the user
+            # aborted at the calibration prompt (Esc/Q, or by closing the
+            # "Calibration Required" dialog). Don't claim success or a saved
+            # file that doesn't exist.
+            self._log.appendPlainText(
+                "\n[INFO] Measurement stopped — no measurement (.ti3) file was created."
+            )
         self._auto_proceed = False
         self._log.ensureCursorVisible()
 
