@@ -42,7 +42,7 @@ from core.preset_store import (
     tab_dir,
 )
 from core.resource_path import resource_path
-from core.strip_utils import letter_to_idx
+from core.strip_utils import letter_to_idx, parse_passes_per_page
 from ui.fade_scroll import FadeScrollArea
 from ui.tab_header import TabHeader
 from ui.tooltip_button import TooltipButton
@@ -222,6 +222,129 @@ def _detect_stripe_rects(tiff_path: Path) -> list[QRect]:
         return []
 
 
+def _detect_uniform_stripe_rects(tiff_path: Path, n_strips: int) -> list[QRect]:
+    """Locate strip columns when the page's strip count is already known.
+
+    Used when the chart's .ti2 tells us exactly how many strips a page holds
+    (see ``parse_passes_per_page``). Counting strip *labels* from the image is
+    fragile — two-character labels (AA, AB, …) cluster unpredictably and the
+    rotated title string printtarg prints down the right margin looks like an
+    extra strip. Here we sidestep all of that:
+
+    1. Find the label band at the top (vertical anchor for the arrow).
+    2. Isolate the patch block as the *widest contiguous run* of "has content"
+       columns below the labels — one solid, edge-to-edge run of equal-width
+       strips. The white margin before the right-edge title text splits that
+       text into its own narrow run, so it is excluded.
+    3. Divide the block into exactly ``n_strips`` equal columns.
+
+    Returns [] if the page can't be analysed, so the caller can fall back to
+    the label-based detector.
+    """
+    from PIL import Image
+    if n_strips < 1:
+        return []
+    try:
+        try:
+            img = Image.open(tiff_path).convert("L")
+        except Exception:
+            from ui.tiff_preview import load_tiff_as_rgb, _find_sidecar_channels
+            img = load_tiff_as_rgb(
+                tiff_path, ink_channels=_find_sidecar_channels(tiff_path)
+            ).convert("L")
+        orig_w, orig_h = img.size
+
+        ANALYSIS_W = 1000
+        scale = ANALYSIS_W / orig_w if orig_w > ANALYSIS_W else 1.0
+        aw    = max(1, int(orig_w * scale))
+        ah    = max(1, int(orig_h * scale))
+        small = img.resize((aw, ah), Image.BOX)
+        pix   = small.load()
+
+        DARK            = 80
+        WHITE           = 240
+        MIN_LABEL_DARK  = max(5, aw // 200)
+        MAX_LABEL_FRAC  = 0.30
+        EMPTY_STOP      = 8
+
+        # ── 1. Label band → vertical anchor (same as the legacy detector) ────
+        max_label_dark = int(aw * MAX_LABEL_FRAC)
+        y_lab_start: int | None = None
+        y_lab_end:   int | None = None
+        empty_streak = 0
+        for y in range(ah * 30 // 100):
+            count = sum(1 for x in range(aw) if pix[x, y] < DARK)
+            if MIN_LABEL_DARK <= count <= max_label_dark:
+                if y_lab_start is None:
+                    y_lab_start = y
+                y_lab_end = y
+                empty_streak = 0
+            else:
+                empty_streak += 1
+                if y_lab_start is not None and empty_streak >= EMPTY_STOP:
+                    break
+        if y_lab_end is None:
+            return []
+
+        # ── 2. Patch block = widest contiguous run of content columns ────────
+        y0 = y_lab_end + 1
+        y1 = int(ah * 0.97)
+        if y1 <= y0:
+            return []
+        col_content = [
+            sum(1 for y in range(y0, y1) if pix[x, y] < WHITE) for x in range(aw)
+        ]
+        thr = (y1 - y0) * 0.10
+        gap = max(2, aw // 250)   # bridge anti-alias dropouts between strips
+        best: tuple[int, int] | None = None
+        run_start: int | None = None
+        last = 0
+        for x in range(aw):
+            if col_content[x] > thr:
+                if run_start is None:
+                    run_start = x
+                last = x
+            elif run_start is not None and x - last > gap:
+                if best is None or (last - run_start) > (best[1] - best[0]):
+                    best = (run_start, last)
+                run_start = None
+        if run_start is not None and (
+            best is None or (last - run_start) > (best[1] - best[0])
+        ):
+            best = (run_start, last)
+        if best is None:
+            return []
+        block_l, block_r = best
+        block_w = block_r - block_l + 1
+
+        # ── 3. Vertical extent for the rect height ───────────────────────────
+        y_top_a    = next((y for y in range(ah)
+                           if any(pix[x, y] < WHITE for x in range(0, aw, 4))), 0)
+        y_bottom_a = next((y for y in range(ah - 1, -1, -1)
+                           if any(pix[x, y] < WHITE for x in range(0, aw, 4))), ah - 1)
+        inv         = 1.0 / scale
+        y_top       = max(0,      int(y_top_a * inv))
+        y_bottom    = min(orig_h, int((y_bottom_a + 1) * inv))
+        y_label_bot = min(orig_h, int((y_lab_end + 1) * inv))
+        strip_h     = max(1, y_bottom - y_top)
+
+        # ── 4. Divide the block into n_strips equal columns ──────────────────
+        col_w = block_w / n_strips
+        rects: list[QRect] = []
+        for i in range(n_strips):
+            x0 = int((block_l + i * col_w) * inv)
+            x1 = int((block_l + (i + 1) * col_w) * inv)
+            rects.append(QRect(x0, y_label_bot, max(1, x1 - x0), strip_h))
+
+        log.info("Uniform strip detection: %d strips, block x=%d–%d (scaled)",
+                 n_strips, block_l, block_r)
+        return rects
+
+    except Exception as exc:
+        log.warning("Uniform strip detection failed: %s", exc)
+        return []
+
+
 # ---------------------------------------------------------------------------
 # Per-option chartread row helper
 # ---------------------------------------------------------------------------
@@ -278,6 +401,12 @@ class TabMeasure(QWidget):
         self._manager  = MeasureManager(runner, self)
         self._ti1_path: Path | None = None
         self._tiff_pages: list[Path] = []
+        # Per-page strip highlight rects and the authoritative per-page strip
+        # counts (from the .ti2 PASSES_IN_STRIPS2). Together these let the
+        # highlighter map an absolute strip letter to the right page + column,
+        # even on multi-page charts whose last page is partly empty.
+        self._page_stripe_rects: list[list[QRect]] = []
+        self._strips_per_page: list[int] = []
         self._chartread_opts: list[_ChartreadOption] = []
         # Auto bidir-detection: resolved -B value for the loaded .ti2 (False =
         # bidirectional allowed; the no-file / unknown-instrument fallback).
@@ -1574,6 +1703,8 @@ class TabMeasure(QWidget):
         self._ti1_lbl.setStyleSheet("color: #909090; font-size: 11px;")
         self._start_btn.setEnabled(False)
         self._tiff_pages = []
+        self._page_stripe_rects = []
+        self._strips_per_page = []
         self._preview.clear()
         self._update_resume_availability()
         self._settings.set("session_ti1_path", "")
@@ -1778,6 +1909,9 @@ class TabMeasure(QWidget):
             self._preview.load_tiff(tiffs)
             self._setup_stripe_rects()
         else:
+            self._tiff_pages = []
+            self._page_stripe_rects = []
+            self._strips_per_page = []
             self._preview.clear()
             self._log.appendPlainText(
                 "[WARNING] No matching TIFF preview found. "
@@ -1786,11 +1920,42 @@ class TabMeasure(QWidget):
             self._log.ensureCursorVisible()
 
     def _setup_stripe_rects(self) -> None:
-        """Detect strip positions from the first TIFF page and push to preview."""
+        """Detect per-page strip positions and resolve per-page strip counts.
+
+        Strip counts come from the chart's .ti2 (``PASSES_IN_STRIPS2``) — the
+        authoritative source — so the highlighter maps the right strip to the
+        right page even when the last page is partly empty (e.g. a 24,23 chart).
+        Rects are detected per page so the arrow lands correctly on every page,
+        not just page 1.
+
+        Falls back to the legacy single-page label detector when the .ti2 is
+        unavailable or its page count doesn't line up with the loaded TIFFs.
+        """
+        self._page_stripe_rects = []
+        self._strips_per_page = []
         if not self._tiff_pages:
             return
+
+        counts = parse_passes_per_page(self._ti1_path) if self._ti1_path else []
+        if counts and len(counts) == len(self._tiff_pages):
+            per_page: list[list[QRect]] = []
+            for page_path, n in zip(self._tiff_pages, counts):
+                rects = _detect_uniform_stripe_rects(page_path, n)
+                if not rects:
+                    per_page = []
+                    break
+                per_page.append(rects)
+            if per_page:
+                self._page_stripe_rects = per_page
+                self._strips_per_page = counts
+                self._preview.set_stripe_rects(per_page[0])
+                return
+
+        # Fallback: legacy label-based detection on page 1 only. Page mapping
+        # in _on_stripe_changed then assumes uniform pages (len(rects)/page).
         rects = _detect_stripe_rects(self._tiff_pages[0])
         if rects:
+            self._page_stripe_rects = [rects]
             self._preview.set_stripe_rects(rects)
 
     def _set_settings_enabled(self, enabled: bool) -> None:
@@ -2546,11 +2711,19 @@ class TabMeasure(QWidget):
         layout.addWidget(btn_box)
 
         tint_dialog_primary(dlg, _TAB_COLOR)
-        dlg.exec()
-        # Send any key to tell chartread to proceed with calibration.
-        self._manager.send_key("\r")
-        self._arm_key_watchdog()
-        QApplication.instance().installEventFilter(self)
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            # "Start Calibration" — any key tells chartread to proceed.
+            self._manager.send_key("\r")
+            self._arm_key_watchdog()
+            QApplication.instance().installEventFilter(self)
+        else:
+            # The user dismissed the prompt with the window's close button (or
+            # Esc) instead of starting calibration. Esc at chartread's
+            # calibration prompt cancels the run cleanly; chartread then exits
+            # and _on_measure_done re-enables the UI (same path as "Give Up").
+            self._manager.send_key("\x1b")
+            self._arm_key_watchdog()
+            # Don't re-install the event filter: chartread is shutting down.
 
     def _on_calibration_done(self) -> None:
         from PyQt6.QtWidgets import (
@@ -3159,22 +3332,48 @@ class TabMeasure(QWidget):
         letter = "".join(c for c in strip_id if c.isalpha()).upper()
         if not letter:
             return
-        rects = self._preview._stripe_rects
-        if not rects:
+        if not self._page_stripe_rects:
             return
-        global_idx     = letter_to_idx(letter)
-        strips_per_page = len(rects)
-        page            = global_idx // strips_per_page
-        local_idx       = global_idx % strips_per_page
-        n_pages         = max(1, len(self._tiff_pages))
+        global_idx = letter_to_idx(letter)
+        n_pages    = max(1, len(self._tiff_pages))
+
+        # Map the absolute strip index → (page, local index). Prefer the
+        # authoritative per-page counts from the .ti2: walking them handles a
+        # non-uniform last page (e.g. 24,23) correctly, where a flat
+        # global_idx // strips_per_page would keep the first strip of page 2 on
+        # page 1. Fall back to a uniform split only when those counts are
+        # absent (legacy label-detection path).
+        if self._strips_per_page:
+            page = 0
+            local_idx = global_idx
+            for count in self._strips_per_page:
+                if local_idx < count:
+                    break
+                local_idx -= count
+                page += 1
+            strips_per_page_dbg = ",".join(str(c) for c in self._strips_per_page)
+        else:
+            strips_per_page = max(1, len(self._page_stripe_rects[0]))
+            page            = global_idx // strips_per_page
+            local_idx       = global_idx % strips_per_page
+            strips_per_page_dbg = str(strips_per_page)
+
+        page = max(0, min(page, n_pages - 1))
+        # Use this page's own rects when we detected them per page; otherwise
+        # (legacy fallback) reuse the only page we have.
+        rects_idx = min(page, len(self._page_stripe_rects) - 1)
+        rects = self._page_stripe_rects[rects_idx]
+
         if bool(self._settings.get("debug_highlighter", False)):
             msg = (
                 f"[highlighter] id={strip_id} letter={letter} "
-                f"global_idx={global_idx} strips_per_page={strips_per_page} "
+                f"global_idx={global_idx} strips_per_page={strips_per_page_dbg} "
                 f"page={page + 1}/{n_pages} local_idx={local_idx}"
             )
             self._log.appendPlainText(msg)
             log.warning(msg)  # also goes to chromiq.log file
+
+        self._preview.set_stripe_rects(rects)
         if 0 <= page < n_pages:
             self._preview.show_page(page)
         self._preview.highlight_stripe(local_idx)
