@@ -1,5 +1,37 @@
 # Changelog
 
+## v3.7.39
+Fixes for multi-page chart reading and measurement aborts, a patch-count search
+that no longer freezes the window, and a refreshed built-in TC9.18 preset.
+
+### Fixed
+- **The strip highlighter now follows multi-page charts correctly.** On a chart
+  that spans more than one page, the green "read this strip" marker could get
+  stuck on the last strip of page 1 when it should have moved to the first strip
+  of page 2. ChromIQ now reads the exact strips-per-page from the chart's own
+  data (the `.ti2` file) instead of guessing from the image — printtarg prints a
+  rotated title down the right margin that the old guess mistook for an extra
+  strip — so the marker lands on the right strip and the right page every time.
+- **Closing the "Calibration Required" dialog now stops the measurement.**
+  Pressing the window's close button (or Esc) while that dialog is open now sends
+  the abort key to the instrument and ends the run, instead of starting
+  calibration anyway.
+- **No more false "Measurement complete" after an aborted calibration.** If you
+  cancel at the calibration step (Esc/Q, or by closing the dialog), the log no
+  longer claims success and shows a "Saved:" path for a file that was never
+  written — it now says the measurement was stopped and no `.ti3` was created.
+- **Patch-count search no longer freezes the window.** In Create Chart → Manual
+  with Auto patch count, a layout that isn't in the built-in capacity database
+  makes ChromIQ probe targen/printtarg several times to find the exact fit. The
+  window used to lock up (macOS beach ball) until it finished; the log now
+  updates step by step ("Step 3/8 — probing 412 patches…") while it works.
+
+### Changed
+- **The built-in TC9.18 preset was rebuilt as "i1Pro TC9.18 by Pharmacist".** It
+  now uses a plain 918-patch TC9.18 set with a simpler i1Pro recipe
+  (`printtarg -ii1 -pA4 -t300 -L -m12 -M12 -b`). Leaving the preset now correctly
+  restores your per-instrument default patch scale and margin.
+
 ## v3.7.38
 Your own Create Chart presets can now generate as soon as you pick them.
 
