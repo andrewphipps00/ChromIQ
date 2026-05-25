@@ -154,9 +154,11 @@ Supporting code:
 - `workflow/chart_creator.py::load_ti1_and_generate_preview()` /
   `_build_printtarg_args()` — the printtarg-only run and the arg builder the
   recipe must satisfy.
-- `assets/charts/tc918.ti1` — the bundled patch set. Anything under
-  `assets/` is shipped automatically via `('assets','assets')` in `ChromIQ.spec`;
-  resolve it at runtime with `core.resource_path.resource_path(...)`.
+- `assets/charts/<set>/` — the bundled patch sets, **one subfolder per chart
+  set** (`tc918/`, `tc924_a4/`, `tc924_letter/`); see `assets/charts/README.md`
+  for the provenance + recipe table. Anything under `assets/` is shipped
+  automatically via `('assets','assets')` in `ChromIQ.spec`; resolve a file at
+  runtime with `core.resource_path.resource_path("assets/charts/<set>/<file>")`.
 
 ## Gotchas learned
 
@@ -198,17 +200,18 @@ shared `_apply_colormunki_td_preset`, and `BUILTIN_PRESET_KEYS` is derived from
    `_is_deletable_preset()` and the disk-shadow filter pick it up automatically.
 
 - **ti1-based** (clone TC9.18): add `_TI1_ASSET` / `_TARGET_NAME` / `_PRINTTARG`
-  constants, drop the `.ti1` into `assets/charts/`, and have `_apply_foo_preset`
-  seed the layout + call `_generate_from_ti1`. Wire `_on_generate()` reproduce
-  routing, the preview note, and `_reset_*_overrides()` like TC9.18.
+  constants, drop the `.ti1` into a new `assets/charts/<set>/` subfolder, and have
+  `_apply_foo_preset` seed the layout + call `_generate_from_ti1`. Wire
+  `_on_generate()` reproduce routing, the preview note, and `_reset_*_overrides()`
+  like TC9.18.
 - **params-based** (clone `_apply_colormunki_td_preset`): call
   `_set_manual_value(...)` per flag (turn Auto patches/neutrals off first), set
   pages / bit-depth / target name, then call `self._on_generate()` to create the
   target immediately. No ti1, no reproduce routing — the normal targen→printtarg
   flow runs. (Guard `self._runner.is_running` first.)
 - **prebuilt-files** (easiest — just a `PREBUILT_PRESETS` row): drop the bundle
-  (`<stem>.ti1`, `<stem>.ti2`, `<stem>_NN.tif`) into `assets/charts/`, add a row
-  `KEY: ("assets/charts/<stem>", "<default-name>")`, a `*_PRESET_KEY` +
+  (`<stem>.ti1`, `<stem>.ti2`, `<stem>_NN.tif`) into a new `assets/charts/<set>/`
+  subfolder, add a row `KEY: ("assets/charts/<set>/<stem>", "<default-name>")`, a `*_PRESET_KEY` +
   `*_PRESET_LABEL` (include the label in `BUILTIN_PRESET_LABELS`), and one
   `_add_builtin_preset_item(LABEL, KEY, self._prebuilt_tooltip("<paper>"))` call.
   `_on_preset_selected` already dispatches anything in `PREBUILT_PRESETS` to

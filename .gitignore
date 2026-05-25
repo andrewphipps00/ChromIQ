@@ -38,8 +38,9 @@ assets/exported/
 *.tif
 *.tiff
 # …but the bundled prebuilt-preset charts under assets/ ARE shipped
-!assets/charts/*.tif
-!assets/charts/*.tiff
+# (each chart set lives in its own subfolder, hence the recursive **).
+!assets/charts/**/*.tif
+!assets/charts/**/*.tiff
 
 # CI-generated icons (rebuilt by scripts/build_icons.py during the build)
 assets/app_icon.ico
