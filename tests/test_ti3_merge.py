@@ -1,25 +1,24 @@
 """Pre-conditioning measurement merge (ChromIQ-style refinement).
 
 Covers workflow.ti3_merge: combining a pre-conditioning profile's measurement
-data into a freshly measured .ti3 so colprof builds from the larger set.
+data into a freshly measured .ti3 so colprof builds from the larger set. The
+concatenation is delegated to ArgyllCMS ``average -m``; this module's own job is
+to refuse incompatible pairings before invoking it.
 
 Invariants exercised here:
-  * fresh patches stay first as SAMPLE_ID 1..N with their SAMPLE_LOC intact;
-  * pre patches are appended, renumbered, and have SAMPLE_LOC neutralised to "0"
-    so they cannot masquerade as a strip in Check & Refine;
-  * NUMBER_OF_SETS is corrected and CHROMIQ_FRESH_COUNT records N;
-  * a colour-space / data-format mismatch is refused, not silently merged.
+  * a colour-space / data-format mismatch is refused, not silently merged;
+  * a file with no usable measurement data is refused;
+  * when ``average`` is available, the merge concatenates both patch sets.
 """
 from __future__ import annotations
 
+import shutil
+from pathlib import Path
+
 import pytest
 
-from workflow.ti3_merge import (
-    FRESH_COUNT_KEYWORD,
-    Ti3MergeError,
-    merge_preconditioning,
-    read_fresh_count,
-)
+from core.resource_path import argyll_binary
+from workflow.ti3_merge import Ti3MergeError, merge_preconditioning
 
 
 def _ti3(color_rep: str, fmt: str, rows: list[str]) -> str:
@@ -65,45 +64,46 @@ def _read_data(path):
     return [ln for ln in lines[b + 1:e] if ln.strip()]
 
 
-def test_merge_combines_and_renumbers(tmp_path):
+def _find_average() -> str | None:
+    """Locate the ArgyllCMS 'average' binary, or None if it isn't installed."""
+    name = argyll_binary("average")
+    default = Path("/Applications/Argyll/bin") / name
+    if default.exists():
+        return str(default)
+    return shutil.which(name)
+
+
+_AVERAGE = _find_average()
+requires_average = pytest.mark.skipif(
+    _AVERAGE is None, reason="ArgyllCMS 'average' binary not available"
+)
+
+
+@requires_average
+def test_merge_concatenates_both_sets(tmp_path):
     fresh = _write(tmp_path, "fresh.ti3", "iRGB_XYZ", _data_rows(1, 3, "A"))
     pre = _write(tmp_path, "pre.json", "iRGB_XYZ", _data_rows(1, 2, "B"))
     out = tmp_path / "merged.ti3"
 
-    total = merge_preconditioning(fresh, pre, out)
+    total = merge_preconditioning(fresh, pre, out, bin_dir="/Applications/Argyll/bin")
     assert total == 5
-
-    rows = _read_data(out)
-    assert len(rows) == 5
-    # SAMPLE_IDs run 1..5 with no gaps or repeats
-    assert [r.split()[0] for r in rows] == ["1", "2", "3", "4", "5"]
-    # NUMBER_OF_SETS header matches
-    assert any(ln.strip() == "NUMBER_OF_SETS 5" for ln in out.read_text().splitlines())
+    assert out.exists()
+    assert len(_read_data(out)) == 5
+    assert any(
+        ln.strip() == "NUMBER_OF_SETS 5" for ln in out.read_text().splitlines()
+    )
 
 
-def test_fresh_locs_kept_pre_locs_neutralised(tmp_path):
-    fresh = _write(tmp_path, "fresh.ti3", "iRGB_XYZ", _data_rows(1, 2, "A"))
-    pre = _write(tmp_path, "pre.json", "iRGB_XYZ", _data_rows(1, 2, "B"))
-    out = tmp_path / "merged.ti3"
-    merge_preconditioning(fresh, pre, out)
-
-    rows = _read_data(out)
-    locs = [r.split()[1].strip('"') for r in rows]
-    # first 2 = fresh, keep their A-labels; last 2 = pre, neutralised
-    assert locs[0].startswith("A") and locs[1].startswith("A")
-    assert locs[2] == "0" and locs[3] == "0"
-
-
-def test_fresh_count_marker_roundtrip(tmp_path):
+@requires_average
+def test_merge_reads_json_named_pre_input(tmp_path):
+    # The pre-conditioning data lives under a .json name; average must still read it.
     fresh = _write(tmp_path, "fresh.ti3", "iRGB_XYZ", _data_rows(1, 4, "A"))
-    pre = _write(tmp_path, "pre.json", "iRGB_XYZ", _data_rows(1, 3, "B"))
-    out = tmp_path / "merged.ti3"
-    merge_preconditioning(fresh, pre, out)
+    pre = _write(tmp_path, "pre_fresh.json", "iRGB_XYZ", _data_rows(1, 3, "B"))
+    out = tmp_path / "fresh_merged.ti3"
 
-    assert FRESH_COUNT_KEYWORD in out.read_text()
-    assert read_fresh_count(out) == 4
-    # an ordinary, un-merged file has no marker
-    assert read_fresh_count(fresh) is None
+    total = merge_preconditioning(fresh, pre, out, bin_dir="/Applications/Argyll/bin")
+    assert total == 7
+    assert len(_read_data(out)) == 7
 
 
 def test_color_rep_mismatch_refused(tmp_path):
@@ -123,6 +123,7 @@ def test_data_format_mismatch_refused(tmp_path):
     out = tmp_path / "merged.ti3"
     with pytest.raises(Ti3MergeError):
         merge_preconditioning(fresh, pre, out)
+    assert not out.exists()
 
 
 def test_missing_data_block_refused(tmp_path):
@@ -132,3 +133,4 @@ def test_missing_data_block_refused(tmp_path):
     out = tmp_path / "merged.ti3"
     with pytest.raises(Ti3MergeError):
         merge_preconditioning(fresh, bad, out)
+    assert not out.exists()

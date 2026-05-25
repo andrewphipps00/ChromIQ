@@ -8,27 +8,28 @@ chart-regeneration cleanup) — are merged into the chart just measured. The
 combined file is handed to colprof, which then builds the profile from more
 data points.
 
-The merged file is **self-describing**:
-  * fresh patches stay first, as SAMPLE_ID 1..N, with their SAMPLE_LOC intact,
-  * pre-conditioning patches are appended, renumbered to continue the sequence,
-    with SAMPLE_LOC neutralised to "0" so they cannot masquerade as a strip,
-  * a custom ``CHROMIQ_FRESH_COUNT N`` keyword records how many leading sets are
-    fresh, so Check & Refine can restrict its strip analysis to those.
+The concatenation itself is done by ArgyllCMS's own ``average -m`` tool, which
+appends the patch rows of two field-compatible measurement files (taking all
+header/keyword data from the first input). Before invoking it we verify the two
+files share a COLOR_REP and DATA_FORMAT, so an incompatible pairing (e.g. a
+different instrument, or spectral vs. tristimulus data) yields a clear message
+instead of a terse tool error.
 
-Validated against ArgyllCMS 3.5.0 colprof/profcheck: the custom keyword and the
-neutralised SAMPLE_LOC are both tolerated, and colprof ingests every patch.
+The merged file feeds colprof only; Check & Refine always works from the clean
+fresh .ti3, so the merged file needs no ChromIQ-specific markup. Validated
+against ArgyllCMS 3.5.0: ``average -m`` output is ingested in full by colprof
+and read back by profcheck.
 """
 from __future__ import annotations
 
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
 from core.logger import get_logger
+from core.resource_path import argyll_binary
 
 log = get_logger(__name__)
-
-FRESH_COUNT_KEYWORD = "CHROMIQ_FRESH_COUNT"
-_NEUTRAL_LOC = '"0"'  # leading digit -> never matches the strip-letter regex
 
 
 class Ti3MergeError(Exception):
@@ -44,14 +45,13 @@ class Ti3MergeError(Exception):
 
 @dataclass
 class _Parsed:
-    lines: list[str]
     color_rep: str
     data_format: list[str]
-    header_end: int          # index of the BEGIN_DATA line
-    rows: list[str]          # non-empty data rows between BEGIN_DATA / END_DATA
+    n_sets: int
 
 
 def _parse(path: Path) -> _Parsed:
+    """Read just enough of a CGATS .ti3 to validate compatibility before merging."""
     try:
         text = path.read_text()
     except OSError as exc:
@@ -87,43 +87,38 @@ def _parse(path: Path) -> _Parsed:
             f"'{path.name}' is missing its COLOR_REP or DATA_FORMAT header."
         )
 
-    rows = [ln for ln in lines[b + 1:e] if ln.strip()]
-    if not rows:
+    n_sets = sum(1 for ln in lines[b + 1:e] if ln.strip())
+    if n_sets == 0:
         raise Ti3MergeError(f"'{path.name}' contains no measurement data.")
 
-    return _Parsed(lines, color_rep, data_format, b, rows)
+    return _Parsed(color_rep, data_format, n_sets)
 
 
-def read_fresh_count(path: Path) -> int | None:
-    """Return the CHROMIQ_FRESH_COUNT value if the .ti3 carries the marker.
-
-    Used by Check & Refine to limit strip analysis to freshly measured patches.
-    Returns None for any ordinary (un-merged) file.
-    """
-    try:
-        text = path.read_text()
-    except OSError:
-        return None
-    for ln in text.splitlines():
-        s = ln.strip()
-        if s.startswith(FRESH_COUNT_KEYWORD) and not s.startswith("KEYWORD"):
-            parts = s.split(None, 1)
-            if len(parts) == 2:
-                try:
-                    return int(parts[1].strip().strip('"'))
-                except ValueError:
-                    return None
-    return None
+def _resolve_average(bin_dir: Path | str | None) -> str:
+    """Return the path to the ArgyllCMS ``average`` binary (falling back to PATH)."""
+    name = argyll_binary("average")
+    if bin_dir:
+        candidate = Path(bin_dir) / name
+        if candidate.exists():
+            return str(candidate)
+    return name
 
 
-def merge_preconditioning(fresh_ti3: Path, pre_data: Path, out_ti3: Path) -> int:
+def merge_preconditioning(
+    fresh_ti3: Path,
+    pre_data: Path,
+    out_ti3: Path,
+    bin_dir: Path | str | None = None,
+) -> int:
     """Merge ``pre_data`` patches into ``fresh_ti3``; write the result to ``out_ti3``.
 
     ``pre_data`` holds CGATS .ti3 content (typically under a ``pre_*.json`` name).
-    Returns the total number of sets in the merged file.
+    The merge is performed by ``average -m`` (located under ``bin_dir`` if given,
+    otherwise via PATH). Returns the total number of sets in the merged file.
 
     Raises ``Ti3MergeError`` when the two files use a different COLOR_REP or
-    DATA_FORMAT — colprof needs a single, consistent column layout.
+    DATA_FORMAT — colprof needs a single, consistent column layout — or when the
+    ``average`` tool fails.
     """
     fresh = _parse(fresh_ti3)
     pre = _parse(pre_data)
@@ -144,49 +139,28 @@ def merge_preconditioning(fresh_ti3: Path, pre_data: Path, out_ti3: Path) -> int
             "The profile will be built from the new measurements only."
         )
 
-    loc_idx = fresh.data_format.index("SAMPLE_LOC") if "SAMPLE_LOC" in fresh.data_format else None
-    n_fresh = len(fresh.rows)
-
-    merged_rows: list[str] = []
-    # Fresh patches: keep verbatim, force a clean 1..N SAMPLE_ID sequence.
-    for i, row in enumerate(fresh.rows, start=1):
-        toks = row.split()
-        toks[0] = str(i)
-        merged_rows.append(" ".join(toks))
-    # Pre-conditioning patches: continue the sequence, neutralise SAMPLE_LOC.
-    for j, row in enumerate(pre.rows, start=n_fresh + 1):
-        toks = row.split()
-        toks[0] = str(j)
-        if loc_idx is not None and loc_idx < len(toks):
-            toks[loc_idx] = _NEUTRAL_LOC
-        merged_rows.append(" ".join(toks))
-
-    total = len(merged_rows)
-
-    out: list[str] = []
-    inserted_kw = False
-    for ln in fresh.lines[:fresh.header_end]:
-        s = ln.strip()
-        if s.startswith("NUMBER_OF_SETS"):
-            out.append(f"NUMBER_OF_SETS {total}")
-            continue
-        if s.startswith("NUMBER_OF_FIELDS") and not inserted_kw:
-            out.append(f'KEYWORD "{FRESH_COUNT_KEYWORD}"')
-            out.append(f'{FRESH_COUNT_KEYWORD} "{n_fresh}"')
-            inserted_kw = True
-        out.append(ln)
-
-    out.append("BEGIN_DATA")
-    out.extend(merged_rows)
-    out.append("END_DATA")
-
+    average = _resolve_average(bin_dir)
+    cmd = [average, "-m", str(fresh_ti3), str(pre_data), str(out_ti3)]
     try:
-        out_ti3.write_text("\n".join(out) + "\n")
+        proc = subprocess.run(cmd, capture_output=True, text=True)
     except OSError as exc:
-        raise Ti3MergeError(f"Could not write merged file '{out_ti3.name}': {exc}") from exc
+        raise Ti3MergeError(
+            f"Could not run ArgyllCMS 'average' to merge the data: {exc}\n\n"
+            "The profile will be built from the new measurements only."
+        ) from exc
 
+    if proc.returncode != 0 or not out_ti3.exists():
+        detail = (proc.stderr or proc.stdout or "").strip()
+        raise Ti3MergeError(
+            "ArgyllCMS 'average' could not merge the measurement files"
+            + (f":\n{detail}" if detail else ".")
+            + "\n\nThe profile will be built from the new measurements only."
+        )
+
+    total = fresh.n_sets + pre.n_sets
     log.info(
-        "Merged measurements: %d fresh + %d pre-conditioning = %d sets -> %s",
-        n_fresh, len(pre.rows), total, out_ti3.name,
+        "Merged measurements via 'average -m': %d fresh + %d pre-conditioning "
+        "= %d sets -> %s",
+        fresh.n_sets, pre.n_sets, total, out_ti3.name,
     )
     return total

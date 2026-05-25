@@ -3452,8 +3452,9 @@ class TabProfile(QWidget):
             return params
 
         merged = fresh.with_name(f"{fresh.stem}_merged{fresh.suffix}")
+        bin_dir = self._settings.get("argyll_bin_path", "/Applications/Argyll/bin")
         try:
-            total = merge_preconditioning(fresh, src, merged)
+            total = merge_preconditioning(fresh, src, merged, bin_dir=bin_dir)
         except Ti3MergeError as exc:
             self._show_tool_failure_dialog("Pre-conditioning data not merged", exc.message)
             return params
