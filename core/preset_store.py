@@ -53,6 +53,15 @@ def _sanitize(name: str) -> str:
     return safe or "Untitled"
 
 
+def sidecar_path(tab: str, name: str, suffix: str) -> Path:
+    """Path to a non-JSON file bundled alongside a preset (e.g. its .ti1).
+
+    `suffix` includes the leading dot (".ti1"). Uses the same filename stem
+    as the preset's .json so the pair travels together when shared.
+    """
+    return tab_dir(tab) / (_sanitize(name) + suffix)
+
+
 def load_presets(tab: str, settings: Any = None) -> dict[str, Any]:
     """Return ``{name: payload_dict}`` for `tab`.
 
