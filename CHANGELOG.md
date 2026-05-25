@@ -1,5 +1,38 @@
 # Changelog
 
+## v3.8.0-beta.3
+Third beta of the optional **ChromIQ-style refinement process** (the feature
+itself is unchanged from beta.2 and still off by default). This beta folds in the
+same chart-reading and measurement-abort fixes shipping in stable 3.7.39, plus
+the refreshed built-in TC9.18 preset.
+
+### Fixed
+- **The strip highlighter now follows multi-page charts correctly.** On a chart
+  that spans more than one page, the green "read this strip" marker could get
+  stuck on the last strip of page 1 when it should have moved to the first strip
+  of page 2. ChromIQ now reads the exact strips-per-page from the chart's own
+  data (the `.ti2` file) instead of guessing from the image — printtarg prints a
+  rotated title down the right margin that the old guess mistook for an extra
+  strip — so the marker lands on the right strip and the right page every time.
+- **Closing the "Calibration Required" dialog now stops the measurement.**
+  Pressing the window's close button (or Esc) while that dialog is open now sends
+  the abort key to the instrument and ends the run, instead of starting
+  calibration anyway.
+- **No more false "Measurement complete" after an aborted calibration.** If you
+  cancel at the calibration step (Esc/Q, or by closing the dialog), the log no
+  longer claims success and shows a "Saved:" path for a file that was never
+  written — it now says the measurement was stopped and no `.ti3` was created.
+
+### Changed
+- **The built-in TC9.18 preset was rebuilt as "i1Pro TC9.18 by Pharmacist".** It
+  now uses a plain 918-patch TC9.18 set with a simpler i1Pro recipe
+  (`printtarg -ii1 -pA4 -t300 -L -m12 -M12 -b`). Leaving the preset now correctly
+  restores your per-instrument default patch scale and margin.
+
+### About ChromIQ-style refinement (unchanged)
+See **v3.8.0-beta.2** below for the full description and testing notes. With the
+setting off (the default), ChromIQ behaves exactly as it did in 3.7.x.
+
 ## v3.8.0-beta.2
 Second beta of the optional **ChromIQ-style refinement process**. Same headline
 feature as beta.1 — reuse the measurements from an earlier profile to build a more
