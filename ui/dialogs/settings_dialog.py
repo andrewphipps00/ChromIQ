@@ -14,6 +14,7 @@ from PyQt6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QFileDialog,
+    QGridLayout,
     QGroupBox,
     QHBoxLayout,
     QLabel,
@@ -50,13 +51,13 @@ class SettingsDialog(QDialog):
         self._settings = settings
         self._update_checker: UpdateChecker | None = None
         self.setWindowTitle("ChromIQ Preferences")
-        self.setMinimumWidth(900)
+        self.setMinimumWidth(960)
         self.setWindowFlags(
             self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint
         )
         self._build_ui()
         self._load_settings()
-        self.resize(900, self.sizeHint().height())
+        self.resize(960, self.sizeHint().height())
 
     # ------------------------------------------------------------------
 
@@ -243,28 +244,96 @@ class SettingsDialog(QDialog):
         layout.addWidget(neutral_grp)
 
         # ---- Behaviour ----
+        # Options are laid out in two equal-width columns to keep the dialog
+        # short; each option (checkbox + optional tooltip) is one grid cell.
         behaviour_grp = QGroupBox("Behaviour", self)
-        bh = QVBoxLayout(behaviour_grp)
+        bh = QGridLayout(behaviour_grp)
+        bh.setHorizontalSpacing(100)
+        bh.setColumnStretch(0, 1)
+        bh.setColumnStretch(1, 1)
+
+        def _bh_cell(check: QCheckBox, tooltip: TooltipButton | None = None) -> QWidget:
+            cell = QWidget(self)
+            row = QHBoxLayout(cell)
+            row.setContentsMargins(0, 0, 0, 0)
+            row.addWidget(check)
+            row.addStretch()
+            if tooltip is not None:
+                row.addWidget(tooltip)
+            return cell
+
         self._restore_tab_check = QCheckBox(
             "Restore last active tab on launch", self
         )
-        bh.addWidget(self._restore_tab_check)
+        restore_tab_tip = TooltipButton(
+            "Restore Last Active Tab on Launch",
+            "ChromIQ is organised as five numbered steps along the top of the "
+            "window:\n\n"
+            "  1. Create Chart\n"
+            "  2. Print Chart\n"
+            "  3. Measure\n"
+            "  4. Build Profile\n"
+            "  5. Check & Refine\n\n"
+            "When this option is ON, ChromIQ reopens on whichever step you were "
+            "looking at when you last closed the app. This is handy if you tend to "
+            "work in several sittings — for example, you print a chart, quit, and "
+            "later come back to measure it: the app opens straight on the Measure "
+            "step instead of sending you back to the beginning.\n\n"
+            "When OFF, ChromIQ always starts on step 1 (Create Chart).\n\n"
+            "This only remembers which step was open — it does not reload any of "
+            "your files. To have your files come back too, also turn on "
+            "\"Restore last session on launch\".",
+            self,
+            min_width=600,
+        )
 
         self._restore_session_check = QCheckBox(
-            "Restore last session on launch (reload previously loaded files)", self
+            "Restore last session on launch", self
         )
-        bh.addWidget(self._restore_session_check)
+        restore_session_tip = TooltipButton(
+            "Restore Last Session on Launch",
+            "When this option is ON, ChromIQ remembers the files you were working "
+            "with and reloads them automatically the next time you start the app, "
+            "so you can carry on exactly where you left off.\n\n"
+            "What gets restored:\n\n"
+            "  • The chart / target you created (its name and the .ti1 file)\n"
+            "  • The printable chart images (TIFF files) in the working folder\n"
+            "  • Your measurement data (the .ti3 file)\n"
+            "  • The ICC profile you built (.icc)\n"
+            "  • The calibration measurements, if calibration options are enabled\n\n"
+            "These files are simply re-opened from where they are saved on disk — "
+            "nothing is copied, changed, or re-measured. If you have since moved or "
+            "deleted a file, ChromIQ just skips that one and loads the rest.\n\n"
+            "When OFF, ChromIQ starts with an empty session every time and you load "
+            "the files you need by hand. This is the default — turn the option on if "
+            "you usually continue the same job across several sessions.",
+            self,
+            min_width=560,
+        )
 
-        cal_row = QHBoxLayout()
         self._themed_colors_check = QCheckBox(
             "Use app theme colors for 3D gamut viewer", self
         )
-        bh.addWidget(self._themed_colors_check)
+        themed_colors_tip = TooltipButton(
+            "Use App Theme Colours for 3D Gamut Viewer",
+            "On the Check & Refine step, ChromIQ can show a rotatable 3D model of "
+            "your printer and paper's colour range (its \"gamut\") — the full set of "
+            "colours that combination can actually reproduce.\n\n"
+            "When this option is ON, the colours of that 3D model are recoloured to "
+            "match ChromIQ's own accent palette, and the very brightest points are "
+            "toned down slightly so they don't wash out to pure white. The result "
+            "blends in neatly with the app's light or dark theme.\n\n"
+            "When OFF, the model keeps the viewer's natural colours, where each point "
+            "is drawn roughly in the colour it represents.\n\n"
+            "This setting is purely cosmetic. It changes only how the 3D preview "
+            "looks — it has no effect whatsoever on your measurements or on the ICC "
+            "profile ChromIQ builds.",
+            self,
+            min_width=560,
+        )
 
         self._cal_mode_check = QCheckBox("Enable calibration options", self)
-        cal_row.addWidget(self._cal_mode_check)
-        cal_row.addStretch()
-        cal_row.addWidget(TooltipButton(
+        cal_tip = TooltipButton(
             "Enable Calibration Options",
             "Unlocks the full printer calibration workflow (printcal / applycal).\n\n"
             "Most users do NOT need this — consumer and prosumer inkjet printers "
@@ -278,16 +347,12 @@ class SettingsDialog(QDialog):
             "workflow is added to the Calibration & Profiling tab.",
             self,
             min_width=620,
-        ))
-        bh.addLayout(cal_row)
+        )
 
-        refine_row = QHBoxLayout()
         self._chromiq_refine_check = QCheckBox(
             "ChromIQ-style refinement process", self
         )
-        refine_row.addWidget(self._chromiq_refine_check)
-        refine_row.addStretch()
-        refine_row.addWidget(TooltipButton(
+        refine_tip = TooltipButton(
             "ChromIQ-style refinement process",
             "Builds a more accurate profile by REUSING the measurements you "
             "already made for an earlier profile, instead of throwing them away.\n\n"
@@ -318,14 +383,10 @@ class SettingsDialog(QDialog):
             "specifically want to reuse measurements across refinement runs.",
             self,
             min_width=680,
-        ))
-        bh.addLayout(refine_row)
+        )
 
-        native_print_row = QHBoxLayout()
         self._native_print_check = QCheckBox("Use default macOS printer dialog", self)
-        native_print_row.addWidget(self._native_print_check)
-        native_print_row.addStretch()
-        native_print_row.addWidget(TooltipButton(
+        native_tip = TooltipButton(
             "Use default macOS printer dialog",
             "When enabled, clicking Print in the Print Chart tab opens the standard\n"
             "macOS print dialog instead of ChromIQ's built-in PostScript / CUPS pipeline.\n\n"
@@ -347,20 +408,12 @@ class SettingsDialog(QDialog):
             "automatically with no extra steps required.",
             self,
             min_width=620,
-        ))
-        native_print_row.setContentsMargins(0, 0, 0, 0)
-        native_print_container = QWidget(self)
-        native_print_container.setLayout(native_print_row)
-        native_print_container.setVisible(native_print_supported())
-        bh.addWidget(native_print_container)
-
-        confirm_row = QHBoxLayout()
-        self._confirm_print_check = QCheckBox(
-            "Confirm print settings before sending to printer", self
         )
-        confirm_row.addWidget(self._confirm_print_check)
-        confirm_row.addStretch()
-        confirm_row.addWidget(TooltipButton(
+
+        self._confirm_print_check = QCheckBox(
+            "Confirm print settings before printing", self
+        )
+        confirm_tip = TooltipButton(
             "Confirm Print Settings",
             "When enabled, ChromIQ shows a summary dialog of every option that "
             "will be sent to CUPS before each print job:\n\n"
@@ -372,14 +425,26 @@ class SettingsDialog(QDialog):
             "ink when printed with the wrong settings.",
             self,
             min_width=560,
-        ))
-        confirm_row.setContentsMargins(0, 0, 0, 0)
-        # The CUPS preflight summary is a macOS/Linux concept; hide this option
-        # on Windows, where printing goes through a different path.
-        confirm_container = QWidget(self)
-        confirm_container.setLayout(confirm_row)
-        confirm_container.setVisible(not is_windows())
-        bh.addWidget(confirm_container)
+        )
+
+        # Collect the options that apply on this platform, in order, then place
+        # them two per row. Platform-specific options are simply omitted (rather
+        # than hidden) so they leave no empty cell in the grid.
+        bh_cells = [
+            _bh_cell(self._restore_tab_check, restore_tab_tip),
+            _bh_cell(self._restore_session_check, restore_session_tip),
+            _bh_cell(self._themed_colors_check, themed_colors_tip),
+            _bh_cell(self._cal_mode_check, cal_tip),
+            _bh_cell(self._chromiq_refine_check, refine_tip),
+        ]
+        if native_print_supported():
+            bh_cells.append(_bh_cell(self._native_print_check, native_tip))
+        # The CUPS preflight summary is a macOS/Linux concept; skip it on Windows.
+        if not is_windows():
+            bh_cells.append(_bh_cell(self._confirm_print_check, confirm_tip))
+
+        for i, cell in enumerate(bh_cells):
+            bh.addWidget(cell, i // 2, i % 2)
 
         layout.addWidget(behaviour_grp)
 
