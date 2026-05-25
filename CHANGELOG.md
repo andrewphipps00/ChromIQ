@@ -1,5 +1,40 @@
 # Changelog
 
+## v3.8.0-beta.4
+Fourth beta of the optional **ChromIQ-style refinement process** (still off by
+default). The refinement merge is now done by ArgyllCMS itself, and this beta
+folds in the same Create Chart additions and Check & Refine improvement shipping
+in stable 3.7.40.
+
+### Added
+- **Two built-in "i1Pro TC9.24 by Pharmacist" targets — one for A4, one for US
+  Letter.** Pick one from Create Chart → Manual → Presets, give it a name, and
+  ChromIQ copies a complete, ready-made chart (patch set, layout and page TIFFs)
+  into a new folder under that name. There's no targen or printtarg step — the
+  files are used exactly as supplied — so the targen and printtarg options are
+  greyed out while one of these presets is selected.
+- **Save a preset together with its patch set.** The Save Preset dialog can now
+  attach the patch set (`.ti1`) currently loaded. Selecting that preset later
+  builds the chart straight from that patch set — skipping targen, just laying it
+  out with printtarg — and the `.ti1` is stored inside the preset folder, so it
+  travels with a shared preset.
+
+### Changed
+- **The refinement merge now uses ArgyllCMS's own `average -m`.** The optional
+  pre-conditioning merge hands off to ArgyllCMS instead of ChromIQ's hand-rolled
+  CGATS surgery, so the merged measurements match what Argyll's own tools produce.
+- **The preset list is grouped by instrument.** Built-in presets are now sorted by
+  instrument and separated with divider lines — one between your own saved presets
+  and the built-ins, and one between each instrument group — so the list is easier
+  to scan.
+- **Check & Refine lists the worst individual patches.** Alongside the worst
+  strips, the report now also calls out the single worst-performing patches, so
+  it's easier to see whether a problem is a whole strip or just a few patches.
+
+### Thanks
+- **Alan Goldhammer** and **Pharmacist** for the TC9.24 targets and their testing
+  and feedback.
+
 ## v3.8.0-beta.3
 Third beta of the optional **ChromIQ-style refinement process** (the feature
 itself is unchanged from beta.2 and still off by default). This beta folds in the
