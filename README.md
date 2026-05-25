@@ -17,7 +17,7 @@ Supported instruments: X-Rite i1Pro, i1Pro 2, i1Pro 3, i1Pro 3 Plus, ColorMunki,
   <a href="https://ko-fi.com/itsab1989"><img src="https://ko-fi.com/img/githubbutton_sm.svg" alt="Support ChromIQ on Ko-fi"></a>
 </p>
 
-<p align="center"><sub>ChromIQ is free — if it's saved you time and paper, a coffee is a kind way to say thanks. No pressure.</sub></p>
+<p align="center"><sub>Enjoying ChromIQ? You can buy me a coffee on Ko-fi — it's always appreciated.</sub></p>
 
 ---
 
@@ -537,7 +537,7 @@ To be determined.
 
 ## Support
 
-ChromIQ is free and open-source. If it has saved you time and paper, [buying me a coffee on Ko-fi](https://ko-fi.com/itsab1989) is a kind way to say thanks and helps keep the project going. There's absolutely no obligation — the app stays fully free either way.
+ChromIQ is free and open-source. If you're enjoying it, you can [buy me a coffee on Ko-fi](https://ko-fi.com/itsab1989) — it's always appreciated and helps keep the project going.
 
 <a href="https://ko-fi.com/itsab1989"><img src="https://ko-fi.com/img/githubbutton_sm.svg" alt="Support ChromIQ on Ko-fi"></a>
 
