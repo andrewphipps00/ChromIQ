@@ -1,5 +1,16 @@
 # Changelog
 
+## v3.7.41
+Small interface polish for the Preferences and Create Chart screens.
+
+### Changed
+- **Preferences → Behaviour is easier to read.** The behaviour options are now
+  laid out in two columns, and every option carries a full ⓘ tooltip explaining
+  exactly what it does.
+- **Create Chart no longer scrolls sideways.** A long generated-command preview
+  is kept inside the panel instead of forcing a horizontal scrollbar across the
+  whole layout.
+
 ## v3.7.40
 Ready-made i1Pro TC9.24 targets you can drop in without building a chart, the
 option to bundle your own patch set with a saved preset, and a tidier preset list
