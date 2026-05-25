@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 import yaml
 from PyQt6.QtCore import QSize, Qt, pyqtSignal
-from PyQt6.QtGui import QFont, QIcon
+from PyQt6.QtGui import QColor, QFont, QIcon, QPalette
 from PyQt6.QtWidgets import (
     QButtonGroup,
     QCheckBox,
@@ -26,6 +26,7 @@ from PyQt6.QtWidgets import (
     QSizePolicy,
     QSplitter,
     QStackedWidget,
+    QStyledItemDelegate,
     QVBoxLayout,
     QWidget,
 )
@@ -35,6 +36,7 @@ from core.preset_store import (
     load_presets as _load_tab_presets,
     reveal_in_file_manager,
     save_presets as _save_tab_presets,
+    sidecar_path as _preset_sidecar_path,
     tab_dir,
 )
 from core.resource_path import resource_path
@@ -113,11 +115,29 @@ MUNKI_TARGEN = {
     MUNKI648_PRESET_KEY: (648, 4, 4, 64),
 }
 
+# Prebuilt-files built-in presets: a complete, pre-generated target (ti1 + ti2 +
+# TIFFs) bundled in assets/. Selecting one prompts for a name, copies the bundled
+# files into a fresh ~/ChromIQ/<name> folder (renamed to <name>…) and loads them.
+# targen AND printtarg are skipped entirely — the param panels are greyed out
+# while such a preset is active, because none of those options apply.
+TC924A4_PRESET_KEY = "__chromiq_tc924_a4_builtin__"
+TC924A4_PRESET_LABEL = "★  i1Pro TC9.24 A4 by Pharmacist  ·  built-in"
+TC924LETTER_PRESET_KEY = "__chromiq_tc924_letter_builtin__"
+TC924LETTER_PRESET_LABEL = "★  i1Pro TC9.24 Letter by Pharmacist  ·  built-in"
+
+# key -> (asset stem under assets/charts, default target name). The stem locates
+# <stem>.ti1, <stem>.ti2 and <stem>_NN.tif page TIFFs.
+PREBUILT_PRESETS = {
+    TC924A4_PRESET_KEY:     ("assets/charts/tc924_a4",     "tc924-a4"),
+    TC924LETTER_PRESET_KEY: ("assets/charts/tc924_letter", "tc924-letter"),
+}
+
 # Every built-in (non-deletable) preset key. Used to protect them from the
 # delete button and to keep disk presets from shadowing them.
-BUILTIN_PRESET_KEYS = frozenset({TC918_PRESET_KEY, *MUNKI_TARGEN})
+BUILTIN_PRESET_KEYS = frozenset({TC918_PRESET_KEY, *MUNKI_TARGEN, *PREBUILT_PRESETS})
 BUILTIN_PRESET_LABELS = frozenset({
     TC918_PRESET_LABEL, MUNKI324_PRESET_LABEL, MUNKI648_PRESET_LABEL,
+    TC924A4_PRESET_LABEL, TC924LETTER_PRESET_LABEL,
 })
 
 
@@ -175,6 +195,38 @@ def _extra_args_have_patch_source(extra: str) -> bool:
     return False
 
 
+class _ComboSeparatorDelegate(QStyledItemDelegate):
+    """Paint insertSeparator() rows as a clear horizontal divider line.
+
+    The default combo-popup separator is nearly invisible on ChromIQ's dark
+    theme, and QSS ``::separator`` isn't honoured for combo views, so the line is
+    drawn here. Its colour is derived from the active palette, so it stays
+    visible in both the light and dark themes. Non-separator rows fall through to
+    the default delegate, preserving bold/tooltip rendering of the built-ins."""
+
+    _SEP_ROLE = Qt.ItemDataRole.AccessibleDescriptionRole
+
+    def _is_separator(self, index) -> bool:
+        return index.data(self._SEP_ROLE) == "separator"
+
+    def paint(self, painter, option, index) -> None:
+        if self._is_separator(index):
+            line = QColor(option.palette.color(QPalette.ColorRole.Text))
+            line.setAlpha(70)
+            painter.save()
+            painter.setPen(line)
+            y = option.rect.center().y()
+            painter.drawLine(option.rect.left() + 10, y, option.rect.right() - 10, y)
+            painter.restore()
+            return
+        super().paint(painter, option, index)
+
+    def sizeHint(self, option, index) -> QSize:
+        if self._is_separator(index):
+            return QSize(0, 11)
+        return super().sizeHint(option, index)
+
+
 class TabChart(QWidget):
     """Step 1: create targen/printtarg test chart."""
 
@@ -205,6 +257,20 @@ class TabChart(QWidget):
         # chosen, or a different .ti1 is loaded.
         self._tc918_active = False
         self._tc918_targen_sig: list | None = None
+        # Prebuilt-files built-in preset state. While active the targen/printtarg
+        # panels are greyed out and "Generate Chart" re-copies the bundled files
+        # instead of running any tool. Cleared when another preset / Default is
+        # chosen or a .ti1 is loaded.
+        self._prebuilt_active = False
+        self._prebuilt_key: str | None = None
+        # Absolute path of the .ti1 backing the chart currently shown (set after a
+        # successful generate / load). Offered for attachment in the Save Preset
+        # dialog.
+        self._current_ti1_path: Path | None = None
+        # When a user preset that bundles a .ti1 is selected, this points at that
+        # preset's sidecar .ti1 so "Generate Chart" skips targen and lays it out
+        # with printtarg only. Cleared for presets without an attached patch set.
+        self._preset_ti1_path: Path | None = None
         # Last committed preset-combo index. Lets a cancelled built-in prompt
         # revert the dropdown to the prior selection.
         self._last_preset_index = 0
@@ -920,6 +986,11 @@ class TabChart(QWidget):
         self._preset_combo.setSizePolicy(
             QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed
         )
+        # Draw the group-divider separators ourselves (the default ones are
+        # nearly invisible on the dark theme).
+        self._preset_combo.setItemDelegate(
+            _ComboSeparatorDelegate(self._preset_combo)
+        )
         self._preset_combo.addItem("Default", userData=None)
         presets_row.addWidget(self._preset_combo, stretch=1)
         self._preset_add_btn = QPushButton(w)
@@ -998,6 +1069,10 @@ class TabChart(QWidget):
         self._manual_b_pw: ParameterWidget | None = None
         self._manual_c_pw: ParameterWidget | None = None
         self._manual_A_pw: ParameterWidget | None = None
+        # Top-level targen/printtarg group boxes — greyed out wholesale while a
+        # prebuilt-files preset is active.
+        self._manual_targen_grp: QGroupBox | None = None
+        self._manual_printtarg_grp: QGroupBox | None = None
         # targen -c / -n: -n (Neutral Axis Steps) only does anything when a
         # pre-conditioning profile (-c) is supplied, so -n tracks -c's state.
         self._manual_targen_c_pw: ParameterWidget | None = None
@@ -1030,6 +1105,11 @@ class TabChart(QWidget):
             ("printtarg", self._params.get("printtarg", [])),
         ]:
             grp = QGroupBox(f"{tool} parameters", inner)
+            # Keep a handle so prebuilt-files presets can grey the whole panel.
+            if tool == "targen":
+                self._manual_targen_grp = grp
+            else:
+                self._manual_printtarg_grp = grp
             grp_layout = QVBoxLayout(grp)
 
             basic_grp = QGroupBox("Basic", grp)
@@ -2112,6 +2192,16 @@ class TabChart(QWidget):
         self._preset_combo.setItemData(bi, bi_font, Qt.ItemDataRole.FontRole)
         self._preset_combo.setItemData(bi, tooltip, Qt.ItemDataRole.ToolTipRole)
 
+    def _tc918_tooltip(self) -> str:
+        """Tooltip text for the ti1-based TC9.18 built-in preset."""
+        return (
+            "Built-in chart — cannot be deleted.\n"
+            "Loads the fixed TC9.18 patch set and lays it out with\n"
+            "printtarg -ii1 -pA4 -t300 -L -m12 -M12 -b, then creates the\n"
+            "target right away. You can adjust any setting afterwards and\n"
+            "regenerate."
+        )
+
     def _munki_tooltip(self, patches: int, white: int, black: int, grey: int) -> str:
         """Tooltip text for a ColorMunki built-in preset."""
         return (
@@ -2122,6 +2212,17 @@ class TabChart(QWidget):
             "printtarg lays it out with the denser i1Pro geometry and the\n"
             ".ti2 instrument is rewritten back to ColorMunki. Creates the\n"
             "target right away; you can adjust any setting and regenerate."
+        )
+
+    def _prebuilt_tooltip(self, paper: str) -> str:
+        """Tooltip text for a prebuilt-files built-in preset."""
+        return (
+            "Built-in chart — cannot be deleted.\n"
+            f"A complete, ready-made TC9.24 i1Pro target for {paper}.\n"
+            "Picking it asks for a name, then copies the bundled patch set\n"
+            "(.ti1 / .ti2 / TIFF pages) into a new folder under that name —\n"
+            "no targen or printtarg is run, so those panels are greyed out.\n"
+            "The copied TIFFs are loaded straight into the preview."
         )
 
     def _populate_preset_combo(self, presets: dict, select_name: str | None = None) -> None:
@@ -2137,24 +2238,30 @@ class TabChart(QWidget):
             label = f"▶  {name}" if (isinstance(presets[name], dict)
                                      and presets[name].get("auto_run")) else name
             self._preset_combo.addItem(label, userData=name)
-        # Built-in presets, pinned below the user's own. Bold + tooltip so they
-        # read as special, fixed entries rather than user presets.
-        self._add_builtin_preset_item(
-            TC918_PRESET_LABEL, TC918_PRESET_KEY,
-            "Built-in chart — cannot be deleted.\n"
-            "Loads the fixed TC9.18 patch set and lays it out with\n"
-            "printtarg -ii1 -pA4 -t300 -L -m12 -M12 -b, then creates the\n"
-            "target right away. You can adjust any setting afterwards and\n"
-            "regenerate.",
-        )
-        self._add_builtin_preset_item(
-            MUNKI324_PRESET_LABEL, MUNKI324_PRESET_KEY,
-            self._munki_tooltip(*MUNKI_TARGEN[MUNKI324_PRESET_KEY]),
-        )
-        self._add_builtin_preset_item(
-            MUNKI648_PRESET_LABEL, MUNKI648_PRESET_KEY,
-            self._munki_tooltip(*MUNKI_TARGEN[MUNKI648_PRESET_KEY]),
-        )
+        # Built-in presets, pinned below the user's own and grouped by the
+        # instrument they target. The groups are ordered by instrument name; a
+        # separator line is drawn before the whole built-in block (dividing it
+        # from the user presets) and again before each new instrument group.
+        # Within a group the curated order below is preserved (stable sort).
+        # (instrument, label, key, tooltip)
+        builtins = [
+            ("i1Pro",      TC918_PRESET_LABEL,       TC918_PRESET_KEY,
+             self._tc918_tooltip()),
+            ("i1Pro",      TC924A4_PRESET_LABEL,     TC924A4_PRESET_KEY,
+             self._prebuilt_tooltip("A4")),
+            ("i1Pro",      TC924LETTER_PRESET_LABEL, TC924LETTER_PRESET_KEY,
+             self._prebuilt_tooltip("US Letter")),
+            ("ColorMunki", MUNKI324_PRESET_LABEL,    MUNKI324_PRESET_KEY,
+             self._munki_tooltip(*MUNKI_TARGEN[MUNKI324_PRESET_KEY])),
+            ("ColorMunki", MUNKI648_PRESET_LABEL,    MUNKI648_PRESET_KEY,
+             self._munki_tooltip(*MUNKI_TARGEN[MUNKI648_PRESET_KEY])),
+        ]
+        prev_instr: str | None = None
+        for instr, label, key, tip in sorted(builtins, key=lambda t: t[0].lower()):
+            if instr != prev_instr:
+                self._preset_combo.insertSeparator(self._preset_combo.count())
+                prev_instr = instr
+            self._add_builtin_preset_item(label, key, tip)
         if select_name is not None:
             # Match by userData (the bare name), not the shown text, which may
             # carry a ▶ prefix for auto-run presets.
@@ -2174,6 +2281,8 @@ class TabChart(QWidget):
             return TC918_TARGET_NAME
         if key in MUNKI_TARGEN:
             return f"ColorMunki-{MUNKI_TARGEN[key][0]}"
+        if key in PREBUILT_PRESETS:
+            return PREBUILT_PRESETS[key][1]
         return "chart"
 
     def _prompt_target_name(self, default_name: str) -> str | None:
@@ -2240,6 +2349,13 @@ class TabChart(QWidget):
         )
 
     def _on_preset_selected(self, index: int) -> None:
+        # Group-divider separators aren't real choices. The combo skips them on
+        # mouse/keyboard interaction, but guard anyway so one can never be
+        # treated as a selection — restore the prior pick instead.
+        if index > 0 and self._preset_combo.itemData(index) is None \
+                and not self._preset_combo.itemText(index):
+            self._revert_preset_combo()
+            return
         data = self._preset_combo.itemData(index)
 
         # Built-in presets generate immediately, so prompt for a target name
@@ -2261,10 +2377,17 @@ class TabChart(QWidget):
                 self._reset_tc918_overrides()
                 self._tc918_active = False
                 self._tc918_targen_sig = None
+            # Leaving a prebuilt-files preset for a params-based built-in
+            # (TC9.18 / ColorMunki) must re-enable the greyed param panels.
+            if self._prebuilt_active and data not in PREBUILT_PRESETS:
+                self._leave_prebuilt()
+            self._preset_ti1_path = None  # built-ins are not ti1-user-presets
             self._preset_del_btn.setEnabled(False)
             self._last_preset_index = index
             if data == TC918_PRESET_KEY:
                 self._apply_tc918_preset(name)
+            elif data in PREBUILT_PRESETS:
+                self._apply_prebuilt_preset(data, name)
             else:
                 self._apply_colormunki_td_preset(*MUNKI_TARGEN[data], target_name=name)
             return
@@ -2277,6 +2400,9 @@ class TabChart(QWidget):
             self._reset_tc918_overrides()
             self._tc918_active = False
             self._tc918_targen_sig = None
+        # Leaving a prebuilt-files preset re-enables the greyed param panels.
+        if self._prebuilt_active:
+            self._leave_prebuilt()
 
         self._last_preset_index = index
         self._preset_del_btn.setEnabled(self._is_deletable_preset(index))
@@ -2317,10 +2443,23 @@ class TabChart(QWidget):
                 self._manual_td_check.setChecked(
                     bool(s.get("manual_printtarg__triple_density", False))
                 )
+            self._preset_ti1_path = None      # Default builds via targen
         else:
             name = self._preset_combo.currentData()
             presets = self._load_presets_from_settings()
-            self._restore_user_preset(presets.get(name, {}))
+            pdata = presets.get(name, {})
+            self._restore_user_preset(pdata)
+            # A user preset that bundled a .ti1 builds from it (skip targen). Point
+            # Generate at the sidecar file if it's present; otherwise fall back to
+            # the normal targen path.
+            self._preset_ti1_path = None
+            if isinstance(pdata, dict) and pdata.get("attached_ti1"):
+                p = _preset_sidecar_path("create_chart", str(name), ".ti1")
+                if p.is_file():
+                    self._preset_ti1_path = p
+                else:
+                    log.warning("preset '%s' marked attached_ti1 but %s is missing",
+                                name, p)
         self._update_manual_lb_visibility()
 
         # A user preset flagged "generate on select" (▶) prompts for a target
@@ -2430,11 +2569,15 @@ class TabChart(QWidget):
         # Pre-fill name + checkbox from the currently-selected user preset, so
         # re-saving to tweak it (e.g. just toggling auto-run) is one step.
         cur_key = self._preset_combo.currentData()
-        prefill_name, prefill_run = "", False
+        prefill_name, prefill_run, prefill_attach = "", False, False
         if cur_key is not None and cur_key not in BUILTIN_PRESET_KEYS:
             prefill_name = str(cur_key)
             existing = self._load_presets_from_settings().get(cur_key, {})
             prefill_run = bool(isinstance(existing, dict) and existing.get("auto_run"))
+            prefill_attach = bool(isinstance(existing, dict) and existing.get("attached_ti1"))
+        # A patch set can only be attached if one is currently loaded.
+        have_ti1 = (self._current_ti1_path is not None
+                    and self._current_ti1_path.is_file())
 
         dlg = QDialog(self)
         dlg.setWindowTitle("Save Preset")
@@ -2477,6 +2620,32 @@ class TabChart(QWidget):
         run_note.setObjectName("info")
         lay.addWidget(run_note)
 
+        lay.addSpacing(6)
+        attach_chk = QCheckBox(
+            "Build from the currently loaded patch set (attach its .ti1)", dlg)
+        attach_chk.setChecked(prefill_attach and have_ti1)
+        attach_chk.setEnabled(have_ti1)
+        lay.addWidget(attach_chk)
+        if have_ti1:
+            attach_text = (
+                "When on, the patch set currently loaded (its .ti1) is saved next to "
+                "this preset. Selecting the preset then builds the chart straight from "
+                "that .ti1 — targen is skipped and printtarg just lays it out, exactly "
+                "like the built-in presets. The .ti1 is stored inside the preset folder "
+                "under the preset's name, so it travels with a shared preset."
+            )
+        else:
+            attach_text = (
+                "Generate or load a chart first to enable this — there's no patch set "
+                "(.ti1) loaded right now to attach. When a set is loaded, you can save "
+                "it with the preset so selecting it skips targen and builds from that "
+                "exact .ti1."
+            )
+        attach_note = QLabel(attach_text, dlg)
+        attach_note.setWordWrap(True)
+        attach_note.setObjectName("info")
+        lay.addWidget(attach_note)
+
         lay.addSpacing(4)
         bb = QDialogButtonBox(dlg)
         bb.addButton("Cancel", QDialogButtonBox.ButtonRole.RejectRole)
@@ -2494,6 +2663,22 @@ class TabChart(QWidget):
         if not name:
             return
         capture["auto_run"] = bool(run_chk.isChecked())
+        attach = bool(attach_chk.isChecked() and have_ti1)
+        capture["attached_ti1"] = attach
+        # Manage the .ti1 sidecar next to the preset .json. Copy the loaded set in
+        # when attaching; remove any stale one when the option is turned off.
+        sidecar = _preset_sidecar_path("create_chart", name, ".ti1")
+        try:
+            if attach:
+                import shutil
+                sidecar.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy(self._current_ti1_path, sidecar)
+            elif sidecar.is_file():
+                sidecar.unlink()
+        except OSError as exc:
+            log.warning("preset .ti1 sidecar update failed for '%s': %s", name, exc)
+            if attach:
+                capture["attached_ti1"] = False
         presets = self._load_presets_from_settings()
         presets[name] = capture
         self._save_presets_to_settings(presets)
@@ -2532,6 +2717,13 @@ class TabChart(QWidget):
         presets = self._load_presets_from_settings()
         presets.pop(name, None)
         self._save_presets_to_settings(presets)
+        # Remove the attached .ti1 sidecar, if any, so it doesn't orphan.
+        sidecar = _preset_sidecar_path("create_chart", str(name), ".ti1")
+        if sidecar.is_file():
+            try:
+                sidecar.unlink()
+            except OSError as exc:
+                log.warning("could not remove preset .ti1 sidecar %s: %s", sidecar, exc)
         self._populate_preset_combo(presets)
 
     # ------------------------------------------------------------------
@@ -2705,6 +2897,99 @@ class TabChart(QWidget):
 
         self._refresh_manual_command_preview()
 
+    # ------------------------------------------------------------------
+    # Prebuilt-files built-in presets (TC9.24 A4 / Letter)
+    # ------------------------------------------------------------------
+
+    def _set_manual_params_enabled(self, enabled: bool) -> None:
+        """Grey out (or restore) the whole targen + printtarg parameter panels.
+
+        Used by prebuilt-files presets, where none of those options apply — the
+        chart is a fixed bundle that's only copied, never re-laid-out."""
+        for grp in (self._manual_targen_grp, self._manual_printtarg_grp):
+            if grp is not None:
+                grp.setEnabled(enabled)
+
+    def _leave_prebuilt(self) -> None:
+        """Clear prebuilt-files state and re-enable the param panels."""
+        self._prebuilt_active = False
+        self._prebuilt_key = None
+        self._set_manual_params_enabled(True)
+
+    def _apply_prebuilt_preset(self, key: str, target_name: str) -> None:
+        """Select a prebuilt-files preset: grey the panels and copy the bundle."""
+        self._prebuilt_active = True
+        self._prebuilt_key = key
+        # These are i1Pro targets. Pin the instrument so the downstream routing
+        # (notably the i1iSis hand-off check in _on_generate_finished) treats them
+        # as a normal strip-read chart, regardless of what was selected before.
+        self._set_manual_value("printtarg", "-i", "i1")
+        self._set_manual_params_enabled(False)
+        if self._manual_target_name_edit is not None:
+            self._manual_target_name_edit.setText(target_name)
+        self._create_prebuilt_target(key, target_name)
+
+    def _create_prebuilt_target(self, key: str, target_name: str) -> None:
+        """Copy a bundled prebuilt target into ~/ChromIQ/<name> and load it.
+
+        No targen/printtarg is run: the bundled .ti1/.ti2 and TIFF pages are
+        copied verbatim (renamed to the chosen target name) and the TIFFs are
+        loaded into the preview, then routed downstream like a normal chart."""
+        import shutil
+        if self._runner.is_running:
+            log.warning("Prebuilt preset: a process is already running")
+            return
+        stem_rel, default_name = PREBUILT_PRESETS[key]
+        src_ti1 = resource_path(f"{stem_rel}.ti1")
+        src_ti2 = resource_path(f"{stem_rel}.ti2")
+        src_dir = src_ti1.parent
+        src_stem = src_ti1.stem
+        src_tiffs = sorted(src_dir.glob(f"{src_stem}_*.tif"))
+        if not src_ti1.is_file() or not src_tiffs:
+            InfoDialog(
+                "Prebuilt chart not found",
+                "The bundled patch set could not be located:\n\n"
+                f"{src_dir}\n\nThe app bundle may be incomplete.",
+                self, min_width=520,
+            ).exec()
+            return
+
+        self.target_started.emit()
+        name = (self._manual_target_name_edit.text().strip()
+                if self._manual_target_name_edit is not None else "") or target_name
+        self._file_mgr.set_target_name(name)
+        stem = self._file_mgr.get_target_name() or default_name
+        work_dir = self._file_mgr.ensure_folder()
+        # Start from a clean slate so stale pages from a prior copy can't linger.
+        self._file_mgr.clean_folder(["ti1", "ti2", "tif", "tiff", "cht", "ps"])
+
+        self._log.clear()
+        self._preview.clear()
+        try:
+            shutil.copy(src_ti1, work_dir / f"{stem}.ti1")
+            if src_ti2.is_file():
+                shutil.copy(src_ti2, work_dir / f"{stem}.ti2")
+            tiffs: list[Path] = []
+            for i, src_tif in enumerate(src_tiffs, start=1):
+                dest = work_dir / f"{stem}_{i:02d}.tif"
+                shutil.copy(src_tif, dest)
+                tiffs.append(dest)
+        except OSError as exc:
+            log.error("Prebuilt copy failed: %s", exc)
+            InfoDialog(
+                "Could not create target",
+                f"Copying the bundled chart into\n\n{work_dir}\n\nfailed:\n{exc}",
+                self, min_width=520,
+            ).exec()
+            return
+
+        self._last_target_name = stem
+        self._log.appendPlainText(
+            f"Copied prebuilt patch set into {work_dir} ({len(tiffs)} page(s)). "
+            "targen and printtarg skipped."
+        )
+        self._on_generate_finished(tiffs)
+
     def _generate_from_ti1(self, ti1_path: Path) -> None:
         """Create the target by running printtarg only on an existing .ti1.
 
@@ -2717,8 +3002,8 @@ class TabChart(QWidget):
             return
         if not ti1_path.is_file():
             InfoDialog(
-                "TC9.18 chart not found",
-                f"The patch set could not be located:\n\n{ti1_path}",
+                "Patch set not found",
+                f"The .ti1 patch set could not be located:\n\n{ti1_path}",
                 self, min_width=520,
             ).exec()
             return
@@ -2983,6 +3268,24 @@ class TabChart(QWidget):
         if self._runner.is_running:
             log.warning("A process is already running")
             return
+        # Prebuilt-files preset: nothing to compute — re-copy the bundled files
+        # into a folder named after the current Output field. targen/printtarg
+        # are never run for these.
+        if self._prebuilt_active and self._prebuilt_key is not None \
+                and self._current_mode() == "manual":
+            name = (self._manual_target_name_edit.text().strip()
+                    if self._manual_target_name_edit is not None else "")
+            self._create_prebuilt_target(
+                self._prebuilt_key, name or self._builtin_default_name(self._prebuilt_key))
+            return
+        # User preset with a bundled .ti1: build from that patch set (skip targen,
+        # lay it out with printtarg) — same path as the TC9.18 built-in.
+        if self._preset_ti1_path is not None and self._current_mode() == "manual":
+            if self._preset_ti1_path.is_file():
+                self._generate_from_ti1(self._preset_ti1_path)
+                return
+            log.warning("attached preset .ti1 vanished: %s", self._preset_ti1_path)
+            self._preset_ti1_path = None
         # TC9.18 built-in preset: while it's active and the user hasn't touched
         # any targen setting, reproduce the exact bundled chart (printtarg only).
         # The OFPS patch set can't be recreated reliably by re-running targen, so
@@ -3095,9 +3398,13 @@ class TabChart(QWidget):
         if not path:
             return
         ti1 = Path(path)
-        # Loading a different patch set means we're no longer on the TC9.18 chart.
+        # Loading a different patch set means we're no longer on the TC9.18 chart
+        # or any preset-bound patch set; re-enable panels if a prebuilt was active.
         self._tc918_active = False
         self._tc918_targen_sig = None
+        self._preset_ti1_path = None
+        if self._prebuilt_active:
+            self._leave_prebuilt()
         self._file_mgr.set_target_name(ti1.stem)
         params = self._collect_params()
         self._log.clear()
@@ -3279,6 +3586,10 @@ class TabChart(QWidget):
             self._preview.load_tiff(tiffs)
             log.info("Preview loaded: %d TIFF(s)", len(tiffs))
             ti2 = tiffs[0].parent / f"{stem}.ti2"
+            # Remember the .ti1 backing this chart so the Save Preset dialog can
+            # offer to attach it.
+            ti1 = tiffs[0].parent / f"{stem}.ti1"
+            self._current_ti1_path = ti1 if ti1.is_file() else None
             self.chart_finished.emit(tiffs, ti2, is_isis)
         else:
             self._log.appendPlainText("[ERROR] Chart generation failed.")

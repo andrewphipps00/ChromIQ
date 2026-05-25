@@ -5,7 +5,7 @@ another quickly. "Built-in" means: it always appears in the Create Chart →
 Manual **Presets** dropdown, the user can't delete it, and selecting it does
 something fixed.
 
-There are three built-in presets today, of **two different kinds**:
+There are five built-in presets today, of **three different kinds**:
 
 1. **ti1-based** — *i1Pro TC9.18 by Pharmacist*. Loads a bundled `.ti1` and runs
    `printtarg` only (targen skipped), creating the target right after the name
@@ -21,9 +21,26 @@ There are three built-in presets today, of **two different kinds**:
    method (`_apply_colormunki_td_preset`) and a `MUNKI_TARGEN` table that maps
    each key to its `(patches, white, black, grey)` targen counts — add more by
    adding a row, no new method needed.
+3. **prebuilt-files** — *i1Pro TC9.24 A4* and *i1Pro TC9.24 Letter by Pharmacist*.
+   A **complete, pre-generated target** (`.ti1` + `.ti2` + page `.tif`s) bundled in
+   `assets/charts/`. Selecting one prompts for a name, **copies** the bundled files
+   into a fresh `~/ChromIQ/<name>/` folder (renamed to `<name>…`) and loads the
+   copied TIFFs — **neither targen nor printtarg runs**, so the param panels are
+   greyed out while the preset is active. The two share `_apply_prebuilt_preset` /
+   `_create_prebuilt_target` and a `PREBUILT_PRESETS` table mapping each key to its
+   `(asset_stem, default_name)` — add more by adding a row.
 
 In the dropdown the order is **Default → user presets → built-ins** (built-ins
-pinned at the bottom).
+pinned at the bottom). The built-ins are **grouped by instrument**, the groups
+ordered by instrument name, with a **divider line** before the built-in block
+(separating it from the user presets) and before each new instrument group. The
+grouping/sort lives in `_populate_preset_combo` (a `(instrument, label, key,
+tooltip)` list, stable-sorted by instrument, `insertSeparator()` on each group
+change). The default combo separator is nearly invisible on the dark theme and
+QSS `::separator` isn't honoured for combo views, so `_ComboSeparatorDelegate`
+(module-level, set via `setItemDelegate`) paints the line itself in a
+palette-derived colour; separator rows are non-selectable and an extra guard at
+the top of `_on_preset_selected` ignores any that somehow become current.
 
 All of this lives in `ui/tabs/tab_chart.py` unless noted.
 
@@ -60,6 +77,25 @@ restore loop ignores keys that don't match a `{tool}_{flag}` widget.
   preset selected with its values loaded but doesn't generate** — deliberately
   different from a built-in's full revert, so an auto-run user preset stays
   selectable for delete / re-save.
+
+### User presets: attached `.ti1` (build from a bundled patch set)
+
+A user preset can also **bundle its own `.ti1`**, mirroring the ti1-based
+built-in but with a user-supplied patch set. The Save dialog (`_on_preset_save`)
+shows a *"Build from the currently loaded patch set (attach its .ti1)"* checkbox,
+enabled only when `self._current_ti1_path` points at a real file (set in
+`_on_generate_finished` from `<work_dir>/<stem>.ti1` after any generate/load).
+
+- On save: the loaded `.ti1` is copied next to the preset's `.json` via
+  `preset_store.sidecar_path("create_chart", name, ".ti1")` (same filename stem,
+  so the pair travels together when shared), and `data["attached_ti1"] = True` is
+  stored. Turning the option off deletes a stale sidecar; `_on_preset_delete`
+  removes it too. (Note: `save_presets` only rewrites `*.json`, so non-JSON
+  sidecars are managed by hand in these two methods.)
+- On selection: `_on_preset_selected` sets `self._preset_ti1_path` to the sidecar
+  if `attached_ti1` is set (else `None`). `_on_generate` checks this **before** the
+  TC9.18 path and routes to `_generate_from_ti1(self._preset_ti1_path)` — targen
+  skipped, printtarg lays it out. Works with `auto_run` too (prompt → generate).
 
 ## Moving parts (TC9.18)
 
@@ -170,7 +206,18 @@ shared `_apply_colormunki_td_preset`, and `BUILTIN_PRESET_KEYS` is derived from
   pages / bit-depth / target name, then call `self._on_generate()` to create the
   target immediately. No ti1, no reproduce routing — the normal targen→printtarg
   flow runs. (Guard `self._runner.is_running` first.)
+- **prebuilt-files** (easiest — just a `PREBUILT_PRESETS` row): drop the bundle
+  (`<stem>.ti1`, `<stem>.ti2`, `<stem>_NN.tif`) into `assets/charts/`, add a row
+  `KEY: ("assets/charts/<stem>", "<default-name>")`, a `*_PRESET_KEY` +
+  `*_PRESET_LABEL` (include the label in `BUILTIN_PRESET_LABELS`), and one
+  `_add_builtin_preset_item(LABEL, KEY, self._prebuilt_tooltip("<paper>"))` call.
+  `_on_preset_selected` already dispatches anything in `PREBUILT_PRESETS` to
+  `_apply_prebuilt_preset`, and `BUILTIN_PRESET_KEYS` is derived from it.
+  `_create_prebuilt_target` copies the files (renamed to the chosen name), greys
+  the panels via `_set_manual_params_enabled(False)`, pins the instrument to `i1`,
+  and routes through `_on_generate_finished` so Print/Measure get the files. The
+  panels are re-enabled by `_leave_prebuilt()` on any other selection or
+  `_on_load_ti1`. `_on_generate` re-copies to the current Output name while active.
 
-The ti1-based and params-based kinds still have one `if` branch each in
-`_on_preset_selected`; only add a third branch for a genuinely new *kind*, not
-for more variants of an existing one.
+The three kinds have one dispatch branch each in `_on_preset_selected`; only add a
+fourth branch for a genuinely new *kind*, not for more variants of an existing one.

@@ -37,6 +37,9 @@ assets/exported/
 # Chart / calibration TIFFs produced by the workflow
 *.tif
 *.tiff
+# …but the bundled prebuilt-preset charts under assets/ ARE shipped
+!assets/charts/*.tif
+!assets/charts/*.tiff
 
 # CI-generated icons (rebuilt by scripts/build_icons.py during the build)
 assets/app_icon.ico
