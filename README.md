@@ -13,6 +13,12 @@ ChromIQ runs on **macOS**, **Windows** (x64 and ARM64), and **Linux** (x86_64 an
 
 Supported instruments: X-Rite i1Pro, i1Pro 2, i1Pro 3, i1Pro 3 Plus, ColorMunki, i1Studio, ColorChecker Studio, and SpectroScan.
 
+<p align="center">
+  <a href="https://ko-fi.com/itsab1989"><img src="https://ko-fi.com/img/githubbutton_sm.svg" alt="Support ChromIQ on Ko-fi"></a>
+</p>
+
+<p align="center"><sub>ChromIQ is free — if it's saved you time and paper, a coffee is a kind way to say thanks. No pressure.</sub></p>
+
 ---
 
 ## Download & First Launch
@@ -531,7 +537,9 @@ To be determined.
 
 ## Support
 
-ChromIQ is free and open-source. If it has saved you time and paper, [buying me a coffee on Ko-fi](https://ko-fi.com/itsab1989) is a kind way to say thanks and helps keep the project going.
+ChromIQ is free and open-source. If it has saved you time and paper, [buying me a coffee on Ko-fi](https://ko-fi.com/itsab1989) is a kind way to say thanks and helps keep the project going. There's absolutely no obligation — the app stays fully free either way.
+
+<a href="https://ko-fi.com/itsab1989"><img src="https://ko-fi.com/img/githubbutton_sm.svg" alt="Support ChromIQ on Ko-fi"></a>
 
 ---
 
