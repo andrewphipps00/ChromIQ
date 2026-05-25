@@ -11,13 +11,22 @@ Phases 1–4 below are **done** and unit-tested (`tests/test_average_runner.py`)
 - `workflow/average_runner.py` — wraps `average` (mean, or median via `-e`).
 - `core/file_manager.py` — `read_variant_path` / `average_path` /
   `existing_read_variants` / `next_read_index`.
-- `core/settings.py` — `average_method` ("mean" | "median"), default mean.
-- `ui/tabs/tab_measure.py` — `_handle_measure_complete` shows the completion
+- `core/settings.py` — `averaging_enabled` (master switch, default **False**)
+  and `average_method` ("mean" | "median", default mean).
+- `ui/dialogs/settings_dialog.py` — "Enable measurement averaging" checkbox in
+  the Behaviour group, with an extensive tooltip.
+- `ui/tabs/tab_measure.py` — when `averaging_enabled`,
+  `_handle_measure_complete` shows the completion
   dialog on every normal full read; "Measure again" accumulates
   `<base>_read{N}.ti3`, "Average" → `<base>_average.ti3` then Build Profile.
 - `ui/tabs/tab_profile.py` — `set_ti3_path` strips a trailing
   `_read{N}`/`_average` so the averaged file still finds the canonical `.ti2`
   (edge case #1, solved by suffix-stripping rather than copying).
+
+The whole flow is **off by default**, gated behind the `averaging_enabled`
+Preferences toggle — with it off, a finished full read proceeds straight to
+Build Profile exactly as before (the classic `elif ti3_exists:` branch in
+`_on_measure_done`).
 
 **Deferred:** Phase 5 (auto-offer on re-entering a project with prior reads).
 **Known UX wrinkle:** a full strip read shows the existing "All Stripes Read"

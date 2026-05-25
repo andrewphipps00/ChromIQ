@@ -3392,9 +3392,23 @@ class TabMeasure(QWidget):
             self.measure_finished.emit(ti3)
             if self._auto_proceed:
                 self.proceed_to_profile.emit()
-        elif ti3_exists:
-            # Normal full read → offer "read again & average" (docs/dev_averaging.md).
+        elif ti3_exists and self._settings.get("averaging_enabled", False):
+            # Normal full read, averaging enabled → offer "read again & average"
+            # (docs/dev_averaging.md). Gated behind a Preferences toggle so the
+            # default experience is unchanged.
             self._handle_measure_complete(ti3)
+        elif ti3_exists:
+            # Normal full read, averaging off → classic behaviour: log the result
+            # and proceed straight to Build Profile (mirrors the cal/refinement
+            # branch above, minus the dedicated next-step wording).
+            self._log.appendPlainText(
+                "\n[OK] Measurement complete.\n"
+                f"Saved: {ti3}\n\n"
+                "→ Next step: go to the '4. Build Profile' tab to create your ICC profile."
+            )
+            self.measure_finished.emit(ti3)
+            if self._auto_proceed:
+                self.proceed_to_profile.emit()
         else:
             # chartread exited cleanly but wrote no fresh .ti3 — e.g. the user
             # aborted at the calibration prompt (Esc/Q, or by closing the

@@ -19,7 +19,18 @@ import pytest
 
 from core.file_manager import FileManager
 from core.resource_path import argyll_binary
+from core.settings import DEFAULTS
 from workflow.average_runner import AverageParams, AverageRunner
+
+
+# ----------------------------------------------------------------------
+# Master switch — the whole flow is opt-in, off by default
+# ----------------------------------------------------------------------
+
+def test_averaging_disabled_by_default() -> None:
+    # The Measure-tab completion dialog / read-again flow is gated behind this
+    # toggle; shipping it on would change the default experience for everyone.
+    assert DEFAULTS["averaging_enabled"] is False
 
 
 # ----------------------------------------------------------------------

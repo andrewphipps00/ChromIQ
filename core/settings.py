@@ -101,7 +101,11 @@ DEFAULTS: dict[str, Any] = {
     # ChromIQ-style refinement: merge a pre-conditioning profile's measurement
     # data into the freshly measured chart before building (see workflow/ti3_merge.py)
     "chromiq_refinement":        False,
-    # "Read again & average" — how repeated reads are combined: "mean" | "median"
+    # "Read again & average" — master switch. OFF (default) restores the classic
+    # behaviour: a finished full read proceeds straight to Build Profile. ON adds
+    # the post-read completion dialog offering measure-again / average.
+    "averaging_enabled":         False,
+    # When averaging is enabled, how repeated reads are combined: "mean" | "median"
     # (median == argyll `average -e`; only differs from mean at 3+ reads)
     "average_method":            "mean",
     # UI state

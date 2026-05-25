@@ -385,6 +385,50 @@ class SettingsDialog(QDialog):
             min_width=680,
         )
 
+        self._averaging_check = QCheckBox(
+            "Enable measurement averaging", self
+        )
+        averaging_tip = TooltipButton(
+            "Enable Measurement Averaging",
+            "Lets you read the SAME printed chart more than once and combine the "
+            "readings, to even out the small random errors every measuring device "
+            "makes. The more times you read a chart, the closer the averaged "
+            "result gets to its \"true\" colour — which can make for a slightly "
+            "more accurate profile, especially with budget instruments or tricky "
+            "papers.\n\n"
+            "You do NOT print a new chart. You measure the one already in front of "
+            "you a second (or third, or fourth) time. Because the printed colours "
+            "never change, only the tiny reading-to-reading wobble of the "
+            "instrument does, averaging those reads cancels most of that wobble "
+            "out.\n\n"
+            "Here is the whole journey, step by step:\n\n"
+            "  1. You measure your chart as usual in the Measure tab.\n\n"
+            "  2. When the read finishes, a new completion window appears. As well "
+            "as continuing to Build Profile, it offers \"Measure again\" — put the "
+            "very same chart back on the table and read it once more.\n\n"
+            "  3. You can repeat this as many times as you like. ChromIQ keeps each "
+            "read safely side by side in the working folder (named …_read1, "
+            "…_read2, and so on).\n\n"
+            "  4. Once you have two or more reads, the window lets you either build "
+            "from just the last read, or average all of the reads together and "
+            "build from that combined result (saved as …_average).\n\n"
+            "Mean vs. Median: averaging normally uses the plain mean (the ordinary "
+            "average). The window also offers Median, which ignores the odd "
+            "stray reading and only behaves differently once you have three or "
+            "more reads — handy if one read was disturbed (a bump, a smudge) and "
+            "you don't want it dragging the result.\n\n"
+            "When this option is OFF (the default), ChromIQ behaves exactly as it "
+            "always has: a finished measurement takes you straight on to Build "
+            "Profile with no extra window and no extra files. Turn it on only if "
+            "you want the option to read charts repeatedly for extra precision.\n\n"
+            "Tip: two reads already remove most of the random noise; three or four "
+            "give diminishing returns. There is no benefit to averaging reads of "
+            "DIFFERENT charts — this is only for re-reading one and the same chart.\n\n"
+            "With thanks to Alan Goldhammer, who suggested this feature.",
+            self,
+            min_width=660,
+        )
+
         self._native_print_check = QCheckBox("Use default macOS printer dialog", self)
         native_tip = TooltipButton(
             "Use default macOS printer dialog",
@@ -436,6 +480,7 @@ class SettingsDialog(QDialog):
             _bh_cell(self._themed_colors_check, themed_colors_tip),
             _bh_cell(self._cal_mode_check, cal_tip),
             _bh_cell(self._chromiq_refine_check, refine_tip),
+            _bh_cell(self._averaging_check, averaging_tip),
         ]
         if native_print_supported():
             bh_cells.append(_bh_cell(self._native_print_check, native_tip))
@@ -542,6 +587,7 @@ class SettingsDialog(QDialog):
         self._themed_colors_check.setChecked(bool(s.get("gamut_themed_colors", True)))
         self._cal_mode_check.setChecked(bool(s.get("calibration_mode", False)))
         self._chromiq_refine_check.setChecked(bool(s.get("chromiq_refinement", False)))
+        self._averaging_check.setChecked(bool(s.get("averaging_enabled", False)))
         self._native_print_check.setChecked(bool(s.get("use_native_print_dialog", False)))
         self._confirm_print_check.setChecked(bool(s.get("confirm_before_printing", True)))
         from data.patch_db import I1PRO_DEFAULT_PRESET_KEY
@@ -611,6 +657,7 @@ class SettingsDialog(QDialog):
         s.set("gamut_themed_colors",       self._themed_colors_check.isChecked())
         s.set("calibration_mode",          self._cal_mode_check.isChecked())
         s.set("chromiq_refinement",        self._chromiq_refine_check.isChecked())
+        s.set("averaging_enabled",         self._averaging_check.isChecked())
         s.set("use_native_print_dialog",   self._native_print_check.isChecked())
         s.set("confirm_before_printing",   self._confirm_print_check.isChecked())
         s.set("appearance",                str(self._appearance_combo.currentData()))
