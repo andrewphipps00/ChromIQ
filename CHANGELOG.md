@@ -1,5 +1,40 @@
 # Changelog
 
+## v3.8.0-beta.5
+Fifth beta of the 3.8.0 line. Adds an optional **"Read again & average"** step to
+the Measure tab: read the same printed chart more than once and average the
+measurements together to reduce instrument noise.
+
+### Added
+- **Read the same chart several times and average the results.** When a
+  measurement finishes, ChromIQ now asks whether you'd like to measure the chart
+  again. Each repeat is kept alongside the previous reads, and once you have two
+  or more you can combine them into a single averaged measurement — or just keep
+  the most recent read — before building your profile. Averaging is handled by
+  ArgyllCMS's own `average` tool: it averages the measured colour values,
+  including the full spectral data, while leaving the chart's RGB patches
+  untouched. A **Mean / Median** choice is offered once you have three or more
+  reads (with two reads they're identical).
+
+### Thanks
+- **Alan Goldhammer** for suggesting measurement averaging and pointing to the
+  approach behind it.
+
+### What to test
+- **The completion dialog appears.** Finish a normal chart read — after the usual
+  "All stripes read" prompt, a new **Measurement Complete** dialog should offer
+  *Continue to Build Profile* and *Measure again to average*.
+- **Measure again.** Choosing it should re-read the same chart from the start (a
+  fresh full read, not a resume) and keep the previous read.
+- **Two or more reads.** After a second read the dialog should offer *Average all
+  reads & build*, *Use last read only*, and *Measure again*, plus the Mean/Median
+  selector.
+- **Average & build.** Averaging should produce one measurement file and take you
+  to Build Profile with it loaded; the chart's patch file is still linked, so
+  "print again" / refinement keep working.
+- **Three or more reads** and the **Median** option, if you want to exercise the
+  outlier-rejection path.
+
 ## v3.8.0-beta.4
 Fourth beta of the optional **ChromIQ-style refinement process** (still off by
 default). The refinement merge is now done by ArgyllCMS itself, and this beta
