@@ -1348,19 +1348,43 @@ class TabCheckRefine(QWidget):
         exp_lbl.setWordWrap(True)
         layout.addWidget(exp_lbl)
 
-        # Strip overview — always show if data is available
-        if all_strips_display:
-            top_n = all_strips_display[:5]
-            strip_lines = "\n".join(
-                f"  • Strip {s}  (avg ΔE: {de:.2f})" for s, de in top_n
-            )
-            overview_lbl = QLabel(
-                f"<b>Strips with the highest error</b> (worst first, avg ΔE):"
-                f"<br><pre>{strip_lines}</pre>",
-                dlg,
-            )
-            overview_lbl.setWordWrap(True)
-            layout.addWidget(overview_lbl)
+        # Worst strips (left) and worst individual patches (right), side by side
+        # so both fit without making the dialog tall.
+        if all_strips_display or result.patch_errors:
+            cols = QHBoxLayout()
+            cols.setSpacing(24)
+
+            if all_strips_display:
+                strip_lines = "\n".join(
+                    f"  • Strip {s}  (avg ΔE: {de:.2f})"
+                    for s, de in all_strips_display[:5]
+                )
+                strip_lbl = QLabel(
+                    "<b>Strips with the highest error</b><br>(worst first, avg ΔE):"
+                    f"<pre>{strip_lines}</pre>",
+                    dlg,
+                )
+                strip_lbl.setWordWrap(True)
+                strip_lbl.setAlignment(Qt.AlignmentFlag.AlignTop)
+                cols.addWidget(strip_lbl, 1)
+
+            if result.patch_errors:
+                worst_patches = sorted(
+                    result.patch_errors, key=lambda pe: pe[1], reverse=True
+                )[:5]
+                patch_lines = "\n".join(
+                    f"  • Patch {p}  (ΔE: {de:.2f})" for p, de in worst_patches
+                )
+                patch_lbl = QLabel(
+                    "<b>Patches with the highest error</b><br>(worst first, ΔE):"
+                    f"<pre>{patch_lines}</pre>",
+                    dlg,
+                )
+                patch_lbl.setWordWrap(True)
+                patch_lbl.setAlignment(Qt.AlignmentFlag.AlignTop)
+                cols.addWidget(patch_lbl, 1)
+
+            layout.addLayout(cols)
 
         # Action recommendation
         if recommend_start_over and refine_strips:
