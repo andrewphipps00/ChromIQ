@@ -3030,11 +3030,25 @@ class TabChart(QWidget):
                 and self._manual_auto_patches_check.isChecked()):
             self._log.appendPlainText("Calculating patch count…")
             self._log.ensureCursorVisible()
+            from PyQt6.QtCore import QEventLoop
             from PyQt6.QtWidgets import QApplication
+
+            # The binary-search path (custom layouts not in the patch DB)
+            # shells out to targen/printtarg synchronously per step, blocking
+            # this thread. Repaint the log after each progress line so the user
+            # sees step-by-step progress instead of a frozen window / beach
+            # ball. ExcludeUserInputEvents stops queued clicks/keys from
+            # re-entering generation mid-search.
+            def _estimate_progress(line: str) -> None:
+                self._on_log_line(line)
+                QApplication.processEvents(
+                    QEventLoop.ProcessEventsFlag.ExcludeUserInputEvents
+                )
+
             QApplication.processEvents()
             try:
                 params.patches = self._creator.estimate_patches(
-                    params, progress_cb=self._on_log_line
+                    params, progress_cb=_estimate_progress
                 )
             except Exception as exc:
                 log.error("Auto patch estimation failed: %s", exc)
