@@ -34,6 +34,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from core.file_manager import FileManager
 from core.logger import get_logger
 from core.preset_store import (
     load_presets as _load_tab_presets,
@@ -50,6 +51,7 @@ from ui.widgets import ElidingLabel, NoScrollComboBox, NoScrollDoubleSpinBox, No
 
 _TAB_COLOR = "#56d6a5"  # Measure tab accent
 from ui.styles import SPEC_GREEN, TAB_COLORS
+from workflow.average_runner import AverageParams, AverageRunner
 from workflow.measure_manager import MeasureManager, MeasureParams
 from ui.tiff_preview import TiffPreview
 
@@ -417,6 +419,7 @@ class TabMeasure(QWidget):
         self._runner   = runner
         self._settings = settings
         self._manager  = MeasureManager(runner, self)
+        self._avg_runner = AverageRunner(runner)
         self._ti1_path: Path | None = None
         self._tiff_pages: list[Path] = []
         # Per-page strip highlight rects and the authoritative per-page strip
@@ -443,6 +446,9 @@ class TabMeasure(QWidget):
         self._resume_active: bool = False
         self._auto_proceed: bool = False
         self._all_done_shown: bool = False
+        # "Read again & average": True once the user opts to re-read the chart,
+        # so each subsequent successful read is saved as <base>_read{N}.ti3.
+        self._averaging_active: bool = False
         self._instrument_disconnected: bool = False
         self._device_busy: bool = False
         self._no_instrument: bool = False
@@ -1737,6 +1743,8 @@ class TabMeasure(QWidget):
         return self._ti1_path
 
     def set_ti1_path(self, path: Path) -> None:
+        if path != self._ti1_path:
+            self._averaging_active = False   # new chart → fresh averaging session
         self._ti1_path = path
         self._ti1_lbl.setText(str(path))
         self._start_btn.setEnabled(True)
@@ -1747,6 +1755,7 @@ class TabMeasure(QWidget):
 
     def clear_chart_file(self) -> None:
         self._ti1_path = None
+        self._averaging_active = False
         self._ti1_lbl.setText("No file selected")
         self._ti1_lbl.setStyleSheet("color: #909090; font-size: 11px;")
         self._start_btn.setEnabled(False)
@@ -3369,7 +3378,8 @@ class TabMeasure(QWidget):
                 "or untick 'Refine / resume existing measurement (-r)' to start over."
             )
             self.measure_finished.emit(ti3)
-        elif ti3_exists:
+        elif ti3_exists and (is_cal or self._guided_refinement_active):
+            # Calibration and guided-refinement reads keep their dedicated flow.
             if is_cal:
                 next_step = "→ Next step: go to the '4. Calibration & Profiling' tab to create your calibration file."
             else:
@@ -3382,6 +3392,9 @@ class TabMeasure(QWidget):
             self.measure_finished.emit(ti3)
             if self._auto_proceed:
                 self.proceed_to_profile.emit()
+        elif ti3_exists:
+            # Normal full read → offer "read again & average" (docs/dev_averaging.md).
+            self._handle_measure_complete(ti3)
         else:
             # chartread exited cleanly but wrote no fresh .ti3 — e.g. the user
             # aborted at the calibration prompt (Esc/Q, or by closing the
@@ -3392,6 +3405,236 @@ class TabMeasure(QWidget):
             )
         self._auto_proceed = False
         self._log.ensureCursorVisible()
+
+    # ------------------------------------------------------------------
+    # Read again & average  (docs/dev_averaging.md)
+    # ------------------------------------------------------------------
+
+    def _handle_measure_complete(self, ti3: Path) -> None:
+        """A normal full read finished. Promote it to <base>_read{N} if we're in
+        an averaging session, then offer read-again / average / continue."""
+        work_dir  = ti3.parent
+        base_stem = ti3.stem            # canonical <base> (the .ti1/.ti2 stem)
+
+        if self._averaging_active:
+            # Save this fresh read as the next read in the current set.
+            n = FileManager.next_read_index(work_dir, base_stem)
+            dest = FileManager.read_variant_path(ti3, n)
+            try:
+                ti3.replace(dest)
+                current = dest
+            except OSError as exc:
+                log.warning("Could not save read variant %s: %s", dest, exc)
+                current = ti3
+            self._log.appendPlainText(f"\n[OK] Read saved: {current.name}")
+            reads = FileManager.existing_read_variants(work_dir, base_stem)
+        else:
+            # A standalone read. Ignore any <base>_read* left over from an
+            # earlier session — opting into averaging below starts a clean set.
+            current = ti3
+            reads = []
+            self._log.appendPlainText(f"\n[OK] Measurement complete.\nSaved: {current}")
+
+        action, method = self._show_completion_dialog(current, reads)
+
+        if action == "again":
+            if not self._averaging_active:
+                # Begin a fresh averaging set: discard any stale variants, then
+                # save this first read as <base>_read1 so the next read lands
+                # beside it as <base>_read2.
+                self._reset_read_variants(work_dir, base_stem)
+                first = FileManager.read_variant_path(ti3, 1)
+                try:
+                    ti3.replace(first)
+                    self._log.appendPlainText(f"[INFO] First read saved as {first.name}")
+                except OSError as exc:
+                    log.warning("Could not save first read variant: %s", exc)
+                self._averaging_active = True
+            QTimer.singleShot(0, self._start_averaging_read)
+            return
+
+        self._averaging_active = False
+        if action == "average" and len(reads) >= 2:
+            self._run_average_and_proceed(ti3, reads, method)
+            return
+
+        # "continue" (single read) or "use_last" (last read of a set).
+        self.measure_finished.emit(current)
+        self.proceed_to_profile.emit()
+
+    def _reset_read_variants(self, work_dir: Path, base_stem: str) -> None:
+        """Delete leftover <base>_read*.ti3 / <base>_average.ti3 before a new set."""
+        stale = list(FileManager.existing_read_variants(work_dir, base_stem))
+        avg = FileManager.average_path(work_dir / f"{base_stem}.ti3")
+        if avg.exists():
+            stale.append(avg)
+        for f in stale:
+            try:
+                f.unlink()
+            except OSError as exc:
+                log.warning("Could not remove stale read file %s: %s", f, exc)
+
+    def _show_completion_dialog(
+        self, current: Path, reads: list[Path]
+    ) -> tuple[str, str]:
+        """Return (action, method). action ∈ {continue, again, use_last, average}."""
+        from PyQt6.QtWidgets import (
+            QComboBox, QDialog, QHBoxLayout, QLabel, QPushButton, QVBoxLayout,
+        )
+        n_reads = len(reads)
+
+        QApplication.instance().removeEventFilter(self)
+
+        dlg = QDialog(self)
+        dlg.setMinimumWidth(580)
+        dlg.setWindowTitle("Measurement Complete")
+        layout = QVBoxLayout(dlg)
+        layout.setSpacing(16)
+        layout.setContentsMargins(24, 20, 24, 20)
+
+        if n_reads >= 2:
+            body = (
+                f"<b>Measurement complete — {n_reads} reads of this chart are saved.</b>"
+                "<br><br>"
+                "Combining repeated reads of the same chart averages out instrument "
+                "noise and can improve profile accuracy.<br><br>"
+                "&nbsp;&nbsp;•&nbsp; <b>Average all reads &amp; build</b> — combine all "
+                f"{n_reads} reads into one measurement, then continue to Build Profile.<br>"
+                "&nbsp;&nbsp;•&nbsp; <b>Use last read only</b> — build from the most "
+                "recent read and ignore the others.<br>"
+                "&nbsp;&nbsp;•&nbsp; <b>Measure again</b> — read the chart once more and "
+                "add it to the set."
+            )
+        else:
+            body = (
+                "<b>Measurement complete — your readings have been saved.</b><br><br>"
+                "Reading the same chart a second time and averaging the two results "
+                "reduces instrument noise and can improve profile accuracy.<br><br>"
+                "&nbsp;&nbsp;•&nbsp; <b>Continue to Build Profile</b> — use this single "
+                "measurement as it is.<br>"
+                "&nbsp;&nbsp;•&nbsp; <b>Measure again to average</b> — read the same "
+                "chart once more; the results will be averaged together."
+            )
+        msg = QLabel(body, dlg)
+        msg.setWordWrap(True)
+        layout.addWidget(msg)
+
+        method_combo = None
+        if n_reads >= 2:
+            method_row = QHBoxLayout()
+            method_combo = QComboBox(dlg)
+            method_combo.addItem("Mean (recommended)", "mean")
+            method_combo.addItem("Median — needs 3+ reads", "median")
+            saved = self._settings.get("average_method", "mean")
+            method_combo.setCurrentIndex(max(0, method_combo.findData(saved)))
+            method_combo.setToolTip(
+                "Mean averages every read. Median rejects a single outlier read, "
+                "but only differs from the mean with three or more reads."
+            )
+            method_row.addWidget(QLabel("Combine method:", dlg))
+            method_row.addWidget(method_combo, 1)
+            layout.addLayout(method_row)
+
+        choice = {"action": "use_last" if n_reads >= 2 else "continue"}
+
+        def _pick(action: str) -> None:
+            choice["action"] = action
+            dlg.accept()
+
+        btn_row = QHBoxLayout()
+        btn_row.addStretch(1)
+        if n_reads >= 2:
+            again_btn = QPushButton("Measure again", dlg)
+            again_btn.clicked.connect(lambda: _pick("again"))
+            last_btn = QPushButton("Use last read only", dlg)
+            last_btn.clicked.connect(lambda: _pick("use_last"))
+            avg_btn = QPushButton("Average all reads & build →", dlg)
+            avg_btn.setObjectName("primary")
+            avg_btn.clicked.connect(lambda: _pick("average"))
+            for b in (again_btn, last_btn, avg_btn):
+                btn_row.addWidget(b)
+        else:
+            again_btn = QPushButton("Measure again to average", dlg)
+            again_btn.clicked.connect(lambda: _pick("again"))
+            cont_btn = QPushButton("Continue to Build Profile →", dlg)
+            cont_btn.setObjectName("primary")
+            cont_btn.clicked.connect(lambda: _pick("continue"))
+            for b in (again_btn, cont_btn):
+                btn_row.addWidget(b)
+        layout.addLayout(btn_row)
+
+        tint_dialog_primary(dlg, _TAB_COLOR)
+        dlg.exec()
+
+        method = "mean"
+        if method_combo is not None:
+            method = method_combo.currentData() or "mean"
+            self._settings.set("average_method", method)
+        return choice["action"], method
+
+    def _start_averaging_read(self) -> None:
+        """Re-run a fresh, full read of the same chart for the averaging set."""
+        if self._ti1_path is None:
+            return
+        if self._runner.is_running:
+            QTimer.singleShot(200, self._start_averaging_read)
+            return
+        # Force a clean full read — never resume/refine the previous pass.
+        cb = self._resume_cb if self._current_mode() == "guided" else self._m_resume_cb
+        if cb.isChecked():
+            cb.setChecked(False)
+        self._on_start()
+
+    def _run_average_and_proceed(
+        self, base: Path, reads: list[Path], method: str
+    ) -> None:
+        out = FileManager.average_path(base)
+        self._log.appendPlainText(
+            f"\n[INFO] Averaging {len(reads)} reads → {out.name} …"
+        )
+
+        def _on_avg_finish(result: Path | None) -> None:
+            if result is None:
+                fail = self._avg_runner.primary_failure()
+                detail = fail[1] if fail else "see the output log above."
+                self._log.appendPlainText(f"[ERROR] Averaging failed — {detail}")
+                self._show_average_failed_dialog(detail)
+                return
+            self._log.appendPlainText(
+                f"[OK] Averaged measurement saved: {result.name}\n"
+                "→ Next step: go to the '4. Build Profile' tab to create your ICC profile."
+            )
+            self.measure_finished.emit(result)
+            self.proceed_to_profile.emit()
+
+        self._avg_runner.run(
+            AverageParams(inputs=reads, output=out, method=method),
+            on_line=self._on_log_line,
+            on_finish=_on_avg_finish,
+        )
+
+    def _show_average_failed_dialog(self, detail: str) -> None:
+        from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QVBoxLayout
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Averaging Failed")
+        dlg.setMinimumWidth(500)
+        layout = QVBoxLayout(dlg)
+        layout.setSpacing(16)
+        layout.setContentsMargins(24, 20, 24, 20)
+        msg = QLabel(
+            "<b>The reads could not be averaged.</b><br><br>"
+            + detail
+            + "<br><br>Your individual reads are still saved — you can continue "
+            "from the Build Profile tab using one of them.",
+            dlg,
+        )
+        msg.setWordWrap(True)
+        layout.addWidget(msg)
+        btn_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
+        btn_box.accepted.connect(dlg.accept)
+        layout.addWidget(btn_box)
+        tint_dialog_primary(dlg, _TAB_COLOR)
+        dlg.exec()
 
     def eventFilter(self, obj: QObject, event: QEvent) -> bool:
         if event.type() == QEvent.Type.KeyPress:

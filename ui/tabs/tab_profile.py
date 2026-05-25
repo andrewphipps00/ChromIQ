@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sys
 from dataclasses import replace
 from pathlib import Path
@@ -3199,6 +3200,15 @@ class TabProfile(QWidget):
         self._detect_instrument(path)
         if propagate:
             ti2 = path.with_suffix(".ti2")
+            if not ti2.exists():
+                # "Read again & average" produces <base>_average.ti3 /
+                # <base>_read{N}.ti3 with no matching .ti2 of their own — fall
+                # back to the canonical chart's .ti2 (see docs/dev_averaging.md).
+                base_stem = re.sub(r"_(?:read\d+|average)$", "", path.stem)
+                if base_stem != path.stem:
+                    cand = path.with_name(f"{base_stem}.ti2")
+                    if cand.exists():
+                        ti2 = cand
             if ti2.exists():
                 self.ti2_found.emit(ti2)
 

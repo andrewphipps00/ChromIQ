@@ -16,6 +16,10 @@ log = get_logger(__name__)
 _ILLEGAL = re.compile(r"[^\w\-.]+", re.UNICODE)
 _TRAIL   = re.compile(r"^[._]+|[._]+$")
 
+# Trailing tag on a measurement stem produced by the "read again & average"
+# flow: <base>_read1.ti3, <base>_read2.ti3, … and the averaged <base>_average.ti3.
+_READ_VARIANT_RE = re.compile(r"_read(\d+)$")
+
 # Extensions ChromIQ itself generates during a session. A user-entered target
 # name (or a loaded file's stem) must never carry one of these: the name is
 # used verbatim as the working-folder name and the stem of every derived file,
@@ -107,6 +111,50 @@ class FileManager:
         d.mkdir(parents=True, exist_ok=True)
         log.debug("Working dir: %s", d)
         return d
+
+    # ------------------------------------------------------------------
+    # Averaging — repeated-read file naming
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def read_variant_path(base_ti3: Path, n: int) -> Path:
+        """`<base>_read{n}.ti3` next to base_ti3 (which must be the canonical file)."""
+        return base_ti3.with_name(f"{base_ti3.stem}_read{n}{base_ti3.suffix}")
+
+    @staticmethod
+    def average_path(base_ti3: Path) -> Path:
+        """`<base>_average.ti3` next to base_ti3."""
+        return base_ti3.with_name(f"{base_ti3.stem}_average{base_ti3.suffix}")
+
+    @staticmethod
+    def existing_read_variants(work_dir: Path, base_stem: str) -> list[Path]:
+        """`<base>_read{N}.ti3` files for base_stem, sorted by N.
+
+        Stems carrying a ``pre_``/``cal_`` prefix (refinement / calibration
+        files) are excluded — they aren't averaging reads.
+        """
+        if not work_dir.exists():
+            return []
+        found: list[tuple[int, Path]] = []
+        for f in work_dir.glob(f"{base_stem}_read*.ti3"):
+            if f.stem.startswith(("pre_", "cal_")):
+                continue
+            m = _READ_VARIANT_RE.search(f.stem)
+            if m:
+                found.append((int(m.group(1)), f))
+        found.sort(key=lambda t: t[0])
+        return [f for _, f in found]
+
+    @staticmethod
+    def next_read_index(work_dir: Path, base_stem: str) -> int:
+        """Smallest unused read index (max existing + 1, or 1 if none)."""
+        existing = FileManager.existing_read_variants(work_dir, base_stem)
+        highest = 0
+        for f in existing:
+            m = _READ_VARIANT_RE.search(f.stem)
+            if m:
+                highest = max(highest, int(m.group(1)))
+        return highest + 1
 
     # ------------------------------------------------------------------
     # Cleanup
