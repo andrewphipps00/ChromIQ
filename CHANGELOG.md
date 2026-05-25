@@ -1,5 +1,32 @@
 # Changelog
 
+## v3.8.0-beta.6
+Sixth beta of the 3.8.0 line. The **"Read again & average"** measurement step
+added in beta.5 is now an opt-in setting (off by default), plus the latest
+interface polish.
+
+### Changed
+- **Measurement averaging is now opt-in.** The repeated-read / averaging flow
+  introduced in beta.5 is controlled by a new **"Enable measurement averaging"**
+  switch in Preferences → Behaviour, **off by default**. With it off, a finished
+  read goes straight to Build Profile exactly as in 3.7.x — no extra dialog and
+  no extra files. Turn it on to get the *Measure again* / *Average* options. The
+  switch carries a full plain-language tooltip.
+- **Preferences → Behaviour is easier to read.** The behaviour options are now
+  laid out in two columns, and every option carries a full ⓘ tooltip.
+- **Create Chart no longer scrolls sideways.** A long generated-command preview
+  is kept inside the panel instead of forcing a horizontal scrollbar.
+
+### What to test
+- **Default off.** With the new setting off, finishing a chart read should behave
+  exactly as before — straight to Build Profile, no completion dialog, no
+  `_read*` / `_average` files created.
+- **Toggle on.** Enable "Enable measurement averaging" in Preferences, then finish
+  a read: the completion dialog offering *Measure again* / *Average* should appear,
+  and the averaging flow from beta.5 should work end to end.
+- **The tooltip.** The ⓘ beside the new switch should open a readable explanation
+  that fits fully in its window.
+
 ## v3.8.0-beta.5
 Fifth beta of the 3.8.0 line. Adds an optional **"Read again & average"** step to
 the Measure tab: read the same printed chart more than once and average the
