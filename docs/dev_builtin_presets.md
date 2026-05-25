@@ -7,9 +7,9 @@ something fixed.
 
 There are three built-in presets today, of **two different kinds**:
 
-1. **ti1-based** — *i1Pro TC9.18 + Extended grays by Pharmacist*. Loads a bundled
-   `.ti1` and runs `printtarg` only (targen skipped), creating the target right
-   after the name prompt (see below).
+1. **ti1-based** — *i1Pro TC9.18 by Pharmacist*. Loads a bundled `.ti1` and runs
+   `printtarg` only (targen skipped), creating the target right after the name
+   prompt (see below).
 2. **params-based** — *ColorMunki 324 patch standard quality* and *ColorMunki
    648 patch high quality*. Plain parameter sets (normal `targen→printtarg`);
    selecting one seeds the settings and then **auto-generates** by calling
@@ -118,7 +118,7 @@ Supporting code:
 - `workflow/chart_creator.py::load_ti1_and_generate_preview()` /
   `_build_printtarg_args()` — the printtarg-only run and the arg builder the
   recipe must satisfy.
-- `assets/charts/tc918-grays.ti1` — the bundled patch set. Anything under
+- `assets/charts/tc918.ti1` — the bundled patch set. Anything under
   `assets/` is shipped automatically via `('assets','assets')` in `ChromIQ.spec`;
   resolve it at runtime with `core.resource_path.resource_path(...)`.
 

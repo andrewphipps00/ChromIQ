@@ -73,29 +73,26 @@ log = get_logger(__name__)
 # Built-in, read-only preset for the Create Chart → Manual presets dropdown.
 # Unlike user presets (one .json file each under presets_dir()), this one is
 # baked into the app: it can't be deleted, and selecting it loads a fixed
-# patch set (assets/charts/tc918-grays.ti1) and lays it out with a fixed set
-# of printtarg options. The combo entry is identified by its sentinel userData
+# patch set (assets/charts/tc918.ti1) and lays it out with a fixed set of
+# printtarg options. The combo entry is identified by its sentinel userData
 # (TC918_PRESET_KEY) rather than its display text.
 TC918_PRESET_KEY = "__chromiq_tc918_builtin__"
-TC918_PRESET_LABEL = "★  i1Pro TC9.18 + Extended grays by Pharmacist  ·  built-in"
-TC918_TI1_ASSET = "assets/charts/tc918-grays.ti1"
-TC918_TARGET_NAME = "tc918-grays"
+TC918_PRESET_LABEL = "★  i1Pro TC9.18 by Pharmacist  ·  built-in"
+TC918_TI1_ASSET = "assets/charts/tc918.ti1"
+TC918_TARGET_NAME = "tc918"
 # Fixed printtarg layout for the TC9.18 preset (matches the Pharmacist recipe
-# printtarg -ii1 -pA4 -L -a0.95 -m10 -M10 -r -P -c -A0.90). -m drives both -m
-# and -M in the UI; -P removes the strip-length limit; -c forces colored
-# spacers; -A scales spacers only.
+# printtarg -ii1 -pA4 -t300 -L -m12 -M12 -b). -m drives both -m and -M in the
+# UI; -t is the TIFF DPI; -b forces black & white (uncolored) spacers. -a is
+# pinned to 1.0 *after* -i so it overrides the i1 instrument-default scale
+# (0.95) the recipe doesn't want — a patch scale of 1.0 emits no -a flag.
 TC918_PRINTTARG = {
     "-i": "i1",
+    "-a": 1.0,
     "-p": "A4",
+    "-t": 300,
     "-L": True,
-    "-a": 0.95,
-    "-m": 10,
-    "-r": True,
-    "-P": True,
-    "-c": True,
-    "-A": 0.90,
-    "-b": False,
-    "-h": False,
+    "-m": 12,
+    "-b": True,
 }
 
 # ColorMunki built-in presets: plain parameter presets (normal targen→printtarg,
@@ -1413,8 +1410,8 @@ class TabChart(QWidget):
         )
         if tc918_repro:
             info = (
-                f"i1Pro TC9.18 + Extended grays by Pharmacist — fixed patch set ({' · '.join(notes)}):\n"
-                f"Uses the bundled tc918-grays.ti1 (targen skipped).\n"
+                f"i1Pro TC9.18 by Pharmacist — fixed patch set ({' · '.join(notes)}):\n"
+                f"Uses the bundled tc918.ti1 (targen skipped).\n"
                 f"printtarg {' '.join(pt_args)}\n"
                 "Change a targen setting above to build a fresh chart instead."
             )
@@ -2145,10 +2142,10 @@ class TabChart(QWidget):
         self._add_builtin_preset_item(
             TC918_PRESET_LABEL, TC918_PRESET_KEY,
             "Built-in chart — cannot be deleted.\n"
-            "Loads the fixed TC9.18 grey patch set and lays it out with\n"
-            "printtarg -ii1 -pA4 -L -a0.95 -m10 -M10 -r -P -c -A0.90, then\n"
-            "creates the target right away. You can adjust any setting\n"
-            "afterwards and regenerate.",
+            "Loads the fixed TC9.18 patch set and lays it out with\n"
+            "printtarg -ii1 -pA4 -t300 -L -m12 -M12 -b, then creates the\n"
+            "target right away. You can adjust any setting afterwards and\n"
+            "regenerate.",
         )
         self._add_builtin_preset_item(
             MUNKI324_PRESET_LABEL, MUNKI324_PRESET_KEY,
@@ -2259,7 +2256,7 @@ class TabChart(QWidget):
                 self._revert_preset_combo()
                 return
             # Switching from the TC9.18 chart to another built-in clears the
-            # expert printtarg overrides it forced on (spacer scale, etc.).
+            # expert printtarg overrides it forced on (margins, spacers, etc.).
             if self._tc918_active and data != TC918_PRESET_KEY:
                 self._reset_tc918_overrides()
                 self._tc918_active = False
@@ -2273,10 +2270,9 @@ class TabChart(QWidget):
             return
 
         # Leaving the TC9.18 built-in chart for Default or a user preset clears
-        # the expert printtarg overrides it forced on (spacer scale -A, colored
-        # spacers -c, strip-length -P, no-randomise -r, margin -m, …). The
-        # restores below only *set* flags the target preset stores, so without
-        # this they would bleed through.
+        # the expert printtarg overrides it forced on (margins -m/-M, black &
+        # white spacers -b, …). The restores below only *set* flags the target
+        # preset stores, so without this they would bleed through.
         if self._tc918_active:
             self._reset_tc918_overrides()
             self._tc918_active = False
@@ -2551,12 +2547,19 @@ class TabChart(QWidget):
         """Revert the printtarg flags the TC9.18 preset forces to YAML defaults.
 
         Run when the user switches away from the built-in chart so its expert
-        overrides (notably -A spacer scale and -c colored spacers, which stay
-        ticked otherwise) don't carry into Default or another preset."""
+        overrides (notably -m margins and -b black-and-white spacers) don't
+        carry into Default or another preset.
+
+        The recipe pins -a to 1.0; resetting it to the YAML default (also 1.0)
+        would leave it at 1.0 even on i1, where the instrument default is 0.95.
+        So after reverting, re-apply the per-instrument margin/scale defaults —
+        the last word, since the -i reset earlier in the loop would otherwise be
+        undone by -a's own reset."""
         for flag in TC918_PRINTTARG:
             for pw in self._manual_widgets.get("printtarg", []):
                 if pw.flag == flag:
                     pw.reset_to_default()
+        self._apply_instrument_default_margin()
 
     def _set_manual_value(self, tool: str, flag: str, value: Any) -> None:
         """Set the value of a single manual ParameterWidget, if present."""
@@ -2626,7 +2629,7 @@ class TabChart(QWidget):
         # chart is built from the .ti1 itself, so these are descriptive only —
         # but they make the panel reflect what was loaded, and changing any of
         # them is what tells "Generate Chart" to switch to a fresh targen run.
-        self._set_manual_value("targen", "-f", 1156)
+        self._set_manual_value("targen", "-f", 918)
         self._set_manual_value("targen", "-e", 4)
         self._set_manual_value("targen", "-B", 4)
 
