@@ -557,11 +557,15 @@ class SettingsDialog(QDialog):
 
     def reject(self) -> None:  # type: ignore[override]
         # Revert any live theme preview to whatever was persisted on open.
-        if getattr(self, "_appearance_original", None) is not None:
+        # Only when the theme was actually previewed to something different —
+        # apply_appearance re-applies the app-wide stylesheet and re-polishes
+        # every widget, which is slow, so skip it when nothing changed.
+        original = getattr(self, "_appearance_original", None)
+        if original is not None and str(self._appearance_combo.currentData()) != original:
             from ui.theme import apply_appearance
             app = QApplication.instance()
             if app is not None:
-                apply_appearance(app, self.parent(), self._appearance_original)
+                apply_appearance(app, self.parent(), original)
         super().reject()
 
     def _save_and_close(self) -> None:
