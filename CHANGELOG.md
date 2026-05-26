@@ -1,5 +1,21 @@
 # Changelog
 
+## v3.8.0-beta.9
+Small visual fix to the "All Stripes Read" averaging window.
+
+### Fixed
+- **Combo body matches the other input fields in light mode.** The Mean / Median
+  selector that appears in the "All Stripes Read" window once you have re-read
+  the chart for averaging was rendering with the surrounding cream surface
+  colour instead of the usual white input background. It now matches every
+  other dropdown / spin box in light mode. (The dark theme already looked
+  correct, but the fix applies there too for consistency.)
+
+### What to test
+- With averaging on and light mode, get to the second-or-later read so the
+  "Average all reads & build" dialog appears with the **Combine method** combo
+  — confirm the combo body is white.
+
 ## v3.8.0-beta.8
 Eighth beta of the 3.8.0 line. Streamlines the **"Read again & average"** flow so
 the averaging choice is visible the moment a chart finishes — no second pop-up.
