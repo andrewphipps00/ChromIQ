@@ -449,6 +449,12 @@ class TabMeasure(QWidget):
         # "Read again & average": True once the user opts to re-read the chart,
         # so each subsequent successful read is saved as <base>_read{N}.ti3.
         self._averaging_active: bool = False
+        # When averaging is enabled, the "All Stripes Read" dialog records the
+        # user's choice here so _on_measure_done can act on it once chartread has
+        # finished writing the .ti3 (the file isn't final while chartread runs).
+        # None → no decision pending (fall back to the post-process dialog).
+        self._pending_avg_action: str | None = None
+        self._pending_avg_method: str = "mean"
         self._instrument_disconnected: bool = False
         self._device_busy: bool = False
         self._no_instrument: bool = False
@@ -3011,6 +3017,17 @@ class TabMeasure(QWidget):
         # to chartread as spurious keystrokes.
         QApplication.instance().removeEventFilter(self)
 
+        # Measurement averaging (docs/dev_averaging.md): for a normal read (not a
+        # calibration or guided-refinement re-read) fold the averaging choice into
+        # this dialog so there is no redundant second popup afterwards.
+        if (
+            self._settings.get("averaging_enabled", False)
+            and not is_cal
+            and not self._guided_refinement_active
+        ):
+            self._show_all_stripes_averaging_dialog()
+            return
+
         dlg = QDialog(self)
         dlg.setMinimumWidth(560)
 
@@ -3094,6 +3111,135 @@ class TabMeasure(QWidget):
                 self._guided_refinement_active = False
                 self._manager.set_guided_strips([])
             QApplication.instance().installEventFilter(self)
+
+    def _show_all_stripes_averaging_dialog(self) -> None:
+        """The 'All Stripes Read' dialog when measurement averaging is on.
+
+        First read of a chart → Re-read Stripes / Measure again to average /
+        Build Profile. Mid-set (≥1 read already saved) → Use last read only /
+        Measure again to average / Average all reads & build. The chosen action is
+        stored in ``_pending_avg_action`` so :meth:`_on_measure_done` can act on it
+        once chartread has written the final .ti3 (it isn't final while chartread
+        is still running). 'Re-read Stripes' instead keeps chartread running for
+        manual single-strip re-reads, exactly like the classic dialog.
+        """
+        from PyQt6.QtWidgets import (
+            QComboBox, QDialog, QHBoxLayout, QLabel, QPushButton, QVBoxLayout,
+        )
+
+        work_dir  = self._ti1_path.parent if self._ti1_path else None
+        base_stem = self._ti1_path.stem if self._ti1_path else ""
+        prior = (
+            FileManager.existing_read_variants(work_dir, base_stem)
+            if work_dir is not None else []
+        )
+        in_set  = self._averaging_active and len(prior) >= 1
+        n_total = len(prior) + 1   # prior saved reads + this just-finished one
+
+        dlg = QDialog(self)
+        dlg.setMinimumWidth(560)
+        dlg.setWindowTitle("All Stripes Read")
+        layout = QVBoxLayout(dlg)
+        layout.setSpacing(16)
+        layout.setContentsMargins(24, 20, 24, 20)
+
+        if in_set:
+            body = (
+                f"<b>All stripes read — {n_total} reads of this chart are now saved.</b>"
+                "<br><br>"
+                "Combining repeated reads of the same chart averages out instrument "
+                "noise and can improve profile accuracy.<br><br>"
+                "&nbsp;&nbsp;•&nbsp; <b>Average all reads &amp; build</b> — combine all "
+                f"{n_total} reads into one measurement, then continue to Build Profile.<br>"
+                "&nbsp;&nbsp;•&nbsp; <b>Measure again to average</b> — read the whole "
+                "chart once more and add it to the set.<br>"
+                "&nbsp;&nbsp;•&nbsp; <b>Use last read only</b> — build from this most "
+                "recent read and ignore the others."
+            )
+        else:
+            body = (
+                "<b>All stripes have been read successfully.</b><br><br>"
+                "&nbsp;&nbsp;•&nbsp; <b>Build Profile</b> — finalise the measurement and "
+                "go to the Build Profile tab.<br>"
+                "&nbsp;&nbsp;•&nbsp; <b>Measure again to average</b> — read the whole chart "
+                "once more; the reads are averaged together to reduce instrument noise "
+                "(saved as …_average).<br>"
+                "&nbsp;&nbsp;•&nbsp; <b>Re-read Stripes</b> — re-scan individual strips into "
+                "this same measurement. Use <b>f</b>&nbsp;/&nbsp;<b>b</b> to move, "
+                "<b>n</b> for the next unread stripe, and <b>d</b> when done."
+            )
+        msg = QLabel(body, dlg)
+        msg.setWordWrap(True)
+        layout.addWidget(msg)
+
+        method_combo = None
+        if in_set:
+            method_row = QHBoxLayout()
+            method_combo = QComboBox(dlg)
+            method_combo.addItem("Mean (recommended)", "mean")
+            method_combo.addItem("Median — needs 3+ reads", "median")
+            saved = self._settings.get("average_method", "mean")
+            method_combo.setCurrentIndex(max(0, method_combo.findData(saved)))
+            method_combo.setToolTip(
+                "Mean averages every read. Median rejects a single outlier read, "
+                "but only differs from the mean with three or more reads."
+            )
+            method_row.addWidget(QLabel("Combine method:", dlg))
+            method_row.addWidget(method_combo, 1)
+            layout.addLayout(method_row)
+
+        choice = {"action": "average" if in_set else "build"}
+
+        def _pick(action: str) -> None:
+            choice["action"] = action
+            dlg.accept()
+
+        btn_row = QHBoxLayout()
+        btn_row.addStretch(1)
+        if in_set:
+            last_btn = QPushButton("Use last read only", dlg)
+            last_btn.clicked.connect(lambda: _pick("use_last"))
+            again_btn = QPushButton("Measure again to average", dlg)
+            again_btn.clicked.connect(lambda: _pick("again"))
+            avg_btn = QPushButton("Average all reads & build →", dlg)
+            avg_btn.setObjectName("primary")
+            avg_btn.clicked.connect(lambda: _pick("average"))
+            for b in (last_btn, again_btn, avg_btn):
+                btn_row.addWidget(b)
+        else:
+            reread_btn = QPushButton("Re-read Stripes", dlg)
+            reread_btn.clicked.connect(lambda: _pick("reread"))
+            again_btn = QPushButton("Measure again to average", dlg)
+            again_btn.clicked.connect(lambda: _pick("again"))
+            build_btn = QPushButton("Build Profile →", dlg)
+            build_btn.setObjectName("primary")
+            build_btn.clicked.connect(lambda: _pick("build"))
+            for b in (reread_btn, again_btn, build_btn):
+                btn_row.addWidget(b)
+        layout.addLayout(btn_row)
+
+        tint_dialog_primary(dlg, _TAB_COLOR)
+        dlg.exec()
+
+        action = choice["action"]
+        method = "mean"
+        if method_combo is not None:
+            method = method_combo.currentData() or "mean"
+            self._settings.set("average_method", method)
+
+        if action == "reread":
+            # Keep chartread running for manual single-strip re-reads, exactly like
+            # the classic "Re-read Stripes" path; the event filter must go back on.
+            QApplication.instance().installEventFilter(self)
+            return
+
+        # build / again / average / use_last: finish this read. _on_measure_done
+        # promotes the file and acts on the decision once the .ti3 is written.
+        self._pending_avg_action = action
+        self._pending_avg_method = method
+        self._manager.send_key("d")
+        self._arm_key_watchdog()
+        # Event filter stays off — chartread will finish momentarily.
 
     def _on_measure_done(self, code: int) -> None:
         self._preview.highlight_stripe(-1)
@@ -3393,10 +3539,19 @@ class TabMeasure(QWidget):
             if self._auto_proceed:
                 self.proceed_to_profile.emit()
         elif ti3_exists and self._settings.get("averaging_enabled", False):
-            # Normal full read, averaging enabled → offer "read again & average"
-            # (docs/dev_averaging.md). Gated behind a Preferences toggle so the
-            # default experience is unchanged.
-            self._handle_measure_complete(ti3)
+            # Normal full read, averaging enabled (docs/dev_averaging.md). The
+            # "All Stripes Read" dialog already captured the user's choice in
+            # _pending_avg_action; act on it now that chartread has written the
+            # final .ti3. If nothing was captured (the all-rows-read dialog never
+            # fired — e.g. detection miss), fall back to the post-process dialog.
+            if self._pending_avg_action is not None:
+                action = self._pending_avg_action
+                method = self._pending_avg_method
+                self._pending_avg_action = None
+                current, reads = self._promote_completed_read(ti3)
+                self._apply_completion_action(ti3, current, reads, action, method)
+            else:
+                self._handle_measure_complete(ti3)
         elif ti3_exists:
             # Normal full read, averaging off → classic behaviour: log the result
             # and proceed straight to Build Profile (mirrors the cal/refinement
@@ -3425,11 +3580,19 @@ class TabMeasure(QWidget):
     # ------------------------------------------------------------------
 
     def _handle_measure_complete(self, ti3: Path) -> None:
-        """A normal full read finished. Promote it to <base>_read{N} if we're in
-        an averaging session, then offer read-again / average / continue."""
+        """A normal full read finished without a pre-made choice (Manual mode, or
+        the 'All Stripes Read' dialog never fired). Promote the read, then ask via
+        the post-process completion dialog and carry out the answer."""
+        current, reads = self._promote_completed_read(ti3)
+        action, method = self._show_completion_dialog(current, reads)
+        self._apply_completion_action(ti3, current, reads, action, method)
+
+    def _promote_completed_read(self, ti3: Path) -> tuple[Path, list[Path]]:
+        """If an averaging set is active, save this read as the next
+        ``<base>_read{N}.ti3`` and return (saved_path, all_reads). Otherwise leave
+        the file in place and return (ti3, [])."""
         work_dir  = ti3.parent
         base_stem = ti3.stem            # canonical <base> (the .ti1/.ti2 stem)
-
         if self._averaging_active:
             # Save this fresh read as the next read in the current set.
             n = FileManager.next_read_index(work_dir, base_stem)
@@ -3448,15 +3611,22 @@ class TabMeasure(QWidget):
             current = ti3
             reads = []
             self._log.appendPlainText(f"\n[OK] Measurement complete.\nSaved: {current}")
+        return current, reads
 
-        action, method = self._show_completion_dialog(current, reads)
+    def _apply_completion_action(
+        self, ti3: Path, current: Path, reads: list[Path], action: str, method: str
+    ) -> None:
+        """Carry out the chosen averaging action.
 
+        ``action`` ∈ {again, average, use_last, continue, build}; the latter three
+        all mean "stop and build from ``current``".
+        """
         if action == "again":
             if not self._averaging_active:
                 # Begin a fresh averaging set: discard any stale variants, then
                 # save this first read as <base>_read1 so the next read lands
                 # beside it as <base>_read2.
-                self._reset_read_variants(work_dir, base_stem)
+                self._reset_read_variants(ti3.parent, ti3.stem)
                 first = FileManager.read_variant_path(ti3, 1)
                 try:
                     ti3.replace(first)
@@ -3472,7 +3642,7 @@ class TabMeasure(QWidget):
             self._run_average_and_proceed(ti3, reads, method)
             return
 
-        # "continue" (single read) or "use_last" (last read of a set).
+        # "continue" / "build" (single read) or "use_last" (last read of a set).
         self.measure_finished.emit(current)
         self.proceed_to_profile.emit()
 

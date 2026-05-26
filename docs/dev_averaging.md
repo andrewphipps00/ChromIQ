@@ -15,10 +15,17 @@ Phases 1–4 below are **done** and unit-tested (`tests/test_average_runner.py`)
   and `average_method` ("mean" | "median", default mean).
 - `ui/dialogs/settings_dialog.py` — "Enable measurement averaging" checkbox in
   the Behaviour group, with an extensive tooltip.
-- `ui/tabs/tab_measure.py` — when `averaging_enabled`,
-  `_handle_measure_complete` shows the completion
-  dialog on every normal full read; "Measure again" accumulates
+- `ui/tabs/tab_measure.py` — when `averaging_enabled`, the averaging choice is
+  presented **in the "All Stripes Read" dialog itself** for a normal full read
+  (`_show_all_stripes_averaging_dialog`): first read → *Re-read Stripes* /
+  *Measure again to average* / *Build Profile →*; mid-set → *Use last read only* /
+  *Measure again to average* / *Average all reads & build →* (with a mean/median
+  combo). The choice is stashed in `_pending_avg_action`; once chartread writes
+  the final `.ti3`, `_on_measure_done` promotes it (`_promote_completed_read`) and
+  carries out the action (`_apply_completion_action`). "Measure again" accumulates
   `<base>_read{N}.ti3`, "Average" → `<base>_average.ti3` then Build Profile.
+  Manual mode (or any case where the all-rows-read dialog never fired) falls back
+  to the post-process `_handle_measure_complete` → `_show_completion_dialog`.
 - `ui/tabs/tab_profile.py` — `set_ti3_path` strips a trailing
   `_read{N}`/`_average` so the averaged file still finds the canonical `.ti2`
   (edge case #1, solved by suffix-stripping rather than copying).
@@ -29,9 +36,10 @@ Build Profile exactly as before (the classic `elif ti3_exists:` branch in
 `_on_measure_done`).
 
 **Deferred:** Phase 5 (auto-offer on re-entering a project with prior reads).
-**Known UX wrinkle:** a full strip read shows the existing "All Stripes Read"
-dialog first, then the new completion dialog — two dialogs in sequence. Merging
-them is a possible follow-up.
+**Resolved (was a UX wrinkle):** a full strip read used to show the "All Stripes
+Read" dialog and then a second completion dialog. The averaging choice is now
+folded into the "All Stripes Read" dialog itself (primary action on the right), so
+there is a single dialog and no redundant second popup.
 
 ---
 
