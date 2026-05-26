@@ -142,7 +142,7 @@ def merge_preconditioning(
     average = _resolve_average(bin_dir)
     cmd = [average, "-m", str(fresh_ti3), str(pre_data), str(out_ti3)]
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True)
+        proc = subprocess.run(cmd, capture_output=True, text=True, stdin=subprocess.DEVNULL)
     except OSError as exc:
         raise Ti3MergeError(
             f"Could not run ArgyllCMS 'average' to merge the data: {exc}\n\n"

@@ -1,5 +1,47 @@
 # Changelog
 
+## v3.8.0-beta.10
+Fixes a Windows-only crash that hung the app when starting a second chart
+read in the same session — most visibly via the new "Measure again to
+average" button. Also tidies the button order in the "All Stripes Read"
+window.
+
+### Fixed
+- **Second chart read no longer hangs the app on Windows.** With averaging
+  enabled, finishing a chart and then clicking **Measure again to average**
+  crashed silently with `OSError: [WinError 6] The handle is invalid` and
+  left the Measure tab frozen — the spectrometer never re-prompted for
+  calibration. Root cause was in the Windows keystroke-injection path used
+  by chartread: after each `AttachConsole` + `FreeConsole` pair (used to
+  forward keypresses into chartread's hidden console) the parent process
+  was left with stale standard handles, and the next `subprocess.run` call
+  (the `taskkill chartread.exe` guard at the start of every measurement)
+  failed before chartread could even start. The standard handles are now
+  reset to NULL after every detach, matching the state a `--windowed`
+  PyInstaller app starts with. As a defensive measure, every
+  `subprocess.run` call across the app now passes `stdin=subprocess.DEVNULL`
+  so the same class of bug cannot resurface in chart creation, profile
+  building, Argyll binary probing, average merging, or CUPS printing on
+  macOS.
+
+### Changed
+- **"All Stripes Read" window — Build Profile is now on the right.** With
+  averaging disabled, the window used to show **Build Profile →** on the
+  left and **Re-read Stripes** on the right (the default order for
+  `QDialogButtonBox` on Windows). The two buttons now swap places so the
+  primary action sits on the right, matching the layout of the averaging-on
+  variant. The calibration and guided-refinement variants of the same
+  window pick up the new order too.
+
+### What to test
+- Windows, averaging on: finish a full chart read, then click **Measure
+  again to average** in the "All Stripes Read" window. Confirm the
+  spectrometer is re-prompted for calibration and the second read starts
+  normally instead of hanging. Repeat for a third read to exercise the
+  average + build path.
+- Any platform, averaging off: finish a full chart read. Confirm **Re-read
+  Stripes** is on the left and **Build Profile →** on the right.
+
 ## v3.8.0-beta.9
 Small visual fix to the "All Stripes Read" averaging window.
 

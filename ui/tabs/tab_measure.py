@@ -2087,10 +2087,15 @@ class TabMeasure(QWidget):
             subprocess.run(
                 ["taskkill", "/F", "/IM", "chartread.exe"],
                 capture_output=True,
+                stdin=subprocess.DEVNULL,
                 creationflags=subprocess.CREATE_NO_WINDOW,
             )
         else:
-            subprocess.run(["killall", "-q", "chartread"], capture_output=True)
+            subprocess.run(
+                ["killall", "-q", "chartread"],
+                capture_output=True,
+                stdin=subprocess.DEVNULL,
+            )
         self._set_settings_enabled(False)
         self._start_btn.setEnabled(False)
         self._stop_btn.setEnabled(True)
@@ -3086,18 +3091,30 @@ class TabMeasure(QWidget):
         msg.setWordWrap(True)
         layout.addWidget(msg)
 
-        btn_box = QDialogButtonBox()
+        # Manual button row so Re-read / Continue sits on the left and the
+        # primary "Build Profile / Create Calibration File" sits on the right —
+        # QDialogButtonBox auto-orders by platform (Accept-left on Windows),
+        # which doesn't match the averaging-on dialog's layout.
+        from PyQt6.QtWidgets import QHBoxLayout, QPushButton
+
         if is_cal and not self._guided_refinement_active:
             accept_label = "Create Calibration File →"
         else:
             accept_label = "Build Profile →"
-        build_btn = btn_box.addButton(accept_label, QDialogButtonBox.ButtonRole.AcceptRole)
-        build_btn.setObjectName("primary")
         cont_label = "Continue Measuring Manually" if self._guided_refinement_active else "Re-read Stripes"
-        btn_box.addButton(cont_label, QDialogButtonBox.ButtonRole.RejectRole)
-        btn_box.accepted.connect(dlg.accept)
-        btn_box.rejected.connect(dlg.reject)
-        layout.addWidget(btn_box)
+
+        btn_row = QHBoxLayout()
+        btn_row.addStretch(1)
+        cont_btn = QPushButton(cont_label, dlg)
+        cont_btn.clicked.connect(dlg.reject)
+        build_btn = QPushButton(accept_label, dlg)
+        build_btn.setObjectName("primary")
+        build_btn.setDefault(True)
+        build_btn.setAutoDefault(True)
+        build_btn.clicked.connect(dlg.accept)
+        btn_row.addWidget(cont_btn)
+        btn_row.addWidget(build_btn)
+        layout.addLayout(btn_row)
 
         tint_dialog_primary(dlg, _TAB_COLOR)
         if dlg.exec() == QDialog.DialogCode.Accepted:

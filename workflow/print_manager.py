@@ -205,6 +205,7 @@ class PrintModule:
             r = subprocess.run(
                 ["lpoptions", "-p", printer, "-l"],
                 capture_output=True, text=True, timeout=15,
+                stdin=subprocess.DEVNULL,
             )
             # Parse all options: opt_name → (label, [raw_value, ...])
             all_opts: dict[str, tuple[str, list[str]]] = {}

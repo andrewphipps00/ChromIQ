@@ -721,6 +721,7 @@ class SettingsDialog(QDialog):
                 try:
                     subprocess.run(
                         [str(p), "-?"], capture_output=True, timeout=5,
+                        stdin=subprocess.DEVNULL,
                         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
                     )
                     results.append(f"✓ {tool}")

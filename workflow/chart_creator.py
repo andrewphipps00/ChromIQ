@@ -1171,12 +1171,14 @@ class ChartCreator:
         r = subprocess.run(
             [str(targen_bin)] + tg_args,
             capture_output=True, timeout=60, cwd=str(tmpdir),
+            stdin=subprocess.DEVNULL,
         )
         if r.returncode != 0 or not (tmpdir / "calc.ti1").exists():
             return 0
         pt = subprocess.run(
             [str(printtarg_bin)] + pt_args,
             capture_output=True, timeout=60, cwd=str(tmpdir),
+            stdin=subprocess.DEVNULL,
         )
         if pt.returncode != 0:
             return 0
