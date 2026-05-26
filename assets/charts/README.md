@@ -19,15 +19,21 @@ is self-describing even when opened on its own. Resolve a file at runtime with
 ## How each kind is used
 
 - **ti1-based** (`tc918/`) — only the `.ti1` is bundled. Selecting the preset
-  runs **printtarg only** on it (targen skipped), with the fixed Pharmacist
-  layout `printtarg -ii1 -pA4 -t300 -L -m12 -M12 -b`. The OFPS patch order can't
-  be reliably recreated by re-running targen, so the `.ti1` is the source of truth.
+  prompts for a name, **copies the bundled `.ti1` into a fresh `~/ChromIQ/<name>/`
+  (renamed to the chosen target name)**, then runs **printtarg only** on that copy
+  (targen skipped) with the fixed Pharmacist layout
+  `printtarg -ii1 -pA4 -t300 -L -m12 -M12 -b` to produce the `.ti2` + page TIFFs.
+  The OFPS patch order can't be reliably recreated by re-running targen, so the
+  `.ti1` is the source of truth.
 
 - **prebuilt-files** (`tc924_*/`) — a complete, pre-generated target (`.ti1` +
-  `.ti2` + page TIFFs). Selecting the preset **copies the files verbatim** into a
-  fresh `~/ChromIQ/<name>/` (renamed to the chosen target name); no targen and no
-  printtarg are run. The `_NN.tif` pages are located by globbing `<stem>_*.tif`
-  next to the `.ti1`.
+  `.ti2` + page TIFFs). Selecting the preset prompts for a name and **copies all
+  the files verbatim** into a fresh `~/ChromIQ/<name>/` (renamed to the chosen
+  target name); no targen and no printtarg are run. The `_NN.tif` pages are
+  located by globbing `<stem>_*.tif` next to the `.ti1`.
+
+Either way the resulting `~/ChromIQ/<name>/` folder is self-contained: it holds
+a `<name>.ti1` plus the generated/copied `<name>.ti2` and `<name>_NN.tif` pages.
 
 ## Adding another set
 
