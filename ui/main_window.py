@@ -222,6 +222,9 @@ class MainWindow(QMainWindow):
             primary_text         = "#ffffff"
             primary_disabled_bg  = "#e8e6e1"
             primary_disabled_fg  = "#a8a4a0"
+            # Greyed checkbox/radio indicator — matches light_styles disabled rule
+            disabled_ind_bg      = "#eeece8"   # LM_BG_WINDOW
+            disabled_ind_border  = "#d0ccc6"   # LM_BORDER
             pane_bg              = "#ffffff"
             # Big "Calculated Patches" number anchors to the masthead
             # "Chrom" wordmark colour, not the tab's spectrum accent, so
@@ -238,6 +241,9 @@ class MainWindow(QMainWindow):
             primary_text         = "#0a0a0a"
             primary_disabled_bg  = "#1e1e1e"
             primary_disabled_fg  = "#484848"
+            # Greyed checkbox/radio indicator — matches styles.py disabled rule
+            disabled_ind_bg      = "#1f1f1f"
+            disabled_ind_border  = "#3a3a3a"
             pane_bg              = "#181818"
             patch_count_color    = "#ffffff"   # _PALETTE_DARK["wordmark"]
             log_color            = color
@@ -266,9 +272,19 @@ class MainWindow(QMainWindow):
                 QCheckBox::indicator:hover {{
                     border-color: {color};
                 }}
+                /* Greyed when the group is disabled — must beat :checked,
+                   otherwise an active box keeps its bright accent fill. */
+                QCheckBox::indicator:checked:disabled {{
+                    background: {disabled_ind_bg};
+                    border-color: {disabled_ind_border};
+                }}
                 QRadioButton::indicator:checked {{
                     background: {color};
                     border-color: {color};
+                }}
+                QRadioButton::indicator:checked:disabled {{
+                    background: {disabled_ind_bg};
+                    border-color: {disabled_ind_border};
                 }}
                 QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus,
                 QComboBox:focus, QComboBox:on {{
