@@ -75,12 +75,13 @@ log = get_logger(__name__)
 # Built-in, read-only preset for the Create Chart → Manual presets dropdown.
 # Unlike user presets (one .json file each under presets_dir()), this one is
 # baked into the app: it can't be deleted, and selecting it loads a fixed
-# patch set (assets/charts/tc918/tc918.ti1) and lays it out with a fixed set of
-# printtarg options. The combo entry is identified by its sentinel userData
-# (TC918_PRESET_KEY) rather than its display text.
+# patch set and lays it out with a fixed set of printtarg options. The combo
+# entry is identified by its sentinel userData (TC918_PRESET_KEY) rather than
+# its display text. Bundled charts are filed under
+# assets/charts/<creator>/<colorspace>/<instrument>/<paper>/<target>/.
 TC918_PRESET_KEY = "__chromiq_tc918_builtin__"
 TC918_PRESET_LABEL = "★  i1Pro TC9.18 by Pharmacist  ·  built-in"
-TC918_TI1_ASSET = "assets/charts/tc918/tc918.ti1"
+TC918_TI1_ASSET = "assets/charts/pharmacist/rgb/i1pro/a4/tc918/tc918.ti1"
 TC918_TARGET_NAME = "tc918"
 # Fixed printtarg layout for the TC9.18 preset (matches the Pharmacist recipe
 # printtarg -ii1 -pA4 -t300 -L -m12 -M12 -b). -m drives both -m and -M in the
@@ -125,12 +126,12 @@ TC924A4_PRESET_LABEL = "★  i1Pro TC9.24 A4 by Pharmacist  ·  built-in"
 TC924LETTER_PRESET_KEY = "__chromiq_tc924_letter_builtin__"
 TC924LETTER_PRESET_LABEL = "★  i1Pro TC9.24 Letter by Pharmacist  ·  built-in"
 
-# key -> (asset stem under assets/charts, default target name). Each chart set
-# lives in its own subfolder; the stem locates <stem>.ti1, <stem>.ti2 and the
-# <stem>_NN.tif page TIFFs inside it.
+# key -> (asset stem under assets/charts, default target name). Charts are filed
+# by creator/colorspace/instrument/paper/target; the stem locates <stem>.ti1,
+# <stem>.ti2 and the <stem>_NN.tif page TIFFs inside that leaf folder.
 PREBUILT_PRESETS = {
-    TC924A4_PRESET_KEY:     ("assets/charts/tc924_a4/tc924_a4",         "tc924-a4"),
-    TC924LETTER_PRESET_KEY: ("assets/charts/tc924_letter/tc924_letter", "tc924-letter"),
+    TC924A4_PRESET_KEY:     ("assets/charts/pharmacist/rgb/i1pro/a4/tc924/tc924",     "tc924-a4"),
+    TC924LETTER_PRESET_KEY: ("assets/charts/pharmacist/rgb/i1pro/letter/tc924/tc924", "tc924-letter"),
 }
 
 # Every built-in (non-deletable) preset key. Used to protect them from the

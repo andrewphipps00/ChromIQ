@@ -1,9 +1,19 @@
 # Developer note — built-in Create Chart presets
 
-How the built-in "by Pharmacist" presets were implemented, and how to add
-another quickly. "Built-in" means: it always appears in the Create Chart →
-Manual **Presets** dropdown, the user can't delete it, and selecting it does
-something fixed.
+How the built-in "by Pharmacist" presets were implemented, and how to **add**,
+**rename**, or **re-file** one quickly. "Built-in" means: it always appears in
+the Create Chart → Manual **Presets** dropdown, the user can't delete it, and
+selecting it does something fixed.
+
+> **Start here.** The single list that decides which built-ins exist and how
+> they're grouped is the `builtins = [ (instrument, label, key, tooltip), … ]`
+> literal inside `_populate_preset_combo()` (`ui/tabs/tab_chart.py`). Everything
+> else (`*_PRESET_KEY`/`*_PRESET_LABEL` constants, the `MUNKI_TARGEN` /
+> `PREBUILT_PRESETS` tables, and `BUILTIN_PRESET_KEYS`/`BUILTIN_PRESET_LABELS`
+> derived from them) feeds that list. To add → append a row + its constants; to
+> rename → edit a constant; to regroup → edit a row's first field. The
+> "[Rename or re-file](#rename-or-re-file-an-existing-preset)" section is the
+> checklist.
 
 There are five built-in presets today, of **three different kinds**:
 
@@ -154,11 +164,14 @@ Supporting code:
 - `workflow/chart_creator.py::load_ti1_and_generate_preview()` /
   `_build_printtarg_args()` — the printtarg-only run and the arg builder the
   recipe must satisfy.
-- `assets/charts/<set>/` — the bundled patch sets, **one subfolder per chart
-  set** (`tc918/`, `tc924_a4/`, `tc924_letter/`); see `assets/charts/README.md`
-  for the provenance + recipe table. Anything under `assets/` is shipped
-  automatically via `('assets','assets')` in `ChromIQ.spec`; resolve a file at
-  runtime with `core.resource_path.resource_path("assets/charts/<set>/<file>")`.
+- `assets/charts/<creator>/<colorspace>/<instrument>/<paper>/<target>/` — the
+  bundled patch sets, filed by that taxonomy (e.g.
+  `pharmacist/rgb/i1pro/a4/tc918/`, `…/a4/tc924/`, `…/letter/tc924/`); file
+  stems are the bare `<target>` (`tc924.ti1`, not `tc924_a4.ti1`). See
+  `assets/charts/README.md` for the provenance + recipe table. Anything under
+  `assets/` is shipped automatically via `('assets','assets')` in `ChromIQ.spec`;
+  resolve a file at runtime with `core.resource_path.resource_path(
+  "assets/charts/<creator>/<colorspace>/<instrument>/<paper>/<target>/<file>")`.
 
 ## Gotchas learned
 
@@ -200,7 +213,8 @@ shared `_apply_colormunki_td_preset`, and `BUILTIN_PRESET_KEYS` is derived from
    `_is_deletable_preset()` and the disk-shadow filter pick it up automatically.
 
 - **ti1-based** (clone TC9.18): add `_TI1_ASSET` / `_TARGET_NAME` / `_PRINTTARG`
-  constants, drop the `.ti1` into a new `assets/charts/<set>/` subfolder, and have
+  constants, drop the `.ti1` into its
+  `assets/charts/<creator>/<colorspace>/<instrument>/<paper>/<target>/` leaf, and have
   `_apply_foo_preset` seed the layout + call `_generate_from_ti1`. Wire
   `_on_generate()` reproduce routing, the preview note, and `_reset_*_overrides()`
   like TC9.18.
@@ -210,8 +224,9 @@ shared `_apply_colormunki_td_preset`, and `BUILTIN_PRESET_KEYS` is derived from
   target immediately. No ti1, no reproduce routing — the normal targen→printtarg
   flow runs. (Guard `self._runner.is_running` first.)
 - **prebuilt-files** (easiest — just a `PREBUILT_PRESETS` row): drop the bundle
-  (`<stem>.ti1`, `<stem>.ti2`, `<stem>_NN.tif`) into a new `assets/charts/<set>/`
-  subfolder, add a row `KEY: ("assets/charts/<set>/<stem>", "<default-name>")`, a `*_PRESET_KEY` +
+  (`<target>.ti1`, `<target>.ti2`, `<target>_NN.tif`) into its
+  `assets/charts/<creator>/<colorspace>/<instrument>/<paper>/<target>/` leaf,
+  add a row `KEY: (".../<paper>/<target>/<target>", "<default-name>")`, a `*_PRESET_KEY` +
   `*_PRESET_LABEL` (include the label in `BUILTIN_PRESET_LABELS`), and one
   `_add_builtin_preset_item(LABEL, KEY, self._prebuilt_tooltip("<paper>"))` call.
   `_on_preset_selected` already dispatches anything in `PREBUILT_PRESETS` to
@@ -224,3 +239,62 @@ shared `_apply_colormunki_td_preset`, and `BUILTIN_PRESET_KEYS` is derived from
 
 The three kinds have one dispatch branch each in `_on_preset_selected`; only add a
 fourth branch for a genuinely new *kind*, not for more variants of an existing one.
+
+## Rename or re-file an existing preset
+
+Renaming changes what the user *sees* or *where its files live* — never what the
+preset *does*. Work through only the rows that apply:
+
+- **`*_PRESET_KEY` — leave it alone.** It's the runtime identity matched by
+  `BUILTIN_PRESET_KEYS`, the dispatch in `_on_preset_selected`, and
+  `_is_deletable_preset`. It's never shown to the user and never written to disk,
+  so a rename has no reason to touch it. (If you truly must, change it in the
+  constant, any `MUNKI_TARGEN`/`PREBUILT_PRESETS` table key, **and**
+  `BUILTIN_PRESET_KEYS` in the same commit, or the item silently becomes
+  deletable / undispatched.)
+- **Visible name** → edit `*_PRESET_LABEL` only. It feeds both the combo text and
+  the bold built-in styling (via `BUILTIN_PRESET_LABELS`) automatically. Keep the
+  `★  …  ·  built-in` shape. The label text does **not** drive grouping, so reword
+  freely.
+- **Group / order** → the only source of truth is the `builtins` list in
+  `_populate_preset_combo`. Edit a row's **first field** (`instrument`) to move it
+  to another group; reorder rows to change order within a group (stable sort, so
+  list order is kept). Don't infer the group from the label.
+- **Default output name** → `*_TARGET_NAME` (ti1-based) or the 2nd tuple element
+  of the `PREBUILT_PRESETS` row (prebuilt). The shared prompt default comes from
+  `_builtin_default_name`.
+- **Re-file the bundled charts** (different `creator/colorspace/instrument/paper/
+  target` leaf, or a new `<target>` stem):
+  1. `git mv` the files into the new leaf. Keep each file's stem equal to the
+     `<target>` folder name (`tc924.ti1`, **not** `tc924_a4.ti1` — the path
+     carries the metadata). Delete the emptied old dirs (`rmdir`).
+  2. Update the path: `TC918_TI1_ASSET` (ti1-based) or the **1st** tuple element
+     (asset stem) of the `PREBUILT_PRESETS` row. The stem is the path with **no**
+     extension and **no** `_NN`; `_create_prebuilt_target` appends `.ti1`/`.ti2`
+     and globs `<stem>_*.tif`.
+  3. Update the table in `assets/charts/README.md`.
+  4. No `.gitignore` change needed — `!assets/charts/**/*.tif{,f}` is recursive.
+
+**Verify after any asset move or re-file** (from the repo root, venv active):
+
+```bash
+# 1. every bundled chart path still resolves
+python -c "
+from core.resource_path import resource_path
+from ui.tabs.tab_chart import TC918_TI1_ASSET, PREBUILT_PRESETS
+import os, glob
+assert os.path.isfile(resource_path(TC918_TI1_ASSET)), TC918_TI1_ASSET
+for stem, _ in PREBUILT_PRESETS.values():
+    rp = str(resource_path(stem))
+    for ext in ('.ti1', '.ti2'):
+        assert os.path.isfile(rp + ext), rp + ext
+    assert glob.glob(rp + '_*.tif'), rp + '_*.tif'
+print('all bundled chart paths OK')
+"
+# 2. moved TIFFs are still tracked, not gitignored (prints nothing == good)
+git check-ignore assets/charts/**/*.tif
+# 3. nothing else still points at an old path
+grep -rn "charts/" --include="*.py" --include="*.md" . | grep -v ".venv/"
+# 4. suite
+QT_QPA_PLATFORM=offscreen pytest -q
+```
