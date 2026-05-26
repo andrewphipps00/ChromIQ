@@ -1,5 +1,27 @@
 # Changelog
 
+## v3.8.0-beta.7
+Seventh beta of the 3.8.0 line. Two small interface fixes, also shipped in the
+3.7.42 stable release.
+
+### Fixed
+- **Closing Preferences with Cancel is now instant.** Cancelling the Preferences
+  window no longer pauses while it needlessly re-applied the whole app theme; the
+  previewed theme is now only restored when you actually changed the Theme
+  dropdown, so Cancel closes as quickly as OK.
+- **Disabled options now look disabled.** A ticked checkbox kept its bright fill
+  when its group was switched off (for example the targen / printtarg options
+  greyed out by a prebuilt-chart preset). Ticked checkboxes and radio buttons now
+  grey out together with the rest of their group, in both light and dark themes.
+
+### What to test
+- **Cancel speed.** Open Preferences and click Cancel without touching the Theme
+  dropdown — the window should close immediately. Then change the Theme, click
+  Cancel, and confirm the previous theme is restored correctly.
+- **Greyed checkboxes.** Pick a prebuilt-chart preset in Create Chart so the
+  targen / printtarg panels grey out, and confirm any ticked checkboxes there go
+  grey instead of staying coloured.
+
 ## v3.8.0-beta.6
 Sixth beta of the 3.8.0 line. The **"Read again & average"** measurement step
 added in beta.5 is now an opt-in setting (off by default), plus the latest
