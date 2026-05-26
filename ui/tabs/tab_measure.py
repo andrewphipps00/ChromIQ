@@ -3154,7 +3154,11 @@ class TabMeasure(QWidget):
                 "&nbsp;&nbsp;•&nbsp; <b>Measure again to average</b> — read the whole "
                 "chart once more and add it to the set.<br>"
                 "&nbsp;&nbsp;•&nbsp; <b>Use last read only</b> — build from this most "
-                "recent read and ignore the others."
+                "recent read and ignore the others.<br><br>"
+                "<span style='color:#909090;'>After <b>Measure again to average</b> the "
+                "instrument is set up again — this can take a few seconds and may ask you "
+                "to recalibrate before the next read starts, so a brief pause here is "
+                "normal.</span>"
             )
         else:
             body = (
@@ -3166,7 +3170,11 @@ class TabMeasure(QWidget):
                 "(saved as …_average).<br>"
                 "&nbsp;&nbsp;•&nbsp; <b>Re-read Stripes</b> — re-scan individual strips into "
                 "this same measurement. Use <b>f</b>&nbsp;/&nbsp;<b>b</b> to move, "
-                "<b>n</b> for the next unread stripe, and <b>d</b> when done."
+                "<b>n</b> for the next unread stripe, and <b>d</b> when done.<br><br>"
+                "<span style='color:#909090;'>After <b>Measure again to average</b> the "
+                "instrument is set up again — this can take a few seconds and may ask you "
+                "to recalibrate before the next read starts, so a brief pause here is "
+                "normal.</span>"
             )
         msg = QLabel(body, dlg)
         msg.setWordWrap(True)
