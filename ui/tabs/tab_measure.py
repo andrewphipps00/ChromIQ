@@ -3124,7 +3124,7 @@ class TabMeasure(QWidget):
         manual single-strip re-reads, exactly like the classic dialog.
         """
         from PyQt6.QtWidgets import (
-            QComboBox, QDialog, QHBoxLayout, QLabel, QPushButton, QVBoxLayout,
+            QDialog, QHBoxLayout, QLabel, QPushButton, QVBoxLayout,
         )
 
         work_dir  = self._ti1_path.parent if self._ti1_path else None
@@ -3183,7 +3183,11 @@ class TabMeasure(QWidget):
         method_combo = None
         if in_set:
             method_row = QHBoxLayout()
-            method_combo = QComboBox(dlg)
+            # NoScrollComboBox so the body picks up the per-theme white input
+            # background in light mode (plain QComboBox keeps the surface color
+            # — see _input_bg_qss in ui/widgets.py) and the wheel doesn't change
+            # the selection on accidental page-scroll.
+            method_combo = NoScrollComboBox(dlg)
             method_combo.addItem("Mean (recommended)", "mean")
             method_combo.addItem("Median — needs 3+ reads", "median")
             saved = self._settings.get("average_method", "mean")
@@ -3671,7 +3675,7 @@ class TabMeasure(QWidget):
     ) -> tuple[str, str]:
         """Return (action, method). action ∈ {continue, again, use_last, average}."""
         from PyQt6.QtWidgets import (
-            QComboBox, QDialog, QHBoxLayout, QLabel, QPushButton, QVBoxLayout,
+            QDialog, QHBoxLayout, QLabel, QPushButton, QVBoxLayout,
         )
         n_reads = len(reads)
 
@@ -3714,7 +3718,9 @@ class TabMeasure(QWidget):
         method_combo = None
         if n_reads >= 2:
             method_row = QHBoxLayout()
-            method_combo = QComboBox(dlg)
+            # NoScrollComboBox: per-widget input-bg QSS (white in light mode) +
+            # wheel-scroll guard. See _input_bg_qss in ui/widgets.py.
+            method_combo = NoScrollComboBox(dlg)
             method_combo.addItem("Mean (recommended)", "mean")
             method_combo.addItem("Median — needs 3+ reads", "median")
             saved = self._settings.get("average_method", "mean")
