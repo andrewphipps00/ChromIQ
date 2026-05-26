@@ -1,5 +1,40 @@
 # Changelog
 
+## v3.8.0-beta.8
+Eighth beta of the 3.8.0 line. Streamlines the **"Read again & average"** flow so
+the averaging choice is visible the moment a chart finishes — no second pop-up.
+
+### Changed
+- **Averaging is now offered directly in the "All Stripes Read" window.** When
+  measurement averaging is enabled, finishing a chart used to show that window
+  first and then a *second* "Measurement Complete" pop-up — so in Guided mode the
+  averaging option was hidden until you clicked through, and the only "read again"
+  on the first window (**Re-read Stripes**) re-scans individual strips into the
+  same file rather than averaging. The averaging choice now lives in the "All
+  Stripes Read" window itself:
+  - first read → **Re-read Stripes** / **Measure again to average** / **Build Profile →**
+  - after a re-read → **Use last read only** / **Measure again to average** /
+    **Average all reads & build →** (with a mean/median selector)
+- **Button order fixed.** The primary action ("Build Profile →" / "Average all
+  reads & build →") now sits on the right, matching the rest of the app.
+- **No surprise pause.** A note explains that **Measure again to average** sets
+  the instrument up again and may ask you to recalibrate, so the brief wait
+  before the next read is expected.
+
+With averaging switched off, nothing changes.
+
+### What to test
+- With averaging **on**, read a chart in **Guided** mode: confirm the "All Stripes
+  Read" window now shows the three buttons above (primary on the right) and that
+  **no** second pop-up appears after you choose.
+- Click **Measure again to average**, confirm the re-init note matches what you
+  see, then average two reads and build — the profile should build from
+  `…_average.ti3`.
+- Try **Re-read Stripes** and **Use last read only** to confirm they still behave
+  as before.
+- Repeat a normal read in **Manual** mode, and confirm a plain read with averaging
+  **off** still goes straight to Build Profile unchanged.
+
 ## v3.8.0-beta.7
 Seventh beta of the 3.8.0 line. Two small interface fixes, also shipped in the
 3.7.42 stable release.
