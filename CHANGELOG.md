@@ -1,5 +1,18 @@
 # Changelog
 
+## v3.7.42
+Two small interface fixes.
+
+### Fixed
+- **Closing Preferences with Cancel is now instant.** Cancelling the Preferences
+  window no longer pauses while it needlessly re-applied the whole app theme; the
+  previewed theme is now only restored when you actually changed the Theme
+  dropdown, so Cancel closes as quickly as OK.
+- **Disabled options now look disabled.** A ticked checkbox kept its bright fill
+  when its group was switched off (for example the targen / printtarg options
+  greyed out by a prebuilt-chart preset). Ticked checkboxes and radio buttons now
+  grey out together with the rest of their group, in both light and dark themes.
+
 ## v3.7.41
 Small interface polish for the Preferences and Create Chart screens.
 
