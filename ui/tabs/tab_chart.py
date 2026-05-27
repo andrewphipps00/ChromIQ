@@ -3472,7 +3472,8 @@ class TabChart(QWidget):
             return False
         try:
             target = parse_ti1(ti1)
-            txt_path, pxf_path = export_from_ti1(ti1)
+            exports_dir = self._file_mgr.project().ensure_exports_dir()
+            txt_path, pxf_path = export_from_ti1(ti1, exports_dir)
         except Exception as exc:  # noqa: BLE001
             log.exception("i1Profiler export failed")
             self._log.appendPlainText(f"[i1iSis] export failed: {exc}")

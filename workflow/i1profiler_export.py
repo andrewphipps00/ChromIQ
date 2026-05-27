@@ -449,17 +449,24 @@ def write_pxf(
 
 
 def export_from_ti1(
-    ti1_path: Path, descriptor: str | None = None
+    ti1_path: Path,
+    out_dir: Path,
+    descriptor: str | None = None,
 ) -> tuple[Path | None, Path]:
-    """Read TI1, write .pxf (always) and .txt (RGB/CMYK only) next to it.
+    """Read TI1, write ``i1profiler.pxf`` (always) and ``i1profiler.txt``
+    (RGB/CMYK only) into ``out_dir``.
 
     Returns (txt_path_or_None, pxf_path). txt_path is None for CMYK+N, which
     i1Profiler only accepts as a CxF3 .pxf.
+
+    The output filenames are fixed (``i1profiler.txt`` / ``.pxf``) because the
+    folder identifies the project — see ``Project.exports_dir``.
     """
     target = parse_ti1(ti1_path)
     desc = descriptor or ti1_path.stem
-    txt_out = ti1_path.with_suffix(".txt")
-    pxf_out = ti1_path.with_suffix(".pxf")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    txt_out = out_dir / "i1profiler.txt"
+    pxf_out = out_dir / "i1profiler.pxf"
     wrote_txt = write_txt(target, txt_out, desc)
     write_pxf(target, pxf_out, desc)
     return (txt_out if wrote_txt else None), pxf_out

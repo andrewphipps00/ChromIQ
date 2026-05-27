@@ -124,7 +124,7 @@ def test_ink_colorspace_enum():
 
 
 def test_rgb_export_scales_to_255_and_stays_minimal(tmp_path):
-    txt, pxf = export_from_ti1(_write(tmp_path, "rgb.ti1", RGB_TI1))
+    txt, pxf = export_from_ti1(_write(tmp_path, "rgb.ti1", RGB_TI1), tmp_path)
     assert txt is not None and txt.suffix == ".txt"
     pxf_text = pxf.read_text()
     parseString(pxf_text)  # well-formed
@@ -145,7 +145,7 @@ def test_rgb_export_scales_to_255_and_stays_minimal(tmp_path):
 
 
 def test_cmyk_export(tmp_path):
-    txt, pxf = export_from_ti1(_write(tmp_path, "cmyk.ti1", CMYK_TI1))
+    txt, pxf = export_from_ti1(_write(tmp_path, "cmyk.ti1", CMYK_TI1), tmp_path)
     assert txt is not None
     pxf_text = pxf.read_text()
     parseString(pxf_text)
@@ -164,7 +164,7 @@ def test_cmyk_export(tmp_path):
 
 
 def test_cmykogv_export(tmp_path):
-    txt, pxf = export_from_ti1(_write(tmp_path, "ogv.ti1", CMYKOGV_TI1))
+    txt, pxf = export_from_ti1(_write(tmp_path, "ogv.ti1", CMYKOGV_TI1), tmp_path)
     assert txt is None  # extended gamut is .pxf only
     pxf_text = pxf.read_text()
     parseString(pxf_text)
@@ -182,7 +182,7 @@ def test_cmykogv_export(tmp_path):
 
 
 def test_cmykogv_spotcolor_percentages(tmp_path):
-    _txt, pxf = export_from_ti1(_write(tmp_path, "ogv.ti1", CMYKOGV_TI1))
+    _txt, pxf = export_from_ti1(_write(tmp_path, "ogv.ti1", CMYKOGV_TI1), tmp_path)
     dom = parseString(pxf.read_text())
     first = dom.getElementsByTagName("cc:ColorCMYKPlusN")[0]
     spots = first.getElementsByTagName("cc:SpotColor")
