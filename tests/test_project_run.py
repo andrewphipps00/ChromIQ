@@ -148,6 +148,15 @@ def test_run_chart_tiffs_sorted_and_case_insensitive(tmp_path: Path) -> None:
     assert [p.name for p in tiffs] == ["chart_01.tif", "chart_02.tif", "chart_03.TIF", "chart_04.tiff"]
 
 
+def test_run_chart_tiffs_finds_single_page_no_suffix(tmp_path: Path) -> None:
+    """printtarg writes `chart.tif` (no _NN) for a one-page chart — it must be
+    found, not silently skipped by a `chart_*.tif` (underscore) glob."""
+    proj = Project.create(tmp_path / "P", "P")
+    r = proj.current_run()
+    (r.dir / "chart.tif").write_text("single page")
+    assert [p.name for p in r.chart_tiffs()] == ["chart.tif"]
+
+
 # ---------------------------------------------------------------------------
 # Run — averaging
 # ---------------------------------------------------------------------------

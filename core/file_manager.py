@@ -109,7 +109,7 @@ class RunMeta:
     averaging_method: str = "mean"
     averaging_read_count: int = 0
     preconditioning_source_run: str | None = None
-    profile_built_from: str = "measurement.ti3"
+    profile_built_from: str = "chart.ti3"
     status: str = "in_progress"          # in_progress | complete
 
     @classmethod
@@ -158,10 +158,12 @@ class Calibration:
     def meta_path(self) -> Path:              return self.dir / "meta.json"
 
     def chart_tiffs(self) -> list[Path]:
+        # `calibration*.tif` matches both single-page calibration.tif and
+        # multi-page calibration_NN.tif (see Run.chart_tiffs for the rationale).
         if not self.dir.exists():
             return []
         out: set[Path] = set()
-        for pattern in ("calibration_*.tif", "calibration_*.TIF", "calibration_*.tiff"):
+        for pattern in ("calibration*.tif", "calibration*.TIF", "calibration*.tiff"):
             out.update(self.dir.glob(pattern))
         return sorted(out)
 
@@ -231,11 +233,17 @@ class Run:
     def chart_channels_json(self) -> Path:    return self.dir / "chart.channels.json"
 
     def chart_tiffs(self) -> list[Path]:
-        """All chart_*.tif/.TIF/.tiff page bitmaps in this run, sorted."""
+        """All chart page bitmaps in this run, sorted.
+
+        Matches both single-page `chart.tif` (printtarg's output for one page)
+        and multi-page `chart_NN.tif` — the glob is `chart*.tif`, mirroring
+        chart_creator._printtarg_done. Using `chart_*.tif` (underscore) would
+        silently miss single-page charts.
+        """
         if not self.dir.exists():
             return []
         out: set[Path] = set()
-        for pattern in ("chart_*.tif", "chart_*.TIF", "chart_*.tiff"):
+        for pattern in ("chart*.tif", "chart*.TIF", "chart*.tiff"):
             out.update(self.dir.glob(pattern))
         return sorted(out)
 
