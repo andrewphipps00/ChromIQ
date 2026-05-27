@@ -14,6 +14,8 @@ import pytest
 
 from ui.ti2_loader import (
     KNOWN_INSTRUMENTS,
+    _copy_files,
+    _project_root_for,
     _related_files,
     disable_bidir_for_instrument,
     has_spectral_data,
@@ -182,3 +184,89 @@ def test_related_files_finds_tiff_extension(tmp_path: Path) -> None:
     _, tiffs = _related_files(ti2)
 
     assert [p.name for p in tiffs] == ["chart.tiff"]
+
+
+# ---------------------------------------------------------------------------
+# Importing external charts → per-run project layout
+# ---------------------------------------------------------------------------
+
+def test_copy_files_builds_project_layout(tmp_path: Path) -> None:
+    """Importing an external .ti2 must produce a real project, not flat files.
+
+    runs/run1/chart.* + project.json, with the originals renamed to the
+    canonical chart stem (see docs/dev_folder_layout.md).
+    """
+    src = tmp_path / "external"
+    src.mkdir()
+    (src / "MyOldChart.ti2").write_text("CTI2\n")
+    (src / "MyOldChart.ti1").write_text("CTI1\n")
+    (src / "MyOldChart_01.tif").write_bytes(b"II*\x00")
+    (src / "MyOldChart_02.tif").write_bytes(b"II*\x00")
+    (src / "MyOldChart.ti3").write_text("CTI3\n")
+    (src / "MyOldChart.cht").write_text("cht\n")
+    (src / "MyOldChart.channels.json").write_text('{"ink_channels": ["r","g","b"]}')
+
+    _, tiffs = _related_files(src / "MyOldChart.ti2")
+    working_dir = tmp_path / "ChromIQ"
+    new_ti2, new_tiffs = _copy_files(
+        src / "MyOldChart.ti2", src / "MyOldChart.ti1", tiffs,
+        working_dir, "Imported",
+    )
+
+    proj = working_dir / "Imported"
+    run1 = proj / "runs" / "run1"
+    assert (proj / "project.json").is_file()
+    assert new_ti2 == run1 / "chart.ti2"
+    assert (run1 / "chart.ti2").is_file()
+    assert (run1 / "chart.ti1").is_file()
+    assert (run1 / "chart.ti3").is_file()        # measurement
+    assert (run1 / "chart.cht").is_file()
+    assert (run1 / "chart.channels.json").is_file()
+    assert [p.name for p in new_tiffs] == ["chart_01.tif", "chart_02.tif"]
+    # No flat <name>.ti2 left at the project root.
+    assert not (proj / "Imported.ti2").exists()
+
+
+def test_copy_files_imports_icc_as_chart_icc(tmp_path: Path) -> None:
+    src = tmp_path / "external"
+    src.mkdir()
+    (src / "old.ti2").write_text("CTI2\n")
+    (src / "old.icc").write_text("ICC\n")
+
+    working_dir = tmp_path / "ChromIQ"
+    _copy_files(src / "old.ti2", None, [], working_dir, "Imported")
+
+    assert (working_dir / "Imported" / "runs" / "run1" / "chart.icc").read_text() == "ICC\n"
+
+
+def test_project_root_for_recognises_structured_chart(tmp_path: Path) -> None:
+    """A chart already inside a project run folder is 'inside' (no re-import)."""
+    from core.file_manager import Project
+    working_dir = tmp_path / "ChromIQ"
+    proj = Project.create(working_dir / "Existing", "Existing")
+    chart_ti2 = proj.current_run().chart_ti2
+    chart_ti2.parent.mkdir(parents=True, exist_ok=True)
+    chart_ti2.write_text("CTI2\n")
+
+    assert _project_root_for(chart_ti2, working_dir) == working_dir / "Existing"
+
+
+def test_project_root_for_rejects_external_file(tmp_path: Path) -> None:
+    working_dir = tmp_path / "ChromIQ"
+    working_dir.mkdir()
+    external = tmp_path / "somewhere" / "chart.ti2"
+    external.parent.mkdir(parents=True)
+    external.write_text("CTI2\n")
+
+    assert _project_root_for(external, working_dir) is None
+
+
+def test_project_root_for_rejects_folder_without_manifest(tmp_path: Path) -> None:
+    """A first-level folder without project.json (e.g. a legacy flat folder)
+    is not treated as a project."""
+    working_dir = tmp_path / "ChromIQ"
+    legacy = working_dir / "LegacyFlat"
+    legacy.mkdir(parents=True)
+    (legacy / "LegacyFlat.ti2").write_text("CTI2\n")
+
+    assert _project_root_for(legacy / "LegacyFlat.ti2", working_dir) is None

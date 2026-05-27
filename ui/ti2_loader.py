@@ -118,7 +118,7 @@ def resolve_ti2(
     copied/renamed ones — or None if the user cancelled.
     """
     working_dir = _resolve_working_dir(settings)
-    if _is_under(ti2_path, working_dir):
+    if _project_root_for(ti2_path, working_dir) is not None:
         return _handle_inside(parent, ti2_path, working_dir)
     return _handle_outside(parent, ti2_path, working_dir)
 
@@ -132,15 +132,22 @@ def _resolve_working_dir(settings: "AppSettings") -> Path:
     return Path(custom) if custom else Path.home() / "ChromIQ"
 
 
-def _is_under(path: Path, root: Path) -> bool:
-    # Only consider the file "inside" the working folder if it sits directly
-    # in a first-level project subfolder: <working_dir>/<project>/<file>.
-    # This avoids false positives when working_dir is a broad path (e.g. ~/).
+def _project_root_for(path: Path, working_dir: Path) -> Path | None:
+    """Return the ChromIQ project root that contains ``path``, or None.
+
+    A project root is a first-level subfolder of ``working_dir`` that holds a
+    ``project.json``. ``path`` counts as "inside" when that manifest exists —
+    so a chart already structured as ``<project>/runs/<id>/chart.ti2`` (or a
+    calibration in ``<project>/cal/``) is recognised and not re-imported.
+    """
     try:
-        rel = path.resolve().relative_to(root.resolve())
-        return len(rel.parts) == 2
+        rel = path.resolve().relative_to(working_dir.resolve())
     except ValueError:
-        return False
+        return None
+    if not rel.parts:
+        return None
+    candidate = working_dir / rel.parts[0]
+    return candidate if (candidate / "project.json").exists() else None
 
 
 def _related_files(ti2_path: Path) -> tuple[Path | None, list[Path]]:
@@ -427,33 +434,52 @@ def _copy_files(
     new_name: str,
     overwrite: bool = False,
 ) -> tuple[Path, list[Path]]:
+    """Import an external chart into a fresh project as run1.
+
+    Builds the per-run layout (see docs/dev_folder_layout.md): a project at
+    ``working_dir/<new_name>/`` with ``project.json`` and the imported chart
+    placed under ``runs/run1/`` with the canonical ``chart`` stem
+    (``chart.ti2`` / ``chart.ti1`` / ``chart_NN.tif`` / ``chart.ti3`` /
+    ``chart.icc``). Returns (run1 chart.ti2, copied page tiffs).
+    """
+    from core.file_manager import Project
+
     old_stem = ti2_path.stem
-    dest     = working_dir / new_name
+    dest      = working_dir / new_name
     if overwrite and dest.exists():
         shutil.rmtree(dest)
-    dest.mkdir(parents=True, exist_ok=True)
 
-    new_ti2 = dest / f"{new_name}.ti2"
-    shutil.copy2(ti2_path, new_ti2)
+    proj = Project.create(dest, new_name)
+    run  = proj.current_run()
+    run.ensure_dir()
 
+    shutil.copy2(ti2_path, run.chart_ti2)
     if ti1:
-        shutil.copy2(ti1, dest / f"{new_name}.ti1")
+        shutil.copy2(ti1, run.chart_ti1)
 
+    # Chart recognition + channels sidecar travel with the chart when present.
+    cht = ti2_path.with_suffix(".cht")
+    if cht.exists():
+        shutil.copy2(cht, run.chart_cht)
+    channels = ti2_path.with_name(f"{old_stem}.channels.json")
+    if channels.exists():
+        shutil.copy2(channels, run.chart_channels_json)
+
+    # Pages are renumbered chart_01.tif, chart_02.tif, … in sorted order.
     new_tiffs: list[Path] = []
-    for tiff in tiffs:
-        suffix   = tiff.name[len(old_stem):]    # e.g. ".tif" or "_2.tif"
-        new_tiff = dest / f"{new_name}{suffix}"
+    for i, tiff in enumerate(sorted(tiffs), start=1):
+        new_tiff = run.dir / f"chart_{i:02d}.tif"
         shutil.copy2(tiff, new_tiff)
         new_tiffs.append(new_tiff)
 
     ti3 = ti2_path.with_suffix(".ti3")
     if ti3.exists():
-        shutil.copy2(ti3, dest / f"{new_name}.ti3")
+        shutil.copy2(ti3, run.measurement_ti3)   # chart.ti3
 
     for ext in (".icc", ".icm"):
         icc = ti2_path.with_suffix(ext)
         if icc.exists():
-            shutil.copy2(icc, dest / f"{new_name}{ext}")
+            shutil.copy2(icc, run.profile_icc)    # chart.icc
             break
 
-    return new_ti2, new_tiffs
+    return run.chart_ti2, new_tiffs
