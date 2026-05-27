@@ -53,6 +53,7 @@ from data.patch_db import (
     i1_defaults_from_preset,
     query_patches,
 )
+from ui.dialogs.target_change_dialog import TargetChangeAction, TargetChangeDialog
 from ui.fade_scroll import FadeScrollArea
 from ui.parameter_widget import ParameterWidget
 from ui.styles import SPEC_AMBER, SPEC_CYAN, SPEC_GREEN, SPEC_MAGENTA, SPEC_VIOLET
@@ -134,6 +135,12 @@ PREBUILT_PRESETS = {
     TC924A4_PRESET_KEY:     ("assets/charts/pharmacist/rgb/i1pro/a4/tc924/tc924",     "tc924-a4"),
     TC924LETTER_PRESET_KEY: ("assets/charts/pharmacist/rgb/i1pro/letter/tc924/tc924", "tc924-letter"),
 }
+
+# Built-in presets that are temporarily disabled: shown greyed-out and
+# non-selectable in the dropdown (NOT removed), pending a fix from their author.
+# The TC9.24 charts (A4 + US Letter) are parked here until Pharmacist corrects
+# them; clear this set to re-enable them — no other change needed.
+DISABLED_BUILTIN_PRESET_KEYS = frozenset({TC924A4_PRESET_KEY, TC924LETTER_PRESET_KEY})
 
 # Every built-in (non-deletable) preset key. Used to protect them from the
 # delete button and to keep disk presets from shadowing them.
@@ -252,6 +259,9 @@ class TabChart(QWidget):
         self._settings = settings
         self._creator  = ChartCreator(runner, file_mgr, settings)
         self._params   = self._load_yaml_params()
+        # Sanitised target name of the most recent generate. Lets _on_generate
+        # detect a name change (rename) away from an already-created target.
+        self._last_target_name = ""
         self._preconditioning_from_dialog = False
         # Run that produced the profile the user clicked "Use as pre-conditioning"
         # on. Captured at apply_preconditioning time; consumed at Generate-click
@@ -2200,14 +2210,33 @@ class TabChart(QWidget):
         data = self._preset_combo.itemData(index)
         return data is not None and data not in BUILTIN_PRESET_KEYS
 
-    def _add_builtin_preset_item(self, label: str, key: str, tooltip: str) -> None:
-        """Append a pinned, non-deletable preset entry (bold + tooltip)."""
+    def _add_builtin_preset_item(
+        self, label: str, key: str, tooltip: str, *, disabled: bool = False
+    ) -> None:
+        """Append a pinned, non-deletable preset entry (bold + tooltip).
+
+        ``disabled`` greys the item out and makes it non-selectable while leaving
+        it visible (see DISABLED_BUILTIN_PRESET_KEYS) — used to park a built-in
+        that needs fixing without deleting its wiring.
+        """
+        if disabled:
+            label = f"{label}  (temporarily unavailable)"
+            tooltip = (
+                "Temporarily unavailable — this built-in chart is being fixed and "
+                "has been disabled for now. It will return in a later update."
+            )
         self._preset_combo.addItem(label, userData=key)
         bi = self._preset_combo.count() - 1
         bi_font = self._preset_combo.font()
         bi_font.setBold(True)
         self._preset_combo.setItemData(bi, bi_font, Qt.ItemDataRole.FontRole)
         self._preset_combo.setItemData(bi, tooltip, Qt.ItemDataRole.ToolTipRole)
+        if disabled:
+            # Grey out + block selection via the underlying model item (the combo
+            # uses a QStandardItemModel by default).
+            item = self._preset_combo.model().item(bi)
+            if item is not None:
+                item.setEnabled(False)
 
     def _tc918_tooltip(self) -> str:
         """Tooltip text for the ti1-based TC9.18 built-in preset."""
@@ -2278,7 +2307,9 @@ class TabChart(QWidget):
             if instr != prev_instr:
                 self._preset_combo.insertSeparator(self._preset_combo.count())
                 prev_instr = instr
-            self._add_builtin_preset_item(label, key, tip)
+            self._add_builtin_preset_item(
+                label, key, tip, disabled=key in DISABLED_BUILTIN_PRESET_KEYS
+            )
         if select_name is not None:
             # Match by userData (the bare name), not the shown text, which may
             # carry a ▶ prefix for auto-run presets.
@@ -2374,6 +2405,12 @@ class TabChart(QWidget):
             self._revert_preset_combo()
             return
         data = self._preset_combo.itemData(index)
+
+        # Temporarily-disabled built-ins are greyed out and unselectable in the
+        # UI, but guard anyway so a programmatic selection can never apply one.
+        if data in DISABLED_BUILTIN_PRESET_KEYS:
+            self._revert_preset_combo()
+            return
 
         # Built-in presets generate immediately, so prompt for a target name
         # first — otherwise the output folder is created under the preset's
@@ -3279,6 +3316,47 @@ class TabChart(QWidget):
     # Actions
     # ------------------------------------------------------------------
 
+    def _handle_target_rename(self, new_name: str) -> bool:
+        """Reconcile a name change away from an already-created target.
+
+        Returns True to proceed with generation, False only when the user
+        cancels. When the user has previously generated a target this session
+        and now asks for a different (not-yet-existing) folder, pops the
+        rename/keep/delete chooser and performs the chosen file operation.
+        """
+        old_name = getattr(self, "_last_target_name", "")
+        if not old_name or not new_name:
+            return True
+        new_root = self._file_mgr.preview_project_root(new_name)
+        if new_root is None:
+            return True
+        old_root = self._file_mgr.root_dir() / old_name
+        # Same destination (e.g. only spacing/case-equivalent edit), or the old
+        # target was never written to disk — nothing to reconcile.
+        if new_root == old_root or not (old_root / "project.json").exists():
+            return True
+        # A project already occupying the new name is a different situation
+        # (merge/overwrite) that this dialog doesn't cover — let the normal flow
+        # handle it rather than offering a misleading "rename onto it".
+        if new_root.exists():
+            return True
+
+        dlg = TargetChangeDialog(old_name, new_root.name, old_root, new_root, self)
+        dlg.exec()
+        action = dlg.result_action()
+        if action == TargetChangeAction.CANCEL:
+            return False
+        if action == TargetChangeAction.RENAME:
+            try:
+                self._file_mgr.rename_existing_project(old_name, new_name)
+            except (OSError, FileExistsError, FileNotFoundError) as exc:
+                # Fall back to a fresh target rather than blocking the user.
+                log.warning("Project rename failed (%s); creating fresh instead", exc)
+        elif action == TargetChangeAction.DELETE:
+            self._file_mgr.delete_project_folder(old_name)
+        # KEEP: leave the old folder; set_target_name creates the fresh one.
+        return True
+
     def _on_generate(self) -> None:
         if self._runner.is_running:
             log.warning("A process is already running")
@@ -3312,14 +3390,20 @@ class TabChart(QWidget):
                 return
             self._tc918_active = False
             self._tc918_targen_sig = None
-        self.target_started.emit()
-
-        params = self._collect_params()
         name = (
             self._target_name_edit.text().strip()
             if self._current_mode() == "guided"
             else self._manual_target_name_edit.text().strip()
         )
+        # If a target was already created this session and the user has now typed
+        # a different name, switching folders would orphan the old one. Ask first
+        # (rename / keep both / delete old); Cancel aborts before anything clears.
+        if not self._handle_target_rename(name):
+            return
+
+        self.target_started.emit()
+
+        params = self._collect_params()
         if name:
             self._file_mgr.set_target_name(name)
         base_name = self._file_mgr.get_target_name()

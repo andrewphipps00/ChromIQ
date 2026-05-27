@@ -577,6 +577,51 @@ class Project:
             encoding="utf-8",
         )
 
+    def rename(self, new_stem: str) -> None:
+        """Relabel an in-place project from its current stem to ``new_stem``.
+
+        Chart artefacts carry the project name as their file stem (see
+        ``Run.stem`` / ``Calibration.stem``), so simply moving the project
+        folder is not enough — the files inside would keep the old stem while
+        every ``Run``/``Calibration`` path property now resolves to the new one,
+        silently breaking the project. This renames every ChromIQ-generated file
+        whose stem is the old name (across ``runs/``, ``cal/`` and ``exports/``),
+        updates ``project.json`` and rewrites the README.
+
+        ``self._root`` must already be at the new location (the folder move is
+        the caller's job) — this fixes up the contents and the manifest. A
+        no-op when ``new_stem`` equals the current name.
+        """
+        old_stem = self._manifest.target_name
+        if not old_stem or not new_stem or new_stem == old_stem:
+            return
+
+        # Only rename files shaped like a ChromIQ artefact for this stem:
+        #   <stem>[-cal|-i1profiler][_NN].<ext...>
+        # so a user's own "<stem>-notes.txt" is left untouched, and structural
+        # files (project.json, meta.json, the README) never match.
+        protected = {self.MANIFEST, self.README, "meta.json"}
+        tail_re = re.compile(r"(-cal|-i1profiler)?(_\d+)?\.[\w.]+$")
+
+        for f in sorted(self._root.rglob("*")):
+            if not f.is_file() or f.name in protected:
+                continue
+            if not f.name.startswith(old_stem):
+                continue
+            tail = f.name[len(old_stem):]
+            if not tail_re.fullmatch(tail):
+                continue
+            dst = f.with_name(new_stem + tail)
+            if dst.exists():
+                log.warning("Rename target already exists, skipping: %s", dst)
+                continue
+            f.rename(dst)
+
+        self._manifest.target_name = new_stem
+        self.save_manifest()
+        self.write_readme()
+        log.info("Renamed project stem %s -> %s at %s", old_stem, new_stem, self._root)
+
     # ---- run access
     def run(self, run_id: str) -> Run:
         return Run(self, run_id)
@@ -749,6 +794,54 @@ class FileManager:
             root = self.working_dir()
             self._project = Project.create_or_load(root, self.get_target_name())
         return self._project
+
+    def rename_existing_project(self, old_name: str, new_name_raw: str) -> Path:
+        """Move the project folder ``old_name`` to the sanitised ``new_name`` and
+        fix every artefact stem + the manifest inside it.
+
+        Used when the user changes the Output name after a first generate and
+        chooses "rename". Makes the renamed project the current target. Returns
+        the new root.
+
+        Raises ``FileExistsError`` if a project already occupies the new name,
+        and ``FileNotFoundError`` if ``old_name`` is not a project on disk.
+        """
+        root = self.root_dir()
+        old_root = root / old_name
+        new_root = self.preview_project_root(new_name_raw)
+        if new_root is None:
+            raise ValueError("Empty target name")
+        if new_root == old_root:
+            return old_root
+        if not (old_root / Project.MANIFEST).exists():
+            raise FileNotFoundError(old_root)
+        if new_root.exists():
+            raise FileExistsError(new_root)
+
+        shutil.move(str(old_root), str(new_root))
+        proj = Project.load(new_root)
+        proj.rename(new_root.name)
+        self._target_name = new_root.name
+        self._project = proj
+        return new_root
+
+    def delete_project_folder(self, name: str) -> None:
+        """Permanently delete a ChromIQ project folder.
+
+        Guarded so a stray/empty name can never remove something unexpected: the
+        folder must live directly under :meth:`root_dir` and contain a
+        ``project.json``. Anything else is refused with a warning.
+        """
+        root = self.root_dir()
+        target = root / name
+        if target == root or target.parent != root:
+            log.warning("Refusing to delete unsafe path: %s", target)
+            return
+        if not (target / Project.MANIFEST).exists():
+            log.warning("Refusing to delete non-project folder: %s", target)
+            return
+        shutil.rmtree(target)
+        log.info("Deleted project folder %s", target)
 
     def cwd_for_chart(self, *, cal_target: bool) -> Path:
         """Folder chart_creator must run targen/printtarg in.

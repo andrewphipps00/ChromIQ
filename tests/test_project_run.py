@@ -481,3 +481,108 @@ def test_file_manager_project_cached_until_target_name_changes(tmp_path: Path) -
     p3 = fm.project()
     assert p3 is not p1
     assert p3.target_name == "B"
+
+
+# ---------------------------------------------------------------------------
+# Project.rename — relabel an in-place project (stems + manifest + readme)
+# ---------------------------------------------------------------------------
+
+def test_project_rename_fixes_stems_manifest_and_readme(tmp_path: Path) -> None:
+    # A renamed folder must also rename every artefact whose stem is the old
+    # project name, or Run.stem (derived from the folder) points at files that
+    # no longer exist.
+    proj = Project.create(tmp_path / "Old", "Old")
+    run = proj.current_run()
+    run.chart_ti1.write_text("TI1")
+    run.chart_ti2.write_text("TI2")
+    (run.dir / "Old_01.tif").write_text("PAGE")
+    run.chart_channels_json.write_text("{}")
+    cal = proj.calibration
+    cal.ensure_dir()
+    cal.cal_path.write_text("CAL")
+    cal.ti3.write_text("CALTI3")
+    proj.ensure_exports_dir()
+    (proj.exports_dir / "Old-i1profiler.pxf").write_text("PXF")
+    # A user's own file that merely starts with the stem must NOT be renamed.
+    (proj.root / "Old-notes.txt").write_text("keep me")
+
+    # Simulate the caller having moved the folder, then rename contents.
+    moved = tmp_path / "New"
+    proj.root.rename(moved)
+    proj = Project.load(moved)
+    proj.rename("New")
+
+    run = proj.current_run()
+    assert proj.target_name == "New"
+    assert run.chart_ti1.exists() and run.chart_ti1.name == "New.ti1"
+    assert run.chart_ti2.exists()
+    assert (run.dir / "New_01.tif").exists()
+    assert run.chart_channels_json.name == "New.channels.json"
+    assert proj.calibration.cal_path.name == "New-cal.cal"
+    assert proj.calibration.ti3.name == "New-cal.ti3"
+    assert (proj.exports_dir / "New-i1profiler.pxf").exists()
+    # Old-stem files are gone; the user's note is untouched.
+    assert not (run.dir / "Old.ti1").exists()
+    assert (moved / "Old-notes.txt").read_text() == "keep me"
+    # Manifest + README reflect the new name.
+    manifest = json.loads(proj.manifest_path.read_text())
+    assert manifest["target_name"] == "New"
+    assert "New" in proj.readme_path.read_text()
+
+
+def test_project_rename_noop_when_same_name(tmp_path: Path) -> None:
+    proj = Project.create(tmp_path / "Same", "Same")
+    proj.current_run().chart_ti1.write_text("TI1")
+    proj.rename("Same")
+    assert proj.current_run().chart_ti1.exists()
+
+
+# ---------------------------------------------------------------------------
+# FileManager.rename_existing_project / delete_project_folder
+# ---------------------------------------------------------------------------
+
+def test_file_manager_rename_existing_project(tmp_path: Path) -> None:
+    from core.file_manager import FileManager
+    fm = FileManager(_FakeSettings(tmp_path))
+    fm.set_target_name("Alpha")
+    proj = fm.project()  # creates ~/Alpha
+    proj.current_run().chart_ti2.write_text("TI2")
+
+    new_root = fm.rename_existing_project("Alpha", "Beta")
+
+    assert new_root == tmp_path / "Beta"
+    assert not (tmp_path / "Alpha").exists()
+    assert (tmp_path / "Beta" / "project.json").is_file()
+    assert fm.get_target_name() == "Beta"
+    # Chart stem followed the folder.
+    assert (fm.project().current_run().dir / "Beta.ti2").exists()
+
+
+def test_file_manager_rename_refuses_existing_target(tmp_path: Path) -> None:
+    from core.file_manager import FileManager
+    fm = FileManager(_FakeSettings(tmp_path))
+    fm.set_target_name("Alpha")
+    fm.project()
+    fm.set_target_name("Beta")
+    fm.project()  # Beta now exists on disk
+    with pytest.raises(FileExistsError):
+        fm.rename_existing_project("Alpha", "Beta")
+
+
+def test_file_manager_delete_project_folder(tmp_path: Path) -> None:
+    from core.file_manager import FileManager
+    fm = FileManager(_FakeSettings(tmp_path))
+    fm.set_target_name("Gone")
+    fm.project()
+    assert (tmp_path / "Gone").exists()
+    fm.delete_project_folder("Gone")
+    assert not (tmp_path / "Gone").exists()
+
+
+def test_file_manager_delete_refuses_non_project(tmp_path: Path) -> None:
+    from core.file_manager import FileManager
+    fm = FileManager(_FakeSettings(tmp_path))
+    # A bare folder with no project.json must not be deleted.
+    (tmp_path / "NotAProject").mkdir()
+    fm.delete_project_folder("NotAProject")
+    assert (tmp_path / "NotAProject").exists()
