@@ -29,6 +29,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from core.file_manager import Run
 from core.logger import get_logger
 from core.preset_store import (
     load_presets as _load_tab_presets,
@@ -1190,9 +1191,17 @@ class TabCheckRefine(QWidget):
             self._gamut_panel.set_icc_path(self._icc_path)
 
     def _auto_fill_icc(self, ti3: Path) -> None:
-        """Try to find a matching ICC/ICM in the same folder."""
-        for ext in (".icc", ".icm"):
-            candidate = ti3.with_suffix(ext)
+        """Try to find a matching ICC/ICM in the same folder.
+
+        Prefers the run's refinement-merged profile (merged.icc) when one was
+        built, falling back to the same-stem profile (chart.icc / chart.icm).
+        """
+        candidates: list[Path] = []
+        run = Run.for_dir(ti3.parent)
+        if run.merged_icc.exists():
+            candidates.append(run.merged_icc)
+        candidates += [ti3.with_suffix(ext) for ext in (".icc", ".icm")]
+        for candidate in candidates:
             if candidate.exists():
                 self._icc_path = candidate
                 self._icc_edit.setText(str(candidate))
@@ -1432,8 +1441,8 @@ class TabCheckRefine(QWidget):
                 "that uses this profile to place the new test patches more intelligently. "
                 "The next chart will sample more in the colour regions your printer "
                 "reproduces least accurately, producing a noticeably better profile on "
-                "the second round. Your existing chart files are preserved (renamed "
-                "with a <code>pre_</code> prefix) so nothing is lost. Recommended once "
+                "the second round. This profile and its measurements are kept intact "
+                "in their own run folder so nothing is lost. Recommended once "
                 "you've confirmed a working profile for this paper.",
                 dlg,
             )
