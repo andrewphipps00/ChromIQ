@@ -82,6 +82,7 @@ class MainWindow(QMainWindow):
         self._masthead = MastheadHeader(version=APP_VERSION, parent=central)
         self._masthead.settings_clicked.connect(self._open_settings)
         self._masthead.help_clicked.connect(self.open_welcome_dialog)
+        self._masthead.tools_clicked.connect(self._open_tools_menu)
         main_layout.addWidget(self._masthead)
 
         # Tabs
@@ -470,6 +471,19 @@ class MainWindow(QMainWindow):
         dlg.show()
         dlg.raise_()
         dlg.activateWindow()
+
+    def _open_tools_menu(self) -> None:
+        """Show the speech-bubble Tools popup under the masthead's Tools button."""
+        from ui.tools_popup import ToolsPopup
+
+        popup = ToolsPopup(self)
+        popup.set_appearance(self._title_bar_mode)
+        popup.selected.connect(self._launch_tool)
+        popup.show_under(self._masthead.tools_button())
+
+    def _launch_tool(self, key: str) -> None:
+        from ui.dialogs.tools_dialogs import open_tool_dialog
+        open_tool_dialog(key, self._runner, self._settings, self)
 
     def _open_settings(self) -> None:
         # SettingsDialog tints its own tooltip ⓘ icons to the dialog's neutral

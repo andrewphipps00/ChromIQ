@@ -1,5 +1,30 @@
 # Changelog
 
+## v3.8.0-beta.12
+**New Tools menu.** A toolbox button in the header — next to Preferences —
+opens a popup listing four stand-alone measurement utilities. Each opens its
+own dialog with a plain-language explanation of what it does, file pickers for
+the input(s), and a destination + name for the output. These conversions were
+already part of the normal workflow; the Tools menu exposes them for ad-hoc use
+without having to set up a project. File pickers start in your working folder
+and remember the last folder you used per tool.
+
+### Features
+- **Tools popup in the masthead.** A speech-bubble menu, themed for light and
+  dark mode, listing the four utilities.
+- **Average measurements.** Combine repeated reads of the same chart into one
+  averaged `.ti3` to reduce instrument noise. Choose mean, or — with three or
+  more reads — median.
+- **Merge measurements.** Concatenate the patches of a primary `.ti3` with any
+  number of additional `.ti3` files into a single measurement, giving the
+  profiler more data points to fit.
+- **Convert TI1 → i1Profiler.** Export an Argyll `.ti1` chart as i1Profiler
+  patch sets (`.txt` and `.pxf`) so an i1iSis (or other i1Profiler-driven
+  scanner) can measure it.
+- **Convert i1Profiler → TI3.** Convert an i1Profiler measurement `.txt`
+  export into an Argyll `.ti3` (via `txt2ti3`) for building a profile in
+  ChromIQ.
+
 ## v3.8.0-beta.11
 **Working-folder layout redesign.** Every project now uses a per-run folder
 structure. The old prefix/suffix conventions (`pre_`, `cal_`, `_readN`,

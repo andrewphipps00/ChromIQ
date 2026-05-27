@@ -164,3 +164,64 @@ def merge_preconditioning(
         fresh.n_sets, pre.n_sets, total, out_ti3.name,
     )
     return total
+
+
+def merge_measurements(
+    inputs: list[Path],
+    out_ti3: Path,
+    bin_dir: Path | str | None = None,
+) -> int:
+    """Concatenate the patches of ``inputs`` into ``out_ti3`` via ``average -m``.
+
+    Generalises :func:`merge_preconditioning` to any number of measurement
+    files (two or more). The first input is the primary: ``average -m`` takes
+    its header/keyword data and appends every other input's patch rows.
+
+    Every input must share the primary's COLOR_REP and DATA_FORMAT — colprof
+    needs one consistent column layout — otherwise a ``Ti3MergeError`` naming
+    the offending file is raised. Returns the total number of sets written.
+    """
+    if len(inputs) < 2:
+        raise Ti3MergeError("Merging needs at least two measurement files.")
+
+    primary = _parse(inputs[0])
+    total = primary.n_sets
+    for extra_path in inputs[1:]:
+        extra = _parse(extra_path)
+        if extra.color_rep != primary.color_rep:
+            raise Ti3MergeError(
+                f"'{extra_path.name}' uses a different colour representation "
+                f"({extra.color_rep}) than the primary file "
+                f"'{inputs[0].name}' ({primary.color_rep}). They were likely "
+                "made with a different instrument or colour space and cannot "
+                "be combined."
+            )
+        if extra.data_format != primary.data_format:
+            raise Ti3MergeError(
+                f"'{extra_path.name}' has a different data layout (e.g. spectral "
+                "vs. non-spectral, or a different field set) than the primary "
+                f"file '{inputs[0].name}', so they cannot be combined."
+            )
+        total += extra.n_sets
+
+    average = _resolve_average(bin_dir)
+    cmd = [average, "-m", *(str(p) for p in inputs), str(out_ti3)]
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, stdin=subprocess.DEVNULL)
+    except OSError as exc:
+        raise Ti3MergeError(
+            f"Could not run ArgyllCMS 'average' to merge the data: {exc}"
+        ) from exc
+
+    if proc.returncode != 0 or not out_ti3.exists():
+        detail = (proc.stderr or proc.stdout or "").strip()
+        raise Ti3MergeError(
+            "ArgyllCMS 'average' could not merge the measurement files"
+            + (f":\n{detail}" if detail else ".")
+        )
+
+    log.info(
+        "Merged %d measurement files via 'average -m' = %d sets -> %s",
+        len(inputs), total, out_ti3.name,
+    )
+    return total
