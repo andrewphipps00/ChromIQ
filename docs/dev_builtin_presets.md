@@ -34,10 +34,12 @@ There are five built-in presets today, of **three different kinds**:
 3. **prebuilt-files** — *i1Pro TC9.24 A4* and *i1Pro TC9.24 Letter by Pharmacist*.
    A **complete, pre-generated target** (`.ti1` + `.ti2` + page `.tif`s) bundled in
    `assets/charts/`. Selecting one prompts for a name, **copies** the bundled files
-   into a fresh `~/ChromIQ/<name>/` folder (renamed to `<name>…`) and loads the
-   copied TIFFs — **neither targen nor printtarg runs**, so the param panels are
-   greyed out while the preset is active. The two share `_apply_prebuilt_preset` /
-   `_create_prebuilt_target` and a `PREBUILT_PRESETS` table mapping each key to its
+   into the project's current run as `runs/<current>/chart.ti1` / `chart.ti2` /
+   `chart_NN.tif` (the fixed `chart` stem — the user's name is the *project folder*
+   name, see `docs/dev_folder_layout.md`) and loads the copied TIFFs — **neither
+   targen nor printtarg runs**, so the param panels are greyed out while the preset
+   is active. The two share `_apply_prebuilt_preset` / `_create_prebuilt_target`
+   and a `PREBUILT_PRESETS` table mapping each key to its
    `(asset_stem, default_name)` — add more by adding a row.
 
 In the dropdown the order is **Default → user presets → built-ins** (built-ins
@@ -94,7 +96,8 @@ A user preset can also **bundle its own `.ti1`**, mirroring the ti1-based
 built-in but with a user-supplied patch set. The Save dialog (`_on_preset_save`)
 shows a *"Build from the currently loaded patch set (attach its .ti1)"* checkbox,
 enabled only when `self._current_ti1_path` points at a real file (set in
-`_on_generate_finished` from `<work_dir>/<stem>.ti1` after any generate/load).
+`_on_generate_finished` from `runs/<current>/chart.ti1` after any generate/load —
+see `docs/dev_folder_layout.md`).
 
 - On save: the loaded `.ti1` is copied next to the preset's `.json` via
   `preset_store.sidecar_path("create_chart", name, ".ti1")` (same filename stem,

@@ -57,6 +57,41 @@ ChromIQ is a PyQt6 GUI for RGB printer ICC profiling with ArgyllCMS 3.5.0.
 `parameters.yaml` → `ParameterWidget` rows in panels → `workflow/*.py` builds CLI args
 → `ArgyllRunner.run()` → `QProcess` → line_received signal → LogWidget + stripe detection
 
+### Working-folder layout (Project / Run)
+
+Every project is a folder under `~/ChromIQ/<target-name>/` owned by the
+`Project` / `Run` / `Calibration` classes in `core/file_manager.py`:
+
+```
+<target-name>/
+  project.json            # manifest: schema_version, current_run, runs[]
+  cal/                    # optional, shared across runs (calibration.cal/.ti1/.ti2/.ti3/.icc)
+  exports/                # i1Profiler exports (i1profiler.txt/.pxf)
+  runs/run1/, run2/, …    # one folder per profile build
+    chart.ti1/.ti2/.cht/.ps/.channels.json + chart_NN.tif
+    reads/readN.ti3       # only when averaging is used
+    chart.ti3             # the measurement (chartread output; averaged result reuses this stem)
+    chart.icc             # the profile (colprof output)
+    preconditioning.ti3/.icc   # seeded by Project.new_run when refining a prior run
+    merged.ti3/.icc       # build-time refinement-merge outputs
+    calibrated.icc        # applycal output
+    meta.json
+```
+
+**The role of a file is its filename within a run folder; the folder
+disambiguates between runs.** There are no `pre_`/`cal_` prefixes or
+`_readN`/`_average`/`_merged` suffixes — those were removed in the folder
+redesign. File stems follow ArgyllCMS's natural coupling (`chart.ti2` →
+`chart.ti3` → `chart.icc`), so no post-tool renames are needed.
+
+**All path construction goes through `Project` / `Run` / `Calibration`.**
+Adding a new artefact = add a property/method to `Run`, never a stem pattern
+elsewhere. `FileManager.project()` returns the current target's project;
+`Run.for_dir(dir)` gives a project-less Run for path ops on a known folder.
+Cross-run isolation makes the old "averaging reads double-counted into a
+refinement merge" bug impossible by construction. See
+`docs/dev_folder_layout.md`.
+
 ### Key patterns
 
 **ArgyllRunner** is a singleton `QObject` injected into all workflow classes.

@@ -9,8 +9,9 @@ completion dialog.
 Phases 1–4 below are **done** and unit-tested (`tests/test_average_runner.py`):
 
 - `workflow/average_runner.py` — wraps `average` (mean, or median via `-e`).
-- `core/file_manager.py` — `read_variant_path` / `average_path` /
-  `existing_read_variants` / `next_read_index`.
+- `core/file_manager.py` — read naming lives on `Run`: `reads()` /
+  `next_read_path()` / `promote_measurement_to_read()` / `clear_reads()`
+  (reads/readN.ti3 inside the run folder; see `docs/dev_folder_layout.md`).
 - `core/settings.py` — `averaging_enabled` (master switch, default **False**)
   and `average_method` ("mean" | "median", default mean).
 - `ui/dialogs/settings_dialog.py` — "Enable measurement averaging" checkbox in
@@ -21,14 +22,15 @@ Phases 1–4 below are **done** and unit-tested (`tests/test_average_runner.py`)
   *Measure again to average* / *Build Profile →*; mid-set → *Use last read only* /
   *Measure again to average* / *Average all reads & build →* (with a mean/median
   combo). The choice is stashed in `_pending_avg_action`; once chartread writes
-  the final `.ti3`, `_on_measure_done` promotes it (`_promote_completed_read`) and
-  carries out the action (`_apply_completion_action`). "Measure again" accumulates
-  `<base>_read{N}.ti3`, "Average" → `<base>_average.ti3` then Build Profile.
+  the final `chart.ti3`, `_on_measure_done` promotes it (`_promote_completed_read`
+  → `Run.promote_measurement_to_read`) and carries out the action
+  (`_apply_completion_action`). "Measure again" accumulates `reads/readN.ti3`,
+  "Average" runs `average reads/*.ti3` back into `chart.ti3` then Build Profile.
   Manual mode (or any case where the all-rows-read dialog never fired) falls back
   to the post-process `_handle_measure_complete` → `_show_completion_dialog`.
-- `ui/tabs/tab_profile.py` — `set_ti3_path` strips a trailing
-  `_read{N}`/`_average` so the averaged file still finds the canonical `.ti2`
-  (edge case #1, solved by suffix-stripping rather than copying).
+- `ui/tabs/tab_profile.py` — `set_ti3_path` needs no suffix-stripping: the
+  averaged result reuses the canonical `chart.ti3` stem, so its `chart.ti2`
+  sits right beside it (edge case #1 dissolved by the per-run layout).
 
 The whole flow is **off by default**, gated behind the `averaging_enabled`
 Preferences toggle — with it off, a finished full read proceeds straight to
@@ -119,19 +121,39 @@ it's the only thing that matters. Optionally expose a `mean`/`median` toggle whe
 
 ---
 
-## File-naming scheme
+## File-naming scheme (per-run layout)
 
-- Reads: `<base>_read1.ti3`, `<base>_read2.ti3`, … (**accumulate**)
-- Averaged result: `<base>_average.ti3`
-- Detection of prior reads **ignores any stem prefixed `pre_` / `cal_`** (those
-  belong to the refinement / calibration features, not averaging).
+Averaging lives entirely inside one run folder (`runs/<id>/`, see
+`docs/dev_folder_layout.md`):
 
-`pre_` and `cal_` are prefixes (front); these are suffixes (back), so they
-compose without collision, e.g. `pre_<base>_read1.ti3`.
+- Per-read snapshots: `reads/read1.ti3`, `reads/read2.ti3`, … (**accumulate**)
+- Averaged result: written back to the canonical `chart.ti3` (the averaged
+  measurement *is* the canonical one — colprof builds from it).
+
+There are no prefix/suffix conventions and no cross-run lookup: `Run.reads()`
+lists exactly one folder (`reads/`), so a different run's reads can never be
+picked up. This is what makes the old "averaged reads double-counted into a
+refinement merge" bug impossible — the reads of run 1 sit in
+`runs/run1/reads/`, run 2 averages `runs/run2/reads/`, and the merge only ever
+sees `chart.ti3` + `preconditioning.ti3`.
+
+`Run` owns the naming: `reads_dir`, `reads()`, `next_read_path()`,
+`promote_measurement_to_read()` (moves `chart.ti3` → `reads/readN.ti3`),
+`clear_reads()`.
 
 ---
 
 ## Implementation phases
+
+> **Historical — superseded by the per-run folder layout.** The phases and
+> edge cases below describe the *original* design, which used flat
+> `<base>_readN.ti3` / `<base>_average.ti3` files and the now-removed
+> `FileManager.read_variant_path` / `existing_read_variants` helpers. The
+> shipped implementation moves the per-read snapshots into `runs/<id>/reads/`
+> and averages back into `chart.ti3` (see the **Status** and **File-naming
+> scheme** sections above, and `docs/dev_folder_layout.md`). Edge case #1
+> (matching `.ti2`) and the cleanup concern (#5) dissolve under the per-run
+> layout; the planning text is kept for provenance only.
 
 ### Phase 1 — `average` wrapper
 **New `workflow/average_runner.py`** (mirror `workflow/printcal_runner.py`):
