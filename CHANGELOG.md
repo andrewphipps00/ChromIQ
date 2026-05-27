@@ -1,5 +1,15 @@
 # Changelog
 
+## v3.8.0-beta.14
+**Windows polish on top of beta.13.** Carries the beta.13 fix for the
+Windows project-create crash and tidies up the Tools popup on Windows.
+
+### Fixed
+- **Tools popup no longer shows a border on its bottom and right edges on
+  Windows.** The frameless popup was also getting the operating system's own
+  popup drop-shadow on top of the soft shadow ChromIQ already paints; on
+  Windows that OS shadow rendered as a hard edge. It's now suppressed.
+
 ## v3.8.0-beta.13
 **Fixes a Windows-only crash that made beta.11 unusable.** Creating or
 importing a project on Windows failed silently part-way through: you'd see a
