@@ -237,6 +237,28 @@ def test_black_patch_xyz_floored(tmp_path):
     assert y == pytest.approx(1.0, abs=0.01)
 
 
+def test_density_extremes_table_is_white_first(tmp_path):
+    """Row 0 of the density-extremes table must be white (100,100,100).
+
+    printtarg uses this table to decide whether to print the chart
+    identification (row letters A-Z, chart name, ArgyllCMS branding). With the
+    table emitted black-first, printtarg silently drops every label, producing
+    an unreadable strip chart. White-first order restores them — verified by
+    bisection against a real targen .ti1.
+    """
+    out = write_ti1([RgbPatch(50, 50, 50)], tmp_path / "o.ti1")
+    text = out.read_text()
+    # The second CTI1 table is DENSITY_EXTREME_VALUES.
+    chunk = text.split("DENSITY_EXTREME_VALUES", 1)[1]
+    data = chunk.split("BEGIN_DATA\n", 1)[1].split("END_DATA", 1)[0].strip()
+    rows = [l.split() for l in data.splitlines() if l.strip()]
+    assert len(rows) == 8
+    # First row = white (RGB columns 1..3).
+    assert [float(v) for v in rows[0][1:4]] == [100.0, 100.0, 100.0]
+    # Last row = black.
+    assert [float(v) for v in rows[-1][1:4]] == [0.0, 0.0, 0.0]
+
+
 def test_patch_xyz_matches_targen_flare():
     """The flare model reproduces real targen TI1 XYZ.
 

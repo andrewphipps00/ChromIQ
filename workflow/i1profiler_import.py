@@ -217,12 +217,26 @@ _DEVICE_COMBINATIONS: tuple[tuple[float, float, float], ...] = (
     (50, 50, 50),     # mid grey
 )
 
-# Density extremes (targen's second table). targen fits these to a device
-# model; lacking one, we use the RGB cube corners — a model-free set that spans
-# the density range. printtarg only needs the table present and parseable.
+# Density extremes (targen's second table) — the 8 RGB cube corners in the same
+# white-first iteration order targen uses (W, C, M, B, Y, G, R, K, i.e. the
+# first 8 of _DEVICE_COMBINATIONS). targen fits actual fractional values to a
+# device model; we lack one so cube corners are used as a model-free stand-in.
+#
+# **Order matters.** printtarg uses this table to decide whether to print the
+# chart identification (row letters A-Z, chart name, ArgyllCMS branding). With
+# the table emitted black-first (e.g. (0,0,0) at row 0) printtarg silently drops
+# all those labels, producing an unreadable strip chart. White-first restores
+# them. Verified by bisection against a real targen .ti1 (bisect: only the
+# order changes the label decision; the values themselves don't).
 _DENSITY_EXTREMES: tuple[tuple[float, float, float], ...] = (
-    (0, 0, 0), (100, 0, 0), (0, 100, 0), (0, 0, 100),
-    (100, 100, 0), (100, 0, 100), (0, 100, 100), (100, 100, 100),
+    (100, 100, 100),  # white
+    (0, 100, 100),    # cyan
+    (100, 0, 100),    # magenta
+    (0, 0, 100),      # blue
+    (100, 100, 0),    # yellow
+    (0, 100, 0),      # green
+    (100, 0, 0),      # red
+    (0, 0, 0),        # black
 )
 
 

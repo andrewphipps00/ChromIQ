@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import re
 import shlex
+import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -62,6 +63,7 @@ from ui.tiff_preview import TiffPreview
 from ui.tooltip_button import InfoDialog, TooltipButton
 from ui.widgets import NoScrollComboBox, NoScrollSpinBox, icc_profile_paths, make_browse_button, open_file_dialog, set_folder_icon, set_preset_icon
 from workflow.i1profiler_export import EXTRA_INK, export_from_ti1, parse_ti1
+from workflow.i1profiler_import import import_to_ti1
 from workflow.chart_creator import (
     ChartCreator, ChartParams, guided_neutrals, GUIDED_NEUTRAL_BASE, REF_BUDGET,
 )
@@ -378,8 +380,14 @@ class TabChart(QWidget):
         self._generate_btn.setFixedHeight(36)
         self._generate_btn.clicked.connect(self._on_generate)
 
-        self._load_ti1_btn = QPushButton("Load existing .ti1…", self)
+        self._load_ti1_btn = QPushButton("Load patch set…", self)
         self._load_ti1_btn.setFixedHeight(36)
+        self._load_ti1_btn.setToolTip(
+            "Load an existing patch set and lay it out (targen is skipped).\n"
+            "Accepts an Argyll .ti1, or an i1Profiler RGB patch set "
+            "(.pxf or a CGATS .txt) — i1Profiler files are converted to .ti1 "
+            "automatically."
+        )
         set_folder_icon(self._load_ti1_btn, "folder_create")
         self._load_ti1_btn.clicked.connect(self._on_load_ti1)
 
@@ -3510,12 +3518,39 @@ class TabChart(QWidget):
 
     def _on_load_ti1(self) -> None:
         path = open_file_dialog(
-            self, "Load .ti1 file", "TI1 files (*.ti1)",
+            self, "Load patch set",
+            "Patch sets (*.ti1 *.pxf *.cgats *.txt)",
             extra_path=self._settings.get("custom_output_path", ""),
         )
         if not path:
             return
-        ti1 = Path(path)
+        src = Path(path)
+        self._log.clear()
+
+        # A native Argyll .ti1 already carries real colorimetry, so it's used
+        # as-is. Anything else is treated as an i1Profiler RGB patch set
+        # (.pxf / CGATS .txt) and converted to a .ti1 first — reconstructing
+        # approximate XYZ so printtarg can lay it out (see
+        # workflow/i1profiler_import). CMYK / parse errors raise ValueError.
+        if src.suffix.lower() == ".ti1":
+            ti1 = src
+        else:
+            try:
+                tmp_dir = Path(tempfile.mkdtemp(prefix="chromiq_import_"))
+                ti1, n = import_to_ti1(src, tmp_dir / f"{src.stem}.ti1")
+            except ValueError as exc:
+                InfoDialog(
+                    "Couldn't read that patch set",
+                    f"{exc}\n\nLoad an Argyll .ti1, or an i1Profiler RGB patch "
+                    "set (a .pxf or a CGATS .txt). CMYK and extended-gamut "
+                    "sets aren't supported.",
+                    self, min_width=520,
+                ).exec()
+                return
+            self._log.appendPlainText(
+                f"Converted {src.name} to .ti1 ({n} patches)."
+            )
+
         # Loading a different patch set means we're no longer on the TC9.18 chart
         # or any preset-bound patch set; re-enable panels if a prebuilt was active.
         self._tc918_active = False
@@ -3523,9 +3558,8 @@ class TabChart(QWidget):
         self._preset_ti1_path = None
         if self._prebuilt_active:
             self._leave_prebuilt()
-        self._file_mgr.set_target_name(ti1.stem)
+        self._file_mgr.set_target_name(src.stem)
         params = self._collect_params()
-        self._log.clear()
         self._preview.clear()
         self._generate_btn.setEnabled(False)
         self._creator.load_ti1_and_generate_preview(
