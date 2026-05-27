@@ -127,3 +127,28 @@ There is **no migration** from the old flat-folder layout — the redesign
 shipped on a clean break (small early user base). Projects created by older
 versions are simply not picked up by session restore (the `project.json`
 existence check bails); the user starts fresh.
+
+## Known edge cases (deferred, not bugs yet)
+
+Two small gaps in the import / in-place-load flow that aren't worth fixing
+today but are worth knowing about if they ever surface:
+
+1. **README backfill doesn't run on in-place loads.** `Project.load`
+   backfills `Where are my files.txt` when it's missing, but the
+   "Continue" branch of `_handle_inside` (in `ui/ti2_loader.py` and
+   `ui/txt_loader.py`) returns the file path without calling
+   `Project.load` on the discovered project root. Purely hypothetical
+   today — no projects exist that have `project.json` but no README. Worth
+   wiring in if the README is ever revised and old projects need to catch
+   up; the fix is one line (call `Project.load(_project_root_for(path,
+   working_dir))` before returning the in-place path).
+
+2. **`.txt` saved into a project's `exports/` folder.** If a user saves
+   an i1Profiler measurement `.txt` directly into `<project>/exports/`
+   (instead of somewhere outside that ChromIQ then imports), `resolve_txt`
+   sees it as "inside the project" and "Continue" runs `txt2ti3` in
+   `exports/` — producing `<stem>.ti3` and (via Build Profile) `<stem>.icc`
+   in `exports/`, *outside* the runs structure. Unlikely workflow
+   (i1Profiler doesn't default to writing into ChromIQ's `exports/`), but
+   if it ever bites, the fix is to special-case `parent.name == "exports"`
+   in `_handle_inside` and route to the import flow instead.
