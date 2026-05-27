@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import json
-import re
 import sys
 from dataclasses import replace
 from pathlib import Path
@@ -32,6 +31,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from core.file_manager import Run
 from core.logger import get_logger
 from core.platform_paths import is_macos
 from core.preset_store import (
@@ -3199,16 +3199,10 @@ class TabProfile(QWidget):
         self._m_desc_edit.setText(path.stem)
         self._detect_instrument(path)
         if propagate:
+            # Under the per-run layout the measurement is chart.ti3 sitting
+            # next to chart.ti2 in the same run folder, so no suffix-stripping
+            # is needed — the averaged result reuses the canonical chart stem.
             ti2 = path.with_suffix(".ti2")
-            if not ti2.exists():
-                # "Read again & average" produces <base>_average.ti3 /
-                # <base>_read{N}.ti3 with no matching .ti2 of their own — fall
-                # back to the canonical chart's .ti2 (see docs/dev_averaging.md).
-                base_stem = re.sub(r"_(?:read\d+|average)$", "", path.stem)
-                if base_stem != path.stem:
-                    cand = path.with_name(f"{base_stem}.ti2")
-                    if cand.exists():
-                        ti2 = cand
             if ti2.exists():
                 self.ti2_found.emit(ti2)
 
@@ -3448,8 +3442,12 @@ class TabProfile(QWidget):
 
     def _apply_preconditioning_merge(self, params: ProfileParams) -> ProfileParams:
         """When ChromIQ-style refinement is on and pre-conditioning data was
-        selected, merge it with the fresh .ti3 into a separate <stem>_merged.ti3
+        selected, merge it with the fresh chart.ti3 into the run's merged.ti3
         and return params pointing at that file. Otherwise return params as-is.
+
+        The fresh chart.ti3 is left untouched so Check & Refine keeps working
+        on the physical chart (Architecture D). colprof builds merged.icc from
+        merged.ti3.
 
         On a colour-space / format mismatch the merge is skipped, the user is
         told, and the profile is built from the fresh measurements only.
@@ -3461,7 +3459,7 @@ class TabProfile(QWidget):
         if not src or not src.exists() or not fresh.exists():
             return params
 
-        merged = fresh.with_name(f"{fresh.stem}_merged{fresh.suffix}")
+        merged = Run.for_dir(fresh.parent).merged_ti3
         bin_dir = self._settings.get("argyll_bin_path", "/Applications/Argyll/bin")
         try:
             total = merge_preconditioning(fresh, src, merged, bin_dir=bin_dir)
