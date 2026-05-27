@@ -11,6 +11,7 @@ and the analysis of `average`.
 """
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -54,6 +55,26 @@ def test_build_args_median_adds_e() -> None:
         method="median",
     )
     assert r._build_args(p)[:2] == ["-v", "-e"]
+
+
+def test_build_args_addresses_reads_in_subfolder() -> None:
+    # Per-run layout: the reads live in <run>/reads/ while the averaged output
+    # is the run-dir chart.ti3. average runs with cwd == the output folder, so
+    # the inputs must be addressed relative to it (reads/readN.ti3), not by bare
+    # name — otherwise average can't open them (the beta.14 averaging failure).
+    r = AverageRunner(runner=None)
+    run = Path("/proj/runs/run1")
+    p = AverageParams(
+        inputs=[run / "reads" / "read1.ti3", run / "reads" / "read2.ti3"],
+        output=run / "ChromIQ_Test.ti3",
+        method="mean",
+    )
+    assert r._build_args(p) == [
+        "-v",
+        os.path.join("reads", "read1.ti3"),
+        os.path.join("reads", "read2.ti3"),
+        "ChromIQ_Test.ti3",
+    ]
 
 
 def test_run_rejects_single_input(tmp_path: Path) -> None:

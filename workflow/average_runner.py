@@ -9,6 +9,7 @@ only diverges at 3+ reads.
 """
 from __future__ import annotations
 
+import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -56,6 +57,15 @@ class AverageParams:
     inputs: list[Path]          # two or more .ti3 reads of the same chart
     output: Path                # averaged .ti3 to write
     method: str = "mean"        # "mean" | "median" (median == argyll -e)
+
+
+def _rel_to(target: Path, base: Path) -> str:
+    """``target`` addressed from ``base``, falling back to the absolute path when
+    the two live on different Windows drives (os.path.relpath raises there)."""
+    try:
+        return os.path.relpath(target, base)
+    except ValueError:
+        return str(target)
 
 
 class AverageRunner:
@@ -115,13 +125,19 @@ class AverageRunner:
             on_finish(None)
 
     def _build_args(self, p: AverageParams) -> list[str]:
-        # Run with cwd == output folder so plain file names resolve. -X/-L
-        # geometric median is deliberately not offered: it only rewrites the XYZ
-        # 3-vector, which the profiler recomputes from the (mean-averaged)
-        # spectral data, so it would be a no-op here (see docs/dev_averaging.md).
+        # `average` runs with cwd == the output's folder (see run()) and writes
+        # the output there, so the output is addressed by bare name. The inputs
+        # may sit in a *sub-folder* of that cwd, though: under the per-run layout
+        # the reads live in <run>/reads/ while the averaged result is the run-dir
+        # chart.ti3 — so each input is expressed relative to the cwd rather than
+        # by bare name, or `average` can't open them. -X/-L geometric median is
+        # deliberately not offered: it only rewrites the XYZ 3-vector, which the
+        # profiler recomputes from the (mean-averaged) spectral data, so it would
+        # be a no-op here (see docs/dev_averaging.md).
+        cwd = p.output.parent
         args: list[str] = ["-v"]
         if p.method == "median":
             args.append("-e")
-        args += [f.name for f in p.inputs]
+        args += [_rel_to(f, cwd) for f in p.inputs]
         args.append(p.output.name)
         return args
