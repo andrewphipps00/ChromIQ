@@ -77,7 +77,7 @@ class ParameterWidget(QWidget):
         t = self._param.get("type", "string")
         if t == "boolean":
             return "" if not c.isChecked() else "__flag__"
-        if t == "choice":
+        if t == "choice" or t == "flag_choice":
             if self._custom_combo is not None:
                 data = self._custom_combo.currentData()
                 if data == "custom" and self._custom_w_spin is not None and self._custom_h_spin is not None:
@@ -109,7 +109,7 @@ class ParameterWidget(QWidget):
         t = self._param.get("type", "string")
         if t == "boolean":
             return c.isChecked()
-        if t == "choice":
+        if t == "choice" or t == "flag_choice":
             if self._custom_combo is not None:
                 data = self._custom_combo.currentData()
                 if data == "custom" and self._custom_w_spin is not None and self._custom_h_spin is not None:
@@ -135,7 +135,7 @@ class ParameterWidget(QWidget):
         try:
             if t == "boolean":
                 c.setChecked(bool(v))
-            elif t == "choice":
+            elif t == "choice" or t == "flag_choice":
                 combo = self._custom_combo if self._custom_combo is not None else c
                 idx = combo.findData(str(v))
                 if idx >= 0:
@@ -215,6 +215,12 @@ class ParameterWidget(QWidget):
         val = self.get_value()
         if not val:
             return []
+        # ``flag_choice``: the chosen value *is* the flag (e.g. "-r", "-t" for
+        # targen's mutually-exclusive distribution selectors). The row's
+        # ``flag`` field is a pseudo-id used only for widget bookkeeping;
+        # only the value goes on the command line.
+        if self._param.get("type") == "flag_choice":
+            return [val]
         flag = self.flag
         if val == "__flag__":
             return [flag]
@@ -340,7 +346,7 @@ class ParameterWidget(QWidget):
             cb.toggled.connect(self.value_changed)
             return cb
 
-        if t == "choice":
+        if t == "choice" or t == "flag_choice":
             if self._param.get("custom_dimensions"):
                 return self._make_custom_dim_control()
             combo = NoScrollComboBox(self)

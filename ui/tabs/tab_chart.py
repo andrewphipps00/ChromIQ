@@ -3947,8 +3947,14 @@ class TabChart(QWidget):
         # in the command. targen parses options order-independently and the
         # -c path-staging/rewrite logic scans for the "-c" token wherever it
         # sits, so the order is purely cosmetic.
+        # ``__targen_distribution__`` is the pseudo-id for the mutex
+        # distribution-selector row (flag_choice); its value is the actual
+        # token (-r, -t, …) and is emitted by ParameterWidget.build_args.
         extra = []
-        for flag in ("-n", "-c", "-C", "-N", "-V", "-D"):
+        for flag in (
+            "-n", "-c", "-A", "-C", "-N", "-V", "-D",
+            "-l", "-m", "-M", "-b", "__targen_distribution__",
+        ):
             for pw in self._manual_widgets.get("targen", []):
                 if pw.flag == flag:
                     extra.extend(pw.build_args())
