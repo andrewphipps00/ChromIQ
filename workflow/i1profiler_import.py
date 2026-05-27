@@ -63,12 +63,29 @@ WHITE_XYZ = srgb_to_xyz(100.0, 100.0, 100.0)
 def _scale_to_100(triples: list[tuple[float, float, float]]) -> list[RgbPatch]:
     """Normalise parsed RGB triples to the TI1 0..100 device scale.
 
-    i1Profiler RGB is 0..255; an Argyll TI1 is 0..100. If any value exceeds
-    100 the set is on the 0..255 scale and is divided by 2.55; otherwise it is
-    assumed already 0..100 and passed through.
+    An Argyll TI1 is 0..100, but source patch sets arrive on several scales. We
+    pick the factor from the set's *peak* value — reliable because every real
+    RGB target spans its full range (it always includes white):
+
+        peak <= 1.5   ->  0..1 float      (x100)
+        peak <= 100   ->  already 0..100   (x1)
+        peak <= 255   ->  8-bit 0..255     (/2.55)   <- i1Profiler / X-Rite
+        otherwise     ->  16-bit 0..65535  (x100/65535)
+
+    In practice only the 0..100 and 8-bit bands occur. The float and 16-bit
+    bands rescue files the old "peak>100 => /2.55" rule mangled, *without*
+    changing any input that already worked: a genuine target's brightest patch
+    lands at ~100 or ~255, never in the float (<=1.5) or 16-bit (>255) band.
     """
     peak = max((max(t) for t in triples), default=0.0)
-    factor = (100.0 / 255.0) if peak > 100.0 else 1.0
+    if peak <= 1.5:
+        factor = 100.0
+    elif peak <= 100.0:
+        factor = 1.0
+    elif peak <= 255.0:
+        factor = 100.0 / 255.0
+    else:
+        factor = 100.0 / 65535.0
     return [RgbPatch(r * factor, g * factor, b * factor) for r, g, b in triples]
 
 
@@ -213,13 +230,26 @@ def _fmt(v: float) -> str:
     return f"{v:.4f}"
 
 
+# targen does not pass device RGB straight through sRGB->XYZ. Compared against
+# genuine targen TI1 output (a target round-tripped out to i1Profiler and back),
+# it applies a uniform ~1% viewing flare toward the white point:
+#     XYZ_out = XYZ_srgb * (1 - f) + f * White,   f = 0.01
+# This fits every patch to < 0.1 XYZ across the patch set (raw sRGB was ~0.6
+# mean, ~1.0 max off). Because flare evaluated at RGB=0 lands near (1, 1, 1), it
+# also guarantees printtarg never sees a zero-luminance (zero-density) patch —
+# subsuming the old pure-black (1,1,1) special case while matching every other
+# patch too. The XYZ only drives printtarg's strip-layout distinctness, so this
+# makes a reconstructed target behave like a natively-generated one.
+_TARGEN_FLARE = 0.01
+
+
 def _patch_xyz(r: float, g: float, b: float) -> tuple[float, float, float]:
-    """sRGB->XYZ for a device patch, flooring pure black to (1,1,1) the way
-    targen does so printtarg never sees a zero-luminance (zero-density) patch."""
+    """Device RGB -> approximate XYZ the way targen does: sRGB(D65) with a 1%
+    flare toward the white point (see ``_TARGEN_FLARE``)."""
     x, y, z = srgb_to_xyz(r, g, b)
-    if r <= 0.5 and g <= 0.5 and b <= 0.5:
-        return 1.0, 1.0, 1.0
-    return x, y, z
+    wx, wy, wz = WHITE_XYZ
+    f = _TARGEN_FLARE
+    return x + f * (wx - x), y + f * (wy - y), z + f * (wz - z)
 
 
 def _data_row(idx: int, r: float, g: float, b: float) -> str:
@@ -256,7 +286,9 @@ def write_ti1(patches: list[RgbPatch], out_path: Path) -> Path:
     Writes the three tables targen produces — the patch list, the density
     extremes, and the fixed device combinations — so printtarg accepts it.
     Device values land on the 0..100 scale; every patch's XYZ is the sRGB(D65)
-    estimate of its device RGB so printtarg can optimise the strip layout.
+    estimate of its device RGB with targen's 1% flare applied (see
+    ``_patch_xyz``) so printtarg can optimise the strip layout the same way it
+    would for a natively-generated target.
     """
     n_white = sum(1 for p in patches if p.r >= 99.5 and p.g >= 99.5 and p.b >= 99.5)
     n_black = sum(1 for p in patches if p.r <= 0.5 and p.g <= 0.5 and p.b <= 0.5)
