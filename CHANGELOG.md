@@ -1,5 +1,100 @@
 # Changelog
 
+## v3.8.0-beta.11
+**Working-folder layout redesign.** Every project now uses a per-run folder
+structure. The old prefix/suffix conventions (`pre_`, `cal_`, `_readN`,
+`_average`, `_merged`) are gone — file role lives in the filename within a
+folder, and folder names disambiguate context.
+
+**Breaking change for projects created with earlier betas.** Old flat-layout
+projects (`~/ChromIQ/<name>/<name>.ti2`, etc.) are no longer picked up on
+launch or session restore. They aren't lost — see the migration steps at the
+bottom of this entry.
+
+### New layout
+```
+<project>/
+  project.json                  # manifest (current run, run list)
+  Where are my files.txt        # plain-language map of the folder
+  cal/                          # calibration (optional, shared by all runs)
+  exports/                      # external-tool exports
+  runs/run1/, run2/, …          # one folder per profile build
+    <project>.ti1 / .ti2 / .cht / .ps / .channels.json
+    <project>_NN.tif            # page bitmaps
+    <project>.ti3               # measurement (chartread output)
+    <project>.icc               # profile (colprof output)
+    reads/readN.ti3             # only when averaging is used
+    preconditioning.ti3 / .icc  # only when seeded from a parent run
+    merged.ti3 / merged.icc     # only when ChromIQ-style refinement ran
+    calibrated.icc              # only when applycal ran
+    meta.json
+```
+
+### Changed
+- **Chart files take the sanitised project name as their stem.** printtarg
+  stamps the project name on the printed sheet (was the generic basename
+  before), the installed ICC is named after the project (was a generic
+  filename that collided across projects in the system ColorSync folder),
+  and the ICC's internal description carries the project name too.
+- **Calibration chart files use `<project>-cal`** so a printed calibration
+  sheet is distinguishable from the profiling chart in a stack on the desk.
+- **i1Profiler exports** land in `exports/<project>-i1profiler.{txt,pxf}`
+  (was a generic name).
+- **Folder names get sanitised on import** (spaces → hyphens) — matching
+  what Generate Chart has always done.
+- **Each project gets a `Where are my files.txt`** at its root with a
+  plain-language map of the folder ("your ICC is here, your printable
+  chart is here…").
+
+### Fixed
+- **The "averaged reads double-counted into a refinement merge" bug is
+  impossible by construction now.** Run 1's `reads/` cannot be seen by
+  run 2's averaging code — they live in different folders. The previous
+  patch (suffix-stripping + orphan rename) is no longer needed and has
+  been removed.
+
+### Migrating projects from earlier betas
+1. **To migrate a project**, open one of its files via the **Load .ti2**
+   button (Print or Measure tab), the **Load .ti3 or .txt** button (Build
+   Profile tab), or **Browse for .ti3** (Check & Refine). ChromIQ rebuilds
+   the project in the new layout, carrying every sibling chart file along
+   (.ti1, .ti2, page TIFFs, .ti3, .icc). The new folder name is the
+   sanitised version of the name you give it.
+2. **To start fresh**, just create a new chart — it lands in the new
+   layout automatically.
+3. Old folders aren't deleted by the migration; they sit untouched in
+   `~/ChromIQ/` until you remove them.
+
+Architecture rationale and the full file-by-file mapping are in
+`docs/dev_folder_layout.md`.
+
+### What to test
+- **Generate a new chart, print, measure, build profile.** Confirm the
+  folder under `~/ChromIQ/<name>/` has the structure above, the printed
+  sheet shows `<name>` (not `chart`), and the built `<name>.icc` shows
+  `<name>` as its description in Photoshop / ColorSync Utility.
+- **Calibration target → profiling chart → applycal.** Confirm `cal/` is
+  populated, the printed cal sheet shows `<name>-cal`, and the calibrated
+  profile lands in the run as `calibrated.icc`.
+- **Averaging.** Read a chart, click **Measure again to average**, take a
+  second read, **Average all reads & build**. Confirm `runs/run1/reads/`
+  contains `read1.ti3` + `read2.ti3` and `<name>.ti3` is the averaged
+  result.
+- **Use as pre-conditioning profile** on a built profile → generate the
+  refined chart → measure → build. Confirm a `runs/run2/` appears with
+  `preconditioning.ti3`/`.icc` (copies of run1) and the refined profile
+  builds (when ChromIQ-style refinement is on, you also see `merged.ti3`/
+  `.icc`).
+- **Open an old beta.10 flat-layout project's .ti2 or .ti3** via Load.
+  Confirm a fresh new-layout project appears under the name you give it,
+  with all sibling files inside `runs/run1/`.
+- **i1Profiler workflow** (only relevant for i1iSis users): generate a
+  chart with i1iSis selected → confirm `exports/<name>-i1profiler.pxf` is
+  written → measure in i1Profiler → load the measurement `.txt` back.
+- **Windows** specifically: the import flows, file dialogs, and
+  i1Profiler export all use `pathlib.Path`, but this is the first beta
+  with the new layout — please flag any path-related oddities.
+
 ## v3.8.0-beta.10
 Fixes a Windows-only crash that hung the app when starting a second chart
 read in the same session — most visibly via the new "Measure again to
