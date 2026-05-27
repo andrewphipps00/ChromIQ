@@ -448,6 +448,15 @@ class ChartParams:
     preserve_as_preconditioning: bool = False
 
 
+# Stems left behind by the measurement-averaging feature (workflow naming
+# scheme in docs/dev_averaging.md): the per-read snapshots and the combined
+# result. These are intermediate measurements scoped to a single run — once
+# the run ends (either by being promoted to pre_* or by chart regeneration)
+# they must not leak into the next run, otherwise they get re-averaged or
+# double-counted alongside the pre_*.json snapshot.
+_AVERAGING_ARTIFACT_RE = re.compile(r"_(?:read\d+|average)$")
+
+
 class ChartCreator:
     def __init__(
         self,
@@ -501,14 +510,18 @@ class ChartCreator:
             _exts = {"ti1", "ti2", "tif", "cht", "ps", "json", "cal", "txt", "pxf"}
             _deleted = 0
             for _f in work_dir.iterdir():
-                # pre_* files hold pre-conditioning data (profile + measurements)
-                # that must survive chart regeneration (ChromIQ-style refinement).
-                if (
-                    _f.is_file()
-                    and _f.suffix.lstrip(".").lower() in _exts
-                    and not _f.stem.startswith("cal_")
-                    and not _f.stem.startswith("pre_")
-                ):
+                if not _f.is_file():
+                    continue
+                # pre_* / cal_* files hold pre-conditioning / calibration data
+                # that must survive chart regeneration.
+                if _f.stem.startswith(("cal_", "pre_")):
+                    continue
+                suf = _f.suffix.lstrip(".").lower()
+                # Chart artefacts + averaging leftovers (<base>_readN.ti3 /
+                # <base>_average.ti3 from a prior run). The canonical <base>.ti3
+                # is intentionally NOT swept so a non-averaging measurement
+                # still survives chart re-generation.
+                if suf in _exts or (suf == "ti3" and _AVERAGING_ARTIFACT_RE.search(_f.stem)):
                     try:
                         _f.unlink()
                         _deleted += 1
@@ -680,6 +693,31 @@ class ChartCreator:
                 log.info("Promoted v1 measurements to %s", ti3_dest.name)
             except OSError as exc:
                 log.warning("Could not rename %s -> %s: %s", ti3_src, ti3_dest, exc)
+
+        # Stash the per-read snapshots that fed v1's average. They mustn't be
+        # left under their original names, or v2's averaging glob
+        # (existing_read_variants on <base>_read*.ti3) would pick them up and
+        # double-count them once ti3_merge folds in pre_*.json. Renaming them
+        # to pre_*_readN.ti3 hides them from that glob (the pre_/cal_ skip in
+        # FileManager.existing_read_variants) and protects them from chart
+        # regeneration — so the raw reads remain available for diagnostics or
+        # a future re-average with a different method. Glob from the base
+        # stem (strip any trailing _average so we match either
+        # "chart_average.icc" or "chart.icc" picks).
+        base_stem = src.stem.removesuffix("_average")
+        for orphan in work_dir.glob(f"{base_stem}_read*.ti3"):
+            if orphan.stem.startswith(("pre_", "cal_")):
+                continue
+            orphan_dest = work_dir / f"pre_{orphan.name}"
+            try:
+                if orphan_dest.exists():
+                    orphan_dest.unlink()
+                orphan.rename(orphan_dest)
+                log.info("Stashed v1 averaging read: %s -> %s",
+                         orphan.name, orphan_dest.name)
+            except OSError as exc:
+                log.warning("Could not stash orphan %s -> %s: %s",
+                            orphan, orphan_dest, exc)
 
         parts[idx + 1] = str(icc_dest)
         return shlex.join(parts)

@@ -514,3 +514,143 @@ def test_load_ti1_writes_channels_sidecar(tmp_path: Path) -> None:
         "sidecar is written — regression guard for the second half of #15"
     )
     assert json.loads(sidecar.read_text())["ink_channels"] == ["r", "g", "b"]
+
+
+# ---------------------------------------------------------------------------
+# Averaging + ChromIQ-style refinement interaction
+# ---------------------------------------------------------------------------
+# Run 1 with averaging on leaves <base>_readN.ti3 files behind. If they
+# survive into run 2 the averaging code re-picks them up and the
+# pre_*.json snapshot ends up double-counted. Two layers must catch this:
+# the promote-to-pre_* step (when "Use as pre-conditioning" is clicked)
+# and the chart-regeneration cleanup (anything else).
+
+
+class _ToggleSettings:
+    """Settings stub that honours a single chromiq_refinement boolean."""
+
+    def __init__(self, chromiq_refinement: bool) -> None:
+        self._on = chromiq_refinement
+
+    def get(self, key, default=None):
+        if key == "chromiq_refinement":
+            return self._on
+        return default
+
+
+def test_promote_to_preconditioning_stashes_orphan_readN_files(tmp_path: Path) -> None:
+    """Promoting <base>_average.icc must rename its _readN siblings to pre_*_readN."""
+    work_dir = tmp_path / "work"
+    work_dir.mkdir()
+    # Run 1 finished with averaging on: three reads + the average + an icc.
+    (work_dir / "chart_read1.ti3").write_text("R1")
+    (work_dir / "chart_read2.ti3").write_text("R2")
+    (work_dir / "chart_read3.ti3").write_text("R3")
+    (work_dir / "chart_average.ti3").write_text("AVG")
+    (work_dir / "chart_average.icc").write_text("ICC")
+
+    creator = ChartCreator(
+        _MockRunner(), _MockFileManager(work_dir), _ToggleSettings(chromiq_refinement=True),
+    )
+    new_args = creator._promote_v1_to_preconditioning(
+        f"-c {work_dir / 'chart_average.icc'}", work_dir,
+    )
+
+    # The canonical files are renamed to pre_*.
+    assert (work_dir / "pre_chart_average.icc").is_file()
+    assert (work_dir / "pre_chart_average.json").is_file()
+    assert "pre_chart_average.icc" in new_args
+    # The per-read snapshots are renamed (not deleted) so the raw data
+    # survives for diagnostics / re-averaging, while the pre_ prefix hides
+    # them from existing_read_variants in run 2.
+    for n in (1, 2, 3):
+        assert not (work_dir / f"chart_read{n}.ti3").exists(), (
+            f"chart_read{n}.ti3 must be moved to prevent double-counting "
+            "in the next run's averaging pass"
+        )
+        assert (work_dir / f"pre_chart_read{n}.ti3").is_file(), (
+            f"pre_chart_read{n}.ti3 must exist so the raw read is preserved"
+        )
+        assert (work_dir / f"pre_chart_read{n}.ti3").read_text() == f"R{n}", (
+            "stashed file must hold the original contents"
+        )
+
+
+def test_promote_to_preconditioning_overwrites_stale_pre_readN(tmp_path: Path) -> None:
+    """Stashing a new generation must overwrite the previous pre_*_readN snapshots."""
+    work_dir = tmp_path / "work"
+    work_dir.mkdir()
+    # Leftovers from a previous promote.
+    (work_dir / "pre_chart_read1.ti3").write_text("OLD R1")
+    # Current run's outputs.
+    (work_dir / "chart_read1.ti3").write_text("NEW R1")
+    (work_dir / "chart_average.ti3").write_text("AVG")
+    (work_dir / "chart_average.icc").write_text("ICC")
+
+    creator = ChartCreator(
+        _MockRunner(), _MockFileManager(work_dir), _ToggleSettings(chromiq_refinement=True),
+    )
+    creator._promote_v1_to_preconditioning(
+        f"-c {work_dir / 'chart_average.icc'}", work_dir,
+    )
+
+    assert (work_dir / "pre_chart_read1.ti3").read_text() == "NEW R1", (
+        "newer snapshot must replace the older one"
+    )
+
+
+def test_promote_to_preconditioning_handles_non_averaged_pick(tmp_path: Path) -> None:
+    """When the picked .icc has no _average suffix, no spurious globbing should happen."""
+    work_dir = tmp_path / "work"
+    work_dir.mkdir()
+    (work_dir / "chart.ti3").write_text("TI3")
+    (work_dir / "chart.icc").write_text("ICC")
+    # An unrelated _read1 from some other base must NOT be touched.
+    (work_dir / "other_read1.ti3").write_text("OTHER")
+
+    creator = ChartCreator(
+        _MockRunner(), _MockFileManager(work_dir), _ToggleSettings(chromiq_refinement=True),
+    )
+    creator._promote_v1_to_preconditioning(
+        f"-c {work_dir / 'chart.icc'}", work_dir,
+    )
+
+    assert (work_dir / "pre_chart.icc").is_file()
+    assert (work_dir / "pre_chart.json").is_file()
+    assert (work_dir / "other_read1.ti3").is_file(), (
+        "different-base _readN must not be deleted"
+    )
+
+
+def test_chart_regen_sweeps_averaging_orphans_but_keeps_canonical_ti3(tmp_path: Path) -> None:
+    """generate() must clear _readN.ti3 / _average.ti3 leftovers but preserve <base>.ti3."""
+    work_dir = tmp_path / "work"
+    work_dir.mkdir()
+    # Simulate the state after run 1 (averaging on) followed by manual cleanup
+    # by the user — no promote step ran, so the orphans linger.
+    (work_dir / "chart_read1.ti3").write_text("R1")
+    (work_dir / "chart_read2.ti3").write_text("R2")
+    (work_dir / "chart_average.ti3").write_text("AVG")
+    # A plain measurement from an unrelated chart name — must survive,
+    # since the canonical <base>.ti3 isn't an averaging artefact.
+    (work_dir / "legacy.ti3").write_text("LEGACY")
+    # The pre_*.json snapshot must survive too.
+    (work_dir / "pre_chart_average.json").write_text("PRE")
+
+    creator = ChartCreator(
+        _MockRunner(), _MockFileManager(work_dir), _ToggleSettings(chromiq_refinement=True),
+    )
+    creator.generate(
+        ChartParams(target_name="chart_v2", device_type="2"),
+        on_line=lambda _: None,
+        on_finish=lambda tiffs: None,
+    )
+
+    # Averaging orphans cleared.
+    assert not (work_dir / "chart_read1.ti3").exists()
+    assert not (work_dir / "chart_read2.ti3").exists()
+    assert not (work_dir / "chart_average.ti3").exists()
+    # Canonical ti3 from an unrelated chart preserved (legacy behaviour).
+    assert (work_dir / "legacy.ti3").is_file()
+    # pre_* snapshot survives.
+    assert (work_dir / "pre_chart_average.json").is_file()
