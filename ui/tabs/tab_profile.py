@@ -251,11 +251,12 @@ class TabProfile(QWidget):
         self._ti3_path: Path | None = None
         self._icc_path: Path | None = None
         self._cal_ti3_path: Path | None = None
-        # ChromIQ-style refinement: pre-conditioning measurement data (pre_*.json)
-        # selected in the Measure tab, merged with the fresh .ti3 at build time.
+        # ChromIQ-style refinement: pre-conditioning measurement data
+        # (the run's preconditioning.ti3) selected in the Measure tab, merged
+        # with the fresh chart.ti3 at build time.
         self._preconditioning_source: Path | None = None
         # The params actually handed to colprof for the current build (its
-        # ti3_path may be a derived _merged.ti3). Used by _on_build_done so the
+        # ti3_path may be the run's merged.ti3). Used by _on_build_done so the
         # ICC path is resolved against the file we really built from.
         self._active_params: ProfileParams | None = None
 
