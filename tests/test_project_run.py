@@ -82,7 +82,7 @@ def test_project_create_writes_user_readme(tmp_path: Path) -> None:
     proj = Project.create(tmp_path / "MyChart", "MyChart")
     readme = proj.root / "Where are my files.txt"
     assert readme.is_file()
-    text = readme.read_text()
+    text = readme.read_text(encoding="utf-8")
     # Concrete project name substituted into the example paths.
     assert "MyChart.icc" in text
     assert "MyChart-cal.cal" in text

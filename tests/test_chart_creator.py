@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 from pathlib import Path
 
 import numpy as np
@@ -577,9 +578,11 @@ def test_import_external_preconditioning_copies_icc(tmp_path: Path) -> None:
     )
     proj = creator._file_mgr.project()
     run = proj.current_run()
-    new_args = creator._import_external_preconditioning(f"-c {ext}", run)
+    # Mirror production: tab_chart builds extra_targen_args with shlex.join so
+    # Windows backslashes survive the shlex.split inside _import_external_preconditioning.
+    new_args = creator._import_external_preconditioning(shlex.join(["-c", str(ext)]), run)
 
-    assert run.preconditioning_icc.read_text() == "EXT_ICC"
+    assert run.preconditioning_icc.read_text(encoding="utf-8") == "EXT_ICC"
     assert str(run.preconditioning_icc) in new_args, "-c arg must be rewritten"
 
 
@@ -595,10 +598,12 @@ def test_import_external_preconditioning_with_refinement_copies_ti3(tmp_path: Pa
         _MockRunner(), _MockFileManager(work_dir), _ToggleSettings(chromiq_refinement=True),
     )
     run = creator._file_mgr.project().current_run()
-    creator._import_external_preconditioning(f"-c {ext_dir / 'vendor.icc'}", run)
+    creator._import_external_preconditioning(
+        shlex.join(["-c", str(ext_dir / "vendor.icc")]), run,
+    )
 
-    assert run.preconditioning_icc.read_text() == "EXT_ICC"
-    assert run.preconditioning_ti3.read_text() == "EXT_TI3"
+    assert run.preconditioning_icc.read_text(encoding="utf-8") == "EXT_ICC"
+    assert run.preconditioning_ti3.read_text(encoding="utf-8") == "EXT_TI3"
 
 
 def test_import_external_preconditioning_noop_for_local_pick(tmp_path: Path) -> None:
@@ -609,8 +614,7 @@ def test_import_external_preconditioning_noop_for_local_pick(tmp_path: Path) -> 
     )
     run = creator._file_mgr.project().current_run()
     run.preconditioning_icc.write_text("ALREADY_LOCAL")
-    new_args = creator._import_external_preconditioning(
-        f"-c {run.preconditioning_icc}", run,
-    )
-    assert new_args == f"-c {run.preconditioning_icc}"
-    assert run.preconditioning_icc.read_text() == "ALREADY_LOCAL"
+    in_args = shlex.join(["-c", str(run.preconditioning_icc)])
+    new_args = creator._import_external_preconditioning(in_args, run)
+    assert new_args == in_args
+    assert run.preconditioning_icc.read_text(encoding="utf-8") == "ALREADY_LOCAL"

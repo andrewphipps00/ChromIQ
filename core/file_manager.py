@@ -371,11 +371,11 @@ class Run:
     def load_meta(self) -> RunMeta:
         if not self.meta_path.exists():
             return RunMeta.fresh(self._run_id)
-        return RunMeta.from_dict(json.loads(self.meta_path.read_text()))
+        return RunMeta.from_dict(json.loads(self.meta_path.read_text(encoding="utf-8")))
 
     def save_meta(self, meta: RunMeta) -> None:
         self.dir.mkdir(parents=True, exist_ok=True)
-        self.meta_path.write_text(json.dumps(asdict(meta), indent=2))
+        self.meta_path.write_text(json.dumps(asdict(meta), indent=2), encoding="utf-8")
 
     # ---- lifecycle
     def ensure_dir(self) -> Path:
@@ -541,7 +541,7 @@ class Project:
         mp = root / cls.MANIFEST
         if not mp.exists():
             raise FileNotFoundError(f"No project manifest at {mp}")
-        data = json.loads(mp.read_text())
+        data = json.loads(mp.read_text(encoding="utf-8"))
         proj = cls(root, ProjectManifest.from_dict(data))
         # Backfill the README for projects created before it shipped, but never
         # overwrite an existing file (the user is free to edit theirs).
@@ -557,7 +557,7 @@ class Project:
 
     def save_manifest(self) -> None:
         self._root.mkdir(parents=True, exist_ok=True)
-        self.manifest_path.write_text(json.dumps(asdict(self._manifest), indent=2))
+        self.manifest_path.write_text(json.dumps(asdict(self._manifest), indent=2), encoding="utf-8")
 
     def write_readme(self) -> None:
         """Write a user-facing "Where are my files.txt" at the project root.
@@ -567,7 +567,10 @@ class Project:
         or delete it.
         """
         self._root.mkdir(parents=True, exist_ok=True)
-        self.readme_path.write_text(_PROJECT_README_TEMPLATE.format(name=self.target_name))
+        self.readme_path.write_text(
+            _PROJECT_README_TEMPLATE.format(name=self.target_name),
+            encoding="utf-8",
+        )
 
     # ---- run access
     def run(self, run_id: str) -> Run:
