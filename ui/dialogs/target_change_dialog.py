@@ -103,7 +103,7 @@ class TargetChangeDialog(QDialog):
         paths.setWordWrap(True)
         paths.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         paths.setStyleSheet(
-            f"color: {muted}; font-family: monospace; font-size: 12px;"
+            f"color: {muted}; font-family: Menlo, Consolas, 'Courier New', monospace; font-size: 12px;"
         )
         outer.addWidget(paths)
 

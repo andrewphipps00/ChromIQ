@@ -1,5 +1,35 @@
 # Changelog
 
+## v3.8.0-beta.15
+**Workflow polish and a measurement-accuracy fix.** Rolls up the per-run
+averaging fix, a new Tools converter, and a smoother Create Chart rename flow,
+plus small UI tidy-ups in Check & Refine.
+
+### Added
+- **Tools → "Convert i1Profiler → TI1".** The reverse of the existing
+  TI1 → i1Profiler export: reads an i1Profiler chart back into an ArgyllCMS
+  `.ti1` so it can be fed to printtarg. RGB only.
+- **Create Chart now offers to rename the target** when you generate under a
+  new name. A chooser lets you rename the existing project (stems + manifest
+  are fixed up properly, not just the folder), keep both, or replace it.
+
+### Changed
+- **Check & Refine result dialog button order.** When a refinement is
+  suggested the actions now read left-to-right as *Guide Me Through
+  Refinement → Use as Pre-conditioning → Install*, with Close pinned to the
+  far right.
+- **TC9.24 presets are temporarily disabled** in the Create Chart presets
+  dropdown.
+
+### Fixed
+- **Averaging under the per-run folder layout** now reads each measurement
+  relative to the output working directory, so repeated reads are addressed
+  and averaged correctly.
+- **Eliminated the `Populating font family aliases` startup/rename warning.**
+  Several stylesheets requested the generic `monospace` family with no real
+  family first, forcing Qt to build alias tables (~80 ms). They now lead with
+  `Menlo`, so the family resolves immediately.
+
 ## v3.8.0-beta.14
 **Windows polish on top of beta.13.** Carries the beta.13 fix for the
 Windows project-create crash and tidies up the Tools popup on Windows.

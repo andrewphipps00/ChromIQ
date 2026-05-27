@@ -589,7 +589,7 @@ class MainWindow(QMainWindow):
             "&nbsp;&nbsp;1. Download ArgyllCMS from "
             "<a href='https://www.argyllcms.com'>argyllcms.com</a><br>"
             "&nbsp;&nbsp;2. Extract the archive and move the folder to "
-            "<span style='font-family:monospace'>/Applications</span><br>"
+            "<span style='font-family:Menlo, Consolas, \"Courier New\", monospace'>/Applications</span><br>"
             "&nbsp;&nbsp;3. Restart ChromIQ — it will detect the installation "
             "automatically.<br><br>"
             "If ArgyllCMS is already installed in a custom location, click "

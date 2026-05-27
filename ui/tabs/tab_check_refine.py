@@ -1465,31 +1465,32 @@ class TabCheckRefine(QWidget):
             "Needs Work": "Install Profile Anyway",
         }
 
-        buttons: list[QPushButton] = []
-
         close_btn = QPushButton("Close", dlg)
         close_btn.clicked.connect(dlg.reject)
-        buttons.append(close_btn)
 
         install_btn: QPushButton | None = None
         if self._icc_path:
             install_label = _install_labels.get(grade, "Install Profile Anyway")
             install_btn = QPushButton(install_label, dlg)
-            buttons.append(install_btn)
 
         precond_btn: QPushButton | None = None
         if self._icc_path:
             precond_btn = QPushButton("← Use as Pre-conditioning", dlg)
             precond_btn.setObjectName("primary")
-            buttons.append(precond_btn)
 
         guide_btn: QPushButton | None = None
         if strips_file and refine_strips and not recommend_start_over and self._ti3_path:
             guide_btn = QPushButton("Guide Me Through Refinement", dlg)
             guide_btn.setObjectName("primary")
-            buttons.append(guide_btn)
         elif install_btn and grade == "Excellent":
             install_btn.setObjectName("primary")
+
+        # Action buttons left-to-right: Guide → Pre-conditioning → Install;
+        # Close is pinned to the far right after a stretch.
+        buttons: list[QPushButton] = [close_btn]
+        for b in (guide_btn, precond_btn, install_btn):
+            if b is not None:
+                buttons.append(b)
 
         btn_row = QHBoxLayout()
         btn_row.setSpacing(8)
