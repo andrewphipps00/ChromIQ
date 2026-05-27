@@ -1,5 +1,31 @@
 # Changelog
 
+## v3.8.0-beta.13
+**Fixes a Windows-only crash that made beta.11 unusable.** Creating or
+importing a project on Windows failed silently part-way through: you'd see a
+"files are being transferred to a new folder" message that never completed, a
+blank `Where are my files.txt`, and a stuck Measure tab. This beta fixes that
+and rolls up the beta.11 working-folder redesign and the beta.12 Tools menu, so
+it's the first build where the new layout actually works on Windows.
+
+### Fixed
+- **Project create/import no longer crashes on Windows.** `Where are my
+  files.txt` contains arrow characters (`←`) that Windows' default text
+  encoding (cp1252) can't represent. Writing it raised `UnicodeEncodeError`
+  *after* the empty file had been created but *before* the chart files were
+  copied into the new folder — hence the blank README, the unfinished
+  transfer, and the wedged tab. All project files are now read and written as
+  UTF-8 explicitly, so the behaviour matches macOS.
+- **Blank READMEs self-heal on next load.** A `Where are my files.txt` left
+  empty by the crash above is rewritten with real content the next time its
+  project is opened, so upgrading from beta.11 repairs the file automatically.
+  A README you've edited yourself is still never touched.
+
+### Note for anyone who hit this on beta.11
+A project that failed to import on beta.11 has an empty `runs/run1/` — the
+chart files never made it across. Re-import the chart (Load .ti2 / .ti3) and
+choose to overwrite when prompted; the stale folder is replaced cleanly.
+
 ## v3.8.0-beta.12
 **New Tools menu.** A toolbox button in the header — next to Preferences —
 opens a popup listing four stand-alone measurement utilities. Each opens its

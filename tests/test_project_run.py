@@ -102,6 +102,18 @@ def test_project_load_backfills_readme_when_missing(tmp_path: Path) -> None:
     assert proj.readme_path.is_file()
 
 
+def test_project_load_rewrites_blank_readme(tmp_path: Path) -> None:
+    """A 0-byte README — the artefact a pre-fix Windows build left when
+    write_readme crashed mid-write — is repopulated on next load."""
+    proj = Project.create(tmp_path / "P", "P")
+    proj.readme_path.write_text("")          # simulate the crash artefact
+    assert proj.readme_path.stat().st_size == 0
+
+    Project.load(tmp_path / "P")
+    assert proj.readme_path.stat().st_size > 0
+    assert "P.icc" in proj.readme_path.read_text(encoding="utf-8")
+
+
 def test_project_load_does_not_overwrite_edited_readme(tmp_path: Path) -> None:
     """A README the user edited is left alone on load."""
     proj = Project.create(tmp_path / "P", "P")

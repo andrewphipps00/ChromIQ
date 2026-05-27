@@ -543,9 +543,14 @@ class Project:
             raise FileNotFoundError(f"No project manifest at {mp}")
         data = json.loads(mp.read_text(encoding="utf-8"))
         proj = cls(root, ProjectManifest.from_dict(data))
-        # Backfill the README for projects created before it shipped, but never
-        # overwrite an existing file (the user is free to edit theirs).
-        if not proj.readme_path.exists():
+        # Backfill the README for projects created before it shipped — and
+        # rewrite a 0-byte file, which is exactly the artefact a pre-fix Windows
+        # build left behind: write_readme crashed mid-write (UnicodeEncodeError
+        # encoding the template's arrows under the cp1252 default), leaving the
+        # file created but empty. Never touch a non-empty file — the user is
+        # free to edit theirs.
+        rp = proj.readme_path
+        if not rp.exists() or rp.stat().st_size == 0:
             proj.write_readme()
         return proj
 
