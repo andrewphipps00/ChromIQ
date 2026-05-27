@@ -65,7 +65,15 @@ class ToolsPopup(QWidget):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setWindowFlags(Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint)
+        # NoDropShadowWindowHint suppresses the platform's own popup shadow.
+        # On Windows that native shadow sits on the bottom/right edges of this
+        # translucent frameless window and reads as a hard border; we paint our
+        # own soft shadow in paintEvent, so the OS one is both redundant and ugly.
+        self.setWindowFlags(
+            Qt.WindowType.Popup
+            | Qt.WindowType.FramelessWindowHint
+            | Qt.WindowType.NoDropShadowWindowHint
+        )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setMouseTracking(True)
 
