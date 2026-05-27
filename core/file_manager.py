@@ -415,10 +415,90 @@ class Run:
 # Project — the work_dir root
 # ---------------------------------------------------------------------------
 
+_PROJECT_README_TEMPLATE = """\
+ChromIQ project: {name}
+
+Where to find things you might want:
+
+  runs/run1/{name}.icc              ← your built ICC profile
+                                      (install this, share this)
+
+  runs/run1/{name}_01.tif           ← the printable chart, page 1
+  runs/run1/{name}_02.tif           ← page 2 (if multi-page)
+
+  runs/run1/{name}.ti2              ← chart layout (for re-measuring)
+  runs/run1/{name}.ti3              ← measurements (chartread output)
+
+  cal/{name}-cal.cal                ← calibration curves (if you made one)
+  exports/{name}-i1profiler.pxf     ← for i1Profiler (if you exported)
+
+
+Other files and folders you may see, and why:
+
+  project.json                      ChromIQ's project manifest. Read on start-up
+                                    to find out which run is current.
+
+  runs/runN/                        One folder per profile build. Each is
+                                    self-contained; the highest N is the
+                                    "current" one.
+
+  runs/runN/meta.json               Per-run info (created_at, parent run,
+                                    averaging method, etc.).
+
+  runs/runN/{name}.ti1              Chart definition (targen output), fed to
+                                    printtarg. You don't normally touch it.
+
+  runs/runN/{name}.channels.json    Ink-channel sidecar — lets ChromIQ identify
+                                    inks when re-opening a chart later.
+
+  runs/runN/reads/readN.ti3         Per-read measurements when you use
+                                    "Read again & average". They get averaged
+                                    back into {name}.ti3 when you finish.
+
+  runs/runN/preconditioning.ti3     Copies of the parent run's measurement and
+  runs/runN/preconditioning.icc     profile, created when you click "Use as
+                                    pre-conditioning profile" on a finished
+                                    build. ChromIQ uses them to refine the
+                                    next chart.
+
+  runs/runN/merged.ti3              Build-time merge of {name}.ti3 +
+  runs/runN/merged.icc              preconditioning.ti3 (ChromIQ-style
+                                    refinement). colprof builds from
+                                    merged.ti3; on install you still get the
+                                    clean {name}.icc name.
+
+  runs/runN/calibrated.icc          applycal output — the run's profile with
+                                    the calibration .cal baked in.
+
+  cal/                              Calibration target (optional; shared by
+                                    every run in this project).
+
+  cal/{name}-cal.ti1 / .ti2 / _NN.tif    The calibration chart (same shape as
+                                         a run's chart, with the "-cal" marker
+                                         so a printed sheet is distinguishable
+                                         from the profiling chart).
+
+  cal/{name}-cal.ti3                The calibration measurement.
+
+  cal/{name}-cal.cal                Calibration curves (printcal output) — the
+                                    file applycal bakes into your profile.
+
+  exports/                          External-tool exports.
+
+  exports/{name}-i1profiler.txt     For i1Profiler (RGB / CMYK only).
+  exports/{name}-i1profiler.pxf     For i1Profiler (always written).
+
+  Where are my files.txt            This file. Informational only — ChromIQ
+                                    does not read or update it after creating
+                                    it. Edit or delete it freely.
+"""
+
+
 class Project:
     """A working-folder project. Owns ``project.json`` and all runs."""
 
     MANIFEST = "project.json"
+    README   = "Where are my files.txt"
 
     def __init__(self, root: Path, manifest: ProjectManifest) -> None:
         self._root = root
@@ -437,6 +517,8 @@ class Project:
     def calibration(self) -> Calibration:    return Calibration(self._root)
     @property
     def manifest_path(self) -> Path:          return self._root / self.MANIFEST
+    @property
+    def readme_path(self) -> Path:            return self._root / self.README
 
     # ---- manifest I/O
     @classmethod
@@ -450,6 +532,7 @@ class Project:
         run.ensure_dir()
         run.save_meta(RunMeta.fresh("run1"))
         proj.save_manifest()
+        proj.write_readme()
         log.info("Created project at %s", root)
         return proj
 
@@ -459,7 +542,12 @@ class Project:
         if not mp.exists():
             raise FileNotFoundError(f"No project manifest at {mp}")
         data = json.loads(mp.read_text())
-        return cls(root, ProjectManifest.from_dict(data))
+        proj = cls(root, ProjectManifest.from_dict(data))
+        # Backfill the README for projects created before it shipped, but never
+        # overwrite an existing file (the user is free to edit theirs).
+        if not proj.readme_path.exists():
+            proj.write_readme()
+        return proj
 
     @classmethod
     def create_or_load(cls, root: Path, target_name: str) -> "Project":
@@ -470,6 +558,16 @@ class Project:
     def save_manifest(self) -> None:
         self._root.mkdir(parents=True, exist_ok=True)
         self.manifest_path.write_text(json.dumps(asdict(self._manifest), indent=2))
+
+    def write_readme(self) -> None:
+        """Write a user-facing "Where are my files.txt" at the project root.
+
+        Written by ``create`` for new projects and backfilled by ``load`` if
+        absent. Never overwrites an existing file — the user is free to edit
+        or delete it.
+        """
+        self._root.mkdir(parents=True, exist_ok=True)
+        self.readme_path.write_text(_PROJECT_README_TEMPLATE.format(name=self.target_name))
 
     # ---- run access
     def run(self, run_id: str) -> Run:

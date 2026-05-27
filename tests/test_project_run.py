@@ -76,6 +76,41 @@ def test_project_create_initialises_structure(tmp_path: Path) -> None:
     assert proj.all_runs() == [proj.run("run1")] or len(proj.all_runs()) == 1
 
 
+def test_project_create_writes_user_readme(tmp_path: Path) -> None:
+    """`Where are my files.txt` lands at the project root and mentions the
+    project name so the paths in the example lines are concrete."""
+    proj = Project.create(tmp_path / "MyChart", "MyChart")
+    readme = proj.root / "Where are my files.txt"
+    assert readme.is_file()
+    text = readme.read_text()
+    # Concrete project name substituted into the example paths.
+    assert "MyChart.icc" in text
+    assert "MyChart-cal.cal" in text
+    assert "MyChart-i1profiler.pxf" in text
+    # Both sections present.
+    assert "Where to find things you might want" in text
+    assert "Other files and folders you may see" in text
+
+
+def test_project_load_backfills_readme_when_missing(tmp_path: Path) -> None:
+    """Older projects (created before the README shipped) get one on next load."""
+    proj = Project.create(tmp_path / "P", "P")
+    proj.readme_path.unlink()
+    assert not proj.readme_path.exists()
+
+    Project.load(tmp_path / "P")
+    assert proj.readme_path.is_file()
+
+
+def test_project_load_does_not_overwrite_edited_readme(tmp_path: Path) -> None:
+    """A README the user edited is left alone on load."""
+    proj = Project.create(tmp_path / "P", "P")
+    proj.readme_path.write_text("MY OWN NOTES — please leave alone\n")
+
+    Project.load(tmp_path / "P")
+    assert proj.readme_path.read_text() == "MY OWN NOTES — please leave alone\n"
+
+
 def test_project_load_roundtrip(tmp_path: Path) -> None:
     root = tmp_path / "P"
     Project.create(root, "P")
