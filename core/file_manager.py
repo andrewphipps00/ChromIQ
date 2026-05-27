@@ -228,9 +228,16 @@ class Run:
             out.update(self.dir.glob(pattern))
         return sorted(out)
 
-    # ---- measurements (canonical = measurement.ti3; per-read snapshots in reads/)
+    # ---- measurements
+    # The canonical measurement is ``chart.ti3`` — chartread is stem-coupled
+    # (reading ``chart.ti2`` produces ``chart.ti3``), so naming it anything
+    # else would force a post-tool rename and reintroduce the very stem
+    # fragility this layout removes. The per-run folder supplies the role
+    # context; the Argyll-conventional ``chart.*`` set supplies the artefacts.
+    # Per-read averaging snapshots live in reads/readN.ti3 and are averaged
+    # back into chart.ti3.
     @property
-    def measurement_ti3(self) -> Path:        return self.dir / "measurement.ti3"
+    def measurement_ti3(self) -> Path:        return self.dir / "chart.ti3"
     @property
     def reads_dir(self) -> Path:              return self.dir / "reads"
 
@@ -261,7 +268,7 @@ class Run:
             shutil.rmtree(self.reads_dir)
 
     def promote_measurement_to_read(self) -> Path:
-        """Move ``measurement.ti3`` to the next ``reads/readN.ti3`` slot.
+        """Move ``chart.ti3`` to the next ``reads/readN.ti3`` slot.
 
         Used when the user clicks "Measure again to average" — the just-finished
         measurement becomes the first (or next) input to averaging.
@@ -287,12 +294,27 @@ class Run:
         return self.preconditioning_ti3.exists() and self.preconditioning_icc.exists()
 
     # ---- build-time merge output (only when chromiq_refinement is on)
+    # merged.ti3 = average -m of chart.ti3 + preconditioning.ti3, fed to
+    # colprof to build merged.icc. The clean chart.ti3 stays untouched for
+    # Check/Refine (Architecture D).
     @property
     def merged_ti3(self) -> Path:             return self.dir / "merged.ti3"
+    @property
+    def merged_icc(self) -> Path:             return self.dir / "merged.icc"
 
     # ---- profile output
+    # colprof reading chart.ti3 writes chart.icc (stem-coupled). When a merge
+    # ran, the deliverable is merged.icc instead — see built_profile_icc().
     @property
-    def profile_icc(self) -> Path:            return self.dir / "profile.icc"
+    def profile_icc(self) -> Path:            return self.dir / "chart.icc"
+
+    def built_profile_icc(self) -> Path:
+        """The profile a user should treat as the run's output.
+
+        ``merged.icc`` when a pre-conditioning merge produced one, else the
+        plain ``chart.icc``.
+        """
+        return self.merged_icc if self.merged_icc.exists() else self.profile_icc
 
     # ---- meta
     @property
@@ -321,7 +343,9 @@ class Run:
         for name in (
             "chart.ti1", "chart.ti2", "chart.cht", "chart.ps",
             "chart.channels.json",
-            "measurement.ti3", "merged.ti3", "profile.icc",
+            "chart.ti3",                 # the measurement (chartread output)
+            "chart.icc",                 # the profile (colprof output)
+            "merged.ti3", "merged.icc",  # build-time refinement merge outputs
         ):
             p = self.dir / name
             if p.exists():
@@ -539,6 +563,18 @@ class FileManager:
     def working_dir(self) -> Path:
         return self.root_dir() / self.get_target_name()
 
+    def preview_project_root(self, raw_name: str) -> Path | None:
+        """Compute the project root for a not-yet-set target name.
+
+        Used by UI live-validation (e.g. tab_chart's "is there a calibration
+        file for this project?" check). Returns None if the cleaned name is
+        empty.
+        """
+        cleaned = self.strip_workfile_ext(raw_name)
+        if not cleaned.strip():
+            return None
+        return self.root_dir() / self._sanitise(cleaned)
+
     def ensure_folder(self) -> Path:
         d = self.working_dir()
         d.mkdir(parents=True, exist_ok=True)
@@ -557,6 +593,21 @@ class FileManager:
             root = self.working_dir()
             self._project = Project.create_or_load(root, self.get_target_name())
         return self._project
+
+    def cwd_for_chart(self, *, cal_target: bool) -> Path:
+        """Folder chart_creator must run targen/printtarg in.
+
+        Calibration targets go to ``cal/`` (one calibration per project,
+        shared across all runs). Normal chart generation goes to the
+        current run's folder.
+        """
+        proj = self.project()
+        return proj.calibration.ensure_dir() if cal_target else proj.current_run().ensure_dir()
+
+    @staticmethod
+    def chart_stem(*, cal_target: bool) -> str:
+        """File stem chart_creator passes to targen/printtarg."""
+        return "calibration" if cal_target else "chart"
 
     # ------------------------------------------------------------------
     # Legacy helpers — kept while features migrate to Project/Run, will

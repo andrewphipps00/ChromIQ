@@ -122,11 +122,12 @@ def test_run_path_properties(tmp_path: Path) -> None:
         r.chart_cht:              "runs/run1/chart.cht",
         r.chart_ps:               "runs/run1/chart.ps",
         r.chart_channels_json:    "runs/run1/chart.channels.json",
-        r.measurement_ti3:        "runs/run1/measurement.ti3",
+        r.measurement_ti3:        "runs/run1/chart.ti3",
         r.preconditioning_ti3:    "runs/run1/preconditioning.ti3",
         r.preconditioning_icc:    "runs/run1/preconditioning.icc",
         r.merged_ti3:             "runs/run1/merged.ti3",
-        r.profile_icc:            "runs/run1/profile.icc",
+        r.merged_icc:             "runs/run1/merged.icc",
+        r.profile_icc:            "runs/run1/chart.icc",
         r.meta_path:              "runs/run1/meta.json",
         r.reads_dir:              "runs/run1/reads",
     }
@@ -290,7 +291,7 @@ def test_reset_chart_artefacts_preserves_preconditioning_and_meta(tmp_path: Path
 
     # Wiped:
     for name in ("chart.ti1", "chart.ti2", "chart_01.tif", "chart.channels.json",
-                 "measurement.ti3", "merged.ti3", "profile.icc"):
+                 "chart.ti3", "merged.ti3", "chart.icc"):
         assert not (r2.dir / name).exists(), f"{name} should be wiped"
     assert not r2.reads_dir.exists()
 

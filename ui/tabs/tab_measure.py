@@ -3011,9 +3011,11 @@ class TabMeasure(QWidget):
         from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QVBoxLayout
 
         _ti3_path = self._ti1_path.with_suffix(".ti3") if self._ti1_path else None
+        # A calibration measurement lives in the project's cal/ folder
+        # (cal/calibration.ti3) rather than carrying a cal_ filename prefix.
         is_cal = (
             _ti3_path is not None
-            and _ti3_path.stem.startswith("cal_")
+            and _ti3_path.parent.name == "cal"
             and bool(self._settings.get("calibration_mode", False))
         )
 
@@ -3530,7 +3532,7 @@ class TabMeasure(QWidget):
 
         is_cal = (
             ti3 is not None
-            and ti3.stem.startswith("cal_")
+            and ti3.parent.name == "cal"
             and bool(self._settings.get("calibration_mode", False))
         )
         if failed:

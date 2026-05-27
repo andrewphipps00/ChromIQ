@@ -15,8 +15,17 @@ from data.patch_db import EXTERNAL_INSTRUMENTS, SUPPORTED_PATCH_SCALES, query_pa
 
 if TYPE_CHECKING:
     from core.argyll_runner import ArgyllRunner
-    from core.file_manager import FileManager
+    from core.file_manager import FileManager, Run
     from core.settings import AppSettings
+
+
+def _chart_stem(params: "ChartParams") -> str:
+    """File stem chart_creator writes/reads under cwd.
+
+    The folder identifies the project context; the stem identifies the role.
+    See ``FileManager.cwd_for_chart`` for the matching cwd resolver.
+    """
+    return "calibration" if params.cal_target else "chart"
 
 log = get_logger(__name__)
 
@@ -440,21 +449,14 @@ class ChartParams:
     # right-margin command/notes stamp is skipped because its target area
     # gets pushed off the page by the shift.
     chromiq_clip_style: bool = False
-    cal_target: bool = False          # when True, preserve existing cal_* files during cleanup
+    # When True, this run targets the calibration chart (writes to ``cal/``
+    # with stem ``calibration``). When False, writes to the project's current
+    # run folder with stem ``chart``. See ``FileManager.cwd_for_chart``.
+    cal_target: bool = False
     # When True, the .icc/.ti3 from a prior session in the same working folder
     # are renamed to pre_*.icc/pre_*.ti3 instead of being overwritten on the
     # following measure / colprof runs. Set by the guided tab when the user
     # arrived via "Use as pre-conditioning profile" in a result dialog.
-    preserve_as_preconditioning: bool = False
-
-
-# Stems left behind by the measurement-averaging feature (workflow naming
-# scheme in docs/dev_averaging.md): the per-read snapshots and the combined
-# result. These are intermediate measurements scoped to a single run — once
-# the run ends (either by being promoted to pre_* or by chart regeneration)
-# they must not leak into the next run, otherwise they get re-averaged or
-# double-counted alongside the pre_*.json snapshot.
-_AVERAGING_ARTIFACT_RE = re.compile(r"_(?:read\d+|average)$")
 
 
 class ChartCreator:
@@ -485,50 +487,36 @@ class ChartCreator:
         on_line: Callable[[str], None],
         on_finish: Callable[[list[Path]], None],
     ) -> None:
-        """Run targen then printtarg; call on_finish(tiff_paths) on completion."""
+        """Run targen then printtarg; call on_finish(tiff_paths) on completion.
+
+        Folder routing:
+          * ``cal_target=True``  → writes to ``project.calibration.dir/`` with
+            stem ``calibration``.
+          * ``cal_target=False`` → writes to ``project.current_run().dir/`` with
+            stem ``chart``.
+
+        Cleanup is folder-scoped: a calibration regen resets ``cal/``; a normal
+        chart regen resets only the current run's chart artefacts (preserving
+        any ``preconditioning.*`` already seeded). Other runs and the cal
+        folder are untouched by definition — they live in different folders.
+        """
         self._pending_on_finish = on_finish
         self._pending_params = params
 
-        work_dir = self._file_mgr.ensure_folder()
+        proj = self._file_mgr.project()
         if params.cal_target:
-            # Starting a calibration target run — full wipe, no exceptions
-            self._file_mgr.clean_folder(
-                ["ti1", "ti2", "tif", "cht", "ps", "json", "cal", "txt", "pxf"]
-            )
-            for _f in work_dir.iterdir():
-                if _f.is_file() and _f.stem.startswith("pre_") and _f.suffix.lower() in (".icc", ".icm"):
-                    try:
-                        _f.unlink()
-                    except OSError as _exc:
-                        log.warning("Could not delete %s: %s", _f, _exc)
+            proj.calibration.reset()
+            work_dir = proj.calibration.ensure_dir()
         else:
-            # Normal profiling run — preserve any cal_* files from a prior calibration step
-            if params.preserve_as_preconditioning:
-                params.extra_targen_args = self._promote_v1_to_preconditioning(
-                    params.extra_targen_args, work_dir,
-                )
-            _exts = {"ti1", "ti2", "tif", "cht", "ps", "json", "cal", "txt", "pxf"}
-            _deleted = 0
-            for _f in work_dir.iterdir():
-                if not _f.is_file():
-                    continue
-                # pre_* / cal_* files hold pre-conditioning / calibration data
-                # that must survive chart regeneration.
-                if _f.stem.startswith(("cal_", "pre_")):
-                    continue
-                suf = _f.suffix.lstrip(".").lower()
-                # Chart artefacts + averaging leftovers (<base>_readN.ti3 /
-                # <base>_average.ti3 from a prior run). The canonical <base>.ti3
-                # is intentionally NOT swept so a non-averaging measurement
-                # still survives chart re-generation.
-                if suf in _exts or (suf == "ti3" and _AVERAGING_ARTIFACT_RE.search(_f.stem)):
-                    try:
-                        _f.unlink()
-                        _deleted += 1
-                    except OSError as _exc:
-                        log.warning("Could not delete %s: %s", _f, _exc)
-            log.debug("Cleaned %d file(s), preserved cal_* files", _deleted)
-            params.extra_targen_args = self._stage_precond_profile(params.extra_targen_args, work_dir)
+            run = proj.current_run()
+            run.reset_chart_artefacts()
+            work_dir = run.ensure_dir()
+            # External -c preconditioning: copy ICC (and sibling .ti3 if
+            # refinement is on) into the current run so the chart and the
+            # snapshot live together.
+            params.extra_targen_args = self._import_external_preconditioning(
+                params.extra_targen_args, run,
+            )
 
         if params.is_manual:
             patch_count = params.patches  # pass value as-is; 0 lets targen decide
@@ -598,20 +586,26 @@ class ChartCreator:
         on_line: Callable[[str], None],
         on_finish: Callable[[list[Path]], None],
     ) -> None:
-        """Run printtarg only on an existing .ti1 file."""
+        """Run printtarg only on an existing .ti1 file.
+
+        Always targets the current run's chart slot (preview is never a
+        calibration target). Copies the input .ti1 into ``chart.ti1``, wipes
+        prior chart artefacts in that run, then runs printtarg.
+        """
         import shutil
         # _printtarg_done writes the <stem>.channels.json sidecar only when
         # _pending_params is set; otherwise the preview can't identify inks
         # in a future session. Mirror the generate() path so this entry point
         # produces the same artifacts.
         self._pending_params = params
-        work_dir = self._file_mgr.ensure_folder()
-        stem = params.target_name or "chart"
-        dest = work_dir / f"{stem}.ti1"
+        run = self._file_mgr.project().current_run()
+        run.reset_chart_artefacts()
+        work_dir = run.ensure_dir()
+        stem = "chart"
+        dest = run.chart_ti1
         if ti1_path != dest:
             shutil.copy(ti1_path, dest)
 
-        self._file_mgr.clean_folder(["ti2", "tif", "cht", "ps"])
         pt_args = self._build_printtarg_args(params)
         log.debug("printtarg args (from ti1): %s", pt_args)
         self._matched_errors = []
@@ -629,21 +623,22 @@ class ChartCreator:
             on_finish=lambda code: self._printtarg_done(code, work_dir, on_finish, stem),
         )
 
-    def _promote_v1_to_preconditioning(self, extra_args: str, work_dir: Path) -> str:
-        """Rename a prior session's .icc/.ti3 to pre_* so the next run can use them.
+    def _import_external_preconditioning(self, extra_args: str, run: "Run") -> str:
+        """Copy an external ``-c <icc>`` into the run as ``preconditioning.icc``.
 
-        Triggered when the user clicked "Use as pre-conditioning profile" in a
-        result dialog. The picked profile is the v1 .icc inside the working
-        folder; renaming it (and its matching .ti3) preserves the v1 record
-        instead of letting the upcoming measure/colprof runs overwrite it.
+        Triggered when the user picks a profile from outside the project (e.g.
+        a profile shipped with a colour-managed printer) as the targen
+        ``-c`` argument. Local picks (e.g. ``runs/runN-1/profile.icc``) are
+        handled upstream by ``Project.new_run(preconditioning_from=...)``
+        and won't reach this code.
 
-        With ChromIQ-style refinement enabled, the measurements are kept as
-        pre_*.json so the Measure tab can offer to merge them (matching the
-        external-pick path in _stage_precond_profile); otherwise they stay as the
-        legacy pre_*.ti3 record, so toggle-off behaviour is unchanged.
+        When ``chromiq_refinement`` is enabled and the source profile has a
+        sibling ``.ti3``, that measurement file is copied alongside as
+        ``preconditioning.ti3`` so ``workflow/ti3_merge.py`` can fold its
+        patches in at colprof time.
 
-        Any existing pre_*.icc / pre_*.ti3 from a previous refinement pass are
-        overwritten — we only keep one generation of history.
+        Rewrites the ``-c`` arg to point at the local copy so the targen
+        command line is self-contained within the run folder.
         """
         if not extra_args:
             return extra_args
@@ -656,134 +651,50 @@ class ChartCreator:
             return extra_args
 
         src = Path(parts[idx + 1])
-        # Only promote when the picked profile is INSIDE the working folder and
-        # not already a pre_* file. External paths are handled later by
-        # _stage_precond_profile() which copies them in.
-        try:
-            in_work = src.resolve().parent == work_dir.resolve()
-        except OSError:
-            in_work = False
-        if not in_work or src.stem.startswith("pre_"):
-            return extra_args
         if not src.is_file():
             return extra_args
 
-        icc_dest = work_dir / f"pre_{src.name}"
+        # If the picked profile is ALREADY the current run's preconditioning
+        # ICC (e.g. seeded by Project.new_run), there's nothing to do.
         try:
-            if icc_dest.exists():
-                icc_dest.unlink()
-            src.rename(icc_dest)
-            log.info("Promoted v1 profile to pre-conditioning: %s", icc_dest.name)
-        except OSError as exc:
-            log.warning("Could not rename %s -> %s: %s", src, icc_dest, exc)
-            return extra_args
-
-        ti3_src = src.with_suffix(".ti3")
-        if ti3_src.is_file():
-            # ChromIQ-style refinement consumes the measurements as pre_*.json;
-            # otherwise keep the legacy pre_*.ti3 record (off = unchanged).
-            if bool(self._settings.get("chromiq_refinement", False)):
-                ti3_dest = work_dir / f"pre_{ti3_src.stem}.json"
-            else:
-                ti3_dest = work_dir / f"pre_{ti3_src.name}"
-            try:
-                if ti3_dest.exists():
-                    ti3_dest.unlink()
-                ti3_src.rename(ti3_dest)
-                log.info("Promoted v1 measurements to %s", ti3_dest.name)
-            except OSError as exc:
-                log.warning("Could not rename %s -> %s: %s", ti3_src, ti3_dest, exc)
-
-        # Stash the per-read snapshots that fed v1's average. They mustn't be
-        # left under their original names, or v2's averaging glob
-        # (existing_read_variants on <base>_read*.ti3) would pick them up and
-        # double-count them once ti3_merge folds in pre_*.json. Renaming them
-        # to pre_*_readN.ti3 hides them from that glob (the pre_/cal_ skip in
-        # FileManager.existing_read_variants) and protects them from chart
-        # regeneration — so the raw reads remain available for diagnostics or
-        # a future re-average with a different method. Glob from the base
-        # stem (strip any trailing _average so we match either
-        # "chart_average.icc" or "chart.icc" picks).
-        base_stem = src.stem.removesuffix("_average")
-        for orphan in work_dir.glob(f"{base_stem}_read*.ti3"):
-            if orphan.stem.startswith(("pre_", "cal_")):
-                continue
-            orphan_dest = work_dir / f"pre_{orphan.name}"
-            try:
-                if orphan_dest.exists():
-                    orphan_dest.unlink()
-                orphan.rename(orphan_dest)
-                log.info("Stashed v1 averaging read: %s -> %s",
-                         orphan.name, orphan_dest.name)
-            except OSError as exc:
-                log.warning("Could not stash orphan %s -> %s: %s",
-                            orphan, orphan_dest, exc)
-
-        parts[idx + 1] = str(icc_dest)
-        return shlex.join(parts)
-
-    def _stage_precond_profile(self, extra_args: str, work_dir: Path) -> str:
-        """Copy the -c ICC/ICM file into work_dir with a pre_ prefix if needed.
-
-        When ChromIQ-style refinement is enabled, also copy the profile's sibling
-        .ti3 measurement file (if present) into work_dir as a pre_*.json, so it
-        survives chart-regeneration cleanup and can later be merged into the new
-        measurements (see workflow/ti3_merge.py).
-        """
-        if not extra_args:
-            return extra_args
-        parts = shlex.split(extra_args)
-        try:
-            idx = parts.index("-c")
-        except ValueError:
-            return extra_args
-        if idx + 1 >= len(parts):
-            return extra_args
-        src = Path(parts[idx + 1])
-        if not src.is_file():
-            return extra_args
-
-        if bool(self._settings.get("chromiq_refinement", False)):
-            self._stage_precond_measurements(src, work_dir)
-
-        dest_name = src.name if src.stem.startswith("pre_") else f"pre_{src.name}"
-        dest = work_dir / dest_name
-        if src != dest:
-            import shutil
-            shutil.copy2(src, dest)
-            log.info("Staged pre-conditioning profile to %s", dest)
-            parts[idx + 1] = str(dest)
-            return shlex.join(parts)
-        return extra_args
-
-    @staticmethod
-    def _stage_precond_measurements(profile_src: Path, work_dir: Path) -> None:
-        """Copy a pre-conditioning profile's sibling .ti3 into work_dir as a
-        pre_*.json so it survives cleanup (ChromIQ-style refinement).
-
-        The .json extension keeps the file from being mistaken for the session's
-        own measurement .ti3 by anything globbing *.ti3; it still holds CGATS
-        content, which workflow.ti3_merge reads regardless of extension.
-        """
-        ti3_src = profile_src.with_suffix(".ti3")
-        if not ti3_src.is_file():
-            return
-        stem = ti3_src.stem if ti3_src.stem.startswith("pre_") else f"pre_{ti3_src.stem}"
-        dest = work_dir / f"{stem}.json"
-        try:
-            if ti3_src.resolve() == dest.resolve():
-                return
+            if src.resolve() == run.preconditioning_icc.resolve():
+                return extra_args
         except OSError:
             pass
+
         import shutil
         try:
-            shutil.copy2(ti3_src, dest)
-            log.info("Staged pre-conditioning measurements to %s", dest.name)
+            shutil.copy2(src, run.preconditioning_icc)
+            log.info(
+                "Imported external preconditioning profile to %s",
+                run.preconditioning_icc.name,
+            )
         except OSError as exc:
             log.warning(
-                "Could not stage pre-conditioning measurements %s -> %s: %s",
-                ti3_src, dest, exc,
+                "Could not import preconditioning %s -> %s: %s",
+                src, run.preconditioning_icc, exc,
             )
+            return extra_args
+
+        # Sibling .ti3 → preconditioning.ti3 (only when refinement is on,
+        # otherwise the merge step won't run anyway).
+        if bool(self._settings.get("chromiq_refinement", False)):
+            ti3_src = src.with_suffix(".ti3")
+            if ti3_src.is_file():
+                try:
+                    shutil.copy2(ti3_src, run.preconditioning_ti3)
+                    log.info(
+                        "Imported external preconditioning measurements to %s",
+                        run.preconditioning_ti3.name,
+                    )
+                except OSError as exc:
+                    log.warning(
+                        "Could not import preconditioning ti3 %s -> %s: %s",
+                        ti3_src, run.preconditioning_ti3, exc,
+                    )
+
+        parts[idx + 1] = str(run.preconditioning_icc)
+        return shlex.join(parts)
 
     # ------------------------------------------------------------------
     # Internal
@@ -840,7 +751,7 @@ class ChartCreator:
             work_dir,
             on_line=_printtarg_scan,
             on_finish=lambda code: self._printtarg_done(
-                code, work_dir, self._pending_on_finish, params.target_name
+                code, work_dir, self._pending_on_finish, _chart_stem(params)
             ),
         )
 
@@ -849,7 +760,7 @@ class ChartCreator:
         exit_code: int,
         work_dir: Path,
         on_finish: Callable[[list[Path]], None] | None,
-        target_name: str = "chart",
+        stem: str = "chart",
     ) -> None:
         if exit_code != 0:
             log.error("printtarg failed with code %d", exit_code)
@@ -857,7 +768,6 @@ class ChartCreator:
                 on_finish([])
             return
 
-        stem = target_name or "chart"
         # Set-comprehension dedupes Windows' case-insensitive glob matches
         # (chart.tif matches both *.tif and *.TIF), which otherwise made the
         # preview display "Page 1/2" for a single-file chart (forum #148124).
@@ -917,7 +827,7 @@ class ChartCreator:
             return
 
         patch_count = self._count_patches_in_ti1(
-            tiffs[0].parent / f"{params.target_name}.ti1"
+            tiffs[0].parent / f"{_chart_stem(params)}.ti1"
         ) or params.patches or 0
 
         chromiq_clip = _chromiq_clip_active(params)
@@ -1036,7 +946,7 @@ class ChartCreator:
             args += [f"-s{p.single_channel_steps}"]
         if p.extra_targen_args:
             args += shlex.split(p.extra_targen_args)
-        args.append(p.target_name or "chart")
+        args.append(_chart_stem(p))
         return args
 
     def _build_printtarg_args(self, p: ChartParams) -> list[str]:
@@ -1092,7 +1002,7 @@ class ChartCreator:
             args.append("-P")
         if p.extra_printtarg_args:
             args += shlex.split(p.extra_printtarg_args)
-        args.append(p.target_name or "chart")
+        args.append(_chart_stem(p))
         return args
 
     # ------------------------------------------------------------------

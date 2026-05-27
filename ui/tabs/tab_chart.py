@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shlex
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -252,6 +253,10 @@ class TabChart(QWidget):
         self._creator  = ChartCreator(runner, file_mgr, settings)
         self._params   = self._load_yaml_params()
         self._preconditioning_from_dialog = False
+        # Run that produced the profile the user clicked "Use as pre-conditioning"
+        # on. Captured at apply_preconditioning time; consumed at Generate-click
+        # to seed a fresh run (Project.new_run) from it.
+        self._precond_parent_run_id: str | None = None
         # TC9.18 built-in preset state. While active, "Generate Chart" reproduces
         # the bundled patch set (printtarg-only) instead of running targen, unless
         # the user has since changed a targen-affecting setting (see
@@ -1537,12 +1542,21 @@ class TabChart(QWidget):
         self._cal_target_check.setChecked(False)
 
     def _check_for_cal_file(self, name: str) -> None:
-        """Live check: if cal_<name>.cal exists in working folder, prefill -I and -K."""
+        """Live check: if this project already has a calibration, prefill -I and -K.
+
+        Calibration now lives at ``<project>/cal/calibration.cal`` (one per
+        project, shared across runs) rather than a ``cal_<name>.cal`` file in
+        the working folder.
+        """
         name = name.strip()
         if not name:
             self._cal_status_lbl.setVisible(False)
             return
-        cal_file = self._file_mgr.working_dir() / f"cal_{name}.cal"
+        proj_root = self._file_mgr.preview_project_root(name)
+        if proj_root is None:
+            self._cal_status_lbl.setVisible(False)
+            return
+        cal_file = proj_root / "cal" / "calibration.cal"
         if cal_file.exists():
             cal_str = str(cal_file)
             if self._manual_cal_k_pw is not None:
@@ -1578,29 +1592,20 @@ class TabChart(QWidget):
         return f"{name[:head]}…{name[-tail:]}"
 
     def _preview_target_name(self, mode: str) -> str:
-        """Return the target name as it will appear in the command preview.
+        """Return the file stem as it will appear in the targen/printtarg
+        command preview.
 
-        Falls back to "chart" when the name field is empty, matching the
-        default that ChartCreator uses at generate time. Prefixes "cal_"
-        when the Calibration Target checkbox is active (manual mode only).
-        Shortens with a middle ellipsis when longer than _PREVIEW_NAME_MAX_LEN
-        characters so an unbroken name can't force the info-box wider than
-        its container — the *actual* target name used at Generate-click is
-        read directly from the line edit, not from this helper.
+        Under the per-run folder layout the file stem is fixed: ``calibration``
+        when the Calibration Target checkbox is active (manual mode only),
+        otherwise ``chart``. The user's project name is the *folder* name, not
+        the file stem, so it no longer appears on the command line.
         """
-        if mode == "guided":
-            edit = getattr(self, "_target_name_edit", None)
-        else:
-            edit = getattr(self, "_manual_target_name_edit", None)
-        name = (edit.text().strip() if edit is not None else "") or "chart"
-
         if mode == "manual" and getattr(self, "_cal_target_check", None) is not None:
             grp = getattr(self, "_cal_target_grp", None)
             if (self._cal_target_check.isChecked()
                     and grp is not None and grp.isVisible()):
-                name = f"cal_{name}"
-
-        return self._shorten_for_preview(name)
+                return "calibration"
+        return "chart"
 
     def _on_cal_target_toggled(self, checked: bool) -> None:
         _CAL_VALUES: list[tuple[str, str, Any]] = [
@@ -1707,13 +1712,19 @@ class TabChart(QWidget):
 
         Called by the main window when the user clicks "Use as pre-conditioning
         profile" in the Build Profile or Check/Refine result dialog. Switches to
-        guided mode, ticks the checkbox, fills the path picker, and arms the
-        rename-instead-of-wipe behavior for the next Generate Chart click.
+        guided mode, ticks the checkbox, fills the path picker, and remembers
+        the current run so the next Generate Chart click seeds a fresh run
+        (Project.new_run) from it.
         """
         self._switch_mode("guided")
         self._guided_precond_path.setText(str(profile_path))
         self._guided_precond_check.setChecked(True)
         self._preconditioning_from_dialog = True
+        try:
+            self._precond_parent_run_id = self._file_mgr.project().current_run().id
+        except Exception as exc:  # noqa: BLE001 — never block the UI on this
+            log.warning("Could not capture parent run for preconditioning: %s", exc)
+            self._precond_parent_run_id = None
 
     def _current_mode(self) -> str:
         return "guided" if self._stack.currentIndex() == 0 else "manual"
@@ -3317,19 +3328,38 @@ class TabChart(QWidget):
             self._file_mgr.set_target_name(name)
         base_name = self._file_mgr.get_target_name()
 
-        # Apply calibration target overrides (working folder stays as base_name)
+        # Calibration vs. normal run is now expressed by params.cal_target
+        # alone — it routes chart_creator to cal/ (stem "calibration") vs the
+        # current run folder (stem "chart"). The project folder is always
+        # base_name; the file stem no longer carries a cal_ prefix.
         cal_target_active = (
             hasattr(self, "_cal_target_check")
             and self._cal_target_check.isChecked()
             and self._cal_target_grp.isVisible()
         )
-        if cal_target_active:
-            params.cal_target = True
-            params.target_name = f"cal_{base_name}"
-        else:
-            params.target_name = base_name
+        params.cal_target = cal_target_active
+        params.target_name = base_name
+        self._last_target_name = base_name
 
-        self._last_target_name = params.target_name
+        # "Use as pre-conditioning profile" → seed a fresh run from the parent
+        # before generating the refined chart. new_run() copies the parent's
+        # profile.icc / measurement.ti3 into the new run as preconditioning.*
+        # and makes it current, so the chart generated below lands in the new
+        # run and chart_creator's external-import becomes a no-op.
+        if (not cal_target_active
+                and self._preconditioning_from_dialog
+                and self._precond_parent_run_id):
+            proj = self._file_mgr.project()
+            if proj.has_run(self._precond_parent_run_id):
+                parent = proj.run(self._precond_parent_run_id)
+                try:
+                    new_run = proj.new_run(preconditioning_from=parent)
+                    params.extra_targen_args = shlex.join(
+                        ["-c", str(new_run.preconditioning_icc)]
+                    )
+                    params.neutral_axis_from_profile = True
+                except FileNotFoundError as exc:
+                    log.warning("Could not seed pre-conditioning run: %s", exc)
 
         self._log.clear()
         self._preview.clear()
@@ -3567,26 +3597,25 @@ class TabChart(QWidget):
     def _on_generate_finished(self, tiffs: list[Path]) -> None:
         self._generate_btn.setEnabled(True)
         # One-shot flag: consumed by this run, don't carry over to the next.
-        was_from_dialog = self._preconditioning_from_dialog
         self._preconditioning_from_dialog = False
-        # If a v1 promotion just happened, the path in the picker now points to
-        # a file that has been renamed away. Clear it so the user isn't left
-        # with a stale path next time they look at the panel.
-        if was_from_dialog and hasattr(self, "_guided_precond_path"):
-            picked = self._guided_precond_path.text().strip()
-            if picked and not Path(picked).is_file():
-                self._guided_precond_path.clear()
-                self._guided_precond_check.setChecked(False)
+        self._precond_parent_run_id = None
         is_isis = self._is_isis_selected()
-        stem = getattr(self, "_last_target_name", None) or "chart"
+        # File stem is fixed by the folder layout ("chart" / "calibration").
+        # Derive it from the actual page bitmaps so it's correct regardless of
+        # which flow produced them; fall back to "chart" when none exist.
+        if tiffs:
+            m = re.match(r"(.+?)_\d+$", tiffs[0].stem)
+            stem = m.group(1) if m else tiffs[0].stem
+        else:
+            stem = "chart"
         # For i1iSis the load-bearing artifact is the TI1 from targen, not the
         # printtarg TIFF. Run the export off the TI1 so users still get their
         # patch-set files even if printtarg fails for an unrelated reason
         # (e.g. paper-size validation crash). work_dir is wherever the TI1 lives
-        # — derive from tiffs when present, else from the FileManager.
+        # — derive from tiffs when present, else from the current run folder.
         isis_export_ok = False
         if is_isis:
-            work_dir = tiffs[0].parent if tiffs else self._file_mgr.ensure_folder()
+            work_dir = tiffs[0].parent if tiffs else self._file_mgr.project().current_run().dir
             isis_export_ok = self._export_for_i1profiler_and_notify(
                 work_dir, stem, preview_available=bool(tiffs),
             )
@@ -3768,9 +3797,6 @@ class TabChart(QWidget):
             no_strip_limit       = no_strip_limit,
             left_clip_info       = bool(self._settings.get("chart_left_clip_info", False)),
             chromiq_clip_style   = bool(self._settings.get("i1pro_chromiq_clip_style", False)),
-            preserve_as_preconditioning = (
-                precond_active and self._preconditioning_from_dialog
-            ),
         )
 
     def _collect_manual(self) -> ChartParams:

@@ -357,7 +357,9 @@ class MainWindow(QMainWindow):
 
     def _on_measure_done(self, ti3: Path) -> None:
         cal_mode = bool(self._settings.get("calibration_mode", False))
-        if cal_mode and ti3.stem.startswith("cal_"):
+        # A calibration measurement lives in the project's cal/ folder rather
+        # than carrying a cal_ filename prefix.
+        if cal_mode and ti3.parent.name == "cal":
             self._tab_profile.set_cal_ti3_path(ti3)
             self._tabs.setCurrentWidget(self._tab_profile)
         else:
