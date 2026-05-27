@@ -2949,11 +2949,11 @@ class TabChart(QWidget):
         self._create_prebuilt_target(key, target_name)
 
     def _create_prebuilt_target(self, key: str, target_name: str) -> None:
-        """Copy a bundled prebuilt target into ~/ChromIQ/<name> and load it.
+        """Copy a bundled prebuilt target into the project's current run and load it.
 
         No targen/printtarg is run: the bundled .ti1/.ti2 and TIFF pages are
-        copied verbatim (renamed to the chosen target name) and the TIFFs are
-        loaded into the preview, then routed downstream like a normal chart."""
+        copied into runs/<current>/ under the fixed ``chart`` stem and the TIFFs
+        are loaded into the preview, then routed downstream like a normal chart."""
         import shutil
         if self._runner.is_running:
             log.warning("Prebuilt preset: a process is already running")
@@ -2977,20 +2977,20 @@ class TabChart(QWidget):
         name = (self._manual_target_name_edit.text().strip()
                 if self._manual_target_name_edit is not None else "") or target_name
         self._file_mgr.set_target_name(name)
-        stem = self._file_mgr.get_target_name() or default_name
-        work_dir = self._file_mgr.ensure_folder()
+        run = self._file_mgr.project().current_run()
         # Start from a clean slate so stale pages from a prior copy can't linger.
-        self._file_mgr.clean_folder(["ti1", "ti2", "tif", "tiff", "cht", "ps"])
+        run.reset_chart_artefacts()
+        work_dir = run.ensure_dir()
 
         self._log.clear()
         self._preview.clear()
         try:
-            shutil.copy(src_ti1, work_dir / f"{stem}.ti1")
+            shutil.copy(src_ti1, run.chart_ti1)
             if src_ti2.is_file():
-                shutil.copy(src_ti2, work_dir / f"{stem}.ti2")
+                shutil.copy(src_ti2, run.chart_ti2)
             tiffs: list[Path] = []
             for i, src_tif in enumerate(src_tiffs, start=1):
-                dest = work_dir / f"{stem}_{i:02d}.tif"
+                dest = work_dir / f"chart_{i:02d}.tif"
                 shutil.copy(src_tif, dest)
                 tiffs.append(dest)
         except OSError as exc:
@@ -3002,7 +3002,7 @@ class TabChart(QWidget):
             ).exec()
             return
 
-        self._last_target_name = stem
+        self._last_target_name = name
         self._log.appendPlainText(
             f"Copied prebuilt patch set into {work_dir} ({len(tiffs)} page(s)). "
             "targen and printtarg skipped."
