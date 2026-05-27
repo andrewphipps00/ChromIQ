@@ -34,7 +34,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from core.file_manager import FileManager
+from core.file_manager import FileManager, Run
 from core.logger import get_logger
 from core.preset_store import (
     load_presets as _load_tab_presets,
@@ -352,11 +352,11 @@ def _detect_uniform_stripe_rects(tiff_path: Path, n_strips: int) -> list[QRect]:
 # ---------------------------------------------------------------------------
 
 # Tooltip for the optional "also use pre-conditioning data" checkbox (shown only
-# when ChromIQ-style refinement is on and a pre_*.json sits beside the .ti2).
+# when ChromIQ-style refinement is on and this run carries a preconditioning.ti3).
 _PRECOND_TOOLTIP = (
     "Also Use Pre-conditioning Measurement Data",
     "ChromIQ found saved measurement data from the pre-conditioning profile you\n"
-    "selected when creating this chart (a \"pre_…\" file in this folder).\n\n"
+    "selected when creating this chart (the run's preconditioning.ti3).\n\n"
     "Tick this to fold those earlier measurements into your profile. When you\n"
     "build the profile, ChromIQ combines the patches you just measured with the\n"
     "saved earlier ones and builds from the larger set — generally a more\n"
@@ -429,9 +429,10 @@ class TabMeasure(QWidget):
         self._page_stripe_rects: list[list[QRect]] = []
         self._strips_per_page: list[int] = []
         self._chartread_opts: list[_ChartreadOption] = []
-        # ChromIQ-style refinement: the single pre_*.json sitting beside the
-        # loaded .ti2, if any (the pre-conditioning profile's measurement data).
-        self._precond_json: Path | None = None
+        # ChromIQ-style refinement: this run's preconditioning.ti3, if any
+        # (the pre-conditioning profile's measurement data, seeded by
+        # Project.new_run when the user refined a prior run).
+        self._precond_ti3: Path | None = None
         # Auto bidir-detection: resolved -B value for the loaded .ti2 (False =
         # bidirectional allowed; the no-file / unknown-instrument fallback).
         self._detected_disable_bidir: bool = False
@@ -1937,16 +1938,16 @@ class TabMeasure(QWidget):
 
     def _update_precond_availability(self) -> None:
         """Show the 'also use pre-conditioning data' option when ChromIQ-style
-        refinement is enabled and exactly one pre_*.json sits beside the .ti2."""
+        refinement is enabled and this run carries a preconditioning.ti3 seed."""
         found: Path | None = None
         if (
             self._ti1_path is not None
             and bool(self._settings.get("chromiq_refinement", False))
         ):
-            candidates = sorted(self._ti1_path.parent.glob("pre_*.json"))
-            if len(candidates) == 1:
-                found = candidates[0]
-        self._precond_json = found
+            run = Run.for_dir(self._ti1_path.parent)
+            if run.preconditioning_ti3.exists():
+                found = run.preconditioning_ti3
+        self._precond_ti3 = found
         visible = found is not None
         for cb, tip in [
             (self._use_precond_cb, self._precond_tip),
@@ -1958,18 +1959,18 @@ class TabMeasure(QWidget):
                 cb.setChecked(False)
 
     def preconditioning_choice(self) -> Path | None:
-        """The pre_*.json the user opted into merging, or None.
+        """The preconditioning.ti3 the user opted into merging, or None.
 
         Returns the discovered file only when its checkbox is visible AND ticked
         in the active mode — the main window forwards this to Build Profile.
         """
-        if self._precond_json is None:
+        if self._precond_ti3 is None:
             return None
         cb = self._use_precond_cb if self._current_mode() == "guided" else self._m_use_precond_cb
         # isHidden() reflects the explicit show/hide state set in
         # _update_precond_availability, independent of which tab is front-most.
         if not cb.isHidden() and cb.isChecked():
-            return self._precond_json
+            return self._precond_ti3
         return None
 
     def _refresh_start_button_label(self) -> None:
@@ -3146,11 +3147,9 @@ class TabMeasure(QWidget):
             QDialog, QHBoxLayout, QLabel, QPushButton, QVBoxLayout,
         )
 
-        work_dir  = self._ti1_path.parent if self._ti1_path else None
-        base_stem = self._ti1_path.stem if self._ti1_path else ""
         prior = (
-            FileManager.existing_read_variants(work_dir, base_stem)
-            if work_dir is not None else []
+            Run.for_dir(self._ti1_path.parent).reads()
+            if self._ti1_path is not None else []
         )
         in_set  = self._averaging_active and len(prior) >= 1
         n_total = len(prior) + 1   # prior saved reads + this just-finished one
@@ -3619,26 +3618,22 @@ class TabMeasure(QWidget):
         self._apply_completion_action(ti3, current, reads, action, method)
 
     def _promote_completed_read(self, ti3: Path) -> tuple[Path, list[Path]]:
-        """If an averaging set is active, save this read as the next
-        ``<base>_read{N}.ti3`` and return (saved_path, all_reads). Otherwise leave
-        the file in place and return (ti3, [])."""
-        work_dir  = ti3.parent
-        base_stem = ti3.stem            # canonical <base> (the .ti1/.ti2 stem)
+        """If an averaging set is active, move this read into the run's
+        ``reads/readN.ti3`` slot and return (saved_path, all_reads). Otherwise
+        leave the file in place and return (ti3, [])."""
+        run = Run.for_dir(ti3.parent)   # ti3 == runs/<id>/chart.ti3
         if self._averaging_active:
             # Save this fresh read as the next read in the current set.
-            n = FileManager.next_read_index(work_dir, base_stem)
-            dest = FileManager.read_variant_path(ti3, n)
             try:
-                ti3.replace(dest)
-                current = dest
-            except OSError as exc:
-                log.warning("Could not save read variant %s: %s", dest, exc)
+                current = run.promote_measurement_to_read()
+            except (OSError, FileNotFoundError) as exc:
+                log.warning("Could not save read variant: %s", exc)
                 current = ti3
-            self._log.appendPlainText(f"\n[OK] Read saved: {current.name}")
-            reads = FileManager.existing_read_variants(work_dir, base_stem)
+            self._log.appendPlainText(f"\n[OK] Read saved: reads/{current.name}")
+            reads = run.reads()
         else:
-            # A standalone read. Ignore any <base>_read* left over from an
-            # earlier session — opting into averaging below starts a clean set.
+            # A standalone read. Ignore any reads/ left over from an earlier
+            # session — opting into averaging below starts a clean set.
             current = ti3
             reads = []
             self._log.appendPlainText(f"\n[OK] Measurement complete.\nSaved: {current}")
@@ -3654,15 +3649,15 @@ class TabMeasure(QWidget):
         """
         if action == "again":
             if not self._averaging_active:
-                # Begin a fresh averaging set: discard any stale variants, then
-                # save this first read as <base>_read1 so the next read lands
-                # beside it as <base>_read2.
-                self._reset_read_variants(ti3.parent, ti3.stem)
-                first = FileManager.read_variant_path(ti3, 1)
+                # Begin a fresh averaging set: discard any stale reads/, then
+                # move this first read into reads/read1.ti3 so the next read
+                # lands beside it as reads/read2.ti3.
+                run = Run.for_dir(ti3.parent)
+                run.clear_reads()
                 try:
-                    ti3.replace(first)
-                    self._log.appendPlainText(f"[INFO] First read saved as {first.name}")
-                except OSError as exc:
+                    first = run.promote_measurement_to_read()
+                    self._log.appendPlainText(f"[INFO] First read saved as reads/{first.name}")
+                except (OSError, FileNotFoundError) as exc:
                     log.warning("Could not save first read variant: %s", exc)
                 self._averaging_active = True
             QTimer.singleShot(0, self._start_averaging_read)
@@ -3677,17 +3672,6 @@ class TabMeasure(QWidget):
         self.measure_finished.emit(current)
         self.proceed_to_profile.emit()
 
-    def _reset_read_variants(self, work_dir: Path, base_stem: str) -> None:
-        """Delete leftover <base>_read*.ti3 / <base>_average.ti3 before a new set."""
-        stale = list(FileManager.existing_read_variants(work_dir, base_stem))
-        avg = FileManager.average_path(work_dir / f"{base_stem}.ti3")
-        if avg.exists():
-            stale.append(avg)
-        for f in stale:
-            try:
-                f.unlink()
-            except OSError as exc:
-                log.warning("Could not remove stale read file %s: %s", f, exc)
 
     def _show_completion_dialog(
         self, current: Path, reads: list[Path]
@@ -3805,7 +3789,9 @@ class TabMeasure(QWidget):
     def _run_average_and_proceed(
         self, base: Path, reads: list[Path], method: str
     ) -> None:
-        out = FileManager.average_path(base)
+        # The averaged result IS the canonical measurement (chart.ti3); the
+        # per-read snapshots stay in reads/ for diagnostics.
+        out = Run.for_dir(base.parent).measurement_ti3
         self._log.appendPlainText(
             f"\n[INFO] Averaging {len(reads)} reads → {out.name} …"
         )

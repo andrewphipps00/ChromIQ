@@ -2,9 +2,12 @@
 
 Exercises the file-promotion + action helpers that the "All Stripes Read"
 averaging dialog and the manual completion dialog both feed into:
-  * _promote_completed_read — saves a read as <base>_read{N}.ti3 while a set is
+  * _promote_completed_read — moves a read into reads/readN.ti3 while a set is
     active, leaves a standalone read in place otherwise;
   * _apply_completion_action — routes build / again / use_last correctly.
+
+Under the per-run folder layout the canonical measurement is chart.ti3 and the
+per-read snapshots live in reads/readN.ti3 inside the same run folder.
 
 The "average" action is not exercised here (it spawns the `average` QProcess and
 is covered by tests/test_average_runner.py); we stub _start_averaging_read so the
@@ -84,23 +87,27 @@ def test_again_on_first_read_starts_a_set(tab, tmp_path):
 
     tab._apply_completion_action(ti3, current, reads, "again", "mean")
     assert tab._averaging_active is True
-    assert (tmp_path / "chart_read1.ti3").exists()
-    assert not ti3.exists(), "canonical .ti3 should have moved to _read1"
+    assert (tmp_path / "reads" / "read1.ti3").exists()
+    assert not ti3.exists(), "canonical chart.ti3 should have moved to reads/read1.ti3"
 
 
 def test_promote_while_active_accumulates_variants(tab, tmp_path):
-    # Pretend read1 already exists and a set is active.
-    (tmp_path / "chart_read1.ti3").write_text("CTI3\nBEGIN_DATA\nEND_DATA\n")
+    # Pretend read1 already exists in reads/ and a set is active.
+    reads_dir = tmp_path / "reads"
+    reads_dir.mkdir()
+    (reads_dir / "read1.ti3").write_text("CTI3\nBEGIN_DATA\nEND_DATA\n")
     tab._averaging_active = True
 
     ti3 = _fresh(tmp_path)            # the just-finished canonical read
     current, reads = tab._promote_completed_read(ti3)
-    assert current.name == "chart_read2.ti3"
-    assert [r.name for r in reads] == ["chart_read1.ti3", "chart_read2.ti3"]
+    assert current.name == "read2.ti3"
+    assert [r.name for r in reads] == ["read1.ti3", "read2.ti3"]
 
 
 def test_use_last_proceeds_with_latest_variant(tab, tmp_path):
-    (tmp_path / "chart_read1.ti3").write_text("CTI3\nBEGIN_DATA\nEND_DATA\n")
+    reads_dir = tmp_path / "reads"
+    reads_dir.mkdir()
+    (reads_dir / "read1.ti3").write_text("CTI3\nBEGIN_DATA\nEND_DATA\n")
     tab._averaging_active = True
     ti3 = _fresh(tmp_path)
     current, reads = tab._promote_completed_read(ti3)
