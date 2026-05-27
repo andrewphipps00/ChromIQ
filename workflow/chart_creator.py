@@ -19,14 +19,6 @@ if TYPE_CHECKING:
     from core.settings import AppSettings
 
 
-def _chart_stem(params: "ChartParams") -> str:
-    """File stem chart_creator writes/reads under cwd.
-
-    The folder identifies the project context; the stem identifies the role.
-    See ``FileManager.cwd_for_chart`` for the matching cwd resolver.
-    """
-    return "calibration" if params.cal_target else "chart"
-
 log = get_logger(__name__)
 
 
@@ -601,7 +593,7 @@ class ChartCreator:
         run = self._file_mgr.project().current_run()
         run.reset_chart_artefacts()
         work_dir = run.ensure_dir()
-        stem = "chart"
+        stem = run.stem
         dest = run.chart_ti1
         if ti1_path != dest:
             shutil.copy(ti1_path, dest)
@@ -751,7 +743,8 @@ class ChartCreator:
             work_dir,
             on_line=_printtarg_scan,
             on_finish=lambda code: self._printtarg_done(
-                code, work_dir, self._pending_on_finish, _chart_stem(params)
+                code, work_dir, self._pending_on_finish,
+                self._file_mgr.chart_stem(cal_target=params.cal_target),
             ),
         )
 
@@ -827,7 +820,7 @@ class ChartCreator:
             return
 
         patch_count = self._count_patches_in_ti1(
-            tiffs[0].parent / f"{_chart_stem(params)}.ti1"
+            tiffs[0].parent / f"{self._file_mgr.chart_stem(cal_target=params.cal_target)}.ti1"
         ) or params.patches or 0
 
         chromiq_clip = _chromiq_clip_active(params)
@@ -946,7 +939,7 @@ class ChartCreator:
             args += [f"-s{p.single_channel_steps}"]
         if p.extra_targen_args:
             args += shlex.split(p.extra_targen_args)
-        args.append(_chart_stem(p))
+        args.append(self._file_mgr.chart_stem(cal_target=p.cal_target))
         return args
 
     def _build_printtarg_args(self, p: ChartParams) -> list[str]:
@@ -1002,7 +995,7 @@ class ChartCreator:
             args.append("-P")
         if p.extra_printtarg_args:
             args += shlex.split(p.extra_printtarg_args)
-        args.append(_chart_stem(p))
+        args.append(self._file_mgr.chart_stem(cal_target=p.cal_target))
         return args
 
     # ------------------------------------------------------------------

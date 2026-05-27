@@ -216,18 +216,19 @@ def test_copy_files_builds_project_layout(tmp_path: Path) -> None:
     proj = working_dir / "Imported"
     run1 = proj / "runs" / "run1"
     assert (proj / "project.json").is_file()
-    assert new_ti2 == run1 / "chart.ti2"
-    assert (run1 / "chart.ti2").is_file()
-    assert (run1 / "chart.ti1").is_file()
-    assert (run1 / "chart.ti3").is_file()        # measurement
-    assert (run1 / "chart.cht").is_file()
-    assert (run1 / "chart.channels.json").is_file()
-    assert [p.name for p in new_tiffs] == ["chart_01.tif", "chart_02.tif"]
+    # Files take the project-name stem ("Imported" here).
+    assert new_ti2 == run1 / "Imported.ti2"
+    assert (run1 / "Imported.ti2").is_file()
+    assert (run1 / "Imported.ti1").is_file()
+    assert (run1 / "Imported.ti3").is_file()        # measurement
+    assert (run1 / "Imported.cht").is_file()
+    assert (run1 / "Imported.channels.json").is_file()
+    assert [p.name for p in new_tiffs] == ["Imported_01.tif", "Imported_02.tif"]
     # No flat <name>.ti2 left at the project root.
-    assert not (proj / "Imported.ti2").exists()
+    assert not (proj / "Imported.ti2").exists() or (proj / "Imported.ti2").parent == run1
 
 
-def test_copy_files_imports_icc_as_chart_icc(tmp_path: Path) -> None:
+def test_copy_files_imports_icc_under_project_stem(tmp_path: Path) -> None:
     src = tmp_path / "external"
     src.mkdir()
     (src / "old.ti2").write_text("CTI2\n")
@@ -236,7 +237,22 @@ def test_copy_files_imports_icc_as_chart_icc(tmp_path: Path) -> None:
     working_dir = tmp_path / "ChromIQ"
     _copy_files(src / "old.ti2", None, [], working_dir, "Imported")
 
-    assert (working_dir / "Imported" / "runs" / "run1" / "chart.icc").read_text() == "ICC\n"
+    assert (working_dir / "Imported" / "runs" / "run1" / "Imported.icc").read_text() == "ICC\n"
+
+
+def test_copy_files_sanitises_spaces_in_project_name(tmp_path: Path) -> None:
+    """Importing with a spaced name yields a hyphenated project folder and
+    chart stem, matching what the Generate-Chart path does."""
+    src = tmp_path / "external"
+    src.mkdir()
+    (src / "old.ti2").write_text("CTI2\n")
+
+    working_dir = tmp_path / "ChromIQ"
+    new_ti2, _ = _copy_files(src / "old.ti2", None, [], working_dir, "printer test file")
+
+    proj = working_dir / "printer-test-file"
+    assert proj.is_dir() and not (working_dir / "printer test file").exists()
+    assert new_ti2 == proj / "runs" / "run1" / "printer-test-file.ti2"
 
 
 def test_project_root_for_recognises_structured_chart(tmp_path: Path) -> None:

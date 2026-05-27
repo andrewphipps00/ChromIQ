@@ -1509,7 +1509,12 @@ class TabCheckRefine(QWidget):
                 try:
                     profile_dir = _get_profile_dir()
                     profile_dir.mkdir(parents=True, exist_ok=True)
-                    dest = profile_dir / icc.name
+                    # Install under the project name (Run.stem), so the system
+                    # ColorSync folder ends up with descriptive,
+                    # non-colliding filenames even when the on-disk profile is
+                    # the build-time `merged.icc`.
+                    install_stem = Run.for_dir(icc.parent).stem
+                    dest = profile_dir / f"{install_stem}{icc.suffix}"
                     shutil.copy2(icc, dest)
                     dlg.accept()
                     self._log.appendPlainText(f"[OK] Profile installed to {dest}")

@@ -58,8 +58,17 @@ def tab():
     return t
 
 
-def _fresh(tmp_path, name="chart"):
-    p = tmp_path / f"{name}.ti3"
+def _project_run(tmp_path, name="Proj"):
+    """Build a minimal project layout so Run.for_dir derives stem from the
+    project folder. Returns (run_dir, chart_stem)."""
+    run_dir = tmp_path / name / "runs" / "run1"
+    run_dir.mkdir(parents=True)
+    return run_dir, name
+
+
+def _fresh(run_dir, stem):
+    """Write the canonical measurement (chartread output) under the run."""
+    p = run_dir / f"{stem}.ti3"
     p.write_text("CTI3\nBEGIN_DATA\nEND_DATA\n")
     return p
 
@@ -69,7 +78,8 @@ def test_build_proceeds_with_standalone_read(tab, tmp_path):
     tab.measure_finished.connect(lambda p: sig.__setitem__("finished", p))
     tab.proceed_to_profile.connect(lambda: sig.__setitem__("proceed", True))
 
-    ti3 = _fresh(tmp_path)
+    run_dir, stem = _project_run(tmp_path)
+    ti3 = _fresh(run_dir, stem)
     tab._averaging_active = False
     current, reads = tab._promote_completed_read(ti3)
     assert current == ti3 and reads == []
@@ -81,35 +91,38 @@ def test_build_proceeds_with_standalone_read(tab, tmp_path):
 
 
 def test_again_on_first_read_starts_a_set(tab, tmp_path):
-    ti3 = _fresh(tmp_path)
+    run_dir, stem = _project_run(tmp_path)
+    ti3 = _fresh(run_dir, stem)
     tab._averaging_active = False
     current, reads = tab._promote_completed_read(ti3)
 
     tab._apply_completion_action(ti3, current, reads, "again", "mean")
     assert tab._averaging_active is True
-    assert (tmp_path / "reads" / "read1.ti3").exists()
-    assert not ti3.exists(), "canonical chart.ti3 should have moved to reads/read1.ti3"
+    assert (run_dir / "reads" / "read1.ti3").exists()
+    assert not ti3.exists(), "canonical <stem>.ti3 should have moved to reads/read1.ti3"
 
 
 def test_promote_while_active_accumulates_variants(tab, tmp_path):
+    run_dir, stem = _project_run(tmp_path)
     # Pretend read1 already exists in reads/ and a set is active.
-    reads_dir = tmp_path / "reads"
+    reads_dir = run_dir / "reads"
     reads_dir.mkdir()
     (reads_dir / "read1.ti3").write_text("CTI3\nBEGIN_DATA\nEND_DATA\n")
     tab._averaging_active = True
 
-    ti3 = _fresh(tmp_path)            # the just-finished canonical read
+    ti3 = _fresh(run_dir, stem)       # the just-finished canonical read
     current, reads = tab._promote_completed_read(ti3)
     assert current.name == "read2.ti3"
     assert [r.name for r in reads] == ["read1.ti3", "read2.ti3"]
 
 
 def test_use_last_proceeds_with_latest_variant(tab, tmp_path):
-    reads_dir = tmp_path / "reads"
+    run_dir, stem = _project_run(tmp_path)
+    reads_dir = run_dir / "reads"
     reads_dir.mkdir()
     (reads_dir / "read1.ti3").write_text("CTI3\nBEGIN_DATA\nEND_DATA\n")
     tab._averaging_active = True
-    ti3 = _fresh(tmp_path)
+    ti3 = _fresh(run_dir, stem)
     current, reads = tab._promote_completed_read(ti3)
 
     sig = {}

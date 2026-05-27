@@ -63,26 +63,31 @@ Every project is a folder under `~/ChromIQ/<target-name>/` owned by the
 `Project` / `Run` / `Calibration` classes in `core/file_manager.py`:
 
 ```
-<target-name>/
-  project.json            # manifest: schema_version, current_run, runs[]
-  cal/                    # optional, shared across runs (calibration.cal/.ti1/.ti2/.ti3/.icc)
-  exports/                # i1Profiler exports (i1profiler.txt/.pxf)
-  runs/run1/, run2/, …    # one folder per profile build
-    chart.ti1/.ti2/.cht/.ps/.channels.json + chart_NN.tif
-    reads/readN.ti3       # only when averaging is used
-    chart.ti3             # the measurement (chartread output; averaged result reuses this stem)
-    chart.icc             # the profile (colprof output)
-    preconditioning.ti3/.icc   # seeded by Project.new_run when refining a prior run
-    merged.ti3/.icc       # build-time refinement-merge outputs
-    calibrated.icc        # applycal output
+<target-name>/             # = sanitised project name (spaces → hyphens)
+  project.json             # manifest: schema_version, current_run, runs[]
+  cal/                     # optional, shared across runs
+    <target-name>-cal.*    # cal.ti1/.ti2/.ti3/.cal/.icc/_NN.tif
+  exports/                 # i1Profiler exports (i1profiler.txt/.pxf)
+  runs/run1/, run2/, …     # one folder per profile build
+    <target-name>.*        # chart.ti1/.ti2/.cht/.ps/.channels.json + _NN.tif
+    <target-name>.ti3      # the measurement (chartread output; averaged result reuses this stem)
+    <target-name>.icc      # the profile (colprof output)
+    reads/readN.ti3        # role-named, only when averaging is used
+    preconditioning.ti3/.icc   # role-named, seeded by Project.new_run when refining
+    merged.ti3/.icc        # role-named, build-time refinement-merge outputs
+    calibrated.icc         # role-named, applycal output
     meta.json
 ```
 
-**The role of a file is its filename within a run folder; the folder
-disambiguates between runs.** There are no `pre_`/`cal_` prefixes or
-`_readN`/`_average`/`_merged` suffixes — those were removed in the folder
-redesign. File stems follow ArgyllCMS's natural coupling (`chart.ti2` →
-`chart.ti3` → `chart.icc`), so no post-tool renames are needed.
+**The chart's own files carry the sanitised project name as their stem**
+(so printtarg stamps it on the printed sheet, the ICC is self-identifying,
+Finder shows it). Derived/intermediate files (`reads/readN.ti3`,
+`preconditioning.*`, `merged.*`, `calibrated.icc`) stay role-named — they
+never go on paper. **The per-run folder still removes the need for any
+prefix/suffix state encoding**, so the `pre_`/`cal_` prefixes and the
+`_readN`/`_average`/`_merged` suffixes are gone. File stems follow
+ArgyllCMS's natural coupling (`<name>.ti2` → `<name>.ti3` → `<name>.icc`),
+so no post-tool renames are needed.
 
 **All path construction goes through `Project` / `Run` / `Calibration`.**
 Adding a new artefact = add a property/method to `Run`, never a stem pattern

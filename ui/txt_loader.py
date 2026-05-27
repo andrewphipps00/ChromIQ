@@ -203,6 +203,13 @@ def _ask_profile_name(
         except OSError:
             return False
 
+    def _normalise(text: str) -> str:
+        """Sanitise the typed name the same way set_target_name does (spaces→-,
+        illegal chars→_), so the on-disk folder = the user-facing name."""
+        from core.file_manager import FileManager
+        cleaned = FileManager.strip_workfile_ext(text)
+        return FileManager._sanitise(cleaned) if cleaned.strip() else ""
+
     def _validate(name: str) -> str | None:
         if not name:
             return "Please enter a name."
@@ -211,7 +218,7 @@ def _ask_profile_name(
         return None
 
     def _on_name_changed(_text: str = "") -> None:
-        name = name_edit.text().strip()
+        name = _normalise(name_edit.text())
         collision = bool(name) and (working_dir / name).exists() and not _is_self_collision(name)
         if collision:
             error_lbl.setText(
@@ -227,7 +234,7 @@ def _ask_profile_name(
     name_edit.textChanged.connect(_on_name_changed)
 
     def _on_accept() -> None:
-        name = name_edit.text().strip()
+        name = _normalise(name_edit.text())
         err = _validate(name)
         if err:
             error_lbl.setText(err)
@@ -245,7 +252,7 @@ def _ask_profile_name(
         dlg.accept()
 
     def _on_overwrite() -> None:
-        name = name_edit.text().strip()
+        name = _normalise(name_edit.text())
         err = _validate(name)
         if err:
             error_lbl.setText(err)
@@ -293,11 +300,17 @@ def _copy_txt(
     """Import an i1Profiler .txt into a fresh project as run1's chart.
 
     Builds the per-run layout (see docs/dev_folder_layout.md): a project at
-    ``working_dir/<new_name>/`` with the .txt placed at ``runs/run1/chart.txt``.
-    txt2ti3 then writes ``runs/run1/chart.ti3`` (the canonical measurement).
-    Returns (chart.txt, "chart").
+    ``working_dir/<new_name>/`` with the .txt placed at
+    ``runs/run1/<new_name>.txt``. txt2ti3 then writes
+    ``runs/run1/<new_name>.ti3`` — the canonical measurement under the
+    project-name chart stem.
+
+    Returns (txt path, base name to hand txt2ti3).
     """
-    from core.file_manager import Project
+    from core.file_manager import FileManager, Project
+
+    # Defensive: dialog already sanitises, but enforce here for any caller.
+    new_name = FileManager._sanitise(FileManager.strip_workfile_ext(new_name))
 
     dest = working_dir / new_name
     if overwrite and dest.exists():
@@ -307,6 +320,8 @@ def _copy_txt(
     run  = proj.current_run()
     run.ensure_dir()
 
-    new_txt = run.dir / "chart.txt"
+    # Place the .txt under the chart stem so txt2ti3's output stays paired
+    # (Run.measurement_ti3 = <stem>.ti3 = <new_name>.ti3).
+    new_txt = run.dir / f"{run.stem}.txt"
     shutil.copy2(txt_path, new_txt)
-    return new_txt, "chart"
+    return new_txt, run.stem

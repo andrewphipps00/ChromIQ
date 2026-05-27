@@ -87,9 +87,9 @@ class _MockFileManager:
         proj = self.project()
         return proj.calibration.ensure_dir() if cal_target else proj.current_run().ensure_dir()
 
-    @staticmethod
-    def chart_stem(*, cal_target: bool) -> str:
-        return "calibration" if cal_target else "chart"
+    def chart_stem(self, *, cal_target: bool) -> str:
+        proj = self.project()
+        return proj.calibration.stem if cal_target else proj.current_run().stem
 
 
 class _MockSettings:
@@ -110,8 +110,9 @@ def test_generate_writes_channels_sidecar(tmp_path: Path) -> None:
         on_line=lambda _: None,
         on_finish=lambda tiffs: finished.append(tiffs),
     )
-    # New layout: sidecar lives next to chart.ti1 inside runs/run1/
-    sidecar = work_dir / "runs" / "run1" / "chart.channels.json"
+    # New layout: sidecar lives next to <stem>.ti1 inside runs/run1/, where
+    # stem is the (sanitised) project folder name.
+    sidecar = work_dir / "runs" / "run1" / "chart_proj.channels.json"
     assert sidecar.exists(), "generate() must write the channels sidecar"
     assert json.loads(sidecar.read_text())["ink_channels"] == ["r", "g", "b"]
 
@@ -532,8 +533,9 @@ def test_load_ti1_writes_channels_sidecar(tmp_path: Path) -> None:
         on_line=lambda _: None,
         on_finish=lambda tiffs: finished.append(tiffs),
     )
-    # New layout: sidecar lives in the current run's chart slot.
-    sidecar = work_dir / "runs" / "run1" / "chart.channels.json"
+    # New layout: sidecar lives in the current run's chart slot, under the
+    # project-name stem ("chart_proj" from the _make_creator fixture).
+    sidecar = work_dir / "runs" / "run1" / "chart_proj.channels.json"
     assert sidecar.exists(), (
         "load_ti1_and_generate_preview() must set _pending_params so the "
         "sidecar is written — regression guard for the second half of #15"

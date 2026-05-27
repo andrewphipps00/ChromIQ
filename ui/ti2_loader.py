@@ -345,6 +345,14 @@ def _ask_profile_name(
         except OSError:
             return False
 
+    def _normalise(text: str) -> str:
+        """Sanitise the typed name the same way set_target_name does (spaces→-,
+        illegal chars→_), so the on-disk folder = the user-facing name. Empty
+        in → empty out (so the dialog can still report "please enter a name")."""
+        from core.file_manager import FileManager
+        cleaned = FileManager.strip_workfile_ext(text)
+        return FileManager._sanitise(cleaned) if cleaned.strip() else ""
+
     def _validate(name: str) -> str | None:
         if not name:
             return "Please enter a name."
@@ -353,7 +361,7 @@ def _ask_profile_name(
         return None
 
     def _on_name_changed(_text: str = "") -> None:
-        name = name_edit.text().strip()
+        name = _normalise(name_edit.text())
         collision = bool(name) and (working_dir / name).exists() and not _is_self_collision(name)
         if collision:
             error_lbl.setText(
@@ -369,7 +377,7 @@ def _ask_profile_name(
     name_edit.textChanged.connect(_on_name_changed)
 
     def _on_accept() -> None:
-        name = name_edit.text().strip()
+        name = _normalise(name_edit.text())
         err = _validate(name)
         if err:
             error_lbl.setText(err)
@@ -387,7 +395,7 @@ def _ask_profile_name(
         dlg.accept()
 
     def _on_overwrite() -> None:
-        name = name_edit.text().strip()
+        name = _normalise(name_edit.text())
         err = _validate(name)
         if err:
             error_lbl.setText(err)
@@ -442,7 +450,11 @@ def _copy_files(
     (``chart.ti2`` / ``chart.ti1`` / ``chart_NN.tif`` / ``chart.ti3`` /
     ``chart.icc``). Returns (run1 chart.ti2, copied page tiffs).
     """
-    from core.file_manager import Project
+    from core.file_manager import FileManager, Project
+
+    # Defensive: the dialog already sanitises, but make the contract explicit
+    # so any programmatic caller also gets a clean folder name.
+    new_name = FileManager._sanitise(FileManager.strip_workfile_ext(new_name))
 
     old_stem = ti2_path.stem
     dest      = working_dir / new_name
@@ -465,10 +477,10 @@ def _copy_files(
     if channels.exists():
         shutil.copy2(channels, run.chart_channels_json)
 
-    # Pages are renumbered chart_01.tif, chart_02.tif, … in sorted order.
+    # Pages are renumbered <stem>_01.tif, <stem>_02.tif, … in sorted order.
     new_tiffs: list[Path] = []
     for i, tiff in enumerate(sorted(tiffs), start=1):
-        new_tiff = run.dir / f"chart_{i:02d}.tif"
+        new_tiff = run.dir / f"{run.stem}_{i:02d}.tif"
         shutil.copy2(tiff, new_tiff)
         new_tiffs.append(new_tiff)
 

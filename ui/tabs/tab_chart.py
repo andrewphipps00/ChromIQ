@@ -1542,19 +1542,19 @@ class TabChart(QWidget):
     def _check_for_cal_file(self, name: str) -> None:
         """Live check: if this project already has a calibration, prefill -I and -K.
 
-        Calibration now lives at ``<project>/cal/calibration.cal`` (one per
-        project, shared across runs) rather than a ``cal_<name>.cal`` file in
-        the working folder.
+        Calibration lives at ``<project>/cal/<project>-cal.cal`` (one per
+        project, shared across runs) — see ``Calibration.cal_path``.
         """
         name = name.strip()
         if not name:
             self._cal_status_lbl.setVisible(False)
             return
+        from core.file_manager import Calibration
         proj_root = self._file_mgr.preview_project_root(name)
         if proj_root is None:
             self._cal_status_lbl.setVisible(False)
             return
-        cal_file = proj_root / "cal" / "calibration.cal"
+        cal_file = Calibration(proj_root).cal_path
         if cal_file.exists():
             cal_str = str(cal_file)
             if self._manual_cal_k_pw is not None:
@@ -2988,7 +2988,7 @@ class TabChart(QWidget):
                 shutil.copy(src_ti2, run.chart_ti2)
             tiffs: list[Path] = []
             for i, src_tif in enumerate(src_tiffs, start=1):
-                dest = work_dir / f"chart_{i:02d}.tif"
+                dest = work_dir / f"{run.stem}_{i:02d}.tif"
                 shutil.copy(src_tif, dest)
                 tiffs.append(dest)
         except OSError as exc:

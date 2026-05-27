@@ -115,19 +115,21 @@ def test_project_create_or_load_creates_if_absent(tmp_path: Path) -> None:
 def test_run_path_properties(tmp_path: Path) -> None:
     proj = Project.create(tmp_path / "P", "P")
     r = proj.current_run()
+    # Chart stem is the (sanitised) project folder name — "P" in this test.
+    assert r.stem == "P"
 
     expected = {
-        r.chart_ti1:              "runs/run1/chart.ti1",
-        r.chart_ti2:              "runs/run1/chart.ti2",
-        r.chart_cht:              "runs/run1/chart.cht",
-        r.chart_ps:               "runs/run1/chart.ps",
-        r.chart_channels_json:    "runs/run1/chart.channels.json",
-        r.measurement_ti3:        "runs/run1/chart.ti3",
+        r.chart_ti1:              "runs/run1/P.ti1",
+        r.chart_ti2:              "runs/run1/P.ti2",
+        r.chart_cht:              "runs/run1/P.cht",
+        r.chart_ps:               "runs/run1/P.ps",
+        r.chart_channels_json:    "runs/run1/P.channels.json",
+        r.measurement_ti3:        "runs/run1/P.ti3",
         r.preconditioning_ti3:    "runs/run1/preconditioning.ti3",
         r.preconditioning_icc:    "runs/run1/preconditioning.icc",
         r.merged_ti3:             "runs/run1/merged.ti3",
         r.merged_icc:             "runs/run1/merged.icc",
-        r.profile_icc:            "runs/run1/chart.icc",
+        r.profile_icc:            "runs/run1/P.icc",
         r.meta_path:              "runs/run1/meta.json",
         r.reads_dir:              "runs/run1/reads",
     }
@@ -138,23 +140,35 @@ def test_run_path_properties(tmp_path: Path) -> None:
 def test_run_chart_tiffs_sorted_and_case_insensitive(tmp_path: Path) -> None:
     proj = Project.create(tmp_path / "P", "P")
     r = proj.current_run()
-    (r.dir / "chart_02.tif").write_text("p2")
-    (r.dir / "chart_01.tif").write_text("p1")
-    (r.dir / "chart_03.TIF").write_text("p3")
-    (r.dir / "chart_04.tiff").write_text("p4")
+    (r.dir / "P_02.tif").write_text("p2")
+    (r.dir / "P_01.tif").write_text("p1")
+    (r.dir / "P_03.TIF").write_text("p3")
+    (r.dir / "P_04.tiff").write_text("p4")
     # A non-chart tiff must not be picked up.
     (r.dir / "other.tif").write_text("nope")
     tiffs = r.chart_tiffs()
-    assert [p.name for p in tiffs] == ["chart_01.tif", "chart_02.tif", "chart_03.TIF", "chart_04.tiff"]
+    assert [p.name for p in tiffs] == ["P_01.tif", "P_02.tif", "P_03.TIF", "P_04.tiff"]
 
 
 def test_run_chart_tiffs_finds_single_page_no_suffix(tmp_path: Path) -> None:
-    """printtarg writes `chart.tif` (no _NN) for a one-page chart — it must be
-    found, not silently skipped by a `chart_*.tif` (underscore) glob."""
+    """printtarg writes `<stem>.tif` (no _NN) for a one-page chart — it must be
+    found, not silently skipped by a `<stem>_*.tif` (underscore) glob."""
     proj = Project.create(tmp_path / "P", "P")
     r = proj.current_run()
-    (r.dir / "chart.tif").write_text("single page")
-    assert [p.name for p in r.chart_tiffs()] == ["chart.tif"]
+    (r.dir / "P.tif").write_text("single page")
+    assert [p.name for p in r.chart_tiffs()] == ["P.tif"]
+
+
+def test_run_stem_matches_project_folder(tmp_path: Path) -> None:
+    """Stem derives from the project folder, so Run.for_dir works in isolation
+    and stays consistent with the (sanitised) target name."""
+    from core.file_manager import Run
+    proj = Project.create(tmp_path / "printer-test-file", "printer-test-file")
+    assert proj.current_run().stem == "printer-test-file"
+    # Same answer for a project-less Run bound to the same directory.
+    standalone = Run.for_dir(proj.current_run().dir)
+    assert standalone.stem == "printer-test-file"
+    assert standalone.chart_ti2.name == "printer-test-file.ti2"
 
 
 # ---------------------------------------------------------------------------
@@ -320,10 +334,11 @@ def test_reset_chart_artefacts_preserves_preconditioning_and_meta(tmp_path: Path
     r1.measurement_ti3.write_text("M")
     r1.profile_icc.write_text("ICC")
     r2 = proj.new_run(preconditioning_from=r1)
-    # Now run 2 has preconditioning.* and meta.json. Add some chart artefacts:
+    # Now run 2 has preconditioning.* and meta.json. Add some chart artefacts
+    # under the project-name stem ("P" here).
     r2.chart_ti1.write_text("TI1")
     r2.chart_ti2.write_text("TI2")
-    (r2.dir / "chart_01.tif").write_text("TIFF")
+    (r2.dir / "P_01.tif").write_text("TIFF")
     r2.chart_channels_json.write_text("{}")
     r2.measurement_ti3.write_text("MEASURED")
     r2.merged_ti3.write_text("MERGED")
@@ -334,8 +349,8 @@ def test_reset_chart_artefacts_preserves_preconditioning_and_meta(tmp_path: Path
     r2.reset_chart_artefacts()
 
     # Wiped:
-    for name in ("chart.ti1", "chart.ti2", "chart_01.tif", "chart.channels.json",
-                 "chart.ti3", "merged.ti3", "chart.icc"):
+    for name in ("P.ti1", "P.ti2", "P_01.tif", "P.channels.json",
+                 "P.ti3", "merged.ti3", "P.icc"):
         assert not (r2.dir / name).exists(), f"{name} should be wiped"
     assert not r2.reads_dir.exists()
 
@@ -352,9 +367,12 @@ def test_reset_chart_artefacts_preserves_preconditioning_and_meta(tmp_path: Path
 def test_calibration_paths(tmp_path: Path) -> None:
     proj = Project.create(tmp_path / "P", "P")
     cal = proj.calibration
+    # Calibration stem = "<project>-cal" so the printed sheet is named after
+    # the project but is distinguishable from the profiling chart.
+    assert cal.stem == "P-cal"
     assert cal.dir == proj.root / "cal"
-    assert cal.cal_path == proj.root / "cal" / "calibration.cal"
-    assert cal.ti3 == proj.root / "cal" / "calibration.ti3"
+    assert cal.cal_path == proj.root / "cal" / "P-cal.cal"
+    assert cal.ti3 == proj.root / "cal" / "P-cal.ti3"
 
 
 def test_calibration_exists_false_when_empty(tmp_path: Path) -> None:

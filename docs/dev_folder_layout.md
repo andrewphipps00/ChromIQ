@@ -8,33 +8,47 @@ path construction are owned by `core/file_manager.py` via three classes:
 ## The layout
 
 ```
-<target-name>/
+<target-name>/                       # = sanitised project name (spaces → hyphens)
   project.json                       # manifest
   cal/                               # optional; one calibration shared by all runs
-    calibration.ti1 / .ti2 / .cht / .ps
-    calibration_NN.tif
-    calibration.ti3                  # calibration measurement
-    calibration.cal                  # printcal output
-    calibration.icc
-    calibration.channels.json
+    <target-name>-cal.ti1 / .ti2 / .cht / .ps
+    <target-name>-cal_NN.tif
+    <target-name>-cal.ti3            # calibration measurement
+    <target-name>-cal.cal            # printcal output
+    <target-name>-cal.icc
+    <target-name>-cal.channels.json
     meta.json
   exports/                           # external-tool exports
     i1profiler.txt
     i1profiler.pxf
   runs/
     run1/                            # one folder per profile build
-      chart.ti1 / .ti2 / .cht / .ps / .channels.json
-      chart_NN.tif                   # NN = page index (a real ordinal, not state)
+      <target-name>.ti1 / .ti2 / .cht / .ps / .channels.json
+      <target-name>_NN.tif           # NN = page index (a real ordinal, not state)
       reads/                         # present only when averaging is used
-        read1.ti3 / read2.ti3 / …
-      chart.ti3                      # the measurement (chartread output)
-      chart.icc                      # the profile (colprof output)
-      preconditioning.ti3 / .icc     # present only when seeded from a parent run
-      merged.ti3 / merged.icc        # present only when a refinement merge ran
-      calibrated.icc                 # present only when applycal ran
+        read1.ti3 / read2.ti3 / …    # role-named (in subfolder)
+      <target-name>.ti3              # the measurement (chartread output)
+      <target-name>.icc              # the profile (colprof output)
+      preconditioning.ti3 / .icc     # role-named; seeded from a parent run
+      merged.ti3 / merged.icc        # role-named; build-time refinement merge
+      calibrated.icc                 # role-named; applycal output
       meta.json
     run2/ …
 ```
+
+The **chart's own files** (`.ti1`/`.ti2`/`.ti3`/`.icc`/page TIFFs/`.cht`/`.ps`/
+`.channels.json`) carry the sanitised project name as their stem — so
+printtarg stamps it on the printed sheet, the built ICC is self-identifying in
+ColorSync and Finder, and the install path in the Check tab copies it to the
+system folder as `<target-name>.icc`. The **derived/intermediate files** stay
+role-named (`reads/readN.ti3`, `preconditioning.*`, `merged.*`,
+`calibrated.icc`) — they never go on a printed sheet and the role name is
+clearer at a glance than `<target-name>_merged.ti3` would be.
+
+Calibration uses `<target-name>-cal` so its printed sheet shows the project
+name (you can tell which project the cal target belongs to) AND is
+distinguishable from the profiling chart, which lives in `runs/<id>/` under
+the bare project name.
 
 ## The one rule
 
