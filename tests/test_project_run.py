@@ -266,6 +266,41 @@ def test_run_2_reads_dir_isolated_from_run_1(tmp_path: Path) -> None:
     assert (r1.reads_dir / "read1.ti3").read_text() == "V1 R1"
 
 
+def test_averaged_run1_to_refined_run2_no_double_count(tmp_path: Path) -> None:
+    """End-to-end of the original double-counting bug — now impossible.
+
+    Run 1 with averaging produces reads/ + an averaged chart.ti3 + profile.
+    Promoting to run 2 seeds preconditioning.* from run 1's *averaged* outputs.
+    Run 2's own averaging set lands in a fresh reads/ that never sees run 1's
+    reads, so a later merge with preconditioning.ti3 cannot re-include run 1's
+    individual reads.
+    """
+    proj = Project.create(tmp_path / "P", "P")
+
+    # --- Run 1: averaged ---
+    r1 = proj.current_run()
+    r1.reads_dir.mkdir()
+    (r1.reads_dir / "read1.ti3").write_text("V1 R1")
+    (r1.reads_dir / "read2.ti3").write_text("V1 R2")
+    r1.measurement_ti3.write_text("V1 AVERAGED")       # chart.ti3 = mean of reads
+    r1.profile_icc.write_text("V1 PROFILE")
+
+    # --- Promote to run 2 (refinement) ---
+    r2 = proj.new_run(preconditioning_from=r1)
+    # Pre-conditioning seed is run 1's AVERAGED measurement, not its raw reads.
+    assert r2.preconditioning_ti3.read_text() == "V1 AVERAGED"
+
+    # --- Run 2: its own averaging set ---
+    r2.reads_dir.mkdir()
+    (r2.reads_dir / "read1.ti3").write_text("V2 R1")
+    (r2.reads_dir / "read2.ti3").write_text("V2 R2")
+    # Run 2 only ever sees its own reads.
+    assert [p.read_text() for p in r2.reads()] == ["V2 R1", "V2 R2"]
+    # The merge inputs would be r2.measurement_ti3 + r2.preconditioning_ti3 —
+    # exactly one copy of run 1's data (the average), never the raw reads.
+    assert r1.reads_dir != r2.reads_dir
+
+
 # ---------------------------------------------------------------------------
 # Run.reset_chart_artefacts
 # ---------------------------------------------------------------------------

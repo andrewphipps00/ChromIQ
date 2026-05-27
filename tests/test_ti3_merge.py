@@ -81,8 +81,9 @@ requires_average = pytest.mark.skipif(
 
 @requires_average
 def test_merge_concatenates_both_sets(tmp_path):
-    fresh = _write(tmp_path, "fresh.ti3", "iRGB_XYZ", _data_rows(1, 3, "A"))
-    pre = _write(tmp_path, "pre.json", "iRGB_XYZ", _data_rows(1, 2, "B"))
+    # Mirrors the run layout: chart.ti3 (fresh) + preconditioning.ti3 → merged.ti3
+    fresh = _write(tmp_path, "chart.ti3", "iRGB_XYZ", _data_rows(1, 3, "A"))
+    pre = _write(tmp_path, "preconditioning.ti3", "iRGB_XYZ", _data_rows(1, 2, "B"))
     out = tmp_path / "merged.ti3"
 
     total = merge_preconditioning(fresh, pre, out, bin_dir="/Applications/Argyll/bin")
@@ -94,21 +95,9 @@ def test_merge_concatenates_both_sets(tmp_path):
     )
 
 
-@requires_average
-def test_merge_reads_json_named_pre_input(tmp_path):
-    # The pre-conditioning data lives under a .json name; average must still read it.
-    fresh = _write(tmp_path, "fresh.ti3", "iRGB_XYZ", _data_rows(1, 4, "A"))
-    pre = _write(tmp_path, "pre_fresh.json", "iRGB_XYZ", _data_rows(1, 3, "B"))
-    out = tmp_path / "fresh_merged.ti3"
-
-    total = merge_preconditioning(fresh, pre, out, bin_dir="/Applications/Argyll/bin")
-    assert total == 7
-    assert len(_read_data(out)) == 7
-
-
 def test_color_rep_mismatch_refused(tmp_path):
-    fresh = _write(tmp_path, "fresh.ti3", "iRGB_XYZ", _data_rows(1, 2, "A"))
-    pre = _write(tmp_path, "pre.json", "iRGB_LAB", _data_rows(1, 2, "B"))
+    fresh = _write(tmp_path, "chart.ti3", "iRGB_XYZ", _data_rows(1, 2, "A"))
+    pre = _write(tmp_path, "preconditioning.ti3", "iRGB_LAB", _data_rows(1, 2, "B"))
     out = tmp_path / "merged.ti3"
     with pytest.raises(Ti3MergeError):
         merge_preconditioning(fresh, pre, out)
@@ -116,9 +105,9 @@ def test_color_rep_mismatch_refused(tmp_path):
 
 
 def test_data_format_mismatch_refused(tmp_path):
-    fresh = _write(tmp_path, "fresh.ti3", "iRGB_XYZ", _data_rows(1, 2, "A"))
+    fresh = _write(tmp_path, "chart.ti3", "iRGB_XYZ", _data_rows(1, 2, "A"))
     # pre file with a different (spectral-ish) format
-    pre = tmp_path / "pre.json"
+    pre = tmp_path / "preconditioning.ti3"
     pre.write_text(_ti3("iRGB_XYZ", _FMT + " SPEC_380", ['1 "B1" 10 20 30 11 12 13 0.5']))
     out = tmp_path / "merged.ti3"
     with pytest.raises(Ti3MergeError):
@@ -127,8 +116,8 @@ def test_data_format_mismatch_refused(tmp_path):
 
 
 def test_missing_data_block_refused(tmp_path):
-    fresh = _write(tmp_path, "fresh.ti3", "iRGB_XYZ", _data_rows(1, 2, "A"))
-    bad = tmp_path / "bad.json"
+    fresh = _write(tmp_path, "chart.ti3", "iRGB_XYZ", _data_rows(1, 2, "A"))
+    bad = tmp_path / "preconditioning.ti3"
     bad.write_text("CTI3\nnot a real measurement file\n")
     out = tmp_path / "merged.ti3"
     with pytest.raises(Ti3MergeError):
