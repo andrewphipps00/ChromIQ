@@ -8,12 +8,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from PyQt6.QtCore import QPoint, QRect, QSize, Qt, pyqtSignal
+from PyQt6.QtCore import QEvent, QPoint, QRect, QSize, Qt, pyqtSignal
 from PyQt6.QtGui import (
     QColor, QFont, QFontMetricsF, QMouseEvent, QPainter, QPainterPath,
     QPaintEvent, QPen,
 )
-from PyQt6.QtWidgets import QWidget
+from PyQt6.QtWidgets import QApplication, QWidget
 
 
 # Per-mode visual tokens. Hover background uses a translucent accent so the
@@ -82,6 +82,7 @@ class ToolsPopup(QWidget):
         self._palette = _PALETTE_DARK
         self._hover_index: int = -1
         self._tail_offset_x: int = 0  # tail apex X within the widget
+        self._anchor: QWidget | None = None  # button we're anchored under, for hover-reset on close
 
         font = QFont()
         font.setPixelSize(13)
@@ -122,6 +123,7 @@ class ToolsPopup(QWidget):
     # ------------------------------------------------------------------
     def show_under(self, anchor: QWidget) -> None:
         """Position so the tail apex lands at the horizontal centre of ``anchor``."""
+        self._anchor = anchor
         gp = anchor.mapToGlobal(QPoint(0, anchor.height()))
         anchor_center_x = gp.x() + anchor.width() // 2
 
@@ -231,6 +233,18 @@ class ToolsPopup(QWidget):
             self._hover_index = -1
             self.update()
         super().leaveEvent(event)
+
+    def hideEvent(self, event) -> None:  # noqa: N802
+        # Qt.Popup grabs the mouse the moment the anchor button is pressed, so
+        # the underlying QToolButton never receives the Leave event that would
+        # clear its :hover background. After dismissing the popup the button
+        # would otherwise read as still-highlighted until the cursor next
+        # enters and leaves it. Send a synthetic Leave so Qt re-evaluates.
+        super().hideEvent(event)
+        anchor = self._anchor
+        if anchor is not None:
+            QApplication.sendEvent(anchor, QEvent(QEvent.Type.Leave))
+            anchor.update()
 
     def mousePressEvent(self, event: QMouseEvent) -> None:  # noqa: N802
         if event.button() != Qt.MouseButton.LeftButton:

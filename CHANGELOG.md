@@ -1,5 +1,44 @@
 # Changelog
 
+## v3.8.0-beta.16
+**More targen control in Manual mode, healthier i1Profiler round-trips,
+and a UI polish on the Tools button.**
+
+### Added
+- **Manual mode exposes the targen flags it was missing**: `-l` Total Ink
+  Limit, `-A` OFPS Adaptation, `-m` Cube Interior Steps, `-M` Cube Surface
+  Steps, `-b` Body-Centered Cubic Steps, and a Patch Distribution selector
+  that picks one of `-t / -r / -R / -q / -Q / -i / -I` (or default OFPS).
+  Each new control is gated behind its own expert enable-checkbox, so the
+  default command line is unchanged unless you opt in.
+- **Create Chart → Load patch set** (formerly "Load existing .ti1…") now
+  also accepts i1Profiler files (`.pxf`, `.cgats`, `.txt`). RGB patch sets
+  are converted to a tempfile `.ti1` on the fly; CMYK and parse errors
+  surface as a clear info dialog.
+
+### Fixed
+- **i1Profiler → TI1 now matches targen's flare model**, applying a 1%
+  flare toward the white point during sRGB → XYZ so a reconstructed target's
+  strip-layout decisions in printtarg behave like a natively-generated one.
+  Scale detection also handles 0..1 floats and 16-bit ranges in addition to
+  0..100 and 8-bit.
+- **TC9.18 / TC2.83 and other i1Profiler-converted charts now render their
+  row letters and chart identification.** printtarg silently drops every
+  chart label when the density-extremes table is written black-first;
+  write_ti1 now emits it white-first, matching targen's iteration order.
+- **Exported i1Profiler `.pxf` files are now write-protected.** Without
+  `WriteProtected="True"`, i1Profiler exposes a patch-count slider and
+  shuffle checkbox on our charts, and one stray click would silently
+  desync the ChromIQ `.ti2`/`.ti3` round-trip. Matches the X-Rite-shipped
+  reference charts.
+- **Tools button no longer stays highlighted after the popup is dismissed.**
+  Because `Qt.Popup` grabs the mouse the moment the button is pressed, the
+  button never received the `Leave` event that would normally clear its
+  hover background; the highlight lingered until the cursor next entered
+  and left the button. The popup now sends a synthetic Leave to its anchor
+  when it hides, so the button returns to its resting state immediately in
+  both light and dark mode.
+
 ## v3.8.0-beta.15
 **Workflow polish and a measurement-accuracy fix.** Rolls up the per-run
 averaging fix, a new Tools converter, and a smoother Create Chart rename flow,
