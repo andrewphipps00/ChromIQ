@@ -64,11 +64,6 @@ _WORKFILE_EXTS = frozenset({
     ".cal",
 })
 
-# Legacy regex — kept only while the migration to the Project/Run API is in
-# flight (old averaging helpers still use it). Will be removed when the old
-# API is deleted.
-_READ_VARIANT_RE = re.compile(r"_read(\d+)$")
-
 # Inside a Run.reads_dir, files are read1.ti3, read2.ti3, …
 _NEW_READ_RE = re.compile(r"^read(\d+)$")
 
@@ -332,6 +327,10 @@ class Run:
         """
         return self.merged_icc if self.merged_icc.exists() else self.profile_icc
 
+    # ---- applycal output (calibration baked into a built profile)
+    @property
+    def calibrated_icc(self) -> Path:         return self.dir / "calibrated.icc"
+
     # ---- meta
     @property
     def meta_path(self) -> Path:              return self.dir / "meta.json"
@@ -362,6 +361,7 @@ class Run:
             "chart.ti3",                 # the measurement (chartread output)
             "chart.icc",                 # the profile (colprof output)
             "merged.ti3", "merged.icc",  # build-time refinement merge outputs
+            "calibrated.icc",            # applycal output
         ):
             p = self.dir / name
             if p.exists():
@@ -625,60 +625,3 @@ class FileManager:
         """File stem chart_creator passes to targen/printtarg."""
         return "calibration" if cal_target else "chart"
 
-    # ------------------------------------------------------------------
-    # Legacy helpers — kept while features migrate to Project/Run, will
-    # be removed in the cleanup commit.
-    # ------------------------------------------------------------------
-
-    @staticmethod
-    def read_variant_path(base_ti3: Path, n: int) -> Path:
-        """DEPRECATED: use Run.next_read_path()."""
-        return base_ti3.with_name(f"{base_ti3.stem}_read{n}{base_ti3.suffix}")
-
-    @staticmethod
-    def average_path(base_ti3: Path) -> Path:
-        """DEPRECATED: use Run.measurement_ti3 (the averaged result IS the canonical)."""
-        return base_ti3.with_name(f"{base_ti3.stem}_average{base_ti3.suffix}")
-
-    @staticmethod
-    def existing_read_variants(work_dir: Path, base_stem: str) -> list[Path]:
-        """DEPRECATED: use Run.reads()."""
-        if not work_dir.exists():
-            return []
-        found: list[tuple[int, Path]] = []
-        for f in work_dir.glob(f"{base_stem}_read*.ti3"):
-            if f.stem.startswith(("pre_", "cal_")):
-                continue
-            m = _READ_VARIANT_RE.search(f.stem)
-            if m:
-                found.append((int(m.group(1)), f))
-        found.sort(key=lambda t: t[0])
-        return [f for _, f in found]
-
-    @staticmethod
-    def next_read_index(work_dir: Path, base_stem: str) -> int:
-        """DEPRECATED: use Run.next_read_index()."""
-        existing = FileManager.existing_read_variants(work_dir, base_stem)
-        highest = 0
-        for f in existing:
-            m = _READ_VARIANT_RE.search(f.stem)
-            if m:
-                highest = max(highest, int(m.group(1)))
-        return highest + 1
-
-    def clean_folder(self, extensions: list[str] | None = None) -> None:
-        """DEPRECATED: use Run.reset_chart_artefacts() / Calibration.reset()."""
-        d = self.working_dir()
-        if not d.exists():
-            return
-        exts = {e.lstrip(".").lower() for e in extensions} if extensions else None
-        deleted = 0
-        for f in d.iterdir():
-            if f.is_file():
-                if exts is None or f.suffix.lstrip(".").lower() in exts:
-                    try:
-                        f.unlink()
-                        deleted += 1
-                    except OSError as exc:
-                        log.warning("Could not delete %s: %s", f, exc)
-        log.debug("Cleaned %d file(s) from %s", deleted, d)

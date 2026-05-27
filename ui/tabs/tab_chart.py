@@ -1420,14 +1420,12 @@ class TabChart(QWidget):
             targen_args += [f"-s{p.single_channel_steps}"]
         if p.extra_targen_args:
             _extra = shlex.split(p.extra_targen_args)
-            # Render -c <picked path> as the staged filename — matches what
-            # chart_creator._stage_precond_profile will actually run with and
-            # avoids burying the rest of the args under a long absolute path.
+            # Render -c <picked path> as the staged filename — chart_creator
+            # imports the pick into the run as preconditioning.icc — and avoids
+            # burying the rest of the args under a long absolute path.
             for _i, _tok in enumerate(_extra):
                 if _tok == "-c" and _i + 1 < len(_extra) and _extra[_i + 1]:
-                    _pp = Path(_extra[_i + 1])
-                    _staged = _pp.name if _pp.stem.startswith("pre_") else f"pre_{_pp.name}"
-                    _extra[_i + 1] = self._shorten_for_preview(_staged)
+                    _extra[_i + 1] = "preconditioning.icc"
             targen_args += _extra
         targen_args.append(self._preview_target_name("manual"))
 
@@ -3129,11 +3127,9 @@ class TabChart(QWidget):
         recommendation = ""
         if precond_active:
             if precond_path:
-                # Mirror chart_creator._stage_precond_profile guard so a
-                # already-pre_-prefixed pick doesn't render as pre_pre_*.
-                _pp = Path(precond_path)
-                _staged = _pp.name if _pp.stem.startswith("pre_") else f"pre_{_pp.name}"
-                precond_line = f" -c {self._shorten_for_preview(_staged)}"
+                # chart_creator imports the pick into the run as
+                # preconditioning.icc; show that staged name in the preview.
+                precond_line = " -c preconditioning.icc"
                 recommendation = (
                     "\nTip: use at least as many pages as the original profile."
                 )

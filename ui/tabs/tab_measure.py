@@ -448,7 +448,7 @@ class TabMeasure(QWidget):
         self._auto_proceed: bool = False
         self._all_done_shown: bool = False
         # "Read again & average": True once the user opts to re-read the chart,
-        # so each subsequent successful read is saved as <base>_read{N}.ti3.
+        # so each subsequent successful read is moved into reads/readN.ti3.
         self._averaging_active: bool = False
         # When averaging is enabled, the "All Stripes Read" dialog records the
         # user's choice here so _on_measure_done can act on it once chartread has

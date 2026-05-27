@@ -1,13 +1,13 @@
 """Repeated-read averaging (the "Read again & average" Measure-tab flow).
 
 Covers:
-  * FileManager's read-variant naming helpers (<base>_read{N}.ti3, _average,
-    accumulation index, exclusion of pre_/cal_-prefixed files);
   * AverageRunner argument construction (mean vs. median);
   * an end-to-end `average` run when the binary is available, asserting the
     measured PCS is the true mean and device RGB is untouched.
 
-See docs/dev_averaging.md for the design and the analysis of `average`.
+The read-variant naming is now owned by Run (runs/<id>/reads/readN.ti3) and
+covered by tests/test_project_run.py. See docs/dev_averaging.md for the design
+and the analysis of `average`.
 """
 from __future__ import annotations
 
@@ -17,7 +17,6 @@ from pathlib import Path
 
 import pytest
 
-from core.file_manager import FileManager
 from core.resource_path import argyll_binary
 from core.settings import DEFAULTS
 from workflow.average_runner import AverageParams, AverageRunner
@@ -31,39 +30,6 @@ def test_averaging_disabled_by_default() -> None:
     # The Measure-tab completion dialog / read-again flow is gated behind this
     # toggle; shipping it on would change the default experience for everyone.
     assert DEFAULTS["averaging_enabled"] is False
-
-
-# ----------------------------------------------------------------------
-# FileManager naming helpers
-# ----------------------------------------------------------------------
-
-def test_read_variant_and_average_paths(tmp_path: Path) -> None:
-    base = tmp_path / "chart.ti3"
-    assert FileManager.read_variant_path(base, 2).name == "chart_read2.ti3"
-    assert FileManager.average_path(base).name == "chart_average.ti3"
-
-
-def test_existing_variants_sorted_and_filtered(tmp_path: Path) -> None:
-    for nm in (
-        "chart_read1.ti3", "chart_read2.ti3", "chart_read10.ti3",
-        "pre_chart_read3.ti3",   # refinement file — excluded
-        "cal_chart_read4.ti3",   # calibration file — excluded
-        "chart_average.ti3",     # not a read — excluded
-        "other_read1.ti3",       # different base — excluded
-    ):
-        (tmp_path / nm).write_text("x")
-
-    variants = FileManager.existing_read_variants(tmp_path, "chart")
-    assert [p.name for p in variants] == [
-        "chart_read1.ti3", "chart_read2.ti3", "chart_read10.ti3",  # numeric sort
-    ]
-
-
-def test_next_read_index(tmp_path: Path) -> None:
-    assert FileManager.next_read_index(tmp_path, "chart") == 1
-    (tmp_path / "chart_read1.ti3").write_text("x")
-    (tmp_path / "chart_read10.ti3").write_text("x")
-    assert FileManager.next_read_index(tmp_path, "chart") == 11
 
 
 # ----------------------------------------------------------------------

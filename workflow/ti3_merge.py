@@ -2,11 +2,10 @@
 
 Part of the optional "ChromIQ-style refinement process" (gated by the
 ``chromiq_refinement`` setting). When the user opts in, the patches measured
-for an earlier pre-conditioning profile — stashed beside the chart as a
-``pre_*.json`` file (CGATS .ti3 content under a .json name so it survives
-chart-regeneration cleanup) — are merged into the chart just measured. The
-combined file is handed to colprof, which then builds the profile from more
-data points.
+for an earlier pre-conditioning profile — copied into the refined run as
+``preconditioning.ti3`` by ``Project.new_run`` — are merged into the chart
+just measured (``chart.ti3``). The combined file (``merged.ti3``) is handed to
+colprof, which then builds the profile from more data points.
 
 The concatenation itself is done by ArgyllCMS's own ``average -m`` tool, which
 appends the patch rows of two field-compatible measurement files (taking all
@@ -16,7 +15,7 @@ different instrument, or spectral vs. tristimulus data) yields a clear message
 instead of a terse tool error.
 
 The merged file feeds colprof only; Check & Refine always works from the clean
-fresh .ti3, so the merged file needs no ChromIQ-specific markup. Validated
+fresh chart.ti3, so the merged file needs no ChromIQ-specific markup. Validated
 against ArgyllCMS 3.5.0: ``average -m`` output is ingested in full by colprof
 and read back by profcheck.
 """
@@ -112,9 +111,10 @@ def merge_preconditioning(
 ) -> int:
     """Merge ``pre_data`` patches into ``fresh_ti3``; write the result to ``out_ti3``.
 
-    ``pre_data`` holds CGATS .ti3 content (typically under a ``pre_*.json`` name).
-    The merge is performed by ``average -m`` (located under ``bin_dir`` if given,
-    otherwise via PATH). Returns the total number of sets in the merged file.
+    ``pre_data`` holds CGATS .ti3 content (typically the run's
+    ``preconditioning.ti3``). The merge is performed by ``average -m`` (located
+    under ``bin_dir`` if given, otherwise via PATH). Returns the total number of
+    sets in the merged file.
 
     Raises ``Ti3MergeError`` when the two files use a different COLOR_REP or
     DATA_FORMAT — colprof needs a single, consistent column layout — or when the
