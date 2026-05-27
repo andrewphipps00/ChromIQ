@@ -3320,8 +3320,15 @@ class TabProfile(QWidget):
         if p.suffix.lower() == ".txt":
             self._import_i1profiler_txt(p)
         else:
+            # An external .ti3 (or one in an old flat folder) gets imported
+            # into a fresh project — same as the .ti2 / .txt loaders. Inside
+            # an existing project, resolve_ti3 returns the path unchanged.
+            from ui.ti2_loader import resolve_ti3
+            resolved = resolve_ti3(self, p, self._settings)
+            if resolved is None:
+                return
             self.about_to_load_ti3.emit()
-            self.set_ti3_path(p)
+            self.set_ti3_path(resolved)
             self.ti3_manually_loaded.emit()
 
     # ------------------------------------------------------------------

@@ -123,6 +123,39 @@ def resolve_ti2(
     return _handle_outside(parent, ti2_path, working_dir)
 
 
+def resolve_ti3(
+    parent: "QWidget",
+    ti3_path: Path,
+    settings: "AppSettings",
+) -> Path | None:
+    """Determine how to load a .ti3 relative to the working folder.
+
+    Mirrors ``resolve_ti2``: returns the path to use — either the original
+    (when the file is already inside a structured project) or a newly copied
+    path inside a freshly-created project. Returns ``None`` if the user
+    cancelled.
+
+    For an external .ti3 with a sibling .ti2, the full ti2 import flow is
+    reused (the .ti2 is the chart; the .ti3 is its measurement). For a bare
+    .ti3 (no chart files beside it), a measurement-only project is created.
+    Either way, ``Project.create`` writes the "Where are my files.txt" README
+    at the new project root so the user gets the new layout on the spot.
+    """
+    working_dir = _resolve_working_dir(settings)
+    if _project_root_for(ti3_path, working_dir) is not None:
+        return ti3_path                              # already in a project
+    sibling_ti2 = ti3_path.with_suffix(".ti2")
+    if sibling_ti2.is_file():
+        result = _handle_outside(parent, sibling_ti2, working_dir)
+        if result is None:
+            return None
+        new_ti2, _tiffs = result
+        new_ti3 = new_ti2.with_suffix(".ti3")
+        return new_ti3 if new_ti3.exists() else None
+    # Bare .ti3 — import the measurement (and sibling .icc, if any) alone.
+    return _handle_outside_ti3_only(parent, ti3_path, working_dir)
+
+
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
@@ -272,18 +305,30 @@ def _ask_profile_name(
         QDialog, QHBoxLayout, QLabel, QLineEdit, QMessageBox, QPushButton, QVBoxLayout,
     )
 
-    file_lines = [f"  • {ti2_path.name}"]
+    # Build the file list, deduping so the bare-.ti3 import path (where
+    # ti2_path is actually a .ti3) doesn't list the same file twice.
+    seen: set[Path] = set()
+    file_lines: list[str] = []
+    def _add(p: Path) -> None:
+        try:
+            r = p.resolve()
+        except OSError:
+            r = p
+        if r not in seen:
+            seen.add(r)
+            file_lines.append(f"  • {p.name}")
+    _add(ti2_path)
     if ti1:
-        file_lines.append(f"  • {ti1.name}")
+        _add(ti1)
     for t in tiffs:
-        file_lines.append(f"  • {t.name}")
+        _add(t)
     ti3 = ti2_path.with_suffix(".ti3")
     if ti3.exists():
-        file_lines.append(f"  • {ti3.name}")
+        _add(ti3)
     for ext in (".icc", ".icm"):
         icc = ti2_path.with_suffix(ext)
         if icc.exists():
-            file_lines.append(f"  • {icc.name}")
+            _add(icc)
             break
 
     dlg = QDialog(parent)
@@ -495,3 +540,51 @@ def _copy_files(
             break
 
     return run.chart_ti2, new_tiffs
+
+
+def _handle_outside_ti3_only(
+    parent: "QWidget",
+    ti3_path: Path,
+    working_dir: Path,
+) -> Path | None:
+    """Import a bare .ti3 (no chart files) into a new project as the
+    canonical measurement. The matching .icc/.icm is carried over too.
+    Reuses _ask_profile_name to gather the project name + overwrite intent."""
+    result = _ask_profile_name(parent, ti3_path, ti1=None, tiffs=[],
+                                working_dir=working_dir)
+    if result is None:
+        return None
+    name, overwrite = result
+    return _copy_ti3_only(ti3_path, working_dir, name, overwrite=overwrite)
+
+
+def _copy_ti3_only(
+    ti3_path: Path,
+    working_dir: Path,
+    new_name: str,
+    overwrite: bool = False,
+) -> Path:
+    """Create a project shell around an external .ti3.
+
+    Places the .ti3 at ``runs/run1/<new_name>.ti3`` (the canonical
+    measurement) and a sibling .icc/.icm (if present) at
+    ``runs/run1/<new_name>.icc``. Returns the new .ti3 path.
+    """
+    from core.file_manager import FileManager, Project
+
+    new_name = FileManager._sanitise(FileManager.strip_workfile_ext(new_name))
+    dest = working_dir / new_name
+    if overwrite and dest.exists():
+        shutil.rmtree(dest)
+
+    proj = Project.create(dest, new_name)
+    run  = proj.current_run()
+    run.ensure_dir()
+
+    shutil.copy2(ti3_path, run.measurement_ti3)
+    for ext in (".icc", ".icm"):
+        icc = ti3_path.with_suffix(ext)
+        if icc.exists():
+            shutil.copy2(icc, run.profile_icc)
+            break
+    return run.measurement_ti3

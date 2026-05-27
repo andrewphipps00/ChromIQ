@@ -15,6 +15,7 @@ import pytest
 from ui.ti2_loader import (
     KNOWN_INSTRUMENTS,
     _copy_files,
+    _copy_ti3_only,
     _project_root_for,
     _related_files,
     disable_bidir_for_instrument,
@@ -286,3 +287,40 @@ def test_project_root_for_rejects_folder_without_manifest(tmp_path: Path) -> Non
     (legacy / "LegacyFlat.ti2").write_text("CTI2\n")
 
     assert _project_root_for(legacy / "LegacyFlat.ti2", working_dir) is None
+
+
+# ---------------------------------------------------------------------------
+# Importing external .ti3s — measurement-only path
+# ---------------------------------------------------------------------------
+
+def test_copy_ti3_only_builds_project_layout(tmp_path: Path) -> None:
+    """Importing a bare .ti3 creates a project shell with the measurement
+    under runs/run1/<stem>.ti3 + the README."""
+    src = tmp_path / "external"
+    src.mkdir()
+    ti3 = src / "stray.ti3"
+    ti3.write_text("CTI3\n")
+    (src / "stray.icc").write_text("ICC\n")        # sibling profile carries over
+
+    working_dir = tmp_path / "ChromIQ"
+    new_ti3 = _copy_ti3_only(ti3, working_dir, "Imported")
+
+    proj = working_dir / "Imported"
+    run1 = proj / "runs" / "run1"
+    assert (proj / "project.json").is_file()
+    assert (proj / "Where are my files.txt").is_file()
+    assert new_ti3 == run1 / "Imported.ti3"
+    assert new_ti3.read_text() == "CTI3\n"
+    assert (run1 / "Imported.icc").read_text() == "ICC\n"
+
+
+def test_copy_ti3_only_sanitises_project_name(tmp_path: Path) -> None:
+    src = tmp_path / "external"
+    src.mkdir()
+    (src / "x.ti3").write_text("CTI3\n")
+
+    working_dir = tmp_path / "ChromIQ"
+    new_ti3 = _copy_ti3_only(src / "x.ti3", working_dir, "printer test file")
+
+    assert (working_dir / "printer-test-file" / "runs" / "run1" / "printer-test-file.ti3").exists()
+    assert new_ti3.name == "printer-test-file.ti3"

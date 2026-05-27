@@ -1169,15 +1169,21 @@ class TabCheckRefine(QWidget):
         )
         if not path:
             return
-        ti3 = Path(path)
+        from ui.ti2_loader import resolve_ti3
+        # External / old-flat-layout .ti3s get imported into a fresh project
+        # (Project.create writes the "Where are my files.txt" README too).
+        # Inside an existing project, resolve_ti3 returns the path unchanged.
+        resolved = resolve_ti3(self, Path(path), self._settings)
+        if resolved is None:
+            return
         self.about_to_load_ti3.emit()
-        self._ti3_path = ti3
-        self._ti3_edit.setText(str(ti3))
-        self._auto_fill_icc(ti3)
-        self._notify_ti2(ti3)
+        self._ti3_path = resolved
+        self._ti3_edit.setText(str(resolved))
+        self._auto_fill_icc(resolved)
+        self._notify_ti2(resolved)
         self._update_run_btn()
-        self._detect_instrument(ti3)
-        self.ti3_selected.emit(ti3)
+        self._detect_instrument(resolved)
+        self.ti3_selected.emit(resolved)
 
     def _on_browse_icc(self) -> None:
         path = open_file_dialog(
