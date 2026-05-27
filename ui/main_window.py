@@ -693,16 +693,25 @@ class MainWindow(QMainWindow):
             return
         self._file_mgr.set_target_name(target)
 
-        ti1 = Path(self._settings.get("session_ti1_path", ""))
-        if ti1.exists():
-            self._tab_measure.set_ti1_path(ti1)
+        # Only the target name is persisted now; every artefact path is derived
+        # from the project's current run. Bail if there's no project on disk for
+        # this target (deleted folder, or a pre-redesign session).
+        if not (self._file_mgr.working_dir() / "project.json").exists():
+            log.info("Session restore skipped: no project for target=%s", target)
+            return
 
-        tiffs = sorted(self._file_mgr.working_dir().glob("*.tif*"))
+        proj = self._file_mgr.project()
+        run = proj.current_run()
+
+        if run.chart_ti1.exists():
+            self._tab_measure.set_ti1_path(run.chart_ti1)
+
+        tiffs = run.chart_tiffs()
         if tiffs:
             self._tab_print.load_tiffs(tiffs)
 
-        ti3 = Path(self._settings.get("session_ti3_path", ""))
-        icc = Path(self._settings.get("session_icc_path", ""))
+        ti3 = run.measurement_ti3
+        icc = run.built_profile_icc()
         if ti3.exists():
             self._tab_profile.set_ti3_path(ti3, propagate=False)
         if icc.exists():
@@ -711,11 +720,11 @@ class MainWindow(QMainWindow):
             self._tab_check.set_paths(ti3, icc)
 
         if self._settings.get("calibration_mode", False):
-            cal_ti3 = Path(self._settings.get("session_cal_ti3_path", ""))
+            cal_ti3 = proj.calibration.ti3
             if cal_ti3.exists():
                 self._tab_profile.set_cal_ti3_path(cal_ti3)
 
-        log.info("Session restored: target=%s", target)
+        log.info("Session restored: target=%s run=%s", target, run.id)
 
     def closeEvent(self, event) -> None:
         # Capture geometry BEFORE hide(): on macOS, hide() can leave the
@@ -733,10 +742,8 @@ class MainWindow(QMainWindow):
         self._tab_check.shutdown_webengine()
         self._tab_print.shutdown()
         self._settings.set("active_tab", self._tabs.currentIndex())
+        # Only the target name is persisted; _restore_last_session derives every
+        # artefact path from the project's current run (project.json).
         self._settings.set("session_target_name",  self._file_mgr._target_name)
-        self._settings.set("session_ti1_path",     str(self._tab_measure.ti1_path or ""))
-        self._settings.set("session_ti3_path",     str(self._tab_profile.ti3_path or ""))
-        self._settings.set("session_icc_path",     str(self._tab_profile.icc_path or ""))
-        self._settings.set("session_cal_ti3_path", str(self._tab_profile.cal_ti3_path or ""))
         self._runner.cleanup()
         super().closeEvent(event)
