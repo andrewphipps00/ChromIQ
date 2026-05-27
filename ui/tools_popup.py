@@ -1,4 +1,4 @@
-"""Speech-bubble popup listing the four standalone utilities.
+"""Speech-bubble popup listing the standalone utilities.
 
 Opened from the masthead Tools button; auto-closes on outside click (Qt.Popup).
 Rounded panel with a small upward-pointing tail aligned under the button. Each
@@ -47,6 +47,7 @@ _ENTRIES: tuple[ToolEntry, ...] = (
     ToolEntry("merge",        "Merge measurements"),
     ToolEntry("ti1_to_i1p",   "Convert TI1 → i1Profiler"),
     ToolEntry("i1p_to_ti3",   "Convert i1Profiler → TI3"),
+    ToolEntry("i1p_to_ti1",   "Convert i1Profiler → TI1"),
 )
 
 

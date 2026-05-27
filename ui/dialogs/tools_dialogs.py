@@ -1,12 +1,13 @@
 """Stand-alone utility dialogs launched from the masthead Tools popup.
 
-Four tools — all already implemented inside the regular workflow — exposed as
-project-free file-in/file-out utilities:
+Project-free file-in/file-out utilities, each wrapping logic that also lives in
+the regular workflow:
 
   * Average measurements        (workflow.average_runner)
   * Merge measurements          (workflow.ti3_merge)
   * TI1  -> i1Profiler          (workflow.i1profiler_export)
   * i1Profiler .txt -> TI3      (Argyll txt2ti3 via ArgyllRunner)
+  * i1Profiler -> TI1           (workflow.i1profiler_import)
 
 Each dialog explains the tool in plain language, takes one or more input files,
 asks for an output destination + filename, and runs the underlying logic. File
@@ -41,6 +42,7 @@ from PyQt6.QtWidgets import (
 from core.logger import get_logger
 from workflow.average_runner import AverageParams, AverageRunner
 from workflow.i1profiler_export import export_from_ti1
+from workflow.i1profiler_import import import_to_ti1
 from workflow.ti3_merge import Ti3MergeError, merge_measurements
 
 if TYPE_CHECKING:
@@ -858,6 +860,104 @@ class I1ProfilerToTi3Dialog(_ToolDialogBase):
 
 
 # ---------------------------------------------------------------------------
+# i1Profiler → TI1
+# ---------------------------------------------------------------------------
+
+class I1ProfilerToTi1Dialog(_ToolDialogBase):
+    TOOL_KEY    = "i1p_to_ti1"
+    TITLE       = "Convert i1Profiler → TI1"
+    RUN_LABEL   = "Convert"
+    DESCRIPTION = (
+        "Convert an i1Profiler patch set (.pxf or .cgats) into an Argyll TI1 "
+        "chart definition. Use this to bring a chart that only exists as an "
+        "i1Profiler patch set — for example a TC9.18 target — into the Argyll "
+        "workflow, so you can lay it out with printtarg, print it, and read it "
+        "with chartread.\n\n"
+        "This is the reverse of 'Convert TI1 → i1Profiler'. The input only "
+        "carries device RGB values, so ChromIQ reconstructs each patch's "
+        "approximate colour (treating the values as sRGB) — printtarg needs "
+        "that to space the patches for reliable strip reading.\n\n"
+        "Supported colour space: RGB only. The patch order is preserved; "
+        "printtarg re-lays-out the chart anyway."
+    )
+
+    def __init__(self, settings: "AppSettings", parent: QWidget | None = None) -> None:
+        super().__init__(settings, parent)
+        self._src: Path | None = None
+        self._build_inputs()
+        self._refresh()
+
+    def _build_inputs(self) -> None:
+        self._content.addWidget(QLabel("i1Profiler patch set (.pxf or .cgats):", self))
+        row = QHBoxLayout()
+        self._src_field = QLineEdit(self)
+        self._src_field.setReadOnly(True)
+        self._src_field.setPlaceholderText("No file selected")
+        row.addWidget(self._src_field, 1)
+        btn = QPushButton("Browse…", self)
+        btn.clicked.connect(self._pick_src)
+        row.addWidget(btn)
+        self._content.addLayout(row)
+
+        self._content.addWidget(QLabel("Save the Argyll chart definition as:", self))
+        self._output = _OutputRow(
+            self,
+            ext_hint=".ti1",
+            on_change=self._refresh,
+            initial_dir=_initial_dir(self._settings, self.TOOL_KEY),
+            initial_name="",
+        )
+        self._content.addWidget(self._output)
+
+    def _pick_src(self) -> None:
+        p = self._pick_input_file(
+            "Choose i1Profiler patch set",
+            "i1Profiler patch sets (*.pxf *.cgats *.txt);;All files (*)",
+        )
+        if p:
+            self._src = p
+            self._src_field.setText(str(p))
+            if not self._output.name:
+                self._output._name_edit.setText(p.stem)
+            self._refresh()
+
+    def _can_run(self) -> bool:
+        return self._src is not None and self._output.is_complete()
+
+    def _execute(self) -> None:
+        out_dir = self._output.directory
+        assert out_dir is not None
+        out_dir.mkdir(parents=True, exist_ok=True)
+        out = out_dir / f"{self._output.name}.ti1"
+
+        if out.exists():
+            confirm = QMessageBox.question(
+                self,
+                "Overwrite existing file?",
+                f"'{out.name}' already exists in:\n  {out.parent}\n\nOverwrite it?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if confirm != QMessageBox.StandardButton.Yes:
+                self._finish(False)
+                return
+
+        self._log.clear()
+        self._log.appendPlainText(f"Converting {self._src.name} → {out.name}")
+
+        try:
+            out_path, n = import_to_ti1(self._src, out)
+        except ValueError as exc:
+            self._log.appendPlainText(f"[ERROR] {exc}")
+            self._finish(False)
+            return
+
+        self._log.appendPlainText(f"[OK] Wrote {out_path} ({n} patches)")
+        _remember_dir(self._settings, self.TOOL_KEY, out_dir)
+        self._finish(True)
+
+
+# ---------------------------------------------------------------------------
 # Factory
 # ---------------------------------------------------------------------------
 
@@ -876,6 +976,8 @@ def open_tool_dialog(
         dlg = Ti1ToI1ProfilerDialog(settings, parent)
     elif key == "i1p_to_ti3":
         dlg = I1ProfilerToTi3Dialog(runner, settings, parent)
+    elif key == "i1p_to_ti1":
+        dlg = I1ProfilerToTi1Dialog(settings, parent)
     else:
         log.warning("Unknown tool key: %s", key)
         return
