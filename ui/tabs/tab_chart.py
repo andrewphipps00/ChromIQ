@@ -3498,8 +3498,12 @@ class TabChart(QWidget):
             return False
         try:
             target = parse_ti1(ti1)
-            exports_dir = self._file_mgr.project().ensure_exports_dir()
-            txt_path, pxf_path = export_from_ti1(ti1, exports_dir)
+            project = self._file_mgr.project()
+            exports_dir = project.ensure_exports_dir()
+            # Project-named export so the file is self-identifying when handed
+            # to i1Profiler (e.g. printer-test-file-i1profiler.pxf).
+            base_name = f"{project.current_run().stem}-i1profiler"
+            txt_path, pxf_path = export_from_ti1(ti1, exports_dir, base_name=base_name)
         except Exception as exc:  # noqa: BLE001
             log.exception("i1Profiler export failed")
             self._log.appendPlainText(f"[i1iSis] export failed: {exc}")

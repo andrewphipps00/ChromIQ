@@ -451,22 +451,29 @@ def write_pxf(
 def export_from_ti1(
     ti1_path: Path,
     out_dir: Path,
+    base_name: str = "i1profiler",
     descriptor: str | None = None,
 ) -> tuple[Path | None, Path]:
-    """Read TI1, write ``i1profiler.pxf`` (always) and ``i1profiler.txt``
+    """Read TI1, write ``<base_name>.pxf`` (always) and ``<base_name>.txt``
     (RGB/CMYK only) into ``out_dir``.
 
     Returns (txt_path_or_None, pxf_path). txt_path is None for CMYK+N, which
     i1Profiler only accepts as a CxF3 .pxf.
 
-    The output filenames are fixed (``i1profiler.txt`` / ``.pxf``) because the
-    folder identifies the project — see ``Project.exports_dir``.
+    The default ``base_name="i1profiler"`` keeps tests / generic callers
+    self-contained. The tab_chart caller passes ``<project>-i1profiler`` so
+    the exported file is self-identifying when the user hands it to
+    i1Profiler.
+
+    ``descriptor`` controls the internal CxF/CGATS profile name (shown by
+    i1Profiler in the workflow dropdown). Defaults to the TI1 stem, which
+    under the per-run layout is the (sanitised) project name.
     """
     target = parse_ti1(ti1_path)
     desc = descriptor or ti1_path.stem
     out_dir.mkdir(parents=True, exist_ok=True)
-    txt_out = out_dir / "i1profiler.txt"
-    pxf_out = out_dir / "i1profiler.pxf"
+    txt_out = out_dir / f"{base_name}.txt"
+    pxf_out = out_dir / f"{base_name}.pxf"
     wrote_txt = write_txt(target, txt_out, desc)
     write_pxf(target, pxf_out, desc)
     return (txt_out if wrote_txt else None), pxf_out

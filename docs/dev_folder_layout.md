@@ -19,8 +19,8 @@ path construction are owned by `core/file_manager.py` via three classes:
     <target-name>-cal.channels.json
     meta.json
   exports/                           # external-tool exports
-    i1profiler.txt
-    i1profiler.pxf
+    <target-name>-i1profiler.txt
+    <target-name>-i1profiler.pxf
   runs/
     run1/                            # one folder per profile build
       <target-name>.ti1 / .ti2 / .cht / .ps / .channels.json

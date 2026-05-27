@@ -67,7 +67,7 @@ Every project is a folder under `~/ChromIQ/<target-name>/` owned by the
   project.json             # manifest: schema_version, current_run, runs[]
   cal/                     # optional, shared across runs
     <target-name>-cal.*    # cal.ti1/.ti2/.ti3/.cal/.icc/_NN.tif
-  exports/                 # i1Profiler exports (i1profiler.txt/.pxf)
+  exports/                 # i1Profiler exports (<target-name>-i1profiler.txt/.pxf)
   runs/run1/, run2/, …     # one folder per profile build
     <target-name>.*        # chart.ti1/.ti2/.cht/.ps/.channels.json + _NN.tif
     <target-name>.ti3      # the measurement (chartread output; averaged result reuses this stem)

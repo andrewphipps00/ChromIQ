@@ -120,6 +120,26 @@ def test_ink_colorspace_enum():
     assert ink_colorspace_enum(8) == (17, False)  # CMYK+4 extrapolated
 
 
+# --- Output filenames -----------------------------------------------------
+
+
+def test_export_default_base_name(tmp_path):
+    """Default base_name is 'i1profiler' (kept for generic / test callers)."""
+    txt, pxf = export_from_ti1(_write(tmp_path, "rgb.ti1", RGB_TI1), tmp_path)
+    assert txt.name == "i1profiler.txt"
+    assert pxf.name == "i1profiler.pxf"
+
+
+def test_export_uses_explicit_base_name(tmp_path):
+    """tab_chart passes "<project>-i1profiler" so the export self-identifies."""
+    txt, pxf = export_from_ti1(
+        _write(tmp_path, "rgb.ti1", RGB_TI1), tmp_path,
+        base_name="printer-test-file-i1profiler",
+    )
+    assert txt.name == "printer-test-file-i1profiler.txt"
+    assert pxf.name == "printer-test-file-i1profiler.pxf"
+
+
 # --- RGB export ------------------------------------------------------------
 
 
