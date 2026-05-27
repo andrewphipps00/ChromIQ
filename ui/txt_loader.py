@@ -15,7 +15,7 @@ import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from ui.ti2_loader import _is_under, _resolve_working_dir
+from ui.ti2_loader import _project_root_for, _resolve_working_dir
 
 if TYPE_CHECKING:
     from PyQt6.QtWidgets import QWidget
@@ -36,7 +36,7 @@ def resolve_txt(
     ``<working_dir>/<name>/`` sub-folder.
     """
     working_dir = _resolve_working_dir(settings)
-    if _is_under(txt_path, working_dir):
+    if _project_root_for(txt_path, working_dir) is not None:
         return _handle_inside(parent, txt_path, working_dir)
     return _handle_outside(parent, txt_path, working_dir)
 
@@ -290,10 +290,23 @@ def _copy_txt(
     new_name: str,
     overwrite: bool = False,
 ) -> tuple[Path, str]:
+    """Import an i1Profiler .txt into a fresh project as run1's chart.
+
+    Builds the per-run layout (see docs/dev_folder_layout.md): a project at
+    ``working_dir/<new_name>/`` with the .txt placed at ``runs/run1/chart.txt``.
+    txt2ti3 then writes ``runs/run1/chart.ti3`` (the canonical measurement).
+    Returns (chart.txt, "chart").
+    """
+    from core.file_manager import Project
+
     dest = working_dir / new_name
     if overwrite and dest.exists():
         shutil.rmtree(dest)
-    dest.mkdir(parents=True, exist_ok=True)
-    new_txt = dest / f"{new_name}.txt"
+
+    proj = Project.create(dest, new_name)
+    run  = proj.current_run()
+    run.ensure_dir()
+
+    new_txt = run.dir / "chart.txt"
     shutil.copy2(txt_path, new_txt)
-    return new_txt, new_name
+    return new_txt, "chart"
