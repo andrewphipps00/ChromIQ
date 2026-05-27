@@ -161,6 +161,25 @@ def test_rgb_export_scales_to_255_and_stays_minimal(tmp_path):
     assert "255.0000" in txt_text
 
 
+def test_pxf_is_write_protected(tmp_path):
+    """Exported .pxf must carry WriteProtected="True" — both RGB and CMYK.
+
+    With it False, i1Profiler treats the file as user-editable and exposes the
+    "Intelligente Messfelderstellung" controls (patch-count slider + shuffle
+    checkbox). A stray click would replace or scramble our patches, silently
+    desyncing the .ti2/.ti3 round-trip with ChromIQ. Verified in i1Profiler
+    against X-Rite's shipped reference charts, which all set this to True.
+    """
+    _, rgb_pxf = export_from_ti1(_write(tmp_path, "rgb.ti1", RGB_TI1), tmp_path)
+    assert 'WriteProtected="True"' in rgb_pxf.read_text()
+    assert 'WriteProtected="False"' not in rgb_pxf.read_text()
+    _, cmyk_pxf = export_from_ti1(
+        _write(tmp_path, "cmyk.ti1", CMYK_TI1), tmp_path, base_name="cmyk_out"
+    )
+    assert 'WriteProtected="True"' in cmyk_pxf.read_text()
+    assert 'WriteProtected="False"' not in cmyk_pxf.read_text()
+
+
 # --- CMYK export -----------------------------------------------------------
 
 

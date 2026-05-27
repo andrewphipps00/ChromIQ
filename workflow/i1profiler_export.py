@@ -383,6 +383,11 @@ def write_pxf(
         parts.append("\t</cc:Resources>")
         parts.append("\t<cc:CustomResources>")
         parts.append('\t\t<xrp:Prism xmlns:xrp="http://www.xrite.com/products/prism" release="2.0">')
+        # WriteProtected="True" mirrors X-Rite's shipped reference charts. With
+        # it False, i1Profiler shows the "Intelligente Messfelderstellung"
+        # controls as editable — a stray click on the count slider or
+        # "Messfelder mischen" would replace/scramble our patches, silently
+        # desyncing the ChromIQ .ti2/.ti3 round-trip.
         parts.append(
             "  <xrp:CustomAttributes "
             'ColorSpace="RGB" '
@@ -392,7 +397,7 @@ def write_pxf(
             'ScramblePatches="False" '
             'TestChartType="RGB Variable" '
             f'TitleString="{desc_x}" '
-            'WriteProtected="False" '
+            'WriteProtected="True" '
             f'numberCorePatches="{len(target.rows)}" '
             'numberImagePatches="0" '
             'numberSpotPatches="0"/>'
@@ -434,7 +439,7 @@ def write_pxf(
         f'TestChartType="{colorspace}"'
         f"{plus_attrs} "
         f'TitleString="{desc_x}" '
-        'WriteProtected="False" '
+        'WriteProtected="True" '  # see RGB block above for rationale
         f'numberCorePatches="{len(target.rows)}" '
         'numberImagePatches="0" '
         'numberSpotPatches="0"/>'
