@@ -18,14 +18,14 @@ from pathlib import Path
 
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSize, QPoint, QRect, QTimer
 from PyQt6.QtGui import (
-    QColor, QIcon, QKeySequence, QPainter, QPen, QPixmap, QShortcut,
+    QColor, QFont, QIcon, QKeySequence, QPainter, QPen, QPixmap, QShortcut,
 )
 from PyQt6.QtWidgets import (
     QAbstractItemView, QButtonGroup, QCheckBox, QColorDialog, QDialog,
     QDoubleSpinBox, QFrame, QGridLayout, QGroupBox, QHBoxLayout, QLabel,
     QLineEdit, QListWidget, QListWidgetItem, QMessageBox, QPlainTextEdit,
-    QPushButton, QRadioButton, QScrollArea, QSlider, QSplitter, QVBoxLayout,
-    QWidget,
+    QPushButton, QRadioButton, QScrollArea, QSlider, QSplitter,
+    QStyle, QStyledItemDelegate, QVBoxLayout, QWidget,
 )
 
 from core.logger import get_logger
@@ -107,7 +107,65 @@ class _RegenWorker(QThread):
 
 
 # ---------------------------------------------------------------------------
-# Patch grid — reliable drag-reorder in IconMode
+# Patch grid — ListMode + wrapping flow with an icon-above-label delegate.
+#
+# We use ListMode (not IconMode) because Qt's reorder via DragDropMode.InternalMove
+# is genuinely reliable there — IconMode's drop-target resolution is finicky
+# (items would either snap back to their slot or land at a free grid intersection
+# depending on movement mode). The custom delegate paints each item with its
+# colour swatch on top and the patch number underneath, so we keep the
+# IconMode-style visual without giving up reliable drag-reorder.
+# ---------------------------------------------------------------------------
+
+
+class _SwatchDelegate(QStyledItemDelegate):
+    """Paint a swatch (icon) above a Menlo-styled patch number, inside the
+    grid cell sized by :meth:`sizeHint`."""
+
+    LABEL_H = 16
+    H_PAD = 6
+    V_PAD = 4
+
+    def __init__(self, parent=None, swatch_size: int = _SWATCH) -> None:
+        super().__init__(parent)
+        self.swatch_size = swatch_size
+
+    def paint(self, painter, opt, idx) -> None:
+        painter.save()
+        if opt.state & QStyle.StateFlag.State_Selected:
+            painter.fillRect(opt.rect, opt.palette.highlight())
+
+        icon = idx.data(Qt.ItemDataRole.DecorationRole)
+        text = idx.data(Qt.ItemDataRole.DisplayRole) or ""
+
+        rect = opt.rect
+        size = self.swatch_size
+        cx = rect.x() + (rect.width() - size) // 2
+        cy = rect.y() + self.V_PAD
+        if isinstance(icon, QIcon) and not icon.isNull():
+            icon.paint(painter, QRect(cx, cy, size, size))
+
+        f = QFont("Menlo")
+        f.setPixelSize(10)
+        painter.setFont(f)
+        text_color = (opt.palette.color(opt.palette.ColorRole.HighlightedText)
+                      if opt.state & QStyle.StateFlag.State_Selected
+                      else opt.palette.color(opt.palette.ColorRole.Text))
+        painter.setPen(text_color)
+        text_rect = QRect(rect.x(), cy + size + 2,
+                          rect.width(), self.LABEL_H)
+        painter.drawText(
+            text_rect,
+            int(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop),
+            text,
+        )
+        painter.restore()
+
+    def sizeHint(self, opt, idx) -> QSize:
+        return QSize(self.swatch_size + 2 * self.H_PAD,
+                     self.swatch_size + self.V_PAD + self.LABEL_H + 2)
+
+
 # ---------------------------------------------------------------------------
 class _ReorderListWidget(QListWidget):
     """QListWidget with drag-reorder UX tweaks.
@@ -491,20 +549,15 @@ class Ti2RelayoutDialog(QDialog):
         lv.addLayout(top)
 
         self._grid = _ReorderListWidget(left)
-        self._grid.setViewMode(QListWidget.ViewMode.IconMode)
+        # ListMode + LeftToRight + Wrapping is the canonical Qt pattern for a
+        # wrap-list reorder. The custom delegate puts the icon ABOVE the label
+        # so the visual still looks IconMode-style.
+        self._grid.setViewMode(QListWidget.ViewMode.ListMode)
         self._grid.setFlow(QListWidget.Flow.LeftToRight)
         self._grid.setWrapping(True)
         self._grid.setResizeMode(QListWidget.ResizeMode.Adjust)
-        # Movement.Static + InternalMove with NO custom dropEvent — let Qt's
-        # default reorder pipeline (model.dropMimeData) run unchallenged.
-        # Static prevents items from being placed at free grid positions
-        # (which was producing the "floating between rows" patch in the user's
-        # screenshot when Movement was Snap); InternalMove makes the drop a
-        # row move in the model; overwriteMode=False forces drops *between*
-        # items rather than onto an existing item.
         self._grid.setMovement(QListWidget.Movement.Static)
         self._grid.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
-        self._grid.setDragDropOverwriteMode(False)
         self._grid.setDefaultDropAction(Qt.DropAction.MoveAction)
         self._grid.setDragEnabled(True)
         self._grid.setAcceptDrops(True)
@@ -512,11 +565,9 @@ class Ti2RelayoutDialog(QDialog):
         self._grid.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
         self._grid.setIconSize(QSize(_SWATCH, _SWATCH))
         self._grid.setSpacing(3)
-        # Menlo matches the rest of ChromIQ's small/mono labels (e.g. the TIFF
-        # preview overlay, the "Feed the beast" subtext).
-        self._grid.setStyleSheet(
-            "QListWidget { font-family: Menlo; font-size: 10px; }"
-        )
+        self._delegate = _SwatchDelegate(self._grid, _SWATCH)
+        self._grid.setItemDelegate(self._delegate)
+        self._grid.setGridSize(self._delegate.sizeHint(None, None))
         # Qt's default InternalMove reorder emits rowsMoved on success.
         # That's our single source of truth for "drag committed" — renumber
         # the labels and schedule an auto-preview.
@@ -834,12 +885,16 @@ class Ti2RelayoutDialog(QDialog):
             it.setToolTip(f"#{i + 1}  RGB {tuple(round(v) for v in rgb)}")
 
     def _set_swatch_size(self, size: int) -> None:
-        """Resize the grid swatches; rebuild icons so they stay crisp."""
+        """Resize the grid swatches; rebuild icons + delegate cell so the
+        layout stays crisp and items keep their icon-above-label proportions."""
         self._swatch_size = size
         self._grid.setIconSize(QSize(size, size))
+        self._delegate.swatch_size = size
+        self._grid.setGridSize(self._delegate.sizeHint(None, None))
         for i in range(self._grid.count()):
             it = self._grid.item(i)
             it.setIcon(_swatch_icon(it.data(Qt.ItemDataRole.UserRole), size))
+        self._grid.scheduleDelayedItemsLayout()
 
     def _add_patch(self) -> None:
         c = self._pick_color(QColor(128, 128, 128), "Add patch — pick colour")
