@@ -59,8 +59,21 @@ def _to100(c: QColor) -> tuple[float, float, float]:
 
 
 def _swatch_icon(rgb: tuple[float, float, float], size: int = _SWATCH) -> QIcon:
+    """Colour-filled swatch with a 1-px luminance-adaptive border so dark
+    patches stay visible against the dark grid background and light patches
+    still get a subtle frame."""
     pm = QPixmap(size, size)
-    pm.fill(_qcolor(rgb))
+    qc = _qcolor(rgb)
+    pm.fill(qc)
+    # BT.601 luminance — light grey border on dark swatches, darker grey on
+    # light ones. Both are visible against the dark grid background.
+    y = 0.30 * qc.red() + 0.59 * qc.green() + 0.11 * qc.blue()
+    border = QColor(160, 160, 160) if y < 90 else QColor(90, 90, 90)
+    p = QPainter(pm)
+    p.setPen(QPen(border, 1))
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    p.drawRect(0, 0, size - 1, size - 1)
+    p.end()
     return QIcon(pm)
 
 
