@@ -55,12 +55,18 @@ def instrument_to_flag(target_instrument: str | None) -> str:
 
 
 # printtarg -p named sizes (mm, width x height incl. orientation).
+# Mirrors the dropdown in the Create Chart tab (data.patch_db.PAPER_LABELS).
 _NAMED_PAPERS: dict[tuple[float, float], str] = {
-    (210.0, 297.0): "A4",   (297.0, 210.0): "A4R",
-    (297.0, 420.0): "A3",   (420.0, 594.0): "A2",
-    (215.9, 279.4): "Letter", (279.4, 215.9): "LetterR",
+    (420.0, 594.0): "A2",       (594.0, 420.0): "594x420",
+    (329.0, 483.0): "329x483",  (483.0, 329.0): "483x329",   # A3+
+    (297.0, 420.0): "A3",       (420.0, 297.0): "420x297",
+    (279.4, 431.8): "11x17",
     (215.9, 355.6): "Legal",
-    (101.6, 152.4): "4x6",  (279.4, 431.8): "11x17",
+    (210.0, 297.0): "A4",       (297.0, 210.0): "A4R",
+    (215.9, 279.4): "Letter",   (279.4, 215.9): "LetterR",
+    (203.0, 254.0): "203x254",
+    (127.0, 178.0): "127x178",
+    (101.6, 152.4): "4x6",
 }
 
 
@@ -614,6 +620,7 @@ def segment_spacers(
     min_area: int = 12,
     min_extent: int = 20,
     ref_arr: np.ndarray | None = None,
+    strip_xs: list[int] | None = None,
 ) -> list[Spacer]:
     """Label connected spacer components (4-connectivity, scipy-free BFS).
 
@@ -625,12 +632,15 @@ def segment_spacers(
     that survive the bbox restriction are typically <10 px in either
     dimension and get filtered out here.
 
-    When ``ref_arr`` (the deliverable page as HxWx3) is supplied, **wide
-    horizontal bands** get split into per-strip cells by colour discontinuity:
-    adjacent strips' spacers in the same row touch pixel-wise and collapse
-    into one connected component, but printtarg picks each strip's spacer
-    colour independently for max contrast against its own neighbour patches —
-    so cell boundaries show up as colour jumps along the band's central row.
+    ``strip_xs`` (a list of x-coordinates where adjacent strips meet, derived
+    from the .ti2's ``PASSES_IN_STRIPS2``) is the **authoritative** way to
+    split wide horizontal bands into per-strip cells — it works even when two
+    adjacent strips happen to pick the same spacer colour and the colour-jump
+    heuristic can't see the boundary.
+
+    Otherwise, when ``ref_arr`` (the deliverable page as HxWx3) is supplied,
+    wide horizontal bands get split by colour discontinuity along the central
+    row. This is a usable fallback when the strip layout is unknown.
     """
     h, w = mask.shape
     seen = np.zeros_like(mask, dtype=bool)
@@ -668,14 +678,55 @@ def segment_spacers(
             centroid=(float(ax.mean()), float(ay.mean())),
         ))
 
+    if strip_xs is not None:
+        refined: list[Spacer] = []
+        for sp in raw:
+            refined.extend(_split_band_by_strips(
+                sp, strip_xs, page=page, min_area=min_area))
+        return refined
+
     if ref_arr is None:
         return raw
 
-    refined: list[Spacer] = []
+    refined = []
     for sp in raw:
         sub = _split_band_by_colour(sp, ref_arr, page=page, min_area=min_area)
         refined.extend(sub)
     return refined
+
+
+def _split_band_by_strips(
+    sp: Spacer, strip_xs: list[int], *, page: int, min_area: int,
+) -> list[Spacer]:
+    """Split a wide horizontal band at known inter-strip x-boundaries.
+
+    Each ``strip_xs`` entry is an x-coordinate where two adjacent strips meet.
+    Pixels in the component are partitioned by which strip-cell they fall into.
+    Components that aren't wide bands (bbox aspect ratio < 2) pass through.
+    """
+    x0, y0, x1, y1 = sp.bbox
+    bw = x1 - x0 + 1
+    bh = y1 - y0 + 1
+    if bw <= 2 * bh:
+        return [sp]
+    bounds = sorted({x0, x1 + 1, *(b for b in strip_xs if x0 < b <= x1)})
+    if len(bounds) <= 2:
+        return [sp]
+    ys, xs = sp.pixels
+    cells: list[Spacer] = []
+    for left, right in zip(bounds[:-1], bounds[1:]):
+        sel = (xs >= left) & (xs < right)
+        if int(sel.sum()) < min_area:
+            continue
+        cy = ys[sel]
+        cx = xs[sel]
+        cells.append(Spacer(
+            page=page,
+            pixels=(cy, cx),
+            bbox=(int(cx.min()), int(cy.min()), int(cx.max()), int(cy.max())),
+            centroid=(float(cx.mean()), float(cy.mean())),
+        ))
+    return cells or [sp]
 
 
 def _split_band_by_colour(

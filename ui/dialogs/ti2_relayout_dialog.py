@@ -16,7 +16,7 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 
-from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSize, QPoint, QRect
+from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSize, QPoint, QRect, QTimer
 from PyQt6.QtGui import (
     QColor, QIcon, QKeySequence, QPainter, QPen, QPixmap, QShortcut,
 )
@@ -29,6 +29,7 @@ from PyQt6.QtWidgets import (
 )
 
 from core.logger import get_logger
+from core.strip_utils import parse_passes_per_page
 from ui.styles import SPEC_AMBER, SPEC_MAGENTA, TAB_COLORS
 from ui.widgets import (
     NoScrollComboBox, NoScrollSpinBox, open_dir_dialog, open_file_dialog,
@@ -41,7 +42,12 @@ _SWATCH = 46  # grid swatch px
 
 # printtarg -i codes the editor offers, with friendly labels.
 _INSTRUMENTS = [("i1", "i1Pro / i1Pro2 / i1Pro3(+)"), ("CM", "ColorMunki / i1Studio")]
-_PAPERS = ["A4", "A4R", "A3", "A2", "Letter", "LetterR", "Legal", "4x6", "11x17"]
+
+# Paper sizes the new-chart dropdown offers — matches the Create Chart tab.
+from data.patch_db import PAPER_LABELS, PAPER_PRINTTARG_ARG
+_PAPER_ORDER = ("A2", "594x420", "329x483", "483x329", "A3", "420x297",
+                "11x17", "Legal", "A4", "A4R", "Letter", "LetterR",
+                "203x254", "127x178", "4x6")
 
 
 def _qcolor(rgb: tuple[float, float, float]) -> QColor:
@@ -141,19 +147,24 @@ class _PreviewLabel(QLabel):
 
     clicked = pyqtSignal(QPoint, object)            # pos, keyboard modifiers
     marquee_finished = pyqtSignal(QRect, object)    # rect, keyboard modifiers
+    resized = pyqtSignal()                           # geometry change
     _CLICK_PX = 4               # movement under this is still a click
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._press: QPoint | None = None
         self._drag_rect: QRect | None = None
-        self._base_pixmap: QPixmap | None = None  # what to repaint each frame
 
     def set_base_pixmap(self, pm: QPixmap | None) -> None:
-        """Stash the pixmap the dialog wants shown; we redraw it + the marquee."""
-        self._base_pixmap = pm
+        """Show the given pixmap. QLabel draws DPR-aware pixmaps at logical
+        size with full retina resolution — no compositing needed here; the
+        marquee is painted on top in :meth:`paintEvent`."""
         if pm is not None:
             self.setPixmap(pm)
+
+    def resizeEvent(self, ev) -> None:  # noqa: N802
+        super().resizeEvent(ev)
+        self.resized.emit()
 
     def mousePressEvent(self, ev) -> None:  # noqa: N802
         if ev.button() == Qt.MouseButton.LeftButton:
@@ -165,7 +176,7 @@ class _PreviewLabel(QLabel):
         if self._press is not None:
             cur = ev.position().toPoint()
             self._drag_rect = QRect(self._press, cur).normalized()
-            self._redraw_with_marquee()
+            self.update()
         super().mouseMoveEvent(ev)
 
     def mouseReleaseEvent(self, ev) -> None:  # noqa: N802
@@ -181,26 +192,17 @@ class _PreviewLabel(QLabel):
                     QRect(self._press, end).normalized(), mods)
             self._press = None
             self._drag_rect = None
-            if self._base_pixmap is not None:
-                self.setPixmap(self._base_pixmap)
+            self.update()
         super().mouseReleaseEvent(ev)
 
-    def _redraw_with_marquee(self) -> None:
-        if self._base_pixmap is None or self._drag_rect is None:
-            return
-        # Build a composite of the base + a translucent marquee rectangle.
-        pm = QPixmap(self.size())
-        pm.fill(Qt.GlobalColor.transparent)
-        p = QPainter(pm)
-        # Centre the base pixmap in the label area, same as QLabel does.
-        bx = (self.width() - self._base_pixmap.width()) // 2
-        by = (self.height() - self._base_pixmap.height()) // 2
-        p.drawPixmap(bx, by, self._base_pixmap)
-        p.setPen(QPen(QColor(255, 230, 0), 1, Qt.PenStyle.DashLine))
-        p.setBrush(QColor(255, 230, 0, 50))
-        p.drawRect(self._drag_rect)
-        p.end()
-        self.setPixmap(pm)
+    def paintEvent(self, ev) -> None:  # noqa: N802
+        super().paintEvent(ev)        # QLabel renders the pixmap centred
+        if self._drag_rect is not None:
+            p = QPainter(self)
+            p.setPen(QPen(QColor(255, 230, 0), 1, Qt.PenStyle.DashLine))
+            p.setBrush(QColor(255, 230, 0, 60))
+            p.drawRect(self._drag_rect)
+            p.end()
 
 
 # ---------------------------------------------------------------------------
@@ -237,7 +239,12 @@ class _NewChartDialog(QDialog):
         cg.addWidget(self._instr, 1, 1)
         cg.addWidget(QLabel("Paper:"), 1, 2)
         self._paper = NoScrollComboBox(chart_box)
-        self._paper.addItems(_PAPERS)
+        for code in _PAPER_ORDER:
+            self._paper.addItem(PAPER_LABELS.get(code, code), code)
+        # Default to A4 portrait
+        ix = self._paper.findData("A4")
+        if ix >= 0:
+            self._paper.setCurrentIndex(ix)
         cg.addWidget(self._paper, 1, 3)
         lay.addWidget(chart_box)
 
@@ -360,8 +367,8 @@ class _NewChartDialog(QDialog):
             QMessageBox.warning(self, "Could not read file", str(exc))
 
     def _on_ok(self) -> None:
-        spec = R.ChartSpec.new(self._instr.currentData(),
-                               self._paper.currentText())
+        paper_code = self._paper.currentData() or self._paper.currentText()
+        spec = R.ChartSpec.new(self._instr.currentData(), paper_code)
         program: list[tuple] = []
         if self._mode_seed.isChecked():
             try:
@@ -425,8 +432,18 @@ class Ti2RelayoutDialog(QDialog):
         self._preview_pending_save: Path | None = None
         self._swatch_size = _SWATCH                     # current grid icon size
         self._base_pixmap: QPixmap | None = None        # preview without overlay
+        self._full_pixmap: QPixmap | None = None        # full-res render (pre-scale)
         self._options = R.LayoutOptions()               # printtarg layout knobs
         self._basename = "chart"                        # used for preview + save
+        self._strips_per_page: list[int] = []           # PASSES_IN_STRIPS2 per page
+
+        # Debounced auto-preview: fire 1.8s after the last edit.
+        self._auto_timer = QTimer(self)
+        self._auto_timer.setSingleShot(True)
+        self._auto_timer.setInterval(1800)
+        self._auto_timer.timeout.connect(
+            lambda: self._regenerate(save_to=None) if self._spec else None
+        )
 
         self._build_ui()
         self._refresh_enabled()
@@ -471,11 +488,15 @@ class Ti2RelayoutDialog(QDialog):
         self._grid.setFlow(QListWidget.Flow.LeftToRight)
         self._grid.setWrapping(True)
         self._grid.setResizeMode(QListWidget.ResizeMode.Adjust)
-        # Static + InternalMove + MoveAction = reorder by shifting items (no
-        # free-floating drops on empty space; an empty-area drop appends).
-        self._grid.setMovement(QListWidget.Movement.Static)
+        # Movement.Snap (not Static) — Static snaps items back to their origin
+        # after a drop, even when our custom dropEvent moved them. Snap lets
+        # Qt commit position changes; our dropEvent does the reorder logic.
+        self._grid.setMovement(QListWidget.Movement.Snap)
         self._grid.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
         self._grid.setDefaultDropAction(Qt.DropAction.MoveAction)
+        self._grid.setDragEnabled(True)
+        self._grid.setAcceptDrops(True)
+        self._grid.setDropIndicatorShown(True)
         self._grid.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
         self._grid.setIconSize(QSize(_SWATCH, _SWATCH))
         self._grid.setSpacing(3)
@@ -487,14 +508,16 @@ class Ti2RelayoutDialog(QDialog):
         # keep numeric labels correct after a drag-reorder (explicit signal
         # from the subclass, plus model().rowsMoved for any other code path)
         self._grid.reordered.connect(self._renumber)
+        self._grid.reordered.connect(self._schedule_auto_refresh)
         self._grid.model().rowsMoved.connect(lambda *a: self._renumber())
-        # arrow-key reorder for the selection (Alt = "move", plain arrows still
-        # navigate the cursor as usual)
+        self._grid.model().rowsMoved.connect(lambda *a: self._schedule_auto_refresh())
+        # Keyboard reorder for the selection. Alt + arrows nudge / jump,
+        # plain F/L jump to first/last (mnemonic for "front" / "last").
         for keys, fn in (
             (("Alt+Up", "Alt+Left"),    self._move_up),
             (("Alt+Down", "Alt+Right"), self._move_down),
-            (("Alt+Home",),             self._move_front),
-            (("Alt+End",),              self._move_back),
+            (("Alt+Home", "F"),         self._move_front),
+            (("Alt+End",  "L"),         self._move_back),
         ):
             for k in keys:
                 QShortcut(QKeySequence(k), self._grid, activated=fn)
@@ -511,6 +534,13 @@ class Ti2RelayoutDialog(QDialog):
         self._preview.setText("Preview will appear here.")
         self._preview.clicked.connect(self._on_preview_click)
         self._preview.marquee_finished.connect(self._on_marquee)
+        # Re-scale the preview from the full-res cache when the label resizes,
+        # so the displayed image stays sharp at any pane width.
+        self._resize_timer = QTimer(self)
+        self._resize_timer.setSingleShot(True)
+        self._resize_timer.setInterval(120)
+        self._resize_timer.timeout.connect(self._rescale_preview)
+        self._preview.resized.connect(self._resize_timer.start)
         scroll = QScrollArea(mid)
         scroll.setWidgetResizable(True)
         scroll.setWidget(self._preview)
@@ -602,7 +632,8 @@ class Ti2RelayoutDialog(QDialog):
         addrem.addWidget(add_b)
         addrem.addWidget(rem_b)
         pb.addLayout(addrem)
-        reorder_lbl = QLabel("Reorder (drag, Alt+arrows, or):", self._patch_box)
+        reorder_lbl = QLabel(
+            "Reorder (drag, Alt+arrows, F/L, or):", self._patch_box)
         reorder_lbl.setWordWrap(True)
         pb.addWidget(reorder_lbl)
         order = QGridLayout()
@@ -758,8 +789,19 @@ class Ti2RelayoutDialog(QDialog):
         self._info.setText(
             f"{note} — {len(program)} patches, -i{spec.instrument_flag} "
             f"-p{spec.paper_flag}")
-        self._status.setText("Edit, then Update preview / Save As.")
         self._refresh_enabled()
+        # Auto-render the initial preview so the user sees the chart
+        # immediately instead of having to click "Update preview" first.
+        if program:
+            self._status.setText("Rendering initial preview…")
+            self._regenerate(save_to=None)
+        else:
+            self._status.setText("Empty chart — add patches, then preview.")
+
+    def _schedule_auto_refresh(self) -> None:
+        """Restart the debounced preview timer (called from user edit hooks)."""
+        if self._spec is not None and self._grid.count() > 0:
+            self._auto_timer.start()
 
     # -- patch grid ---------------------------------------------------------
     def _populate_grid(self, program: list[tuple]) -> None:
@@ -825,7 +867,8 @@ class Ti2RelayoutDialog(QDialog):
         for it in items:
             it.setData(Qt.ItemDataRole.UserRole, rgb)
             it.setIcon(_swatch_icon(rgb))
-        self._status.setText(f"Set {len(items)} patch(es). Update preview to apply.")
+        self._status.setText(f"Set {len(items)} patch(es).")
+        self._schedule_auto_refresh()
 
     def _transform_selection(self, factor: float) -> None:
         items = self._grid.selectedItems()
@@ -837,6 +880,7 @@ class Ti2RelayoutDialog(QDialog):
             new = tuple(max(0.0, min(100.0, v * factor)) for v in rgb)
             it.setData(Qt.ItemDataRole.UserRole, new)
             it.setIcon(_swatch_icon(new))
+        self._schedule_auto_refresh()
 
     def _selected_rows(self) -> list[int]:
         return sorted(self._grid.row(it) for it in self._grid.selectedItems())
@@ -914,7 +958,8 @@ class Ti2RelayoutDialog(QDialog):
         pal[idx] = _to100(c)
         self._palette = pal
         self._build_palette_row()
-        self._status.setText("Palette changed. Update preview to apply.")
+        self._status.setText("Palette changed.")
+        self._schedule_auto_refresh()
 
     def _reset_palette(self) -> None:
         self._palette = None
@@ -951,6 +996,8 @@ class Ti2RelayoutDialog(QDialog):
             self._status.setText("Render failed.")
             return
         self._regen = result
+        # Authoritative per-page strip count from the regenerated .ti2.
+        self._strips_per_page = parse_passes_per_page(result.ti2)
         if self._page >= len(result.tiffs):
             self._page = 0
         self._show_page(self._page)
@@ -973,18 +1020,38 @@ class Ti2RelayoutDialog(QDialog):
             tif = self._regen.tiffs[self._page]
             bw  = self._regen.bw_tiffs[self._page]
             mask = R.spacer_mask(tif, bw)
-            # Pass the deliverable array so wide horizontal bands get split
-            # into per-strip cells by colour discontinuity (otherwise adjacent
-            # strips' spacers in the same row are one connected component and
-            # a click selects the whole row).
             ref_arr = R._imread_rgb(tif)
-            self._spacers = R.segment_spacers(mask, page=self._page,
-                                              ref_arr=ref_arr)
+            # Authoritative split by strip count from PASSES_IN_STRIPS2 —
+            # this handles the case where two adjacent strips happened to
+            # pick the same spacer colour, which colour-jump detection
+            # alone can't separate.
+            strip_xs = self._compute_strip_xs(ref_arr)
+            self._spacers = R.segment_spacers(
+                mask, page=self._page,
+                ref_arr=ref_arr, strip_xs=strip_xs)
         except Exception:
             self._spacers = []
         self._sel_spacers.clear()
         self._update_page_nav()
         self._apply_paint_and_show()
+
+    def _compute_strip_xs(self, ref_arr) -> list[int] | None:
+        """Return the inter-strip x-boundaries on the current page, or None.
+
+        Uses the page's strip count from PASSES_IN_STRIPS2 (parsed in
+        :meth:`_on_regen_done`) and the patch-grid bbox to divide the block
+        into equal-width strip cells.
+        """
+        if (self._page >= len(self._strips_per_page)
+                or self._strips_per_page[self._page] <= 1):
+            return None
+        bbox = R._patch_grid_bbox(ref_arr)
+        if bbox is None:
+            return None
+        y0, y1, x0, x1 = bbox
+        n = self._strips_per_page[self._page]
+        col_w = (x1 - x0 + 1) / n
+        return [int(x0 + i * col_w) for i in range(1, n)]
 
     def _update_page_nav(self) -> None:
         n = len(self._regen.tiffs) if self._regen else 0
@@ -1019,11 +1086,32 @@ class Ti2RelayoutDialog(QDialog):
         pm = QPixmap(str(path))
         if pm.isNull():
             return
-        target = self._preview.size()
-        scaled = pm.scaled(target, Qt.AspectRatioMode.KeepAspectRatio,
-                           Qt.TransformationMode.SmoothTransformation)
-        self._preview_scale = scaled.width() / pm.width() if pm.width() else 1.0
-        self._preview_orig = pm.size()
+        self._full_pixmap = pm
+        self._rescale_preview()
+
+    def _rescale_preview(self) -> None:
+        """Scale the cached full-resolution pixmap to the current preview size,
+        honouring the display's device pixel ratio so retina screens get a
+        crisp image (the older code rendered at logical resolution and looked
+        soft on retina)."""
+        if self._full_pixmap is None:
+            return
+        dpr = self._preview.devicePixelRatioF() or 1.0
+        lw, lh = self._preview.width(), self._preview.height()
+        if lw <= 0 or lh <= 0:
+            return
+        target = QSize(int(lw * dpr), int(lh * dpr))
+        scaled = self._full_pixmap.scaled(
+            target,
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+        scaled.setDevicePixelRatio(dpr)
+        # Logical scale (label coords -> image px) — divides out the dpr.
+        logical_w = scaled.width() / dpr
+        self._preview_scale = (logical_w / self._full_pixmap.width()
+                               if self._full_pixmap.width() else 1.0)
+        self._preview_orig = self._full_pixmap.size()
         self._base_pixmap = scaled
         self._refresh_preview()
 
@@ -1055,11 +1143,18 @@ class Ti2RelayoutDialog(QDialog):
         self._preview.set_base_pixmap(pm)
 
     def _label_to_image(self, p: QPoint) -> tuple[float, float] | None:
-        """Map a label-coord click to deliverable image pixels (or None)."""
+        """Map a label-coord click to deliverable image pixels (or None).
+
+        ``_base_pixmap`` is DPR-aware; its ``width()`` is physical, so we
+        divide by DPR to compare against the label's logical width.
+        """
         if self._base_pixmap is None or self._preview_scale <= 0:
             return None
-        off_x = (self._preview.width() - self._base_pixmap.width()) / 2
-        off_y = (self._preview.height() - self._base_pixmap.height()) / 2
+        dpr = self._base_pixmap.devicePixelRatio() or 1.0
+        pm_logical_w = self._base_pixmap.width() / dpr
+        pm_logical_h = self._base_pixmap.height() / dpr
+        off_x = (self._preview.width() - pm_logical_w) / 2
+        off_y = (self._preview.height() - pm_logical_h) / 2
         return (p.x() - off_x) / self._preview_scale, (p.y() - off_y) / self._preview_scale
 
     def _on_marquee(self, rect, mods) -> None:
