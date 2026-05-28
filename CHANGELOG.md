@@ -1,6 +1,24 @@
 # Changelog
 
-## v3.8.0-beta.16
+## v3.8.0-beta.17
+**Create Chart Manual mode: the new expert targen options now save, and
+"Default" fully resets.**
+
+### Fixed
+- **Manual-mode expert targen options can now be saved as defaults and in
+  presets.** The new rows (Total Ink Limit `-l`, OFPS Adaptation `-A`, Cube
+  Interior/Surface Steps `-m`/`-M`, BCC Steps `-b`, and the Patch
+  Distribution selector) keep their enable-checkbox separate from their value,
+  so Save-as-Defaults and presets recorded the value but never whether the
+  flag was armed — on reload the value returned but the flag was dropped. The
+  checkbox state is now persisted and restored alongside the value.
+- **Selecting "Default" in the Manual presets dropdown now resets every
+  parameter.** Rows that weren't part of your saved defaults — e.g. options
+  added in a later version, or a value you changed but never saved — were
+  left untouched instead of reverting. They now return to their factory
+  default. (This also repairs single-letter flags like `-f`/`-g`, which the
+  "Default" entry was reading from the wrong settings key and so never
+  restored.)
 **More targen control in Manual mode, healthier i1Profiler round-trips,
 and a UI polish on the Tools button.**
 

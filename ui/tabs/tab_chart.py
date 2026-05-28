@@ -2474,9 +2474,20 @@ class TabChart(QWidget):
                 for pw in widgets:
                     if pw in self._d_cascade_widgets:
                         continue
-                    v = s.get(f"manual_{tool}_{pw.flag}")
-                    if v is not None:
-                        pw.set_value(v)
+                    # Use the same case-disambiguated key that _on_save_defaults
+                    # writes, so single-char flags (-l, -g, …) round-trip here too.
+                    key = _pw_settings_key(tool, pw.flag)
+                    v = s.get(key)
+                    if v is None:
+                        # No saved default for this row → revert to its factory
+                        # default (and clear any expert enable-checkbox). Without
+                        # this, picking "Default" would leave a row the user
+                        # changed but never saved untouched — the reported bug.
+                        pw.reset_to_default()
+                        continue
+                    pw.set_value(v)
+                    if pw.has_separate_enable:
+                        pw.set_user_enabled(bool(s.get(f"{key}_enabled", False)))
             for idx, pw in enumerate(self._d_cascade_widgets):
                 v = s.get(f"manual_targen_-D_{idx}")
                 if v is not None:
@@ -2550,6 +2561,14 @@ class TabChart(QWidget):
                 v = data.get(f"{tool}_{pw.flag}")
                 if v is not None:
                     pw.set_value(v)
+                # Re-arm expert non-boolean rows from the stored enable state.
+                # Only act when the key was persisted, so presets saved before
+                # this fix (which stored a value regardless of the checkbox)
+                # don't suddenly turn their flag on.
+                if pw.has_separate_enable:
+                    en = data.get(f"{tool}_{pw.flag}_enabled")
+                    if en is not None:
+                        pw.set_user_enabled(bool(en))
         for idx, pw in enumerate(self._d_cascade_widgets):
             v = data.get(f"targen_-D_{idx}")
             if v is not None:
@@ -2598,6 +2617,10 @@ class TabChart(QWidget):
                     v = pw.get_raw_value()
                 if v is not None:
                     capture[f"{tool}_{pw.flag}"] = v
+                # Persist the enable-checkbox state for expert non-boolean rows
+                # so the flag is re-armed when the preset is recalled.
+                if pw.has_separate_enable:
+                    capture[f"{tool}_{pw.flag}_enabled"] = pw.is_enabled_by_user
         for idx, pw in enumerate(self._d_cascade_widgets):
             capture[f"targen_-D_{idx}"] = pw.get_raw_value()
             capture[f"targen_-D_{idx}_enabled"] = pw.is_enabled_by_user
@@ -3816,8 +3839,14 @@ class TabChart(QWidget):
                     v = td_stash[pw.flag]
                 else:
                     v = pw.get_raw_value()
+                key = _pw_settings_key(tool, pw.flag)
                 if v is not None:
-                    s.set(_pw_settings_key(tool, pw.flag), v)
+                    s.set(key, v)
+                # Expert non-boolean rows carry their enable-checkbox state
+                # separately from the value; persist it so the flag is re-armed
+                # on restore (otherwise build_args drops it).
+                if pw.has_separate_enable:
+                    s.set(f"{key}_enabled", pw.is_enabled_by_user)
         for idx, pw in enumerate(self._d_cascade_widgets):
             s.set(f"manual_targen_-D_{idx}", pw.get_raw_value())
             s.set(f"manual_targen_-D_{idx}_enabled", pw.is_enabled_by_user)
@@ -4140,6 +4169,14 @@ class TabChart(QWidget):
                             v = None
                 if v is not None:
                     pw.set_value(v)
+                # Re-arm the enable-checkbox for expert non-boolean rows; without
+                # this the value is restored but the flag stays off (and is
+                # dropped by build_args). Only act when the key was persisted, so
+                # presets/defaults from before this fix don't force rows off.
+                if pw.has_separate_enable:
+                    en = s.get(f"{new_key}_enabled")
+                    if en is not None:
+                        pw.set_user_enabled(bool(en))
         for idx, pw in enumerate(self._d_cascade_widgets):
             v = s.get(f"manual_targen_-D_{idx}")
             if v is not None:
