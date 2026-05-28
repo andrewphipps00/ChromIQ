@@ -1,5 +1,25 @@
 # Changelog
 
+## v3.8.0-beta.20
+**Full printtarg-option parity in the chart-layout editor's right panel.**
+Instrument + paper are now editable on an already-loaded chart, with the
+same instrument-conditional show/hide rules and mutual-exclusion logic
+as the New chart dialog.
+
+### Added
+- **Instrument + Paper combos in the right-panel `printtarg` section.**
+  Switching instrument updates `spec.instrument_flag`, flips the visibility
+  of the i1-only / ColorMunki-only options, and re-renders. Switching
+  paper updates `spec.paper_flag` + `paper_mm` and re-renders. The editor
+  now reaches full option parity with the New chart dialog.
+
+### Fixed
+- **Instrument-conditional checkboxes (-L / -P / double / triple density)
+  now show the correct subset.** They previously all rendered visible at
+  dialog startup because the conditional refresh only ran on chart load;
+  the initial pass now happens at construction, and the combo handler
+  flips visibility even before a chart is loaded.
+
 ## v3.8.0-beta.19
 **Polish pass over the chart-layout editor (Tools → Edit / create chart
 layout).** Every TI2 the editor produces now correctly preserves and

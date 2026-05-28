@@ -1012,8 +1012,24 @@ class Ti2RelayoutDialog(QDialog):
         ptg = QGridLayout(pt_box)
         ptg.setHorizontalSpacing(4)
         ptg.setVerticalSpacing(4)
+        # Instrument + Paper rows — affect ChartSpec, not LayoutOptions
+        # (printtarg reads them as -i / -p), but they live here so the
+        # editor has the same coverage as the New chart dialog.
+        ptg.addWidget(QLabel("Instrument:"), 0, 0)
+        self._pt_instr = NoScrollComboBox(pt_box)
+        for code, label in _INSTRUMENTS:
+            self._pt_instr.addItem(label, code)
+        self._pt_instr.currentIndexChanged.connect(self._on_pt_instr_changed)
+        ptg.addWidget(self._pt_instr, 0, 1, 1, 3)
+        ptg.addWidget(QLabel("Paper:"), 1, 0)
+        self._pt_paper = NoScrollComboBox(pt_box)
+        for code in _PAPER_ORDER:
+            self._pt_paper.addItem(PAPER_LABELS.get(code, code), code)
+        self._pt_paper.currentIndexChanged.connect(self._on_pt_paper_changed)
+        ptg.addWidget(self._pt_paper, 1, 1, 1, 3)
+        _as_compact(self._pt_instr, self._pt_paper)
         # Spacers row
-        ptg.addWidget(QLabel("Spacers:"), 0, 0)
+        ptg.addWidget(QLabel("Spacers:"), 2, 0)
         sp_row = QHBoxLayout()
         sp_row.setSpacing(6)
         self._pt_sp_col  = QRadioButton("Coloured", pt_box)
@@ -1026,45 +1042,45 @@ class Ti2RelayoutDialog(QDialog):
             rb.toggled.connect(self._on_printtarg_changed)
             sp_row.addWidget(rb)
         sp_row.addStretch(1)
-        ptg.addLayout(sp_row, 0, 1, 1, 3)
+        ptg.addLayout(sp_row, 2, 1, 1, 3)
         # Scales row. Min-width on every spinbox so 3-digit / decimal
         # values don't truncate to "30" / "1.0" inside the panel.
         SPIN_W = 76
-        ptg.addWidget(QLabel("Patch -a:"), 1, 0)
+        ptg.addWidget(QLabel("Patch -a:"), 3, 0)
         self._pt_a = NoScrollDoubleSpinBox(pt_box)
         self._pt_a.setRange(0.3, 3.0)
         self._pt_a.setSingleStep(0.05)
         self._pt_a.setValue(1.0)
         self._pt_a.setMinimumWidth(SPIN_W)
         self._pt_a.valueChanged.connect(self._on_printtarg_changed)
-        ptg.addWidget(self._pt_a, 1, 1)
-        ptg.addWidget(QLabel("Spacer -A:"), 1, 2)
+        ptg.addWidget(self._pt_a, 3, 1)
+        ptg.addWidget(QLabel("Spacer -A:"), 3, 2)
         self._pt_A = NoScrollDoubleSpinBox(pt_box)
         self._pt_A.setRange(0.3, 3.0)
         self._pt_A.setSingleStep(0.05)
         self._pt_A.setValue(1.0)
         self._pt_A.setMinimumWidth(SPIN_W)
         self._pt_A.valueChanged.connect(self._on_printtarg_changed)
-        ptg.addWidget(self._pt_A, 1, 3)
+        ptg.addWidget(self._pt_A, 3, 3)
         # Margin + DPI row
-        ptg.addWidget(QLabel("Margin (mm):"), 2, 0)
+        ptg.addWidget(QLabel("Margin (mm):"), 4, 0)
         self._pt_m = NoScrollSpinBox(pt_box)
         self._pt_m.setRange(0, 50)
         self._pt_m.setValue(6)
         self._pt_m.setMinimumWidth(SPIN_W)
         self._pt_m.valueChanged.connect(self._on_printtarg_changed)
-        ptg.addWidget(self._pt_m, 2, 1)
-        ptg.addWidget(QLabel("DPI:"), 2, 2)
+        ptg.addWidget(self._pt_m, 4, 1)
+        ptg.addWidget(QLabel("DPI:"), 4, 2)
         self._pt_dpi = NoScrollSpinBox(pt_box)
         self._pt_dpi.setRange(72, 1200)
         self._pt_dpi.setSingleStep(50)
         self._pt_dpi.setValue(300)
         self._pt_dpi.setMinimumWidth(SPIN_W)
         self._pt_dpi.valueChanged.connect(self._on_printtarg_changed)
-        ptg.addWidget(self._pt_dpi, 2, 3)
+        ptg.addWidget(self._pt_dpi, 4, 3)
         _as_compact(self._pt_a, self._pt_A, self._pt_m, self._pt_dpi)
         # Bit depth row
-        ptg.addWidget(QLabel("Bit depth:"), 3, 0)
+        ptg.addWidget(QLabel("Bit depth:"), 5, 0)
         bd_row = QHBoxLayout()
         self._pt_bd8  = QRadioButton("8-bit", pt_box)
         self._pt_bd16 = QRadioButton("16-bit", pt_box)
@@ -1077,7 +1093,7 @@ class Ti2RelayoutDialog(QDialog):
         bd_row.addWidget(self._pt_bd8)
         bd_row.addWidget(self._pt_bd16)
         bd_row.addStretch(1)
-        ptg.addLayout(bd_row, 3, 1, 1, 3)
+        ptg.addLayout(bd_row, 5, 1, 1, 3)
         # Instrument-conditional checkboxes (visibility flipped from
         # self._spec.instrument_flag in _sync_printtarg_widgets).
         self._pt_L = QCheckBox("Suppress left clip border (-L)", pt_box)
@@ -1099,10 +1115,10 @@ class Ti2RelayoutDialog(QDialog):
             "then patches TARGET_INSTRUMENT back to ColorMunki so chartread "
             "still drives your meter. Mutually exclusive with Double.")
         self._pt_td.toggled.connect(self._on_td_toggled)
-        ptg.addWidget(self._pt_L,  4, 0, 1, 4)
-        ptg.addWidget(self._pt_P,  5, 0, 1, 4)
-        ptg.addWidget(self._pt_dd, 6, 0, 1, 4)
-        ptg.addWidget(self._pt_td, 7, 0, 1, 4)
+        ptg.addWidget(self._pt_L,  6, 0, 1, 4)
+        ptg.addWidget(self._pt_P,  7, 0, 1, 4)
+        ptg.addWidget(self._pt_dd, 8, 0, 1, 4)
+        ptg.addWidget(self._pt_td, 9, 0, 1, 4)
         # NOTE: pt_box is added to the panel layout *after* the Patches and
         # Spacers boxes below, so the on-paper order is Patches → Spacers →
         # printtarg (the chart-content controls users edit most often stay
@@ -1571,13 +1587,20 @@ class Ti2RelayoutDialog(QDialog):
 
         Called when a new chart is loaded / created so the widgets reflect
         whatever options came with it. Visibility of instrument-conditional
-        rows is flipped from the loaded chart's instrument flag — the editor
-        doesn't let the user switch instruments mid-edit since that changes
-        printtarg's strip layout fundamentally.
+        rows is flipped from the loaded chart's instrument flag.
         """
         self._pt_syncing = True
         try:
             o = self._options
+            # Instrument + Paper come from spec; everything else from
+            # LayoutOptions.
+            if self._spec is not None:
+                ix = self._pt_instr.findData(self._spec.instrument_flag)
+                if ix >= 0:
+                    self._pt_instr.setCurrentIndex(ix)
+                ix = self._pt_paper.findData(self._spec.paper_flag)
+                if ix >= 0:
+                    self._pt_paper.setCurrentIndex(ix)
             self._pt_sp_col.setChecked(o.spacer_mode == "colored")
             self._pt_sp_bw.setChecked(o.spacer_mode == "bw")
             self._pt_sp_none.setChecked(o.spacer_mode == "none")
@@ -1592,15 +1615,63 @@ class Ti2RelayoutDialog(QDialog):
             self._pt_dd.setChecked(o.double_density)
             self._pt_td.setChecked(o.triple_density)
             self._pt_dd.setEnabled(not o.triple_density)
-            instr = self._spec.instrument_flag if self._spec else "i1"
-            is_i1 = instr == "i1"
-            is_cm = instr == "CM"
-            self._pt_L.setVisible(is_i1)
-            self._pt_P.setVisible(is_i1)
-            self._pt_dd.setVisible(is_cm)
-            self._pt_td.setVisible(is_cm)
+            self._refresh_pt_instr_visibility()
         finally:
             self._pt_syncing = False
+
+    def _refresh_pt_instr_visibility(self) -> None:
+        """Show/hide -L / -P / -h / triple-density rows based on the
+        currently-selected instrument — same rule as the New chart dialog."""
+        code = self._pt_instr.currentData()
+        is_i1 = code == "i1"
+        is_cm = code == "CM"
+        self._pt_L.setVisible(is_i1)
+        self._pt_P.setVisible(is_i1)
+        self._pt_dd.setVisible(is_cm)
+        self._pt_td.setVisible(is_cm)
+        # Hidden controls reset to off so they can't leak into the
+        # printtarg flag list after an instrument switch. We block their
+        # toggled signals here so the per-widget callbacks don't each
+        # kick off a re-render — _on_pt_instr_changed schedules one at
+        # the end.
+        for w, on in ((self._pt_L, is_i1), (self._pt_P, is_i1),
+                       (self._pt_dd, is_cm), (self._pt_td, is_cm)):
+            if not on and w.isChecked():
+                w.blockSignals(True)
+                w.setChecked(False)
+                w.blockSignals(False)
+
+    def _on_pt_instr_changed(self) -> None:
+        """User flipped the instrument combo. Visibility always follows
+        the combo (so the conditional rows track the user's pick even
+        before a chart is loaded). Spec + re-render only fire when a
+        chart is open."""
+        if getattr(self, "_pt_syncing", False):
+            return
+        self._refresh_pt_instr_visibility()
+        if self._spec is None:
+            return
+        code = self._pt_instr.currentData()
+        if code is None or code == self._spec.instrument_flag:
+            return
+        self._spec.instrument_flag = code
+        self._on_printtarg_changed()
+
+    def _on_pt_paper_changed(self) -> None:
+        """User flipped the paper combo — update spec.paper_flag + paper_mm
+        + re-render. The paper change rewires printtarg's -p so we need a
+        full regenerate, not just a redraw."""
+        if getattr(self, "_pt_syncing", False) or self._spec is None:
+            return
+        code = self._pt_paper.currentData()
+        if code is None or code == self._spec.paper_flag:
+            return
+        self._spec.paper_flag = code
+        # Update paper_mm too, looking up the named-papers reverse map.
+        from workflow.ti2_relayout import _NAMED_PAPERS
+        inv = {v: k for k, v in _NAMED_PAPERS.items()}
+        self._spec.paper_mm = inv.get(code, self._spec.paper_mm)
+        self._schedule_auto_refresh()
 
 
     # -- regeneration / preview --------------------------------------------
@@ -2123,6 +2194,10 @@ class Ti2RelayoutDialog(QDialog):
         has = self._spec is not None
         self._preview_btn.setEnabled(has)
         self._save_btn.setEnabled(has)
+        # Initial pass for the conditional checkboxes — without this the
+        # default Qt state shows ALL four (L, P, double, triple) at
+        # startup before any chart is loaded.
+        self._refresh_pt_instr_visibility()
 
     def closeEvent(self, ev) -> None:  # noqa: N802
         if self._worker is not None and self._worker.isRunning():
