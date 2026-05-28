@@ -64,6 +64,25 @@ def _swatch_icon(rgb: tuple[float, float, float], size: int = _SWATCH) -> QIcon:
     return QIcon(pm)
 
 
+def _ghost_swatch_icon(rgb: tuple[float, float, float], size: int = _SWATCH) -> QIcon:
+    """Faded swatch used while an item is being dragged — the cursor's drag
+    pixmap stays crisp, the original slot looks washed-out + dashed so it's
+    obvious the patch is in motion."""
+    r, g, b = (max(0, min(255, round(v / 100 * 255))) for v in rgb)
+    # Blend 70 % white + 30 % colour
+    fr = round(255 * 0.7 + r * 0.3)
+    fg = round(255 * 0.7 + g * 0.3)
+    fb = round(255 * 0.7 + b * 0.3)
+    pm = QPixmap(size, size)
+    pm.fill(QColor(fr, fg, fb))
+    p = QPainter(pm)
+    p.setPen(QPen(QColor(128, 128, 128), 1, Qt.PenStyle.DashLine))
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    p.drawRect(0, 0, size - 1, size - 1)
+    p.end()
+    return QIcon(pm)
+
+
 # ---------------------------------------------------------------------------
 # Background regeneration (printtarg runs off the GUI thread)
 # ---------------------------------------------------------------------------
@@ -91,46 +110,34 @@ class _RegenWorker(QThread):
 # Patch grid — reliable drag-reorder in IconMode
 # ---------------------------------------------------------------------------
 class _ReorderListWidget(QListWidget):
-    """QListWidget that reliably commits IconMode drag-reorders.
+    """QListWidget with drag-reorder UX tweaks.
 
-    Qt's default IconMode + InternalMove often "snaps back" the dragged items
-    instead of moving them. We compute the target row from the drop position
-    and rebuild the selection at the new location ourselves; the ``reordered``
-    signal fires after every successful reorder so the dialog can renumber.
+    Drop handling is Qt's default (Snap + InternalMove) — that combo is what
+    QListView's reorder logic actually targets, and the previous custom
+    dropEvent fought with it (items snapping back was the symptom). All we
+    customise here is the visual feedback: while a drag is active, the source
+    items get a washed-out / dashed icon so the user sees the slot the patch
+    came from and the drag pixmap following the cursor at the same time.
     """
 
-    reordered = pyqtSignal()
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._drag_originals: list[tuple[QListWidgetItem, QIcon]] = []
 
-    def dropEvent(self, event) -> None:  # noqa: N802
-        if event.source() is not self:
-            event.ignore()
-            return
-        drop = event.position().toPoint()
-        target_idx = self.indexAt(drop)
-        if target_idx.isValid():
-            target_row = target_idx.row()
-            # Drop on the right half → insert AFTER that item.
-            if drop.x() > self.visualRect(target_idx).center().x():
-                target_row += 1
-        else:
-            target_row = self.count()           # empty space → append
-
-        source_rows = sorted({self.row(it) for it in self.selectedItems()})
-        if not source_rows:
-            event.ignore()
-            return
-
-        # Adjust for the items that will be removed from before the target.
-        adjusted = target_row - sum(1 for r in source_rows if r < target_row)
-
-        taken = [self.takeItem(r) for r in reversed(source_rows)][::-1]
-        adjusted = max(0, min(adjusted, self.count()))
-        self.clearSelection()
-        for off, it in enumerate(taken):
-            self.insertItem(adjusted + off, it)
-            self.item(adjusted + off).setSelected(True)
-        event.acceptProposedAction()
-        self.reordered.emit()
+    def startDrag(self, supported_actions) -> None:  # noqa: N802
+        selected = self.selectedItems()
+        size = self.iconSize().width() or _SWATCH
+        self._drag_originals = [(it, it.icon()) for it in selected]
+        for it, _ in self._drag_originals:
+            rgb = it.data(Qt.ItemDataRole.UserRole)
+            if rgb is not None:
+                it.setIcon(_ghost_swatch_icon(rgb, size))
+        try:
+            super().startDrag(supported_actions)
+        finally:
+            for it, icon in self._drag_originals:
+                it.setIcon(icon)
+            self._drag_originals = []
 
 
 # ---------------------------------------------------------------------------
@@ -505,12 +512,13 @@ class Ti2RelayoutDialog(QDialog):
         self._grid.setStyleSheet(
             "QListWidget { font-family: Menlo; font-size: 10px; }"
         )
-        # keep numeric labels correct after a drag-reorder (explicit signal
-        # from the subclass, plus model().rowsMoved for any other code path)
-        self._grid.reordered.connect(self._renumber)
-        self._grid.reordered.connect(self._schedule_auto_refresh)
-        self._grid.model().rowsMoved.connect(lambda *a: self._renumber())
-        self._grid.model().rowsMoved.connect(lambda *a: self._schedule_auto_refresh())
+        # Qt's default InternalMove reorder emits rowsMoved on success.
+        # That's our single source of truth for "drag committed" — renumber
+        # the labels and schedule an auto-preview.
+        def _after_drag(*_a):
+            self._renumber()
+            self._schedule_auto_refresh()
+        self._grid.model().rowsMoved.connect(_after_drag)
         # Keyboard reorder for the selection. Alt + arrows nudge / jump,
         # plain F/L jump to first/last (mnemonic for "front" / "last").
         for keys, fn in (
