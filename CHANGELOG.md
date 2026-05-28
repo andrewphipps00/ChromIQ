@@ -1,5 +1,65 @@
 # Changelog
 
+## v3.8.0-beta.18
+**New Tools utility: an interactive chart-layout editor.** Open it from
+Tools → "Edit / create chart layout" to load any RGB `.ti2` (or start one
+from scratch), drag-arrange the patches, recolour individual patches and
+spacers, and save a fresh, valid `.ti2` + page TIFF(s).
+
+### Added
+- **Tools → "Edit / create chart layout".** A standalone editor that
+  regenerates the chart through printtarg every time, so the `.ti2` and the
+  printed TIFF stay coupled by construction — no chance of measurement data
+  going out of sync with what's on paper.
+- **Two source modes for new charts.** *Blank canvas* lets you build a
+  target by hand with the colour picker; *Seed from targen* fills the grid
+  with an OFPS-optimised patch set you can then re-arrange and recolour.
+- **Paste hex / RGB colour values** to populate a new chart from anything
+  you have in a text file — `#RRGGBB`, `RRGGBB`, decimal triples on `0..1`,
+  `0..100`, `0..255` or `0..65535` are all auto-detected.
+- **Full printtarg layout options on the new-chart dialog** — instrument,
+  paper (the same 15-entry list the Create Chart tab uses, with all
+  orientations), spacer mode (coloured / B&W / none), patch scale (`-a`),
+  spacer scale (`-A`), suppress left clip border (`-L`), don't limit strip
+  length (`-P`), double density / hex patches (`-h`), and the basename
+  printtarg stamps along the right margin.
+- **Patch grid with drag-reorder + multi-select.** Drag-and-drop, plus a
+  swatch-size slider, Add / Remove buttons, explicit *First / Up / Down /
+  Last* buttons, and `Alt + arrow` / `F` / `L` keyboard shortcuts.
+- **Per-patch colour editing.** Set a single patch, set a multi-selection
+  at once, or apply a `Darken 10 %` / `Lighten 10 %` transform across the
+  selection. Re-rendered through printtarg, so the `.ti2` device values and
+  the TIFF pixels are still in lock-step.
+- **Native spacer palette editor.** Edit any of the six middle entries of
+  the spacer palette (the one printtarg picks contrast spacers from); the
+  defaults at index 0/7 stay white/black because printtarg also uses them
+  as the media / mark references.
+- **Per-spacer paint with marquee.** Click coloured spacer bands in the
+  preview to select them — selected ones get a translucent yellow fill +
+  outline — drag a marquee for many at once, hold `Alt` to subtract from
+  the selection, then pick a colour and paint just those spacers. Paint is
+  applied per page on multi-page charts.
+- **Auto-updating preview.** The initial preview renders automatically
+  when you load or create a chart; subsequent edits trigger a debounced
+  re-render so you can keep tweaking without clicking "Update preview"
+  each time.
+- **Multi-page preview navigation** with the strip count read from the
+  regenerated `.ti2`'s `PASSES_IN_STRIPS2`, so the layout editor handles
+  charts that span more than one printed page.
+- **"What a mess!" flourish** on the right panel, matching the Print
+  Chart tab's "Feed the beast" block (Georgia headline with the magenta
+  accent, Menlo subtext, 5-colour bar).
+
+### Notes for adventurous editors
+- Re-colouring a patch changes its device value and therefore what your
+  profile characterises — it stays a *valid* chart by construction, but
+  the profile reflects whatever you've designed. Keeping a good gamut
+  spread is on you.
+- printtarg quantises device values to the output bit depth (8-bit by
+  default), so a hand-entered `75.0` will round-trip to `74.9` in the
+  saved `.ti2`. The integrity check compares on the 8-bit grid, so this
+  is treated as a no-op rather than a data loss.
+
 ## v3.8.0-beta.17
 **Create Chart Manual mode: the new expert targen options now save, and
 "Default" fully resets.**
