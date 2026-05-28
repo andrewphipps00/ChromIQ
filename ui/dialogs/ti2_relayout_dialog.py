@@ -495,11 +495,16 @@ class Ti2RelayoutDialog(QDialog):
         self._grid.setFlow(QListWidget.Flow.LeftToRight)
         self._grid.setWrapping(True)
         self._grid.setResizeMode(QListWidget.ResizeMode.Adjust)
-        # Movement.Snap (not Static) — Static snaps items back to their origin
-        # after a drop, even when our custom dropEvent moved them. Snap lets
-        # Qt commit position changes; our dropEvent does the reorder logic.
-        self._grid.setMovement(QListWidget.Movement.Snap)
+        # Movement.Static + InternalMove with NO custom dropEvent — let Qt's
+        # default reorder pipeline (model.dropMimeData) run unchallenged.
+        # Static prevents items from being placed at free grid positions
+        # (which was producing the "floating between rows" patch in the user's
+        # screenshot when Movement was Snap); InternalMove makes the drop a
+        # row move in the model; overwriteMode=False forces drops *between*
+        # items rather than onto an existing item.
+        self._grid.setMovement(QListWidget.Movement.Static)
         self._grid.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
+        self._grid.setDragDropOverwriteMode(False)
         self._grid.setDefaultDropAction(Qt.DropAction.MoveAction)
         self._grid.setDragEnabled(True)
         self._grid.setAcceptDrops(True)
