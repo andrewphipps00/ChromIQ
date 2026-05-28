@@ -309,3 +309,32 @@ def test_roundtrip_export_then_import(tmp_path):
     assert patches[0].r == pytest.approx(100, abs=0.5)
     assert patches[0].g == pytest.approx(50, abs=0.5)
     assert patches[0].b == pytest.approx(0, abs=0.5)
+
+
+def test_import_dispatches_pwxf(tmp_path):
+    """A .pwxf workflow file carries the same CxF objects as a .pxf, so the
+    importer reads it (ignoring the extra layout/instrument settings)."""
+    out, n = import_to_ti1(_write(tmp_path, "wf.pwxf", PXF), tmp_path / "out.ti1")
+    assert n == 3 and out.read_text().count("CTI1") == 3
+
+
+def test_roundtrip_pwxf_export_then_import(tmp_path):
+    """ti1 -> .pwxf workflow -> ti1 preserves the patch list and order."""
+    from workflow.i1profiler_export import WorkflowOptions, parse_ti1, write_pwxf
+
+    src = _write(
+        tmp_path, "src.ti1",
+        "CTI1\n\nCOLOR_REP \"RGB\"\n\nNUMBER_OF_FIELDS 7\nBEGIN_DATA_FORMAT\n"
+        "SAMPLE_ID RGB_R RGB_G RGB_B XYZ_X XYZ_Y XYZ_Z\nEND_DATA_FORMAT\n\n"
+        "NUMBER_OF_SETS 3\nBEGIN_DATA\n"
+        "1 100.0000 100.0000 0.0000 40 40 40\n"
+        "2 0.0000 0.0000 100.0000 20 20 60\n"
+        "3 0.0000 0.0000 0.0000 1 1 1\nEND_DATA\n",
+    )
+    pwxf = tmp_path / "wf.pwxf"
+    write_pwxf(parse_ti1(src), pwxf, "rt", WorkflowOptions())
+    out, n = import_to_ti1(pwxf, tmp_path / "back.ti1")
+    assert n == 3
+    patches = parse_pxf(pwxf)
+    assert (patches[0].r, patches[0].g, patches[0].b) == pytest.approx((100, 100, 0), abs=0.5)
+    assert (patches[1].r, patches[1].g, patches[1].b) == pytest.approx((0, 0, 100), abs=0.5)

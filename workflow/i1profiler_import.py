@@ -1,8 +1,9 @@
 """Convert an i1Profiler patch set into an Argyll TI1 target.
 
 The reverse of :mod:`workflow.i1profiler_export`. i1Profiler stores a chart's
-patch list either as a CxF3 XML (``.pxf``) or a CGATS ASCII table
-(``.cgats`` / ``.txt``); both carry only device RGB code values (0..255), no
+patch list either as a CxF3 XML (``.pxf``, or a ``.pwxf`` workflow file that
+embeds the same patch objects) or a CGATS ASCII table (``.cgats`` / ``.txt``);
+all carry only device RGB code values (0..255), no
 Argyll-usable colorimetry. ``printtarg``, however, needs each patch's
 *approximate* XYZ: it optimises the strip layout so neighbouring patches are
 visually distinct enough for a strip/scan reader to find patch boundaries (the
@@ -356,13 +357,15 @@ def _looks_like_xml(path: Path) -> bool:
 
 
 def import_to_ti1(in_path: Path, out_path: Path) -> tuple[Path, int]:
-    """Convert an i1Profiler patch set (``.pxf`` or CGATS) to a ``.ti1``.
+    """Convert an i1Profiler patch set (``.pxf``/``.pwxf`` or CGATS) to ``.ti1``.
 
     Dispatches on content, not just extension: a CxF saved as ``.cgats`` or a
-    CGATS table saved as ``.pxf`` are both read correctly. Returns
+    CGATS table saved as ``.pxf`` are both read correctly. A ``.pwxf`` workflow
+    file is the same CxF3 structure as a ``.pxf`` (its extra layout/instrument
+    settings are simply ignored), so ``parse_pxf`` reads it unchanged. Returns
     ``(out_path, patch_count)``.
     """
-    if in_path.suffix.lower() == ".pxf" or _looks_like_xml(in_path):
+    if in_path.suffix.lower() in (".pxf", ".pwxf") or _looks_like_xml(in_path):
         patches = parse_pxf(in_path)
     else:
         patches = parse_cgats(in_path)

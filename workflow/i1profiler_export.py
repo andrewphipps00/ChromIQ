@@ -186,6 +186,11 @@ def _now_iso() -> str:
     return s[:-2] + ":" + s[-2:]
 
 
+def _pwxf_utc_now() -> str:
+    """UTC timestamp in the `...Z` form i1Profiler workflow files use."""
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 # --- CGATS .txt ------------------------------------------------------------
 
 
@@ -482,3 +487,268 @@ def export_from_ti1(
     wrote_txt = write_txt(target, txt_out, desc)
     write_pxf(target, pxf_out, desc)
     return (txt_out if wrote_txt else None), pxf_out
+
+
+# --- CxF3 .pwxf (i1Profiler workflow) --------------------------------------
+#
+# A .pwxf is the same CxF3 file as the .pxf above, plus (1) a fuller
+# <xrp:CustomAttributes> carrying the device + paper + grid, and (2) an
+# optional per-patch <cc:TagCollection Name="Location">. The skeleton, the
+# Object list (ti1 order, 0..255 RGB), the ColorSpecificationCollection, and
+# the ProfileSettings block are structurally what write_pxf already produces.
+#
+# The format was reverse-engineered from 14 genuine i1Profiler 1.1.0 exports;
+# full mapping in docs/dev_pxwf_format.md. RGB only — i1Profiler workflow
+# export for CMYK/CMYK+N is out of scope until we have reference workflow files
+# for those.
+
+# The workflow <ProfileSettings> differs from the .pxf one (printer-profile
+# black generation vs the .pxf's ink-generation form). Embedded verbatim from
+# the reference i1Pro3 RGB workflow; only InkLimit varies in principle but all
+# RGB references use 300, so it is fixed here.
+_PWXF_PROFILE_SETTINGS_RGB = """  <ProfileSettings DeviceType="Printer">
+    <!-- Members of ProfileParams -->
+    <ProfileVersion value="4"/>
+    <EmbeddedProfileVersion value="-1"/>
+    <ChromaticAdaptation>Bradford</ChromaticAdaptation>
+    <!-- Members of PrinterProfileParams -->
+    <BlackGeneration>
+      <BlackType>2</BlackType>
+      <UseMaximumBlack>0</UseMaximumBlack>
+      <BlackWidthType>1</BlackWidthType>
+      <BlackWidth>50</BlackWidth>
+      <NumberOfCurvePoints>4</NumberOfCurvePoints>
+      <KPoints>0 0 18.9465 100 </KPoints>
+      <LPoints>0 30 65 100 </LPoints>
+      <CurveType>4</CurveType>
+    </BlackGeneration>
+    <InkLimiting>
+      <InkLimit>300</InkLimit>
+      <ColorSpace>5</ColorSpace>
+    </InkLimiting>
+    <ViewingEnvironment>
+      <IlluminantName/>
+      <IlluminantType>D50</IlluminantType>
+    </ViewingEnvironment>
+    <ProfileInkColorSpace>5</ProfileInkColorSpace>
+    <Saturation>50</Saturation>
+    <UseMediaSmoothness>0</UseMediaSmoothness>
+    <SmoothnessMedianOverall>-1</SmoothnessMedianOverall>
+    <Smoothness>50</Smoothness>
+    <Contrast>50</Contrast>
+    <NeutralizeGray>0</NeutralizeGray>
+    <ChromaAdjust>50</ChromaAdjust>
+    <DarkeningForHighChroma>0</DarkeningForHighChroma>
+    <WhitePointPaperDeltaEThreshold>3.5</WhitePointPaperDeltaEThreshold>
+    <TableSizeAToB>Medium</TableSizeAToB>
+    <TableSizeBToA>Medium</TableSizeBToA>
+    <BitDepth>16</BitDepth>
+  </ProfileSettings>"""
+
+
+@dataclass
+class WorkflowOptions:
+    """The 16 layout/device knobs that vary across i1Profiler workflow files.
+
+    Defaults reproduce an A4-landscape i1Pro 3 single-scan chart. ``columns`` /
+    ``rows`` / ``emit_locations`` drive the patch grid: with
+    ``emit_locations=False`` (Phase 1 default) the grid attributes are still
+    written but no per-patch Location tags are, so i1Profiler auto-lays-out.
+    """
+
+    device: str = "i1Pro 3"            # free string: "i1Pro 2", "i1Pro 3", "i1iO 2", ...
+    measurement_mode: int = 1          # 1 = single scan, 2 = dual scan
+    paper_format: int = 2              # 0 = Custom, 2 = A4
+    paper_orientation: str = "Landscape"
+    page_width_mm: float = 296.93
+    page_height_mm: float = 210.06
+    columns: int = 29
+    rows: int = 20
+    pages: int = 1
+    patch_w_mm: float = 8.0
+    patch_h_mm: float = 7.0
+    patch_w_percent: float = 0.0       # derived/optional; 0 is accepted by i1Profiler
+    patch_h_percent: float = 0.0
+    use_patch_defaults: bool = True
+    title: str = "ChromIQ Chart"
+    emit_locations: bool = False
+    # iSis lead-in ("Vorlauf"), as the HeaderEdgeSizePercent slider position.
+    # None → write the -2147483648 sentinel that non-iSis devices use.
+    header_edge_percent: float | None = None
+
+
+def _b(v: bool) -> str:
+    return "True" if v else "False"
+
+
+def _mm(v: float) -> str:
+    return f"{v:.2f}"
+
+
+def _pct(v: float) -> str:
+    """Format a slider percent: whole numbers as ints (matching i1Profiler's
+    own files, e.g. "0"/"100"), otherwise a plain decimal."""
+    return str(int(v)) if float(v).is_integer() else repr(float(v))
+
+
+def _pwxf_custom_attributes(n_patches: int, opt: WorkflowOptions) -> str:
+    """Build the full 71-attribute <xrp:CustomAttributes>, reference order."""
+    pairs: list[tuple[str, str]] = [
+        ("BarCodeEnabled", "False"),
+        ("ColorCorrectionPatchCount", "None"),
+        ("ColorSpace", "RGB"),
+        ("DarkLightRatio", "50"),
+        ("DimensionUnit", "2"),
+        ("HeaderEdgeSizePercent",
+         "-2147483648" if opt.header_edge_percent is None
+         else _pct(opt.header_edge_percent)),
+        ("ImagePath", ""),
+        ("InkLimit", "300"),
+        ("LockWriteProtection", "False"),
+        ("LowTestChartResolution", "False"),
+        ("MeasurementDevice", opt.device),
+        ("MeasurementDeviceSerialNumber", "0"),
+        ("MeasurementMode", str(opt.measurement_mode)),
+        ("MeasurementPerPatch", "0"),
+        ("Media_Type", "Translucent Media"),
+        ("NumberEmissiveSpotPatches", "0"),
+        ("NumberLightTablePatches", "0"),
+        ("NumberOfSecondaryPatchesToGenerate", "100"),
+        ("NumberPatchColumns", str(opt.columns)),
+        ("NumberPatchPages", str(opt.pages)),
+        ("NumberPatchRows", str(opt.rows)),
+        ("NumberReflectiveMediaSpotPatches", "0"),
+        ("NumberReflectiveSpotPatches", "0"),
+        ("NumberSecondChartPatches", "0"),
+        ("NumberViewingEmissiveSpotPatches", "0"),
+        ("NumberViewingReflectiveSpotPatches", "0"),
+        ("OptimizeProfile", ""),
+        ("PLUS_1_COLOR", "Orange|68.02|43.06|68.15|1|2|50|50|1"),
+        ("PLUS_2_COLOR", "Green|87.82|-81.04|71.47|1|2|50|50|2"),
+        ("PLUS_3_COLOR", "Red|54.28|78.98|64.91|1|2|50|50|3"),
+        ("PLUS_4_COLOR", "Blue|29.57|67.02|-128|1|2|50|50|4"),
+        ("PageHeight", _mm(opt.page_height_mm)),
+        ("PageWidth", _mm(opt.page_width_mm)),
+        ("Paper", "Plain"),
+        ("PaperFormat", str(opt.paper_format)),
+        ("PaperOrientation", opt.paper_orientation),
+        ("PaperType", "Not Specified (default)"),
+        ("PatchSizeHeightPercent", str(opt.patch_h_percent)),
+        ("PatchSizeHeightValue", _mm(opt.patch_h_mm)),
+        ("PatchSizeWidthPercent", str(opt.patch_w_percent)),
+        ("PatchSizeWidthValue", _mm(opt.patch_w_mm)),
+        ("PrintMarginBottom", "0.00"),
+        ("PrintMarginLeft", "0.00"),
+        ("PrintMarginRight", "0.00"),
+        ("PrintMarginTop", "0.00"),
+        ("PrinterName", "CMYK Printer"),
+        ("PrinterType", "Not specified (default)"),
+        ("ScramblePatches", "False"),
+        ("SelectedMeasurementCondition", "-1"),
+        ("TestChartType", "RGB Variable"),
+        ("TightMarginsEnabled", "False"),
+        ("TitleString", opt.title),
+        ("UseLegacyTestChart", "False"),
+        ("UsePatchSettingDefaults", _b(opt.use_patch_defaults)),
+        ("ViewingLightgboxMeasurementsUsed", "False"),
+        ("WriteProtected", "False"),
+        ("linearMeasurements", ""),
+        ("numLinearSteps", "28"),
+        ("numberCorePatches", str(n_patches)),
+        ("numberImagePatches", "0"),
+        ("numberSpotPatches", "0"),
+        ("PerceptualType", "Custom"),
+        ("ProfileWhitePointType", "0"),
+        ("TableType", "Custom"),
+        ("UseLegacyGeneration", "1"),
+        ("cmyRatio", "0.0000"),
+        ("ControlWedgeType", ""),
+        ("ProfileFilename", ""),
+        ("ReferenceFileName", ""),
+        ("WorkflowStep", "TestChart"),
+        ("WorkflowType", "PrinterProfilePro"),
+    ]
+    attrs = " ".join(f'{k}="{escape(v)}"' for k, v in pairs)
+    return f"  <xrp:CustomAttributes {attrs}/>"
+
+
+def _pwxf_rgb_object(idx: int, v: dict[str, float], created: str,
+                     location: tuple[int, int, int] | None) -> list[str]:
+    """RGB Object, optionally with a column-major Location tag block."""
+    out = _rgb_object(idx, v, created)
+    if location is None:
+        return out
+    col, page, row = location
+    loc = [
+        '\t\t\t\t<cc:TagCollection Name="Location">',
+        f'\t\t\t\t\t<cc:Tag Name="Column" Value="{col}"/>',
+        f'\t\t\t\t\t<cc:Tag Name="Page" Value="{page}"/>',
+        f'\t\t\t\t\t<cc:Tag Name="Row" Value="{row}"/>',
+        '\t\t\t\t\t<cc:Tag Name="SampleID" Value="-1"/>',
+        '\t\t\t\t\t<cc:Tag Name="SampleName" Value=""/>',
+        "\t\t\t\t</cc:TagCollection>",
+    ]
+    # insert the Location block before the closing </cc:Object>
+    return out[:-1] + loc + out[-1:]
+
+
+def write_pwxf(
+    target: Target,
+    out_path: Path,
+    descriptor: str,
+    options: WorkflowOptions | None = None,
+) -> None:
+    """Write an i1Profiler workflow (.pwxf) for an RGB target.
+
+    Mirrors a genuine i1Profiler "Prism" workflow file so i1Profiler opens it
+    with the instrument/paper/grid pre-configured. RGB only.
+    """
+    if target.kind != "RGB":
+        raise ValueError(
+            "i1Profiler workflow (.pwxf) export currently supports RGB targets "
+            f"only (got {target.kind}); use the .pxf patch set for CMYK/CMYK+N."
+        )
+    opt = options or WorkflowOptions()
+    created = _pwxf_utc_now()
+    n = len(target.rows)
+
+    parts = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<cc:CxF xmlns:cc="http://colorexchangeformat.com/CxF3-core" '
+        'xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">',
+        "\t<cc:FileInformation>",
+        # Mirror X-Rite's own header so i1Profiler's workflow loader accepts the
+        # file; the PrismApp tags identify the producing app the way real
+        # workflow files do.
+        "\t\t<cc:Creator>X-Rite - Prism</cc:Creator>",
+        f"\t\t<cc:CreationDate>{created}</cc:CreationDate>",
+        "\t\t<cc:Description>Prism CXF3 file</cc:Description>",
+        '\t\t<cc:Tag Name="PrismAppName" Value="i1Profiler"/>',
+        '\t\t<cc:Tag Name="PrismAppVersion" Value="1.1.0"/>',
+        "\t</cc:FileInformation>",
+        "\t<cc:Resources>",
+        "\t\t<cc:ObjectCollection>",
+    ]
+    for idx, (_sid, v) in enumerate(target.rows, start=1):
+        loc = None
+        if opt.emit_locations and opt.rows > 0:
+            i = idx - 1
+            per_page = opt.columns * opt.rows
+            page = i // per_page + 1
+            within = i % per_page
+            loc = (within // opt.rows, page, within % opt.rows)
+        parts += _pwxf_rgb_object(idx, v, created, loc)
+    parts.append("\t\t</cc:ObjectCollection>")
+    parts += _color_specification()
+    parts.append("\t</cc:Resources>")
+    parts.append("\t<cc:CustomResources>")
+    parts.append('\t\t<xrp:Prism xmlns:xrp="http://www.xrite.com/products/prism" release="2.0">')
+    parts.append(_pwxf_custom_attributes(n, opt))
+    parts.append(_PWXF_PROFILE_SETTINGS_RGB)
+    parts.append("</xrp:Prism>")
+    parts.append("")
+    parts.append("\t</cc:CustomResources>")
+    parts.append("</cc:CxF>")
+    parts.append("")
+    # Real i1Profiler files use CRLF; emit the same for byte-level familiarity.
+    out_path.write_text("\r\n".join(parts), encoding="utf-8")

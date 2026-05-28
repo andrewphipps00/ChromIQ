@@ -23,9 +23,11 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QGuiApplication
 from PyQt6.QtWidgets import (
     QButtonGroup,
+    QCheckBox,
     QDialog,
     QDialogButtonBox,
     QFrame,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -40,11 +42,80 @@ from PyQt6.QtWidgets import (
 
 from core.logger import get_logger
 from ui.widgets import (
-    open_dir_dialog, open_file_dialog, open_files_dialog,
+    NoScrollComboBox, NoScrollSpinBox, open_dir_dialog, open_file_dialog,
+    open_files_dialog,
 )
 from workflow.average_runner import AverageParams, AverageRunner
-from workflow.i1profiler_export import export_from_ti1
+from workflow.i1profiler_export import (
+    WorkflowOptions, export_from_ti1, parse_ti1, write_pwxf,
+)
 from workflow.i1profiler_import import import_to_ti1
+
+
+# Instrument / paper presets for the optional i1Profiler workflow (.pwxf)
+# output. The device string is free-form in the format; these are the values
+# observed in real i1Profiler 1.1.0 exports. Paper maps to (PaperFormat enum,
+# width_mm, height_mm, orientation) — A4 (enum 2) is the validated case; the
+# others use Custom (enum 0). i1Profiler re-lays-out the chart on load anyway,
+# so the page geometry is a starting point the user can change in-app.
+_PWXF_SCAN_MODES = (("Single scan", 1), ("Dual scan", 2))
+_PWXF_PAPERS: dict[str, tuple[int, float, float, str]] = {
+    "A4":        (2, 296.93, 210.06, "Landscape"),
+    "A3":        (0, 420.00, 297.00, "Landscape"),
+    "US Letter": (0, 279.40, 215.90, "Landscape"),
+}
+
+# Per-device data reverse-engineered from i1Profiler workflow files the user
+# saved at each slider extreme (see docs/dev_pxwf_format.md). Tuple is
+#   (w_lo, w_hi, h_lo, h_hi, mode, vorlauf)
+#   w/h_lo,hi : patch-size slider range, mm. i1Profiler stores the patch size as
+#               the slider position — PatchSize*Percent = (mm-lo)/(hi-lo)*100 —
+#               and *ignores* the mm Value we write, so we emit the right percent.
+#   mode      : forced MeasurementMode (PLUS → 1, M3 → 6, i1iSis → 1) or None to
+#               let the user pick Single (1) / Dual (2).
+#   vorlauf   : True for i1iSis. These sheet scanners have a "Vorlauf" (English:
+#               header length) lead-in stored as HeaderEdgeSizePercent; non-iSis
+#               write the -2147483648 sentinel. See _PWXF_VORLAUF_MM below for the
+#               reverse-engineered range — it is *not* user-settable (see note).
+# Observed scan-recommended minimums (warning thresholds, ≥ the slider min):
+#   i1Pro 3 = 7, i1iO 3 = 7.5, PLUS M3 = 20 mm. Defaults sit at/above these.
+_PWXF_DEVICES: dict[str, tuple[int, int, int, int, "int | None", bool]] = {
+    "i1Pro 2":         (7, 25, 8, 12, None, False),
+    "i1Pro 3":         (6, 25, 6, 12, None, False),
+    "i1Pro 3 PLUS":    (16, 40, 16, 20, 1, False),
+    "i1Pro 3 PLUS M3": (16, 40, 16, 20, 6, False),
+    "i1iO 2":          (6, 20, 7, 20, None, False),
+    "i1iO 3":          (6, 20, 7, 20, None, False),
+    "i1iO 3 PLUS":     (16, 40, 16, 40, 1, False),
+    "i1iO 3 PLUS M3":  (16, 40, 16, 40, 6, False),
+    "i1iSis":          (6, 20, 6, 20, 1, True),
+    "i1iSis 2":        (6, 20, 6, 20, 1, True),
+    "i1iSis XL":       (6, 20, 6, 20, 1, True),
+    "i1iSis 2 XL":     (6, 20, 6, 20, 1, True),
+}
+# i1iSis "Vorlauf" / header-length lead-in range, reverse-engineered from files
+# saved at the slider extremes: HeaderEdgeSizePercent = (mm - 32) / 48 * 100
+# (verified 32→0, 56→50, 80→100). Preserved as knowledge but DELIBERATELY NOT
+# wired to any control: i1Profiler does not persist the lead-in — it resets to the
+# 32 mm minimum on load no matter what the file contains (confirmed: even
+# i1Profiler's *own* re-saved 56 mm file reopens at 32 mm). So we always write 0
+# (= 32 mm) for i1iSis and offer no header-length UI.
+_PWXF_VORLAUF_MM = (32, 80)
+
+
+def _patch_percent(mm: float, lo: float, hi: float) -> float:
+    """Slider position (0..100) for a ``mm`` value on a [lo, hi] mm range."""
+    if hi <= lo:
+        return 0.0
+    return max(0.0, min(100.0, (mm - lo) / (hi - lo) * 100.0))
+
+
+def _device_default_size(w_lo: int, w_hi: int, h_lo: int, h_hi: int) -> tuple[int, int]:
+    """Warning-free default patch size for a device's slider range: 20×20 for the
+    big-patch PLUS/M3 devices (20 mm scan min), else 8×7 clamped into range."""
+    if w_lo >= 16:                       # PLUS / M3
+        return min(20, w_hi), min(20, h_hi)
+    return max(8, w_lo), max(7, h_lo)
 from workflow.ti3_merge import Ti3MergeError, merge_measurements
 
 if TYPE_CHECKING:
@@ -185,6 +256,26 @@ class _ToolDialogBase(QDialog):
                  if screen is not None else hint.height())
         self.setMinimumHeight(min(floor.height(), cap_h))
         self.resize(target_w, min(hint.height(), cap_h))
+
+    # ------------------------------------------------------------------
+    def _refit_height(self) -> None:
+        """Re-fit the dialog height after dynamically showing/hiding rows.
+
+        Subclasses that reveal optional content (e.g. an expandable options
+        section) must call this so the dialog grows to fit instead of squashing
+        the newly-shown widgets into the leftover space. No-op until the initial
+        ``showEvent`` sizing has run; capped at 90 % of the screen height."""
+        if not self._sized_once:
+            return
+        layout = self.layout()
+        layout.activate()
+        hint = layout.sizeHint()
+        floor = layout.minimumSize()
+        screen = self.screen() or QGuiApplication.primaryScreen()
+        cap_h = (int(screen.availableGeometry().height() * 0.9)
+                 if screen is not None else hint.height())
+        self.setMinimumHeight(min(floor.height(), cap_h))
+        self.resize(self.width(), min(hint.height(), cap_h))
 
     # ------------------------------------------------------------------
     # Subclass hooks
@@ -638,21 +729,24 @@ class Ti1ToI1ProfilerDialog(_ToolDialogBase):
     TITLE       = "Convert TI1 → i1Profiler"
     RUN_LABEL   = "Convert"
     DESCRIPTION = (
-        "Convert an Argyll TI1 chart definition into the patch-set formats that "
-        "X-Rite i1Profiler reads (.txt and .pxf). Use this when you want an "
-        "i1iSis (or another i1Profiler-driven scanner) to measure a chart that "
-        "Argyll's targen produced.\n\n"
-        "Supported colour spaces:\n"
+        "Convert an Argyll TI1 chart definition into the formats that X-Rite "
+        "i1Profiler reads. Use this when you want an i1iSis (or another "
+        "i1Profiler-driven instrument) to measure a chart that Argyll's targen "
+        "produced.\n\n"
+        "Patch set (always written):\n"
         "  • RGB    — writes both .txt (CGATS) and .pxf (CxF3)\n"
         "  • CMYK   — writes both .txt and .pxf\n"
         "  • CMYK+N — writes .pxf only (i1Profiler accepts extended-gamut sets "
         "only as CxF3)\n\n"
-        "The resulting files are loaded in i1Profiler's 'Open patch set' workflow."
+        "Optionally also write a workflow file (.pwxf) — RGB only — that opens "
+        "in i1Profiler with the instrument, paper and patch layout already set "
+        "up, so you don't have to configure them by hand."
     )
 
     def __init__(self, settings: "AppSettings", parent: QWidget | None = None) -> None:
         super().__init__(settings, parent)
         self._ti1: Path | None = None
+        self._ti1_kind: str | None = None   # "RGB" | "CMYK" | "CMYKPLUSN"
         self._build_inputs()
         self._refresh()
 
@@ -668,15 +762,120 @@ class Ti1ToI1ProfilerDialog(_ToolDialogBase):
         row.addWidget(btn)
         self._content.addLayout(row)
 
-        self._content.addWidget(QLabel("Save the i1Profiler patch set as:", self))
+        self._content.addWidget(QLabel("Save the i1Profiler files as:", self))
         self._output = _OutputRow(
             self,
-            ext_hint=".pxf (+ .txt for RGB/CMYK)",
+            ext_hint=".pxf (+ .txt / .pwxf)",
             on_change=self._refresh,
             initial_dir=_initial_dir(self._settings, self.TOOL_KEY),
             initial_name="i1profiler",
         )
         self._content.addWidget(self._output)
+
+        self._build_workflow_section()
+
+    def _build_workflow_section(self) -> None:
+        sep = QFrame(self)
+        sep.setFrameShape(QFrame.Shape.HLine)
+        sep.setFrameShadow(QFrame.Shadow.Sunken)
+        self._content.addWidget(sep)
+
+        self._wf_check = QCheckBox(
+            "Also write an i1Profiler workflow file (.pwxf)", self
+        )
+        self._wf_check.toggled.connect(self._update_workflow_state)
+        self._content.addWidget(self._wf_check)
+
+        self._wf_note = QLabel("", self)
+        self._wf_note.setWordWrap(True)
+        self._wf_note.setStyleSheet("color: #888;")
+        self._content.addWidget(self._wf_note)
+
+        self._wf_box = QWidget(self)
+        grid = QGridLayout(self._wf_box)
+        grid.setContentsMargins(18, 0, 0, 0)
+        grid.setHorizontalSpacing(10)
+        grid.setVerticalSpacing(8)
+
+        grid.addWidget(QLabel("Instrument:", self._wf_box), 0, 0)
+        self._wf_instrument = NoScrollComboBox(self._wf_box)
+        self._wf_instrument.addItems(list(_PWXF_DEVICES))
+        grid.addWidget(self._wf_instrument, 0, 1)
+
+        grid.addWidget(QLabel("Scan mode:", self._wf_box), 1, 0)
+        self._wf_scan = NoScrollComboBox(self._wf_box)
+        self._wf_scan.addItems([label for label, _ in _PWXF_SCAN_MODES])
+        grid.addWidget(self._wf_scan, 1, 1)
+
+        grid.addWidget(QLabel("Paper:", self._wf_box), 2, 0)
+        self._wf_paper = NoScrollComboBox(self._wf_box)
+        self._wf_paper.addItems(list(_PWXF_PAPERS))
+        grid.addWidget(self._wf_paper, 2, 1)
+
+        # Optional patch-size override. Off = i1Profiler picks its own sensible
+        # size. On = write the exact patch size, encoded as the per-device slider
+        # percent (see _PWXF_DEVICES). i1iSis adds a "Lead-in" (Vorlauf) field.
+        self._wf_size = QCheckBox("Set patch size (otherwise i1Profiler decides)",
+                                  self._wf_box)
+        self._wf_size.toggled.connect(self._update_size_state)
+        grid.addWidget(self._wf_size, 3, 0, 1, 2)
+
+        self._wf_size_row = QWidget(self._wf_box)
+        srow = QHBoxLayout(self._wf_size_row)
+        srow.setContentsMargins(18, 0, 0, 0)
+        srow.setSpacing(6)
+        srow.addWidget(QLabel("W", self._wf_size_row))
+        self._wf_w = NoScrollSpinBox(self._wf_size_row)
+        self._wf_w.setSuffix(" mm")
+        srow.addWidget(self._wf_w)
+        srow.addSpacing(6)
+        srow.addWidget(QLabel("H", self._wf_size_row))
+        self._wf_h = NoScrollSpinBox(self._wf_size_row)
+        self._wf_h.setSuffix(" mm")
+        srow.addWidget(self._wf_h)
+        srow.addStretch(1)
+        grid.addWidget(self._wf_size_row, 4, 0, 1, 2)
+
+        grid.setColumnStretch(1, 1)
+        self._content.addWidget(self._wf_box)
+        # Connect + initialise only after every widget the handler touches exists.
+        self._wf_instrument.currentTextChanged.connect(self._on_instrument_changed)
+        self._wf_instrument.setCurrentText("i1Pro 3")
+        self._on_instrument_changed()
+        self._wf_size_row.setVisible(False)
+        self._update_workflow_state()
+
+    def _on_instrument_changed(self) -> None:
+        """Apply the selected device's slider ranges and forced measurement mode."""
+        wlo, whi, hlo, hhi, mode, _vorlauf = _PWXF_DEVICES.get(
+            self._wf_instrument.currentText(), (6, 25, 6, 20, None, False))
+        self._wf_w.setRange(wlo, whi)
+        self._wf_h.setRange(hlo, hhi)
+        dw, dh = _device_default_size(wlo, whi, hlo, hhi)
+        self._wf_w.setValue(dw)
+        self._wf_h.setValue(dh)
+        # PLUS/M3/i1iSis carry a fixed measurement mode — no Single/Dual choice.
+        self._wf_scan.setEnabled(mode is None)
+
+    def _update_size_state(self) -> None:
+        self._wf_size_row.setVisible(self._wf_size.isChecked())
+        self._refit_height()
+
+    def _update_workflow_state(self) -> None:
+        is_rgb = self._ti1_kind == "RGB"
+        no_file = self._ti1 is None
+        self._wf_check.setEnabled(is_rgb or no_file)
+        if not is_rgb and not no_file:
+            self._wf_check.setChecked(False)
+            self._wf_note.setText(
+                "Workflow files are RGB-only — this target is "
+                f"{self._ti1_kind}, so only the patch set will be written."
+            )
+            self._wf_note.setVisible(True)
+        else:
+            self._wf_note.setVisible(False)
+        self._wf_box.setVisible(self._wf_check.isChecked())
+        self._refit_height()
 
     def _pick_ti1(self) -> None:
         p = self._pick_input_file(
@@ -685,22 +884,33 @@ class Ti1ToI1ProfilerDialog(_ToolDialogBase):
         if p:
             self._ti1 = p
             self._ti1_field.setText(str(p))
+            try:
+                self._ti1_kind = parse_ti1(p).kind
+            except ValueError:
+                self._ti1_kind = None
             if not self._output.name or self._output.name == "i1profiler":
                 self._output._name_edit.setText(f"{p.stem}-i1profiler")
+            self._update_workflow_state()
             self._refresh()
 
     def _can_run(self) -> bool:
         return self._ti1 is not None and self._output.is_complete()
+
+    def _want_workflow(self) -> bool:
+        return self._ti1_kind == "RGB" and self._wf_check.isChecked()
 
     def _execute(self) -> None:
         out_dir = self._output.directory
         assert out_dir is not None
         out_dir.mkdir(parents=True, exist_ok=True)
         base = self._output.name
+        want_wf = self._want_workflow()
 
         pxf = out_dir / f"{base}.pxf"
         txt = out_dir / f"{base}.txt"
-        existing = [p for p in (pxf, txt) if p.exists()]
+        pwxf = out_dir / f"{base}.pwxf"
+        candidates = [pxf, txt] + ([pwxf] if want_wf else [])
+        existing = [p for p in candidates if p.exists()]
         if existing:
             names = ", ".join(p.name for p in existing)
             confirm = QMessageBox.question(
@@ -732,8 +942,55 @@ class Ti1ToI1ProfilerDialog(_ToolDialogBase):
                 "Note: CMYK+N targets are only written as .pxf — i1Profiler does "
                 "not accept extended-gamut patch sets in CGATS .txt form."
             )
+
+        if want_wf:
+            try:
+                self._write_workflow(pwxf, base)
+            except ValueError as exc:
+                self._log.appendPlainText(f"[ERROR] workflow file: {exc}")
+                self._finish(False)
+                return
+            self._log.appendPlainText(f"[OK] Wrote {pwxf}")
+
         _remember_dir(self._settings, self.TOOL_KEY, out_dir)
         self._finish(True)
+
+    def _write_workflow(self, out_path: Path, base: str) -> None:
+        target = parse_ti1(self._ti1)
+        fmt, w, h, orient = _PWXF_PAPERS[self._wf_paper.currentText()]
+        device = self._wf_instrument.currentText()
+        wlo, whi, hlo, hhi, forced_mode, vorlauf = _PWXF_DEVICES.get(
+            device, (6, 25, 6, 20, None, False))
+        # PLUS/M3/i1iSis pin the measurement mode; others use the Single/Dual chooser.
+        mode = forced_mode if forced_mode is not None else _PWXF_SCAN_MODES[
+            self._wf_scan.currentIndex()][1]
+        opt = WorkflowOptions(
+            device=device,
+            measurement_mode=mode,
+            paper_format=fmt,
+            paper_orientation=orient,
+            page_width_mm=w,
+            page_height_mm=h,
+            title=base,
+        )
+        # With the size box unchecked we leave UsePatchSettingDefaults=True and
+        # i1Profiler picks its own (sensible) patch size. When set, we switch it
+        # off and encode the requested size as the per-device slider percent — i1Profiler
+        # reads the percent, not the mm value, and still computes the grid itself.
+        if self._wf_size.isChecked():
+            pw, ph = self._wf_w.value(), self._wf_h.value()
+            opt.use_patch_defaults = False
+            opt.patch_w_mm, opt.patch_h_mm = float(pw), float(ph)
+            opt.patch_w_percent = _patch_percent(pw, wlo, whi)
+            opt.patch_h_percent = _patch_percent(ph, hlo, hhi)
+            # i1iSis needs a valid HeaderEdgeSizePercent (the "Vorlauf" lead-in)
+            # rather than the non-iSis -2147483648 sentinel. We write 0 (=32 mm):
+            # i1Profiler does not persist the lead-in — it resets to that minimum
+            # on load regardless of what any file (even its own) contains — so the
+            # value is fixed, not user-controllable, and there is no UI for it.
+            if vorlauf:
+                opt.header_edge_percent = 0.0
+        write_pwxf(target, out_path, base, opt)
 
 
 # ---------------------------------------------------------------------------
@@ -873,17 +1130,18 @@ class I1ProfilerToTi1Dialog(_ToolDialogBase):
     TITLE       = "Convert i1Profiler → TI1"
     RUN_LABEL   = "Convert"
     DESCRIPTION = (
-        "Convert an i1Profiler patch set (.pxf or .cgats) into an Argyll TI1 "
-        "chart definition. Use this to bring a chart that only exists as an "
-        "i1Profiler patch set — for example a TC9.18 target — into the Argyll "
-        "workflow, so you can lay it out with printtarg, print it, and read it "
-        "with chartread.\n\n"
+        "Convert an i1Profiler patch set (.pxf), a workflow file (.pwxf), or a "
+        ".cgats table into an Argyll TI1 chart definition. Use this to bring a "
+        "chart that only exists in i1Profiler — for example a TC9.18 target, or "
+        "a workflow someone sent you — into the Argyll workflow, so you can lay "
+        "it out with printtarg, print it, and read it with chartread.\n\n"
         "This is the reverse of 'Convert TI1 → i1Profiler'. The input only "
         "carries device RGB values, so ChromIQ reconstructs each patch's "
         "approximate colour (treating the values as sRGB) — printtarg needs "
         "that to space the patches for reliable strip reading.\n\n"
-        "Supported colour space: RGB only. The patch order is preserved; "
-        "printtarg re-lays-out the chart anyway."
+        "Supported colour space: RGB only. A .pwxf carries its layout/instrument "
+        "settings too, but only the patch list is read; the patch order is "
+        "preserved and printtarg re-lays-out the chart anyway."
     )
 
     def __init__(self, settings: "AppSettings", parent: QWidget | None = None) -> None:
@@ -893,7 +1151,7 @@ class I1ProfilerToTi1Dialog(_ToolDialogBase):
         self._refresh()
 
     def _build_inputs(self) -> None:
-        self._content.addWidget(QLabel("i1Profiler patch set (.pxf or .cgats):", self))
+        self._content.addWidget(QLabel("i1Profiler patch set (.pxf / .pwxf / .cgats):", self))
         row = QHBoxLayout()
         self._src_field = QLineEdit(self)
         self._src_field.setReadOnly(True)
@@ -917,7 +1175,7 @@ class I1ProfilerToTi1Dialog(_ToolDialogBase):
     def _pick_src(self) -> None:
         p = self._pick_input_file(
             "Choose i1Profiler patch set",
-            "i1Profiler patch sets (*.pxf *.cgats *.txt);;All files (*)",
+            "i1Profiler patch sets (*.pxf *.pwxf *.cgats *.txt);;All files (*)",
         )
         if p:
             self._src = p

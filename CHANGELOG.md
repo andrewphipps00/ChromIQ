@@ -1,5 +1,32 @@
 # Changelog
 
+## v3.8.0-beta.23
+**New i1Profiler workflow (.pwxf) export, plus .pwxf import.** "Convert TI1 →
+i1Profiler" (Tools) can now also write an i1Profiler *workflow* file alongside
+the .pxf/.txt patch set — open it in i1Profiler and the instrument, paper and
+patch layout are already set up, so you don't have to configure them by hand.
+It covers all twelve i1Profiler device entries, with an optional per-device
+patch-size override. "Convert i1Profiler → TI1" now reads .pwxf files too, so
+workflows round-trip both ways. The format was reverse-engineered from real
+i1Profiler exports (see `docs/dev_pxwf_format.md`).
+
+### Added
+- Tools → Convert TI1 → i1Profiler: optional **"Also write an i1Profiler
+  workflow file (.pwxf)"** (RGB targets only). Pick the instrument — i1Pro 2/3,
+  i1Pro 3 PLUS / PLUS M3, i1iO 2/3, i1iO 3 PLUS / PLUS M3, i1iSis /2/XL/2 XL —
+  scan mode and paper; i1Profiler opens the file with all of it preconfigured.
+- Optional **"Set patch size"** with per-device limits (e.g. i1Pro 6–25 ×
+  6–12 mm, the PLUS/M3 devices 16–40 mm), encoded the way i1Profiler stores
+  the size so the requested patch dimensions are honoured. Left unticked,
+  i1Profiler chooses its own sensible size (the default).
+- Tools → Convert i1Profiler → TI1 now also accepts **.pwxf** workflow files
+  (reading the patch list out of them), in addition to .pxf / .cgats / .txt.
+
+### Notes
+- i1Profiler owns the chart's column/row layout and the i1iSis lead-in
+  ("header length") — it recomputes them on load — so ChromIQ supplies the
+  patch set plus device/paper/size and lets i1Profiler lay the chart out.
+
 ## v3.8.0-beta.22
 **TI2 editor: magenta selection/overlay polish and a fix for the drag-reorder
 preview that wasn't refreshing.** Drag-reordering patches on the left now
