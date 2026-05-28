@@ -294,7 +294,12 @@ def _table(header_keywords: list[str], id_field: str,
     return lines
 
 
-def write_ti1(patches: list[RgbPatch], out_path: Path) -> Path:
+def write_ti1(
+    patches: list[RgbPatch],
+    out_path: Path,
+    *,
+    density_extremes: tuple[tuple[float, float, float], ...] | None = None,
+) -> Path:
     """Emit a CTI1 ``.ti1`` for ``patches`` (input order preserved).
 
     Writes the three tables targen produces — the patch list, the density
@@ -303,10 +308,19 @@ def write_ti1(patches: list[RgbPatch], out_path: Path) -> Path:
     estimate of its device RGB with targen's 1% flare applied (see
     ``_patch_xyz``) so printtarg can optimise the strip layout the same way it
     would for a natively-generated target.
+
+    ``density_extremes`` overrides the 2nd table (the cube-corner defaults in
+    ``_DENSITY_EXTREMES``). printtarg reads that table as its **spacer-colour
+    palette** (printtarg.c ~L3576), so passing custom 0..100 RGB triples here
+    recolours the spacers natively, with no TIFF post-processing. Keep entry 0
+    white and the last entry black — printtarg also uses those as the
+    media / min- & max-density references and the strip-label decision depends
+    on white-first ordering. ``None`` keeps targen's defaults unchanged.
     """
     n_white = sum(1 for p in patches if p.r >= 99.5 and p.g >= 99.5 and p.b >= 99.5)
     n_black = sum(1 for p in patches if p.r <= 0.5 and p.g <= 0.5 and p.b <= 0.5)
     wx, wy, wz = WHITE_XYZ
+    extremes_vals = density_extremes if density_extremes is not None else _DENSITY_EXTREMES
 
     main = _table(
         header_keywords=[
@@ -319,9 +333,9 @@ def write_ti1(patches: list[RgbPatch], out_path: Path) -> Path:
         rows=[(i, (p.r, p.g, p.b)) for i, p in enumerate(patches, start=1)],
     )
     extremes = _table(
-        header_keywords=[f'DENSITY_EXTREME_VALUES "{len(_DENSITY_EXTREMES)}"'],
+        header_keywords=[f'DENSITY_EXTREME_VALUES "{len(extremes_vals)}"'],
         id_field="INDEX",
-        rows=list(enumerate(_DENSITY_EXTREMES)),
+        rows=list(enumerate(extremes_vals)),
     )
     combos = _table(
         header_keywords=[f'DEVICE_COMBINATION_VALUES "{len(_DEVICE_COMBINATIONS)}"'],

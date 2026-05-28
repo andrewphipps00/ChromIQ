@@ -968,7 +968,10 @@ def open_tool_dialog(
     parent: QWidget | None = None,
 ) -> None:
     """Open the dialog for the given tool key (no-op for unknown keys)."""
-    if key == "average":
+    if key == "ti2_relayout":
+        from ui.dialogs.ti2_relayout_dialog import Ti2RelayoutDialog
+        dlg = Ti2RelayoutDialog(runner, settings, parent)
+    elif key == "average":
         dlg = AverageMeasurementsDialog(runner, settings, parent)
     elif key == "merge":
         dlg = MergeMeasurementsDialog(settings, parent)

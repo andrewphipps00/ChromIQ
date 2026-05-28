@@ -43,6 +43,7 @@ class ToolEntry:
 
 
 _ENTRIES: tuple[ToolEntry, ...] = (
+    ToolEntry("ti2_relayout",  "Edit / create chart layout"),
     ToolEntry("average",      "Average measurements"),
     ToolEntry("merge",        "Merge measurements"),
     ToolEntry("ti1_to_i1p",   "Convert TI1 → i1Profiler"),
