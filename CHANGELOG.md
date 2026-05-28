@@ -1,5 +1,31 @@
 # Changelog
 
+## v3.8.0-beta.22
+**TI2 editor: magenta selection/overlay polish and a fix for the drag-reorder
+preview that wasn't refreshing.** Drag-reordering patches on the left now
+correctly triggers the debounced auto-preview, the yellow selection wash on
+the TIFF preview (spacer + patch overlays, marquee rubber-band) is now a
+softer magenta in the accent family, and the left-column selection fill is a
+toned-down translucent magenta so the swatches stay easy to read.
+
+### Fixed
+- TI2 editor: dragging patches in the grid now updates the preview. The
+  reorder handler was wired only to `rowsMoved`, which Qt only emits when
+  the model implements `moveRows()`; QListWidget's default InternalMove path
+  uses remove + insert, so the auto-preview never queued. The handler is
+  now also connected to `rowsRemoved`, which fires on both paths. Removing
+  patches via the Remove button benefits from the same auto-refresh.
+
+### Changed
+- TI2 editor: TIFF preview overlay (spacer outline, patch highlight, marquee
+  rubber-band) repainted in `SPEC_MAGENTA` instead of yellow, matching the
+  rest of the editor's magenta accent.
+- TI2 editor: left-column patch selection fill is now a translucent magenta
+  (~43% alpha) instead of the system palette highlight — sits in the
+  wine-magenta family of the info boxes without overpowering the swatches.
+- TI2 editor: the per-spacer paint hint label now reads "Selected = magenta
+  outline" (was "yellow outline").
+
 ## v3.8.0-beta.21
 **Chart-layout editor polish + consistent non-native file pickers across
 all Tools-menu utilities.** The TI2 editor's right panel breathes a bit

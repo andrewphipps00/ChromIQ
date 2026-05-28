@@ -193,7 +193,7 @@ class _SwatchDelegate(QStyledItemDelegate):
     def paint(self, painter, opt, idx) -> None:
         painter.save()
         if opt.state & QStyle.StateFlag.State_Selected:
-            painter.fillRect(opt.rect, opt.palette.highlight())
+            painter.fillRect(opt.rect, QColor(255, 69, 115, 110))
 
         icon = idx.data(Qt.ItemDataRole.DecorationRole)
         text = idx.data(Qt.ItemDataRole.DisplayRole) or ""
@@ -406,8 +406,8 @@ class _PreviewLabel(QLabel):
         super().paintEvent(ev)        # QLabel renders the pixmap centred
         if self._drag_rect is not None:
             p = QPainter(self)
-            p.setPen(QPen(QColor(255, 230, 0), 1, Qt.PenStyle.DashLine))
-            p.setBrush(QColor(255, 230, 0, 60))
+            p.setPen(QPen(QColor(SPEC_MAGENTA), 1, Qt.PenStyle.DashLine))
+            p.setBrush(QColor(255, 69, 115, 60))
             p.drawRect(self._drag_rect)
             p.end()
 
@@ -981,13 +981,16 @@ class Ti2RelayoutDialog(QDialog):
         self._delegate = _SwatchDelegate(self._grid, _SWATCH)
         self._grid.setItemDelegate(self._delegate)
         self._grid.setGridSize(self._delegate.sizeHint(None, None))
-        # Qt's default InternalMove reorder emits rowsMoved on success.
-        # That's our single source of truth for "drag committed" — renumber
-        # the labels and schedule an auto-preview.
+        # Qt's default InternalMove reorder may emit either rowsMoved (when
+        # the model implements moveRows) or rowsRemoved/rowsInserted (the
+        # remove-then-insert fallback path). Connect to both so the drag is
+        # always picked up. _schedule_auto_refresh is debounced, so double
+        # firing during a single drop is harmless.
         def _after_drag(*_a):
             self._renumber()
             self._schedule_auto_refresh()
         self._grid.model().rowsMoved.connect(_after_drag)
+        self._grid.model().rowsRemoved.connect(_after_drag)
         # Re-render the preview overlay when the grid selection changes —
         # only matters when "Highlight selected in preview" is on, but the
         # connection is harmless either way (_refresh_preview no-ops if the
@@ -1359,7 +1362,7 @@ class Ti2RelayoutDialog(QDialog):
         sb.addWidget(self._hline())
         paint_lbl = QLabel(
             "Per-spacer paint: click a spacer (drag for a marquee). "
-            "Hold Alt to remove from selection. Selected = yellow outline.",
+            "Hold Alt to remove from selection. Selected = magenta outline.",
             self._spacer_box)
         paint_lbl.setWordWrap(True)
         sb.addWidget(paint_lbl)
@@ -2138,8 +2141,8 @@ class Ti2RelayoutDialog(QDialog):
             # the boundary crisp.
             p = QPainter(pm)
             p.setRenderHint(QPainter.RenderHint.Antialiasing, False)
-            p.setBrush(QColor(255, 230, 0, 120))
-            p.setPen(QPen(QColor(255, 200, 0), 2))
+            p.setBrush(QColor(255, 69, 115, 120))
+            p.setPen(QPen(QColor(SPEC_MAGENTA), 2))
             s = self._preview_scale
             for i in self._sel_spacers:
                 if 0 <= i < len(self._spacers):
@@ -2156,8 +2159,8 @@ class Ti2RelayoutDialog(QDialog):
             if sel and geom:
                 p = QPainter(pm)
                 p.setRenderHint(QPainter.RenderHint.Antialiasing, False)
-                p.setBrush(QColor(255, 230, 0, 120))
-                p.setPen(QPen(QColor(255, 200, 0), 2))
+                p.setBrush(QColor(255, 69, 115, 120))
+                p.setPen(QPen(QColor(SPEC_MAGENTA), 2))
                 s = self._preview_scale
                 for sid in sel:
                     box = geom.get(sid)
