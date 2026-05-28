@@ -1,5 +1,71 @@
 # Changelog
 
+## v3.8.0-beta.19
+**Polish pass over the chart-layout editor (Tools → Edit / create chart
+layout).** Every TI2 the editor produces now correctly preserves and
+restores its source palette, the patch grid mirrors the printed chart's
+spatial order, and the preview's selection overlays land on the right
+pixels on charts of any size (verified at 100 / 500 / 1 000 / 3 000
+patches across multi-page renders).
+
+### Added
+- **Highlight selected patches in the preview.** New checkbox in the
+  Patches section: when on, selecting patches on the left highlights them
+  on the rendered chart, and clicking / marquee-dragging on the chart
+  selects them in the swatch grid. Bidirectional and works at any zoom.
+- **Standard selection semantics** in both Patches and Spacers modes:
+  plain click / marquee *replaces* the selection (clicking an empty area
+  clears it); Shift adds; Alt subtracts — matching the Finder convention
+  the rest of the app uses.
+- **Dedicated `printtarg` section in the right panel.** Every printtarg
+  option exposed in the New chart dialog (spacer mode, patch / spacer
+  scale, margin, DPI, bit depth, `-L`, `-P`, double / triple density) is
+  now live-editable on an already-loaded chart, behind the same
+  instrument-conditional visibility rules.
+- **Triple-density preset for ColorMunki + rig.** Mutually exclusive with
+  double-density. Renders the chart with the i1Pro strip layout (printtarg
+  `-ii1` at `-a 1.3 / -m 5 / -P / -L`) then rewrites `TARGET_INSTRUMENT`
+  in the produced `.ti2` back to ColorMunki so chartread still drives the
+  meter you actually own — same recipe Create Chart uses.
+- **Margin / DPI / Bit-depth knobs** on the New chart dialog so the editor
+  reaches printtarg parity with the Create Chart tab.
+- **Scrollable controls panel** with a soft top / bottom fade so the
+  printtarg + Patches + Spacers + What-a-mess block never falls off the
+  bottom on smaller window heights.
+- **White-bordered preview** matching the main app's TiffPreview look —
+  the chart sits inside a 15 px white margin painted directly onto the
+  canvas, so it reads as paper-on-table instead of TIFF-on-dialog.
+
+### Changed
+- **Loaded charts now open in the *visual* order they were printed in,**
+  not in the `.ti2`'s internal `SAMPLE_ID` order. Charts generated with
+  randomisation finally show the grid the same way as the preview.
+- **Spacer palette persists across load.** The editor reads
+  `DENSITY_EXTREME_VALUES` from the chart's sibling `.ti1` (if present)
+  and seeds the palette buttons from it, so reloading a chart you saved
+  with a custom palette renders the way you left it — no more snapping
+  back to printtarg's W/CMY/K defaults.
+- **Patch-highlight geometry rewritten** to combine the `.ti2`'s
+  authoritative strip / step counts with the chart's patch-block bbox.
+  Verified at 100 % hit-rate on 100 / 200 / 500 / 1 000 / 2 000 / 3 000
+  patch charts across multi-page renders (was ~22 – 45 % on the previous
+  uniform-divide approach).
+- **Drag drop indicator** now snaps to the gap midpoint between two
+  patches instead of flickering between "after A" and "before B" — same
+  reorder result, calmer visual.
+- **Compact spinboxes + comboboxes** throughout the editor — every input
+  is now a `NoScroll*` widget tagged `compact_input`, picking up the
+  shorter / smaller-arrow rules the app stylesheets already define.
+  Fixes the off-white background in light mode and the oversized native
+  arrows on macOS.
+
+### Fixed
+- **Preview no longer zooms itself out of existence.** A QSS border on
+  the preview `QLabel` was inflating its `sizeHint`, kicking off a
+  resize → rescale → `setPixmap` → resize loop that grew the image every
+  refresh. Border moved off the label and onto a properly-framed
+  canvas.
+
 ## v3.8.0-beta.18
 **New Tools utility: an interactive chart-layout editor.** Open it from
 Tools → "Edit / create chart layout" to load any RGB `.ti2` (or start one

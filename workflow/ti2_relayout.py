@@ -34,6 +34,7 @@ from pathlib import Path
 import numpy as np
 
 from core.logger import get_logger
+from core.strip_utils import letter_to_idx, parse_passes_per_page
 
 log = get_logger(__name__)
 
@@ -102,6 +103,11 @@ class ChartSpec:
     instrument_flag: str                  # printtarg -i value, e.g. "i1"
     paper_flag: str                       # printtarg -p value, e.g. "A4"
     paper_mm: tuple[float, float]
+    # Spacer palette read from the sibling .ti1's DENSITY_EXTREME_VALUES table.
+    # Populated only when loading a chart whose .ti1 is alongside the .ti2 —
+    # restores the original spacer palette on load so the preview matches the
+    # source chart instead of resetting to printtarg's defaults.
+    density_extremes: tuple[tuple[float, float, float], ...] | None = None
 
     @property
     def n_channels(self) -> int:
@@ -164,12 +170,21 @@ class ChartSpec:
             ))
         if not patches:
             raise ValueError(f"{path}: no data rows parsed")
+        # Sort patches into their visual order (top-to-bottom of strip A,
+        # then strip B, …) so the editor's grid matches the printed chart's
+        # layout. The .ti2's SAMPLE_ID order is the order printtarg wrote
+        # rows in — for randomised charts (no `-r`) that's spatially
+        # arbitrary. SAMPLE_LOC carries the spatial truth, so we sort by it
+        # whenever it's populated.
+        if any(p.loc for p in patches):
+            patches.sort(key=_loc_sort_key)
 
         return cls(
             patches=patches, dev_fields=dev_fields, has_xyz=has_xyz,
             color_rep=color_rep, white_point=white_point,
             instrument_flag=instrument_to_flag(instrument),
             paper_flag=paper_to_flag(*paper_mm), paper_mm=paper_mm,
+            density_extremes=_read_sibling_density_extremes(Path(path)),
         )
 
     # -- from scratch ------------------------------------------------------
@@ -198,6 +213,69 @@ def _split_cgats(line: str) -> list[str]:
     return re.findall(r'"[^"]*"|\S+', line.strip())
 
 
+_LOC_RE = re.compile(r"^([A-Z]+)(\d+)$")
+
+
+def _loc_sort_key(p: "Patch") -> tuple[int, int]:
+    """Sort key turning a SAMPLE_LOC ("A12") into (strip-index, step) for
+    visual ordering. Patches with no/unparseable LOC sort last."""
+    loc = (p.loc or "").upper().strip()
+    m = _LOC_RE.match(loc)
+    if not m:
+        return (10**9, 10**9)
+    return (letter_to_idx(m.group(1)), int(m.group(2)))
+
+
+def _read_sibling_density_extremes(
+    ti2_path: Path,
+) -> tuple[tuple[float, float, float], ...] | None:
+    """Pull DENSITY_EXTREME_VALUES from the .ti1 next to a .ti2 (if present).
+
+    printtarg always writes the .ti1 + .ti2 as a pair with matching stems. The
+    .ti1's second CGATS table carries the spacer-colour palette the chart was
+    rendered with, so reading it back on load lets the editor restore the
+    original palette instead of resetting to printtarg's defaults. Returns
+    None when no sibling .ti1 exists or the table is missing/malformed.
+    """
+    ti1 = ti2_path.with_suffix(".ti1")
+    if not ti1.is_file():
+        return None
+    try:
+        text = ti1.read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return None
+    # Split into per-table sections by CTI1 marker so we read the 2nd table
+    # only. The first table is the patch list; the second is the extremes.
+    sections = re.split(r"^CTI1\s*$", text, flags=re.MULTILINE)
+    # sections[0] is the file header; sections[1..] are the tables.
+    extreme_section = None
+    for s in sections[1:]:
+        if "DENSITY_EXTREME_VALUES" in s:
+            extreme_section = s
+            break
+    if extreme_section is None:
+        return None
+    fm = re.search(r"BEGIN_DATA_FORMAT(.*?)END_DATA_FORMAT", extreme_section, re.DOTALL)
+    dm = re.search(r"BEGIN_DATA(?!_FORMAT)(.*?)END_DATA", extreme_section, re.DOTALL)
+    if not fm or not dm:
+        return None
+    fields = fm.group(1).split()
+    try:
+        ri, gi, bi = fields.index("RGB_R"), fields.index("RGB_G"), fields.index("RGB_B")
+    except ValueError:
+        return None
+    out: list[tuple[float, float, float]] = []
+    for line in dm.group(1).splitlines():
+        toks = _split_cgats(line)
+        if len(toks) <= max(ri, gi, bi):
+            continue
+        try:
+            out.append((float(toks[ri]), float(toks[gi]), float(toks[bi])))
+        except ValueError:
+            continue
+    return tuple(out) if out else None
+
+
 # ---------------------------------------------------------------------------
 # .ti1 synthesis
 # ---------------------------------------------------------------------------
@@ -207,9 +285,17 @@ class LayoutOptions:
     spacer_mode: str = "colored"        # "colored" | "bw" | "none"
     patch_scale: float = 1.0            # -a
     spacer_scale: float = 1.0           # -A
+    margin_mm: int = 6                  # -m + -M (printtarg's default is 6 mm)
     suppress_left_clip: bool = False    # -L
     no_strip_limit: bool = False        # -P
     double_density: bool = False        # -h (ColorMunki double / SpectroScan hex)
+    # ChromIQ-internal: rewrites -i to "i1" + applies the preset values, then
+    # patches the produced .ti2's TARGET_INSTRUMENT back to ColorMunki. Mutually
+    # exclusive with double_density. Mirrors tab_chart's triple-density preset
+    # (see workflow/chart_creator.py's triple_density rewrite logic).
+    triple_density: bool = False
+    tiff_16bit: bool = False            # -T (vs -t) DPI flag
+    dpi: int = 300                      # printtarg -t / -T value
 
     def to_printtarg_args(self) -> list[str]:
         """Build the printtarg flag list this options bundle implies."""
@@ -222,6 +308,13 @@ class LayoutOptions:
             args.append(f"-a{self.patch_scale:.2f}")
         if abs(self.spacer_scale - 1.0) > 0.01:
             args.append(f"-A{self.spacer_scale:.2f}")
+        if self.margin_mm != 6:
+            # -m sets the inter-strip margin, -M sets the outer page margin.
+            # Both default to 6 mm in printtarg; ChromIQ's Create Chart tab
+            # ties them together (see ui/tabs/tab_chart.py manual mode), so
+            # we do the same here.
+            args.append(f"-m{self.margin_mm}")
+            args.append(f"-M{self.margin_mm}")
         if self.suppress_left_clip:
             args.append("-L")
         if self.no_strip_limit:
@@ -420,9 +513,14 @@ def regenerate(
     palette — geometry is pinned by ``-r`` regardless of palette).
 
     ``options`` carries the printtarg layout knobs the editor exposes (scale,
-    spacer mode, ``-L``, ``-P``, ``-h``). All non-spacer-mode flags are applied
-    to BOTH renders so geometry matches; spacer-mode flags are stripped from
-    the twin which always uses ``-b`` to provide a colour-only diff.
+    spacer mode, ``-L``, ``-P``, ``-h``, margin, DPI, bit depth, triple-density).
+    All non-spacer-mode flags are applied to BOTH renders so geometry matches;
+    spacer-mode flags are stripped from the twin which always uses ``-b`` to
+    provide a colour-only diff. ``options.dpi`` and ``options.tiff_16bit``
+    override the ``dpi`` kwarg + 8-bit default; ``options.triple_density``
+    overrides ``spec.instrument_flag`` to "i1" and rewrites the deliverable
+    .ti2's TARGET_INSTRUMENT back to ColorMunki post-render (mirroring
+    workflow/chart_creator.py's triple-density behaviour).
     """
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -435,10 +533,17 @@ def regenerate(
     geometry_args = [a for a in layout_args
                      if not (a == "-b" or a == "-n" or a == "-c")]
     deliverable_args = list(layout_args)
+    # Triple-density: render with the i1Pro strip layout regardless of the
+    # chart's stored instrument flag. The .ti2's TARGET_INSTRUMENT is patched
+    # back to ColorMunki after the run (see _patch_ti2_for_triple_density).
+    triple = bool(options and options.triple_density)
+    instr_flag = "i1" if triple else spec.instrument_flag
+    use_dpi = options.dpi if options else dpi
+    dpi_flag = "-T" if options and options.tiff_16bit else "-t"
     base_args = [
-        f"-i{spec.instrument_flag}",
+        f"-i{instr_flag}",
         f"-p{spec.paper_flag}",
-        f"-t{dpi}",
+        f"{dpi_flag}{use_dpi}",
         "-r",                       # honour our .ti1 order, don't randomise
         *(extra_args or []),
     ]
@@ -464,7 +569,32 @@ def regenerate(
         raise RuntimeError(
             f"page-count mismatch: {len(tiffs)} default vs {len(bw_tiffs)} bw"
         )
-    return RegenResult(out_dir / f"{basename}.ti2", tiffs, bw_tiffs, basename)
+    ti2 = out_dir / f"{basename}.ti2"
+    if triple:
+        _patch_ti2_for_triple_density(ti2)
+    return RegenResult(ti2, tiffs, bw_tiffs, basename)
+
+
+def _patch_ti2_for_triple_density(ti2: Path) -> None:
+    """Rewrite TARGET_INSTRUMENT from i1 Pro back to ColorMunki.
+
+    Triple density uses the i1Pro strip layout so printtarg writes
+    ``TARGET_INSTRUMENT "GretagMacbeth i1 Pro"`` into the .ti2; chartread
+    needs to drive the ColorMunki the user actually has, so we patch that
+    string post-run. Mirrors workflow.chart_creator._patch_ti2_instrument.
+    """
+    if not ti2.is_file():
+        return
+    try:
+        text = ti2.read_text(encoding="utf-8", errors="ignore")
+        new = text.replace(
+            'TARGET_INSTRUMENT "GretagMacbeth i1 Pro"',
+            'TARGET_INSTRUMENT "X-Rite ColorMunki"',
+        )
+        if new != text:
+            ti2.write_text(new, encoding="utf-8")
+    except OSError as exc:
+        log.warning("triple-density ti2 patch failed for %s: %s", ti2, exc)
 
 
 # ---------------------------------------------------------------------------
@@ -504,34 +634,22 @@ _BW_TWIN_PALETTE: tuple[tuple[float, float, float], ...] = (
 )
 
 
-def _patch_grid_bbox(arr: np.ndarray) -> tuple[int, int, int, int] | None:
-    """Bounding box of the patch grid in a deliverable page.
+def _label_band_end(arr: np.ndarray) -> int | None:
+    """Return the y of the last row in the strip-label band (A B C…), or None.
 
-    Adapted from ``ui.tabs.tab_measure._detect_uniform_stripe_rects`` — the
-    same algorithm the Measure tab uses to position its strip highlighter
-    over the patch block while explicitly ignoring the rotated title string
-    printtarg prints down the right margin. Three passes:
-
-    1. Find the label band at the top (rows whose dark-pixel count is
-       between a small floor and ~30 % of width — narrow enough to fit
-       single-letter strip labels but excludes solid patch rows).
-    2. Below the labels, look at every column's "has-content" count and
-       take the **widest contiguous run** of content columns. The patch
-       block is one solid edge-to-edge run; the right-margin title is a
-       narrower run separated by a wide white gap and gets dropped.
-    3. Take the vertical extent from the topmost to bottommost content row.
-
-    Returns ``(y0, y1, x0, x1)`` inclusive, or ``None`` if the page can't be
-    analysed (callers fall back to using the full image).
+    The label band is at the top of the deliverable: a row of sparse darks
+    (single-letter strip labels) on white. Detected as the topmost
+    contiguous span of rows whose dark-pixel count is in
+    ``[MIN_LABEL_DARK, 30% of width]`` — narrow enough to admit single
+    letters but exclude solid patch rows. Extracted so callers needing
+    only the y-anchor (e.g. patch_geometry_for_page) don't have to run
+    the multi-strip-fragile bbox math in :func:`_patch_grid_bbox`.
     """
     h, w = arr.shape[:2]
     if h < 50 or w < 50:
         return None
-    gray = arr.mean(axis=2)  # 0..255 luminance proxy
-
-    # ── 1. Label band → vertical anchor ───────────────────────────────────
+    gray = arr.mean(axis=2)
     DARK            = 80
-    WHITE           = 240
     MIN_LABEL_DARK  = max(5, w // 200)
     MAX_LABEL_FRAC  = 0.30
     EMPTY_STOP      = 8
@@ -550,6 +668,35 @@ def _patch_grid_bbox(arr: np.ndarray) -> tuple[int, int, int, int] | None:
             empty_streak += 1
             if y_lab_start is not None and empty_streak >= EMPTY_STOP:
                 break
+    return y_lab_end
+
+
+def _patch_grid_bbox(arr: np.ndarray) -> tuple[int, int, int, int] | None:
+    """Bounding box of the patch grid in a deliverable page.
+
+    Adapted from ``ui.tabs.tab_measure._detect_uniform_stripe_rects`` — the
+    same algorithm the Measure tab uses to position its strip highlighter
+    over the patch block while explicitly ignoring the rotated title string
+    printtarg prints down the right margin. Three passes:
+
+    1. Find the label band at the top via :func:`_label_band_end`.
+    2. Below the labels, look at every column's "has-content" count and
+       take the **widest contiguous run** of content columns. The patch
+       block is one solid edge-to-edge run; the right-margin title is a
+       narrower run separated by a wide white gap and gets dropped.
+    3. Take the vertical extent from the topmost to bottommost content row.
+
+    Returns ``(y0, y1, x0, x1)`` inclusive, or ``None`` if the page can't be
+    analysed (callers fall back to using the full image).
+    """
+    h, w = arr.shape[:2]
+    if h < 50 or w < 50:
+        return None
+    gray = arr.mean(axis=2)  # 0..255 luminance proxy
+
+    # ── 1. Label band → vertical anchor ───────────────────────────────────
+    WHITE = 240
+    y_lab_end = _label_band_end(arr)
     if y_lab_end is None:
         return None
 
@@ -855,3 +1002,175 @@ def _imread_rgb(path: Path) -> np.ndarray:
     """Read a TIFF page as an HxWx3 uint8 array (RGB)."""
     from PIL import Image
     return np.asarray(Image.open(path).convert("RGB"), dtype=np.uint8)
+
+
+# ---------------------------------------------------------------------------
+# Per-patch pixel geometry (for the preview's click + highlight overlay)
+# ---------------------------------------------------------------------------
+def patch_geometry_for_page(
+    ti2_path: Path, tif_path: Path, page: int,
+    *, bw_tif_path: Path | None = None,
+) -> dict[int, tuple[int, int, int, int]]:
+    """Pixel bbox for each patch on a rendered page, keyed by SAMPLE_ID.
+
+    Strategy:
+        * The BW-twin diff gives the **outer** patch-block bbox (works for
+          any strip count — spacers tile the block edge-to-edge).
+        * That bbox is divided uniformly: ``n_strips`` columns × ``steps``
+          rows. printtarg's i1Pro / ColorMunki layouts space patches
+          uniformly within a strip, so a uniform divide places each rect
+          close enough to its patch for click + highlight to feel right.
+        * SAMPLE_LOC (e.g. "A12") in the .ti2 maps each SAMPLE_ID to a
+          (strip, step) cell — strips go A,B,…,AA,AB,… across the chart,
+          steps run 1..N down the strip.
+
+    With ``-r`` (no-randomise) the .ti2's SAMPLE_ID order matches the
+    editor's program order, so SAMPLE_ID N corresponds to grid index N-1
+    and clicks can hop straight to the matching swatch.
+
+    The simpler central-column-scan approach (find non-spacer runs)
+    breaks on consecutive same-colour patches — printtarg picks a spacer
+    colour that matches the patch, so the spacer is invisible in the diff
+    and N consecutive patches merge into one run. Uniform divide sidesteps
+    that.
+
+    Returns an empty dict if anything can't be resolved (no ``bw_tif_path``,
+    no SAMPLE_LOC, diff shape mismatch, …) — callers fall back gracefully.
+    """
+    if bw_tif_path is None:
+        return {}
+    try:
+        text = Path(ti2_path).read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return {}
+    passes = parse_passes_per_page(ti2_path)
+    if not passes or page >= len(passes):
+        return {}
+    sm = re.search(r'STEPS_IN_PASS\s+"?(\d+)"?', text)
+    if not sm:
+        return {}
+    steps = int(sm.group(1))
+
+    a = _imread_rgb(tif_path).astype(np.int16)
+    b = _imread_rgb(bw_tif_path).astype(np.int16)
+    if a.shape != b.shape:
+        return {}
+    diff = np.abs(a - b).sum(axis=2) > 8
+    ys, xs = np.where(diff)
+    if not ys.size:
+        return {}
+    y0_all, y1, x0, x1 = (int(ys.min()), int(ys.max()),
+                          int(xs.min()), int(xs.max()))
+    # The BW-diff x range is contaminated by the right-margin "ArgyllCMS …"
+    # title that printtarg renders alongside the patch block — that text
+    # diffs against the twin too, so x1 lands beyond the rightmost strip.
+    # _patch_grid_bbox excludes the title by picking the widest content
+    # column run, so use its x range when available.
+    grid = _patch_grid_bbox(a.astype(np.uint8))
+    if grid is not None:
+        _, _, x0, x1 = grid
+    # Snap y_top to just below the strip-label row (label letters diff
+    # against the twin's near-white spacer 0). Without this, downstream
+    # math lands the first row in the label band.
+    lab_end = _label_band_end(a.astype(np.uint8))
+    y_top = (lab_end + 2) if (lab_end is not None and lab_end + 2 < y1) else y0_all
+
+    n_strips = passes[page]
+    strip_w = (x1 - x0 + 1) / n_strips
+    strips_before = sum(passes[:page])
+
+    # Per-strip: walk the central column for non-spacer runs (= patches),
+    # then keep only patch-sized ones — printtarg precedes each strip's
+    # data with a tall leader patch (~3× a regular patch) and appends a
+    # trailer at the bottom; both are too tall to be data patches, so
+    # filtering by run-height drops them automatically. The remaining
+    # `steps` runs in top→bottom order map straight onto step 1..N.
+    strip_ranges: list[list[tuple[int, int]] | None] = []
+    for s in range(n_strips):
+        cx = int(x0 + (s + 0.5) * strip_w)
+        col = diff[y_top:y1 + 1, cx]
+        runs: list[tuple[int, int]] = []
+        in_run = False
+        start = 0
+        for i, is_spacer in enumerate(col):
+            if not is_spacer:
+                if not in_run:
+                    start = i
+                    in_run = True
+            elif in_run:
+                runs.append((y_top + start, y_top + i - 1))
+                in_run = False
+        if in_run:
+            runs.append((y_top + start, y_top + len(col) - 1))
+        if not runs:
+            strip_ranges.append(None)
+            continue
+        # Estimate a normal patch height: the median of the bottom N
+        # smallest runs. Leader and trailer are outliers and won't
+        # contribute. Allow ±50 % around it as the "patch-like" band.
+        heights = sorted(r[1] - r[0] + 1 for r in runs)
+        med = heights[len(heights) // 2]
+        keep_min = max(20, int(med * 0.5))
+        keep_max = int(med * 1.5)
+        patch_runs = [r for r in runs
+                      if keep_min <= (r[1] - r[0] + 1) <= keep_max]
+        # Take the BOTTOM-MOST `steps` of them: leader sits above and
+        # trailer below the data — if filtering missed one, the bottom-
+        # anchor is still the safer side because the trailer is usually
+        # smaller and more uniform than the leader.
+        if len(patch_runs) >= steps:
+            strip_ranges.append(patch_runs[-steps:])
+        else:
+            strip_ranges.append(patch_runs or None)
+
+    fm = re.search(r"BEGIN_DATA_FORMAT(.*?)END_DATA_FORMAT", text, re.DOTALL)
+    dm = re.search(r"BEGIN_DATA(?!_FORMAT)(.*?)END_DATA", text, re.DOTALL)
+    if not fm or not dm:
+        return {}
+    fields = fm.group(1).split()
+    idx = {f: i for i, f in enumerate(fields)}
+    id_i = idx.get("SAMPLE_ID", 0)
+    loc_i = idx.get("SAMPLE_LOC")
+    if loc_i is None:
+        return {}
+
+    # Width shrink (each strip column has inter-strip spacers around it).
+    shrink_w = 0.75
+    half_w = strip_w * shrink_w / 2
+    # Uniform y fallback (when strip_ranges couldn't locate enough runs).
+    fallback_row_h = (y1 - y_top + 1) / steps
+
+    geom: dict[int, tuple[int, int, int, int]] = {}
+    for line in dm.group(1).splitlines():
+        toks = _split_cgats(line)
+        if len(toks) <= max(id_i, loc_i):
+            continue
+        try:
+            sid = int(toks[id_i])
+        except ValueError:
+            continue
+        # printtarg pads a partial last strip with white patches whose
+        # SAMPLE_ID is 0 — they don't correspond to anything the user
+        # placed, so skip them (they'd also collide on the key).
+        if sid <= 0:
+            continue
+        loc = toks[loc_i].strip('"')
+        m = _LOC_RE.match(loc)
+        if not m:
+            continue
+        strip_idx = letter_to_idx(m.group(1))
+        step_idx = int(m.group(2)) - 1
+        if not (strips_before <= strip_idx < strips_before + n_strips):
+            continue
+        within_strip = strip_idx - strips_before
+        cx = x0 + (within_strip + 0.5) * strip_w
+        ranges = strip_ranges[within_strip]
+        if ranges and step_idx < len(ranges):
+            ty, by = ranges[step_idx]
+        else:
+            cy = y_top + (step_idx + 0.5) * fallback_row_h
+            ty = int(cy - fallback_row_h * 0.4)
+            by = int(cy + fallback_row_h * 0.4)
+        geom[sid] = (int(cx - half_w), int(ty),
+                     int(cx + half_w), int(by))
+    return geom

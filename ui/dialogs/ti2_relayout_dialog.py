@@ -32,8 +32,18 @@ from core.logger import get_logger
 from core.strip_utils import parse_passes_per_page
 from ui.styles import SPEC_AMBER, SPEC_MAGENTA, TAB_COLORS
 from ui.widgets import (
-    NoScrollComboBox, NoScrollSpinBox, open_dir_dialog, open_file_dialog,
+    NoScrollComboBox, NoScrollDoubleSpinBox, NoScrollSpinBox,
+    open_dir_dialog, open_file_dialog,
 )
+
+
+def _as_compact(*widgets) -> None:
+    """Mark inputs as ``#compact_input`` so the app-wide stylesheets
+    (ui/styles.py + ui/light_styles.py) apply the short / small-arrow
+    rules to them. Used in this dialog so the spinboxes don't display
+    the bulky default native arrows."""
+    for w in widgets:
+        w.setObjectName("compact_input")
 from workflow import ti2_relayout as R
 
 log = get_logger(__name__)
@@ -185,15 +195,23 @@ class _ReorderListWidget(QListWidget):
 
     Drop handling is Qt's default (Snap + InternalMove) — that combo is what
     QListView's reorder logic actually targets, and the previous custom
-    dropEvent fought with it (items snapping back was the symptom). All we
-    customise here is the visual feedback: while a drag is active, the source
-    items get a washed-out / dashed icon so the user sees the slot the patch
-    came from and the drag pixmap following the cursor at the same time.
+    dropEvent fought with it (items snapping back was the symptom).
+
+    Two visual tweaks on top of Qt's behaviour:
+
+    1. While a drag is active, the source items get a washed-out / dashed
+       icon so the source slot stays visible alongside the drag pixmap.
+    2. The drop indicator is painted by us at the **gap midpoint** between
+       the two items around the cursor — Qt's built-in indicator otherwise
+       snaps to either side of the gap depending on cursor position, which
+       reads as visual flicker even though the resulting reorder is the
+       same. We hide the built-in one and draw a single mid-gap line.
     """
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._drag_originals: list[tuple[QListWidgetItem, QIcon]] = []
+        self._drop_line: tuple[int, int, int] | None = None  # (x, y0, y1)
 
     def startDrag(self, supported_actions) -> None:  # noqa: N802
         selected = self.selectedItems()
@@ -209,6 +227,80 @@ class _ReorderListWidget(QListWidget):
             for it, icon in self._drag_originals:
                 it.setIcon(icon)
             self._drag_originals = []
+            self._drop_line = None
+            self.viewport().update()
+
+    def dragMoveEvent(self, ev) -> None:  # noqa: N802
+        """Compute the gap midpoint between the items around the cursor.
+
+        Qt's hit logic gives us the item *under* the cursor; we then decide
+        whether the drop goes *before* or *after* that item by the cursor's
+        position within its rect, and pin the indicator to the centre of the
+        gap to the chosen neighbour. The actual insert position is left to
+        Qt's dropEvent so the InternalMove reorder still does the right
+        thing.
+        """
+        super().dragMoveEvent(ev)
+        pos = ev.position().toPoint()
+        idx = self.indexAt(pos)
+        if not idx.isValid():
+            self._drop_line = None
+            self.viewport().update()
+            return
+        rect = self.visualRect(idx)
+        # Drop-before-this-item if cursor is in its left half, else drop-after.
+        before = pos.x() < rect.center().x()
+        if before:
+            other_idx = self.model().index(idx.row() - 1, 0) if idx.row() > 0 else None
+            if other_idx is not None and other_idx.isValid():
+                left_rect  = self.visualRect(other_idx)
+                right_rect = rect
+                # Only stack horizontally when items are on the same row.
+                if abs(left_rect.center().y() - right_rect.center().y()) < rect.height() / 2:
+                    x = (left_rect.right() + right_rect.left()) // 2
+                    y0 = min(left_rect.top(), right_rect.top())
+                    y1 = max(left_rect.bottom(), right_rect.bottom())
+                    self._drop_line = (x, y0, y1)
+                else:
+                    self._drop_line = (rect.left() - 2, rect.top(), rect.bottom())
+            else:
+                self._drop_line = (rect.left() - 2, rect.top(), rect.bottom())
+        else:
+            other_idx = self.model().index(idx.row() + 1, 0)
+            if other_idx is not None and other_idx.isValid():
+                left_rect  = rect
+                right_rect = self.visualRect(other_idx)
+                if abs(left_rect.center().y() - right_rect.center().y()) < rect.height() / 2:
+                    x = (left_rect.right() + right_rect.left()) // 2
+                    y0 = min(left_rect.top(), right_rect.top())
+                    y1 = max(left_rect.bottom(), right_rect.bottom())
+                    self._drop_line = (x, y0, y1)
+                else:
+                    self._drop_line = (rect.right() + 2, rect.top(), rect.bottom())
+            else:
+                self._drop_line = (rect.right() + 2, rect.top(), rect.bottom())
+        self.viewport().update()
+
+    def dragLeaveEvent(self, ev) -> None:  # noqa: N802
+        self._drop_line = None
+        self.viewport().update()
+        super().dragLeaveEvent(ev)
+
+    def dropEvent(self, ev) -> None:  # noqa: N802
+        self._drop_line = None
+        super().dropEvent(ev)
+        self.viewport().update()
+
+    def paintEvent(self, ev) -> None:  # noqa: N802
+        super().paintEvent(ev)
+        if self._drop_line is None:
+            return
+        x, y0, y1 = self._drop_line
+        p = QPainter(self.viewport())
+        # Magenta accent — matches the app's drag/active highlight family.
+        p.setPen(QPen(QColor(SPEC_MAGENTA), 2))
+        p.drawLine(x, y0, x, y1)
+        p.end()
 
 
 # ---------------------------------------------------------------------------
@@ -284,6 +376,70 @@ class _PreviewLabel(QLabel):
 
 
 # ---------------------------------------------------------------------------
+# Right-panel scroll area with a top/bottom fade gradient.
+# ---------------------------------------------------------------------------
+class _FadeScrollArea(QScrollArea):
+    """QScrollArea that paints translucent fade strips at the top + bottom
+    edges so the user can see content continues out of view.
+
+    The fades only render when there's actually content above/below — at
+    the top they vanish when scrolled to the top, etc. The dialog colour
+    bleeds the fade into the surrounding panel.
+
+    We install an event filter on the viewport to draw AFTER the child
+    widget paints (QScrollArea's own paintEvent fires only on frame
+    repaints, not on scroll). The vertical scroll bar's valueChanged
+    triggers a viewport update so the fades refresh as the user scrolls.
+    """
+
+    _FADE_PX = 18
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self.verticalScrollBar().valueChanged.connect(
+            lambda _v: self.viewport().update()
+        )
+        self.viewport().installEventFilter(self)
+
+    def eventFilter(self, obj, ev):  # noqa: N802
+        if obj is self.viewport() and ev.type() == ev.Type.Paint:
+            # Let the viewport draw its child widget first, then overlay
+            # the fade strips on top.
+            res = super().eventFilter(obj, ev)
+            self._paint_fades(self.viewport())
+            return res
+        return super().eventFilter(obj, ev)
+
+    def _paint_fades(self, vp) -> None:
+        bar = self.verticalScrollBar()
+        if bar is None or bar.maximum() == 0:
+            return
+        from PyQt6.QtGui import QLinearGradient
+        w, h = vp.width(), vp.height()
+        if w <= 0 or h <= 0:
+            return
+        p = QPainter(vp)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing, False)
+        # Sample the dialog background (one level up) so the fade matches
+        # whatever theme is active.
+        bg = (self.parentWidget() or self).palette().color(
+            self.backgroundRole())
+        clear  = QColor(bg.red(), bg.green(), bg.blue(), 0)
+        opaque = QColor(bg.red(), bg.green(), bg.blue(), 235)
+        if bar.value() > 0:
+            grad = QLinearGradient(0, 0, 0, self._FADE_PX)
+            grad.setColorAt(0.0, opaque)
+            grad.setColorAt(1.0, clear)
+            p.fillRect(0, 0, w, self._FADE_PX, grad)
+        if bar.value() < bar.maximum():
+            grad = QLinearGradient(0, h - self._FADE_PX, 0, h)
+            grad.setColorAt(0.0, clear)
+            grad.setColorAt(1.0, opaque)
+            p.fillRect(0, h - self._FADE_PX, w, self._FADE_PX, grad)
+        p.end()
+
+
+# ---------------------------------------------------------------------------
 # New-chart setup
 # ---------------------------------------------------------------------------
 class _NewChartDialog(QDialog):
@@ -308,6 +464,7 @@ class _NewChartDialog(QDialog):
         cg = QGridLayout(chart_box)
         cg.addWidget(QLabel("Name:"), 0, 0)
         self._name = QLineEdit("chart", chart_box)
+        self._name.setObjectName("compact_input")
         self._name.setToolTip("Used as the file basename and stamped onto the chart")
         cg.addWidget(self._name, 0, 1, 1, 3)
         cg.addWidget(QLabel("Instrument:"), 1, 0)
@@ -319,6 +476,7 @@ class _NewChartDialog(QDialog):
         self._paper = NoScrollComboBox(chart_box)
         for code in _PAPER_ORDER:
             self._paper.addItem(PAPER_LABELS.get(code, code), code)
+        _as_compact(self._instr, self._paper)
         # Default to A4 portrait
         ix = self._paper.findData("A4")
         if ix >= 0:
@@ -340,6 +498,7 @@ class _NewChartDialog(QDialog):
         self._count = NoScrollSpinBox(src_box)
         self._count.setRange(8, 4000)
         self._count.setValue(200)
+        self._count.setObjectName("compact_input")
         seed_row.addWidget(self._count)
         seed_row.addStretch(1)
         sl.addLayout(seed_row)
@@ -389,26 +548,78 @@ class _NewChartDialog(QDialog):
         og.addLayout(sp_row, 0, 1, 1, 3)
 
         og.addWidget(QLabel("Patch scale (-a):"), 1, 0)
-        self._patch_scale = QDoubleSpinBox(opt_box)
+        self._patch_scale = NoScrollDoubleSpinBox(opt_box)
         self._patch_scale.setRange(0.3, 3.0)
         self._patch_scale.setSingleStep(0.05)
         self._patch_scale.setValue(1.0)
         og.addWidget(self._patch_scale, 1, 1)
         og.addWidget(QLabel("Spacer scale (-A):"), 1, 2)
-        self._spacer_scale = QDoubleSpinBox(opt_box)
+        self._spacer_scale = NoScrollDoubleSpinBox(opt_box)
         self._spacer_scale.setRange(0.3, 3.0)
         self._spacer_scale.setSingleStep(0.05)
         self._spacer_scale.setValue(1.0)
         og.addWidget(self._spacer_scale, 1, 3)
 
+        # Margin / DPI / bit depth — match the Create Chart tab so the
+        # editor offers the same printtarg knobs.
+        og.addWidget(QLabel("Margin (-m / -M, mm):"), 2, 0)
+        self._margin = NoScrollSpinBox(opt_box)
+        self._margin.setRange(0, 50)
+        self._margin.setValue(6)
+        self._margin.setToolTip("Inter-strip and outer page margin in mm. "
+                                "printtarg's default is 6.")
+        og.addWidget(self._margin, 2, 1)
+        og.addWidget(QLabel("DPI:"), 2, 2)
+        self._dpi = NoScrollSpinBox(opt_box)
+        self._dpi.setRange(72, 1200)
+        self._dpi.setSingleStep(50)
+        self._dpi.setValue(300)
+        og.addWidget(self._dpi, 2, 3)
+        _as_compact(self._patch_scale, self._spacer_scale,
+                    self._margin, self._dpi)
+
+        og.addWidget(QLabel("Bit depth:"), 3, 0)
+        self._bd_8 = QRadioButton("8-bit", opt_box)
+        self._bd_16 = QRadioButton("16-bit", opt_box)
+        self._bd_8.setChecked(True)
+        bd_grp = QButtonGroup(opt_box)
+        bd_grp.addButton(self._bd_8)
+        bd_grp.addButton(self._bd_16)
+        bd_row = QHBoxLayout()
+        bd_row.addWidget(self._bd_8)
+        bd_row.addWidget(self._bd_16)
+        bd_row.addStretch(1)
+        og.addLayout(bd_row, 3, 1, 1, 3)
+
+        # Instrument-conditional knobs — laid out in a self-contained 2-col
+        # grid below the always-visible options. We toggle the *whole row*
+        # visibility from the instrument signal so the dialog stays compact.
         self._cb_L = QCheckBox("Suppress left clip border (-L)", opt_box)
         self._cb_L.setToolTip("i1Pro / 3+ only. Frees the strip for patches.")
         self._cb_P = QCheckBox("Don't limit strip length (-P)", opt_box)
-        self._cb_h = QCheckBox("Double density / hexagons (-h)", opt_box)
-        self._cb_h.setToolTip("ColorMunki: double-density. SpectroScan: hex patches.")
-        og.addWidget(self._cb_L, 2, 0, 1, 2)
-        og.addWidget(self._cb_P, 2, 2, 1, 2)
-        og.addWidget(self._cb_h, 3, 0, 1, 4)
+        self._cb_P.setToolTip("i1Pro / 3+ only. Lets a long strip span multiple "
+                              "physical strokes for very tall charts.")
+        self._cb_h = QCheckBox("Double density (-h)", opt_box)
+        self._cb_h.setToolTip("ColorMunki only. Tighter strip layout for the "
+                              "ColorMunki rig. Mutually exclusive with Triple.")
+        self._cb_td = QCheckBox("Triple density (i1Pro layout emulation)", opt_box)
+        self._cb_td.setToolTip(
+            "ColorMunki + rig only. Renders the chart with the i1Pro strip "
+            "layout (printtarg -ii1) at the tuned scale (1.3) / margin (5) / "
+            "strip-limit-off / left-border-suppressed preset, then patches "
+            "TARGET_INSTRUMENT back to ColorMunki so chartread still drives "
+            "your meter. Mutually exclusive with Double density."
+        )
+        og.addWidget(self._cb_L,  4, 0, 1, 2)
+        og.addWidget(self._cb_P,  4, 2, 1, 2)
+        og.addWidget(self._cb_h,  5, 0, 1, 2)
+        og.addWidget(self._cb_td, 5, 2, 1, 2)
+        # Triple ↔ Double mutual exclusion + triple-density preset apply
+        self._cb_td.toggled.connect(self._on_td_toggled)
+        self._cb_h.toggled.connect(self._on_dd_toggled)
+        # Initial visibility for the conditional rows
+        self._instr.currentIndexChanged.connect(self._refresh_instr_widgets)
+        self._refresh_instr_widgets()
         lay.addWidget(opt_box)
 
         btns = QHBoxLayout()
@@ -426,6 +637,69 @@ class _NewChartDialog(QDialog):
     def _refresh_source_widgets(self) -> None:
         self._count.setEnabled(self._mode_seed.isChecked())
         self._paste_edit.setEnabled(self._mode_paste.isChecked())
+
+    def _refresh_instr_widgets(self) -> None:
+        """Show/hide instrument-conditional options.
+
+        i1Pro: ``-L`` (suppress left clip) + ``-P`` (no strip limit) — both
+        layout flags Argyll documents as i1-only.
+        ColorMunki: ``-h`` (double density) + Triple density — the rig-only
+        layout tweaks. Hidden controls also reset to off so a hidden value
+        can't leak through into the printtarg command on Create.
+        """
+        code = self._instr.currentData()
+        is_i1 = code == "i1"
+        is_cm = code == "CM"
+        self._cb_L.setVisible(is_i1)
+        self._cb_P.setVisible(is_i1)
+        self._cb_h.setVisible(is_cm)
+        self._cb_td.setVisible(is_cm)
+        if not is_i1:
+            self._cb_L.setChecked(False)
+            self._cb_P.setChecked(False)
+        if not is_cm:
+            self._cb_h.setChecked(False)
+            self._cb_td.setChecked(False)
+
+    def _on_dd_toggled(self, on: bool) -> None:
+        """Toggling double density off triple density (mutual exclusion)."""
+        if on and self._cb_td.isChecked():
+            self._cb_td.setChecked(False)
+
+    def _on_td_toggled(self, on: bool) -> None:
+        """Apply / undo the triple-density preset on the layout widgets.
+
+        Mirrors the manual triple-density toggle in
+        ``ui/tabs/tab_chart.py`` (``_on_manual_td_toggled``): when enabled,
+        stash the user's -a / -m / -L / -P values and overwrite them with the
+        preset (1.3 / 5 / on / on); restore on untoggle. Also keeps Double
+        density mutually exclusive.
+        """
+        if on and self._cb_h.isChecked():
+            self._cb_h.setChecked(False)
+        self._cb_h.setEnabled(not on)
+        if on:
+            self._td_stash = {
+                "a": self._patch_scale.value(),
+                "m": self._margin.value(),
+                "L": self._cb_L.isChecked(),
+                "P": self._cb_P.isChecked(),
+            }
+            self._patch_scale.setValue(1.3)
+            self._margin.setValue(5)
+            self._cb_L.setChecked(True)
+            self._cb_P.setChecked(True)
+        else:
+            stash = getattr(self, "_td_stash", None) or {}
+            if "a" in stash:
+                self._patch_scale.setValue(stash["a"])
+            if "m" in stash:
+                self._margin.setValue(stash["m"])
+            if "L" in stash:
+                self._cb_L.setChecked(bool(stash["L"]))
+            if "P" in stash:
+                self._cb_P.setChecked(bool(stash["P"]))
+            self._td_stash = None
 
     def _update_paste_count(self) -> None:
         parsed = R.parse_color_values(self._paste_edit.toPlainText())
@@ -472,9 +746,13 @@ class _NewChartDialog(QDialog):
             spacer_mode=sm,
             patch_scale=self._patch_scale.value(),
             spacer_scale=self._spacer_scale.value(),
+            margin_mm=self._margin.value(),
             suppress_left_clip=self._cb_L.isChecked(),
             no_strip_limit=self._cb_P.isChecked(),
             double_density=self._cb_h.isChecked(),
+            triple_density=self._cb_td.isChecked(),
+            tiff_16bit=self._bd_16.isChecked(),
+            dpi=self._dpi.value(),
         )
 
         name = self._name.text().strip() or "chart"
@@ -494,8 +772,10 @@ class Ti2RelayoutDialog(QDialog):
         self._settings = settings
         self._bin_dir = Path(settings.get("argyll_bin_path", "/Applications/Argyll/bin"))
         self.setWindowTitle("Edit / create chart layout")
-        self.resize(1060, 720)
-        self.setMinimumSize(880, 560)
+        # Wider default so the printtarg-options column doesn't clip its
+        # row labels ("Margin (mm):", "Spacer -A:") on first open.
+        self.resize(1180, 760)
+        self.setMinimumSize(960, 600)
 
         self._spec: R.ChartSpec | None = None
         self._palette: list[tuple] | None = None       # native spacer palette
@@ -514,6 +794,10 @@ class Ti2RelayoutDialog(QDialog):
         self._options = R.LayoutOptions()               # printtarg layout knobs
         self._basename = "chart"                        # used for preview + save
         self._strips_per_page: list[int] = []           # PASSES_IN_STRIPS2 per page
+        # Per-page {sample_id: (x0,y0,x1,y1)} pixel boxes, computed once
+        # after each regen and used by the "highlight selected patches"
+        # overlay + the preview's patch-click/marquee handlers.
+        self._patch_geom: list[dict[int, tuple[int, int, int, int]]] = []
 
         # Debounced auto-preview: fire 1.8s after the last edit.
         self._auto_timer = QTimer(self)
@@ -574,7 +858,9 @@ class Ti2RelayoutDialog(QDialog):
         self._grid.setDefaultDropAction(Qt.DropAction.MoveAction)
         self._grid.setDragEnabled(True)
         self._grid.setAcceptDrops(True)
-        self._grid.setDropIndicatorShown(True)
+        # Built-in indicator hidden — _ReorderListWidget paints a mid-gap
+        # magenta line in dragMoveEvent / paintEvent instead.
+        self._grid.setDropIndicatorShown(False)
         self._grid.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
         self._grid.setIconSize(QSize(_SWATCH, _SWATCH))
         self._grid.setSpacing(3)
@@ -588,6 +874,11 @@ class Ti2RelayoutDialog(QDialog):
             self._renumber()
             self._schedule_auto_refresh()
         self._grid.model().rowsMoved.connect(_after_drag)
+        # Re-render the preview overlay when the grid selection changes —
+        # only matters when "Highlight selected in preview" is on, but the
+        # connection is harmless either way (_refresh_preview no-ops if the
+        # toggle is off).
+        self._grid.itemSelectionChanged.connect(self._on_grid_selection_changed)
         # Keyboard reorder for the selection. Alt + arrows nudge / jump,
         # plain F/L jump to first/last (mnemonic for "front" / "last").
         for keys, fn in (
@@ -618,10 +909,16 @@ class Ti2RelayoutDialog(QDialog):
         self._resize_timer.setInterval(120)
         self._resize_timer.timeout.connect(self._rescale_preview)
         self._preview.resized.connect(self._resize_timer.start)
-        scroll = QScrollArea(mid)
-        scroll.setWidgetResizable(True)
-        scroll.setWidget(self._preview)
-        midv.addWidget(scroll, 1)
+        # Plain layout (no QScrollArea): the canvas-with-white-border
+        # pattern in _rescale_preview already paints the visible chart on a
+        # white background. We give the label a small minimum size so it
+        # always shows the border even with no chart loaded.
+        self._preview.setMinimumSize(200, 200)
+        self._preview.setSizePolicy(
+            self._preview.sizePolicy().Policy.Expanding,
+            self._preview.sizePolicy().Policy.Expanding,
+        )
+        midv.addWidget(self._preview, 1)
         self._page_bar = QWidget(mid)
         pbl = QHBoxLayout(self._page_bar)
         pbl.setContentsMargins(0, 0, 0, 0)
@@ -644,11 +941,30 @@ class Ti2RelayoutDialog(QDialog):
 
         # Right: controls — OUTSIDE the splitter so it sits flush at the right
         # edge with no jumpy "phantom" pane between it and the window border.
+        # The controls panel is wrapped in a scroll area so a stack of
+        # printtarg knobs + Patches/Spacers + What-a-mess + actions never
+        # falls off the bottom on smaller window heights. _FadeScroll paints
+        # a top/bottom fade so the user can tell content continues above /
+        # below the visible band.
         body = QHBoxLayout()
         body.setContentsMargins(0, 0, 0, 0)
         body.setSpacing(8)
         body.addWidget(split, 1)
-        body.addWidget(self._build_controls(), 0)
+        controls = self._build_controls()
+        ctrl_scroll = _FadeScrollArea(self)
+        ctrl_scroll.setWidget(controls)
+        ctrl_scroll.setWidgetResizable(True)
+        ctrl_scroll.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        ctrl_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        ctrl_scroll.setStyleSheet(
+            "QScrollArea { background: transparent; }"
+            " QScrollArea > QWidget > QWidget { background: transparent; }"
+        )
+        # Match the panel's fixed width so the scrollbar (if shown)
+        # sits next to it without overflow.
+        ctrl_scroll.setFixedWidth(controls.width() + 14)
+        body.addWidget(ctrl_scroll, 0)
         outer.addLayout(body, 1)
 
         self._status = QLabel("", self)
@@ -657,15 +973,19 @@ class Ti2RelayoutDialog(QDialog):
 
     def _build_controls(self) -> QWidget:
         panel = QWidget(self)
-        panel.setFixedWidth(230)
+        # Widened so the printtarg spinboxes ("1.00", "300") render their
+        # full value next to their up/down arrows without clipping in
+        # German locale ("1,00") or 3-digit DPI ("300").
+        panel.setFixedWidth(320)
         # Container stylesheet — the only reliable way to shrink button height
         # ([[feedback_qt_button_sizing]]: setMinimumHeight on the button itself
         # is overridden by Qt's compound-widget CSS).
         panel.setStyleSheet("""
-            QPushButton { padding: 3px 8px; min-height: 22px; font-size: 11px; }
+            QPushButton { padding: 4px 8px; min-height: 26px; font-size: 11px; }
             QGroupBox  { font-size: 12px; }
             QLabel     { font-size: 11px; }
             QRadioButton { font-size: 12px; }
+            QCheckBox  { font-size: 11px; }
         """)
         v = QVBoxLayout(panel)
         v.setContentsMargins(4, 0, 0, 0)
@@ -685,9 +1005,122 @@ class Ti2RelayoutDialog(QDialog):
         mb.addWidget(self._mode_spacers)
         v.addWidget(mode_box)
 
+        # printtarg options — all the knobs the New chart dialog exposes,
+        # editable on an already-loaded chart. Mirrors LayoutOptions; each
+        # widget pushes back to self._options + schedules an auto-preview.
+        pt_box = QGroupBox("printtarg", panel)
+        ptg = QGridLayout(pt_box)
+        ptg.setHorizontalSpacing(4)
+        ptg.setVerticalSpacing(4)
+        # Spacers row
+        ptg.addWidget(QLabel("Spacers:"), 0, 0)
+        sp_row = QHBoxLayout()
+        sp_row.setSpacing(6)
+        self._pt_sp_col  = QRadioButton("Coloured", pt_box)
+        self._pt_sp_bw   = QRadioButton("B&&W", pt_box)
+        self._pt_sp_none = QRadioButton("None", pt_box)
+        self._pt_sp_col.setChecked(True)
+        pt_sp_grp = QButtonGroup(pt_box)
+        for rb in (self._pt_sp_col, self._pt_sp_bw, self._pt_sp_none):
+            pt_sp_grp.addButton(rb)
+            rb.toggled.connect(self._on_printtarg_changed)
+            sp_row.addWidget(rb)
+        sp_row.addStretch(1)
+        ptg.addLayout(sp_row, 0, 1, 1, 3)
+        # Scales row. Min-width on every spinbox so 3-digit / decimal
+        # values don't truncate to "30" / "1.0" inside the panel.
+        SPIN_W = 76
+        ptg.addWidget(QLabel("Patch -a:"), 1, 0)
+        self._pt_a = NoScrollDoubleSpinBox(pt_box)
+        self._pt_a.setRange(0.3, 3.0)
+        self._pt_a.setSingleStep(0.05)
+        self._pt_a.setValue(1.0)
+        self._pt_a.setMinimumWidth(SPIN_W)
+        self._pt_a.valueChanged.connect(self._on_printtarg_changed)
+        ptg.addWidget(self._pt_a, 1, 1)
+        ptg.addWidget(QLabel("Spacer -A:"), 1, 2)
+        self._pt_A = NoScrollDoubleSpinBox(pt_box)
+        self._pt_A.setRange(0.3, 3.0)
+        self._pt_A.setSingleStep(0.05)
+        self._pt_A.setValue(1.0)
+        self._pt_A.setMinimumWidth(SPIN_W)
+        self._pt_A.valueChanged.connect(self._on_printtarg_changed)
+        ptg.addWidget(self._pt_A, 1, 3)
+        # Margin + DPI row
+        ptg.addWidget(QLabel("Margin (mm):"), 2, 0)
+        self._pt_m = NoScrollSpinBox(pt_box)
+        self._pt_m.setRange(0, 50)
+        self._pt_m.setValue(6)
+        self._pt_m.setMinimumWidth(SPIN_W)
+        self._pt_m.valueChanged.connect(self._on_printtarg_changed)
+        ptg.addWidget(self._pt_m, 2, 1)
+        ptg.addWidget(QLabel("DPI:"), 2, 2)
+        self._pt_dpi = NoScrollSpinBox(pt_box)
+        self._pt_dpi.setRange(72, 1200)
+        self._pt_dpi.setSingleStep(50)
+        self._pt_dpi.setValue(300)
+        self._pt_dpi.setMinimumWidth(SPIN_W)
+        self._pt_dpi.valueChanged.connect(self._on_printtarg_changed)
+        ptg.addWidget(self._pt_dpi, 2, 3)
+        _as_compact(self._pt_a, self._pt_A, self._pt_m, self._pt_dpi)
+        # Bit depth row
+        ptg.addWidget(QLabel("Bit depth:"), 3, 0)
+        bd_row = QHBoxLayout()
+        self._pt_bd8  = QRadioButton("8-bit", pt_box)
+        self._pt_bd16 = QRadioButton("16-bit", pt_box)
+        self._pt_bd8.setChecked(True)
+        bd_grp = QButtonGroup(pt_box)
+        bd_grp.addButton(self._pt_bd8)
+        bd_grp.addButton(self._pt_bd16)
+        self._pt_bd8.toggled.connect(self._on_printtarg_changed)
+        self._pt_bd16.toggled.connect(self._on_printtarg_changed)
+        bd_row.addWidget(self._pt_bd8)
+        bd_row.addWidget(self._pt_bd16)
+        bd_row.addStretch(1)
+        ptg.addLayout(bd_row, 3, 1, 1, 3)
+        # Instrument-conditional checkboxes (visibility flipped from
+        # self._spec.instrument_flag in _sync_printtarg_widgets).
+        self._pt_L = QCheckBox("Suppress left clip border (-L)", pt_box)
+        self._pt_L.setToolTip("i1Pro / 3+ only. Frees the strip for patches.")
+        self._pt_L.toggled.connect(self._on_printtarg_changed)
+        self._pt_P = QCheckBox("Don't limit strip length (-P)", pt_box)
+        self._pt_P.setToolTip("i1Pro / 3+ only. Lets a long strip span "
+                              "multiple strokes.")
+        self._pt_P.toggled.connect(self._on_printtarg_changed)
+        self._pt_dd = QCheckBox("Double density (-h)", pt_box)
+        self._pt_dd.setToolTip("ColorMunki only. Tighter strip layout for "
+                               "the ColorMunki rig. Mutually exclusive "
+                               "with Triple.")
+        self._pt_dd.toggled.connect(self._on_dd_toggled)
+        self._pt_td = QCheckBox("Triple density (i1Pro layout)", pt_box)
+        self._pt_td.setToolTip(
+            "ColorMunki + rig only. Renders with the i1Pro strip layout at "
+            "scale 1.3 / margin 5 / strip-limit off / left-border suppressed, "
+            "then patches TARGET_INSTRUMENT back to ColorMunki so chartread "
+            "still drives your meter. Mutually exclusive with Double.")
+        self._pt_td.toggled.connect(self._on_td_toggled)
+        ptg.addWidget(self._pt_L,  4, 0, 1, 4)
+        ptg.addWidget(self._pt_P,  5, 0, 1, 4)
+        ptg.addWidget(self._pt_dd, 6, 0, 1, 4)
+        ptg.addWidget(self._pt_td, 7, 0, 1, 4)
+        # NOTE: pt_box is added to the panel layout *after* the Patches and
+        # Spacers boxes below, so the on-paper order is Patches → Spacers →
+        # printtarg (the chart-content controls users edit most often stay
+        # at the top; printtarg's render knobs are set-once-then-forget).
+        self._pt_box = pt_box
+
         # Patch controls
         self._patch_box = QGroupBox("Patches", panel)
         pb = QVBoxLayout(self._patch_box)
+        self._hl_patches = QCheckBox(
+            "Highlight selected in preview", self._patch_box)
+        self._hl_patches.setToolTip(
+            "Two-way link between the swatch grid and the preview:\n"
+            "• selecting patches on the left highlights them in the preview\n"
+            "• clicking or marquee-dragging on the preview selects them on "
+            "the left")
+        self._hl_patches.toggled.connect(self._on_patch_highlight_toggled)
+        pb.addWidget(self._hl_patches)
         set_col = QPushButton("Set colour of selection…", self._patch_box)
         set_col.clicked.connect(self._set_patch_colour)
         pb.addWidget(set_col)
@@ -761,6 +1194,11 @@ class Ti2RelayoutDialog(QDialog):
         sb.addLayout(paint_row)
         self._spacer_box.setVisible(False)
         v.addWidget(self._spacer_box)
+
+        # printtarg knobs section sits below Patches + Spacers — it's
+        # always visible (the chart's printtarg config applies regardless
+        # of the "Patches / Spacers" target mode above).
+        v.addWidget(self._pt_box)
 
         # Actions
         v.addStretch(1)
@@ -858,11 +1296,20 @@ class Ti2RelayoutDialog(QDialog):
 
     def _set_chart(self, spec: R.ChartSpec, program: list[tuple], note: str) -> None:
         self._spec = spec
-        self._palette = None
+        # Seed the spacer palette from the source chart's own .ti1 (if its
+        # sibling was found by ChartSpec.from_ti2), so loaded charts render
+        # with the palette they were originally made with instead of
+        # snapping to printtarg's defaults.
+        self._palette = (list(spec.density_extremes)
+                         if spec.density_extremes else None)
         self._paint.clear()
         self._sel_spacers.clear()
         self._populate_grid(program)
         self._build_palette_row()
+        # Mirror the live printtarg-options widgets to the chart we just
+        # loaded (so loading after a new-chart create reflects whatever the
+        # user picked, and loading a file resets to defaults).
+        self._sync_printtarg_widgets()
         self._info.setText(
             f"{note} — {len(program)} patches, -i{spec.instrument_flag} "
             f"-p{spec.paper_flag}")
@@ -1047,6 +1494,115 @@ class Ti2RelayoutDialog(QDialog):
         self._build_palette_row()
         self._status.setText("Palette reset to default.")
 
+    # -- printtarg-options panel -------------------------------------------
+    def _on_printtarg_changed(self, *_a) -> None:
+        """Pull the printtarg panel widgets into self._options and schedule
+        a re-render. The mutual-exclusion + triple-density preset live in
+        _on_dd_toggled / _on_td_toggled (which delegate back here)."""
+        if getattr(self, "_pt_syncing", False):
+            return
+        # Spacer mode
+        if self._pt_sp_bw.isChecked():
+            mode = "bw"
+        elif self._pt_sp_none.isChecked():
+            mode = "none"
+        else:
+            mode = "colored"
+        new = R.LayoutOptions(
+            spacer_mode=mode,
+            patch_scale=self._pt_a.value(),
+            spacer_scale=self._pt_A.value(),
+            margin_mm=self._pt_m.value(),
+            suppress_left_clip=self._pt_L.isChecked(),
+            no_strip_limit=self._pt_P.isChecked(),
+            double_density=self._pt_dd.isChecked(),
+            triple_density=self._pt_td.isChecked(),
+            tiff_16bit=self._pt_bd16.isChecked(),
+            dpi=self._pt_dpi.value(),
+        )
+        if new == self._options:
+            return
+        self._options = new
+        self._schedule_auto_refresh()
+
+    def _on_dd_toggled(self, on: bool) -> None:
+        if on and self._pt_td.isChecked():
+            self._pt_td.setChecked(False)
+        self._on_printtarg_changed()
+
+    def _on_td_toggled(self, on: bool) -> None:
+        """Triple-density mutual exclusion + preset application — mirrors
+        the manual triple-density toggle in tab_chart."""
+        if on and self._pt_dd.isChecked():
+            self._pt_dd.setChecked(False)
+        self._pt_dd.setEnabled(not on)
+        # Block while applying the preset so we coalesce one re-render at
+        # the end of this method instead of one per widget edit.
+        self._pt_syncing = True
+        try:
+            if on:
+                self._td_stash = {
+                    "a": self._pt_a.value(),
+                    "m": self._pt_m.value(),
+                    "L": self._pt_L.isChecked(),
+                    "P": self._pt_P.isChecked(),
+                }
+                self._pt_a.setValue(1.3)
+                self._pt_m.setValue(5)
+                self._pt_L.setChecked(True)
+                self._pt_P.setChecked(True)
+            else:
+                stash = getattr(self, "_td_stash", None) or {}
+                if "a" in stash:
+                    self._pt_a.setValue(stash["a"])
+                if "m" in stash:
+                    self._pt_m.setValue(stash["m"])
+                if "L" in stash:
+                    self._pt_L.setChecked(bool(stash["L"]))
+                if "P" in stash:
+                    self._pt_P.setChecked(bool(stash["P"]))
+                self._td_stash = None
+        finally:
+            self._pt_syncing = False
+        self._on_printtarg_changed()
+
+    def _sync_printtarg_widgets(self) -> None:
+        """Push self._options + spec into the printtarg-section widgets.
+
+        Called when a new chart is loaded / created so the widgets reflect
+        whatever options came with it. Visibility of instrument-conditional
+        rows is flipped from the loaded chart's instrument flag — the editor
+        doesn't let the user switch instruments mid-edit since that changes
+        printtarg's strip layout fundamentally.
+        """
+        self._pt_syncing = True
+        try:
+            o = self._options
+            self._pt_sp_col.setChecked(o.spacer_mode == "colored")
+            self._pt_sp_bw.setChecked(o.spacer_mode == "bw")
+            self._pt_sp_none.setChecked(o.spacer_mode == "none")
+            self._pt_a.setValue(o.patch_scale)
+            self._pt_A.setValue(o.spacer_scale)
+            self._pt_m.setValue(o.margin_mm)
+            self._pt_dpi.setValue(o.dpi)
+            self._pt_bd8.setChecked(not o.tiff_16bit)
+            self._pt_bd16.setChecked(o.tiff_16bit)
+            self._pt_L.setChecked(o.suppress_left_clip)
+            self._pt_P.setChecked(o.no_strip_limit)
+            self._pt_dd.setChecked(o.double_density)
+            self._pt_td.setChecked(o.triple_density)
+            self._pt_dd.setEnabled(not o.triple_density)
+            instr = self._spec.instrument_flag if self._spec else "i1"
+            is_i1 = instr == "i1"
+            is_cm = instr == "CM"
+            self._pt_L.setVisible(is_i1)
+            self._pt_P.setVisible(is_i1)
+            self._pt_dd.setVisible(is_cm)
+            self._pt_td.setVisible(is_cm)
+        finally:
+            self._pt_syncing = False
+
+
     # -- regeneration / preview --------------------------------------------
     def _regenerate(self, save_to: Path | None) -> None:
         if self._spec is None or self._grid.count() == 0:
@@ -1079,6 +1635,16 @@ class Ti2RelayoutDialog(QDialog):
         self._regen = result
         # Authoritative per-page strip count from the regenerated .ti2.
         self._strips_per_page = parse_passes_per_page(result.ti2)
+        # Per-page patch geometry (sample-id → pixel bbox) used by the
+        # highlight overlay and preview patch hit-tests. Computed eagerly
+        # here so toggling Highlight or selecting in the grid is instant.
+        # The BW twin is required for the central-column scan that locates
+        # patch y-bands precisely (instead of guessing from the full bbox).
+        self._patch_geom = [
+            R.patch_geometry_for_page(
+                result.ti2, tif, page, bw_tif_path=result.bw_tiffs[page])
+            for page, tif in enumerate(result.tiffs)
+        ]
         if self._page >= len(result.tiffs):
             self._page = 0
         self._show_page(self._page)
@@ -1171,39 +1737,65 @@ class Ti2RelayoutDialog(QDialog):
         self._rescale_preview()
 
     def _rescale_preview(self) -> None:
-        """Scale the cached full-resolution pixmap to the current preview size,
-        honouring the display's device pixel ratio so retina screens get a
-        crisp image (the older code rendered at logical resolution and looked
-        soft on retina)."""
+        """Scale + compose the cached full-res pixmap onto a white canvas
+        with a 15-px margin, the same canvas-with-white-border pattern
+        ui.tiff_preview uses (see ``_repaint_label``). Painting the margin
+        INTO the pixmap (instead of via QLabel QSS) sidesteps the
+        sizeHint feedback loop that grows the label every refresh."""
         if self._full_pixmap is None:
             return
         dpr = self._preview.devicePixelRatioF() or 1.0
         lw, lh = self._preview.width(), self._preview.height()
         if lw <= 0 or lh <= 0:
             return
-        target = QSize(int(lw * dpr), int(lh * dpr))
+        B = 15  # white display border, all sides (logical px)
+        avail = QSize(
+            max(1, int((lw - 2 * B) * dpr)),
+            max(1, int((lh - 2 * B) * dpr)),
+        )
         scaled = self._full_pixmap.scaled(
-            target,
+            avail,
             Qt.AspectRatioMode.KeepAspectRatio,
             Qt.TransformationMode.SmoothTransformation,
         )
         scaled.setDevicePixelRatio(dpr)
-        # Logical scale (label coords -> image px) — divides out the dpr.
+        canvas = QPixmap(scaled.width() + int(2 * B * dpr),
+                         scaled.height() + int(2 * B * dpr))
+        canvas.setDevicePixelRatio(dpr)
+        canvas.fill(Qt.GlobalColor.white)
+        p = QPainter(canvas)
+        p.drawPixmap(B, B, scaled)
+        p.end()
+        # Logical scale (label coords → image px) — divides out the dpr.
         logical_w = scaled.width() / dpr
         self._preview_scale = (logical_w / self._full_pixmap.width()
                                if self._full_pixmap.width() else 1.0)
+        # Origin of the patch raster inside the canvas, in label-logical
+        # coords (used by _label_to_image when mapping clicks).
+        self._preview_border = B
         self._preview_orig = self._full_pixmap.size()
-        self._base_pixmap = scaled
+        self._base_pixmap = canvas
         self._refresh_preview()
 
     def _refresh_preview(self) -> None:
         """Redraw the preview from the cached base pixmap, overlaying yellow
-        outlines on currently-selected spacers when in Spacers mode. Hands
-        the composited pixmap to the preview label so the marquee can repaint
-        on top of it during drag."""
+        outlines on the currently-selected spacers (Spacers mode) or patches
+        (Patches mode + Highlight toggle on). Hands the composited pixmap to
+        the preview label so the marquee can repaint on top of it during
+        drag.
+
+        Overlay coordinates are shifted by ``_preview_border`` (the white
+        margin baked into the canvas by :meth:`_rescale_preview`) so the
+        rects align with the chart pixels inside the border.
+        """
         if self._base_pixmap is None:
             return
         pm = QPixmap(self._base_pixmap)
+        B = getattr(self, "_preview_border", 0)
+        dpr = pm.devicePixelRatio() or 1.0
+        # Painter coords are logical, but the canvas was created at device
+        # pixels with DPR baked in — so logical scale = self._preview_scale
+        # and the border offset is just B (logical px).
         if (self._mode_spacers.isChecked()
                 and self._sel_spacers and self._spacers):
             # Fill + outline (à la ui.scan_highlighter) — a translucent yellow
@@ -1217,17 +1809,76 @@ class Ti2RelayoutDialog(QDialog):
             for i in self._sel_spacers:
                 if 0 <= i < len(self._spacers):
                     x0, y0, x1, y1 = self._spacers[i].bbox
-                    p.drawRect(int(x0 * s) - 1, int(y0 * s) - 1,
+                    p.drawRect(int(x0 * s) + B - 1, int(y0 * s) + B - 1,
                                int((x1 - x0 + 1) * s) + 2,
                                int((y1 - y0 + 1) * s) + 2)
             p.end()
+        elif (self._mode_patches.isChecked()
+                and self._hl_patches.isChecked()
+                and self._patch_geom):
+            geom = self._patch_geom[self._page] if self._page < len(self._patch_geom) else {}
+            sel = {self._grid.row(it) + 1 for it in self._grid.selectedItems()}
+            if sel and geom:
+                p = QPainter(pm)
+                p.setRenderHint(QPainter.RenderHint.Antialiasing, False)
+                p.setBrush(QColor(255, 230, 0, 120))
+                p.setPen(QPen(QColor(255, 200, 0), 2))
+                s = self._preview_scale
+                for sid in sel:
+                    box = geom.get(sid)
+                    if box is None:
+                        continue
+                    x0, y0, x1, y1 = box
+                    p.drawRect(int(x0 * s) + B - 1, int(y0 * s) + B - 1,
+                               int((x1 - x0 + 1) * s) + 2,
+                               int((y1 - y0 + 1) * s) + 2)
+                p.end()
         self._preview.set_base_pixmap(pm)
+
+    def _on_patch_highlight_toggled(self, on: bool) -> None:
+        # Toggling either direction needs a redraw to show / clear the
+        # overlay. No status change — the checkbox label is the affordance.
+        self._refresh_preview()
+
+    def _on_grid_selection_changed(self) -> None:
+        # Cheap no-op unless we're showing the patch overlay; otherwise just
+        # repaint with the new selection.
+        if (self._mode_patches.isChecked()
+                and self._hl_patches.isChecked()
+                and self._patch_geom):
+            self._refresh_preview()
+
+    def _patch_at(self, ix: float, iy: float) -> int | None:
+        """Return the SAMPLE_ID under (ix, iy) on the current page, or None."""
+        if self._page >= len(self._patch_geom):
+            return None
+        for sid, (x0, y0, x1, y1) in self._patch_geom[self._page].items():
+            if x0 <= ix <= x1 and y0 <= iy <= y1:
+                return sid
+        return None
+
+    def _select_patches_by_ids(
+        self, sids: list[int], *, extend: bool, remove: bool = False,
+    ) -> None:
+        """Select grid rows for the given SAMPLE_IDs (1-based; row = id - 1).
+
+        ``extend`` keeps the existing selection (Ctrl-style additive). ``remove``
+        removes the given ids from the selection (Alt-style subtractive).
+        """
+        if not extend and not remove:
+            self._grid.clearSelection()
+        for sid in sids:
+            row = sid - 1
+            if 0 <= row < self._grid.count():
+                self._grid.item(row).setSelected(not remove)
 
     def _label_to_image(self, p: QPoint) -> tuple[float, float] | None:
         """Map a label-coord click to deliverable image pixels (or None).
 
         ``_base_pixmap`` is DPR-aware; its ``width()`` is physical, so we
-        divide by DPR to compare against the label's logical width.
+        divide by DPR to compare against the label's logical width. The
+        white border baked into the canvas (``_preview_border``) is also
+        subtracted before scaling back to original-image coordinates.
         """
         if self._base_pixmap is None or self._preview_scale <= 0:
             return None
@@ -1236,39 +1887,77 @@ class Ti2RelayoutDialog(QDialog):
         pm_logical_h = self._base_pixmap.height() / dpr
         off_x = (self._preview.width() - pm_logical_w) / 2
         off_y = (self._preview.height() - pm_logical_h) / 2
-        return (p.x() - off_x) / self._preview_scale, (p.y() - off_y) / self._preview_scale
+        B = getattr(self, "_preview_border", 0)
+        return ((p.x() - off_x - B) / self._preview_scale,
+                (p.y() - off_y - B) / self._preview_scale)
 
     def _on_marquee(self, rect, mods) -> None:
-        """Add (or, with Alt, subtract) every spacer that intersects the marquee."""
-        if not self._mode_spacers.isChecked() or not self._spacers:
-            return
+        """Marquee selection — same semantics as :meth:`_on_preview_click`.
+
+            * plain marquee  → replace (everything hit by the rectangle)
+            * Shift+marquee  → add hits to existing selection
+            * Alt+marquee    → remove hits from selection
+            * marquee hitting nothing + no modifiers → clear
+        """
         tl = self._label_to_image(rect.topLeft())
         br = self._label_to_image(rect.bottomRight())
         if tl is None or br is None:
             return
         ix0, iy0 = tl
         ix1, iy1 = br
-        is_alt = bool(mods & Qt.KeyboardModifier.AltModifier)
-        touched: list[int] = []
-        for i, sp in enumerate(self._spacers):
-            sx0, sy0, sx1, sy1 = sp.bbox
-            if sx1 < ix0 or sx0 > ix1 or sy1 < iy0 or sy0 > iy1:
-                continue
-            touched.append(i)
+        is_alt   = bool(mods & Qt.KeyboardModifier.AltModifier)
+        is_shift = bool(mods & (Qt.KeyboardModifier.ShiftModifier
+                                | Qt.KeyboardModifier.ControlModifier
+                                | Qt.KeyboardModifier.MetaModifier))
+
+        if self._mode_spacers.isChecked():
+            if not self._spacers:
+                return
+            touched = [
+                i for i, sp in enumerate(self._spacers)
+                if not (sp.bbox[2] < ix0 or sp.bbox[0] > ix1
+                        or sp.bbox[3] < iy0 or sp.bbox[1] > iy1)
+            ]
+            if is_alt:
+                self._sel_spacers.difference_update(touched)
+            elif is_shift:
+                self._sel_spacers.update(touched)
+            else:
+                # Empty marquee clears (no modifiers means a replace, so
+                # selecting nothing should mean "clear").
+                self._sel_spacers = set(touched)
+            self._refresh_preview()
+            self._status.setText(f"{len(self._sel_spacers)} spacer(s) selected.")
+            return
+
+        # Patches mode (+ highlight): marquee picks patches into the grid.
+        if not (self._hl_patches.isChecked() and self._patch_geom):
+            return
+        if self._page >= len(self._patch_geom):
+            return
+        geom = self._patch_geom[self._page]
+        touched_p = [
+            sid for sid, (x0, y0, x1, y1) in geom.items()
+            if not (x1 < ix0 or x0 > ix1 or y1 < iy0 or y0 > iy1)
+        ]
         if is_alt:
-            removed = sum(1 for i in touched if i in self._sel_spacers)
-            self._sel_spacers.difference_update(touched)
-            self._refresh_preview()
-            self._status.setText(
-                f"Marquee removed {removed} spacer(s); "
-                f"{len(self._sel_spacers)} still selected.")
+            if touched_p:
+                self._select_patches_by_ids(touched_p, extend=True, remove=True)
+        elif is_shift:
+            if touched_p:
+                self._select_patches_by_ids(touched_p, extend=True)
         else:
-            added = sum(1 for i in touched if i not in self._sel_spacers)
-            self._sel_spacers.update(touched)
-            self._refresh_preview()
-            self._status.setText(
-                f"Marquee added {added} spacer(s); "
-                f"{len(self._sel_spacers)} total selected.")
+            # Plain marquee replaces — clear first so an empty marquee is a
+            # clear, and a non-empty one becomes exactly the touched set.
+            self._grid.clearSelection()
+            if touched_p:
+                self._select_patches_by_ids(touched_p, extend=True)
+        if touched_p and not is_alt:
+            row = min(touched_p) - 1
+            if 0 <= row < self._grid.count():
+                self._grid.scrollToItem(self._grid.item(row))
+        self._status.setText(
+            f"{len(self._grid.selectedItems())} patch(es) selected.")
 
     def _clear_spacer_selection(self) -> None:
         if not self._sel_spacers:
@@ -1278,26 +1967,66 @@ class Ti2RelayoutDialog(QDialog):
         self._status.setText("Spacer selection cleared.")
 
     def _on_preview_click(self, pos: QPoint, mods) -> None:
-        if not self._mode_spacers.isChecked() or not self._spacers:
-            return
+        """Click in the preview — standard select semantics for both modes.
+
+            * plain click on a target  → replace selection (clear + add hit)
+            * plain click on empty     → clear selection
+            * Shift+click              → add hit
+            * Alt+click                → remove hit
+        """
         mapped = self._label_to_image(pos)
         if mapped is None:
             return
         ix, iy = mapped
-        hit = self._spacer_at(ix, iy)
-        if hit is None:
+        is_alt   = bool(mods & Qt.KeyboardModifier.AltModifier)
+        is_shift = bool(mods & (Qt.KeyboardModifier.ShiftModifier
+                                | Qt.KeyboardModifier.ControlModifier
+                                | Qt.KeyboardModifier.MetaModifier))
+
+        if self._mode_spacers.isChecked():
+            if not self._spacers:
+                return
+            hit = self._spacer_at(ix, iy)
+            if hit is None:
+                # Empty area + no modifiers clears; with modifiers it's a
+                # no-op (a missed Shift-click shouldn't drop the selection).
+                if not (is_alt or is_shift):
+                    self._sel_spacers.clear()
+                    self._refresh_preview()
+                    self._status.setText("Spacer selection cleared.")
+                return
+            if is_alt:
+                self._sel_spacers.discard(hit)
+            elif is_shift:
+                self._sel_spacers.add(hit)
+            else:
+                self._sel_spacers = {hit}
+            self._refresh_preview()
+            self._status.setText(f"{len(self._sel_spacers)} spacer(s) selected.")
             return
-        # Plain click toggles; Alt+click explicitly removes (matches macOS
-        # subtract-from-selection convention).
-        is_alt = bool(mods & Qt.KeyboardModifier.AltModifier)
+
+        # Patches mode (+ highlight): click maps to the grid selection.
+        if not (self._hl_patches.isChecked() and self._patch_geom):
+            return
+        sid = self._patch_at(ix, iy)
+        if sid is None:
+            if not (is_alt or is_shift):
+                self._grid.clearSelection()
+                self._status.setText("Patch selection cleared.")
+            return
+        row = sid - 1
+        if not (0 <= row < self._grid.count()):
+            return
         if is_alt:
-            self._sel_spacers.discard(hit)
-        elif hit in self._sel_spacers:
-            self._sel_spacers.discard(hit)
+            self._select_patches_by_ids([sid], extend=True, remove=True)
+        elif is_shift:
+            self._select_patches_by_ids([sid], extend=True)
         else:
-            self._sel_spacers.add(hit)
-        self._refresh_preview()
-        self._status.setText(f"{len(self._sel_spacers)} spacer(s) selected.")
+            self._select_patches_by_ids([sid], extend=False)
+        if not is_alt:
+            self._grid.scrollToItem(self._grid.item(row))
+        self._status.setText(
+            f"{len(self._grid.selectedItems())} patch(es) selected.")
 
     def _spacer_at(self, ix: float, iy: float) -> int | None:
         for i, sp in enumerate(self._spacers):

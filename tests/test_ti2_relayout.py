@@ -99,6 +99,93 @@ def test_instrument_and_paper_maps():
     assert R.paper_to_flag(123.0, 456.0) == "123x456"  # custom fallback
 
 
+# --- LayoutOptions args ---------------------------------------------------
+def test_layout_options_default_emits_nothing():
+    # Defaults match printtarg's defaults — no flags should be emitted.
+    assert R.LayoutOptions().to_printtarg_args() == []
+
+
+def test_layout_options_margin_emits_both_m_and_M():
+    args = R.LayoutOptions(margin_mm=5).to_printtarg_args()
+    assert "-m5" in args
+    assert "-M5" in args
+
+
+def test_layout_options_bw_and_scales():
+    args = R.LayoutOptions(
+        spacer_mode="bw", patch_scale=1.3, spacer_scale=0.9,
+        suppress_left_clip=True, no_strip_limit=True, double_density=True,
+    ).to_printtarg_args()
+    assert "-b" in args
+    assert "-a1.30" in args
+    assert "-A0.90" in args
+    assert "-L" in args
+    assert "-P" in args
+    assert "-h" in args
+
+
+# --- sibling .ti1 palette pickup ------------------------------------------
+def test_loaded_chart_picks_up_sibling_density_extremes(ti2: Path, tmp_path: Path):
+    # Write a .ti1 next to the .ti2 with a *non-default* extremes table; the
+    # loader must pick it up so the editor restores the original palette
+    # instead of resetting to printtarg's defaults.
+    spec = R.ChartSpec.from_ti2(ti2)
+    custom = ((100, 100, 100), (10, 20, 30), (40, 50, 60),
+              (70, 80, 90), (5, 5, 5), (15, 25, 35),
+              (45, 55, 65), (0, 0, 0))
+    sibling = ti2.with_suffix(".ti1")
+    R.write_ti1(spec, R.default_program(spec), sibling, spacer_palette=custom)
+    reloaded = R.ChartSpec.from_ti2(ti2)
+    assert reloaded.density_extremes is not None
+    assert reloaded.density_extremes[1] == (10.0, 20.0, 30.0)
+    assert reloaded.density_extremes[6] == (45.0, 55.0, 65.0)
+
+
+# --- end-to-end patch geometry --------------------------------------------
+@argyll
+def test_patch_geometry_returns_a_rect_per_patch(tmp_path: Path):
+    # Smoke-test: the geometry helper should produce one bbox per visible
+    # patch on the page, with each rect fitting inside the chart image.
+    spec = R.ChartSpec.new("i1", "A4")
+    prog = R.seed_from_targen(ARGYLL_BIN, 50)
+    res = R.regenerate(spec, prog, tmp_path, ARGYLL_BIN)
+    geom = R.patch_geometry_for_page(
+        res.ti2, res.tiffs[0], page=0, bw_tif_path=res.bw_tiffs[0])
+    assert geom, "geometry should be non-empty"
+    new_spec = R.ChartSpec.from_ti2(res.ti2)
+    # Real (non-padding) patches each get a rect; printtarg fills any
+    # partial last strip with sample_id=0 padding which the helper drops.
+    real = [p for p in new_spec.patches if int(p.sample_id) > 0]
+    assert len(geom) == len(real)
+    arr = R._imread_rgb(res.tiffs[0])
+    h, w = arr.shape[:2]
+    for x0, y0, x1, y1 in geom.values():
+        assert 0 <= x0 < x1 < w
+        assert 0 <= y0 < y1 < h
+
+
+def test_patch_geometry_requires_bw_twin():
+    # Without the BW twin the helper bails out (returns {}) — callers must
+    # opt in by passing the twin path. The signature default makes it easy
+    # to forget; the smoke check protects against that.
+    assert R.patch_geometry_for_page(Path("/no/such.ti2"),
+                                      Path("/no/such.tif"), 0) == {}
+
+
+# --- triple-density --------------------------------------------------------
+@argyll
+def test_triple_density_patches_target_instrument(tmp_path: Path):
+    spec = R.ChartSpec.new("CM", "A4")
+    prog = R.seed_from_targen(ARGYLL_BIN, 30)
+    opts = R.LayoutOptions(triple_density=True, patch_scale=1.3,
+                           margin_mm=5, suppress_left_clip=True,
+                           no_strip_limit=True)
+    res = R.regenerate(spec, prog, tmp_path, ARGYLL_BIN, options=opts)
+    text = res.ti2.read_text()
+    assert 'TARGET_INSTRUMENT "X-Rite ColorMunki"' in text
+    assert 'TARGET_INSTRUMENT "GretagMacbeth i1 Pro"' not in text
+
+
 # --- .ti1 synthesis --------------------------------------------------------
 def test_write_ti1_three_tables_and_order(ti2: Path, tmp_path: Path):
     spec = R.ChartSpec.from_ti2(ti2)
