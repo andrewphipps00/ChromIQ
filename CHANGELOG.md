@@ -1,5 +1,57 @@
 # Changelog
 
+## v3.8.0-beta.21
+**Chart-layout editor polish + consistent non-native file pickers across
+all Tools-menu utilities.** The TI2 editor's right panel breathes a bit
+wider, gains custom paper sizes, exports its colour list as a paste-able
+text file, and saves through a single dialog instead of a two-step
+folder-then-name flow. The five Tools-menu dialogs now use ChromIQ's own
+file pickers (with sidebar shortcuts + extension filtering) instead of
+the OS-native ones.
+
+### Added
+- **Custom paper sizes in the chart-layout editor.** Both the New chart
+  dialog and the right-panel `printtarg` section gain a "Custom" entry;
+  selecting it reveals W / H (mm) spinboxes and emits printtarg's
+  `WWWxHHH` form. Loaded charts whose paper code is `WWWxHHH` fall back
+  to "Custom" + seed the W / H spinboxes from `paper_mm`. Matches the
+  Create Chart tab's custom-paper UX.
+- **Export colours… button** next to Save As in the chart-layout editor.
+  Saves the current patch program as a text file (hex `#rrggbb` or
+  decimal `R G B`, one per line, in chart order). The file round-trips
+  through the New chart dialog's "Paste colour values" mode, so a chart's
+  colours can be exported, edited, and rebuilt as a fresh chart.
+- **`save_file_dialog` + `open_files_dialog` helpers** in `ui/widgets.py`
+  to round out the file-dialog API. Both apply `DontUseNativeDialog`
+  and pick up the same sidebar shortcuts / extension-filter behaviour
+  as the existing `open_file_dialog` / `open_dir_dialog`.
+
+### Changed
+- **Spacer-mode picker is now a mutex-checkbox group** (Coloured / B&W /
+  None) in both the New chart dialog and the right-panel `printtarg`
+  section. Selecting one clears the others; selecting none falls through
+  to printtarg's coloured default. "None" disables the Spacer scale
+  (`-A`) field since there are no spacers to scale.
+- **Save As uses a single save dialog** in the chart-layout editor (the
+  typed filename becomes both the chart folder name and the basename
+  of the files written inside). The old folder-pick → name-prompt
+  two-step is gone.
+- **Tools-menu file dialogs are now non-native.** `Average measurements`,
+  `Merge measurements`, `TI1 → i1Profiler`, `i1Profiler → TI3` and
+  `i1Profiler → TI1` (and the shared destination-row browse button) now
+  go through `open_file_dialog` / `open_files_dialog` / `open_dir_dialog`,
+  matching the rest of the app's pickers — same sidebar, same
+  extension-filter behaviour, same look in light and dark mode.
+- **Wider editor window + right panel** so the paper combo's full label
+  ("A4 (210 × 297 mm) Portrait") and per-locale spinbox values no longer
+  clip on first open. Default size is now 1280×820 (was 1180×760), right
+  panel 360 px (was 320 px).
+- **Magenta accent throughout the chart-layout editor** — checked
+  checkboxes / radios, focused inputs, and the swatch-size slider all
+  use the magenta accent, scoped to the dialog so the app-wide cyan
+  accent stays untouched. The slider also picks up the Gamut viewer's
+  slim-groove recipe (theme-aware groove colour).
+
 ## v3.8.0-beta.20
 **Full printtarg-option parity in the chart-layout editor's right panel.**
 Instrument + paper are now editable on an already-loaded chart, with the

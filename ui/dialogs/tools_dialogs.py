@@ -25,7 +25,6 @@ from PyQt6.QtWidgets import (
     QButtonGroup,
     QDialog,
     QDialogButtonBox,
-    QFileDialog,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -40,6 +39,9 @@ from PyQt6.QtWidgets import (
 )
 
 from core.logger import get_logger
+from ui.widgets import (
+    open_dir_dialog, open_file_dialog, open_files_dialog,
+)
 from workflow.average_runner import AverageParams, AverageRunner
 from workflow.i1profiler_export import export_from_ti1
 from workflow.i1profiler_import import import_to_ti1
@@ -227,8 +229,9 @@ class _ToolDialogBase(QDialog):
     # Picker helpers
     # ------------------------------------------------------------------
     def _pick_input_file(self, caption: str, name_filter: str) -> Path | None:
-        path, _ = QFileDialog.getOpenFileName(
-            self, caption, str(_initial_dir(self._settings, self.TOOL_KEY)), name_filter,
+        path = open_file_dialog(
+            self, caption, name_filter,
+            start_dir=str(_initial_dir(self._settings, self.TOOL_KEY)),
         )
         if not path:
             return None
@@ -237,8 +240,9 @@ class _ToolDialogBase(QDialog):
         return p
 
     def _pick_input_files(self, caption: str, name_filter: str) -> list[Path]:
-        paths, _ = QFileDialog.getOpenFileNames(
-            self, caption, str(_initial_dir(self._settings, self.TOOL_KEY)), name_filter,
+        paths = open_files_dialog(
+            self, caption, name_filter,
+            start_dir=str(_initial_dir(self._settings, self.TOOL_KEY)),
         )
         if not paths:
             return []
@@ -247,8 +251,9 @@ class _ToolDialogBase(QDialog):
         return result
 
     def _pick_output_dir(self, caption: str) -> Path | None:
-        path = QFileDialog.getExistingDirectory(
-            self, caption, str(_initial_dir(self._settings, self.TOOL_KEY)),
+        path = open_dir_dialog(
+            self, caption,
+            start_dir=str(_initial_dir(self._settings, self.TOOL_KEY)),
         )
         if not path:
             return None
@@ -303,7 +308,7 @@ class _OutputRow(QWidget):
 
     def _browse(self) -> None:
         start = self._dir_edit.text() or str(Path.home())
-        path = QFileDialog.getExistingDirectory(self, "Choose destination folder", start)
+        path = open_dir_dialog(self, "Choose destination folder", start_dir=start)
         if path:
             self._dir_edit.setText(path)
 

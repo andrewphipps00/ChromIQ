@@ -33,7 +33,7 @@ from core.strip_utils import parse_passes_per_page
 from ui.styles import SPEC_AMBER, SPEC_MAGENTA, TAB_COLORS
 from ui.widgets import (
     NoScrollComboBox, NoScrollDoubleSpinBox, NoScrollSpinBox,
-    open_dir_dialog, open_file_dialog,
+    open_dir_dialog, open_file_dialog, save_file_dialog,
 )
 
 
@@ -44,6 +44,31 @@ def _as_compact(*widgets) -> None:
     the bulky default native arrows."""
     for w in widgets:
         w.setObjectName("compact_input")
+
+
+def _wire_spacer_mutex(boxes: tuple) -> None:
+    """Make a set of QCheckBoxes behave like a radio group that also
+    permits the all-off state.
+
+    Clicking a box that's already on leaves it on (no-op uncheck-then-
+    -check loop); clicking a different box switches the active selection;
+    the user may explicitly uncheck the active one to land in the all-off
+    state. Mirrors the spacer-mode picker behaviour the editor uses in
+    both the printtarg section and the New-chart dialog.
+    """
+    def _make(cb_idx: int):
+        def _on_toggled(on: bool) -> None:
+            if not on:
+                return
+            for j, other in enumerate(boxes):
+                if j == cb_idx or not other.isChecked():
+                    continue
+                other.blockSignals(True)
+                other.setChecked(False)
+                other.blockSignals(False)
+        return _on_toggled
+    for i, cb in enumerate(boxes):
+        cb.toggled.connect(_make(i))
 from workflow import ti2_relayout as R
 
 log = get_logger(__name__)
@@ -57,7 +82,19 @@ _INSTRUMENTS = [("i1", "i1Pro / i1Pro2 / i1Pro3(+)"), ("CM", "ColorMunki / i1Stu
 from data.patch_db import PAPER_LABELS, PAPER_PRINTTARG_ARG
 _PAPER_ORDER = ("A2", "594x420", "329x483", "483x329", "A3", "420x297",
                 "11x17", "Legal", "A4", "A4R", "Letter", "LetterR",
-                "203x254", "127x178", "4x6")
+                "203x254", "127x178", "4x6", "custom")
+_PAPER_LABELS_WITH_CUSTOM = {**PAPER_LABELS,
+                              "custom": "Custom (enter dimensions)"}
+
+
+def _paper_code_known(code: str) -> bool:
+    """True iff *code* is one of the printtarg named paper sizes — i.e. not
+    a custom ``WxH`` form. Used by the editor UI to decide whether to fall
+    back to the "custom" combo entry + W/H spinboxes when syncing a loaded
+    chart whose paper_flag was emitted as ``WxH`` by
+    :func:`workflow.ti2_relayout.paper_to_flag`.
+    """
+    return code in PAPER_LABELS
 
 
 def _qcolor(rgb: tuple[float, float, float]) -> QColor:
@@ -449,12 +486,28 @@ class _NewChartDialog(QDialog):
     def __init__(self, bin_dir: Path, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setWindowTitle("New chart")
-        self.setMinimumWidth(540)
+        self.setMinimumWidth(560)
         self._bin_dir = bin_dir
         self.result_spec: R.ChartSpec | None = None
         self.result_program: list[tuple] | None = None
         self.result_options: R.LayoutOptions | None = None
         self.result_basename: str = "chart"
+        # Magenta accents on checked / focused state — same scoped rules
+        # as the parent dialog so the New-chart dialog matches it instead
+        # of falling back to the app-wide cyan.
+        self.setStyleSheet(f"""
+            QCheckBox::indicator:checked {{
+                background: {SPEC_MAGENTA}; border-color: {SPEC_MAGENTA};
+            }}
+            QCheckBox::indicator:hover {{ border-color: {SPEC_MAGENTA}; }}
+            QRadioButton::indicator:checked {{
+                background: {SPEC_MAGENTA}; border-color: {SPEC_MAGENTA};
+            }}
+            QLineEdit:focus, QComboBox:focus,
+            QSpinBox:focus, QDoubleSpinBox:focus {{
+                border-color: {SPEC_MAGENTA};
+            }}
+        """)
 
         lay = QVBoxLayout(self)
         lay.setSpacing(10)
@@ -475,13 +528,35 @@ class _NewChartDialog(QDialog):
         cg.addWidget(QLabel("Paper:"), 1, 2)
         self._paper = NoScrollComboBox(chart_box)
         for code in _PAPER_ORDER:
-            self._paper.addItem(PAPER_LABELS.get(code, code), code)
+            self._paper.addItem(
+                _PAPER_LABELS_WITH_CUSTOM.get(code, code), code)
         _as_compact(self._instr, self._paper)
         # Default to A4 portrait
         ix = self._paper.findData("A4")
         if ix >= 0:
             self._paper.setCurrentIndex(ix)
         cg.addWidget(self._paper, 1, 3)
+        # Custom W/H row appears under the paper combo when "Custom" is
+        # selected — same UX as the Create Chart tab.
+        self._paper_custom_row = QWidget(chart_box)
+        cust_l = QHBoxLayout(self._paper_custom_row)
+        cust_l.setContentsMargins(0, 0, 0, 0)
+        cust_l.setSpacing(6)
+        cust_l.addWidget(QLabel("W (mm):"))
+        self._paper_w = NoScrollSpinBox(self._paper_custom_row)
+        self._paper_w.setRange(10, 9999)
+        self._paper_w.setValue(210)
+        cust_l.addWidget(self._paper_w)
+        cust_l.addWidget(QLabel("H (mm):"))
+        self._paper_h = NoScrollSpinBox(self._paper_custom_row)
+        self._paper_h.setRange(10, 9999)
+        self._paper_h.setValue(297)
+        cust_l.addWidget(self._paper_h)
+        cust_l.addStretch(1)
+        _as_compact(self._paper_w, self._paper_h)
+        self._paper_custom_row.setVisible(False)
+        cg.addWidget(self._paper_custom_row, 2, 0, 1, 4)
+        self._paper.currentIndexChanged.connect(self._on_paper_changed)
         lay.addWidget(chart_box)
 
         # --- Source ---------------------------------------------------------
@@ -534,18 +609,21 @@ class _NewChartDialog(QDialog):
         # --- Layout options -------------------------------------------------
         opt_box = QGroupBox("Layout options (printtarg)", self)
         og = QGridLayout(opt_box)
+        # Spacer-mode checkboxes wired as a mutex group, with the all-off
+        # state permitted. "None" disables Spacer scale (-A) since there
+        # are no spacers to scale.
         og.addWidget(QLabel("Spacers:"), 0, 0)
-        self._sp_colored = QRadioButton("Coloured", opt_box)
-        self._sp_bw = QRadioButton("B&&W", opt_box)
-        self._sp_none = QRadioButton("None", opt_box)
+        self._sp_colored = QCheckBox("Coloured", opt_box)
+        self._sp_bw      = QCheckBox("B&&W", opt_box)
+        self._sp_none    = QCheckBox("None", opt_box)
         self._sp_colored.setChecked(True)
-        sp_grp = QButtonGroup(opt_box)
+        _wire_spacer_mutex((self._sp_colored, self._sp_bw, self._sp_none))
         sp_row = QHBoxLayout()
-        for rb in (self._sp_colored, self._sp_bw, self._sp_none):
-            sp_grp.addButton(rb)
-            sp_row.addWidget(rb)
+        for cb in (self._sp_colored, self._sp_bw, self._sp_none):
+            sp_row.addWidget(cb)
         sp_row.addStretch(1)
         og.addLayout(sp_row, 0, 1, 1, 3)
+        self._sp_none.toggled.connect(self._refresh_spacer_scale_enabled)
 
         og.addWidget(QLabel("Patch scale (-a):"), 1, 0)
         self._patch_scale = NoScrollDoubleSpinBox(opt_box)
@@ -638,6 +716,16 @@ class _NewChartDialog(QDialog):
         self._count.setEnabled(self._mode_seed.isChecked())
         self._paste_edit.setEnabled(self._mode_paste.isChecked())
 
+    def _refresh_spacer_scale_enabled(self, *_a) -> None:
+        """Disable Spacer scale (-A) when "None" is the spacer choice —
+        there's nothing for the scale to apply to in that case."""
+        self._spacer_scale.setEnabled(not self._sp_none.isChecked())
+
+    def _on_paper_changed(self) -> None:
+        """Show the custom W/H row only when "Custom" is the selection."""
+        self._paper_custom_row.setVisible(
+            self._paper.currentData() == "custom")
+
     def _refresh_instr_widgets(self) -> None:
         """Show/hide instrument-conditional options.
 
@@ -720,7 +808,15 @@ class _NewChartDialog(QDialog):
 
     def _on_ok(self) -> None:
         paper_code = self._paper.currentData() or self._paper.currentText()
+        if paper_code == "custom":
+            paper_code = f"{self._paper_w.value()}x{self._paper_h.value()}"
         spec = R.ChartSpec.new(self._instr.currentData(), paper_code)
+        # ChartSpec.new only knows the named-paper inverse map; patch
+        # paper_mm explicitly for custom sizes so the editor knows the
+        # canvas dimensions for downstream code (preview scaling etc.).
+        if self._paper.currentData() == "custom":
+            spec.paper_mm = (float(self._paper_w.value()),
+                              float(self._paper_h.value()))
         program: list[tuple] = []
         if self._mode_seed.isChecked():
             try:
@@ -736,6 +832,8 @@ class _NewChartDialog(QDialog):
                                     "from the pasted text.")
                 return
 
+        # Mutex-checkbox group: at most one is on; all-off falls through
+        # to printtarg's coloured default.
         if self._sp_bw.isChecked():
             sm = "bw"
         elif self._sp_none.isChecked():
@@ -773,9 +871,10 @@ class Ti2RelayoutDialog(QDialog):
         self._bin_dir = Path(settings.get("argyll_bin_path", "/Applications/Argyll/bin"))
         self.setWindowTitle("Edit / create chart layout")
         # Wider default so the printtarg-options column doesn't clip its
-        # row labels ("Margin (mm):", "Spacer -A:") on first open.
-        self.resize(1180, 760)
-        self.setMinimumSize(960, 600)
+        # row labels ("Margin (mm):", "Spacer -A:") or its combo content
+        # ("A4 (210 × 297 mm) Portrait") on first open.
+        self.resize(1280, 820)
+        self.setMinimumSize(1000, 620)
 
         self._spec: R.ChartSpec | None = None
         self._palette: list[tuple] | None = None       # native spacer palette
@@ -842,6 +941,21 @@ class Ti2RelayoutDialog(QDialog):
         self._size_slider.setRange(24, 96)
         self._size_slider.setValue(_SWATCH)
         self._size_slider.valueChanged.connect(self._set_swatch_size)
+        # Same recipe as the Gamut viewer's opacity / saturation sliders
+        # (slim groove, filled sub-page, round handle) but with the magenta
+        # accent so it harmonises with the rest of this dialog's accent.
+        from ui.theme import resolve_mode
+        _mode = resolve_mode(self._settings.get("appearance", "auto"))
+        _groove = "#1c1b18" if _mode == "light" else "#333333"
+        self._size_slider.setStyleSheet(
+            f"QSlider::groove:horizontal {{ height: 4px; background: {_groove};"
+            " border-radius: 2px; }"
+            f"QSlider::handle:horizontal {{ background: {SPEC_MAGENTA};"
+            " border: none; width: 12px; height: 12px; margin: -4px 0;"
+            " border-radius: 6px; }"
+            f"QSlider::sub-page:horizontal {{ background: {SPEC_MAGENTA};"
+            " border-radius: 2px; }"
+        )
         top.addWidget(self._size_slider, 1)
         lv.addLayout(top)
 
@@ -973,19 +1087,34 @@ class Ti2RelayoutDialog(QDialog):
 
     def _build_controls(self) -> QWidget:
         panel = QWidget(self)
-        # Widened so the printtarg spinboxes ("1.00", "300") render their
-        # full value next to their up/down arrows without clipping in
-        # German locale ("1,00") or 3-digit DPI ("300").
-        panel.setFixedWidth(320)
-        # Container stylesheet — the only reliable way to shrink button height
-        # ([[feedback_qt_button_sizing]]: setMinimumHeight on the button itself
-        # is overridden by Qt's compound-widget CSS).
-        panel.setStyleSheet("""
-            QPushButton { padding: 4px 8px; min-height: 26px; font-size: 11px; }
-            QGroupBox  { font-size: 12px; }
-            QLabel     { font-size: 11px; }
-            QRadioButton { font-size: 12px; }
-            QCheckBox  { font-size: 11px; }
+        # Widened so the printtarg paper combo ("A4 (210 × 297 mm)
+        # Portrait") and the per-locale spinboxes don't clip on first
+        # open. Bump beyond 320 also gives custom-paper W/H spinboxes
+        # room to breathe.
+        panel.setFixedWidth(360)
+        # Container stylesheet — the only reliable way to shrink button
+        # height ([[feedback_qt_button_sizing]]: setMinimumHeight on the
+        # button itself is overridden by Qt's compound-widget CSS). Magenta
+        # accents on checked/focused state to match the dialog's magenta
+        # drop-indicator + "What a mess!" bang, scoped to the dialog so
+        # the app-wide cyan accent isn't touched.
+        panel.setStyleSheet(f"""
+            QPushButton {{ padding: 4px 8px; min-height: 26px; font-size: 11px; }}
+            QGroupBox  {{ font-size: 12px; }}
+            QLabel     {{ font-size: 11px; }}
+            QRadioButton {{ font-size: 12px; }}
+            QCheckBox  {{ font-size: 11px; }}
+            QCheckBox::indicator:checked {{
+                background: {SPEC_MAGENTA}; border-color: {SPEC_MAGENTA};
+            }}
+            QCheckBox::indicator:hover {{ border-color: {SPEC_MAGENTA}; }}
+            QRadioButton::indicator:checked {{
+                background: {SPEC_MAGENTA}; border-color: {SPEC_MAGENTA};
+            }}
+            QLineEdit:focus, QComboBox:focus,
+            QSpinBox:focus, QDoubleSpinBox:focus {{
+                border-color: {SPEC_MAGENTA};
+            }}
         """)
         v = QVBoxLayout(panel)
         v.setContentsMargins(4, 0, 0, 0)
@@ -1022,25 +1151,61 @@ class Ti2RelayoutDialog(QDialog):
         self._pt_instr.currentIndexChanged.connect(self._on_pt_instr_changed)
         ptg.addWidget(self._pt_instr, 0, 1, 1, 3)
         ptg.addWidget(QLabel("Paper:"), 1, 0)
-        self._pt_paper = NoScrollComboBox(pt_box)
+        # Vertical container: paper combo on top, custom W/H row below
+        # (hidden unless "Custom" is the selection). Keeps the rest of
+        # the grid's row indices untouched.
+        paper_container = QWidget(pt_box)
+        paper_v = QVBoxLayout(paper_container)
+        paper_v.setContentsMargins(0, 0, 0, 0)
+        paper_v.setSpacing(4)
+        self._pt_paper = NoScrollComboBox(paper_container)
         for code in _PAPER_ORDER:
-            self._pt_paper.addItem(PAPER_LABELS.get(code, code), code)
+            self._pt_paper.addItem(
+                _PAPER_LABELS_WITH_CUSTOM.get(code, code), code)
         self._pt_paper.currentIndexChanged.connect(self._on_pt_paper_changed)
-        ptg.addWidget(self._pt_paper, 1, 1, 1, 3)
+        paper_v.addWidget(self._pt_paper)
+        self._pt_paper_custom_row = QWidget(paper_container)
+        cust_l = QHBoxLayout(self._pt_paper_custom_row)
+        cust_l.setContentsMargins(0, 0, 0, 0)
+        cust_l.setSpacing(6)
+        cust_l.addWidget(QLabel("W (mm):"))
+        self._pt_paper_w = NoScrollSpinBox(self._pt_paper_custom_row)
+        self._pt_paper_w.setRange(10, 9999)
+        self._pt_paper_w.setValue(210)
+        self._pt_paper_w.setMinimumWidth(76)
+        cust_l.addWidget(self._pt_paper_w)
+        cust_l.addWidget(QLabel("H (mm):"))
+        self._pt_paper_h = NoScrollSpinBox(self._pt_paper_custom_row)
+        self._pt_paper_h.setRange(10, 9999)
+        self._pt_paper_h.setValue(297)
+        self._pt_paper_h.setMinimumWidth(76)
+        cust_l.addWidget(self._pt_paper_h)
+        cust_l.addStretch(1)
+        self._pt_paper_w.valueChanged.connect(self._on_pt_paper_custom_changed)
+        self._pt_paper_h.valueChanged.connect(self._on_pt_paper_custom_changed)
+        _as_compact(self._pt_paper_w, self._pt_paper_h)
+        self._pt_paper_custom_row.setVisible(False)
+        paper_v.addWidget(self._pt_paper_custom_row)
+        ptg.addWidget(paper_container, 1, 1, 1, 3)
         _as_compact(self._pt_instr, self._pt_paper)
-        # Spacers row
+        # Spacers row — checkboxes wired as a mutex group, with the
+        # all-off state permitted (printtarg's default = coloured, so an
+        # all-off picker just falls back to that). Picking "None" also
+        # disables the Spacer -A field since there are no spacers to
+        # scale.
         ptg.addWidget(QLabel("Spacers:"), 2, 0)
         sp_row = QHBoxLayout()
         sp_row.setSpacing(6)
-        self._pt_sp_col  = QRadioButton("Coloured", pt_box)
-        self._pt_sp_bw   = QRadioButton("B&&W", pt_box)
-        self._pt_sp_none = QRadioButton("None", pt_box)
+        self._pt_sp_col  = QCheckBox("Coloured", pt_box)
+        self._pt_sp_bw   = QCheckBox("B&&W", pt_box)
+        self._pt_sp_none = QCheckBox("None", pt_box)
         self._pt_sp_col.setChecked(True)
-        pt_sp_grp = QButtonGroup(pt_box)
-        for rb in (self._pt_sp_col, self._pt_sp_bw, self._pt_sp_none):
-            pt_sp_grp.addButton(rb)
-            rb.toggled.connect(self._on_printtarg_changed)
-            sp_row.addWidget(rb)
+        _wire_spacer_mutex(
+            (self._pt_sp_col, self._pt_sp_bw, self._pt_sp_none)
+        )
+        for cb in (self._pt_sp_col, self._pt_sp_bw, self._pt_sp_none):
+            cb.toggled.connect(self._on_printtarg_changed)
+            sp_row.addWidget(cb)
         sp_row.addStretch(1)
         ptg.addLayout(sp_row, 2, 1, 1, 3)
         # Scales row. Min-width on every spinbox so 3-digit / decimal
@@ -1264,9 +1429,22 @@ class Ti2RelayoutDialog(QDialog):
         self._preview_btn = QPushButton("Update preview", panel)
         self._preview_btn.clicked.connect(lambda: self._regenerate(save_to=None))
         v.addWidget(self._preview_btn)
+        save_row = QHBoxLayout()
+        save_row.setSpacing(6)
+        # Export sits next to Save As since both are "write the chart out"
+        # actions — Save As writes the full deliverable, Export writes the
+        # colour list (hex / RGB) for re-use in a fresh chart.
+        self._export_btn = QPushButton("Export colours…", panel)
+        self._export_btn.setToolTip(
+            "Save the patch colours as a text file you can paste back into "
+            "the New chart dialog (or import elsewhere). Hex (#rrggbb) or "
+            "decimal RGB, one colour per line, in chart order.")
+        self._export_btn.clicked.connect(self._export_patch_colours)
+        save_row.addWidget(self._export_btn)
         self._save_btn = QPushButton("Save As…", panel)
         self._save_btn.clicked.connect(self._save_as)
-        v.addWidget(self._save_btn)
+        save_row.addWidget(self._save_btn)
+        v.addLayout(save_row)
         return panel
 
     def _pick_color(self, initial: QColor, title: str) -> QColor:
@@ -1398,6 +1576,52 @@ class Ti2RelayoutDialog(QDialog):
         return [self._grid.item(i).data(Qt.ItemDataRole.UserRole)
                 for i in range(self._grid.count())]
 
+    def _export_patch_colours(self) -> None:
+        """Save the current patch program as a text file (hex or 0..255 RGB).
+
+        Format mirrors what :func:`workflow.ti2_relayout.parse_color_values`
+        accepts so the file round-trips through the New chart dialog's
+        "Paste colour values" mode.
+        """
+        if self._grid.count() == 0:
+            self._status.setText("No patches to export.")
+            return
+        from PyQt6.QtWidgets import QInputDialog
+        fmt, ok = QInputDialog.getItem(
+            self, "Export patch colours", "Format:",
+            ["Hex (#rrggbb)", "RGB 0..255 (R G B)"], 0, False,
+        )
+        if not ok:
+            return
+        as_hex = fmt.startswith("Hex")
+        start = (self._settings.get("custom_output_path", "")
+                 or str(Path.home() / "ChromIQ"))
+        default_name = f"{self._basename or 'chart'}-colours.txt"
+        path = save_file_dialog(
+            self, "Save patch colours",
+            "Text files (*.txt)",
+            start_path=str(Path(start) / default_name),
+        )
+        if not path:
+            return
+        out_path = Path(path)
+        if not out_path.suffix:
+            out_path = out_path.with_suffix(".txt")
+        lines: list[str] = []
+        for r100, g100, b100 in self._program_from_grid():
+            r = max(0, min(255, round(r100 / 100 * 255)))
+            g = max(0, min(255, round(g100 / 100 * 255)))
+            b = max(0, min(255, round(b100 / 100 * 255)))
+            lines.append(f"#{r:02x}{g:02x}{b:02x}" if as_hex
+                          else f"{r} {g} {b}")
+        try:
+            out_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        except OSError as exc:
+            QMessageBox.warning(self, "Save failed", str(exc))
+            return
+        self._status.setText(f"Exported {len(lines)} colour(s) to "
+                             f"{out_path.name}.")
+
     def _set_patch_colour(self) -> None:
         items = self._grid.selectedItems()
         if not items:
@@ -1517,13 +1741,17 @@ class Ti2RelayoutDialog(QDialog):
         _on_dd_toggled / _on_td_toggled (which delegate back here)."""
         if getattr(self, "_pt_syncing", False):
             return
-        # Spacer mode
+        # Spacer mode — checkbox group: at most one is on. All-off falls
+        # through to printtarg's coloured default.
         if self._pt_sp_bw.isChecked():
             mode = "bw"
         elif self._pt_sp_none.isChecked():
             mode = "none"
         else:
             mode = "colored"
+        # "None" means no spacers — disable the spacer-scale spinbox so
+        # the user can't dial a -A that has nothing to apply to.
+        self._pt_A.setEnabled(mode != "none")
         new = R.LayoutOptions(
             spacer_mode=mode,
             patch_scale=self._pt_a.value(),
@@ -1598,12 +1826,25 @@ class Ti2RelayoutDialog(QDialog):
                 ix = self._pt_instr.findData(self._spec.instrument_flag)
                 if ix >= 0:
                     self._pt_instr.setCurrentIndex(ix)
-                ix = self._pt_paper.findData(self._spec.paper_flag)
-                if ix >= 0:
-                    self._pt_paper.setCurrentIndex(ix)
+                if _paper_code_known(self._spec.paper_flag):
+                    ix = self._pt_paper.findData(self._spec.paper_flag)
+                    if ix >= 0:
+                        self._pt_paper.setCurrentIndex(ix)
+                    self._pt_paper_custom_row.setVisible(False)
+                else:
+                    # paper_flag is a "WxH" custom size — point the combo
+                    # at "Custom" and seed the W/H spinboxes from paper_mm.
+                    ix = self._pt_paper.findData("custom")
+                    if ix >= 0:
+                        self._pt_paper.setCurrentIndex(ix)
+                    w, h = self._spec.paper_mm
+                    self._pt_paper_w.setValue(int(round(w)))
+                    self._pt_paper_h.setValue(int(round(h)))
+                    self._pt_paper_custom_row.setVisible(True)
             self._pt_sp_col.setChecked(o.spacer_mode == "colored")
             self._pt_sp_bw.setChecked(o.spacer_mode == "bw")
             self._pt_sp_none.setChecked(o.spacer_mode == "none")
+            self._pt_A.setEnabled(o.spacer_mode != "none")
             self._pt_a.setValue(o.patch_scale)
             self._pt_A.setValue(o.spacer_scale)
             self._pt_m.setValue(o.margin_mm)
@@ -1660,8 +1901,15 @@ class Ti2RelayoutDialog(QDialog):
     def _on_pt_paper_changed(self) -> None:
         """User flipped the paper combo — update spec.paper_flag + paper_mm
         + re-render. The paper change rewires printtarg's -p so we need a
-        full regenerate, not just a redraw."""
+        full regenerate, not just a redraw. "Custom" reveals W/H spinboxes
+        and the actual paper_flag comes from those (see
+        :meth:`_on_pt_paper_custom_changed`)."""
+        is_custom = self._pt_paper.currentData() == "custom"
+        self._pt_paper_custom_row.setVisible(is_custom)
         if getattr(self, "_pt_syncing", False) or self._spec is None:
+            return
+        if is_custom:
+            self._on_pt_paper_custom_changed()
             return
         code = self._pt_paper.currentData()
         if code is None or code == self._spec.paper_flag:
@@ -1671,6 +1919,22 @@ class Ti2RelayoutDialog(QDialog):
         from workflow.ti2_relayout import _NAMED_PAPERS
         inv = {v: k for k, v in _NAMED_PAPERS.items()}
         self._spec.paper_mm = inv.get(code, self._spec.paper_mm)
+        self._schedule_auto_refresh()
+
+    def _on_pt_paper_custom_changed(self) -> None:
+        """Apply the W/H spinbox values to spec.paper_flag + paper_mm and
+        schedule a re-render. Only meaningful when the paper combo is set
+        to "Custom"."""
+        if getattr(self, "_pt_syncing", False) or self._spec is None:
+            return
+        if self._pt_paper.currentData() != "custom":
+            return
+        w, h = self._pt_paper_w.value(), self._pt_paper_h.value()
+        flag = f"{w}x{h}"
+        if flag == self._spec.paper_flag:
+            return
+        self._spec.paper_flag = flag
+        self._spec.paper_mm = (float(w), float(h))
         self._schedule_auto_refresh()
 
 
@@ -2126,13 +2390,22 @@ class Ti2RelayoutDialog(QDialog):
             return
         start = (self._settings.get("custom_output_path", "")
                  or str(Path.home() / "ChromIQ"))
-        out_dir = open_dir_dialog(self, "Choose output folder", start_dir=start)
-        if not out_dir:
+        default_name = (self._regen.basename if self._regen
+                        else self._basename) or "chart"
+        # Single save dialog (vs the old folder-pick → name-prompt
+        # two-step). The typed filename becomes both the chart folder
+        # name and the basename of the files written into it; any
+        # extension the user types is dropped because the editor saves
+        # a folder, not a single file.
+        path = save_file_dialog(
+            self, "Save chart",
+            start_path=str(Path(start) / default_name),
+        )
+        if not path:
             return
-        name, ok = self._ask_name()
-        if not ok or not name:
-            return
-        target = Path(out_dir) / name
+        target_path = Path(path)
+        name = target_path.stem or "chart"
+        target = target_path.parent / name
         target.mkdir(parents=True, exist_ok=True)
         # regenerate straight into the target, then bake per-spacer paint into pages
         try:
@@ -2177,23 +2450,17 @@ class Ti2RelayoutDialog(QDialog):
                 R.recolor_spacers(src, sps, rgb, tif)
                 src = tif
 
-    def _ask_name(self) -> tuple[str, bool]:
-        from PyQt6.QtWidgets import QInputDialog
-        default = "chart"
-        if self._regen is not None:
-            default = self._regen.basename
-        return QInputDialog.getText(self, "Chart name", "Base name:",
-                                    QLineEdit.EchoMode.Normal, default)
-
     # -- misc ---------------------------------------------------------------
     def _set_busy(self, busy: bool) -> None:
         self._preview_btn.setEnabled(not busy)
         self._save_btn.setEnabled(not busy)
+        self._export_btn.setEnabled(not busy)
 
     def _refresh_enabled(self) -> None:
         has = self._spec is not None
         self._preview_btn.setEnabled(has)
         self._save_btn.setEnabled(has)
+        self._export_btn.setEnabled(has)
         # Initial pass for the conditional checkboxes — without this the
         # default Qt state shows ALL four (L, P, double, triple) at
         # startup before any chart is loaded.
