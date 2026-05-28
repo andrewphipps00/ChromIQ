@@ -165,7 +165,9 @@ def test_recolor_only_touches_spacers(tmp_path: Path):
     tifffile.imwrite(str(src), img, photometric="rgb")
     mask = np.zeros((20, 20), dtype=bool)
     mask[5:8, 5:15] = True
-    spacers = R.segment_spacers(mask, page=0)
+    # min_extent=5 — the production default (20) rejects this tiny synthetic
+    # spacer because real charts never have anything that small.
+    spacers = R.segment_spacers(mask, page=0, min_extent=5)
     out = tmp_path / "p_rec.tif"
     R.recolor_spacers(src, spacers, (255, 0, 0), out)
     R.assert_patches_untouched(src, out, mask)

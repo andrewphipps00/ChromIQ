@@ -195,6 +195,84 @@ def _split_cgats(line: str) -> list[str]:
 # ---------------------------------------------------------------------------
 # .ti1 synthesis
 # ---------------------------------------------------------------------------
+# Printtarg layout knobs the editor exposes per chart.
+@dataclass
+class LayoutOptions:
+    spacer_mode: str = "colored"        # "colored" | "bw" | "none"
+    patch_scale: float = 1.0            # -a
+    spacer_scale: float = 1.0           # -A
+    suppress_left_clip: bool = False    # -L
+    no_strip_limit: bool = False        # -P
+    double_density: bool = False        # -h (ColorMunki double / SpectroScan hex)
+
+    def to_printtarg_args(self) -> list[str]:
+        """Build the printtarg flag list this options bundle implies."""
+        args: list[str] = []
+        if self.spacer_mode == "bw":
+            args.append("-b")
+        elif self.spacer_mode == "none":
+            args.append("-n")
+        if abs(self.patch_scale - 1.0) > 0.01:
+            args.append(f"-a{self.patch_scale:.2f}")
+        if abs(self.spacer_scale - 1.0) > 0.01:
+            args.append(f"-A{self.spacer_scale:.2f}")
+        if self.suppress_left_clip:
+            args.append("-L")
+        if self.no_strip_limit:
+            args.append("-P")
+        if self.double_density:
+            args.append("-h")
+        return args
+
+
+_HEX_RE = re.compile(r"^#?([0-9a-fA-F]{6})$")
+
+
+def parse_color_values(text: str) -> list[tuple[float, float, float]]:
+    """Parse user-pasted colour values into a list of 0..100 RGB tuples.
+
+    Accepts one colour per line in any of:
+        #RRGGBB  or  RRGGBB        — hex 0..255 per channel
+        R, G, B  or  R G B         — decimal; scale auto-detected (0..1 /
+                                     0..100 / 0..255 / 0..65535) from the
+                                     peak value across the input.
+
+    Lines that don't look like a colour are skipped silently, so '#' comments
+    or blank lines in pasted files are tolerated. Returns an empty list when
+    nothing parseable was found.
+    """
+    triples: list[tuple[float, float, float]] = []
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        m = _HEX_RE.match(line)
+        if m:
+            h = m.group(1)
+            triples.append((float(int(h[0:2], 16)),
+                            float(int(h[2:4], 16)),
+                            float(int(h[4:6], 16))))
+            continue
+        parts = re.split(r"[,;\s]+", line)
+        if len(parts) >= 3:
+            try:
+                triples.append((float(parts[0]), float(parts[1]), float(parts[2])))
+            except ValueError:
+                pass
+    if not triples:
+        return []
+    peak = max(max(t) for t in triples)
+    if peak <= 1.5:
+        f = 100.0
+    elif peak <= 100.0:
+        f = 1.0
+    elif peak <= 255.0:
+        f = 100.0 / 255.0
+    else:
+        f = 100.0 / 65535.0
+    return [(r * f, g * f, b * f) for r, g, b in triples]
+
+
 def default_program(spec: ChartSpec) -> list[tuple[float, ...]]:
     """The chart's current patches as an editable ordered device-value list.
 
@@ -324,6 +402,7 @@ def regenerate(
     dpi: int = 300,
     extra_args: list[str] | None = None,
     spacer_palette: tuple[tuple[float, float, float], ...] | None = None,
+    options: "LayoutOptions | None" = None,
 ) -> RegenResult:
     """Run printtarg twice (default + ``-b``) and return the artefact paths.
 
@@ -333,6 +412,11 @@ def regenerate(
     ``spacer_palette`` recolours spacers natively on the deliverable render (the
     ``-b`` twin is only used to locate spacer pixels, so it keeps the default
     palette — geometry is pinned by ``-r`` regardless of palette).
+
+    ``options`` carries the printtarg layout knobs the editor exposes (scale,
+    spacer mode, ``-L``, ``-P``, ``-h``). All non-spacer-mode flags are applied
+    to BOTH renders so geometry matches; spacer-mode flags are stripped from
+    the twin which always uses ``-b`` to provide a colour-only diff.
     """
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -340,6 +424,11 @@ def regenerate(
     bw_dir.mkdir(parents=True, exist_ok=True)
 
     printtarg = Path(bin_dir) / "printtarg"
+    layout_args = options.to_printtarg_args() if options else []
+    # Non-spacer-mode flags ride along on both renders so geometry matches.
+    geometry_args = [a for a in layout_args
+                     if not (a == "-b" or a == "-n" or a == "-c")]
+    deliverable_args = list(layout_args)
     base_args = [
         f"-i{spec.instrument_flag}",
         f"-p{spec.paper_flag}",
@@ -353,7 +442,8 @@ def regenerate(
         # black spacer choices in the deliverable still diff against it.
         write_ti1(spec, dev_values, work / f"{basename}.ti1",
                   spacer_palette=_BW_TWIN_PALETTE if bw else spacer_palette)
-        args = [str(printtarg), *base_args, *(["-b"] if bw else []), basename]
+        flags = (geometry_args + ["-b"]) if bw else deliverable_args
+        args = [str(printtarg), *base_args, *flags, basename]
         r = subprocess.run(args, cwd=str(work), capture_output=True,
                            text=True, timeout=300, stdin=subprocess.DEVNULL)
         if r.returncode != 0:
@@ -409,47 +499,89 @@ _BW_TWIN_PALETTE: tuple[tuple[float, float, float], ...] = (
 
 
 def _patch_grid_bbox(arr: np.ndarray) -> tuple[int, int, int, int] | None:
-    """Bounding box of the dense patch-grid region in a deliverable page.
+    """Bounding box of the patch grid in a deliverable page.
 
-    Returns ``(y0, y1, x0, x1)`` inclusive. Two-step heuristic so neither the
-    rotated chart-label strip on the right margin nor the strip-name row at
-    the top can leak into the bbox:
+    Adapted from ``ui.tabs.tab_measure._detect_uniform_stripe_rects`` — the
+    same algorithm the Measure tab uses to position its strip highlighter
+    over the patch block while explicitly ignoring the rotated title string
+    printtarg prints down the right margin. Three passes:
 
-    1. Keep only rows/columns that are at least 50 % as dense (non-white pixel
-       count) as the densest patch column/row. Label text strips are sparse —
-       maybe 10-30 % — so they fall below this floor.
-    2. From those, take the **largest contiguous block** along each axis. Any
-       isolated dense strip that survived step 1 (e.g. a tightly-packed text
-       line) is disconnected from the patch grid and gets dropped.
+    1. Find the label band at the top (rows whose dark-pixel count is
+       between a small floor and ~30 % of width — narrow enough to fit
+       single-letter strip labels but excludes solid patch rows).
+    2. Below the labels, look at every column's "has-content" count and
+       take the **widest contiguous run** of content columns. The patch
+       block is one solid edge-to-edge run; the right-margin title is a
+       narrower run separated by a wide white gap and gets dropped.
+    3. Take the vertical extent from the topmost to bottommost content row.
+
+    Returns ``(y0, y1, x0, x1)`` inclusive, or ``None`` if the page can't be
+    analysed (callers fall back to using the full image).
     """
-    non_white = arr.sum(axis=2) < 750
-    col_sums = non_white.sum(axis=0)
-    row_sums = non_white.sum(axis=1)
-    if col_sums.max() == 0 or row_sums.max() == 0:
+    h, w = arr.shape[:2]
+    if h < 50 or w < 50:
         return None
-    cm = col_sums.max() * 0.5
-    rm = row_sums.max() * 0.5
-    xs = np.where(col_sums >= cm)[0]
-    ys = np.where(row_sums >= rm)[0]
-    if xs.size == 0 or ys.size == 0:
+    gray = arr.mean(axis=2)  # 0..255 luminance proxy
+
+    # ── 1. Label band → vertical anchor ───────────────────────────────────
+    DARK            = 80
+    WHITE           = 240
+    MIN_LABEL_DARK  = max(5, w // 200)
+    MAX_LABEL_FRAC  = 0.30
+    EMPTY_STOP      = 8
+    max_label_dark = int(w * MAX_LABEL_FRAC)
+    y_lab_start: int | None = None
+    y_lab_end:   int | None = None
+    empty_streak = 0
+    for y in range(h * 30 // 100):
+        count = int((gray[y] < DARK).sum())
+        if MIN_LABEL_DARK <= count <= max_label_dark:
+            if y_lab_start is None:
+                y_lab_start = y
+            y_lab_end = y
+            empty_streak = 0
+        else:
+            empty_streak += 1
+            if y_lab_start is not None and empty_streak >= EMPTY_STOP:
+                break
+    if y_lab_end is None:
         return None
-    xs = _largest_contiguous(xs)
-    ys = _largest_contiguous(ys)
-    return int(ys[0]), int(ys[-1]), int(xs[0]), int(xs[-1])
 
+    # ── 2. Patch block = widest contiguous run of content columns ─────────
+    y0 = y_lab_end + 1
+    y1 = int(h * 0.97)
+    if y1 <= y0:
+        return None
+    col_content = (gray[y0:y1] < WHITE).sum(axis=0)
+    thr = (y1 - y0) * 0.10
+    gap = max(2, w // 250)
+    best: tuple[int, int] | None = None
+    run_start: int | None = None
+    last = 0
+    for x in range(w):
+        if int(col_content[x]) > thr:
+            if run_start is None:
+                run_start = x
+            last = x
+        elif run_start is not None and x - last > gap:
+            if best is None or (last - run_start) > (best[1] - best[0]):
+                best = (run_start, last)
+            run_start = None
+    if run_start is not None and (
+        best is None or (last - run_start) > (best[1] - best[0])
+    ):
+        best = (run_start, last)
+    if best is None:
+        return None
+    block_l, block_r = best
 
-def _largest_contiguous(idx: np.ndarray) -> np.ndarray:
-    """Return the longest run of consecutive integers from a sorted index array."""
-    if idx.size <= 1:
-        return idx
-    gaps = np.diff(idx)
-    if gaps.max() <= 1:
-        return idx
-    breaks = np.where(gaps > 1)[0]
-    starts = np.concatenate(([0], breaks + 1))
-    ends = np.concatenate((breaks + 1, [idx.size]))
-    i = int((ends - starts).argmax())
-    return idx[starts[i]:ends[i]]
+    # ── 3. Vertical extent (top/bottom rows that contain any content) ─────
+    sample = max(1, w // 250)
+    any_content = (gray[:, ::sample] < WHITE).any(axis=1)
+    nz = np.where(any_content)[0]
+    y_top    = int(nz[0])  if nz.size else 0
+    y_bottom = int(nz[-1]) if nz.size else h - 1
+    return (max(y_lab_end + 1, y_top), y_bottom, block_l, block_r)
 
 
 def spacer_mask(default_tif: Path, bw_tif: Path, *, thresh: int = 8) -> np.ndarray:
@@ -480,11 +612,18 @@ def segment_spacers(
     page: int,
     *,
     min_area: int = 12,
+    min_extent: int = 20,
     ref_arr: np.ndarray | None = None,
 ) -> list[Spacer]:
     """Label connected spacer components (4-connectivity, scipy-free BFS).
 
     The mask is sparse (~1% of the page), so BFS over True pixels is cheap.
+
+    ``min_extent`` rejects components whose longest bbox dimension is below
+    this threshold (default 20 px). Real spacers are elongated bars — even a
+    single-cell spacer is ≥ a patch width long. Stray label-text characters
+    that survive the bbox restriction are typically <10 px in either
+    dimension and get filtered out here.
 
     When ``ref_arr`` (the deliverable page as HxWx3) is supplied, **wide
     horizontal bands** get split into per-strip cells by colour discontinuity:
@@ -518,6 +657,10 @@ def segment_spacers(
             continue
         ay = np.array(comp_y)
         ax = np.array(comp_x)
+        bw = int(ax.max() - ax.min() + 1)
+        bh = int(ay.max() - ay.min() + 1)
+        if max(bw, bh) < min_extent:
+            continue   # too small to be a spacer bar — likely stray text
         raw.append(Spacer(
             page=page,
             pixels=(ay, ax),

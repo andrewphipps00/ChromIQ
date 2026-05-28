@@ -21,10 +21,11 @@ from PyQt6.QtGui import (
     QColor, QIcon, QKeySequence, QPainter, QPen, QPixmap, QShortcut,
 )
 from PyQt6.QtWidgets import (
-    QAbstractItemView, QButtonGroup, QColorDialog, QDialog, QFrame, QGridLayout,
-    QGroupBox, QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem,
-    QMessageBox, QPushButton, QRadioButton, QScrollArea, QSlider, QSplitter,
-    QVBoxLayout, QWidget,
+    QAbstractItemView, QButtonGroup, QCheckBox, QColorDialog, QDialog,
+    QDoubleSpinBox, QFrame, QGridLayout, QGroupBox, QHBoxLayout, QLabel,
+    QLineEdit, QListWidget, QListWidgetItem, QMessageBox, QPlainTextEdit,
+    QPushButton, QRadioButton, QScrollArea, QSlider, QSplitter, QVBoxLayout,
+    QWidget,
 )
 
 from core.logger import get_logger
@@ -63,15 +64,18 @@ def _swatch_icon(rgb: tuple[float, float, float], size: int = _SWATCH) -> QIcon:
 class _RegenWorker(QThread):
     done = pyqtSignal(object)  # RegenResult | Exception
 
-    def __init__(self, spec, program, out_dir, bin_dir, palette):
+    def __init__(self, spec, program, out_dir, bin_dir, palette,
+                 *, options=None, basename="chart"):
         super().__init__()
-        self._args = (spec, program, out_dir, bin_dir, palette)
+        self._args = (spec, program, out_dir, bin_dir, palette, options, basename)
 
     def run(self) -> None:
-        spec, program, out_dir, bin_dir, palette = self._args
+        spec, program, out_dir, bin_dir, palette, options, basename = self._args
         try:
             self.done.emit(R.regenerate(spec, program, out_dir, bin_dir,
-                                        spacer_palette=palette))
+                                        spacer_palette=palette,
+                                        options=options,
+                                        basename=basename))
         except Exception as exc:  # surfaced to the user, not swallowed
             log.exception("relayout regenerate failed")
             self.done.emit(exc)
@@ -203,43 +207,124 @@ class _PreviewLabel(QLabel):
 # New-chart setup
 # ---------------------------------------------------------------------------
 class _NewChartDialog(QDialog):
-    """Pick instrument / paper and either a blank canvas or a targen seed."""
+    """New-chart setup: source (blank / targen seed / pasted colours) plus the
+    printtarg layout knobs that affect rendering."""
 
     def __init__(self, bin_dir: Path, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setWindowTitle("New chart")
+        self.setMinimumWidth(540)
         self._bin_dir = bin_dir
         self.result_spec: R.ChartSpec | None = None
         self.result_program: list[tuple] | None = None
+        self.result_options: R.LayoutOptions | None = None
+        self.result_basename: str = "chart"
 
         lay = QVBoxLayout(self)
-        grid = QGridLayout()
-        grid.addWidget(QLabel("Instrument:"), 0, 0)
-        self._instr = NoScrollComboBox(self)
+        lay.setSpacing(10)
+
+        # --- Chart identity --------------------------------------------------
+        chart_box = QGroupBox("Chart", self)
+        cg = QGridLayout(chart_box)
+        cg.addWidget(QLabel("Name:"), 0, 0)
+        self._name = QLineEdit("chart", chart_box)
+        self._name.setToolTip("Used as the file basename and stamped onto the chart")
+        cg.addWidget(self._name, 0, 1, 1, 3)
+        cg.addWidget(QLabel("Instrument:"), 1, 0)
+        self._instr = NoScrollComboBox(chart_box)
         for code, label in _INSTRUMENTS:
             self._instr.addItem(label, code)
-        grid.addWidget(self._instr, 0, 1)
-        grid.addWidget(QLabel("Paper:"), 1, 0)
-        self._paper = NoScrollComboBox(self)
+        cg.addWidget(self._instr, 1, 1)
+        cg.addWidget(QLabel("Paper:"), 1, 2)
+        self._paper = NoScrollComboBox(chart_box)
         self._paper.addItems(_PAPERS)
-        grid.addWidget(self._paper, 1, 1)
-        lay.addLayout(grid)
+        cg.addWidget(self._paper, 1, 3)
+        lay.addWidget(chart_box)
 
-        self._blank = QRadioButton("Blank canvas (add patches by hand)", self)
-        self._seed = QRadioButton("Seed from targen (optimised patch set)", self)
-        self._seed.setChecked(True)
-        lay.addWidget(self._seed)
+        # --- Source ---------------------------------------------------------
+        src_box = QGroupBox("Patches", self)
+        sl = QVBoxLayout(src_box)
+        self._mode_blank = QRadioButton("Blank canvas (add patches by hand)", src_box)
+        self._mode_seed = QRadioButton("Seed from targen (optimised patch set)", src_box)
+        self._mode_paste = QRadioButton("Paste colour values (or load a file)", src_box)
+        self._mode_seed.setChecked(True)
+        sl.addWidget(self._mode_seed)
         seed_row = QHBoxLayout()
         seed_row.addSpacing(22)
         seed_row.addWidget(QLabel("Patches:"))
-        self._count = NoScrollSpinBox(self)
+        self._count = NoScrollSpinBox(src_box)
         self._count.setRange(8, 4000)
         self._count.setValue(200)
         seed_row.addWidget(self._count)
         seed_row.addStretch(1)
-        lay.addLayout(seed_row)
-        lay.addWidget(self._blank)
-        self._seed.toggled.connect(lambda on: self._count.setEnabled(on))
+        sl.addLayout(seed_row)
+        sl.addWidget(self._mode_blank)
+        sl.addWidget(self._mode_paste)
+        paste_indent = QVBoxLayout()
+        paste_indent.setContentsMargins(22, 0, 0, 0)
+        self._paste_edit = QPlainTextEdit(src_box)
+        self._paste_edit.setPlaceholderText(
+            "One colour per line — hex (#ff00aa or ff00aa) or RGB "
+            "(255,0,170 / 1.0 0 0.67). Scale auto-detected."
+        )
+        self._paste_edit.setFixedHeight(110)
+        paste_indent.addWidget(self._paste_edit)
+        paste_btns = QHBoxLayout()
+        load_btn = QPushButton("Load from file…", src_box)
+        load_btn.clicked.connect(self._load_paste_file)
+        self._paste_status = QLabel("", src_box)
+        self._paste_status.setStyleSheet("color: #888;")
+        paste_btns.addWidget(load_btn)
+        paste_btns.addStretch(1)
+        paste_btns.addWidget(self._paste_status)
+        paste_indent.addLayout(paste_btns)
+        sl.addLayout(paste_indent)
+        self._paste_edit.textChanged.connect(self._update_paste_count)
+        # Enable/disable subcontrols by mode
+        self._mode_seed.toggled.connect(lambda on: self._count.setEnabled(on))
+        for r in (self._mode_blank, self._mode_seed, self._mode_paste):
+            r.toggled.connect(self._refresh_source_widgets)
+        self._refresh_source_widgets()
+        lay.addWidget(src_box)
+
+        # --- Layout options -------------------------------------------------
+        opt_box = QGroupBox("Layout options (printtarg)", self)
+        og = QGridLayout(opt_box)
+        og.addWidget(QLabel("Spacers:"), 0, 0)
+        self._sp_colored = QRadioButton("Coloured", opt_box)
+        self._sp_bw = QRadioButton("B&&W", opt_box)
+        self._sp_none = QRadioButton("None", opt_box)
+        self._sp_colored.setChecked(True)
+        sp_grp = QButtonGroup(opt_box)
+        sp_row = QHBoxLayout()
+        for rb in (self._sp_colored, self._sp_bw, self._sp_none):
+            sp_grp.addButton(rb)
+            sp_row.addWidget(rb)
+        sp_row.addStretch(1)
+        og.addLayout(sp_row, 0, 1, 1, 3)
+
+        og.addWidget(QLabel("Patch scale (-a):"), 1, 0)
+        self._patch_scale = QDoubleSpinBox(opt_box)
+        self._patch_scale.setRange(0.3, 3.0)
+        self._patch_scale.setSingleStep(0.05)
+        self._patch_scale.setValue(1.0)
+        og.addWidget(self._patch_scale, 1, 1)
+        og.addWidget(QLabel("Spacer scale (-A):"), 1, 2)
+        self._spacer_scale = QDoubleSpinBox(opt_box)
+        self._spacer_scale.setRange(0.3, 3.0)
+        self._spacer_scale.setSingleStep(0.05)
+        self._spacer_scale.setValue(1.0)
+        og.addWidget(self._spacer_scale, 1, 3)
+
+        self._cb_L = QCheckBox("Suppress left clip border (-L)", opt_box)
+        self._cb_L.setToolTip("i1Pro / 3+ only. Frees the strip for patches.")
+        self._cb_P = QCheckBox("Don't limit strip length (-P)", opt_box)
+        self._cb_h = QCheckBox("Double density / hexagons (-h)", opt_box)
+        self._cb_h.setToolTip("ColorMunki: double-density. SpectroScan: hex patches.")
+        og.addWidget(self._cb_L, 2, 0, 1, 2)
+        og.addWidget(self._cb_P, 2, 2, 1, 2)
+        og.addWidget(self._cb_h, 3, 0, 1, 4)
+        lay.addWidget(opt_box)
 
         btns = QHBoxLayout()
         btns.addStretch(1)
@@ -252,18 +337,66 @@ class _NewChartDialog(QDialog):
         btns.addWidget(cancel)
         lay.addLayout(btns)
 
+    # -- helpers -----------------------------------------------------------
+    def _refresh_source_widgets(self) -> None:
+        self._count.setEnabled(self._mode_seed.isChecked())
+        self._paste_edit.setEnabled(self._mode_paste.isChecked())
+
+    def _update_paste_count(self) -> None:
+        parsed = R.parse_color_values(self._paste_edit.toPlainText())
+        self._paste_status.setText(f"{len(parsed)} colour(s) parsed"
+                                    if parsed else "")
+
+    def _load_paste_file(self) -> None:
+        path = open_file_dialog(self, "Load colour values",
+                                "Text files (*.txt *.csv *.tsv);;All files (*)",
+                                start_dir=str(Path.home()))
+        if not path:
+            return
+        try:
+            self._paste_edit.setPlainText(Path(path).read_text(errors="ignore"))
+            self._mode_paste.setChecked(True)
+        except OSError as exc:
+            QMessageBox.warning(self, "Could not read file", str(exc))
+
     def _on_ok(self) -> None:
         spec = R.ChartSpec.new(self._instr.currentData(),
                                self._paper.currentText())
         program: list[tuple] = []
-        if self._seed.isChecked():
+        if self._mode_seed.isChecked():
             try:
                 program = R.seed_from_targen(self._bin_dir, self._count.value())
             except Exception as exc:
                 QMessageBox.warning(self, "targen failed", str(exc))
                 return
+        elif self._mode_paste.isChecked():
+            program = R.parse_color_values(self._paste_edit.toPlainText())
+            if not program:
+                QMessageBox.warning(self, "No values",
+                                    "Couldn't parse any RGB / hex values "
+                                    "from the pasted text.")
+                return
+
+        if self._sp_bw.isChecked():
+            sm = "bw"
+        elif self._sp_none.isChecked():
+            sm = "none"
+        else:
+            sm = "colored"
+        opts = R.LayoutOptions(
+            spacer_mode=sm,
+            patch_scale=self._patch_scale.value(),
+            spacer_scale=self._spacer_scale.value(),
+            suppress_left_clip=self._cb_L.isChecked(),
+            no_strip_limit=self._cb_P.isChecked(),
+            double_density=self._cb_h.isChecked(),
+        )
+
+        name = self._name.text().strip() or "chart"
         self.result_spec = spec
         self.result_program = program
+        self.result_options = opts
+        self.result_basename = name
         self.accept()
 
 
@@ -292,6 +425,8 @@ class Ti2RelayoutDialog(QDialog):
         self._preview_pending_save: Path | None = None
         self._swatch_size = _SWATCH                     # current grid icon size
         self._base_pixmap: QPixmap | None = None        # preview without overlay
+        self._options = R.LayoutOptions()               # printtarg layout knobs
+        self._basename = "chart"                        # used for preview + save
 
         self._build_ui()
         self._refresh_enabled()
@@ -507,7 +642,7 @@ class Ti2RelayoutDialog(QDialog):
         paint_lbl.setWordWrap(True)
         sb.addWidget(paint_lbl)
         paint_row = QHBoxLayout()
-        paint = QPushButton("Paint selected…", self._spacer_box)
+        paint = QPushButton("Paint…", self._spacer_box)
         paint.setToolTip("Paint the spacers selected in the preview")
         paint.clicked.connect(self._paint_spacers)
         clear = QPushButton("Clear", self._spacer_box)
@@ -608,6 +743,9 @@ class Ti2RelayoutDialog(QDialog):
         dlg = _NewChartDialog(self._bin_dir, self)
         if dlg.exec() != QDialog.DialogCode.Accepted or dlg.result_spec is None:
             return
+        if dlg.result_options is not None:
+            self._options = dlg.result_options
+        self._basename = dlg.result_basename or "chart"
         self._set_chart(dlg.result_spec, dlg.result_program or [], "New chart")
 
     def _set_chart(self, spec: R.ChartSpec, program: list[tuple], note: str) -> None:
@@ -801,7 +939,8 @@ class Ti2RelayoutDialog(QDialog):
         self._status.setText("Rendering with printtarg…")
         self._worker = _RegenWorker(
             self._spec, self._program_from_grid(), out_dir, self._bin_dir,
-            tuple(self._palette) if self._palette else None)
+            tuple(self._palette) if self._palette else None,
+            options=self._options, basename=self._basename)
         self._worker.done.connect(self._on_regen_done)
         self._worker.start()
 
@@ -898,9 +1037,13 @@ class Ti2RelayoutDialog(QDialog):
         pm = QPixmap(self._base_pixmap)
         if (self._mode_spacers.isChecked()
                 and self._sel_spacers and self._spacers):
+            # Fill + outline (à la ui.scan_highlighter) — a translucent yellow
+            # wash makes thin bars visible at a glance, the 2px outline keeps
+            # the boundary crisp.
             p = QPainter(pm)
-            p.setPen(QPen(QColor(255, 230, 0), 3))
-            p.setBrush(Qt.BrushStyle.NoBrush)
+            p.setRenderHint(QPainter.RenderHint.Antialiasing, False)
+            p.setBrush(QColor(255, 230, 0, 120))
+            p.setPen(QPen(QColor(255, 200, 0), 2))
             s = self._preview_scale
             for i in self._sel_spacers:
                 if 0 <= i < len(self._spacers):
@@ -1020,7 +1163,7 @@ class Ti2RelayoutDialog(QDialog):
             res = R.regenerate(self._spec, self._program_from_grid(), target,
                                self._bin_dir,
                                spacer_palette=tuple(self._palette) if self._palette else None,
-                               basename=name)
+                               basename=name, options=self._options)
             pad = R.assert_data_integrity(self._program_from_grid(), res.ti2)
             self._bake_paint_into_saved(res)
         except Exception as exc:
