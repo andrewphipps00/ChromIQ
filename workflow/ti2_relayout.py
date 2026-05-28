@@ -411,24 +411,45 @@ _BW_TWIN_PALETTE: tuple[tuple[float, float, float], ...] = (
 def _patch_grid_bbox(arr: np.ndarray) -> tuple[int, int, int, int] | None:
     """Bounding box of the dense patch-grid region in a deliverable page.
 
-    Returns ``(y0, y1, x0, x1)`` inclusive. Used to keep the spacer mask
-    confined to the grid even when the twin's near-white page background
-    diverges slightly from the deliverable's pure white (above the diff
-    threshold, but only in the page margins / rotated label text — both
-    sparsely non-white and naturally excluded by row/column profile density).
+    Returns ``(y0, y1, x0, x1)`` inclusive. Two-step heuristic so neither the
+    rotated chart-label strip on the right margin nor the strip-name row at
+    the top can leak into the bbox:
+
+    1. Keep only rows/columns that are at least 50 % as dense (non-white pixel
+       count) as the densest patch column/row. Label text strips are sparse —
+       maybe 10-30 % — so they fall below this floor.
+    2. From those, take the **largest contiguous block** along each axis. Any
+       isolated dense strip that survived step 1 (e.g. a tightly-packed text
+       line) is disconnected from the patch grid and gets dropped.
     """
     non_white = arr.sum(axis=2) < 750
     col_sums = non_white.sum(axis=0)
     row_sums = non_white.sum(axis=1)
     if col_sums.max() == 0 or row_sums.max() == 0:
         return None
-    cm = col_sums.max() * 0.2
-    rm = row_sums.max() * 0.2
+    cm = col_sums.max() * 0.5
+    rm = row_sums.max() * 0.5
     xs = np.where(col_sums >= cm)[0]
     ys = np.where(row_sums >= rm)[0]
     if xs.size == 0 or ys.size == 0:
         return None
+    xs = _largest_contiguous(xs)
+    ys = _largest_contiguous(ys)
     return int(ys[0]), int(ys[-1]), int(xs[0]), int(xs[-1])
+
+
+def _largest_contiguous(idx: np.ndarray) -> np.ndarray:
+    """Return the longest run of consecutive integers from a sorted index array."""
+    if idx.size <= 1:
+        return idx
+    gaps = np.diff(idx)
+    if gaps.max() <= 1:
+        return idx
+    breaks = np.where(gaps > 1)[0]
+    starts = np.concatenate(([0], breaks + 1))
+    ends = np.concatenate((breaks + 1, [idx.size]))
+    i = int((ends - starts).argmax())
+    return idx[starts[i]:ends[i]]
 
 
 def spacer_mask(default_tif: Path, bw_tif: Path, *, thresh: int = 8) -> np.ndarray:

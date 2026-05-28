@@ -135,8 +135,8 @@ class _PreviewLabel(QLabel):
     are in label coordinates; the dialog maps them to image pixels.
     """
 
-    clicked = pyqtSignal(QPoint)
-    marquee_finished = pyqtSignal(QRect)
+    clicked = pyqtSignal(QPoint, object)            # pos, keyboard modifiers
+    marquee_finished = pyqtSignal(QRect, object)    # rect, keyboard modifiers
     _CLICK_PX = 4               # movement under this is still a click
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -167,12 +167,14 @@ class _PreviewLabel(QLabel):
     def mouseReleaseEvent(self, ev) -> None:  # noqa: N802
         if ev.button() == Qt.MouseButton.LeftButton and self._press is not None:
             end = ev.position().toPoint()
+            mods = ev.modifiers()
             dx = abs(end.x() - self._press.x())
             dy = abs(end.y() - self._press.y())
             if dx <= self._CLICK_PX and dy <= self._CLICK_PX:
-                self.clicked.emit(self._press)
+                self.clicked.emit(self._press, mods)
             else:
-                self.marquee_finished.emit(QRect(self._press, end).normalized())
+                self.marquee_finished.emit(
+                    QRect(self._press, end).normalized(), mods)
             self._press = None
             self._drag_rect = None
             if self._base_pixmap is not None:
@@ -499,15 +501,21 @@ class Ti2RelayoutDialog(QDialog):
         sb.addWidget(reset)
         sb.addWidget(self._hline())
         paint_lbl = QLabel(
-            "Per-spacer paint: click a spacer in the preview (or drag a "
-            "marquee for many at once) — selected = yellow outline. Then:",
+            "Per-spacer paint: click a spacer (drag for a marquee). "
+            "Hold Alt to remove from selection. Selected = yellow outline.",
             self._spacer_box)
         paint_lbl.setWordWrap(True)
         sb.addWidget(paint_lbl)
+        paint_row = QHBoxLayout()
         paint = QPushButton("Paint selected…", self._spacer_box)
         paint.setToolTip("Paint the spacers selected in the preview")
         paint.clicked.connect(self._paint_spacers)
-        sb.addWidget(paint)
+        clear = QPushButton("Clear", self._spacer_box)
+        clear.setToolTip("Clear the spacer selection")
+        clear.clicked.connect(self._clear_spacer_selection)
+        paint_row.addWidget(paint)
+        paint_row.addWidget(clear)
+        sb.addLayout(paint_row)
         self._spacer_box.setVisible(False)
         v.addWidget(self._spacer_box)
 
@@ -911,8 +919,8 @@ class Ti2RelayoutDialog(QDialog):
         off_y = (self._preview.height() - self._base_pixmap.height()) / 2
         return (p.x() - off_x) / self._preview_scale, (p.y() - off_y) / self._preview_scale
 
-    def _on_marquee(self, rect) -> None:
-        """Add every spacer whose bbox intersects the marquee to the selection."""
+    def _on_marquee(self, rect, mods) -> None:
+        """Add (or, with Alt, subtract) every spacer that intersects the marquee."""
         if not self._mode_spacers.isChecked() or not self._spacers:
             return
         tl = self._label_to_image(rect.topLeft())
@@ -921,19 +929,36 @@ class Ti2RelayoutDialog(QDialog):
             return
         ix0, iy0 = tl
         ix1, iy1 = br
-        added = 0
+        is_alt = bool(mods & Qt.KeyboardModifier.AltModifier)
+        touched: list[int] = []
         for i, sp in enumerate(self._spacers):
             sx0, sy0, sx1, sy1 = sp.bbox
             if sx1 < ix0 or sx0 > ix1 or sy1 < iy0 or sy0 > iy1:
                 continue
-            if i not in self._sel_spacers:
-                self._sel_spacers.add(i)
-                added += 1
-        self._refresh_preview()
-        self._status.setText(
-            f"Marquee added {added} spacer(s); {len(self._sel_spacers)} total selected.")
+            touched.append(i)
+        if is_alt:
+            removed = sum(1 for i in touched if i in self._sel_spacers)
+            self._sel_spacers.difference_update(touched)
+            self._refresh_preview()
+            self._status.setText(
+                f"Marquee removed {removed} spacer(s); "
+                f"{len(self._sel_spacers)} still selected.")
+        else:
+            added = sum(1 for i in touched if i not in self._sel_spacers)
+            self._sel_spacers.update(touched)
+            self._refresh_preview()
+            self._status.setText(
+                f"Marquee added {added} spacer(s); "
+                f"{len(self._sel_spacers)} total selected.")
 
-    def _on_preview_click(self, pos: QPoint) -> None:
+    def _clear_spacer_selection(self) -> None:
+        if not self._sel_spacers:
+            return
+        self._sel_spacers.clear()
+        self._refresh_preview()
+        self._status.setText("Spacer selection cleared.")
+
+    def _on_preview_click(self, pos: QPoint, mods) -> None:
         if not self._mode_spacers.isChecked() or not self._spacers:
             return
         mapped = self._label_to_image(pos)
@@ -943,7 +968,12 @@ class Ti2RelayoutDialog(QDialog):
         hit = self._spacer_at(ix, iy)
         if hit is None:
             return
-        if hit in self._sel_spacers:
+        # Plain click toggles; Alt+click explicitly removes (matches macOS
+        # subtract-from-selection convention).
+        is_alt = bool(mods & Qt.KeyboardModifier.AltModifier)
+        if is_alt:
+            self._sel_spacers.discard(hit)
+        elif hit in self._sel_spacers:
             self._sel_spacers.discard(hit)
         else:
             self._sel_spacers.add(hit)
