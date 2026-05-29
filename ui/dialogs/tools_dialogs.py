@@ -46,6 +46,13 @@ from ui.widgets import (
     open_files_dialog,
 )
 from workflow.average_runner import AverageParams, AverageRunner
+from workflow.colverify_runner import (
+    ColverifyParams,
+    ColverifyRunner,
+    chart_patch_count,
+    parse_reference_values,
+    write_reference_ti3,
+)
 from workflow.i1profiler_export import (
     WorkflowOptions, export_from_ti1, parse_ti1, write_pwxf,
 )
@@ -1224,6 +1231,203 @@ class I1ProfilerToTi1Dialog(_ToolDialogBase):
 # Factory
 # ---------------------------------------------------------------------------
 
+class VerifyAgainstReferenceDialog(_ToolDialogBase):
+    TOOL_KEY    = "verify"
+    TITLE       = "Verify against reference"
+    RUN_LABEL   = "Verify"
+    MIN_WIDTH   = 660
+    DESCRIPTION = (
+        "Compare a measured chart against a set of expected colour values and "
+        "report the colour error (ΔE) per patch — without building a "
+        "profile. Use this to check how closely a print matches known target "
+        "values, e.g. a profile-evaluation target someone shared with you.\n\n"
+        "Paste (or load) the expected values — one patch per line, in the same "
+        "order as the chart — pick your measured .ti3, and optionally the "
+        "chart's .ti1/.ti2 so the patch count is cross-checked. ChromIQ builds "
+        "a reference file whose patch IDs line up with your measurement and "
+        "runs Argyll's colverify."
+    )
+
+    def __init__(self, runner: "ArgyllRunner", settings: "AppSettings", parent: QWidget | None = None) -> None:
+        super().__init__(settings, parent)
+        self._runner    = runner
+        self._cv        = ColverifyRunner(runner)
+        self._measured: Path | None = None
+        self._chart: Path | None = None
+        self._build_inputs()
+        self._refresh()
+
+    def _file_row(self, on_browse: "Callable[[], None]") -> tuple[QHBoxLayout, QLineEdit]:
+        row = QHBoxLayout()
+        field = QLineEdit(self)
+        field.setReadOnly(True)
+        field.setPlaceholderText("No file selected")
+        row.addWidget(field, 1)
+        btn = QPushButton("Browse…", self)
+        btn.clicked.connect(on_browse)
+        row.addWidget(btn)
+        return row, field
+
+    def _build_inputs(self) -> None:
+        # Expected values: colour-space picker + load-from-file + paste box.
+        head = QHBoxLayout()
+        head.addWidget(QLabel("Expected values:", self))
+        self._space = NoScrollComboBox(self)
+        self._space.addItem("CIE L*a*b*", "LAB")
+        self._space.addItem("CIE XYZ", "XYZ")
+        head.addWidget(self._space)
+        head.addStretch(1)
+        load_btn = QPushButton("Load from file…", self)
+        load_btn.clicked.connect(self._load_reference_file)
+        head.addWidget(load_btn)
+        self._content.addLayout(head)
+
+        self._ref_edit = QPlainTextEdit(self)
+        self._ref_edit.setPlaceholderText(
+            "One patch per line, in chart order, e.g.:\n"
+            "100  0  0\n95.2  -1.1  2.3\n…"
+        )
+        self._ref_edit.setFixedHeight(110)
+        self._ref_edit.textChanged.connect(self._refresh)
+        self._content.addWidget(self._ref_edit)
+
+        self._content.addWidget(QLabel("Measured chart (.ti3):", self))
+        row, self._measured_field = self._file_row(self._pick_measured)
+        self._content.addLayout(row)
+
+        self._content.addWidget(
+            QLabel("Chart definition (.ti1 / .ti2) — optional, cross-checks patch count:", self)
+        )
+        row, self._chart_field = self._file_row(self._pick_chart)
+        self._content.addLayout(row)
+
+        opts = QHBoxLayout()
+        opts.addWidget(QLabel("ΔE formula:", self))
+        self._formula = NoScrollComboBox(self)
+        self._formula.addItem("CIEDE2000", "-k")
+        self._formula.addItem("CIE94", "-c")
+        self._formula.addItem("CIE76", "")
+        opts.addWidget(self._formula)
+        self._sort_cb = QCheckBox("List worst patches first", self)
+        self._sort_cb.setChecked(True)
+        opts.addWidget(self._sort_cb)
+        opts.addStretch(1)
+        self._content.addLayout(opts)
+
+        self._banner = QLabel("", self)
+        self._banner.setWordWrap(True)
+        self._banner.setStyleSheet("font-weight: bold;")
+        self._content.addWidget(self._banner)
+
+    # -- pickers --------------------------------------------------------
+    def _load_reference_file(self) -> None:
+        p = self._pick_input_file(
+            "Choose expected-values file",
+            "Reference values (*.txt *.cgats *.ti3 *.csv);;All files (*)",
+        )
+        if not p:
+            return
+        try:
+            text = p.read_text(encoding="utf-8", errors="replace")
+        except OSError as exc:
+            self._log.appendPlainText(f"[ERROR] Could not read {p.name}: {exc}")
+            return
+        self._ref_edit.setPlainText(text)
+        self._refresh()
+
+    def _pick_measured(self) -> None:
+        p = self._pick_input_file("Choose measured chart", "Measurements (*.ti3);;All files (*)")
+        if p:
+            self._measured = p
+            self._measured_field.setText(str(p))
+            self._refresh()
+
+    def _pick_chart(self) -> None:
+        p = self._pick_input_file("Choose chart definition", "Charts (*.ti1 *.ti2);;All files (*)")
+        if p:
+            self._chart = p
+            self._chart_field.setText(str(p))
+            self._refresh()
+
+    # -- run ------------------------------------------------------------
+    def _can_run(self) -> bool:
+        return self._measured is not None and bool(self._ref_edit.toPlainText().strip())
+
+    def _execute(self) -> None:
+        if self._runner.is_running:
+            self._log.appendPlainText("[BUSY] Another operation is running — please wait.")
+            self._finish(False)
+            return
+
+        assert self._measured is not None
+        try:
+            rows = parse_reference_values(self._ref_edit.toPlainText())
+        except ValueError as exc:
+            self._log.appendPlainText(f"[ERROR] {exc}")
+            self._finish(False)
+            return
+
+        if self._chart is not None:
+            try:
+                n_chart = chart_patch_count(self._chart)
+            except OSError as exc:
+                self._log.appendPlainText(f"[ERROR] Could not read the chart: {exc}")
+                self._finish(False)
+                return
+            if n_chart and n_chart != len(rows):
+                self._log.appendPlainText(
+                    f"[ERROR] The chart has {n_chart} patches but you supplied "
+                    f"{len(rows)} expected values. They must match — check the "
+                    "pasted table."
+                )
+                self._finish(False)
+                return
+
+        space    = self._space.currentData()
+        ref_path = self._measured.parent / f"{self._measured.stem}-reference.ti3"
+        try:
+            write_reference_ti3(ref_path, rows, space=space)
+        except (ValueError, OSError) as exc:
+            self._log.appendPlainText(f"[ERROR] Could not write reference file: {exc}")
+            self._finish(False)
+            return
+
+        self._log.clear()
+        self._banner.setText("")
+        self._log.appendPlainText(
+            f"Built reference: {ref_path.name} ({len(rows)} patches, {space})"
+        )
+        _remember_dir(self._settings, self.TOOL_KEY, self._measured.parent)
+
+        params = ColverifyParams(
+            ref_ti3=ref_path,
+            measured_ti3=self._measured,
+            de_formula=self._formula.currentData(),
+            sort=self._sort_cb.isChecked(),
+        )
+
+        def _on_line(line: str) -> None:
+            self._log.appendPlainText(line.rstrip())
+            self._log.ensureCursorVisible()
+
+        def _on_finish(code: int) -> None:
+            result = self._cv.parse_results()
+            if code == 0 and result.avg_de is not None:
+                self._banner.setText(
+                    f"Average ΔE {result.avg_de:.2f}   ·   Peak ΔE "
+                    f"{result.peak_de:.2f}   ({len(result.patch_errors)} patches)"
+                )
+                self._finish(True)
+            else:
+                self._log.appendPlainText(
+                    "[ERROR] colverify did not return a result. Check that the "
+                    "measured .ti3 has the same patches (matched by SAMPLE_ID)."
+                )
+                self._finish(False)
+
+        self._cv.run(params, _on_line, _on_finish)
+
+
 def open_tool_dialog(
     key: str,
     runner: "ArgyllRunner",
@@ -1244,6 +1448,8 @@ def open_tool_dialog(
         dlg = I1ProfilerToTi3Dialog(runner, settings, parent)
     elif key == "i1p_to_ti1":
         dlg = I1ProfilerToTi1Dialog(settings, parent)
+    elif key == "verify":
+        dlg = VerifyAgainstReferenceDialog(runner, settings, parent)
     else:
         log.warning("Unknown tool key: %s", key)
         return

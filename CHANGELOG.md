@@ -1,5 +1,27 @@
 # Changelog
 
+## v3.8.0-beta.24
+**New Tools utility: "Verify against reference".** Check how closely a printed
+chart matches a set of expected colour values — per-patch and average ΔE —
+*without* building a profile. Print your evaluation target through a candidate
+profile, measure it, and compare the measurement against the values it should
+have hit (e.g. a profile-evaluation target someone shared with you). Under the
+hood this runs ArgyllCMS's `colverify`.
+
+### Added
+- Tools → **Verify against reference**. Paste (or load) the expected values —
+  CIE L\*a\*b\* or XYZ, one patch per line in chart order — pick your measured
+  `.ti3`, and optionally the chart's `.ti1`/`.ti2` so the patch count is
+  cross-checked. ChromIQ builds a reference file whose patch IDs line up with
+  your measurement and reports average / peak ΔE plus a per-patch list.
+- ΔE formula selectable (CIEDE2000, CIE94, CIE76) and an option to list the
+  worst patches first.
+
+### Notes
+- Patches are matched by `SAMPLE_ID`, so the measured chart and the expected
+  values must describe the same patch set in the same order. The optional
+  chart cross-check catches the most common mismatch (wrong patch count).
+
 ## v3.8.0-beta.23
 **New i1Profiler workflow (.pwxf) export, plus .pwxf import.** "Convert TI1 →
 i1Profiler" (Tools) can now also write an i1Profiler *workflow* file alongside

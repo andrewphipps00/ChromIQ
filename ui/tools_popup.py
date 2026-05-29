@@ -49,6 +49,7 @@ _ENTRIES: tuple[ToolEntry, ...] = (
     ToolEntry("ti1_to_i1p",   "Convert TI1 → i1Profiler"),
     ToolEntry("i1p_to_ti3",   "Convert i1Profiler → TI3"),
     ToolEntry("i1p_to_ti1",   "Convert i1Profiler → TI1"),
+    ToolEntry("verify",       "Verify against reference"),
 )
 
 
