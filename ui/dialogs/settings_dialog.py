@@ -471,6 +471,11 @@ class SettingsDialog(QDialog):
             min_width=560,
         )
 
+        # The CUPS preflight summary only applies to ChromIQ's own print
+        # pipeline. When the macOS print dialog is in use, that dialog is the
+        # confirmation step, so grey the option out.
+        self._native_print_check.toggled.connect(self._sync_confirm_print_enabled)
+
         # Collect the options that apply on this platform, in order, then place
         # them two per row. Platform-specific options are simply omitted (rather
         # than hidden) so they leave no empty cell in the grid.
@@ -578,6 +583,14 @@ class SettingsDialog(QDialog):
 
     # ------------------------------------------------------------------
 
+    def _sync_confirm_print_enabled(self) -> None:
+        """Grey out the CUPS preflight-confirmation option while the macOS print
+        dialog is selected — that dialog already serves as the confirmation."""
+        if native_print_supported():
+            self._confirm_print_check.setEnabled(
+                not self._native_print_check.isChecked()
+            )
+
     def _load_settings(self) -> None:
         s = self._settings
         self._argyll_edit.setText(s.get("argyll_bin_path", default_argyll_bin_dir()))
@@ -590,6 +603,7 @@ class SettingsDialog(QDialog):
         self._averaging_check.setChecked(bool(s.get("averaging_enabled", False)))
         self._native_print_check.setChecked(bool(s.get("use_native_print_dialog", False)))
         self._confirm_print_check.setChecked(bool(s.get("confirm_before_printing", True)))
+        self._sync_confirm_print_enabled()
         from data.patch_db import I1PRO_DEFAULT_PRESET_KEY
         i1pro_key = str(s.get("i1pro_default_preset", I1PRO_DEFAULT_PRESET_KEY))
         idx = self._i1pro_preset_combo.findData(i1pro_key)
@@ -622,7 +636,18 @@ class SettingsDialog(QDialog):
         # same neutral way (checkboxes, radios and the focus ring on text/number/
         # combo inputs).
         from ui.dialogs.tools_dialogs import neutral_controls_qss
-        self.setStyleSheet(neutral_controls_qss(indicator))
+        # neutral_controls_qss restyles :checked indicators in the neutral colour,
+        # which would otherwise keep a *disabled* checked box looking active. Add a
+        # higher-specificity :checked:disabled rule so it greys out like the rest
+        # of the app (matching the global QCheckBox::indicator:disabled greys).
+        dis_bg, dis_border = (
+            ("#eeece8", "#d0ccc6") if mode == "light" else ("#1f1f1f", "#3a3a3a")
+        )
+        disabled_qss = (
+            f"QCheckBox::indicator:checked:disabled {{"
+            f" background: {dis_bg}; border-color: {dis_border}; }}"
+        )
+        self.setStyleSheet(neutral_controls_qss(indicator) + disabled_qss)
         for btn in self.findChildren(TooltipButton):
             btn._color_override = indicator
             btn._set_icon()

@@ -6,7 +6,7 @@ from typing import Any
 from PyQt6.QtCore import QSettings
 
 from core.logger import get_logger
-from core.platform_paths import default_argyll_bin_dir, is_windows
+from core.platform_paths import default_argyll_bin_dir, is_macos, is_windows
 
 log = get_logger(__name__)
 
@@ -56,7 +56,9 @@ DEFAULTS: dict[str, Any] = {
     "print_media":               "",
     "print_media_type":          "",
     "print_quality":             "",
-    "use_native_print_dialog":   is_windows(),
+    # Default to the OS print dialog on macOS too (the user can untick it,
+    # unlike Windows where it is force-locked on in get()).
+    "use_native_print_dialog":   is_windows() or is_macos(),
     "confirm_before_printing":   True,
     # Step 3 — measure
     "measure_disable_bidir":       True,

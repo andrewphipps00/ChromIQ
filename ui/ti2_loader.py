@@ -280,14 +280,15 @@ def _handle_inside(
     from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QVBoxLayout
 
     dlg = QDialog(parent)
-    dlg.setWindowTitle("Load Chart")
+    dlg.setWindowTitle("Load Test Session")
     dlg.setMinimumWidth(460)
     layout = QVBoxLayout(dlg)
     layout.setContentsMargins(24, 20, 24, 20)
     layout.setSpacing(12)
 
     lbl = QLabel(
-        f"<b>{ti2_path.name}</b> is already in your working folder.<br><br>"
+        f"The session <b>{ti2_path.stem}</b> is already set up in your working "
+        "folder.<br><br>"
         "What would you like to do?",
         dlg,
     )
@@ -295,7 +296,7 @@ def _handle_inside(
     layout.addWidget(lbl)
 
     cont_desc = QLabel(
-        "<i>Continue</i> — use the chart files in this folder as-is — "
+        "<i>Continue</i> — use the files in this folder as-is — "
         "nothing will be copied or moved.",
         dlg,
     )
@@ -303,7 +304,7 @@ def _handle_inside(
     layout.addWidget(cont_desc)
 
     new_desc = QLabel(
-        "<i>Use as base for a new profile</i> — copy the chart files to a new "
+        "<i>Use as base for a new profile</i> — copy the files to a new "
         "subfolder so you can build a separate ICC profile without overwriting "
         "the original.",
         dlg,
