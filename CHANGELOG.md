@@ -1,5 +1,20 @@
 # Changelog
 
+## v3.8.0-beta.30
+**The Measure tab's bidirectional strip indicator now matches what actually
+happens during the read.** The preview shows a second (bottom) arrow on the
+active strip to signal that it can be scanned in either direction — but on a
+fixed-order chart left at Argyll's default setting, the chart is in fact read in
+one direction only, so the second arrow was misleading.
+
+### Fixed
+- **Bidirectional preview arrow follows the effective read direction.** The
+  double arrow now appears only when the read is truly bidirectional: always
+  when "Bidirectional forced" is set, never when it is disabled, and — at the
+  Argyll-default setting — only on a randomised chart (where chartread reads
+  both directions). Fixed-order charts at the default setting now correctly
+  show a single arrow.
+
 ## v3.8.0-beta.29
 **Readability fix for the Average / Merge tool dialogs in dark mode.** The file
 list in both dialogs used a near-black background that made it hard to tell the

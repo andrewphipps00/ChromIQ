@@ -183,3 +183,30 @@ def test_confirm_shows_dialog_and_honours_choice(tab, monkeypatch):
     assert tab._confirm_nonrandom_bidir(_params(True)) is False
     monkeypatch.setattr(QDialog, "exec", lambda self: QDialog.DialogCode.Accepted)
     assert tab._confirm_nonrandom_bidir(_params(True)) is True
+
+
+# --- Effective-bidirectional rule -> preview double (bottom) strip arrow -----
+
+def _bidir_params(disable=False, force=False):
+    return MeasureParams(ti1_path=Path("/tmp/x.ti2"), instrument="1",
+                         disable_bidir=disable, force_bidir=force)
+
+
+@pytest.mark.parametrize(
+    "disable, force, randomized, expected",
+    [
+        # force (-b): always bidirectional, regardless of chart
+        (False, True,  True,  True),
+        (False, True,  False, True),
+        # disable (-B): never bidirectional
+        (True,  False, True,  False),
+        (True,  False, False, False),
+        # Argyll default: bidirectional only on a randomised chart
+        (False, False, True,  True),
+        (False, False, False, False),
+    ],
+)
+def test_effective_bidirectional(tab, disable, force, randomized, expected):
+    tab._detected_randomized = randomized
+    params = _bidir_params(disable=disable, force=force)
+    assert tab._effective_bidirectional(params) is expected

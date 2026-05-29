@@ -1972,6 +1972,20 @@ class TabMeasure(QWidget):
     def _resolve_force_bidir(self, mode: str) -> bool:
         return self._resolve_bidir_value(mode) == "force"
 
+    def _effective_bidirectional(self, params: "MeasureParams") -> bool:
+        """Whether the read will *effectively* be bidirectional.
+
+        Drives the preview's double (bottom) strip arrow so it mirrors what
+        chartread actually does:
+          • "force" (-b)   → always bidirectional, any chart
+          • "disable" (-B) → never bidirectional
+          • Argyll default → bidirectional only on a randomised chart (chartread
+            reads both directions there, one direction on a fixed-order chart)
+        """
+        return params.force_bidir or (
+            not params.disable_bidir and self._detected_randomized
+        )
+
     # ------------------------------------------------------------------
     # Internal
     # ------------------------------------------------------------------
@@ -2172,7 +2186,7 @@ class TabMeasure(QWidget):
         params = self._collect_params()
         if not self._confirm_nonrandom_bidir(params):
             return
-        self._preview.set_bidirectional(not params.disable_bidir)
+        self._preview.set_bidirectional(self._effective_bidirectional(params))
         self._log.clear()
         self._auto_proceed = False
         self._all_done_shown = False
