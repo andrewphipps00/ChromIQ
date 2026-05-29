@@ -834,69 +834,10 @@ class TabMeasure(QWidget):
             cg.addLayout(row)
             return cb, tip
 
-        # Bidirectional row: the -B checkbox with its own tooltip on the left,
-        # then an "Auto" toggle with its own tooltip on the right (Auto derives
-        # -B from the loaded chart's instrument via _refresh_bidir_autodetect
-        # and greys out the checkbox while on). A stretch between the two
-        # option/tooltip groups spreads them across the column width.
-        bidir_row = QHBoxLayout()
-        self._bidir_cb = QCheckBox("Disable bidirectional strip recognition (-B)", left)
-        self._bidir_cb.setChecked(True)
-        bidir_row.addWidget(self._bidir_cb)
-        bidir_row.addSpacing(18)
-        bidir_row.addWidget(TooltipButton(
-            "Bidirectional reading (-B)",
-            "Sets whether a strip can be read in both directions or only one.\n\n"
-            "Tick the box to force one-direction reading (-B); untick it to\n"
-            "allow scanning a strip either way. The i1 Pro (including i1 Pro 3)\n"
-            "can read both directions, while the ColorMunki reads one only.\n\n"
-            "While Auto is on this is decided for you and the box is locked —\n"
-            "turn Auto off to choose it yourself.",
-            left,
-        ))
-        bidir_row.addStretch()
-        self._bidir_auto_cb = QCheckBox("Auto", left)
-        self._bidir_auto_cb.setChecked(True)
-        self._bidir_auto_cb.toggled.connect(
-            lambda _checked: self._apply_bidir_auto_state("guided")
-        )
-        bidir_row.addWidget(self._bidir_auto_cb)
-        bidir_row.addSpacing(18)
-        bidir_row.addWidget(TooltipButton(
-            "Auto (recommended)",
-            "Sets the bidirectional option for you from the instrument saved\n"
-            "in your loaded chart: the i1 Pro (including i1 Pro 3) reads both\n"
-            "directions, the ColorMunki reads one direction only.\n\n"
-            "While Auto is on, the checkbox to the left is locked and shows\n"
-            "the chosen setting. Turn Auto off to set it yourself.",
-            left,
-        ))
-        cg.addLayout(bidir_row)
-
-        # Force-bidirectional row: chartread -b, the counterpart to -B above.
-        # Governed by the same Auto toggle (Auto turns it on for the i1 Pro
-        # family, which reads strips either way). -b and -B are mutually
-        # exclusive — ticking one clears the other.
-        force_bidir_row = QHBoxLayout()
-        self._force_bidir_cb = QCheckBox("Force bidirectional strip recognition (-b)", left)
-        self._force_bidir_cb.setChecked(False)
-        force_bidir_row.addWidget(self._force_bidir_cb)
-        force_bidir_row.addSpacing(18)
-        force_bidir_row.addWidget(TooltipButton(
-            "Force bidirectional reading (-b)",
-            "Forces chartread to accept a strip scanned in either direction.\n\n"
-            "Normally chartread only auto-detects strip direction on randomised\n"
-            "charts; on a fixed-order chart it reads one direction only and\n"
-            "rejects strips scanned backwards. Tick this to force the detection\n"
-            "on regardless — useful for the i1 Pro family, which reads either way.\n\n"
-            "This is the opposite of \"Disable bidirectional\" (-B); only one can\n"
-            "apply. While Auto is on this is decided for you (on for the i1 Pro)\n"
-            "and the box is locked — turn Auto off to choose it yourself.",
-            left,
-        ))
-        force_bidir_row.addStretch()
-        cg.addLayout(force_bidir_row)
-        self._wire_bidir_exclusive(self._bidir_cb, self._force_bidir_cb)
+        # Strip-recognition row: a single combo (Default / -B / -b) plus the
+        # "Auto" toggle. Auto derives the value from the loaded chart's
+        # instrument and greys out the combo while on. See _make_bidir_row.
+        self._make_bidir_row(left, cg, "guided")
 
         self._suppress_cb, _ = _bool_row(
             "Suppress warning messages (-S)", True,
@@ -1166,66 +1107,8 @@ class TabMeasure(QWidget):
             mcg.addLayout(row)
             return cb
 
-        # Bidirectional row (mirrors guided): the -B checkbox with its own
-        # tooltip on the left, then an "Auto" toggle with its own tooltip on
-        # the right, a stretch between the two groups spreads them across the
-        # column width.
-        m_bidir_row = QHBoxLayout()
-        self._m_bidir_cb = QCheckBox("Disable bidirectional strip recognition (-B)", left)
-        self._m_bidir_cb.setChecked(False)
-        m_bidir_row.addWidget(self._m_bidir_cb)
-        m_bidir_row.addSpacing(18)
-        m_bidir_row.addWidget(TooltipButton(
-            "Bidirectional reading (-B)",
-            "Sets whether a strip can be read in both directions or only one.\n\n"
-            "Tick the box to force one-direction reading (-B); untick it to\n"
-            "allow scanning a strip either way. The i1 Pro (including i1 Pro 3)\n"
-            "can read both directions, while the ColorMunki reads one only.\n\n"
-            "While Auto is on this is decided for you and the box is locked —\n"
-            "turn Auto off to choose it yourself.",
-            left,
-        ))
-        m_bidir_row.addStretch()
-        self._m_bidir_auto_cb = QCheckBox("Auto", left)
-        self._m_bidir_auto_cb.setChecked(True)
-        self._m_bidir_auto_cb.toggled.connect(
-            lambda _checked: self._apply_bidir_auto_state("manual")
-        )
-        m_bidir_row.addWidget(self._m_bidir_auto_cb)
-        m_bidir_row.addSpacing(18)
-        m_bidir_row.addWidget(TooltipButton(
-            "Auto (recommended)",
-            "Sets the bidirectional option for you from the instrument saved\n"
-            "in your loaded chart: the i1 Pro (including i1 Pro 3) reads both\n"
-            "directions, the ColorMunki reads one direction only.\n\n"
-            "While Auto is on, the checkbox to the left is locked and shows\n"
-            "the chosen setting. Turn Auto off to set it yourself.",
-            left,
-        ))
-        mcg.addLayout(m_bidir_row)
-
-        # Force-bidirectional row (mirrors guided): chartread -b, governed by
-        # the same Auto toggle and mutually exclusive with -B.
-        m_force_bidir_row = QHBoxLayout()
-        self._m_force_bidir_cb = QCheckBox("Force bidirectional strip recognition (-b)", left)
-        self._m_force_bidir_cb.setChecked(False)
-        m_force_bidir_row.addWidget(self._m_force_bidir_cb)
-        m_force_bidir_row.addSpacing(18)
-        m_force_bidir_row.addWidget(TooltipButton(
-            "Force bidirectional reading (-b)",
-            "Forces chartread to accept a strip scanned in either direction.\n\n"
-            "Normally chartread only auto-detects strip direction on randomised\n"
-            "charts; on a fixed-order chart it reads one direction only and\n"
-            "rejects strips scanned backwards. Tick this to force the detection\n"
-            "on regardless — useful for the i1 Pro family, which reads either way.\n\n"
-            "This is the opposite of \"Disable bidirectional\" (-B); only one can\n"
-            "apply. While Auto is on this is decided for you (on for the i1 Pro)\n"
-            "and the box is locked — turn Auto off to choose it yourself.",
-            left,
-        ))
-        m_force_bidir_row.addStretch()
-        mcg.addLayout(m_force_bidir_row)
-        self._wire_bidir_exclusive(self._m_bidir_cb, self._m_force_bidir_cb)
+        # Strip-recognition row (mirrors guided): single combo + Auto toggle.
+        self._make_bidir_row(left, mcg, "manual")
 
         self._m_suppress_cb = _bool_row_m(
             "Suppress warning messages (-S)", True,
@@ -1381,8 +1264,7 @@ class TabMeasure(QWidget):
     def _m_collect_preset_data(self) -> dict:
         data: dict = {
             "instr":      self._m_instr_spin.value(),
-            "bidir":      self._m_bidir_cb.isChecked(),
-            "force_bidir": self._m_force_bidir_cb.isChecked(),
+            "bidir_mode": self._m_bidir_combo.currentData(),
             "bidir_auto": self._m_bidir_auto_cb.isChecked(),
             "suppress":   self._m_suppress_cb.isChecked(),
             "nocal":      self._m_nocal_cb.isChecked(),
@@ -1403,8 +1285,8 @@ class TabMeasure(QWidget):
             self._m_instr_spin.setValue(int(data.get("instr", 1)))
         except (ValueError, TypeError):
             pass
-        self._m_bidir_cb.setChecked(bool(data.get("bidir", False)))
-        self._m_force_bidir_cb.setChecked(bool(data.get("force_bidir", False)))
+        self._set_bidir_value(self._m_bidir_combo, self._coerce_bidir_mode(
+            data.get("bidir_mode"), bool(data.get("bidir")), bool(data.get("force_bidir"))))
         self._m_bidir_auto_cb.setChecked(bool(data.get("bidir_auto", True)))
         self._m_suppress_cb.setChecked(bool(data.get("suppress", True)))
         self._m_nocal_cb.setChecked(bool(data.get("nocal", False)))
@@ -1435,8 +1317,10 @@ class TabMeasure(QWidget):
                 self._m_instr_spin.setValue(int(s.get("manual2_chartread_instr", 1)))
             except (ValueError, TypeError):
                 pass
-            self._m_bidir_cb.setChecked(bool(s.get("manual2_chartread_bidir", False)))
-            self._m_force_bidir_cb.setChecked(bool(s.get("manual2_chartread_force_bidir", False)))
+            self._set_bidir_value(self._m_bidir_combo, self._coerce_bidir_mode(
+                s.get("manual2_chartread_bidir_mode"),
+                bool(s.get("manual2_chartread_bidir", False)),
+                bool(s.get("manual2_chartread_force_bidir", False))))
             self._m_bidir_auto_cb.setChecked(bool(s.get("manual2_chartread_bidir_auto", True)))
             self._m_suppress_cb.setChecked(bool(s.get("manual2_chartread_suppress", True)))
             self._m_nocal_cb.setChecked(bool(s.get("manual2_chartread_nocal", False)))
@@ -1909,68 +1793,159 @@ class TabMeasure(QWidget):
             cursor.removeSelectedText()
         self._instr_log_text = None
 
-    @staticmethod
-    def _wire_bidir_exclusive(disable_cb: QCheckBox, force_cb: QCheckBox) -> None:
-        """Make -B and -b mutually exclusive: ticking one clears the other.
+    # Strip-recognition combo entries: (userData, label). The userData maps to
+    # a chartread flag — "default" = no flag, "disable" = -B, "force" = -b.
+    _BIDIR_ITEMS = (
+        ("default", "Default"),
+        ("disable", "Bidirectional disabled (-B)"),
+        ("force",   "Bidirectional forced (-b)"),
+    )
 
-        Uses blockSignals so the clearing does not re-enter and bounce back.
-        Only relevant in manual (Auto off) mode — while Auto is on both boxes
-        are disabled and set programmatically (also under blockSignals).
+    def _make_bidir_row(self, parent: QWidget, layout, mode: str) -> None:
+        """Build the 'Strip recognition' combo + Auto toggle for a mode.
+
+        The combo offers Default / -B / -b as one mutually-exclusive choice.
+        The Auto toggle (right) derives the value from the loaded chart's
+        instrument and greys out (but still shows) the combo while on.
         """
-        def _on_disable(checked: bool) -> None:
-            if checked and force_cb.isChecked():
-                force_cb.blockSignals(True)
-                force_cb.setChecked(False)
-                force_cb.blockSignals(False)
-
-        def _on_force(checked: bool) -> None:
-            if checked and disable_cb.isChecked():
-                disable_cb.blockSignals(True)
-                disable_cb.setChecked(False)
-                disable_cb.blockSignals(False)
-
-        disable_cb.toggled.connect(_on_disable)
-        force_cb.toggled.connect(_on_force)
-
-    def _bidir_widgets(self, mode: str) -> tuple[QCheckBox, QCheckBox, QCheckBox]:
-        """(auto, disable -B, force -b) checkboxes for the given mode."""
+        row = QHBoxLayout()
+        row.addWidget(QLabel("Strip recognition:", parent))
+        combo = NoScrollComboBox(parent)
+        combo.setObjectName("compact_input")
+        combo.setMinimumWidth(210)
+        for data, label in self._BIDIR_ITEMS:
+            combo.addItem(label, data)
+        row.addWidget(combo)
+        row.addSpacing(12)
+        row.addWidget(TooltipButton(
+            "Strip recognition",
+            "When you measure a chart you slide the instrument along each row\n"
+            "of colour patches — that row is called a \"strip\". You can slide\n"
+            "it either way: left-to-right or right-to-left. This setting tells\n"
+            "the measuring tool which sliding directions to accept.\n\n"
+            "Why it matters: if the tool expects one direction but you slide\n"
+            "the other way, it can't tell which patch is which, so it rejects\n"
+            "the read and makes you scan the strip again. The right setting\n"
+            "here lets a strip be accepted however you happen to slide it.\n\n"
+            "The three choices:\n\n"
+            "  • Default\n"
+            "      Let the tool decide. It accepts either direction only when\n"
+            "      the patches are printed in a shuffled (randomised) order; on\n"
+            "      a chart with the patches in plain order it accepts one\n"
+            "      direction only. This is the safe, standard choice and what\n"
+            "      most charts expect.\n\n"
+            "  • Bidirectional disabled\n"
+            "      Always accept one direction only. Choose this if your\n"
+            "      instrument can read one way only — the ColorMunki (and the\n"
+            "      i1Studio / ColorChecker Studio, which are the same hardware)\n"
+            "      work like this. It also helps if you keep getting false\n"
+            "      \"wrong direction\" errors.\n\n"
+            "  • Bidirectional forced\n"
+            "      Always accept a strip slid either way, even on a plain-order\n"
+            "      chart. Choose this for the i1 Pro family (i1 Pro / Pro 2 /\n"
+            "      Pro 3), which reads both directions happily. It saves you\n"
+            "      having to slide every strip the same way, and rescues charts\n"
+            "      the tool would otherwise only read in one direction.\n\n"
+            "Tip: leave \"Auto\" (next to this menu) switched on and ChromIQ\n"
+            "picks the right option for you from the instrument saved in your\n"
+            "chart. Switch Auto off only when you want to choose by hand.",
+            parent,
+            min_width=560,
+        ))
+        row.addStretch()
+        auto_cb = QCheckBox("Auto", parent)
+        auto_cb.setChecked(True)
+        auto_cb.toggled.connect(lambda _checked, m=mode: self._apply_bidir_auto_state(m))
+        row.addWidget(auto_cb)
+        row.addSpacing(18)
+        row.addWidget(TooltipButton(
+            "Auto (recommended)",
+            "Lets ChromIQ choose the \"Strip recognition\" option for you, based\n"
+            "on the measuring instrument saved in the chart you loaded:\n\n"
+            "  • i1 Pro / i1 Pro 2 / i1 Pro 3 — reads strips in both\n"
+            "      directions, so Auto chooses \"Bidirectional forced\".\n"
+            "  • ColorMunki / i1Studio / ColorChecker Studio — reads one\n"
+            "      direction only, so Auto chooses \"Bidirectional disabled\".\n"
+            "  • Any other or unknown instrument — uses \"Default\".\n\n"
+            "While Auto is on, the menu on the left is locked and simply shows\n"
+            "the option Auto has chosen, so you can always see what will be\n"
+            "used. Switch Auto off to pick the option yourself.\n\n"
+            "Auto is the recommended setting — most people never need to\n"
+            "change it.",
+            parent,
+            min_width=520,
+        ))
+        layout.addLayout(row)
         if mode == "guided":
-            return self._bidir_auto_cb, self._bidir_cb, self._force_bidir_cb
-        return self._m_bidir_auto_cb, self._m_bidir_cb, self._m_force_bidir_cb
+            self._bidir_combo, self._bidir_auto_cb = combo, auto_cb
+        else:
+            self._m_bidir_combo, self._m_bidir_auto_cb = combo, auto_cb
+
+    def _bidir_widgets(self, mode: str):
+        """(auto checkbox, strip-recognition combo) for the given mode."""
+        if mode == "guided":
+            return self._bidir_auto_cb, self._bidir_combo
+        return self._m_bidir_auto_cb, self._m_bidir_combo
+
+    @staticmethod
+    def _coerce_bidir_mode(mode, legacy_disable: bool, legacy_force: bool,
+                           fallback: str = "default") -> str:
+        """Resolve a stored strip-recognition value, migrating the old scheme.
+
+        Pre-combo presets/settings stored two booleans (disable -B / force -b);
+        this maps them to the new combo value. `fallback` is used when neither
+        the new key nor a legacy flag is present.
+        """
+        if mode in ("default", "disable", "force"):
+            return mode
+        if legacy_disable:
+            return "disable"
+        if legacy_force:
+            return "force"
+        return fallback
+
+    def _detected_bidir_value(self) -> str:
+        """The combo value the Auto toggle resolves for the loaded chart."""
+        if self._detected_disable_bidir:
+            return "disable"
+        if self._detected_force_bidir:
+            return "force"
+        return "default"
+
+    def _set_bidir_value(self, combo: "QComboBox", value: str) -> None:
+        """Select the combo entry for a strip-recognition value, without firing
+        signals (falls back to the first entry if the value is unknown)."""
+        idx = combo.findData(value)
+        combo.blockSignals(True)
+        combo.setCurrentIndex(idx if idx >= 0 else 0)
+        combo.blockSignals(False)
 
     def _apply_bidir_auto_state(self, mode: str) -> None:
-        """Grey out and sync a mode's -B/-b checkboxes per its Auto toggle.
+        """Grey out and sync a mode's strip-recognition combo per its Auto toggle.
 
-        While Auto is on both checkboxes are disabled and mirror the detected
-        values (so the locked boxes show the effective setting); their own
-        state is ignored when the command is built (see _resolve_*).
+        While Auto is on the combo is disabled and shows the detected value
+        (so the locked menu reflects the effective setting); its own selection
+        is ignored when the command is built (see _resolve_bidir_value).
         """
-        auto_cb, bidir_cb, force_cb = self._bidir_widgets(mode)
+        auto_cb, combo = self._bidir_widgets(mode)
         auto_on = auto_cb.isChecked()
-        bidir_cb.setEnabled(not auto_on)
-        force_cb.setEnabled(not auto_on)
+        combo.setEnabled(not auto_on)
         if auto_on:
-            for cb, val in ((bidir_cb, self._detected_disable_bidir),
-                            (force_cb, self._detected_force_bidir)):
-                cb.blockSignals(True)
-                cb.setChecked(val)
-                cb.blockSignals(False)
+            self._set_bidir_value(combo, self._detected_bidir_value())
+
+    def _resolve_bidir_value(self, mode: str) -> str:
+        """The strip-recognition value to apply: auto-detected when Auto is on,
+        else the user's combo selection (its saved preset/default)."""
+        auto_cb, combo = self._bidir_widgets(mode)
+        if auto_cb.isChecked():
+            return self._detected_bidir_value()
+        return combo.currentData() or "default"
 
     def _resolve_disable_bidir(self, mode: str) -> bool:
-        """The -B value to pass to chartread: auto-detected when Auto is on,
-        else the user's checkbox (its saved preset/default)."""
-        auto_cb, bidir_cb, _force_cb = self._bidir_widgets(mode)
-        if auto_cb.isChecked():
-            return self._detected_disable_bidir
-        return bidir_cb.isChecked()
+        return self._resolve_bidir_value(mode) == "disable"
 
     def _resolve_force_bidir(self, mode: str) -> bool:
-        """The -b value to pass to chartread: auto-detected when Auto is on,
-        else the user's checkbox (its saved preset/default)."""
-        auto_cb, _bidir_cb, force_cb = self._bidir_widgets(mode)
-        if auto_cb.isChecked():
-            return self._detected_force_bidir
-        return force_cb.isChecked()
+        return self._resolve_bidir_value(mode) == "force"
 
     # ------------------------------------------------------------------
     # Internal
@@ -4063,8 +4038,7 @@ class TabMeasure(QWidget):
     def _on_save_defaults(self) -> None:
         s = self._settings
         if self._current_mode() == "guided":
-            s.set("measure_disable_bidir",     self._bidir_cb.isChecked())
-            s.set("measure_force_bidir",       self._force_bidir_cb.isChecked())
+            s.set("measure_bidir_mode",        self._bidir_combo.currentData())
             s.set("measure_bidir_auto",        self._bidir_auto_cb.isChecked())
             s.set("measure_suppress_warnings", self._suppress_cb.isChecked())
             s.set("measure_no_cal",            self._nocal_cb.isChecked())
@@ -4079,8 +4053,7 @@ class TabMeasure(QWidget):
                         s.set(f"measure_{opt.key}_value", opt.widget.currentData())
         else:
             s.set("manual2_chartread_instr",    self._m_instr_spin.value())
-            s.set("manual2_chartread_bidir",    self._m_bidir_cb.isChecked())
-            s.set("manual2_chartread_force_bidir", self._m_force_bidir_cb.isChecked())
+            s.set("manual2_chartread_bidir_mode", self._m_bidir_combo.currentData())
             s.set("manual2_chartread_bidir_auto", self._m_bidir_auto_cb.isChecked())
             s.set("manual2_chartread_suppress", self._m_suppress_cb.isChecked())
             s.set("manual2_chartread_nocal",    self._m_nocal_cb.isChecked())
@@ -4098,9 +4071,13 @@ class TabMeasure(QWidget):
 
     def _restore_defaults(self) -> None:
         s = self._settings
-        # Guided defaults
-        self._bidir_cb.setChecked(bool(s.get("measure_disable_bidir", True)))
-        self._force_bidir_cb.setChecked(bool(s.get("measure_force_bidir", False)))
+        # Guided defaults. The legacy guided default was -B on (DEFAULTS has
+        # measure_disable_bidir=True), so a brand-new user migrates to "disable"
+        # via legacy_disable; someone who saved it False migrates to "default".
+        self._set_bidir_value(self._bidir_combo, self._coerce_bidir_mode(
+            s.get("measure_bidir_mode"),
+            bool(s.get("measure_disable_bidir", True)),
+            bool(s.get("measure_force_bidir", False))))
         self._bidir_auto_cb.setChecked(bool(s.get("measure_bidir_auto", True)))
         self._suppress_cb.setChecked(bool(s.get("measure_suppress_warnings", True)))
         self._nocal_cb.setChecked(bool(s.get("measure_no_cal", False)))
@@ -4128,8 +4105,10 @@ class TabMeasure(QWidget):
                 self._m_instr_spin.setValue(int(m_instr))
             except (ValueError, TypeError):
                 pass
-        self._m_bidir_cb.setChecked(bool(s.get("manual2_chartread_bidir", False)))
-        self._m_force_bidir_cb.setChecked(bool(s.get("manual2_chartread_force_bidir", False)))
+        self._set_bidir_value(self._m_bidir_combo, self._coerce_bidir_mode(
+            s.get("manual2_chartread_bidir_mode"),
+            bool(s.get("manual2_chartread_bidir", False)),
+            bool(s.get("manual2_chartread_force_bidir", False))))
         self._m_bidir_auto_cb.setChecked(bool(s.get("manual2_chartread_bidir_auto", True)))
         self._m_suppress_cb.setChecked(bool(s.get("manual2_chartread_suppress", True)))
         self._m_nocal_cb.setChecked(bool(s.get("manual2_chartread_nocal", False)))
@@ -4152,6 +4131,6 @@ class TabMeasure(QWidget):
                             opt.widget.setCurrentIndex(idx)
         presets = self._m_load_presets()
         self._m_populate_preset_combo(presets)
-        # Reflect the restored Auto toggles (grey out / sync the -B checkboxes).
+        # Reflect the restored Auto toggles (grey out / sync the combos).
         self._apply_bidir_auto_state("guided")
         self._apply_bidir_auto_state("manual")

@@ -1,5 +1,27 @@
 # Changelog
 
+## v3.8.0-beta.26
+**Strip recognition is now a single dropdown in the Measure tab.** The pair of
+bidirectional checkboxes added in beta.25 (`-B` / `-b`) is replaced by one
+**Strip recognition** menu — *Default*, *Bidirectional disabled* (`-B`), or
+*Bidirectional forced* (`-b`) — in both Guided and Manual modes, with the
+**Auto** toggle beside it as before. A single menu makes the choice clearer and
+removes the "two checkboxes that can't both be on" awkwardness.
+
+### Changed
+- Measure tab (Guided + Manual): the **Disable** / **Force** bidirectional
+  checkboxes are now one **Strip recognition** dropdown. While **Auto** is on
+  the menu is locked but still shows the option Auto picked from the chart's
+  instrument (i1 Pro → forced, ColorMunki → disabled, others → default); turn
+  Auto off to choose by hand.
+- Rewrote the strip-recognition and Auto tooltips to be longer and plainer,
+  explaining what strip direction means and when to pick each option, in
+  wider dialogs sized to fit the text.
+
+### Notes
+- Saved defaults and presets from beta.25 (and the older single-`-B` scheme)
+  migrate automatically to the new dropdown value — no reconfiguration needed.
+
 ## v3.8.0-beta.25
 **Force bidirectional strip reading (`-b`) in the Measure tab.** chartread can
 now be told to accept a strip scanned in either direction even on fixed-order
