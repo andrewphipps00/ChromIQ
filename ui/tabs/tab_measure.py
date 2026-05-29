@@ -441,6 +441,11 @@ class TabMeasure(QWidget):
         # _detected_disable_bidir).
         self._detected_force_bidir: bool = False
         self._detected_instrument: str | None = None
+        # Whether the loaded chart was laid out in randomised patch order.
+        # Forcing bidirectional reading (-b) on a non-randomised chart can make
+        # chartread misrecognise strips, so _on_start warns when both are true.
+        # Default True so we never warn until a real (non-random) chart is seen.
+        self._detected_randomized: bool = True
         # Text of the last "Chart instrument:" line logged, so a new chart can
         # replace it instead of letting the messages accumulate.
         self._instr_log_text: str | None = None
@@ -1728,15 +1733,18 @@ class TabMeasure(QWidget):
         """
         from ui.ti2_loader import (
             disable_bidir_for_instrument, force_bidir_for_instrument,
-            instrument_label, is_spectroscan, read_target_instrument,
+            instrument_label, is_randomized, is_spectroscan, read_target_instrument,
         )
 
         instr = None
+        randomized = True
         if self._ti1_path is not None and self._ti1_path.exists():
             instr = read_target_instrument(self._ti1_path)
+            randomized = is_randomized(self._ti1_path)
         self._detected_instrument    = instr
         self._detected_disable_bidir = disable_bidir_for_instrument(instr)
         self._detected_force_bidir   = force_bidir_for_instrument(instr)
+        self._detected_randomized    = randomized
 
         if hasattr(self, "_log"):
             # Drop the previous instrument line so only the most recent
@@ -1749,13 +1757,14 @@ class TabMeasure(QWidget):
                     # bidirectional "reading direction" note does not apply.
                     msg = f"Chart instrument: {label}."
                 else:
-                    if self._detected_disable_bidir:
-                        direction = "one direction only (-B)"
-                    elif self._detected_force_bidir:
-                        direction = "both directions (forced, -b)"
+                    value = self._detected_bidir_value()
+                    if value == "disable":
+                        detail = "reading one direction only (-B)"
+                    elif value == "force":
+                        detail = "reading both directions (forced, -b)"
                     else:
-                        direction = "both directions"
-                    msg = f"Chart instrument: {label} → reading {direction}."
+                        detail = "using Argyll's default strip recognition"
+                    msg = f"Chart instrument: {label} → {detail}."
                 self._log.appendPlainText(msg)
                 self._instr_log_text = msg
 
@@ -1796,7 +1805,7 @@ class TabMeasure(QWidget):
     # Strip-recognition combo entries: (userData, label). The userData maps to
     # a chartread flag — "default" = no flag, "disable" = -B, "force" = -b.
     _BIDIR_ITEMS = (
-        ("default", "Default"),
+        ("default", "Argyll default"),
         ("disable", "Bidirectional disabled (-B)"),
         ("force",   "Bidirectional forced (-b)"),
     )
@@ -1811,8 +1820,13 @@ class TabMeasure(QWidget):
         row = QHBoxLayout()
         row.addWidget(QLabel("Strip recognition:", parent))
         combo = NoScrollComboBox(parent)
-        combo.setObjectName("compact_input")
-        combo.setMinimumWidth(210)
+        # Guided mode shows a full-size (non-compact) combo; Manual keeps the
+        # compact styling that matches its other dense option rows.
+        if mode == "manual":
+            combo.setObjectName("compact_input")
+            combo.setMinimumWidth(210)
+        else:
+            combo.setMinimumWidth(240)
         for data, label in self._BIDIR_ITEMS:
             combo.addItem(label, data)
         row.addWidget(combo)
@@ -1828,12 +1842,14 @@ class TabMeasure(QWidget):
             "the read and makes you scan the strip again. The right setting\n"
             "here lets a strip be accepted however you happen to slide it.\n\n"
             "The three choices:\n\n"
-            "  • Default\n"
-            "      Let the tool decide. It accepts either direction only when\n"
-            "      the patches are printed in a shuffled (randomised) order; on\n"
-            "      a chart with the patches in plain order it accepts one\n"
-            "      direction only. This is the safe, standard choice and what\n"
-            "      most charts expect.\n\n"
+            "  • Argyll default\n"
+            "      Don't force anything — hand the decision to ArgyllCMS's own\n"
+            "      built-in rule. That rule looks only at how the chart was\n"
+            "      printed: if the patches are in a shuffled (randomised) order\n"
+            "      it accepts both directions, and if they are in plain order it\n"
+            "      accepts one direction only. This is a fixed rule inside the\n"
+            "      tool — it is NOT the same as ChromIQ's \"Auto\" (see the note\n"
+            "      at the end).\n\n"
             "  • Bidirectional disabled\n"
             "      Always accept one direction only. Choose this if your\n"
             "      instrument can read one way only — the ColorMunki (and the\n"
@@ -1846,9 +1862,17 @@ class TabMeasure(QWidget):
             "      Pro 3), which reads both directions happily. It saves you\n"
             "      having to slide every strip the same way, and rescues charts\n"
             "      the tool would otherwise only read in one direction.\n\n"
-            "Tip: leave \"Auto\" (next to this menu) switched on and ChromIQ\n"
-            "picks the right option for you from the instrument saved in your\n"
-            "chart. Switch Auto off only when you want to choose by hand.",
+            "\"Auto\" is not the same as \"Argyll default\":\n"
+            "  • \"Argyll default\" is one of the three fixed choices above. It\n"
+            "      simply forwards your chart to ArgyllCMS and lets the tool's\n"
+            "      built-in rule decide.\n"
+            "  • \"Auto\" (the switch next to this menu) is ChromIQ's helper. It\n"
+            "      reads the instrument saved in your chart and picks whichever\n"
+            "      of the three choices suits it — \"Bidirectional forced\" for an\n"
+            "      i1 Pro, \"Argyll default\" for a ColorMunki and most others.\n"
+            "      While Auto is on, the menu is locked and shows the choice it\n"
+            "      made.\n\n"
+            "Leave Auto on unless you specifically want to choose by hand.",
             parent,
             min_width=560,
         ))
@@ -1864,9 +1888,10 @@ class TabMeasure(QWidget):
             "on the measuring instrument saved in the chart you loaded:\n\n"
             "  • i1 Pro / i1 Pro 2 / i1 Pro 3 — reads strips in both\n"
             "      directions, so Auto chooses \"Bidirectional forced\".\n"
-            "  • ColorMunki / i1Studio / ColorChecker Studio — reads one\n"
-            "      direction only, so Auto chooses \"Bidirectional disabled\".\n"
-            "  • Any other or unknown instrument — uses \"Default\".\n\n"
+            "  • ColorMunki / i1Studio / ColorChecker Studio — Argyll's\n"
+            "      default already reads these correctly, so Auto chooses\n"
+            "      \"Argyll default\".\n"
+            "  • Any other or unknown instrument — uses \"Argyll default\".\n\n"
             "While Auto is on, the menu on the left is locked and simply shows\n"
             "the option Auto has chosen, so you can always see what will be\n"
             "used. Switch Auto off to pick the option yourself.\n\n"
@@ -2145,6 +2170,8 @@ class TabMeasure(QWidget):
             return
 
         params = self._collect_params()
+        if not self._confirm_nonrandom_bidir(params):
+            return
         self._preview.set_bidirectional(not params.disable_bidir)
         self._log.clear()
         self._auto_proceed = False
@@ -2196,6 +2223,79 @@ class TabMeasure(QWidget):
             on_finish=self._on_measure_done,
         )
         self.measurement_active.emit(True)
+
+    def _confirm_nonrandom_bidir(self, params: "MeasureParams") -> bool:
+        """Warn before forcing bidirectional reading on a non-randomised chart.
+
+        Forcing ``-b`` lets a strip be read in either direction, but chartread
+        relies on randomised patch order to tell strips (and reading direction)
+        apart. On a fixed-order chart that recognition can silently latch onto
+        the wrong strip, producing a measurement that builds a colour-cast
+        profile with no obvious error.
+
+        Returns True if measurement should proceed (chart is randomised, the
+        option isn't forcing ``-b``, the warning is suppressed, or the user
+        chose to continue), False if the user cancelled.
+        """
+        if not params.force_bidir or self._detected_randomized:
+            return True
+        if bool(self._settings.get("measure_hide_nonrandom_bidir_warning", False)):
+            return True
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Bidirectional reading on a fixed-order chart")
+        dlg.setMinimumWidth(560)
+        lay = QVBoxLayout(dlg)
+        lay.setContentsMargins(24, 20, 24, 16)
+        lay.setSpacing(12)
+
+        heading = QLabel(
+            "This chart is laid out in a fixed (non-randomised) patch order, "
+            "and strip recognition is set to <b>Bidirectional forced (-b)</b>.",
+            dlg,
+        )
+        heading.setWordWrap(True)
+        heading.setStyleSheet("font-weight: 600;")
+        lay.addWidget(heading)
+
+        body = QLabel(
+            "Forcing bidirectional reading lets you scan each strip in either "
+            "direction. To do that reliably, chartread depends on the patches "
+            "being printed in a shuffled (randomised) order — that is what gives "
+            "every strip a unique colour signature.<br><br>"
+            "On a fixed-order chart the strips can look alike, so chartread may "
+            "lock onto the <i>wrong</i> strip or the wrong direction. That "
+            "usually produces no error message — just a measurement file that "
+            "builds a profile with colour casts.<br><br>"
+            "<b>What to do:</b><br>"
+            "• Safest: set Strip recognition to <b>Argyll default</b> (turn "
+            "<i>Auto</i> off and pick it), then scan every strip the same way.<br>"
+            "• Or regenerate this chart with randomisation enabled, then measure "
+            "that copy.<br>"
+            "• If you know this chart's patch order is already well mixed, it is "
+            "safe to continue.",
+            dlg,
+        )
+        body.setWordWrap(True)
+        lay.addWidget(body)
+
+        hide_cb = QCheckBox("Don't show this again", dlg)
+        lay.addWidget(hide_cb)
+
+        bb = QDialogButtonBox(dlg)
+        continue_btn = bb.addButton("Continue anyway", QDialogButtonBox.ButtonRole.AcceptRole)
+        cancel_btn = bb.addButton("Cancel", QDialogButtonBox.ButtonRole.RejectRole)
+        cancel_btn.setDefault(True)
+        continue_btn.clicked.connect(dlg.accept)
+        cancel_btn.clicked.connect(dlg.reject)
+        lay.addWidget(bb)
+
+        proceed = dlg.exec() == QDialog.DialogCode.Accepted
+        # Honour "don't show again" whichever button was used, so a user who
+        # cancels to fix the chart isn't nagged on every subsequent attempt.
+        if hide_cb.isChecked():
+            self._settings.set("measure_hide_nonrandom_bidir_warning", True)
+        return proceed
 
     def _on_stop(self) -> None:
         self._key_watchdog.stop()

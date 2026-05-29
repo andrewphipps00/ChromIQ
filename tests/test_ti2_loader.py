@@ -24,6 +24,7 @@ from ui.ti2_loader import (
     instrument_label,
     is_colormunki,
     is_i1pro,
+    is_randomized,
     is_spectroscan,
     read_target_instrument,
 )
@@ -55,19 +56,22 @@ def test_read_target_instrument_missing_file(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize(
-    "name, expected",
+    "name",
     [
-        ("GretagMacbeth i1 Pro", False),   # i1 Pro / Pro 2 / Pro 3 / Pro 3+
-        ("X-Rite i1 Pro 3", False),        # robust to alternate spellings
-        ("X-Rite ColorMunki", True),       # one direction only
-        ("ColorMunki Photo", True),
-        ("GretagMacbeth SpectroScan", False),
-        (None, False),                     # unknown / no file -> bidir allowed
-        ("", False),
+        "GretagMacbeth i1 Pro",   # i1 Pro / Pro 2 / Pro 3 / Pro 3+
+        "X-Rite i1 Pro 3",        # robust to alternate spellings
+        "X-Rite ColorMunki",      # now left on the Argyll default, not forced -B
+        "ColorMunki Photo",
+        "GretagMacbeth SpectroScan",
+        None,                     # unknown / no file -> Argyll default
+        "",
     ],
 )
-def test_disable_bidir_for_instrument(name, expected) -> None:
-    assert disable_bidir_for_instrument(name) is expected
+def test_disable_bidir_for_instrument(name) -> None:
+    # No instrument auto-selects -B any more; the ColorMunki now falls back to
+    # the Argyll default like everything else (Auto can still be overridden by
+    # picking "Bidirectional disabled" manually).
+    assert disable_bidir_for_instrument(name) is False
 
 
 @pytest.mark.parametrize(
@@ -100,10 +104,11 @@ def test_is_spectroscan(name, expected) -> None:
     assert is_spectroscan(name) is expected
 
 
-def test_disable_bidir_delegates_to_is_colormunki() -> None:
-    # disable_bidir_for_instrument is now defined in terms of is_colormunki.
+def test_disable_bidir_never_auto_selected() -> None:
+    # The Auto toggle never disables bidirectional reading on its own — even
+    # for the ColorMunki, which now stays on the Argyll default.
     for name in (*KNOWN_INSTRUMENTS, None, "", "Unknown device"):
-        assert disable_bidir_for_instrument(name) is is_colormunki(name)
+        assert disable_bidir_for_instrument(name) is False
 
 
 @pytest.mark.parametrize(
@@ -179,6 +184,22 @@ def test_read_target_instrument_works_on_ti3(tmp_path: Path) -> None:
     p = tmp_path / "measured.ti3"
     p.write_text('CTI3\nTARGET_INSTRUMENT "GretagMacbeth SpectroScan"\n', encoding="utf-8")
     assert read_target_instrument(p) == "GretagMacbeth SpectroScan"
+
+
+def test_is_randomized_random_start(tmp_path: Path) -> None:
+    p = _write(tmp_path, 'CTI2\nRANDOM_START "7"\nBEGIN_DATA\n')
+    assert is_randomized(p) is True
+
+
+def test_is_randomized_chart_id(tmp_path: Path) -> None:
+    # printtarg -r writes CHART_ID instead of RANDOM_START → fixed order.
+    p = _write(tmp_path, 'CTI2\nCHART_ID "2"\nBEGIN_DATA\n')
+    assert is_randomized(p) is False
+
+
+def test_is_randomized_missing_file_defaults_true(tmp_path: Path) -> None:
+    # A missing/unreadable file is treated as randomised so callers don't warn.
+    assert is_randomized(tmp_path / "nope.ti2") is True
 
 
 def test_has_spectral_data_present(tmp_path: Path) -> None:

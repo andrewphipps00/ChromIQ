@@ -575,6 +575,179 @@ def regenerate(
     return RegenResult(ti2, tiffs, bw_tiffs, basename)
 
 
+# ---------------------------------------------------------------------------
+# "Tag as randomised" — gate + keyword rewrite
+# ---------------------------------------------------------------------------
+#
+# The editor renders with printtarg ``-r`` (keep our order), so the .ti2 carries
+# CHART_ID and chartread treats it as fixed-order: no auto strip-ID, no
+# bidirectional reading. Re-labelling it RANDOM_START unlocks both — but only
+# *safely* when the patch order is actually well mixed. On a structured order
+# (a smooth ramp, or an i1Profiler-style RGB-cube grid) neighbouring strips look
+# alike, so chartread can latch onto the wrong strip/direction and silently scramble
+# the readings → a colour-cast profile (see the project_norandomize_chartread_bug
+# diagnosis). The risk grows with strip count, i.e. with big charts.
+#
+# analyze_randomisation() measures, on the *produced* layout, the two things that
+# break: whether any strip reads the same forwards and backwards (direction
+# ambiguous), and whether any two strips are near-identical (strip ambiguous).
+# Thresholds were calibrated on synthetic ramp / grid / shuffled charts from 24
+# to 3000 patches: shuffled (safe) stayed at symmetry>=38 & confusability>=50 at
+# every size, ramps collapsed to ~0-2, and grids collapsed in confusability as
+# they grew (58 -> 10 by 3000 patches). The cut sits conservatively below the
+# safe band so an uncertain chart is reported unsafe (the user can still override).
+
+_SYM_THRESHOLD = 25.0     # min mean RGB distance between a strip and its reverse
+_CONF_THRESHOLD = 40.0    # min mean RGB distance between any two strips
+
+
+@dataclass
+class RandomisationReport:
+    """Verdict on whether a chart's layout is safe to tag as randomised."""
+    safe: bool
+    n_strips: int
+    min_symmetry: float        # inf when undefined (e.g. single-patch strips)
+    min_confusability: float   # inf when < 2 strips
+    reason: str
+
+
+_LOC_RE = re.compile(r"^([A-Za-z]+)(\d+)$")
+# printtarg writes CHART_ID (fixed order) / RANDOM_START (randomised); chartread
+# keys auto strip-ID + bidirectional reading off the latter (chartread.c:2980).
+_RANDOM_START_RE = re.compile(r"\bRANDOM_START\b")
+
+
+def _read_ti2_strips(ti2_path: Path) -> list["np.ndarray"]:
+    """Group a .ti2's patches into per-strip RGB sequences (by SAMPLE_LOC).
+
+    Returns one ``[n_patches, 3]`` float array per strip, patches ordered by the
+    numeric part of their SAMPLE_LOC (e.g. A1, A2, …). Strips are returned in
+    first-seen order. Empty list if the file can't be parsed.
+    """
+    try:
+        text = ti2_path.read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return []
+    lines = text.splitlines()
+    try:
+        fmt_i = next(i for i, l in enumerate(lines) if l.strip() == "BEGIN_DATA_FORMAT")
+        fields = lines[fmt_i + 1].split()
+        loc_ix = fields.index("SAMPLE_LOC")
+        r_ix, g_ix, b_ix = (fields.index(f) for f in ("RGB_R", "RGB_G", "RGB_B"))
+        data_i = next(i for i, l in enumerate(lines) if l.strip() == "BEGIN_DATA")
+    except (StopIteration, ValueError):
+        return []
+
+    strips: dict[str, list[tuple[int, tuple[float, float, float]]]] = {}
+    order: list[str] = []
+    for l in lines[data_i + 1:]:
+        if l.strip() == "END_DATA":
+            break
+        p = l.split()
+        if len(p) <= max(loc_ix, r_ix, g_ix, b_ix):
+            continue
+        m = _LOC_RE.match(p[loc_ix].strip('"'))
+        if not m:
+            continue
+        letter, num = m.group(1), int(m.group(2))
+        try:
+            rgb = (float(p[r_ix]), float(p[g_ix]), float(p[b_ix]))
+        except ValueError:
+            continue
+        if letter not in strips:
+            strips[letter] = []
+            order.append(letter)
+        strips[letter].append((num, rgb))
+
+    out: list[np.ndarray] = []
+    for letter in order:
+        seq = [rgb for _, rgb in sorted(strips[letter])]
+        out.append(np.asarray(seq, dtype=float))
+    return out
+
+
+def _mean_row_dist(a: "np.ndarray", b: "np.ndarray") -> float:
+    """Mean per-patch Euclidean RGB distance over the common length of two strips."""
+    n = min(len(a), len(b))
+    if n == 0:
+        return float("inf")
+    return float(np.linalg.norm(a[:n] - b[:n], axis=1).mean())
+
+
+def analyze_randomisation(ti2_path: Path) -> RandomisationReport:
+    """Judge whether ``ti2_path``'s layout is well-mixed enough to tag as randomised.
+
+    Safe requires every strip to differ from its own reverse (direction is
+    decidable) and every pair of strips to differ from each other in both
+    orientations (the right strip is decidable), each by a calibrated margin.
+    A chart with fewer than two multi-patch strips is trivially safe.
+    """
+    strips = _read_ti2_strips(ti2_path)
+    multi = [s for s in strips if len(s) >= 2]
+    n = len(strips)
+
+    if len(multi) < 2:
+        return RandomisationReport(True, n, float("inf"), float("inf"),
+                                   "Too few strips to be confusable.")
+
+    # Direction ambiguity: any strip that reads ~the same forwards and backwards.
+    min_sym = min(_mean_row_dist(s, s[::-1]) for s in multi)
+    if min_sym < _SYM_THRESHOLD:
+        return RandomisationReport(
+            False, n, min_sym, float("nan"),
+            "A strip reads almost the same in both directions, so the reading "
+            "direction can't be told apart.")
+
+    # Strip ambiguity: any two strips near-identical in either orientation.
+    # Compare equal-length strips vectorised; the last strip may be shorter, so
+    # truncate everything to the shortest length for the pairwise pass.
+    min_len = min(len(s) for s in multi)
+    arr = np.stack([s[:min_len] for s in multi])           # [S, L, 3]
+    rev = arr[:, ::-1, :]
+    min_conf = float("inf")
+    for i in range(len(arr)):
+        # distance from strip i to every strip, forwards and reversed
+        d_fwd = np.linalg.norm(arr - arr[i], axis=2).mean(axis=1)   # [S]
+        d_rev = np.linalg.norm(rev - arr[i], axis=2).mean(axis=1)   # [S]
+        d_fwd[i] = np.inf                                            # skip self
+        local = float(min(d_fwd.min(), d_rev.min()))
+        if local < min_conf:
+            min_conf = local
+        if min_conf < _CONF_THRESHOLD:
+            return RandomisationReport(
+                False, n, min_sym, min_conf,
+                "Two strips look almost identical, so chartread can't reliably "
+                "tell which strip is which.")
+
+    return RandomisationReport(True, n, min_sym, min_conf,
+                               "Layout is well mixed.")
+
+
+def tag_ti2_randomised(ti2_path: Path) -> bool:
+    """Relabel a fixed-order .ti2 as randomised (CHART_ID → RANDOM_START).
+
+    chartread keys auto strip-ID and bidirectional reading off this keyword
+    (chartread.c:2980); the physical layout (SAMPLE_LOC + values) is untouched,
+    so the chart on paper is identical. Returns True if a rewrite happened,
+    False if the file was already randomised or couldn't be read.
+    """
+    try:
+        text = ti2_path.read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return False
+    if _RANDOM_START_RE.search(text):
+        return False
+    new = re.sub(r'\bCHART_ID\b', "RANDOM_START", text, count=1)
+    if new == text:
+        return False
+    try:
+        ti2_path.write_text(new, encoding="utf-8")
+    except OSError as exc:
+        log.warning("tag-as-randomised rewrite failed for %s: %s", ti2_path, exc)
+        return False
+    return True
+
+
 def _patch_ti2_for_triple_density(ti2: Path) -> None:
     """Rewrite TARGET_INSTRUMENT from i1 Pro back to ColorMunki.
 

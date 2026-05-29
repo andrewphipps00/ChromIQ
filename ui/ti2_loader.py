@@ -15,6 +15,10 @@ if TYPE_CHECKING:
 _TARGET_INSTRUMENT_RE = re.compile(r'TARGET_INSTRUMENT\s+"([^"]*)"')
 # Matches:  SPECTRAL_BANDS "36"   (number of spectral bands recorded per patch)
 _SPECTRAL_BANDS_RE = re.compile(r'SPECTRAL_BANDS\s+"?(\d+)"?')
+# printtarg writes RANDOM_START on a randomised chart and CHART_ID on a
+# fixed-order one (printtarg.c:3718). chartread keys its auto strip-ID and
+# bidirectional recognition off the same keyword (chartread.c:2980).
+_RANDOM_START_RE = re.compile(r'\bRANDOM_START\b')
 
 # The exact TARGET_INSTRUMENT strings ChromIQ lays out charts for. ArgyllCMS
 # writes the same value into the resulting .ti3, so detection works on either.
@@ -94,16 +98,21 @@ def is_i1pro(name: str | None) -> bool:
 
 
 def disable_bidir_for_instrument(name: str | None) -> bool:
-    """Whether bidirectional strip recognition should be disabled (chartread -B).
+    """Whether the Auto toggle should disable bidirectional strip recognition
+    (chartread ``-B``).
 
-    The ColorMunki (and its i1Studio rebrand) can only read strips reliably in
-    one direction, so it needs ``-B``. The i1 Pro family — i1 Pro / Pro 2 /
-    Pro 3 / Pro 3+, all tagged ``"GretagMacbeth i1 Pro"`` — reads in either
-    direction, and the SpectroScan is an XY table that reads patches individually,
-    so neither needs ``-B``. Unknown / missing instruments fall back to
-    bidirectional allowed (no ``-B``).
+    No instrument auto-selects ``-B`` any more. The ColorMunki (and its
+    i1Studio rebrand) reads strips in one direction, but ArgyllCMS's default
+    behaviour already handles that correctly, so Auto leaves the ColorMunki on
+    the Argyll default (no ``-B``) rather than forcing ``-B``. The i1 Pro family
+    auto-forces ``-b`` instead (see ``force_bidir_for_instrument``); the
+    SpectroScan reads patches individually. Users can still pick "Bidirectional
+    disabled" by hand.
+
+    Always returns ``False`` — kept as the single Auto ``-B`` decision point so
+    the behaviour stays documented in one place.
     """
-    return is_colormunki(name)
+    return False
 
 
 def force_bidir_for_instrument(name: str | None) -> bool:
@@ -118,6 +127,27 @@ def force_bidir_for_instrument(name: str | None) -> bool:
     are mutually exclusive; this only returns True for the i1 Pro family.
     """
     return is_i1pro(name)
+
+
+def is_randomized(cgats_path: Path) -> bool:
+    """Whether a chart was laid out in randomised patch order.
+
+    printtarg randomises by default and writes ``RANDOM_START``; its ``-r`` flag
+    keeps the source order and writes ``CHART_ID`` instead. chartread reads the
+    same keyword to decide whether it may auto-recognise strips and read them in
+    either direction. Randomisation gives every strip a unique colour signature,
+    which is what makes that recognition reliable — a fixed-order chart (no
+    ``RANDOM_START``) can confuse it, especially with forced bidirectional
+    reading (``-b``).
+
+    Returns ``True`` only when ``RANDOM_START`` is present; a missing/unreadable
+    file is treated as randomised (``True``) so callers don't warn spuriously.
+    """
+    try:
+        text = cgats_path.read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return True
+    return bool(_RANDOM_START_RE.search(text))
 
 
 def has_spectral_data(cgats_path: Path) -> bool:

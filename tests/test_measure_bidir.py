@@ -80,7 +80,22 @@ def test_auto_resolves_i1pro_to_force(tab, mode):
 
 
 @pytest.mark.parametrize("mode", ["guided", "manual"])
-def test_auto_resolves_colormunki_to_disable(tab, mode):
+def test_auto_resolves_colormunki_to_default(tab, mode):
+    # The ColorMunki no longer auto-selects -B: Auto leaves it on the Argyll
+    # default (mirrors the real detection via ui.ti2_loader).
+    from ui.ti2_loader import disable_bidir_for_instrument, force_bidir_for_instrument
+    tab._detected_disable_bidir = disable_bidir_for_instrument("X-Rite ColorMunki")
+    tab._detected_force_bidir = force_bidir_for_instrument("X-Rite ColorMunki")
+    tab._apply_bidir_auto_state(mode)
+    assert tab._resolve_bidir_value(mode) == "default"
+    assert tab._resolve_disable_bidir(mode) is False
+    assert tab._resolve_force_bidir(mode) is False
+
+
+@pytest.mark.parametrize("mode", ["guided", "manual"])
+def test_auto_resolves_disable_flag(tab, mode):
+    # Mechanism check: when the detected value is "disable" (e.g. a future
+    # one-direction-only instrument), Auto resolves and locks to it.
     tab._detected_disable_bidir = True
     tab._detected_force_bidir = False
     tab._apply_bidir_auto_state(mode)
@@ -130,3 +145,41 @@ def test_manual_legacy_preset_migrates(tab):
     assert tab._m_bidir_combo.currentData() == "force"
     tab._m_apply_preset_data({"bidir": True, "bidir_auto": False})
     assert tab._m_bidir_combo.currentData() == "disable"
+
+
+# --- Forced-bidir-on-fixed-order-chart warning -------------------------------
+
+from pathlib import Path  # noqa: E402
+
+from workflow.measure_manager import MeasureParams  # noqa: E402
+
+
+def _params(force_bidir):
+    return MeasureParams(ti1_path=Path("/tmp/x.ti2"), instrument="1",
+                         force_bidir=force_bidir)
+
+
+def test_confirm_skips_when_not_forcing(tab):
+    tab._detected_randomized = False
+    assert tab._confirm_nonrandom_bidir(_params(False)) is True
+
+
+def test_confirm_skips_when_randomized(tab):
+    tab._detected_randomized = True
+    assert tab._confirm_nonrandom_bidir(_params(True)) is True
+
+
+def test_confirm_skips_when_suppressed(tab):
+    tab._detected_randomized = False
+    tab._settings.set("measure_hide_nonrandom_bidir_warning", True)
+    assert tab._confirm_nonrandom_bidir(_params(True)) is True
+
+
+def test_confirm_shows_dialog_and_honours_choice(tab, monkeypatch):
+    # force_bidir + fixed-order chart + not suppressed -> the dialog is shown.
+    from PyQt6.QtWidgets import QDialog
+    tab._detected_randomized = False
+    monkeypatch.setattr(QDialog, "exec", lambda self: QDialog.DialogCode.Rejected)
+    assert tab._confirm_nonrandom_bidir(_params(True)) is False
+    monkeypatch.setattr(QDialog, "exec", lambda self: QDialog.DialogCode.Accepted)
+    assert tab._confirm_nonrandom_bidir(_params(True)) is True

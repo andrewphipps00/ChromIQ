@@ -31,10 +31,17 @@ from PyQt6.QtWidgets import (
 from core.logger import get_logger
 from core.strip_utils import parse_passes_per_page
 from ui.styles import SPEC_AMBER, SPEC_MAGENTA, TAB_COLORS
+from ui.tooltip_button import TooltipButton
 from ui.widgets import (
     NoScrollComboBox, NoScrollDoubleSpinBox, NoScrollSpinBox,
     open_dir_dialog, open_file_dialog, save_file_dialog,
 )
+
+
+def _magenta_tip(title: str, body: str, parent: QWidget | None = None,
+                 min_width: int = 480) -> TooltipButton:
+    """A TooltipButton drawn in the editor's magenta accent."""
+    return TooltipButton(title, body, parent, min_width=min_width, color=SPEC_MAGENTA)
 
 
 def _as_compact(*widgets) -> None:
@@ -512,6 +519,33 @@ class _NewChartDialog(QDialog):
         lay = QVBoxLayout(self)
         lay.setSpacing(10)
 
+        head = QHBoxLayout()
+        head.addWidget(QLabel("Set up a new chart, then edit it.", self))
+        head.addStretch(1)
+        head.addWidget(_magenta_tip(
+            "New chart",
+            "Let's start a brand-new chart. You only need to make a few quick "
+            "choices here — once you're done, the chart opens in the editor where "
+            "you can arrange and fine-tune everything.\n\n"
+            "What each choice means:\n\n"
+            "• Name — what the chart is called. It becomes the file name and is "
+            "also printed on the page, so you can tell your charts apart later.\n\n"
+            "• Instrument & Paper — which measuring device you'll use and what "
+            "paper you'll print on. ChromIQ uses these to lay the patches out in a "
+            "way your device can read, at the right page size.\n\n"
+            "• Patches — how to fill the chart to begin with. You can start with an "
+            "empty page and add your own colours, or just enter a number and let "
+            "ChromIQ spread that many colours evenly across the whole colour range "
+            "as a ready-made starting point you can then rearrange.\n\n"
+            "• Layout options — the finer print settings (spacer squares, sizing, "
+            "page margin, resolution). The defaults are sensible, so feel free to "
+            "leave these alone until you need them.\n\n"
+            "When you confirm, your new chart opens in the editor — there you can "
+            "drag patches around, recolour them, add or remove some, and save when "
+            "it's ready.",
+            self, min_width=520))
+        lay.addLayout(head)
+
         # --- Chart identity --------------------------------------------------
         chart_box = QGroupBox("Chart", self)
         cg = QGridLayout(chart_box)
@@ -926,6 +960,35 @@ class Ti2RelayoutDialog(QDialog):
         src.addStretch(1)
         self._info = QLabel("No chart loaded.", self)
         src.addWidget(self._info)
+        src.addWidget(_magenta_tip(
+            "Chart layout editor",
+            "Welcome! This is where you design the test chart you'll print and "
+            "then measure. A chart is just a page full of little colour squares "
+            "(we call each one a \"patch\"). You can start a brand-new chart or "
+            "open one you already have, rearrange and recolour the patches however "
+            "you like, and save a ready-to-print chart when you're happy.\n\n"
+            "Don't worry — you can't break anything here. Nothing is printed or "
+            "measured until you choose to, and you can preview every change first.\n\n"
+            "There are three areas to know about:\n\n"
+            "• The patch grid on the left shows every colour as a small square. "
+            "This is your workbench: drag squares around to reorder them, click to "
+            "select, and recolour or add and remove patches. The order you see "
+            "here is the order they'll be printed in.\n\n"
+            "• The preview in the middle is a live picture of the actual printed "
+            "page. It redraws as you edit, so you always see what will really come "
+            "out of the printer — strips, spacers, margins and all. If the chart "
+            "needs more than one page, little Page ◀ ▶ buttons appear.\n\n"
+            "• The controls on the right let you pick whether you're editing "
+            "patches or the spacer squares between them, and adjust how the page is "
+            "laid out (which instrument and paper, spacer style, sizing, margin, "
+            "resolution). This is also where you save.\n\n"
+            "A typical session goes: load a chart or start a new one, arrange and "
+            "recolour the patches, glance at the preview, then Save. The file you "
+            "save is exactly what you print and then read in on the Measure tab.\n\n"
+            "One handy tip: when you save, ChromIQ can quietly mark the chart so "
+            "your instrument is allowed to read each strip in either direction — "
+            "see the \"Tag as randomised\" option in the controls for more.",
+            self, min_width=560))
         outer.addLayout(src)
 
         split = QSplitter(Qt.Orientation.Horizontal, self)
@@ -937,6 +1000,7 @@ class Ti2RelayoutDialog(QDialog):
         lv.setSpacing(6)
         top = QHBoxLayout()
         top.addWidget(QLabel("Swatch size:"))
+        top.addSpacing(20)
         self._size_slider = QSlider(Qt.Orientation.Horizontal, left)
         self._size_slider.setRange(24, 96)
         self._size_slider.setValue(_SWATCH)
@@ -956,7 +1020,35 @@ class Ti2RelayoutDialog(QDialog):
             f"QSlider::sub-page:horizontal {{ background: {SPEC_MAGENTA};"
             " border-radius: 2px; }"
         )
-        top.addWidget(self._size_slider, 1)
+        self._size_slider.setFixedWidth(220)
+        top.addWidget(self._size_slider)
+        top.addStretch(1)
+        top.addWidget(_magenta_tip(
+            "Patch grid",
+            "This is your main workspace. Every little square is one colour patch "
+            "from your chart, and the order you see — reading left to right, top to "
+            "bottom — is exactly the order they'll be printed in.\n\n"
+            "Here's everything you can do:\n\n"
+            "• Move patches around. Just drag a square (or several at once) to a "
+            "new spot — a magenta line shows where it will land when you let go. "
+            "Prefer the keyboard? Select some patches and nudge them with Alt and "
+            "the arrow keys, or press F to send them to the very front and L to the "
+            "very end.\n\n"
+            "• Pick patches. Click a square to select it, hold Shift or Ctrl to "
+            "select more, or drag a box around several. If you turn on \"Highlight "
+            "selected in preview\", the patches you pick here light up in the "
+            "preview too (and the other way round), so it's easy to see where each "
+            "one sits on the page.\n\n"
+            "• Change a colour. Select one or more patches, then use \"Set colour "
+            "of selection…\" over in the Patches controls to give them a new "
+            "colour.\n\n"
+            "• Add or remove. The Patches controls also let you add fresh patches "
+            "or delete the ones you've selected.\n\n"
+            "And don't worry about the \"Swatch size\" slider next to this button — "
+            "it only changes how big the squares look on your screen. It makes no "
+            "difference at all to the printed chart.",
+            self, min_width=520))
+        top.addSpacing(10)
         lv.addLayout(top)
 
         self._grid = _ReorderListWidget(left)
@@ -1283,10 +1375,49 @@ class Ti2RelayoutDialog(QDialog):
             "then patches TARGET_INSTRUMENT back to ColorMunki so chartread "
             "still drives your meter. Mutually exclusive with Double.")
         self._pt_td.toggled.connect(self._on_td_toggled)
+        self._pt_tag = QCheckBox("Tag as randomised for measurement", pt_box)
+        self._pt_tag.setChecked(bool(
+            self._settings.get("ti2_editor_tag_randomised", True)))
+        self._pt_tag.setToolTip("Mark the saved chart as randomised so it can be "
+                                "measured bidirectionally (click the ⓘ for details).")
+        self._pt_tag.toggled.connect(self._on_tag_randomised_toggled)
         ptg.addWidget(self._pt_L,  6, 0, 1, 4)
         ptg.addWidget(self._pt_P,  7, 0, 1, 4)
         ptg.addWidget(self._pt_dd, 8, 0, 1, 4)
         ptg.addWidget(self._pt_td, 9, 0, 1, 4)
+        tag_row = QHBoxLayout()
+        tag_row.setContentsMargins(0, 0, 0, 0)
+        tag_row.addWidget(self._pt_tag)
+        tag_row.addStretch(1)
+        tag_row.addWidget(_magenta_tip(
+            "Tag as randomised for measurement",
+            "This little option saves you a lot of hassle when you go to measure "
+            "the chart, so it's worth a quick read.\n\n"
+            "When you measure a chart, you slide your instrument along each row of "
+            "patches (a row is called a \"strip\"). Some instruments are happy to "
+            "read a strip in either direction — but they're only allowed to when "
+            "the chart is marked as having its colours in a shuffled order. Charts "
+            "you build in this editor are kept in a fixed order, so without this "
+            "option they'd have to be read one specific way only, which is fiddly.\n\n"
+            "Ticking this adds a small note inside the saved file that says \"the "
+            "colours are well shuffled\" — and that's what lets you scan strips "
+            "either way. Nothing on the printed page moves; only that note changes.\n\n"
+            "So why isn't it just always on? Because the note is only honest if the "
+            "colours really are well mixed. If the patches happen to sit in a tidy "
+            "pattern — a smooth fade from light to dark, or a neat colour grid, "
+            "especially on a big chart — then neighbouring strips look too alike, "
+            "and your instrument can mix them up and quietly record the wrong "
+            "readings. That gives you a profile with colour casts, with no obvious "
+            "warning.\n\n"
+            "So ChromIQ has your back: when you save, it takes a quick look at how "
+            "mixed-up your colours are. If they look nicely shuffled, it adds the "
+            "note for you without fuss. If they look too tidy to be safe, it gives "
+            "you a heads-up and lets you decide — leave it as-is, or go ahead and "
+            "tag it anyway if you know what you're doing.\n\n"
+            "If you're not sure, just leave this switched on. The safety check will "
+            "catch the risky cases, and the final call is always yours.",
+            pt_box, min_width=560))
+        ptg.addLayout(tag_row, 10, 0, 1, 4)
         # NOTE: pt_box is added to the panel layout *after* the Patches and
         # Spacers boxes below, so the on-paper order is Patches → Spacers →
         # printtarg (the chart-content controls users edit most often stay
@@ -1776,6 +1907,10 @@ class Ti2RelayoutDialog(QDialog):
         if on and self._pt_td.isChecked():
             self._pt_td.setChecked(False)
         self._on_printtarg_changed()
+
+    def _on_tag_randomised_toggled(self, on: bool) -> None:
+        # Affects only the saved .ti2's keyword, not the render — no re-preview.
+        self._settings.set("ti2_editor_tag_randomised", bool(on))
 
     def _on_td_toggled(self, on: bool) -> None:
         """Triple-density mutual exclusion + preset application — mirrors
@@ -2421,11 +2556,45 @@ class Ti2RelayoutDialog(QDialog):
         except Exception as exc:
             QMessageBox.warning(self, "Save failed", str(exc))
             return
+        tagged = self._maybe_tag_randomised(res.ti2)
         msg = f"Saved {res.ti2.name} + {len(res.tiffs)} page(s) to {target}"
         if pad:
             msg += f"\nprinttarg added {pad} patch(es) to complete the last strip."
+        if tagged:
+            msg += "\nTagged as randomised — bidirectional measuring is available."
         QMessageBox.information(self, "Saved", msg)
         self._status.setText(msg.splitlines()[0])
+
+    def _maybe_tag_randomised(self, ti2: Path) -> bool:
+        """Tag the saved .ti2 as randomised when requested, gated by a safety check.
+
+        Returns True if the chart was tagged (CHART_ID → RANDOM_START). When the
+        layout analysis says the order is too structured to read reliably, the
+        user is warned and can either tag anyway (override) or leave it alone.
+        """
+        if not self._pt_tag.isChecked():
+            return False
+        report = R.analyze_randomisation(ti2)
+        if not report.safe:
+            dlg = QMessageBox(self)
+            dlg.setIcon(QMessageBox.Icon.Warning)
+            dlg.setWindowTitle("Tag as randomised?")
+            dlg.setText(
+                "This chart's patch order looks structured, not well mixed.")
+            dlg.setInformativeText(
+                f"{report.reason}\n\n"
+                "Tagging it as randomised would let chartread read strips in "
+                "either direction — but on a layout like this it can latch onto "
+                "the wrong strip and quietly build a colour-cast profile.\n\n"
+                "Safer: regenerate this chart with randomisation enabled, or "
+                "leave it untagged and scan every strip the same way.\n\n"
+                "Tag it as randomised anyway?")
+            tag_btn = dlg.addButton("Tag anyway", QMessageBox.ButtonRole.AcceptRole)
+            dlg.addButton("Leave untagged", QMessageBox.ButtonRole.RejectRole)
+            dlg.exec()
+            if dlg.clickedButton() is not tag_btn:
+                return False
+        return R.tag_ti2_randomised(ti2)
 
     def _bake_paint_into_saved(self, res: R.RegenResult) -> None:
         """Apply per-spacer paint to every saved page in place.

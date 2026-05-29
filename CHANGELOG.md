@@ -1,5 +1,47 @@
 # Changelog
 
+## v3.8.0-beta.27
+**Randomisation-aware bidirectional measuring, and plain-language help across
+the tools.** The chart layout editor can now mark a chart as randomised so it
+can be measured bidirectionally — but only when its patch order is actually
+well mixed, checked automatically. The Measure tab warns if you force
+bidirectional reading on a fixed-order chart, and every editor/tool screen
+gained friendly ⓘ help popups.
+
+### Added
+- **Chart layout editor — "Tag as randomised for measurement"** (on by
+  default). When you save, ChromIQ can mark the chart's `.ti2` as randomised so
+  chartread will auto-recognise strips and read them in either direction. The
+  patches on paper don't move — only a label inside the file changes. Because
+  this is only safe when the patch order is well mixed, the editor analyses the
+  saved layout first: a well-mixed chart is tagged silently, while a structured
+  one (a smooth ramp or a regular RGB grid, especially on big charts) raises a
+  warning so you can leave it untagged or tag it anyway.
+- **Measure tab — fixed-order + forced-bidirectional warning.** Starting a
+  measurement with strip recognition forced to bidirectional (`-b`) on a
+  non-randomised chart now shows an explanatory warning (with "Don't show this
+  again"), since that combination can make chartread misread strips and build a
+  colour-cast profile.
+- **ⓘ help popups on the tools.** The chart layout editor (overview, patch
+  grid, new-chart, and the tag option) and all six Tools dialogs (Average,
+  Merge, TI1 → i1Profiler, i1Profiler → TI3, i1Profiler → TI1, Verify) gained
+  friendly, plain-language help popups — magenta in the editor, and the
+  light/dark indicator accent in the Tools dialogs.
+
+### Changed
+- **Measure tab — ColorMunki now uses Argyll's default** under Auto, instead of
+  forcing `-B`. ArgyllCMS's default already reads the ColorMunki correctly, so
+  Auto no longer disables bidirectional for it; the i1 Pro family still
+  auto-forces `-b`. The "Default" item in the Strip recognition menu is renamed
+  **Argyll default**, and the guided menu is shown full-size (non-compact).
+- Reworked the Strip recognition tooltip so "Argyll default" is described
+  accurately (it depends only on whether the chart is randomised) and is clearly
+  distinguished from ChromIQ's "Auto".
+
+### Notes
+- The randomisation safety check biases conservative: an uncertain chart is
+  reported as structured, and you can always tag it anyway from the warning.
+
 ## v3.8.0-beta.26
 **Strip recognition is now a single dropdown in the Measure tab.** The pair of
 bidirectional checkboxes added in beta.25 (`-B` / `-b`) is replaced by one

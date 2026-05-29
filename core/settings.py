@@ -60,11 +60,17 @@ DEFAULTS: dict[str, Any] = {
     "confirm_before_printing":   True,
     # Step 3 — measure
     "measure_disable_bidir":       True,
+    # Suppresses the "forcing bidirectional on a non-randomised chart" warning
+    # dialog once the user ticks "Don't show this again".
+    "measure_hide_nonrandom_bidir_warning": False,
     "measure_suppress_warnings":   True,
     "measure_extra_args":          "",
     "measure_tolerance_enabled":           True,
     "measure_tolerance_value":             0.7,
     "manual2_chartread_tolerance_enabled": True,
+    # TI2 layout editor — tag saved charts as randomised (gated by a safety
+    # check) so chartread can auto-recognise strips + read bidirectionally.
+    "ti2_editor_tag_randomised":   True,
     # Step 4 — profile
     "colprof_algorithm":         "l",
     "colprof_quality":           "m",

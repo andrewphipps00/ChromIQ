@@ -41,10 +41,18 @@ from PyQt6.QtWidgets import (
 )
 
 from core.logger import get_logger
+from ui.theme import resolve_mode
+from ui.tooltip_button import TooltipButton
 from ui.widgets import (
     NoScrollComboBox, NoScrollSpinBox, open_dir_dialog, open_file_dialog,
     open_files_dialog,
 )
+
+
+def _indicator_color(settings: "AppSettings") -> str:
+    """The Tools-dialog ⓘ accent — the same light/dark indicator the Settings
+    window uses (near-black on light, light-grey on dark)."""
+    return "#1c1b18" if resolve_mode(settings.get("appearance", "auto")) == "light" else "#d0d0d0"
 from workflow.average_runner import AverageParams, AverageRunner
 from workflow.colverify_runner import (
     ColverifyParams,
@@ -168,6 +176,7 @@ class _ToolDialogBase(QDialog):
     TOOL_KEY: str   = ""
     TITLE: str      = ""
     DESCRIPTION: str = ""
+    HELP: str       = ""    # extended ⓘ popup text; falls back to DESCRIPTION
     RUN_LABEL: str  = "Run"
     MIN_WIDTH: int  = 620
 
@@ -185,10 +194,16 @@ class _ToolDialogBase(QDialog):
         outer.setContentsMargins(22, 20, 22, 16)
         outer.setSpacing(14)
 
+        head_row = QHBoxLayout()
         self._heading = QLabel(self.TITLE, self)
         self._heading.setStyleSheet("font-size: 15px; font-weight: bold;")
         self._heading.setWordWrap(True)
-        outer.addWidget(self._heading)
+        head_row.addWidget(self._heading, 1)
+        self._help_tip = TooltipButton(
+            self.TITLE, self.HELP or self.DESCRIPTION, self,
+            min_width=560, color=_indicator_color(settings))
+        head_row.addWidget(self._help_tip, 0, Qt.AlignmentFlag.AlignTop)
+        outer.addLayout(head_row)
 
         self._body = QLabel(self.DESCRIPTION, self)
         self._body.setWordWrap(True)
@@ -432,6 +447,27 @@ class AverageMeasurementsDialog(_ToolDialogBase):
     TOOL_KEY    = "average"
     TITLE       = "Average measurements"
     RUN_LABEL   = "Average"
+    HELP = (
+        "Measured the same chart a few times? This tool blends those readings "
+        "into one cleaner result.\n\n"
+        "Every measurement has a little random noise in it. If you read the same "
+        "chart two or three times and combine the results, those random wobbles "
+        "tend to cancel out, so each patch ends up with a steadier, more "
+        "trustworthy colour — and one unlucky bad sweep matters far less.\n\n"
+        "Here's how:\n\n"
+        "1. Add two or more measurement files (.ti3), each one a separate reading "
+        "of the very same printed chart.\n"
+        "2. Choose how to combine them. \"Mean\" simply averages all the readings. "
+        "\"Median\" instead takes the middle reading and ignores the odd one out, "
+        "which is handy if one sweep went wrong — it just needs at least three "
+        "files to do anything different from Mean.\n"
+        "3. Pick where to save the result and what to call it.\n"
+        "4. Click Average.\n\n"
+        "You'll get a single measurement file that you can take straight to the "
+        "Build Profile tab.\n\n"
+        "Just one thing to watch: every file you add has to be the same chart "
+        "(same patches, same instrument) — otherwise there's nothing matching to "
+        "average together.")
     DESCRIPTION = (
         "Combine two or more readings of the same printed chart into a single "
         "averaged measurement. Reading the chart several times and averaging "
@@ -596,6 +632,22 @@ class MergeMeasurementsDialog(_ToolDialogBase):
     TOOL_KEY    = "merge"
     TITLE       = "Merge measurements"
     RUN_LABEL   = "Merge"
+    HELP = (
+        "This tool joins several measurement files together into one bigger set "
+        "of patches.\n\n"
+        "It's easy to mix this up with averaging, so here's the difference in "
+        "plain terms: averaging is for when you measured the SAME chart a few "
+        "times and want to blend those reads into one. Merging is for when you "
+        "have DIFFERENT sets of patches and want to pool them — for example an "
+        "earlier \"pre-conditioning\" chart plus a fresh one. The more (well "
+        "spread out) patches a profile is built from, the better it usually turns "
+        "out.\n\n"
+        "Here's how:\n\n"
+        "1. Add the measurement files you'd like to combine.\n"
+        "2. Pick where to save the result and what to call it.\n"
+        "3. Click Merge.\n\n"
+        "You'll get a single measurement file containing all of the patches from "
+        "your inputs, ready to build a profile from.")
     DESCRIPTION = (
         "Combine the patches of several measurement files into one. Unlike "
         "averaging (which mixes repeated reads of the same chart), merging "
@@ -735,6 +787,23 @@ class Ti1ToI1ProfilerDialog(_ToolDialogBase):
     TOOL_KEY    = "ti1_to_i1p"
     TITLE       = "Convert TI1 → i1Profiler"
     RUN_LABEL   = "Convert"
+    HELP = (
+        "Want to measure a ChromIQ chart using X-Rite's i1Profiler software (for "
+        "example to drive an i1iSis scanner)? This tool gets your chart ready for "
+        "it.\n\n"
+        "ChromIQ describes charts in Argyll's own \"TI1\" format, which i1Profiler "
+        "doesn't understand. This converts that description into files i1Profiler "
+        "can open, so the very same chart can be measured over there.\n\n"
+        "Here's how:\n\n"
+        "1. Pick the ChromIQ chart definition (.ti1) you want to measure.\n"
+        "2. Choose what to write out (the patch set, and/or a ready-made "
+        "i1Profiler workflow file).\n"
+        "3. Pick where to save it and what to call it.\n"
+        "4. Click Convert.\n\n"
+        "Then open the result in i1Profiler, print and measure as usual. When "
+        "you're done, come back and use the \"i1Profiler → TI3\" tool to bring "
+        "those measurements into ChromIQ.\n\n"
+        "Good to know: this works with RGB charts.")
     DESCRIPTION = (
         "Convert an Argyll TI1 chart definition into the formats that X-Rite "
         "i1Profiler reads. Use this when you want an i1iSis (or another "
@@ -1008,6 +1077,19 @@ class I1ProfilerToTi3Dialog(_ToolDialogBase):
     TOOL_KEY    = "i1p_to_ti3"
     TITLE       = "Convert i1Profiler → TI3"
     RUN_LABEL   = "Convert"
+    HELP = (
+        "Measured your chart in X-Rite's i1Profiler? This brings those readings "
+        "back into ChromIQ so you can build a profile from them.\n\n"
+        "i1Profiler saves its measurements in its own text format, which ChromIQ "
+        "can't read directly. This tool translates that file into the measurement "
+        "format ChromIQ uses everywhere else.\n\n"
+        "Here's how:\n\n"
+        "1. Pick the measurement file (.txt) you exported from i1Profiler.\n"
+        "2. Pick where to save the result and what to call it.\n"
+        "3. Click Convert.\n\n"
+        "You'll get a ChromIQ measurement file (.ti3) you can take straight to the "
+        "Build Profile tab — which neatly closes the loop after measuring an "
+        "exported chart over in i1Profiler.")
     DESCRIPTION = (
         "Convert an i1Profiler measurement export (.txt) into an Argyll .ti3 "
         "measurement file. Use this when you measured a chart in i1Profiler "
@@ -1136,6 +1218,21 @@ class I1ProfilerToTi1Dialog(_ToolDialogBase):
     TOOL_KEY    = "i1p_to_ti1"
     TITLE       = "Convert i1Profiler → TI1"
     RUN_LABEL   = "Convert"
+    HELP = (
+        "Have a chart from X-Rite's i1Profiler that you'd like to print and "
+        "measure in ChromIQ? This brings it across.\n\n"
+        "It takes i1Profiler's chart description and turns it into the format "
+        "ChromIQ uses, so you can lay the chart out, print it, and measure it just "
+        "like any other.\n\n"
+        "Here's how:\n\n"
+        "1. Pick your i1Profiler chart — a patch set (.pxf), a workflow file "
+        "(.pwxf), or an exported list.\n"
+        "2. Pick where to save the result and what to call it.\n"
+        "3. Click Convert.\n\n"
+        "You'll get a ChromIQ chart definition (.ti1) you can open in the chart "
+        "layout editor, print, and then measure.\n\n"
+        "Good to know: this works with RGB charts; ChromIQ reconstructs the patch "
+        "colours so it can lay the chart out for printing.")
     DESCRIPTION = (
         "Convert an i1Profiler patch set (.pxf), a workflow file (.pwxf), or a "
         ".cgats table into an Argyll TI1 chart definition. Use this to bring a "
@@ -1235,6 +1332,24 @@ class VerifyAgainstReferenceDialog(_ToolDialogBase):
     TOOL_KEY    = "verify"
     TITLE       = "Verify against reference"
     RUN_LABEL   = "Verify"
+    HELP = (
+        "This tool tells you how close your colours came out compared to where "
+        "they were supposed to be — without building a profile first.\n\n"
+        "The idea is simple: you give it what you actually measured, and what the "
+        "colours were meant to be, and it tells you how far apart they are. That "
+        "gap is measured as \"ΔE\" (delta-E) — think of it as a colour-difference "
+        "score where smaller is better and 0 would be a perfect match.\n\n"
+        "Here's how:\n\n"
+        "1. Pick the chart you measured (your .ti3 measurement file).\n"
+        "2. Give it the reference to compare against — either a reference "
+        "measurement file, or a set of expected values you load or paste in.\n"
+        "3. Click Verify.\n\n"
+        "You'll see the ΔE for every single patch plus an overall average. If most "
+        "patches are low and only a handful are high, those few usually point to a "
+        "misread or a problem patch on the print.\n\n"
+        "It's a quick way to sanity-check a profile, compare one paper or ink "
+        "batch against another, or keep an eye on a printer drifting over time — "
+        "all without building anything.")
     MIN_WIDTH   = 660
     DESCRIPTION = (
         "Compare a measured chart against a set of expected colour values and "

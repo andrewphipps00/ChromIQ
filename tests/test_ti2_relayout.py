@@ -90,6 +90,95 @@ def test_seed_from_targen_then_regenerate(tmp_path: Path):
     R.assert_data_integrity(prog, res.ti2)
 
 
+# --- "tag as randomised" gate + keyword rewrite ----------------------------
+
+_TI2_HEAD = (
+    'CTI2\n\nORIGINATOR "test"\nTARGET_INSTRUMENT "GretagMacbeth i1 Pro"\n'
+    'COLOR_REP "iRGB"\n{kw} "2"\n\nNUMBER_OF_FIELDS 8\nBEGIN_DATA_FORMAT\n'
+    "SAMPLE_ID SAMPLE_LOC RGB_R RGB_G RGB_B XYZ_X XYZ_Y XYZ_Z\nEND_DATA_FORMAT\n\n"
+)
+
+
+def _make_ti2(tmp_path: Path, strips: dict, kw: str = "CHART_ID") -> Path:
+    """Write a minimal .ti2 from {strip_letter: [(r,g,b), ...]} (XYZ faked)."""
+    rows, sid = [], 0
+    for letter, seq in strips.items():
+        for i, (r, g, b) in enumerate(seq, start=1):
+            sid += 1
+            rows.append(f'{sid} "{letter}{i}" {r:.1f} {g:.1f} {b:.1f} 0 0 0')
+    text = _TI2_HEAD.format(kw=kw) + f"NUMBER_OF_SETS {sid}\nBEGIN_DATA\n" \
+        + "\n".join(rows) + "\nEND_DATA\n"
+    p = tmp_path / "chart.ti2"
+    p.write_text(text)
+    return p
+
+
+def test_analyze_safe_when_well_mixed(tmp_path: Path):
+    strips = {
+        "A": [(100, 0, 0), (0, 100, 0), (0, 0, 100)],
+        "B": [(100, 100, 0), (0, 100, 100), (100, 0, 100)],
+        "C": [(50, 50, 50), (90, 10, 10), (10, 90, 90)],
+    }
+    rep = R.analyze_randomisation(_make_ti2(tmp_path, strips))
+    assert rep.safe is True
+    assert rep.n_strips == 3
+
+
+def test_analyze_unsafe_when_strips_identical(tmp_path: Path):
+    # Two identical strips -> confusability 0 -> can't tell them apart.
+    seq = [(100, 0, 0), (0, 100, 0), (0, 0, 100)]
+    rep = R.analyze_randomisation(_make_ti2(tmp_path, {"A": seq, "B": list(seq)}))
+    assert rep.safe is False
+    assert rep.min_confusability < R._CONF_THRESHOLD
+
+
+def test_analyze_unsafe_when_strip_is_palindrome(tmp_path: Path):
+    # A strip that reads the same both ways -> direction can't be told apart.
+    strips = {
+        "A": [(20, 40, 60), (90, 90, 90), (20, 40, 60)],   # palindrome
+        "B": [(0, 0, 0), (50, 0, 0), (100, 0, 0)],
+    }
+    rep = R.analyze_randomisation(_make_ti2(tmp_path, strips))
+    assert rep.safe is False
+    assert rep.min_symmetry < R._SYM_THRESHOLD
+
+
+def test_analyze_trivially_safe_with_one_strip(tmp_path: Path):
+    rep = R.analyze_randomisation(_make_ti2(tmp_path, {"A": [(1, 2, 3), (4, 5, 6)]}))
+    assert rep.safe is True
+
+
+def test_tag_rewrites_chart_id(tmp_path: Path):
+    ti2 = _make_ti2(tmp_path, {"A": [(1, 2, 3)]}, kw="CHART_ID")
+    assert R.tag_ti2_randomised(ti2) is True
+    text = ti2.read_text()
+    assert "RANDOM_START" in text and "CHART_ID" not in text
+
+
+def test_tag_is_idempotent_on_random_start(tmp_path: Path):
+    ti2 = _make_ti2(tmp_path, {"A": [(1, 2, 3)]}, kw="RANDOM_START")
+    assert R.tag_ti2_randomised(ti2) is False          # already randomised
+
+
+def test_tag_missing_file_is_noop(tmp_path: Path):
+    assert R.tag_ti2_randomised(tmp_path / "nope.ti2") is False
+
+
+@argyll
+@pytest.mark.parametrize("n", [100, 1500])
+def test_analyze_flags_grid_unsafe_at_scale(tmp_path: Path, n):
+    # An RGB-cube grid (i1Profiler-style) is fine when small but confusable once
+    # it grows into many strips — the regression this whole feature guards.
+    k = max(2, round(n ** (1 / 3)))
+    grid = [(100 * r / (k - 1), 100 * g / (k - 1), 100 * b / (k - 1))
+            for r in range(k) for g in range(k) for b in range(k)][:n]
+    spec = R.ChartSpec.new("i1", "A4")
+    res = R.regenerate(spec, grid, tmp_path, ARGYLL_BIN)
+    rep = R.analyze_randomisation(res.ti2)
+    if n >= 1500:
+        assert rep.safe is False           # big structured grid -> unsafe
+
+
 def test_instrument_and_paper_maps():
     assert R.instrument_to_flag("X-Rite ColorMunki") == "CM"
     assert R.instrument_to_flag("GretagMacbeth SpectroScan") == "SS"
