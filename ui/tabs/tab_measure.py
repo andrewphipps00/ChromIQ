@@ -436,6 +436,10 @@ class TabMeasure(QWidget):
         # Auto bidir-detection: resolved -B value for the loaded .ti2 (False =
         # bidirectional allowed; the no-file / unknown-instrument fallback).
         self._detected_disable_bidir: bool = False
+        # Auto force-bidir (-b): resolved for the loaded .ti2 — True for the
+        # i1 Pro family, which reads strips either way (mutually exclusive with
+        # _detected_disable_bidir).
+        self._detected_force_bidir: bool = False
         self._detected_instrument: str | None = None
         # Text of the last "Chart instrument:" line logged, so a new chart can
         # replace it instead of letting the messages accumulate.
@@ -868,6 +872,32 @@ class TabMeasure(QWidget):
             left,
         ))
         cg.addLayout(bidir_row)
+
+        # Force-bidirectional row: chartread -b, the counterpart to -B above.
+        # Governed by the same Auto toggle (Auto turns it on for the i1 Pro
+        # family, which reads strips either way). -b and -B are mutually
+        # exclusive — ticking one clears the other.
+        force_bidir_row = QHBoxLayout()
+        self._force_bidir_cb = QCheckBox("Force bidirectional strip recognition (-b)", left)
+        self._force_bidir_cb.setChecked(False)
+        force_bidir_row.addWidget(self._force_bidir_cb)
+        force_bidir_row.addSpacing(18)
+        force_bidir_row.addWidget(TooltipButton(
+            "Force bidirectional reading (-b)",
+            "Forces chartread to accept a strip scanned in either direction.\n\n"
+            "Normally chartread only auto-detects strip direction on randomised\n"
+            "charts; on a fixed-order chart it reads one direction only and\n"
+            "rejects strips scanned backwards. Tick this to force the detection\n"
+            "on regardless — useful for the i1 Pro family, which reads either way.\n\n"
+            "This is the opposite of \"Disable bidirectional\" (-B); only one can\n"
+            "apply. While Auto is on this is decided for you (on for the i1 Pro)\n"
+            "and the box is locked — turn Auto off to choose it yourself.",
+            left,
+        ))
+        force_bidir_row.addStretch()
+        cg.addLayout(force_bidir_row)
+        self._wire_bidir_exclusive(self._bidir_cb, self._force_bidir_cb)
+
         self._suppress_cb, _ = _bool_row(
             "Suppress warning messages (-S)", True,
             "Suppress Warnings (-S)",
@@ -1173,6 +1203,30 @@ class TabMeasure(QWidget):
             left,
         ))
         mcg.addLayout(m_bidir_row)
+
+        # Force-bidirectional row (mirrors guided): chartread -b, governed by
+        # the same Auto toggle and mutually exclusive with -B.
+        m_force_bidir_row = QHBoxLayout()
+        self._m_force_bidir_cb = QCheckBox("Force bidirectional strip recognition (-b)", left)
+        self._m_force_bidir_cb.setChecked(False)
+        m_force_bidir_row.addWidget(self._m_force_bidir_cb)
+        m_force_bidir_row.addSpacing(18)
+        m_force_bidir_row.addWidget(TooltipButton(
+            "Force bidirectional reading (-b)",
+            "Forces chartread to accept a strip scanned in either direction.\n\n"
+            "Normally chartread only auto-detects strip direction on randomised\n"
+            "charts; on a fixed-order chart it reads one direction only and\n"
+            "rejects strips scanned backwards. Tick this to force the detection\n"
+            "on regardless — useful for the i1 Pro family, which reads either way.\n\n"
+            "This is the opposite of \"Disable bidirectional\" (-B); only one can\n"
+            "apply. While Auto is on this is decided for you (on for the i1 Pro)\n"
+            "and the box is locked — turn Auto off to choose it yourself.",
+            left,
+        ))
+        m_force_bidir_row.addStretch()
+        mcg.addLayout(m_force_bidir_row)
+        self._wire_bidir_exclusive(self._m_bidir_cb, self._m_force_bidir_cb)
+
         self._m_suppress_cb = _bool_row_m(
             "Suppress warning messages (-S)", True,
             "Suppress Warnings (-S)",
@@ -1328,6 +1382,7 @@ class TabMeasure(QWidget):
         data: dict = {
             "instr":      self._m_instr_spin.value(),
             "bidir":      self._m_bidir_cb.isChecked(),
+            "force_bidir": self._m_force_bidir_cb.isChecked(),
             "bidir_auto": self._m_bidir_auto_cb.isChecked(),
             "suppress":   self._m_suppress_cb.isChecked(),
             "nocal":      self._m_nocal_cb.isChecked(),
@@ -1349,6 +1404,7 @@ class TabMeasure(QWidget):
         except (ValueError, TypeError):
             pass
         self._m_bidir_cb.setChecked(bool(data.get("bidir", False)))
+        self._m_force_bidir_cb.setChecked(bool(data.get("force_bidir", False)))
         self._m_bidir_auto_cb.setChecked(bool(data.get("bidir_auto", True)))
         self._m_suppress_cb.setChecked(bool(data.get("suppress", True)))
         self._m_nocal_cb.setChecked(bool(data.get("nocal", False)))
@@ -1380,6 +1436,7 @@ class TabMeasure(QWidget):
             except (ValueError, TypeError):
                 pass
             self._m_bidir_cb.setChecked(bool(s.get("manual2_chartread_bidir", False)))
+            self._m_force_bidir_cb.setChecked(bool(s.get("manual2_chartread_force_bidir", False)))
             self._m_bidir_auto_cb.setChecked(bool(s.get("manual2_chartread_bidir_auto", True)))
             self._m_suppress_cb.setChecked(bool(s.get("manual2_chartread_suppress", True)))
             self._m_nocal_cb.setChecked(bool(s.get("manual2_chartread_nocal", False)))
@@ -1786,7 +1843,8 @@ class TabMeasure(QWidget):
         (greyed) checkboxes so they show what will happen.
         """
         from ui.ti2_loader import (
-            disable_bidir_for_instrument, instrument_label, is_spectroscan, read_target_instrument,
+            disable_bidir_for_instrument, force_bidir_for_instrument,
+            instrument_label, is_spectroscan, read_target_instrument,
         )
 
         instr = None
@@ -1794,6 +1852,7 @@ class TabMeasure(QWidget):
             instr = read_target_instrument(self._ti1_path)
         self._detected_instrument    = instr
         self._detected_disable_bidir = disable_bidir_for_instrument(instr)
+        self._detected_force_bidir   = force_bidir_for_instrument(instr)
 
         if hasattr(self, "_log"):
             # Drop the previous instrument line so only the most recent
@@ -1806,8 +1865,12 @@ class TabMeasure(QWidget):
                     # bidirectional "reading direction" note does not apply.
                     msg = f"Chart instrument: {label}."
                 else:
-                    direction = ("one direction only (-B)" if self._detected_disable_bidir
-                                 else "both directions")
+                    if self._detected_disable_bidir:
+                        direction = "one direction only (-B)"
+                    elif self._detected_force_bidir:
+                        direction = "both directions (forced, -b)"
+                    else:
+                        direction = "both directions"
                     msg = f"Chart instrument: {label} → reading {direction}."
                 self._log.appendPlainText(msg)
                 self._instr_log_text = msg
@@ -1846,34 +1909,68 @@ class TabMeasure(QWidget):
             cursor.removeSelectedText()
         self._instr_log_text = None
 
-    def _apply_bidir_auto_state(self, mode: str) -> None:
-        """Grey out and sync a mode's -B checkbox according to its Auto toggle.
+    @staticmethod
+    def _wire_bidir_exclusive(disable_cb: QCheckBox, force_cb: QCheckBox) -> None:
+        """Make -B and -b mutually exclusive: ticking one clears the other.
 
-        While Auto is on the checkbox is disabled and mirrors the detected
-        value (so the locked box shows the effective setting); its own state
-        is ignored when the command is built (see _collect_*).
+        Uses blockSignals so the clearing does not re-enter and bounce back.
+        Only relevant in manual (Auto off) mode — while Auto is on both boxes
+        are disabled and set programmatically (also under blockSignals).
         """
+        def _on_disable(checked: bool) -> None:
+            if checked and force_cb.isChecked():
+                force_cb.blockSignals(True)
+                force_cb.setChecked(False)
+                force_cb.blockSignals(False)
+
+        def _on_force(checked: bool) -> None:
+            if checked and disable_cb.isChecked():
+                disable_cb.blockSignals(True)
+                disable_cb.setChecked(False)
+                disable_cb.blockSignals(False)
+
+        disable_cb.toggled.connect(_on_disable)
+        force_cb.toggled.connect(_on_force)
+
+    def _bidir_widgets(self, mode: str) -> tuple[QCheckBox, QCheckBox, QCheckBox]:
+        """(auto, disable -B, force -b) checkboxes for the given mode."""
         if mode == "guided":
-            auto_cb, bidir_cb = self._bidir_auto_cb, self._bidir_cb
-        else:
-            auto_cb, bidir_cb = self._m_bidir_auto_cb, self._m_bidir_cb
+            return self._bidir_auto_cb, self._bidir_cb, self._force_bidir_cb
+        return self._m_bidir_auto_cb, self._m_bidir_cb, self._m_force_bidir_cb
+
+    def _apply_bidir_auto_state(self, mode: str) -> None:
+        """Grey out and sync a mode's -B/-b checkboxes per its Auto toggle.
+
+        While Auto is on both checkboxes are disabled and mirror the detected
+        values (so the locked boxes show the effective setting); their own
+        state is ignored when the command is built (see _resolve_*).
+        """
+        auto_cb, bidir_cb, force_cb = self._bidir_widgets(mode)
         auto_on = auto_cb.isChecked()
         bidir_cb.setEnabled(not auto_on)
+        force_cb.setEnabled(not auto_on)
         if auto_on:
-            bidir_cb.blockSignals(True)
-            bidir_cb.setChecked(self._detected_disable_bidir)
-            bidir_cb.blockSignals(False)
+            for cb, val in ((bidir_cb, self._detected_disable_bidir),
+                            (force_cb, self._detected_force_bidir)):
+                cb.blockSignals(True)
+                cb.setChecked(val)
+                cb.blockSignals(False)
 
     def _resolve_disable_bidir(self, mode: str) -> bool:
         """The -B value to pass to chartread: auto-detected when Auto is on,
         else the user's checkbox (its saved preset/default)."""
-        if mode == "guided":
-            auto_cb, bidir_cb = self._bidir_auto_cb, self._bidir_cb
-        else:
-            auto_cb, bidir_cb = self._m_bidir_auto_cb, self._m_bidir_cb
+        auto_cb, bidir_cb, _force_cb = self._bidir_widgets(mode)
         if auto_cb.isChecked():
             return self._detected_disable_bidir
         return bidir_cb.isChecked()
+
+    def _resolve_force_bidir(self, mode: str) -> bool:
+        """The -b value to pass to chartread: auto-detected when Auto is on,
+        else the user's checkbox (its saved preset/default)."""
+        auto_cb, _bidir_cb, force_cb = self._bidir_widgets(mode)
+        if auto_cb.isChecked():
+            return self._detected_force_bidir
+        return force_cb.isChecked()
 
     # ------------------------------------------------------------------
     # Internal
@@ -3929,6 +4026,7 @@ class TabMeasure(QWidget):
             ti1_path            = self._ti1_path,
             instrument          = str(self._instr_spin.value()),
             disable_bidir       = self._resolve_disable_bidir("guided"),
+            force_bidir         = self._resolve_force_bidir("guided"),
             suppress_warnings   = self._suppress_cb.isChecked(),
             disable_initial_cal = self._nocal_cb.isChecked(),
             patch_by_patch      = self._pbp_cb.isChecked(),
@@ -3945,6 +4043,7 @@ class TabMeasure(QWidget):
             ti1_path            = self._ti1_path,
             instrument          = str(self._m_instr_spin.value()),
             disable_bidir       = self._resolve_disable_bidir("manual"),
+            force_bidir         = self._resolve_force_bidir("manual"),
             suppress_warnings   = self._m_suppress_cb.isChecked(),
             disable_initial_cal = self._m_nocal_cb.isChecked(),
             patch_by_patch      = self._m_pbp_cb.isChecked(),
@@ -3965,6 +4064,7 @@ class TabMeasure(QWidget):
         s = self._settings
         if self._current_mode() == "guided":
             s.set("measure_disable_bidir",     self._bidir_cb.isChecked())
+            s.set("measure_force_bidir",       self._force_bidir_cb.isChecked())
             s.set("measure_bidir_auto",        self._bidir_auto_cb.isChecked())
             s.set("measure_suppress_warnings", self._suppress_cb.isChecked())
             s.set("measure_no_cal",            self._nocal_cb.isChecked())
@@ -3980,6 +4080,7 @@ class TabMeasure(QWidget):
         else:
             s.set("manual2_chartread_instr",    self._m_instr_spin.value())
             s.set("manual2_chartread_bidir",    self._m_bidir_cb.isChecked())
+            s.set("manual2_chartread_force_bidir", self._m_force_bidir_cb.isChecked())
             s.set("manual2_chartread_bidir_auto", self._m_bidir_auto_cb.isChecked())
             s.set("manual2_chartread_suppress", self._m_suppress_cb.isChecked())
             s.set("manual2_chartread_nocal",    self._m_nocal_cb.isChecked())
@@ -3999,6 +4100,7 @@ class TabMeasure(QWidget):
         s = self._settings
         # Guided defaults
         self._bidir_cb.setChecked(bool(s.get("measure_disable_bidir", True)))
+        self._force_bidir_cb.setChecked(bool(s.get("measure_force_bidir", False)))
         self._bidir_auto_cb.setChecked(bool(s.get("measure_bidir_auto", True)))
         self._suppress_cb.setChecked(bool(s.get("measure_suppress_warnings", True)))
         self._nocal_cb.setChecked(bool(s.get("measure_no_cal", False)))
@@ -4027,6 +4129,7 @@ class TabMeasure(QWidget):
             except (ValueError, TypeError):
                 pass
         self._m_bidir_cb.setChecked(bool(s.get("manual2_chartread_bidir", False)))
+        self._m_force_bidir_cb.setChecked(bool(s.get("manual2_chartread_force_bidir", False)))
         self._m_bidir_auto_cb.setChecked(bool(s.get("manual2_chartread_bidir_auto", True)))
         self._m_suppress_cb.setChecked(bool(s.get("manual2_chartread_suppress", True)))
         self._m_nocal_cb.setChecked(bool(s.get("manual2_chartread_nocal", False)))

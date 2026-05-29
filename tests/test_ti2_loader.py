@@ -19,9 +19,11 @@ from ui.ti2_loader import (
     _project_root_for,
     _related_files,
     disable_bidir_for_instrument,
+    force_bidir_for_instrument,
     has_spectral_data,
     instrument_label,
     is_colormunki,
+    is_i1pro,
     is_spectroscan,
     read_target_instrument,
 )
@@ -102,6 +104,49 @@ def test_disable_bidir_delegates_to_is_colormunki() -> None:
     # disable_bidir_for_instrument is now defined in terms of is_colormunki.
     for name in (*KNOWN_INSTRUMENTS, None, "", "Unknown device"):
         assert disable_bidir_for_instrument(name) is is_colormunki(name)
+
+
+@pytest.mark.parametrize(
+    "name, expected",
+    [
+        ("GretagMacbeth i1 Pro", True),    # i1 Pro / Pro 2 / Pro 3 / Pro 3+
+        ("X-Rite i1 Pro 3", True),         # robust to alternate spellings
+        ("i1pro2", True),                  # no-space spelling
+        ("X-Rite ColorMunki", False),
+        ("GretagMacbeth SpectroScan", False),
+        (None, False),
+        ("", False),
+    ],
+)
+def test_is_i1pro(name, expected) -> None:
+    assert is_i1pro(name) is expected
+
+
+@pytest.mark.parametrize(
+    "name, expected",
+    [
+        ("GretagMacbeth i1 Pro", True),    # i1 Pro family forces bidir (-b)
+        ("X-Rite i1 Pro 3", True),
+        ("X-Rite ColorMunki", False),      # one direction only -> never force
+        ("GretagMacbeth SpectroScan", False),
+        (None, False),
+        ("", False),
+    ],
+)
+def test_force_bidir_for_instrument(name, expected) -> None:
+    assert force_bidir_for_instrument(name) is expected
+
+
+def test_force_and_disable_bidir_mutually_exclusive() -> None:
+    # -b and -B can never both apply to the same instrument: chartread treats
+    # them as mutually exclusive, so the two detectors must never both be True.
+    for name in (*KNOWN_INSTRUMENTS, None, "", "Unknown device", "i1pro3"):
+        assert not (force_bidir_for_instrument(name) and disable_bidir_for_instrument(name))
+
+
+def test_force_bidir_delegates_to_is_i1pro() -> None:
+    for name in (*KNOWN_INSTRUMENTS, None, "", "Unknown device"):
+        assert force_bidir_for_instrument(name) is is_i1pro(name)
 
 
 @pytest.mark.parametrize(

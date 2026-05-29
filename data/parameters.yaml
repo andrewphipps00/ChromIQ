@@ -1090,6 +1090,21 @@ parameters:
         Turn it on only if your instrument reports false strip-direction
         errors during measurement.
 
+    - flag: "-b"
+      name: "Force Bidirectional Strip Recognition"
+      type: boolean
+      default: false
+      expert_only: false
+      tooltip_title: "Force Bidirectional Reading (-b)"
+      tooltip_body: |
+        Forces chartread to accept a strip scanned in either direction.
+
+        Normally chartread only auto-detects strip direction on randomised
+        charts; on a fixed-order chart it reads one direction only and
+        rejects strips scanned backwards. Turn this on to force the
+        detection regardless — useful for the i1 Pro family, which reads
+        either way. This is the opposite of -B; only one can apply.
+
     - flag: "-S"
       name: "Suppress Warning Messages"
       type: boolean

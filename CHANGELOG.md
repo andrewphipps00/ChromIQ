@@ -1,5 +1,28 @@
 # Changelog
 
+## v3.8.0-beta.25
+**Force bidirectional strip reading (`-b`) in the Measure tab.** chartread can
+now be told to accept a strip scanned in either direction even on fixed-order
+charts. Previously chartread only auto-detected strip direction on *randomised*
+charts; on a fixed-order layout (e.g. printtarg `-r`) it read one direction
+only and rejected strips scanned backwards. The new option is the counterpart
+to "Disable bidirectional" (`-B`), and the two are mutually exclusive.
+
+### Added
+- Measure tab — both **Guided** and **Manual** modes: a **Force bidirectional
+  strip recognition (`-b`)** checkbox, saveable as a preset and as your
+  default.
+- The existing **Auto** toggle now drives both `-B` and `-b` from the chart's
+  instrument: the i1 Pro family (reads either direction) force-enables `-b`,
+  the ColorMunki (one direction only) uses `-B`, and SpectroScan / unknown
+  instruments use neither. While Auto is on, both boxes are locked and show
+  the chosen setting. The instrument log line now states the direction, e.g.
+  "reading both directions (forced, `-b`)".
+
+### Notes
+- `-b` and `-B` are mutually exclusive. Turning **Auto** off lets you set
+  either by hand, and ticking one clears the other.
+
 ## v3.8.0-beta.24
 **New Tools utility: "Verify against reference".** Check how closely a printed
 chart matches a set of expected colour values — per-patch and average ΔE —

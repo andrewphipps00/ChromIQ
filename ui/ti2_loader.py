@@ -79,6 +79,20 @@ def instrument_label(name: str | None) -> str | None:
     return name
 
 
+def is_i1pro(name: str | None) -> bool:
+    """Whether the instrument is an i1 Pro family device.
+
+    The i1 Pro / Pro 2 / Pro 3 / Pro 3+ are all tagged ``"GretagMacbeth i1 Pro"``
+    by ArgyllCMS (some builds report ``"X-Rite i1 Pro …"``). They can read a
+    strip in either direction (``inst2_bidi_scan``), so they support chartread's
+    force-bidirectional mode (``-b``).
+    """
+    if not name:
+        return False
+    low = name.lower()
+    return "i1 pro" in low or "i1pro" in low
+
+
 def disable_bidir_for_instrument(name: str | None) -> bool:
     """Whether bidirectional strip recognition should be disabled (chartread -B).
 
@@ -90,6 +104,20 @@ def disable_bidir_for_instrument(name: str | None) -> bool:
     bidirectional allowed (no ``-B``).
     """
     return is_colormunki(name)
+
+
+def force_bidir_for_instrument(name: str | None) -> bool:
+    """Whether to force-enable bidirectional strip recognition (chartread -b).
+
+    chartread only auto-enables bidirectional reading when the chart is
+    randomised; on a fixed-order chart (e.g. printtarg ``-r``) it otherwise
+    reads one direction only and rejects strips scanned backwards. The i1 Pro
+    family reads either direction, so ``-b`` forces the auto-detection on for
+    those charts. The ColorMunki reads one direction only and the SpectroScan
+    reads patches individually, so neither should force it. ``-b`` and ``-B``
+    are mutually exclusive; this only returns True for the i1 Pro family.
+    """
+    return is_i1pro(name)
 
 
 def has_spectral_data(cgats_path: Path) -> bool:
