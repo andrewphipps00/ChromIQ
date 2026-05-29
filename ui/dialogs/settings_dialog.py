@@ -349,6 +349,86 @@ class SettingsDialog(QDialog):
             min_width=620,
         )
 
+        self._chromiq_refine_check = QCheckBox(
+            "ChromIQ-style refinement process", self
+        )
+        refine_tip = TooltipButton(
+            "ChromIQ-style refinement process",
+            "Builds a more accurate profile by REUSING the measurements you "
+            "already made for an earlier profile, instead of throwing them away.\n\n"
+            "Normally, every profiling run starts from scratch: you print a chart, "
+            "measure it, and build a profile from only those patches. If you later "
+            "make a second, refined chart for the same printer and paper, the "
+            "measurements from the first run are not used again.\n\n"
+            "With this option ON, ChromIQ can carry those earlier measurements "
+            "forward. Here is the whole journey, step by step:\n\n"
+            "  1. In Create Chart, you tick \"Refinement profile\" and pick the ICC "
+            "profile from your earlier run. ChromIQ quietly keeps a copy of that "
+            "profile's measurement data (a \"pre_…\" file) inside the working folder, "
+            "so it is not deleted when the new chart is generated.\n\n"
+            "  2. You print and measure the new chart as usual. In the Measure tab a "
+            "new option appears: \"Also use measurement data from the pre-conditioning "
+            "profile\". It only shows up when such saved data is actually present.\n\n"
+            "  3. When you build the profile, ChromIQ combines the new measurements "
+            "with the saved earlier ones and builds from the larger, combined set. "
+            "More measured colours generally means a more accurate profile.\n\n"
+            "Your freshly measured file is never altered — the combining happens on a "
+            "separate copy only at build time, so you can re-measure or refine "
+            "individual strips in Check & Refine exactly as before. The guided "
+            "Check & Refine analysis still looks only at the strips you physically "
+            "printed, so it will never ask you to re-measure a patch that came from "
+            "the earlier run.\n\n"
+            "When this option is OFF, ChromIQ behaves exactly as it always has — "
+            "nothing in your normal workflow changes. Leave it off unless you "
+            "specifically want to reuse measurements across refinement runs.",
+            self,
+            min_width=680,
+        )
+
+        self._averaging_check = QCheckBox(
+            "Enable measurement averaging", self
+        )
+        averaging_tip = TooltipButton(
+            "Enable Measurement Averaging",
+            "Lets you read the SAME printed chart more than once and combine the "
+            "readings, to even out the small random errors every measuring device "
+            "makes. The more times you read a chart, the closer the averaged "
+            "result gets to its \"true\" colour — which can make for a slightly "
+            "more accurate profile, especially with budget instruments or tricky "
+            "papers.\n\n"
+            "You do NOT print a new chart. You measure the one already in front of "
+            "you a second (or third, or fourth) time. Because the printed colours "
+            "never change, only the tiny reading-to-reading wobble of the "
+            "instrument does, averaging those reads cancels most of that wobble "
+            "out.\n\n"
+            "Here is the whole journey, step by step:\n\n"
+            "  1. You measure your chart as usual in the Measure tab.\n\n"
+            "  2. When the read finishes, a new completion window appears. As well "
+            "as continuing to Build Profile, it offers \"Measure again\" — put the "
+            "very same chart back on the table and read it once more.\n\n"
+            "  3. You can repeat this as many times as you like. ChromIQ keeps each "
+            "read safely side by side in the working folder (named …_read1, "
+            "…_read2, and so on).\n\n"
+            "  4. Once you have two or more reads, the window lets you either build "
+            "from just the last read, or average all of the reads together and "
+            "build from that combined result (saved as …_average).\n\n"
+            "Mean vs. Median: averaging normally uses the plain mean (the ordinary "
+            "average). The window also offers Median, which ignores the odd "
+            "stray reading and only behaves differently once you have three or "
+            "more reads — handy if one read was disturbed (a bump, a smudge) and "
+            "you don't want it dragging the result.\n\n"
+            "When this option is OFF (the default), ChromIQ behaves exactly as it "
+            "always has: a finished measurement takes you straight on to Build "
+            "Profile with no extra window and no extra files. Turn it on only if "
+            "you want the option to read charts repeatedly for extra precision.\n\n"
+            "Tip: two reads already remove most of the random noise; three or four "
+            "give diminishing returns. There is no benefit to averaging reads of "
+            "DIFFERENT charts — this is only for re-reading one and the same chart.\n\n"
+            "With thanks to Alan Goldhammer, who suggested this feature.",
+            self,
+            min_width=660,
+        )
+
         self._native_print_check = QCheckBox("Use default macOS printer dialog", self)
         native_tip = TooltipButton(
             "Use default macOS printer dialog",
@@ -391,6 +471,11 @@ class SettingsDialog(QDialog):
             min_width=560,
         )
 
+        # The CUPS preflight summary only applies to ChromIQ's own print
+        # pipeline. When the macOS print dialog is in use, that dialog is the
+        # confirmation step, so grey the option out.
+        self._native_print_check.toggled.connect(self._sync_confirm_print_enabled)
+
         # Collect the options that apply on this platform, in order, then place
         # them two per row. Platform-specific options are simply omitted (rather
         # than hidden) so they leave no empty cell in the grid.
@@ -399,6 +484,8 @@ class SettingsDialog(QDialog):
             _bh_cell(self._restore_session_check, restore_session_tip),
             _bh_cell(self._themed_colors_check, themed_colors_tip),
             _bh_cell(self._cal_mode_check, cal_tip),
+            _bh_cell(self._chromiq_refine_check, refine_tip),
+            _bh_cell(self._averaging_check, averaging_tip),
         ]
         if native_print_supported():
             bh_cells.append(_bh_cell(self._native_print_check, native_tip))
@@ -496,6 +583,14 @@ class SettingsDialog(QDialog):
 
     # ------------------------------------------------------------------
 
+    def _sync_confirm_print_enabled(self) -> None:
+        """Grey out the CUPS preflight-confirmation option while the macOS print
+        dialog is selected — that dialog already serves as the confirmation."""
+        if native_print_supported():
+            self._confirm_print_check.setEnabled(
+                not self._native_print_check.isChecked()
+            )
+
     def _load_settings(self) -> None:
         s = self._settings
         self._argyll_edit.setText(s.get("argyll_bin_path", default_argyll_bin_dir()))
@@ -504,8 +599,11 @@ class SettingsDialog(QDialog):
         self._restore_session_check.setChecked(bool(s.get("restore_last_session", False)))
         self._themed_colors_check.setChecked(bool(s.get("gamut_themed_colors", True)))
         self._cal_mode_check.setChecked(bool(s.get("calibration_mode", False)))
+        self._chromiq_refine_check.setChecked(bool(s.get("chromiq_refinement", False)))
+        self._averaging_check.setChecked(bool(s.get("averaging_enabled", False)))
         self._native_print_check.setChecked(bool(s.get("use_native_print_dialog", False)))
         self._confirm_print_check.setChecked(bool(s.get("confirm_before_printing", True)))
+        self._sync_confirm_print_enabled()
         from data.patch_db import I1PRO_DEFAULT_PRESET_KEY
         i1pro_key = str(s.get("i1pro_default_preset", I1PRO_DEFAULT_PRESET_KEY))
         idx = self._i1pro_preset_combo.findData(i1pro_key)
@@ -534,11 +632,22 @@ class SettingsDialog(QDialog):
           Light: masthead "Chrom" wordmark.  Dark: neutral grey (Restore border).
         """
         indicator = "#1c1b18" if mode == "light" else "#d0d0d0"
-        self.setStyleSheet(
-            f"QLineEdit:focus {{ border-color: {indicator}; }}"
-            f"QCheckBox::indicator:checked {{ background: {indicator}; border-color: {indicator}; }}"
-            f"QCheckBox::indicator:hover {{ border-color: {indicator}; }}"
+        # Shared with the Tools dialogs so every dialog highlights controls the
+        # same neutral way (checkboxes, radios and the focus ring on text/number/
+        # combo inputs).
+        from ui.dialogs.tools_dialogs import neutral_controls_qss
+        # neutral_controls_qss restyles :checked indicators in the neutral colour,
+        # which would otherwise keep a *disabled* checked box looking active. Add a
+        # higher-specificity :checked:disabled rule so it greys out like the rest
+        # of the app (matching the global QCheckBox::indicator:disabled greys).
+        dis_bg, dis_border = (
+            ("#eeece8", "#d0ccc6") if mode == "light" else ("#1f1f1f", "#3a3a3a")
         )
+        disabled_qss = (
+            f"QCheckBox::indicator:checked:disabled {{"
+            f" background: {dis_bg}; border-color: {dis_border}; }}"
+        )
+        self.setStyleSheet(neutral_controls_qss(indicator) + disabled_qss)
         for btn in self.findChildren(TooltipButton):
             btn._color_override = indicator
             btn._set_icon()
@@ -576,6 +685,8 @@ class SettingsDialog(QDialog):
         s.set("restore_last_session",      self._restore_session_check.isChecked())
         s.set("gamut_themed_colors",       self._themed_colors_check.isChecked())
         s.set("calibration_mode",          self._cal_mode_check.isChecked())
+        s.set("chromiq_refinement",        self._chromiq_refine_check.isChecked())
+        s.set("averaging_enabled",         self._averaging_check.isChecked())
         s.set("use_native_print_dialog",   self._native_print_check.isChecked())
         s.set("confirm_before_printing",   self._confirm_print_check.isChecked())
         s.set("appearance",                str(self._appearance_combo.currentData()))
@@ -635,6 +746,7 @@ class SettingsDialog(QDialog):
                 try:
                     subprocess.run(
                         [str(p), "-?"], capture_output=True, timeout=5,
+                        stdin=subprocess.DEVNULL,
                         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
                     )
                     results.append(f"✓ {tool}")

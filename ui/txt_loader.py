@@ -15,7 +15,7 @@ import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from ui.ti2_loader import _is_under, _resolve_working_dir
+from ui.ti2_loader import _project_root_for, _resolve_working_dir
 
 if TYPE_CHECKING:
     from PyQt6.QtWidgets import QWidget
@@ -36,7 +36,7 @@ def resolve_txt(
     ``<working_dir>/<name>/`` sub-folder.
     """
     working_dir = _resolve_working_dir(settings)
-    if _is_under(txt_path, working_dir):
+    if _project_root_for(txt_path, working_dir) is not None:
         return _handle_inside(parent, txt_path, working_dir)
     return _handle_outside(parent, txt_path, working_dir)
 
@@ -203,6 +203,13 @@ def _ask_profile_name(
         except OSError:
             return False
 
+    def _normalise(text: str) -> str:
+        """Sanitise the typed name the same way set_target_name does (spaces→-,
+        illegal chars→_), so the on-disk folder = the user-facing name."""
+        from core.file_manager import FileManager
+        cleaned = FileManager.strip_workfile_ext(text)
+        return FileManager._sanitise(cleaned) if cleaned.strip() else ""
+
     def _validate(name: str) -> str | None:
         if not name:
             return "Please enter a name."
@@ -211,7 +218,7 @@ def _ask_profile_name(
         return None
 
     def _on_name_changed(_text: str = "") -> None:
-        name = name_edit.text().strip()
+        name = _normalise(name_edit.text())
         collision = bool(name) and (working_dir / name).exists() and not _is_self_collision(name)
         if collision:
             error_lbl.setText(
@@ -227,7 +234,7 @@ def _ask_profile_name(
     name_edit.textChanged.connect(_on_name_changed)
 
     def _on_accept() -> None:
-        name = name_edit.text().strip()
+        name = _normalise(name_edit.text())
         err = _validate(name)
         if err:
             error_lbl.setText(err)
@@ -245,7 +252,7 @@ def _ask_profile_name(
         dlg.accept()
 
     def _on_overwrite() -> None:
-        name = name_edit.text().strip()
+        name = _normalise(name_edit.text())
         err = _validate(name)
         if err:
             error_lbl.setText(err)
@@ -290,10 +297,31 @@ def _copy_txt(
     new_name: str,
     overwrite: bool = False,
 ) -> tuple[Path, str]:
+    """Import an i1Profiler .txt into a fresh project as run1's chart.
+
+    Builds the per-run layout (see docs/dev_folder_layout.md): a project at
+    ``working_dir/<new_name>/`` with the .txt placed at
+    ``runs/run1/<new_name>.txt``. txt2ti3 then writes
+    ``runs/run1/<new_name>.ti3`` — the canonical measurement under the
+    project-name chart stem.
+
+    Returns (txt path, base name to hand txt2ti3).
+    """
+    from core.file_manager import FileManager, Project
+
+    # Defensive: dialog already sanitises, but enforce here for any caller.
+    new_name = FileManager._sanitise(FileManager.strip_workfile_ext(new_name))
+
     dest = working_dir / new_name
     if overwrite and dest.exists():
         shutil.rmtree(dest)
-    dest.mkdir(parents=True, exist_ok=True)
-    new_txt = dest / f"{new_name}.txt"
+
+    proj = Project.create(dest, new_name)
+    run  = proj.current_run()
+    run.ensure_dir()
+
+    # Place the .txt under the chart stem so txt2ti3's output stays paired
+    # (Run.measurement_ti3 = <stem>.ti3 = <new_name>.ti3).
+    new_txt = run.dir / f"{run.stem}.txt"
     shutil.copy2(txt_path, new_txt)
-    return new_txt, new_name
+    return new_txt, run.stem

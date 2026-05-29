@@ -40,11 +40,17 @@ class TooltipButton(QToolButton):
         body: str,
         parent: QWidget | None = None,
         min_width: int = 420,
+        color: str | None = None,
     ) -> None:
         super().__init__(parent)
         self._title     = title
         self._body      = body.strip()
         self._min_width = min_width
+        # Per-instance icon colour. When None the shared tab ACCENT is used; the
+        # Tools dialogs/editor set this to keep their own accent (e.g. magenta,
+        # or the settings-window light/dark indicator). See _set_icon.
+        if color is not None:
+            self._color_override = color
 
         self.setObjectName("tooltip_btn")
         self.setToolTip(f"{title}\n\nClick for details")

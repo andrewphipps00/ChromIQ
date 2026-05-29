@@ -364,6 +364,71 @@ def open_file_dialog(
     return ""
 
 
+def open_files_dialog(
+    parent: QWidget,
+    title: str,
+    name_filter: str = "",
+    start_dir: str = "",
+    extra_path: str = "",
+    extra_paths: tuple | list = (),
+) -> list[str]:
+    """Multi-file variant of :func:`open_file_dialog`.
+
+    Returns the list of selected paths, or an empty list if cancelled.
+    """
+    dlg = QFileDialog(parent, title, start_dir or str(Path.home()))
+    dlg.setOptions(QFileDialog.Option.DontUseNativeDialog)
+    _style_file_dialog_toolbar(dlg)
+    dlg.setFileMode(QFileDialog.FileMode.ExistingFiles)
+    if name_filter:
+        dlg.setNameFilter(name_filter)
+        exts = _parse_extensions(name_filter)
+        if exts:
+            dlg.setProxyModel(_ExtensionFilterProxy(exts, dlg))
+    dlg.setSidebarUrls(_sidebar_urls(extra_path, extra_paths))
+    if dlg.exec() == QFileDialog.DialogCode.Accepted:
+        return list(dlg.selectedFiles())
+    return []
+
+
+def save_file_dialog(
+    parent: QWidget,
+    title: str,
+    name_filter: str = "",
+    start_path: str = "",
+    extra_path: str = "",
+    extra_paths: tuple | list = (),
+) -> str:
+    """Open a Qt **save** file dialog with sidebar shortcuts.
+
+    ``start_path`` may be a directory or a full path with a default
+    filename — if it points at an existing directory the dialog opens
+    there, otherwise it pre-selects the file inside its parent dir.
+    Returns the chosen path, or an empty string if cancelled.
+    """
+    p = Path(start_path) if start_path else None
+    if p is not None and p.is_dir():
+        start_dir, default_name = str(p), ""
+    elif p is not None:
+        start_dir, default_name = str(p.parent), p.name
+    else:
+        start_dir, default_name = str(Path.home()), ""
+    dlg = QFileDialog(parent, title, start_dir)
+    dlg.setOptions(QFileDialog.Option.DontUseNativeDialog)
+    _style_file_dialog_toolbar(dlg)
+    dlg.setFileMode(QFileDialog.FileMode.AnyFile)
+    dlg.setAcceptMode(QFileDialog.AcceptMode.AcceptSave)
+    if name_filter:
+        dlg.setNameFilter(name_filter)
+    if default_name:
+        dlg.selectFile(default_name)
+    dlg.setSidebarUrls(_sidebar_urls(extra_path, extra_paths))
+    if dlg.exec() == QFileDialog.DialogCode.Accepted:
+        files = dlg.selectedFiles()
+        return files[0] if files else ""
+    return ""
+
+
 def open_dir_dialog(
     parent: QWidget,
     title: str,

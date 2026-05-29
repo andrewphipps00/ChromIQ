@@ -88,6 +88,7 @@ class MeasureParams:
     ti1_path: Path
     instrument: str = "1"
     disable_bidir: bool = False
+    force_bidir: bool = False
     suppress_warnings: bool = True
     disable_initial_cal: bool = False
     patch_by_patch: bool = False
@@ -215,8 +216,12 @@ class MeasureManager(QObject):
 
     def _build_args(self, p: MeasureParams) -> list[str]:
         args: list[str] = ["-c", p.instrument]
+        # -B (disable) and -b (force enable) are mutually exclusive; -B wins
+        # if both are somehow set.
         if p.disable_bidir:
             args.append("-B")
+        elif p.force_bidir:
+            args.append("-b")
         if p.suppress_warnings:
             args.append("-S")
         if p.disable_initial_cal:

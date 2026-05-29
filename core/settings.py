@@ -6,7 +6,7 @@ from typing import Any
 from PyQt6.QtCore import QSettings
 
 from core.logger import get_logger
-from core.platform_paths import default_argyll_bin_dir, is_windows
+from core.platform_paths import default_argyll_bin_dir, is_macos, is_windows
 
 log = get_logger(__name__)
 
@@ -56,15 +56,26 @@ DEFAULTS: dict[str, Any] = {
     "print_media":               "",
     "print_media_type":          "",
     "print_quality":             "",
-    "use_native_print_dialog":   is_windows(),
+    # Default to the OS print dialog on macOS too (the user can untick it,
+    # unlike Windows where it is force-locked on in get()).
+    "use_native_print_dialog":   is_windows() or is_macos(),
     "confirm_before_printing":   True,
     # Step 3 — measure
     "measure_disable_bidir":       True,
+    # Suppresses the "forcing bidirectional on a non-randomised chart" warning
+    # dialog once the user ticks "Don't show this again".
+    "measure_hide_nonrandom_bidir_warning": False,
     "measure_suppress_warnings":   True,
     "measure_extra_args":          "",
     "measure_tolerance_enabled":           True,
     "measure_tolerance_value":             0.7,
     "manual2_chartread_tolerance_enabled": True,
+    # TI2 layout editor — randomised tagging. Well-mixed charts are tagged
+    # automatically on save; this remembers whether to FORCE the tag on a
+    # layout the safety check considers structured, and whether the user has
+    # dismissed the force-risk warning.
+    "ti2_editor_force_tag":              False,
+    "ti2_editor_force_tag_hide_warning": False,
     # Step 4 — profile
     "colprof_algorithm":         "l",
     "colprof_quality":           "m",
@@ -98,6 +109,16 @@ DEFAULTS: dict[str, Any] = {
     "printcal_mode":             "initial",
     "applycal_mode":             "apply",
     "applycal_verbose":          False,
+    # ChromIQ-style refinement: merge a pre-conditioning profile's measurement
+    # data into the freshly measured chart before building (see workflow/ti3_merge.py)
+    "chromiq_refinement":        False,
+    # "Read again & average" — master switch. OFF (default) restores the classic
+    # behaviour: a finished full read proceeds straight to Build Profile. ON adds
+    # the post-read completion dialog offering measure-again / average.
+    "averaging_enabled":         False,
+    # When averaging is enabled, how repeated reads are combined: "mean" | "median"
+    # (median == argyll `average -e`; only differs from mean at 3+ reads)
+    "average_method":            "mean",
     # UI state
     "window_geometry":           None,
     "active_tab":                0,
@@ -107,12 +128,9 @@ DEFAULTS: dict[str, Any] = {
     "show_welcome_dialog":       True,
     "window_maximized":          False,
     "window_fullscreen":         False,
-    # Session restore paths (only used when restore_last_session is True)
+    # Session restore — only the target name is stored; every artefact path is
+    # derived from the project's current run on restore (see main_window).
     "session_target_name":       "",
-    "session_ti1_path":          "",
-    "session_ti3_path":          "",
-    "session_icc_path":          "",
-    "session_cal_ti3_path":      "",
     # Diagnostics — off by default; flip to True to log per-strip highlighter
     # math (id, global_idx, page, local_idx) to chromiq.log for investigating
     # detection drift.

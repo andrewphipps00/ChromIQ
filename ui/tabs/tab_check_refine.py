@@ -29,6 +29,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from core.file_manager import Run
 from core.logger import get_logger
 from core.preset_store import (
     load_presets as _load_tab_presets,
@@ -1168,15 +1169,21 @@ class TabCheckRefine(QWidget):
         )
         if not path:
             return
-        ti3 = Path(path)
+        from ui.ti2_loader import resolve_ti3
+        # External / old-flat-layout .ti3s get imported into a fresh project
+        # (Project.create writes the "Where are my files.txt" README too).
+        # Inside an existing project, resolve_ti3 returns the path unchanged.
+        resolved = resolve_ti3(self, Path(path), self._settings)
+        if resolved is None:
+            return
         self.about_to_load_ti3.emit()
-        self._ti3_path = ti3
-        self._ti3_edit.setText(str(ti3))
-        self._auto_fill_icc(ti3)
-        self._notify_ti2(ti3)
+        self._ti3_path = resolved
+        self._ti3_edit.setText(str(resolved))
+        self._auto_fill_icc(resolved)
+        self._notify_ti2(resolved)
         self._update_run_btn()
-        self._detect_instrument(ti3)
-        self.ti3_selected.emit(ti3)
+        self._detect_instrument(resolved)
+        self.ti3_selected.emit(resolved)
 
     def _on_browse_icc(self) -> None:
         path = open_file_dialog(
@@ -1190,9 +1197,17 @@ class TabCheckRefine(QWidget):
             self._gamut_panel.set_icc_path(self._icc_path)
 
     def _auto_fill_icc(self, ti3: Path) -> None:
-        """Try to find a matching ICC/ICM in the same folder."""
-        for ext in (".icc", ".icm"):
-            candidate = ti3.with_suffix(ext)
+        """Try to find a matching ICC/ICM in the same folder.
+
+        Prefers the run's refinement-merged profile (merged.icc) when one was
+        built, falling back to the same-stem profile (chart.icc / chart.icm).
+        """
+        candidates: list[Path] = []
+        run = Run.for_dir(ti3.parent)
+        if run.merged_icc.exists():
+            candidates.append(run.merged_icc)
+        candidates += [ti3.with_suffix(ext) for ext in (".icc", ".icm")]
+        for candidate in candidates:
             if candidate.exists():
                 self._icc_path = candidate
                 self._icc_edit.setText(str(candidate))
@@ -1432,8 +1447,8 @@ class TabCheckRefine(QWidget):
                 "that uses this profile to place the new test patches more intelligently. "
                 "The next chart will sample more in the colour regions your printer "
                 "reproduces least accurately, producing a noticeably better profile on "
-                "the second round. Your existing chart files are preserved (renamed "
-                "with a <code>pre_</code> prefix) so nothing is lost. Recommended once "
+                "the second round. This profile and its measurements are kept intact "
+                "in their own run folder so nothing is lost. Recommended once "
                 "you've confirmed a working profile for this paper.",
                 dlg,
             )
@@ -1450,31 +1465,32 @@ class TabCheckRefine(QWidget):
             "Needs Work": "Install Profile Anyway",
         }
 
-        buttons: list[QPushButton] = []
-
         close_btn = QPushButton("Close", dlg)
         close_btn.clicked.connect(dlg.reject)
-        buttons.append(close_btn)
 
         install_btn: QPushButton | None = None
         if self._icc_path:
             install_label = _install_labels.get(grade, "Install Profile Anyway")
             install_btn = QPushButton(install_label, dlg)
-            buttons.append(install_btn)
 
         precond_btn: QPushButton | None = None
         if self._icc_path:
             precond_btn = QPushButton("← Use as Pre-conditioning", dlg)
             precond_btn.setObjectName("primary")
-            buttons.append(precond_btn)
 
         guide_btn: QPushButton | None = None
         if strips_file and refine_strips and not recommend_start_over and self._ti3_path:
             guide_btn = QPushButton("Guide Me Through Refinement", dlg)
             guide_btn.setObjectName("primary")
-            buttons.append(guide_btn)
         elif install_btn and grade == "Excellent":
             install_btn.setObjectName("primary")
+
+        # Action buttons left-to-right: Guide → Pre-conditioning → Install;
+        # Close is pinned to the far right after a stretch.
+        buttons: list[QPushButton] = [close_btn]
+        for b in (guide_btn, precond_btn, install_btn):
+            if b is not None:
+                buttons.append(b)
 
         btn_row = QHBoxLayout()
         btn_row.setSpacing(8)
@@ -1500,7 +1516,12 @@ class TabCheckRefine(QWidget):
                 try:
                     profile_dir = _get_profile_dir()
                     profile_dir.mkdir(parents=True, exist_ok=True)
-                    dest = profile_dir / icc.name
+                    # Install under the project name (Run.stem), so the system
+                    # ColorSync folder ends up with descriptive,
+                    # non-colliding filenames even when the on-disk profile is
+                    # the build-time `merged.icc`.
+                    install_stem = Run.for_dir(icc.parent).stem
+                    dest = profile_dir / f"{install_stem}{icc.suffix}"
                     shutil.copy2(icc, dest)
                     dlg.accept()
                     self._log.appendPlainText(f"[OK] Profile installed to {dest}")

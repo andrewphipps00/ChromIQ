@@ -185,7 +185,7 @@ class CupsRawPrinter:
     def _run_lp_result(self, cmd: list[str]) -> tuple[int, str]:
         """Run lp, return (returncode, stderr_text)."""
         try:
-            result = subprocess.run(cmd, capture_output=True, timeout=30)
+            result = subprocess.run(cmd, capture_output=True, timeout=30, stdin=subprocess.DEVNULL)
             stderr = result.stderr.decode("utf-8", errors="replace")
             if result.returncode != 0:
                 log.error("lp failed (code %d): %s", result.returncode, stderr)

@@ -57,6 +57,46 @@ ChromIQ is a PyQt6 GUI for RGB printer ICC profiling with ArgyllCMS 3.5.0.
 `parameters.yaml` → `ParameterWidget` rows in panels → `workflow/*.py` builds CLI args
 → `ArgyllRunner.run()` → `QProcess` → line_received signal → LogWidget + stripe detection
 
+### Working-folder layout (Project / Run)
+
+Every project is a folder under `~/ChromIQ/<target-name>/` owned by the
+`Project` / `Run` / `Calibration` classes in `core/file_manager.py`:
+
+```
+<target-name>/             # = sanitised project name (spaces → hyphens)
+  project.json             # manifest: schema_version, current_run, runs[]
+  cal/                     # optional, shared across runs
+    <target-name>-cal.*    # cal.ti1/.ti2/.ti3/.cal/.icc/_NN.tif
+  exports/                 # i1Profiler exports (<target-name>-i1profiler.txt/.pxf)
+  runs/run1/, run2/, …     # one folder per profile build
+    <target-name>.*        # chart.ti1/.ti2/.cht/.ps/.channels.json + _NN.tif
+    <target-name>.ti3      # the measurement (chartread output; averaged result reuses this stem)
+    <target-name>.icc      # the profile (colprof output)
+    reads/readN.ti3        # role-named, only when averaging is used
+    preconditioning.ti3/.icc   # role-named, seeded by Project.new_run when refining
+    merged.ti3/.icc        # role-named, build-time refinement-merge outputs
+    calibrated.icc         # role-named, applycal output
+    meta.json
+```
+
+**The chart's own files carry the sanitised project name as their stem**
+(so printtarg stamps it on the printed sheet, the ICC is self-identifying,
+Finder shows it). Derived/intermediate files (`reads/readN.ti3`,
+`preconditioning.*`, `merged.*`, `calibrated.icc`) stay role-named — they
+never go on paper. **The per-run folder still removes the need for any
+prefix/suffix state encoding**, so the `pre_`/`cal_` prefixes and the
+`_readN`/`_average`/`_merged` suffixes are gone. File stems follow
+ArgyllCMS's natural coupling (`<name>.ti2` → `<name>.ti3` → `<name>.icc`),
+so no post-tool renames are needed.
+
+**All path construction goes through `Project` / `Run` / `Calibration`.**
+Adding a new artefact = add a property/method to `Run`, never a stem pattern
+elsewhere. `FileManager.project()` returns the current target's project;
+`Run.for_dir(dir)` gives a project-less Run for path ops on a known folder.
+Cross-run isolation makes the old "averaging reads double-counted into a
+refinement merge" bug impossible by construction. See
+`docs/dev_folder_layout.md`.
+
 ### Key patterns
 
 **ArgyllRunner** is a singleton `QObject` injected into all workflow classes.

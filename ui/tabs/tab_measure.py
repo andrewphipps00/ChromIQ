@@ -34,6 +34,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from core.file_manager import FileManager, Run
 from core.logger import get_logger
 from core.preset_store import (
     load_presets as _load_tab_presets,
@@ -50,6 +51,7 @@ from ui.widgets import ElidingLabel, NoScrollComboBox, NoScrollDoubleSpinBox, No
 
 _TAB_COLOR = "#56d6a5"  # Measure tab accent
 from ui.styles import SPEC_GREEN, TAB_COLORS
+from workflow.average_runner import AverageParams, AverageRunner
 from workflow.measure_manager import MeasureManager, MeasureParams
 from ui.tiff_preview import TiffPreview
 
@@ -349,6 +351,24 @@ def _detect_uniform_stripe_rects(tiff_path: Path, n_strips: int) -> list[QRect]:
 # Per-option chartread row helper
 # ---------------------------------------------------------------------------
 
+# Tooltip for the optional "also use pre-conditioning data" checkbox (shown only
+# when ChromIQ-style refinement is on and this run carries a preconditioning.ti3).
+_PRECOND_TOOLTIP = (
+    "Also Use Pre-conditioning Measurement Data",
+    "ChromIQ found saved measurement data from the pre-conditioning profile you\n"
+    "selected when creating this chart (the run's preconditioning.ti3).\n\n"
+    "Tick this to fold those earlier measurements into your profile. When you\n"
+    "build the profile, ChromIQ combines the patches you just measured with the\n"
+    "saved earlier ones and builds from the larger set — generally a more\n"
+    "accurate profile.\n\n"
+    "Your freshly measured file is not changed: the combining happens on a\n"
+    "separate copy only at build time. You can still re-measure individual\n"
+    "strips in Check && Refine exactly as usual.\n\n"
+    "This option only appears when ChromIQ-style refinement is enabled in\n"
+    "Settings and saved pre-conditioning data is present.",
+)
+
+
 @dataclass
 class _ChartreadOption:
     """One chartread option row with enable-checkbox and optional value widget."""
@@ -399,6 +419,7 @@ class TabMeasure(QWidget):
         self._runner   = runner
         self._settings = settings
         self._manager  = MeasureManager(runner, self)
+        self._avg_runner = AverageRunner(runner)
         self._ti1_path: Path | None = None
         self._tiff_pages: list[Path] = []
         # Per-page strip highlight rects and the authoritative per-page strip
@@ -408,10 +429,23 @@ class TabMeasure(QWidget):
         self._page_stripe_rects: list[list[QRect]] = []
         self._strips_per_page: list[int] = []
         self._chartread_opts: list[_ChartreadOption] = []
+        # ChromIQ-style refinement: this run's preconditioning.ti3, if any
+        # (the pre-conditioning profile's measurement data, seeded by
+        # Project.new_run when the user refined a prior run).
+        self._precond_ti3: Path | None = None
         # Auto bidir-detection: resolved -B value for the loaded .ti2 (False =
         # bidirectional allowed; the no-file / unknown-instrument fallback).
         self._detected_disable_bidir: bool = False
+        # Auto force-bidir (-b): resolved for the loaded .ti2 — True for the
+        # i1 Pro family, which reads strips either way (mutually exclusive with
+        # _detected_disable_bidir).
+        self._detected_force_bidir: bool = False
         self._detected_instrument: str | None = None
+        # Whether the loaded chart was laid out in randomised patch order.
+        # Forcing bidirectional reading (-b) on a non-randomised chart can make
+        # chartread misrecognise strips, so _on_start warns when both are true.
+        # Default True so we never warn until a real (non-random) chart is seen.
+        self._detected_randomized: bool = True
         # Text of the last "Chart instrument:" line logged, so a new chart can
         # replace it instead of letting the messages accumulate.
         self._instr_log_text: str | None = None
@@ -422,6 +456,15 @@ class TabMeasure(QWidget):
         self._resume_active: bool = False
         self._auto_proceed: bool = False
         self._all_done_shown: bool = False
+        # "Read again & average": True once the user opts to re-read the chart,
+        # so each subsequent successful read is moved into reads/readN.ti3.
+        self._averaging_active: bool = False
+        # When averaging is enabled, the "All Stripes Read" dialog records the
+        # user's choice here so _on_measure_done can act on it once chartread has
+        # finished writing the .ti3 (the file isn't final while chartread runs).
+        # None → no decision pending (fall back to the post-process dialog).
+        self._pending_avg_action: str | None = None
+        self._pending_avg_method: str = "mean"
         self._instrument_disconnected: bool = False
         self._device_busy: bool = False
         self._no_instrument: bool = False
@@ -796,44 +839,11 @@ class TabMeasure(QWidget):
             cg.addLayout(row)
             return cb, tip
 
-        # Bidirectional row: the -B checkbox with its own tooltip on the left,
-        # then an "Auto" toggle with its own tooltip on the right (Auto derives
-        # -B from the loaded chart's instrument via _refresh_bidir_autodetect
-        # and greys out the checkbox while on). A stretch between the two
-        # option/tooltip groups spreads them across the column width.
-        bidir_row = QHBoxLayout()
-        self._bidir_cb = QCheckBox("Disable bidirectional strip recognition (-B)", left)
-        self._bidir_cb.setChecked(True)
-        bidir_row.addWidget(self._bidir_cb)
-        bidir_row.addSpacing(18)
-        bidir_row.addWidget(TooltipButton(
-            "Bidirectional reading (-B)",
-            "Sets whether a strip can be read in both directions or only one.\n\n"
-            "Tick the box to force one-direction reading (-B); untick it to\n"
-            "allow scanning a strip either way. The i1 Pro (including i1 Pro 3)\n"
-            "can read both directions, while the ColorMunki reads one only.\n\n"
-            "While Auto is on this is decided for you and the box is locked —\n"
-            "turn Auto off to choose it yourself.",
-            left,
-        ))
-        bidir_row.addStretch()
-        self._bidir_auto_cb = QCheckBox("Auto", left)
-        self._bidir_auto_cb.setChecked(True)
-        self._bidir_auto_cb.toggled.connect(
-            lambda _checked: self._apply_bidir_auto_state("guided")
-        )
-        bidir_row.addWidget(self._bidir_auto_cb)
-        bidir_row.addSpacing(18)
-        bidir_row.addWidget(TooltipButton(
-            "Auto (recommended)",
-            "Sets the bidirectional option for you from the instrument saved\n"
-            "in your loaded chart: the i1 Pro (including i1 Pro 3) reads both\n"
-            "directions, the ColorMunki reads one direction only.\n\n"
-            "While Auto is on, the checkbox to the left is locked and shows\n"
-            "the chosen setting. Turn Auto off to set it yourself.",
-            left,
-        ))
-        cg.addLayout(bidir_row)
+        # Strip-recognition row: a single combo (Default / -B / -b) plus the
+        # "Auto" toggle. Auto derives the value from the loaded chart's
+        # instrument and greys out the combo while on. See _make_bidir_row.
+        self._make_bidir_row(left, cg, "guided")
+
         self._suppress_cb, _ = _bool_row(
             "Suppress warning messages (-S)", True,
             "Suppress Warnings (-S)",
@@ -913,6 +923,19 @@ class TabMeasure(QWidget):
         ))
         self._refine_row.setVisible(False)
         cg.addWidget(self._refine_row)
+
+        precond_row = QHBoxLayout()
+        self._use_precond_cb = QCheckBox(
+            "Also use measurement data from the pre-conditioning profile", left
+        )
+        self._use_precond_cb.setChecked(False)
+        self._use_precond_cb.setVisible(False)
+        precond_row.addWidget(self._use_precond_cb)
+        precond_row.addStretch()
+        self._precond_tip = TooltipButton(*_PRECOND_TOOLTIP, left)
+        self._precond_tip.setVisible(False)
+        precond_row.addWidget(self._precond_tip)
+        cg.addLayout(precond_row)
 
         self._resume_cb.stateChanged.connect(
             lambda state: self._refine_row.setVisible(
@@ -1089,43 +1112,9 @@ class TabMeasure(QWidget):
             mcg.addLayout(row)
             return cb
 
-        # Bidirectional row (mirrors guided): the -B checkbox with its own
-        # tooltip on the left, then an "Auto" toggle with its own tooltip on
-        # the right, a stretch between the two groups spreads them across the
-        # column width.
-        m_bidir_row = QHBoxLayout()
-        self._m_bidir_cb = QCheckBox("Disable bidirectional strip recognition (-B)", left)
-        self._m_bidir_cb.setChecked(False)
-        m_bidir_row.addWidget(self._m_bidir_cb)
-        m_bidir_row.addSpacing(18)
-        m_bidir_row.addWidget(TooltipButton(
-            "Bidirectional reading (-B)",
-            "Sets whether a strip can be read in both directions or only one.\n\n"
-            "Tick the box to force one-direction reading (-B); untick it to\n"
-            "allow scanning a strip either way. The i1 Pro (including i1 Pro 3)\n"
-            "can read both directions, while the ColorMunki reads one only.\n\n"
-            "While Auto is on this is decided for you and the box is locked —\n"
-            "turn Auto off to choose it yourself.",
-            left,
-        ))
-        m_bidir_row.addStretch()
-        self._m_bidir_auto_cb = QCheckBox("Auto", left)
-        self._m_bidir_auto_cb.setChecked(True)
-        self._m_bidir_auto_cb.toggled.connect(
-            lambda _checked: self._apply_bidir_auto_state("manual")
-        )
-        m_bidir_row.addWidget(self._m_bidir_auto_cb)
-        m_bidir_row.addSpacing(18)
-        m_bidir_row.addWidget(TooltipButton(
-            "Auto (recommended)",
-            "Sets the bidirectional option for you from the instrument saved\n"
-            "in your loaded chart: the i1 Pro (including i1 Pro 3) reads both\n"
-            "directions, the ColorMunki reads one direction only.\n\n"
-            "While Auto is on, the checkbox to the left is locked and shows\n"
-            "the chosen setting. Turn Auto off to set it yourself.",
-            left,
-        ))
-        mcg.addLayout(m_bidir_row)
+        # Strip-recognition row (mirrors guided): single combo + Auto toggle.
+        self._make_bidir_row(left, mcg, "manual")
+
         self._m_suppress_cb = _bool_row_m(
             "Suppress warning messages (-S)", True,
             "Suppress Warnings (-S)",
@@ -1201,6 +1190,19 @@ class TabMeasure(QWidget):
         self._m_refine_row.setVisible(False)
         mcg.addWidget(self._m_refine_row)
 
+        m_precond_row = QHBoxLayout()
+        self._m_use_precond_cb = QCheckBox(
+            "Also use measurement data from the pre-conditioning profile", left
+        )
+        self._m_use_precond_cb.setChecked(False)
+        self._m_use_precond_cb.setVisible(False)
+        m_precond_row.addWidget(self._m_use_precond_cb)
+        m_precond_row.addStretch()
+        self._m_precond_tip = TooltipButton(*_PRECOND_TOOLTIP, left)
+        self._m_precond_tip.setVisible(False)
+        m_precond_row.addWidget(self._m_precond_tip)
+        mcg.addLayout(m_precond_row)
+
         self._m_resume_cb.stateChanged.connect(
             lambda state: self._m_refine_row.setVisible(
                 state == Qt.CheckState.Checked.value
@@ -1267,7 +1269,7 @@ class TabMeasure(QWidget):
     def _m_collect_preset_data(self) -> dict:
         data: dict = {
             "instr":      self._m_instr_spin.value(),
-            "bidir":      self._m_bidir_cb.isChecked(),
+            "bidir_mode": self._m_bidir_combo.currentData(),
             "bidir_auto": self._m_bidir_auto_cb.isChecked(),
             "suppress":   self._m_suppress_cb.isChecked(),
             "nocal":      self._m_nocal_cb.isChecked(),
@@ -1288,7 +1290,8 @@ class TabMeasure(QWidget):
             self._m_instr_spin.setValue(int(data.get("instr", 1)))
         except (ValueError, TypeError):
             pass
-        self._m_bidir_cb.setChecked(bool(data.get("bidir", False)))
+        self._set_bidir_value(self._m_bidir_combo, self._coerce_bidir_mode(
+            data.get("bidir_mode"), bool(data.get("bidir")), bool(data.get("force_bidir"))))
         self._m_bidir_auto_cb.setChecked(bool(data.get("bidir_auto", True)))
         self._m_suppress_cb.setChecked(bool(data.get("suppress", True)))
         self._m_nocal_cb.setChecked(bool(data.get("nocal", False)))
@@ -1319,7 +1322,10 @@ class TabMeasure(QWidget):
                 self._m_instr_spin.setValue(int(s.get("manual2_chartread_instr", 1)))
             except (ValueError, TypeError):
                 pass
-            self._m_bidir_cb.setChecked(bool(s.get("manual2_chartread_bidir", False)))
+            self._set_bidir_value(self._m_bidir_combo, self._coerce_bidir_mode(
+                s.get("manual2_chartread_bidir_mode"),
+                bool(s.get("manual2_chartread_bidir", False)),
+                bool(s.get("manual2_chartread_force_bidir", False))))
             self._m_bidir_auto_cb.setChecked(bool(s.get("manual2_chartread_bidir_auto", True)))
             self._m_suppress_cb.setChecked(bool(s.get("manual2_chartread_suppress", True)))
             self._m_nocal_cb.setChecked(bool(s.get("manual2_chartread_nocal", False)))
@@ -1690,15 +1696,19 @@ class TabMeasure(QWidget):
         return self._ti1_path
 
     def set_ti1_path(self, path: Path) -> None:
+        if path != self._ti1_path:
+            self._averaging_active = False   # new chart → fresh averaging session
         self._ti1_path = path
         self._ti1_lbl.setText(str(path))
         self._start_btn.setEnabled(True)
         self._try_load_tiffs(path)
         self._update_resume_availability()
+        self._update_precond_availability()
         self._refresh_bidir_autodetect()
 
     def clear_chart_file(self) -> None:
         self._ti1_path = None
+        self._averaging_active = False
         self._ti1_lbl.setText("No file selected")
         self._ti1_lbl.setStyleSheet("color: #909090; font-size: 11px;")
         self._start_btn.setEnabled(False)
@@ -1722,14 +1732,19 @@ class TabMeasure(QWidget):
         (greyed) checkboxes so they show what will happen.
         """
         from ui.ti2_loader import (
-            disable_bidir_for_instrument, instrument_label, is_spectroscan, read_target_instrument,
+            disable_bidir_for_instrument, force_bidir_for_instrument,
+            instrument_label, is_randomized, is_spectroscan, read_target_instrument,
         )
 
         instr = None
+        randomized = True
         if self._ti1_path is not None and self._ti1_path.exists():
             instr = read_target_instrument(self._ti1_path)
+            randomized = is_randomized(self._ti1_path)
         self._detected_instrument    = instr
         self._detected_disable_bidir = disable_bidir_for_instrument(instr)
+        self._detected_force_bidir   = force_bidir_for_instrument(instr)
+        self._detected_randomized    = randomized
 
         if hasattr(self, "_log"):
             # Drop the previous instrument line so only the most recent
@@ -1742,9 +1757,14 @@ class TabMeasure(QWidget):
                     # bidirectional "reading direction" note does not apply.
                     msg = f"Chart instrument: {label}."
                 else:
-                    direction = ("one direction only (-B)" if self._detected_disable_bidir
-                                 else "both directions")
-                    msg = f"Chart instrument: {label} → reading {direction}."
+                    value = self._detected_bidir_value()
+                    if value == "disable":
+                        detail = "reading one direction only (-B)"
+                    elif value == "force":
+                        detail = "reading both directions (forced, -b)"
+                    else:
+                        detail = "using Argyll's default strip recognition"
+                    msg = f"Chart instrument: {label} → {detail}."
                 self._log.appendPlainText(msg)
                 self._instr_log_text = msg
 
@@ -1782,34 +1802,189 @@ class TabMeasure(QWidget):
             cursor.removeSelectedText()
         self._instr_log_text = None
 
-    def _apply_bidir_auto_state(self, mode: str) -> None:
-        """Grey out and sync a mode's -B checkbox according to its Auto toggle.
+    # Strip-recognition combo entries: (userData, label). The userData maps to
+    # a chartread flag — "default" = no flag, "disable" = -B, "force" = -b.
+    _BIDIR_ITEMS = (
+        ("default", "Argyll default"),
+        ("disable", "Bidirectional disabled (-B)"),
+        ("force",   "Bidirectional forced (-b)"),
+    )
 
-        While Auto is on the checkbox is disabled and mirrors the detected
-        value (so the locked box shows the effective setting); its own state
-        is ignored when the command is built (see _collect_*).
+    def _make_bidir_row(self, parent: QWidget, layout, mode: str) -> None:
+        """Build the 'Strip recognition' combo + Auto toggle for a mode.
+
+        The combo offers Default / -B / -b as one mutually-exclusive choice.
+        The Auto toggle (right) derives the value from the loaded chart's
+        instrument and greys out (but still shows) the combo while on.
         """
-        if mode == "guided":
-            auto_cb, bidir_cb = self._bidir_auto_cb, self._bidir_cb
+        row = QHBoxLayout()
+        row.addWidget(QLabel("Strip recognition:", parent))
+        combo = NoScrollComboBox(parent)
+        # Guided mode shows a full-size (non-compact) combo; Manual keeps the
+        # compact styling that matches its other dense option rows.
+        if mode == "manual":
+            combo.setObjectName("compact_input")
+            combo.setMinimumWidth(210)
         else:
-            auto_cb, bidir_cb = self._m_bidir_auto_cb, self._m_bidir_cb
+            combo.setMinimumWidth(240)
+        for data, label in self._BIDIR_ITEMS:
+            combo.addItem(label, data)
+        row.addWidget(combo)
+        row.addSpacing(12)
+        row.addWidget(TooltipButton(
+            "Strip recognition",
+            "When you measure a chart you slide the instrument along each row\n"
+            "of colour patches — that row is called a \"strip\". You can slide\n"
+            "it either way: left-to-right or right-to-left. This setting tells\n"
+            "the measuring tool which sliding directions to accept.\n\n"
+            "Why it matters: if the tool expects one direction but you slide\n"
+            "the other way, it can't tell which patch is which, so it rejects\n"
+            "the read and makes you scan the strip again. The right setting\n"
+            "here lets a strip be accepted however you happen to slide it.\n\n"
+            "The three choices:\n\n"
+            "  • Argyll default\n"
+            "      Don't force anything — hand the decision to ArgyllCMS's own\n"
+            "      built-in rule. That rule looks only at how the chart was\n"
+            "      printed: if the patches are in a shuffled (randomised) order\n"
+            "      it accepts both directions, and if they are in plain order it\n"
+            "      accepts one direction only. This is a fixed rule inside the\n"
+            "      tool — it is NOT the same as ChromIQ's \"Auto\" (see the note\n"
+            "      at the end).\n\n"
+            "  • Bidirectional disabled\n"
+            "      Always accept one direction only. Choose this if your\n"
+            "      instrument can read one way only — the ColorMunki (and the\n"
+            "      i1Studio / ColorChecker Studio, which are the same hardware)\n"
+            "      work like this. It also helps if you keep getting false\n"
+            "      \"wrong direction\" errors.\n\n"
+            "  • Bidirectional forced\n"
+            "      Always accept a strip slid either way, even on a plain-order\n"
+            "      chart. Choose this for the i1 Pro family (i1 Pro / Pro 2 /\n"
+            "      Pro 3), which reads both directions happily. It saves you\n"
+            "      having to slide every strip the same way, and rescues charts\n"
+            "      the tool would otherwise only read in one direction.\n\n"
+            "\"Auto\" is not the same as \"Argyll default\":\n"
+            "  • \"Argyll default\" is one of the three fixed choices above. It\n"
+            "      simply forwards your chart to ArgyllCMS and lets the tool's\n"
+            "      built-in rule decide.\n"
+            "  • \"Auto\" (the switch next to this menu) is ChromIQ's helper. It\n"
+            "      reads the instrument saved in your chart and picks whichever\n"
+            "      of the three choices suits it — \"Bidirectional forced\" for an\n"
+            "      i1 Pro, \"Argyll default\" for a ColorMunki and most others.\n"
+            "      While Auto is on, the menu is locked and shows the choice it\n"
+            "      made.\n\n"
+            "Leave Auto on unless you specifically want to choose by hand.",
+            parent,
+            min_width=560,
+        ))
+        row.addStretch()
+        auto_cb = QCheckBox("Auto", parent)
+        auto_cb.setChecked(True)
+        auto_cb.toggled.connect(lambda _checked, m=mode: self._apply_bidir_auto_state(m))
+        row.addWidget(auto_cb)
+        row.addSpacing(18)
+        row.addWidget(TooltipButton(
+            "Auto (recommended)",
+            "Lets ChromIQ choose the \"Strip recognition\" option for you, based\n"
+            "on the measuring instrument saved in the chart you loaded:\n\n"
+            "  • i1 Pro / i1 Pro 2 / i1 Pro 3 — reads strips in both\n"
+            "      directions, so Auto chooses \"Bidirectional forced\".\n"
+            "  • ColorMunki / i1Studio / ColorChecker Studio — Argyll's\n"
+            "      default already reads these correctly, so Auto chooses\n"
+            "      \"Argyll default\".\n"
+            "  • Any other or unknown instrument — uses \"Argyll default\".\n\n"
+            "While Auto is on, the menu on the left is locked and simply shows\n"
+            "the option Auto has chosen, so you can always see what will be\n"
+            "used. Switch Auto off to pick the option yourself.\n\n"
+            "Auto is the recommended setting — most people never need to\n"
+            "change it.",
+            parent,
+            min_width=520,
+        ))
+        layout.addLayout(row)
+        if mode == "guided":
+            self._bidir_combo, self._bidir_auto_cb = combo, auto_cb
+        else:
+            self._m_bidir_combo, self._m_bidir_auto_cb = combo, auto_cb
+
+    def _bidir_widgets(self, mode: str):
+        """(auto checkbox, strip-recognition combo) for the given mode."""
+        if mode == "guided":
+            return self._bidir_auto_cb, self._bidir_combo
+        return self._m_bidir_auto_cb, self._m_bidir_combo
+
+    @staticmethod
+    def _coerce_bidir_mode(mode, legacy_disable: bool, legacy_force: bool,
+                           fallback: str = "default") -> str:
+        """Resolve a stored strip-recognition value, migrating the old scheme.
+
+        Pre-combo presets/settings stored two booleans (disable -B / force -b);
+        this maps them to the new combo value. `fallback` is used when neither
+        the new key nor a legacy flag is present.
+        """
+        if mode in ("default", "disable", "force"):
+            return mode
+        if legacy_disable:
+            return "disable"
+        if legacy_force:
+            return "force"
+        return fallback
+
+    def _detected_bidir_value(self) -> str:
+        """The combo value the Auto toggle resolves for the loaded chart."""
+        if self._detected_disable_bidir:
+            return "disable"
+        if self._detected_force_bidir:
+            return "force"
+        return "default"
+
+    def _set_bidir_value(self, combo: "QComboBox", value: str) -> None:
+        """Select the combo entry for a strip-recognition value, without firing
+        signals (falls back to the first entry if the value is unknown)."""
+        idx = combo.findData(value)
+        combo.blockSignals(True)
+        combo.setCurrentIndex(idx if idx >= 0 else 0)
+        combo.blockSignals(False)
+
+    def _apply_bidir_auto_state(self, mode: str) -> None:
+        """Grey out and sync a mode's strip-recognition combo per its Auto toggle.
+
+        While Auto is on the combo is disabled and shows the detected value
+        (so the locked menu reflects the effective setting); its own selection
+        is ignored when the command is built (see _resolve_bidir_value).
+        """
+        auto_cb, combo = self._bidir_widgets(mode)
         auto_on = auto_cb.isChecked()
-        bidir_cb.setEnabled(not auto_on)
+        combo.setEnabled(not auto_on)
         if auto_on:
-            bidir_cb.blockSignals(True)
-            bidir_cb.setChecked(self._detected_disable_bidir)
-            bidir_cb.blockSignals(False)
+            self._set_bidir_value(combo, self._detected_bidir_value())
+
+    def _resolve_bidir_value(self, mode: str) -> str:
+        """The strip-recognition value to apply: auto-detected when Auto is on,
+        else the user's combo selection (its saved preset/default)."""
+        auto_cb, combo = self._bidir_widgets(mode)
+        if auto_cb.isChecked():
+            return self._detected_bidir_value()
+        return combo.currentData() or "default"
 
     def _resolve_disable_bidir(self, mode: str) -> bool:
-        """The -B value to pass to chartread: auto-detected when Auto is on,
-        else the user's checkbox (its saved preset/default)."""
-        if mode == "guided":
-            auto_cb, bidir_cb = self._bidir_auto_cb, self._bidir_cb
-        else:
-            auto_cb, bidir_cb = self._m_bidir_auto_cb, self._m_bidir_cb
-        if auto_cb.isChecked():
-            return self._detected_disable_bidir
-        return bidir_cb.isChecked()
+        return self._resolve_bidir_value(mode) == "disable"
+
+    def _resolve_force_bidir(self, mode: str) -> bool:
+        return self._resolve_bidir_value(mode) == "force"
+
+    def _effective_bidirectional(self, params: "MeasureParams") -> bool:
+        """Whether the read will *effectively* be bidirectional.
+
+        Drives the preview's double (bottom) strip arrow so it mirrors what
+        chartread actually does:
+          • "force" (-b)   → always bidirectional, any chart
+          • "disable" (-B) → never bidirectional
+          • Argyll default → bidirectional only on a randomised chart (chartread
+            reads both directions there, one direction on a fixed-order chart)
+        """
+        return params.force_bidir or (
+            not params.disable_bidir and self._detected_randomized
+        )
 
     # ------------------------------------------------------------------
     # Internal
@@ -1871,6 +2046,43 @@ class TabMeasure(QWidget):
                 rcb.setEnabled(False)
                 rcb.setChecked(False)
         self._refresh_start_button_label()
+
+    def _update_precond_availability(self) -> None:
+        """Show the 'also use pre-conditioning data' option when ChromIQ-style
+        refinement is enabled and this run carries a preconditioning.ti3 seed."""
+        found: Path | None = None
+        if (
+            self._ti1_path is not None
+            and bool(self._settings.get("chromiq_refinement", False))
+        ):
+            run = Run.for_dir(self._ti1_path.parent)
+            if run.preconditioning_ti3.exists():
+                found = run.preconditioning_ti3
+        self._precond_ti3 = found
+        visible = found is not None
+        for cb, tip in [
+            (self._use_precond_cb, self._precond_tip),
+            (self._m_use_precond_cb, self._m_precond_tip),
+        ]:
+            cb.setVisible(visible)
+            tip.setVisible(visible)
+            if not visible:
+                cb.setChecked(False)
+
+    def preconditioning_choice(self) -> Path | None:
+        """The preconditioning.ti3 the user opted into merging, or None.
+
+        Returns the discovered file only when its checkbox is visible AND ticked
+        in the active mode — the main window forwards this to Build Profile.
+        """
+        if self._precond_ti3 is None:
+            return None
+        cb = self._use_precond_cb if self._current_mode() == "guided" else self._m_use_precond_cb
+        # isHidden() reflects the explicit show/hide state set in
+        # _update_precond_availability, independent of which tab is front-most.
+        if not cb.isHidden() and cb.isChecked():
+            return self._precond_ti3
+        return None
 
     def _refresh_start_button_label(self) -> None:
         """Show 'Continue Measurement' on the Start button when the resume
@@ -1972,7 +2184,9 @@ class TabMeasure(QWidget):
             return
 
         params = self._collect_params()
-        self._preview.set_bidirectional(not params.disable_bidir)
+        if not self._confirm_nonrandom_bidir(params):
+            return
+        self._preview.set_bidirectional(self._effective_bidirectional(params))
         self._log.clear()
         self._auto_proceed = False
         self._all_done_shown = False
@@ -1987,10 +2201,15 @@ class TabMeasure(QWidget):
             subprocess.run(
                 ["taskkill", "/F", "/IM", "chartread.exe"],
                 capture_output=True,
+                stdin=subprocess.DEVNULL,
                 creationflags=subprocess.CREATE_NO_WINDOW,
             )
         else:
-            subprocess.run(["killall", "-q", "chartread"], capture_output=True)
+            subprocess.run(
+                ["killall", "-q", "chartread"],
+                capture_output=True,
+                stdin=subprocess.DEVNULL,
+            )
         self._set_settings_enabled(False)
         self._start_btn.setEnabled(False)
         self._stop_btn.setEnabled(True)
@@ -2018,6 +2237,79 @@ class TabMeasure(QWidget):
             on_finish=self._on_measure_done,
         )
         self.measurement_active.emit(True)
+
+    def _confirm_nonrandom_bidir(self, params: "MeasureParams") -> bool:
+        """Warn before forcing bidirectional reading on a non-randomised chart.
+
+        Forcing ``-b`` lets a strip be read in either direction, but chartread
+        relies on randomised patch order to tell strips (and reading direction)
+        apart. On a fixed-order chart that recognition can silently latch onto
+        the wrong strip, producing a measurement that builds a colour-cast
+        profile with no obvious error.
+
+        Returns True if measurement should proceed (chart is randomised, the
+        option isn't forcing ``-b``, the warning is suppressed, or the user
+        chose to continue), False if the user cancelled.
+        """
+        if not params.force_bidir or self._detected_randomized:
+            return True
+        if bool(self._settings.get("measure_hide_nonrandom_bidir_warning", False)):
+            return True
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Bidirectional reading on a fixed-order chart")
+        dlg.setMinimumWidth(560)
+        lay = QVBoxLayout(dlg)
+        lay.setContentsMargins(24, 20, 24, 16)
+        lay.setSpacing(12)
+
+        heading = QLabel(
+            "This chart is laid out in a fixed (non-randomised) patch order, "
+            "and strip recognition is set to <b>Bidirectional forced (-b)</b>.",
+            dlg,
+        )
+        heading.setWordWrap(True)
+        heading.setStyleSheet("font-weight: 600;")
+        lay.addWidget(heading)
+
+        body = QLabel(
+            "Forcing bidirectional reading lets you scan each strip in either "
+            "direction. To do that reliably, chartread depends on the patches "
+            "being printed in a shuffled (randomised) order — that is what gives "
+            "every strip a unique colour signature.<br><br>"
+            "On a fixed-order chart the strips can look alike, so chartread may "
+            "lock onto the <i>wrong</i> strip or the wrong direction. That "
+            "usually produces no error message — just a measurement file that "
+            "builds a profile with colour casts.<br><br>"
+            "<b>What to do:</b><br>"
+            "• Safest: set Strip recognition to <b>Argyll default</b> (turn "
+            "<i>Auto</i> off and pick it), then scan every strip the same way.<br>"
+            "• Or regenerate this chart with randomisation enabled, then measure "
+            "that copy.<br>"
+            "• If you know this chart's patch order is already well mixed, it is "
+            "safe to continue.",
+            dlg,
+        )
+        body.setWordWrap(True)
+        lay.addWidget(body)
+
+        hide_cb = QCheckBox("Don't show this again", dlg)
+        lay.addWidget(hide_cb)
+
+        bb = QDialogButtonBox(dlg)
+        continue_btn = bb.addButton("Continue anyway", QDialogButtonBox.ButtonRole.AcceptRole)
+        cancel_btn = bb.addButton("Cancel", QDialogButtonBox.ButtonRole.RejectRole)
+        cancel_btn.setDefault(True)
+        continue_btn.clicked.connect(dlg.accept)
+        cancel_btn.clicked.connect(dlg.reject)
+        lay.addWidget(bb)
+
+        proceed = dlg.exec() == QDialog.DialogCode.Accepted
+        # Honour "don't show again" whichever button was used, so a user who
+        # cancels to fix the chart isn't nagged on every subsequent attempt.
+        if hide_cb.isChecked():
+            self._settings.set("measure_hide_nonrandom_bidir_warning", True)
+        return proceed
 
     def _on_stop(self) -> None:
         self._key_watchdog.stop()
@@ -2906,9 +3198,11 @@ class TabMeasure(QWidget):
         from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QVBoxLayout
 
         _ti3_path = self._ti1_path.with_suffix(".ti3") if self._ti1_path else None
+        # A calibration measurement lives in the project's cal/ folder
+        # (cal/calibration.ti3) rather than carrying a cal_ filename prefix.
         is_cal = (
             _ti3_path is not None
-            and _ti3_path.stem.startswith("cal_")
+            and _ti3_path.parent.name == "cal"
             and bool(self._settings.get("calibration_mode", False))
         )
 
@@ -2916,6 +3210,17 @@ class TabMeasure(QWidget):
         # interactions with the dialog (Enter, Space, Esc) are not forwarded
         # to chartread as spurious keystrokes.
         QApplication.instance().removeEventFilter(self)
+
+        # Measurement averaging (docs/dev_averaging.md): for a normal read (not a
+        # calibration or guided-refinement re-read) fold the averaging choice into
+        # this dialog so there is no redundant second popup afterwards.
+        if (
+            self._settings.get("averaging_enabled", False)
+            and not is_cal
+            and not self._guided_refinement_active
+        ):
+            self._show_all_stripes_averaging_dialog()
+            return
 
         dlg = QDialog(self)
         dlg.setMinimumWidth(560)
@@ -2975,18 +3280,30 @@ class TabMeasure(QWidget):
         msg.setWordWrap(True)
         layout.addWidget(msg)
 
-        btn_box = QDialogButtonBox()
+        # Manual button row so Re-read / Continue sits on the left and the
+        # primary "Build Profile / Create Calibration File" sits on the right —
+        # QDialogButtonBox auto-orders by platform (Accept-left on Windows),
+        # which doesn't match the averaging-on dialog's layout.
+        from PyQt6.QtWidgets import QHBoxLayout, QPushButton
+
         if is_cal and not self._guided_refinement_active:
             accept_label = "Create Calibration File →"
         else:
             accept_label = "Build Profile →"
-        build_btn = btn_box.addButton(accept_label, QDialogButtonBox.ButtonRole.AcceptRole)
-        build_btn.setObjectName("primary")
         cont_label = "Continue Measuring Manually" if self._guided_refinement_active else "Re-read Stripes"
-        btn_box.addButton(cont_label, QDialogButtonBox.ButtonRole.RejectRole)
-        btn_box.accepted.connect(dlg.accept)
-        btn_box.rejected.connect(dlg.reject)
-        layout.addWidget(btn_box)
+
+        btn_row = QHBoxLayout()
+        btn_row.addStretch(1)
+        cont_btn = QPushButton(cont_label, dlg)
+        cont_btn.clicked.connect(dlg.reject)
+        build_btn = QPushButton(accept_label, dlg)
+        build_btn.setObjectName("primary")
+        build_btn.setDefault(True)
+        build_btn.setAutoDefault(True)
+        build_btn.clicked.connect(dlg.accept)
+        btn_row.addWidget(cont_btn)
+        btn_row.addWidget(build_btn)
+        layout.addLayout(btn_row)
 
         tint_dialog_primary(dlg, _TAB_COLOR)
         if dlg.exec() == QDialog.DialogCode.Accepted:
@@ -3000,6 +3317,145 @@ class TabMeasure(QWidget):
                 self._guided_refinement_active = False
                 self._manager.set_guided_strips([])
             QApplication.instance().installEventFilter(self)
+
+    def _show_all_stripes_averaging_dialog(self) -> None:
+        """The 'All Stripes Read' dialog when measurement averaging is on.
+
+        First read of a chart → Re-read Stripes / Measure again to average /
+        Build Profile. Mid-set (≥1 read already saved) → Use last read only /
+        Measure again to average / Average all reads & build. The chosen action is
+        stored in ``_pending_avg_action`` so :meth:`_on_measure_done` can act on it
+        once chartread has written the final .ti3 (it isn't final while chartread
+        is still running). 'Re-read Stripes' instead keeps chartread running for
+        manual single-strip re-reads, exactly like the classic dialog.
+        """
+        from PyQt6.QtWidgets import (
+            QDialog, QHBoxLayout, QLabel, QPushButton, QVBoxLayout,
+        )
+
+        prior = (
+            Run.for_dir(self._ti1_path.parent).reads()
+            if self._ti1_path is not None else []
+        )
+        in_set  = self._averaging_active and len(prior) >= 1
+        n_total = len(prior) + 1   # prior saved reads + this just-finished one
+
+        dlg = QDialog(self)
+        dlg.setMinimumWidth(560)
+        dlg.setWindowTitle("All Stripes Read")
+        layout = QVBoxLayout(dlg)
+        layout.setSpacing(16)
+        layout.setContentsMargins(24, 20, 24, 20)
+
+        if in_set:
+            body = (
+                f"<b>All stripes read — {n_total} reads of this chart are now saved.</b>"
+                "<br><br>"
+                "Combining repeated reads of the same chart averages out instrument "
+                "noise and can improve profile accuracy.<br><br>"
+                "&nbsp;&nbsp;•&nbsp; <b>Average all reads &amp; build</b> — combine all "
+                f"{n_total} reads into one measurement, then continue to Build Profile.<br>"
+                "&nbsp;&nbsp;•&nbsp; <b>Measure again to average</b> — read the whole "
+                "chart once more and add it to the set.<br>"
+                "&nbsp;&nbsp;•&nbsp; <b>Use last read only</b> — build from this most "
+                "recent read and ignore the others.<br><br>"
+                "<span style='color:#909090;'>After <b>Measure again to average</b> the "
+                "instrument is set up again — this can take a few seconds and may ask you "
+                "to recalibrate before the next read starts, so a brief pause here is "
+                "normal.</span>"
+            )
+        else:
+            body = (
+                "<b>All stripes have been read successfully.</b><br><br>"
+                "&nbsp;&nbsp;•&nbsp; <b>Build Profile</b> — finalise the measurement and "
+                "go to the Build Profile tab.<br>"
+                "&nbsp;&nbsp;•&nbsp; <b>Measure again to average</b> — read the whole chart "
+                "once more; the reads are averaged together to reduce instrument noise "
+                "(saved as …_average).<br>"
+                "&nbsp;&nbsp;•&nbsp; <b>Re-read Stripes</b> — re-scan individual strips into "
+                "this same measurement. Use <b>f</b>&nbsp;/&nbsp;<b>b</b> to move, "
+                "<b>n</b> for the next unread stripe, and <b>d</b> when done.<br><br>"
+                "<span style='color:#909090;'>After <b>Measure again to average</b> the "
+                "instrument is set up again — this can take a few seconds and may ask you "
+                "to recalibrate before the next read starts, so a brief pause here is "
+                "normal.</span>"
+            )
+        msg = QLabel(body, dlg)
+        msg.setWordWrap(True)
+        layout.addWidget(msg)
+
+        method_combo = None
+        if in_set:
+            method_row = QHBoxLayout()
+            # NoScrollComboBox so the body picks up the per-theme white input
+            # background in light mode (plain QComboBox keeps the surface color
+            # — see _input_bg_qss in ui/widgets.py) and the wheel doesn't change
+            # the selection on accidental page-scroll.
+            method_combo = NoScrollComboBox(dlg)
+            method_combo.addItem("Mean (recommended)", "mean")
+            method_combo.addItem("Median — needs 3+ reads", "median")
+            saved = self._settings.get("average_method", "mean")
+            method_combo.setCurrentIndex(max(0, method_combo.findData(saved)))
+            method_combo.setToolTip(
+                "Mean averages every read. Median rejects a single outlier read, "
+                "but only differs from the mean with three or more reads."
+            )
+            method_row.addWidget(QLabel("Combine method:", dlg))
+            method_row.addWidget(method_combo, 1)
+            layout.addLayout(method_row)
+
+        choice = {"action": "average" if in_set else "build"}
+
+        def _pick(action: str) -> None:
+            choice["action"] = action
+            dlg.accept()
+
+        btn_row = QHBoxLayout()
+        btn_row.addStretch(1)
+        if in_set:
+            last_btn = QPushButton("Use last read only", dlg)
+            last_btn.clicked.connect(lambda: _pick("use_last"))
+            again_btn = QPushButton("Measure again to average", dlg)
+            again_btn.clicked.connect(lambda: _pick("again"))
+            avg_btn = QPushButton("Average all reads & build →", dlg)
+            avg_btn.setObjectName("primary")
+            avg_btn.clicked.connect(lambda: _pick("average"))
+            for b in (last_btn, again_btn, avg_btn):
+                btn_row.addWidget(b)
+        else:
+            reread_btn = QPushButton("Re-read Stripes", dlg)
+            reread_btn.clicked.connect(lambda: _pick("reread"))
+            again_btn = QPushButton("Measure again to average", dlg)
+            again_btn.clicked.connect(lambda: _pick("again"))
+            build_btn = QPushButton("Build Profile →", dlg)
+            build_btn.setObjectName("primary")
+            build_btn.clicked.connect(lambda: _pick("build"))
+            for b in (reread_btn, again_btn, build_btn):
+                btn_row.addWidget(b)
+        layout.addLayout(btn_row)
+
+        tint_dialog_primary(dlg, _TAB_COLOR)
+        dlg.exec()
+
+        action = choice["action"]
+        method = "mean"
+        if method_combo is not None:
+            method = method_combo.currentData() or "mean"
+            self._settings.set("average_method", method)
+
+        if action == "reread":
+            # Keep chartread running for manual single-strip re-reads, exactly like
+            # the classic "Re-read Stripes" path; the event filter must go back on.
+            QApplication.instance().installEventFilter(self)
+            return
+
+        # build / again / average / use_last: finish this read. _on_measure_done
+        # promotes the file and acts on the decision once the .ti3 is written.
+        self._pending_avg_action = action
+        self._pending_avg_method = method
+        self._manager.send_key("d")
+        self._arm_key_watchdog()
+        # Event filter stays off — chartread will finish momentarily.
 
     def _on_measure_done(self, code: int) -> None:
         self._preview.highlight_stripe(-1)
@@ -3261,7 +3717,7 @@ class TabMeasure(QWidget):
 
         is_cal = (
             ti3 is not None
-            and ti3.stem.startswith("cal_")
+            and ti3.parent.name == "cal"
             and bool(self._settings.get("calibration_mode", False))
         )
         if failed:
@@ -3284,7 +3740,8 @@ class TabMeasure(QWidget):
                 "or untick 'Refine / resume existing measurement (-r)' to start over."
             )
             self.measure_finished.emit(ti3)
-        elif ti3_exists:
+        elif ti3_exists and (is_cal or self._guided_refinement_active):
+            # Calibration and guided-refinement reads keep their dedicated flow.
             if is_cal:
                 next_step = "→ Next step: go to the '4. Calibration & Profiling' tab to create your calibration file."
             else:
@@ -3293,6 +3750,32 @@ class TabMeasure(QWidget):
                 "\n[OK] Measurement complete.\n"
                 f"Saved: {ti3}\n\n"
                 + next_step
+            )
+            self.measure_finished.emit(ti3)
+            if self._auto_proceed:
+                self.proceed_to_profile.emit()
+        elif ti3_exists and self._settings.get("averaging_enabled", False):
+            # Normal full read, averaging enabled (docs/dev_averaging.md). The
+            # "All Stripes Read" dialog already captured the user's choice in
+            # _pending_avg_action; act on it now that chartread has written the
+            # final .ti3. If nothing was captured (the all-rows-read dialog never
+            # fired — e.g. detection miss), fall back to the post-process dialog.
+            if self._pending_avg_action is not None:
+                action = self._pending_avg_action
+                method = self._pending_avg_method
+                self._pending_avg_action = None
+                current, reads = self._promote_completed_read(ti3)
+                self._apply_completion_action(ti3, current, reads, action, method)
+            else:
+                self._handle_measure_complete(ti3)
+        elif ti3_exists:
+            # Normal full read, averaging off → classic behaviour: log the result
+            # and proceed straight to Build Profile (mirrors the cal/refinement
+            # branch above, minus the dedicated next-step wording).
+            self._log.appendPlainText(
+                "\n[OK] Measurement complete.\n"
+                f"Saved: {ti3}\n\n"
+                "→ Next step: go to the '4. Build Profile' tab to create your ICC profile."
             )
             self.measure_finished.emit(ti3)
             if self._auto_proceed:
@@ -3307,6 +3790,240 @@ class TabMeasure(QWidget):
             )
         self._auto_proceed = False
         self._log.ensureCursorVisible()
+
+    # ------------------------------------------------------------------
+    # Read again & average  (docs/dev_averaging.md)
+    # ------------------------------------------------------------------
+
+    def _handle_measure_complete(self, ti3: Path) -> None:
+        """A normal full read finished without a pre-made choice (Manual mode, or
+        the 'All Stripes Read' dialog never fired). Promote the read, then ask via
+        the post-process completion dialog and carry out the answer."""
+        current, reads = self._promote_completed_read(ti3)
+        action, method = self._show_completion_dialog(current, reads)
+        self._apply_completion_action(ti3, current, reads, action, method)
+
+    def _promote_completed_read(self, ti3: Path) -> tuple[Path, list[Path]]:
+        """If an averaging set is active, move this read into the run's
+        ``reads/readN.ti3`` slot and return (saved_path, all_reads). Otherwise
+        leave the file in place and return (ti3, [])."""
+        run = Run.for_dir(ti3.parent)   # ti3 == runs/<id>/chart.ti3
+        if self._averaging_active:
+            # Save this fresh read as the next read in the current set.
+            try:
+                current = run.promote_measurement_to_read()
+            except (OSError, FileNotFoundError) as exc:
+                log.warning("Could not save read variant: %s", exc)
+                current = ti3
+            self._log.appendPlainText(f"\n[OK] Read saved: reads/{current.name}")
+            reads = run.reads()
+        else:
+            # A standalone read. Ignore any reads/ left over from an earlier
+            # session — opting into averaging below starts a clean set.
+            current = ti3
+            reads = []
+            self._log.appendPlainText(f"\n[OK] Measurement complete.\nSaved: {current}")
+        return current, reads
+
+    def _apply_completion_action(
+        self, ti3: Path, current: Path, reads: list[Path], action: str, method: str
+    ) -> None:
+        """Carry out the chosen averaging action.
+
+        ``action`` ∈ {again, average, use_last, continue, build}; the latter three
+        all mean "stop and build from ``current``".
+        """
+        if action == "again":
+            if not self._averaging_active:
+                # Begin a fresh averaging set: discard any stale reads/, then
+                # move this first read into reads/read1.ti3 so the next read
+                # lands beside it as reads/read2.ti3.
+                run = Run.for_dir(ti3.parent)
+                run.clear_reads()
+                try:
+                    first = run.promote_measurement_to_read()
+                    self._log.appendPlainText(f"[INFO] First read saved as reads/{first.name}")
+                except (OSError, FileNotFoundError) as exc:
+                    log.warning("Could not save first read variant: %s", exc)
+                self._averaging_active = True
+            QTimer.singleShot(0, self._start_averaging_read)
+            return
+
+        self._averaging_active = False
+        if action == "average" and len(reads) >= 2:
+            self._run_average_and_proceed(ti3, reads, method)
+            return
+
+        # "continue" / "build" (single read) or "use_last" (last read of a set).
+        self.measure_finished.emit(current)
+        self.proceed_to_profile.emit()
+
+
+    def _show_completion_dialog(
+        self, current: Path, reads: list[Path]
+    ) -> tuple[str, str]:
+        """Return (action, method). action ∈ {continue, again, use_last, average}."""
+        from PyQt6.QtWidgets import (
+            QDialog, QHBoxLayout, QLabel, QPushButton, QVBoxLayout,
+        )
+        n_reads = len(reads)
+
+        QApplication.instance().removeEventFilter(self)
+
+        dlg = QDialog(self)
+        dlg.setMinimumWidth(580)
+        dlg.setWindowTitle("Measurement Complete")
+        layout = QVBoxLayout(dlg)
+        layout.setSpacing(16)
+        layout.setContentsMargins(24, 20, 24, 20)
+
+        if n_reads >= 2:
+            body = (
+                f"<b>Measurement complete — {n_reads} reads of this chart are saved.</b>"
+                "<br><br>"
+                "Combining repeated reads of the same chart averages out instrument "
+                "noise and can improve profile accuracy.<br><br>"
+                "&nbsp;&nbsp;•&nbsp; <b>Average all reads &amp; build</b> — combine all "
+                f"{n_reads} reads into one measurement, then continue to Build Profile.<br>"
+                "&nbsp;&nbsp;•&nbsp; <b>Use last read only</b> — build from the most "
+                "recent read and ignore the others.<br>"
+                "&nbsp;&nbsp;•&nbsp; <b>Measure again</b> — read the chart once more and "
+                "add it to the set."
+            )
+        else:
+            body = (
+                "<b>Measurement complete — your readings have been saved.</b><br><br>"
+                "Reading the same chart a second time and averaging the two results "
+                "reduces instrument noise and can improve profile accuracy.<br><br>"
+                "&nbsp;&nbsp;•&nbsp; <b>Continue to Build Profile</b> — use this single "
+                "measurement as it is.<br>"
+                "&nbsp;&nbsp;•&nbsp; <b>Measure again to average</b> — read the same "
+                "chart once more; the results will be averaged together."
+            )
+        msg = QLabel(body, dlg)
+        msg.setWordWrap(True)
+        layout.addWidget(msg)
+
+        method_combo = None
+        if n_reads >= 2:
+            method_row = QHBoxLayout()
+            # NoScrollComboBox: per-widget input-bg QSS (white in light mode) +
+            # wheel-scroll guard. See _input_bg_qss in ui/widgets.py.
+            method_combo = NoScrollComboBox(dlg)
+            method_combo.addItem("Mean (recommended)", "mean")
+            method_combo.addItem("Median — needs 3+ reads", "median")
+            saved = self._settings.get("average_method", "mean")
+            method_combo.setCurrentIndex(max(0, method_combo.findData(saved)))
+            method_combo.setToolTip(
+                "Mean averages every read. Median rejects a single outlier read, "
+                "but only differs from the mean with three or more reads."
+            )
+            method_row.addWidget(QLabel("Combine method:", dlg))
+            method_row.addWidget(method_combo, 1)
+            layout.addLayout(method_row)
+
+        choice = {"action": "use_last" if n_reads >= 2 else "continue"}
+
+        def _pick(action: str) -> None:
+            choice["action"] = action
+            dlg.accept()
+
+        btn_row = QHBoxLayout()
+        btn_row.addStretch(1)
+        if n_reads >= 2:
+            again_btn = QPushButton("Measure again", dlg)
+            again_btn.clicked.connect(lambda: _pick("again"))
+            last_btn = QPushButton("Use last read only", dlg)
+            last_btn.clicked.connect(lambda: _pick("use_last"))
+            avg_btn = QPushButton("Average all reads & build →", dlg)
+            avg_btn.setObjectName("primary")
+            avg_btn.clicked.connect(lambda: _pick("average"))
+            for b in (again_btn, last_btn, avg_btn):
+                btn_row.addWidget(b)
+        else:
+            again_btn = QPushButton("Measure again to average", dlg)
+            again_btn.clicked.connect(lambda: _pick("again"))
+            cont_btn = QPushButton("Continue to Build Profile →", dlg)
+            cont_btn.setObjectName("primary")
+            cont_btn.clicked.connect(lambda: _pick("continue"))
+            for b in (again_btn, cont_btn):
+                btn_row.addWidget(b)
+        layout.addLayout(btn_row)
+
+        tint_dialog_primary(dlg, _TAB_COLOR)
+        dlg.exec()
+
+        method = "mean"
+        if method_combo is not None:
+            method = method_combo.currentData() or "mean"
+            self._settings.set("average_method", method)
+        return choice["action"], method
+
+    def _start_averaging_read(self) -> None:
+        """Re-run a fresh, full read of the same chart for the averaging set."""
+        if self._ti1_path is None:
+            return
+        if self._runner.is_running:
+            QTimer.singleShot(200, self._start_averaging_read)
+            return
+        # Force a clean full read — never resume/refine the previous pass.
+        cb = self._resume_cb if self._current_mode() == "guided" else self._m_resume_cb
+        if cb.isChecked():
+            cb.setChecked(False)
+        self._on_start()
+
+    def _run_average_and_proceed(
+        self, base: Path, reads: list[Path], method: str
+    ) -> None:
+        # The averaged result IS the canonical measurement (chart.ti3); the
+        # per-read snapshots stay in reads/ for diagnostics.
+        out = Run.for_dir(base.parent).measurement_ti3
+        self._log.appendPlainText(
+            f"\n[INFO] Averaging {len(reads)} reads → {out.name} …"
+        )
+
+        def _on_avg_finish(result: Path | None) -> None:
+            if result is None:
+                fail = self._avg_runner.primary_failure()
+                detail = fail[1] if fail else "see the output log above."
+                self._log.appendPlainText(f"[ERROR] Averaging failed — {detail}")
+                self._show_average_failed_dialog(detail)
+                return
+            self._log.appendPlainText(
+                f"[OK] Averaged measurement saved: {result.name}\n"
+                "→ Next step: go to the '4. Build Profile' tab to create your ICC profile."
+            )
+            self.measure_finished.emit(result)
+            self.proceed_to_profile.emit()
+
+        self._avg_runner.run(
+            AverageParams(inputs=reads, output=out, method=method),
+            on_line=self._on_log_line,
+            on_finish=_on_avg_finish,
+        )
+
+    def _show_average_failed_dialog(self, detail: str) -> None:
+        from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QVBoxLayout
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Averaging Failed")
+        dlg.setMinimumWidth(500)
+        layout = QVBoxLayout(dlg)
+        layout.setSpacing(16)
+        layout.setContentsMargins(24, 20, 24, 20)
+        msg = QLabel(
+            "<b>The reads could not be averaged.</b><br><br>"
+            + detail
+            + "<br><br>Your individual reads are still saved — you can continue "
+            "from the Build Profile tab using one of them.",
+            dlg,
+        )
+        msg.setWordWrap(True)
+        layout.addWidget(msg)
+        btn_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
+        btn_box.accepted.connect(dlg.accept)
+        layout.addWidget(btn_box)
+        tint_dialog_primary(dlg, _TAB_COLOR)
+        dlg.exec()
 
     def eventFilter(self, obj: QObject, event: QEvent) -> bool:
         if event.type() == QEvent.Type.KeyPress:
@@ -3398,6 +4115,7 @@ class TabMeasure(QWidget):
             ti1_path            = self._ti1_path,
             instrument          = str(self._instr_spin.value()),
             disable_bidir       = self._resolve_disable_bidir("guided"),
+            force_bidir         = self._resolve_force_bidir("guided"),
             suppress_warnings   = self._suppress_cb.isChecked(),
             disable_initial_cal = self._nocal_cb.isChecked(),
             patch_by_patch      = self._pbp_cb.isChecked(),
@@ -3414,6 +4132,7 @@ class TabMeasure(QWidget):
             ti1_path            = self._ti1_path,
             instrument          = str(self._m_instr_spin.value()),
             disable_bidir       = self._resolve_disable_bidir("manual"),
+            force_bidir         = self._resolve_force_bidir("manual"),
             suppress_warnings   = self._m_suppress_cb.isChecked(),
             disable_initial_cal = self._m_nocal_cb.isChecked(),
             patch_by_patch      = self._m_pbp_cb.isChecked(),
@@ -3433,7 +4152,7 @@ class TabMeasure(QWidget):
     def _on_save_defaults(self) -> None:
         s = self._settings
         if self._current_mode() == "guided":
-            s.set("measure_disable_bidir",     self._bidir_cb.isChecked())
+            s.set("measure_bidir_mode",        self._bidir_combo.currentData())
             s.set("measure_bidir_auto",        self._bidir_auto_cb.isChecked())
             s.set("measure_suppress_warnings", self._suppress_cb.isChecked())
             s.set("measure_no_cal",            self._nocal_cb.isChecked())
@@ -3448,7 +4167,7 @@ class TabMeasure(QWidget):
                         s.set(f"measure_{opt.key}_value", opt.widget.currentData())
         else:
             s.set("manual2_chartread_instr",    self._m_instr_spin.value())
-            s.set("manual2_chartread_bidir",    self._m_bidir_cb.isChecked())
+            s.set("manual2_chartread_bidir_mode", self._m_bidir_combo.currentData())
             s.set("manual2_chartread_bidir_auto", self._m_bidir_auto_cb.isChecked())
             s.set("manual2_chartread_suppress", self._m_suppress_cb.isChecked())
             s.set("manual2_chartread_nocal",    self._m_nocal_cb.isChecked())
@@ -3466,8 +4185,13 @@ class TabMeasure(QWidget):
 
     def _restore_defaults(self) -> None:
         s = self._settings
-        # Guided defaults
-        self._bidir_cb.setChecked(bool(s.get("measure_disable_bidir", True)))
+        # Guided defaults. The legacy guided default was -B on (DEFAULTS has
+        # measure_disable_bidir=True), so a brand-new user migrates to "disable"
+        # via legacy_disable; someone who saved it False migrates to "default".
+        self._set_bidir_value(self._bidir_combo, self._coerce_bidir_mode(
+            s.get("measure_bidir_mode"),
+            bool(s.get("measure_disable_bidir", True)),
+            bool(s.get("measure_force_bidir", False))))
         self._bidir_auto_cb.setChecked(bool(s.get("measure_bidir_auto", True)))
         self._suppress_cb.setChecked(bool(s.get("measure_suppress_warnings", True)))
         self._nocal_cb.setChecked(bool(s.get("measure_no_cal", False)))
@@ -3495,7 +4219,10 @@ class TabMeasure(QWidget):
                 self._m_instr_spin.setValue(int(m_instr))
             except (ValueError, TypeError):
                 pass
-        self._m_bidir_cb.setChecked(bool(s.get("manual2_chartread_bidir", False)))
+        self._set_bidir_value(self._m_bidir_combo, self._coerce_bidir_mode(
+            s.get("manual2_chartread_bidir_mode"),
+            bool(s.get("manual2_chartread_bidir", False)),
+            bool(s.get("manual2_chartread_force_bidir", False))))
         self._m_bidir_auto_cb.setChecked(bool(s.get("manual2_chartread_bidir_auto", True)))
         self._m_suppress_cb.setChecked(bool(s.get("manual2_chartread_suppress", True)))
         self._m_nocal_cb.setChecked(bool(s.get("manual2_chartread_nocal", False)))
@@ -3518,6 +4245,6 @@ class TabMeasure(QWidget):
                             opt.widget.setCurrentIndex(idx)
         presets = self._m_load_presets()
         self._m_populate_preset_combo(presets)
-        # Reflect the restored Auto toggles (grey out / sync the -B checkboxes).
+        # Reflect the restored Auto toggles (grey out / sync the combos).
         self._apply_bidir_auto_state("guided")
         self._apply_bidir_auto_state("manual")

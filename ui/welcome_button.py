@@ -54,8 +54,11 @@ class WelcomeButton(QToolButton):
 
         fm = QFontMetricsF(font)
         glyph = "?"
-        gx = (self.width() - fm.horizontalAdvance(glyph)) / 2
-        gy = self.height() / 2 + (fm.ascent() - fm.descent()) / 2
+        # Nudge 1 px up and 2 px left so the italic "?" sits optically aligned
+        # with the tools and settings icons to its left (italic slant pushes
+        # the glyph's perceived centre slightly right of its geometric centre).
+        gx = (self.width() - fm.horizontalAdvance(glyph)) / 2 - 2
+        gy = self.height() / 2 + (fm.ascent() - fm.descent()) / 2 - 1
 
         path = QPainterPath()
         path.addText(float(gx), float(gy), font, glyph)

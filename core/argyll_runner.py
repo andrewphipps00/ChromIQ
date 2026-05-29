@@ -61,6 +61,23 @@ if sys.platform == "win32":
     _k32.WriteConsoleInputW.restype   = _wt.BOOL
     _k32.CloseHandle.argtypes         = [_wt.HANDLE]
     _k32.CloseHandle.restype          = _wt.BOOL
+    _k32.SetStdHandle.argtypes        = [_wt.DWORD, _wt.HANDLE]
+    _k32.SetStdHandle.restype         = _wt.BOOL
+
+    # Cast negative STD_*_HANDLE constants to unsigned DWORD.
+    _STD_INPUT_HANDLE  = _wt.DWORD(-10).value
+    _STD_OUTPUT_HANDLE = _wt.DWORD(-11).value
+    _STD_ERROR_HANDLE  = _wt.DWORD(-12).value
+
+    def _win_reset_std_handles() -> None:
+        # After FreeConsole, the parent's std handles point at a freed console
+        # buffer. subprocess.run then fails with WinError 6 (invalid handle)
+        # when it tries to inherit them. Clearing to NULL restores the same
+        # state a no-console --windowed app starts with, which Python handles
+        # gracefully.
+        _k32.SetStdHandle(_STD_INPUT_HANDLE,  None)
+        _k32.SetStdHandle(_STD_OUTPUT_HANDLE, None)
+        _k32.SetStdHandle(_STD_ERROR_HANDLE,  None)
 
     def _win_inject_key(pid: int, text: str) -> bool:
         """Inject text[0] into the console of process `pid` via WriteConsoleInputW.
@@ -96,6 +113,7 @@ if sys.platform == "win32":
 
         k32 = _k32
         k32.FreeConsole()
+        _win_reset_std_handles()
         if not k32.AttachConsole(pid):
             err = k32.GetLastError()
             log.warning("_win_inject_key: AttachConsole(%d) failed (err %d)", pid, err)
@@ -135,6 +153,7 @@ if sys.platform == "win32":
                 k32.CloseHandle(h)
         finally:
             k32.FreeConsole()
+            _win_reset_std_handles()
         return ok_full
 else:
     def _win_inject_key(pid: int, text: str) -> bool:  # pragma: no cover - non-Windows

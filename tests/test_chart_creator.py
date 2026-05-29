@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 from pathlib import Path
 
 import numpy as np
@@ -56,8 +57,17 @@ class _MockRunner:
 
 
 class _MockFileManager:
+    """Minimal FileManager stub for chart_creator tests.
+
+    Backs ``project()`` with the real Project class so chart_creator's
+    Project/Run-aware paths exercise the actual folder layout under tmp_path.
+    """
+
     def __init__(self, root: Path) -> None:
+        # ``root`` here is the *project* root (mirrors what working_dir()
+        # would return in the real FileManager).
         self.root = root
+        self._project = None
 
     def ensure_folder(self) -> Path:
         self.root.mkdir(parents=True, exist_ok=True)
@@ -67,6 +77,20 @@ class _MockFileManager:
         for f in self.root.iterdir():
             if f.is_file() and f.suffix.lstrip(".").lower() in exts:
                 f.unlink()
+
+    def project(self):
+        from core.file_manager import Project
+        if self._project is None:
+            self._project = Project.create_or_load(self.root, self.root.name)
+        return self._project
+
+    def cwd_for_chart(self, *, cal_target: bool) -> Path:
+        proj = self.project()
+        return proj.calibration.ensure_dir() if cal_target else proj.current_run().ensure_dir()
+
+    def chart_stem(self, *, cal_target: bool) -> str:
+        proj = self.project()
+        return proj.calibration.stem if cal_target else proj.current_run().stem
 
 
 class _MockSettings:
@@ -87,7 +111,9 @@ def test_generate_writes_channels_sidecar(tmp_path: Path) -> None:
         on_line=lambda _: None,
         on_finish=lambda tiffs: finished.append(tiffs),
     )
-    sidecar = work_dir / "mychart.channels.json"
+    # New layout: sidecar lives next to <stem>.ti1 inside runs/run1/, where
+    # stem is the (sanitised) project folder name.
+    sidecar = work_dir / "runs" / "run1" / "chart_proj.channels.json"
     assert sidecar.exists(), "generate() must write the channels sidecar"
     assert json.loads(sidecar.read_text())["ink_channels"] == ["r", "g", "b"]
 
@@ -508,9 +534,87 @@ def test_load_ti1_writes_channels_sidecar(tmp_path: Path) -> None:
         on_line=lambda _: None,
         on_finish=lambda tiffs: finished.append(tiffs),
     )
-    sidecar = work_dir / "imported.channels.json"
+    # New layout: sidecar lives in the current run's chart slot, under the
+    # project-name stem ("chart_proj" from the _make_creator fixture).
+    sidecar = work_dir / "runs" / "run1" / "chart_proj.channels.json"
     assert sidecar.exists(), (
         "load_ti1_and_generate_preview() must set _pending_params so the "
         "sidecar is written — regression guard for the second half of #15"
     )
     assert json.loads(sidecar.read_text())["ink_channels"] == ["r", "g", "b"]
+
+
+# ---------------------------------------------------------------------------
+# External preconditioning import
+# ---------------------------------------------------------------------------
+# When the user picks an external .icc (e.g. shipped with their printer)
+# as the targen -c argument, chart_creator must copy it into the current
+# run's preconditioning.icc slot, and (when refinement is on) copy the
+# sibling .ti3 alongside as preconditioning.ti3.
+
+
+class _ToggleSettings:
+    """Settings stub that honours a single chromiq_refinement boolean."""
+
+    def __init__(self, chromiq_refinement: bool) -> None:
+        self._on = chromiq_refinement
+
+    def get(self, key, default=None):
+        if key == "chromiq_refinement":
+            return self._on
+        return default
+
+
+def test_import_external_preconditioning_copies_icc(tmp_path: Path) -> None:
+    """External -c .icc must be copied into runs/run1/preconditioning.icc."""
+    work_dir = tmp_path / "proj"
+    # Create the external .icc somewhere outside the project.
+    ext = tmp_path / "external" / "vendor.icc"
+    ext.parent.mkdir()
+    ext.write_text("EXT_ICC")
+
+    creator = ChartCreator(
+        _MockRunner(), _MockFileManager(work_dir), _ToggleSettings(chromiq_refinement=False),
+    )
+    proj = creator._file_mgr.project()
+    run = proj.current_run()
+    # Mirror production: tab_chart builds extra_targen_args with shlex.join so
+    # Windows backslashes survive the shlex.split inside _import_external_preconditioning.
+    new_args = creator._import_external_preconditioning(shlex.join(["-c", str(ext)]), run)
+
+    assert run.preconditioning_icc.read_text(encoding="utf-8") == "EXT_ICC"
+    assert str(run.preconditioning_icc) in new_args, "-c arg must be rewritten"
+
+
+def test_import_external_preconditioning_with_refinement_copies_ti3(tmp_path: Path) -> None:
+    """When chromiq_refinement is on, sibling .ti3 is also copied as preconditioning.ti3."""
+    work_dir = tmp_path / "proj"
+    ext_dir = tmp_path / "external"
+    ext_dir.mkdir()
+    (ext_dir / "vendor.icc").write_text("EXT_ICC")
+    (ext_dir / "vendor.ti3").write_text("EXT_TI3")
+
+    creator = ChartCreator(
+        _MockRunner(), _MockFileManager(work_dir), _ToggleSettings(chromiq_refinement=True),
+    )
+    run = creator._file_mgr.project().current_run()
+    creator._import_external_preconditioning(
+        shlex.join(["-c", str(ext_dir / "vendor.icc")]), run,
+    )
+
+    assert run.preconditioning_icc.read_text(encoding="utf-8") == "EXT_ICC"
+    assert run.preconditioning_ti3.read_text(encoding="utf-8") == "EXT_TI3"
+
+
+def test_import_external_preconditioning_noop_for_local_pick(tmp_path: Path) -> None:
+    """If -c already points at run.preconditioning_icc, nothing changes."""
+    work_dir = tmp_path / "proj"
+    creator = ChartCreator(
+        _MockRunner(), _MockFileManager(work_dir), _ToggleSettings(chromiq_refinement=True),
+    )
+    run = creator._file_mgr.project().current_run()
+    run.preconditioning_icc.write_text("ALREADY_LOCAL")
+    in_args = shlex.join(["-c", str(run.preconditioning_icc)])
+    new_args = creator._import_external_preconditioning(in_args, run)
+    assert new_args == in_args
+    assert run.preconditioning_icc.read_text(encoding="utf-8") == "ALREADY_LOCAL"

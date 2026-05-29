@@ -15,6 +15,10 @@ if TYPE_CHECKING:
 _TARGET_INSTRUMENT_RE = re.compile(r'TARGET_INSTRUMENT\s+"([^"]*)"')
 # Matches:  SPECTRAL_BANDS "36"   (number of spectral bands recorded per patch)
 _SPECTRAL_BANDS_RE = re.compile(r'SPECTRAL_BANDS\s+"?(\d+)"?')
+# printtarg writes RANDOM_START on a randomised chart and CHART_ID on a
+# fixed-order one (printtarg.c:3718). chartread keys its auto strip-ID and
+# bidirectional recognition off the same keyword (chartread.c:2980).
+_RANDOM_START_RE = re.compile(r'\bRANDOM_START\b')
 
 # The exact TARGET_INSTRUMENT strings ChromIQ lays out charts for. ArgyllCMS
 # writes the same value into the resulting .ti3, so detection works on either.
@@ -79,17 +83,71 @@ def instrument_label(name: str | None) -> str | None:
     return name
 
 
-def disable_bidir_for_instrument(name: str | None) -> bool:
-    """Whether bidirectional strip recognition should be disabled (chartread -B).
+def is_i1pro(name: str | None) -> bool:
+    """Whether the instrument is an i1 Pro family device.
 
-    The ColorMunki (and its i1Studio rebrand) can only read strips reliably in
-    one direction, so it needs ``-B``. The i1 Pro family — i1 Pro / Pro 2 /
-    Pro 3 / Pro 3+, all tagged ``"GretagMacbeth i1 Pro"`` — reads in either
-    direction, and the SpectroScan is an XY table that reads patches individually,
-    so neither needs ``-B``. Unknown / missing instruments fall back to
-    bidirectional allowed (no ``-B``).
+    The i1 Pro / Pro 2 / Pro 3 / Pro 3+ are all tagged ``"GretagMacbeth i1 Pro"``
+    by ArgyllCMS (some builds report ``"X-Rite i1 Pro …"``). They can read a
+    strip in either direction (``inst2_bidi_scan``), so they support chartread's
+    force-bidirectional mode (``-b``).
     """
-    return is_colormunki(name)
+    if not name:
+        return False
+    low = name.lower()
+    return "i1 pro" in low or "i1pro" in low
+
+
+def disable_bidir_for_instrument(name: str | None) -> bool:
+    """Whether the Auto toggle should disable bidirectional strip recognition
+    (chartread ``-B``).
+
+    No instrument auto-selects ``-B`` any more. The ColorMunki (and its
+    i1Studio rebrand) reads strips in one direction, but ArgyllCMS's default
+    behaviour already handles that correctly, so Auto leaves the ColorMunki on
+    the Argyll default (no ``-B``) rather than forcing ``-B``. The i1 Pro family
+    auto-forces ``-b`` instead (see ``force_bidir_for_instrument``); the
+    SpectroScan reads patches individually. Users can still pick "Bidirectional
+    disabled" by hand.
+
+    Always returns ``False`` — kept as the single Auto ``-B`` decision point so
+    the behaviour stays documented in one place.
+    """
+    return False
+
+
+def force_bidir_for_instrument(name: str | None) -> bool:
+    """Whether to force-enable bidirectional strip recognition (chartread -b).
+
+    chartread only auto-enables bidirectional reading when the chart is
+    randomised; on a fixed-order chart (e.g. printtarg ``-r``) it otherwise
+    reads one direction only and rejects strips scanned backwards. The i1 Pro
+    family reads either direction, so ``-b`` forces the auto-detection on for
+    those charts. The ColorMunki reads one direction only and the SpectroScan
+    reads patches individually, so neither should force it. ``-b`` and ``-B``
+    are mutually exclusive; this only returns True for the i1 Pro family.
+    """
+    return is_i1pro(name)
+
+
+def is_randomized(cgats_path: Path) -> bool:
+    """Whether a chart was laid out in randomised patch order.
+
+    printtarg randomises by default and writes ``RANDOM_START``; its ``-r`` flag
+    keeps the source order and writes ``CHART_ID`` instead. chartread reads the
+    same keyword to decide whether it may auto-recognise strips and read them in
+    either direction. Randomisation gives every strip a unique colour signature,
+    which is what makes that recognition reliable — a fixed-order chart (no
+    ``RANDOM_START``) can confuse it, especially with forced bidirectional
+    reading (``-b``).
+
+    Returns ``True`` only when ``RANDOM_START`` is present; a missing/unreadable
+    file is treated as randomised (``True``) so callers don't warn spuriously.
+    """
+    try:
+        text = cgats_path.read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return True
+    return bool(_RANDOM_START_RE.search(text))
 
 
 def has_spectral_data(cgats_path: Path) -> bool:
@@ -118,9 +176,42 @@ def resolve_ti2(
     copied/renamed ones — or None if the user cancelled.
     """
     working_dir = _resolve_working_dir(settings)
-    if _is_under(ti2_path, working_dir):
+    if _project_root_for(ti2_path, working_dir) is not None:
         return _handle_inside(parent, ti2_path, working_dir)
     return _handle_outside(parent, ti2_path, working_dir)
+
+
+def resolve_ti3(
+    parent: "QWidget",
+    ti3_path: Path,
+    settings: "AppSettings",
+) -> Path | None:
+    """Determine how to load a .ti3 relative to the working folder.
+
+    Mirrors ``resolve_ti2``: returns the path to use — either the original
+    (when the file is already inside a structured project) or a newly copied
+    path inside a freshly-created project. Returns ``None`` if the user
+    cancelled.
+
+    For an external .ti3 with a sibling .ti2, the full ti2 import flow is
+    reused (the .ti2 is the chart; the .ti3 is its measurement). For a bare
+    .ti3 (no chart files beside it), a measurement-only project is created.
+    Either way, ``Project.create`` writes the "Where are my files.txt" README
+    at the new project root so the user gets the new layout on the spot.
+    """
+    working_dir = _resolve_working_dir(settings)
+    if _project_root_for(ti3_path, working_dir) is not None:
+        return ti3_path                              # already in a project
+    sibling_ti2 = ti3_path.with_suffix(".ti2")
+    if sibling_ti2.is_file():
+        result = _handle_outside(parent, sibling_ti2, working_dir)
+        if result is None:
+            return None
+        new_ti2, _tiffs = result
+        new_ti3 = new_ti2.with_suffix(".ti3")
+        return new_ti3 if new_ti3.exists() else None
+    # Bare .ti3 — import the measurement (and sibling .icc, if any) alone.
+    return _handle_outside_ti3_only(parent, ti3_path, working_dir)
 
 
 # ---------------------------------------------------------------------------
@@ -132,15 +223,22 @@ def _resolve_working_dir(settings: "AppSettings") -> Path:
     return Path(custom) if custom else Path.home() / "ChromIQ"
 
 
-def _is_under(path: Path, root: Path) -> bool:
-    # Only consider the file "inside" the working folder if it sits directly
-    # in a first-level project subfolder: <working_dir>/<project>/<file>.
-    # This avoids false positives when working_dir is a broad path (e.g. ~/).
+def _project_root_for(path: Path, working_dir: Path) -> Path | None:
+    """Return the ChromIQ project root that contains ``path``, or None.
+
+    A project root is a first-level subfolder of ``working_dir`` that holds a
+    ``project.json``. ``path`` counts as "inside" when that manifest exists —
+    so a chart already structured as ``<project>/runs/<id>/chart.ti2`` (or a
+    calibration in ``<project>/cal/``) is recognised and not re-imported.
+    """
     try:
-        rel = path.resolve().relative_to(root.resolve())
-        return len(rel.parts) == 2
+        rel = path.resolve().relative_to(working_dir.resolve())
     except ValueError:
-        return False
+        return None
+    if not rel.parts:
+        return None
+    candidate = working_dir / rel.parts[0]
+    return candidate if (candidate / "project.json").exists() else None
 
 
 def _related_files(ti2_path: Path) -> tuple[Path | None, list[Path]]:
@@ -182,14 +280,15 @@ def _handle_inside(
     from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QVBoxLayout
 
     dlg = QDialog(parent)
-    dlg.setWindowTitle("Load Chart")
+    dlg.setWindowTitle("Load Test Session")
     dlg.setMinimumWidth(460)
     layout = QVBoxLayout(dlg)
     layout.setContentsMargins(24, 20, 24, 20)
     layout.setSpacing(12)
 
     lbl = QLabel(
-        f"<b>{ti2_path.name}</b> is already in your working folder.<br><br>"
+        f"The session <b>{ti2_path.stem}</b> is already set up in your working "
+        "folder.<br><br>"
         "What would you like to do?",
         dlg,
     )
@@ -197,7 +296,7 @@ def _handle_inside(
     layout.addWidget(lbl)
 
     cont_desc = QLabel(
-        "<i>Continue</i> — use the chart files in this folder as-is — "
+        "<i>Continue</i> — use the files in this folder as-is — "
         "nothing will be copied or moved.",
         dlg,
     )
@@ -205,7 +304,7 @@ def _handle_inside(
     layout.addWidget(cont_desc)
 
     new_desc = QLabel(
-        "<i>Use as base for a new profile</i> — copy the chart files to a new "
+        "<i>Use as base for a new profile</i> — copy the files to a new "
         "subfolder so you can build a separate ICC profile without overwriting "
         "the original.",
         dlg,
@@ -265,18 +364,30 @@ def _ask_profile_name(
         QDialog, QHBoxLayout, QLabel, QLineEdit, QMessageBox, QPushButton, QVBoxLayout,
     )
 
-    file_lines = [f"  • {ti2_path.name}"]
+    # Build the file list, deduping so the bare-.ti3 import path (where
+    # ti2_path is actually a .ti3) doesn't list the same file twice.
+    seen: set[Path] = set()
+    file_lines: list[str] = []
+    def _add(p: Path) -> None:
+        try:
+            r = p.resolve()
+        except OSError:
+            r = p
+        if r not in seen:
+            seen.add(r)
+            file_lines.append(f"  • {p.name}")
+    _add(ti2_path)
     if ti1:
-        file_lines.append(f"  • {ti1.name}")
+        _add(ti1)
     for t in tiffs:
-        file_lines.append(f"  • {t.name}")
+        _add(t)
     ti3 = ti2_path.with_suffix(".ti3")
     if ti3.exists():
-        file_lines.append(f"  • {ti3.name}")
+        _add(ti3)
     for ext in (".icc", ".icm"):
         icc = ti2_path.with_suffix(ext)
         if icc.exists():
-            file_lines.append(f"  • {icc.name}")
+            _add(icc)
             break
 
     dlg = QDialog(parent)
@@ -338,6 +449,14 @@ def _ask_profile_name(
         except OSError:
             return False
 
+    def _normalise(text: str) -> str:
+        """Sanitise the typed name the same way set_target_name does (spaces→-,
+        illegal chars→_), so the on-disk folder = the user-facing name. Empty
+        in → empty out (so the dialog can still report "please enter a name")."""
+        from core.file_manager import FileManager
+        cleaned = FileManager.strip_workfile_ext(text)
+        return FileManager._sanitise(cleaned) if cleaned.strip() else ""
+
     def _validate(name: str) -> str | None:
         if not name:
             return "Please enter a name."
@@ -346,7 +465,7 @@ def _ask_profile_name(
         return None
 
     def _on_name_changed(_text: str = "") -> None:
-        name = name_edit.text().strip()
+        name = _normalise(name_edit.text())
         collision = bool(name) and (working_dir / name).exists() and not _is_self_collision(name)
         if collision:
             error_lbl.setText(
@@ -362,7 +481,7 @@ def _ask_profile_name(
     name_edit.textChanged.connect(_on_name_changed)
 
     def _on_accept() -> None:
-        name = name_edit.text().strip()
+        name = _normalise(name_edit.text())
         err = _validate(name)
         if err:
             error_lbl.setText(err)
@@ -380,7 +499,7 @@ def _ask_profile_name(
         dlg.accept()
 
     def _on_overwrite() -> None:
-        name = name_edit.text().strip()
+        name = _normalise(name_edit.text())
         err = _validate(name)
         if err:
             error_lbl.setText(err)
@@ -427,33 +546,104 @@ def _copy_files(
     new_name: str,
     overwrite: bool = False,
 ) -> tuple[Path, list[Path]]:
+    """Import an external chart into a fresh project as run1.
+
+    Builds the per-run layout (see docs/dev_folder_layout.md): a project at
+    ``working_dir/<new_name>/`` with ``project.json`` and the imported chart
+    placed under ``runs/run1/`` with the canonical ``chart`` stem
+    (``chart.ti2`` / ``chart.ti1`` / ``chart_NN.tif`` / ``chart.ti3`` /
+    ``chart.icc``). Returns (run1 chart.ti2, copied page tiffs).
+    """
+    from core.file_manager import FileManager, Project
+
+    # Defensive: the dialog already sanitises, but make the contract explicit
+    # so any programmatic caller also gets a clean folder name.
+    new_name = FileManager._sanitise(FileManager.strip_workfile_ext(new_name))
+
     old_stem = ti2_path.stem
-    dest     = working_dir / new_name
+    dest      = working_dir / new_name
     if overwrite and dest.exists():
         shutil.rmtree(dest)
-    dest.mkdir(parents=True, exist_ok=True)
 
-    new_ti2 = dest / f"{new_name}.ti2"
-    shutil.copy2(ti2_path, new_ti2)
+    proj = Project.create(dest, new_name)
+    run  = proj.current_run()
+    run.ensure_dir()
 
+    shutil.copy2(ti2_path, run.chart_ti2)
     if ti1:
-        shutil.copy2(ti1, dest / f"{new_name}.ti1")
+        shutil.copy2(ti1, run.chart_ti1)
 
+    # Chart recognition + channels sidecar travel with the chart when present.
+    cht = ti2_path.with_suffix(".cht")
+    if cht.exists():
+        shutil.copy2(cht, run.chart_cht)
+    channels = ti2_path.with_name(f"{old_stem}.channels.json")
+    if channels.exists():
+        shutil.copy2(channels, run.chart_channels_json)
+
+    # Pages are renumbered <stem>_01.tif, <stem>_02.tif, … in sorted order.
     new_tiffs: list[Path] = []
-    for tiff in tiffs:
-        suffix   = tiff.name[len(old_stem):]    # e.g. ".tif" or "_2.tif"
-        new_tiff = dest / f"{new_name}{suffix}"
+    for i, tiff in enumerate(sorted(tiffs), start=1):
+        new_tiff = run.dir / f"{run.stem}_{i:02d}.tif"
         shutil.copy2(tiff, new_tiff)
         new_tiffs.append(new_tiff)
 
     ti3 = ti2_path.with_suffix(".ti3")
     if ti3.exists():
-        shutil.copy2(ti3, dest / f"{new_name}.ti3")
+        shutil.copy2(ti3, run.measurement_ti3)   # chart.ti3
 
     for ext in (".icc", ".icm"):
         icc = ti2_path.with_suffix(ext)
         if icc.exists():
-            shutil.copy2(icc, dest / f"{new_name}{ext}")
+            shutil.copy2(icc, run.profile_icc)    # chart.icc
             break
 
-    return new_ti2, new_tiffs
+    return run.chart_ti2, new_tiffs
+
+
+def _handle_outside_ti3_only(
+    parent: "QWidget",
+    ti3_path: Path,
+    working_dir: Path,
+) -> Path | None:
+    """Import a bare .ti3 (no chart files) into a new project as the
+    canonical measurement. The matching .icc/.icm is carried over too.
+    Reuses _ask_profile_name to gather the project name + overwrite intent."""
+    result = _ask_profile_name(parent, ti3_path, ti1=None, tiffs=[],
+                                working_dir=working_dir)
+    if result is None:
+        return None
+    name, overwrite = result
+    return _copy_ti3_only(ti3_path, working_dir, name, overwrite=overwrite)
+
+
+def _copy_ti3_only(
+    ti3_path: Path,
+    working_dir: Path,
+    new_name: str,
+    overwrite: bool = False,
+) -> Path:
+    """Create a project shell around an external .ti3.
+
+    Places the .ti3 at ``runs/run1/<new_name>.ti3`` (the canonical
+    measurement) and a sibling .icc/.icm (if present) at
+    ``runs/run1/<new_name>.icc``. Returns the new .ti3 path.
+    """
+    from core.file_manager import FileManager, Project
+
+    new_name = FileManager._sanitise(FileManager.strip_workfile_ext(new_name))
+    dest = working_dir / new_name
+    if overwrite and dest.exists():
+        shutil.rmtree(dest)
+
+    proj = Project.create(dest, new_name)
+    run  = proj.current_run()
+    run.ensure_dir()
+
+    shutil.copy2(ti3_path, run.measurement_ti3)
+    for ext in (".icc", ".icm"):
+        icc = ti3_path.with_suffix(ext)
+        if icc.exists():
+            shutil.copy2(icc, run.profile_icc)
+            break
+    return run.measurement_ti3

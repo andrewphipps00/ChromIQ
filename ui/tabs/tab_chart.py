@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import json
+import re
 import shlex
+import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -52,6 +54,7 @@ from data.patch_db import (
     i1_defaults_from_preset,
     query_patches,
 )
+from ui.dialogs.target_change_dialog import TargetChangeAction, TargetChangeDialog
 from ui.fade_scroll import FadeScrollArea
 from ui.parameter_widget import ParameterWidget
 from ui.styles import SPEC_AMBER, SPEC_CYAN, SPEC_GREEN, SPEC_MAGENTA, SPEC_VIOLET
@@ -60,6 +63,7 @@ from ui.tiff_preview import TiffPreview
 from ui.tooltip_button import InfoDialog, TooltipButton
 from ui.widgets import NoScrollComboBox, NoScrollSpinBox, icc_profile_paths, make_browse_button, open_file_dialog, set_folder_icon, set_preset_icon
 from workflow.i1profiler_export import EXTRA_INK, export_from_ti1, parse_ti1
+from workflow.i1profiler_import import import_to_ti1
 from workflow.chart_creator import (
     ChartCreator, ChartParams, guided_neutrals, GUIDED_NEUTRAL_BASE, REF_BUDGET,
 )
@@ -133,6 +137,12 @@ PREBUILT_PRESETS = {
     TC924A4_PRESET_KEY:     ("assets/charts/pharmacist/rgb/i1pro/a4/tc924/tc924",     "tc924-a4"),
     TC924LETTER_PRESET_KEY: ("assets/charts/pharmacist/rgb/i1pro/letter/tc924/tc924", "tc924-letter"),
 }
+
+# Built-in presets that are temporarily disabled: shown greyed-out and
+# non-selectable in the dropdown (NOT removed), pending a fix from their author.
+# The TC9.24 charts (A4 + US Letter) are parked here until Pharmacist corrects
+# them; clear this set to re-enable them — no other change needed.
+DISABLED_BUILTIN_PRESET_KEYS = frozenset({TC924A4_PRESET_KEY, TC924LETTER_PRESET_KEY})
 
 # Every built-in (non-deletable) preset key. Used to protect them from the
 # delete button and to keep disk presets from shadowing them.
@@ -251,7 +261,14 @@ class TabChart(QWidget):
         self._settings = settings
         self._creator  = ChartCreator(runner, file_mgr, settings)
         self._params   = self._load_yaml_params()
+        # Sanitised target name of the most recent generate. Lets _on_generate
+        # detect a name change (rename) away from an already-created target.
+        self._last_target_name = ""
         self._preconditioning_from_dialog = False
+        # Run that produced the profile the user clicked "Use as pre-conditioning"
+        # on. Captured at apply_preconditioning time; consumed at Generate-click
+        # to seed a fresh run (Project.new_run) from it.
+        self._precond_parent_run_id: str | None = None
         # TC9.18 built-in preset state. While active, "Generate Chart" reproduces
         # the bundled patch set (printtarg-only) instead of running targen, unless
         # the user has since changed a targen-affecting setting (see
@@ -363,8 +380,14 @@ class TabChart(QWidget):
         self._generate_btn.setFixedHeight(36)
         self._generate_btn.clicked.connect(self._on_generate)
 
-        self._load_ti1_btn = QPushButton("Load existing .ti1…", self)
+        self._load_ti1_btn = QPushButton("Load patch set…", self)
         self._load_ti1_btn.setFixedHeight(36)
+        self._load_ti1_btn.setToolTip(
+            "Load an existing patch set and lay it out (targen is skipped).\n"
+            "Accepts an Argyll .ti1, or an i1Profiler RGB patch set "
+            "(.pxf or a CGATS .txt) — i1Profiler files are converted to .ti1 "
+            "automatically."
+        )
         set_folder_icon(self._load_ti1_btn, "folder_create")
         self._load_ti1_btn.clicked.connect(self._on_load_ti1)
 
@@ -1415,14 +1438,12 @@ class TabChart(QWidget):
             targen_args += [f"-s{p.single_channel_steps}"]
         if p.extra_targen_args:
             _extra = shlex.split(p.extra_targen_args)
-            # Render -c <picked path> as the staged filename — matches what
-            # chart_creator._stage_precond_profile will actually run with and
-            # avoids burying the rest of the args under a long absolute path.
+            # Render -c <picked path> as the staged filename — chart_creator
+            # imports the pick into the run as preconditioning.icc — and avoids
+            # burying the rest of the args under a long absolute path.
             for _i, _tok in enumerate(_extra):
                 if _tok == "-c" and _i + 1 < len(_extra) and _extra[_i + 1]:
-                    _pp = Path(_extra[_i + 1])
-                    _staged = _pp.name if _pp.stem.startswith("pre_") else f"pre_{_pp.name}"
-                    _extra[_i + 1] = self._shorten_for_preview(_staged)
+                    _extra[_i + 1] = "preconditioning.icc"
             targen_args += _extra
         targen_args.append(self._preview_target_name("manual"))
 
@@ -1537,12 +1558,21 @@ class TabChart(QWidget):
         self._cal_target_check.setChecked(False)
 
     def _check_for_cal_file(self, name: str) -> None:
-        """Live check: if cal_<name>.cal exists in working folder, prefill -I and -K."""
+        """Live check: if this project already has a calibration, prefill -I and -K.
+
+        Calibration lives at ``<project>/cal/<project>-cal.cal`` (one per
+        project, shared across runs) — see ``Calibration.cal_path``.
+        """
         name = name.strip()
         if not name:
             self._cal_status_lbl.setVisible(False)
             return
-        cal_file = self._file_mgr.working_dir() / f"cal_{name}.cal"
+        from core.file_manager import Calibration
+        proj_root = self._file_mgr.preview_project_root(name)
+        if proj_root is None:
+            self._cal_status_lbl.setVisible(False)
+            return
+        cal_file = Calibration(proj_root).cal_path
         if cal_file.exists():
             cal_str = str(cal_file)
             if self._manual_cal_k_pw is not None:
@@ -1578,29 +1608,20 @@ class TabChart(QWidget):
         return f"{name[:head]}…{name[-tail:]}"
 
     def _preview_target_name(self, mode: str) -> str:
-        """Return the target name as it will appear in the command preview.
+        """Return the file stem as it will appear in the targen/printtarg
+        command preview.
 
-        Falls back to "chart" when the name field is empty, matching the
-        default that ChartCreator uses at generate time. Prefixes "cal_"
-        when the Calibration Target checkbox is active (manual mode only).
-        Shortens with a middle ellipsis when longer than _PREVIEW_NAME_MAX_LEN
-        characters so an unbroken name can't force the info-box wider than
-        its container — the *actual* target name used at Generate-click is
-        read directly from the line edit, not from this helper.
+        Under the per-run folder layout the file stem is fixed: ``calibration``
+        when the Calibration Target checkbox is active (manual mode only),
+        otherwise ``chart``. The user's project name is the *folder* name, not
+        the file stem, so it no longer appears on the command line.
         """
-        if mode == "guided":
-            edit = getattr(self, "_target_name_edit", None)
-        else:
-            edit = getattr(self, "_manual_target_name_edit", None)
-        name = (edit.text().strip() if edit is not None else "") or "chart"
-
         if mode == "manual" and getattr(self, "_cal_target_check", None) is not None:
             grp = getattr(self, "_cal_target_grp", None)
             if (self._cal_target_check.isChecked()
                     and grp is not None and grp.isVisible()):
-                name = f"cal_{name}"
-
-        return self._shorten_for_preview(name)
+                return "calibration"
+        return "chart"
 
     def _on_cal_target_toggled(self, checked: bool) -> None:
         _CAL_VALUES: list[tuple[str, str, Any]] = [
@@ -1707,13 +1728,19 @@ class TabChart(QWidget):
 
         Called by the main window when the user clicks "Use as pre-conditioning
         profile" in the Build Profile or Check/Refine result dialog. Switches to
-        guided mode, ticks the checkbox, fills the path picker, and arms the
-        rename-instead-of-wipe behavior for the next Generate Chart click.
+        guided mode, ticks the checkbox, fills the path picker, and remembers
+        the current run so the next Generate Chart click seeds a fresh run
+        (Project.new_run) from it.
         """
         self._switch_mode("guided")
         self._guided_precond_path.setText(str(profile_path))
         self._guided_precond_check.setChecked(True)
         self._preconditioning_from_dialog = True
+        try:
+            self._precond_parent_run_id = self._file_mgr.project().current_run().id
+        except Exception as exc:  # noqa: BLE001 — never block the UI on this
+            log.warning("Could not capture parent run for preconditioning: %s", exc)
+            self._precond_parent_run_id = None
 
     def _current_mode(self) -> str:
         return "guided" if self._stack.currentIndex() == 0 else "manual"
@@ -2191,14 +2218,43 @@ class TabChart(QWidget):
         data = self._preset_combo.itemData(index)
         return data is not None and data not in BUILTIN_PRESET_KEYS
 
-    def _add_builtin_preset_item(self, label: str, key: str, tooltip: str) -> None:
-        """Append a pinned, non-deletable preset entry (bold + tooltip)."""
+    def _add_builtin_preset_item(
+        self, label: str, key: str, tooltip: str, *, disabled: bool = False
+    ) -> None:
+        """Append a pinned, non-deletable preset entry (bold + tooltip).
+
+        ``disabled`` greys the item out and makes it non-selectable while leaving
+        it visible (see DISABLED_BUILTIN_PRESET_KEYS) — used to park a built-in
+        that needs fixing without deleting its wiring.
+        """
+        if disabled:
+            label = f"{label}  (temporarily unavailable)"
+            tooltip = (
+                "Temporarily unavailable — this built-in chart is being fixed and "
+                "has been disabled for now. It will return in a later update."
+            )
         self._preset_combo.addItem(label, userData=key)
         bi = self._preset_combo.count() - 1
         bi_font = self._preset_combo.font()
         bi_font.setBold(True)
         self._preset_combo.setItemData(bi, bi_font, Qt.ItemDataRole.FontRole)
         self._preset_combo.setItemData(bi, tooltip, Qt.ItemDataRole.ToolTipRole)
+        if disabled:
+            # Grey out + block selection via the underlying model item (the combo
+            # uses a QStandardItemModel by default).
+            item = self._preset_combo.model().item(bi)
+            if item is not None:
+                item.setEnabled(False)
+
+    def _tc918_tooltip(self) -> str:
+        """Tooltip text for the ti1-based TC9.18 built-in preset."""
+        return (
+            "Built-in chart — cannot be deleted.\n"
+            "Loads the fixed TC9.18 patch set and lays it out with\n"
+            "printtarg -ii1 -pA4 -t300 -L -m12 -M12 -b, then creates the\n"
+            "target right away. You can adjust any setting afterwards and\n"
+            "regenerate."
+        )
 
     def _tc918_tooltip(self) -> str:
         """Tooltip text for the ti1-based TC9.18 built-in preset."""
@@ -2269,7 +2325,9 @@ class TabChart(QWidget):
             if instr != prev_instr:
                 self._preset_combo.insertSeparator(self._preset_combo.count())
                 prev_instr = instr
-            self._add_builtin_preset_item(label, key, tip)
+            self._add_builtin_preset_item(
+                label, key, tip, disabled=key in DISABLED_BUILTIN_PRESET_KEYS
+            )
         if select_name is not None:
             # Match by userData (the bare name), not the shown text, which may
             # carry a ▶ prefix for auto-run presets.
@@ -2366,6 +2424,12 @@ class TabChart(QWidget):
             return
         data = self._preset_combo.itemData(index)
 
+        # Temporarily-disabled built-ins are greyed out and unselectable in the
+        # UI, but guard anyway so a programmatic selection can never apply one.
+        if data in DISABLED_BUILTIN_PRESET_KEYS:
+            self._revert_preset_combo()
+            return
+
         # Built-in presets generate immediately, so prompt for a target name
         # first — otherwise the output folder is created under the preset's
         # default name. Cancel reverts the dropdown to the previous selection
@@ -2420,9 +2484,20 @@ class TabChart(QWidget):
                 for pw in widgets:
                     if pw in self._d_cascade_widgets:
                         continue
-                    v = s.get(f"manual_{tool}_{pw.flag}")
-                    if v is not None:
-                        pw.set_value(v)
+                    # Use the same case-disambiguated key that _on_save_defaults
+                    # writes, so single-char flags (-l, -g, …) round-trip here too.
+                    key = _pw_settings_key(tool, pw.flag)
+                    v = s.get(key)
+                    if v is None:
+                        # No saved default for this row → revert to its factory
+                        # default (and clear any expert enable-checkbox). Without
+                        # this, picking "Default" would leave a row the user
+                        # changed but never saved untouched — the reported bug.
+                        pw.reset_to_default()
+                        continue
+                    pw.set_value(v)
+                    if pw.has_separate_enable:
+                        pw.set_user_enabled(bool(s.get(f"{key}_enabled", False)))
             for idx, pw in enumerate(self._d_cascade_widgets):
                 v = s.get(f"manual_targen_-D_{idx}")
                 if v is not None:
@@ -2496,6 +2571,14 @@ class TabChart(QWidget):
                 v = data.get(f"{tool}_{pw.flag}")
                 if v is not None:
                     pw.set_value(v)
+                # Re-arm expert non-boolean rows from the stored enable state.
+                # Only act when the key was persisted, so presets saved before
+                # this fix (which stored a value regardless of the checkbox)
+                # don't suddenly turn their flag on.
+                if pw.has_separate_enable:
+                    en = data.get(f"{tool}_{pw.flag}_enabled")
+                    if en is not None:
+                        pw.set_user_enabled(bool(en))
         for idx, pw in enumerate(self._d_cascade_widgets):
             v = data.get(f"targen_-D_{idx}")
             if v is not None:
@@ -2544,6 +2627,10 @@ class TabChart(QWidget):
                     v = pw.get_raw_value()
                 if v is not None:
                     capture[f"{tool}_{pw.flag}"] = v
+                # Persist the enable-checkbox state for expert non-boolean rows
+                # so the flag is re-armed when the preset is recalled.
+                if pw.has_separate_enable:
+                    capture[f"{tool}_{pw.flag}_enabled"] = pw.is_enabled_by_user
         for idx, pw in enumerate(self._d_cascade_widgets):
             capture[f"targen_-D_{idx}"] = pw.get_raw_value()
             capture[f"targen_-D_{idx}_enabled"] = pw.is_enabled_by_user
@@ -2938,11 +3025,11 @@ class TabChart(QWidget):
         self._create_prebuilt_target(key, target_name)
 
     def _create_prebuilt_target(self, key: str, target_name: str) -> None:
-        """Copy a bundled prebuilt target into ~/ChromIQ/<name> and load it.
+        """Copy a bundled prebuilt target into the project's current run and load it.
 
         No targen/printtarg is run: the bundled .ti1/.ti2 and TIFF pages are
-        copied verbatim (renamed to the chosen target name) and the TIFFs are
-        loaded into the preview, then routed downstream like a normal chart."""
+        copied into runs/<current>/ under the fixed ``chart`` stem and the TIFFs
+        are loaded into the preview, then routed downstream like a normal chart."""
         import shutil
         if self._runner.is_running:
             log.warning("Prebuilt preset: a process is already running")
@@ -2966,20 +3053,20 @@ class TabChart(QWidget):
         name = (self._manual_target_name_edit.text().strip()
                 if self._manual_target_name_edit is not None else "") or target_name
         self._file_mgr.set_target_name(name)
-        stem = self._file_mgr.get_target_name() or default_name
-        work_dir = self._file_mgr.ensure_folder()
+        run = self._file_mgr.project().current_run()
         # Start from a clean slate so stale pages from a prior copy can't linger.
-        self._file_mgr.clean_folder(["ti1", "ti2", "tif", "tiff", "cht", "ps"])
+        run.reset_chart_artefacts()
+        work_dir = run.ensure_dir()
 
         self._log.clear()
         self._preview.clear()
         try:
-            shutil.copy(src_ti1, work_dir / f"{stem}.ti1")
+            shutil.copy(src_ti1, run.chart_ti1)
             if src_ti2.is_file():
-                shutil.copy(src_ti2, work_dir / f"{stem}.ti2")
+                shutil.copy(src_ti2, run.chart_ti2)
             tiffs: list[Path] = []
             for i, src_tif in enumerate(src_tiffs, start=1):
-                dest = work_dir / f"{stem}_{i:02d}.tif"
+                dest = work_dir / f"{run.stem}_{i:02d}.tif"
                 shutil.copy(src_tif, dest)
                 tiffs.append(dest)
         except OSError as exc:
@@ -2991,7 +3078,7 @@ class TabChart(QWidget):
             ).exec()
             return
 
-        self._last_target_name = stem
+        self._last_target_name = name
         self._log.appendPlainText(
             f"Copied prebuilt patch set into {work_dir} ({len(tiffs)} page(s)). "
             "targen and printtarg skipped."
@@ -3118,11 +3205,9 @@ class TabChart(QWidget):
         recommendation = ""
         if precond_active:
             if precond_path:
-                # Mirror chart_creator._stage_precond_profile guard so a
-                # already-pre_-prefixed pick doesn't render as pre_pre_*.
-                _pp = Path(precond_path)
-                _staged = _pp.name if _pp.stem.startswith("pre_") else f"pre_{_pp.name}"
-                precond_line = f" -c {self._shorten_for_preview(_staged)}"
+                # chart_creator imports the pick into the run as
+                # preconditioning.icc; show that staged name in the preview.
+                precond_line = " -c preconditioning.icc"
                 recommendation = (
                     "\nTip: use at least as many pages as the original profile."
                 )
@@ -3272,6 +3357,47 @@ class TabChart(QWidget):
     # Actions
     # ------------------------------------------------------------------
 
+    def _handle_target_rename(self, new_name: str) -> bool:
+        """Reconcile a name change away from an already-created target.
+
+        Returns True to proceed with generation, False only when the user
+        cancels. When the user has previously generated a target this session
+        and now asks for a different (not-yet-existing) folder, pops the
+        rename/keep/delete chooser and performs the chosen file operation.
+        """
+        old_name = getattr(self, "_last_target_name", "")
+        if not old_name or not new_name:
+            return True
+        new_root = self._file_mgr.preview_project_root(new_name)
+        if new_root is None:
+            return True
+        old_root = self._file_mgr.root_dir() / old_name
+        # Same destination (e.g. only spacing/case-equivalent edit), or the old
+        # target was never written to disk — nothing to reconcile.
+        if new_root == old_root or not (old_root / "project.json").exists():
+            return True
+        # A project already occupying the new name is a different situation
+        # (merge/overwrite) that this dialog doesn't cover — let the normal flow
+        # handle it rather than offering a misleading "rename onto it".
+        if new_root.exists():
+            return True
+
+        dlg = TargetChangeDialog(old_name, new_root.name, old_root, new_root, self)
+        dlg.exec()
+        action = dlg.result_action()
+        if action == TargetChangeAction.CANCEL:
+            return False
+        if action == TargetChangeAction.RENAME:
+            try:
+                self._file_mgr.rename_existing_project(old_name, new_name)
+            except (OSError, FileExistsError, FileNotFoundError) as exc:
+                # Fall back to a fresh target rather than blocking the user.
+                log.warning("Project rename failed (%s); creating fresh instead", exc)
+        elif action == TargetChangeAction.DELETE:
+            self._file_mgr.delete_project_folder(old_name)
+        # KEEP: leave the old folder; set_target_name creates the fresh one.
+        return True
+
     def _on_generate(self) -> None:
         if self._runner.is_running:
             log.warning("A process is already running")
@@ -3305,31 +3431,56 @@ class TabChart(QWidget):
                 return
             self._tc918_active = False
             self._tc918_targen_sig = None
-        self.target_started.emit()
-
-        params = self._collect_params()
         name = (
             self._target_name_edit.text().strip()
             if self._current_mode() == "guided"
             else self._manual_target_name_edit.text().strip()
         )
+        # If a target was already created this session and the user has now typed
+        # a different name, switching folders would orphan the old one. Ask first
+        # (rename / keep both / delete old); Cancel aborts before anything clears.
+        if not self._handle_target_rename(name):
+            return
+
+        self.target_started.emit()
+
+        params = self._collect_params()
         if name:
             self._file_mgr.set_target_name(name)
         base_name = self._file_mgr.get_target_name()
 
-        # Apply calibration target overrides (working folder stays as base_name)
+        # Calibration vs. normal run is now expressed by params.cal_target
+        # alone — it routes chart_creator to cal/ (stem "calibration") vs the
+        # current run folder (stem "chart"). The project folder is always
+        # base_name; the file stem no longer carries a cal_ prefix.
         cal_target_active = (
             hasattr(self, "_cal_target_check")
             and self._cal_target_check.isChecked()
             and self._cal_target_grp.isVisible()
         )
-        if cal_target_active:
-            params.cal_target = True
-            params.target_name = f"cal_{base_name}"
-        else:
-            params.target_name = base_name
+        params.cal_target = cal_target_active
+        params.target_name = base_name
+        self._last_target_name = base_name
 
-        self._last_target_name = params.target_name
+        # "Use as pre-conditioning profile" → seed a fresh run from the parent
+        # before generating the refined chart. new_run() copies the parent's
+        # profile.icc / measurement.ti3 into the new run as preconditioning.*
+        # and makes it current, so the chart generated below lands in the new
+        # run and chart_creator's external-import becomes a no-op.
+        if (not cal_target_active
+                and self._preconditioning_from_dialog
+                and self._precond_parent_run_id):
+            proj = self._file_mgr.project()
+            if proj.has_run(self._precond_parent_run_id):
+                parent = proj.run(self._precond_parent_run_id)
+                try:
+                    new_run = proj.new_run(preconditioning_from=parent)
+                    params.extra_targen_args = shlex.join(
+                        ["-c", str(new_run.preconditioning_icc)]
+                    )
+                    params.neutral_axis_from_profile = True
+                except FileNotFoundError as exc:
+                    log.warning("Could not seed pre-conditioning run: %s", exc)
 
         self._log.clear()
         self._preview.clear()
@@ -3400,12 +3551,39 @@ class TabChart(QWidget):
 
     def _on_load_ti1(self) -> None:
         path = open_file_dialog(
-            self, "Load .ti1 file", "TI1 files (*.ti1)",
+            self, "Load patch set",
+            "Patch sets (*.ti1 *.pxf *.cgats *.txt)",
             extra_path=self._settings.get("custom_output_path", ""),
         )
         if not path:
             return
-        ti1 = Path(path)
+        src = Path(path)
+        self._log.clear()
+
+        # A native Argyll .ti1 already carries real colorimetry, so it's used
+        # as-is. Anything else is treated as an i1Profiler RGB patch set
+        # (.pxf / CGATS .txt) and converted to a .ti1 first — reconstructing
+        # approximate XYZ so printtarg can lay it out (see
+        # workflow/i1profiler_import). CMYK / parse errors raise ValueError.
+        if src.suffix.lower() == ".ti1":
+            ti1 = src
+        else:
+            try:
+                tmp_dir = Path(tempfile.mkdtemp(prefix="chromiq_import_"))
+                ti1, n = import_to_ti1(src, tmp_dir / f"{src.stem}.ti1")
+            except ValueError as exc:
+                InfoDialog(
+                    "Couldn't read that patch set",
+                    f"{exc}\n\nLoad an Argyll .ti1, or an i1Profiler RGB patch "
+                    "set (a .pxf or a CGATS .txt). CMYK and extended-gamut "
+                    "sets aren't supported.",
+                    self, min_width=520,
+                ).exec()
+                return
+            self._log.appendPlainText(
+                f"Converted {src.name} to .ti1 ({n} patches)."
+            )
+
         # Loading a different patch set means we're no longer on the TC9.18 chart
         # or any preset-bound patch set; re-enable panels if a prebuilt was active.
         self._tc918_active = False
@@ -3413,9 +3591,8 @@ class TabChart(QWidget):
         self._preset_ti1_path = None
         if self._prebuilt_active:
             self._leave_prebuilt()
-        self._file_mgr.set_target_name(ti1.stem)
+        self._file_mgr.set_target_name(src.stem)
         params = self._collect_params()
-        self._log.clear()
         self._preview.clear()
         self._generate_btn.setEnabled(False)
         self._creator.load_ti1_and_generate_preview(
@@ -3472,7 +3649,12 @@ class TabChart(QWidget):
             return False
         try:
             target = parse_ti1(ti1)
-            txt_path, pxf_path = export_from_ti1(ti1)
+            project = self._file_mgr.project()
+            exports_dir = project.ensure_exports_dir()
+            # Project-named export so the file is self-identifying when handed
+            # to i1Profiler (e.g. printer-test-file-i1profiler.pxf).
+            base_name = f"{project.current_run().stem}-i1profiler"
+            txt_path, pxf_path = export_from_ti1(ti1, exports_dir, base_name=base_name)
         except Exception as exc:  # noqa: BLE001
             log.exception("i1Profiler export failed")
             self._log.appendPlainText(f"[i1iSis] export failed: {exc}")
@@ -3566,26 +3748,25 @@ class TabChart(QWidget):
     def _on_generate_finished(self, tiffs: list[Path]) -> None:
         self._generate_btn.setEnabled(True)
         # One-shot flag: consumed by this run, don't carry over to the next.
-        was_from_dialog = self._preconditioning_from_dialog
         self._preconditioning_from_dialog = False
-        # If a v1 promotion just happened, the path in the picker now points to
-        # a file that has been renamed away. Clear it so the user isn't left
-        # with a stale path next time they look at the panel.
-        if was_from_dialog and hasattr(self, "_guided_precond_path"):
-            picked = self._guided_precond_path.text().strip()
-            if picked and not Path(picked).is_file():
-                self._guided_precond_path.clear()
-                self._guided_precond_check.setChecked(False)
+        self._precond_parent_run_id = None
         is_isis = self._is_isis_selected()
-        stem = getattr(self, "_last_target_name", None) or "chart"
+        # File stem is fixed by the folder layout ("chart" / "calibration").
+        # Derive it from the actual page bitmaps so it's correct regardless of
+        # which flow produced them; fall back to "chart" when none exist.
+        if tiffs:
+            m = re.match(r"(.+?)_\d+$", tiffs[0].stem)
+            stem = m.group(1) if m else tiffs[0].stem
+        else:
+            stem = "chart"
         # For i1iSis the load-bearing artifact is the TI1 from targen, not the
         # printtarg TIFF. Run the export off the TI1 so users still get their
         # patch-set files even if printtarg fails for an unrelated reason
         # (e.g. paper-size validation crash). work_dir is wherever the TI1 lives
-        # — derive from tiffs when present, else from the FileManager.
+        # — derive from tiffs when present, else from the current run folder.
         isis_export_ok = False
         if is_isis:
-            work_dir = tiffs[0].parent if tiffs else self._file_mgr.ensure_folder()
+            work_dir = tiffs[0].parent if tiffs else self._file_mgr.project().current_run().dir
             isis_export_ok = self._export_for_i1profiler_and_notify(
                 work_dir, stem, preview_available=bool(tiffs),
             )
@@ -3668,8 +3849,14 @@ class TabChart(QWidget):
                     v = td_stash[pw.flag]
                 else:
                     v = pw.get_raw_value()
+                key = _pw_settings_key(tool, pw.flag)
                 if v is not None:
-                    s.set(_pw_settings_key(tool, pw.flag), v)
+                    s.set(key, v)
+                # Expert non-boolean rows carry their enable-checkbox state
+                # separately from the value; persist it so the flag is re-armed
+                # on restore (otherwise build_args drops it).
+                if pw.has_separate_enable:
+                    s.set(f"{key}_enabled", pw.is_enabled_by_user)
         for idx, pw in enumerate(self._d_cascade_widgets):
             s.set(f"manual_targen_-D_{idx}", pw.get_raw_value())
             s.set(f"manual_targen_-D_{idx}_enabled", pw.is_enabled_by_user)
@@ -3767,9 +3954,6 @@ class TabChart(QWidget):
             no_strip_limit       = no_strip_limit,
             left_clip_info       = bool(self._settings.get("chart_left_clip_info", False)),
             chromiq_clip_style   = bool(self._settings.get("i1pro_chromiq_clip_style", False)),
-            preserve_as_preconditioning = (
-                precond_active and self._preconditioning_from_dialog
-            ),
         )
 
     def _collect_manual(self) -> ChartParams:
@@ -3802,8 +3986,14 @@ class TabChart(QWidget):
         # in the command. targen parses options order-independently and the
         # -c path-staging/rewrite logic scans for the "-c" token wherever it
         # sits, so the order is purely cosmetic.
+        # ``__targen_distribution__`` is the pseudo-id for the mutex
+        # distribution-selector row (flag_choice); its value is the actual
+        # token (-r, -t, …) and is emitted by ParameterWidget.build_args.
         extra = []
-        for flag in ("-n", "-c", "-C", "-N", "-V", "-D"):
+        for flag in (
+            "-n", "-c", "-A", "-C", "-N", "-V", "-D",
+            "-l", "-m", "-M", "-b", "__targen_distribution__",
+        ):
             for pw in self._manual_widgets.get("targen", []):
                 if pw.flag == flag:
                     extra.extend(pw.build_args())
@@ -3989,6 +4179,14 @@ class TabChart(QWidget):
                             v = None
                 if v is not None:
                     pw.set_value(v)
+                # Re-arm the enable-checkbox for expert non-boolean rows; without
+                # this the value is restored but the flag stays off (and is
+                # dropped by build_args). Only act when the key was persisted, so
+                # presets/defaults from before this fix don't force rows off.
+                if pw.has_separate_enable:
+                    en = s.get(f"{new_key}_enabled")
+                    if en is not None:
+                        pw.set_user_enabled(bool(en))
         for idx, pw in enumerate(self._d_cascade_widgets):
             v = s.get(f"manual_targen_-D_{idx}")
             if v is not None:

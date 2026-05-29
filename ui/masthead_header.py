@@ -6,11 +6,12 @@ when the gear button is pressed.
 """
 from __future__ import annotations
 
-from PyQt6.QtCore import QRect, QSize, Qt, pyqtSignal
+from PyQt6.QtCore import QRect, QRectF, QSize, Qt, pyqtSignal
 from PyQt6.QtGui import (
     QColor, QFont, QFontMetricsF, QGuiApplication, QIcon,
     QPainter, QPen, QPaintEvent, QPixmap,
 )
+from PyQt6.QtSvg import QSvgRenderer
 from PyQt6.QtWidgets import QToolButton, QWidget
 
 from core.resource_path import resource_path
@@ -56,6 +57,7 @@ class MastheadHeader(QWidget):
 
     settings_clicked = pyqtSignal()
     help_clicked     = pyqtSignal()
+    tools_clicked    = pyqtSignal()
 
     STRIPE_H  = 6
     VERSION_H = 22
@@ -81,7 +83,16 @@ class MastheadHeader(QWidget):
         self._btn.clicked.connect(self.settings_clicked)
         self._load_settings_icon()
 
-        # ---- Embedded "?" help button (absolute child, left of settings) ----
+        # ---- Embedded tools button (absolute child, left of settings) ----
+        self._tools_btn = QToolButton(self)
+        self._tools_btn.setObjectName("tooltip_btn")
+        self._tools_btn.setToolTip("Tools")
+        self._tools_btn.setFixedSize(QSize(44, 44))
+        self._tools_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._tools_btn.clicked.connect(self.tools_clicked)
+        self._load_tools_icon()
+
+        # ---- Embedded "?" help button (absolute child, far right) ----
         self._help_btn = WelcomeButton(self)
         self._help_btn.help_clicked.connect(self.help_clicked)
 
@@ -94,6 +105,7 @@ class MastheadHeader(QWidget):
         self._mode = new_mode
         self._palette = _PALETTE_LIGHT if new_mode == "light" else _PALETTE_DARK
         self._load_settings_icon()
+        self._load_tools_icon()
         self.update()
 
     # ------------------------------------------------------------------
@@ -105,7 +117,7 @@ class MastheadHeader(QWidget):
     # ------------------------------------------------------------------
     def resizeEvent(self, event) -> None:  # noqa: N802
         super().resizeEvent(event)
-        # Right edge: [ Settings ] [ ? ] — help icon sits on the far right.
+        # Right edge: [ Tools ] [ Settings ] [ ? ] — help icon sits on the far right.
         bw, bh = self._btn.width(), self._btn.height()
         body_top  = self.STRIPE_H
         body_bot  = self.height() - self.VERSION_H
@@ -113,6 +125,7 @@ class MastheadHeader(QWidget):
         help_x = self.width() - self._help_btn.width() - 12
         self._help_btn.move(help_x, btn_y)
         self._btn.move(help_x - bw - 8, btn_y)
+        self._tools_btn.move(help_x - bw - 8 - self._tools_btn.width() - 8, btn_y)
 
     def sizeHint(self) -> QSize:  # noqa: N802
         return QSize(900, 110)
@@ -242,6 +255,48 @@ class MastheadHeader(QWidget):
 
         self._btn.setIcon(self._draw_sliders_icon())
         self._btn.setIconSize(QSize(26, 26))
+
+    # ------------------------------------------------------------------
+    def tools_button(self) -> QToolButton:
+        """Expose the Tools button so callers can anchor a popup under it."""
+        return self._tools_btn
+
+    # ------------------------------------------------------------------
+    def _load_tools_icon(self) -> None:
+        """Render the tools toolbox SVG to fill the button.
+
+        The SVG ships in two flavours (``tools_v2.svg`` for dark, ``tools_v2_light.svg``
+        for light). The toolbox graphic has noticeable internal padding inside its
+        64x64 viewBox, so we render close to the full button area (40 px inside
+        the 44x44 button) so the visible shape matches the optical weight of the
+        adjacent settings gear and "?" help glyph.
+        """
+        rel = "assets/tools_v2_light.svg" if self._mode == "light" else "assets/tools_v2.svg"
+        path = resource_path(rel)
+        if not path.exists():
+            return
+        renderer = QSvgRenderer(str(path))
+        if not renderer.isValid():
+            return
+        # The toolbox graphic is visually bottom-heavy (handle + lid above a
+        # body of coloured stripes), so a strictly centred render reads as
+        # sitting a bit low next to the gear and "?" buttons. Shift the SVG a
+        # few logical px upward inside the pixmap to optically centre it.
+        size      = 40   # logical px — fills the 44x44 button with a slim margin
+        y_shift   = 3    # logical px — nudge the artwork upward
+        dpr  = QGuiApplication.primaryScreen().devicePixelRatio()
+        phys = round(size * dpr)
+        shift_phys = round(y_shift * dpr)
+        px = QPixmap(phys, phys)
+        px.fill(Qt.GlobalColor.transparent)
+        p = QPainter(px)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+        renderer.render(p, QRectF(0.0, float(-shift_phys), float(phys), float(phys)))
+        p.end()
+        px.setDevicePixelRatio(dpr)
+        self._tools_btn.setIcon(QIcon(px))
+        self._tools_btn.setIconSize(QSize(size, size))
 
     def _draw_sliders_icon(self) -> QIcon:
         dpr  = QGuiApplication.primaryScreen().devicePixelRatio()

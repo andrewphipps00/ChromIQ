@@ -163,6 +163,18 @@ QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox {{
 QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus {{
     border-color: {ACCENT};
 }}
+/* File lists (Average/Merge tools) — match the text-input background so the
+   field reads as an editable area rather than a near-black void. */
+QListWidget {{
+    background: {BG_INPUT};
+    color: {TEXT_MAIN};
+    border: 1px solid {BORDER};
+    border-radius: 3px;
+}}
+QListWidget::item:selected {{
+    background: {ACCENT};
+    color: #ffffff;
+}}
 /* Disabled inputs — dim text, subtly darker chrome to signal "off". */
 QLineEdit:disabled,
 QSpinBox:disabled, QDoubleSpinBox:disabled,
@@ -195,19 +207,26 @@ QComboBox QAbstractItemView {{
     selection-color: #0a0a0a;
     outline: none;
 }}
-QSpinBox, QDoubleSpinBox {{ padding-right: 24px; min-height: 28px; }}
+/* Buttons mirror the QComboBox drop-down exactly: subcontrol-origin PADDING
+   keeps them INSIDE the 1px border, so the focus ring is never overlapped and
+   stays a clean continuous rounded rectangle (origin: border made the buttons
+   sit on the frame, leaving messy seam/corner artefacts). Zero VERTICAL padding
+   so the two buttons fill the inner height and meet at a single 1px divider
+   (the down-button's top border); border-left is the divider from the text. */
+QSpinBox, QDoubleSpinBox {{ padding: 0 24px 0 6px; }}
 QSpinBox::up-button, QDoubleSpinBox::up-button {{
-    subcontrol-origin: border; subcontrol-position: top right;
-    width: 22px; height: 18px;
+    subcontrol-origin: padding; subcontrol-position: top right;
+    width: 22px;
+    border: none;
     border-left: 1px solid {BORDER};
-    border-bottom: 1px solid {BORDER};
     border-top-right-radius: 2px;
     background: #2c2c2c;
 }}
 QSpinBox::up-button:hover, QDoubleSpinBox::up-button:hover {{ background: #3a3a3a; }}
 QSpinBox::down-button, QDoubleSpinBox::down-button {{
-    subcontrol-origin: border; subcontrol-position: bottom right;
-    width: 22px; height: 18px;
+    subcontrol-origin: padding; subcontrol-position: bottom right;
+    width: 22px;
+    border: none;
     border-left: 1px solid {BORDER};
     border-top: 1px solid {BORDER};
     border-bottom-right-radius: 2px;
@@ -241,7 +260,7 @@ QRadioButton::indicator:checked {{ background: {ACCENT}; border-color: {ACCENT};
 
 /* ---- Log ---------------------------------------------------------- */
 QPlainTextEdit#log {{
-    background: #0a0a0a;
+    background: {BG_INPUT};
     color: {TEXT_MONO};
     font-family: "JetBrains Mono", "Menlo", "SF Mono", "Courier New", monospace;
     font-size: 12px;
@@ -324,11 +343,9 @@ QLineEdit#compact_input,
 QSpinBox#compact_input, QDoubleSpinBox#compact_input, QComboBox#compact_input {{
     min-height: 0; max-height: 22px; padding: 1px 6px;
 }}
-QSpinBox#compact_input, QDoubleSpinBox#compact_input {{ padding-right: 20px; }}
-QSpinBox#compact_input::up-button,   QDoubleSpinBox#compact_input::up-button   {{ height: 10px; }}
-QSpinBox#compact_input::down-button, QDoubleSpinBox#compact_input::down-button {{ height: 10px; }}
-QSpinBox#compact_input::up-arrow,   QDoubleSpinBox#compact_input::up-arrow   {{ top: 0; }}
-QSpinBox#compact_input::down-arrow, QDoubleSpinBox#compact_input::down-arrow {{ top: 0; }}
+QSpinBox#compact_input, QDoubleSpinBox#compact_input {{
+    padding: 0 20px 0 6px; min-height: 0; max-height: 22px;
+}}
 QComboBox#compact_input {{ padding-right: 28px; }}
 QLineEdit#compact_path {{
     min-height: 22px;

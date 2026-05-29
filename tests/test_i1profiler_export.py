@@ -120,11 +120,31 @@ def test_ink_colorspace_enum():
     assert ink_colorspace_enum(8) == (17, False)  # CMYK+4 extrapolated
 
 
+# --- Output filenames -----------------------------------------------------
+
+
+def test_export_default_base_name(tmp_path):
+    """Default base_name is 'i1profiler' (kept for generic / test callers)."""
+    txt, pxf = export_from_ti1(_write(tmp_path, "rgb.ti1", RGB_TI1), tmp_path)
+    assert txt.name == "i1profiler.txt"
+    assert pxf.name == "i1profiler.pxf"
+
+
+def test_export_uses_explicit_base_name(tmp_path):
+    """tab_chart passes "<project>-i1profiler" so the export self-identifies."""
+    txt, pxf = export_from_ti1(
+        _write(tmp_path, "rgb.ti1", RGB_TI1), tmp_path,
+        base_name="printer-test-file-i1profiler",
+    )
+    assert txt.name == "printer-test-file-i1profiler.txt"
+    assert pxf.name == "printer-test-file-i1profiler.pxf"
+
+
 # --- RGB export ------------------------------------------------------------
 
 
 def test_rgb_export_scales_to_255_and_stays_minimal(tmp_path):
-    txt, pxf = export_from_ti1(_write(tmp_path, "rgb.ti1", RGB_TI1))
+    txt, pxf = export_from_ti1(_write(tmp_path, "rgb.ti1", RGB_TI1), tmp_path)
     assert txt is not None and txt.suffix == ".txt"
     pxf_text = pxf.read_text()
     parseString(pxf_text)  # well-formed
@@ -141,11 +161,30 @@ def test_rgb_export_scales_to_255_and_stays_minimal(tmp_path):
     assert "255.0000" in txt_text
 
 
+def test_pxf_is_write_protected(tmp_path):
+    """Exported .pxf must carry WriteProtected="True" — both RGB and CMYK.
+
+    With it False, i1Profiler treats the file as user-editable and exposes the
+    "Intelligente Messfelderstellung" controls (patch-count slider + shuffle
+    checkbox). A stray click would replace or scramble our patches, silently
+    desyncing the .ti2/.ti3 round-trip with ChromIQ. Verified in i1Profiler
+    against X-Rite's shipped reference charts, which all set this to True.
+    """
+    _, rgb_pxf = export_from_ti1(_write(tmp_path, "rgb.ti1", RGB_TI1), tmp_path)
+    assert 'WriteProtected="True"' in rgb_pxf.read_text()
+    assert 'WriteProtected="False"' not in rgb_pxf.read_text()
+    _, cmyk_pxf = export_from_ti1(
+        _write(tmp_path, "cmyk.ti1", CMYK_TI1), tmp_path, base_name="cmyk_out"
+    )
+    assert 'WriteProtected="True"' in cmyk_pxf.read_text()
+    assert 'WriteProtected="False"' not in cmyk_pxf.read_text()
+
+
 # --- CMYK export -----------------------------------------------------------
 
 
 def test_cmyk_export(tmp_path):
-    txt, pxf = export_from_ti1(_write(tmp_path, "cmyk.ti1", CMYK_TI1))
+    txt, pxf = export_from_ti1(_write(tmp_path, "cmyk.ti1", CMYK_TI1), tmp_path)
     assert txt is not None
     pxf_text = pxf.read_text()
     parseString(pxf_text)
@@ -164,7 +203,7 @@ def test_cmyk_export(tmp_path):
 
 
 def test_cmykogv_export(tmp_path):
-    txt, pxf = export_from_ti1(_write(tmp_path, "ogv.ti1", CMYKOGV_TI1))
+    txt, pxf = export_from_ti1(_write(tmp_path, "ogv.ti1", CMYKOGV_TI1), tmp_path)
     assert txt is None  # extended gamut is .pxf only
     pxf_text = pxf.read_text()
     parseString(pxf_text)
@@ -182,7 +221,7 @@ def test_cmykogv_export(tmp_path):
 
 
 def test_cmykogv_spotcolor_percentages(tmp_path):
-    _txt, pxf = export_from_ti1(_write(tmp_path, "ogv.ti1", CMYKOGV_TI1))
+    _txt, pxf = export_from_ti1(_write(tmp_path, "ogv.ti1", CMYKOGV_TI1), tmp_path)
     dom = parseString(pxf.read_text())
     first = dom.getElementsByTagName("cc:ColorCMYKPlusN")[0]
     spots = first.getElementsByTagName("cc:SpotColor")

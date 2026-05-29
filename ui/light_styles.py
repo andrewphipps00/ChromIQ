@@ -258,19 +258,21 @@ QComboBox QAbstractItemView {{
     selection-color: #ffffff;
     outline: none;
 }}
+/* Buttons mirror the QComboBox drop-down: subcontrol-origin PADDING keeps them
+   INSIDE the 1px border, so the focus ring stays a clean continuous rounded
+   rectangle (origin: border made the buttons sit on the frame, leaving messy
+   seam/corner artefacts). Zero VERTICAL padding so the two buttons fill the
+   inner height and meet at a single 1px divider (the down-button's top border);
+   border-left is the divider from the text. */
 QSpinBox, QDoubleSpinBox {{
-    padding-right: 24px;
-    min-height: 28px;
+    padding: 0 24px 0 6px;
 }}
 QSpinBox::up-button, QDoubleSpinBox::up-button {{
-    subcontrol-origin: border;
+    subcontrol-origin: padding;
     subcontrol-position: top right;
     width: 22px;
-    height: 18px;
+    border: none;
     border-left: 1px solid {LM_BORDER};
-    border-top: 1px solid transparent;
-    border-right: 1px solid transparent;
-    border-bottom: 1px solid {LM_BORDER};
     border-top-right-radius: 3px;
     background: {LM_BG_WIDGET};
 }}
@@ -278,14 +280,12 @@ QSpinBox::up-button:hover, QDoubleSpinBox::up-button:hover {{
     background: #e4e0da;
 }}
 QSpinBox::down-button, QDoubleSpinBox::down-button {{
-    subcontrol-origin: border;
+    subcontrol-origin: padding;
     subcontrol-position: bottom right;
     width: 22px;
-    height: 18px;
+    border: none;
     border-left: 1px solid {LM_BORDER};
     border-top: 1px solid {LM_BORDER};
-    border-right: 1px solid transparent;
-    border-bottom: 1px solid transparent;
     border-bottom-right-radius: 3px;
     background: {LM_BG_WIDGET};
 }}
@@ -512,19 +512,9 @@ QSpinBox#compact_input, QDoubleSpinBox#compact_input, QComboBox#compact_input {{
     padding: 1px 6px;
 }}
 QSpinBox#compact_input, QDoubleSpinBox#compact_input {{
-    padding-right: 20px;
-}}
-QSpinBox#compact_input::up-button, QDoubleSpinBox#compact_input::up-button {{
-    height: 10px;
-}}
-QSpinBox#compact_input::down-button, QDoubleSpinBox#compact_input::down-button {{
-    height: 10px;
-}}
-QSpinBox#compact_input::up-arrow, QDoubleSpinBox#compact_input::up-arrow {{
-    top: 0;
-}}
-QSpinBox#compact_input::down-arrow, QDoubleSpinBox#compact_input::down-arrow {{
-    top: 0;
+    padding: 0 20px 0 6px;
+    min-height: 0;
+    max-height: 22px;
 }}
 QComboBox#compact_input {{
     padding-right: 28px;

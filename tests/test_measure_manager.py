@@ -78,6 +78,37 @@ def _feed(mgr: MeasureManager, line: str) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Command construction — bidirectional flags
+# ---------------------------------------------------------------------------
+
+def _args(**kw) -> list[str]:
+    from pathlib import Path
+    mgr, _runner, _sigs = _make_manager()
+    return mgr._build_args(MeasureParams(ti1_path=Path("/tmp/chart.ti1"), **kw))
+
+
+def test_build_args_disable_bidir_emits_capital_B():
+    assert "-B" in _args(disable_bidir=True)
+    assert "-b" not in _args(disable_bidir=True)
+
+
+def test_build_args_force_bidir_emits_lowercase_b():
+    assert "-b" in _args(force_bidir=True)
+    assert "-B" not in _args(force_bidir=True)
+
+
+def test_build_args_bidir_flags_mutually_exclusive():
+    # -B and -b can never both be passed; -B (disable) wins if both are set.
+    args = _args(disable_bidir=True, force_bidir=True)
+    assert "-B" in args and "-b" not in args
+
+
+def test_build_args_no_bidir_flag_by_default():
+    args = _args()
+    assert "-B" not in args and "-b" not in args
+
+
+# ---------------------------------------------------------------------------
 # A. Mid-measurement recovery prompts
 # ---------------------------------------------------------------------------
 

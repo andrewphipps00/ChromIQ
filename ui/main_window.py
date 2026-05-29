@@ -82,6 +82,7 @@ class MainWindow(QMainWindow):
         self._masthead = MastheadHeader(version=APP_VERSION, parent=central)
         self._masthead.settings_clicked.connect(self._open_settings)
         self._masthead.help_clicked.connect(self.open_welcome_dialog)
+        self._masthead.tools_clicked.connect(self._open_tools_menu)
         main_layout.addWidget(self._masthead)
 
         # Tabs
@@ -357,11 +358,18 @@ class MainWindow(QMainWindow):
 
     def _on_measure_done(self, ti3: Path) -> None:
         cal_mode = bool(self._settings.get("calibration_mode", False))
-        if cal_mode and ti3.stem.startswith("cal_"):
+        # A calibration measurement lives in the project's cal/ folder rather
+        # than carrying a cal_ filename prefix.
+        if cal_mode and ti3.parent.name == "cal":
             self._tab_profile.set_cal_ti3_path(ti3)
             self._tabs.setCurrentWidget(self._tab_profile)
         else:
             self._tab_profile.set_ti3_path(ti3, propagate=False)
+            # Forward the Measure-tab opt-in so Build Profile can merge the
+            # pre-conditioning data (ChromIQ-style refinement). None when off.
+            self._tab_profile.set_preconditioning_source(
+                self._tab_measure.preconditioning_choice()
+            )
 
     def _on_measurement_active(self, active: bool) -> None:
         measure_idx = self._tabs.indexOf(self._tab_measure)
@@ -463,6 +471,19 @@ class MainWindow(QMainWindow):
         dlg.show()
         dlg.raise_()
         dlg.activateWindow()
+
+    def _open_tools_menu(self) -> None:
+        """Show the speech-bubble Tools popup under the masthead's Tools button."""
+        from ui.tools_popup import ToolsPopup
+
+        popup = ToolsPopup(self)
+        popup.set_appearance(self._title_bar_mode)
+        popup.selected.connect(self._launch_tool)
+        popup.show_under(self._masthead.tools_button())
+
+    def _launch_tool(self, key: str) -> None:
+        from ui.dialogs.tools_dialogs import open_tool_dialog
+        open_tool_dialog(key, self._runner, self._settings, self)
 
     def _open_settings(self) -> None:
         # SettingsDialog tints its own tooltip ⓘ icons to the dialog's neutral
@@ -568,7 +589,7 @@ class MainWindow(QMainWindow):
             "&nbsp;&nbsp;1. Download ArgyllCMS from "
             "<a href='https://www.argyllcms.com'>argyllcms.com</a><br>"
             "&nbsp;&nbsp;2. Extract the archive and move the folder to "
-            "<span style='font-family:monospace'>/Applications</span><br>"
+            "<span style='font-family:Menlo, Consolas, \"Courier New\", monospace'>/Applications</span><br>"
             "&nbsp;&nbsp;3. Restart ChromIQ — it will detect the installation "
             "automatically.<br><br>"
             "If ArgyllCMS is already installed in a custom location, click "
@@ -686,16 +707,25 @@ class MainWindow(QMainWindow):
             return
         self._file_mgr.set_target_name(target)
 
-        ti1 = Path(self._settings.get("session_ti1_path", ""))
-        if ti1.exists():
-            self._tab_measure.set_ti1_path(ti1)
+        # Only the target name is persisted now; every artefact path is derived
+        # from the project's current run. Bail if there's no project on disk for
+        # this target (deleted folder, or a pre-redesign session).
+        if not (self._file_mgr.working_dir() / "project.json").exists():
+            log.info("Session restore skipped: no project for target=%s", target)
+            return
 
-        tiffs = sorted(self._file_mgr.working_dir().glob("*.tif*"))
+        proj = self._file_mgr.project()
+        run = proj.current_run()
+
+        if run.chart_ti1.exists():
+            self._tab_measure.set_ti1_path(run.chart_ti1)
+
+        tiffs = run.chart_tiffs()
         if tiffs:
             self._tab_print.load_tiffs(tiffs)
 
-        ti3 = Path(self._settings.get("session_ti3_path", ""))
-        icc = Path(self._settings.get("session_icc_path", ""))
+        ti3 = run.measurement_ti3
+        icc = run.built_profile_icc()
         if ti3.exists():
             self._tab_profile.set_ti3_path(ti3, propagate=False)
         if icc.exists():
@@ -704,11 +734,11 @@ class MainWindow(QMainWindow):
             self._tab_check.set_paths(ti3, icc)
 
         if self._settings.get("calibration_mode", False):
-            cal_ti3 = Path(self._settings.get("session_cal_ti3_path", ""))
+            cal_ti3 = proj.calibration.ti3
             if cal_ti3.exists():
                 self._tab_profile.set_cal_ti3_path(cal_ti3)
 
-        log.info("Session restored: target=%s", target)
+        log.info("Session restored: target=%s run=%s", target, run.id)
 
     def closeEvent(self, event) -> None:
         # Capture geometry BEFORE hide(): on macOS, hide() can leave the
@@ -726,10 +756,8 @@ class MainWindow(QMainWindow):
         self._tab_check.shutdown_webengine()
         self._tab_print.shutdown()
         self._settings.set("active_tab", self._tabs.currentIndex())
+        # Only the target name is persisted; _restore_last_session derives every
+        # artefact path from the project's current run (project.json).
         self._settings.set("session_target_name",  self._file_mgr._target_name)
-        self._settings.set("session_ti1_path",     str(self._tab_measure.ti1_path or ""))
-        self._settings.set("session_ti3_path",     str(self._tab_profile.ti3_path or ""))
-        self._settings.set("session_icc_path",     str(self._tab_profile.icc_path or ""))
-        self._settings.set("session_cal_ti3_path", str(self._tab_profile.cal_ti3_path or ""))
         self._runner.cleanup()
         super().closeEvent(event)

@@ -1,5 +1,1143 @@
 # Changelog
 
+## v3.8.0
+**ChromIQ is out of beta.** This is the first stable release of the 3.8 line,
+and it's a big one. Since 3.7 it has grown a whole toolbox of stand-alone
+utilities, an interactive chart editor, two optional ways to squeeze more
+accuracy out of your profiles, and a tidier, more predictable way of storing
+your work on disk — plus a long list of smaller fixes and polish.
+
+If you followed the betas you've met most of this already; here is the complete
+picture in one place, grouped by what you actually do with it. Everything new is
+either on by sensible defaults or clearly opt-in, so upgrading shouldn't change
+your day-to-day workflow unless you want it to.
+
+### 🧰 A new Tools menu
+A toolbox button now sits in the header next to Preferences. It opens a small
+menu of stand-alone utilities you can use any time — no project setup required.
+Each one has a plain-language explainer (ⓘ), its own file pickers, and a
+destination + name for what it produces.
+
+- **Average measurements** — combine repeated reads of the same chart into one
+  averaged `.ti3` to cancel out instrument noise (mean, or median with 3+ reads).
+- **Merge measurements** — join the patches of several `.ti3` files into one
+  bigger set, giving the profiler more data to work with.
+- **Verify against reference** — check how closely a print matches a set of
+  expected colour values (ΔE per patch and overall) *without* building a profile.
+  It now **explains** its numbers (whether a high score is really a paper/black-
+  point limit or a true colour shift), can **leave out colours your paper can't
+  physically print**, and can draw an interactive **3D difference map** of where
+  each colour landed versus where it should have.
+- **Verify a profile (independent check)** — the honest test: grade a finished
+  profile against a freshly measured chart it was *not* built from, in plain
+  language. (A profile always looks good against its own training patches.)
+- **Convert TI1 → i1Profiler** — export an Argyll chart as i1Profiler patch sets
+  (`.txt` / `.pxf`) so an i1iSis or other i1Profiler-driven instrument can
+  measure it. It can now also write a ready-to-open i1Profiler **workflow file
+  (`.pwxf`)** with the instrument, paper and layout already configured, across
+  all twelve i1Profiler device types, with an optional patch-size override.
+- **Convert i1Profiler → TI3** — bring an i1Profiler measurement export back into
+  ChromIQ to build a profile from it.
+- **Convert i1Profiler → TI1** — the reverse of the export, reading i1Profiler
+  charts (including `.pwxf` workflows) back into an Argyll `.ti1`.
+
+### ✏️ Interactive chart-layout editor
+**Tools → "Edit / create chart layout"** opens a full editor where you can load
+any RGB chart (or build one from scratch), drag patches into a new order,
+recolour individual patches and spacers, paste in your own colour list, choose
+custom paper sizes, and export the colour list as a text file. It always
+regenerates the chart through Argyll's printtarg, so the data file and the
+printed image can never drift out of sync. Well-mixed charts are **tagged as
+randomised automatically on save** so they can be measured in either direction;
+structured layouts are left alone unless you deliberately override.
+
+### 🔁 Two optional ways to push accuracy further (both off by default)
+- **ChromIQ-style refinement (two-pass profiling).** Build a first profile, then
+  create a second chart that points at it as a "pre-conditioning" profile;
+  ChromIQ keeps the first run's measurements and combines both sets at build
+  time for a more accurate result. Your original measurement file is never
+  altered — the combined data goes into separate `merged` files.
+- **Measure-and-average.** Read the same printed chart several times and average
+  the measurements (including full spectral data) to reduce instrument noise.
+  The choice is offered right in the "All stripes read" window. With it off,
+  measuring behaves exactly as in 3.7.
+- _Thanks to **Alan Goldhammer** for suggesting averaging and the approach behind
+  it._
+
+### 🎯 Create Chart
+- **Ready-made targets** — built-in i1Pro **TC9.24** (A4 + US Letter) and a
+  refreshed **TC9.18** preset that drop in a complete chart with no targen /
+  printtarg step. _(See the note on presets below.)_
+- **Attach your own patch set to a saved preset** so selecting it later rebuilds
+  that exact chart, and the `.ti1` travels with the preset when you share it.
+- **Load i1Profiler files** (`.pxf` / `.cgats` / `.txt`) directly as a patch set.
+- **More expert targen options in Manual mode** — total ink limit, OFPS
+  adaptation, cube interior/surface steps, BCC steps and a patch-distribution
+  selector, each behind its own opt-in so the default command line is unchanged.
+  These now save correctly in presets and "Default" fully resets every field.
+- **Rename-on-generate** — generating under a new name offers to rename the
+  existing project properly (files and manifest, not just the folder), keep both,
+  or replace.
+
+### 📏 Measuring
+- **Strip recognition is now a single dropdown** (Argyll default / bidirectional
+  disabled / bidirectional forced) in both Guided and Manual modes, with **Auto**
+  picking the right setting from your instrument (i1 Pro reads either direction,
+  ColorMunki one direction).
+- **Randomisation-aware bidirectional reading** — forcing bidirectional on a
+  fixed-order chart now warns you first, because that combination can misread
+  strips and bake a colour cast into the profile.
+- **The bidirectional preview arrow is now honest** — the second arrow appears
+  only when the read truly is bidirectional, so fixed-order charts show a single
+  arrow.
+
+### 🗂️ Reorganised project folders
+Every project now uses a clear **per-run folder layout** under
+`~/ChromIQ/<project>/`, with a `Where are my files.txt` map at its root, shared
+`cal/` and `exports/` folders, and one folder per profile build under `runs/`.
+Chart files now carry your **project's name** (so the printed sheet, the saved
+files, and the installed `.icc` are all self-identifying), and a whole class of
+"which measurement went where" bugs is now impossible by construction.
+
+> **Upgrading from a 3.8 beta?** Projects created by beta.10 or earlier used the
+> old flat layout and won't be picked up automatically. They're not lost — just
+> open one of their files (Load .ti2 / .ti3) and ChromIQ rebuilds the project in
+> the new layout, bringing every related file along. New charts use the new
+> layout automatically.
+
+### 🖨️ Printing (macOS)
+- The **macOS print dialog is now the default on macOS** (you can still switch
+  back to ChromIQ's built-in colour-managed pipeline in Preferences). When it's
+  selected, the "Confirm print settings before printing" option greys out, since
+  the system dialog is itself the confirmation step.
+
+### 💅 Polish & fixes
+- **Spin boxes** look right everywhere now — the up/down buttons tile cleanly
+  with a single divider and the focus ring stays a clean rounded rectangle, in
+  both light and dark mode.
+- **Disabled options actually look disabled** — ticked checkboxes grey out with
+  their group instead of keeping a bright fill.
+- **Friendlier dark/light surfaces** in the tool dialogs (status and paste boxes,
+  file lists, combo bodies) so input areas no longer read as a near-black void.
+- **Plain-language ⓘ help popups** across the chart editor and every Tools dialog.
+- **Cancelling Preferences is instant**, and a startup font warning is gone.
+- **Windows fixes** — a project-create crash, a second-chart-read hang, and the
+  Tools popup's stray border/shadow are all resolved.
+
+### 📋 A note on built-in presets
+The ready-made chart presets (the i1Pro **TC9.24** targets, and friends) are
+getting one more **accuracy review** before they're switched on by default, so
+they're temporarily held back in this release. They'll be enabled in a follow-up
+update soon — everything else above is ready to use today.
+
+### 🙏 Thanks
+To **Alan Goldhammer**, **Pharmacist**, and everyone who tested the 3.8 betas and
+sent feedback — this release is shaped by it.
+
+## v3.8.0-beta.31
+**Verify is far more useful, plus a second, more honest way to check a profile.**
+The "Verify against reference" tool used to hand back a bare ΔE number that
+could look alarmingly high for reasons that aren't your profile's fault (for
+example checking glossy-targeted values against a matte print). It now explains
+its results, can leave out colours your paper physically can't reproduce, and
+can draw the differences in 3D. There's also a brand-new tool for checking a
+finished profile against a fresh chart it has never seen.
+
+### Added
+- **New tool: "Verify a profile (independent check)."** Runs Argyll's profcheck
+  on a profile plus a freshly measured chart it was *not* built from, then grades
+  the result in plain language. Checking a profile against its own training
+  patches almost always looks good — testing it on a different chart is the
+  honest measure of accuracy. (Tools menu.)
+- **3D difference map in "Verify against reference."** Tick *Create a 3D
+  difference map* and, when the check finishes, an interactive 3D view opens
+  drawing a line from each target colour to where your print actually landed —
+  green dots are the reference, red dots your measurement. Drag to rotate, scroll
+  to zoom. It reuses the gamut viewer's renderer and follows the light/dark
+  theme.
+
+### Changed
+- **"Verify against reference" now explains its numbers.** Instead of just an
+  average and peak ΔE, it tells you whether the difference is mostly *lightness*
+  (a black-point / paper limit — expected when a reference made for one paper is
+  checked on another) or a real *colour* shift, and reports the best-90% figure
+  and a plain-language grade.
+- **Skip colours your paper can't print.** Optionally point the verify tool at
+  your profile (.icc): reference colours outside that paper's gamut — most often
+  the deepest shadows — are left out of the score (it tells you how many), so
+  unreachable colours stop dominating the result.
+- **Consistent control highlights.** Checkboxes, focused text fields and combo
+  boxes in the tool dialogs now use the same neutral highlight colour as the
+  Settings window, in both light and dark mode.
+
+### Fixed
+- **Dark mode:** the status-message box and paste boxes in the tool dialogs now
+  use the same background as the text-entry fields, instead of a darker shade
+  that read as a near-black void.
+- The Tools menu pop-up is a little wider so longer entries are no longer
+  clipped.
+
+## v3.8.0-beta.30
+**The Measure tab's bidirectional strip indicator now matches what actually
+happens during the read.** The preview shows a second (bottom) arrow on the
+active strip to signal that it can be scanned in either direction — but on a
+fixed-order chart left at Argyll's default setting, the chart is in fact read in
+one direction only, so the second arrow was misleading.
+
+### Fixed
+- **Bidirectional preview arrow follows the effective read direction.** The
+  double arrow now appears only when the read is truly bidirectional: always
+  when "Bidirectional forced" is set, never when it is disabled, and — at the
+  Argyll-default setting — only on a randomised chart (where chartread reads
+  both directions). Fixed-order charts at the default setting now correctly
+  show a single arrow.
+
+## v3.8.0-beta.29
+**Readability fix for the Average / Merge tool dialogs in dark mode.** The file
+list in both dialogs used a near-black background that made it hard to tell the
+list area apart from the surrounding window.
+
+### Fixed
+- The measurement-file lists in **Average measurements** and **Merge
+  measurements** now use the same background as the text-entry fields, so the
+  list reads as an editable area instead of a dark void. Selected rows are
+  highlighted in the accent colour. (Dark mode only.)
+
+## v3.8.0-beta.28
+**Randomised tagging in the chart editor is now automatic.** A well-mixed chart
+is tagged as randomised for you on save (so it can be measured bidirectionally),
+and the manual checkbox is demoted to a "force" override that only matters for
+structured layouts the safety check considers risky.
+
+### Changed
+- **Chart layout editor — auto-tag on save.** When you save, ChromIQ analyses
+  the layout: a well-mixed chart is tagged as randomised automatically with no
+  prompt; a structured one is left untagged unless you override it.
+- The old "Tag as randomised" checkbox is renamed **"Force 'randomised' tag"**
+  and is **enabled only while the current layout is judged unsafe** (greyed out
+  otherwise, since safe charts are tagged anyway). Its state refreshes live with
+  each preview.
+- Forcing the tag on an unsafe layout now shows an extensive, plain-language
+  risk warning with a **"Don't show this again"** option.
+- The safety check looks at each strip individually — a single direction-
+  ambiguous strip or a single near-identical strip pair flags the whole chart,
+  rather than being averaged away.
+
+### Notes
+- The check is conservative (uncertain → treated as unsafe); you can always
+  Force the tag from the warning. Small charts with short strips have less
+  margin and may be flagged more readily.
+
+## v3.8.0-beta.27
+**Randomisation-aware bidirectional measuring, and plain-language help across
+the tools.** The chart layout editor can now mark a chart as randomised so it
+can be measured bidirectionally — but only when its patch order is actually
+well mixed, checked automatically. The Measure tab warns if you force
+bidirectional reading on a fixed-order chart, and every editor/tool screen
+gained friendly ⓘ help popups.
+
+### Added
+- **Chart layout editor — "Tag as randomised for measurement"** (on by
+  default). When you save, ChromIQ can mark the chart's `.ti2` as randomised so
+  chartread will auto-recognise strips and read them in either direction. The
+  patches on paper don't move — only a label inside the file changes. Because
+  this is only safe when the patch order is well mixed, the editor analyses the
+  saved layout first: a well-mixed chart is tagged silently, while a structured
+  one (a smooth ramp or a regular RGB grid, especially on big charts) raises a
+  warning so you can leave it untagged or tag it anyway.
+- **Measure tab — fixed-order + forced-bidirectional warning.** Starting a
+  measurement with strip recognition forced to bidirectional (`-b`) on a
+  non-randomised chart now shows an explanatory warning (with "Don't show this
+  again"), since that combination can make chartread misread strips and build a
+  colour-cast profile.
+- **ⓘ help popups on the tools.** The chart layout editor (overview, patch
+  grid, new-chart, and the tag option) and all six Tools dialogs (Average,
+  Merge, TI1 → i1Profiler, i1Profiler → TI3, i1Profiler → TI1, Verify) gained
+  friendly, plain-language help popups — magenta in the editor, and the
+  light/dark indicator accent in the Tools dialogs.
+
+### Changed
+- **Measure tab — ColorMunki now uses Argyll's default** under Auto, instead of
+  forcing `-B`. ArgyllCMS's default already reads the ColorMunki correctly, so
+  Auto no longer disables bidirectional for it; the i1 Pro family still
+  auto-forces `-b`. The "Default" item in the Strip recognition menu is renamed
+  **Argyll default**, and the guided menu is shown full-size (non-compact).
+- Reworked the Strip recognition tooltip so "Argyll default" is described
+  accurately (it depends only on whether the chart is randomised) and is clearly
+  distinguished from ChromIQ's "Auto".
+
+### Notes
+- The randomisation safety check biases conservative: an uncertain chart is
+  reported as structured, and you can always tag it anyway from the warning.
+
+## v3.8.0-beta.26
+**Strip recognition is now a single dropdown in the Measure tab.** The pair of
+bidirectional checkboxes added in beta.25 (`-B` / `-b`) is replaced by one
+**Strip recognition** menu — *Default*, *Bidirectional disabled* (`-B`), or
+*Bidirectional forced* (`-b`) — in both Guided and Manual modes, with the
+**Auto** toggle beside it as before. A single menu makes the choice clearer and
+removes the "two checkboxes that can't both be on" awkwardness.
+
+### Changed
+- Measure tab (Guided + Manual): the **Disable** / **Force** bidirectional
+  checkboxes are now one **Strip recognition** dropdown. While **Auto** is on
+  the menu is locked but still shows the option Auto picked from the chart's
+  instrument (i1 Pro → forced, ColorMunki → disabled, others → default); turn
+  Auto off to choose by hand.
+- Rewrote the strip-recognition and Auto tooltips to be longer and plainer,
+  explaining what strip direction means and when to pick each option, in
+  wider dialogs sized to fit the text.
+
+### Notes
+- Saved defaults and presets from beta.25 (and the older single-`-B` scheme)
+  migrate automatically to the new dropdown value — no reconfiguration needed.
+
+## v3.8.0-beta.25
+**Force bidirectional strip reading (`-b`) in the Measure tab.** chartread can
+now be told to accept a strip scanned in either direction even on fixed-order
+charts. Previously chartread only auto-detected strip direction on *randomised*
+charts; on a fixed-order layout (e.g. printtarg `-r`) it read one direction
+only and rejected strips scanned backwards. The new option is the counterpart
+to "Disable bidirectional" (`-B`), and the two are mutually exclusive.
+
+### Added
+- Measure tab — both **Guided** and **Manual** modes: a **Force bidirectional
+  strip recognition (`-b`)** checkbox, saveable as a preset and as your
+  default.
+- The existing **Auto** toggle now drives both `-B` and `-b` from the chart's
+  instrument: the i1 Pro family (reads either direction) force-enables `-b`,
+  the ColorMunki (one direction only) uses `-B`, and SpectroScan / unknown
+  instruments use neither. While Auto is on, both boxes are locked and show
+  the chosen setting. The instrument log line now states the direction, e.g.
+  "reading both directions (forced, `-b`)".
+
+### Notes
+- `-b` and `-B` are mutually exclusive. Turning **Auto** off lets you set
+  either by hand, and ticking one clears the other.
+
+## v3.8.0-beta.24
+**New Tools utility: "Verify against reference".** Check how closely a printed
+chart matches a set of expected colour values — per-patch and average ΔE —
+*without* building a profile. Print your evaluation target through a candidate
+profile, measure it, and compare the measurement against the values it should
+have hit (e.g. a profile-evaluation target someone shared with you). Under the
+hood this runs ArgyllCMS's `colverify`.
+
+### Added
+- Tools → **Verify against reference**. Paste (or load) the expected values —
+  CIE L\*a\*b\* or XYZ, one patch per line in chart order — pick your measured
+  `.ti3`, and optionally the chart's `.ti1`/`.ti2` so the patch count is
+  cross-checked. ChromIQ builds a reference file whose patch IDs line up with
+  your measurement and reports average / peak ΔE plus a per-patch list.
+- ΔE formula selectable (CIEDE2000, CIE94, CIE76) and an option to list the
+  worst patches first.
+
+### Notes
+- Patches are matched by `SAMPLE_ID`, so the measured chart and the expected
+  values must describe the same patch set in the same order. The optional
+  chart cross-check catches the most common mismatch (wrong patch count).
+
+## v3.8.0-beta.23
+**New i1Profiler workflow (.pwxf) export, plus .pwxf import.** "Convert TI1 →
+i1Profiler" (Tools) can now also write an i1Profiler *workflow* file alongside
+the .pxf/.txt patch set — open it in i1Profiler and the instrument, paper and
+patch layout are already set up, so you don't have to configure them by hand.
+It covers all twelve i1Profiler device entries, with an optional per-device
+patch-size override. "Convert i1Profiler → TI1" now reads .pwxf files too, so
+workflows round-trip both ways. The format was reverse-engineered from real
+i1Profiler exports (see `docs/dev_pxwf_format.md`).
+
+### Added
+- Tools → Convert TI1 → i1Profiler: optional **"Also write an i1Profiler
+  workflow file (.pwxf)"** (RGB targets only). Pick the instrument — i1Pro 2/3,
+  i1Pro 3 PLUS / PLUS M3, i1iO 2/3, i1iO 3 PLUS / PLUS M3, i1iSis /2/XL/2 XL —
+  scan mode and paper; i1Profiler opens the file with all of it preconfigured.
+- Optional **"Set patch size"** with per-device limits (e.g. i1Pro 6–25 ×
+  6–12 mm, the PLUS/M3 devices 16–40 mm), encoded the way i1Profiler stores
+  the size so the requested patch dimensions are honoured. Left unticked,
+  i1Profiler chooses its own sensible size (the default).
+- Tools → Convert i1Profiler → TI1 now also accepts **.pwxf** workflow files
+  (reading the patch list out of them), in addition to .pxf / .cgats / .txt.
+
+### Notes
+- i1Profiler owns the chart's column/row layout and the i1iSis lead-in
+  ("header length") — it recomputes them on load — so ChromIQ supplies the
+  patch set plus device/paper/size and lets i1Profiler lay the chart out.
+
+## v3.8.0-beta.22
+**TI2 editor: magenta selection/overlay polish and a fix for the drag-reorder
+preview that wasn't refreshing.** Drag-reordering patches on the left now
+correctly triggers the debounced auto-preview, the yellow selection wash on
+the TIFF preview (spacer + patch overlays, marquee rubber-band) is now a
+softer magenta in the accent family, and the left-column selection fill is a
+toned-down translucent magenta so the swatches stay easy to read.
+
+### Fixed
+- TI2 editor: dragging patches in the grid now updates the preview. The
+  reorder handler was wired only to `rowsMoved`, which Qt only emits when
+  the model implements `moveRows()`; QListWidget's default InternalMove path
+  uses remove + insert, so the auto-preview never queued. The handler is
+  now also connected to `rowsRemoved`, which fires on both paths. Removing
+  patches via the Remove button benefits from the same auto-refresh.
+
+### Changed
+- TI2 editor: TIFF preview overlay (spacer outline, patch highlight, marquee
+  rubber-band) repainted in `SPEC_MAGENTA` instead of yellow, matching the
+  rest of the editor's magenta accent.
+- TI2 editor: left-column patch selection fill is now a translucent magenta
+  (~43% alpha) instead of the system palette highlight — sits in the
+  wine-magenta family of the info boxes without overpowering the swatches.
+- TI2 editor: the per-spacer paint hint label now reads "Selected = magenta
+  outline" (was "yellow outline").
+
+## v3.8.0-beta.21
+**Chart-layout editor polish + consistent non-native file pickers across
+all Tools-menu utilities.** The TI2 editor's right panel breathes a bit
+wider, gains custom paper sizes, exports its colour list as a paste-able
+text file, and saves through a single dialog instead of a two-step
+folder-then-name flow. The five Tools-menu dialogs now use ChromIQ's own
+file pickers (with sidebar shortcuts + extension filtering) instead of
+the OS-native ones.
+
+### Added
+- **Custom paper sizes in the chart-layout editor.** Both the New chart
+  dialog and the right-panel `printtarg` section gain a "Custom" entry;
+  selecting it reveals W / H (mm) spinboxes and emits printtarg's
+  `WWWxHHH` form. Loaded charts whose paper code is `WWWxHHH` fall back
+  to "Custom" + seed the W / H spinboxes from `paper_mm`. Matches the
+  Create Chart tab's custom-paper UX.
+- **Export colours… button** next to Save As in the chart-layout editor.
+  Saves the current patch program as a text file (hex `#rrggbb` or
+  decimal `R G B`, one per line, in chart order). The file round-trips
+  through the New chart dialog's "Paste colour values" mode, so a chart's
+  colours can be exported, edited, and rebuilt as a fresh chart.
+- **`save_file_dialog` + `open_files_dialog` helpers** in `ui/widgets.py`
+  to round out the file-dialog API. Both apply `DontUseNativeDialog`
+  and pick up the same sidebar shortcuts / extension-filter behaviour
+  as the existing `open_file_dialog` / `open_dir_dialog`.
+
+### Changed
+- **Spacer-mode picker is now a mutex-checkbox group** (Coloured / B&W /
+  None) in both the New chart dialog and the right-panel `printtarg`
+  section. Selecting one clears the others; selecting none falls through
+  to printtarg's coloured default. "None" disables the Spacer scale
+  (`-A`) field since there are no spacers to scale.
+- **Save As uses a single save dialog** in the chart-layout editor (the
+  typed filename becomes both the chart folder name and the basename
+  of the files written inside). The old folder-pick → name-prompt
+  two-step is gone.
+- **Tools-menu file dialogs are now non-native.** `Average measurements`,
+  `Merge measurements`, `TI1 → i1Profiler`, `i1Profiler → TI3` and
+  `i1Profiler → TI1` (and the shared destination-row browse button) now
+  go through `open_file_dialog` / `open_files_dialog` / `open_dir_dialog`,
+  matching the rest of the app's pickers — same sidebar, same
+  extension-filter behaviour, same look in light and dark mode.
+- **Wider editor window + right panel** so the paper combo's full label
+  ("A4 (210 × 297 mm) Portrait") and per-locale spinbox values no longer
+  clip on first open. Default size is now 1280×820 (was 1180×760), right
+  panel 360 px (was 320 px).
+- **Magenta accent throughout the chart-layout editor** — checked
+  checkboxes / radios, focused inputs, and the swatch-size slider all
+  use the magenta accent, scoped to the dialog so the app-wide cyan
+  accent stays untouched. The slider also picks up the Gamut viewer's
+  slim-groove recipe (theme-aware groove colour).
+
+## v3.8.0-beta.20
+**Full printtarg-option parity in the chart-layout editor's right panel.**
+Instrument + paper are now editable on an already-loaded chart, with the
+same instrument-conditional show/hide rules and mutual-exclusion logic
+as the New chart dialog.
+
+### Added
+- **Instrument + Paper combos in the right-panel `printtarg` section.**
+  Switching instrument updates `spec.instrument_flag`, flips the visibility
+  of the i1-only / ColorMunki-only options, and re-renders. Switching
+  paper updates `spec.paper_flag` + `paper_mm` and re-renders. The editor
+  now reaches full option parity with the New chart dialog.
+
+### Fixed
+- **Instrument-conditional checkboxes (-L / -P / double / triple density)
+  now show the correct subset.** They previously all rendered visible at
+  dialog startup because the conditional refresh only ran on chart load;
+  the initial pass now happens at construction, and the combo handler
+  flips visibility even before a chart is loaded.
+
+## v3.8.0-beta.19
+**Polish pass over the chart-layout editor (Tools → Edit / create chart
+layout).** Every TI2 the editor produces now correctly preserves and
+restores its source palette, the patch grid mirrors the printed chart's
+spatial order, and the preview's selection overlays land on the right
+pixels on charts of any size (verified at 100 / 500 / 1 000 / 3 000
+patches across multi-page renders).
+
+### Added
+- **Highlight selected patches in the preview.** New checkbox in the
+  Patches section: when on, selecting patches on the left highlights them
+  on the rendered chart, and clicking / marquee-dragging on the chart
+  selects them in the swatch grid. Bidirectional and works at any zoom.
+- **Standard selection semantics** in both Patches and Spacers modes:
+  plain click / marquee *replaces* the selection (clicking an empty area
+  clears it); Shift adds; Alt subtracts — matching the Finder convention
+  the rest of the app uses.
+- **Dedicated `printtarg` section in the right panel.** Every printtarg
+  option exposed in the New chart dialog (spacer mode, patch / spacer
+  scale, margin, DPI, bit depth, `-L`, `-P`, double / triple density) is
+  now live-editable on an already-loaded chart, behind the same
+  instrument-conditional visibility rules.
+- **Triple-density preset for ColorMunki + rig.** Mutually exclusive with
+  double-density. Renders the chart with the i1Pro strip layout (printtarg
+  `-ii1` at `-a 1.3 / -m 5 / -P / -L`) then rewrites `TARGET_INSTRUMENT`
+  in the produced `.ti2` back to ColorMunki so chartread still drives the
+  meter you actually own — same recipe Create Chart uses.
+- **Margin / DPI / Bit-depth knobs** on the New chart dialog so the editor
+  reaches printtarg parity with the Create Chart tab.
+- **Scrollable controls panel** with a soft top / bottom fade so the
+  printtarg + Patches + Spacers + What-a-mess block never falls off the
+  bottom on smaller window heights.
+- **White-bordered preview** matching the main app's TiffPreview look —
+  the chart sits inside a 15 px white margin painted directly onto the
+  canvas, so it reads as paper-on-table instead of TIFF-on-dialog.
+
+### Changed
+- **Loaded charts now open in the *visual* order they were printed in,**
+  not in the `.ti2`'s internal `SAMPLE_ID` order. Charts generated with
+  randomisation finally show the grid the same way as the preview.
+- **Spacer palette persists across load.** The editor reads
+  `DENSITY_EXTREME_VALUES` from the chart's sibling `.ti1` (if present)
+  and seeds the palette buttons from it, so reloading a chart you saved
+  with a custom palette renders the way you left it — no more snapping
+  back to printtarg's W/CMY/K defaults.
+- **Patch-highlight geometry rewritten** to combine the `.ti2`'s
+  authoritative strip / step counts with the chart's patch-block bbox.
+  Verified at 100 % hit-rate on 100 / 200 / 500 / 1 000 / 2 000 / 3 000
+  patch charts across multi-page renders (was ~22 – 45 % on the previous
+  uniform-divide approach).
+- **Drag drop indicator** now snaps to the gap midpoint between two
+  patches instead of flickering between "after A" and "before B" — same
+  reorder result, calmer visual.
+- **Compact spinboxes + comboboxes** throughout the editor — every input
+  is now a `NoScroll*` widget tagged `compact_input`, picking up the
+  shorter / smaller-arrow rules the app stylesheets already define.
+  Fixes the off-white background in light mode and the oversized native
+  arrows on macOS.
+
+### Fixed
+- **Preview no longer zooms itself out of existence.** A QSS border on
+  the preview `QLabel` was inflating its `sizeHint`, kicking off a
+  resize → rescale → `setPixmap` → resize loop that grew the image every
+  refresh. Border moved off the label and onto a properly-framed
+  canvas.
+
+## v3.8.0-beta.18
+**New Tools utility: an interactive chart-layout editor.** Open it from
+Tools → "Edit / create chart layout" to load any RGB `.ti2` (or start one
+from scratch), drag-arrange the patches, recolour individual patches and
+spacers, and save a fresh, valid `.ti2` + page TIFF(s).
+
+### Added
+- **Tools → "Edit / create chart layout".** A standalone editor that
+  regenerates the chart through printtarg every time, so the `.ti2` and the
+  printed TIFF stay coupled by construction — no chance of measurement data
+  going out of sync with what's on paper.
+- **Two source modes for new charts.** *Blank canvas* lets you build a
+  target by hand with the colour picker; *Seed from targen* fills the grid
+  with an OFPS-optimised patch set you can then re-arrange and recolour.
+- **Paste hex / RGB colour values** to populate a new chart from anything
+  you have in a text file — `#RRGGBB`, `RRGGBB`, decimal triples on `0..1`,
+  `0..100`, `0..255` or `0..65535` are all auto-detected.
+- **Full printtarg layout options on the new-chart dialog** — instrument,
+  paper (the same 15-entry list the Create Chart tab uses, with all
+  orientations), spacer mode (coloured / B&W / none), patch scale (`-a`),
+  spacer scale (`-A`), suppress left clip border (`-L`), don't limit strip
+  length (`-P`), double density / hex patches (`-h`), and the basename
+  printtarg stamps along the right margin.
+- **Patch grid with drag-reorder + multi-select.** Drag-and-drop, plus a
+  swatch-size slider, Add / Remove buttons, explicit *First / Up / Down /
+  Last* buttons, and `Alt + arrow` / `F` / `L` keyboard shortcuts.
+- **Per-patch colour editing.** Set a single patch, set a multi-selection
+  at once, or apply a `Darken 10 %` / `Lighten 10 %` transform across the
+  selection. Re-rendered through printtarg, so the `.ti2` device values and
+  the TIFF pixels are still in lock-step.
+- **Native spacer palette editor.** Edit any of the six middle entries of
+  the spacer palette (the one printtarg picks contrast spacers from); the
+  defaults at index 0/7 stay white/black because printtarg also uses them
+  as the media / mark references.
+- **Per-spacer paint with marquee.** Click coloured spacer bands in the
+  preview to select them — selected ones get a translucent yellow fill +
+  outline — drag a marquee for many at once, hold `Alt` to subtract from
+  the selection, then pick a colour and paint just those spacers. Paint is
+  applied per page on multi-page charts.
+- **Auto-updating preview.** The initial preview renders automatically
+  when you load or create a chart; subsequent edits trigger a debounced
+  re-render so you can keep tweaking without clicking "Update preview"
+  each time.
+- **Multi-page preview navigation** with the strip count read from the
+  regenerated `.ti2`'s `PASSES_IN_STRIPS2`, so the layout editor handles
+  charts that span more than one printed page.
+- **"What a mess!" flourish** on the right panel, matching the Print
+  Chart tab's "Feed the beast" block (Georgia headline with the magenta
+  accent, Menlo subtext, 5-colour bar).
+
+### Notes for adventurous editors
+- Re-colouring a patch changes its device value and therefore what your
+  profile characterises — it stays a *valid* chart by construction, but
+  the profile reflects whatever you've designed. Keeping a good gamut
+  spread is on you.
+- printtarg quantises device values to the output bit depth (8-bit by
+  default), so a hand-entered `75.0` will round-trip to `74.9` in the
+  saved `.ti2`. The integrity check compares on the 8-bit grid, so this
+  is treated as a no-op rather than a data loss.
+
+## v3.8.0-beta.17
+**Create Chart Manual mode: the new expert targen options now save, and
+"Default" fully resets.**
+
+### Fixed
+- **Manual-mode expert targen options can now be saved as defaults and in
+  presets.** The new rows (Total Ink Limit `-l`, OFPS Adaptation `-A`, Cube
+  Interior/Surface Steps `-m`/`-M`, BCC Steps `-b`, and the Patch
+  Distribution selector) keep their enable-checkbox separate from their value,
+  so Save-as-Defaults and presets recorded the value but never whether the
+  flag was armed — on reload the value returned but the flag was dropped. The
+  checkbox state is now persisted and restored alongside the value.
+- **Selecting "Default" in the Manual presets dropdown now resets every
+  parameter.** Rows that weren't part of your saved defaults — e.g. options
+  added in a later version, or a value you changed but never saved — were
+  left untouched instead of reverting. They now return to their factory
+  default. (This also repairs single-letter flags like `-f`/`-g`, which the
+  "Default" entry was reading from the wrong settings key and so never
+  restored.)
+**More targen control in Manual mode, healthier i1Profiler round-trips,
+and a UI polish on the Tools button.**
+
+### Added
+- **Manual mode exposes the targen flags it was missing**: `-l` Total Ink
+  Limit, `-A` OFPS Adaptation, `-m` Cube Interior Steps, `-M` Cube Surface
+  Steps, `-b` Body-Centered Cubic Steps, and a Patch Distribution selector
+  that picks one of `-t / -r / -R / -q / -Q / -i / -I` (or default OFPS).
+  Each new control is gated behind its own expert enable-checkbox, so the
+  default command line is unchanged unless you opt in.
+- **Create Chart → Load patch set** (formerly "Load existing .ti1…") now
+  also accepts i1Profiler files (`.pxf`, `.cgats`, `.txt`). RGB patch sets
+  are converted to a tempfile `.ti1` on the fly; CMYK and parse errors
+  surface as a clear info dialog.
+
+### Fixed
+- **i1Profiler → TI1 now matches targen's flare model**, applying a 1%
+  flare toward the white point during sRGB → XYZ so a reconstructed target's
+  strip-layout decisions in printtarg behave like a natively-generated one.
+  Scale detection also handles 0..1 floats and 16-bit ranges in addition to
+  0..100 and 8-bit.
+- **TC9.18 / TC2.83 and other i1Profiler-converted charts now render their
+  row letters and chart identification.** printtarg silently drops every
+  chart label when the density-extremes table is written black-first;
+  write_ti1 now emits it white-first, matching targen's iteration order.
+- **Exported i1Profiler `.pxf` files are now write-protected.** Without
+  `WriteProtected="True"`, i1Profiler exposes a patch-count slider and
+  shuffle checkbox on our charts, and one stray click would silently
+  desync the ChromIQ `.ti2`/`.ti3` round-trip. Matches the X-Rite-shipped
+  reference charts.
+- **Tools button no longer stays highlighted after the popup is dismissed.**
+  Because `Qt.Popup` grabs the mouse the moment the button is pressed, the
+  button never received the `Leave` event that would normally clear its
+  hover background; the highlight lingered until the cursor next entered
+  and left the button. The popup now sends a synthetic Leave to its anchor
+  when it hides, so the button returns to its resting state immediately in
+  both light and dark mode.
+
+## v3.8.0-beta.15
+**Workflow polish and a measurement-accuracy fix.** Rolls up the per-run
+averaging fix, a new Tools converter, and a smoother Create Chart rename flow,
+plus small UI tidy-ups in Check & Refine.
+
+### Added
+- **Tools → "Convert i1Profiler → TI1".** The reverse of the existing
+  TI1 → i1Profiler export: reads an i1Profiler chart back into an ArgyllCMS
+  `.ti1` so it can be fed to printtarg. RGB only.
+- **Create Chart now offers to rename the target** when you generate under a
+  new name. A chooser lets you rename the existing project (stems + manifest
+  are fixed up properly, not just the folder), keep both, or replace it.
+
+### Changed
+- **Check & Refine result dialog button order.** When a refinement is
+  suggested the actions now read left-to-right as *Guide Me Through
+  Refinement → Use as Pre-conditioning → Install*, with Close pinned to the
+  far right.
+- **TC9.24 presets are temporarily disabled** in the Create Chart presets
+  dropdown.
+
+### Fixed
+- **Averaging under the per-run folder layout** now reads each measurement
+  relative to the output working directory, so repeated reads are addressed
+  and averaged correctly.
+- **Eliminated the `Populating font family aliases` startup/rename warning.**
+  Several stylesheets requested the generic `monospace` family with no real
+  family first, forcing Qt to build alias tables (~80 ms). They now lead with
+  `Menlo`, so the family resolves immediately.
+
+## v3.8.0-beta.14
+**Windows polish on top of beta.13.** Carries the beta.13 fix for the
+Windows project-create crash and tidies up the Tools popup on Windows.
+
+### Fixed
+- **Tools popup no longer shows a border on its bottom and right edges on
+  Windows.** The frameless popup was also getting the operating system's own
+  popup drop-shadow on top of the soft shadow ChromIQ already paints; on
+  Windows that OS shadow rendered as a hard edge. It's now suppressed.
+
+## v3.8.0-beta.13
+**Fixes a Windows-only crash that made beta.11 unusable.** Creating or
+importing a project on Windows failed silently part-way through: you'd see a
+"files are being transferred to a new folder" message that never completed, a
+blank `Where are my files.txt`, and a stuck Measure tab. This beta fixes that
+and rolls up the beta.11 working-folder redesign and the beta.12 Tools menu, so
+it's the first build where the new layout actually works on Windows.
+
+### Fixed
+- **Project create/import no longer crashes on Windows.** `Where are my
+  files.txt` contains arrow characters (`←`) that Windows' default text
+  encoding (cp1252) can't represent. Writing it raised `UnicodeEncodeError`
+  *after* the empty file had been created but *before* the chart files were
+  copied into the new folder — hence the blank README, the unfinished
+  transfer, and the wedged tab. All project files are now read and written as
+  UTF-8 explicitly, so the behaviour matches macOS.
+- **Blank READMEs self-heal on next load.** A `Where are my files.txt` left
+  empty by the crash above is rewritten with real content the next time its
+  project is opened, so upgrading from beta.11 repairs the file automatically.
+  A README you've edited yourself is still never touched.
+
+### Note for anyone who hit this on beta.11
+A project that failed to import on beta.11 has an empty `runs/run1/` — the
+chart files never made it across. Re-import the chart (Load .ti2 / .ti3) and
+choose to overwrite when prompted; the stale folder is replaced cleanly.
+
+## v3.8.0-beta.12
+**New Tools menu.** A toolbox button in the header — next to Preferences —
+opens a popup listing four stand-alone measurement utilities. Each opens its
+own dialog with a plain-language explanation of what it does, file pickers for
+the input(s), and a destination + name for the output. These conversions were
+already part of the normal workflow; the Tools menu exposes them for ad-hoc use
+without having to set up a project. File pickers start in your working folder
+and remember the last folder you used per tool.
+
+### Features
+- **Tools popup in the masthead.** A speech-bubble menu, themed for light and
+  dark mode, listing the four utilities.
+- **Average measurements.** Combine repeated reads of the same chart into one
+  averaged `.ti3` to reduce instrument noise. Choose mean, or — with three or
+  more reads — median.
+- **Merge measurements.** Concatenate the patches of a primary `.ti3` with any
+  number of additional `.ti3` files into a single measurement, giving the
+  profiler more data points to fit.
+- **Convert TI1 → i1Profiler.** Export an Argyll `.ti1` chart as i1Profiler
+  patch sets (`.txt` and `.pxf`) so an i1iSis (or other i1Profiler-driven
+  scanner) can measure it.
+- **Convert i1Profiler → TI3.** Convert an i1Profiler measurement `.txt`
+  export into an Argyll `.ti3` (via `txt2ti3`) for building a profile in
+  ChromIQ.
+
+## v3.8.0-beta.11
+**Working-folder layout redesign.** Every project now uses a per-run folder
+structure. The old prefix/suffix conventions (`pre_`, `cal_`, `_readN`,
+`_average`, `_merged`) are gone — file role lives in the filename within a
+folder, and folder names disambiguate context.
+
+**Breaking change for projects created with earlier betas.** Old flat-layout
+projects (`~/ChromIQ/<name>/<name>.ti2`, etc.) are no longer picked up on
+launch or session restore. They aren't lost — see the migration steps at the
+bottom of this entry.
+
+### New layout
+```
+<project>/
+  project.json                  # manifest (current run, run list)
+  Where are my files.txt        # plain-language map of the folder
+  cal/                          # calibration (optional, shared by all runs)
+  exports/                      # external-tool exports
+  runs/run1/, run2/, …          # one folder per profile build
+    <project>.ti1 / .ti2 / .cht / .ps / .channels.json
+    <project>_NN.tif            # page bitmaps
+    <project>.ti3               # measurement (chartread output)
+    <project>.icc               # profile (colprof output)
+    reads/readN.ti3             # only when averaging is used
+    preconditioning.ti3 / .icc  # only when seeded from a parent run
+    merged.ti3 / merged.icc     # only when ChromIQ-style refinement ran
+    calibrated.icc              # only when applycal ran
+    meta.json
+```
+
+### Changed
+- **Chart files take the sanitised project name as their stem.** printtarg
+  stamps the project name on the printed sheet (was the generic basename
+  before), the installed ICC is named after the project (was a generic
+  filename that collided across projects in the system ColorSync folder),
+  and the ICC's internal description carries the project name too.
+- **Calibration chart files use `<project>-cal`** so a printed calibration
+  sheet is distinguishable from the profiling chart in a stack on the desk.
+- **i1Profiler exports** land in `exports/<project>-i1profiler.{txt,pxf}`
+  (was a generic name).
+- **Folder names get sanitised on import** (spaces → hyphens) — matching
+  what Generate Chart has always done.
+- **Each project gets a `Where are my files.txt`** at its root with a
+  plain-language map of the folder ("your ICC is here, your printable
+  chart is here…").
+
+### Fixed
+- **The "averaged reads double-counted into a refinement merge" bug is
+  impossible by construction now.** Run 1's `reads/` cannot be seen by
+  run 2's averaging code — they live in different folders. The previous
+  patch (suffix-stripping + orphan rename) is no longer needed and has
+  been removed.
+
+### Migrating projects from earlier betas
+1. **To migrate a project**, open one of its files via the **Load .ti2**
+   button (Print or Measure tab), the **Load .ti3 or .txt** button (Build
+   Profile tab), or **Browse for .ti3** (Check & Refine). ChromIQ rebuilds
+   the project in the new layout, carrying every sibling chart file along
+   (.ti1, .ti2, page TIFFs, .ti3, .icc). The new folder name is the
+   sanitised version of the name you give it.
+2. **To start fresh**, just create a new chart — it lands in the new
+   layout automatically.
+3. Old folders aren't deleted by the migration; they sit untouched in
+   `~/ChromIQ/` until you remove them.
+
+Architecture rationale and the full file-by-file mapping are in
+`docs/dev_folder_layout.md`.
+
+### What to test
+- **Generate a new chart, print, measure, build profile.** Confirm the
+  folder under `~/ChromIQ/<name>/` has the structure above, the printed
+  sheet shows `<name>` (not `chart`), and the built `<name>.icc` shows
+  `<name>` as its description in Photoshop / ColorSync Utility.
+- **Calibration target → profiling chart → applycal.** Confirm `cal/` is
+  populated, the printed cal sheet shows `<name>-cal`, and the calibrated
+  profile lands in the run as `calibrated.icc`.
+- **Averaging.** Read a chart, click **Measure again to average**, take a
+  second read, **Average all reads & build**. Confirm `runs/run1/reads/`
+  contains `read1.ti3` + `read2.ti3` and `<name>.ti3` is the averaged
+  result.
+- **Use as pre-conditioning profile** on a built profile → generate the
+  refined chart → measure → build. Confirm a `runs/run2/` appears with
+  `preconditioning.ti3`/`.icc` (copies of run1) and the refined profile
+  builds (when ChromIQ-style refinement is on, you also see `merged.ti3`/
+  `.icc`).
+- **Open an old beta.10 flat-layout project's .ti2 or .ti3** via Load.
+  Confirm a fresh new-layout project appears under the name you give it,
+  with all sibling files inside `runs/run1/`.
+- **i1Profiler workflow** (only relevant for i1iSis users): generate a
+  chart with i1iSis selected → confirm `exports/<name>-i1profiler.pxf` is
+  written → measure in i1Profiler → load the measurement `.txt` back.
+- **Windows** specifically: the import flows, file dialogs, and
+  i1Profiler export all use `pathlib.Path`, but this is the first beta
+  with the new layout — please flag any path-related oddities.
+
+## v3.8.0-beta.10
+Fixes a Windows-only crash that hung the app when starting a second chart
+read in the same session — most visibly via the new "Measure again to
+average" button. Also tidies the button order in the "All Stripes Read"
+window.
+
+### Fixed
+- **Second chart read no longer hangs the app on Windows.** With averaging
+  enabled, finishing a chart and then clicking **Measure again to average**
+  crashed silently with `OSError: [WinError 6] The handle is invalid` and
+  left the Measure tab frozen — the spectrometer never re-prompted for
+  calibration. Root cause was in the Windows keystroke-injection path used
+  by chartread: after each `AttachConsole` + `FreeConsole` pair (used to
+  forward keypresses into chartread's hidden console) the parent process
+  was left with stale standard handles, and the next `subprocess.run` call
+  (the `taskkill chartread.exe` guard at the start of every measurement)
+  failed before chartread could even start. The standard handles are now
+  reset to NULL after every detach, matching the state a `--windowed`
+  PyInstaller app starts with. As a defensive measure, every
+  `subprocess.run` call across the app now passes `stdin=subprocess.DEVNULL`
+  so the same class of bug cannot resurface in chart creation, profile
+  building, Argyll binary probing, average merging, or CUPS printing on
+  macOS.
+
+### Changed
+- **"All Stripes Read" window — Build Profile is now on the right.** With
+  averaging disabled, the window used to show **Build Profile →** on the
+  left and **Re-read Stripes** on the right (the default order for
+  `QDialogButtonBox` on Windows). The two buttons now swap places so the
+  primary action sits on the right, matching the layout of the averaging-on
+  variant. The calibration and guided-refinement variants of the same
+  window pick up the new order too.
+
+### What to test
+- Windows, averaging on: finish a full chart read, then click **Measure
+  again to average** in the "All Stripes Read" window. Confirm the
+  spectrometer is re-prompted for calibration and the second read starts
+  normally instead of hanging. Repeat for a third read to exercise the
+  average + build path.
+- Any platform, averaging off: finish a full chart read. Confirm **Re-read
+  Stripes** is on the left and **Build Profile →** on the right.
+
+## v3.8.0-beta.9
+Small visual fix to the "All Stripes Read" averaging window.
+
+### Fixed
+- **Combo body matches the other input fields in light mode.** The Mean / Median
+  selector that appears in the "All Stripes Read" window once you have re-read
+  the chart for averaging was rendering with the surrounding cream surface
+  colour instead of the usual white input background. It now matches every
+  other dropdown / spin box in light mode. (The dark theme already looked
+  correct, but the fix applies there too for consistency.)
+
+### What to test
+- With averaging on and light mode, get to the second-or-later read so the
+  "Average all reads & build" dialog appears with the **Combine method** combo
+  — confirm the combo body is white.
+
+## v3.8.0-beta.8
+Eighth beta of the 3.8.0 line. Streamlines the **"Read again & average"** flow so
+the averaging choice is visible the moment a chart finishes — no second pop-up.
+
+### Changed
+- **Averaging is now offered directly in the "All Stripes Read" window.** When
+  measurement averaging is enabled, finishing a chart used to show that window
+  first and then a *second* "Measurement Complete" pop-up — so in Guided mode the
+  averaging option was hidden until you clicked through, and the only "read again"
+  on the first window (**Re-read Stripes**) re-scans individual strips into the
+  same file rather than averaging. The averaging choice now lives in the "All
+  Stripes Read" window itself:
+  - first read → **Re-read Stripes** / **Measure again to average** / **Build Profile →**
+  - after a re-read → **Use last read only** / **Measure again to average** /
+    **Average all reads & build →** (with a mean/median selector)
+- **Button order fixed.** The primary action ("Build Profile →" / "Average all
+  reads & build →") now sits on the right, matching the rest of the app.
+- **No surprise pause.** A note explains that **Measure again to average** sets
+  the instrument up again and may ask you to recalibrate, so the brief wait
+  before the next read is expected.
+
+With averaging switched off, nothing changes.
+
+### What to test
+- With averaging **on**, read a chart in **Guided** mode: confirm the "All Stripes
+  Read" window now shows the three buttons above (primary on the right) and that
+  **no** second pop-up appears after you choose.
+- Click **Measure again to average**, confirm the re-init note matches what you
+  see, then average two reads and build — the profile should build from
+  `…_average.ti3`.
+- Try **Re-read Stripes** and **Use last read only** to confirm they still behave
+  as before.
+- Repeat a normal read in **Manual** mode, and confirm a plain read with averaging
+  **off** still goes straight to Build Profile unchanged.
+
+## v3.8.0-beta.7
+Seventh beta of the 3.8.0 line. Two small interface fixes, also shipped in the
+3.7.42 stable release.
+
+### Fixed
+- **Closing Preferences with Cancel is now instant.** Cancelling the Preferences
+  window no longer pauses while it needlessly re-applied the whole app theme; the
+  previewed theme is now only restored when you actually changed the Theme
+  dropdown, so Cancel closes as quickly as OK.
+- **Disabled options now look disabled.** A ticked checkbox kept its bright fill
+  when its group was switched off (for example the targen / printtarg options
+  greyed out by a prebuilt-chart preset). Ticked checkboxes and radio buttons now
+  grey out together with the rest of their group, in both light and dark themes.
+
+### What to test
+- **Cancel speed.** Open Preferences and click Cancel without touching the Theme
+  dropdown — the window should close immediately. Then change the Theme, click
+  Cancel, and confirm the previous theme is restored correctly.
+- **Greyed checkboxes.** Pick a prebuilt-chart preset in Create Chart so the
+  targen / printtarg panels grey out, and confirm any ticked checkboxes there go
+  grey instead of staying coloured.
+
+## v3.8.0-beta.6
+Sixth beta of the 3.8.0 line. The **"Read again & average"** measurement step
+added in beta.5 is now an opt-in setting (off by default), plus the latest
+interface polish.
+
+### Changed
+- **Measurement averaging is now opt-in.** The repeated-read / averaging flow
+  introduced in beta.5 is controlled by a new **"Enable measurement averaging"**
+  switch in Preferences → Behaviour, **off by default**. With it off, a finished
+  read goes straight to Build Profile exactly as in 3.7.x — no extra dialog and
+  no extra files. Turn it on to get the *Measure again* / *Average* options. The
+  switch carries a full plain-language tooltip.
+- **Preferences → Behaviour is easier to read.** The behaviour options are now
+  laid out in two columns, and every option carries a full ⓘ tooltip.
+- **Create Chart no longer scrolls sideways.** A long generated-command preview
+  is kept inside the panel instead of forcing a horizontal scrollbar.
+
+### What to test
+- **Default off.** With the new setting off, finishing a chart read should behave
+  exactly as before — straight to Build Profile, no completion dialog, no
+  `_read*` / `_average` files created.
+- **Toggle on.** Enable "Enable measurement averaging" in Preferences, then finish
+  a read: the completion dialog offering *Measure again* / *Average* should appear,
+  and the averaging flow from beta.5 should work end to end.
+- **The tooltip.** The ⓘ beside the new switch should open a readable explanation
+  that fits fully in its window.
+
+## v3.8.0-beta.5
+Fifth beta of the 3.8.0 line. Adds an optional **"Read again & average"** step to
+the Measure tab: read the same printed chart more than once and average the
+measurements together to reduce instrument noise.
+
+### Added
+- **Read the same chart several times and average the results.** When a
+  measurement finishes, ChromIQ now asks whether you'd like to measure the chart
+  again. Each repeat is kept alongside the previous reads, and once you have two
+  or more you can combine them into a single averaged measurement — or just keep
+  the most recent read — before building your profile. Averaging is handled by
+  ArgyllCMS's own `average` tool: it averages the measured colour values,
+  including the full spectral data, while leaving the chart's RGB patches
+  untouched. A **Mean / Median** choice is offered once you have three or more
+  reads (with two reads they're identical).
+
+### Thanks
+- **Alan Goldhammer** for suggesting measurement averaging and pointing to the
+  approach behind it.
+
+### What to test
+- **The completion dialog appears.** Finish a normal chart read — after the usual
+  "All stripes read" prompt, a new **Measurement Complete** dialog should offer
+  *Continue to Build Profile* and *Measure again to average*.
+- **Measure again.** Choosing it should re-read the same chart from the start (a
+  fresh full read, not a resume) and keep the previous read.
+- **Two or more reads.** After a second read the dialog should offer *Average all
+  reads & build*, *Use last read only*, and *Measure again*, plus the Mean/Median
+  selector.
+- **Average & build.** Averaging should produce one measurement file and take you
+  to Build Profile with it loaded; the chart's patch file is still linked, so
+  "print again" / refinement keep working.
+- **Three or more reads** and the **Median** option, if you want to exercise the
+  outlier-rejection path.
+
+## v3.8.0-beta.4
+Fourth beta of the optional **ChromIQ-style refinement process** (still off by
+default). The refinement merge is now done by ArgyllCMS itself, and this beta
+folds in the same Create Chart additions and Check & Refine improvement shipping
+in stable 3.7.40.
+
+### Added
+- **Two built-in "i1Pro TC9.24 by Pharmacist" targets — one for A4, one for US
+  Letter.** Pick one from Create Chart → Manual → Presets, give it a name, and
+  ChromIQ copies a complete, ready-made chart (patch set, layout and page TIFFs)
+  into a new folder under that name. There's no targen or printtarg step — the
+  files are used exactly as supplied — so the targen and printtarg options are
+  greyed out while one of these presets is selected.
+- **Save a preset together with its patch set.** The Save Preset dialog can now
+  attach the patch set (`.ti1`) currently loaded. Selecting that preset later
+  builds the chart straight from that patch set — skipping targen, just laying it
+  out with printtarg — and the `.ti1` is stored inside the preset folder, so it
+  travels with a shared preset.
+
+### Changed
+- **The refinement merge now uses ArgyllCMS's own `average -m`.** The optional
+  pre-conditioning merge hands off to ArgyllCMS instead of ChromIQ's hand-rolled
+  CGATS surgery, so the merged measurements match what Argyll's own tools produce.
+- **The preset list is grouped by instrument.** Built-in presets are now sorted by
+  instrument and separated with divider lines — one between your own saved presets
+  and the built-ins, and one between each instrument group — so the list is easier
+  to scan.
+- **Check & Refine lists the worst individual patches.** Alongside the worst
+  strips, the report now also calls out the single worst-performing patches, so
+  it's easier to see whether a problem is a whole strip or just a few patches.
+
+### Thanks
+- **Alan Goldhammer** and **Pharmacist** for the TC9.24 targets and their testing
+  and feedback.
+
+## v3.8.0-beta.3
+Third beta of the optional **ChromIQ-style refinement process** (the feature
+itself is unchanged from beta.2 and still off by default). This beta folds in the
+same chart-reading and measurement-abort fixes shipping in stable 3.7.39, plus
+the refreshed built-in TC9.18 preset.
+
+### Fixed
+- **The strip highlighter now follows multi-page charts correctly.** On a chart
+  that spans more than one page, the green "read this strip" marker could get
+  stuck on the last strip of page 1 when it should have moved to the first strip
+  of page 2. ChromIQ now reads the exact strips-per-page from the chart's own
+  data (the `.ti2` file) instead of guessing from the image — printtarg prints a
+  rotated title down the right margin that the old guess mistook for an extra
+  strip — so the marker lands on the right strip and the right page every time.
+- **Closing the "Calibration Required" dialog now stops the measurement.**
+  Pressing the window's close button (or Esc) while that dialog is open now sends
+  the abort key to the instrument and ends the run, instead of starting
+  calibration anyway.
+- **No more false "Measurement complete" after an aborted calibration.** If you
+  cancel at the calibration step (Esc/Q, or by closing the dialog), the log no
+  longer claims success and shows a "Saved:" path for a file that was never
+  written — it now says the measurement was stopped and no `.ti3` was created.
+
+### Changed
+- **The built-in TC9.18 preset was rebuilt as "i1Pro TC9.18 by Pharmacist".** It
+  now uses a plain 918-patch TC9.18 set with a simpler i1Pro recipe
+  (`printtarg -ii1 -pA4 -t300 -L -m12 -M12 -b`). Leaving the preset now correctly
+  restores your per-instrument default patch scale and margin.
+
+### About ChromIQ-style refinement (unchanged)
+See **v3.8.0-beta.2** below for the full description and testing notes. With the
+setting off (the default), ChromIQ behaves exactly as it did in 3.7.x.
+
+## v3.8.0-beta.2
+Second beta of the optional **ChromIQ-style refinement process**. Same headline
+feature as beta.1 — reuse the measurements from an earlier profile to build a more
+accurate one — now with a fix so calculating the patch count for an unusual chart
+layout no longer freezes the window. Still off by default; with the setting off,
+ChromIQ behaves exactly as it did in 3.7.x.
+
+### What ChromIQ-style refinement does
+It builds a profile in two passes for higher accuracy:
+1. Print and measure a first chart and build a profile from it — this becomes your
+   *pre-conditioning* profile.
+2. In Create Chart, create a second chart and point it at that profile. ChromIQ
+   keeps the first run's measurements alongside the new chart.
+3. After you measure the second chart, the Measure tab offers *"Also use measurement
+   data from the pre-conditioning profile"*. Accept it and the final profile is built
+   from both measurement sets combined.
+
+Your freshly measured file is never changed — the combined data goes into separate
+`*_merged.ti3` / `*_merged.icc` files. Turn the feature on in Settings (off by
+default).
+
+### Fixed
+- **Patch-count calculation no longer freezes the window.** In Create Chart →
+  Manual with *Auto* patch count, a layout that isn't in the built-in capacity
+  database makes ChromIQ run targen/printtarg several times to find the exact fit.
+  This used to lock the UI (spinning beach ball on macOS) until it finished. The
+  log now updates step by step ("Step 3/8 — probing 412 patches…") so you can see
+  it working.
+
+### What to test
+- **The refinement round-trip.** With the setting on, build a first profile, create
+  a second chart using it as the pre-conditioning profile, measure, and confirm the
+  Measure tab offers the merge and produces a `*_merged.icc`. Check the merged
+  profile is at least as good as the single-pass one.
+- **Toggle off = unchanged.** With the setting off, confirm the workflow behaves
+  exactly as in 3.7.x — no merge prompt, no `pre_*` files left behind.
+- **Custom-layout patch count.** In Manual mode with Auto patch count on, choose a
+  patch scale or margin that isn't a standard value and click Generate — the window
+  should stay responsive and show the search progress live.
+
+## v3.8.0-beta.1
+Beta: optional "ChromIQ-style refinement process" — reuse the measurements from
+an earlier profile to build a more accurate one. Off by default; enable it in
+Settings. When off, ChromIQ behaves exactly as before.
+
+### Added
+- **ChromIQ-style refinement (Settings toggle, off by default).** When enabled,
+  the measurement data from a pre-conditioning profile you select in Create Chart
+  is preserved (as a `pre_*.json` beside the chart) and can be merged into your
+  new measurements at profile-build time, so colprof builds from a larger,
+  combined set of patches. A new Measure-tab option, *"Also use measurement data
+  from the pre-conditioning profile"*, appears only when such data is present.
+- **`workflow/ti3_merge.py`** — combines the two measurement sets into a separate
+  `<name>_merged.ti3` (your freshly measured file is never altered), renumbering
+  patches and refusing to merge data measured in a different colour space/format.
+  The profile is written as `<name>_merged.icc` so it's clear it used the extra
+  data.
+
+### Notes
+- Guided Check & Refine still analyses only the strips you physically printed, so
+  it never asks you to re-measure a patch that came from the earlier run.
+
 ## v3.7.42
 Two small interface fixes.
 

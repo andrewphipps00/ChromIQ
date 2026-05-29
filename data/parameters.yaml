@@ -227,17 +227,31 @@ parameters:
         (Guided mode always sets this automatically using the same idea.)
 
     - flag: "-G"
-      name: "Good Distribution (recomm.)"
+      name: "Thorough Optimisation (slow)"
       type: boolean
       default: true
       affects_preview: true
       expert_only: false
-      tooltip_title: "Good Optimised Distribution (-G)"
+      tooltip_title: "Thorough Optimisation (-G)"
+      tooltip_min_width: 480
       tooltip_body: |
-        Enables the OFPS (Optimised Farthest Point Sampling) algorithm
-        which produces a well-distributed, perceptually-uniform patch set.
-        This is strongly recommended over the default random distribution
-        and has no significant drawback.
+        Makes targen spend extra time placing the patches as evenly as
+        possible across your printer's colour gamut. The patch set is
+        the same kind (OFPS — Optimised Farthest Point Sampling, the
+        default distribution) either way; this just switches it from
+        "fast" mode to "good" mode.
+
+        Recommended ON for any chart you will actually print and
+        measure: a few extra seconds of computer time during chart
+        generation gives you a measurably better profile.
+
+        Turn OFF only if you're iterating quickly on chart settings and
+        don't care about absolute patch quality (e.g. testing print
+        layouts before committing to a final chart).
+
+        Has no effect when "Patch Distribution" is set to anything other
+        than OFPS — the alternative distributions (random, quasi-random,
+        body-centered cubic, …) ignore this flag.
 
     - flag: "-s"
       name: "Single Channel Steps"
@@ -371,6 +385,235 @@ parameters:
         Adds extra patches in dark (shadow) areas of the gamut.
         1.0 = no emphasis (default).  Increase to 2.0–3.0 for printers
         with complex shadow behaviour (e.g. matte fine-art papers).
+
+    - flag: "-l"
+      name: "Total Ink Limit (%)"
+      type: int
+      min: 50
+      max: 600
+      default: 300
+      step: 10
+      affects_preview: false
+      expert_only: true
+      tooltip_title: "Total Ink Limit (-l)"
+      tooltip_min_width: 480
+      tooltip_body: |
+        The maximum total amount of ink the printer is allowed to lay
+        down on the paper, as a percentage. 100 % = one full ink layer,
+        200 % = two full layers (e.g. 100C + 100K), and so on.
+
+        Why it matters (especially for CMYK / CMYK+N):
+        Without a limit, targen happily generates patches like 100C +
+        100M + 100Y + 100K = 400 %. That much wet ink can puddle, dry
+        slowly, mottle, or even tear the paper — and the profile built
+        from such patches predicts colours your printer can't actually
+        produce.
+
+        How to choose a value:
+          • Most CMYK inkjets:        260 – 320 %
+          • Coated / glossy papers:   320 – 360 %
+          • Newsprint, low-quality:   220 – 260 %
+          • Extended-gamut (CMYKOGV): 400 – 500 %  (more inks share
+                                                   the total budget)
+
+        If unsure, check your printer's documentation or paper profile
+        guidance, or measure: print a small ink-limit test wedge and
+        pick the highest value that dries cleanly without bleeding.
+
+        For RGB workflows: usually leave this disabled — RGB inkjets
+        handle their own ink limiting internally, so targen doesn't
+        need to budget across channels.
+
+        Tick the checkbox to enable.
+
+    - flag: "__targen_distribution__"
+      name: "Patch Distribution"
+      type: flag_choice
+      choices: ["", "-t", "-r", "-R", "-q", "-Q", "-i", "-I"]
+      labels:
+        - "OFPS — optimised farthest point (recommended)"
+        - "Incremental Far Point (-t) — faster, less even"
+        - "Even random — device space (-r)"
+        - "Even random — perceptual space (-R)"
+        - "Quasi-random space-filling — device space (-q)"
+        - "Quasi-random space-filling — perceptual space (-Q)"
+        - "Body-centered cubic lattice — device space (-i)"
+        - "Body-centered cubic lattice — perceptual space (-I)"
+      default: ""
+      affects_preview: true
+      expert_only: true
+      tooltip_title: "Patch Distribution (-t / -r / -R / -q / -Q / -i / -I)"
+      tooltip_min_width: 520
+      tooltip_body: |
+        How targen decides where to place each colour patch in the
+        printer's gamut. Different algorithms give different trade-offs
+        between coverage, evenness, and speed.
+
+        Pick ONE. These are mutually exclusive — selecting any of them
+        replaces the default OFPS placement entirely.
+
+        OFPS (default, recommended):
+        Optimised Farthest Point Sampling. Iteratively places each new
+        patch as far as possible from every existing patch, producing
+        the most even coverage of any algorithm here. Slower than the
+        alternatives but the gold standard for profile quality. Pair
+        with "Thorough Optimisation (-G)" for best results.
+
+        Incremental Far Point (-t):
+        A simpler farthest-point method. Faster than OFPS, slightly
+        less even. Use when OFPS is too slow on very large patch counts
+        and you accept a small quality drop.
+
+        Random — device space (-r):
+        Uniformly random patches in raw device values (e.g. RGB).
+        Fastest possible, but coverage in *perceived* colour is uneven
+        — wastes patches in regions our eye barely distinguishes.
+
+        Random — perceptual space (-R):
+        Uniformly random in perceived colour (Lab). Better than -r if
+        you must use random, since patches are spread evenly by what
+        the eye sees. Still less optimal than OFPS for the same count.
+
+        Quasi-random space-filling (-q / -Q):
+        Low-discrepancy sequences (Sobol-like) that fill space more
+        evenly than true random without OFPS's iterative cost.
+        -q in device space, -Q in perceptual space. A good middle
+        ground when OFPS is too slow.
+
+        Body-centered cubic lattice (-i / -I):
+        A fixed regular lattice (each patch surrounded by 8 neighbours
+        in a cube pattern). Deterministic and very even, but inflexible
+        — exact patch counts that fit the lattice are limited. -i in
+        device space, -I in perceptual space.
+
+        Most users should leave this on OFPS.
+
+    - flag: "-A"
+      name: "OFPS Adaptation"
+      type: float
+      min: 0.0
+      max: 1.0
+      default: 0.10
+      step: 0.05
+      affects_preview: false
+      expert_only: true
+      tooltip_title: "OFPS Adaptation (-A)"
+      tooltip_min_width: 480
+      tooltip_body: |
+        How strongly OFPS bends its even-coverage rule to follow the
+        shape of a Pre-conditioning Profile (-c). Only meaningful when
+        OFPS is the chosen Patch Distribution AND a -c profile is set.
+
+        0.0 = ignore the profile completely — pure even coverage in
+              device space, as if no -c were given.
+        1.0 = follow the profile fully — concentrate patches where the
+              profile says the printer's gamut is interesting (i.e. the
+              shape of the actual colour space).
+
+        Default in targen is 0.10 (mild) for a first pass and 1.0 when
+        -c is set; ChromIQ leaves this at 0.10 unless you explicitly
+        change it so you don't get a surprise behaviour switch.
+
+        Increase toward 1.0 for refinement passes where you trust the
+        first profile and want the second chart to densely sample the
+        printer's real gamut rather than empty corners of device space.
+
+        Tick the checkbox to enable.
+
+    - flag: "-m"
+      name: "Cube Interior Steps"
+      type: int
+      min: 0
+      max: 16
+      default: 0
+      step: 1
+      affects_preview: true
+      expert_only: true
+      tooltip_title: "Cube Interior Steps (-m)"
+      tooltip_min_width: 480
+      tooltip_body: |
+        Adds a regular grid of patches *inside* the printer's colour
+        cube — N steps along each axis (N×N×N for RGB, etc.). These
+        are placed *in addition to* the patches you've chosen with
+        -f, -g, -s, and the other counters.
+
+        Set to 0 (default) to skip — almost always the right choice.
+        OFPS already covers the cube interior more efficiently.
+
+        When to use it:
+          • Repeatability across machines: a fixed grid is the same
+            every time, regardless of which OFPS placements targen
+            picked, which can help compare profiles across runs.
+          • Diagnostic charts where you want predictable, named cube
+            positions.
+
+        Typical values when used: 3 – 6 (steps per axis). Numbers
+        grow fast — 6 steps in RGB is 216 patches, 8 is 512.
+
+        Tick the checkbox to enable.
+
+    - flag: "-M"
+      name: "Cube Surface Steps"
+      type: int
+      min: 0
+      max: 16
+      default: 0
+      step: 1
+      affects_preview: true
+      expert_only: true
+      tooltip_title: "Cube Surface Steps (-M)"
+      tooltip_min_width: 480
+      tooltip_body: |
+        Adds a regular grid of patches on the *surface* of the printer's
+        colour cube — N steps along each face. Patches go on the
+        outside (primaries, secondaries, gamut edge) but not in the
+        interior.
+
+        Set to 0 (default) to skip.
+
+        When to use it:
+          • You specifically want to nail down the gamut boundary and
+            primary/secondary corners without the interior overhead
+            of -m.
+          • Comparing how different inks/papers shift the gamut
+            envelope — surface patches are the ones most affected.
+
+        Typical values when used: 4 – 8 steps per face.
+
+        Tick the checkbox to enable.
+
+    - flag: "-b"
+      name: "Body-Centered Cubic Steps"
+      type: int
+      min: 0
+      max: 16
+      default: 0
+      step: 1
+      affects_preview: true
+      expert_only: true
+      tooltip_title: "Body-Centered Cubic Steps (-b)"
+      tooltip_min_width: 480
+      tooltip_body: |
+        Adds patches on a body-centered cubic (BCC) lattice — denser
+        than a plain cube grid because it places points at both the
+        cube corners and the cube centres. N is the number of
+        subdivisions along each axis.
+
+        Set to 0 (default) to skip — this is a niche knob.
+
+        When to use it:
+          • You want regular, lattice-aligned patch positions but
+            with better packing than -m gives, without going all the
+            way to OFPS.
+          • Research / repeatability scenarios where the BCC structure
+            itself is the point.
+
+        Note: this is the *step counter* form (adds to your patch list);
+        for a chart whose *entire* distribution is BCC, use the
+        "Patch Distribution" selector above and pick the body-centered
+        cubic option there.
+
+        Tick the checkbox to enable.
 
   # ====================================================================
   # printtarg — create printable TIFF / PostScript test chart (.ti2)
@@ -846,6 +1089,21 @@ parameters:
 
         Turn it on only if your instrument reports false strip-direction
         errors during measurement.
+
+    - flag: "-b"
+      name: "Force Bidirectional Strip Recognition"
+      type: boolean
+      default: false
+      expert_only: false
+      tooltip_title: "Force Bidirectional Reading (-b)"
+      tooltip_body: |
+        Forces chartread to accept a strip scanned in either direction.
+
+        Normally chartread only auto-detects strip direction on randomised
+        charts; on a fixed-order chart it reads one direction only and
+        rejects strips scanned backwards. Turn this on to force the
+        detection regardless — useful for the i1 Pro family, which reads
+        either way. This is the opposite of -B; only one can apply.
 
     - flag: "-S"
       name: "Suppress Warning Messages"
