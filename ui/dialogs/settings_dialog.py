@@ -618,11 +618,11 @@ class SettingsDialog(QDialog):
           Light: masthead "Chrom" wordmark.  Dark: neutral grey (Restore border).
         """
         indicator = "#1c1b18" if mode == "light" else "#d0d0d0"
-        self.setStyleSheet(
-            f"QLineEdit:focus {{ border-color: {indicator}; }}"
-            f"QCheckBox::indicator:checked {{ background: {indicator}; border-color: {indicator}; }}"
-            f"QCheckBox::indicator:hover {{ border-color: {indicator}; }}"
-        )
+        # Shared with the Tools dialogs so every dialog highlights controls the
+        # same neutral way (checkboxes, radios and the focus ring on text/number/
+        # combo inputs).
+        from ui.dialogs.tools_dialogs import neutral_controls_qss
+        self.setStyleSheet(neutral_controls_qss(indicator))
         for btn in self.findChildren(TooltipButton):
             btn._color_override = indicator
             btn._set_icon()

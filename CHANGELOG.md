@@ -1,5 +1,48 @@
 # Changelog
 
+## v3.8.0-beta.31
+**Verify is far more useful, plus a second, more honest way to check a profile.**
+The "Verify against reference" tool used to hand back a bare ΔE number that
+could look alarmingly high for reasons that aren't your profile's fault (for
+example checking glossy-targeted values against a matte print). It now explains
+its results, can leave out colours your paper physically can't reproduce, and
+can draw the differences in 3D. There's also a brand-new tool for checking a
+finished profile against a fresh chart it has never seen.
+
+### Added
+- **New tool: "Verify a profile (independent check)."** Runs Argyll's profcheck
+  on a profile plus a freshly measured chart it was *not* built from, then grades
+  the result in plain language. Checking a profile against its own training
+  patches almost always looks good — testing it on a different chart is the
+  honest measure of accuracy. (Tools menu.)
+- **3D difference map in "Verify against reference."** Tick *Create a 3D
+  difference map* and, when the check finishes, an interactive 3D view opens
+  drawing a line from each target colour to where your print actually landed —
+  green dots are the reference, red dots your measurement. Drag to rotate, scroll
+  to zoom. It reuses the gamut viewer's renderer and follows the light/dark
+  theme.
+
+### Changed
+- **"Verify against reference" now explains its numbers.** Instead of just an
+  average and peak ΔE, it tells you whether the difference is mostly *lightness*
+  (a black-point / paper limit — expected when a reference made for one paper is
+  checked on another) or a real *colour* shift, and reports the best-90% figure
+  and a plain-language grade.
+- **Skip colours your paper can't print.** Optionally point the verify tool at
+  your profile (.icc): reference colours outside that paper's gamut — most often
+  the deepest shadows — are left out of the score (it tells you how many), so
+  unreachable colours stop dominating the result.
+- **Consistent control highlights.** Checkboxes, focused text fields and combo
+  boxes in the tool dialogs now use the same neutral highlight colour as the
+  Settings window, in both light and dark mode.
+
+### Fixed
+- **Dark mode:** the status-message box and paste boxes in the tool dialogs now
+  use the same background as the text-entry fields, instead of a darker shade
+  that read as a near-black void.
+- The Tools menu pop-up is a little wider so longer entries are no longer
+  clipped.
+
 ## v3.8.0-beta.30
 **The Measure tab's bidirectional strip indicator now matches what actually
 happens during the read.** The preview shows a second (bottom) arrow on the

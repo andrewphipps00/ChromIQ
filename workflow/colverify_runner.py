@@ -29,8 +29,9 @@ dialog lives in ui/dialogs/tools_dialogs.py.
 """
 from __future__ import annotations
 
+import math
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable
@@ -52,6 +53,32 @@ _SUMMARY_RE = re.compile(
 # colverify prints the id immediately followed by a colon ("%s%s%s:"), so the
 # id is everything up to the first colon.
 _PATCH_RE = re.compile(r"^(\S+?):.*?\bde\s+([\d.]+)\s*$")
+# Full per-patch line, capturing both Lab triples (always Lab — colverify prints
+# its internal v[] which is Lab regardless of the file's PCS). Lets us split each
+# patch's error into lightness (ΔL*) vs colour (Δa*b*) without a second tool.
+# colverify.c ~L1303:  printf("%s%s%s: %f %f %f <=> %f %f %f  de %f\n", …)
+_PATCH_FULL_RE = re.compile(
+    r"^(\S+?):\s*"
+    r"(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s*<=>\s*"
+    r"(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+de\s+([\d.]+)\s*$"
+)
+# "  Worst 10% errors (CIEDE2000): peak = …, avg = …"  (colverify.c ~L1443)
+_WORST10_RE = re.compile(
+    r"Worst\s*10%\s*errors[^:]*:\s*peak\s*=\s*([\d.]+),\s*avg\s*=\s*([\d.]+)",
+    re.IGNORECASE,
+)
+# "  Best  90% errors (CIEDE2000): peak = …, avg = …"  (colverify.c ~L1444)
+_BEST90_RE = re.compile(
+    r"Best\s*90%\s*errors[^:]*:\s*peak\s*=\s*([\d.]+),\s*avg\s*=\s*([\d.]+)",
+    re.IGNORECASE,
+)
+# "  avg err L* %f, a* %f, b* %f"  (colverify.c ~L1446) — mean signed component error.
+_COMP_RE = re.compile(
+    r"avg\s*err\s*L\*\s*(-?[\d.]+),\s*a\*\s*(-?[\d.]+),\s*b\*\s*(-?[\d.]+)",
+    re.IGNORECASE,
+)
+# "No of test patches in gamut = 42/50"  (colverify.c ~L1027, only with -L + -v)
+_GAMUT_RE = re.compile(r"patches in gamut\s*=\s*(\d+)\s*/\s*(\d+)", re.IGNORECASE)
 
 
 def _fmt(v: float) -> str:
@@ -93,6 +120,17 @@ def parse_reference_values(text: str) -> list[tuple[float, float, float]]:
     if not rows:
         raise ValueError("No reference values found — the table is empty.")
     return rows
+
+
+def vrml_output_path(measured_ti3: Path) -> Path:
+    """Where ``colverify -w`` writes its 3D plot for a given measured file.
+
+    colverify names the visualisation after the *measured* (second) file with its
+    extension swapped for ``.x3d.html`` (colverify.c ~L446 strips the extension;
+    new_vrml appends ``vrml_ext()``). It lands in the working directory alongside
+    sibling ``x3dom.css`` / ``x3dom.js`` the HTML references relatively.
+    """
+    return measured_ti3.parent / f"{measured_ti3.stem}.x3d.html"
 
 
 def chart_patch_count(path: Path) -> int:
@@ -185,6 +223,40 @@ def write_reference_ti3(
 # ---------------------------------------------------------------------------
 
 @dataclass
+class PatchDelta:
+    """One patch's reference vs measured Lab, with the error split into
+    lightness (ΔL*) and colour (Δa*b* magnitude).
+
+    A patch dominated by ΔL* (deep shadow on a paper whose black point sits
+    higher than the reference's) is a *reachability* limit, not a colour-accuracy
+    fault — the distinction the summary banner leans on. ``de`` is colverify's
+    own reported value (whatever formula was selected); ``dl``/``dab`` are derived
+    here purely for that lightness-vs-colour breakdown.
+    """
+    sample_id: str
+    target: tuple[float, float, float]    # reference L*a*b*
+    measured: tuple[float, float, float]  # measured L*a*b*
+    de: float
+
+    @property
+    def dl(self) -> float:
+        """Signed lightness error (measured − reference)."""
+        return self.measured[0] - self.target[0]
+
+    @property
+    def dab(self) -> float:
+        """Magnitude of the a*/b* (colour) error."""
+        da = self.measured[1] - self.target[1]
+        db = self.measured[2] - self.target[2]
+        return math.hypot(da, db)
+
+    @property
+    def lightness_dominated(self) -> bool:
+        """True when the error is mostly lightness rather than colour."""
+        return abs(self.dl) > self.dab
+
+
+@dataclass
 class ColverifyParams:
     ref_ti3: Path                 # target (reference) — built by write_reference_ti3
     measured_ti3: Path            # the user's chartread measurement
@@ -192,18 +264,27 @@ class ColverifyParams:
     sort: bool = True             # -s : sort patches worst-first
     match_by_location: bool = False  # -l : pair by SAMPLE_LOC instead of SAMPLE_ID
     per_patch: bool = True        # -v 2 : print every patch's ΔE
+    gamut_profile: Path | None = None  # -L : skip reference colours outside this profile's gamut
+    vrml: bool = False            # -w : also emit a 3D PCS vector visualisation (.x3d.html)
 
 
 @dataclass
 class ColverifyResult:
     avg_de: float | None = None
     peak_de: float | None = None
-    patch_errors: list[tuple[str, float]] = None  # type: ignore[assignment]
+    patch_errors: list[tuple[str, float]] = field(default_factory=list)
     raw_log: str = ""
-
-    def __post_init__(self) -> None:
-        if self.patch_errors is None:
-            self.patch_errors = []
+    # Richer extras (present when colverify printed them):
+    patches: list[PatchDelta] = field(default_factory=list)
+    worst10_avg: float | None = None
+    worst10_peak: float | None = None
+    best90_avg: float | None = None
+    best90_peak: float | None = None
+    comp_l: float | None = None   # mean signed ΔL* across in-gamut patches
+    comp_a: float | None = None
+    comp_b: float | None = None
+    in_gamut: int | None = None   # only set when a gamut profile (-L) was supplied
+    total_patches: int | None = None
 
 
 class ColverifyRunner:
@@ -221,6 +302,12 @@ class ColverifyRunner:
             args.append("-l")
         if p.sort:
             args.append("-s")
+        if p.vrml:
+            args.append("-w")
+        if p.gamut_profile is not None:
+            # colverify opens the profile directly, so an absolute path is fine
+            # even though ref/measured are named relative to cwd.
+            args += ["-L", str(p.gamut_profile)]
         args += [p.ref_ti3.name, p.measured_ti3.name]
         return args
 
@@ -250,12 +337,132 @@ class ColverifyRunner:
     def parse_results(self, log_text: str = "") -> ColverifyResult:
         text = log_text or self._last_log
         result = ColverifyResult(raw_log=text)
+
         m = _SUMMARY_RE.search(text)
         if m:
             result.peak_de = float(m.group(1))
             result.avg_de = float(m.group(2))
+        if (m := _WORST10_RE.search(text)) is not None:
+            result.worst10_peak = float(m.group(1))
+            result.worst10_avg = float(m.group(2))
+        if (m := _BEST90_RE.search(text)) is not None:
+            result.best90_peak = float(m.group(1))
+            result.best90_avg = float(m.group(2))
+        if (m := _COMP_RE.search(text)) is not None:
+            result.comp_l = float(m.group(1))
+            result.comp_a = float(m.group(2))
+            result.comp_b = float(m.group(3))
+        if (m := _GAMUT_RE.search(text)) is not None:
+            result.in_gamut = int(m.group(1))
+            result.total_patches = int(m.group(2))
+
         for line in text.splitlines():
-            pm = _PATCH_RE.match(line.strip())
+            stripped = line.strip()
+            full = _PATCH_FULL_RE.match(stripped)
+            if full:
+                nums = [float(full.group(i)) for i in range(2, 9)]
+                result.patches.append(
+                    PatchDelta(
+                        sample_id=full.group(1),
+                        target=(nums[0], nums[1], nums[2]),
+                        measured=(nums[3], nums[4], nums[5]),
+                        de=nums[6],
+                    )
+                )
+                result.patch_errors.append((full.group(1), nums[6]))
+                continue
+            # Fall back to the loose ΔE-only matcher so summary/other layouts
+            # (and the existing self-compare test fixtures) still populate
+            # patch_errors even if the full triple line doesn't parse.
+            pm = _PATCH_RE.match(stripped)
             if pm:
                 result.patch_errors.append((pm.group(1), float(pm.group(2))))
         return result
+
+
+# ---------------------------------------------------------------------------
+# Plain-language interpretation
+# ---------------------------------------------------------------------------
+# Average-ΔE bands, kept in step with profcheck's quality grading so the two
+# verify paths speak the same language to the user.
+_GRADE_LABELS = ("excellent", "good", "acceptable", "in need of work")
+_AVG_THRESHOLDS = (1.0, 2.0, 4.0)
+# Below this, a mean signed component error is just measurement noise, not a
+# meaningful lightness/colour lean.
+_COMP_NOISE = 0.5
+
+
+def _grade(avg_de: float) -> str:
+    t1, t2, t3 = _AVG_THRESHOLDS
+    if avg_de < t1:
+        return _GRADE_LABELS[0]
+    if avg_de < t2:
+        return _GRADE_LABELS[1]
+    if avg_de < t3:
+        return _GRADE_LABELS[2]
+    return _GRADE_LABELS[3]
+
+
+def interpret(result: ColverifyResult) -> str:
+    """Turn a parsed colverify result into a friendly, beginner-readable summary.
+
+    Leads with the outcome, explains a gamut-skip if one happened, and — the
+    point of the whole exercise — says whether the remaining error is mostly
+    *lightness* (a black-point / paper-reachability limit, often expected) or
+    mostly *colour* (a real accuracy problem worth chasing).
+    """
+    if result.avg_de is None:
+        return (
+            "colverify didn't return a result. Check that your measured .ti3 has "
+            "the same patches as the reference (they're matched by patch number)."
+        )
+
+    parts: list[str] = []
+
+    peak = f"  ·  Peak ΔE {result.peak_de:.2f}" if result.peak_de is not None else ""
+    n = len(result.patch_errors)
+    parts.append(f"Average ΔE {result.avg_de:.2f}{peak}" + (f"  ({n} patches)" if n else ""))
+
+    # Gamut skip — explain why some patches vanished, so the result isn't a mystery.
+    if (
+        result.in_gamut is not None
+        and result.total_patches is not None
+        and result.in_gamut < result.total_patches
+    ):
+        skipped = result.total_patches - result.in_gamut
+        parts.append(
+            f"{skipped} of {result.total_patches} reference colours fall outside "
+            "what this paper/profile can physically reproduce, so they were left "
+            "out — otherwise their large, unavoidable errors would dominate "
+            f"everything. The numbers describe the {result.in_gamut} colours your "
+            "paper can actually make."
+        )
+
+    # Lightness vs colour — the core insight.
+    if result.comp_l is not None and result.comp_a is not None and result.comp_b is not None:
+        colour_mag = math.hypot(result.comp_a, result.comp_b)
+        if abs(result.comp_l) > _COMP_NOISE and abs(result.comp_l) > colour_mag:
+            direction = "lighter" if result.comp_l > 0 else "darker"
+            parts.append(
+                "Most of the difference is in lightness, not colour: on average "
+                f"the print came out {direction} than the reference (ΔL* "
+                f"{result.comp_l:+.1f}) while the actual colour was much closer "
+                f"(Δa*b* {colour_mag:.1f}). That's typical when the reference "
+                "values were made for a different paper or finish — the hue and "
+                "saturation match better than the ΔE alone suggests."
+            )
+        elif colour_mag > _COMP_NOISE and colour_mag > abs(result.comp_l):
+            parts.append(
+                f"The difference is mostly in colour (Δa*b* {colour_mag:.1f}) "
+                f"rather than brightness (ΔL* {result.comp_l:+.1f}) — a genuine "
+                "colour shift worth a closer look, not just a black-point limit."
+            )
+
+    if result.best90_avg is not None and n > 10:
+        parts.append(
+            f"Setting aside the worst 10% of patches, the rest match at average "
+            f"ΔE {result.best90_avg:.2f}."
+        )
+
+    parts.append(f"Overall, this match is {_grade(result.avg_de)}.")
+    return "\n\n".join(parts)

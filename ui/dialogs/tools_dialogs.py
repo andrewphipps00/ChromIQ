@@ -16,6 +16,8 @@ remember the last-used directory per tool across sessions.
 """
 from __future__ import annotations
 
+import shutil
+import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
@@ -41,6 +43,7 @@ from PyQt6.QtWidgets import (
 )
 
 from core.logger import get_logger
+from ui.styles import BG_INPUT, BORDER, TEXT_MAIN
 from ui.theme import resolve_mode
 from ui.tooltip_button import TooltipButton
 from ui.widgets import (
@@ -53,18 +56,47 @@ def _indicator_color(settings: "AppSettings") -> str:
     """The Tools-dialog ⓘ accent — the same light/dark indicator the Settings
     window uses (near-black on light, light-grey on dark)."""
     return "#1c1b18" if resolve_mode(settings.get("appearance", "auto")) == "light" else "#d0d0d0"
+
+
+def neutral_controls_qss(color: str) -> str:
+    """Dialog-scoped QSS that swaps the global cyan/blue ACCENT on interactive
+    controls for the neutral light/dark *indicator* colour.
+
+    The Settings window already does this for checkboxes and line-edit focus so
+    its controls read as neutral chrome rather than the tab-accent cyan that has
+    no meaning inside a dialog body. Tool dialogs share that look via this helper
+    (checkbox/radio when checked, and the focus ring on every text/number/combo
+    input), so every dialog in the app highlights its controls the same way.
+    """
+    return (
+        f"QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus {{"
+        f" border-color: {color}; }}"
+        f"QCheckBox::indicator:checked {{ background: {color}; border-color: {color}; }}"
+        f"QCheckBox::indicator:hover {{ border-color: {color}; }}"
+        f"QRadioButton::indicator:checked {{ background: {color}; border-color: {color}; }}"
+        f"QRadioButton::indicator:hover {{ border-color: {color}; }}"
+    )
 from workflow.average_runner import AverageParams, AverageRunner
 from workflow.colverify_runner import (
     ColverifyParams,
     ColverifyRunner,
     chart_patch_count,
+    interpret,
     parse_reference_values,
+    vrml_output_path,
     write_reference_ti3,
 )
+from ui.dialogs.drift_plot_dialog import DriftPlotDialog, webengine_available
 from workflow.i1profiler_export import (
     WorkflowOptions, export_from_ti1, parse_ti1, write_pwxf,
 )
 from workflow.i1profiler_import import import_to_ti1
+from workflow.profcheck_runner import (
+    ProfcheckParams,
+    ProfcheckRunner,
+    quality_explanation,
+    quality_grade,
+)
 
 
 # Instrument / paper presets for the optional i1Profiler workflow (.pwxf)
@@ -236,6 +268,24 @@ class _ToolDialogBase(QDialog):
         self._run_btn.clicked.connect(self._on_run_clicked)
         self._close_btn.clicked.connect(self.reject)
         outer.addWidget(bb)
+
+        # Highlight checkboxes, focused inputs and combos with the same neutral
+        # indicator the Settings window uses, instead of the global tab-accent
+        # cyan/blue. (The TI2 layout editor is a plain QDialog, not a subclass of
+        # this base, so it deliberately keeps its own accent.)
+        qss = neutral_controls_qss(_indicator_color(settings))
+        if resolve_mode(settings.get("appearance", "auto")) == "dark":
+            # Generic QPlainTextEdit (the status field, paste boxes) has no
+            # explicit background rule, so it falls back to the dark panel
+            # background and reads darker than the QLineEdit inputs beside it.
+            # Match it to the input background. (Dark mode only — light mode reads
+            # fine as-is.)
+            qss += (
+                f"QPlainTextEdit {{ background: {BG_INPUT}; color: {TEXT_MAIN};"
+                f" border: 1px solid {BORDER}; border-radius: 3px;"
+                f" padding: 4px 6px; }}"
+            )
+        self.setStyleSheet(qss)
 
         # Defer building the input rows + first refresh until the subclass __init__
         # has finished setting up its own attributes.
@@ -1347,6 +1397,13 @@ class VerifyAgainstReferenceDialog(_ToolDialogBase):
         "You'll see the ΔE for every single patch plus an overall average. If most "
         "patches are low and only a handful are high, those few usually point to a "
         "misread or a problem patch on the print.\n\n"
+        "A tip if the numbers look alarmingly high: if your reference values were "
+        "made for a different paper or finish (for example glossy values checked "
+        "against a matte print), the deep shadows can't match — matte simply can't "
+        "go as dark. ChromIQ tells you when an error is mostly *lightness* (a "
+        "black-point limit you can't avoid) versus a real *colour* shift. You can "
+        "also point it at your own profile (.icc) and it will skip the colours your "
+        "paper physically can't reproduce, so they stop dominating the score.\n\n"
         "It's a quick way to sanity-check a profile, compare one paper or ink "
         "batch against another, or keep an eye on a printer drifting over time — "
         "all without building anything.")
@@ -1369,8 +1426,23 @@ class VerifyAgainstReferenceDialog(_ToolDialogBase):
         self._cv        = ColverifyRunner(runner)
         self._measured: Path | None = None
         self._chart: Path | None = None
+        self._profile: Path | None = None
+        self._temp_dirs: list[Path] = []   # staging dirs for 3D-map runs, cleaned on close
         self._build_inputs()
         self._refresh()
+
+    def _cleanup_temp(self) -> None:
+        for d in self._temp_dirs:
+            shutil.rmtree(d, ignore_errors=True)
+        self._temp_dirs.clear()
+
+    def done(self, result: int) -> None:  # noqa: D102 — covers both Run-accept and Close
+        self._cleanup_temp()
+        super().done(result)
+
+    def closeEvent(self, event) -> None:  # noqa: N802
+        self._cleanup_temp()
+        super().closeEvent(event)
 
     def _file_row(self, on_browse: "Callable[[], None]") -> tuple[QHBoxLayout, QLineEdit]:
         row = QHBoxLayout()
@@ -1416,6 +1488,34 @@ class VerifyAgainstReferenceDialog(_ToolDialogBase):
         row, self._chart_field = self._file_row(self._pick_chart)
         self._content.addLayout(row)
 
+        prof_row = QHBoxLayout()
+        prof_row.addWidget(
+            QLabel(
+                "Your profile (.icc) — optional, skips reference colours this "
+                "paper can't print:", self
+            )
+        )
+        prof_row.addWidget(
+            TooltipButton(
+                "Skip unprintable colours",
+                "If your reference values were made for a different paper or finish "
+                "(say glossy values checked on matte), some of them are colours your "
+                "paper simply can't produce — most often the very darkest shadows, "
+                "because matte paper can't go as dark as glossy. Comparing against "
+                "those is unfair and makes the error look alarmingly high.\n\n"
+                "Point this at the profile for the paper you actually printed on, and "
+                "ChromIQ asks Argyll to leave those unreachable colours out of the "
+                "score, then tells you how many it skipped. What's left is a fair "
+                "measure of how well the colours your paper CAN make were reproduced.",
+                self, min_width=520, color=_indicator_color(self._settings),
+            ),
+            0, Qt.AlignmentFlag.AlignVCenter,
+        )
+        prof_row.addStretch(1)
+        self._content.addLayout(prof_row)
+        row, self._profile_field = self._file_row(self._pick_profile)
+        self._content.addLayout(row)
+
         opts = QHBoxLayout()
         opts.addWidget(QLabel("ΔE formula:", self))
         self._formula = NoScrollComboBox(self)
@@ -1423,11 +1523,46 @@ class VerifyAgainstReferenceDialog(_ToolDialogBase):
         self._formula.addItem("CIE94", "-c")
         self._formula.addItem("CIE76", "")
         opts.addWidget(self._formula)
+        opts.addWidget(
+            TooltipButton(
+                "ΔE formula",
+                "How the colour difference is scored. CIEDE2000 is the modern "
+                "standard and best matches what your eye sees — leave it on this "
+                "unless you need to match an older report. CIE94 and CIE76 are older "
+                "formulas kept for comparison.",
+                self, min_width=460, color=_indicator_color(self._settings),
+            ),
+            0, Qt.AlignmentFlag.AlignVCenter,
+        )
         self._sort_cb = QCheckBox("List worst patches first", self)
         self._sort_cb.setChecked(True)
+        opts.addSpacing(16)
         opts.addWidget(self._sort_cb)
         opts.addStretch(1)
         self._content.addLayout(opts)
+
+        plot_row = QHBoxLayout()
+        self._vrml_cb = QCheckBox("Create a 3D difference map", self)
+        plot_row.addWidget(self._vrml_cb)
+        plot_row.addWidget(
+            TooltipButton(
+                "3D difference map",
+                "Opens an interactive 3D picture of the result when the check "
+                "finishes. Every patch is drawn as a short line from the colour you "
+                "asked for (a green dot) to the colour you actually measured (a red "
+                "dot), placed in 3D colour space. Long lines all leaning the same way "
+                "tell you the print drifts consistently in that direction; a few long "
+                "lines among short ones point to specific problem patches. Drag to "
+                "rotate, scroll to zoom.",
+                self, min_width=500, color=_indicator_color(self._settings),
+            ),
+            0, Qt.AlignmentFlag.AlignVCenter,
+        )
+        plot_row.addStretch(1)
+        self._content.addLayout(plot_row)
+        if not webengine_available():
+            self._vrml_cb.setEnabled(False)
+            self._vrml_cb.setToolTip("Install PyQt6-WebEngine to enable the 3D map.")
 
         self._banner = QLabel("", self)
         self._banner.setWordWrap(True)
@@ -1464,6 +1599,13 @@ class VerifyAgainstReferenceDialog(_ToolDialogBase):
             self._chart_field.setText(str(p))
             self._refresh()
 
+    def _pick_profile(self) -> None:
+        p = self._pick_input_file("Choose your profile", "ICC profiles (*.icc *.icm);;All files (*)")
+        if p:
+            self._profile = p
+            self._profile_field.setText(str(p))
+            self._refresh()
+
     # -- run ------------------------------------------------------------
     def _can_run(self) -> bool:
         return self._measured is not None and bool(self._ref_edit.toPlainText().strip())
@@ -1498,8 +1640,28 @@ class VerifyAgainstReferenceDialog(_ToolDialogBase):
                 self._finish(False)
                 return
 
-        space    = self._space.currentData()
-        ref_path = self._measured.parent / f"{self._measured.stem}-reference.ti3"
+        space     = self._space.currentData()
+        want_plot = self._vrml_cb.isChecked() and self._vrml_cb.isEnabled()
+
+        # For the 3D map, colverify writes the .x3d.html (plus sibling x3dom.js/
+        # css) next to the measured file. Stage that run in a temp dir so the run
+        # folder isn't littered; the normal run writes only the reference beside
+        # the measurement, as before.
+        if want_plot:
+            work = Path(tempfile.mkdtemp(prefix="chromiq_drift_"))
+            self._temp_dirs.append(work)
+            measured_path = work / self._measured.name
+            try:
+                shutil.copyfile(self._measured, measured_path)
+            except OSError as exc:
+                self._log.appendPlainText(f"[ERROR] Could not stage the measurement: {exc}")
+                self._finish(False)
+                return
+            ref_path = work / f"{self._measured.stem}-reference.ti3"
+        else:
+            measured_path = self._measured
+            ref_path = self._measured.parent / f"{self._measured.stem}-reference.ti3"
+
         try:
             write_reference_ti3(ref_path, rows, space=space)
         except (ValueError, OSError) as exc:
@@ -1516,10 +1678,16 @@ class VerifyAgainstReferenceDialog(_ToolDialogBase):
 
         params = ColverifyParams(
             ref_ti3=ref_path,
-            measured_ti3=self._measured,
+            measured_ti3=measured_path,
             de_formula=self._formula.currentData(),
             sort=self._sort_cb.isChecked(),
+            gamut_profile=self._profile,
+            vrml=want_plot,
         )
+        if self._profile is not None:
+            self._log.appendPlainText(
+                f"Skipping out-of-gamut colours using profile: {self._profile.name}"
+            )
 
         def _on_line(line: str) -> None:
             self._log.appendPlainText(line.rstrip())
@@ -1528,11 +1696,17 @@ class VerifyAgainstReferenceDialog(_ToolDialogBase):
         def _on_finish(code: int) -> None:
             result = self._cv.parse_results()
             if code == 0 and result.avg_de is not None:
-                self._banner.setText(
-                    f"Average ΔE {result.avg_de:.2f}   ·   Peak ΔE "
-                    f"{result.peak_de:.2f}   ({len(result.patch_errors)} patches)"
-                )
+                self._banner.setText(interpret(result))
                 self._finish(True)
+                if want_plot:
+                    html = vrml_output_path(measured_path)
+                    if html.exists():
+                        DriftPlotDialog(html, self._settings, self).exec()
+                    else:
+                        self._log.appendPlainText(
+                            "[NOTE] A 3D map was requested but colverify produced no "
+                            "plot file."
+                        )
             else:
                 self._log.appendPlainText(
                     "[ERROR] colverify did not return a result. Check that the "
@@ -1541,6 +1715,214 @@ class VerifyAgainstReferenceDialog(_ToolDialogBase):
                 self._finish(False)
 
         self._cv.run(params, _on_line, _on_finish)
+
+
+class VerifyProfileDialog(_ToolDialogBase):
+    TOOL_KEY    = "verify_profile"
+    TITLE       = "Verify a profile (independent check)"
+    RUN_LABEL   = "Verify profile"
+    MIN_WIDTH   = 660
+    DESCRIPTION = (
+        "Check how accurate a finished profile really is by testing it against a "
+        "chart it has never seen.\n\n"
+        "Pick your profile (.icc) and a measured chart (.ti3) that you printed "
+        "through that profile and read back. ChromIQ runs Argyll's profcheck, "
+        "which asks the profile what each patch should look like and compares that "
+        "to what you actually measured — then grades the result for you."
+    )
+    HELP = (
+        "This is the most honest way to answer “is my profile any good?”.\n\n"
+        "Why a *separate* chart? When you build a profile, it is tuned to the exact "
+        "patches you measured — so checking it against those same patches almost "
+        "always looks great, even if the profile is weak elsewhere. Printing and "
+        "measuring a *different* chart and checking the profile against that is a "
+        "real test: the profile has to predict colours it was never trained on. "
+        "Colour managers call this a round-trip or cross-check.\n\n"
+        "How to do it:\n\n"
+        "1. In ChromIQ, create a small chart (a few hundred patches is plenty) that "
+        "is different from the one you built the profile with. The Create Chart tab "
+        "can make one for you.\n"
+        "2. Print it through the profile you want to test, then read it back on the "
+        "Measure tab — that gives you a .ti3 measurement file.\n"
+        "3. Come back here, pick that profile and that measurement, and click "
+        "Verify profile.\n\n"
+        "You'll get an average and a peak ΔE (colour-difference score, where smaller "
+        "is better and 0 is perfect) plus a plain-language grade. A good printer "
+        "profile typically lands in the “excellent/good” range; a high peak with a "
+        "low average usually means one or two odd patches rather than a bad profile.\n\n"
+        "Tip: this checks the profile itself. If instead you want to compare your "
+        "print to colour targets someone else gave you, use “Verify against "
+        "reference”."
+    )
+
+    def __init__(self, runner: "ArgyllRunner", settings: "AppSettings", parent: QWidget | None = None) -> None:
+        super().__init__(settings, parent)
+        self._runner   = runner
+        self._checker  = ProfcheckRunner(runner)
+        self._profile: Path | None = None
+        self._measured: Path | None = None
+        self._build_inputs()
+        self._refresh()
+
+    def _file_row(self, on_browse: "Callable[[], None]") -> tuple[QHBoxLayout, QLineEdit]:
+        row = QHBoxLayout()
+        field = QLineEdit(self)
+        field.setReadOnly(True)
+        field.setPlaceholderText("No file selected")
+        row.addWidget(field, 1)
+        btn = QPushButton("Browse…", self)
+        btn.clicked.connect(on_browse)
+        row.addWidget(btn)
+        return row, field
+
+    def _label_with_tip(self, text: str, tip_title: str, tip_body: str) -> QHBoxLayout:
+        row = QHBoxLayout()
+        row.addWidget(QLabel(text, self))
+        tip = TooltipButton(
+            tip_title, tip_body, self,
+            min_width=520, color=_indicator_color(self._settings),
+        )
+        row.addWidget(tip, 0, Qt.AlignmentFlag.AlignVCenter)
+        row.addStretch(1)
+        return row
+
+    def _build_inputs(self) -> None:
+        self._content.addLayout(self._label_with_tip(
+            "Profile to test (.icc):",
+            "Profile to test",
+            "The ICC profile whose accuracy you want to measure — the file Build "
+            "Profile produced. ChromIQ asks this profile what colour each patch "
+            "should be and compares that to your measurement.",
+        ))
+        row, self._profile_field = self._file_row(self._pick_profile)
+        self._content.addLayout(row)
+
+        self._content.addLayout(self._label_with_tip(
+            "Measured chart (.ti3):",
+            "Measured chart — use a fresh one",
+            "A chart you printed through the profile above and then read back on "
+            "the Measure tab. For a meaningful test use a chart that is DIFFERENT "
+            "from the one you built the profile with — checking a profile against "
+            "its own training patches almost always looks good even when the "
+            "profile isn't. A few hundred fresh patches are plenty.",
+        ))
+        row, self._measured_field = self._file_row(self._pick_measured)
+        self._content.addLayout(row)
+
+        opts = QHBoxLayout()
+        opts.addWidget(QLabel("ΔE formula:", self))
+        self._formula = NoScrollComboBox(self)
+        self._formula.addItem("CIEDE2000", "-k")
+        self._formula.addItem("CIE94", "-c")
+        self._formula.addItem("CIE76", "")
+        opts.addWidget(self._formula)
+        formula_tip = TooltipButton(
+            "ΔE formula",
+            "How the colour difference is scored. CIEDE2000 is the modern standard "
+            "and best matches what your eye sees — leave it on this unless you need "
+            "to match an older report. CIE94 and CIE76 are older formulas kept for "
+            "comparison.",
+            self, min_width=460, color=_indicator_color(self._settings),
+        )
+        opts.addWidget(formula_tip, 0, Qt.AlignmentFlag.AlignVCenter)
+
+        opts.addSpacing(16)
+        opts.addWidget(QLabel("Intent:", self))
+        self._intent = NoScrollComboBox(self)
+        self._intent.addItem("Absolute", "a")
+        self._intent.addItem("Relative", "r")
+        opts.addWidget(self._intent)
+        intent_tip = TooltipButton(
+            "Rendering intent",
+            "Which way the profile is asked to reproduce colour for the check. "
+            "Absolute compares exact colours including the paper white, and is the "
+            "usual choice for judging accuracy. Relative ignores the paper-white "
+            "difference, which can look kinder on papers whose white isn't neutral.",
+            self, min_width=460, color=_indicator_color(self._settings),
+        )
+        opts.addWidget(intent_tip, 0, Qt.AlignmentFlag.AlignVCenter)
+
+        self._sort_cb = QCheckBox("List worst patches first", self)
+        self._sort_cb.setChecked(True)
+        opts.addSpacing(16)
+        opts.addWidget(self._sort_cb)
+        opts.addStretch(1)
+        self._content.addLayout(opts)
+
+        self._banner = QLabel("", self)
+        self._banner.setWordWrap(True)
+        self._banner.setStyleSheet("font-weight: bold;")
+        self._content.addWidget(self._banner)
+
+    # -- pickers --------------------------------------------------------
+    def _pick_profile(self) -> None:
+        p = self._pick_input_file("Choose profile to test", "ICC profiles (*.icc *.icm);;All files (*)")
+        if p:
+            self._profile = p
+            self._profile_field.setText(str(p))
+            self._refresh()
+
+    def _pick_measured(self) -> None:
+        p = self._pick_input_file("Choose measured chart", "Measurements (*.ti3);;All files (*)")
+        if p:
+            self._measured = p
+            self._measured_field.setText(str(p))
+            self._refresh()
+
+    # -- run ------------------------------------------------------------
+    def _can_run(self) -> bool:
+        return self._profile is not None and self._measured is not None
+
+    def _execute(self) -> None:
+        if self._runner.is_running:
+            self._log.appendPlainText("[BUSY] Another operation is running — please wait.")
+            self._finish(False)
+            return
+
+        assert self._profile is not None and self._measured is not None
+        self._log.clear()
+        self._banner.setText("")
+        _remember_dir(self._settings, self.TOOL_KEY, self._measured.parent)
+
+        params = ProfcheckParams(
+            ti3_path   = self._measured,
+            icc_path   = self._profile,
+            de_formula = self._formula.currentData(),
+            intent     = self._intent.currentData() or "a",
+            sort       = self._sort_cb.isChecked(),
+            verbosity  = "2",
+        )
+
+        def _on_line(line: str) -> None:
+            self._log.appendPlainText(line.rstrip())
+            self._log.ensureCursorVisible()
+
+        def _on_finish(code: int) -> None:
+            result = self._checker.parse_results()
+            # profcheck exits 1 when it finds colour errors — that's normal, so we
+            # judge success on whether it produced numbers, not the exit code.
+            if result.avg_de is not None:
+                grade = quality_grade(result.avg_de, result.peak_de)
+                self._banner.setText(
+                    f"Verdict: {grade}\n\n"
+                    + quality_explanation(result.avg_de, result.peak_de)
+                )
+                for _key, msg in self._checker.captured_warnings():
+                    self._log.appendPlainText(f"[NOTE] {msg}")
+                self._finish(True)
+            else:
+                failure = self._checker.primary_failure()
+                if failure is not None:
+                    self._log.appendPlainText(f"[ERROR] {failure[1]}")
+                else:
+                    self._log.appendPlainText(
+                        "[ERROR] profcheck did not return a result. Check that the "
+                        ".ti3 was measured through this profile's chart and that the "
+                        "files match."
+                    )
+                self._finish(False)
+
+        self._checker.run(params, _on_line, _on_finish)
 
 
 def open_tool_dialog(
@@ -1565,6 +1947,8 @@ def open_tool_dialog(
         dlg = I1ProfilerToTi1Dialog(settings, parent)
     elif key == "verify":
         dlg = VerifyAgainstReferenceDialog(runner, settings, parent)
+    elif key == "verify_profile":
+        dlg = VerifyProfileDialog(runner, settings, parent)
     else:
         log.warning("Unknown tool key: %s", key)
         return

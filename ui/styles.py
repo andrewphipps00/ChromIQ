@@ -253,7 +253,7 @@ QRadioButton::indicator:checked {{ background: {ACCENT}; border-color: {ACCENT};
 
 /* ---- Log ---------------------------------------------------------- */
 QPlainTextEdit#log {{
-    background: #0a0a0a;
+    background: {BG_INPUT};
     color: {TEXT_MONO};
     font-family: "JetBrains Mono", "Menlo", "SF Mono", "Courier New", monospace;
     font-size: 12px;

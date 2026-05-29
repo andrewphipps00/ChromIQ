@@ -6,6 +6,7 @@ row behaves like a combobox item — hover highlight, click emits ``selected``.
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 from PyQt6.QtCore import QEvent, QPoint, QRect, QSize, Qt, pyqtSignal
@@ -49,6 +50,7 @@ _ENTRIES: tuple[ToolEntry, ...] = (
     ToolEntry("ti1_to_i1p",   "Convert TI1 → i1Profiler"),
     ToolEntry("i1p_to_ti3",   "Convert i1Profiler → TI3"),
     ToolEntry("i1p_to_ti1",   "Convert i1Profiler → TI1"),
+    ToolEntry("verify_profile", "Verify a profile (independent check)"),
     ToolEntry("verify",       "Verify against reference"),
 )
 
@@ -102,7 +104,13 @@ class ToolsPopup(QWidget):
     def _compute_size(self) -> None:
         fm = QFontMetricsF(self.font())
         text_w = max(fm.horizontalAdvance(e.label) for e in _ENTRIES)
-        panel_w = int(text_w) + 2 * self.H_PAD
+        # Each row insets its label by ROW(6)+TEXT(12) px on each side (see
+        # _row_rect / paintEvent), which alone consumed all of 2*H_PAD and left the
+        # widest label flush against the edge — the last glyph clipped. Reserve the
+        # true insets plus H_PAD of actual breathing room, and round up so a
+        # fractional advance never truncates.
+        inner = 2 * (6 + 12)
+        panel_w = math.ceil(text_w) + inner + self.H_PAD
         panel_w = max(panel_w, 240)
         panel_h = len(_ENTRIES) * self.ROW_H + 2 * self.V_PAD
         w = panel_w + 2 * self.PANEL_MARGIN
