@@ -1,5 +1,16 @@
 # Changelog
 
+## v3.8.0-beta.29
+**Readability fix for the Average / Merge tool dialogs in dark mode.** The file
+list in both dialogs used a near-black background that made it hard to tell the
+list area apart from the surrounding window.
+
+### Fixed
+- The measurement-file lists in **Average measurements** and **Merge
+  measurements** now use the same background as the text-entry fields, so the
+  list reads as an editable area instead of a dark void. Selected rows are
+  highlighted in the accent colour. (Dark mode only.)
+
 ## v3.8.0-beta.28
 **Randomised tagging in the chart editor is now automatic.** A well-mixed chart
 is tagged as randomised for you on save (so it can be measured bidirectionally),

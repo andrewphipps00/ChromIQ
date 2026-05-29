@@ -163,6 +163,18 @@ QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox {{
 QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus {{
     border-color: {ACCENT};
 }}
+/* File lists (Average/Merge tools) — match the text-input background so the
+   field reads as an editable area rather than a near-black void. */
+QListWidget {{
+    background: {BG_INPUT};
+    color: {TEXT_MAIN};
+    border: 1px solid {BORDER};
+    border-radius: 3px;
+}}
+QListWidget::item:selected {{
+    background: {ACCENT};
+    color: #ffffff;
+}}
 /* Disabled inputs — dim text, subtly darker chrome to signal "off". */
 QLineEdit:disabled,
 QSpinBox:disabled, QDoubleSpinBox:disabled,
