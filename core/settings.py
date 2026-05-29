@@ -68,9 +68,12 @@ DEFAULTS: dict[str, Any] = {
     "measure_tolerance_enabled":           True,
     "measure_tolerance_value":             0.7,
     "manual2_chartread_tolerance_enabled": True,
-    # TI2 layout editor — tag saved charts as randomised (gated by a safety
-    # check) so chartread can auto-recognise strips + read bidirectionally.
-    "ti2_editor_tag_randomised":   True,
+    # TI2 layout editor — randomised tagging. Well-mixed charts are tagged
+    # automatically on save; this remembers whether to FORCE the tag on a
+    # layout the safety check considers structured, and whether the user has
+    # dismissed the force-risk warning.
+    "ti2_editor_force_tag":              False,
+    "ti2_editor_force_tag_hide_warning": False,
     # Step 4 — profile
     "colprof_algorithm":         "l",
     "colprof_quality":           "m",

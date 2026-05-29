@@ -1,5 +1,30 @@
 # Changelog
 
+## v3.8.0-beta.28
+**Randomised tagging in the chart editor is now automatic.** A well-mixed chart
+is tagged as randomised for you on save (so it can be measured bidirectionally),
+and the manual checkbox is demoted to a "force" override that only matters for
+structured layouts the safety check considers risky.
+
+### Changed
+- **Chart layout editor — auto-tag on save.** When you save, ChromIQ analyses
+  the layout: a well-mixed chart is tagged as randomised automatically with no
+  prompt; a structured one is left untagged unless you override it.
+- The old "Tag as randomised" checkbox is renamed **"Force 'randomised' tag"**
+  and is **enabled only while the current layout is judged unsafe** (greyed out
+  otherwise, since safe charts are tagged anyway). Its state refreshes live with
+  each preview.
+- Forcing the tag on an unsafe layout now shows an extensive, plain-language
+  risk warning with a **"Don't show this again"** option.
+- The safety check looks at each strip individually — a single direction-
+  ambiguous strip or a single near-identical strip pair flags the whole chart,
+  rather than being averaged away.
+
+### Notes
+- The check is conservative (uncertain → treated as unsafe); you can always
+  Force the tag from the warning. Small charts with short strips have less
+  margin and may be flagged more readily.
+
 ## v3.8.0-beta.27
 **Randomisation-aware bidirectional measuring, and plain-language help across
 the tools.** The chart layout editor can now mark a chart as randomised so it

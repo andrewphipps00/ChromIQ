@@ -22,6 +22,7 @@ from PyQt6.QtGui import (
 )
 from PyQt6.QtWidgets import (
     QAbstractItemView, QButtonGroup, QCheckBox, QColorDialog, QDialog,
+    QDialogButtonBox,
     QDoubleSpinBox, QFrame, QGridLayout, QGroupBox, QHBoxLayout, QLabel,
     QLineEdit, QListWidget, QListWidgetItem, QMessageBox, QPlainTextEdit,
     QPushButton, QRadioButton, QScrollArea, QSlider, QSplitter,
@@ -985,9 +986,11 @@ class Ti2RelayoutDialog(QDialog):
             "A typical session goes: load a chart or start a new one, arrange and "
             "recolour the patches, glance at the preview, then Save. The file you "
             "save is exactly what you print and then read in on the Measure tab.\n\n"
-            "One handy tip: when you save, ChromIQ can quietly mark the chart so "
-            "your instrument is allowed to read each strip in either direction — "
-            "see the \"Tag as randomised\" option in the controls for more.",
+            "One handy thing happens automatically: when you save, ChromIQ checks "
+            "whether your colours are well mixed and, if they are, marks the chart "
+            "so your instrument may read each strip in either direction. You only "
+            "have to get involved for tricky, structured layouts — see the "
+            "\"Force randomised tag\" option in the controls for more.",
             self, min_width=560))
         outer.addLayout(src)
 
@@ -1375,47 +1378,48 @@ class Ti2RelayoutDialog(QDialog):
             "then patches TARGET_INSTRUMENT back to ColorMunki so chartread "
             "still drives your meter. Mutually exclusive with Double.")
         self._pt_td.toggled.connect(self._on_td_toggled)
-        self._pt_tag = QCheckBox("Tag as randomised for measurement", pt_box)
-        self._pt_tag.setChecked(bool(
-            self._settings.get("ti2_editor_tag_randomised", True)))
-        self._pt_tag.setToolTip("Mark the saved chart as randomised so it can be "
-                                "measured bidirectionally (click the ⓘ for details).")
-        self._pt_tag.toggled.connect(self._on_tag_randomised_toggled)
+        self._pt_force_tag = QCheckBox("Force “randomised” tag", pt_box)
+        self._pt_force_tag.setChecked(bool(
+            self._settings.get("ti2_editor_force_tag", False)))
+        self._pt_force_tag.setEnabled(False)   # enabled only on an unsafe layout
+        self._pt_force_tag.setToolTip(
+            "Only needed for risky layouts (click the ⓘ for details). Charts that "
+            "are already well mixed get tagged as randomised automatically.")
+        self._pt_force_tag.toggled.connect(self._on_force_tag_toggled)
         ptg.addWidget(self._pt_L,  6, 0, 1, 4)
         ptg.addWidget(self._pt_P,  7, 0, 1, 4)
         ptg.addWidget(self._pt_dd, 8, 0, 1, 4)
         ptg.addWidget(self._pt_td, 9, 0, 1, 4)
         tag_row = QHBoxLayout()
         tag_row.setContentsMargins(0, 0, 0, 0)
-        tag_row.addWidget(self._pt_tag)
+        tag_row.addWidget(self._pt_force_tag)
         tag_row.addStretch(1)
         tag_row.addWidget(_magenta_tip(
-            "Tag as randomised for measurement",
-            "This little option saves you a lot of hassle when you go to measure "
-            "the chart, so it's worth a quick read.\n\n"
-            "When you measure a chart, you slide your instrument along each row of "
-            "patches (a row is called a \"strip\"). Some instruments are happy to "
-            "read a strip in either direction — but they're only allowed to when "
-            "the chart is marked as having its colours in a shuffled order. Charts "
-            "you build in this editor are kept in a fixed order, so without this "
-            "option they'd have to be read one specific way only, which is fiddly.\n\n"
-            "Ticking this adds a small note inside the saved file that says \"the "
-            "colours are well shuffled\" — and that's what lets you scan strips "
-            "either way. Nothing on the printed page moves; only that note changes.\n\n"
-            "So why isn't it just always on? Because the note is only honest if the "
-            "colours really are well mixed. If the patches happen to sit in a tidy "
-            "pattern — a smooth fade from light to dark, or a neat colour grid, "
-            "especially on a big chart — then neighbouring strips look too alike, "
-            "and your instrument can mix them up and quietly record the wrong "
-            "readings. That gives you a profile with colour casts, with no obvious "
-            "warning.\n\n"
-            "So ChromIQ has your back: when you save, it takes a quick look at how "
-            "mixed-up your colours are. If they look nicely shuffled, it adds the "
-            "note for you without fuss. If they look too tidy to be safe, it gives "
-            "you a heads-up and lets you decide — leave it as-is, or go ahead and "
-            "tag it anyway if you know what you're doing.\n\n"
-            "If you're not sure, just leave this switched on. The safety check will "
-            "catch the risky cases, and the final call is always yours.",
+            "Force “randomised” tag",
+            "Good news first: you usually don't need to touch this. It stays "
+            "greyed-out and only wakes up when a chart needs your attention.\n\n"
+            "Here's the background. When you measure a chart, you slide your "
+            "instrument along each row of patches (a row is called a \"strip\"). "
+            "Many instruments can read a strip in either direction — but only when "
+            "the chart is marked as having its colours in a shuffled order. So when "
+            "you save, ChromIQ takes a quick look at your layout:\n\n"
+            "• If the colours are nicely mixed up, it adds that \"randomised\" mark "
+            "for you automatically. Nothing to do — bidirectional measuring just "
+            "works, and this checkbox stays greyed-out.\n\n"
+            "• If the colours sit in a tidy pattern instead — a smooth fade from "
+            "light to dark, or a neat colour grid, especially on a big chart — then "
+            "neighbouring strips look too alike. Marking such a chart as randomised "
+            "is risky: your instrument can mix the strips up and quietly record the "
+            "wrong readings, giving you a profile with colour casts and no obvious "
+            "warning. So ChromIQ does NOT mark it automatically, and instead "
+            "switches this checkbox on so the choice is yours.\n\n"
+            "Ticking it then says \"I understand the risk — mark it as randomised "
+            "anyway.\" That's only sensible if you happen to know the order is "
+            "genuinely fine, or you'd rather re-shuffle the chart. Either way, "
+            "nothing on the printed page moves — only a note inside the file "
+            "changes.\n\n"
+            "If you're unsure, leave it unticked and the chart is simply measured "
+            "in one direction, which is always safe.",
             pt_box, min_width=560))
         ptg.addLayout(tag_row, 10, 0, 1, 4)
         # NOTE: pt_box is added to the panel layout *after* the Patches and
@@ -1908,9 +1912,28 @@ class Ti2RelayoutDialog(QDialog):
             self._pt_td.setChecked(False)
         self._on_printtarg_changed()
 
-    def _on_tag_randomised_toggled(self, on: bool) -> None:
+    def _on_force_tag_toggled(self, on: bool) -> None:
         # Affects only the saved .ti2's keyword, not the render — no re-preview.
-        self._settings.set("ti2_editor_tag_randomised", bool(on))
+        self._settings.set("ti2_editor_force_tag", bool(on))
+
+    def _update_force_tag_state(self) -> None:
+        """Enable the 'Force randomised tag' checkbox only when the current
+        layout is judged unsafe to tag automatically.
+
+        A well-mixed chart is tagged as randomised for us on save, so forcing is
+        pointless and the box is greyed out; a structured one is left untagged
+        unless the user forces it, so the box is offered. Driven by analysing the
+        latest preview .ti2 (see _on_regen_done)."""
+        safe = True
+        if self._regen is not None:
+            safe = R.analyze_randomisation(self._regen.ti2).safe
+        self._pt_force_tag.setEnabled(not safe)
+        self._pt_force_tag.setToolTip(
+            "This chart is already well mixed, so it's tagged as randomised "
+            "automatically — nothing to force here."
+            if safe else
+            "This chart's layout looks structured. Tick to mark it as randomised "
+            "anyway (risky — click the ⓘ for details).")
 
     def _on_td_toggled(self, on: bool) -> None:
         """Triple-density mutual exclusion + preset application — mirrors
@@ -2121,6 +2144,8 @@ class Ti2RelayoutDialog(QDialog):
         if self._page >= len(result.tiffs):
             self._page = 0
         self._show_page(self._page)
+        # Refresh the 'Force randomised tag' affordance for this fresh layout.
+        self._update_force_tag_state()
         if self._preview_pending_save is not None:
             self._status.setText(f"Saved to {self._preview_pending_save}")
         else:
@@ -2556,45 +2581,99 @@ class Ti2RelayoutDialog(QDialog):
         except Exception as exc:
             QMessageBox.warning(self, "Save failed", str(exc))
             return
-        tagged = self._maybe_tag_randomised(res.ti2)
+        tag_note = self._maybe_tag_randomised(res.ti2)
         msg = f"Saved {res.ti2.name} + {len(res.tiffs)} page(s) to {target}"
         if pad:
             msg += f"\nprinttarg added {pad} patch(es) to complete the last strip."
-        if tagged:
-            msg += "\nTagged as randomised — bidirectional measuring is available."
+        if tag_note:
+            msg += "\n" + tag_note
         QMessageBox.information(self, "Saved", msg)
         self._status.setText(msg.splitlines()[0])
 
-    def _maybe_tag_randomised(self, ti2: Path) -> bool:
-        """Tag the saved .ti2 as randomised when requested, gated by a safety check.
+    def _maybe_tag_randomised(self, ti2: Path) -> str:
+        """Decide how the just-saved .ti2 is tagged as randomised, and do it.
 
-        Returns True if the chart was tagged (CHART_ID → RANDOM_START). When the
-        layout analysis says the order is too structured to read reliably, the
-        user is warned and can either tag anyway (override) or leave it alone.
+        - Well-mixed layout → tagged automatically (CHART_ID → RANDOM_START).
+        - Structured layout + 'Force' ticked → tagged after a risk warning the
+          user can suppress ('never show again'), or silently if suppressed.
+        - Structured layout + 'Force' unticked → left untagged.
+
+        Returns a short note for the save confirmation (empty if nothing to say).
         """
-        if not self._pt_tag.isChecked():
-            return False
         report = R.analyze_randomisation(ti2)
-        if not report.safe:
-            dlg = QMessageBox(self)
-            dlg.setIcon(QMessageBox.Icon.Warning)
-            dlg.setWindowTitle("Tag as randomised?")
-            dlg.setText(
-                "This chart's patch order looks structured, not well mixed.")
-            dlg.setInformativeText(
-                f"{report.reason}\n\n"
-                "Tagging it as randomised would let chartread read strips in "
-                "either direction — but on a layout like this it can latch onto "
-                "the wrong strip and quietly build a colour-cast profile.\n\n"
-                "Safer: regenerate this chart with randomisation enabled, or "
-                "leave it untagged and scan every strip the same way.\n\n"
-                "Tag it as randomised anyway?")
-            tag_btn = dlg.addButton("Tag anyway", QMessageBox.ButtonRole.AcceptRole)
-            dlg.addButton("Leave untagged", QMessageBox.ButtonRole.RejectRole)
-            dlg.exec()
-            if dlg.clickedButton() is not tag_btn:
-                return False
-        return R.tag_ti2_randomised(ti2)
+        if report.safe:
+            R.tag_ti2_randomised(ti2)
+            return "Tagged as randomised — bidirectional measuring is available."
+        if not self._pt_force_tag.isChecked():
+            return ("Left untagged — the layout looks structured, so it will be "
+                    "measured one direction only. Tick “Force randomised tag” to "
+                    "override.")
+        if not self._confirm_force_tag(report):
+            return ("Left untagged — the layout looks structured, so it will be "
+                    "measured one direction only.")
+        R.tag_ti2_randomised(ti2)
+        return ("Tagged as randomised (forced) — take care: this layout may be "
+                "read unreliably (see the warning).")
+
+    def _confirm_force_tag(self, report: "R.RandomisationReport") -> bool:
+        """Risk warning shown when the user forces the tag on an unsafe layout.
+
+        Returns True to go ahead and tag. Honours a 'never show this again'
+        preference, after which forcing tags without prompting."""
+        if bool(self._settings.get("ti2_editor_force_tag_hide_warning", False)):
+            return True
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Force “randomised” tag?")
+        dlg.setMinimumWidth(560)
+        lay = QVBoxLayout(dlg)
+        lay.setContentsMargins(24, 20, 24, 16)
+        lay.setSpacing(12)
+
+        heading = QLabel(
+            "You're about to mark a structured chart as randomised. Please read "
+            "this first.", dlg)
+        heading.setWordWrap(True)
+        heading.setStyleSheet("font-weight: 600;")
+        lay.addWidget(heading)
+
+        body = QLabel(
+            "When you measure a chart, your instrument has to work out which strip "
+            "it's looking at and which way round you scanned it. It does that by "
+            "matching the colours it reads against what it expects — and that only "
+            "works reliably when the colours are well shuffled, so every strip has "
+            "its own distinctive look.\n\n"
+            f"ChromIQ checked this chart and it looks structured instead: "
+            f"{report.reason[0].lower() + report.reason[1:]} On a layout like this "
+            "the strips can look alike, so the instrument may lock onto the wrong "
+            "strip or read it backwards. The frustrating part is that you usually "
+            "get no error at all — just measurements that are quietly wrong, which "
+            "then build a profile with colour casts.\n\n"
+            "Marking it as randomised anyway tells your instrument it's free to "
+            "read strips in either direction, which is exactly where this goes "
+            "wrong. It's only a sensible choice if you happen to know the order is "
+            "genuinely well mixed despite how it looks.\n\n"
+            "The safer alternatives: leave it untagged and simply scan every strip "
+            "the same way, or rebuild the chart so its colours are shuffled.\n\n"
+            "Would you like to mark it as randomised anyway?", dlg)
+        body.setWordWrap(True)
+        lay.addWidget(body)
+
+        hide_cb = QCheckBox("Don't show this again", dlg)
+        lay.addWidget(hide_cb)
+
+        bb = QDialogButtonBox(dlg)
+        tag_btn = bb.addButton("Tag anyway", QDialogButtonBox.ButtonRole.AcceptRole)
+        cancel_btn = bb.addButton("Leave untagged", QDialogButtonBox.ButtonRole.RejectRole)
+        cancel_btn.setDefault(True)
+        tag_btn.clicked.connect(dlg.accept)
+        cancel_btn.clicked.connect(dlg.reject)
+        lay.addWidget(bb)
+
+        proceed = dlg.exec() == QDialog.DialogCode.Accepted
+        if hide_cb.isChecked():
+            self._settings.set("ti2_editor_force_tag_hide_warning", True)
+        return proceed
 
     def _bake_paint_into_saved(self, res: R.RegenResult) -> None:
         """Apply per-spacer paint to every saved page in place.
