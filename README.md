@@ -8,11 +8,16 @@
   <img alt="Version" src="https://img.shields.io/badge/version-3.8.0-7c5cff">
   <img alt="Platforms" src="https://img.shields.io/badge/platforms-macOS%20%C2%B7%20Windows%20%C2%B7%20Linux-2a9d8f">
   <img alt="License" src="https://img.shields.io/badge/license-GPLv3-blue">
-  <a href="https://ko-fi.com/itsab1989"><img alt="Ko-fi" src="https://img.shields.io/badge/support-Ko--fi-ff5e5b"></a>
 </p>
 
 <p align="center">
   <img src="docs/13-gamut-compare-dark.png" alt="ChromIQ — Check &amp; Refine tab with the 3D gamut viewer comparing two profiles" width="900">
+</p>
+
+<p align="center">
+  <a href="https://ko-fi.com/itsab1989"><img src="https://ko-fi.com/img/githubbutton_sm.svg" alt="Support ChromIQ on Ko-fi" height="36"></a>
+  <br>
+  <sub>ChromIQ is free and always will be. If it's useful to you, a coffee is a kind way to say thanks — completely optional, and the app stays fully featured either way.</sub>
 </p>
 
 ChromIQ is a free, open-source desktop app that builds custom **ICC printer
@@ -523,11 +528,3 @@ A heartfelt thanks to **soul-traveller** for
 — a mature, in several areas more comprehensive printer-profiling tool. If you
 prefer working from proven, pre-made test charts rather than randomly generated
 targets, his project ships an excellent curated collection for exactly that.
-
----
-
-<p align="center">
-  <a href="https://ko-fi.com/itsab1989"><img src="https://ko-fi.com/img/githubbutton_sm.svg" alt="Support ChromIQ on Ko-fi"></a>
-  <br>
-  <sub>ChromIQ is free and open-source. If it's useful to you, a coffee on Ko-fi is always appreciated and helps keep the project going.</sub>
-</p>
