@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/13-gamut-compare-dark.png" alt="ChromIQ — Check &amp; Refine tab with the 3D gamut viewer comparing two profiles" width="900">
+  <img src="docs/01-create-chart-guided-dark.png" alt="ChromIQ — Create Chart tab with a full A4 test chart in the preview" width="900">
 </p>
 
 ChromIQ is a free, open-source desktop app that builds custom **ICC printer
@@ -201,9 +201,10 @@ instructions for turning ICM off.
 
 ### Step 3 — Measure
 The chart from Step 1 loads automatically. Follow the on-screen prompts:
-**Enter/Space** confirms a strip, **← →** navigate, **Esc** aborts. Misread a
-strip? The dialog offers **Retry**, **Skip Stripe**, or **Save Partial & Quit**
-(which lets you resume later with one click).
+**Enter/Space** confirms a strip, and **F** / **B** step **forward** and **back**
+between strips (the on-screen strip highlight follows along). Misread a strip?
+The dialog offers **Retry**, **Skip Stripe**, or **Save Partial & Quit** (which
+lets you resume later with one click).
 
 ### Step 4 — Build Profile
 Review the `colprof` settings and click **Build Profile**. Then **Install
@@ -329,6 +330,17 @@ a System/Auto mode that follows your OS live). Click any step to expand it.
   in ΔE³, Lab / CIECAM02 Jab, cusp markers, and edge plots.
 - **Profile-vs-profile comparison** — volume delta, intersection volume, and
   bidirectional coverage.
+
+### Tools menu — standalone utilities
+The masthead **Tools** button opens a menu of conversions and checks you can run
+on their own, outside the five-step flow:
+- **Edit / create chart layout** — reorder strips or build a custom patch layout.
+- **Average measurements** — combine repeat reads of the same chart for lower noise.
+- **Merge measurements** — fold extra measurements into an existing set.
+- **Convert TI1 → i1Profiler** and **Convert i1Profiler → TI1 / TI3** — move charts
+  and measurements between ChromIQ/ArgyllCMS and X-Rite i1Profiler.
+- **Verify a profile** (independent check) and **Verify against reference** —
+  validate an existing profile's accuracy without rebuilding it.
 
 ### A calm, modern app
 - **Light / Dark / System (Auto)** appearance that follows your OS theme live.
