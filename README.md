@@ -14,12 +14,6 @@
   <img src="docs/13-gamut-compare-dark.png" alt="ChromIQ — Check &amp; Refine tab with the 3D gamut viewer comparing two profiles" width="900">
 </p>
 
-<p align="center">
-  <a href="https://ko-fi.com/itsab1989"><img src="https://ko-fi.com/img/githubbutton_sm.svg" alt="Support ChromIQ on Ko-fi" height="36"></a>
-  <br>
-  <sub>ChromIQ is free and always will be. If it's useful to you, a coffee is a kind way to say thanks — completely optional, and the app stays fully featured either way.</sub>
-</p>
-
 ChromIQ is a free, open-source desktop app that builds custom **ICC printer
 profiles** — the colour "fingerprint" that tells your computer exactly how your
 printer, ink, and paper reproduce colour. With an accurate profile, what you see
@@ -35,6 +29,12 @@ so you never have to memorise a single flag.
 > has a clickable **ⓘ** icon that explains, in plain language, what the step
 > does, what you need ready (device plugged in, paper loaded…), and what comes
 > next. The in-app tooltips are the real manual — this README is the map.
+
+<p align="center">
+  <a href="https://ko-fi.com/itsab1989"><img src="https://ko-fi.com/img/githubbutton_sm.svg" alt="Support ChromIQ on Ko-fi" height="36"></a>
+  <br>
+  <sub>ChromIQ is free and always will be. If it's useful to you, a coffee is a kind way to say thanks — completely optional, and the app stays fully featured either way.</sub>
+</p>
 
 ---
 
