@@ -28,7 +28,7 @@ import shutil
 import subprocess
 import tempfile
 from collections import deque
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 
 import numpy as np
@@ -297,6 +297,14 @@ class LayoutOptions:
     tiff_16bit: bool = False            # -T (vs -t) DPI flag
     dpi: int = 300                      # printtarg -t / -T value
 
+    def __post_init__(self) -> None:
+        # The -a / -A spinboxes step by 0.05, so values are 2-decimal by
+        # intent; binary-float arithmetic (e.g. 1.3 → 1.2999999999999998) would
+        # otherwise leak that noise into the saved meta.json. Round to 2 dp so
+        # the stored knobs read cleanly and compare equal across save/load.
+        self.patch_scale = round(float(self.patch_scale), 2)
+        self.spacer_scale = round(float(self.spacer_scale), 2)
+
     def to_printtarg_args(self) -> list[str]:
         """Build the printtarg flag list this options bundle implies."""
         args: list[str] = []
@@ -322,6 +330,69 @@ class LayoutOptions:
         if self.double_density:
             args.append("-h")
         return args
+
+
+# ---------------------------------------------------------------------------
+# Editor meta.json — restore-as-saved
+# ---------------------------------------------------------------------------
+# The .ti2 records instrument + paper + spacer palette, but printtarg discards
+# the rest of its layout knobs (-a/-A/-m/-t/bit-depth/spacer mode/-L/-P/-h) once
+# the chart is rendered. So when the editor saves a chart it writes the same
+# ``meta.json`` the main app writes for a run (RunMeta) into the chart folder,
+# carrying instrument / paper / created_at / status PLUS the editor's
+# LayoutOptions + basename under RunMeta.editor_layout / editor_basename.
+# Reopening that chart reads meta.json back so the printtarg panel appears
+# exactly as the user left it; the folder also reads like a main-app chart
+# folder. Charts from elsewhere have no meta.json and fall back to defaults +
+# whatever the .ti2 / .ti1 themselves reveal.
+
+
+def _layout_from_dict(raw: dict | None) -> "LayoutOptions":
+    """Build a LayoutOptions from a (possibly partial / future) dict, dropping
+    unknown keys so a meta.json written by a newer schema still loads what it
+    can instead of failing."""
+    raw = raw or {}
+    valid = {f.name for f in fields(LayoutOptions)}
+    return LayoutOptions(**{k: v for k, v in raw.items() if k in valid})
+
+
+def save_editor_meta(ti2_path: Path, spec: "ChartSpec",
+                     options: "LayoutOptions", basename: str) -> None:
+    """Write a main-app-style ``meta.json`` into the chart folder (next to
+    *ti2_path*), carrying the editor's layout knobs so reopening restores the
+    panel. Best-effort: a failure here must never block a successful chart
+    save, so errors are swallowed."""
+    from core.file_manager import Run, RunMeta
+    try:
+        run = Run.for_dir(Path(ti2_path).parent)
+        meta = run.load_meta()              # preserve any existing fields
+        meta.instrument = spec.instrument_flag
+        meta.paper = spec.paper_flag
+        if not meta.created_at:
+            from datetime import datetime
+            meta.created_at = datetime.now().isoformat(timespec="seconds")
+        meta.editor_layout = asdict(options)
+        meta.editor_basename = basename
+        run.save_meta(meta)
+    except Exception:  # noqa: BLE001 — sidecar write must never be fatal
+        log.exception("could not write editor meta.json")
+
+
+def load_editor_meta(ti2_path: Path) -> tuple["LayoutOptions", str] | None:
+    """Read the editor's layout knobs + basename back from the chart folder's
+    ``meta.json``, or None when there's no meta.json or it carries no editor
+    layout (e.g. a foreign chart, or a main-app run that never went through the
+    editor). Returns ``(options, basename)``."""
+    from core.file_manager import Run
+    try:
+        meta = Run.for_dir(Path(ti2_path).parent).load_meta()
+    except Exception:  # noqa: BLE001
+        return None
+    if meta.editor_layout is None:
+        return None
+    opts = _layout_from_dict(meta.editor_layout)
+    basename = meta.editor_basename or Path(ti2_path).stem or "chart"
+    return opts, basename
 
 
 _HEX_RE = re.compile(r"^#?([0-9a-fA-F]{6})$")
@@ -487,7 +558,9 @@ def write_ti1(
 class RegenResult:
     ti2: Path
     tiffs: list[Path]               # default-spacer pages (the deliverable)
-    bw_tiffs: list[Path]            # B&W-spacer twin pages (mask source)
+    bw_tiffs: list[Path | None]     # B&W-spacer twin pages (mask source);
+    #                                 None for any deliverable page the twin
+    #                                 render didn't produce (page-break skew)
     basename: str
 
 
@@ -565,14 +638,22 @@ def regenerate(
     bw_tiffs = _run(bw_dir, bw=True)
     if not tiffs:
         raise RuntimeError("printtarg produced no TIFF pages")
-    if len(tiffs) != len(bw_tiffs):
-        raise RuntimeError(
-            f"page-count mismatch: {len(tiffs)} default vs {len(bw_tiffs)} bw"
-        )
+    # The B&W twin exists only as a spacer-mask source for the editor. Its
+    # spacer geometry differs from the deliverable's (it always forces -b and
+    # drops -n / -A), so near a page boundary the two renders can spill onto a
+    # different number of pages. That's harmless — the deliverable is what we
+    # ship — so instead of failing, align the twin list to the deliverable:
+    # pad short with None (that page just gets coarser, mask-less geometry) and
+    # truncate any extra twin pages. spacer_mask / patch_geometry_for_page both
+    # tolerate a missing or shape-mismatched twin.
+    bw_aligned: list[Path | None] = [
+        bw_tiffs[i] if i < len(bw_tiffs) else None
+        for i in range(len(tiffs))
+    ]
     ti2 = out_dir / f"{basename}.ti2"
     if triple:
         _patch_ti2_for_triple_density(ti2)
-    return RegenResult(ti2, tiffs, bw_tiffs, basename)
+    return RegenResult(ti2, tiffs, bw_aligned, basename)
 
 
 # ---------------------------------------------------------------------------
@@ -1275,6 +1356,28 @@ def patch_geometry_for_page(
                 in_run = False
         if in_run:
             runs.append((y_top + start, y_top + len(col) - 1))
+        # Trim the page-margin run at the top/bottom of the scan. The strip
+        # block sits inside the page's white margin, which is non-spacer
+        # (white in both twin renders) so it surfaces as a tall white non-diff
+        # run at the very top (and occasionally bottom). Left in, it passes the
+        # height filter and — when a strip loses its bottom patch to a colour-
+        # matched spacer — gets kept by the [-steps:] slice as a phantom
+        # "step 0", pulling a highlight box up into the white area.
+        #
+        # A paper-white DATA patch renders pure white too, so colour alone
+        # can't tell it from the margin. The structural tell: the margin abuts
+        # the scan boundary (nothing separates it from the label band above /
+        # page edge below), whereas a real top-of-strip patch is always held
+        # off the boundary by its strip-start spacer. So only trim a white run
+        # that touches the boundary — a genuine white first/last patch starts
+        # well inside it and is kept.
+        def _is_page_white(run: tuple[int, int]) -> bool:
+            c = a[(run[0] + run[1]) // 2, cx]
+            return int(c[0]) > 245 and int(c[1]) > 245 and int(c[2]) > 245
+        if runs and runs[0][0] <= y_top + 2 and _is_page_white(runs[0]):
+            runs.pop(0)
+        if runs and runs[-1][1] >= y1 - 2 and _is_page_white(runs[-1]):
+            runs.pop()
         if not runs:
             strip_ranges.append(None)
             continue
@@ -1307,11 +1410,71 @@ def patch_geometry_for_page(
     if loc_i is None:
         return {}
 
-    # Width shrink (each strip column has inter-strip spacers around it).
-    shrink_w = 0.75
-    half_w = strip_w * shrink_w / 2
-    # Uniform y fallback (when strip_ranges couldn't locate enough runs).
-    fallback_row_h = (y1 - y_top + 1) / steps
+    # Build a SHARED step→y grid from the strips that detected a clean full
+    # set of `steps` patch runs. printtarg lays every strip on the same
+    # vertical grid, so pooling the clean strips gives a per-step y-centre
+    # that's robust to strips whose patches happened to match their spacer
+    # colour — those strips' runs merge in the diff and can't be trusted on
+    # their own (this is the failure the per-strip lookup hit at larger patch
+    # scales, producing duplicated / non-monotonic highlight boxes). Falls
+    # back to a uniform divide of the patch block when no strip came out clean.
+    import statistics
+    clean = [r for r in strip_ranges if r is not None and len(r) == steps]
+    if clean:
+        step_cy = [statistics.median((r[k][0] + r[k][1]) / 2 for r in clean)
+                   for k in range(steps)]
+        box_half = statistics.median(
+            r[k][1] - r[k][0] + 1 for r in clean for k in range(steps)) / 2
+    else:
+        # No strip yielded a clean run set — the B&W twin is unusable (e.g. it
+        # paginated differently from the deliverable, so its page doesn't line
+        # up patch-for-patch). Don't divide from y_top: that band starts at the
+        # label row and includes the white leader, which would push step 0 up
+        # into the page margin (the "highlight floating above the chart" bug).
+        # Anchor instead to the real patch block measured from the COLOURED
+        # image: the first/last non-white pixel below the label band, median'd
+        # across strips. printtarg tiles patches uniformly between those, so a
+        # uniform divide of that range lands each step on its patch.
+        tops, bots = [], []
+        for s in range(n_strips):
+            cx = int(x0 + (s + 0.5) * strip_w)
+            colseg = a[y_top:y1 + 1, cx]
+            nonwhite = np.where(~np.all(colseg > 245, axis=1))[0]
+            if nonwhite.size:
+                tops.append(y_top + int(nonwhite.min()))
+                bots.append(y_top + int(nonwhite.max()))
+        block_top = statistics.median(tops) if tops else y_top
+        block_bot = statistics.median(bots) if bots else y1
+        row_h = (block_bot - block_top + 1) / steps
+        step_cy = [block_top + (k + 0.5) * row_h for k in range(steps)]
+        box_half = row_h * 0.45
+
+    # Half-width of the highlight box, measured from the rendered image rather
+    # than guessed. printtarg tiles strips uniformly and (for the common
+    # no-vertical-spacer layout) patches fill the strip cell edge-to-edge, so
+    # the old fixed 0.75 shrink left a rim of the patch's own colour around the
+    # highlight — read as a mismatch. Scan out from each strip centre at a
+    # known patch-centre row to the nearest strong colour edge (the strip
+    # boundary, or an inter-strip spacer's edge when the layout has one); the
+    # median across strips is the true patch half-width. Where a neighbour
+    # shares the colour (no detectable edge) it falls back to the cell
+    # boundary. A small inset keeps adjacent highlighted patches visually
+    # separate.
+    mid_y = int(step_cy[len(step_cy) // 2]) if step_cy else int((y_top + y1) // 2)
+    mid_y = max(0, min(mid_y, a.shape[0] - 1))
+    grad = np.abs(np.diff(a[mid_y].astype(np.int16), axis=0)).sum(axis=1)
+    cell_half = strip_w / 2
+    half_ws: list[float] = []
+    for s in range(n_strips):
+        cx = int(x0 + (s + 0.5) * strip_w)
+        lo = max(int(x0 + s * strip_w), 0)
+        hi = min(int(x0 + (s + 1) * strip_w), grad.size)
+        left = next((cx - x for x in range(cx - 1, lo - 1, -1) if grad[x] > 60),
+                    cell_half)
+        right = next((x - cx for x in range(cx + 1, hi) if grad[x] > 60),
+                     cell_half)
+        half_ws.append(min(left, right))
+    half_w = (statistics.median(half_ws) if half_ws else cell_half) * 0.97
 
     geom: dict[int, tuple[int, int, int, int]] = {}
     for line in dm.group(1).splitlines():
@@ -1337,13 +1500,10 @@ def patch_geometry_for_page(
             continue
         within_strip = strip_idx - strips_before
         cx = x0 + (within_strip + 0.5) * strip_w
-        ranges = strip_ranges[within_strip]
-        if ranges and step_idx < len(ranges):
-            ty, by = ranges[step_idx]
+        if 0 <= step_idx < len(step_cy):
+            cy = step_cy[step_idx]
         else:
             cy = y_top + (step_idx + 0.5) * fallback_row_h
-            ty = int(cy - fallback_row_h * 0.4)
-            by = int(cy + fallback_row_h * 0.4)
-        geom[sid] = (int(cx - half_w), int(ty),
-                     int(cx + half_w), int(by))
+        geom[sid] = (int(cx - half_w), int(cy - box_half),
+                     int(cx + half_w), int(cy + box_half))
     return geom

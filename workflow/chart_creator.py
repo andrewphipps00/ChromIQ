@@ -415,9 +415,18 @@ class ChartParams:
     tiff_dpi: int = 300
     tiff_16bit: bool = False
     patch_scale: float = 1.0
+    # printtarg -A (spacer-only scale). Carried for metadata (the editor's
+    # LayoutOptions) only — the printtarg command itself still gets -A via the
+    # manual ParameterWidget build_args path, so this field must NOT be re-emitted
+    # there or -A would appear twice.
+    spacer_scale: float = 1.0
     margin_mm: int = 6
     no_randomise: bool = False
     bw_spacers: bool = False
+    # printtarg -n (no spacers at all). Like spacer_scale, carried for metadata
+    # (the editor's LayoutOptions spacer_mode="none") only — manual mode emits
+    # -n via the widget build_args path, so this field must NOT be re-emitted.
+    no_spacers: bool = False
     no_strip_limit: bool = False
     extra_printtarg_args: str = ""
 

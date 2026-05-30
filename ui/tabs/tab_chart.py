@@ -3083,6 +3083,10 @@ class TabChart(QWidget):
             f"Copied prebuilt patch set into {work_dir} ({len(tiffs)} page(s)). "
             "targen and printtarg skipped."
         )
+        # Prebuilt sets aren't generated from ChartParams — clear any stale
+        # params so _stamp_chart_meta falls back to instrument/paper only
+        # (read from the bundled .ti2) rather than a previous chart's knobs.
+        self._last_params = None
         self._on_generate_finished(tiffs)
 
     def _generate_from_ti1(self, ti1_path: Path) -> None:
@@ -3109,6 +3113,7 @@ class TabChart(QWidget):
             self._file_mgr.set_target_name(name)
         base_name = self._file_mgr.get_target_name() or TC918_TARGET_NAME
         params = self._collect_params()
+        self._last_params = params  # for _stamp_chart_meta (see _on_generate)
         params.target_name = base_name
         self._last_target_name = base_name
         self._log.clear()
@@ -3445,6 +3450,10 @@ class TabChart(QWidget):
         self.target_started.emit()
 
         params = self._collect_params()
+        # Remembered for _stamp_chart_meta so the run's meta.json can carry the
+        # full printtarg layout knobs (not just instrument/paper), letting the
+        # TI2 editor restore a main-app chart exactly like an editor-saved one.
+        self._last_params = params
         if name:
             self._file_mgr.set_target_name(name)
         base_name = self._file_mgr.get_target_name()
@@ -3775,6 +3784,13 @@ class TabChart(QWidget):
             self._preview.load_tiff(tiffs)
             log.info("Preview loaded: %d TIFF(s)", len(tiffs))
             ti2 = tiffs[0].parent / f"{stem}.ti2"
+            # Record the chart's instrument + paper in the run's meta.json,
+            # mirroring what the TI2 layout editor writes (see
+            # workflow.ti2_relayout.save_editor_meta). The .ti2 carries these
+            # too, but stamping them in meta.json keeps the run folder
+            # self-describing. Read straight from the just-written .ti2 so it's
+            # correct for every creation path (normal / prebuilt / from-.ti1).
+            self._stamp_chart_meta(ti2)
             # Remember the .ti1 backing this chart so the Save Preset dialog can
             # offer to attach it.
             ti1 = tiffs[0].parent / f"{stem}.ti1"
@@ -3797,6 +3813,54 @@ class TabChart(QWidget):
                         else "Chart Layout Failed (printtarg)"
                     )
                     InfoDialog(title, friendly, self, min_width=520).exec()
+
+    def _stamp_chart_meta(self, ti2: Path) -> None:
+        """Record instrument / paper AND the printtarg layout knobs in the run's
+        meta.json, so a main-app chart opened in the TI2 layout editor restores
+        exactly like an editor-saved one.
+
+        Reuses :func:`workflow.ti2_relayout.save_editor_meta` (the same writer
+        the editor uses), feeding it a LayoutOptions built from the params this
+        chart was generated with. The chart's instrument/paper come from the
+        just-written .ti2 (authoritative for every creation path). Only runs for
+        charts in a ``runs/runN/`` folder — calibration targets live in ``cal/``
+        and aren't RunMeta-backed. Best-effort: never block chart creation.
+        """
+        try:
+            run_dir = ti2.parent
+            if run_dir.parent.name != "runs":   # cal/ or some other folder
+                return
+            from core.file_manager import Run
+            from workflow.ti2_relayout import ChartSpec, LayoutOptions, save_editor_meta
+            spec = ChartSpec.from_ti2(ti2)
+            run = Run.for_dir(run_dir)
+            # Build the editor's LayoutOptions from the params this chart was
+            # generated with (stored at generate time). Without params we can
+            # still stamp instrument/paper but not the layout knobs.
+            params = getattr(self, "_last_params", None)
+            if params is not None:
+                opts = LayoutOptions(
+                    spacer_mode=("none" if params.no_spacers
+                                 else "bw" if params.bw_spacers
+                                 else "colored"),
+                    patch_scale=params.patch_scale,
+                    spacer_scale=params.spacer_scale,
+                    margin_mm=params.margin_mm,
+                    suppress_left_clip=params.disable_left_border,
+                    no_strip_limit=params.no_strip_limit,
+                    double_density=params.double_density,
+                    triple_density=params.triple_density,
+                    tiff_16bit=params.tiff_16bit,
+                    dpi=params.tiff_dpi,
+                )
+                save_editor_meta(ti2, spec, opts, run.stem)
+            else:
+                meta = run.load_meta()
+                meta.instrument = spec.instrument_flag
+                meta.paper = spec.paper_flag
+                run.save_meta(meta)
+        except Exception:  # noqa: BLE001 — metadata is non-essential
+            log.exception("could not stamp chart meta.json")
 
     def _on_save_defaults(self) -> None:
         params = self._collect_params()
@@ -4007,6 +4071,11 @@ class TabChart(QWidget):
         p.double_density       = bool(_get("printtarg", "-h", False))
         p.disable_left_border  = bool(_get("printtarg", "-L", True))
         p.patch_scale          = float(_get("printtarg", "-a", 1.0))
+        # -A (spacer scale) and -n (no spacers) reach printtarg via the manual
+        # widget build_args path; captured here for metadata (the editor's
+        # LayoutOptions) only — see ChartParams.spacer_scale / no_spacers.
+        p.spacer_scale         = float(_get("printtarg", "-A", 1.0) or 1.0)
+        p.no_spacers           = bool(_get("printtarg", "-n",  False))
         p.margin_mm            = int(_get("printtarg",  "-m",  6))
         p.no_randomise         = bool(_get("printtarg", "-r",  False))
         p.bw_spacers           = bool(_get("printtarg", "-b",  False))

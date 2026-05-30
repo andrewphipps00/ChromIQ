@@ -113,6 +113,13 @@ class RunMeta:
     # measurement carries the (project-name) chart stem.
     profile_built_from: str = ""
     status: str = "in_progress"          # in_progress | complete
+    # TI2 layout editor only: the printtarg layout knobs (a LayoutOptions dict)
+    # the chart was rendered with + its file basename, so reopening the chart in
+    # the editor restores the panel exactly as saved. printtarg discards these
+    # once a chart is rendered, and they can't be recovered from the .ti2 alone.
+    # The main app never sets or reads these — they stay None / "" for its runs.
+    editor_layout: dict | None = None
+    editor_basename: str = ""
 
     @classmethod
     def fresh(cls, run_id: str, parent: str | None = None) -> "RunMeta":

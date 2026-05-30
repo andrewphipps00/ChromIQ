@@ -916,6 +916,11 @@ class Ti2RelayoutDialog(QDialog):
         self._regen: R.RegenResult | None = None
         self._page = 0                                  # previewed page index
         self._spacers: list = []                        # current-page Spacer list
+        # Per-page spacer segmentation cache (page -> Spacer list). Filled
+        # lazily on first visit to a page and reused on every later visit, so
+        # flipping back and forth between pages doesn't re-run the (expensive)
+        # twin-diff + segmentation each time. Cleared on every fresh regen.
+        self._spacer_cache: dict[int, list] = {}
         self._sel_spacers: set[int] = set()             # current-page selection
         self._paint: dict[tuple[int, int], tuple] = {}  # (page, spacer idx) -> rgb
         self._preview_tmp = tempfile.TemporaryDirectory()
@@ -1173,10 +1178,19 @@ class Ti2RelayoutDialog(QDialog):
             "QScrollArea { background: transparent; }"
             " QScrollArea > QWidget > QWidget { background: transparent; }"
         )
-        # Match the panel's fixed width so the scrollbar (if shown)
-        # sits next to it without overflow.
-        ctrl_scroll.setFixedWidth(controls.width() + 14)
-        body.addWidget(ctrl_scroll, 0)
+        # Right side: scrollable controls on top, fixed action footer below.
+        # Only the controls scroll; "Update preview / Export / Save As" stay
+        # pinned so they're always reachable on short windows.
+        right = QWidget(self)
+        # Match the panel's fixed width (+ scrollbar gutter) so the column
+        # sits flush at the window edge without overflow.
+        right.setFixedWidth(controls.width() + 14)
+        rv = QVBoxLayout(right)
+        rv.setContentsMargins(0, 0, 0, 0)
+        rv.setSpacing(6)
+        rv.addWidget(ctrl_scroll, 1)
+        rv.addWidget(self._build_action_bar(right), 0)
+        body.addWidget(right, 0)
         outer.addLayout(body, 1)
 
         self._status = QLabel("", self)
@@ -1564,26 +1578,47 @@ class Ti2RelayoutDialog(QDialog):
         ml.addLayout(mess_bar)
         v.addWidget(mess_box)
 
-        self._preview_btn = QPushButton("Update preview", panel)
+        # NOTE: the action buttons (Update preview / Export / Save As) used to
+        # live here at the bottom of the scrollable panel, which meant they
+        # scrolled off-screen on short windows. They now sit in a fixed
+        # footer built by _build_action_bar() and pinned below the scroll
+        # area in _build_ui(), so they're always reachable.
+        return panel
+
+    def _build_action_bar(self, parent: QWidget) -> QWidget:
+        """The always-visible action footer (Update preview / Export / Save).
+
+        Built outside the scroll area so these primary actions never scroll
+        out of view. Carries the same compact-button stylesheet the controls
+        panel uses (per [[feedback_qt_button_sizing]] a container stylesheet is
+        the reliable way to shrink button height)."""
+        bar = QWidget(parent)
+        bar.setStyleSheet(
+            "QPushButton { padding: 4px 8px; min-height: 26px; font-size: 11px; }"
+        )
+        bv = QVBoxLayout(bar)
+        bv.setContentsMargins(4, 4, 0, 0)
+        bv.setSpacing(8)
+        self._preview_btn = QPushButton("Update preview", bar)
         self._preview_btn.clicked.connect(lambda: self._regenerate(save_to=None))
-        v.addWidget(self._preview_btn)
+        bv.addWidget(self._preview_btn)
         save_row = QHBoxLayout()
         save_row.setSpacing(6)
         # Export sits next to Save As since both are "write the chart out"
         # actions — Save As writes the full deliverable, Export writes the
         # colour list (hex / RGB) for re-use in a fresh chart.
-        self._export_btn = QPushButton("Export colours…", panel)
+        self._export_btn = QPushButton("Export colours…", bar)
         self._export_btn.setToolTip(
             "Save the patch colours as a text file you can paste back into "
             "the New chart dialog (or import elsewhere). Hex (#rrggbb) or "
             "decimal RGB, one colour per line, in chart order.")
         self._export_btn.clicked.connect(self._export_patch_colours)
         save_row.addWidget(self._export_btn)
-        self._save_btn = QPushButton("Save As…", panel)
+        self._save_btn = QPushButton("Save As…", bar)
         self._save_btn.clicked.connect(self._save_as)
         save_row.addWidget(self._save_btn)
-        v.addLayout(save_row)
-        return panel
+        bv.addLayout(save_row)
+        return bar
 
     def _pick_color(self, initial: QColor, title: str) -> QColor:
         """Use Qt's non-native colour dialog so the HTML/hex field, RGB / HSV
@@ -1615,7 +1650,19 @@ class Ti2RelayoutDialog(QDialog):
         except Exception as exc:
             QMessageBox.warning(self, "Could not load chart", str(exc))
             return
-        self._set_chart(spec, program, f"Loaded {Path(path).name}")
+        # Restore the printtarg layout knobs from the chart folder's meta.json
+        # if this chart was saved by ChromIQ (the .ti2 itself only carries
+        # instrument / paper / spacer palette). Foreign charts have no editor
+        # meta: reset to defaults and take the basename from the file stem.
+        saved = R.load_editor_meta(Path(path))
+        if saved is not None:
+            self._options, self._basename = saved
+            note = f"Loaded {Path(path).name} (restored saved settings)"
+        else:
+            self._options = R.LayoutOptions()
+            self._basename = Path(path).stem or "chart"
+            note = f"Loaded {Path(path).name}"
+        self._set_chart(spec, program, note)
 
     def _new_chart(self) -> None:
         dlg = _NewChartDialog(self._bin_dir, self)
@@ -2129,6 +2176,8 @@ class Ti2RelayoutDialog(QDialog):
             self._status.setText("Render failed.")
             return
         self._regen = result
+        # New render → previous per-page spacer segmentations are stale.
+        self._spacer_cache.clear()
         # Authoritative per-page strip count from the regenerated .ti2.
         self._strips_per_page = parse_passes_per_page(result.ti2)
         # Per-page patch geometry (sample-id → pixel bbox) used by the
@@ -2156,45 +2205,62 @@ class Ti2RelayoutDialog(QDialog):
                 "Spacers mode → click to select, then Paint.")
 
     def _show_page(self, page: int) -> None:
-        """Switch the preview to ``page``: re-detect its spacers, redraw."""
+        """Switch the preview to ``page``: detect its spacers (cached), redraw."""
         if self._regen is None:
             return
         n = len(self._regen.tiffs)
         self._page = max(0, min(page, n - 1))
+        self._spacers = self._spacers_for_page(self._page)
+        self._sel_spacers.clear()
+        self._update_page_nav()
+        self._apply_paint_and_show()
+
+    def _spacers_for_page(self, page: int) -> list:
+        """Spacer list for ``page`` — computed once and cached.
+
+        The twin-diff + segmentation is the slow part of switching pages, so we
+        memoise it per page. Cache is cleared on every fresh regen
+        (:meth:`_on_regen_done`)."""
+        cached = self._spacer_cache.get(page)
+        if cached is not None:
+            return cached
+        spacers: list = []
         try:
-            tif = self._regen.tiffs[self._page]
-            bw  = self._regen.bw_tiffs[self._page]
+            tif = self._regen.tiffs[page]
+            bw  = self._regen.bw_tiffs[page]
+            if bw is None:
+                # No twin page for this deliverable page (page-break skew) —
+                # render it without per-spacer selection rather than erroring.
+                raise ValueError("no B&W twin for this page")
             mask = R.spacer_mask(tif, bw)
             ref_arr = R._imread_rgb(tif)
             # Authoritative split by strip count from PASSES_IN_STRIPS2 —
             # this handles the case where two adjacent strips happened to
             # pick the same spacer colour, which colour-jump detection
             # alone can't separate.
-            strip_xs = self._compute_strip_xs(ref_arr)
-            self._spacers = R.segment_spacers(
-                mask, page=self._page,
-                ref_arr=ref_arr, strip_xs=strip_xs)
+            strip_xs = self._compute_strip_xs(ref_arr, page)
+            spacers = R.segment_spacers(
+                mask, page=page, ref_arr=ref_arr, strip_xs=strip_xs)
         except Exception:
-            self._spacers = []
-        self._sel_spacers.clear()
-        self._update_page_nav()
-        self._apply_paint_and_show()
+            spacers = []
+        self._spacer_cache[page] = spacers
+        return spacers
 
-    def _compute_strip_xs(self, ref_arr) -> list[int] | None:
-        """Return the inter-strip x-boundaries on the current page, or None.
+    def _compute_strip_xs(self, ref_arr, page: int) -> list[int] | None:
+        """Return the inter-strip x-boundaries on ``page``, or None.
 
         Uses the page's strip count from PASSES_IN_STRIPS2 (parsed in
         :meth:`_on_regen_done`) and the patch-grid bbox to divide the block
         into equal-width strip cells.
         """
-        if (self._page >= len(self._strips_per_page)
-                or self._strips_per_page[self._page] <= 1):
+        if (page >= len(self._strips_per_page)
+                or self._strips_per_page[page] <= 1):
             return None
         bbox = R._patch_grid_bbox(ref_arr)
         if bbox is None:
             return None
         y0, y1, x0, x1 = bbox
-        n = self._strips_per_page[self._page]
+        n = self._strips_per_page[page]
         col_w = (x1 - x0 + 1) / n
         return [int(x0 + i * col_w) for i in range(1, n)]
 
@@ -2578,6 +2644,11 @@ class Ti2RelayoutDialog(QDialog):
                                basename=name, options=self._options)
             pad = R.assert_data_integrity(self._program_from_grid(), res.ti2)
             self._bake_paint_into_saved(res)
+            # Write meta.json (the same RunMeta the main app uses) into the
+            # chart folder so reopening restores the printtarg knobs exactly as
+            # saved, and the folder reads like a main-app chart (best-effort;
+            # never fatal).
+            R.save_editor_meta(res.ti2, self._spec, self._options, name)
         except Exception as exc:
             QMessageBox.warning(self, "Save failed", str(exc))
             return
@@ -2688,7 +2759,9 @@ class Ti2RelayoutDialog(QDialog):
         for page, (tif, bw) in enumerate(zip(res.tiffs, res.bw_tiffs)):
             page_paint = {idx: rgb for (pg, idx), rgb in self._paint.items()
                           if pg == page}
-            if not page_paint:
+            if not page_paint or bw is None:
+                # bw is None when the twin render skipped this page (page-break
+                # skew) — no spacer mask, so this page's paint can't be located.
                 continue
             spacers = R.segment_spacers(R.spacer_mask(tif, bw), page=page,
                                         ref_arr=R._imread_rgb(tif))
