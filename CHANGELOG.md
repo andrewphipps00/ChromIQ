@@ -1,5 +1,22 @@
 # Changelog
 
+## v3.8.1
+A focused fix for the chart-layout editor's patch highlighter, plus a
+quality-of-life touch when reopening charts.
+
+### 🎯 Chart editor highlighting
+- Selecting patches now highlights them **exactly on the patch** in the
+  preview. The highlight fills the swatch instead of leaving a rim of the
+  patch's own colour, and it no longer floats up into the white margin above
+  the chart. This holds even when the first patch is white and on charts
+  where the preview render and its internal analysis twin don't line up.
+
+### 💾 Reopening charts
+- Charts now remember the printtarg layout settings they were made with
+  (patch/spacer scale, margins, density, bit depth, …) in the project's
+  `meta.json`, so reopening one in the editor restores the panel exactly as
+  you left it. Older projects keep working unchanged.
+
 ## v3.8.0
 **ChromIQ is out of beta.** This is the first stable release of the 3.8 line,
 and it's a big one. Since 3.7 it has grown a whole toolbox of stand-alone
