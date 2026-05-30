@@ -1,550 +1,533 @@
-# ChromIQ
-
-**ChromIQ** is a free, open-source desktop application for creating custom ICC profiles for inkjet printers using [ArgyllCMS](https://www.argyllcms.com/). It guides you through a five-step workflow — generate a test chart, print it, measure it with a spectrophotometer, build the ICC profile with `colprof`, then verify and refine with `profcheck` — all without touching the command line. An optional `printcal → applycal → colprof` calibration mode is available from Preferences for users who want full per-channel ink calibration before profiling.
-
-What sets ChromIQ apart:
-
-- **Light / Dark / System (Auto) appearance** that follows your OS theme live.
-- **Interactive 3D gamut viewer** with profile-vs-profile comparison (delta %, intersection volume, bidirectional coverage).
-- **Print pipeline that bypasses colour management automatically** — PostScript Level 2/3 with TIFF fallback (macOS only), plus an optional native OS print dialog.
-- **RGB, CMYK, and DeviceN multi-channel targets** up to 11 inks (e.g. CMYK + Orange + Green + Light Cyan).
-
-ChromIQ runs on **macOS**, **Windows** (x64 and ARM64), and **Linux** (x86_64 and aarch64, beta).
-
-Supported instruments: X-Rite i1Pro, i1Pro 2, i1Pro 3, i1Pro 3 Plus, ColorMunki, i1Studio, ColorChecker Studio, and SpectroScan.
+<h1 align="center">ChromIQ</h1>
 
 <p align="center">
-  <a href="https://ko-fi.com/itsab1989"><img src="https://ko-fi.com/img/githubbutton_sm.svg" alt="Support ChromIQ on Ko-fi"></a>
+  <strong>Make your inkjet printer print accurate colour — without touching the command line.</strong>
 </p>
 
-<p align="center"><sub>Enjoying ChromIQ? You can buy me a coffee on Ko-fi — it's always appreciated.</sub></p>
+<p align="center">
+  <img alt="Version" src="https://img.shields.io/badge/version-3.8.0-7c5cff">
+  <img alt="Platforms" src="https://img.shields.io/badge/platforms-macOS%20%C2%B7%20Windows%20%C2%B7%20Linux-2a9d8f">
+  <img alt="License" src="https://img.shields.io/badge/license-GPLv3-blue">
+  <a href="https://ko-fi.com/itsab1989"><img alt="Ko-fi" src="https://img.shields.io/badge/support-Ko--fi-ff5e5b"></a>
+</p>
+
+<p align="center">
+  <img src="docs/13-gamut-compare-dark.png" alt="ChromIQ — Check &amp; Refine tab with the 3D gamut viewer comparing two profiles" width="900">
+</p>
+
+ChromIQ is a free, open-source desktop app that builds custom **ICC printer
+profiles** — the colour "fingerprint" that tells your computer exactly how your
+printer, ink, and paper reproduce colour. With an accurate profile, what you see
+on screen is what comes out of the printer.
+
+Under the hood it drives [**ArgyllCMS**](https://www.argyllcms.com/), the
+gold-standard open-source colour engine, through a friendly five-step wizard.
+ArgyllCMS does all the colour science; ChromIQ gives it a calm, guided interface
+so you never have to memorise a single flag.
+
+> [!NOTE]
+> **New to printer profiling?** That's exactly who ChromIQ is for. Every screen
+> has a clickable **ⓘ** icon that explains, in plain language, what the step
+> does, what you need ready (device plugged in, paper loaded…), and what comes
+> next. The in-app tooltips are the real manual — this README is the map.
 
 ---
 
-## Download & First Launch
+## Table of contents
+
+- [What you'll need](#what-youll-need)
+- [Download & install](#download--install)
+  - [macOS](#macos)
+  - [Windows](#windows)
+  - [Linux (beta)](#linux-beta)
+  - [Installing ArgyllCMS](#installing-argyllcms)
+- [The five-step workflow](#the-five-step-workflow)
+- [Screenshots](#screenshots)
+- [Feature highlights](#feature-highlights)
+- [Troubleshooting](#troubleshooting)
+- [Configuration & logs](#configuration--logs)
+- [For developers](#for-developers)
+- [Reporting issues & feedback](#reporting-issues--feedback)
+- [License](#license)
+- [Acknowledgements](#acknowledgements)
+
+---
+
+## What you'll need
+
+To build a profile you need three things:
+
+1. **A printer** — any inkjet (RGB, CMYK, or extended-gamut with extra inks).
+2. **A spectrophotometer** — the device that "reads" the printed colours.
+   ChromIQ supports the X-Rite family:
+
+   | Code | Instrument |
+   |------|-----------|
+   | `i1` | i1Pro / i1Pro 2 / i1Pro 3 |
+   | `p3` | i1Pro 3 Plus |
+   | `CM` | ColorMunki / i1Studio / ColorChecker Studio |
+   | `SS` | SpectroScan (flatbed XY table) |
+
+3. **ArgyllCMS** installed on your computer — ChromIQ looks for it automatically
+   and walks you through installing it if it's missing. See
+   [Installing ArgyllCMS](#installing-argyllcms).
+
+ChromIQ itself runs on **macOS**, **Windows** (Intel/AMD and ARM64), and
+**Linux** (x86_64 and aarch64, currently beta).
+
+---
+
+## Download & install
+
+Grab the build for your system from the
+**[latest release](https://github.com/itsab1989/ChromIQ/releases/latest)**.
+The pre-built downloads are all most people need — you only need the
+[from-source](#for-developers) route if you want to modify the code.
 
 ### macOS
 
-1. Go to the [Releases page](https://github.com/itsab1989/ChromIQ/releases/latest) and download **`ChromIQ-macOS-universal.dmg`** (works on both Apple Silicon and Intel).
-2. Open the DMG — a Finder window appears.
-3. Drag **ChromIQ** into your **Applications** folder.
-4. Eject the DMG (⌘E or drag it to the Trash).
-5. Open your **Applications** folder, **right-click ChromIQ** and choose **Open** from the menu, then click **Open** in the dialog that appears. This one-time step tells macOS you trust the app.
+1. Download **`ChromIQ-macOS-universal.dmg`** (works on both Apple Silicon and Intel).
+2. Open the DMG, then drag **ChromIQ** into your **Applications** folder.
+3. Eject the DMG (⌘E).
+4. The first time only: open **Applications**, **right-click ChromIQ → Open**,
+   then click **Open** in the dialog. This tells macOS you trust the app.
 
-> **Dialog has no Open button (macOS Sonoma 14+ only)?**
-> On Sonoma and later, right-click → Open sometimes shows only a "Done" button with no way to proceed. If that happens, run this one-time command in Terminal:
-> ```
+> [!TIP]
+> **Right-click → Open shows only a "Done" button (macOS Sonoma 14+)?**
+> Run this once in Terminal, then double-click ChromIQ normally:
+> ```bash
 > xattr -dr com.apple.quarantine /Applications/ChromIQ.app
 > ```
-> Then double-click ChromIQ normally — no further steps needed.
-
-6. On first launch, ChromIQ automatically searches for ArgyllCMS. If it isn't found, a setup guide opens — follow the on-screen steps or see [First-time setup](#first-time-setup) below.
-
----
 
 ### Windows
 
-1. Go to the [Releases page](https://github.com/itsab1989/ChromIQ/releases/latest) and download the right build for your PC:
-   - **`ChromIQ-Windows-x64.zip`** — 64-bit Intel or AMD (most PCs)
+1. Download the build for your PC:
+   - **`ChromIQ-Windows-x64.zip`** — Intel/AMD (most PCs)
    - **`ChromIQ-Windows-arm64.zip`** — ARM64 (e.g. Snapdragon X laptops)
-2. Right-click the ZIP → **Extract All…**, then open the extracted `ChromIQ` folder.
+2. Right-click the ZIP → **Extract All…**, open the extracted `ChromIQ` folder.
 3. Double-click **`ChromIQ.exe`**.
 
-> **Windows SmartScreen says "Windows protected your PC"?**
-> This is expected for apps without a paid code-signing certificate. Click **More info**, then **Run anyway**.
-
-> **Windows Defender flagged or removed `ChromIQ.exe`?**
-> ChromIQ is an open-source app packaged with PyInstaller and isn't code-signed yet, so Defender's heuristics sometimes report a false positive — this is common for unsigned PyInstaller apps and isn't specific to ChromIQ. The full source is public in this repo and each release is built by the GitHub Actions workflow from the matching tag.
-> - **If the EXE disappears after extracting:** open **Windows Security → Virus & threat protection → Protection history**, find the ChromIQ item, and choose **Restore** (or **Allow on device**).
-> - **If it keeps recurring:** add the extracted ChromIQ folder under **Virus & threat protection → Manage settings → Exclusions → Add an exclusion → Folder**.
-
-4. On first launch, ChromIQ automatically searches for ArgyllCMS in `C:\Program Files\ArgyllCMS\bin` and `%LOCALAPPDATA%\ArgyllCMS\bin`. If it isn't found, a setup guide opens — see [First-time setup](#first-time-setup) below.
-
----
+> [!TIP]
+> **"Windows protected your PC" / Defender flags the EXE?** This is the usual
+> false positive for open-source apps that aren't code-signed yet — see
+> [Troubleshooting](#troubleshooting) for how to allow it. The full source is in
+> this repo and every release is built by GitHub Actions from its matching tag.
 
 ### Linux (beta)
 
-1. Go to the [Releases page](https://github.com/itsab1989/ChromIQ/releases/latest) and download the right build:
-   - **`ChromIQ-Linux-x86_64.tar.gz`** — 64-bit Intel / AMD
-   - **`ChromIQ-Linux-aarch64.tar.gz`** — 64-bit ARM (Raspberry Pi 4/5, ARM workstations)
-2. Extract the archive:
-   ```
+1. Download the build for your machine:
+   - **`ChromIQ-Linux-x86_64.tar.gz`** — Intel/AMD
+   - **`ChromIQ-Linux-aarch64.tar.gz`** — ARM (Raspberry Pi 4/5, ARM workstations)
+2. Extract and run:
+   ```bash
    tar xzf ChromIQ-Linux-x86_64.tar.gz
-   ```
-3. Run ChromIQ:
-   ```
    ./ChromIQ/ChromIQ
    ```
 
-> **`qt.qpa.plugin: ... xcb-cursor0 ...` on launch?**
-> Install the missing system library:
-> ```
-> sudo apt install libxcb-cursor0        # Debian / Ubuntu
-> sudo dnf install xcb-util-cursor       # Fedora / RHEL
-> sudo pacman -S xcb-util-cursor         # Arch
-> ```
+> [!TIP]
+> **`qt.qpa.plugin: … xcb-cursor0 …` on launch?** Install the missing library —
+> see [Troubleshooting](#troubleshooting).
 
-4. Install ArgyllCMS from your package manager:
-   - **Debian / Ubuntu:** `sudo apt install argyll`
-   - **Fedora:** `sudo dnf install argyllcms`
-   - **Arch:** `sudo pacman -S argyllcms`
-   - Or download the latest version from [argyllcms.com](https://www.argyllcms.com/downloadlinux.html)
-5. ChromIQ auto-detects ArgyllCMS at `/usr/bin` and common fallback paths. If needed, set the path manually in **Preferences → ArgyllCMS bin path**.
+Linux support is **beta**: ChromIQ runs, but the full workflow hasn't been
+exercised against real hardware yet. Please report what works (and what doesn't)
+via [Discussions](https://github.com/itsab1989/ChromIQ/discussions) or the
+[issue tracker](https://github.com/itsab1989/ChromIQ/issues).
 
-Linux support is currently **beta** — please report what works and what doesn't via [Discussions](https://github.com/itsab1989/ChromIQ/discussions) or the [issue tracker](https://github.com/itsab1989/ChromIQ/issues).
+### Installing ArgyllCMS
+
+ChromIQ needs ArgyllCMS 3.5.0 to do the colour work. **It is not bundled with
+ChromIQ** — you install it once, separately, and ChromIQ finds it automatically.
+
+| OS | How to install |
+|----|----------------|
+| **macOS** | Download from [argyllcms.com](https://www.argyllcms.com/downloadmac.html), unzip, and move the folder into `/Applications` (e.g. `/Applications/Argyll_V3.5.0/`). |
+| **Windows** | Download the `win64` build from [argyllcms.com](https://www.argyllcms.com/downloadwin.html) and extract to `C:\Program Files\ArgyllCMS\`. |
+| **Linux** | `sudo apt install argyll` · `sudo dnf install argyllcms` · `sudo pacman -S argyllcms`, or download from [argyllcms.com](https://www.argyllcms.com/downloadlinux.html). |
+
+**On first launch ChromIQ searches automatically** — the system `PATH`, Homebrew,
+MacPorts and any `Argyll*` folder in `/Applications` on macOS; the standard
+install folders on Windows; `/usr/bin` and common paths on Linux. If it can't
+find ArgyllCMS, a setup guide opens. You can also point it manually any time:
+
+> **Preferences** (`⌘,` on macOS, `Ctrl+,` elsewhere) → **Auto-detect** to search
+> again, or **Browse** to the ArgyllCMS `bin` folder, then **Test binaries** to
+> confirm it works.
+
+---
+
+## The five-step workflow
+
+ChromIQ is organised as five numbered tabs. Walk left to right and you have a
+finished, installed profile.
+
+| | Step | What happens | ArgyllCMS tool |
+|---|------|--------------|----------------|
+| **1** | **Create Chart** | Generate a test chart with the ideal number of colour patches for your instrument, paper, and page count. | `targen` + `printtarg` |
+| **2** | **Print Chart** | Send the chart to your printer with colour management switched **off** (so you measure the printer's raw behaviour). | CUPS / native dialog |
+| **3** | **Measure** | Scan the printed patches with your spectrophotometer. | `chartread` |
+| **4** | **Build Profile** | Turn the measurements into a finished `.icc` profile and install it. | `colprof` |
+| **5** | **Check & Refine** | Score the profile's accuracy, view its 3D gamut, and re-measure only the worst patches to improve it. | `profcheck` + `iccgamut` |
+
+Every step offers two modes:
+
+- **Guided** — pick instrument, paper, and page count; ChromIQ chooses sensible,
+  empirically-tuned defaults for everything else.
+- **Manual** — every ArgyllCMS flag is exposed, with a live preview of the exact
+  command that will run. Save your favourite setups as named **presets**.
+
+### Step 1 — Create Chart
+Choose Guided or Manual, name your target, and click **Generate Chart**. The
+patch grid appears in the preview on the right. Optionally tick **Refinement
+profile** to base a second, improved pass on an existing `.icc`/`.icm`.
+
+### Step 2 — Print Chart
+Pick your printer and print the chart. **On macOS the native print dialog is now
+the default** — ChromIQ opens the OS print sheet and *locks the driver's colour
+controls off for you* (via PyObjC), so colour management can't sneak back in.
+The per-brand steps for confirming colour is disabled are shown right in the tab.
+On Windows and Linux the OS print sheet opens the same way, with per-brand
+instructions for turning ICM off.
+
+> [!TIP]
+> Prefer the old behaviour on macOS? Turn **Use default macOS printer dialog**
+> *off* in Preferences and ChromIQ falls back to its direct **PostScript
+> pipeline**, which bypasses colour management automatically with no dialog at
+> all — handy for batch printing.
+
+### Step 3 — Measure
+The chart from Step 1 loads automatically. Follow the on-screen prompts:
+**Enter/Space** confirms a strip, **← →** navigate, **Esc** aborts. Misread a
+strip? The dialog offers **Retry**, **Skip Stripe**, or **Save Partial & Quit**
+(which lets you resume later with one click).
+
+### Step 4 — Build Profile
+Review the `colprof` settings and click **Build Profile**. Then **Install
+Profile** copies it to the right place for your OS so every app can use it. To
+iterate, click **← Use as Pre-conditioning** to seed an improved second pass.
+
+### Step 5 — Check & Refine
+Click **Analyse Profile Quality** to get per-patch ΔE accuracy scores. The 3D
+**Gamut Volume** viewer on the right shows the range of colours your profile can
+reproduce — and you can load a second profile to **compare** them
+(volume difference, overlap, and coverage in both directions). Patches that
+scored poorly can be re-measured in one click, then rebuilt.
+
+> [!NOTE]
+> **Optional calibration mode.** Turn on **Enable calibration options** in
+> Preferences to expand Step 4 into a three-part panel — **Create Calibration
+> File** (`printcal`), **Build Profile** (`colprof`), and **Apply Calibration**
+> (`applycal`) — for per-channel ink linearisation before profiling.
 
 ---
 
 ## Screenshots
 
-| Step 1a — Create Chart (guided) | Step 1b — Create Chart (manual)  |
-|---|---|
-|![ChromIQ Guided Test Chart creation](docs/1a.png) | ![ChromIQ Manual Test Chart creation](docs/1b.png) |
+Every screen is shown in both **Dark** and **Light** appearance (ChromIQ also has
+a System/Auto mode that follows your OS live). Click any step to expand it.
 
-| Step 2a — Print Chart (ChromIQ native) | Step 2a — Print Chart (OS native) |
-|---|---|
-| ![ChromIQ Print Tab ChromIQ native](docs/2a.png) | ![ChromIQ Print Tab OS native](docs/2b.png) |
+<details open>
+<summary><strong>Step 1 — Create Chart</strong></summary>
 
-| Step 3a — Measure Chart (guided) | Step 3b — Measure Chart (manual) |
-|---|---|
-| ![ChromIQ Measure Chart guided](docs/3a.png) | ![ChromIQ Measure Chart manual](docs/3b.png) |
+| | Dark | Light |
+|---|---|---|
+| **Guided** | ![Create Chart, guided, dark](docs/01-create-chart-guided-dark.png) | ![Create Chart, guided, light](docs/01-create-chart-guided-light.png) |
+| **Manual** | ![Create Chart, manual, dark](docs/02-create-chart-manual-dark.png) | ![Create Chart, manual, light](docs/02-create-chart-manual-light.png) |
+</details>
 
-| Step 4a — Build Profile (guided) | Step 4b — Build Profile (manual) |
-|---|---|
-| ![ChromIQ Create ICC Profile guided](docs/4a.png) | ![ChromIQ Create ICC Profile manual](docs/4b.png) |
+<details>
+<summary><strong>Step 2 — Print Chart</strong></summary>
 
-| Step 4c — Calibration & Profiling (disabled by default) | Step 4d — Calibration & Profiling (disabled by default) |
-|---|---|
-| ![Calibration & Profiling](docs/4c.png) | ![Calibration & Profiling](docs/4d.png) |
+| | Dark | Light |
+|---|---|---|
+| **Native print dialog** (macOS default) | ![Print Chart, native dialog, dark](docs/03-print-chart-native-dialog-dark.png) | ![Print Chart, native dialog, light](docs/03-print-chart-native-dialog-light.png) |
+| **PostScript pipeline** (no-dialog fallback) | ![Print Chart, PostScript, dark](docs/04-print-chart-postscript-dark.png) | ![Print Chart, PostScript, light](docs/04-print-chart-postscript-light.png) |
+</details>
 
-| Step 5a — Check & Refine (guided)  | Step 5b — Check & Refine (manual) |
-|---|---|
-| ![ChromIQ Check & Refine guided](docs/5a.png) | ![ChromIQ Check & Refine manual](docs/5b.png) |
+<details>
+<summary><strong>Step 3 — Measure</strong></summary>
 
-| Settings light mode  | Settings dark mode |
+| | Dark | Light |
+|---|---|---|
+| **Guided** | ![Measure, guided, dark](docs/05-measure-guided-dark.png) | ![Measure, guided, light](docs/05-measure-guided-light.png) |
+| **Manual** | ![Measure, manual, dark](docs/06-measure-manual-dark.png) | ![Measure, manual, light](docs/06-measure-manual-light.png) |
+| **"All stripes read" prompt** | ![Measure dialog, dark](docs/17-dialog-measure-stripes-dark.png) | ![Measure dialog, light](docs/17-dialog-measure-stripes-light.png) |
+</details>
+
+<details>
+<summary><strong>Step 4 — Build Profile</strong></summary>
+
+| | Dark | Light |
+|---|---|---|
+| **Guided** | ![Build Profile, guided, dark](docs/07-build-profile-guided-dark.png) | ![Build Profile, guided, light](docs/07-build-profile-guided-light.png) |
+| **Manual** | ![Build Profile, manual, dark](docs/08-build-profile-manual-dark.png) | ![Build Profile, manual, light](docs/08-build-profile-manual-light.png) |
+| **"Profile built" — what next?** | ![Profile Built dialog, dark](docs/15-dialog-profile-built-dark.png) | ![Profile Built dialog, light](docs/15-dialog-profile-built-light.png) |
+| **Calibration mode** — Create Calibration File (`printcal`) | ![Create Calibration File, dark](docs/09-calibration-create-file-dark.png) | ![Create Calibration File, light](docs/09-calibration-create-file-light.png) |
+| **Calibration mode** — Apply Calibration (`applycal`) | ![Apply Calibration, dark](docs/10-calibration-apply-dark.png) | ![Apply Calibration, light](docs/10-calibration-apply-light.png) |
+</details>
+
+<details>
+<summary><strong>Step 5 — Check &amp; Refine</strong></summary>
+
+| | Dark | Light |
+|---|---|---|
+| **Analysis run** | ![Check & Refine, dark](docs/11-check-results-dark.png) | ![Check & Refine, light](docs/11-check-results-light.png) |
+| **Quality assessment** (per-patch ΔE) | ![Quality Assessment dialog, dark](docs/16-dialog-quality-assessment-dark.png) | ![Quality Assessment dialog, light](docs/16-dialog-quality-assessment-light.png) |
+| **Manual options** | ![Check & Refine, manual, dark](docs/12-check-manual-dark.png) | ![Check & Refine, manual, light](docs/12-check-manual-light.png) |
+| **3D gamut comparison** (two profiles) | ![Gamut comparison, dark](docs/13-gamut-compare-dark.png) | ![Gamut comparison, light](docs/13-gamut-compare-light.png) |
+</details>
+
+<details>
+<summary><strong>Preferences</strong></summary>
+
+| Dark | Light |
 |---|---|
-| ![Settings light mode](docs/6a.png) | ![ChromIQ Check & Refine](docs/6b.png) |
+| ![Preferences, dark](docs/14-preferences-dark.png) | ![Preferences, light](docs/14-preferences-light.png) |
+</details>
 
 ---
 
-## Features
+## Feature highlights
 
-### Five-step guided workflow
+### Guided & Manual, side by side
+- **Guided** uses an empirical patch-capacity database to pick the right patch
+  count for your instrument/paper/page combo — no guesswork.
+- **Manual** exposes every `targen` / `printtarg` / `colprof` flag with a live
+  command preview, plus per-tab **Save as Defaults** and named **presets**.
 
-1. **Create Chart** — `targen` + `printtarg` generate a test chart with the optimal patch count for your instrument/paper combo.
-2. **Print Chart** — send the chart to the printer with colour management bypassed automatically.
-3. **Measure Chart** — drive your spectrophotometer with `chartread`.
-4. **Build Profile** — run `colprof` to write the finished ICC profile.
-5. **Check & Refine** — evaluate the profile with `profcheck`, then re-measure only the worst patches and rebuild.
+### Printing that just works
+- **PostScript Level 2/3 pipeline** (macOS) that disables colour management
+  automatically — no driver fiddling, no ColorSync in the way.
+- **Automatic TIFF fallback** for AirPrint / driverless printers that reject
+  PostScript, plus **16-bit TIFF** output for true 16-bit printers and RIPs.
+- **Native OS print dialog** option — on macOS it even locks the driver's colour
+  controls via PyObjC so they can't be re-enabled by accident; on Windows/Linux
+  it shows per-brand instructions for turning ICM off.
+- **Preflight confirmation** with paper-size and orientation checks, **offline
+  printer detection**, and a **Clear Print Queue** button for stuck jobs.
 
-An optional `printcal → applycal → colprof` **calibration mode** (Preferences → Behaviour → *Enable calibration options*) turns Step 4 into a three-module panel — Create Calibration File, Build Profile, Apply Calibration — for users who want per-channel ink linearisation before profiling.
+### Serious colour science
+- Full `colprof` option set — illuminants (D50/D65/A/C/F5/F8/F10), observers
+  (1931 2°, 1964 10°, 2015 variants), FWA compensation, gamut-mapping intents.
+- **RGB, CMYK, and multi-channel (DeviceN) targets** — from 4-channel CMYK to
+  extended-gamut ink sets (CMYK plus Orange, Green, Light Cyan, …). The UI lets
+  you stack up to **11 colorant overrides** (`-D`); ArgyllCMS supports up to 16
+  device channels.
+- **Pre-conditioning (second-pass) refinement** — drive a `targen -c` pass from
+  an existing profile to iteratively improve it, with automatic archiving.
+- **CIECAM02 viewing-condition presets** for correct perceptual/saturation tables.
+- **ICC media attributes** (`colprof -Z`) embedded in the profile header.
 
-### Guided and Manual modes
+### Quality check & 3D gamut viewer
+- **`profcheck` integration** with per-patch ΔE statistics and quality grading.
+- **Targeted re-measurement** — only the patches above your ΔE threshold.
+- **Interactive 3D gamut viewer** (`iccgamut` + `viewgam` + X3DOM) with volume
+  in ΔE³, Lab / CIECAM02 Jab, cusp markers, and edge plots.
+- **Profile-vs-profile comparison** — volume delta, intersection volume, and
+  bidirectional coverage.
 
-- **Guided** picks sensible defaults from an empirical patch-capacity database — just choose instrument, paper, and page count.
-- **Manual** exposes every `targen` / `printtarg` / `colprof` flag, with a live command preview.
-- Per-tab **Save as Defaults** and named **user presets** (Manual mode) make repeatable workflows easy.
-
-### Instrument and paper support
-
-| Code | Instrument |
-|------|-----------|
-| `i1` | X-Rite i1Pro / i1Pro 2 / i1Pro 3 |
-| `p3` | X-Rite i1Pro 3 Plus |
-| `CM` | X-Rite ColorMunki / i1Studio / ColorChecker Studio |
-| `SS` | X-Rite SpectroScan (flatbed XY) |
-
-Paper sizes: A2, A3+, A3, A4, Tabloid (11×17), Legal, Letter (each with a landscape variant), photo formats (8×10", 5×7", 4×6"), and fully custom dimensions in mm.
-
-### Printing pipeline
-
-- **PostScript Level 2/3** output with `%cupsJobTicket: cups-disable-cmm` — zero colour transforms between app and printer.
-- **Automatic TIFF fallback** for AirPrint / driverless printers that reject PostScript.
-- **16-bit TIFF printing** via PostScript Level 3 for printers and RIPs with a true 16-bit pipeline.
-- **Optional native OS print dialog** — on macOS it locks `AP_ApplicationColorMatching` via PyObjC; on Windows and Linux per-brand instructions are shown in-app.
-- **Print preflight confirmation** with paper-size and orientation checks before each job.
-
-<details>
-<summary>More printing details</summary>
-
-- **CMYK and multi-channel (DeviceN) target support** — 4-channel CMYK and 5–17 channel extended-gamut targets (e.g. CMYK + LC LM) print correctly without colour-channel corruption.
-- **Cascading colorant slot overrides** (Create Chart — Manual mode) — up to 11 stacked `-D` modifications configure extended-gamut inksets (e.g. CMYK + Orange + Green + Light Cyan) directly in the UI; values and enabled states persist through presets and Save Defaults.
-- **Multi-page TIFF support** — Print Current Page and Print All Pages correctly extract and send individual frames from multi-page charts.
-- **Printer reachability check** detects offline printers before submitting a job and shows a clear error dialog.
-- **Clear Print Queue** button and stuck-job pre-print detection cancel held or aborted jobs before submitting a new one.
-- **AirPrint driver detection** in the Print tab — identifies when no configurable options are available and explains how to reinstall the printer with a native PPD driver.
-- The native macOS dialog runs a **post-print verification** that confirms the colour-management lock and shows a warning if it couldn't be applied.
-- **Automatic page orientation** matches the chart aspect ratio to the selected paper, and a **paper-size mismatch warning** flags discrepancies before you waste ink.
-
-</details>
-
-### Colour science and profiling
-
-- Full `colprof` option set: illuminants (D50, D65, A, C, F5, F8, F10), observers (1931 2°, 1964 10°, 2015 variants), FWA compensation, gamut-mapping intents.
-- **CIECAM02 viewing-condition presets** (`-c` / `-d`) for source and destination — required for correct perceptual / saturation tables when a Gamut Source profile is supplied.
-- **Pre-conditioning (second-pass) refinement** — pick an existing `.icc` / `.icm` / `.mpp` to drive a `targen -c` second pass; the *Build Profile* and *Check & Refine* dialogs offer one-click **Use as Pre-conditioning** with auto-archiving of v1.
-- **ICC media attributes** (`colprof -Z`) — embed Media Surface, Colour Type, Media Type, Polarity, and Default Rendering Intent in the profile header.
-- **ClayRGB1998** (Argyll's AdobeRGB 1998 equivalent) ships as the default Gamut Source.
-
-<details>
-<summary>More colour-science details</summary>
-
-- **Spectral filter type** in the Measure tab (`-F` flag) — override the measurement condition (M0 / M1 / M2 / M3) for instruments that support it.
-- **Colorimetric-gamut combobox** in Manual mode collapses the `-nP` / `-nS` checkboxes into one selector; `-nI` (inverse gamut mapping) stays on its own row.
-- **Auto patch count** (Manual mode) — an "Auto" checkbox computes the exact patch count to fill a requested page count at Generate time, running a binary search when needed.
-- Separate patch counts for charts **with and without the left clip border** (`-L` flag).
-- **Double-density mode** for ColorMunki / i1Studio with measuring rig (`-h` flag).
-- **i1Pro margin auto-set to 10 mm** — silently applied for i1Pro / i1Pro 3 Plus to prevent strip-end clipping; never overwrites a value typed by hand in Manual mode.
-- **Empirical patch-capacity database** (measured with Argyll 3.5.0) for instant lookup, with binary-search fallback for custom margins.
-- **Optional calibration workflow** (`printcal → applycal`) — per-channel initial target overrides (C/M/Y/K, Ch4–Ch7), metadata embedding (`-D`/`-A`/`-M`/`-C`), imitation target mode (`-I`), dry-run (`-d`); `cal_*` measurements are auto-routed to the calibration module.
-
-</details>
-
-### Quality check and 3D gamut viewer
-
-- **`profcheck` integration** in the Check & Refine tab with per-patch ΔE statistics and quality grading.
-- **Targeted re-measurement** — patches above the ΔE threshold are highlighted; one click starts a guided re-measurement of just those patches.
-- **Interactive 3D gamut viewer** powered by `iccgamut` + `viewgam` + X3DOM — zoomable mesh with volume in ΔE³, Lab / CIECAM02 Jab, cusp markers, edge plot.
-- **Profile-vs-profile comparison** with delta %, intersection volume, and bidirectional coverage.
-- **Measurement error recovery** — the misread dialog offers Retry / Skip Stripe / **Save Partial & Quit** that arms the resume checkbox for one-click continuation.
-
-### App experience
-
-- **Light / Dark / System (Auto) appearance** — Auto follows the OS theme live (re-skins on the fly on macOS).
-- **Per-tab onboarding tooltips** — a ⓘ icon on every tab explains what the screen does, what needs to be ready, and what comes next.
-- **Live command preview** in Manual mode mirrors the exact `targen` / `printtarg` lines that will run.
-- **Zoomable multi-channel TIFF preview** — RGB, CMYK, and extended-gamut up to 11 inks, ICC-accurate.
-- **Session restore** and **automatic session naming** based on printer, paper, media, instrument, and timestamp.
-- **Responsive window sizing**, **rotating log file**, and a SemVer-aware **update checker**.
-
-<details>
-<summary>More UI details</summary>
-
-- The window scales to fit the available screen on launch (13″ MacBook 1280×800 and larger); minimum size 900×650 enforced; geometry saved on a large display is clamped to the current screen on the next launch; the Print Chart options panel scrolls vertically on small screens.
-- **Self-documenting chart TIFFs** — the exact `targen` and `printtarg` commands plus the ChromIQ version are stamped as a rotated text line in the right margin of every generated TIFF; an optional "Chart notes" field rides along on the same stamp.
-- Settings persist between sessions via `QSettings`.
-
-</details>
-
-### Cross-platform and setup
-
-- **ArgyllCMS auto-detection** at launch on every platform, with an **Auto-detect** button in Preferences to re-run on demand.
-- **Windows WinUSB driver installer** — detects connected colorimeters via the Windows registry and installs the driver silently with UAC elevation; falls back to bundled Zadig GUI if needed.
-- ICC profiles install to the standard system location for each OS — see [First-time setup](#first-time-setup).
+### A calm, modern app
+- **Light / Dark / System (Auto)** appearance that follows your OS theme live.
+- **Per-tab onboarding tooltips**, **live command preview**, and a **zoomable
+  multi-channel TIFF preview** (RGB, CMYK, extended-gamut).
+- **Session restore**, **rotating log file**, and a built-in **update checker**.
+- **Self-documenting chart TIFFs** — the exact commands and ChromIQ version are
+  stamped into each generated TIFF's margin.
 
 ---
 
-## Requirements
+## Troubleshooting
 
-### System
-- **macOS:** macOS 13 Ventura or later (Apple Silicon and Intel supported)
-- **Windows:** Windows 10 or later (x64 or ARM64)
-- **Linux:** glibc-based distributions, x86_64 or aarch64 (beta) — see [Linux (beta)](#linux-beta) above
-- [ArgyllCMS 3.5.0](https://www.argyllcms.com/downloaddev.html) — ChromIQ auto-detects ArgyllCMS at launch. On macOS: scans the system PATH, Homebrew, MacPorts, and any versioned Argyll folder in `/Applications`. On Windows: checks `C:\Program Files\ArgyllCMS\bin` and `%LOCALAPPDATA%\ArgyllCMS\bin`. The path can be overridden or re-detected from Preferences on both platforms.
+<details>
+<summary><strong>Windows: "Windows protected your PC" or Defender removed the EXE</strong></summary>
 
-### To run from source
-- Python 3.12 or later
+ChromIQ is packaged with PyInstaller and isn't code-signed yet, so unsigned-app
+heuristics sometimes flag it. This is common and not specific to ChromIQ.
 
-### Python dependencies
-```
-PyQt6 >= 6.11.0
-PyQt6-WebEngine >= 6.11.0
-Pillow >= 10.0.0
-PyYAML >= 6.0
-pycups >= 2.0.1       # macOS only
-certifi >= 2024.0.0
-tifffile >= 2024.0.0
-numpy >= 1.24.0
-imagecodecs >= 2024.0.0
-```
+- **SmartScreen warning:** click **More info → Run anyway**.
+- **EXE disappeared after extracting:** open **Windows Security → Virus & threat
+  protection → Protection history**, find ChromIQ, and choose **Restore** /
+  **Allow on device**.
+- **Keeps recurring:** add the ChromIQ folder under **Virus & threat protection →
+  Manage settings → Exclusions → Add an exclusion → Folder**.
+</details>
 
----
+<details>
+<summary><strong>Linux: <code>xcb-cursor0</code> error on launch</strong></summary>
 
-## Building from source
-
-> The pre-built downloads above cover most users. Only continue here if you want to run or modify the source code directly.
-
-### From source
-
+Install the missing system library:
 ```bash
-git clone https://github.com/itsab1989/ChromIQ.git
-cd ChromIQ
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-python main.py
+sudo apt install libxcb-cursor0     # Debian / Ubuntu
+sudo dnf install xcb-util-cursor    # Fedora / RHEL
+sudo pacman -S xcb-util-cursor      # Arch
 ```
+</details>
 
-### Build a standalone .app from source
+<details>
+<summary><strong>ChromIQ can't find ArgyllCMS</strong></summary>
 
-```bash
-source .venv/bin/activate
-pip install pyinstaller
-pyinstaller ChromIQ.spec
-# Result: dist/ChromIQ.app
-```
+Open **Preferences** → **Auto-detect**. If that fails, click **Browse**, select
+the ArgyllCMS `bin` folder, and click **Test binaries**. See
+[Installing ArgyllCMS](#installing-argyllcms) for the expected locations.
+</details>
 
-Copy `dist/ChromIQ.app` to `/Applications` and launch like any other macOS app. ArgyllCMS binaries are not bundled — install them separately and configure the path in Preferences.
+<details>
+<summary><strong>Windows/Linux: colour looks wrong in the printed chart</strong></summary>
 
----
-
-## Usage
-
-> Every workflow tab has a clickable **ⓘ** icon next to its title that opens a beginner-friendly explanation of what the screen does, what needs to be ready (devices connected, paper loaded…), how to use it, and what comes next — the README below is a quick reference; the in-app tooltips are the full guide.
-
-### First-time setup
-
-**Install ArgyllCMS** before or after installing ChromIQ:
-- **macOS** — download from [argyllcms.com](https://www.argyllcms.com/downloadmac.html), extract the archive, and move the folder to `/Applications` (e.g. `/Applications/Argyll_V3.5.0/`)
-- **Windows** — download `win64` from [argyllcms.com](https://www.argyllcms.com/downloadwin.html) and extract to `C:\Program Files\ArgyllCMS\`
-- **Linux** — use your package manager (`sudo apt install argyll`) or download from [argyllcms.com](https://www.argyllcms.com/downloadlinux.html)
-
-**On first launch**, ChromIQ searches for ArgyllCMS automatically. If it is found, you are ready to go. If not:
-1. A setup guide opens — follow the on-screen instructions
-2. Or open **Preferences** (`⌘,` on macOS / `Ctrl+,` on Windows & Linux), click **Auto-detect**, and ChromIQ will search again
-3. If auto-detection still fails, click **Browse** and navigate manually to the ArgyllCMS `bin` folder, then click **Test binaries** to confirm everything is working
-
-### Step 1 — Create Chart
-- Choose **Guided** or **Manual** mode
-- In Guided mode: select your instrument and paper size, set the number of pages, and ChromIQ calculates the optimal patch count automatically
-- Optionally toggle **Suppress left clip border (-L)** — suppressing it gains ~15 mm of printable width for extra patches; leave it on unless you use a physical paper-clip jig
-- Click **Generate Chart** — the TIFF preview appears on the right when done
-- Optional **Refinement (Optional)** section: tick **Refinement profile** and pick an existing `.icc` / `.icm` to drive a `targen -c` second-pass profiling run — useful for iteratively improving an existing profile rather than building from scratch
-
-### Step 2 — Print Chart
-- Select your printer from the dropdown (click ↺ to refresh the list)
-- Configure paper slot, media type, and print quality if needed
-- Click **Print Page X** for each page of the chart — color management is disabled automatically via the PostScript pipeline; no driver settings need changing
-- For unsupported printers, ChromIQ falls back to TIFF automatically if the printer rejects PostScript
-- The **native OS print sheet** is used on Windows and Linux, and on macOS when "Use default macOS printer dialog" is enabled in Preferences — when it opens, disable colour management manually in the driver panel (per-brand instructions are shown in the Print tab)
-- Before each job a **Confirm Print Settings** dialog summarises printer, paper, media, quality, orientation, duplex, and colour-management status; toggle via *Confirm Print Settings* in Preferences (on by default)
-- If the printer is offline or has held / stuck jobs, ChromIQ flags it before sending — use the **Clear Print Queue** button (top right of the Print tab) to cancel held jobs and retry
-
-### Step 3 — Measure Chart
-- The `.ti2` file from Step 1 is loaded automatically
-- Follow the on-screen prompts from `chartread`
-- Use **Enter/Space** to confirm each strip, **← →** to navigate, **ESC** to abort
-- On a misread, the dialog offers **Retry**, **Skip Stripe**, or **Save Partial && Quit** — the last option writes the partial `.ti3` and arms the **Refine / resume existing measurement (-r)** checkbox so one click continues from where you stopped on the next launch
-- For instruments that support it, set the **Spectral filter type (-F)** dropdown (None / M1 / M2 / M3) before measuring
-
-### Step 4 — Build Profile
-- Review the `colprof` settings (quality, algorithm, gamut mapping, etc.)
-- When supplying a Gamut Source profile, set the CIECAM02 viewing-condition presets — **Source viewing (-c)** and **Destination viewing (-d)** — to drive correct perceptual and saturation tables
-- Optionally embed ICC media attributes (Media Surface / Type / Polarity, Colour Type, Default Intent) from the **Color Science** group in Manual mode (`colprof -Z`)
-- Click **Build Profile** — the resulting `.icc` file is saved in the same folder as the chart
-- Click **Install Profile** to copy it to the standard system location so it is immediately available system-wide:
-  - **macOS** — `~/Library/ColorSync/Profiles`
-  - **Windows** — `C:\Windows\System32\spool\drivers\color`
-  - **Linux** — `~/.local/share/color/icc` (or `$XDG_DATA_HOME/color/icc`)
-- To iterate, click **← Use as Pre-conditioning** on the result dialog — the just-built profile pre-fills the Step 1 refinement chart picker and v1 is auto-archived as `pre_*`
-
-> **Calibration mode** — turn on **Enable Calibration Options** in Preferences to rename this tab to **4. Calibration & Profiling** with three modules: **Create Calibration File** (`printcal`), **Build Profile** (`colprof`), and **Apply Calibration** (`applycal`). The Build Profile result dialog then offers an additional **Apply Calibration →** shortcut, and measurement files whose names start with `cal_` are routed to the calibration module automatically.
-
-### Step 5 — Check & Refine
-- The `.ti3` measurement file from Step 3 is loaded automatically
-- Click **Run profcheck** to evaluate the finished profile — per-patch ΔE statistics are shown in the log
-- Patches above the ΔE threshold are highlighted; click **Re-measure patches** to start a guided re-measurement of only those patches
-- After re-measurement, click **Build Profile** again to incorporate the improved data
-- The **Gamut Volume** panel on the right renders the profile as a zoomable 3D mesh and reports its volume (ΔE³); use **Compare with:** to load a second profile and ChromIQ reports the volume delta (Δ %), intersection volume, and bidirectional coverage (*A covered by B* / *B covered by A*)
-- Click **← Use as Pre-conditioning** on the profcheck result dialog to start a Step 1 second-pass with the current profile pre-filled
-- Repeat until the profile accuracy meets your requirements
+The CUPS/PostScript auto-bypass is macOS-only. On Windows and Linux you must
+disable ICM/colour management **in the printer driver** before printing a
+profiling target — ChromIQ shows per-brand instructions in the Print tab and
+can't do this for you without CUPS.
+</details>
 
 ---
 
-## Project Structure
+## Configuration & logs
 
-```
-ChromIQ/
-├── main.py                    # Entry point
-├── ChromIQ.spec               # PyInstaller build spec (macOS)
-├── ChromIQWin.spec            # PyInstaller build spec (Windows)
-├── ChromIQLinux.spec          # PyInstaller build spec (Linux)
-├── requirements.txt
-├── assets/                    # App icons and UI images
-├── core/
-│   ├── argyll_detect.py       # ArgyllCMS auto-detection (PATH, Homebrew, /Applications scan, Windows paths)
-│   ├── argyll_runner.py       # QProcess wrapper for ArgyllCMS tools
-│   ├── file_manager.py        # Working folder and target name management
-│   ├── logger.py              # Rotating file logger (~Library/Logs/ChromIQ/ on macOS; %LOCALAPPDATA%\ChromIQ\Logs\ on Windows)
-│   ├── resource_path.py       # Asset path resolution for dev + frozen bundles
-│   ├── settings.py            # QSettings wrapper with typed defaults
-│   ├── strip_utils.py         # Strip label parsing and TIFF zone detection
-│   ├── updater.py             # Background update checker (GitHub releases API)
-│   ├── usb_driver_installer.py  # Windows: colorimeter detection and WinUSB driver installation via libwdi
-│   ├── platform_paths.py      # Cross-platform path resolution (log dir, ICC install location, Argyll bin defaults)
-│   └── version.py             # Application version constant
-├── data/
-│   ├── parameters.yaml        # All targen/printtarg/colprof flags + tooltips
-│   └── patch_db.py            # Empirical per-sheet patch capacity database
-├── ui/
-│   ├── main_window.py         # Top-level window, tab container, status bar
-│   ├── parameter_widget.py    # Auto-generated flag widgets from parameters.yaml
-│   ├── styles.py              # Fusion dark-theme QSS stylesheet
-│   ├── tiff_preview.py        # Zoomable multi-channel TIFF viewer widget
-│   ├── tooltip_button.py      # ? icon with popover tooltip
-│   ├── tab_header.py          # Per-tab workflow header widget (step indicator + headline)
-│   ├── masthead_header.py     # Gradient masthead banner at the top of the window
-│   ├── gradient_overlay.py    # Accent-coloured gradient wash on tab control panels
-│   ├── spectrum_tab_bar.py    # Per-tab coloured tab bar
-│   ├── spectrum_progress.py   # Animated five-segment spectrum progress bar
-│   ├── scan_highlighter.py    # Strip highlight overlay during chartread measurement
-│   ├── ti2_loader.py          # .ti2 file loading and cross-tab population logic
-│   ├── gamut_panel.py         # 3D gamut viewer panel widget (iccgamut + X3DOM via QWebEngineView)
-│   ├── widgets.py             # Shared widget helpers (browse buttons, etc.)
-│   ├── dialogs/
-│   │   ├── settings_dialog.py # Preferences dialog
-│   │   └── preflight_dialog.py  # Print preflight confirmation dialog
-│   └── tabs/
-│       ├── tab_chart.py           # Step 1: chart creation
-│       ├── tab_print.py           # Step 2: CUPS printing
-│       ├── tab_measure.py         # Step 3: chartread measurement
-│       ├── tab_profile.py         # Step 4: colprof profile building
-│       └── tab_check_refine.py    # Step 5: profcheck quality check & refinement
-└── workflow/
-    ├── chart_creator.py       # targen + printtarg orchestration
-    ├── cups_printer.py        # lp command wrapper
-    ├── measure_manager.py     # chartread orchestration
-    ├── postscript_generator.py  # PostScript Level 2/3 document generation for the print pipeline
-    ├── print_manager.py       # Printer enumeration (lpstat)
-    ├── printcal_runner.py     # printcal orchestration (calibration curve generation)
-    ├── applycal_runner.py     # applycal orchestration (bake/remove/check calibration on ICC)
-    ├── profile_builder.py     # colprof orchestration
-    ├── profcheck_runner.py    # profcheck orchestration, ΔE parsing, quality grading, refinement guidance
-    ├── gamut_viewer.py        # iccgamut orchestration, volume computation, X3DOM 3D mesh generation
-    ├── viewgam_runner.py      # viewgam orchestration, gamut comparison and coverage statistics
-    ├── native_print_macos.py  # macOS native print dialog implementation (PyObjC, colour-management lock)
-    ├── page_geometry.py       # Chart page geometry computation (aspect ratio, orientation, DPI)
-    └── tiff_metadata.py       # TIFF right-margin command stamp and chart notes
-```
+Settings are stored with `QSettings` (on macOS,
+`~/Library/Preferences/ChromIQ.ChromIQ.plist`). The **Preferences** dialog (`⌘,`)
+exposes:
 
----
+| Setting | Default | What it does |
+|---------|---------|--------------|
+| ArgyllCMS bin path | auto-detected | Folder containing the ArgyllCMS executables |
+| Output folder | `~/ChromIQ/` | Where chart/profile projects are saved |
+| Restore last active tab on launch | On | Reopen on the last-used tab |
+| Restore last session on launch | Off | Reload the last project's files at startup |
+| Enable calibration options | Off | Unlock the `printcal → applycal` workflow |
+| Use default macOS printer dialog | Off | Use the native print sheet instead of the PostScript pipeline (macOS) |
+| Confirm print settings before sending | On | Show a preflight summary before each job |
+| Use app theme colours for 3D gamut viewer | On | Tint the gamut mesh with ChromIQ's palette |
 
-## Configuration
+Each project lives in its own folder under `~/ChromIQ/<project-name>/`, holding
+every generated file for that run (chart, measurements, profile, quality
+reports). See [`docs/dev_folder_layout.md`](docs/dev_folder_layout.md) for the
+exact layout.
 
-All settings are stored via `QSettings` (macOS: `~/Library/Preferences/ChromIQ.ChromIQ.plist`).
-
-**Preferences dialog** (⌘,) exposes:
-
-| Setting | Default | Description |
-|---------|---------|-------------|
-| ArgyllCMS bin path | `/Applications/Argyll/bin` | Directory containing the ArgyllCMS executables |
-| Output folder | `~/ChromIQ/` | Root folder for all chart/profile sessions |
-
-**Behaviour settings** (Preferences → Behaviour):
-
-| Setting | Default | Description |
-|---------|---------|-------------|
-| Restore last active tab on launch | On | Re-opens on the tab that was active when the app was closed |
-| Restore last session on launch | Off | Reloads previously loaded files (`.ti2`, `.ti3`, `.icc`) on startup |
-| Enable calibration options | Off | Unlocks the full `printcal → applycal` calibration workflow |
-| Use default macOS printer dialog | Off | Opens the native macOS print sheet instead of the built-in PostScript/CUPS pipeline (macOS only) |
-| Confirm print settings before sending | On | Shows a preflight summary of all print options before every job |
-| Use app theme colours for 3D gamut viewer | On | Remaps gamut mesh vertex colours to ChromIQ's spectrum accent palette |
-
-**Per-tab defaults** — every tab has a **Save as Defaults** button that persists the current parameter values for that step. Defaults are restored on the next launch.
-
-**User presets** (Create Chart — Manual mode) — multiple named parameter presets can be saved and recalled independently of the global defaults.
-
-Each session creates a subfolder named after the target (e.g. `~/ChromIQ/Canon_A4_Matte_i1_2025-04-18_14-30/`) containing all generated files for that run.
-
----
-
-## How Patch Count Is Calculated
-
-In **Guided mode** ChromIQ determines how many color patches to generate:
-
-1. **Direct lookup** — the empirical database in `data/patch_db.py` is consulted. Separate values are stored for charts with (`-L`) and without the left clip border, and for two margin settings: 6 mm (ColorMunki / SpectroScan) and 10 mm (i1Pro / i1Pro 3 Plus — raised to prevent strip-end clipping on the narrower scanning head).
-2. **Binary search fallback** — for custom scale or margin settings, ChromIQ runs a series of quick `targen`/`printtarg` probes to find the maximum patch count that fits on a single page.
-
-The database values were measured with Argyll 3.5.0 at 300 DPI. All common instrument/paper combinations are covered.
-
----
-
-## Adding a New ArgyllCMS Parameter
-
-Parameters are driven by `data/parameters.yaml` — no code changes needed:
-
-```yaml
-- tool: printtarg
-  flag: "-x"
-  type: bool
-  default: false
-  label: "Some new option"
-  tooltip_title: "Some New Option (-x)"
-  tooltip_body: "What this option does."
-  expert_only: true   # optional: hide under Expert section
-  no_space: false     # set true if value attaches directly to flag (e.g. -il not -i l)
-```
-
-Save the file and restart ChromIQ — the new parameter appears automatically in Manual mode.
-
----
-
-## Windows
-
-Full Windows support (x64 + ARM64) shipped in v3.0.0. All macOS behaviour is unchanged — every adaptation is behind a platform guard. The full ArgyllCMS workflow (chart creation, measurement, profiling, quality check) runs on Windows. The main differences from macOS:
-
-- **Printing** uses the native Windows print dialog instead of the CUPS/PostScript pipeline. You must disable ICM (colour management) in your printer driver settings manually before printing a profiling target — ChromIQ cannot do this automatically without CUPS.
-- **ICC profiles** are installed to `%WINDIR%\System32\spool\drivers\color\`. On some systems this may require administrator privileges; if it fails, copy the `.icc` file there manually.
-- ArgyllCMS is auto-detected in `C:\Program Files\ArgyllCMS\bin` and `%LOCALAPPDATA%\ArgyllCMS\bin`. Download for Windows from [argyllcms.com](https://www.argyllcms.com/downloadwin.html) (`win64`).
-
-### Feedback
-
-If you run into any issues on Windows, please [open a bug report](https://github.com/itsab1989/ChromIQ/issues/new?template=bug_report.yml).
-
----
-
-## Known Issues
-
-> This section will be updated as issues are resolved.
-
-- **Measurement (Step 3):** Some spectrophotometer models may require additional calibration steps not yet surfaced in the UI.
-- **Advanced color science (Step 4):** FWA compensation and custom gamut mapping intents cover a wide range of instrument/paper combinations — edge cases may exist depending on your specific hardware and media.
-- **Windows:** The CUPS-based PostScript print pipeline is not available on Windows — colour management must be disabled manually in the printer driver. See [Windows](#windows) above.
-- **Linux (beta):** ChromIQ runs but has not been exercised against the full Argyll workflow on real hardware yet. Please report what works and what doesn't.
-
----
-
-## Reporting issues & feedback
-
-You can also reach these directly from inside the app — open **Preferences** (⌘,) and click **Report a Bug…** in the bottom row.
-
-- **Bug?** [Open a bug report](https://github.com/itsab1989/ChromIQ/issues/new?template=bug_report.yml) — the form asks for the version, OS, ArgyllCMS install method, and repro steps. Filling it in completely is the single biggest factor in getting a fix.
-- **Feature idea?** [Open a feature request](https://github.com/itsab1989/ChromIQ/issues/new?template=feature_request.yml).
-- **Usage question or open-ended discussion?** Use [Discussions](https://github.com/itsab1989/ChromIQ/discussions) rather than the issue tracker.
-
-Please include the contents of the in-app log panel (or the file under `~/Library/Logs/ChromIQ/chromiq.log` on macOS / `%LOCALAPPDATA%\ChromIQ\Logs\` on Windows / `~/.local/state/ChromIQ/logs/chromiq.log` on Linux) when reporting a bug — it captures every ArgyllCMS command ChromIQ ran and is usually the fastest way to identify the cause.
-
----
-
-## Log File
-
-ChromIQ writes a rotating log (max 5 MB × 5 backups) to:
+**Logs** (rotating, max 5 MB × 5 backups) record every ArgyllCMS command run —
+the fastest way to diagnose a problem:
 
 - **macOS:** `~/Library/Logs/ChromIQ/chromiq.log`
 - **Windows:** `%LOCALAPPDATA%\ChromIQ\Logs\chromiq.log`
 - **Linux:** `~/.local/state/ChromIQ/logs/chromiq.log`
 
-Every ArgyllCMS command and its full argument list is recorded at `INFO` level. Each session opens with a banner stamped with the local time, app version, platform, and Python version. Tab switches are logged with `---- Tab → <name> ----` markers so it's easy to locate output from a specific workflow step.
+---
+
+## For developers
+
+> Most users don't need this section — the pre-built downloads above are all you
+> need. Continue here only to run or modify the source.
+
+### Run from source
+
+```bash
+git clone https://github.com/itsab1989/ChromIQ.git
+cd ChromIQ
+python3 -m venv .venv
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+python main.py
+```
+
+Requires **Python 3.12+**. Key dependencies: PyQt6 / PyQt6-WebEngine (≥ 6.11),
+Pillow, PyYAML, NumPy, tifffile, imagecodecs, certifi, and (macOS only) pycups
+and pyobjc. See [`requirements.txt`](requirements.txt).
+
+### Run the tests
+
+```bash
+source .venv/bin/activate
+QT_QPA_PLATFORM=offscreen pytest    # ~1–2s, 284 tests
+```
+
+### Build a standalone app
+
+```bash
+pip install pyinstaller
+pyinstaller ChromIQ.spec            # macOS → dist/ChromIQ.app
+#           ChromIQWin.spec  (Windows)   ChromIQLinux.spec  (Linux)
+```
+
+ArgyllCMS binaries are **not** bundled — install them separately and set the path
+in Preferences.
+
+### Refresh the documentation screenshots
+
+The screenshots in `docs/` are generated by a script that drives the real app:
+
+```bash
+scripts/make_sample_projects.sh     # build sample data (needs ArgyllCMS)
+python scripts/capture_screens.py   # opens the app and captures docs/*.png
+```
+
+### How the architecture fits together
+
+ChromIQ is a thin GUI over ArgyllCMS; the heavy colour science is all Argyll.
+
+| Directory | Purpose |
+|-----------|---------|
+| `core/` | Settings, ArgyllCMS detection, the `QProcess` runner, file/project management, logging |
+| `data/` | `parameters.yaml` (every CLI flag + tooltip) and the patch-capacity database |
+| `ui/` | All Qt widgets — main window, the five tabs, shared TIFF preview, gamut panel, dialogs |
+| `workflow/` | Business logic — chart creation, PostScript generation, printing, measuring, profiling |
+
+A few patterns worth knowing:
+
+- **`data/parameters.yaml` drives the UI.** Add a parameter there — with `tool`,
+  `flag`, `type`, `default`, `tooltip_title`, `tooltip_body` — and it appears in
+  Manual mode automatically, no code changes needed. (`no_space: true` appends
+  the value directly to the flag; `expert_only: true` hides it under "Expert".)
+- **All file paths go through `Project` / `Run` / `Calibration`** in
+  `core/file_manager.py` — never hard-code a filename pattern.
+- **`ArgyllRunner` is a singleton** — only one ArgyllCMS process runs at a time.
+
+More developer docs live in [`docs/`](docs/) (folder layout, built-in presets,
+the i1Profiler export format, and more), and project-specific guidance is in
+[`CLAUDE.md`](CLAUDE.md).
+
+---
+
+## Reporting issues & feedback
+
+You can reach all of these from inside the app — **Preferences** (`⌘,`) →
+**Report a Bug…** in the bottom row.
+
+- **Found a bug?** [Open a bug report](https://github.com/itsab1989/ChromIQ/issues/new?template=bug_report.yml).
+  Please attach the log file (see [Configuration & logs](#configuration--logs)) —
+  it captures every ArgyllCMS command and is usually the fastest path to a fix.
+- **Have an idea?** [Open a feature request](https://github.com/itsab1989/ChromIQ/issues/new?template=feature_request.yml).
+- **Question or open-ended chat?** Use [Discussions](https://github.com/itsab1989/ChromIQ/discussions).
 
 ---
 
 ## License
 
-To be determined.
+ChromIQ is free software, licensed under the **GNU General Public License v3.0**
+(see [`LICENSE`](LICENSE)). You're free to use, study, share, and modify it; if
+you distribute a modified version, it must stay free under the same license.
 
----
-
-## Support
-
-ChromIQ is free and open-source. If you're enjoying it, you can [buy me a coffee on Ko-fi](https://ko-fi.com/itsab1989) — it's always appreciated and helps keep the project going.
-
-<a href="https://ko-fi.com/itsab1989"><img src="https://ko-fi.com/img/githubbutton_sm.svg" alt="Support ChromIQ on Ko-fi"></a>
+GPLv3 is the right fit because ChromIQ builds on GPL-licensed components (PyQt6
+and pycups), so the combined application is, and remains, free and open source.
+ArgyllCMS (AGPLv3) is used at arm's length as a separate command-line program and
+is not bundled or modified, so its copyleft does not extend to ChromIQ's own code.
 
 ---
 
 ## Acknowledgements
 
-ChromIQ is built on top of [ArgyllCMS](https://www.argyllcms.com/) by Graeme Gill — an outstanding open-source color management system. All color science heavy lifting is done by ArgyllCMS; ChromIQ is purely a GUI front-end.
+ChromIQ stands on the shoulders of [**ArgyllCMS**](https://www.argyllcms.com/) by
+Graeme Gill — an outstanding open-source colour management system that does all
+the real colour science here. ChromIQ is purely a friendly front-end to it.
 
-A heartfelt thanks to **soul-traveller** for [Argyll_Printer_Profiler](https://github.com/soul-traveller/Argyll_Printer_Profiler) — a printer profiling tool that is likely in a more mature and in several areas more comprehensive state than ChromIQ. If you prefer working with proven, pre-made test charts rather than randomly generated targets, his project includes an extensive collection of carefully selected charts that are an excellent fit for exactly that use case.
+A heartfelt thanks to **soul-traveller** for
+[Argyll_Printer_Profiler](https://github.com/soul-traveller/Argyll_Printer_Profiler)
+— a mature, in several areas more comprehensive printer-profiling tool. If you
+prefer working from proven, pre-made test charts rather than randomly generated
+targets, his project ships an excellent curated collection for exactly that.
+
+---
+
+<p align="center">
+  <a href="https://ko-fi.com/itsab1989"><img src="https://ko-fi.com/img/githubbutton_sm.svg" alt="Support ChromIQ on Ko-fi"></a>
+  <br>
+  <sub>ChromIQ is free and open-source. If it's useful to you, a coffee on Ko-fi is always appreciated and helps keep the project going.</sub>
+</p>
