@@ -1,5 +1,22 @@
 # Changelog
 
+## v3.8.2
+A small, focused addition for anyone who likes to keep their measurement
+files tidy.
+
+### 🔬 Leaner measurement files
+- The Measure tab's **Manual** mode gains a new option,
+  **"Don't save spectral data (-n)"**. Switch it on and the chart reader
+  stores only the colour values (XYZ, or L\*a\*b\*) in the `.ti3` file and
+  leaves out the per-wavelength spectrum — roughly three dozen extra numbers
+  per patch. The file becomes much shorter and far easier to review by eye.
+- Your profile is unaffected: building the ICC only needs the colour values,
+  which are always kept, so a profile made with this option on is identical
+  to one made with it off. Leave it off (the default) if you rely on the
+  spectrum later — for optical-brightener (FWA) compensation when building
+  the profile, or to re-derive values under a different illuminant. A
+  detailed ⓘ explainer next to the option spells out the trade-offs.
+
 ## v3.8.1
 A focused fix for the chart-layout editor's patch highlighter, plus a
 quality-of-life touch when reopening charts.

@@ -1,0 +1,64 @@
+name: Sync README version badge
+
+# On a *stable* release tag (e.g. v3.8.2), update the version badge in
+# README.md on the default branch so it never drifts behind core/version.py.
+# Pre-release tags (-alpha/-beta/-rc/-pre) are skipped — the badge tracks the
+# latest stable release only. This job pushes to `master`; the push does not
+# re-trigger the tag-only build workflows, so there is no CI loop.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag whose version to sync into the README (e.g. v3.8.2)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve tag and skip pre-releases
+        id: ver
+        run: |
+          TAG="${{ inputs.tag || github.ref_name }}"
+          case "$TAG" in
+            *-alpha*|*-beta*|*-rc*|*-pre*)
+              echo "Pre-release tag $TAG — leaving README badge on the latest stable version."
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+              echo "skip=false" >> "$GITHUB_OUTPUT"
+              ;;
+          esac
+
+      - name: Checkout default branch
+        if: steps.ver.outputs.skip == 'false'
+        uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+
+      - name: Update badge and push if changed
+        if: steps.ver.outputs.skip == 'false'
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          # Rewrite only the version badge URL, leaving the rest of the line
+          # (and any other shields) untouched.
+          sed -i -E "s#(badge/version-)[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?(-7c5cff)#\1${VERSION}\3#" README.md
+          if git diff --quiet -- README.md; then
+            echo "README badge already at ${VERSION} — nothing to do."
+            exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add README.md
+          git commit -m "docs: sync README version badge to ${VERSION}"
+          git push origin HEAD:master

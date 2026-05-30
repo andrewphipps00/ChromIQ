@@ -380,6 +380,7 @@ class _ChartreadOption:
     widget: QWidget | None = None   # value widget (spinbox, combo…)
     checkbox: QCheckBox | None = None
     row_widget: QWidget | None = None
+    tooltip_width: int = 420        # min width of this option's info dialog
 
     def build_args(self) -> list[str]:
         """Return CLI tokens for this option if enabled."""
@@ -972,7 +973,7 @@ class TabMeasure(QWidget):
             else:
                 row.addWidget(cb, stretch=1)
 
-            row.addWidget(TooltipButton(opt.tooltip_title, opt.tooltip_body, left))
+            row.addWidget(TooltipButton(opt.tooltip_title, opt.tooltip_body, left, min_width=opt.tooltip_width))
             ag.addWidget(row_w)
 
         for opt in self._chartread_opts:
@@ -1233,7 +1234,7 @@ class TabMeasure(QWidget):
                 row.addWidget(opt.widget)
             else:
                 row.addWidget(cb, stretch=1)
-            row.addWidget(TooltipButton(opt.tooltip_title, opt.tooltip_body, left))
+            row.addWidget(TooltipButton(opt.tooltip_title, opt.tooltip_body, left, min_width=opt.tooltip_width))
             mag.addLayout(row)
 
         ll.addWidget(m_adv_grp)
@@ -1658,6 +1659,62 @@ class TabMeasure(QWidget):
                 "Use this when you need the .ti3 to be compatible with tools\n"
                 "that require L*a*b* while keeping the XYZ data that colprof\n"
                 "and other ArgyllCMS tools expect."
+            ),
+        ))
+
+        opts.append(_ChartreadOption(
+            key="no_spectral", flag="-n",
+            tooltip_width=540,
+            label="Don't save spectral data (-n)",
+            tooltip_title="Don't Save Spectral Data (-n)",
+            tooltip_body=(
+                "What this does\n"
+                "\n"
+                "When you measure a chart, your instrument records two kinds of\n"
+                "numbers for every patch:\n"
+                "\n"
+                "  •  The colour values (XYZ, or L*a*b*) — a small handful of\n"
+                "     numbers that describe the colour your eye sees.\n"
+                "\n"
+                "  •  The full spectrum — how much light the patch reflects at\n"
+                "     each wavelength, measured in roughly 10 nm steps across\n"
+                "     the visible range. That is around 36 extra numbers for\n"
+                "     every single patch.\n"
+                "\n"
+                "Tick this box to keep only the colour values and leave the\n"
+                "spectrum out of the measurement (.ti3) file.\n"
+                "\n"
+                "Why you might want it\n"
+                "\n"
+                "The spectral numbers make the .ti3 file several times longer. If\n"
+                "you ever open the file to check a reading by eye, all those extra\n"
+                "columns make it hard to find what you are looking for. Switching\n"
+                "this on gives you a short, tidy file with just the colour data —\n"
+                "much easier to scan and review.\n"
+                "\n"
+                "Does it change my profile?\n"
+                "\n"
+                "No. Building the ICC profile only needs the XYZ colour values,\n"
+                "and those are always kept. A profile made with this option on is\n"
+                "identical to one made with it off.\n"
+                "\n"
+                "When to leave it OFF\n"
+                "\n"
+                "Keep the spectral data if you plan to:\n"
+                "\n"
+                "  •  use optical-brightener (FWA) compensation when building the\n"
+                "     profile — that feature reads the spectrum to model the\n"
+                "     brighteners in modern photo papers,\n"
+                "\n"
+                "  •  re-calculate your colours under a different illuminant\n"
+                "     later on, or\n"
+                "\n"
+                "  •  hand the file to other tools that expect spectral data.\n"
+                "\n"
+                "If none of that applies — and for everyday printer profiling it\n"
+                "usually doesn't — this option is perfectly safe to turn on. It is\n"
+                "off by default, so the spectrum is always kept unless you ask for\n"
+                "it to be dropped."
             ),
         ))
 
