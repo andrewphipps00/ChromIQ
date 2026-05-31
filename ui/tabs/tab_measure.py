@@ -319,6 +319,41 @@ def _detect_uniform_stripe_rects(tiff_path: Path, n_strips: int) -> list[QRect]:
         block_l, block_r = best
         block_w = block_r - block_l + 1
 
+        # ── 2b. Re-derive the label-band bottom inside the patch block ───────
+        # The full-width band scan in step 1 also counts the rotated descriptive
+        # caption printtarg stamps down the page margin. When that caption
+        # reaches up to the A,B,C label row with no gap (e.g. a long target
+        # description), those margin rows get folded into the band and push the
+        # strip arrow — anchored to ``y_label_bot`` — downward. Re-running the
+        # band scan counting only dark pixels INSIDE [block_l, block_r] (the
+        # patch grid, which holds the real labels) drops the margin caption.
+        # Clamping can only shorten the band, never lengthen it, so the arrow
+        # moves up to just under the real label row or stays put — strip
+        # division below is left byte-identical. Skipped when the block is
+        # implausibly narrow (a 1–2 strip chart, where margin text could rival
+        # the block width) so we never trade a cosmetic offset for a misdetect.
+        # See memory project_measure_arrow_position.
+        if block_w >= aw * 0.30:
+            blk_max_dark = int(block_w * MAX_LABEL_FRAC)
+            blk_min_dark = max(5, block_w // 200)
+            ys_blk: int | None = None
+            ye_blk: int | None = None
+            empty_blk = 0
+            for y in range(ah * 30 // 100):
+                count = sum(1 for x in range(block_l, block_r + 1)
+                            if pix[x, y] < DARK)
+                if blk_min_dark <= count <= blk_max_dark:
+                    if ys_blk is None:
+                        ys_blk = y
+                    ye_blk = y
+                    empty_blk = 0
+                else:
+                    empty_blk += 1
+                    if ys_blk is not None and empty_blk >= EMPTY_STOP:
+                        break
+            if ye_blk is not None:
+                y_lab_end = ye_blk
+
         # ── 3. Vertical extent for the rect height ───────────────────────────
         y_top_a    = next((y for y in range(ah)
                            if any(pix[x, y] < WHITE for x in range(0, aw, 4))), 0)
