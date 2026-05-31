@@ -1,5 +1,32 @@
 # Changelog
 
+## v3.8.3
+A refreshed set of ready-to-print charts from Pharmacist, plus a small
+polish to the Measure tab.
+
+### 🎯 New built-in charts by Pharmacist
+- The **Create Chart → Presets** dropdown ships a brand-new, curated line-up
+  of four ready-made targets, all kindly built and tuned by **Pharmacist**:
+  - **i1Pro TC9.24** — a high-quality 924-patch target for the i1 Pro family.
+  - **i1Pro 1110 ABW-optimized** — an 1110-patch target tuned for advanced
+    black-and-white / neutral work on the i1 Pro.
+  - **ColorMunki TC3.00** — a compact 300-patch target for the ColorMunki /
+    i1Studio.
+  - **ColorMunki 702 ABW-optimized** — a 702-patch ABW-tuned target for the
+    ColorMunki / i1Studio.
+- Each is a **complete, pre-made chart**: picking one simply asks for a name
+  and drops the finished files into your working folder — no chart generation
+  step to wait on. The previous built-in presets have been retired in favour
+  of this set.
+- **Heartfelt thanks to Pharmacist** for designing, measuring and validating
+  these targets for the community. 🙏
+
+### 🔎 Measure tab
+- The scan arrow that points at the strip you're about to read now sits at a
+  consistent height across every chart. On a few targets a long caption
+  printed down the page margin used to nudge the arrow lower than on the
+  others; it now lines up the same way everywhere.
+
 ## v3.8.2
 A small, focused addition for anyone who likes to keep their measurement
 files tidy.
