@@ -125,31 +125,38 @@ MUNKI_TARGEN = {
 # files into a fresh ~/ChromIQ/<name> folder (renamed to <name>…) and loads them.
 # targen AND printtarg are skipped entirely — the param panels are greyed out
 # while such a preset is active, because none of those options apply.
-TC924A4_PRESET_KEY = "__chromiq_tc924_a4_builtin__"
-TC924A4_PRESET_LABEL = "★  i1Pro TC9.24 A4 by Pharmacist  ·  built-in"
-TC924LETTER_PRESET_KEY = "__chromiq_tc924_letter_builtin__"
-TC924LETTER_PRESET_LABEL = "★  i1Pro TC9.24 Letter by Pharmacist  ·  built-in"
+# The four "by Pharmacist" targets below are the full built-in line-up
+# (two i1Pro, two ColorMunki) — every one a prebuilt-files preset.
+TC924_PRESET_KEY = "__chromiq_tc924_builtin__"
+TC924_PRESET_LABEL = "★  i1Pro TC9.24 by Pharmacist  ·  built-in"
+ABW1110_PRESET_KEY = "__chromiq_abw1110_builtin__"
+ABW1110_PRESET_LABEL = "★  i1Pro 1110 ABW-optimized by Pharmacist  ·  built-in"
+TC300_PRESET_KEY = "__chromiq_tc300_builtin__"
+TC300_PRESET_LABEL = "★  ColorMunki TC3.00 by Pharmacist  ·  built-in"
+ABW702_PRESET_KEY = "__chromiq_abw702_builtin__"
+ABW702_PRESET_LABEL = "★  ColorMunki 702 ABW-optimized by Pharmacist  ·  built-in"
 
 # key -> (asset stem under assets/charts, default target name). Charts are filed
 # by creator/colorspace/instrument/paper/target; the stem locates <stem>.ti1,
 # <stem>.ti2 and the <stem>_NN.tif page TIFFs inside that leaf folder.
 PREBUILT_PRESETS = {
-    TC924A4_PRESET_KEY:     ("assets/charts/pharmacist/rgb/i1pro/a4/tc924/tc924",     "tc924-a4"),
-    TC924LETTER_PRESET_KEY: ("assets/charts/pharmacist/rgb/i1pro/letter/tc924/tc924", "tc924-letter"),
+    TC924_PRESET_KEY:   ("assets/charts/pharmacist/rgb/i1pro/a4/tc924/tc924",         "tc924"),
+    ABW1110_PRESET_KEY: ("assets/charts/pharmacist/rgb/i1pro/a4/abw1110/abw1110",     "abw1110"),
+    TC300_PRESET_KEY:   ("assets/charts/pharmacist/rgb/colormunki/a4/tc300/tc300",    "tc300"),
+    ABW702_PRESET_KEY:  ("assets/charts/pharmacist/rgb/colormunki/a4/abw702/abw702",  "abw702"),
 }
 
-# Built-in presets that are temporarily disabled: shown greyed-out and
-# non-selectable in the dropdown (NOT removed), pending a fix from their author.
-# The TC9.24 charts (A4 + US Letter) are parked here until Pharmacist corrects
-# them; clear this set to re-enable them — no other change needed.
-DISABLED_BUILTIN_PRESET_KEYS = frozenset({TC924A4_PRESET_KEY, TC924LETTER_PRESET_KEY})
+# Built-in presets can be parked here (shown greyed-out, non-selectable) pending
+# a fix from their author; none are parked at the moment.
+DISABLED_BUILTIN_PRESET_KEYS = frozenset()
 
-# Every built-in (non-deletable) preset key. Used to protect them from the
-# delete button and to keep disk presets from shadowing them.
-BUILTIN_PRESET_KEYS = frozenset({TC918_PRESET_KEY, *MUNKI_TARGEN, *PREBUILT_PRESETS})
+# Every built-in (non-deletable) preset key — all four are prebuilt-files. Used
+# to protect them from the delete button and to keep disk presets from shadowing
+# them.
+BUILTIN_PRESET_KEYS = frozenset(PREBUILT_PRESETS)
 BUILTIN_PRESET_LABELS = frozenset({
-    TC918_PRESET_LABEL, MUNKI324_PRESET_LABEL, MUNKI648_PRESET_LABEL,
-    TC924A4_PRESET_LABEL, TC924LETTER_PRESET_LABEL,
+    TC924_PRESET_LABEL, ABW1110_PRESET_LABEL,
+    TC300_PRESET_LABEL, ABW702_PRESET_LABEL,
 })
 
 
@@ -2309,16 +2316,14 @@ class TabChart(QWidget):
         # Within a group the curated order below is preserved (stable sort).
         # (instrument, label, key, tooltip)
         builtins = [
-            ("i1Pro",      TC918_PRESET_LABEL,       TC918_PRESET_KEY,
-             self._tc918_tooltip()),
-            ("i1Pro",      TC924A4_PRESET_LABEL,     TC924A4_PRESET_KEY,
+            ("i1Pro",      TC924_PRESET_LABEL,   TC924_PRESET_KEY,
              self._prebuilt_tooltip("A4")),
-            ("i1Pro",      TC924LETTER_PRESET_LABEL, TC924LETTER_PRESET_KEY,
-             self._prebuilt_tooltip("US Letter")),
-            ("ColorMunki", MUNKI324_PRESET_LABEL,    MUNKI324_PRESET_KEY,
-             self._munki_tooltip(*MUNKI_TARGEN[MUNKI324_PRESET_KEY])),
-            ("ColorMunki", MUNKI648_PRESET_LABEL,    MUNKI648_PRESET_KEY,
-             self._munki_tooltip(*MUNKI_TARGEN[MUNKI648_PRESET_KEY])),
+            ("i1Pro",      ABW1110_PRESET_LABEL, ABW1110_PRESET_KEY,
+             self._prebuilt_tooltip("A4")),
+            ("ColorMunki", TC300_PRESET_LABEL,   TC300_PRESET_KEY,
+             self._prebuilt_tooltip("A4")),
+            ("ColorMunki", ABW702_PRESET_LABEL,  ABW702_PRESET_KEY,
+             self._prebuilt_tooltip("A4")),
         ]
         prev_instr: str | None = None
         for instr, label, key, tip in sorted(builtins, key=lambda t: t[0].lower()):
