@@ -1,5 +1,17 @@
 # Changelog
 
+## v3.8.4
+A small cosmetic refresh to the bundled charts from Pharmacist.
+
+### 🎨 Chart appearance
+- The four built-in **Pharmacist** charts have had a light visual tidy-up
+  around the page margins and title band, so the printed sheets look a touch
+  cleaner. The colour patches themselves are **completely untouched** — every
+  patch value is byte-for-byte identical to the previous release, so your
+  measurement and profiling results are exactly the same.
+- With thanks, as always, to **Pharmacist** for designing these targets for
+  the community. 🙏
+
 ## v3.8.3
 A refreshed set of ready-to-print charts from Pharmacist, plus a small
 polish to the Measure tab.
