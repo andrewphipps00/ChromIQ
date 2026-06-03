@@ -46,18 +46,34 @@ The four shipped presets (all RGB, A4):
 - `BUILTIN_PRESET_KEYS = frozenset(PREBUILT_PRESETS)` and
   `BUILTIN_PRESET_LABELS` — protect built-ins from the delete button and stop a
   user `.json` from shadowing one.
+- `BUILTIN_PRESET_GROUPS` — the single source of truth for *which* built-ins
+  exist and *how they group by instrument*, as
+  `[(instrument, [(combo_label, overlay_label, key), …]), …]`. Both the dropdown
+  and the overlay read it, so they can't drift apart.
 
 **Combo population**
 
-- `_populate_preset_combo` — adds "Default", then the user presets, then the
-  built-ins grouped by instrument with separators (sorted by instrument name,
-  curated order preserved within a group via stable sort). Guided mode shows
-  only the recommended starter (i1Pro TC9.24).
+- `_populate_preset_combo` — adds "none", then the user presets, then the
+  built-ins grouped by instrument with separators (built from
+  `BUILTIN_PRESET_GROUPS`, sorted by instrument name, curated order preserved
+  within a group via stable sort). Guided mode shows only the recommended
+  starter (i1Pro TC9.24).
 - `_add_builtin_preset_item` — appends a bold, tooltipped, pinned entry;
   `disabled=True` greys it out and blocks selection.
 - `_prebuilt_tooltip(paper)` — the tooltip body for a prebuilt preset.
 - `_builtin_default_name(key)` — the name suggested in the prompt
   (`PREBUILT_PRESETS[key][1]`, else `"chart"`).
+
+**Built-in presets overlay** (`ui/builtin_preset_popup.py`)
+
+- A star button (`BuiltinPresetButton`) sits at the right edge of the
+  GUIDED / MANUAL switch row. Clicking it opens `BuiltinPresetPopup` — a
+  speech-bubble (same look as the masthead Tools popup) listing the built-ins
+  under instrument headers, built from `BUILTIN_PRESET_GROUPS`.
+- `_open_builtin_preset_overlay` shows it; `_activate_builtin_preset(key)` wires
+  a pick back through the dropdown: switch to Manual, then select the matching
+  combo entry (or re-call `_on_preset_selected` if it's already current). So the
+  overlay and the dropdown share the *exact* same name-prompt + generate flow.
 
 **Selection → creation**
 
@@ -109,8 +125,14 @@ without extension, so `_create_prebuilt_target` can find every file by globbing
 3. **Register it.** Add `FOO_PRESET_KEY: ("assets/charts/.../<stem>", "<default-name>")`
    to `PREBUILT_PRESETS`. `BUILTIN_PRESET_KEYS` derives from the dict
    automatically; add the label to `BUILTIN_PRESET_LABELS`.
-4. **Show it.** Add `(instrument, FOO_PRESET_LABEL, FOO_PRESET_KEY, self._prebuilt_tooltip("<paper>"))`
-   to the `builtins` list in `_populate_preset_combo`.
+4. **Show it.** Add `(FOO_PRESET_LABEL, "<short overlay label>", FOO_PRESET_KEY)`
+   to the right instrument group in `BUILTIN_PRESET_GROUPS` (add a new
+   `(instrument, [...])` group if the instrument is new). This single registry
+   feeds **both** the Manual presets dropdown (`_populate_preset_combo` derives
+   its `builtins` list from it) **and** the Built-in presets overlay
+   (`BuiltinPresetPopup`) — no other UI edit is needed. The overlay groups by
+   instrument, so the short label should omit the instrument (e.g. just
+   `"TC9.24 by Pharmacist"`).
 5. **Verify** (see snippet below): the asset files resolve, the key is in the
    registry, and the suite passes.
 

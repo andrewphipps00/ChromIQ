@@ -1,5 +1,32 @@
 # Changelog
 
+## v3.8.5
+A quicker way to reach the ready-made charts, plus a few small refinements.
+
+### ⭐ One-click access to the built-in charts
+- Create Chart now has a **star button** right next to the Guided / Manual
+  switch. Click it for a tidy little menu of the built-in, ready-to-print
+  charts, **grouped by the instrument** they're made for (i1Pro or ColorMunki).
+  Pick one, give it a name, and the finished chart drops straight in — there's
+  nothing to set up and nothing to get wrong.
+- It's the fastest way to a known-good target, and ideal when you just want a
+  reliable chart without thinking about the details. The very same presets also
+  still live at the bottom of Manual mode's **Presets** dropdown, so nothing has
+  moved — this is simply a shortcut to them.
+
+### ✨ Polish
+- The Create Chart help (ⓘ) now walks you through all three ways to make a
+  chart — built-in presets, Guided, and Manual — so it's clearer which to reach
+  for.
+- The "no preset selected" entry in the manual-mode **Presets** dropdowns now
+  reads **"none"** instead of "Default", which better reflects what it does.
+- Fixed a small visual glitch where a row in the pop-up menus (the new presets
+  menu and the header Tools menu) could stay highlighted while the cursor was
+  just outside the menu to the left or right.
+
+### 🙏 Thanks
+- To **Knut** for suggesting the quick-access button for the built-in charts.
+
 ## v3.8.4
 A small cosmetic refresh to the bundled charts from Pharmacist.
 

@@ -1043,7 +1043,7 @@ class TabMeasure(QWidget):
         presets_row.setContentsMargins(8, 4, 8, 8)
         presets_row.addWidget(QLabel("Select preset:", container))
         self._m_preset_combo = NoScrollComboBox(container)
-        self._m_preset_combo.addItem("Default", userData=None)
+        self._m_preset_combo.addItem("none", userData=None)
         presets_row.addWidget(self._m_preset_combo, stretch=1)
         self._m_preset_add_btn = QPushButton(container)
         self._m_preset_add_btn.setObjectName("icon_btn")
@@ -1292,7 +1292,7 @@ class TabMeasure(QWidget):
     def _m_populate_preset_combo(self, presets: dict, select_name: str | None = None) -> None:
         self._m_preset_combo.blockSignals(True)
         self._m_preset_combo.clear()
-        self._m_preset_combo.addItem("Default", userData=None)
+        self._m_preset_combo.addItem("none", userData=None)
         for name in presets:
             self._m_preset_combo.addItem(name, userData=name)
         if select_name is not None:

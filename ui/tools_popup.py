@@ -225,14 +225,17 @@ class ToolsPopup(QWidget):
         p.end()
 
     # ------------------------------------------------------------------
-    def _index_at(self, y: int) -> int:
+    def _index_at(self, pt: QPoint) -> int:
+        """Index of the row under ``pt``; -1 over gaps or the transparent margin
+        to either side of the panel (so a row never highlights when the cursor is
+        level with it but outside the bubble)."""
         for i in range(len(_ENTRIES)):
-            if self._row_rect(i).contains(self._row_rect(i).left() + 4, y):
+            if self._row_rect(i).contains(pt):
                 return i
         return -1
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:  # noqa: N802
-        idx = self._index_at(event.position().toPoint().y())
+        idx = self._index_at(event.position().toPoint())
         if idx != self._hover_index:
             self._hover_index = idx
             self.update()
@@ -267,7 +270,7 @@ class ToolsPopup(QWidget):
         if not self._panel_rect().contains(pt):
             self.close()
             return
-        idx = self._index_at(pt.y())
+        idx = self._index_at(pt)
         if idx < 0:
             return
         key = _ENTRIES[idx].key

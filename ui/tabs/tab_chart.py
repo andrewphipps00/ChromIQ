@@ -59,6 +59,7 @@ from ui.fade_scroll import FadeScrollArea
 from ui.parameter_widget import ParameterWidget
 from ui.styles import SPEC_AMBER, SPEC_CYAN, SPEC_GREEN, SPEC_MAGENTA, SPEC_VIOLET
 from ui.tab_header import TabHeader
+from ui.builtin_preset_popup import BuiltinPresetButton, BuiltinPresetPopup
 from ui.tiff_preview import TiffPreview
 from ui.tooltip_button import InfoDialog, TooltipButton
 from ui.widgets import NoScrollComboBox, NoScrollSpinBox, icc_profile_paths, make_browse_button, open_file_dialog, set_folder_icon, set_preset_icon
@@ -158,6 +159,23 @@ BUILTIN_PRESET_LABELS = frozenset({
     TC924_PRESET_LABEL, ABW1110_PRESET_LABEL,
     TC300_PRESET_LABEL, ABW702_PRESET_LABEL,
 })
+
+# Built-in presets grouped by the instrument they target — the single source of
+# truth shared by the Manual presets dropdown (_populate_preset_combo) and the
+# "Built-in presets" overlay (BuiltinPresetPopup). Each group is
+# (instrument, [(combo_label, overlay_label, key), …]). The combo label is the
+# full "★ … · built-in" string; the overlay groups by instrument so it shows the
+# shorter label with the instrument prefix dropped.
+BUILTIN_PRESET_GROUPS: list[tuple[str, list[tuple[str, str, str]]]] = [
+    ("i1Pro", [
+        (TC924_PRESET_LABEL,   "TC9.24 by Pharmacist",             TC924_PRESET_KEY),
+        (ABW1110_PRESET_LABEL, "1110 ABW-optimized by Pharmacist",  ABW1110_PRESET_KEY),
+    ]),
+    ("ColorMunki", [
+        (TC300_PRESET_LABEL,   "TC3.00 by Pharmacist",             TC300_PRESET_KEY),
+        (ABW702_PRESET_LABEL,  "702 ABW-optimized by Pharmacist",   ABW702_PRESET_KEY),
+    ]),
+]
 
 
 def _value_compatible_with_pw(v: Any, pw: "ParameterWidget") -> bool:
@@ -336,14 +354,28 @@ class TabChart(QWidget):
                 "profile will only be accurate for that exact combination.\n"
                 "• Have a rough idea of how careful you want to be. More patches = "
                 "more accuracy, but also more ink and paper.\n\n"
-                "How to use this screen:\n"
+                "You have three ways to make a chart — from quickest to most "
+                "hands-on:\n\n"
+                "★  Built-in presets — the star button at the right end of the "
+                "Guided / Manual switch.\n"
+                "Click it to open a little menu of ready-made, professionally tuned "
+                "charts, grouped by the measuring instrument they're made for "
+                "(i1Pro or ColorMunki). Pick one and ChromIQ simply asks you for a "
+                "name, then drops the finished chart straight in — there are no "
+                "settings to understand and nothing to get wrong. This is the "
+                "fastest way to a known-good target, and a great choice if you just "
+                "want a reliable chart without thinking about the details. (The very "
+                "same presets also live at the bottom of Manual mode's \"Presets\" "
+                "dropdown, in case you'd rather find them there.)\n\n"
                 "• Guided mode picks sensible patch counts for you based on your "
-                "paper size and instrument. Recommended if you're new.\n"
+                "paper size and instrument. Recommended if you're new but still want "
+                "to choose your own paper, instrument and quality level.\n\n"
                 "• Manual mode exposes every option. Use it once you know what each "
-                "flag does.\n"
-                "• Click \"Generate\" to create the test chart. You'll get a TIFF "
-                "image (the printable chart) and a .ti2 file (the recipe ChromIQ "
-                "uses later to read it back).\n\n"
+                "setting does and want full control.\n\n"
+                "Whichever route you take, click \"Generate\" (or pick a built-in "
+                "preset) to create the test chart. You'll get a TIFF image (the "
+                "printable chart) and a .ti2 file (the recipe ChromIQ uses later to "
+                "read it back).\n\n"
                 "Next step: print the TIFF on tab 2."
             ),
         ))
@@ -351,7 +383,13 @@ class TabChart(QWidget):
         # Mode switcher (wrapped in a widget so it can be hidden in calibration mode)
         self._mode_row_widget = QWidget(left)
         mode_row = QHBoxLayout(self._mode_row_widget)
-        mode_row.setContentsMargins(0, 0, 0, 0)
+        # The panels below sit in a scroll area, so their group boxes are inset on
+        # the right by the (Fusion) scrollbar width + the inner 4px margin. Inset
+        # the mode row by roughly the same so the built-in-presets button lines up
+        # with the section outlines below — less 14px so it sits a touch right.
+        from PyQt6.QtWidgets import QStyle
+        _sb = self.style().pixelMetric(QStyle.PixelMetric.PM_ScrollBarExtent)
+        mode_row.setContentsMargins(0, 0, max(0, _sb - 10), 0)
         _mode_font = QFont()
         _mode_font.setFamilies(["Menlo", "Consolas", "Courier New", "monospace"])
         _mode_font.setPointSize(11)
@@ -370,6 +408,12 @@ class TabChart(QWidget):
         mode_row.addWidget(self._guided_btn)
         mode_row.addWidget(self._manual_btn)
         mode_row.addStretch()
+        # Far-right star button: opens the Built-in presets overlay, listing the
+        # bundled prebuilt charts grouped by instrument. Picking one runs the
+        # exact same flow as choosing it in the Manual presets dropdown.
+        self._builtin_preset_btn = BuiltinPresetButton(self._mode_row_widget)
+        self._builtin_preset_btn.clicked.connect(self._open_builtin_preset_overlay)
+        mode_row.addWidget(self._builtin_preset_btn)
         left_layout.addWidget(self._mode_row_widget)
 
         # Stacked panel
@@ -1024,7 +1068,7 @@ class TabChart(QWidget):
         self._preset_combo.setItemDelegate(
             _ComboSeparatorDelegate(self._preset_combo)
         )
-        self._preset_combo.addItem("Default", userData=None)
+        self._preset_combo.addItem("none", userData=None)
         presets_row.addWidget(self._preset_combo, stretch=1)
         self._preset_add_btn = QPushButton(w)
         self._preset_add_btn.setObjectName("icon_btn")
@@ -2299,7 +2343,7 @@ class TabChart(QWidget):
     def _populate_preset_combo(self, presets: dict, select_name: str | None = None) -> None:
         self._preset_combo.blockSignals(True)
         self._preset_combo.clear()
-        self._preset_combo.addItem("Default", userData=None)
+        self._preset_combo.addItem("none", userData=None)
         # User presets first, then the built-ins below them. A preset saved with
         # "generate on select" gets a ▶ prefix so the user knows picking it
         # starts the chart, not just loads values. userData stays the bare name.
@@ -2314,16 +2358,13 @@ class TabChart(QWidget):
         # separator line is drawn before the whole built-in block (dividing it
         # from the user presets) and again before each new instrument group.
         # Within a group the curated order below is preserved (stable sort).
+        # Derived from the shared BUILTIN_PRESET_GROUPS registry so the dropdown
+        # and the Built-in presets overlay can never drift apart.
         # (instrument, label, key, tooltip)
         builtins = [
-            ("i1Pro",      TC924_PRESET_LABEL,   TC924_PRESET_KEY,
-             self._prebuilt_tooltip("A4")),
-            ("i1Pro",      ABW1110_PRESET_LABEL, ABW1110_PRESET_KEY,
-             self._prebuilt_tooltip("A4")),
-            ("ColorMunki", TC300_PRESET_LABEL,   TC300_PRESET_KEY,
-             self._prebuilt_tooltip("A4")),
-            ("ColorMunki", ABW702_PRESET_LABEL,  ABW702_PRESET_KEY,
-             self._prebuilt_tooltip("A4")),
+            (instr, combo_label, key, self._prebuilt_tooltip("A4"))
+            for instr, entries in BUILTIN_PRESET_GROUPS
+            for (combo_label, _overlay_label, key) in entries
         ]
         prev_instr: str | None = None
         for instr, label, key, tip in sorted(builtins, key=lambda t: t[0].lower()):
@@ -2418,6 +2459,39 @@ class TabChart(QWidget):
         self._preset_del_btn.setEnabled(
             self._is_deletable_preset(self._last_preset_index)
         )
+
+    def _open_builtin_preset_overlay(self) -> None:
+        """Show the speech-bubble overlay of built-in presets under the star button."""
+        from ui.theme import resolve_mode
+        groups = [
+            (instr, [(overlay_label, key) for (_combo, overlay_label, key) in entries])
+            for instr, entries in BUILTIN_PRESET_GROUPS
+        ]
+        popup = BuiltinPresetPopup(groups, self)
+        popup.set_appearance(resolve_mode(self._settings.get("appearance", "auto")))
+        popup.selected.connect(self._activate_builtin_preset)
+        # Keep a reference so the popup isn't garbage-collected while shown.
+        self._builtin_preset_popup = popup
+        popup.show_under(self._builtin_preset_btn)
+
+    def _activate_builtin_preset(self, key: str) -> None:
+        """Pick a built-in from the overlay — identical to choosing it in the dropdown.
+
+        The built-ins live in the Manual presets dropdown, so route through it:
+        switch to Manual (so the dropdown and greyed panels are visible), then
+        select the matching entry, which fires _on_preset_selected — the name
+        prompt + generate flow. Re-picking the current entry won't emit
+        currentIndexChanged, so call the handler directly in that case."""
+        idx = self._preset_combo.findData(key)
+        if idx < 0:
+            log.warning("Built-in preset overlay: key %r not in dropdown", key)
+            return
+        if self._current_mode() != "manual":
+            self._switch_mode("manual")
+        if idx == self._preset_combo.currentIndex():
+            self._on_preset_selected(idx)
+        else:
+            self._preset_combo.setCurrentIndex(idx)
 
     def _on_preset_selected(self, index: int) -> None:
         # Group-divider separators aren't real choices. The combo skips them on
