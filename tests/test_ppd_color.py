@@ -1,12 +1,11 @@
 """Tests for the vendor "no colour management" PPD backstop in
-``workflow.native_print_macos``.
+``workflow.ppd_color`` (shared by the native macOS dialog and the ``lp`` path).
 
-These exercise only the pure PPD-parsing helpers (no PyObjC / PrintCore), so
-they run on any platform.
+Pure PPD parsing — no PyObjC / PrintCore / CUPS — so they run on any platform.
 """
 import textwrap
 
-from workflow.native_print_macos import _vendor_no_cm_setting
+from workflow.ppd_color import vendor_no_cm_setting as _vendor_no_cm_setting
 
 
 def _write_ppd(tmp_path, body: str):

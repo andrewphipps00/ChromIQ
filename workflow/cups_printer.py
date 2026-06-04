@@ -11,6 +11,7 @@ from typing import Callable
 
 from core.logger import get_logger
 from workflow.postscript_generator import PostScriptGenerator
+from workflow.ppd_color import vendor_no_cm_setting_for_queue
 
 log = get_logger(__name__)
 
@@ -228,6 +229,27 @@ class CupsRawPrinter:
             log.warning("_cancel_pending_jobs error: %s", exc)
 
     @staticmethod
+    def _apply_vendor_no_cm(opts: dict[str, str], printer_name: str) -> None:
+        """Force the driver's own "no colour adjustment" option into *opts*.
+
+        ``ColorSync=None`` only stops CUPS' *own* ColorSync transform; a driver
+        whose colour engine lives below that (e.g. Canon, whose PPD exposes
+        ``CNIJIntent2=1001`` / "No Color Correction") keeps re-profiling the
+        chart unless its key is set explicitly.  Mirrors the backstop the native
+        macOS print path applies.  Best-effort: silently does nothing if the PPD
+        isn't found or exposes no such option (e.g. Epson, already handled by the
+        raster options above).
+        """
+        try:
+            vendor = vendor_no_cm_setting_for_queue(printer_name)
+        except Exception as exc:  # pragma: no cover - defensive
+            log.warning("vendor no-CM lookup failed for %s: %s", printer_name, exc)
+            return
+        if vendor:
+            opts[vendor[0]] = vendor[1]
+            log.info("CUPS print: driver no-colour option %s=%s", *vendor)
+
+    @staticmethod
     def _build_lp_command_ps(
         ps_path: Path,
         cfg: PrintConfig,
@@ -241,6 +263,7 @@ class CupsRawPrinter:
         # symmetry with _build_lp_command_tiff, which still needs it.
         del orientation
         merged = {**cfg.options, **_PS_JOB_OPTIONS}
+        CupsRawPrinter._apply_vendor_no_cm(merged, cfg.printer_name)
         cmd = ["lp", "-d", cfg.printer_name]
         for key, val in merged.items():
             if val:
@@ -266,6 +289,7 @@ class CupsRawPrinter:
         merged = {**cfg.options, **opts}
         if orientation is not None:
             merged["orientation-requested"] = str(orientation)
+        CupsRawPrinter._apply_vendor_no_cm(merged, cfg.printer_name)
         cmd = ["lp", "-d", cfg.printer_name]
         for key, val in merged.items():
             if val:
