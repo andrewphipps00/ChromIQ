@@ -200,7 +200,8 @@ def native_print_supported() -> bool:
 
     Used only for UI affordances (the macOS ``NSPrintPanel`` checkbox in
     Preferences).  Do not conflate with the *default* value of
-    ``use_native_print_dialog``, which is True on Windows because the
-    Windows-native Qt print dialog is the only sensible way to print.
+    ``use_native_print_dialog``, which is True on both macOS and Windows
+    (macOS: the native path now reliably disables colour management; Windows:
+    the Qt print dialog is the only sensible way to print).
     """
     return is_macos()

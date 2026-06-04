@@ -56,13 +56,17 @@ DEFAULTS: dict[str, Any] = {
     "print_media":               "",
     "print_media_type":          "",
     "print_quality":             "",
-    # Default to ChromIQ's own printing module on macOS: it sends the chart via
-    # lp with colour management forced off (incl. the driver's own no-colour key
-    # like Canon CNIJIntent2=1001), which the native dialog can't guarantee for
-    # every driver — some (e.g. Canon) colour-manage the chart anyway.  The user
-    # can still opt into the OS dialog in Settings.  Windows has no such lp path,
-    # so it stays force-locked on there (in get()).
-    "use_native_print_dialog":   is_windows(),
+    # Default to the OS print dialog on macOS *and* Windows.  The macOS native
+    # path now reliably disables colour management for every driver — including
+    # Canon, which previously colour-managed the chart regardless — by
+    # replicating ColorByte Print-Tool's recipe: it declares the printer's own
+    # device profile as the *application* output intent (identity transform =
+    # true passthrough) and sets AP_ApplicationColorMatching on the session, in
+    # addition to the driver's own no-colour key (e.g. Canon CNIJIntent2=1001).
+    # See workflow/native_print_macos.py.  macOS users can still opt back to
+    # ChromIQ's lp path in Settings; Windows has no lp path so it stays
+    # force-locked on there (in get()).
+    "use_native_print_dialog":   is_windows() or is_macos(),
     "confirm_before_printing":   True,
     # Step 3 — measure
     "measure_disable_bidir":       True,

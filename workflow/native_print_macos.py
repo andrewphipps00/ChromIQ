@@ -51,17 +51,28 @@ _PT_PER_INCH = 72.0
 
 # PrintCore ``PMPrintSettings`` key/values that put the job into
 # application-managed colour.  These are vendor-neutral — they come from Apple's
-# print framework, not the driver — and were confirmed by dumping
-# ``NSPrintInfo.printSettings()`` after selecting "Color Matching > ColorSync"
-# against an Epson ET-8550 (which then auto-locks ``EPIJ_CMat`` to "3" / Off).
-# Set with the *locked* flag so the values can't be silently rewritten between
-# dialog and submission.  In addition, `_vendor_no_cm_setting` scans the
-# selected printer's PPD for that driver's own "Off / No Color Adjustment"
-# option and locks it too, so it doesn't matter whether a given vendor's PDE
-# honours the Apple-level keys.
+# print framework, not the driver.  Only ``AP_ColorMatchingMode`` is set here:
+# ColorByte Print-Tool's no-colour-management path sets *exactly* this one Apple
+# key (to ``AP_ApplicationColorMatching``) and nothing else — notably it never
+# names a source profile.  We previously also set
+# ``APCustomColorMatchingProfile = "sRGB"``; that was removed because it
+# *declares an sRGB source*, which invites the driver/ColorSync to transform
+# sRGB→device (i.e. the very colour management we are trying to suppress) — the
+# likely reason Canon drivers still profiled the chart.  Under
+# ``AP_ApplicationColorMatching`` a custom source profile is meaningless anyway:
+# the application is asserting the pixels are already device-ready.
+#
+# The real "no colour management" mechanism is the *session*-level declaration in
+# ``_apply_session_no_color_management`` (application output intent +
+# ``PMSessionSetColorMatchingMode``), which is also what greys out the print
+# panel's Color Matching pane.  This settings key mirrors it into the Cocoa /
+# PrintCore settings as a backstop, set *locked* so it can't be silently
+# rewritten between dialog and submission.  ``vendor_no_cm_setting`` additionally
+# scans the selected printer's PPD for that driver's own "No Color Adjustment"
+# option (e.g. Canon ``CNIJIntent2=1001``) and locks it too, so it doesn't matter
+# whether a given vendor's PDE honours the Apple-level key.
 _LOCKED_COLOR_SETTINGS: dict[str, str] = {
     "AP_ColorMatchingMode": "AP_ApplicationColorMatching",
-    "APCustomColorMatchingProfile": "sRGB",
 }
 
 
@@ -93,6 +104,15 @@ try:  # pragma: no cover - macOS only
     _cf.CFStringCreateWithCString.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_uint32]
     _cf.CFRelease.restype = None
     _cf.CFRelease.argtypes = [ctypes.c_void_p]
+    # Read-only dictionary access + a UTF-8 snapshot of a CFString, used purely
+    # to log which device profile the print system hands us as the output
+    # intent (mirrors Print-Tool's "OutputIntent = %@" NSLog diagnostics).
+    _cf.CFDictionaryGetValue.restype = ctypes.c_void_p
+    _cf.CFDictionaryGetValue.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+    _cf.CFStringGetCString.restype = ctypes.c_bool
+    _cf.CFStringGetCString.argtypes = [
+        ctypes.c_void_p, ctypes.c_char_p, ctypes.c_long, ctypes.c_uint32,
+    ]
 
     _appsvc = ctypes.CDLL(
         "/System/Library/Frameworks/ApplicationServices.framework/ApplicationServices"
@@ -104,6 +124,11 @@ try:  # pragma: no cover - macOS only
         ctypes.c_void_p,  # CFTypeRef value
         ctypes.c_bool,    # Boolean locked
     ]
+    # ColorSync lives inside the ApplicationServices umbrella; used to log the
+    # human-readable name of whichever device profile we declare as the output
+    # intent (diagnostics only).
+    _appsvc.ColorSyncProfileCopyDescriptionString.restype = ctypes.c_void_p  # CFStringRef
+    _appsvc.ColorSyncProfileCopyDescriptionString.argtypes = [ctypes.c_void_p]
     _PRINTCORE_OK = True
 except Exception as _exc:  # pragma: no cover
     _PRINTCORE_OK = False
@@ -151,6 +176,62 @@ else:  # pragma: no cover
 def _cfstr(value: str) -> int:
     """Create a CFStringRef (returns its pointer as int).  Caller must CFRelease."""
     return _cf.CFStringCreateWithCString(None, value.encode("utf-8"), _kCFStringEncodingUTF8)
+
+
+def _cfstr_to_py(cfstr_ptr: int) -> str | None:
+    """Best-effort UTF-8 snapshot of a CFStringRef for logging; None on failure."""
+    if not cfstr_ptr:
+        return None
+    buf = ctypes.create_string_buffer(512)
+    if _cf.CFStringGetCString(
+        ctypes.c_void_p(cfstr_ptr), buf, len(buf), _kCFStringEncodingUTF8
+    ):
+        return buf.value.decode("utf-8", "replace")
+    return None
+
+
+# The output-intent dictionary returned by PrintCore is keyed by colour model;
+# we only generate RGB charts, but log all three if present so a future
+# grey/CMYK path is easy to diagnose.
+_OUTPUT_INTENT_KEYS = (
+    "PMSessionRGBOutputIntent",
+    "PMSessionGrayOutputIntent",
+    "PMSessionCMYKOutputIntent",
+)
+
+
+def _log_output_intent_profiles(intents_dict_ptr: int, label: str) -> None:
+    """Log the device-profile name(s) inside an output-intent CFDictionary.
+
+    This is the visibility Print-Tool gets from its ``OutputIntent = %@`` NSLog:
+    on the Canon path it tells us *which* profile the print system is treating
+    the chart pixels as already being in.  For a true colour-managed-off pass
+    this should name the printer's own device profile (so the transform is
+    identity), not a working space like sRGB.  Diagnostics only; never raises.
+    """
+    if not intents_dict_ptr:
+        return
+    for key in _OUTPUT_INTENT_KEYS:
+        k_ref = _cfstr(key)
+        try:
+            prof = _cf.CFDictionaryGetValue(
+                ctypes.c_void_p(intents_dict_ptr), ctypes.c_void_p(k_ref)
+            )
+        finally:
+            if k_ref:
+                _cf.CFRelease(ctypes.c_void_p(k_ref))
+        if not prof:
+            continue
+        desc_ref = 0
+        try:
+            desc_ref = _appsvc.ColorSyncProfileCopyDescriptionString(ctypes.c_void_p(prof))
+            name = _cfstr_to_py(desc_ref) or "<unnamed profile>"
+        except Exception:  # pragma: no cover - diagnostics only
+            name = "<description unavailable>"
+        finally:
+            if desc_ref:
+                _cf.CFRelease(ctypes.c_void_p(desc_ref))
+        log.info("native print: [%s] %s -> %s", label, key, name)
 
 
 def _queue_name(display_name: str) -> str:
@@ -326,6 +407,11 @@ def _apply_session_no_color_management(print_info) -> None:
             ctypes.c_void_p(session), ctypes.c_void_p(settings), ctypes.byref(intents),
         )
         if status == 0 and intents:
+            # Log which device profile the print system says is the printer's
+            # default — on the Canon this is the single most useful signal for
+            # whether colour-off is really happening (it must name the printer's
+            # own space, not sRGB/working space).
+            _log_output_intent_profiles(intents.value or 0, "default-intent")
             # 2. Re-declare it as the *application's* output intent → the print
             #    system treats the pixels as already device-targeted (no CM).
             st2 = _appsvc.PMSessionSetApplicationOutputIntentWithColorSyncProfiles(
