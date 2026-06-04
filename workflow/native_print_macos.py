@@ -65,9 +65,8 @@ _LOCKED_COLOR_SETTINGS: dict[str, str] = {
     "APCustomColorMatchingProfile": "sRGB",
 }
 
-# A PPD UI option is a "colour" option if its label mentions colour ...
-_PPD_COLOUR_OPT_RE = re.compile(r"colou?r", re.I)
-# ... and it's specifically a colour-management option if it also looks like one:
+# A PPD UI option is specifically a "colour-management" option if its label
+# looks like one (used to qualify a bare "Off"/"None" value):
 _PPD_CM_OPT_RES = (
     re.compile(r"colou?r.*(match|manag)", re.I),
     re.compile(r"(match|manag).*colou?r", re.I),
@@ -213,14 +212,21 @@ def _vendor_no_cm_setting(ppd_path: str) -> tuple[str, str] | None:
         return None
     best: tuple[int, str, str] | None = None
     for key, ui_label, values in _parse_ppd_options(text):
-        if not _PPD_COLOUR_OPT_RE.search(ui_label):
-            continue
         is_cm_opt = any(r.search(ui_label) for r in _PPD_CM_OPT_RES)
         for val, vlabel in values:
             prio: int | None = None
             if any(r.search(vlabel) for r in _PPD_NO_CM_VALUE_RES):
+                # An explicit "no colour management" *value* (e.g. Canon's
+                # "No Color Correction") is unambiguous on its own, so accept
+                # it regardless of the option's own name.  Canon hangs this off
+                # an option labelled "Rendering Intent" (CNIJIntent2=1001), not
+                # one with "colour" in the name, so an option-label gate here
+                # would silently miss it — the bug this branch fixes.
                 prio = 0
             elif is_cm_opt and any(r.match(vlabel) for r in _PPD_GENERIC_OFF_RES):
+                # A bare "Off"/"None" is only a no-CM signal when the option
+                # itself clearly *is* a colour-management option, so we don't
+                # mistake e.g. "Duplex: Off" for colour management.
                 prio = 1
             if prio is not None and (best is None or prio < best[0]):
                 best = (prio, key, val)
