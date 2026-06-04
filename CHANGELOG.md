@@ -1,5 +1,25 @@
 # Changelog
 
+## v3.8.7
+Reliable colour-management-off for Canon (and other) printers, by making
+ChromIQ's own printing the default again on macOS.
+
+### 🐛 Fixes
+- **Canon charts no longer print colour-managed.** When it prints the chart,
+  ChromIQ now sends the driver's own "No Color Correction" option (and the
+  matching option for other brands) straight to the printer, so the patches come
+  out in the printer's raw colours — exactly what profiling needs.
+- **macOS uses ChromIQ's built-in printing again by default.** It turns colour
+  management off for you with no extra steps. Testing showed that some drivers —
+  Canon in particular — ignore the macOS print dialog's colour-off request and
+  colour-correct the chart anyway, so the built-in path is the dependable one.
+
+### Changed
+- The macOS system print dialog is still available as an option in Settings, but
+  it now clearly explains that **you must switch the driver's colour management
+  off yourself** in that dialog, with step-by-step notes for each brand. If in
+  doubt, leave the option off and use ChromIQ's built-in printing.
+
 ## v3.8.6
 A printing fix for the macOS print dialog: some printer drivers were quietly
 colour-correcting the test chart even with colour management turned off.
