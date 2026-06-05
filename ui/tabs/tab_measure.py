@@ -2480,14 +2480,17 @@ class TabMeasure(QWidget):
         layout.setContentsMargins(24, 20, 24, 20)
 
         msg = QLabel(
-            f"<b>Strip {read} was read, but strip {expected} was expected.</b><br><br>"
-            "This happens when the instrument is placed on the wrong stripe. "
-            "You have three options:<br><br>"
-            "&nbsp;&nbsp;<b>Use Anyway</b> — accept the reading for strip "
-            f"{read} and continue. Use this if you intentionally read "
-            f"{read} out of order.<br><br>"
+            f"<b>This reading looks like strip {read}, but strip {expected} "
+            "was expected.</b><br><br>"
+            "This usually means the instrument was placed on the wrong row — "
+            "or two rows simply look very similar. You have three options:<br><br>"
+            "&nbsp;&nbsp;<b>Use Anyway</b> — keep this reading and save it as "
+            f"strip {expected} (the row you were asked to scan). Only choose "
+            f"this if you are sure the instrument really was on strip {expected} "
+            "and the warning is a false alarm — the reading is always filed "
+            f"under {expected}, not {read}.<br><br>"
             "&nbsp;&nbsp;<b>Retry</b> — discard this reading and try again. "
-            f"Place your instrument at the correct position for strip {expected}.<br><br>"
+            f"Place your instrument on strip {expected} and re-scan.<br><br>"
             "&nbsp;&nbsp;<b>Give Up</b> — stop the measurement without saving.",
             dlg,
         )
