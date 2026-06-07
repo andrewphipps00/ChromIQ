@@ -1,5 +1,26 @@
 # Changelog
 
+## v3.8.9
+Two more built-in charts from Pharmacist, and a clearer message when a strip is
+read out of order.
+
+### 🎯 New built-in charts by Pharmacist
+- **TC9.18 extended greys (1160 patches) — now in A4 and US Letter.** Two
+  ready-made i1Pro targets join the Create Chart presets. Pick one from the
+  Manual **presets** dropdown or the ⭐ built-in charts overlay and it copies
+  straight into your project — no chart-generation step to run. The page size is
+  now shown in **every** Pharmacist preset's name (e.g. "TC9.24 (A4)"), so the
+  A4 and Letter charts are easy to tell apart at a glance.
+
+### 🐛 Fixes
+- **Clearer "use it anyway" warning when a strip is read out of order.** The
+  measure-tab dialog now correctly says the reading is filed under the strip
+  ChromIQ *expected*, and no longer suggests an option that could quietly write a
+  reading onto the wrong strip's patches.
+
+### 🙏 Thanks
+- **Pharmacist** for the two new TC9.18 extended-greys charts.
+
 ## v3.8.8
 The macOS system print dialog is the default again — and it now reliably turns
 colour management off for every driver, including Canon.
