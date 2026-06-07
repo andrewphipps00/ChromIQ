@@ -26,19 +26,17 @@ not `tc924_a4.ti1`). Resolve a file at runtime with
 
 | Path | Preset (Create Chart → Manual) | Kind | Files |
 |------|--------------------------------|------|-------|
-| `pharmacist/rgb/i1pro/a4/tc918/` | ★ i1Pro TC9.18 by Pharmacist | ti1-based | `tc918.ti1` |
-| `pharmacist/rgb/i1pro/a4/tc924/` | ★ i1Pro TC9.24 A4 by Pharmacist | prebuilt-files | `tc924.ti1` `tc924.ti2` `tc924_01.tif` `tc924_02.tif` |
-| `pharmacist/rgb/i1pro/letter/tc924/` | ★ i1Pro TC9.24 Letter by Pharmacist | prebuilt-files | `tc924.ti1` `tc924.ti2` `tc924_01.tif` `tc924_02.tif` |
+| `pharmacist/rgb/i1pro/a4/tc924/` | ★ i1Pro TC9.24 (A4) by Pharmacist | prebuilt-files | `tc924.ti1` `tc924.ti2` `tc924_01.tif` `tc924_02.tif` |
+| `pharmacist/rgb/i1pro/a4/abw1110/` | ★ i1Pro 1110 ABW-optimized (A4) by Pharmacist | prebuilt-files | `abw1110.ti1` `abw1110.ti2` `abw1110_01.tif` `abw1110_02.tif` |
+| `pharmacist/rgb/i1pro/a4/tc918eg/` | ★ i1Pro TC9.18 extended greys 1160 (A4) by Pharmacist | prebuilt-files | `tc918eg.ti1` `tc918eg.ti2` `tc918eg_01.tif` `tc918eg_02.tif` |
+| `pharmacist/rgb/i1pro/letter/tc918eg/` | ★ i1Pro TC9.18 extended greys 1160 (Letter) by Pharmacist | prebuilt-files | `tc918eg.ti1` `tc918eg.ti2` `tc918eg_01.tif` `tc918eg_02.tif` |
+| `pharmacist/rgb/colormunki/a4/tc300/` | ★ ColorMunki TC3.00 (A4) by Pharmacist | prebuilt-files | `tc300.ti1` `tc300.ti2` `tc300_01.tif` |
+| `pharmacist/rgb/colormunki/a4/abw702/` | ★ ColorMunki 702 ABW-optimized (A4) by Pharmacist | prebuilt-files | `abw702.ti1` `abw702.ti2` `abw702_01.tif` `abw702_02.tif` |
 
 ## How each kind is used
 
-- **ti1-based** (`…/a4/tc918/`) — only the `.ti1` is bundled. Selecting the preset
-  prompts for a name, **copies the bundled `.ti1` into a fresh `~/ChromIQ/<name>/`
-  (renamed to the chosen target name)**, then runs **printtarg only** on that copy
-  (targen skipped) with the fixed Pharmacist layout
-  `printtarg -ii1 -pA4 -t300 -L -m12 -M12 -b` to produce the `.ti2` + page TIFFs.
-  The OFPS patch order can't be reliably recreated by re-running targen, so the
-  `.ti1` is the source of truth.
+Every shipped preset is **prebuilt-files** (the earlier ti1-based / targen-based
+kinds were removed — see `docs/dev_builtin_presets.md` for the history).
 
 - **prebuilt-files** (`…/tc924/`) — a complete, pre-generated target (`.ti1` +
   `.ti2` + page TIFFs). Selecting the preset prompts for a name and **copies all

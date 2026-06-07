@@ -20,14 +20,21 @@ Selecting one prompts for a name, copies the bundled files into a fresh
 loads the TIFFs — **no `targen` or `printtarg` runs**, so the parameter panels
 are greyed out while the preset is active.
 
-The four shipped presets (all RGB, A4):
+The six shipped presets (all RGB; A4 except where noted):
 
-| Label (in the dropdown)                          | Instrument | Asset leaf |
-|--------------------------------------------------|------------|------------|
-| ★ i1Pro TC9.24 by Pharmacist                     | i1Pro      | `i1pro/a4/tc924` |
-| ★ i1Pro 1110 ABW-optimized by Pharmacist         | i1Pro      | `i1pro/a4/abw1110` |
-| ★ ColorMunki TC3.00 by Pharmacist                | ColorMunki | `colormunki/a4/tc300` |
-| ★ ColorMunki 702 ABW-optimized by Pharmacist     | ColorMunki | `colormunki/a4/abw702` |
+| Label (in the dropdown)                                   | Instrument | Asset leaf |
+|-----------------------------------------------------------|------------|------------|
+| ★ i1Pro TC9.24 (A4) by Pharmacist                         | i1Pro      | `i1pro/a4/tc924` |
+| ★ i1Pro 1110 ABW-optimized (A4) by Pharmacist             | i1Pro      | `i1pro/a4/abw1110` |
+| ★ i1Pro TC9.18 extended greys 1160 (A4) by Pharmacist     | i1Pro      | `i1pro/a4/tc918eg` |
+| ★ i1Pro TC9.18 extended greys 1160 (Letter) by Pharmacist | i1Pro      | `i1pro/letter/tc918eg` |
+| ★ ColorMunki TC3.00 (A4) by Pharmacist                    | ColorMunki | `colormunki/a4/tc300` |
+| ★ ColorMunki 702 ABW-optimized (A4) by Pharmacist         | ColorMunki | `colormunki/a4/abw702` |
+
+The `tc918eg` pair is the same patch set in two page sizes; the page size lives
+in the label (and is read back from the asset path by `_prebuilt_paper` for the
+tooltip), so the two entries are distinguishable in both the dropdown and the
+overlay.
 
 ---
 

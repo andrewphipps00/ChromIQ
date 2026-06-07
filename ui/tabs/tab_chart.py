@@ -129,23 +129,44 @@ MUNKI_TARGEN = {
 # The four "by Pharmacist" targets below are the full built-in line-up
 # (two i1Pro, two ColorMunki) — every one a prebuilt-files preset.
 TC924_PRESET_KEY = "__chromiq_tc924_builtin__"
-TC924_PRESET_LABEL = "★  i1Pro TC9.24 by Pharmacist  ·  built-in"
+TC924_PRESET_LABEL = "★  i1Pro TC9.24 (A4) by Pharmacist  ·  built-in"
 ABW1110_PRESET_KEY = "__chromiq_abw1110_builtin__"
-ABW1110_PRESET_LABEL = "★  i1Pro 1110 ABW-optimized by Pharmacist  ·  built-in"
+ABW1110_PRESET_LABEL = "★  i1Pro 1110 ABW-optimized (A4) by Pharmacist  ·  built-in"
+# TC9.18 extended-greys 1160-patch target, in A4 and US-Letter layouts. Same
+# patch set, two page sizes — the paper is carried in the label so the pair is
+# distinguishable in the dropdown and the overlay.
+TC918EG_A4_PRESET_KEY = "__chromiq_tc918eg_a4_builtin__"
+TC918EG_A4_PRESET_LABEL = "★  i1Pro TC9.18 extended greys 1160 (A4) by Pharmacist  ·  built-in"
+TC918EG_LETTER_PRESET_KEY = "__chromiq_tc918eg_letter_builtin__"
+TC918EG_LETTER_PRESET_LABEL = "★  i1Pro TC9.18 extended greys 1160 (Letter) by Pharmacist  ·  built-in"
 TC300_PRESET_KEY = "__chromiq_tc300_builtin__"
-TC300_PRESET_LABEL = "★  ColorMunki TC3.00 by Pharmacist  ·  built-in"
+TC300_PRESET_LABEL = "★  ColorMunki TC3.00 (A4) by Pharmacist  ·  built-in"
 ABW702_PRESET_KEY = "__chromiq_abw702_builtin__"
-ABW702_PRESET_LABEL = "★  ColorMunki 702 ABW-optimized by Pharmacist  ·  built-in"
+ABW702_PRESET_LABEL = "★  ColorMunki 702 ABW-optimized (A4) by Pharmacist  ·  built-in"
 
 # key -> (asset stem under assets/charts, default target name). Charts are filed
 # by creator/colorspace/instrument/paper/target; the stem locates <stem>.ti1,
 # <stem>.ti2 and the <stem>_NN.tif page TIFFs inside that leaf folder.
 PREBUILT_PRESETS = {
-    TC924_PRESET_KEY:   ("assets/charts/pharmacist/rgb/i1pro/a4/tc924/tc924",         "tc924"),
-    ABW1110_PRESET_KEY: ("assets/charts/pharmacist/rgb/i1pro/a4/abw1110/abw1110",     "abw1110"),
-    TC300_PRESET_KEY:   ("assets/charts/pharmacist/rgb/colormunki/a4/tc300/tc300",    "tc300"),
-    ABW702_PRESET_KEY:  ("assets/charts/pharmacist/rgb/colormunki/a4/abw702/abw702",  "abw702"),
+    TC924_PRESET_KEY:          ("assets/charts/pharmacist/rgb/i1pro/a4/tc924/tc924",            "tc924"),
+    ABW1110_PRESET_KEY:        ("assets/charts/pharmacist/rgb/i1pro/a4/abw1110/abw1110",        "abw1110"),
+    TC918EG_A4_PRESET_KEY:     ("assets/charts/pharmacist/rgb/i1pro/a4/tc918eg/tc918eg",        "tc918eg"),
+    TC918EG_LETTER_PRESET_KEY: ("assets/charts/pharmacist/rgb/i1pro/letter/tc918eg/tc918eg",    "tc918eg-letter"),
+    TC300_PRESET_KEY:          ("assets/charts/pharmacist/rgb/colormunki/a4/tc300/tc300",       "tc300"),
+    ABW702_PRESET_KEY:         ("assets/charts/pharmacist/rgb/colormunki/a4/abw702/abw702",     "abw702"),
 }
+
+
+def _prebuilt_paper(key: str) -> str:
+    """Page size a prebuilt preset is laid out for, read from its asset path.
+
+    The asset stem is ``.../<instrument>/<paper>/<target>/<target>``, so the
+    paper folder is the third path component from the end. Returned as a display
+    label for the tooltip; unknown sizes fall through upper-cased."""
+    stem = PREBUILT_PRESETS.get(key, ("",))[0]
+    parts = stem.split("/")
+    paper = parts[-3] if len(parts) >= 3 else ""
+    return {"a4": "A4", "letter": "US Letter"}.get(paper, paper.upper() or "A4")
 
 # Built-in presets can be parked here (shown greyed-out, non-selectable) pending
 # a fix from their author; none are parked at the moment.
@@ -157,6 +178,7 @@ DISABLED_BUILTIN_PRESET_KEYS = frozenset()
 BUILTIN_PRESET_KEYS = frozenset(PREBUILT_PRESETS)
 BUILTIN_PRESET_LABELS = frozenset({
     TC924_PRESET_LABEL, ABW1110_PRESET_LABEL,
+    TC918EG_A4_PRESET_LABEL, TC918EG_LETTER_PRESET_LABEL,
     TC300_PRESET_LABEL, ABW702_PRESET_LABEL,
 })
 
@@ -168,12 +190,14 @@ BUILTIN_PRESET_LABELS = frozenset({
 # shorter label with the instrument prefix dropped.
 BUILTIN_PRESET_GROUPS: list[tuple[str, list[tuple[str, str, str]]]] = [
     ("i1Pro", [
-        (TC924_PRESET_LABEL,   "TC9.24 by Pharmacist",             TC924_PRESET_KEY),
-        (ABW1110_PRESET_LABEL, "1110 ABW-optimized by Pharmacist",  ABW1110_PRESET_KEY),
+        (TC924_PRESET_LABEL,   "TC9.24 (A4) by Pharmacist",             TC924_PRESET_KEY),
+        (ABW1110_PRESET_LABEL, "1110 ABW-optimized (A4) by Pharmacist",  ABW1110_PRESET_KEY),
+        (TC918EG_A4_PRESET_LABEL,     "TC9.18 extended greys 1160 (A4) by Pharmacist",     TC918EG_A4_PRESET_KEY),
+        (TC918EG_LETTER_PRESET_LABEL, "TC9.18 extended greys 1160 (Letter) by Pharmacist", TC918EG_LETTER_PRESET_KEY),
     ]),
     ("ColorMunki", [
-        (TC300_PRESET_LABEL,   "TC3.00 by Pharmacist",             TC300_PRESET_KEY),
-        (ABW702_PRESET_LABEL,  "702 ABW-optimized by Pharmacist",   ABW702_PRESET_KEY),
+        (TC300_PRESET_LABEL,   "TC3.00 (A4) by Pharmacist",             TC300_PRESET_KEY),
+        (ABW702_PRESET_LABEL,  "702 ABW-optimized (A4) by Pharmacist",   ABW702_PRESET_KEY),
     ]),
 ]
 
@@ -2333,7 +2357,7 @@ class TabChart(QWidget):
         """Tooltip text for a prebuilt-files built-in preset."""
         return (
             "Built-in chart — cannot be deleted.\n"
-            f"A complete, ready-made TC9.24 i1Pro target for {paper}.\n"
+            f"A complete, ready-made target laid out for {paper}.\n"
             "Picking it asks for a name, then copies the bundled patch set\n"
             "(.ti1 / .ti2 / TIFF pages) into a new folder under that name —\n"
             "no targen or printtarg is run, so those panels are greyed out.\n"
@@ -2362,7 +2386,7 @@ class TabChart(QWidget):
         # and the Built-in presets overlay can never drift apart.
         # (instrument, label, key, tooltip)
         builtins = [
-            (instr, combo_label, key, self._prebuilt_tooltip("A4"))
+            (instr, combo_label, key, self._prebuilt_tooltip(_prebuilt_paper(key)))
             for instr, entries in BUILTIN_PRESET_GROUPS
             for (combo_label, _overlay_label, key) in entries
         ]
