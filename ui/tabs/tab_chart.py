@@ -248,6 +248,18 @@ def _paper_area_mm2(paper: str) -> float:
     return dims[0] * dims[1] if dims else 0.0
 
 
+def _paper_sort_key(paper: str) -> float:
+    """Ordering key for "smallest sheet first".
+
+    Area-based, except US Letter is nudged to sort *just after* A4. The two are
+    within ~3% (Letter is marginally smaller), but the conventional order — and
+    the one the Pharmacist presets already use — lists A4 first, so we match it
+    rather than letting Letter jump ahead on raw area."""
+    if paper in ("Letter", "LetterR"):
+        return _paper_area_mm2("A4") + 1.0
+    return _paper_area_mm2(paper)
+
+
 # Knut's commands, transcribed (the trailing common suffix is added above):
 #   i1Pro:      printtarg -v -P -ii1  -T200 -p<paper> -M8 -R<seed> -a<scale> -A0.6
 #   ColorMunki: printtarg -v -P -iCM -h -T200 -p<paper> -a<scale> -M6
@@ -309,7 +321,7 @@ BUILTIN_PRESET_LABELS = frozenset({
 _KNUT_GROUP_ENTRIES = {
     grp: [(p.combo_label, p.overlay_label, p.key)
           for p in sorted((q for q in KNUT_PRESETS if q.instrument == instr),
-                          key=lambda q: _paper_area_mm2(q.paper))]
+                          key=lambda q: _paper_sort_key(q.paper))]
     for grp, instr in (("ColorMunki", _KNUT_CM), ("i1Pro", _KNUT_I1))
 }
 BUILTIN_PRESET_GROUPS: list[tuple[str, list[tuple[str, str, str]]]] = [
