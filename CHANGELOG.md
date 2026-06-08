@@ -1,5 +1,23 @@
 # Changelog
 
+## v3.8.12
+Seventeen ready-to-use **TC9.18 charts for the Datacolor SpyderPrint**, courtesy
+of **Knut**, plus a small accuracy fix to the patch-count estimates for the
+i1Pro on the smallest photo papers.
+
+### ✨ New built-in presets
+- **TC9.18 + SpyderPrint.** Seventeen new presets in the *Create Chart →
+  Manual → Presets* dropdown, each laying out the standard TC9.18 target for the
+  Datacolor SpyderPrint on a common paper size — pick one and print, no layout
+  tweaking required. They're grouped and sorted by paper size for quick scanning.
+
+### 🐛 Fixes
+- **More accurate patch counts on 4×6″ and 5×7″ paper (i1Pro).** The patch-
+  capacity database now carries measured values for these papers at the 10 mm
+  margin (and the denser −a 0.95 patch size), with and without the strip-length
+  limit. Previously they fell back to a live estimate; the Create Chart tab now
+  reports the exact per-sheet maximum straight away.
+
 ## v3.8.11
 Bigger changes to the **Edit / create chart layout** tool: combine patch sets
 from other files, see your patches as a rotatable 3D RGB cube, and shuffle the
