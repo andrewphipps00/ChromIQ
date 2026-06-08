@@ -60,6 +60,45 @@ def test_parse_basics(ti2: Path):
     assert spec.patches[2].dev == (100.0, 0.0, 0.0)
 
 
+# --- load_rgb_program (combine sets) ---------------------------------------
+def test_load_rgb_program_from_ti2(ti2: Path):
+    prog = R.load_rgb_program(ti2)
+    # Same patches as the chart, in visual (SAMPLE_LOC) order, 3-tuple RGB.
+    assert prog == [
+        (100.0, 100.0, 100.0),
+        (0.0, 0.0, 0.0),
+        (100.0, 0.0, 0.0),
+        (0.0, 0.0, 100.0),
+    ]
+
+
+def test_load_rgb_program_from_cgats_txt(tmp_path: Path):
+    p = tmp_path / "set.txt"
+    p.write_text(
+        "BEGIN_DATA_FORMAT\nSAMPLE_ID RGB_R RGB_G RGB_B\nEND_DATA_FORMAT\n"
+        "BEGIN_DATA\n1 100 50 0\n2 0 0 100\nEND_DATA\n"
+    )
+    prog = R.load_rgb_program(p)
+    assert prog == [(100.0, 50.0, 0.0), (0.0, 0.0, 100.0)]
+
+
+def test_load_rgb_program_from_pxf(tmp_path: Path):
+    p = tmp_path / "set.pxf"
+    p.write_text(
+        '<?xml version="1.0"?>\n<Root><Object><ColorValues>'
+        '<ColorRGB><R>100</R><G>0</G><B>50</B></ColorRGB>'
+        '</ColorValues></Object></Root>'
+    )
+    assert R.load_rgb_program(p) == [(100.0, 0.0, 50.0)]
+
+
+def test_load_rgb_program_rejects_non_rgb_ti2(tmp_path: Path):
+    p = tmp_path / "cmyk.ti2"
+    p.write_text(_TI2.replace('"iRGB"', '"iCMYK"'))
+    with pytest.raises(ValueError, match="RGB"):
+        R.load_rgb_program(p)
+
+
 def test_new_chart_from_scratch(tmp_path: Path):
     spec = R.ChartSpec.new("i1", "A4")
     assert spec.patches == []

@@ -453,6 +453,57 @@ def default_program(spec: ChartSpec) -> list[tuple[float, ...]]:
     return [p.dev for p in spec.patches]
 
 
+# Patch files the editor can combine into the current chart. Dispatched on
+# content where it matters (a CxF saved as .cgats still reads), so this set is
+# a hint for the file-open filter, not a hard gate.
+LOADABLE_PATCH_SUFFIXES = (
+    ".ti2", ".ti1", ".ti3", ".cgats", ".txt", ".pxf", ".pwxf",
+)
+
+
+def load_rgb_program(path: Path) -> list[tuple[float, float, float]]:
+    """Load any supported RGB patch file into a 0..100 RGB program.
+
+    Used by the editor's "combine sets" feature: parse a second file's patches
+    into the same flat list of device tuples the editor mutates, ready to splice
+    onto the front or back of the current program.
+
+    Supported sources:
+
+    * ``.ti2`` — a full Argyll chart (read via :meth:`ChartSpec.from_ti2`, so
+      its patches come back in visual / strip order).
+    * ``.ti1`` / ``.ti3`` / ``.cgats`` / ``.txt`` — any CGATS table with
+      ``RGB_R/RGB_G/RGB_B`` (or bare ``R/G/B``) columns.
+    * ``.pxf`` / ``.pwxf`` — X-Rite i1Profiler CxF3 patch / workflow files.
+
+    RGB only, matching the rest of the editor — a CMYK / extended-gamut source
+    raises :class:`ValueError` with a readable message. The CGATS/CxF parsers
+    auto-detect 0..1 / 0..100 / 0..255 scaling. Raises ``ValueError`` (or the
+    parser's own error) when nothing usable is found.
+    """
+    path = Path(path)
+    if path.suffix.lower() == ".ti2":
+        spec = ChartSpec.from_ti2(path)
+        rep = spec.color_rep.lstrip("i").upper()
+        if rep != "RGB":
+            raise ValueError(
+                f"{path.name}: chart is {spec.color_rep!r}, not RGB — the "
+                "layout editor combines RGB patch sets only."
+            )
+        return [tuple(p.dev[:3]) for p in spec.patches]
+
+    # CGATS tables and CxF/XML both flow through i1profiler_import's parsers,
+    # which already return RGB on the 0..100 scale and reject non-RGB sources.
+    from workflow.i1profiler_import import (
+        _looks_like_xml, parse_cgats, parse_pxf,
+    )
+    if path.suffix.lower() in (".pxf", ".pwxf") or _looks_like_xml(path):
+        patches = parse_pxf(path)
+    else:
+        patches = parse_cgats(path)
+    return [(p.r, p.g, p.b) for p in patches]
+
+
 def seed_from_targen(
     bin_dir: Path,
     n_patches: int,

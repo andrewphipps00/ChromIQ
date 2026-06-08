@@ -1,5 +1,30 @@
 # Changelog
 
+## v3.8.11
+Bigger changes to the **Edit / create chart layout** tool: combine patch sets
+from other files, see your patches as a rotatable 3D RGB cube, and shuffle the
+order in one click. Thanks to **Knut** for suggesting these.
+
+### ✨ New in the chart layout editor
+- **Combine sets — *Append from file…***. Load another patch set (`.ti2`,
+  `.ti1`, `.ti3`, CGATS `.txt`, or i1Profiler `.pxf` / `.pwxf`) and drop its
+  colours onto the **start** or the **end** of the chart you're editing — an
+  easy way to merge two targets into one. RGB patch sets only.
+- **See the spread — *3D distribution…***. View the whole patch set as a
+  rotatable, zoomable 3D RGB cube, each dot painted in its own colour inside a
+  reference cube with the neutral (black→white) axis drawn through it. Makes
+  gamut coverage and patch-density clumps obvious at a glance, with a quick
+  count / gamut-fill / spacing read-out along the bottom.
+- **Shuffle.** A one-click randomiser sitting next to *Update preview* mixes the
+  patch order (losslessly — same patches, new order), handy for breaking up a
+  structured set so each strip reads distinctly.
+
+### ✨ Polish
+- The editor's header now keeps the **patch count up to date** as you add,
+  remove, or append patches.
+- Friendlier, correctly-sized wording on the *Append from file…* placement
+  prompt.
+
 ## v3.8.10
 A new ColorMunki chart from Pharmacist, plus two measurement fixes — including
 one that kept the strip highlighter aligned after reopening a project.

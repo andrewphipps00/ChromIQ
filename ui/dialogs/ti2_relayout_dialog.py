@@ -1475,6 +1475,21 @@ class Ti2RelayoutDialog(QDialog):
         addrem.addWidget(add_b)
         addrem.addWidget(rem_b)
         pb.addLayout(addrem)
+        combine = QHBoxLayout()
+        append_b = QPushButton("Append from file…", self._patch_box)
+        append_b.setToolTip(
+            "Load another patch set (.ti2 / .ti1 / .ti3 / CGATS .txt / "
+            "i1Profiler .pxf / .pwxf) and add its colours to the start or end "
+            "of this chart — an easy way to combine sets. RGB only.")
+        append_b.clicked.connect(self._append_from_file)
+        combine.addWidget(append_b)
+        view3d_b = QPushButton("3D distribution…", self._patch_box)
+        view3d_b.setToolTip(
+            "Show the patch set as a rotatable 3D RGB cube so you can see how "
+            "evenly the colours cover the gamut and where they bunch up.")
+        view3d_b.clicked.connect(self._show_3d_distribution)
+        combine.addWidget(view3d_b)
+        pb.addLayout(combine)
         reorder_lbl = QLabel(
             "Reorder (drag, Alt+arrows, F/L, or):", self._patch_box)
         reorder_lbl.setWordWrap(True)
@@ -1599,9 +1614,23 @@ class Ti2RelayoutDialog(QDialog):
         bv = QVBoxLayout(bar)
         bv.setContentsMargins(4, 4, 0, 0)
         bv.setSpacing(8)
+        # "Update preview" shares its row with "Shuffle" — each takes half the
+        # width so the preview button is a little smaller and the randomiser
+        # sits right beside it.
+        top_row = QHBoxLayout()
+        top_row.setSpacing(6)
         self._preview_btn = QPushButton("Update preview", bar)
         self._preview_btn.clicked.connect(lambda: self._regenerate(save_to=None))
-        bv.addWidget(self._preview_btn)
+        top_row.addWidget(self._preview_btn, 1)
+        self._shuffle_btn = QPushButton("Shuffle", bar)
+        self._shuffle_btn.setToolTip(
+            "Randomise the patch order. Mixing up a structured set (a smooth "
+            "ramp or an RGB grid) so neighbouring strips read differently is "
+            "what lets a chart be safely read in either direction — it also "
+            "unlocks the “tag as randomised” option on Save.")
+        self._shuffle_btn.clicked.connect(self._randomise_patches)
+        top_row.addWidget(self._shuffle_btn, 1)
+        bv.addLayout(top_row)
         save_row = QHBoxLayout()
         save_row.setSpacing(6)
         # Export sits next to Save As since both are "write the chart out"
@@ -1689,9 +1718,8 @@ class Ti2RelayoutDialog(QDialog):
         # loaded (so loading after a new-chart create reflects whatever the
         # user picked, and loading a file resets to defaults).
         self._sync_printtarg_widgets()
-        self._info.setText(
-            f"{note} — {len(program)} patches, -i{spec.instrument_flag} "
-            f"-p{spec.paper_flag}")
+        self._chart_note = note
+        self._refresh_info()
         self._refresh_enabled()
         # Auto-render the initial preview so the user sees the chart
         # immediately instead of having to click "Update preview" first.
@@ -1722,6 +1750,18 @@ class Ti2RelayoutDialog(QDialog):
             rgb = it.data(Qt.ItemDataRole.UserRole)
             it.setText(str(i + 1))
             it.setToolTip(f"#{i + 1}  RGB {tuple(round(v) for v in rgb)}")
+        # Keep the top-right "… N patches …" readout in step with the grid:
+        # _renumber runs after every add / remove / append / reorder.
+        self._refresh_info()
+
+    def _refresh_info(self) -> None:
+        """Rewrite the header readout from the live grid count + chart flags."""
+        if self._spec is None:
+            return
+        note = getattr(self, "_chart_note", "")
+        self._info.setText(
+            f"{note} — {self._grid.count()} patches, "
+            f"-i{self._spec.instrument_flag} -p{self._spec.paper_flag}")
 
     def _set_swatch_size(self, size: int) -> None:
         """Resize the grid swatches; rebuild icons + delegate cell so the
@@ -1735,16 +1775,119 @@ class Ti2RelayoutDialog(QDialog):
             it.setIcon(_swatch_icon(it.data(Qt.ItemDataRole.UserRole), size))
         self._grid.scheduleDelayedItemsLayout()
 
+    def _grid_item(self, rgb: tuple) -> QListWidgetItem:
+        """Build a grid item for one RGB patch (icon + UserRole payload)."""
+        it = QListWidgetItem(_swatch_icon(rgb, self._swatch_size), "")
+        it.setData(Qt.ItemDataRole.UserRole, tuple(rgb))
+        return it
+
     def _add_patch(self) -> None:
         c = self._pick_color(QColor(128, 128, 128), "Add patch — pick colour")
         if not c.isValid():
             return
-        rgb = _to100(c)
-        it = QListWidgetItem(_swatch_icon(rgb, self._swatch_size), "")
-        it.setData(Qt.ItemDataRole.UserRole, rgb)
-        self._grid.addItem(it)
+        self._grid.addItem(self._grid_item(_to100(c)))
         self._renumber()
         self._status.setText("Patch added. Update preview to apply.")
+
+    def _append_from_file(self) -> None:
+        """Combine another patch set into this chart (start or end).
+
+        Parses any supported RGB patch file via
+        :func:`workflow.ti2_relayout.load_rgb_program`, asks whether to place
+        the new colours at the start or the end, splices them into the grid,
+        and re-previews. RGB-only — non-RGB sources surface the parser's error.
+        """
+        if self._spec is None:
+            self._status.setText("Load or create a chart first.")
+            return
+        start = (self._settings.get("custom_output_path", "")
+                 or str(Path.home() / "ChromIQ"))
+        patterns = " ".join(f"*{s}" for s in R.LOADABLE_PATCH_SUFFIXES)
+        path = open_file_dialog(
+            self, "Append patches from file",
+            f"Patch sets ({patterns});;All files (*)", start_dir=start)
+        if not path:
+            return
+        try:
+            extra = R.load_rgb_program(Path(path))
+        except Exception as exc:  # noqa: BLE001 — show the parser's message
+            QMessageBox.warning(self, "Could not load patches", str(exc))
+            return
+        if not extra:
+            QMessageBox.warning(self, "No patches",
+                                f"No RGB patches found in {Path(path).name}.")
+            return
+
+        n = len(extra)
+        box = QMessageBox(self)
+        box.setWindowTitle("Add the new colours")
+        box.setIcon(QMessageBox.Icon.Question)
+        box.setText("Where would you like the new colours?")
+        box.setInformativeText(
+            f"{n} colour{'s' if n != 1 else ''} from "
+            f"“{Path(path).name}” {'are' if n != 1 else 'is'} ready to "
+            "add. You can place them right at the beginning of the chart or "
+            "tack them on at the end — whichever makes the combined set "
+            "easier to work with.")
+        start_btn = box.addButton("Add to the beginning",
+                                   QMessageBox.ButtonRole.AcceptRole)
+        end_btn = box.addButton("Add to the end",
+                                QMessageBox.ButtonRole.AcceptRole)
+        cancel_btn = box.addButton("Cancel", QMessageBox.ButtonRole.RejectRole)
+        # The app's button stylesheet keeps buttons short, so the longer
+        # "Add to the beginning"/"end" labels clip at the default width. Give
+        # each button room for its full label plus the stylesheet's own
+        # horizontal padding + Fusion frame (this also widens the dialog).
+        for b in (start_btn, end_btn, cancel_btn):
+            b.setMinimumWidth(b.fontMetrics().horizontalAdvance(b.text()) + 64)
+        box.setDefaultButton(end_btn)
+        box.exec()
+        clicked = box.clickedButton()
+        if clicked is start_btn:
+            for i, rgb in enumerate(extra):
+                self._grid.insertItem(i, self._grid_item(rgb))
+            where = "start"
+        elif clicked is end_btn:
+            for rgb in extra:
+                self._grid.addItem(self._grid_item(rgb))
+            where = "end"
+        else:
+            return
+        self._renumber()
+        self._status.setText(
+            f"Added {len(extra)} patch(es) at the {where}. "
+            "Updating preview…")
+        self._schedule_auto_refresh()
+
+    def _show_3d_distribution(self) -> None:
+        """Open the rotatable 3D RGB-cube view of the current patch set."""
+        program = self._program_from_grid()
+        if not program:
+            self._status.setText("Add patches first to see their distribution.")
+            return
+        from ui.dialogs.patch_cube_dialog import PatchCubeDialog
+        from ui.theme import resolve_mode
+        mode = resolve_mode(self._settings.get("appearance", "auto"))
+        PatchCubeDialog(program, mode=mode, parent=self).exec()
+
+    def _randomise_patches(self) -> None:
+        """Shuffle the patch order into a random permutation, then re-preview.
+
+        A pure reorder — no colour changes — so it's lossless: every patch
+        stays, only its position moves. Useful for breaking up a structured
+        set so each strip reads distinctly (see the "tag as randomised" gate).
+        """
+        import random
+        program = self._program_from_grid()
+        if len(program) < 2:
+            self._status.setText("Need at least two patches to shuffle.")
+            return
+        random.shuffle(program)
+        self._populate_grid(program)
+        self._renumber()
+        self._status.setText(
+            f"Shuffled {len(program)} patches. Updating preview…")
+        self._schedule_auto_refresh()
 
     def _remove_selected_patches(self) -> None:
         rows = sorted((self._grid.row(it) for it in self._grid.selectedItems()),
@@ -2777,12 +2920,14 @@ class Ti2RelayoutDialog(QDialog):
     # -- misc ---------------------------------------------------------------
     def _set_busy(self, busy: bool) -> None:
         self._preview_btn.setEnabled(not busy)
+        self._shuffle_btn.setEnabled(not busy)
         self._save_btn.setEnabled(not busy)
         self._export_btn.setEnabled(not busy)
 
     def _refresh_enabled(self) -> None:
         has = self._spec is not None
         self._preview_btn.setEnabled(has)
+        self._shuffle_btn.setEnabled(has)
         self._save_btn.setEnabled(has)
         self._export_btn.setEnabled(has)
         # Initial pass for the conditional checkboxes — without this the
