@@ -227,6 +227,27 @@ class _Ti1Preset:
         return self.name
 
 
+# Named printtarg page sizes in mm (only those the presets use); custom sizes are
+# given as "WxH" and parsed directly. Used to order the presets by paper size.
+_PAPER_MM = {
+    "A4": (210.0, 297.0), "A4R": (297.0, 210.0),
+    "Letter": (215.9, 279.4), "LetterR": (279.4, 215.9),
+    "A3": (297.0, 420.0), "A2": (420.0, 594.0),
+}
+
+
+def _paper_area_mm2(paper: str) -> float:
+    """Sheet area in mm² for a printtarg -p value (named size or 'WxH')."""
+    if "x" in paper:
+        try:
+            w, h = paper.split("x", 1)
+            return float(w) * float(h)
+        except ValueError:
+            return 0.0
+    dims = _PAPER_MM.get(paper)
+    return dims[0] * dims[1] if dims else 0.0
+
+
 # Knut's commands, transcribed (the trailing common suffix is added above):
 #   i1Pro:      printtarg -v -P -ii1  -T200 -p<paper> -M8 -R<seed> -a<scale> -A0.6
 #   ColorMunki: printtarg -v -P -iCM -h -T200 -p<paper> -a<scale> -M6
@@ -282,10 +303,13 @@ BUILTIN_PRESET_LABELS = frozenset({
 # shorter label with the instrument prefix dropped.
 # Order here is the single source of truth for BOTH the dropdown and the overlay
 # (neither re-sorts) — ColorMunki first, then i1Pro.
-# Knut's presets merged into their instrument group, below the Pharmacist ones.
+# Knut's presets merged into their instrument group, below the Pharmacist ones,
+# ordered by paper size (smallest sheet first). sorted() is stable, so presets on
+# the same paper keep their registry order (e.g. 2-page before 3-page).
 _KNUT_GROUP_ENTRIES = {
     grp: [(p.combo_label, p.overlay_label, p.key)
-          for p in KNUT_PRESETS if p.instrument == instr]
+          for p in sorted((q for q in KNUT_PRESETS if q.instrument == instr),
+                          key=lambda q: _paper_area_mm2(q.paper))]
     for grp, instr in (("ColorMunki", _KNUT_CM), ("i1Pro", _KNUT_I1))
 }
 BUILTIN_PRESET_GROUPS: list[tuple[str, list[tuple[str, str, str]]]] = [
