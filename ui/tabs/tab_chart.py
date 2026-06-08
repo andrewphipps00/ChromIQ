@@ -247,10 +247,12 @@ KNUT_PRESETS: list[_Ti1Preset] = [
     _Ti1Preset("cm_a3_port_3p",  "A3-1168p-3pages-w14.0mm-Portrait"      + KNUT_SUFFIX, _KNUT_CM, "297x420", 1.07,  6, 3, double_density=True),
     _Ti1Preset("cm_a3_land_3p",  "A3-1168p-3pages-w14.0mm-Landscape"     + KNUT_SUFFIX, _KNUT_CM, "420x297", 1.05,  6, 3, double_density=True),
     _Ti1Preset("cm_ledger_3p",   "Ledger-1168p-3pages-w13.5mm-Landscape" + KNUT_SUFFIX, _KNUT_CM, "432x279", 1.013, 6, 3, double_density=True),
-    _Ti1Preset("cm_tabloid_3p",  "Tabloid-1168p-3pages-w14.0mm-Portrait" + KNUT_SUFFIX, _KNUT_CM, "279x432", 1.076, 6, 3, double_density=True),
+    # -a1.06 (Knut's corrected value; the 1.076 he first sent overflowed to 4 pages).
+    _Ti1Preset("cm_tabloid_3p",  "Tabloid-1168p-3pages-w14.0mm-Portrait" + KNUT_SUFFIX, _KNUT_CM, "279x432", 1.06,  6, 3, double_density=True),
     _Ti1Preset("cm_a2_port_1p",  "A2-1168p-1page-w12.5mm-Portrait"       + KNUT_SUFFIX, _KNUT_CM, "420x594", 0.92,  6, 1, double_density=True),
     _Ti1Preset("cm_a2_land_1p",  "A2-1168p-1page-w12.5mm-Landscape"      + KNUT_SUFFIX, _KNUT_CM, "594x420", 0.90,  6, 1, double_density=True),
-    _Ti1Preset("cm_a2_port_2p",  "A2-1168p-2pages-w17.0mm-Portrait"      + KNUT_SUFFIX, _KNUT_CM, "420x594", 1.4,   6, 2, double_density=True),
+    # -a1.29 (Knut's corrected value; the 1.4 he first sent overflowed to 3 pages).
+    _Ti1Preset("cm_a2_port_2p",  "A2-1168p-2pages-w17.0mm-Portrait"      + KNUT_SUFFIX, _KNUT_CM, "420x594", 1.29,  6, 2, double_density=True),
     _Ti1Preset("cm_a2_land_2p",  "A2-1168p-2pages-w17.0mm-Landscape"     + KNUT_SUFFIX, _KNUT_CM, "594x420", 1.27,  6, 2, double_density=True),
 ]
 KNUT_PRESETS_BY_KEY: dict[str, _Ti1Preset] = {p.key: p for p in KNUT_PRESETS}
