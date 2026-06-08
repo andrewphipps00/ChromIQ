@@ -32,6 +32,7 @@ not `tc924_a4.ti1`). Resolve a file at runtime with
 | `pharmacist/rgb/i1pro/letter/tc918eg/` | ★ i1Pro TC9.18 extended greys 1160 (Letter) by Pharmacist | prebuilt-files | `tc918eg.ti1` `tc918eg.ti2` `tc918eg_01.tif` `tc918eg_02.tif` |
 | `pharmacist/rgb/colormunki/a4/tc300/` | ★ ColorMunki TC3.00 (A4) by Pharmacist | prebuilt-files | `tc300.ti1` `tc300.ti2` `tc300_01.tif` |
 | `pharmacist/rgb/colormunki/a4/abw702/` | ★ ColorMunki 702 ABW-optimized (A4) by Pharmacist | prebuilt-files | `abw702.ti1` `abw702.ti2` `abw702_01.tif` `abw702_02.tif` |
+| `pharmacist/rgb/colormunki/a3/tc924/` | ★ ColorMunki TC9.24 (A3) by Pharmacist | prebuilt-files | `tc924.ti1` `tc924.ti2` `tc924_01.tif` |
 
 ## How each kind is used
 

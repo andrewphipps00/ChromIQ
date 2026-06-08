@@ -143,6 +143,9 @@ TC300_PRESET_KEY = "__chromiq_tc300_builtin__"
 TC300_PRESET_LABEL = "★  ColorMunki TC3.00 (A4) by Pharmacist  ·  built-in"
 ABW702_PRESET_KEY = "__chromiq_abw702_builtin__"
 ABW702_PRESET_LABEL = "★  ColorMunki 702 ABW-optimized (A4) by Pharmacist  ·  built-in"
+# TC9.24 target laid out for the ColorMunki on A3 (single page, 940 patches).
+TC924_CM_A3_PRESET_KEY = "__chromiq_tc924_cm_a3_builtin__"
+TC924_CM_A3_PRESET_LABEL = "★  ColorMunki TC9.24 (A3) by Pharmacist  ·  built-in"
 
 # key -> (asset stem under assets/charts, default target name). Charts are filed
 # by creator/colorspace/instrument/paper/target; the stem locates <stem>.ti1,
@@ -154,6 +157,7 @@ PREBUILT_PRESETS = {
     TC918EG_LETTER_PRESET_KEY: ("assets/charts/pharmacist/rgb/i1pro/letter/tc918eg/tc918eg",    "tc918eg-letter"),
     TC300_PRESET_KEY:          ("assets/charts/pharmacist/rgb/colormunki/a4/tc300/tc300",       "tc300"),
     ABW702_PRESET_KEY:         ("assets/charts/pharmacist/rgb/colormunki/a4/abw702/abw702",     "abw702"),
+    TC924_CM_A3_PRESET_KEY:    ("assets/charts/pharmacist/rgb/colormunki/a3/tc924/tc924",       "tc924-a3"),
 }
 
 
@@ -166,7 +170,7 @@ def _prebuilt_paper(key: str) -> str:
     stem = PREBUILT_PRESETS.get(key, ("",))[0]
     parts = stem.split("/")
     paper = parts[-3] if len(parts) >= 3 else ""
-    return {"a4": "A4", "letter": "US Letter"}.get(paper, paper.upper() or "A4")
+    return {"a4": "A4", "a3": "A3", "letter": "US Letter"}.get(paper, paper.upper() or "A4")
 
 # Built-in presets can be parked here (shown greyed-out, non-selectable) pending
 # a fix from their author; none are parked at the moment.
@@ -180,6 +184,7 @@ BUILTIN_PRESET_LABELS = frozenset({
     TC924_PRESET_LABEL, ABW1110_PRESET_LABEL,
     TC918EG_A4_PRESET_LABEL, TC918EG_LETTER_PRESET_LABEL,
     TC300_PRESET_LABEL, ABW702_PRESET_LABEL,
+    TC924_CM_A3_PRESET_LABEL,
 })
 
 # Built-in presets grouped by the instrument they target — the single source of
@@ -188,16 +193,19 @@ BUILTIN_PRESET_LABELS = frozenset({
 # (instrument, [(combo_label, overlay_label, key), …]). The combo label is the
 # full "★ … · built-in" string; the overlay groups by instrument so it shows the
 # shorter label with the instrument prefix dropped.
+# Order here is the single source of truth for BOTH the dropdown and the overlay
+# (neither re-sorts) — ColorMunki first, then i1Pro.
 BUILTIN_PRESET_GROUPS: list[tuple[str, list[tuple[str, str, str]]]] = [
+    ("ColorMunki", [
+        (TC300_PRESET_LABEL,   "TC3.00 (A4) by Pharmacist",             TC300_PRESET_KEY),
+        (ABW702_PRESET_LABEL,  "702 ABW-optimized (A4) by Pharmacist",   ABW702_PRESET_KEY),
+        (TC924_CM_A3_PRESET_LABEL, "TC9.24 (A3) by Pharmacist",          TC924_CM_A3_PRESET_KEY),
+    ]),
     ("i1Pro", [
         (TC924_PRESET_LABEL,   "TC9.24 (A4) by Pharmacist",             TC924_PRESET_KEY),
         (ABW1110_PRESET_LABEL, "1110 ABW-optimized (A4) by Pharmacist",  ABW1110_PRESET_KEY),
         (TC918EG_A4_PRESET_LABEL,     "TC9.18 extended greys 1160 (A4) by Pharmacist",     TC918EG_A4_PRESET_KEY),
         (TC918EG_LETTER_PRESET_LABEL, "TC9.18 extended greys 1160 (Letter) by Pharmacist", TC918EG_LETTER_PRESET_KEY),
-    ]),
-    ("ColorMunki", [
-        (TC300_PRESET_LABEL,   "TC3.00 (A4) by Pharmacist",             TC300_PRESET_KEY),
-        (ABW702_PRESET_LABEL,  "702 ABW-optimized (A4) by Pharmacist",   ABW702_PRESET_KEY),
     ]),
 ]
 
@@ -2378,12 +2386,12 @@ class TabChart(QWidget):
                                      and presets[name].get("auto_run")) else name
             self._preset_combo.addItem(label, userData=name)
         # Built-in presets, pinned below the user's own and grouped by the
-        # instrument they target. The groups are ordered by instrument name; a
-        # separator line is drawn before the whole built-in block (dividing it
-        # from the user presets) and again before each new instrument group.
-        # Within a group the curated order below is preserved (stable sort).
-        # Derived from the shared BUILTIN_PRESET_GROUPS registry so the dropdown
-        # and the Built-in presets overlay can never drift apart.
+        # instrument they target. Groups (and the order within each) follow the
+        # shared BUILTIN_PRESET_GROUPS registry verbatim — no re-sorting — so the
+        # dropdown and the Built-in presets overlay show the instruments in the
+        # exact same order. A separator line is drawn before the whole built-in
+        # block (dividing it from the user presets) and again before each new
+        # instrument group.
         # (instrument, label, key, tooltip)
         builtins = [
             (instr, combo_label, key, self._prebuilt_tooltip(_prebuilt_paper(key)))
@@ -2391,7 +2399,7 @@ class TabChart(QWidget):
             for (combo_label, _overlay_label, key) in entries
         ]
         prev_instr: str | None = None
-        for instr, label, key, tip in sorted(builtins, key=lambda t: t[0].lower()):
+        for instr, label, key, tip in builtins:
             if instr != prev_instr:
                 self._preset_combo.insertSeparator(self._preset_combo.count())
                 prev_instr = instr

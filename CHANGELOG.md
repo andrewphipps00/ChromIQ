@@ -1,5 +1,31 @@
 # Changelog
 
+## v3.8.10
+A new ColorMunki chart from Pharmacist, plus two measurement fixes — including
+one that kept the strip highlighter aligned after reopening a project.
+
+### 🎯 New built-in chart by Pharmacist
+- **ColorMunki TC9.24 on A3.** A ready-made 940-patch TC9.24 target laid out for
+  the ColorMunki on A3 joins the Create Chart presets — pick it from the Manual
+  **presets** dropdown or the ⭐ built-in charts overlay and it copies straight
+  into your project, no chart-generation step to run.
+
+### 🐛 Fixes
+- **The strip highlighter no longer drifts after you reopen a project.** When a
+  saved project was reopened, the measure preview could fall back to a weaker
+  strip-finder and misalign the highlighted strip (worst on charts whose
+  description is printed down the page margin). It now always uses the chart's
+  own layout data, so the highlight lands on the right strip every time.
+- **Removed a harmless console warning** that appeared when the
+  "Calibration complete" dialog opened.
+
+### ✨ Polish
+- **Consistent preset order.** The built-in charts now appear in the same order
+  (ColorMunki, then i1Pro) in both the presets dropdown and the ⭐ overlay.
+
+### 🙏 Thanks
+- **Pharmacist** for the new A3 ColorMunki TC9.24 chart.
+
 ## v3.8.9
 Two more built-in charts from Pharmacist, and a clearer message when a strip is
 read out of order.

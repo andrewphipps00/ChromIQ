@@ -2240,7 +2240,19 @@ class TabMeasure(QWidget):
         if not self._tiff_pages:
             return
 
-        counts = parse_passes_per_page(self._ti1_path) if self._ti1_path else []
+        # PASSES_IN_STRIPS2 lives only in the .ti2, but _ti1_path can hold either
+        # a .ti2 (most load paths) or a real .ti1 (reopening a saved run passes
+        # run.chart_ti1). Resolve the sibling .ti2 so the authoritative uniform
+        # detector runs in both cases instead of falling back to the fragile
+        # label-counter, which miscounts charts whose rotated caption sits in the
+        # page margin. Unchanged when _ti1_path is already a .ti2, or when no
+        # sibling .ti2 exists (then parse returns [] and we fall back as before).
+        ti2_for_counts = self._ti1_path
+        if ti2_for_counts is not None and ti2_for_counts.suffix.lower() != ".ti2":
+            sibling = ti2_for_counts.with_suffix(".ti2")
+            if sibling.is_file():
+                ti2_for_counts = sibling
+        counts = parse_passes_per_page(ti2_for_counts) if ti2_for_counts else []
         if counts and len(counts) == len(self._tiff_pages):
             per_page: list[list[QRect]] = []
             for page_path, n in zip(self._tiff_pages, counts):
@@ -3134,7 +3146,7 @@ class TabMeasure(QWidget):
             _frame_bg, _frame_border, _dim_text = "#181818", "#2a2a2a", "#909090"
         _frame_style = (
             f"QFrame {{ background: {_frame_bg}; border: 1px solid {_frame_border};"
-            " border-radius: 6px; }}"
+            " border-radius: 6px; }"
         )
         _key_style = (
             f"font-family: Menlo, monospace; font-weight: 700; color: {_TAB_COLOR};"

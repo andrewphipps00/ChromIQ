@@ -20,7 +20,7 @@ Selecting one prompts for a name, copies the bundled files into a fresh
 loads the TIFFs — **no `targen` or `printtarg` runs**, so the parameter panels
 are greyed out while the preset is active.
 
-The six shipped presets (all RGB; A4 except where noted):
+The seven shipped presets (all RGB; A4 except where noted):
 
 | Label (in the dropdown)                                   | Instrument | Asset leaf |
 |-----------------------------------------------------------|------------|------------|
@@ -30,6 +30,7 @@ The six shipped presets (all RGB; A4 except where noted):
 | ★ i1Pro TC9.18 extended greys 1160 (Letter) by Pharmacist | i1Pro      | `i1pro/letter/tc918eg` |
 | ★ ColorMunki TC3.00 (A4) by Pharmacist                    | ColorMunki | `colormunki/a4/tc300` |
 | ★ ColorMunki 702 ABW-optimized (A4) by Pharmacist         | ColorMunki | `colormunki/a4/abw702` |
+| ★ ColorMunki TC9.24 (A3) by Pharmacist                    | ColorMunki | `colormunki/a3/tc924` |
 
 The `tc918eg` pair is the same patch set in two page sizes; the page size lives
 in the label (and is read back from the asset path by `_prebuilt_paper` for the
