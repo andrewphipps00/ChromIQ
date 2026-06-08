@@ -374,9 +374,11 @@ _PER_SHEET_CAPACITY_NO_LB: dict[tuple[str, bool, str], int] = {
 # ---------------------------------------------------------------------------
 
 # Measured values (scripts/measure_margin10_capacity.py against Argyll 3.5.0).
-# 127x178 and 4x6 are omitted on i1 and p3: margin=10 leaves no room for a
-# single instrument strip on those paper sizes. query_patches returns None
-# for those combos, and the chart workflow falls back to live binary search.
+# i1's 127x178 and 4x6 at margin=10 were later measured directly (targen +
+# printtarg) and DO fit a single strip, so they're included here. They remain
+# omitted on p3: margin=10 leaves no room for a single i1Pro3+ strip on those
+# paper sizes, so query_patches returns None and the chart workflow falls back
+# to live binary search.
 _PER_SHEET_CAPACITY_M10: dict[tuple[str, bool, str], int] = {
     # ---- i1Pro / i1Pro 2 / i1Pro 3 --------------------------------
     ("i1", False, "A2"):       1029,
@@ -392,6 +394,8 @@ _PER_SHEET_CAPACITY_M10: dict[tuple[str, bool, str], int] = {
     ("i1", False, "Letter"):    483,
     ("i1", False, "LetterR"):   496,
     ("i1", False, "203x254"):   418,
+    ("i1", False, "127x178"):   144,
+    ("i1", False, "4x6"):        90,
     # ---- i1Pro 3 Plus ---------------------------------------------
     ("p3", False, "A2"):        216,
     ("p3", False, "594x420"):      315,
@@ -423,6 +427,8 @@ _PER_SHEET_CAPACITY_M10_NO_LB: dict[tuple[str, bool, str], int] = {
     ("i1", False, "Letter"):    441,
     ("i1", False, "LetterR"):   464,
     ("i1", False, "203x254"):   380,
+    ("i1", False, "127x178"):   120,
+    ("i1", False, "4x6"):        70,
     # ---- i1Pro 3 Plus ---------------------------------------------
     ("p3", False, "A2"):        207,
     ("p3", False, "594x420"):      306,
@@ -598,7 +604,8 @@ _PER_SHEET_CAPACITY_A095_M10: dict[tuple[str, bool, str], int] = {
     ("i1", False, "Letter"):    550,
     ("i1", False, "LetterR"):   561,
     ("i1", False, "203x254"):   460,
-    # 127x178 / 4x6 omitted: infeasible at margin=10
+    ("i1", False, "127x178"):   169,
+    ("i1", False, "4x6"):       100,
     # ---- i1Pro 3 Plus ---------------------------------------------
     ("p3", False, "A2"):        250,
     ("p3", False, "594x420"):      370,
@@ -631,7 +638,8 @@ _PER_SHEET_CAPACITY_A095_M10_NO_LB: dict[tuple[str, bool, str], int] = {
     ("i1", False, "Letter"):    506,
     ("i1", False, "LetterR"):   527,
     ("i1", False, "203x254"):   420,
-    # 127x178 / 4x6 omitted: infeasible at margin=10
+    ("i1", False, "127x178"):   143,
+    ("i1", False, "4x6"):        70,
     # ---- i1Pro 3 Plus ---------------------------------------------
     ("p3", False, "A2"):        240,
     ("p3", False, "594x420"):      360,
@@ -791,7 +799,10 @@ _PER_SHEET_CAPACITY_M10_P: dict[tuple[str, bool, str], int] = {
     ("i1", False, "Letter"):    483,
     ("i1", False, "LetterR"):   496,
     ("i1", False, "203x254"):   418,
-    # 127x178 / 4x6 omitted: infeasible at margin=10
+    # 127x178 / 4x6 fit at margin=10 *with -P* (measured); they remain
+    # infeasible only in the non-P M10 tables.
+    ("i1", False, "127x178"):   144,
+    ("i1", False, "4x6"):        90,
     # ---- i1Pro 3 Plus ---------------------------------------------
     ("p3", False, "A2"):        576,
     ("p3", False, "594x420"):      560,
@@ -824,7 +835,10 @@ _PER_SHEET_CAPACITY_M10_NO_LB_P: dict[tuple[str, bool, str], int] = {
     ("i1", False, "Letter"):    441,
     ("i1", False, "LetterR"):   464,
     ("i1", False, "203x254"):   380,
-    # 127x178 / 4x6 omitted: infeasible at margin=10
+    # 127x178 / 4x6 fit at margin=10 *with -P* (measured); they remain
+    # infeasible only in the non-P M10 tables.
+    ("i1", False, "127x178"):   120,
+    ("i1", False, "4x6"):        70,
     # ---- i1Pro 3 Plus ---------------------------------------------
     ("p3", False, "A2"):        552,
     ("p3", False, "594x420"):      544,
@@ -927,7 +941,10 @@ _PER_SHEET_CAPACITY_A095_M10_P: dict[tuple[str, bool, str], int] = {
     ("i1", False, "Letter"):    575,
     ("i1", False, "LetterR"):   561,
     ("i1", False, "203x254"):   460,
-    # 127x178 / 4x6 omitted: infeasible at margin=10
+    # 127x178 / 4x6 fit at margin=10 *with -P* (measured); they remain
+    # infeasible only in the non-P M10 tables.
+    ("i1", False, "127x178"):   169,
+    ("i1", False, "4x6"):       100,
     # ---- i1Pro 3 Plus ---------------------------------------------
     ("p3", False, "A2"):        625,
     ("p3", False, "594x420"):      629,
@@ -960,7 +977,10 @@ _PER_SHEET_CAPACITY_A095_M10_NO_LB_P: dict[tuple[str, bool, str], int] = {
     ("i1", False, "Letter"):    529,
     ("i1", False, "LetterR"):   527,
     ("i1", False, "203x254"):   420,
-    # 127x178 / 4x6 omitted: infeasible at margin=10
+    # 127x178 / 4x6 fit at margin=10 *with -P* (measured); they remain
+    # infeasible only in the non-P M10 tables.
+    ("i1", False, "127x178"):   143,
+    ("i1", False, "4x6"):        70,
     # ---- i1Pro 3 Plus ---------------------------------------------
     ("p3", False, "A2"):        600,
     ("p3", False, "594x420"):      612,

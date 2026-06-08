@@ -13,24 +13,39 @@ mechanism works end-to-end and how to add, rename, or re-file one.
 > `_generate_from_ti1` wiring from git history — `_generate_from_ti1` itself is
 > still present (it backs the *user* preset "attach a .ti1" feature).
 
-All current built-ins are one kind: **prebuilt-files**. A complete,
+Built-ins now come in **two kinds**:
+
+1. **prebuilt-files** (the seven "by Pharmacist" charts) — a complete, ready-made
+   target is bundled and just copied into the run; **no targen/printtarg**.
+2. **ti1 → printtarg** (the 17 "TC9.18+Spyderprint Grays" charts, see the
+   dedicated section below) — one shared `.ti1` is bundled and **printtarg is run
+   at selection** with a fixed per-preset layout. The targen/printtarg panels stay
+   **editable** (you can re-layout the fixed patch set), and only one small `.ti1`
+   ships instead of 17 sets of page TIFFs.
+
+The prebuilt-files kind is described first.
+
+A complete,
 pre-generated target (`.ti1` + `.ti2` + page `.tif`s) is bundled in `assets/`.
 Selecting one prompts for a name, copies the bundled files into a fresh
 `~/ChromIQ/<name>/runs/<current>/` folder under the canonical `chart` stem, and
 loads the TIFFs — **no `targen` or `printtarg` runs**, so the parameter panels
 are greyed out while the preset is active.
 
-The seven shipped presets (all RGB; A4 except where noted):
+The seven shipped presets (all RGB). Labels follow the same
+`Instrument · Paper-NNNNp-Mpages Name by Pharmacist` convention as the
+ti1→printtarg presets below (patch width / orientation omitted — not stored for
+these pre-rendered charts):
 
-| Label (in the dropdown)                                   | Instrument | Asset leaf |
-|-----------------------------------------------------------|------------|------------|
-| ★ i1Pro TC9.24 (A4) by Pharmacist                         | i1Pro      | `i1pro/a4/tc924` |
-| ★ i1Pro 1110 ABW-optimized (A4) by Pharmacist             | i1Pro      | `i1pro/a4/abw1110` |
-| ★ i1Pro TC9.18 extended greys 1160 (A4) by Pharmacist     | i1Pro      | `i1pro/a4/tc918eg` |
-| ★ i1Pro TC9.18 extended greys 1160 (Letter) by Pharmacist | i1Pro      | `i1pro/letter/tc918eg` |
-| ★ ColorMunki TC3.00 (A4) by Pharmacist                    | ColorMunki | `colormunki/a4/tc300` |
-| ★ ColorMunki 702 ABW-optimized (A4) by Pharmacist         | ColorMunki | `colormunki/a4/abw702` |
-| ★ ColorMunki TC9.24 (A3) by Pharmacist                    | ColorMunki | `colormunki/a3/tc924` |
+| Label (in the dropdown)                                       | Instrument | Asset leaf |
+|---------------------------------------------------------------|------------|------------|
+| ★ i1Pro · A4-924p-2pages TC9.24 by Pharmacist                 | i1Pro      | `i1pro/a4/tc924` |
+| ★ i1Pro · A4-1110p-2pages ABW-optimized by Pharmacist         | i1Pro      | `i1pro/a4/abw1110` |
+| ★ i1Pro · A4-1160p-2pages TC9.18 extended greys by Pharmacist | i1Pro      | `i1pro/a4/tc918eg` |
+| ★ i1Pro · Letter-1160p-2pages TC9.18 extended greys by Pharmacist | i1Pro  | `i1pro/letter/tc918eg` |
+| ★ ColorMunki · A4-300p-1page TC3.00 by Pharmacist             | ColorMunki | `colormunki/a4/tc300` |
+| ★ ColorMunki · A4-702p-2pages ABW-optimized by Pharmacist     | ColorMunki | `colormunki/a4/abw702` |
+| ★ ColorMunki · A3-924p-1page TC9.24 by Pharmacist             | ColorMunki | `colormunki/a3/tc924` |
 
 The `tc918eg` pair is the same patch set in two page sizes; the page size lives
 in the label (and is read back from the asset path by `_prebuilt_paper` for the
@@ -144,6 +159,52 @@ without extension, so `_create_prebuilt_target` can find every file by globbing
 5. **Verify** (see snippet below): the asset files resolve, the key is in the
    registry, and the suite passes.
 
+---
+
+## The ti1 → printtarg kind (TC9.18 + Spyderprint-greys)
+
+These 17 presets (`_Ti1Preset` dataclass + `KNUT_PRESETS` registry in
+`ui/tabs/tab_chart.py`) all share **one** bundled `.ti1`
+(`assets/charts/knut/rgb/tc918-spyderprint-1168p/1168p.ti1`, 1168 patches) and
+differ only in their printtarg layout (instrument, page size, `-a`, margin, `-A`
+spacer scale, `-R` seed). Selecting one:
+
+- `_apply_knut_preset(key, name)` → `_seed_knut_preset(key)` seeds every
+  printtarg control the recipe touches (and **resets** the optional `-A`/`-R`
+  rows when the preset doesn't use them, so values can't leak between presets),
+  sets `_knut_active=True`, snapshots the targen controls into `_knut_targen_sig`
+  (via the shared `_targen_signature()`), then calls `_generate_from_ti1`.
+- **ti1 reuse, signature-gated** (same as the TC9.18 built-in): on later
+  **Generate** clicks, `_on_generate` re-lays-out the bundled `.ti1` with
+  printtarg only **as long as the targen settings are untouched** (`_knut_active`
+  and `_targen_signature() == _knut_targen_sig`). Change a *targen* setting and it
+  falls through to a fresh targen run (the OFPS patch set can't be recreated by
+  re-running targen, so this is opt-in). The Manual info box says which mode it's
+  in. Changing only *printtarg* settings keeps the `.ti1` and just re-lays it out.
+- The panels stay **editable** (unlike prebuilt-files). Leaving a preset reverts
+  its forced printtarg flags (`_reset_knut_overrides`) and clears the flags.
+
+`_Ti1Preset.key` is `__chromiq_knut_<slug>__`; the **slug**, not the display
+name, is the stable identity — renaming a `name` must not change a slug.
+`KNUT_PRESET_KEYS` folds into `BUILTIN_PRESET_KEYS`, the combo labels into
+`BUILTIN_PRESET_LABELS`, and the entries merge into `BUILTIN_PRESET_GROUPS`
+(by instrument), so the dropdown + overlay pick them up with no extra wiring.
+`_builtin_tooltip(key)` routes these to `_knut_tooltip` (which shows the
+printtarg line) instead of `_prebuilt_tooltip`.
+
+> **3-decimal `-a`.** Several recipes are tuned to 3 places (0.929, 1.125, …) to
+> land on an exact page count. The printtarg `-a` param carries `decimals: 3` in
+> `parameters.yaml` (read by `ParameterWidget`), and `_build_printtarg_args`
+> keeps a 3rd decimal only when the value needs it (`-a1.30`/`-a0.95` are
+> unchanged). To add another such preset, append a `_Ti1Preset(...)` row — no
+> other code change is needed. `tests/test_knut_spyderprint_presets.py` pins the
+> seeded command against each recipe.
+
+> **ChromIQ vs. Knut's literal flags.** Knut's commands use a lone `-M8`; ChromIQ
+> emits `-m8 -M8` together, which is *functionally identical* (printtarg's `-m`
+> and `-M` write the same margin; `-M` only also includes it in the TIFF). The
+> i1 charts keep the left clip border (no `-L`, seeded off) to match Knut.
+
 ### Rename or re-file an existing preset
 
 - **Rename (label only):** change `*_PRESET_LABEL` and update
@@ -175,10 +236,13 @@ without extension, so `_create_prebuilt_target` can find every file by globbing
 
 ```python
 # QT_QPA_PLATFORM=offscreen python - <<'PY'
-from ui.tabs.tab_chart import PREBUILT_PRESETS, BUILTIN_PRESET_KEYS, BUILTIN_PRESET_LABELS
+from ui.tabs.tab_chart import (
+    PREBUILT_PRESETS, KNUT_PRESET_KEYS, BUILTIN_PRESET_KEYS, BUILTIN_PRESET_LABELS,
+)
 from core.resource_path import resource_path
 
-assert set(PREBUILT_PRESETS) == BUILTIN_PRESET_KEYS
+# Built-ins = prebuilt-files + ti1→printtarg presets.
+assert set(PREBUILT_PRESETS) | KNUT_PRESET_KEYS == BUILTIN_PRESET_KEYS
 for key, (stem, default) in PREBUILT_PRESETS.items():
     ti1 = resource_path(f"{stem}.ti1")
     ti2 = resource_path(f"{stem}.ti2")

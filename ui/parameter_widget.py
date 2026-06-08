@@ -394,7 +394,11 @@ class ParameterWidget(QWidget):
                 self._param.get("max", 999.9),
             )
             sb.setSingleStep(self._param.get("step", 0.1))
-            sb.setDecimals(2)
+            # Most float params show 2 decimals; a param can request more via
+            # `decimals:` in parameters.yaml (e.g. printtarg -a, whose preset
+            # values are tuned to 3 places). get_value()/build_args() read the
+            # control's own decimals(), so the command preview tracks this too.
+            sb.setDecimals(int(self._param.get("decimals", 2)))
             if default is not None:
                 sb.setValue(float(default))
             sb.valueChanged.connect(self.value_changed)
