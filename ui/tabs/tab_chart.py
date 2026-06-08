@@ -5,6 +5,7 @@ import json
 import re
 import shlex
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -128,24 +129,29 @@ MUNKI_TARGEN = {
 # while such a preset is active, because none of those options apply.
 # The four "by Pharmacist" targets below are the full built-in line-up
 # (two i1Pro, two ColorMunki) — every one a prebuilt-files preset.
+# Labels follow the same convention as Knut's presets — instrument · paper +
+# patch count + page count, then the set name + "by Pharmacist". (Patch width and
+# orientation, which Knut's names carry, aren't stored for these pre-rendered
+# charts, so they're omitted here.) The *_KEY is the stable identity — labels can
+# change freely, keys must not.
 TC924_PRESET_KEY = "__chromiq_tc924_builtin__"
-TC924_PRESET_LABEL = "★  i1Pro TC9.24 (A4) by Pharmacist  ·  built-in"
+TC924_PRESET_LABEL = "★  i1Pro · A4-924p-2pages TC9.24 by Pharmacist  ·  built-in"
 ABW1110_PRESET_KEY = "__chromiq_abw1110_builtin__"
-ABW1110_PRESET_LABEL = "★  i1Pro 1110 ABW-optimized (A4) by Pharmacist  ·  built-in"
+ABW1110_PRESET_LABEL = "★  i1Pro · A4-1110p-2pages ABW-optimized by Pharmacist  ·  built-in"
 # TC9.18 extended-greys 1160-patch target, in A4 and US-Letter layouts. Same
 # patch set, two page sizes — the paper is carried in the label so the pair is
 # distinguishable in the dropdown and the overlay.
 TC918EG_A4_PRESET_KEY = "__chromiq_tc918eg_a4_builtin__"
-TC918EG_A4_PRESET_LABEL = "★  i1Pro TC9.18 extended greys 1160 (A4) by Pharmacist  ·  built-in"
+TC918EG_A4_PRESET_LABEL = "★  i1Pro · A4-1160p-2pages TC9.18 extended greys by Pharmacist  ·  built-in"
 TC918EG_LETTER_PRESET_KEY = "__chromiq_tc918eg_letter_builtin__"
-TC918EG_LETTER_PRESET_LABEL = "★  i1Pro TC9.18 extended greys 1160 (Letter) by Pharmacist  ·  built-in"
+TC918EG_LETTER_PRESET_LABEL = "★  i1Pro · Letter-1160p-2pages TC9.18 extended greys by Pharmacist  ·  built-in"
 TC300_PRESET_KEY = "__chromiq_tc300_builtin__"
-TC300_PRESET_LABEL = "★  ColorMunki TC3.00 (A4) by Pharmacist  ·  built-in"
+TC300_PRESET_LABEL = "★  ColorMunki · A4-300p-1page TC3.00 by Pharmacist  ·  built-in"
 ABW702_PRESET_KEY = "__chromiq_abw702_builtin__"
-ABW702_PRESET_LABEL = "★  ColorMunki 702 ABW-optimized (A4) by Pharmacist  ·  built-in"
-# TC9.24 target laid out for the ColorMunki on A3 (single page, 940 patches).
+ABW702_PRESET_LABEL = "★  ColorMunki · A4-702p-2pages ABW-optimized by Pharmacist  ·  built-in"
+# TC9.24 target laid out for the ColorMunki on A3 (single page, 924 patches).
 TC924_CM_A3_PRESET_KEY = "__chromiq_tc924_cm_a3_builtin__"
-TC924_CM_A3_PRESET_LABEL = "★  ColorMunki TC9.24 (A3) by Pharmacist  ·  built-in"
+TC924_CM_A3_PRESET_LABEL = "★  ColorMunki · A3-924p-1page TC9.24 by Pharmacist  ·  built-in"
 
 # key -> (asset stem under assets/charts, default target name). Charts are filed
 # by creator/colorspace/instrument/paper/target; the stem locates <stem>.ti1,
@@ -172,6 +178,85 @@ def _prebuilt_paper(key: str) -> str:
     paper = parts[-3] if len(parts) >= 3 else ""
     return {"a4": "A4", "a3": "A3", "letter": "US Letter"}.get(paper, paper.upper() or "A4")
 
+# --- Knut's TC9.18 + Spyderprint-greys presets -----------------------------
+# A family of built-in presets that all share ONE bundled 1168-patch .ti1
+# (TC9.18 colour set + Spyderprint neutral ramp) and differ only in their
+# printtarg layout — instrument, page size, patch scale, margin, spacer scale
+# and random seed. Unlike the prebuilt-files presets, nothing is pre-rendered:
+# picking one seeds the Manual printtarg panel and runs printtarg on the bundled
+# .ti1 (the same ti1→printtarg path the "attach a .ti1" user presets use, via
+# _preset_ti1_path), so the panels stay editable and only one small .ti1 ships.
+KNUT_TI1_ASSET = "assets/charts/knut/rgb/tc918-spyderprint-1168p/1168p.ti1"
+KNUT_PATCHES, KNUT_WHITE, KNUT_BLACK = 1168, 9, 8   # from the .ti1 header
+KNUT_DPI = 200                                        # -T200 (16-bit) on every one
+KNUT_SUFFIX = " TC9.18+Spyderprint Grays"             # common name tail
+_KNUT_I1, _KNUT_CM = "i1", "CM"
+
+
+@dataclass(frozen=True)
+class _Ti1Preset:
+    """One TC9.18+Spyderprint preset: a printtarg layout over the shared .ti1."""
+    slug: str            # stable identity component (never change once shipped)
+    name: str            # Knut's full chart name (display + default target name)
+    instrument: str      # printtarg -i ("i1" | "CM")
+    paper: str           # printtarg -p (named size or "WxH" in mm)
+    patch_scale: float   # printtarg -a
+    margin: int          # printtarg -m / -M
+    pages: int           # informational (the page count in the name)
+    double_density: bool = False        # printtarg -h (ColorMunki)
+    spacer_scale: float | None = None   # printtarg -A (None → leave at default)
+    seed: int | None = None             # printtarg -R (None → default randomise)
+
+    @property
+    def key(self) -> str:
+        return f"__chromiq_knut_{self.slug}__"
+
+    @property
+    def combo_label(self) -> str:
+        instr = "i1Pro" if self.instrument == _KNUT_I1 else "ColorMunki"
+        return f"★  {instr} · {self.name}  ·  built-in"
+
+    @property
+    def overlay_label(self) -> str:
+        return self.name  # the overlay already groups by instrument
+
+    @property
+    def default_target_name(self) -> str:
+        if self.name.endswith(KNUT_SUFFIX):
+            return self.name[: -len(KNUT_SUFFIX)]
+        return self.name
+
+
+# Knut's commands, transcribed (the trailing common suffix is added above):
+#   i1Pro:      printtarg -v -P -ii1  -T200 -p<paper> -M8 -R<seed> -a<scale> -A0.6
+#   ColorMunki: printtarg -v -P -iCM -h -T200 -p<paper> -a<scale> -M6
+# ChromIQ emits -m<m> -M<m> together (functionally == Knut's lone -M, since
+# printtarg's -m/-M write the same margin) and keeps the left clip border (no -L).
+KNUT_PRESETS: list[_Ti1Preset] = [
+    # i1Pro group — margin 8, spacer scale 0.6, seeded randomisation.
+    _Ti1Preset("i1_a3_land_1p",  "A3-1168p-1page-w8.0mm-Landscape"     + KNUT_SUFFIX, _KNUT_I1, "420x297", 0.98,  8, 1, spacer_scale=0.6, seed=161),
+    _Ti1Preset("i1_a4_2p",       "A4-1168p-2pages-w7.5mm-Portrait"     + KNUT_SUFFIX, _KNUT_I1, "A4",      0.929, 8, 2, spacer_scale=0.6, seed=161),
+    _Ti1Preset("i1_a4_3p",       "A4-1168p-3pages-w8.5mm-Portrait"     + KNUT_SUFFIX, _KNUT_I1, "A4",      1.125, 8, 3, spacer_scale=0.6, seed=367),
+    _Ti1Preset("i1_letter_2p",   "Letter-1168p-2pages-w7.0mm-Portrait" + KNUT_SUFFIX, _KNUT_I1, "Letter",  0.92,  8, 2, spacer_scale=0.6, seed=161),
+    _Ti1Preset("i1_letter_3p",   "Letter-1168p-3pages-w8.5mm-Portrait" + KNUT_SUFFIX, _KNUT_I1, "Letter",  1.105, 8, 3, spacer_scale=0.6, seed=367),
+    # ColorMunki Photo group — margin 6, double density (-h), default randomise.
+    _Ti1Preset("cm_a4_5p",       "A4-1168p-5pages-w12.5mm-Portrait"      + KNUT_SUFFIX, _KNUT_CM, "A4",      0.93,  6, 5, double_density=True),
+    _Ti1Preset("cm_letter_5p",   "Letter-1168p-5pages-w12.0mm-Portrait"  + KNUT_SUFFIX, _KNUT_CM, "Letter",  0.9,   6, 5, double_density=True),
+    _Ti1Preset("cm_a3_port_2p",  "A3-1168p-2pages-w11.5mm-Portrait"      + KNUT_SUFFIX, _KNUT_CM, "297x420", 0.88,  6, 2, double_density=True),
+    _Ti1Preset("cm_a3_land_2p",  "A3-1168p-2pages-w11.5mm-Landscape"     + KNUT_SUFFIX, _KNUT_CM, "420x297", 0.85,  6, 2, double_density=True),
+    _Ti1Preset("cm_a3_port_3p",  "A3-1168p-3pages-w14.0mm-Portrait"      + KNUT_SUFFIX, _KNUT_CM, "297x420", 1.07,  6, 3, double_density=True),
+    _Ti1Preset("cm_a3_land_3p",  "A3-1168p-3pages-w14.0mm-Landscape"     + KNUT_SUFFIX, _KNUT_CM, "420x297", 1.05,  6, 3, double_density=True),
+    _Ti1Preset("cm_ledger_3p",   "Ledger-1168p-3pages-w13.5mm-Landscape" + KNUT_SUFFIX, _KNUT_CM, "432x279", 1.013, 6, 3, double_density=True),
+    _Ti1Preset("cm_tabloid_3p",  "Tabloid-1168p-3pages-w14.0mm-Portrait" + KNUT_SUFFIX, _KNUT_CM, "279x432", 1.076, 6, 3, double_density=True),
+    _Ti1Preset("cm_a2_port_1p",  "A2-1168p-1page-w12.5mm-Portrait"       + KNUT_SUFFIX, _KNUT_CM, "420x594", 0.92,  6, 1, double_density=True),
+    _Ti1Preset("cm_a2_land_1p",  "A2-1168p-1page-w12.5mm-Landscape"      + KNUT_SUFFIX, _KNUT_CM, "594x420", 0.90,  6, 1, double_density=True),
+    _Ti1Preset("cm_a2_port_2p",  "A2-1168p-2pages-w17.0mm-Portrait"      + KNUT_SUFFIX, _KNUT_CM, "420x594", 1.4,   6, 2, double_density=True),
+    _Ti1Preset("cm_a2_land_2p",  "A2-1168p-2pages-w17.0mm-Landscape"     + KNUT_SUFFIX, _KNUT_CM, "594x420", 1.27,  6, 2, double_density=True),
+]
+KNUT_PRESETS_BY_KEY: dict[str, _Ti1Preset] = {p.key: p for p in KNUT_PRESETS}
+KNUT_PRESET_KEYS = frozenset(KNUT_PRESETS_BY_KEY)
+
+
 # Built-in presets can be parked here (shown greyed-out, non-selectable) pending
 # a fix from their author; none are parked at the moment.
 DISABLED_BUILTIN_PRESET_KEYS = frozenset()
@@ -179,13 +264,13 @@ DISABLED_BUILTIN_PRESET_KEYS = frozenset()
 # Every built-in (non-deletable) preset key — all four are prebuilt-files. Used
 # to protect them from the delete button and to keep disk presets from shadowing
 # them.
-BUILTIN_PRESET_KEYS = frozenset(PREBUILT_PRESETS)
+BUILTIN_PRESET_KEYS = frozenset(PREBUILT_PRESETS) | KNUT_PRESET_KEYS
 BUILTIN_PRESET_LABELS = frozenset({
     TC924_PRESET_LABEL, ABW1110_PRESET_LABEL,
     TC918EG_A4_PRESET_LABEL, TC918EG_LETTER_PRESET_LABEL,
     TC300_PRESET_LABEL, ABW702_PRESET_LABEL,
     TC924_CM_A3_PRESET_LABEL,
-})
+}) | {p.combo_label for p in KNUT_PRESETS}
 
 # Built-in presets grouped by the instrument they target — the single source of
 # truth shared by the Manual presets dropdown (_populate_preset_combo) and the
@@ -195,17 +280,25 @@ BUILTIN_PRESET_LABELS = frozenset({
 # shorter label with the instrument prefix dropped.
 # Order here is the single source of truth for BOTH the dropdown and the overlay
 # (neither re-sorts) — ColorMunki first, then i1Pro.
+# Knut's presets merged into their instrument group, below the Pharmacist ones.
+_KNUT_GROUP_ENTRIES = {
+    grp: [(p.combo_label, p.overlay_label, p.key)
+          for p in KNUT_PRESETS if p.instrument == instr]
+    for grp, instr in (("ColorMunki", _KNUT_CM), ("i1Pro", _KNUT_I1))
+}
 BUILTIN_PRESET_GROUPS: list[tuple[str, list[tuple[str, str, str]]]] = [
     ("ColorMunki", [
-        (TC300_PRESET_LABEL,   "TC3.00 (A4) by Pharmacist",             TC300_PRESET_KEY),
-        (ABW702_PRESET_LABEL,  "702 ABW-optimized (A4) by Pharmacist",   ABW702_PRESET_KEY),
-        (TC924_CM_A3_PRESET_LABEL, "TC9.24 (A3) by Pharmacist",          TC924_CM_A3_PRESET_KEY),
+        (TC300_PRESET_LABEL,   "A4-300p-1page TC3.00 by Pharmacist",          TC300_PRESET_KEY),
+        (ABW702_PRESET_LABEL,  "A4-702p-2pages ABW-optimized by Pharmacist",   ABW702_PRESET_KEY),
+        (TC924_CM_A3_PRESET_LABEL, "A3-924p-1page TC9.24 by Pharmacist",       TC924_CM_A3_PRESET_KEY),
+        *_KNUT_GROUP_ENTRIES["ColorMunki"],
     ]),
     ("i1Pro", [
-        (TC924_PRESET_LABEL,   "TC9.24 (A4) by Pharmacist",             TC924_PRESET_KEY),
-        (ABW1110_PRESET_LABEL, "1110 ABW-optimized (A4) by Pharmacist",  ABW1110_PRESET_KEY),
-        (TC918EG_A4_PRESET_LABEL,     "TC9.18 extended greys 1160 (A4) by Pharmacist",     TC918EG_A4_PRESET_KEY),
-        (TC918EG_LETTER_PRESET_LABEL, "TC9.18 extended greys 1160 (Letter) by Pharmacist", TC918EG_LETTER_PRESET_KEY),
+        (TC924_PRESET_LABEL,   "A4-924p-2pages TC9.24 by Pharmacist",          TC924_PRESET_KEY),
+        (ABW1110_PRESET_LABEL, "A4-1110p-2pages ABW-optimized by Pharmacist",  ABW1110_PRESET_KEY),
+        (TC918EG_A4_PRESET_LABEL,     "A4-1160p-2pages TC9.18 extended greys by Pharmacist",     TC918EG_A4_PRESET_KEY),
+        (TC918EG_LETTER_PRESET_LABEL, "Letter-1160p-2pages TC9.18 extended greys by Pharmacist", TC918EG_LETTER_PRESET_KEY),
+        *_KNUT_GROUP_ENTRIES["i1Pro"],
     ]),
 ]
 
@@ -329,10 +422,18 @@ class TabChart(QWidget):
         # TC9.18 built-in preset state. While active, "Generate Chart" reproduces
         # the bundled patch set (printtarg-only) instead of running targen, unless
         # the user has since changed a targen-affecting setting (see
-        # _tc918_targen_signature). Cleared when another preset / Default is
+        # _targen_signature). Cleared when another preset / Default is
         # chosen, or a different .ti1 is loaded.
         self._tc918_active = False
         self._tc918_targen_sig: list | None = None
+        # True while one of Knut's TC9.18+Spyderprint presets is the active source.
+        # While active and the targen settings are untouched (see _knut_targen_sig),
+        # "Generate" re-lays-out the bundled 1168-patch .ti1 with printtarg only;
+        # changing a targen setting opts into a fresh targen run. Tracked so the
+        # forced printtarg overrides (-a/-m/-A/-R/-P/-L/-h) revert on leave, exactly
+        # like _tc918_active, so they don't bleed into the next preset.
+        self._knut_active = False
+        self._knut_targen_sig: list | None = None
         # Prebuilt-files built-in preset state. While active the targen/printtarg
         # panels are greyed out and "Generate Chart" re-copies the bundled files
         # instead of running any tool. Cleared when another preset / Default is
@@ -1598,12 +1699,24 @@ class TabChart(QWidget):
         tc918_repro = (
             getattr(self, "_tc918_active", False)
             and self._tc918_targen_sig is not None
-            and self._tc918_targen_signature() == self._tc918_targen_sig
+            and self._targen_signature() == self._tc918_targen_sig
+        )
+        knut_repro = (
+            getattr(self, "_knut_active", False)
+            and self._knut_targen_sig is not None
+            and self._targen_signature() == self._knut_targen_sig
         )
         if tc918_repro:
             info = (
                 f"i1Pro TC9.18 by Pharmacist — fixed patch set ({' · '.join(notes)}):\n"
                 f"Uses the bundled tc918.ti1 (targen skipped).\n"
+                f"printtarg {' '.join(pt_args)}\n"
+                "Change a targen setting above to build a fresh chart instead."
+            )
+        elif knut_repro:
+            info = (
+                f"TC9.18+Spyderprint preset — fixed patch set ({' · '.join(notes)}):\n"
+                "Uses the bundled 1168-patch .ti1 (targen skipped).\n"
                 f"printtarg {' '.join(pt_args)}\n"
                 "Change a targen setting above to build a fresh chart instead."
             )
@@ -2394,7 +2507,7 @@ class TabChart(QWidget):
         # instrument group.
         # (instrument, label, key, tooltip)
         builtins = [
-            (instr, combo_label, key, self._prebuilt_tooltip(_prebuilt_paper(key)))
+            (instr, combo_label, key, self._builtin_tooltip(key))
             for instr, entries in BUILTIN_PRESET_GROUPS
             for (combo_label, _overlay_label, key) in entries
         ]
@@ -2423,11 +2536,38 @@ class TabChart(QWidget):
         """Default target name suggested in the prompt for a built-in preset."""
         if key == TC918_PRESET_KEY:
             return TC918_TARGET_NAME
+        if key in KNUT_PRESET_KEYS:
+            return KNUT_PRESETS_BY_KEY[key].default_target_name
         if key in MUNKI_TARGEN:
             return f"ColorMunki-{MUNKI_TARGEN[key][0]}"
         if key in PREBUILT_PRESETS:
             return PREBUILT_PRESETS[key][1]
         return "chart"
+
+    def _builtin_tooltip(self, key: str) -> str:
+        """Combo/overlay tooltip for any built-in preset (per its kind)."""
+        if key in KNUT_PRESET_KEYS:
+            return self._knut_tooltip(key)
+        return self._prebuilt_tooltip(_prebuilt_paper(key))
+
+    @staticmethod
+    def _knut_tooltip(key: str) -> str:
+        """Tooltip for a TC9.18+Spyderprint (ti1 → printtarg) built-in preset."""
+        p = KNUT_PRESETS_BY_KEY[key]
+        instr = "i1Pro" if p.instrument == _KNUT_I1 else "ColorMunki (double density)"
+        bits = [f"-p{p.paper}", f"-a{p.patch_scale:g}", f"-M{p.margin}"]
+        if p.spacer_scale is not None:
+            bits.append(f"-A{p.spacer_scale:g}")
+        if p.seed is not None:
+            bits.append(f"-R{p.seed}")
+        return (
+            "Built-in chart — cannot be deleted.\n"
+            f"Loads the bundled 1168-patch TC9.18 + Spyderprint-greys set and\n"
+            f"lays it out for the {instr} ({p.pages}-page):\n"
+            f"printtarg -i{p.instrument} -T200 {' '.join(bits)}\n"
+            "Creates the target right away; the patch set stays fixed but you\n"
+            "can adjust any printtarg setting and regenerate."
+        )
 
     def _prompt_target_name(self, default_name: str) -> str | None:
         """Ask for a target name before generating a built-in preset.
@@ -2560,6 +2700,13 @@ class TabChart(QWidget):
                 self._reset_tc918_overrides()
                 self._tc918_active = False
                 self._tc918_targen_sig = None
+            # Switching away from a TC9.18+Spyderprint preset clears its printtarg
+            # overrides; picking another one of them re-seeds cleanly, so only
+            # reset when the new pick isn't itself one of them.
+            if self._knut_active and data not in KNUT_PRESET_KEYS:
+                self._reset_knut_overrides()
+                self._knut_active = False
+                self._knut_targen_sig = None
             # Leaving a prebuilt-files preset for a params-based built-in
             # (TC9.18 / ColorMunki) must re-enable the greyed param panels.
             if self._prebuilt_active and data not in PREBUILT_PRESETS:
@@ -2569,6 +2716,8 @@ class TabChart(QWidget):
             self._last_preset_index = index
             if data == TC918_PRESET_KEY:
                 self._apply_tc918_preset(name)
+            elif data in KNUT_PRESET_KEYS:
+                self._apply_knut_preset(data, name)
             elif data in PREBUILT_PRESETS:
                 self._apply_prebuilt_preset(data, name)
             else:
@@ -2583,6 +2732,11 @@ class TabChart(QWidget):
             self._reset_tc918_overrides()
             self._tc918_active = False
             self._tc918_targen_sig = None
+        # Same for a TC9.18+Spyderprint preset → Default / a user preset.
+        if self._knut_active:
+            self._reset_knut_overrides()
+            self._knut_active = False
+            self._knut_targen_sig = None
         # Leaving a prebuilt-files preset re-enables the greyed param panels.
         if self._prebuilt_active:
             self._leave_prebuilt()
@@ -2971,7 +3125,18 @@ class TabChart(QWidget):
                     pw.set_user_enabled(True)
                 return
 
-    def _tc918_targen_signature(self) -> list:
+    def _reset_manual_value(self, tool: str, flag: str) -> None:
+        """Revert a single manual widget to its YAML default and disable it.
+
+        For expert non-boolean rows (-A, -R, …) this also unticks the enable
+        checkbox, so a flag a previously-selected preset turned on can't leak
+        into the next one."""
+        for pw in self._manual_widgets.get(tool, []):
+            if pw.flag == flag:
+                pw.reset_to_default()
+                return
+
+    def _targen_signature(self) -> list:
         """Snapshot of every targen-affecting control.
 
         printtarg controls are excluded on purpose: changing the *layout*
@@ -3041,7 +3206,7 @@ class TabChart(QWidget):
             self._manual_target_name_edit.setText(target_name or TC918_TARGET_NAME)
 
         self._tc918_active = True
-        self._tc918_targen_sig = self._tc918_targen_signature()
+        self._tc918_targen_sig = self._targen_signature()
         self._refresh_manual_command_preview()
         self._generate_from_ti1(ti1)
 
@@ -3102,6 +3267,103 @@ class TabChart(QWidget):
         self._on_generate()
 
         self._refresh_manual_command_preview()
+
+    # ------------------------------------------------------------------
+    # TC9.18 + Spyderprint-greys presets (shared .ti1 → printtarg)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _knut_ti1_path() -> Path:
+        """Absolute path to the bundled 1168-patch TC9.18+Spyderprint .ti1."""
+        return resource_path(KNUT_TI1_ASSET)
+
+    def _seed_knut_preset(self, key: str, target_name: str | None = None) -> None:
+        """Load a TC9.18+Spyderprint preset's fixed printtarg layout into the panel.
+
+        Sets every printtarg control the recipe touches (and resets the optional
+        -A / -R rows when it doesn't), so the layout is fully determined no matter
+        which preset was selected before. Split from _apply_knut_preset so it can
+        be unit-tested without running printtarg."""
+        p = KNUT_PRESETS_BY_KEY[key]
+
+        # Clear modes that would otherwise hijack the seeded printtarg values.
+        if self._manual_td_check is not None:
+            self._manual_td_check.setChecked(False)
+        if self._manual_auto_patches_check is not None:
+            self._manual_auto_patches_check.setChecked(False)
+            self._on_auto_patches_toggled(False)
+        self._load_auto_neutral_states(grey=False, white=False, black=False)
+
+        # Instrument first — it drives -h visibility and the per-instrument
+        # default margin; we set the margin explicitly afterwards so ours wins.
+        self._set_manual_value("printtarg", "-i", p.instrument)
+        self._set_manual_value("printtarg", "-p", p.paper)
+        self._set_manual_value("printtarg", "-t", KNUT_DPI)        # dpi (with -T)
+        if self._bit16_radio is not None:
+            self._bit16_radio.setChecked(True)                     # 16-bit → -T200
+        self._set_manual_value("printtarg", "-a", p.patch_scale)
+        self._set_manual_value("printtarg", "-P", True)            # don't limit strips
+        self._set_manual_value("printtarg", "-m", p.margin)        # → -m/-M
+        self._set_manual_value("printtarg", "-L", False)           # keep left clip border
+        self._set_manual_value("printtarg", "-r", False)           # randomise (default)
+        self._set_manual_value("printtarg", "-b", False)           # coloured spacers
+        self._set_manual_value("printtarg", "-h", p.double_density)  # CM double density
+        if p.spacer_scale is not None:
+            self._set_manual_value("printtarg", "-A", p.spacer_scale)
+        else:
+            self._reset_manual_value("printtarg", "-A")
+        if p.seed is not None:
+            self._set_manual_value("printtarg", "-R", p.seed)
+        else:
+            self._reset_manual_value("printtarg", "-R")
+
+        # Descriptive targen values (the bundled patch set; .ti1 is the real
+        # source, so these only make the panel reflect what was loaded).
+        self._set_manual_value("targen", "-f", KNUT_PATCHES)
+        self._set_manual_value("targen", "-e", KNUT_WHITE)
+        self._set_manual_value("targen", "-B", KNUT_BLACK)
+
+        if self._manual_pages_spin is not None:
+            self._manual_pages_spin.setValue(p.pages)
+        if self._manual_target_name_edit is not None:
+            self._manual_target_name_edit.setText(target_name or p.default_target_name)
+
+    def _apply_knut_preset(self, key: str, target_name: str | None = None) -> None:
+        """Seed a TC9.18+Spyderprint preset and build it from the bundled .ti1."""
+        if self._runner.is_running:
+            log.warning("TC9.18+Spyderprint preset: a process is already running")
+            return
+        ti1 = self._knut_ti1_path()
+        if not ti1.is_file():
+            InfoDialog(
+                "Patch set not found",
+                "The bundled TC9.18 + Spyderprint-greys patch set could not be "
+                f"located:\n\n{ti1}\n\nThe app bundle may be incomplete.",
+                self, min_width=520,
+            ).exec()
+            return
+        self._seed_knut_preset(key, target_name)
+        self._knut_active = True
+        # Snapshot the targen controls so later "Generate" clicks know whether to
+        # re-lay-out the bundled .ti1 (printtarg only, targen untouched) or build a
+        # fresh targen chart (the user changed a targen setting) — mirrors the
+        # TC9.18 mechanism in _on_generate. The .ti1 is the fixed OFPS patch set,
+        # so it can't be recreated by re-running targen.
+        self._knut_targen_sig = self._targen_signature()
+        self._refresh_manual_command_preview()
+        self._generate_from_ti1(ti1)
+
+    def _reset_knut_overrides(self) -> None:
+        """Revert the printtarg flags a TC9.18+Spyderprint preset forced on.
+
+        Run when the user switches away from one (to Default / a user preset / a
+        different built-in) so its layout overrides don't carry over. Mirrors
+        _reset_tc918_overrides: revert to YAML defaults, then re-apply the
+        per-instrument margin (the last word, after -i resets to its default)."""
+        for flag in ("-i", "-p", "-t", "-a", "-P", "-m", "-L", "-r", "-b",
+                     "-h", "-A", "-R"):
+            self._reset_manual_value("printtarg", flag)
+        self._apply_instrument_default_margin()
 
     # ------------------------------------------------------------------
     # Prebuilt-files built-in presets (TC9.24 A4 / Letter)
@@ -3542,11 +3804,20 @@ class TabChart(QWidget):
         # this is the only way to guarantee an identical target. Once a targen
         # setting changes the user has opted into a fresh chart, so fall through.
         if self._tc918_active and self._current_mode() == "manual":
-            if self._tc918_targen_signature() == self._tc918_targen_sig:
+            if self._targen_signature() == self._tc918_targen_sig:
                 self._generate_from_ti1(self._tc918_ti1_path())
                 return
             self._tc918_active = False
             self._tc918_targen_sig = None
+        # Same for Knut's TC9.18+Spyderprint presets: while active and the targen
+        # settings are untouched, re-lay-out the bundled 1168-patch .ti1 (printtarg
+        # only). Changing a targen setting opts into a fresh targen chart.
+        if self._knut_active and self._current_mode() == "manual":
+            if self._targen_signature() == self._knut_targen_sig:
+                self._generate_from_ti1(self._knut_ti1_path())
+                return
+            self._knut_active = False
+            self._knut_targen_sig = None
         name = (
             self._target_name_edit.text().strip()
             if self._current_mode() == "guided"

@@ -132,6 +132,11 @@ class BuiltinPresetPopup(QWidget):
     V_PAD        = 8    # vertical padding above the first / below the last row
     ITEM_INDENT  = 12   # extra left inset for preset labels under a header
     PANEL_MARGIN = 12   # transparent space around panel for the drop shadow
+    # When the built-in list is taller than this many preset entries the panel
+    # caps its height and scrolls (mouse wheel). One leading header is allowed
+    # for on top of the visible entries.
+    MAX_VISIBLE_ITEMS = 10
+    SCROLLBAR_W       = 4    # width of the scroll thumb drawn inside the panel
 
     def __init__(
         self,
@@ -163,6 +168,15 @@ class BuiltinPresetPopup(QWidget):
         self._header_font.setBold(True)
         self.setFont(self._item_font)
 
+        # Scroll state (set in _compute_size). _content_top is the widget-space y
+        # of the first row; rows store content-relative tops and are offset by
+        # _content_top - _scroll_y when painted / hit-tested.
+        self._scroll_y    = 0
+        self._max_scroll  = 0
+        self._viewport_h  = 0
+        self._content_h   = 0
+        self._content_top = 0
+
         self._rows: list[_VisualRow] = []
         self._build_rows()
         self._compute_size()
@@ -175,9 +189,12 @@ class BuiltinPresetPopup(QWidget):
 
     # ------------------------------------------------------------------
     def _build_rows(self) -> None:
-        """Flatten the grouped presets into headers + item rows with y offsets."""
+        """Flatten the grouped presets into headers + item rows.
+
+        ``top`` is content-relative (first row at y=0); painting/hit-testing add
+        ``_content_top - _scroll_y`` so the same list can be scrolled."""
         self._rows = []
-        y = self.PANEL_MARGIN + self.TAIL_H + self.V_PAD
+        y = 0
         for instr, entries in self._groups:
             self._rows.append(_VisualRow("header", instr, None, y, self.HEADER_H))
             y += self.HEADER_H
@@ -197,10 +214,19 @@ class BuiltinPresetPopup(QWidget):
                 w = header_fm.horizontalAdvance(row.text)
             text_w = max(text_w, w)
         inner = 2 * (6 + 12)
-        panel_w = math.ceil(text_w) + inner + self.H_PAD
+        panel_w = math.ceil(text_w) + inner + self.H_PAD + self.SCROLLBAR_W
         panel_w = max(panel_w, 260)
-        content_h = sum(r.height for r in self._rows)
-        panel_h = content_h + 2 * self.V_PAD
+
+        self._content_h = sum(r.height for r in self._rows)
+        # Cap the viewport to one header + MAX_VISIBLE_ITEMS entries; scroll the
+        # rest. A short list (≤ cap) shows in full with no scrolling.
+        cap_h = self.HEADER_H + self.MAX_VISIBLE_ITEMS * self.ROW_H
+        self._viewport_h = min(self._content_h, cap_h)
+        self._max_scroll = self._content_h - self._viewport_h
+        self._scroll_y = 0
+
+        self._content_top = self.PANEL_MARGIN + self.TAIL_H + self.V_PAD
+        panel_h = self._viewport_h + 2 * self.V_PAD
         w = panel_w + 2 * self.PANEL_MARGIN
         h = panel_h + 2 * self.PANEL_MARGIN + self.TAIL_H
         self.setFixedSize(w, h)
@@ -213,9 +239,15 @@ class BuiltinPresetPopup(QWidget):
             self.height() - 2 * self.PANEL_MARGIN - self.TAIL_H,
         )
 
+    def _viewport_rect(self) -> QRect:
+        """The scrolling content region inside the panel (rows are clipped here)."""
+        panel = self._panel_rect()
+        return QRect(panel.left(), self._content_top, panel.width(), self._viewport_h)
+
     def _row_rect(self, row: _VisualRow) -> QRect:
         panel = self._panel_rect()
-        return QRect(panel.left() + 6, row.top, panel.width() - 12, row.height)
+        y = self._content_top + row.top - self._scroll_y
+        return QRect(panel.left() + 6, y, panel.width() - 12, row.height)
 
     # ------------------------------------------------------------------
     def show_under(self, anchor: QWidget) -> None:
@@ -283,13 +315,22 @@ class BuiltinPresetPopup(QWidget):
         p.setBrush(Qt.BrushStyle.NoBrush)
         p.drawPath(bubble)
 
+        # Clip the rows to the scrolling viewport so partial rows don't bleed
+        # over the rounded corners / tail / padding.
+        viewport = self._viewport_rect()
+        sb_w = self.SCROLLBAR_W if self._max_scroll > 0 else 0
+        p.save()
+        p.setClipRect(viewport)
         for i, row in enumerate(self._rows):
             rect = self._row_rect(row)
+            if rect.bottom() < viewport.top() or rect.top() > viewport.bottom():
+                continue  # fully scrolled out of view
             if row.kind == "header":
                 p.setPen(QColor(pal["header_text"]))
                 p.setFont(self._header_font)
                 p.drawText(
-                    QRect(rect.left() + 12, rect.top(), rect.width() - 24, rect.height()),
+                    QRect(rect.left() + 12, rect.top(),
+                          rect.width() - 24 - sb_w, rect.height()),
                     int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignBottom),
                     row.text,
                 )
@@ -297,7 +338,10 @@ class BuiltinPresetPopup(QWidget):
             if i == self._hover_index:
                 p.setBrush(QColor(pal["hover_bg"]))
                 p.setPen(Qt.PenStyle.NoPen)
-                p.drawRoundedRect(rect, 6, 6)
+                p.drawRoundedRect(
+                    QRect(rect.left(), rect.top(), rect.width() - sb_w, rect.height()),
+                    6, 6,
+                )
                 text_color = pal["text_hover"]
             else:
                 text_color = pal["text"]
@@ -305,9 +349,27 @@ class BuiltinPresetPopup(QWidget):
             p.setFont(self._item_font)
             p.drawText(
                 QRect(rect.left() + 12 + self.ITEM_INDENT, rect.top(),
-                      rect.width() - 24 - self.ITEM_INDENT, rect.height()),
+                      rect.width() - 24 - self.ITEM_INDENT - sb_w, rect.height()),
                 int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter),
                 row.text,
+            )
+        p.restore()
+
+        # Scroll thumb on the right edge of the viewport.
+        if self._max_scroll > 0:
+            track_h = viewport.height()
+            thumb_h = max(24, int(track_h * self._viewport_h / self._content_h))
+            travel  = track_h - thumb_h
+            frac    = self._scroll_y / self._max_scroll if self._max_scroll else 0
+            thumb_y = viewport.top() + int(travel * frac)
+            thumb_x = panel.right() - self.SCROLLBAR_W - 3
+            thumb   = QColor(pal["text"])
+            thumb.setAlpha(70)
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(thumb)
+            p.drawRoundedRect(
+                QRect(thumb_x, thumb_y, self.SCROLLBAR_W, thumb_h),
+                2, 2,
             )
 
         p.end()
@@ -315,13 +377,29 @@ class BuiltinPresetPopup(QWidget):
     # ------------------------------------------------------------------
     def _index_at(self, pt: QPoint) -> int:
         """Index of the selectable (item) row under ``pt``; -1 over headers,
-        gaps, or the transparent margin to either side of the panel."""
+        gaps, the scrolled-away region, or the transparent margin."""
+        if not self._viewport_rect().contains(pt):
+            return -1
         for i, row in enumerate(self._rows):
             if row.kind != "item":
                 continue
             if self._row_rect(row).contains(pt):
                 return i
         return -1
+
+    def wheelEvent(self, event) -> None:  # noqa: N802
+        if self._max_scroll <= 0:
+            return
+        # angleDelta is in eighths of a degree; one notch ≈ 120 → ~ROW_H/notch.
+        dy = event.angleDelta().y()
+        step = int(round(dy / 120 * self.ROW_H)) or (1 if dy > 0 else -1)
+        new_y = max(0, min(self._max_scroll, self._scroll_y - step))
+        if new_y != self._scroll_y:
+            self._scroll_y = new_y
+            self._hover_index = self._index_at(
+                self.mapFromGlobal(self.cursor().pos())
+            )
+            self.update()
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:  # noqa: N802
         idx = self._index_at(event.position().toPoint())

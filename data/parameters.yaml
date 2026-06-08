@@ -780,6 +780,7 @@ parameters:
       max: 4.0
       default: 1.0
       step: 0.1
+      decimals: 3
       affects_preview: true
       expert_only: false
       tooltip_title: "Patch Size Scale (-a)"

@@ -992,7 +992,14 @@ class ChartCreator:
         if (p.disable_left_border or force_l) and l_applies:
             args.append("-L")
         if abs(p.patch_scale - 1.0) > 0.01:
-            args += [f"-a{p.patch_scale:.2f}"]
+            # 2 decimals normally (so -a1.30 / -a0.95 read as before), but keep a
+            # 3rd place when the value actually needs it — the TC9.18+Spyderprint
+            # presets are tuned to 3 decimals (0.929, 1.125, 1.013, …) to land on
+            # an exact page count.
+            scale = (f"{p.patch_scale:.2f}"
+                     if round(p.patch_scale, 2) == round(p.patch_scale, 3)
+                     else f"{p.patch_scale:.3f}")
+            args += [f"-a{scale}"]
         if p.margin_mm != 6:
             args += [f"-m{p.margin_mm}"]
         args.append(f"-M{p.margin_mm}")
