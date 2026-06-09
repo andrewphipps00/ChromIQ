@@ -3005,11 +3005,24 @@ class TabMeasure(QWidget):
         layout.setSpacing(16)
         layout.setContentsMargins(24, 20, 24, 20)
 
+        is_coms = "communication" in reason.lower()
+        if is_coms:
+            advice = (
+                "<b>The instrument lost communication with the computer.</b><br><br>"
+                "Check that the instrument's cable is firmly connected (try a "
+                "different USB port or cable), make sure no other application is "
+                "using the device, then reconnect it before retrying.<br><br>"
+            )
+        else:
+            advice = (
+                f"<b>The stripe could not be read:</b> {reason}<br><br>"
+                "Re-position your instrument at the beginning of the stripe and try again. "
+                "If the error keeps occurring, try scanning more slowly and steadily, or "
+                "raise the <i>Patch consistency tolerance</i> setting before the next run.<br><br>"
+            )
+
         msg = QLabel(
-            f"<b>The stripe could not be read:</b> {reason}<br><br>"
-            "Re-position your instrument at the beginning of the stripe and try again. "
-            "If the error keeps occurring, try scanning more slowly and steadily, or "
-            "raise the <i>Patch consistency tolerance</i> setting before the next run.<br><br>"
+            advice +
             "&nbsp;&nbsp;<b>Retry</b> — read this same stripe again.<br>"
             "&nbsp;&nbsp;<b>Skip Stripe</b> — leave this stripe unread for now and "
             "jump to the next unread one. You can come back to it later in this session.<br>"

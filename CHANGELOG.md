@@ -1,5 +1,19 @@
 # Changelog
 
+## v3.8.15
+A bug-fix release that restores a missing recovery dialog during chart
+measurement.
+
+### 🐞 Fixes
+- **Measurement now shows a recovery dialog when the instrument loses
+  communication mid-strip.** Previously, when `chartread` failed a strip read
+  because of a communication problem (rather than an ordinary misread), the app
+  stayed silent and the measurement appeared to hang at a hidden retry prompt.
+  ChromIQ now surfaces the same clear **Strip Read Failed** dialog it already
+  shows for misreads — with **Retry**, **Skip Stripe** and **Save Partial &
+  Quit** options — plus tailored advice to check the instrument's cable and
+  connection.
+
 ## v3.8.14
 A reliability-and-polish release: better crash diagnostics — prompted by a bug
 report from **Knut** — plus a small visual fix to the preset setting locks

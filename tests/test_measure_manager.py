@@ -142,6 +142,20 @@ def test_generic_ierror_fires_with_friendly_and_technical():
     assert sigs.get("generic_instrument_error") == [("Communication error", "USB read timeout")]
 
 
+def test_strip_error_misread_carries_parenthesised_reason():
+    mgr, _, sigs = _make_manager()
+    _feed(mgr, "Strip read failed due to misread (Insufficient delta E)")
+    assert sigs.get("strip_error") == [("Insufficient delta E",)]
+
+
+def test_strip_error_communication_problem_fires_without_parens():
+    # chartread.c L1671 prints no "(reason)" for a comms failure, so this used
+    # to slip past _STRIP_ERROR_RE and no dialog appeared.
+    mgr, _, sigs = _make_manager()
+    _feed(mgr, "Strip read failed due to communication problem.")
+    assert sigs.get("strip_error") == [("communication problem",)]
+
+
 # ---------------------------------------------------------------------------
 # B. Startup / config failure messages
 # ---------------------------------------------------------------------------

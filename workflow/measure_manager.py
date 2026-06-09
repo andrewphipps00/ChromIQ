@@ -30,6 +30,12 @@ _ALL_DONE_RE           = re.compile(r"ALL\s+ROWS\s+READ",                       
 _CALIBRATION_RE        = re.compile(r"Calibration\s+complete",                   re.IGNORECASE)
 _CALIBRATION_PROMPT_RE = re.compile(r"Set\s+instrument\s+sensor\s+to\s+calibration\s+position", re.IGNORECASE)
 _STRIP_ERROR_RE        = re.compile(r"Strip\s+read\s+failed[^(]*\(([^)]+)\)",   re.IGNORECASE)
+# chartread.c 3.5.0 L1671/L2238: a comms failure mid-strip. Unlike the misread
+# and unexpected-error variants it prints no "(reason)" in parentheses, so
+# _STRIP_ERROR_RE never matches it — hence this dedicated pattern. The prompt
+# ("any other key to retry") returns to the strip menu just like a misread, so
+# it routes through the same strip_error signal / dialog (Retry/Skip/Save).
+_STRIP_COMS_FAIL_RE    = re.compile(r"Strip\s+read\s+failed\s+due\s+to\s+communication\s+problem", re.IGNORECASE)
 _USB_ERROR_RE          = re.compile(r"ReadPipeAsync\s+failed",                   re.IGNORECASE)
 _DEVICE_BUSY_RE        = re.compile(r"Device being used",                        re.IGNORECASE)
 _NO_INSTRUMENT_RE      = re.compile(r"no instrument detected|no suitable instruments|no instruments connected", re.IGNORECASE)
@@ -274,6 +280,8 @@ class MeasureManager(QObject):
         m = _STRIP_ERROR_RE.search(line)
         if m:
             self.strip_error.emit(m.group(1).strip())
+        elif _STRIP_COMS_FAIL_RE.search(line):
+            self.strip_error.emit("communication problem")
         if _USB_ERROR_RE.search(line):
             self.instrument_disconnected.emit()
         if _DEVICE_BUSY_RE.search(line):
