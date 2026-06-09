@@ -1,5 +1,21 @@
 # Changelog
 
+## v3.8.16
+A small feature release: see how a chart's patches are spread through colour
+space, straight from the toolbar.
+
+![ChromIQ — 3D patch distribution cube for the loaded chart](docs/v3.8.16-patch-cube.png)
+
+### ✨ Features
+- **Show patch distribution (3D), now a tool of its own.** The rotatable 3D RGB
+  cube that the chart-layout editor offers is now also available directly from
+  the **Tools** menu in the header. Pick *Show patch distribution (3D)* and it
+  plots the patches of the chart currently loaded in the main window — every
+  patch shown at its own (R, G, B) position and painted in its own colour, with
+  a coverage read-out (patch count, gamut fill, and patch spacing) along the
+  bottom. It's a quick way to eyeball how well a target samples the colour space
+  before you print and measure it.
+
 ## v3.8.15
 A bug-fix release that restores a missing recovery dialog during chart
 measurement.

@@ -482,8 +482,54 @@ class MainWindow(QMainWindow):
         popup.show_under(self._masthead.tools_button())
 
     def _launch_tool(self, key: str) -> None:
+        if key == "patch_cube":
+            self._show_patch_cube()
+            return
         from ui.dialogs.tools_dialogs import open_tool_dialog
         open_tool_dialog(key, self._runner, self._settings, self)
+
+    def _show_patch_cube(self) -> None:
+        """Open the 3D RGB-cube view of the chart currently loaded in the app.
+
+        Reads the current project/run's chart (``.ti2``, falling back to
+        ``.ti1``) into a 0..100 RGB program and shows it in the same
+        ``PatchCubeDialog`` the layout editor uses. Unlike the editor's cube —
+        which visualises the patches being edited — this one visualises whatever
+        chart the rest of the window is working with, with no file picking.
+        """
+        from PyQt6.QtWidgets import QMessageBox
+
+        no_chart = (
+            "No chart is loaded yet.\n\n"
+            "Generate or open a chart first (Create Chart tab), then this tool "
+            "will show how its patches are spread across the RGB cube."
+        )
+        # project() materialises a project.json as a side effect, so guard on the
+        # manifest existing first — exactly as session restore does.
+        if not (self._file_mgr.working_dir() / "project.json").exists():
+            QMessageBox.information(self, "Show patch distribution (3D)", no_chart)
+            return
+
+        run = self._file_mgr.project().current_run()
+        chart = run.chart_ti2 if run.chart_ti2.exists() else run.chart_ti1
+        if not chart.exists():
+            QMessageBox.information(self, "Show patch distribution (3D)", no_chart)
+            return
+
+        from workflow.ti2_relayout import load_rgb_program
+        try:
+            program = load_rgb_program(chart)
+        except ValueError as exc:
+            QMessageBox.information(self, "Show patch distribution (3D)", str(exc))
+            return
+        if not program:
+            QMessageBox.information(self, "Show patch distribution (3D)", no_chart)
+            return
+
+        from ui.dialogs.patch_cube_dialog import PatchCubeDialog
+        from ui.theme import resolve_mode
+        mode = resolve_mode(self._settings.get("appearance", "auto"))
+        PatchCubeDialog(program, mode=mode, parent=self).exec()
 
     def _open_settings(self) -> None:
         # SettingsDialog tints its own tooltip ⓘ icons to the dialog's neutral
