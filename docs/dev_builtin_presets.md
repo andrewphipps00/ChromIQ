@@ -15,13 +15,17 @@ mechanism works end-to-end and how to add, rename, or re-file one.
 
 Built-ins now come in **two kinds**:
 
-1. **prebuilt-files** (the seven "by Pharmacist" charts) — a complete, ready-made
+1. **prebuilt-files** (the eight "by Pharmacist" charts) — a complete, ready-made
    target is bundled and just copied into the run; **no targen/printtarg**.
 2. **ti1 → printtarg** (the 17 "TC9.18+Spyderprint Grays" charts, see the
    dedicated section below) — one shared `.ti1` is bundled and **printtarg is run
-   at selection** with a fixed per-preset layout. The targen/printtarg panels stay
-   **editable** (you can re-layout the fixed patch set), and only one small `.ti1`
-   ships instead of 17 sets of page TIFFs.
+   at selection** with a fixed per-preset layout. **targen is greyed** (the patch
+   set is fixed) but **printtarg stays editable** so you can re-layout it; only one
+   small `.ti1` ships instead of 17 sets of page TIFFs. An "Edit patch recipe"
+   override checkbox can unlock targen (→ a fresh, different patch set).
+
+Both kinds grey one or both parameter panels while active, with override
+checkboxes to unlock them — see **Panel locks + override checkboxes** below.
 
 The prebuilt-files kind is described first.
 
@@ -32,7 +36,7 @@ Selecting one prompts for a name, copies the bundled files into a fresh
 loads the TIFFs — **no `targen` or `printtarg` runs**, so the parameter panels
 are greyed out while the preset is active.
 
-The seven shipped presets (all RGB). Labels follow the same
+The eight shipped presets (all RGB). Labels follow the same
 `Instrument · Paper-NNNNp-Mpages Name by Pharmacist` convention as the
 ti1→printtarg presets below (patch width / orientation omitted — not stored for
 these pre-rendered charts):
@@ -46,6 +50,7 @@ these pre-rendered charts):
 | ★ ColorMunki · A4-300p-1page TC3.00 by Pharmacist             | ColorMunki | `colormunki/a4/tc300` |
 | ★ ColorMunki · A4-702p-2pages ABW-optimized by Pharmacist     | ColorMunki | `colormunki/a4/abw702` |
 | ★ ColorMunki · A3-924p-1page TC9.24 by Pharmacist             | ColorMunki | `colormunki/a3/tc924` |
+| ★ ColorMunki · A3+-1160p-1page TC9.18 extended greys by Pharmacist | ColorMunki | `colormunki/a3plus/tc918eg` |
 
 The `tc918eg` pair is the same patch set in two page sizes; the page size lives
 in the label (and is read back from the asset path by `_prebuilt_paper` for the
@@ -103,16 +108,43 @@ overlay.
 - `_on_preset_selected` — for any `BUILTIN_PRESET_KEYS` entry: guard against a
   running process, prompt for a target name (Cancel reverts the dropdown), then
   route straight to `_apply_prebuilt_preset(key, name)`.
-- `_apply_prebuilt_preset` — sets `_prebuilt_active`, pins the instrument to
-  `-i i1` (so downstream routing treats it as a normal strip-read chart), greys
-  the param panels, then calls `_create_prebuilt_target`.
+- `_apply_prebuilt_preset` — sets `_prebuilt_active`, seeds the instrument and
+  paper the bundle was made for (`_prebuilt_instrument` / `_prebuilt_paper_code`,
+  both parsed from the asset path), snapshots the targen + printtarg signatures
+  as the change-detection baseline, greys both panels (locked), then calls
+  `_create_prebuilt_target`.
 - `_create_prebuilt_target` — copies `<stem>.ti1`/`.ti2` and the `<stem>_NN.tif`
   pages into the run as `chart.ti1` / `chart.ti2` / `chart_NN.tif`, clears
   `_last_params`, and hands the TIFF list to `_on_generate_finished` (same path
   a generated chart takes). `resource_path()` resolves the asset in both dev and
   frozen builds.
-- `_leave_prebuilt` — clears the prebuilt state and re-enables the panels (run
-  when the user picks Default / a user preset / loads a different patch set).
+- `_leave_prebuilt` — clears the prebuilt state, unticks the override boxes, and
+  re-enables the panels (run when the user picks Default / a user preset / loads
+  a different patch set).
+
+**Panel locks + override checkboxes** (shared by both kinds)
+
+Selecting a preset that supplies a fixed patch set or layout greys the matching
+panel; an override checkbox above each panel (built once per tool in
+`_make_manual_panel`, hidden by default) lets the user unlock it.
+
+- `_update_preset_locks` — the single authority. A **ti1 preset**
+  (`_ti1_preset_active()`: TC9.18, Knut, or a user preset with an attached `.ti1`)
+  greys only **targen**; a **prebuilt** preset greys **both**. Each panel's inner
+  content (`_manual_targen_content` / `_manual_printtarg_content` = its basic +
+  expert sub-groups) is disabled, never the outer group — so the override row,
+  which sits outside that content, stays clickable. Called from every apply /
+  leave path and after every Default/user-preset selection.
+- `_reset_override_checks` — unticks both boxes (signals blocked, no pop-up) on
+  every selection so a freshly picked preset starts locked.
+- `_on_override_clicked` — fires only on a real user click (not programmatic
+  `setChecked`); shows the warning `InfoDialog` when the box is ticked on.
+- **Generate-time routing** keys off the snapshots: for a prebuilt preset,
+  `_on_generate` compares the live targen / printtarg signatures against the
+  baselines — targen changed → fresh `targen→printtarg`; else printtarg changed →
+  re-lay-out the bundled `.ti1` via `_generate_from_ti1` (same patches, new
+  layout); else copy the bundled files. User-`.ti1` presets gate the same way on
+  `_preset_ti1_targen_sig`.
 
 ---
 
@@ -181,8 +213,11 @@ spacer scale, `-R` seed). Selecting one:
   falls through to a fresh targen run (the OFPS patch set can't be recreated by
   re-running targen, so this is opt-in). The Manual info box says which mode it's
   in. Changing only *printtarg* settings keeps the `.ti1` and just re-lays it out.
-- The panels stay **editable** (unlike prebuilt-files). Leaving a preset reverts
-  its forced printtarg flags (`_reset_knut_overrides`) and clears the flags.
+- **targen is greyed** (printtarg stays editable). To change the patch set the
+  user ticks the "Edit patch recipe" override box — which, once a targen value is
+  changed, drops `_knut_active` and falls through to a fresh targen run as above.
+  Leaving a preset reverts its forced printtarg flags (`_reset_knut_overrides`),
+  unticks the override box, and clears the flags.
 
 `_Ti1Preset.key` is `__chromiq_knut_<slug>__`; the **slug**, not the display
 name, is the stable identity — renaming a `name` must not change a slug.

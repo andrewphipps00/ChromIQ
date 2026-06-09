@@ -152,6 +152,9 @@ ABW702_PRESET_LABEL = "★  ColorMunki · A4-702p-2pages ABW-optimized by Pharma
 # TC9.24 target laid out for the ColorMunki on A3 (single page, 924 patches).
 TC924_CM_A3_PRESET_KEY = "__chromiq_tc924_cm_a3_builtin__"
 TC924_CM_A3_PRESET_LABEL = "★  ColorMunki · A3-924p-1page TC9.24 by Pharmacist  ·  built-in"
+# TC9.18 extended greys laid out for the ColorMunki on A3+ (single page, 1160 patches).
+TC918EG_CM_A3_PRESET_KEY = "__chromiq_tc918eg_cm_a3_builtin__"
+TC918EG_CM_A3_PRESET_LABEL = "★  ColorMunki · A3+-1160p-1page TC9.18 extended greys by Pharmacist  ·  built-in"
 
 # key -> (asset stem under assets/charts, default target name). Charts are filed
 # by creator/colorspace/instrument/paper/target; the stem locates <stem>.ti1,
@@ -164,6 +167,7 @@ PREBUILT_PRESETS = {
     TC300_PRESET_KEY:          ("assets/charts/pharmacist/rgb/colormunki/a4/tc300/tc300",       "tc300"),
     ABW702_PRESET_KEY:         ("assets/charts/pharmacist/rgb/colormunki/a4/abw702/abw702",     "abw702"),
     TC924_CM_A3_PRESET_KEY:    ("assets/charts/pharmacist/rgb/colormunki/a3/tc924/tc924",       "tc924-a3"),
+    TC918EG_CM_A3_PRESET_KEY:  ("assets/charts/pharmacist/rgb/colormunki/a3plus/tc918eg/tc918eg", "tc918eg-cm-a3"),
 }
 
 
@@ -176,7 +180,7 @@ def _prebuilt_paper(key: str) -> str:
     stem = PREBUILT_PRESETS.get(key, ("",))[0]
     parts = stem.split("/")
     paper = parts[-3] if len(parts) >= 3 else ""
-    return {"a4": "A4", "a3": "A3", "letter": "US Letter"}.get(paper, paper.upper() or "A4")
+    return {"a4": "A4", "a3": "A3", "a3plus": "A3+", "letter": "US Letter"}.get(paper, paper.upper() or "A4")
 
 # --- Knut's TC9.18 + Spyderprint-greys presets -----------------------------
 # A family of built-in presets that all share ONE bundled 1168-patch .ti1
@@ -304,7 +308,7 @@ BUILTIN_PRESET_LABELS = frozenset({
     TC924_PRESET_LABEL, ABW1110_PRESET_LABEL,
     TC918EG_A4_PRESET_LABEL, TC918EG_LETTER_PRESET_LABEL,
     TC300_PRESET_LABEL, ABW702_PRESET_LABEL,
-    TC924_CM_A3_PRESET_LABEL,
+    TC924_CM_A3_PRESET_LABEL, TC918EG_CM_A3_PRESET_LABEL,
 }) | {p.combo_label for p in KNUT_PRESETS}
 
 # Built-in presets grouped by the instrument they target — the single source of
@@ -329,6 +333,7 @@ BUILTIN_PRESET_GROUPS: list[tuple[str, list[tuple[str, str, str]]]] = [
         (TC300_PRESET_LABEL,   "A4-300p-1page TC3.00 by Pharmacist",          TC300_PRESET_KEY),
         (ABW702_PRESET_LABEL,  "A4-702p-2pages ABW-optimized by Pharmacist",   ABW702_PRESET_KEY),
         (TC924_CM_A3_PRESET_LABEL, "A3-924p-1page TC9.24 by Pharmacist",       TC924_CM_A3_PRESET_KEY),
+        (TC918EG_CM_A3_PRESET_LABEL, "A3+-1160p-1page TC9.18 extended greys by Pharmacist", TC918EG_CM_A3_PRESET_KEY),
         *_KNUT_GROUP_ENTRIES["ColorMunki"],
     ]),
     ("i1Pro", [
@@ -339,6 +344,63 @@ BUILTIN_PRESET_GROUPS: list[tuple[str, list[tuple[str, str, str]]]] = [
         *_KNUT_GROUP_ENTRIES["i1Pro"],
     ]),
 ]
+
+
+# --- Override-checkbox copy (preset panels) --------------------------------
+# Shown next to the "Edit patch recipe / page layout" checkboxes that unlock a
+# preset's otherwise-greyed panels. Written for beginners: lead with the plain
+# outcome, then the consequence of changing it.
+_OVERRIDE_TARGEN_TIP = (
+    "Edit the patch recipe (targen settings)\n\n"
+    "This preset comes with a ready-made set of colour patches, so the targen "
+    "settings above are locked. Tick this box only if you really want to change "
+    "which colours get printed.\n\n"
+    "Important: targen decides WHICH colours are on the chart. The moment you "
+    "change anything here, ChromIQ can no longer reuse the preset's carefully "
+    "chosen patches — it will build a brand-new set of colours from scratch. The "
+    "chart is still perfectly valid, but it will NOT be the same as the preset, "
+    "and the preset's hand-tuning no longer applies.\n\n"
+    "Leave this unticked unless you specifically need a different patch set."
+)
+_OVERRIDE_PRINTTARG_TIP = (
+    "Edit the page layout (printtarg settings)\n\n"
+    "This preset is already arranged on the page for you, so the printtarg "
+    "settings above are locked. Tick this box if you'd like to re-arrange the "
+    "same patches differently — for example a different paper size, margin or "
+    "patch size.\n\n"
+    "Good news: changing only these layout settings keeps the preset's exact "
+    "colour patches. ChromIQ simply re-lays that same set of colours onto the "
+    "page using your new settings.\n\n"
+    "(To change the colours themselves, use the \"Edit patch recipe\" box on the "
+    "targen panel instead — but note that produces a different, non-matching set "
+    "of patches.)"
+)
+# Pop-up shown the moment the user ticks an override box.
+_OVERRIDE_TARGEN_POPUP_TITLE = "Editing the patch recipe"
+_OVERRIDE_TARGEN_POPUP_BODY = (
+    "You've unlocked the patch-recipe (targen) settings for this preset.\n\n"
+    "What this means:\n"
+    "The preset includes a carefully prepared set of colour patches. As long as "
+    "you don't touch the targen settings, ChromIQ keeps using that exact set.\n\n"
+    "The moment you change a targen value, ChromIQ can no longer reuse the "
+    "preset's patches — when you click \"Generate Chart\" it will create a "
+    "completely new set of colours from scratch. The new chart is perfectly "
+    "valid, but it will be DIFFERENT from the preset, and the preset's careful "
+    "tuning no longer applies.\n\n"
+    "If that's what you want, go right ahead. If not, simply untick the box to "
+    "keep the preset's original patches."
+)
+_OVERRIDE_PRINTTARG_POPUP_TITLE = "Editing the page layout"
+_OVERRIDE_PRINTTARG_POPUP_BODY = (
+    "You've unlocked the page-layout (printtarg) settings.\n\n"
+    "Changing these re-arranges the SAME colour patches on the page — a "
+    "different paper size, margins, patch size and so on. The colours "
+    "themselves stay exactly as the preset intended, so this is safe to do.\n\n"
+    "When you click \"Generate Chart\", ChromIQ re-lays the preset's patch set "
+    "onto the page using your new layout settings.\n\n"
+    "(If you also unlock and change the patch-recipe settings, that's different "
+    "— it produces a new set of colours that won't match the preset.)"
+)
 
 
 def _value_compatible_with_pw(v: Any, pw: "ParameterWidget") -> bool:
@@ -478,6 +540,13 @@ class TabChart(QWidget):
         # chosen or a .ti1 is loaded.
         self._prebuilt_active = False
         self._prebuilt_key: str | None = None
+        # Snapshots of the targen / printtarg controls taken when a prebuilt-files
+        # preset is selected. While active, "Generate Chart" decides what to do by
+        # comparing the live controls against these: targen changed → fresh targen
+        # run (different patches); else printtarg changed → re-lay-out the bundled
+        # .ti1 (same patches, new layout); else copy the bundled files verbatim.
+        self._prebuilt_targen_sig: list | None = None
+        self._prebuilt_printtarg_sig: list | None = None
         # Absolute path of the .ti1 backing the chart currently shown (set after a
         # successful generate / load). Offered for attachment in the Save Preset
         # dialog.
@@ -485,7 +554,20 @@ class TabChart(QWidget):
         # When a user preset that bundles a .ti1 is selected, this points at that
         # preset's sidecar .ti1 so "Generate Chart" skips targen and lays it out
         # with printtarg only. Cleared for presets without an attached patch set.
+        # _preset_ti1_targen_sig snapshots the targen controls at selection so the
+        # targen-override checkbox can opt into a fresh targen run, like the
+        # built-in ti1 presets.
         self._preset_ti1_path: Path | None = None
+        self._preset_ti1_targen_sig: list | None = None
+        # Override-checkbox widgets (created in _make_manual_panel). Shown only
+        # while a preset that supplies a fixed patch set / layout is active; ticking
+        # one re-enables the otherwise-greyed targen / printtarg panel.
+        self._override_targen_check: QCheckBox | None = None
+        self._override_printtarg_check: QCheckBox | None = None
+        self._override_targen_row: QWidget | None = None
+        self._override_printtarg_row: QWidget | None = None
+        self._manual_targen_content: list[QWidget] = []
+        self._manual_printtarg_content: list[QWidget] = []
         # Last committed preset-combo index. Lets a cancelled built-in prompt
         # revert the dropdown to the prior selection.
         self._last_preset_index = 0
@@ -1322,8 +1404,10 @@ class TabChart(QWidget):
         self._manual_b_pw: ParameterWidget | None = None
         self._manual_c_pw: ParameterWidget | None = None
         self._manual_A_pw: ParameterWidget | None = None
-        # Top-level targen/printtarg group boxes — greyed out wholesale while a
-        # prebuilt-files preset is active.
+        # Top-level targen/printtarg group boxes. Their inner content (basic +
+        # expert sub-groups, tracked in _manual_targen_content /
+        # _manual_printtarg_content) is greyed while a preset locks the panel;
+        # the override row stays enabled because it sits outside that content.
         self._manual_targen_grp: QGroupBox | None = None
         self._manual_printtarg_grp: QGroupBox | None = None
         # targen -c / -n: -n (Neutral Axis Steps) only does anything when a
@@ -1358,17 +1442,54 @@ class TabChart(QWidget):
             ("printtarg", self._params.get("printtarg", [])),
         ]:
             grp = QGroupBox(f"{tool} parameters", inner)
-            # Keep a handle so prebuilt-files presets can grey the whole panel.
+            # Keep a handle to the outer group (its inner content is greyed via
+            # _manual_*_content while a preset locks the panel).
             if tool == "targen":
                 self._manual_targen_grp = grp
             else:
                 self._manual_printtarg_grp = grp
             grp_layout = QVBoxLayout(grp)
 
+            # Override row — pinned at the top of the panel, hidden until a preset
+            # that supplies a fixed patch set (ti1) or a fixed layout (prebuilt)
+            # is active. Ticking it re-enables the greyed controls below. The
+            # checkbox stays enabled while its content is greyed because it lives
+            # outside the disabled content widgets (basic_grp / expert_grp).
+            override_row = QWidget(grp)
+            override_l = QHBoxLayout(override_row)
+            override_l.setContentsMargins(0, 0, 0, 2)
+            if tool == "targen":
+                ov_check = QCheckBox("Edit patch recipe (override preset)", override_row)
+                ov_tip = TooltipButton("Edit patch recipe", _OVERRIDE_TARGEN_TIP,
+                                       override_row, min_width=600)
+                self._override_targen_check = ov_check
+                self._override_targen_row = override_row
+            else:
+                ov_check = QCheckBox("Edit page layout (override preset)", override_row)
+                ov_tip = TooltipButton("Edit page layout", _OVERRIDE_PRINTTARG_TIP,
+                                       override_row, min_width=600)
+                self._override_printtarg_check = ov_check
+                self._override_printtarg_row = override_row
+            override_l.addWidget(ov_check)
+            override_l.addStretch()
+            override_l.addWidget(ov_tip)
+            override_row.setVisible(False)
+            grp_layout.addWidget(override_row)
+            ov_check.toggled.connect(self._update_preset_locks)
+            ov_check.toggled.connect(self._refresh_manual_command_preview)
+            ov_check.clicked.connect(
+                lambda checked, t=tool: self._on_override_clicked(t, checked)
+            )
+
             basic_grp = QGroupBox("Basic", grp)
             basic_layout = QVBoxLayout(basic_grp)
             expert_grp = QGroupBox("Expert Options", grp)
             expert_layout = QVBoxLayout(expert_grp)
+            # Content widgets greyed out (not the override row) while locked.
+            if tool == "targen":
+                self._manual_targen_content = [basic_grp, expert_grp]
+            else:
+                self._manual_printtarg_content = [basic_grp, expert_grp]
 
             for p in params:
                 pw = ParameterWidget(p, inner, browse_icon="folder_create")
@@ -1621,6 +1742,7 @@ class TabChart(QWidget):
         if self._bit16_radio is not None:
             self._bit16_radio.toggled.connect(self._refresh_manual_command_preview)
         self._refresh_manual_command_preview()
+        self._update_preset_locks()
 
         inner_layout.addStretch()
         scroll.setWidget(inner)
@@ -1744,6 +1866,40 @@ class TabChart(QWidget):
             and self._knut_targen_sig is not None
             and self._targen_signature() == self._knut_targen_sig
         )
+        # A prebuilt-files preset normally copies its bundled files. Unlocking a
+        # panel changes that: editing the layout re-lays the bundled patches;
+        # editing the recipe builds a fresh chart. Reflect whichever applies.
+        prebuilt_active = getattr(self, "_prebuilt_active", False)
+        if prebuilt_active:
+            targen_changed = (self._prebuilt_targen_sig is not None
+                              and self._targen_signature() != self._prebuilt_targen_sig)
+            printtarg_changed = (self._prebuilt_printtarg_sig is not None
+                                 and self._printtarg_signature() != self._prebuilt_printtarg_sig)
+            if targen_changed:
+                info = (
+                    f"Built-in preset — patch recipe changed ({' · '.join(notes)}):\n"
+                    "Builds a fresh chart from your settings — the patches will "
+                    "NOT match the preset.\n"
+                    f"targen {' '.join(targen_args)}\n"
+                    f"printtarg {' '.join(pt_args)}"
+                )
+            elif printtarg_changed:
+                info = (
+                    f"Built-in preset — re-laid out ({' · '.join(notes)}):\n"
+                    "Re-arranges the preset's exact patches on the page (targen "
+                    "skipped).\n"
+                    f"printtarg {' '.join(pt_args)}"
+                )
+            else:
+                info = (
+                    "Built-in preset — ready-made chart:\n"
+                    "Copies the bundled patch set as-is (targen and printtarg "
+                    "skipped).\n"
+                    "Unlock \"Edit page layout\" to re-arrange the same patches, "
+                    "or \"Edit patch recipe\" to build a different chart."
+                )
+            self._manual_info_lbl.setText(info)
+            return
         if tc918_repro:
             info = (
                 f"i1Pro TC9.18 by Pharmacist — fixed patch set ({' · '.join(notes)}):\n"
@@ -2750,6 +2906,9 @@ class TabChart(QWidget):
             if self._prebuilt_active and data not in PREBUILT_PRESETS:
                 self._leave_prebuilt()
             self._preset_ti1_path = None  # built-ins are not ti1-user-presets
+            self._preset_ti1_targen_sig = None
+            # Start the freshly-picked built-in with its panels locked again.
+            self._reset_override_checks()
             self._preset_del_btn.setEnabled(False)
             self._last_preset_index = index
             if data == TC918_PRESET_KEY:
@@ -2760,6 +2919,10 @@ class TabChart(QWidget):
                 self._apply_prebuilt_preset(data, name)
             else:
                 self._apply_colormunki_td_preset(*MUNKI_TARGEN[data], target_name=name)
+            # Final lock pass: covers the params-based ColorMunki presets (which
+            # set no ti1/prebuilt flag, so their panels stay fully editable) and
+            # re-asserts state after leaving a previous tc918/knut preset.
+            self._update_preset_locks()
             return
 
         # Leaving the TC9.18 built-in chart for Default or a user preset clears
@@ -2839,13 +3002,21 @@ class TabChart(QWidget):
             # Generate at the sidecar file if it's present; otherwise fall back to
             # the normal targen path.
             self._preset_ti1_path = None
+            self._preset_ti1_targen_sig = None
             if isinstance(pdata, dict) and pdata.get("attached_ti1"):
                 p = _preset_sidecar_path("create_chart", str(name), ".ti1")
                 if p.is_file():
                     self._preset_ti1_path = p
+                    # Snapshot targen so the override box can opt into a fresh
+                    # targen run (changed → different patches), like the built-ins.
+                    self._preset_ti1_targen_sig = self._targen_signature()
                 else:
                     log.warning("preset '%s' marked attached_ti1 but %s is missing",
                                 name, p)
+        # Every Default / user-preset selection re-establishes the lock state:
+        # untick any leftover override and grey the panels a ti1 preset needs.
+        self._reset_override_checks()
+        self._update_preset_locks()
         self._update_manual_lb_visibility()
 
         # A user preset flagged "generate on select" (▶) prompts for a target
@@ -3197,6 +3368,96 @@ class TabChart(QWidget):
             sig.append(("pages", int(self._manual_pages_spin.value())))
         return sig
 
+    def _printtarg_signature(self) -> list:
+        """Snapshot of every printtarg (layout) control.
+
+        Used by the prebuilt-files presets to tell a pure layout change (re-run
+        printtarg on the bundled .ti1, keeping the patches) from no change at all
+        (copy the bundled files verbatim)."""
+        sig: list = []
+        for pw in self._manual_widgets.get("printtarg", []):
+            sig.append((pw.flag, pw.get_raw_value(), pw.is_enabled_by_user))
+        if self._bit16_radio is not None:
+            sig.append(("bit16", self._bit16_radio.isChecked()))
+        if self._manual_td_check is not None:
+            sig.append(("triple", self._manual_td_check.isChecked()))
+        return sig
+
+    # ------------------------------------------------------------------
+    # Preset panel locks (greying targen / printtarg while a preset is active)
+    # ------------------------------------------------------------------
+
+    def _ti1_preset_active(self) -> bool:
+        """True while a preset that supplies a fixed patch set (.ti1) is active.
+
+        Covers the TC9.18 built-in, Knut's TC9.18+Spyderprint presets, and any
+        user preset that bundled a .ti1 — for all of these targen is skipped, so
+        its panel is greyed unless the user opts in."""
+        return bool(
+            self._tc918_active
+            or self._knut_active
+            or self._preset_ti1_path is not None
+        )
+
+    def _update_preset_locks(self) -> None:
+        """Show/hide the override rows and grey the panels they guard.
+
+        • A ti1 preset greys only targen (printtarg stays editable).
+        • A prebuilt-files preset greys both targen and printtarg.
+        • No preset → both override rows hidden, both panels editable.
+        Each panel is enabled when no lock applies, or when its override box is
+        ticked."""
+        ti1 = self._ti1_preset_active()
+        prebuilt = self._prebuilt_active
+        show_targen_cb = ti1 or prebuilt
+        show_printtarg_cb = prebuilt
+
+        if self._override_targen_row is not None:
+            self._override_targen_row.setVisible(show_targen_cb)
+        if self._override_printtarg_row is not None:
+            self._override_printtarg_row.setVisible(show_printtarg_cb)
+
+        targen_unlocked = (
+            not show_targen_cb
+            or (self._override_targen_check is not None
+                and self._override_targen_check.isChecked())
+        )
+        printtarg_unlocked = (
+            not show_printtarg_cb
+            or (self._override_printtarg_check is not None
+                and self._override_printtarg_check.isChecked())
+        )
+        for w in self._manual_targen_content:
+            w.setEnabled(targen_unlocked)
+        for w in self._manual_printtarg_content:
+            w.setEnabled(printtarg_unlocked)
+
+    def _reset_override_checks(self) -> None:
+        """Untick both override boxes without firing their pop-up.
+
+        Called on every preset selection so a freshly chosen preset always starts
+        locked. blockSignals keeps the toggle from thrashing _update_preset_locks
+        mid-selection (the caller re-applies the lock state afterwards)."""
+        for cb in (self._override_targen_check, self._override_printtarg_check):
+            if cb is not None and cb.isChecked():
+                cb.blockSignals(True)
+                cb.setChecked(False)
+                cb.blockSignals(False)
+
+    def _on_override_clicked(self, tool: str, checked: bool) -> None:
+        """User ticked/unticked an override box — warn (once) when unlocking.
+
+        Fires only on real clicks (not programmatic setChecked), so the warning
+        pop-up appears exactly when the user themselves unlocks a panel."""
+        if not checked:
+            return
+        if tool == "targen":
+            InfoDialog(_OVERRIDE_TARGEN_POPUP_TITLE, _OVERRIDE_TARGEN_POPUP_BODY,
+                       self, min_width=560).exec()
+        else:
+            InfoDialog(_OVERRIDE_PRINTTARG_POPUP_TITLE, _OVERRIDE_PRINTTARG_POPUP_BODY,
+                       self, min_width=560).exec()
+
     def _apply_tc918_preset(self, target_name: str | None = None) -> None:
         """Seed the fixed TC9.18 layout and create the target from the bundled .ti1."""
         if self._runner.is_running:
@@ -3245,6 +3506,7 @@ class TabChart(QWidget):
 
         self._tc918_active = True
         self._tc918_targen_sig = self._targen_signature()
+        self._update_preset_locks()      # grey targen (printtarg stays editable)
         self._refresh_manual_command_preview()
         self._generate_from_ti1(ti1)
 
@@ -3388,6 +3650,7 @@ class TabChart(QWidget):
         # TC9.18 mechanism in _on_generate. The .ti1 is the fixed OFPS patch set,
         # so it can't be recreated by re-running targen.
         self._knut_targen_sig = self._targen_signature()
+        self._update_preset_locks()      # grey targen (printtarg stays editable)
         self._refresh_manual_command_preview()
         self._generate_from_ti1(ti1)
 
@@ -3407,32 +3670,57 @@ class TabChart(QWidget):
     # Prebuilt-files built-in presets (TC9.24 A4 / Letter)
     # ------------------------------------------------------------------
 
-    def _set_manual_params_enabled(self, enabled: bool) -> None:
-        """Grey out (or restore) the whole targen + printtarg parameter panels.
+    @staticmethod
+    def _prebuilt_instrument(key: str) -> str:
+        """printtarg -i code a prebuilt preset is laid out for, from its asset path.
 
-        Used by prebuilt-files presets, where none of those options apply — the
-        chart is a fixed bundle that's only copied, never re-laid-out."""
-        for grp in (self._manual_targen_grp, self._manual_printtarg_grp):
-            if grp is not None:
-                grp.setEnabled(enabled)
+        The asset stem is ``.../<instrument>/<paper>/<target>/<target>``; the
+        instrument folder is the fourth component from the end. Used to seed the
+        printtarg panel so an override re-layout starts from the right device."""
+        stem = PREBUILT_PRESETS.get(key, ("",))[0]
+        parts = stem.split("/")
+        instr = parts[-4] if len(parts) >= 4 else ""
+        return {"i1pro": "i1", "colormunki": "CM"}.get(instr, "i1")
+
+    @staticmethod
+    def _prebuilt_paper_code(key: str) -> str:
+        """printtarg -p code a prebuilt preset is laid out for, from its asset path."""
+        stem = PREBUILT_PRESETS.get(key, ("",))[0]
+        parts = stem.split("/")
+        paper = parts[-3] if len(parts) >= 3 else ""
+        # Map the asset folder name to a valid printtarg -p code (see PAPER_SIZES).
+        return {"a4": "A4", "a3": "A3", "a3plus": "329x483",
+                "letter": "Letter"}.get(paper, "A4")
 
     def _leave_prebuilt(self) -> None:
         """Clear prebuilt-files state and re-enable the param panels."""
         self._prebuilt_active = False
         self._prebuilt_key = None
-        self._set_manual_params_enabled(True)
+        self._prebuilt_targen_sig = None
+        self._prebuilt_printtarg_sig = None
+        self._reset_override_checks()
+        self._update_preset_locks()
 
     def _apply_prebuilt_preset(self, key: str, target_name: str) -> None:
-        """Select a prebuilt-files preset: grey the panels and copy the bundle."""
+        """Select a prebuilt-files preset: grey the panels and copy the bundle.
+
+        Both panels start locked. The instrument and paper the bundle was made
+        for are seeded so that, if the user unlocks the layout and changes it,
+        a printtarg re-run starts from the right device/page — and so the
+        "did the layout change?" check has a sensible baseline."""
         self._prebuilt_active = True
         self._prebuilt_key = key
-        # These are i1Pro targets. Pin the instrument so the downstream routing
-        # (notably the i1iSis hand-off check in _on_generate_finished) treats them
-        # as a normal strip-read chart, regardless of what was selected before.
-        self._set_manual_value("printtarg", "-i", "i1")
-        self._set_manual_params_enabled(False)
+        self._reset_override_checks()
+        # Seed the device + page the bundle was made for. printtarg is re-run from
+        # the bundled .ti1 only if the user unlocks the layout and edits it.
+        self._set_manual_value("printtarg", "-i", self._prebuilt_instrument(key))
+        self._set_manual_value("printtarg", "-p", self._prebuilt_paper_code(key))
         if self._manual_target_name_edit is not None:
             self._manual_target_name_edit.setText(target_name)
+        # Baselines for the Generate-time change detection, taken after seeding.
+        self._prebuilt_targen_sig = self._targen_signature()
+        self._prebuilt_printtarg_sig = self._printtarg_signature()
+        self._update_preset_locks()      # grey both panels
         self._create_prebuilt_target(key, target_name)
 
     def _create_prebuilt_target(self, key: str, target_name: str) -> None:
@@ -3818,24 +4106,50 @@ class TabChart(QWidget):
         if self._runner.is_running:
             log.warning("A process is already running")
             return
-        # Prebuilt-files preset: nothing to compute — re-copy the bundled files
-        # into a folder named after the current Output field. targen/printtarg
-        # are never run for these.
+        # Prebuilt-files preset. By default nothing is computed — the bundled
+        # files are copied verbatim. But the user can unlock the panels:
+        #   • targen changed   → fresh targen run (different patches): fall through
+        #   • else printtarg changed → re-lay-out the bundled .ti1 (same patches)
+        #   • else                   → copy the bundled files (exact original)
         if self._prebuilt_active and self._prebuilt_key is not None \
                 and self._current_mode() == "manual":
-            name = (self._manual_target_name_edit.text().strip()
-                    if self._manual_target_name_edit is not None else "")
-            self._create_prebuilt_target(
-                self._prebuilt_key, name or self._builtin_default_name(self._prebuilt_key))
-            return
-        # User preset with a bundled .ti1: build from that patch set (skip targen,
-        # lay it out with printtarg) — same path as the TC9.18 built-in.
-        if self._preset_ti1_path is not None and self._current_mode() == "manual":
-            if self._preset_ti1_path.is_file():
-                self._generate_from_ti1(self._preset_ti1_path)
+            targen_changed = (self._prebuilt_targen_sig is not None
+                              and self._targen_signature() != self._prebuilt_targen_sig)
+            printtarg_changed = (self._prebuilt_printtarg_sig is not None
+                                 and self._printtarg_signature() != self._prebuilt_printtarg_sig)
+            if targen_changed:
+                # User unlocked the patch recipe and changed it — build a fresh
+                # chart from the current settings (fall through to the normal
+                # targen→printtarg path below). The preset stays selected.
+                pass
+            elif printtarg_changed:
+                stem_rel = PREBUILT_PRESETS[self._prebuilt_key][0]
+                bundled_ti1 = resource_path(f"{stem_rel}.ti1")
+                self._generate_from_ti1(bundled_ti1)
                 return
-            log.warning("attached preset .ti1 vanished: %s", self._preset_ti1_path)
-            self._preset_ti1_path = None
+            else:
+                name = (self._manual_target_name_edit.text().strip()
+                        if self._manual_target_name_edit is not None else "")
+                self._create_prebuilt_target(
+                    self._prebuilt_key,
+                    name or self._builtin_default_name(self._prebuilt_key))
+                return
+        # User preset with a bundled .ti1: build from that patch set (skip targen,
+        # lay it out with printtarg) — same path as the TC9.18 built-in. If the
+        # user unlocked the targen panel and changed it, fall through to a fresh
+        # targen run instead (different patches, like the built-in ti1 presets).
+        if self._preset_ti1_path is not None and self._current_mode() == "manual":
+            targen_changed = (self._preset_ti1_targen_sig is not None
+                              and self._targen_signature() != self._preset_ti1_targen_sig)
+            if not targen_changed:
+                if self._preset_ti1_path.is_file():
+                    self._generate_from_ti1(self._preset_ti1_path)
+                    return
+                log.warning("attached preset .ti1 vanished: %s", self._preset_ti1_path)
+                self._preset_ti1_path = None
+            else:
+                self._preset_ti1_path = None
+                self._preset_ti1_targen_sig = None
         # TC9.18 built-in preset: while it's active and the user hasn't touched
         # any targen setting, reproduce the exact bundled chart (printtarg only).
         # The OFPS patch set can't be recreated reliably by re-running targen, so

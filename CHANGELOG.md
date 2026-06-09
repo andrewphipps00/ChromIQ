@@ -1,5 +1,30 @@
 # Changelog
 
+## v3.8.13
+A new ready-to-use **ColorMunki TC9.18 (A3+)** preset from **Pharmacist**, and —
+suggested by **Knut** — the ability to safely tweak a preset's settings without
+losing track of what it does.
+
+### ✨ New built-in preset
+- **TC9.18 extended greys, A3+ (ColorMunki).** A complete, ready-made 1160-patch
+  target for the ColorMunki on A3+ paper, courtesy of **Pharmacist**. Pick it in
+  *Create Chart → Manual → Presets* (or the ★ built-in presets menu) and print —
+  no setup required.
+
+### ✨ Edit a preset without surprises (thanks, Knut!)
+- **Presets now lock the settings they own.** When you pick a preset that comes
+  with a fixed set of colour patches, the *targen* options are greyed out (they no
+  longer apply); ready-made charts grey out both *targen* and *printtarg*. This
+  makes it obvious at a glance which settings the preset is in charge of.
+- **Override checkboxes to unlock them.** A friendly checkbox above each locked
+  panel lets you take control when you want to. Unlocking the **page layout**
+  re-arranges the *same* patches differently (e.g. a different paper size or
+  margin) — perfectly safe. Unlocking the **patch recipe** lets you build a
+  different set of colours, which no longer matches the preset.
+- **Clear warnings.** Each checkbox has a plain-language tooltip, and unlocking
+  one pops up a short explanation — so it's always clear when a change will keep
+  the preset's exact patches and when it will create a new, different chart.
+
 ## v3.8.12
 Seventeen ready-to-use **TC9.18 charts for the Datacolor SpyderPrint**, courtesy
 of **Knut**, plus a small accuracy fix to the patch-count estimates for the
