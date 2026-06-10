@@ -26,6 +26,7 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from core.i18n import tr
 
 
 class TargetChangeAction(Enum):
@@ -54,7 +55,7 @@ class TargetChangeDialog(QDialog):
     ) -> None:
         super().__init__(parent)
         self._action = TargetChangeAction.CANCEL
-        self.setWindowTitle("This target already exists under a different name")
+        self.setWindowTitle(tr("This target already exists under a different name"))
         self.setMinimumWidth(580)
         self.setMaximumWidth(720)
         self.setWindowFlags(
@@ -75,8 +76,7 @@ class TargetChangeDialog(QDialog):
         outer.setSpacing(14)
 
         heading = QLabel(
-            f'You already created the target "{old_name}", and now asked to '
-            f'generate one called "{new_name}".',
+            tr("You already created the target \"{old_name}\", and now asked to generate one called \"{new_name}\".").format(old_name=old_name, new_name=new_name),
             self,
         )
         heading.setWordWrap(True)
@@ -86,9 +86,9 @@ class TargetChangeDialog(QDialog):
         outer.addWidget(heading)
 
         intro = QLabel(
-            "Each target is a separate folder on disk. Changing the name points "
+            tr("Each target is a separate folder on disk. Changing the name points "
             "ChromIQ at a different folder, so the work you already created would "
-            "be left behind. What would you like to do?",
+            "be left behind. What would you like to do?"),
             self,
         )
         intro.setWordWrap(True)
@@ -148,7 +148,7 @@ class TargetChangeDialog(QDialog):
 
         cancel_row = QHBoxLayout()
         cancel_row.addStretch()
-        cancel_btn = QPushButton("Cancel", self)
+        cancel_btn = QPushButton(tr("Cancel"), self)
         cancel_btn.clicked.connect(self.reject)
         cancel_row.addWidget(cancel_btn)
         outer.addLayout(cancel_row)

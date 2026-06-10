@@ -20,6 +20,7 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from core.i18n import tr
 
 
 class PreflightDialog(QDialog):
@@ -33,7 +34,7 @@ class PreflightDialog(QDialog):
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Confirm Print Settings")
+        self.setWindowTitle(tr("Confirm Print Settings"))
         self.setMinimumWidth(520)
         self.setWindowFlags(
             self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint
@@ -68,7 +69,7 @@ class PreflightDialog(QDialog):
         form.setContentsMargins(14, 10, 14, 10)
         form.setVerticalSpacing(4)
         for label, value in rows:
-            lbl_w = QLabel(f"{label}:", form_frame)
+            lbl_w = QLabel(tr("{label}:").format(label=label), form_frame)
             lbl_w.setStyleSheet("color: #a0a0a0;")
             val_w = QLabel(value, form_frame)
             val_w.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
@@ -76,7 +77,7 @@ class PreflightDialog(QDialog):
         outer.addWidget(form_frame)
 
         for w in warnings:
-            warn = QLabel(f"⚠  {w}", self)
+            warn = QLabel(tr("⚠  {w}").format(w=w), self)
             warn.setWordWrap(True)
             warn.setStyleSheet(
                 "QLabel { color: #fdd835; background: #2a2000;"
@@ -85,7 +86,7 @@ class PreflightDialog(QDialog):
             )
             outer.addWidget(warn)
 
-        self._dont_ask_cb = QCheckBox("Don't ask again", self)
+        self._dont_ask_cb = QCheckBox(tr("Don't ask again"), self)
         outer.addWidget(self._dont_ask_cb)
 
         btn_row = QHBoxLayout()

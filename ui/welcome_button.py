@@ -13,6 +13,7 @@ from PyQt6.QtGui import (
 from PyQt6.QtWidgets import QToolButton, QWidget
 
 from ui.styles import SPEC_MAGENTA
+from core.i18n import tr
 
 
 class WelcomeButton(QToolButton):
@@ -23,7 +24,7 @@ class WelcomeButton(QToolButton):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setObjectName("tooltip_btn")
-        self.setToolTip("Help — open the welcome menu")
+        self.setToolTip(tr("Help — open the welcome menu"))
         self.setFixedSize(QSize(44, 44))
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self._hover = False

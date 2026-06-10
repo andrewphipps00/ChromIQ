@@ -31,6 +31,7 @@ from PyQt6.QtWidgets import (
 
 from ui.fade_scroll import FadeScrollArea
 from ui.styles import SPEC_MAGENTA, TAB_COLORS
+from core.i18n import tr
 
 if TYPE_CHECKING:
     from core.settings import AppSettings
@@ -914,7 +915,7 @@ class WelcomeDialog(QDialog):
         super().__init__(parent)
         self._settings = settings
         self._mode = "light" if initial_mode == "light" else "dark"
-        self.setWindowTitle("Welcome to ChromIQ")
+        self.setWindowTitle(tr("Welcome to ChromIQ"))
         self.setWindowFlags(
             self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint
         )
@@ -938,9 +939,9 @@ class WelcomeDialog(QDialog):
         # Work-in-progress disclaimer. Persistent across both pages; small,
         # italic, dimmed text — visible but not noisy.
         self._wip_note = QLabel(
-            "These guides are still being polished — some details may not "
+            tr("These guides are still being polished — some details may not "
             "be fully accurate yet. When in doubt, trust what you see in "
-            "the app over what you read here.",
+            "the app over what you read here."),
             self,
         )
         self._wip_note.setObjectName("welcome_wip_note")
@@ -955,18 +956,18 @@ class WelcomeDialog(QDialog):
         # Footer — shared across both pages. Back button only shows on detail.
         footer = QHBoxLayout()
         footer.setContentsMargins(0, 0, 0, 0)
-        self._show_cb = QCheckBox("Show this on startup", self)
+        self._show_cb = QCheckBox(tr("Show this on startup"), self)
         self._show_cb.setChecked(bool(self._settings.get("show_welcome_dialog", True)))
         self._show_cb.toggled.connect(
             lambda v: self._settings.set("show_welcome_dialog", bool(v))
         )
         footer.addWidget(self._show_cb)
         footer.addStretch(1)
-        self._back_btn = QPushButton("← Back", self)
+        self._back_btn = QPushButton(tr("← Back"), self)
         self._back_btn.clicked.connect(lambda: self._stack.setCurrentIndex(0))
         self._back_btn.setVisible(False)
         footer.addWidget(self._back_btn)
-        self._close_btn = QPushButton("Close", self)
+        self._close_btn = QPushButton(tr("Close"), self)
         self._close_btn.clicked.connect(self.accept)
         footer.addWidget(self._close_btn)
         outer.addLayout(footer)
@@ -985,7 +986,7 @@ class WelcomeDialog(QDialog):
         heading = self._make_heading()
         v.addWidget(heading)
 
-        self._subtitle = QLabel("What would you like to do?", page)
+        self._subtitle = QLabel(tr("What would you like to do?"), page)
         self._subtitle.setAlignment(Qt.AlignmentFlag.AlignHCenter)
         sf = QFont()
         sf.setPixelSize(15)

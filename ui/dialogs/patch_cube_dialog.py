@@ -21,6 +21,7 @@ from PyQt6.QtWidgets import QDialogButtonBox, QLabel, QVBoxLayout, QDialog
 from core.logger import get_logger
 from core.resource_path import resource_path
 from workflow import patch_cube
+from core.i18n import tr
 
 log = get_logger(__name__)
 
@@ -37,7 +38,7 @@ class PatchCubeDialog(QDialog):
     def __init__(self, program: list[tuple], *, mode: str = "dark",
                  parent=None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Patch distribution — 3D RGB cube")
+        self.setWindowTitle(tr("Patch distribution — 3D RGB cube"))
         self.resize(820, 760)
         self.setMinimumSize(520, 480)
         self._program = list(program)
@@ -66,7 +67,7 @@ class PatchCubeDialog(QDialog):
         except ImportError:
             log.warning("PyQt6-WebEngine unavailable — 3D cube disabled")
             lbl = QLabel(
-                "Install PyQt6-WebEngine to view the 3D patch cube.", self)
+                tr("Install PyQt6-WebEngine to view the 3D patch cube."), self)
             lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
             return lbl
         view = QWebEngineView(self)

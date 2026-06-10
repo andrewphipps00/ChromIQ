@@ -5,6 +5,7 @@ import re
 import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING
+from core.i18n import tr
 
 if TYPE_CHECKING:
     from PyQt6.QtWidgets import QWidget
@@ -280,7 +281,7 @@ def _handle_inside(
     from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QVBoxLayout
 
     dlg = QDialog(parent)
-    dlg.setWindowTitle("Load Test Session")
+    dlg.setWindowTitle(tr("Load Test Session"))
     dlg.setMinimumWidth(460)
     layout = QVBoxLayout(dlg)
     layout.setContentsMargins(24, 20, 24, 20)
@@ -296,17 +297,17 @@ def _handle_inside(
     layout.addWidget(lbl)
 
     cont_desc = QLabel(
-        "<i>Continue</i> — use the files in this folder as-is — "
-        "nothing will be copied or moved.",
+        tr("<i>Continue</i> — use the files in this folder as-is — "
+        "nothing will be copied or moved."),
         dlg,
     )
     cont_desc.setWordWrap(True)
     layout.addWidget(cont_desc)
 
     new_desc = QLabel(
-        "<i>Use as base for a new profile</i> — copy the files to a new "
+        tr("<i>Use as base for a new profile</i> — copy the files to a new "
         "subfolder so you can build a separate ICC profile without overwriting "
-        "the original.",
+        "the original."),
         dlg,
     )
     new_desc.setWordWrap(True)
@@ -391,7 +392,7 @@ def _ask_profile_name(
             break
 
     dlg = QDialog(parent)
-    dlg.setWindowTitle("Copy Chart Files")
+    dlg.setWindowTitle(tr("Copy Chart Files"))
     dlg.setMinimumWidth(580)
     layout = QVBoxLayout(dlg)
     layout.setContentsMargins(24, 20, 24, 20)
@@ -410,7 +411,7 @@ def _ask_profile_name(
     layout.addWidget(info)
 
     name_edit = QLineEdit(dlg)
-    name_edit.setPlaceholderText("e.g. Canon_ProGraf_Glossy_240g")
+    name_edit.setPlaceholderText(tr("e.g. Canon_ProGraf_Glossy_240g"))
     layout.addWidget(name_edit)
 
     error_lbl = QLabel("", dlg)
@@ -420,18 +421,18 @@ def _ask_profile_name(
 
     btn_row = QHBoxLayout()
 
-    ok_btn = QPushButton("OK", dlg)
+    ok_btn = QPushButton(tr("OK"), dlg)
     ok_btn.setDefault(True)
     btn_row.addWidget(ok_btn)
 
-    overwrite_btn = QPushButton("Overwrite existing folder", dlg)
+    overwrite_btn = QPushButton(tr("Overwrite existing folder"), dlg)
     overwrite_btn.setAutoDefault(False)
     overwrite_btn.setVisible(False)
     btn_row.addWidget(overwrite_btn)
 
     btn_row.addStretch(1)
 
-    cancel_btn = QPushButton("Cancel", dlg)
+    cancel_btn = QPushButton(tr("Cancel"), dlg)
     cancel_btn.setAutoDefault(False)
     cancel_btn.clicked.connect(dlg.reject)
     btn_row.addWidget(cancel_btn)
@@ -469,7 +470,7 @@ def _ask_profile_name(
         collision = bool(name) and (working_dir / name).exists() and not _is_self_collision(name)
         if collision:
             error_lbl.setText(
-                f"“{name}” already exists. Click “Overwrite existing folder” to replace it."
+                tr("“{name}” already exists. Click “Overwrite existing folder” to replace it.").format(name=name)
             )
             ok_btn.setVisible(False)
             overwrite_btn.setVisible(True)
@@ -491,7 +492,7 @@ def _ask_profile_name(
             return
         if _is_self_collision(name):
             error_lbl.setText(
-                "That name points to the chart's own folder. Pick a different name."
+                tr("That name points to the chart's own folder. Pick a different name.")
             )
             return
         result["name"] = name
@@ -506,8 +507,8 @@ def _ask_profile_name(
             return
         if _is_self_collision(name):
             error_lbl.setText(
-                "You're trying to overwrite the chart's own folder. "
-                "Pick a different name."
+                tr("You're trying to overwrite the chart's own folder. "
+                "Pick a different name.")
             )
             return
         dest = working_dir / name
@@ -518,7 +519,7 @@ def _ask_profile_name(
             return
         confirm = QMessageBox.warning(
             dlg,
-            "Overwrite existing folder?",
+            tr("Overwrite existing folder?"),
             f"This will permanently delete:\n\n    {dest}\n\n"
             "and replace it with the imported chart files. Continue?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,

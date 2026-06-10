@@ -20,6 +20,7 @@ from PyQt6.QtWidgets import (
 )
 
 from core.logger import get_logger
+from core.i18n import tr
 
 log = get_logger(__name__)
 
@@ -423,7 +424,7 @@ class TiffPreview(QWidget):
         self._stripe_rects = []
         self._pixmap = None
         self._ink_channels = None
-        self._img_label.setText("No preview")
+        self._img_label.setText(tr("No preview"))
         self._update_nav()
         self._update_filename_label([])
 
@@ -489,7 +490,7 @@ class TiffPreview(QWidget):
         layout.addWidget(self._header_image_gap)
 
         # Image label
-        self._img_label = QLabel("No preview", self)
+        self._img_label = QLabel(tr("No preview"), self)
         self._img_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._img_label.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
@@ -518,7 +519,7 @@ class TiffPreview(QWidget):
         nav_layout = QHBoxLayout(nav)
         nav_layout.setContentsMargins(12, 0, 12, 0)
 
-        self._prev_btn = QPushButton("‹ Prev", nav)
+        self._prev_btn = QPushButton(tr("‹ Prev"), nav)
         self._prev_btn.setFixedWidth(84)
         self._prev_btn.clicked.connect(self._go_prev)
         nav_layout.addWidget(self._prev_btn)
@@ -530,7 +531,7 @@ class TiffPreview(QWidget):
         nav_layout.addWidget(self._page_label)
         nav_layout.addStretch()
 
-        self._next_btn = QPushButton("Next ›", nav)
+        self._next_btn = QPushButton(tr("Next ›"), nav)
         self._next_btn.setFixedWidth(84)
         self._next_btn.clicked.connect(self._go_next)
         nav_layout.addWidget(self._next_btn)
@@ -581,7 +582,7 @@ class TiffPreview(QWidget):
 
     def _update_display(self) -> None:
         if not self._pages:
-            self._img_label.setText("No preview")
+            self._img_label.setText(tr("No preview"))
             self._pixmap = None
             return
 

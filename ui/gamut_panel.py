@@ -28,6 +28,7 @@ from ui.tooltip_button import InfoDialog, TooltipButton
 from ui.widgets import NoScrollComboBox, NoScrollDoubleSpinBox, make_browse_button, open_file_dialog
 from workflow.gamut_viewer import GamutViewer, GamutViewerParams
 from workflow.viewgam_runner import ViewgamResult, ViewgamRunner
+from core.i18n import tr
 
 if TYPE_CHECKING:
     from core.argyll_runner import ArgyllRunner
@@ -238,7 +239,7 @@ class GamutPanel(QWidget):
         root.setSpacing(0)
 
         # Section header — caption + loaded-profile names (auto-updated)
-        self._hdr_lbl = QLabel("GAMUT VOLUME", self)
+        self._hdr_lbl = QLabel(tr("GAMUT VOLUME"), self)
         self._hdr_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._hdr_lbl.setStyleSheet(
             f"color: {TEXT_DIM}; background: transparent; padding: 4px;"
@@ -283,9 +284,9 @@ class GamutPanel(QWidget):
         toggle_layout.setContentsMargins(12, 6, 12, 6)
         toggle_layout.setSpacing(8)
 
-        self._view_primary_btn  = QPushButton("PROFILE A", self._view_toggle_row)
-        self._view_combined_btn = QPushButton("COMBINED",  self._view_toggle_row)
-        self._view_compare_btn  = QPushButton("PROFILE B", self._view_toggle_row)
+        self._view_primary_btn  = QPushButton(tr("PROFILE A"), self._view_toggle_row)
+        self._view_combined_btn = QPushButton(tr("COMBINED"),  self._view_toggle_row)
+        self._view_compare_btn  = QPushButton(tr("PROFILE B"), self._view_toggle_row)
         for btn in (self._view_primary_btn, self._view_combined_btn, self._view_compare_btn):
             btn.setCheckable(True)
             btn.setObjectName("mode_btn")
@@ -321,11 +322,11 @@ class GamutPanel(QWidget):
         self._sat_slider.setStyleSheet(self._slider_stylesheet())
         self._sat_label = QLabel("100%", self._compare_controls)
         self._sat_label.setFixedWidth(34)
-        _cl.addWidget(QLabel("Opacity:"))
+        _cl.addWidget(QLabel(tr("Opacity:")))
         _cl.addWidget(self._opacity_slider)
         _cl.addWidget(self._opacity_label)
         _cl.addSpacing(10)
-        _cl.addWidget(QLabel("Sat.:"))
+        _cl.addWidget(QLabel(tr("Sat.:")))
         _cl.addWidget(self._sat_slider)
         _cl.addWidget(self._sat_label)
         self._compare_controls.setVisible(False)
@@ -353,7 +354,7 @@ class GamutPanel(QWidget):
         inner_layout.setSpacing(6)
 
         # ── Volume results ──────────────────────────────────────────────
-        vol_grp = QGroupBox("Results", inner)
+        vol_grp = QGroupBox(tr("Results"), inner)
         vg = QVBoxLayout(vol_grp)
         vg.setContentsMargins(8, 10, 8, 8)
         vg.setSpacing(3)
@@ -363,11 +364,11 @@ class GamutPanel(QWidget):
         _bold_style = (f"color: {_ACCENT}; font-family: Menlo, Consolas, 'Courier New', monospace;"
                        " font-size: 12px; font-weight: bold;")
 
-        self._vol_label             = QLabel("Volume: —", vol_grp)
-        self._compare_vol_label     = QLabel("Compare: —", vol_grp)
-        self._intersection_label    = QLabel("Intersection: —", vol_grp)
-        self._coverage_ab_label     = QLabel("A covered by B: —", vol_grp)
-        self._coverage_ba_label     = QLabel("B covered by A: —", vol_grp)
+        self._vol_label             = QLabel(tr("Volume: —"), vol_grp)
+        self._compare_vol_label     = QLabel(tr("Compare: —"), vol_grp)
+        self._intersection_label    = QLabel(tr("Intersection: —"), vol_grp)
+        self._coverage_ab_label     = QLabel(tr("A covered by B: —"), vol_grp)
+        self._coverage_ba_label     = QLabel(tr("B covered by A: —"), vol_grp)
 
         self._vol_label.setStyleSheet(_bold_style)
         for lbl in (self._compare_vol_label, self._intersection_label,
@@ -383,29 +384,29 @@ class GamutPanel(QWidget):
         inner_layout.addWidget(vol_grp)
 
         # ── Profile selectors ───────────────────────────────────────────
-        profile_grp = QGroupBox("Profiles", inner)
+        profile_grp = QGroupBox(tr("Profiles"), inner)
         pg = QVBoxLayout(profile_grp)
         pg.setContentsMargins(8, 10, 8, 8)
         pg.setSpacing(8)
 
         prim_row = QHBoxLayout()
-        prim_row.addWidget(QLabel("Profile:", profile_grp))
+        prim_row.addWidget(QLabel(tr("Profile:"), profile_grp))
         self._primary_edit = QLineEdit(profile_grp)
         self._primary_edit.setObjectName("compact_path")
         self._primary_edit.setReadOnly(True)
-        self._primary_edit.setPlaceholderText("Auto-filled from left panel")
+        self._primary_edit.setPlaceholderText(tr("Auto-filled from left panel"))
         prim_row.addWidget(self._primary_edit, stretch=1)
         pg.addLayout(prim_row)
 
         cmp_row = QHBoxLayout()
         cmp_row.setSpacing(4)
-        cmp_row.addWidget(QLabel("Compare with:", profile_grp))
+        cmp_row.addWidget(QLabel(tr("Compare with:"), profile_grp))
         self._compare_edit = QLineEdit(profile_grp)
         self._compare_edit.setObjectName("compact_path")
         self._compare_edit.setReadOnly(True)
-        self._compare_edit.setPlaceholderText("Optional — browse a second ICC/ICM")
+        self._compare_edit.setPlaceholderText(tr("Optional — browse a second ICC/ICM"))
         cmp_row.addWidget(self._compare_edit, stretch=1)
-        cmp_browse = make_browse_button(profile_grp, "Browse for comparison ICC/ICM", "folder_check")
+        cmp_browse = make_browse_button(profile_grp, tr("Browse for comparison ICC/ICM"), "folder_check")
         cmp_browse.setObjectName("browse_compact")
         cmp_browse.setIconSize(QSize(14, 14))
         cmp_browse.setFixedHeight(22)
@@ -415,7 +416,7 @@ class GamutPanel(QWidget):
         cmp_clear.setObjectName("browse_compact")
         cmp_clear.setFixedWidth(28)
         cmp_clear.setFixedHeight(22)
-        cmp_clear.setToolTip("Clear comparison profile")
+        cmp_clear.setToolTip(tr("Clear comparison profile"))
         cmp_clear.clicked.connect(self._on_clear_compare)
         cmp_row.addWidget(cmp_clear)
         pg.addLayout(cmp_row)
@@ -423,25 +424,25 @@ class GamutPanel(QWidget):
         inner_layout.addWidget(profile_grp)
 
         # ── iccgamut Options ────────────────────────────────────────────
-        opts_grp = QGroupBox("iccgamut Options", inner)
+        opts_grp = QGroupBox(tr("iccgamut Options"), inner)
         og = QVBoxLayout(opts_grp)
         og.setContentsMargins(8, 10, 8, 8)
         og.setSpacing(8)
 
         intent_row = QHBoxLayout()
-        intent_row.addWidget(QLabel("Rendering intent:", opts_grp))
+        intent_row.addWidget(QLabel(tr("Rendering intent:"), opts_grp))
         self._intent_combo = NoScrollComboBox(opts_grp)
-        self._intent_combo.addItem("Absolute colorimetric (default)", "a")
-        self._intent_combo.addItem("Relative colorimetric", "r")
-        self._intent_combo.addItem("Perceptual", "p")
-        self._intent_combo.addItem("Saturation", "s")
+        self._intent_combo.addItem(tr("Absolute colorimetric (default)"), "a")
+        self._intent_combo.addItem(tr("Relative colorimetric"), "r")
+        self._intent_combo.addItem(tr("Perceptual"), "p")
+        self._intent_combo.addItem(tr("Saturation"), "s")
         self._intent_combo.setObjectName("compact_input")
         self._intent_combo.style().unpolish(self._intent_combo)
         self._intent_combo.style().polish(self._intent_combo)
         intent_row.addWidget(self._intent_combo, stretch=1)
         intent_row.addWidget(TooltipButton(
-            "Rendering Intent",
-            "Selects which ICC rendering table iccgamut uses to compute the gamut boundary.\n\n"
+            tr("Rendering Intent"),
+            tr("Selects which ICC rendering table iccgamut uses to compute the gamut boundary.\n\n"
             "• Absolute colorimetric (default) — shows the true colorimetric gamut of the\n"
             "  device including its media white point. Best for comparing one profile against\n"
             "  another or against a reference colour space such as sRGB or AdobeRGB.\n\n"
@@ -453,38 +454,38 @@ class GamutPanel(QWidget):
             "  clipping at the gamut boundary.\n\n"
             "• Saturation — uses the saturation rendering table, which prioritises vivid colours\n"
             "  over colorimetric accuracy.\n\n"
-            "For most ICC profile analysis, use Absolute colorimetric.",
+            "For most ICC profile analysis, use Absolute colorimetric."),
             opts_grp,
             min_width=520,
         ))
         og.addLayout(intent_row)
 
         pcs_row = QHBoxLayout()
-        pcs_row.addWidget(QLabel("Colour space:", opts_grp))
+        pcs_row.addWidget(QLabel(tr("Colour space:"), opts_grp))
         self._pcs_combo = NoScrollComboBox(opts_grp)
-        self._pcs_combo.addItem("Lab (default)", "l")
-        self._pcs_combo.addItem("CIECAM02 Jab", "j")
+        self._pcs_combo.addItem(tr("Lab (default)"), "l")
+        self._pcs_combo.addItem(tr("CIECAM02 Jab"), "j")
         self._pcs_combo.setObjectName("compact_input")
         self._pcs_combo.style().unpolish(self._pcs_combo)
         self._pcs_combo.style().polish(self._pcs_combo)
         pcs_row.addWidget(self._pcs_combo, stretch=1)
         pcs_row.addWidget(TooltipButton(
-            "Profile Connection Space",
-            "Controls which colour space the gamut volume is computed and displayed in.\n\n"
+            tr("Profile Connection Space"),
+            tr("Controls which colour space the gamut volume is computed and displayed in.\n\n"
             "• Lab (default) — CIELAB D50, the standard ICC profile connection space. The three\n"
             "  axes represent L* (lightness, 0–100), a* (green↔red), and b* (blue↔yellow).\n"
             "  Easy to interpret and the correct choice for comparing ICC profiles.\n\n"
             "• CIECAM02 Jab — uses a modern perceptual appearance model that accounts for\n"
             "  chromatic adaptation and luminance-level effects. More perceptually uniform across\n"
             "  lightness levels, but harder to interpret directly and slower to compute.\n\n"
-            "For everyday profile analysis, Lab is the right choice.",
+            "For everyday profile analysis, Lab is the right choice."),
             opts_grp,
             min_width=500,
         ))
         og.addLayout(pcs_row)
 
         sres_row = QHBoxLayout()
-        sres_row.addWidget(QLabel("Surface resolution:", opts_grp))
+        sres_row.addWidget(QLabel(tr("Surface resolution:"), opts_grp))
         self._sres_spin = NoScrollDoubleSpinBox(opts_grp)
         self._sres_spin.setRange(1.0, 50.0)
         self._sres_spin.setSingleStep(1.0)
@@ -497,31 +498,31 @@ class GamutPanel(QWidget):
         sres_row.addWidget(self._sres_spin)
         sres_row.addStretch()
         sres_row.addWidget(TooltipButton(
-            "Surface Resolution",
-            "Controls how densely iccgamut samples the gamut surface (range 1–50).\n\n"
+            tr("Surface Resolution"),
+            tr("Controls how densely iccgamut samples the gamut surface (range 1–50).\n\n"
             "A higher value produces a finer mesh — the 3D shape looks smoother and more\n"
             "accurate, but takes longer to compute.\n\n"
             "   5–10   fast, coarse — good for quick checks\n"
             "  15–25   balanced, suitable for most work  (default: 20)\n"
             "  30–50   very fine and detailed — slow\n\n"
-            "If the gamut surface appears jagged or has visible holes, increase this value.",
+            "If the gamut surface appears jagged or has visible holes, increase this value."),
             opts_grp,
             min_width=460,
         ))
         og.addLayout(sres_row)
 
         func_row = QHBoxLayout()
-        func_row.addWidget(QLabel("Mapping:", opts_grp))
+        func_row.addWidget(QLabel(tr("Mapping:"), opts_grp))
         self._function_combo = NoScrollComboBox(opts_grp)
-        self._function_combo.addItem("Forward — output gamut (default)", "f")
-        self._function_combo.addItem("Backward — input gamut", "b")
+        self._function_combo.addItem(tr("Forward — output gamut (default)"), "f")
+        self._function_combo.addItem(tr("Backward — input gamut"), "b")
         self._function_combo.setObjectName("compact_input")
         self._function_combo.style().unpolish(self._function_combo)
         self._function_combo.style().polish(self._function_combo)
         func_row.addWidget(self._function_combo, stretch=1)
         func_row.addWidget(TooltipButton(
-            "Mapping Direction",
-            "Controls which direction iccgamut traverses the ICC profile tables.\n\n"
+            tr("Mapping Direction"),
+            tr("Controls which direction iccgamut traverses the ICC profile tables.\n\n"
             "• Forward — output gamut (default): maps device values (e.g. RGB ink percentages)\n"
             "  through the profile to Lab and builds the gamut from the resulting Lab points.\n"
             "  This shows every Lab colour the device can physically reproduce.\n\n"
@@ -529,34 +530,34 @@ class GamutPanel(QWidget):
             "  Shows which Lab colours can be addressed by the profile's lookup tables — this\n"
             "  can differ from the forward gamut due to LUT quantisation or non-invertibility.\n\n"
             "Use Forward for almost all profiling work. Backward is mainly useful for diagnosing\n"
-            "profile inversion quality or gamut mapping behaviour.",
+            "profile inversion quality or gamut mapping behaviour."),
             opts_grp,
             min_width=520,
         ))
         og.addLayout(func_row)
 
-        self._axes_cb  = QCheckBox("Show axes && white/black point", opts_grp)
-        self._cusps_cb = QCheckBox("Mark cusp points", opts_grp)
-        self._edges_cb = QCheckBox("Show edge plot", opts_grp)
+        self._axes_cb  = QCheckBox(tr("Show axes && white/black point"), opts_grp)
+        self._cusps_cb = QCheckBox(tr("Mark cusp points"), opts_grp)
+        self._edges_cb = QCheckBox(tr("Show edge plot"), opts_grp)
         self._axes_cb.setChecked(True)
 
         _cb_rows = [
             (self._axes_cb, TooltipButton(
-                "Lab Axes & Reference Points",
-                "Draws the CIELAB coordinate axes and two reference points inside the 3D viewer.\n\n"
+                tr("Lab Axes & Reference Points"),
+                tr("Draws the CIELAB coordinate axes and two reference points inside the 3D viewer.\n\n"
                 "The axes show the direction of each colour dimension:\n"
                 "  • L* axis (vertical) — lightness, from black at the bottom to white at the top\n"
                 "  • a* axis — green (−a*) toward red/magenta (+a*)\n"
                 "  • b* axis — blue/violet (−b*) toward yellow/amber (+b*)\n\n"
                 "Two small spheres mark the white point (lightest reproducible colour) and the\n"
                 "black point (darkest reproducible colour) of the profile.\n\n"
-                "Keeping this enabled makes it much easier to read and orient the 3D gamut model.",
+                "Keeping this enabled makes it much easier to read and orient the 3D gamut model."),
                 opts_grp,
                 min_width=460,
             )),
             (self._cusps_cb, TooltipButton(
-                "Mark Cusp Points",
-                "Marks the primary and secondary colour cusp points on the gamut surface\n"
+                tr("Mark Cusp Points"),
+                tr("Marks the primary and secondary colour cusp points on the gamut surface\n"
                 "(iccgamut -k flag).\n\n"
                 "Cusps are the most saturated colours in each of the six main hue directions:\n"
                 "red, yellow, green, cyan, blue, and magenta. On a printer profile these represent\n"
@@ -564,13 +565,13 @@ class GamutPanel(QWidget):
                 "Marking them helps you:\n"
                 "  • See at a glance how far the gamut extends in each hue direction\n"
                 "  • Compare the saturation envelope of one profile against another\n"
-                "  • Spot compression or irregularities in specific hue regions",
+                "  • Spot compression or irregularities in specific hue regions"),
                 opts_grp,
                 min_width=460,
             )),
             (self._edges_cb, TooltipButton(
-                "Show Edge Plot",
-                "Overlays the triangle edges of the gamut mesh on the 3D model\n"
+                tr("Show Edge Plot"),
+                tr("Overlays the triangle edges of the gamut mesh on the 3D model\n"
                 "(iccgamut -e flag).\n\n"
                 "Instead of only showing the solid shaded surface, this draws lines along every\n"
                 "triangle edge, giving a wireframe-like appearance that can reveal:\n"
@@ -578,7 +579,7 @@ class GamutPanel(QWidget):
                 "  • Sharp corners or unusual topology in the gamut shape\n"
                 "  • Areas where the boundary has been smoothed or interpolated\n\n"
                 "Most useful at higher surface resolution values where the mesh structure\n"
-                "is meaningful.",
+                "is meaningful."),
                 opts_grp,
                 min_width=460,
             )),
@@ -599,15 +600,15 @@ class GamutPanel(QWidget):
         # ── Buttons (outside scroll — always visible at the bottom) ─────
         btn_row = QHBoxLayout()
         btn_row.setContentsMargins(12, 6, 12, 12)
-        self._run_btn = QPushButton("Run Gamut Analysis", self)
+        self._run_btn = QPushButton(tr("Run Gamut Analysis"), self)
         self._run_btn.setObjectName("primary")
         self._run_btn.setFixedHeight(36)
         self._run_btn.setEnabled(False)
         self._run_btn.clicked.connect(self._on_run)
-        self._reset_view_btn = QPushButton("Reset View", self)
+        self._reset_view_btn = QPushButton(tr("Reset View"), self)
         self._reset_view_btn.setFixedHeight(36)
         self._reset_view_btn.clicked.connect(self._on_reset_view)
-        self._save_btn = QPushButton("Save as Defaults", self)
+        self._save_btn = QPushButton(tr("Save as Defaults"), self)
         self._save_btn.setFixedHeight(36)
         self._save_btn.clicked.connect(self._on_save_defaults)
         btn_row.addWidget(self._run_btn)
@@ -663,7 +664,7 @@ class GamutPanel(QWidget):
             log.warning("PyQt6-WebEngine not available — using fallback placeholder")
             self._web_view = None
             lbl = QLabel(
-                "Install PyQt6-WebEngine to view\nthe interactive 3D gamut",
+                tr("Install PyQt6-WebEngine to view\nthe interactive 3D gamut"),
                 container,
             )
             lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -745,7 +746,7 @@ class GamutPanel(QWidget):
         )
 
     def _on_opacity_changed(self, value: int) -> None:
-        self._opacity_label.setText(f"{value}%")
+        self._opacity_label.setText(tr("{value}%").format(value=value))
         if self._web_view is None or not self._view_combined_btn.isChecked():
             return
         t = 1.0 - value / 100.0
@@ -755,7 +756,7 @@ class GamutPanel(QWidget):
         )
 
     def _on_saturation_changed(self, value: int) -> None:
-        self._sat_label.setText(f"{value}%")
+        self._sat_label.setText(tr("{value}%").format(value=value))
         if self._web_view is None or not self._view_combined_btn.isChecked():
             return
         s = value / 100.0
@@ -1004,7 +1005,7 @@ class GamutPanel(QWidget):
         if self._primary_volume is not None:
             self._vol_label.setText(f"Volume: {self._primary_volume:,.0f} cc")
         else:
-            self._vol_label.setText("Volume: —")
+            self._vol_label.setText(tr("Volume: —"))
 
         if self._compare_volume is not None and self._primary_volume is not None:
             delta = (self._compare_volume - self._primary_volume) / self._primary_volume * 100
@@ -1015,7 +1016,7 @@ class GamutPanel(QWidget):
         elif self._compare_volume is not None:
             self._compare_vol_label.setText(f"Compare: {self._compare_volume:,.0f} cc")
         else:
-            self._compare_vol_label.setText("Compare: —")
+            self._compare_vol_label.setText(tr("Compare: —"))
 
         r = self._viewgam_result
         if r and r.intersection_volume is not None:
@@ -1029,9 +1030,9 @@ class GamutPanel(QWidget):
                 if r.compare_coverage_pct is not None else "B covered by A: —"
             )
         else:
-            self._intersection_label.setText("Intersection: —")
-            self._coverage_ab_label.setText("A covered by B: —")
-            self._coverage_ba_label.setText("B covered by A: —")
+            self._intersection_label.setText(tr("Intersection: —"))
+            self._coverage_ab_label.setText(tr("A covered by B: —"))
+            self._coverage_ba_label.setText(tr("B covered by A: —"))
 
     def _collect_params(self, icc_path: Path) -> GamutViewerParams:
         return GamutViewerParams(

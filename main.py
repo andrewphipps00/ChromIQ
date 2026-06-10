@@ -131,6 +131,12 @@ def main() -> int:
     app.installEventFilter(_gb_surface_filter)
 
     settings = AppSettings()
+
+    # Language must be set before any widget is built — strings are
+    # translated at construction time (restart-to-apply, see core/i18n.py).
+    from core.i18n import set_language
+    set_language(settings.get("language", "en"))
+
     appearance = settings.get("appearance", "auto")
     apply_appearance(app, None, appearance)
 

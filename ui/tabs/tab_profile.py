@@ -60,6 +60,7 @@ log = get_logger(__name__)
 
 _TAB_COLOR = "#37bcd6"  # Build Profile tab accent
 from ui.styles import SPEC_CYAN, TAB_COLORS
+from core.i18n import tr
 
 # ---------------------------------------------------------------------------
 # Profile Metadata tooltips (shared by the guided and manual panels).
@@ -319,9 +320,9 @@ class TabProfile(QWidget):
         self._cal_mode_row_widget = QWidget(self)
         cal_mode_row = QHBoxLayout(self._cal_mode_row_widget)
         cal_mode_row.setContentsMargins(0, 0, 0, 0)
-        self._cal_create_btn  = QPushButton("CREATE CALIBRATION FILE", self._cal_mode_row_widget)
-        self._cal_profile_btn = QPushButton("BUILD PROFILE",           self._cal_mode_row_widget)
-        self._cal_apply_btn   = QPushButton("APPLY CALIBRATION",       self._cal_mode_row_widget)
+        self._cal_create_btn  = QPushButton(tr("CREATE CALIBRATION FILE"), self._cal_mode_row_widget)
+        self._cal_profile_btn = QPushButton(tr("BUILD PROFILE"),           self._cal_mode_row_widget)
+        self._cal_apply_btn   = QPushButton(tr("APPLY CALIBRATION"),       self._cal_mode_row_widget)
         for _btn in (self._cal_create_btn, self._cal_profile_btn, self._cal_apply_btn):
             _btn.setCheckable(True)
             _btn.setObjectName("mode_btn")
@@ -342,12 +343,12 @@ class TabProfile(QWidget):
         self._mode_row_widget = QWidget(self)
         mode_row = QHBoxLayout(self._mode_row_widget)
         mode_row.setContentsMargins(0, 0, 0, 0)
-        self._guided_btn = QPushButton("GUIDED", self._mode_row_widget)
+        self._guided_btn = QPushButton(tr("GUIDED"), self._mode_row_widget)
         self._guided_btn.setCheckable(True)
         self._guided_btn.setChecked(True)
         self._guided_btn.setObjectName("mode_btn")
         self._guided_btn.setFont(_mode_font)
-        self._manual_btn = QPushButton("MANUAL", self._mode_row_widget)
+        self._manual_btn = QPushButton(tr("MANUAL"), self._mode_row_widget)
         self._manual_btn.setCheckable(True)
         self._manual_btn.setObjectName("mode_btn")
         self._manual_btn.setFont(_mode_font)
@@ -367,12 +368,12 @@ class TabProfile(QWidget):
         cc.setContentsMargins(0, 0, 0, 0)
         cc.setSpacing(8)
 
-        self._file_grp = file_grp = QGroupBox("Measurement Data (.ti3 / i1Profiler .txt)", colprof_container)
+        self._file_grp = file_grp = QGroupBox(tr("Measurement Data (.ti3 / i1Profiler .txt)"), colprof_container)
         fg = QHBoxLayout(file_grp)
-        self._load_btn = QPushButton("Load .ti3 or .txt…", file_grp)
+        self._load_btn = QPushButton(tr("Load .ti3 or .txt…"), file_grp)
         set_folder_icon(self._load_btn, "folder_build")
         self._load_btn.clicked.connect(self._on_load_ti3)
-        self._file_lbl = QLabel("No file selected", file_grp)
+        self._file_lbl = QLabel(tr("No file selected"), file_grp)
         self._file_lbl.setStyleSheet("color: #909090; font-size: 11px;")
         self._file_lbl.setWordWrap(True)
         fg.addWidget(self._load_btn)
@@ -395,7 +396,7 @@ class TabProfile(QWidget):
         build_layout.setContentsMargins(0, 0, 0, 0)
         build_layout.setSpacing(4)
         self._build_headline = QLabel(
-            f'Ready to build<span style="color: {SPEC_CYAN}; font-style: italic;">?</span>',
+            tr("Ready to build<span style=\"color: {SPEC_CYAN}; font-style: italic;\">?</span>").format(SPEC_CYAN=SPEC_CYAN),
             build_box,
         )
         self._build_headline.setTextFormat(Qt.TextFormat.RichText)
@@ -405,7 +406,7 @@ class TabProfile(QWidget):
             " font-family: Georgia; font-size: 28px;"
         )
         build_layout.addWidget(self._build_headline)
-        self._build_subtext = QLabel("Awaiting your command.", build_box)
+        self._build_subtext = QLabel(tr("Awaiting your command."), build_box)
         self._build_subtext.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._build_subtext.setStyleSheet(
             "color: #808080; background: transparent;"
@@ -427,16 +428,16 @@ class TabProfile(QWidget):
         cc.addWidget(build_box)
 
         btn_row = QHBoxLayout()
-        self._build_btn = QPushButton("Build Profile", colprof_container)
+        self._build_btn = QPushButton(tr("Build Profile"), colprof_container)
         self._build_btn.setObjectName("primary")
         self._build_btn.setFixedHeight(36)
         self._build_btn.setEnabled(False)
         self._build_btn.clicked.connect(self._on_build)
-        self._install_btn = QPushButton("Install Profile", colprof_container)
+        self._install_btn = QPushButton(tr("Install Profile"), colprof_container)
         self._install_btn.setFixedHeight(36)
         self._install_btn.setEnabled(False)
         self._install_btn.clicked.connect(self._on_install)
-        self._save_defaults_btn = QPushButton("Save as Defaults", colprof_container)
+        self._save_defaults_btn = QPushButton(tr("Save as Defaults"), colprof_container)
         self._save_defaults_btn.setFixedHeight(36)
         self._save_defaults_btn.clicked.connect(self._on_save_defaults)
         btn_row.addWidget(self._build_btn)
@@ -454,7 +455,7 @@ class TabProfile(QWidget):
         self._log.setObjectName("log")
         self._log.setReadOnly(True)
         self._log.setMaximumHeight(67)
-        self._log.setPlaceholderText("colprof output will appear here…")
+        self._log.setPlaceholderText(tr("colprof output will appear here…"))
         cc.addWidget(self._log)
 
         self._outer_stack.addWidget(colprof_container)       # page 0
@@ -655,14 +656,14 @@ class TabProfile(QWidget):
         gw_layout.setSpacing(8)
 
         # ---- Measurement Data section ----
-        grp_ti3 = QGroupBox("Measurement Data (.ti3)", grp_wrapper)
+        grp_ti3 = QGroupBox(tr("Measurement Data (.ti3)"), grp_wrapper)
         ti3_g = QVBoxLayout(grp_ti3)
         ti3_g.setSpacing(8)
         in_row = QHBoxLayout()
-        self._pc_load_btn = QPushButton("Load cal_*.ti3…", grp_ti3)
+        self._pc_load_btn = QPushButton(tr("Load cal_*.ti3…"), grp_ti3)
         set_folder_icon(self._pc_load_btn, "folder_build")
         self._pc_load_btn.clicked.connect(self._pc_browse_ti3)
-        self._pc_ti3_lbl = QLabel("No file selected — measure a calibration target first.", grp_ti3)
+        self._pc_ti3_lbl = QLabel(tr("No file selected — measure a calibration target first."), grp_ti3)
         self._pc_ti3_lbl.setStyleSheet("color: #909090; font-size: 11px;")
         self._pc_ti3_lbl.setWordWrap(True)
         in_row.addWidget(self._pc_load_btn)
@@ -673,26 +674,26 @@ class TabProfile(QWidget):
         # ---- Calibration Metadata section ----
         self._build_pc_metadata_group(gw_layout, grp_wrapper)
 
-        grp = QGroupBox("Create Calibration File  (printcal)", grp_wrapper)
+        grp = QGroupBox(tr("Create Calibration File  (printcal)"), grp_wrapper)
         g = QVBoxLayout(grp)
         g.setSpacing(8)
 
         # ---- Mode ----
         mode_row = QHBoxLayout()
-        mode_row.addWidget(QLabel("Mode:", grp))
+        mode_row.addWidget(QLabel(tr("Mode:"), grp))
         self._pc_mode_combo = NoScrollComboBox(grp)
-        self._pc_mode_combo.addItem("Initial calibration  (creates fresh .cal)", "initial")
-        self._pc_mode_combo.addItem("Re-calibrate  (refine existing .cal)", "recalibrate")
-        self._pc_mode_combo.addItem("Verify  (check against existing .cal)", "verify")
-        self._pc_mode_combo.addItem("Imitation target  (null cal from .ti3)", "imitation")
+        self._pc_mode_combo.addItem(tr("Initial calibration  (creates fresh .cal)"), "initial")
+        self._pc_mode_combo.addItem(tr("Re-calibrate  (refine existing .cal)"), "recalibrate")
+        self._pc_mode_combo.addItem(tr("Verify  (check against existing .cal)"), "verify")
+        self._pc_mode_combo.addItem(tr("Imitation target  (null cal from .ti3)"), "imitation")
         self._pc_mode_combo.currentIndexChanged.connect(self._pc_update_mode_vis)
         self._pc_mode_combo.setObjectName("compact_input")
         self._pc_mode_combo.style().unpolish(self._pc_mode_combo)
         self._pc_mode_combo.style().polish(self._pc_mode_combo)
         mode_row.addWidget(self._pc_mode_combo, stretch=1)
         mode_row.addWidget(TooltipButton(
-            "Calibration Mode",
-            "Initial calibration (-i): creates a brand-new .cal file from your\n"
+            tr("Calibration Mode"),
+            tr("Initial calibration (-i): creates a brand-new .cal file from your\n"
             "calibration target measurement. Use this the first time.\n\n"
             "Re-calibrate (-r): refines an existing .cal by comparing new\n"
             "measurements to the previous target. Useful for keeping a\n"
@@ -701,7 +702,7 @@ class TabProfile(QWidget):
             "without writing any new files.\n\n"
             "Imitation target (-I): creates a calibration target from an existing\n"
             ".ti3 using a null (identity) calibration. Useful for deriving a\n"
-            "calibration target when no previous .cal exists.",
+            "calibration target when no previous .cal exists."),
             grp,
             min_width=480,
         ))
@@ -711,13 +712,13 @@ class TabProfile(QWidget):
         self._pc_prev_widget = QWidget(grp)
         prev_row = QHBoxLayout(self._pc_prev_widget)
         prev_row.setContentsMargins(0, 0, 0, 0)
-        prev_row.addWidget(QLabel("Previous .cal file:", self._pc_prev_widget))
+        prev_row.addWidget(QLabel(tr("Previous .cal file:"), self._pc_prev_widget))
         self._pc_prev_edit = QLineEdit(self._pc_prev_widget)
-        self._pc_prev_edit.setPlaceholderText("Path to previous calibration file…")
+        self._pc_prev_edit.setPlaceholderText(tr("Path to previous calibration file…"))
         self._pc_prev_edit.setObjectName("compact_input")
         self._pc_prev_edit.style().unpolish(self._pc_prev_edit)
         self._pc_prev_edit.style().polish(self._pc_prev_edit)
-        prev_browse = make_browse_button(self._pc_prev_widget, "Select previous .cal file", icon="folder_build")
+        prev_browse = make_browse_button(self._pc_prev_widget, tr("Select previous .cal file"), icon="folder_build")
         prev_browse.clicked.connect(self._pc_browse_prev)
         prev_browse.setObjectName("browse_compact")
         prev_browse.style().unpolish(prev_browse)
@@ -731,22 +732,22 @@ class TabProfile(QWidget):
 
         # ---- Dry run ----
         dry_row = QHBoxLayout()
-        self._pc_dry_run_cb = QCheckBox("Dry run (-d)  —  simulate without writing any files", grp)
+        self._pc_dry_run_cb = QCheckBox(tr("Dry run (-d)  —  simulate without writing any files"), grp)
         dry_row.addWidget(self._pc_dry_run_cb)
         dry_row.addStretch()
         dry_row.addWidget(TooltipButton(
-            "Dry Run (-d)",
-            "Runs printcal through all its calculations without writing the .cal\n"
+            tr("Dry Run (-d)"),
+            tr("Runs printcal through all its calculations without writing the .cal\n"
             "file to disk. Use this to check that your input file and settings are\n"
             "correct and to preview what targets would be computed — before\n"
-            "committing to a real calibration run.",
+            "committing to a real calibration run."),
             grp,
         ))
         g.addLayout(dry_row)
 
         # ---- Smoothing ----
         smooth_row = QHBoxLayout()
-        smooth_row.addWidget(QLabel("Smoothing:", grp))
+        smooth_row.addWidget(QLabel(tr("Smoothing:"), grp))
         self._pc_smooth_spin = NoScrollDoubleSpinBox(grp)
         self._pc_smooth_spin.setRange(0.1, 10.0)
         self._pc_smooth_spin.setSingleStep(0.1)
@@ -759,15 +760,15 @@ class TabProfile(QWidget):
         smooth_row.addWidget(self._pc_smooth_spin)
         smooth_row.addStretch()
         smooth_row.addWidget(TooltipButton(
-            "Curve Smoothing (-s)",
-            "Applies additional smoothing to the computed calibration curves, which\n"
+            tr("Curve Smoothing (-s)"),
+            tr("Applies additional smoothing to the computed calibration curves, which\n"
             "reduces the impact of measurement noise on the curve shape.\n\n"
             "Default (1.0) is appropriate for most printers and well-controlled\n"
             "measurement conditions.\n\n"
             "Raise to 2–5 if your printer's tone response looks irregular — for example\n"
             "if a matte paper gave inconsistent density readings across patches.\n"
             "Heavier smoothing averages out these irregularities at the cost of slightly\n"
-            "less precise curve fidelity.",
+            "less precise curve fidelity."),
             grp,
             min_width=460,
         ))
@@ -775,7 +776,7 @@ class TabProfile(QWidget):
 
         # ---- Verbosity ----
         verb_row = QHBoxLayout()
-        verb_row.addWidget(QLabel("Verbosity:", grp))
+        verb_row.addWidget(QLabel(tr("Verbosity:"), grp))
         self._pc_verb_spin = NoScrollSpinBox(grp)
         self._pc_verb_spin.setRange(0, 3)
         self._pc_verb_spin.setValue(1)
@@ -786,9 +787,9 @@ class TabProfile(QWidget):
         verb_row.addWidget(self._pc_verb_spin)
         verb_row.addStretch()
         verb_row.addWidget(TooltipButton(
-            "Verbosity (-v)",
-            "Controls how much detail printcal writes to the log.\n"
-            "0 = silent, 1 = normal, 2–3 = verbose/debug.",
+            tr("Verbosity (-v)"),
+            tr("Controls how much detail printcal writes to the log.\n"
+            "0 = silent, 1 = normal, 2–3 = verbose/debug."),
             grp,
         ))
         g.addLayout(verb_row)
@@ -797,7 +798,7 @@ class TabProfile(QWidget):
 
         # ---- Initial target overrides (hidden for recalibrate/verify) ----
         _targets_inner = self._make_channel_targets_widget(grp_wrapper)
-        self._pc_targets_widget = QGroupBox("Initial Target Overrides", grp_wrapper)
+        self._pc_targets_widget = QGroupBox(tr("Initial Target Overrides"), grp_wrapper)
         _tg = QVBoxLayout(self._pc_targets_widget)
         _tg.addWidget(_targets_inner)
         gw_layout.addWidget(self._pc_targets_widget)
@@ -807,12 +808,12 @@ class TabProfile(QWidget):
 
         # ---- Button row (outside scroll area) ----
         btn_row = QHBoxLayout()
-        self._pc_run_btn = QPushButton("Create Calibration File", container)
+        self._pc_run_btn = QPushButton(tr("Create Calibration File"), container)
         self._pc_run_btn.setObjectName("primary")
         self._pc_run_btn.setFixedHeight(36)
         self._pc_run_btn.setEnabled(False)
         self._pc_run_btn.clicked.connect(self._on_printcal_run)
-        self._pc_save_defaults_btn = QPushButton("Save as Defaults", container)
+        self._pc_save_defaults_btn = QPushButton(tr("Save as Defaults"), container)
         self._pc_save_defaults_btn.setFixedHeight(36)
         self._pc_save_defaults_btn.clicked.connect(self._on_pc_save_defaults)
         btn_row.addWidget(self._pc_run_btn)
@@ -831,7 +832,7 @@ class TabProfile(QWidget):
         self._pc_log.setObjectName("log")
         self._pc_log.setReadOnly(True)
         self._pc_log.setMaximumHeight(67)
-        self._pc_log.setPlaceholderText("printcal output will appear here…")
+        self._pc_log.setPlaceholderText(tr("printcal output will appear here…"))
         cc.addWidget(self._pc_log)
 
         s = self._settings
@@ -883,14 +884,14 @@ class TabProfile(QWidget):
         tip_row = QHBoxLayout()
         tip_row.addStretch()
         tip_row.addWidget(TooltipButton(
-            "Initial Target Overrides",
-            "These optional settings let you override the targets printcal computes\n"
+            tr("Initial Target Overrides"),
+            tr("These optional settings let you override the targets printcal computes\n"
             "automatically when building calibration curves.\n\n"
             "Enable a channel row with its checkbox, then fill in only the values\n"
             "you want to change — leave a spinbox at '—' to let printcal decide\n"
             "that value automatically from your measurement data.\n\n"
             "These overrides apply only in Initial calibration and Imitation target\n"
-            "modes. They have no effect in Re-calibrate or Verify mode.",
+            "modes. They have no effect in Re-calibrate or Verify mode."),
             w,
             min_width=440,
         ))
@@ -961,15 +962,15 @@ class TabProfile(QWidget):
 
         # ③ Extended-disclosure row -------------------------------------------
         ext_disc_row = QHBoxLayout()
-        self._pc_extended_cb = QCheckBox("Extended inkset channels (Ch4–Ch7)", w)
+        self._pc_extended_cb = QCheckBox(tr("Extended inkset channels (Ch4–Ch7)"), w)
         self._pc_extended_cb.setStyleSheet("color: #909090; font-size: 11px;")
         ext_disc_row.addWidget(self._pc_extended_cb)
         ext_disc_row.addStretch()
         ext_disc_row.addWidget(TooltipButton(
-            "Extended Inkset Channels",
-            "Show per-channel controls for printers with more than 4 ink channels\n"
+            tr("Extended Inkset Channels"),
+            tr("Show per-channel controls for printers with more than 4 ink channels\n"
             "(e.g. light cyan, light magenta, or other specialty inks).\n"
-            "Channels are numbered from 0; Ch4–Ch7 cover the fifth ink and beyond.",
+            "Channels are numbered from 0; Ch4–Ch7 cover the fifth ink and beyond."),
             w,
         ))
         outer.addLayout(ext_disc_row)
@@ -1002,25 +1003,25 @@ class TabProfile(QWidget):
         return w
 
     def _build_pc_metadata_group(self, layout: QVBoxLayout, parent: QWidget) -> None:
-        grp = QGroupBox("Calibration Metadata", parent)
+        grp = QGroupBox(tr("Calibration Metadata"), parent)
         g = QVBoxLayout(grp)
         g.setSpacing(8)
 
         desc_row = QHBoxLayout()
-        desc_row.addWidget(QLabel("Description (-D):", grp))
+        desc_row.addWidget(QLabel(tr("Description (-D):"), grp))
         self._pc_desc_edit = QLineEdit(grp)
-        self._pc_desc_edit.setPlaceholderText("e.g. EpsonP900_Cal_2026-04")
+        self._pc_desc_edit.setPlaceholderText(tr("e.g. EpsonP900_Cal_2026-04"))
         self._pc_desc_edit.setObjectName("compact_input")
         self._pc_desc_edit.style().unpolish(self._pc_desc_edit)
         self._pc_desc_edit.style().polish(self._pc_desc_edit)
         desc_row.addWidget(self._pc_desc_edit, stretch=1)
         desc_row.addWidget(TooltipButton(
-            "Description (-D)",
-            "An optional text label embedded in the .cal file header — not the filename.\n"
+            tr("Description (-D)"),
+            tr("An optional text label embedded in the .cal file header — not the filename.\n"
             "Applications that display .cal file information will show this string.\n\n"
             "Use it to identify the purpose of the calibration, for example:\n"
             "\"Epson P900 KCMY linearisation 2026-04\"\n\n"
-            "If left empty, no description is written to the header.",
+            "If left empty, no description is written to the header."),
             grp,
             min_width=460,
         ))
@@ -1031,7 +1032,7 @@ class TabProfile(QWidget):
             ("_pc_model", "M", "Model",        "e.g. SC-P900",  "Optional printer model name embedded in the .cal file header.\nHelps identify which printer this calibration was built for.\nCan be left empty."),
             ("_pc_copy",  "C", "Copyright",    "e.g. © 2026 …", "Optional copyright string embedded in the .cal file header.\nUse to record ownership or licensing terms for this calibration.\nCan be left empty."),
         ]:
-            check = QCheckBox(f"{label} (-{flag}):", grp)
+            check = QCheckBox(tr("{label} (-{flag}):").format(label=label, flag=flag), grp)
             edit  = QLineEdit(grp)
             edit.setPlaceholderText(placeholder)
             edit.setEnabled(False)
@@ -1042,7 +1043,7 @@ class TabProfile(QWidget):
             row = QHBoxLayout()
             row.addWidget(check)
             row.addWidget(edit, stretch=1)
-            row.addWidget(TooltipButton(f"-{flag}", tip, grp))
+            row.addWidget(TooltipButton(tr("-{flag}").format(flag=flag), tip, grp))
             g.addLayout(row)
             setattr(self, attr + "_check", check)
             setattr(self, attr + "_edit",  edit)
@@ -1149,29 +1150,29 @@ class TabProfile(QWidget):
         cc.setContentsMargins(0, 0, 0, 0)
         cc.setSpacing(8)
 
-        grp = QGroupBox("Apply Calibration  (applycal)", container)
+        grp = QGroupBox(tr("Apply Calibration  (applycal)"), container)
         g = QVBoxLayout(grp)
         g.setSpacing(8)
 
         # ---- Mode ----
         mode_row = QHBoxLayout()
-        mode_row.addWidget(QLabel("Mode:", grp))
+        mode_row.addWidget(QLabel(tr("Mode:"), grp))
         self._ac_mode_combo = NoScrollComboBox(grp)
-        self._ac_mode_combo.addItem("Apply calibration to profile  (-a)", "apply")
-        self._ac_mode_combo.addItem("Remove calibration from profile  (-u)", "remove")
-        self._ac_mode_combo.addItem("Check calibration (no file written)  (-c)", "check")
+        self._ac_mode_combo.addItem(tr("Apply calibration to profile  (-a)"), "apply")
+        self._ac_mode_combo.addItem(tr("Remove calibration from profile  (-u)"), "remove")
+        self._ac_mode_combo.addItem(tr("Check calibration (no file written)  (-c)"), "check")
         self._ac_mode_combo.setObjectName("compact_input")
         self._ac_mode_combo.style().unpolish(self._ac_mode_combo)
         self._ac_mode_combo.style().polish(self._ac_mode_combo)
         mode_row.addWidget(self._ac_mode_combo, stretch=1)
         mode_row.addWidget(TooltipButton(
-            "applycal Mode",
-            "Apply: bakes the calibration curves into the ICC profile so\n"
+            tr("applycal Mode"),
+            tr("Apply: bakes the calibration curves into the ICC profile so\n"
             "that any app using the profile automatically gets calibration.\n\n"
             "Remove: strips previously applied calibration curves out of\n"
             "the profile, reverting it to its uncalibrated state.\n\n"
             "Check: reports whether the profile has calibration curves\n"
-            "applied, without modifying anything.",
+            "applied, without modifying anything."),
             grp,
             min_width=480,
         ))
@@ -1179,13 +1180,13 @@ class TabProfile(QWidget):
 
         # ---- Cal file ----
         cal_row = QHBoxLayout()
-        cal_row.addWidget(QLabel("Calibration file (.cal):", grp))
+        cal_row.addWidget(QLabel(tr("Calibration file (.cal):"), grp))
         self._ac_cal_edit = QLineEdit(grp)
-        self._ac_cal_edit.setPlaceholderText("Path to .cal file…")
+        self._ac_cal_edit.setPlaceholderText(tr("Path to .cal file…"))
         self._ac_cal_edit.setObjectName("compact_input")
         self._ac_cal_edit.style().unpolish(self._ac_cal_edit)
         self._ac_cal_edit.style().polish(self._ac_cal_edit)
-        ac_cal_browse = make_browse_button(grp, "Select .cal file", icon="folder_build")
+        ac_cal_browse = make_browse_button(grp, tr("Select .cal file"), icon="folder_build")
         ac_cal_browse.clicked.connect(self._ac_browse_cal)
         ac_cal_browse.setObjectName("browse_compact")
         ac_cal_browse.style().unpolish(ac_cal_browse)
@@ -1198,14 +1199,14 @@ class TabProfile(QWidget):
 
         # ---- Input ICC ----
         in_row = QHBoxLayout()
-        in_row.addWidget(QLabel("Input ICC profile:", grp))
+        in_row.addWidget(QLabel(tr("Input ICC profile:"), grp))
         self._ac_in_edit = QLineEdit(grp)
-        self._ac_in_edit.setPlaceholderText("Path to input .icc / .icm…")
+        self._ac_in_edit.setPlaceholderText(tr("Path to input .icc / .icm…"))
         self._ac_in_edit.textChanged.connect(self._ac_update_out_placeholder)
         self._ac_in_edit.setObjectName("compact_input")
         self._ac_in_edit.style().unpolish(self._ac_in_edit)
         self._ac_in_edit.style().polish(self._ac_in_edit)
-        ac_in_browse = make_browse_button(grp, "Select input ICC profile", icon="folder_build")
+        ac_in_browse = make_browse_button(grp, tr("Select input ICC profile"), icon="folder_build")
         ac_in_browse.clicked.connect(self._ac_browse_in)
         ac_in_browse.setObjectName("browse_compact")
         ac_in_browse.style().unpolish(ac_in_browse)
@@ -1218,13 +1219,13 @@ class TabProfile(QWidget):
 
         # ---- Output ICC ----
         out_row = QHBoxLayout()
-        out_row.addWidget(QLabel("Output ICC profile:", grp))
+        out_row.addWidget(QLabel(tr("Output ICC profile:"), grp))
         self._ac_out_edit = QLineEdit(grp)
-        self._ac_out_edit.setPlaceholderText("Leave blank to save as cal_<name>.icc")
+        self._ac_out_edit.setPlaceholderText(tr("Leave blank to save as cal_<name>.icc"))
         self._ac_out_edit.setObjectName("compact_input")
         self._ac_out_edit.style().unpolish(self._ac_out_edit)
         self._ac_out_edit.style().polish(self._ac_out_edit)
-        ac_out_browse = make_browse_button(grp, "Select output ICC path", icon="folder_build")
+        ac_out_browse = make_browse_button(grp, tr("Select output ICC path"), icon="folder_build")
         ac_out_browse.clicked.connect(self._ac_browse_out)
         ac_out_browse.setObjectName("browse_compact")
         ac_out_browse.style().unpolish(ac_out_browse)
@@ -1237,7 +1238,7 @@ class TabProfile(QWidget):
 
         # ---- Verbose ----
         opt_row = QHBoxLayout()
-        self._ac_verbose_cb = QCheckBox("Verbose", grp)
+        self._ac_verbose_cb = QCheckBox(tr("Verbose"), grp)
         opt_row.addWidget(self._ac_verbose_cb)
         opt_row.addStretch()
         g.addLayout(opt_row)
@@ -1247,11 +1248,11 @@ class TabProfile(QWidget):
 
         # ---- Button row (outside groupbox) ----
         btn_row = QHBoxLayout()
-        self._ac_run_btn = QPushButton("Apply Calibration", container)
+        self._ac_run_btn = QPushButton(tr("Apply Calibration"), container)
         self._ac_run_btn.setObjectName("primary")
         self._ac_run_btn.setFixedHeight(36)
         self._ac_run_btn.clicked.connect(self._on_applycal_run)
-        self._ac_save_defaults_btn = QPushButton("Save as Defaults", container)
+        self._ac_save_defaults_btn = QPushButton(tr("Save as Defaults"), container)
         self._ac_save_defaults_btn.setFixedHeight(36)
         self._ac_save_defaults_btn.clicked.connect(self._on_ac_save_defaults)
         btn_row.addWidget(self._ac_run_btn)
@@ -1270,7 +1271,7 @@ class TabProfile(QWidget):
         self._ac_log.setObjectName("log")
         self._ac_log.setReadOnly(True)
         self._ac_log.setMaximumHeight(67)
-        self._ac_log.setPlaceholderText("applycal output will appear here…")
+        self._ac_log.setPlaceholderText(tr("applycal output will appear here…"))
         cc.addWidget(self._ac_log)
 
         s = self._settings
@@ -1296,8 +1297,8 @@ class TabProfile(QWidget):
 
     def _ac_browse_out(self) -> None:
         path, _ = QFileDialog.getSaveFileName(
-            self, "Save output ICC profile", self._ac_in_edit.text() or "",
-            "ICC profiles (*.icc *.icm)",
+            self, tr("Save output ICC profile"), self._ac_in_edit.text() or "",
+            tr("ICC profiles (*.icc *.icm)"),
         )
         if path:
             self._ac_out_edit.setText(path)
@@ -1306,9 +1307,9 @@ class TabProfile(QWidget):
         """Keep the output placeholder in sync with the input ICC field."""
         if in_text.strip():
             stem = Path(in_text.strip()).stem
-            self._ac_out_edit.setPlaceholderText(f"Leave blank to save as cal_{stem}.icc")
+            self._ac_out_edit.setPlaceholderText(tr("Leave blank to save as cal_{stem}.icc").format(stem=stem))
         else:
-            self._ac_out_edit.setPlaceholderText("Leave blank to save as cal_<name>.icc")
+            self._ac_out_edit.setPlaceholderText(tr("Leave blank to save as cal_<name>.icc"))
 
     def _on_ac_save_defaults(self) -> None:
         s = self._settings
@@ -1372,25 +1373,25 @@ class TabProfile(QWidget):
 
     def _show_applycal_result_dialog(self, icc_path: Path) -> None:
         dlg = QDialog(self)
-        dlg.setWindowTitle("Calibration Applied")
+        dlg.setWindowTitle(tr("Calibration Applied"))
         dlg.setMinimumWidth(580)
 
         layout = QVBoxLayout(dlg)
         layout.setContentsMargins(24, 20, 24, 20)
         layout.setSpacing(14)
 
-        headline = QLabel("<b>Calibration applied successfully.</b>", dlg)
+        headline = QLabel(tr("<b>Calibration applied successfully.</b>"), dlg)
         headline.setStyleSheet("font-size: 14px;")
         layout.addWidget(headline)
 
         path_lbl = QLabel(
-            f"Saved to:<br><code style='font-size:11px'>{icc_path}</code>",
+            tr("Saved to:<br><code style='font-size:11px'>{icc_path}</code>").format(icc_path=icc_path),
             dlg,
         )
         path_lbl.setWordWrap(True)
         layout.addWidget(path_lbl)
 
-        next_lbl = QLabel("What would you like to do next?", dlg)
+        next_lbl = QLabel(tr("What would you like to do next?"), dlg)
         layout.addWidget(next_lbl)
 
         install_desc = QLabel(
@@ -1412,7 +1413,7 @@ class TabProfile(QWidget):
         _install_label = "Install on this Mac" if is_macos() else "Install Profile"
         install_btn = QPushButton(_install_label, dlg)
         install_btn.setObjectName("primary")
-        done_btn = QPushButton("Done", dlg)
+        done_btn = QPushButton(tr("Done"), dlg)
         done_btn.setDefault(True)
 
         btn_row = QHBoxLayout()
@@ -1439,42 +1440,42 @@ class TabProfile(QWidget):
 
     def _show_printcal_result_dialog(self, cal_path: Path) -> None:
         dlg = QDialog(self)
-        dlg.setWindowTitle("Calibration File Created")
+        dlg.setWindowTitle(tr("Calibration File Created"))
         dlg.setMinimumWidth(600)
 
         layout = QVBoxLayout(dlg)
         layout.setContentsMargins(24, 20, 24, 20)
         layout.setSpacing(14)
 
-        headline = QLabel("<b>Your calibration file is ready.</b>", dlg)
+        headline = QLabel(tr("<b>Your calibration file is ready.</b>"), dlg)
         headline.setStyleSheet("font-size: 14px;")
         layout.addWidget(headline)
 
         path_lbl = QLabel(
-            f"Saved to:<br><code style='font-size:11px'>{cal_path}</code>",
+            tr("Saved to:<br><code style='font-size:11px'>{cal_path}</code>").format(cal_path=cal_path),
             dlg,
         )
         path_lbl.setWordWrap(True)
         layout.addWidget(path_lbl)
 
         next_lbl = QLabel(
-            "Next step: go to the <b>Create Chart</b> tab, make sure "
+            tr("Next step: go to the <b>Create Chart</b> tab, make sure "
             "<i>Create target for calibration</i> is unchecked, and generate a "
             "profiling chart. The .cal path has been pre-filled in both the "
-            "<b>-K</b> and <b>-I</b> fields — use whichever applies to your workflow:",
+            "<b>-K</b> and <b>-I</b> fields — use whichever applies to your workflow:"),
             dlg,
         )
         next_lbl.setWordWrap(True)
         layout.addWidget(next_lbl)
 
         k_lbl = QLabel(
-            "<b>-K &nbsp; Apply calibration to patches</b><br>"
+            tr("<b>-K &nbsp; Apply calibration to patches</b><br>"
             "<span style='color:#b0b0b0; font-size:11px'>"
             "printtarg remaps every patch value through the .cal curves before printing. "
             "Use this when your printer has no built-in linearisation — the chart will "
             "already reflect calibrated device behaviour. Recommended for most desktop "
             "inkjet printers driven directly from a TIFF."
-            "</span>",
+            "</span>"),
             dlg,
         )
         k_lbl.setWordWrap(True)
@@ -1482,13 +1483,13 @@ class TabProfile(QWidget):
         layout.addWidget(k_lbl)
 
         i_lbl = QLabel(
-            "<b>-I &nbsp; Embed calibration without applying</b><br>"
+            tr("<b>-I &nbsp; Embed calibration without applying</b><br>"
             "<span style='color:#b0b0b0; font-size:11px'>"
             "The .cal is embedded in the .ti2 as metadata only; patch values are left "
             "untouched. Use this when your printer or RIP already applies linearisation "
             "natively (e.g. EFI Fiery, Wasatch, or any RIP with its own LUT). "
             "colprof will reference the .cal when building the profile."
-            "</span>",
+            "</span>"),
             dlg,
         )
         i_lbl.setWordWrap(True)
@@ -1496,17 +1497,17 @@ class TabProfile(QWidget):
         layout.addWidget(i_lbl)
 
         note_lbl = QLabel(
-            "<span style='color:#606060; font-size:11px'>"
+            tr("<span style='color:#606060; font-size:11px'>"
             "-K and -I are mutually exclusive — enable only one at a time."
-            "</span>",
+            "</span>"),
             dlg,
         )
         note_lbl.setTextFormat(Qt.TextFormat.RichText)
         layout.addWidget(note_lbl)
 
-        chart_btn = QPushButton("← Go to Create Chart", dlg)
+        chart_btn = QPushButton(tr("← Go to Create Chart"), dlg)
         chart_btn.setObjectName("primary")
-        done_btn = QPushButton("Done", dlg)
+        done_btn = QPushButton(tr("Done"), dlg)
         done_btn.setDefault(True)
 
         btn_row = QHBoxLayout()
@@ -1567,32 +1568,32 @@ class TabProfile(QWidget):
         cl.setSpacing(0)
 
         # Presets group
-        presets_grp = QGroupBox("Presets", container)
+        presets_grp = QGroupBox(tr("Presets"), container)
         presets_row = QHBoxLayout(presets_grp)
         presets_row.setContentsMargins(8, 4, 8, 8)
-        presets_row.addWidget(QLabel("Select preset:", container))
+        presets_row.addWidget(QLabel(tr("Select preset:"), container))
         self._m_preset_combo = NoScrollComboBox(container)
-        self._m_preset_combo.addItem("none", userData=None)
+        self._m_preset_combo.addItem(tr("none"), userData=None)
         presets_row.addWidget(self._m_preset_combo, stretch=1)
         self._m_preset_add_btn = QPushButton(container)
         self._m_preset_add_btn.setObjectName("icon_btn")
         self._m_preset_add_btn.setFixedSize(28, 28)
         set_preset_icon(self._m_preset_add_btn, "plus")
-        self._m_preset_add_btn.setToolTip("Save current settings as a new preset")
+        self._m_preset_add_btn.setToolTip(tr("Save current settings as a new preset"))
         self._m_preset_del_btn = QPushButton(container)
         self._m_preset_del_btn.setObjectName("icon_btn")
         self._m_preset_del_btn.setFixedSize(28, 28)
         set_preset_icon(self._m_preset_del_btn, "minus")
-        self._m_preset_del_btn.setToolTip("Delete selected preset")
+        self._m_preset_del_btn.setToolTip(tr("Delete selected preset"))
         self._m_preset_del_btn.setEnabled(False)
         self._m_preset_reveal_btn = QPushButton(container)
         self._m_preset_reveal_btn.setObjectName("icon_btn")
         self._m_preset_reveal_btn.setFixedSize(28, 28)
         set_folder_icon(self._m_preset_reveal_btn, "folder")
         self._m_preset_reveal_btn.setToolTip(
-            "Open this tab's presets folder in Finder/Explorer.\n"
+            tr("Open this tab's presets folder in Finder/Explorer.\n"
             "Each preset is a plain .json file — copy one to a colleague\n"
-            "and they can drop it into their own folder to share."
+            "and they can drop it into their own folder to share.")
         )
         self._m_preset_reveal_btn.clicked.connect(
             lambda: reveal_in_file_manager(tab_dir("build_profile"))
@@ -1601,8 +1602,8 @@ class TabProfile(QWidget):
         presets_row.addWidget(self._m_preset_del_btn)
         presets_row.addWidget(self._m_preset_reveal_btn)
         presets_row.addWidget(TooltipButton(
-            "Manual Presets",
-            "Save and recall named snapshots of all Manual mode settings.\n\n"
+            tr("Manual Presets"),
+            tr("Save and recall named snapshots of all Manual mode settings.\n\n"
             "  +  Save current parameter values as a new named preset.\n"
             "  −  Delete the currently selected preset.\n"
             "  ▢  Open this tab's presets folder in Finder/Explorer.\n\n"
@@ -1616,7 +1617,7 @@ class TabProfile(QWidget):
             "shared preset, drop the .json into the matching folder on the\n"
             "target machine and ChromIQ will pick it up on the next launch.\n\n"
             "Profile Description is not saved — it is filled from the\n"
-            ".ti3 filename. Presets persist between sessions.",
+            ".ti3 filename. Presets persist between sessions."),
             container,
             min_width=600,
         ))
@@ -1674,7 +1675,7 @@ class TabProfile(QWidget):
     def _m_populate_preset_combo(self, presets: dict, select_name: str | None = None) -> None:
         self._m_preset_combo.blockSignals(True)
         self._m_preset_combo.clear()
-        self._m_preset_combo.addItem("none", userData=None)
+        self._m_preset_combo.addItem(tr("none"), userData=None)
         for name in presets:
             self._m_preset_combo.addItem(name, userData=name)
         if select_name is not None:
@@ -1824,12 +1825,12 @@ class TabProfile(QWidget):
     def _on_m_preset_save(self) -> None:
         data = self._m_collect_preset_data()
         dlg = QInputDialog(self)
-        dlg.setWindowTitle("Save Preset")
+        dlg.setWindowTitle(tr("Save Preset"))
         dlg.setLabelText(
-            "Give this preset a name.\n"
+            tr("Give this preset a name.\n"
             "All current Manual mode settings will be saved under that name\n"
             "and can be recalled at any time from the preset list.\n"
-            "(Profile Description is not included — it is filled from the .ti3 filename.)"
+            "(Profile Description is not included — it is filled from the .ti3 filename.)")
         )
         dlg.setMinimumWidth(460)
         if not dlg.exec():
@@ -1845,18 +1846,18 @@ class TabProfile(QWidget):
     def _on_m_preset_delete(self) -> None:
         name = self._m_preset_combo.currentText()
         dlg = QDialog(self)
-        dlg.setWindowTitle("Delete Preset")
+        dlg.setWindowTitle(tr("Delete Preset"))
         dlg.setMinimumWidth(460)
         dlg_layout = QVBoxLayout(dlg)
         dlg_layout.setSpacing(10)
         dlg_layout.setContentsMargins(20, 20, 20, 16)
-        heading = QLabel(f'Delete the preset "{name}"?', dlg)
+        heading = QLabel(tr("Delete the preset \"{name}\"?").format(name=name), dlg)
         heading.setStyleSheet("font-weight: bold;")
         heading.setWordWrap(True)
         dlg_layout.addWidget(heading)
         info = QLabel(
-            "All parameter values saved in this preset will be permanently removed. "
-            "This cannot be undone.",
+            tr("All parameter values saved in this preset will be permanently removed. "
+            "This cannot be undone."),
             dlg,
         )
         info.setWordWrap(True)
@@ -1881,32 +1882,32 @@ class TabProfile(QWidget):
     # ------------------------------------------------------------------
 
     def _build_m_core_group(self, layout: QVBoxLayout) -> None:
-        grp = QGroupBox("Profile Core", layout.parentWidget())
+        grp = QGroupBox(tr("Profile Core"), layout.parentWidget())
         g = QVBoxLayout(grp)
         g.setSpacing(8)
 
         desc_row = QHBoxLayout()
-        desc_row.addWidget(QLabel("Profile Description (-D):", grp))
+        desc_row.addWidget(QLabel(tr("Profile Description (-D):"), grp))
         self._m_desc_edit = QLineEdit(grp)
-        self._m_desc_edit.setPlaceholderText("e.g. EpsonP900_CansonBaryta_2026-04")
+        self._m_desc_edit.setPlaceholderText(tr("e.g. EpsonP900_CansonBaryta_2026-04"))
         self._m_desc_edit.setObjectName("compact_input")
         self._m_desc_edit.style().unpolish(self._m_desc_edit)
         self._m_desc_edit.style().polish(self._m_desc_edit)
         desc_row.addWidget(self._m_desc_edit, stretch=1)
         desc_row.addWidget(TooltipButton(
-            "Profile Description (-D)",
-            "The name embedded in the ICC profile — shown in colour management\n"
+            tr("Profile Description (-D)"),
+            tr("The name embedded in the ICC profile — shown in colour management\n"
             "menus in apps like Photoshop, Lightroom, and Preview.\n\n"
             "Use a consistent format: Printer · Paper · Ink type · Date\n"
             "e.g. \"Epson P900 · Canson Baryta · Chromatic · 2026-04\"\n\n"
             "The output file is named after your .ti3 file — keep that name\n"
-            "consistent using underscores: EpsonP900_CansonBaryta_2026-04.icc",
+            "consistent using underscores: EpsonP900_CansonBaryta_2026-04.icc"),
             grp,
         ))
         g.addLayout(desc_row)
 
         algo_row = QHBoxLayout()
-        algo_row.addWidget(QLabel("Algorithm (-a):", grp))
+        algo_row.addWidget(QLabel(tr("Algorithm (-a):"), grp))
         self._m_algo_combo = NoScrollComboBox(grp)
         for code, label in [
             ("l", "Lab cLUT (recommended for inkjet)"),
@@ -1925,8 +1926,8 @@ class TabProfile(QWidget):
         self._m_algo_combo.style().polish(self._m_algo_combo)
         algo_row.addWidget(self._m_algo_combo, stretch=1)
         algo_row.addWidget(TooltipButton(
-            "Profile Algorithm (-a)",
-            "Selects the mathematical model used to map device values (ink percentages)\n"
+            tr("Profile Algorithm (-a)"),
+            tr("Selects the mathematical model used to map device values (ink percentages)\n"
             "to colours.\n\n"
             "Lab cLUT — a full 3-dimensional lookup table. Captures the complex,\n"
             "non-linear relationship between ink and colour that every real inkjet\n"
@@ -1934,14 +1935,14 @@ class TabProfile(QWidget):
             "Matrix + gamma — a simple linear model that fits only devices with a\n"
             "near-linear, predictable response (such as monitors). Far less accurate\n"
             "for inkjet printers. Use only if the destination application explicitly\n"
-            "requires a matrix profile.",
+            "requires a matrix profile."),
             grp,
             min_width=480,
         ))
         g.addLayout(algo_row)
 
         qual_row = QHBoxLayout()
-        qual_row.addWidget(QLabel("Quality (-q):", grp))
+        qual_row.addWidget(QLabel(tr("Quality (-q):"), grp))
         self._m_qual_combo = NoScrollComboBox(grp)
         for code, label in [
             ("l", "Low — fast test (~30 s)"),
@@ -1956,17 +1957,17 @@ class TabProfile(QWidget):
         self._m_qual_combo.style().polish(self._m_qual_combo)
         qual_row.addWidget(self._m_qual_combo, stretch=1)
         qual_row.addWidget(TooltipButton(
-            "Profile Quality (-q)",
-            "Controls cLUT grid resolution:\n"
+            tr("Profile Quality (-q)"),
+            tr("Controls cLUT grid resolution:\n"
             "• Low: 17³ grid — quick test\n"
             "• Medium: 33³ grid — good balance\n"
             "• High: 45³ grid — production quality\n"
-            "• Ultra: 65³ grid — maximum accuracy, very slow",
+            "• Ultra: 65³ grid — maximum accuracy, very slow"),
             grp,
         ))
         g.addLayout(qual_row)
 
-        self._m_b2a_check = QCheckBox("B2A Table Quality (-b):", grp)
+        self._m_b2a_check = QCheckBox(tr("B2A Table Quality (-b):"), grp)
         self._m_b2a_combo = NoScrollComboBox(grp)
         for code, lbl in [("l", "Low"), ("m", "Medium"), ("h", "High"),
                            ("u", "Ultra"), ("n", "None (skip B2A)")]:
@@ -1981,15 +1982,15 @@ class TabProfile(QWidget):
         b2a_row.addWidget(self._m_b2a_check)
         b2a_row.addWidget(self._m_b2a_combo, stretch=1)
         b2a_row.addWidget(TooltipButton(
-            "B2A Table Quality (-b)",
-            "Controls the resolution of the B→A (PCS→device) lookup tables used for\n"
+            tr("B2A Table Quality (-b)"),
+            tr("Controls the resolution of the B→A (PCS→device) lookup tables used for\n"
             "the perceptual and saturation rendering intents.\n\n"
             "The A→B tables (used for colorimetric intents) are controlled by the\n"
             "main Quality setting (-q). B→A tables are computed separately and only\n"
             "matter when you apply a perceptual or saturation intent.\n\n"
             "Leave unchecked to match -q automatically. Setting a lower quality here\n"
             "shortens build time if you mainly use colorimetric intents and don't\n"
-            "need high-quality B→A tables.",
+            "need high-quality B→A tables."),
             grp,
             min_width=480,
         ))
@@ -1998,12 +1999,12 @@ class TabProfile(QWidget):
         layout.addWidget(grp)
 
     def _build_m_measurement_group(self, layout: QVBoxLayout) -> None:
-        grp = QGroupBox("Measurement && Smoothing", layout.parentWidget())
+        grp = QGroupBox(tr("Measurement && Smoothing"), layout.parentWidget())
         g = QVBoxLayout(grp)
         g.setSpacing(8)
 
         smooth_row = QHBoxLayout()
-        smooth_row.addWidget(QLabel("Smoothing / Noise (-r):", grp))
+        smooth_row.addWidget(QLabel(tr("Smoothing / Noise (-r):"), grp))
         self._m_smooth_spin = NoScrollDoubleSpinBox(grp)
         self._m_smooth_spin.setRange(0.0, 5.0)
         self._m_smooth_spin.setSingleStep(0.1)
@@ -2015,18 +2016,18 @@ class TabProfile(QWidget):
         smooth_row.addWidget(self._m_smooth_spin)
         smooth_row.addStretch()
         smooth_row.addWidget(TooltipButton(
-            "Measurement Noise (-r)",
-            "Estimated average measurement noise as % ΔE.\n"
+            tr("Measurement Noise (-r)"),
+            tr("Estimated average measurement noise as % ΔE.\n"
             "Higher values = more smoothing.\n"
             "• 0.5%: clean measurements (default)\n"
             "• 1.0–2.0%: textured/matte papers\n"
-            "• 3.0–5.0%: very noisy conditions",
+            "• 3.0–5.0%: very noisy conditions"),
             grp,
         ))
         g.addLayout(smooth_row)
 
         dark_row = QHBoxLayout()
-        dark_row.addWidget(QLabel("Dark Region Emphasis (-V):", grp))
+        dark_row.addWidget(QLabel(tr("Dark Region Emphasis (-V):"), grp))
         self._m_dark_spin = NoScrollDoubleSpinBox(grp)
         self._m_dark_spin.setRange(1.0, 4.0)
         self._m_dark_spin.setSingleStep(0.1)
@@ -2038,10 +2039,10 @@ class TabProfile(QWidget):
         dark_row.addWidget(self._m_dark_spin)
         dark_row.addStretch()
         dark_row.addWidget(TooltipButton(
-            "Dark Region Grid Emphasis (-V)",
-            "Adds extra cLUT grid points in shadow areas for better shadow gradation.\n"
+            tr("Dark Region Grid Emphasis (-V)"),
+            tr("Adds extra cLUT grid points in shadow areas for better shadow gradation.\n"
             "1.0 = uniform grid (default).\n"
-            "Try 1.5–2.0 for printers with complex shadow behaviour.",
+            "Try 1.5–2.0 for printers with complex shadow behaviour."),
             grp,
         ))
         g.addLayout(dark_row)
@@ -2049,12 +2050,12 @@ class TabProfile(QWidget):
         layout.addWidget(grp)
 
     def _build_m_color_science_group(self, layout: QVBoxLayout) -> None:
-        grp = QGroupBox("Color Science", layout.parentWidget())
+        grp = QGroupBox(tr("Color Science"), layout.parentWidget())
         g = QVBoxLayout(grp)
         g.setSpacing(8)
 
         illum_row = QHBoxLayout()
-        illum_row.addWidget(QLabel("Illuminant (-i):", grp))
+        illum_row.addWidget(QLabel(tr("Illuminant (-i):"), grp))
         self._m_illum_combo = NoScrollComboBox(grp)
         for label, val in _ILLUMINANTS:
             self._m_illum_combo.addItem(label, val)
@@ -2063,22 +2064,22 @@ class TabProfile(QWidget):
         self._m_illum_combo.style().polish(self._m_illum_combo)
         illum_row.addWidget(self._m_illum_combo, stretch=1)
         illum_row.addWidget(TooltipButton(
-            "Illuminant for XYZ Computation (-i)",
-            "When measurements are spectral, ArgyllCMS converts them to XYZ using a\n"
+            tr("Illuminant for XYZ Computation (-i)"),
+            tr("When measurements are spectral, ArgyllCMS converts them to XYZ using a\n"
             "reference illuminant. This setting controls which illuminant is used.\n\n"
             "D50 is the ICC standard Profile Connection Space illuminant and the\n"
             "correct choice for virtually all print profiling. The entire ICC colour\n"
             "management pipeline is built around D50.\n\n"
             "D65 or other illuminants are only needed for specialised workflows where\n"
             "the profile's PCS must encode under a non-D50 illuminant — for example,\n"
-            "some cross-media proofing setups. In normal inkjet profiling, leave at D50.",
+            "some cross-media proofing setups. In normal inkjet profiling, leave at D50."),
             grp,
             min_width=500,
         ))
         g.addLayout(illum_row)
 
         obs_row = QHBoxLayout()
-        obs_row.addWidget(QLabel("CIE Observer (-o):", grp))
+        obs_row.addWidget(QLabel(tr("CIE Observer (-o):"), grp))
         self._m_obs_combo = NoScrollComboBox(grp)
         for label, val in [
             ("Default (1931 2° standard)", ""),
@@ -2092,8 +2093,8 @@ class TabProfile(QWidget):
         self._m_obs_combo.style().polish(self._m_obs_combo)
         obs_row.addWidget(self._m_obs_combo, stretch=1)
         obs_row.addWidget(TooltipButton(
-            "CIE Observer (-o)",
-            "Selects the CIE standard observer model used to convert spectral data\n"
+            tr("CIE Observer (-o)"),
+            tr("Selects the CIE standard observer model used to convert spectral data\n"
             "to XYZ tristimulus values.\n\n"
             "1931 2° (CIE 1931) — the default for all ICC-based workflows. Use this\n"
             "unless you have a specific reason not to.\n\n"
@@ -2102,16 +2103,16 @@ class TabProfile(QWidget):
             "2015 2° / 10° (Stockman) — based on modern cone fundamentals and more\n"
             "physiologically accurate. Useful for research; not widely adopted in\n"
             "production ICC pipelines.\n\n"
-            "For standard inkjet photo profiling, leave this at the 1931 default.",
+            "For standard inkjet photo profiling, leave this at the 1931 default."),
             grp,
             min_width=500,
         ))
         g.addLayout(obs_row)
 
         fwa_row = QHBoxLayout()
-        self._m_fwa_check = QCheckBox("FWA Compensation (-f):", grp)
+        self._m_fwa_check = QCheckBox(tr("FWA Compensation (-f):"), grp)
         self._m_fwa_illum_combo = NoScrollComboBox(grp)
-        self._m_fwa_illum_combo.addItem("Same as illuminant (-i)", "")
+        self._m_fwa_illum_combo.addItem(tr("Same as illuminant (-i)"), "")
         for label, val in _ILLUMINANTS[1:]:
             self._m_fwa_illum_combo.addItem(label, val)
         self._m_fwa_illum_combo.setEnabled(False)
@@ -2122,21 +2123,21 @@ class TabProfile(QWidget):
         fwa_row.addWidget(self._m_fwa_check)
         fwa_row.addWidget(self._m_fwa_illum_combo, stretch=1)
         fwa_row.addWidget(TooltipButton(
-            "FWA Compensation (-f)",
-            "Compensates for Fluorescent Whitening Agents (optical brighteners) in paper.\n"
+            tr("FWA Compensation (-f)"),
+            tr("Compensates for Fluorescent Whitening Agents (optical brighteners) in paper.\n"
             "Requires spectral measurements — not supported by all instruments.\n\n"
             "The illuminant sets the lighting condition used to compute the FWA effect.\n"
             "Use for papers with optical brighteners (bright white coated stock).\n\n"
             "Important: ColorMunki, i1Studio, and CC Studio filter out UV light and will\n"
             "fail with an error if this option is enabled. UV-capable instruments such as\n"
-            "the X-Rite i1Pro 2/3 are required for FWA compensation.",
+            "the X-Rite i1Pro 2/3 are required for FWA compensation."),
             grp,
             min_width=500,
         ))
         g.addLayout(fwa_row)
 
         src_vc_row = QHBoxLayout()
-        src_vc_row.addWidget(QLabel("Source viewing (-c):", grp))
+        src_vc_row.addWidget(QLabel(tr("Source viewing (-c):"), grp))
         self._m_src_viewing_combo = NoScrollComboBox(grp)
         for label, val in _VIEWING_CONDITIONS:
             self._m_src_viewing_combo.addItem(label, val)
@@ -2145,8 +2146,8 @@ class TabProfile(QWidget):
         self._m_src_viewing_combo.style().polish(self._m_src_viewing_combo)
         src_vc_row.addWidget(self._m_src_viewing_combo, stretch=1)
         src_vc_row.addWidget(TooltipButton(
-            "Source Viewing Conditions (-c)",
-            "Describes the lighting environment that the SOURCE image was "
+            tr("Source Viewing Conditions (-c)"),
+            tr("Describes the lighting environment that the SOURCE image was "
             "designed to be viewed in — typically the space where your image "
             "originated. For a photograph being prepared in Lightroom or "
             "Photoshop, that's the monitor in your editing room.\n\n"
@@ -2174,14 +2175,14 @@ class TabProfile(QWidget):
             "(jm / jd), Transparencies on a light box (cx) — for the specific "
             "non-monitor source types each name describes.\n\n"
             "If you're not sure, \"Monitor in typical work environment (mt)\" "
-            "is the right pick for almost all photographic profiling workflows.",
+            "is the right pick for almost all photographic profiling workflows."),
             grp,
             min_width=560,
         ))
         g.addLayout(src_vc_row)
 
         dst_vc_row = QHBoxLayout()
-        dst_vc_row.addWidget(QLabel("Destination viewing (-d):", grp))
+        dst_vc_row.addWidget(QLabel(tr("Destination viewing (-d):"), grp))
         self._m_dst_viewing_combo = NoScrollComboBox(grp)
         for label, val in _VIEWING_CONDITIONS:
             self._m_dst_viewing_combo.addItem(label, val)
@@ -2190,8 +2191,8 @@ class TabProfile(QWidget):
         self._m_dst_viewing_combo.style().polish(self._m_dst_viewing_combo)
         dst_vc_row.addWidget(self._m_dst_viewing_combo, stretch=1)
         dst_vc_row.addWidget(TooltipButton(
-            "Destination Viewing Conditions (-d)",
-            "Describes the lighting environment that the PRINTED output will "
+            tr("Destination Viewing Conditions (-d)"),
+            tr("Describes the lighting environment that the PRINTED output will "
             "be viewed in. Colprof uses this together with the source viewing "
             "condition above to do a CIECAM02 colour-appearance calculation "
             "when it builds the perceptual (and saturation) gamut-mapping "
@@ -2218,7 +2219,7 @@ class TabProfile(QWidget):
             "• Other entries (mt / mb / md, pcd, ob, cx) — for the specific "
             "non-print destination types each name describes.\n\n"
             "If you're not sure, \"Practical reflection print, typical office "
-            "(pp)\" is the right pick for almost all photographic printing.",
+            "(pp)\" is the right pick for almost all photographic printing."),
             grp,
             min_width=560,
         ))
@@ -2226,100 +2227,100 @@ class TabProfile(QWidget):
 
         # Media Surface
         m_surf_row = QHBoxLayout()
-        m_surf_row.addWidget(QLabel("Media Surface (-Z m):", grp))
+        m_surf_row.addWidget(QLabel(tr("Media Surface (-Z m):"), grp))
         self._m_z_surface_combo = NoScrollComboBox(grp)
-        self._m_z_surface_combo.addItem("Glossy / Reflective (default)", "")
-        self._m_z_surface_combo.addItem("Matte", "m")
+        self._m_z_surface_combo.addItem(tr("Glossy / Reflective (default)"), "")
+        self._m_z_surface_combo.addItem(tr("Matte"), "m")
         self._m_z_surface_combo.setObjectName("compact_input")
         self._m_z_surface_combo.style().unpolish(self._m_z_surface_combo)
         self._m_z_surface_combo.style().polish(self._m_z_surface_combo)
         m_surf_row.addWidget(self._m_z_surface_combo, stretch=1)
         m_surf_row.addWidget(TooltipButton(
-            "Media Surface (-Z m)",
-            "Marks the profile as belonging to matte or glossy media.\n"
+            tr("Media Surface (-Z m)"),
+            tr("Marks the profile as belonging to matte or glossy media.\n"
             "This is embedded in the ICC profile header and used by colour management\n"
             "systems to select the correct profile when multiple are installed.\n\n"
             "Glossy / Reflective — the ArgyllCMS default. Leave here for glossy, satin,\n"
             "and most photo papers.\n\n"
             "Matte — set this when profiling true matte papers. Some CMSes use this flag\n"
-            "to automatically pick the matte profile when the user selects matte media.",
+            "to automatically pick the matte profile when the user selects matte media."),
             grp,
         ))
         g.addLayout(m_surf_row)
 
         # Media Type
         m_mtype_row = QHBoxLayout()
-        m_mtype_row.addWidget(QLabel("Media Type (-Z t):", grp))
+        m_mtype_row.addWidget(QLabel(tr("Media Type (-Z t):"), grp))
         self._m_z_media_type_combo = NoScrollComboBox(grp)
-        self._m_z_media_type_combo.addItem("Reflective (default)", "")
-        self._m_z_media_type_combo.addItem("Transparent", "t")
+        self._m_z_media_type_combo.addItem(tr("Reflective (default)"), "")
+        self._m_z_media_type_combo.addItem(tr("Transparent"), "t")
         self._m_z_media_type_combo.setObjectName("compact_input")
         self._m_z_media_type_combo.style().unpolish(self._m_z_media_type_combo)
         self._m_z_media_type_combo.style().polish(self._m_z_media_type_combo)
         m_mtype_row.addWidget(self._m_z_media_type_combo, stretch=1)
         m_mtype_row.addWidget(TooltipButton(
-            "Media Type (-Z t)",
-            "Marks the profile for transparent media (slide film, overhead transparencies).\n"
+            tr("Media Type (-Z t)"),
+            tr("Marks the profile for transparent media (slide film, overhead transparencies).\n"
             "Leave at 'Reflective' for all standard inkjet and laser paper profiles.\n"
-            "Set 'Transparent' only if you are profiling a transparency inkset.",
+            "Set 'Transparent' only if you are profiling a transparency inkset."),
             grp,
         ))
         g.addLayout(m_mtype_row)
 
         # Media Polarity
         m_pol_row = QHBoxLayout()
-        m_pol_row.addWidget(QLabel("Media Polarity (-Z n):", grp))
+        m_pol_row.addWidget(QLabel(tr("Media Polarity (-Z n):"), grp))
         self._m_z_polarity_combo = NoScrollComboBox(grp)
-        self._m_z_polarity_combo.addItem("Positive (default)", "")
-        self._m_z_polarity_combo.addItem("Negative", "n")
+        self._m_z_polarity_combo.addItem(tr("Positive (default)"), "")
+        self._m_z_polarity_combo.addItem(tr("Negative"), "n")
         self._m_z_polarity_combo.setObjectName("compact_input")
         self._m_z_polarity_combo.style().unpolish(self._m_z_polarity_combo)
         self._m_z_polarity_combo.style().polish(self._m_z_polarity_combo)
         m_pol_row.addWidget(self._m_z_polarity_combo, stretch=1)
         m_pol_row.addWidget(TooltipButton(
-            "Media Polarity (-Z n)",
-            "Marks the profile for negative media (photographic film negatives).\n"
+            tr("Media Polarity (-Z n)"),
+            tr("Marks the profile for negative media (photographic film negatives).\n"
             "Used almost exclusively in professional film scanning workflows.\n"
-            "Leave at 'Positive' for all normal print profiling.",
+            "Leave at 'Positive' for all normal print profiling."),
             grp,
         ))
         g.addLayout(m_pol_row)
 
         # Color Type
         m_cmode_row = QHBoxLayout()
-        m_cmode_row.addWidget(QLabel("Color Type (-Z b):", grp))
+        m_cmode_row.addWidget(QLabel(tr("Color Type (-Z b):"), grp))
         self._m_z_color_mode_combo = NoScrollComboBox(grp)
-        self._m_z_color_mode_combo.addItem("Color media (default)", "")
-        self._m_z_color_mode_combo.addItem("Black & White", "b")
+        self._m_z_color_mode_combo.addItem(tr("Color media (default)"), "")
+        self._m_z_color_mode_combo.addItem(tr("Black & White"), "b")
         self._m_z_color_mode_combo.setObjectName("compact_input")
         self._m_z_color_mode_combo.style().unpolish(self._m_z_color_mode_combo)
         self._m_z_color_mode_combo.style().polish(self._m_z_color_mode_combo)
         m_cmode_row.addWidget(self._m_z_color_mode_combo, stretch=1)
         m_cmode_row.addWidget(TooltipButton(
-            "Color Type (-Z b)",
-            "Marks the profile as intended for black & white output.\n"
+            tr("Color Type (-Z b)"),
+            tr("Marks the profile as intended for black & white output.\n"
             "Set this only when profiling a monochrome inkset or a printer\n"
-            "in pure greyscale mode. Leave at 'Color media' for all normal RGB profiles.",
+            "in pure greyscale mode. Leave at 'Color media' for all normal RGB profiles."),
             grp,
         ))
         g.addLayout(m_cmode_row)
 
         # Default Rendering Intent
         m_intent_row = QHBoxLayout()
-        m_intent_row.addWidget(QLabel("Default Intent (-Z):", grp))
+        m_intent_row.addWidget(QLabel(tr("Default Intent (-Z):"), grp))
         self._m_z_intent_combo = NoScrollComboBox(grp)
-        self._m_z_intent_combo.addItem("Not set (profile default)", "")
-        self._m_z_intent_combo.addItem("Perceptual", "p")
-        self._m_z_intent_combo.addItem("Relative Colorimetric", "r")
-        self._m_z_intent_combo.addItem("Saturation", "s")
-        self._m_z_intent_combo.addItem("Absolute Colorimetric", "a")
+        self._m_z_intent_combo.addItem(tr("Not set (profile default)"), "")
+        self._m_z_intent_combo.addItem(tr("Perceptual"), "p")
+        self._m_z_intent_combo.addItem(tr("Relative Colorimetric"), "r")
+        self._m_z_intent_combo.addItem(tr("Saturation"), "s")
+        self._m_z_intent_combo.addItem(tr("Absolute Colorimetric"), "a")
         self._m_z_intent_combo.setObjectName("compact_input")
         self._m_z_intent_combo.style().unpolish(self._m_z_intent_combo)
         self._m_z_intent_combo.style().polish(self._m_z_intent_combo)
         m_intent_row.addWidget(self._m_z_intent_combo, stretch=1)
         m_intent_row.addWidget(TooltipButton(
-            "Default Rendering Intent (-Z p/r/s/a)",
-            "Sets which rendering intent is flagged as the default in the ICC profile header.\n"
+            tr("Default Rendering Intent (-Z p/r/s/a)"),
+            tr("Sets which rendering intent is flagged as the default in the ICC profile header.\n"
             "Colour management systems read this to decide which intent to use when the\n"
             "user has not specified one explicitly.\n\n"
             "Not set — colprof does not write an explicit default; the ICC default\n"
@@ -2330,7 +2331,7 @@ class TabProfile(QWidget):
             "Best for images that are mostly within the printer's gamut.\n\n"
             "Saturation — maximises colour vividness; rarely used for photographic output.\n\n"
             "Absolute Colorimetric — includes white point simulation; useful for proofing.\n\n"
-            "For most inkjet photo profiles, 'Perceptual' or 'Not set' are the right choices.",
+            "For most inkjet photo profiles, 'Perceptual' or 'Not set' are the right choices."),
             grp,
             min_width=500,
         ))
@@ -2339,23 +2340,23 @@ class TabProfile(QWidget):
         layout.addWidget(grp)
 
     def _build_m_gamut_group(self, layout: QVBoxLayout) -> None:
-        grp = QGroupBox("Gamut Mapping", layout.parentWidget())
+        grp = QGroupBox(tr("Gamut Mapping"), layout.parentWidget())
         g = QVBoxLayout(grp)
         g.setSpacing(8)
 
         mode_row = QHBoxLayout()
-        mode_row.addWidget(QLabel("Gamut Source:", grp))
+        mode_row.addWidget(QLabel(tr("Gamut Source:"), grp))
         self._m_gam_mode_combo = NoScrollComboBox(grp)
-        self._m_gam_mode_combo.addItem("None (colprof default)", "")
-        self._m_gam_mode_combo.addItem("Perceptual only (-s)", "s")
-        self._m_gam_mode_combo.addItem("Perceptual + Saturation (-S)  ← recommended", "S")
+        self._m_gam_mode_combo.addItem(tr("None (colprof default)"), "")
+        self._m_gam_mode_combo.addItem(tr("Perceptual only (-s)"), "s")
+        self._m_gam_mode_combo.addItem(tr("Perceptual + Saturation (-S)  ← recommended"), "S")
         self._m_gam_mode_combo.setObjectName("compact_input")
         self._m_gam_mode_combo.style().unpolish(self._m_gam_mode_combo)
         self._m_gam_mode_combo.style().polish(self._m_gam_mode_combo)
         mode_row.addWidget(self._m_gam_mode_combo, stretch=1)
         mode_row.addWidget(TooltipButton(
-            "Gamut Source (-s / -S)",
-            "When printing, colours that fall outside your printer's range must "
+            tr("Gamut Source (-s / -S)"),
+            tr("When printing, colours that fall outside your printer's range must "
             "be compressed to fit. This setting tells ChromIQ which colour "
             "space your images live in, so the compression is tuned to that "
             "space and looks natural in prints.\n\n"
@@ -2386,7 +2387,7 @@ class TabProfile(QWidget):
             "the perceptual intent has to do, which can desaturate colours "
             "that would have printed fine.\n\n"
             "Browse to the file in Argyll's ref folder, or use any standard "
-            "RGB working-space ICC profile you have installed.",
+            "RGB working-space ICC profile you have installed."),
             grp,
             min_width=560,
         ))
@@ -2395,10 +2396,10 @@ class TabProfile(QWidget):
         path_row = QHBoxLayout()
         self._m_gam_path_edit = QLineEdit(grp)
         self._m_gam_path_edit.setPlaceholderText(
-            "Path to source RGB profile (e.g. ClayRGB1998.icm or sRGB.icm from Argyll/ref/)"
+            tr("Path to source RGB profile (e.g. ClayRGB1998.icm or sRGB.icm from Argyll/ref/)")
         )
         self._m_gam_path_edit.setObjectName("compact_path")
-        self._m_gam_path_browse = make_browse_button(grp, "Select gamut source profile",
+        self._m_gam_path_browse = make_browse_button(grp, tr("Select gamut source profile"),
                                                      icon="folder_build")
         self._m_gam_path_browse.clicked.connect(self._browse_m_gam)
         self._m_gam_path_browse.setObjectName("browse_compact")
@@ -2417,7 +2418,7 @@ class TabProfile(QWidget):
         _on_m_mode_changed()
 
         perc_intent_row = QHBoxLayout()
-        self._m_perc_intent_check = QCheckBox("Perceptual Intent Override (-t):", grp)
+        self._m_perc_intent_check = QCheckBox(tr("Perceptual Intent Override (-t):"), grp)
         self._m_perc_intent_combo = NoScrollComboBox(grp)
         for label, val in _INTENTS:
             self._m_perc_intent_combo.addItem(label, val)
@@ -2429,22 +2430,22 @@ class TabProfile(QWidget):
         perc_intent_row.addWidget(self._m_perc_intent_check)
         perc_intent_row.addWidget(self._m_perc_intent_combo, stretch=1)
         perc_intent_row.addWidget(TooltipButton(
-            "Perceptual Rendering Intent Override (-t)",
-            "Overrides the gamut-mapping algorithm ArgyllCMS uses for the perceptual\n"
+            tr("Perceptual Rendering Intent Override (-t)"),
+            tr("Overrides the gamut-mapping algorithm ArgyllCMS uses for the perceptual\n"
             "rendering intent. Each algorithm compresses out-of-gamut colours differently,\n"
             "trading saturation for lightness accuracy in different ways.\n\n"
             "The default (unchecked) uses ArgyllCMS's built-in perceptual mapping, which\n"
             "is well-tuned for photographic prints.\n\n"
             "The numbered options select different mapping functions built into ArgyllCMS.\n"
             "Only change this if you are intentionally evaluating alternative perceptual\n"
-            "behaviours. The differences are subtle. Leave unchecked for normal profiling.",
+            "behaviours. The differences are subtle. Leave unchecked for normal profiling."),
             grp,
             min_width=500,
         ))
         g.addLayout(perc_intent_row)
 
         sat_intent_row = QHBoxLayout()
-        self._m_sat_intent_check = QCheckBox("Saturation Intent Override (-T):", grp)
+        self._m_sat_intent_check = QCheckBox(tr("Saturation Intent Override (-T):"), grp)
         self._m_sat_intent_combo = NoScrollComboBox(grp)
         for label, val in _INTENTS:
             self._m_sat_intent_combo.addItem(label, val)
@@ -2456,20 +2457,20 @@ class TabProfile(QWidget):
         sat_intent_row.addWidget(self._m_sat_intent_check)
         sat_intent_row.addWidget(self._m_sat_intent_combo, stretch=1)
         sat_intent_row.addWidget(TooltipButton(
-            "Saturation Rendering Intent Override (-T)",
-            "Overrides the gamut-mapping algorithm for the saturation rendering intent.\n"
+            tr("Saturation Rendering Intent Override (-T)"),
+            tr("Overrides the gamut-mapping algorithm for the saturation rendering intent.\n"
             "The saturation intent maximises colour vividness rather than accuracy and\n"
             "is rarely used for fine-art or photographic printing.\n\n"
             "Leave unchecked unless you are specifically building profiles for graphics\n"
             "or presentation output where vivid, saturated colour is preferred over\n"
-            "colour accuracy.",
+            "colour accuracy."),
             grp,
             min_width=460,
         ))
         g.addLayout(sat_intent_row)
 
         colorimetric_row = QHBoxLayout()
-        colorimetric_row.addWidget(QLabel("Colorimetric gamut (-nP / -nS):", grp))
+        colorimetric_row.addWidget(QLabel(tr("Colorimetric gamut (-nP / -nS):"), grp))
         self._m_colorimetric_gamut_combo = NoScrollComboBox(grp)
         for label, data in (
             ("Gamut mapping for both perceptual and saturation (default)", (False, False)),
@@ -2483,8 +2484,8 @@ class TabProfile(QWidget):
         self._m_colorimetric_gamut_combo.style().polish(self._m_colorimetric_gamut_combo)
         colorimetric_row.addWidget(self._m_colorimetric_gamut_combo, stretch=1)
         colorimetric_row.addWidget(TooltipButton(
-            "Colorimetric Gamut for Perceptual / Saturation (-nP, -nS)",
-            "When you supply a Gamut Source profile (above), colprof normally uses "
+            tr("Colorimetric Gamut for Perceptual / Saturation (-nP, -nS)"),
+            tr("When you supply a Gamut Source profile (above), colprof normally uses "
             "it to compress the source colour space into your printer's gamut in a "
             "perceptually pleasing way. This produces the perceptual rendering "
             "intent (used for photographs) and, if you chose the -S source, the "
@@ -2508,18 +2509,18 @@ class TabProfile(QWidget):
             "Effectively disables perceptual/saturation rendering — the profile "
             "behaves the same for every intent. Diagnostic only.\n\n"
             "If you didn't set a Gamut Source above, this setting has no effect "
-            "(there is no gamut mapping to disable).",
+            "(there is no gamut mapping to disable)."),
             grp,
             min_width=580,
         ))
         g.addLayout(colorimetric_row)
 
         inv_row = QHBoxLayout()
-        self._m_inv_gamut_cb = QCheckBox("Inverse gamut mapping (-nI)", grp)
+        self._m_inv_gamut_cb = QCheckBox(tr("Inverse gamut mapping (-nI)"), grp)
         inv_row.addWidget(self._m_inv_gamut_cb)
         inv_row.addWidget(TooltipButton(
-            "Inverse Gamut Mapping (-nI)",
-            "The B2A tables in an ICC profile go from the Profile Connection "
+            tr("Inverse Gamut Mapping (-nI)"),
+            tr("The B2A tables in an ICC profile go from the Profile Connection "
             "Space (PCS) back into device values — they tell an application "
             "\"to print this CIELAB colour, send these RGB numbers to the "
             "printer.\" colprof normally builds those B2A tables by inverting "
@@ -2533,7 +2534,7 @@ class TabProfile(QWidget):
             "developer toolkit. There is no normal printing workflow where "
             "enabling it improves the profile. Leave it unchecked unless you "
             "are specifically investigating B2A inversion behaviour and "
-            "understand what changes it produces.",
+            "understand what changes it produces."),
             grp,
             min_width=540,
         ))
@@ -2543,7 +2544,7 @@ class TabProfile(QWidget):
         layout.addWidget(grp)
 
     def _build_m_metadata_group(self, layout: QVBoxLayout) -> None:
-        grp = QGroupBox("Profile Metadata", layout.parentWidget())
+        grp = QGroupBox(tr("Profile Metadata"), layout.parentWidget())
         g = QVBoxLayout(grp)
         g.setSpacing(8)
 
@@ -2553,7 +2554,7 @@ class TabProfile(QWidget):
             ("_m_copy",  "C", "e.g. © 2026 …", _META_COPY_TIP),
         ]:
             label_text = "Manufacturer" if flag == "A" else "Model" if flag == "M" else "Copyright"
-            check = QCheckBox(f"{label_text} (-{flag}):", grp)
+            check = QCheckBox(tr("{label_text} (-{flag}):").format(label_text=label_text, flag=flag), grp)
             edit  = QLineEdit(grp)
             edit.setPlaceholderText(placeholder)
             edit.setEnabled(False)
@@ -2564,7 +2565,7 @@ class TabProfile(QWidget):
             row = QHBoxLayout()
             row.addWidget(check)
             row.addWidget(edit, stretch=1)
-            row.addWidget(TooltipButton(f"{label_text} (-{flag})", tip, grp, min_width=460))
+            row.addWidget(TooltipButton(tr("{label_text} (-{flag})").format(label_text=label_text, flag=flag), tip, grp, min_width=460))
             g.addLayout(row)
             setattr(self, attr + "_check", check)
             setattr(self, attr + "_edit",  edit)
@@ -2572,32 +2573,32 @@ class TabProfile(QWidget):
         layout.addWidget(grp)
 
     def _build_m_advanced_group(self, layout: QVBoxLayout) -> None:
-        grp = QGroupBox("Advanced", layout.parentWidget())
+        grp = QGroupBox(tr("Advanced"), layout.parentWidget())
         g = QVBoxLayout(grp)
 
         row1 = QHBoxLayout()
-        self._m_no_input_cb  = QCheckBox("No input shaper curves (-ni)", grp)
-        self._m_no_output_cb = QCheckBox("No output shaper curves (-no)", grp)
+        self._m_no_input_cb  = QCheckBox(tr("No input shaper curves (-ni)"), grp)
+        self._m_no_output_cb = QCheckBox(tr("No output shaper curves (-no)"), grp)
         row1.addWidget(self._m_no_input_cb)
         row1.addWidget(TooltipButton(
-            "No Input Shaper Curves (-ni)",
-            "Input shaper curves are 1D tone curves applied to device values before\n"
+            tr("No Input Shaper Curves (-ni)"),
+            tr("Input shaper curves are 1D tone curves applied to device values before\n"
             "the 3D cLUT. They help linearise the device response so the cLUT works\n"
             "with a more uniform distribution of input values.\n\n"
             "Disabling them removes this pre-conditioning step. Diagnostic option —\n"
-            "leave unchecked for normal profiling.",
+            "leave unchecked for normal profiling."),
             grp,
             min_width=460,
         ))
         row1.addSpacing(16)
         row1.addWidget(self._m_no_output_cb)
         row1.addWidget(TooltipButton(
-            "No Output Shaper Curves (-no)",
-            "Output shaper curves are 1D curves applied after the 3D cLUT to refine\n"
+            tr("No Output Shaper Curves (-no)"),
+            tr("Output shaper curves are 1D curves applied after the 3D cLUT to refine\n"
             "the final device values. They smooth out the cLUT output and help achieve\n"
             "accurate highlight and shadow rendering.\n\n"
             "Disabling them removes this post-processing step. Diagnostic option —\n"
-            "leave unchecked for normal profiling.",
+            "leave unchecked for normal profiling."),
             grp,
             min_width=460,
         ))
@@ -2605,24 +2606,24 @@ class TabProfile(QWidget):
         g.addLayout(row1)
 
         row2 = QHBoxLayout()
-        self._m_no_grid_pos_cb = QCheckBox("No input grid position curves (-np)", grp)
-        self._m_no_embedded_cb = QCheckBox("Don't embed measurement data (-nc)", grp)
+        self._m_no_grid_pos_cb = QCheckBox(tr("No input grid position curves (-np)"), grp)
+        self._m_no_embedded_cb = QCheckBox(tr("Don't embed measurement data (-nc)"), grp)
         row2.addWidget(self._m_no_grid_pos_cb)
         row2.addWidget(TooltipButton(
-            "No Grid Position Curves (-np)",
-            "Grid position curves remap where device values land on the cLUT grid,\n"
+            tr("No Grid Position Curves (-np)"),
+            tr("Grid position curves remap where device values land on the cLUT grid,\n"
             "concentrating grid nodes in regions of greater tonal importance.\n\n"
             "Disabling forces a uniform grid distribution instead. Advanced diagnostic\n"
-            "option — leave unchecked for normal profiling.",
+            "option — leave unchecked for normal profiling."),
             grp,
             min_width=460,
         ))
         row2.addSpacing(16)
         row2.addWidget(self._m_no_embedded_cb)
         row2.addWidget(TooltipButton(
-            "Don't Embed .ti3 Data (-nc)",
-            "By default colprof embeds the .ti3 measurement data inside the ICC profile.\n"
-            "Check this to omit it, resulting in a smaller profile file.",
+            tr("Don't Embed .ti3 Data (-nc)"),
+            tr("By default colprof embeds the .ti3 measurement data inside the ICC profile.\n"
+            "Check this to omit it, resulting in a smaller profile file."),
             grp,
         ))
         row2.addStretch()
@@ -2635,23 +2636,23 @@ class TabProfile(QWidget):
     # ------------------------------------------------------------------
 
     def _build_core_group(self, layout: QVBoxLayout) -> None:
-        grp = QGroupBox("Profile Core", layout.parentWidget())
+        grp = QGroupBox(tr("Profile Core"), layout.parentWidget())
         g = QVBoxLayout(grp)
 
         # Description
         desc_row = QHBoxLayout()
-        desc_row.addWidget(QLabel("Profile Description (-D):", grp))
+        desc_row.addWidget(QLabel(tr("Profile Description (-D):"), grp))
         self._desc_edit = QLineEdit(grp)
-        self._desc_edit.setPlaceholderText("e.g. EpsonP900_CansonBaryta_2026-04")
+        self._desc_edit.setPlaceholderText(tr("e.g. EpsonP900_CansonBaryta_2026-04"))
         desc_row.addWidget(self._desc_edit, stretch=1)
         desc_row.addWidget(TooltipButton(
-            "Profile Description (-D)",
-            "The name embedded in the ICC profile — shown in colour management\n"
+            tr("Profile Description (-D)"),
+            tr("The name embedded in the ICC profile — shown in colour management\n"
             "menus in apps like Photoshop, Lightroom, and Preview.\n\n"
             "Use a consistent format: Printer · Paper · Ink type · Date\n"
             "e.g. \"Epson P900 · Canson Baryta · Chromatic · 2026-04\"\n\n"
             "The output file is named after your .ti3 file — keep that name\n"
-            "consistent using underscores: EpsonP900_CansonBaryta_2026-04.icc",
+            "consistent using underscores: EpsonP900_CansonBaryta_2026-04.icc"),
             grp,
         ))
         g.addLayout(desc_row)
@@ -2660,7 +2661,7 @@ class TabProfile(QWidget):
         _algo_w = QWidget(grp)
         algo_row = QHBoxLayout(_algo_w)
         algo_row.setContentsMargins(0, 0, 0, 0)
-        algo_row.addWidget(QLabel("Algorithm (-a):", _algo_w))
+        algo_row.addWidget(QLabel(tr("Algorithm (-a):"), _algo_w))
         self._algo_combo = NoScrollComboBox(_algo_w)
         for code, label in [
             ("l", "Lab cLUT (recommended for inkjet)"),
@@ -2676,8 +2677,8 @@ class TabProfile(QWidget):
             self._algo_combo.addItem(label, code)
         algo_row.addWidget(self._algo_combo, stretch=1)
         algo_row.addWidget(TooltipButton(
-            "Profile Algorithm (-a)",
-            "Selects the mathematical model used to map device values (ink percentages)\n"
+            tr("Profile Algorithm (-a)"),
+            tr("Selects the mathematical model used to map device values (ink percentages)\n"
             "to colours.\n\n"
             "Lab cLUT — a full 3-dimensional lookup table. Captures the complex,\n"
             "non-linear relationship between ink and colour that every real inkjet\n"
@@ -2685,7 +2686,7 @@ class TabProfile(QWidget):
             "Matrix + gamma — a simple linear model that fits only devices with a\n"
             "near-linear, predictable response (such as monitors). Far less accurate\n"
             "for inkjet printers. Use only if the destination application explicitly\n"
-            "requires a matrix profile.",
+            "requires a matrix profile."),
             _algo_w,
             min_width=480,
         ))
@@ -2696,7 +2697,7 @@ class TabProfile(QWidget):
         _qual_w = QWidget(grp)
         qual_row = QHBoxLayout(_qual_w)
         qual_row.setContentsMargins(0, 0, 0, 0)
-        qual_row.addWidget(QLabel("Quality (-q):", _qual_w))
+        qual_row.addWidget(QLabel(tr("Quality (-q):"), _qual_w))
         self._qual_combo = NoScrollComboBox(_qual_w)
         for code, label in [
             ("l", "Low — fast test (~30 s)"),
@@ -2708,12 +2709,12 @@ class TabProfile(QWidget):
         self._qual_combo.setCurrentIndex(1)
         qual_row.addWidget(self._qual_combo, stretch=1)
         qual_row.addWidget(TooltipButton(
-            "Profile Quality (-q)",
-            "Controls cLUT grid resolution:\n"
+            tr("Profile Quality (-q)"),
+            tr("Controls cLUT grid resolution:\n"
             "• Low: 17³ grid — quick test\n"
             "• Medium: 33³ grid — good balance\n"
             "• High: 45³ grid — production quality\n"
-            "• Ultra: 65³ grid — maximum accuracy, very slow",
+            "• Ultra: 65³ grid — maximum accuracy, very slow"),
             _qual_w,
         ))
         g.addWidget(_qual_w)
@@ -2723,7 +2724,7 @@ class TabProfile(QWidget):
         _b2a_w = QWidget(grp)
         b2a_row = QHBoxLayout(_b2a_w)
         b2a_row.setContentsMargins(0, 0, 0, 0)
-        self._b2a_check = QCheckBox("B2A Table Quality (-b):", _b2a_w)
+        self._b2a_check = QCheckBox(tr("B2A Table Quality (-b):"), _b2a_w)
         self._b2a_combo = NoScrollComboBox(_b2a_w)
         for code, lbl in [("l", "Low"), ("m", "Medium"), ("h", "High"),
                            ("u", "Ultra"), ("n", "None (skip B2A)")]:
@@ -2734,15 +2735,15 @@ class TabProfile(QWidget):
         b2a_row.addWidget(self._b2a_check)
         b2a_row.addWidget(self._b2a_combo, stretch=1)
         b2a_row.addWidget(TooltipButton(
-            "B2A Table Quality (-b)",
-            "Controls the resolution of the B→A (PCS→device) lookup tables used for\n"
+            tr("B2A Table Quality (-b)"),
+            tr("Controls the resolution of the B→A (PCS→device) lookup tables used for\n"
             "the perceptual and saturation rendering intents.\n\n"
             "The A→B tables (used for colorimetric intents) are controlled by the\n"
             "main Quality setting (-q). B→A tables are computed separately and only\n"
             "matter when you apply a perceptual or saturation intent.\n\n"
             "Leave unchecked to match -q automatically. Setting a lower quality here\n"
             "shortens build time if you mainly use colorimetric intents and don't\n"
-            "need high-quality B→A tables.",
+            "need high-quality B→A tables."),
             _b2a_w,
             min_width=480,
         ))
@@ -2752,11 +2753,11 @@ class TabProfile(QWidget):
         layout.addWidget(grp)
 
     def _build_measurement_group(self, layout: QVBoxLayout) -> None:
-        grp = QGroupBox("Measurement && Smoothing", layout.parentWidget())
+        grp = QGroupBox(tr("Measurement && Smoothing"), layout.parentWidget())
         g = QVBoxLayout(grp)
 
         smooth_row = QHBoxLayout()
-        smooth_row.addWidget(QLabel("Smoothing / Noise (-r):", grp))
+        smooth_row.addWidget(QLabel(tr("Smoothing / Noise (-r):"), grp))
         self._smooth_spin = NoScrollDoubleSpinBox(grp)
         self._smooth_spin.setRange(0.0, 5.0)
         self._smooth_spin.setSingleStep(0.1)
@@ -2764,19 +2765,19 @@ class TabProfile(QWidget):
         self._smooth_spin.setValue(0.5)
         smooth_row.addWidget(self._smooth_spin)
         smooth_row.addWidget(TooltipButton(
-            "Measurement Noise (-r)",
-            "Estimated average measurement noise as % ΔE.\n"
+            tr("Measurement Noise (-r)"),
+            tr("Estimated average measurement noise as % ΔE.\n"
             "Higher values = more smoothing.\n"
             "• 0.5%: clean measurements (default)\n"
             "• 1.0–2.0%: textured/matte papers\n"
-            "• 3.0–5.0%: very noisy conditions",
+            "• 3.0–5.0%: very noisy conditions"),
             grp,
         ))
         smooth_row.addStretch()
         g.addLayout(smooth_row)
 
         dark_row = QHBoxLayout()
-        dark_row.addWidget(QLabel("Dark Region Emphasis (-V):", grp))
+        dark_row.addWidget(QLabel(tr("Dark Region Emphasis (-V):"), grp))
         self._dark_spin = NoScrollDoubleSpinBox(grp)
         self._dark_spin.setRange(1.0, 4.0)
         self._dark_spin.setSingleStep(0.1)
@@ -2784,10 +2785,10 @@ class TabProfile(QWidget):
         self._dark_spin.setValue(1.0)
         dark_row.addWidget(self._dark_spin)
         dark_row.addWidget(TooltipButton(
-            "Dark Region Grid Emphasis (-V)",
-            "Adds extra cLUT grid points in shadow areas for better shadow gradation.\n"
+            tr("Dark Region Grid Emphasis (-V)"),
+            tr("Adds extra cLUT grid points in shadow areas for better shadow gradation.\n"
             "1.0 = uniform grid (default).\n"
-            "Try 1.5–2.0 for printers with complex shadow behaviour.",
+            "Try 1.5–2.0 for printers with complex shadow behaviour."),
             grp,
         ))
         dark_row.addStretch()
@@ -2797,7 +2798,7 @@ class TabProfile(QWidget):
         grp.setVisible(False)
 
     def _build_color_science_group(self, layout: QVBoxLayout) -> None:
-        grp = QGroupBox("Color Science", layout.parentWidget())
+        grp = QGroupBox(tr("Color Science"), layout.parentWidget())
         g = QVBoxLayout(grp)
 
         # Illuminant, Observer, FWA are hidden in guided mode (advanced options)
@@ -2806,28 +2807,28 @@ class TabProfile(QWidget):
         _adv_layout.setContentsMargins(0, 0, 0, 0)
 
         illum_row = QHBoxLayout()
-        illum_row.addWidget(QLabel("Illuminant (-i):", _adv))
+        illum_row.addWidget(QLabel(tr("Illuminant (-i):"), _adv))
         self._illum_combo = NoScrollComboBox(_adv)
         for label, val in _ILLUMINANTS:
             self._illum_combo.addItem(label, val)
         illum_row.addWidget(self._illum_combo, stretch=1)
         illum_row.addWidget(TooltipButton(
-            "Illuminant for XYZ Computation (-i)",
-            "When measurements are spectral, ArgyllCMS converts them to XYZ using a\n"
+            tr("Illuminant for XYZ Computation (-i)"),
+            tr("When measurements are spectral, ArgyllCMS converts them to XYZ using a\n"
             "reference illuminant. This setting controls which illuminant is used.\n\n"
             "D50 is the ICC standard Profile Connection Space illuminant and the\n"
             "correct choice for virtually all print profiling. The entire ICC colour\n"
             "management pipeline is built around D50.\n\n"
             "D65 or other illuminants are only needed for specialised workflows where\n"
             "the profile's PCS must encode under a non-D50 illuminant — for example,\n"
-            "some cross-media proofing setups. In normal inkjet profiling, leave at D50.",
+            "some cross-media proofing setups. In normal inkjet profiling, leave at D50."),
             _adv,
             min_width=500,
         ))
         _adv_layout.addLayout(illum_row)
 
         obs_row = QHBoxLayout()
-        obs_row.addWidget(QLabel("CIE Observer (-o):", _adv))
+        obs_row.addWidget(QLabel(tr("CIE Observer (-o):"), _adv))
         self._obs_combo = NoScrollComboBox(_adv)
         for label, val in [
             ("Default (1931 2° standard)", ""),
@@ -2838,8 +2839,8 @@ class TabProfile(QWidget):
             self._obs_combo.addItem(label, val)
         obs_row.addWidget(self._obs_combo, stretch=1)
         obs_row.addWidget(TooltipButton(
-            "CIE Observer (-o)",
-            "Selects the CIE standard observer model used to convert spectral data\n"
+            tr("CIE Observer (-o)"),
+            tr("Selects the CIE standard observer model used to convert spectral data\n"
             "to XYZ tristimulus values.\n\n"
             "1931 2° (CIE 1931) — the default for all ICC-based workflows. Use this\n"
             "unless you have a specific reason not to.\n\n"
@@ -2848,16 +2849,16 @@ class TabProfile(QWidget):
             "2015 2° / 10° (Stockman) — based on modern cone fundamentals and more\n"
             "physiologically accurate. Useful for research; not widely adopted in\n"
             "production ICC pipelines.\n\n"
-            "For standard inkjet photo profiling, leave this at the 1931 default.",
+            "For standard inkjet photo profiling, leave this at the 1931 default."),
             _adv,
             min_width=500,
         ))
         _adv_layout.addLayout(obs_row)
 
         fwa_row = QHBoxLayout()
-        self._fwa_check = QCheckBox("FWA Compensation (-f):", _adv)
+        self._fwa_check = QCheckBox(tr("FWA Compensation (-f):"), _adv)
         self._fwa_illum_combo = NoScrollComboBox(_adv)
-        self._fwa_illum_combo.addItem("Same as illuminant (-i)", "")
+        self._fwa_illum_combo.addItem(tr("Same as illuminant (-i)"), "")
         for label, val in _ILLUMINANTS[1:]:
             self._fwa_illum_combo.addItem(label, val)
         self._fwa_illum_combo.setEnabled(False)
@@ -2865,14 +2866,14 @@ class TabProfile(QWidget):
         fwa_row.addWidget(self._fwa_check)
         fwa_row.addWidget(self._fwa_illum_combo, stretch=1)
         fwa_row.addWidget(TooltipButton(
-            "FWA Compensation (-f)",
-            "Compensates for Fluorescent Whitening Agents (optical brighteners) in paper.\n"
+            tr("FWA Compensation (-f)"),
+            tr("Compensates for Fluorescent Whitening Agents (optical brighteners) in paper.\n"
             "Requires spectral measurements — not supported by all instruments.\n\n"
             "The illuminant sets the lighting condition used to compute the FWA effect.\n"
             "Use for papers with optical brighteners (bright white coated stock).\n\n"
             "Important: ColorMunki, i1Studio, and CC Studio filter out UV light and will\n"
             "fail with an error if this option is enabled. UV-capable instruments such as\n"
-            "the X-Rite i1Pro 2/3 are required for FWA compensation.",
+            "the X-Rite i1Pro 2/3 are required for FWA compensation."),
             _adv,
             min_width=500,
         ))
@@ -2883,36 +2884,36 @@ class TabProfile(QWidget):
 
         # Media Surface — visible in guided mode
         surf_row = QHBoxLayout()
-        surf_row.addWidget(QLabel("Media Surface (-Z m):", grp))
+        surf_row.addWidget(QLabel(tr("Media Surface (-Z m):"), grp))
         self._z_surface_combo = NoScrollComboBox(grp)
-        self._z_surface_combo.addItem("Glossy / Reflective (default)", "")
-        self._z_surface_combo.addItem("Matte", "m")
+        self._z_surface_combo.addItem(tr("Glossy / Reflective (default)"), "")
+        self._z_surface_combo.addItem(tr("Matte"), "m")
         surf_row.addWidget(self._z_surface_combo, stretch=1)
         surf_row.addWidget(TooltipButton(
-            "Media Surface (-Z m)",
-            "Marks the profile as belonging to matte or glossy media.\n"
+            tr("Media Surface (-Z m)"),
+            tr("Marks the profile as belonging to matte or glossy media.\n"
             "This is embedded in the ICC profile header and used by colour management\n"
             "systems to select the correct profile when multiple are installed.\n\n"
             "Glossy / Reflective — the ArgyllCMS default. Leave here for glossy, satin,\n"
             "and most photo papers.\n\n"
             "Matte — set this when profiling true matte papers. Some CMSes use this flag\n"
-            "to automatically pick the matte profile when the user selects matte media.",
+            "to automatically pick the matte profile when the user selects matte media."),
             grp,
         ))
         g.addLayout(surf_row)
 
         # Color Type — visible in guided mode
         cmode_row = QHBoxLayout()
-        cmode_row.addWidget(QLabel("Color Type (-Z b):", grp))
+        cmode_row.addWidget(QLabel(tr("Color Type (-Z b):"), grp))
         self._z_color_mode_combo = NoScrollComboBox(grp)
-        self._z_color_mode_combo.addItem("Color media (default)", "")
-        self._z_color_mode_combo.addItem("Black & White", "b")
+        self._z_color_mode_combo.addItem(tr("Color media (default)"), "")
+        self._z_color_mode_combo.addItem(tr("Black & White"), "b")
         cmode_row.addWidget(self._z_color_mode_combo, stretch=1)
         cmode_row.addWidget(TooltipButton(
-            "Color Type (-Z b)",
-            "Marks the profile as intended for black & white output.\n"
+            tr("Color Type (-Z b)"),
+            tr("Marks the profile as intended for black & white output.\n"
             "Set this only when profiling a monochrome inkset or a printer\n"
-            "in pure greyscale mode. Leave at 'Color media' for all normal RGB profiles.",
+            "in pure greyscale mode. Leave at 'Color media' for all normal RGB profiles."),
             grp,
         ))
         g.addLayout(cmode_row)
@@ -2920,20 +2921,20 @@ class TabProfile(QWidget):
         layout.addWidget(grp)
 
     def _build_gamut_group(self, layout: QVBoxLayout) -> None:
-        grp = QGroupBox("Gamut Mapping", layout.parentWidget())
+        grp = QGroupBox(tr("Gamut Mapping"), layout.parentWidget())
         g = QVBoxLayout(grp)
 
         # ── Unified gamut source selector ───────────────────────────────
         mode_row = QHBoxLayout()
-        mode_row.addWidget(QLabel("Gamut Source:", grp))
+        mode_row.addWidget(QLabel(tr("Gamut Source:"), grp))
         self._gam_mode_combo = NoScrollComboBox(grp)
-        self._gam_mode_combo.addItem("None (colprof default)", "")
-        self._gam_mode_combo.addItem("Perceptual only (-s)", "s")
-        self._gam_mode_combo.addItem("Perceptual + Saturation (-S)  ← recommended", "S")
+        self._gam_mode_combo.addItem(tr("None (colprof default)"), "")
+        self._gam_mode_combo.addItem(tr("Perceptual only (-s)"), "s")
+        self._gam_mode_combo.addItem(tr("Perceptual + Saturation (-S)  ← recommended"), "S")
         mode_row.addWidget(self._gam_mode_combo, stretch=1)
         mode_row.addWidget(TooltipButton(
-            "Gamut Source (-s / -S)",
-            "When printing, colours that fall outside your printer's range must "
+            tr("Gamut Source (-s / -S)"),
+            tr("When printing, colours that fall outside your printer's range must "
             "be compressed to fit. This setting tells ChromIQ which colour "
             "space your images live in, so the compression is tuned to that "
             "space and looks natural in prints.\n\n"
@@ -2964,7 +2965,7 @@ class TabProfile(QWidget):
             "the perceptual intent has to do, which can desaturate colours "
             "that would have printed fine.\n\n"
             "Browse to the file in Argyll's ref folder, or use any standard "
-            "RGB working-space ICC profile you have installed.",
+            "RGB working-space ICC profile you have installed."),
             grp,
             min_width=560,
         ))
@@ -2973,9 +2974,9 @@ class TabProfile(QWidget):
         path_row = QHBoxLayout()
         self._gam_path_edit = QLineEdit(grp)
         self._gam_path_edit.setPlaceholderText(
-            "Path to source RGB profile (e.g. ClayRGB1998.icm or sRGB.icm from Argyll/ref/)"
+            tr("Path to source RGB profile (e.g. ClayRGB1998.icm or sRGB.icm from Argyll/ref/)")
         )
-        self._gam_path_browse = make_browse_button(grp, "Select gamut source profile", icon="folder_build")
+        self._gam_path_browse = make_browse_button(grp, tr("Select gamut source profile"), icon="folder_build")
         self._gam_path_browse.clicked.connect(self._browse_gam)
         path_row.addWidget(self._gam_path_edit, stretch=1)
         path_row.addWidget(self._gam_path_browse)
@@ -2993,7 +2994,7 @@ class TabProfile(QWidget):
         _perc_w = QWidget(grp)
         perc_intent_row = QHBoxLayout(_perc_w)
         perc_intent_row.setContentsMargins(0, 0, 0, 0)
-        self._perc_intent_check = QCheckBox("Perceptual Intent Override (-t):", _perc_w)
+        self._perc_intent_check = QCheckBox(tr("Perceptual Intent Override (-t):"), _perc_w)
         self._perc_intent_combo = NoScrollComboBox(_perc_w)
         for label, val in _INTENTS:
             self._perc_intent_combo.addItem(label, val)
@@ -3002,15 +3003,15 @@ class TabProfile(QWidget):
         perc_intent_row.addWidget(self._perc_intent_check)
         perc_intent_row.addWidget(self._perc_intent_combo, stretch=1)
         perc_intent_row.addWidget(TooltipButton(
-            "Perceptual Rendering Intent Override (-t)",
-            "Overrides the gamut-mapping algorithm ArgyllCMS uses for the perceptual\n"
+            tr("Perceptual Rendering Intent Override (-t)"),
+            tr("Overrides the gamut-mapping algorithm ArgyllCMS uses for the perceptual\n"
             "rendering intent. Each algorithm compresses out-of-gamut colours differently,\n"
             "trading saturation for lightness accuracy in different ways.\n\n"
             "The default (unchecked) uses ArgyllCMS's built-in perceptual mapping, which\n"
             "is well-tuned for photographic prints.\n\n"
             "The numbered options select different mapping functions built into ArgyllCMS.\n"
             "Only change this if you are intentionally evaluating alternative perceptual\n"
-            "behaviours. The differences are subtle. Leave unchecked for normal profiling.",
+            "behaviours. The differences are subtle. Leave unchecked for normal profiling."),
             _perc_w,
             min_width=500,
         ))
@@ -3021,7 +3022,7 @@ class TabProfile(QWidget):
         _sat_w = QWidget(grp)
         sat_intent_row = QHBoxLayout(_sat_w)
         sat_intent_row.setContentsMargins(0, 0, 0, 0)
-        self._sat_intent_check = QCheckBox("Saturation Intent Override (-T):", _sat_w)
+        self._sat_intent_check = QCheckBox(tr("Saturation Intent Override (-T):"), _sat_w)
         self._sat_intent_combo = NoScrollComboBox(_sat_w)
         for label, val in _INTENTS:
             self._sat_intent_combo.addItem(label, val)
@@ -3030,13 +3031,13 @@ class TabProfile(QWidget):
         sat_intent_row.addWidget(self._sat_intent_check)
         sat_intent_row.addWidget(self._sat_intent_combo, stretch=1)
         sat_intent_row.addWidget(TooltipButton(
-            "Saturation Rendering Intent Override (-T)",
-            "Overrides the gamut-mapping algorithm for the saturation rendering intent.\n"
+            tr("Saturation Rendering Intent Override (-T)"),
+            tr("Overrides the gamut-mapping algorithm for the saturation rendering intent.\n"
             "The saturation intent maximises colour vividness rather than accuracy and\n"
             "is rarely used for fine-art or photographic printing.\n\n"
             "Leave unchecked unless you are specifically building profiles for graphics\n"
             "or presentation output where vivid, saturated colour is preferred over\n"
-            "colour accuracy.",
+            "colour accuracy."),
             _sat_w,
             min_width=460,
         ))
@@ -3047,38 +3048,38 @@ class TabProfile(QWidget):
         _flags_w = QWidget(grp)
         flags_row = QHBoxLayout(_flags_w)
         flags_row.setContentsMargins(0, 0, 0, 0)
-        self._no_perc_gamut_cb = QCheckBox("Use colorimetric gamut — perceptual (-nP)", _flags_w)
-        self._no_sat_gamut_cb  = QCheckBox("Use colorimetric gamut — saturation (-nS)", _flags_w)
-        self._inv_gamut_cb     = QCheckBox("Inverse gamut mapping (-nI)", _flags_w)
+        self._no_perc_gamut_cb = QCheckBox(tr("Use colorimetric gamut — perceptual (-nP)"), _flags_w)
+        self._no_sat_gamut_cb  = QCheckBox(tr("Use colorimetric gamut — saturation (-nS)"), _flags_w)
+        self._inv_gamut_cb     = QCheckBox(tr("Inverse gamut mapping (-nI)"), _flags_w)
         flags_row.addWidget(self._no_perc_gamut_cb)
         flags_row.addWidget(TooltipButton(
-            "No Perceptual Gamut (-nP)",
-            "Normally, when a gamut source is set, ArgyllCMS uses it to shape the\n"
+            tr("No Perceptual Gamut (-nP)"),
+            tr("Normally, when a gamut source is set, ArgyllCMS uses it to shape the\n"
             "perceptual rendering intent — compressing the source colour space to fit\n"
             "the printer in a way that looks natural for images from that space.\n\n"
             "This option disables that source gamut for the perceptual intent, making\n"
             "it use only the printer's native colorimetric gamut boundaries instead.\n\n"
-            "Advanced diagnostic option — leave unchecked for normal profiling.",
+            "Advanced diagnostic option — leave unchecked for normal profiling."),
             _flags_w,
             min_width=480,
         ))
         flags_row.addSpacing(12)
         flags_row.addWidget(self._no_sat_gamut_cb)
         flags_row.addWidget(TooltipButton(
-            "No Saturation Gamut (-nS)",
-            "Same as No Perceptual Gamut above, but applies to the saturation rendering\n"
+            tr("No Saturation Gamut (-nS)"),
+            tr("Same as No Perceptual Gamut above, but applies to the saturation rendering\n"
             "intent. Disables the gamut source for the saturation intent, forcing it to\n"
             "use the printer's own colorimetric gamut boundaries.\n\n"
-            "Advanced diagnostic option — leave unchecked for normal profiling.",
+            "Advanced diagnostic option — leave unchecked for normal profiling."),
             _flags_w,
             min_width=460,
         ))
         flags_row.addSpacing(12)
         flags_row.addWidget(self._inv_gamut_cb)
         flags_row.addWidget(TooltipButton(
-            "Inverse Gamut Mapping (-nI)",
-            "Applies gamut mapping in reverse on the A→B tables.\n"
-            "Highly experimental — only use if you know exactly what this does.",
+            tr("Inverse Gamut Mapping (-nI)"),
+            tr("Applies gamut mapping in reverse on the A→B tables.\n"
+            "Highly experimental — only use if you know exactly what this does."),
             _flags_w,
         ))
         flags_row.addStretch()
@@ -3088,7 +3089,7 @@ class TabProfile(QWidget):
         layout.addWidget(grp)
 
     def _build_metadata_group(self, layout: QVBoxLayout) -> None:
-        grp = QGroupBox("Profile Metadata", layout.parentWidget())
+        grp = QGroupBox(tr("Profile Metadata"), layout.parentWidget())
         g = QVBoxLayout(grp)
 
         for attr, flag, placeholder, tip in [
@@ -3097,7 +3098,7 @@ class TabProfile(QWidget):
             ("_copy",  "C", "e.g. © 2026 …",       _META_COPY_TIP),
         ]:
             label_text = "Manufacturer" if flag == "A" else "Model" if flag == "M" else "Copyright"
-            check = QCheckBox(f"{label_text} (-{flag}):", grp)
+            check = QCheckBox(tr("{label_text} (-{flag}):").format(label_text=label_text, flag=flag), grp)
             edit  = QLineEdit(grp)
             edit.setPlaceholderText(placeholder)
             edit.setEnabled(False)
@@ -3105,7 +3106,7 @@ class TabProfile(QWidget):
             row = QHBoxLayout()
             row.addWidget(check)
             row.addWidget(edit, stretch=1)
-            row.addWidget(TooltipButton(f"{label_text} (-{flag})", tip, grp, min_width=460))
+            row.addWidget(TooltipButton(tr("{label_text} (-{flag})").format(label_text=label_text, flag=flag), tip, grp, min_width=460))
             g.addLayout(row)
             setattr(self, attr + "_check", check)
             setattr(self, attr + "_edit",  edit)
@@ -3113,32 +3114,32 @@ class TabProfile(QWidget):
         layout.addWidget(grp)
 
     def _build_advanced_group(self, layout: QVBoxLayout) -> None:
-        grp = QGroupBox("Advanced", layout.parentWidget())
+        grp = QGroupBox(tr("Advanced"), layout.parentWidget())
         g = QVBoxLayout(grp)
 
         row1 = QHBoxLayout()
-        self._no_input_cb  = QCheckBox("No input shaper curves (-ni)", grp)
-        self._no_output_cb = QCheckBox("No output shaper curves (-no)", grp)
+        self._no_input_cb  = QCheckBox(tr("No input shaper curves (-ni)"), grp)
+        self._no_output_cb = QCheckBox(tr("No output shaper curves (-no)"), grp)
         row1.addWidget(self._no_input_cb)
         row1.addWidget(TooltipButton(
-            "No Input Shaper Curves (-ni)",
-            "Input shaper curves are 1D tone curves applied to device values before\n"
+            tr("No Input Shaper Curves (-ni)"),
+            tr("Input shaper curves are 1D tone curves applied to device values before\n"
             "the 3D cLUT. They help linearise the device response so the cLUT works\n"
             "with a more uniform distribution of input values.\n\n"
             "Disabling them removes this pre-conditioning step. Diagnostic option —\n"
-            "leave unchecked for normal profiling.",
+            "leave unchecked for normal profiling."),
             grp,
             min_width=460,
         ))
         row1.addSpacing(16)
         row1.addWidget(self._no_output_cb)
         row1.addWidget(TooltipButton(
-            "No Output Shaper Curves (-no)",
-            "Output shaper curves are 1D curves applied after the 3D cLUT to refine\n"
+            tr("No Output Shaper Curves (-no)"),
+            tr("Output shaper curves are 1D curves applied after the 3D cLUT to refine\n"
             "the final device values. They smooth out the cLUT output and help achieve\n"
             "accurate highlight and shadow rendering.\n\n"
             "Disabling them removes this post-processing step. Diagnostic option —\n"
-            "leave unchecked for normal profiling.",
+            "leave unchecked for normal profiling."),
             grp,
             min_width=460,
         ))
@@ -3146,24 +3147,24 @@ class TabProfile(QWidget):
         g.addLayout(row1)
 
         row2 = QHBoxLayout()
-        self._no_grid_pos_cb = QCheckBox("No input grid position curves (-np)", grp)
-        self._no_embedded_cb = QCheckBox("Don't embed measurement data (-nc)", grp)
+        self._no_grid_pos_cb = QCheckBox(tr("No input grid position curves (-np)"), grp)
+        self._no_embedded_cb = QCheckBox(tr("Don't embed measurement data (-nc)"), grp)
         row2.addWidget(self._no_grid_pos_cb)
         row2.addWidget(TooltipButton(
-            "No Grid Position Curves (-np)",
-            "Grid position curves remap where device values land on the cLUT grid,\n"
+            tr("No Grid Position Curves (-np)"),
+            tr("Grid position curves remap where device values land on the cLUT grid,\n"
             "concentrating grid nodes in regions of greater tonal importance.\n\n"
             "Disabling forces a uniform grid distribution instead. Advanced diagnostic\n"
-            "option — leave unchecked for normal profiling.",
+            "option — leave unchecked for normal profiling."),
             grp,
             min_width=460,
         ))
         row2.addSpacing(16)
         row2.addWidget(self._no_embedded_cb)
         row2.addWidget(TooltipButton(
-            "Don't Embed .ti3 Data (-nc)",
-            "By default colprof embeds the .ti3 measurement data inside the ICC profile.\n"
-            "Check this to omit it, resulting in a smaller profile file.",
+            tr("Don't Embed .ti3 Data (-nc)"),
+            tr("By default colprof embeds the .ti3 measurement data inside the ICC profile.\n"
+            "Check this to omit it, resulting in a smaller profile file."),
             grp,
         ))
         row2.addStretch()
@@ -3300,7 +3301,7 @@ class TabProfile(QWidget):
         flag = "-S (Perceptual + Saturation)" if params.gamut_sat_src else "-s (Perceptual only)"
         QMessageBox.critical(
             self,
-            "Gamut source profile not found",
+            tr("Gamut source profile not found"),
             f"The gamut-mapping source profile required by {flag} could not be located:\n\n"
             f"    {src or '(empty path)'}\n\n"
             f"Browse to a valid .icm/.icc file (e.g. sRGB.icm in your Argyll ref folder), "
@@ -3486,10 +3487,10 @@ class TabProfile(QWidget):
         self._active_params = params
         self._log.clear()
         self._build_headline.setText(
-            f'Working hard<span style="color: {SPEC_CYAN}; font-style: italic;">…</span>'
+            tr("Working hard<span style=\"color: {SPEC_CYAN}; font-style: italic;\">…</span>").format(SPEC_CYAN=SPEC_CYAN)
         )
-        self._build_subtext.setText("Good things take time.")
-        self._build_btn.setText("Building Profile…")
+        self._build_subtext.setText(tr("Good things take time."))
+        self._build_btn.setText(tr("Building Profile…"))
         self._build_btn.setEnabled(False)
         self._install_btn.setEnabled(False)
         self._save_defaults_btn.setEnabled(False)
@@ -3513,10 +3514,10 @@ class TabProfile(QWidget):
     def _on_build_done(self, code: int) -> None:
         self.profile_active.emit(False)
         self._build_headline.setText(
-            f'Ready to build<span style="color: {SPEC_CYAN}; font-style: italic;">?</span>'
+            tr("Ready to build<span style=\"color: {SPEC_CYAN}; font-style: italic;\">?</span>").format(SPEC_CYAN=SPEC_CYAN)
         )
-        self._build_subtext.setText("Awaiting your command.")
-        self._build_btn.setText("Build Profile")
+        self._build_subtext.setText(tr("Awaiting your command."))
+        self._build_btn.setText(tr("Build Profile"))
         self._build_btn.setEnabled(True)
         self._save_defaults_btn.setEnabled(True)
         self._file_grp.setEnabled(True)
@@ -3594,7 +3595,7 @@ class TabProfile(QWidget):
         cal_mode = bool(self._settings.get("calibration_mode", False))
 
         dlg = QDialog(self)
-        dlg.setWindowTitle("Profile Built")
+        dlg.setWindowTitle(tr("Profile Built"))
         dlg.setMinimumWidth(880 if cal_mode else 740)
 
         layout = QVBoxLayout(dlg)
@@ -3602,14 +3603,14 @@ class TabProfile(QWidget):
         layout.setSpacing(14)
 
         if issues:
-            headline = QLabel("<b>Your ICC profile has been built — with warnings.</b>", dlg)
+            headline = QLabel(tr("<b>Your ICC profile has been built — with warnings.</b>"), dlg)
         else:
-            headline = QLabel("<b>Your ICC profile has been built successfully.</b>", dlg)
+            headline = QLabel(tr("<b>Your ICC profile has been built successfully.</b>"), dlg)
         headline.setStyleSheet("font-size: 14px;")
         layout.addWidget(headline)
 
         path_lbl = QLabel(
-            f"Saved to:<br><code style='font-size:11px'>{icc_path}</code>",
+            tr("Saved to:<br><code style='font-size:11px'>{icc_path}</code>").format(icc_path=icc_path),
             dlg,
         )
         path_lbl.setWordWrap(True)
@@ -3625,7 +3626,7 @@ class TabProfile(QWidget):
             warn_lbl.setStyleSheet("color: #d4a017;")
             layout.addWidget(warn_lbl)
 
-        next_lbl = QLabel("What would you like to do next?", dlg)
+        next_lbl = QLabel(tr("What would you like to do next?"), dlg)
         layout.addWidget(next_lbl)
 
         install_desc = QLabel(
@@ -3644,9 +3645,9 @@ class TabProfile(QWidget):
         layout.addWidget(install_desc)
 
         check_desc = QLabel(
-            "<b>Check Profile Quality</b> — runs a quality check to see how accurately "
+            tr("<b>Check Profile Quality</b> — runs a quality check to see how accurately "
             "the profile represents your printer's colours. Recommended before using "
-            "the profile for critical prints.",
+            "the profile for critical prints."),
             dlg,
         )
         check_desc.setWordWrap(True)
@@ -3654,13 +3655,13 @@ class TabProfile(QWidget):
         layout.addWidget(check_desc)
 
         precond_desc = QLabel(
-            "<b>Use as pre-conditioning profile</b> — start a second profiling pass that "
+            tr("<b>Use as pre-conditioning profile</b> — start a second profiling pass that "
             "uses this profile to place the new test patches more intelligently. "
             "The next chart will sample more in the colour regions your printer "
             "reproduces least accurately, producing a noticeably better profile on "
             "the second round. Your existing chart files are preserved (renamed "
             "with a <code>pre_</code> prefix) so nothing is lost. "
-            "Recommended once you've already built a working profile for this paper.",
+            "Recommended once you've already built a working profile for this paper."),
             dlg,
         )
         precond_desc.setWordWrap(True)
@@ -3669,12 +3670,12 @@ class TabProfile(QWidget):
 
         if cal_mode:
             apply_desc = QLabel(
-                "<b>Apply Calibration</b> — bakes your calibration curves (.cal file) "
+                tr("<b>Apply Calibration</b> — bakes your calibration curves (.cal file) "
                 "directly into the ICC profile. This means every colour-managed app will "
                 "automatically apply the calibration without any extra steps. Use this "
                 "after you have created a calibration file in the "
                 "<i>Create Calibration File</i> module. The profile path is already "
-                "pre-filled — just select your .cal file and run.",
+                "pre-filled — just select your .cal file and run."),
                 dlg,
             )
             apply_desc.setWordWrap(True)
@@ -3684,15 +3685,15 @@ class TabProfile(QWidget):
         _install_label = "Install on this Mac" if is_macos() else "Install Profile"
         install_btn = QPushButton(_install_label, dlg)
         install_btn.setObjectName("primary")
-        precond_btn = QPushButton("← Use as Pre-conditioning", dlg)
+        precond_btn = QPushButton(tr("← Use as Pre-conditioning"), dlg)
         precond_btn.setObjectName("primary")
-        check_btn = QPushButton("Check Profile Quality →", dlg)
+        check_btn = QPushButton(tr("Check Profile Quality →"), dlg)
         check_btn.setObjectName("primary")
         apply_btn = None
         if cal_mode:
-            apply_btn = QPushButton("Apply Calibration →", dlg)
+            apply_btn = QPushButton(tr("Apply Calibration →"), dlg)
             apply_btn.setObjectName("primary")
-        done_btn = QPushButton("Done", dlg)
+        done_btn = QPushButton(tr("Done"), dlg)
         done_btn.setDefault(True)
 
         btn_row = QHBoxLayout()

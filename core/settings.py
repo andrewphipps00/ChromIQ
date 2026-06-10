@@ -144,6 +144,7 @@ DEFAULTS: dict[str, Any] = {
     "restore_last_tab":          True,
     "restore_last_session":      False,
     "appearance":                "auto",   # "light" | "dark" | "auto"
+    "language":                  "en",     # ISO code; applied on restart (core/i18n.py)
     "show_welcome_dialog":       True,
     "window_maximized":          False,
     "window_fullscreen":         False,
