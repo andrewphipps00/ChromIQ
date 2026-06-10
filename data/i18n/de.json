@@ -368,7 +368,7 @@
  "Gamut Source:": "Gamut-Quelle:",
  "Gamut source profile not found": "Gamut-Quellprofil nicht gefunden",
  "Generate": "Erzeugen",
- "Generate Chart": "Erzeugen",
+ "Generate Chart": "Chart erzeugen",
  "Generate the chart immediately when this preset is selected": "Chart sofort erzeugen, wenn dieses Preset gewählt wird",
  "Generates an interactive 3D visualisation of your profile's colour\nerrors and saves it as an HTML file next to your .ti3.\n\nOpen the .x3d.html file in any modern web browser to explore a\n3D diagram showing where errors are largest — useful for seeing\nwhich parts of the colour gamut your profile handles well and\nwhich areas need improvement.": "Erzeugt eine interaktive 3D-Visualisierung der Farbfehler Ihres Profils\nund speichert sie als HTML-Datei neben Ihrer .ti3.\n\nÖffnen Sie die .x3d.html-Datei in einem modernen Browser, um ein\n3D-Diagramm zu erkunden, das zeigt, wo die Fehler am größten sind —\nnützlich, um zu sehen, welche Teile des Farbraums Ihr Profil gut\nbeherrscht und wo es Verbesserungsbedarf gibt.",
  "Give Up": "Abbrechen",
