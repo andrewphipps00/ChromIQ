@@ -534,7 +534,8 @@ class SettingsDialog(QDialog):
         layout.addWidget(behaviour_grp)
 
         # ---- Appearance & Language ----
-        appearance_grp = QGroupBox(tr("Appearance & Language"), self)
+        # "&&" — QGroupBox treats a single "&" as a mnemonic marker.
+        appearance_grp = QGroupBox(tr("Appearance && Language"), self)
         ap_rows = QVBoxLayout(appearance_grp)
 
         ap = QHBoxLayout()
@@ -547,7 +548,6 @@ class SettingsDialog(QDialog):
         self._appearance_combo.setMinimumWidth(180)
         self._appearance_combo.currentIndexChanged.connect(self._on_appearance_preview)
         ap.addWidget(self._appearance_combo)
-        ap.addStretch()
         ap.addWidget(TooltipButton(
             tr("Appearance"),
             tr("Switches the entire app between light and dark visuals.\n\n"
@@ -559,19 +559,18 @@ class SettingsDialog(QDialog):
             self,
             min_width=520,
         ))
-        ap_rows.addLayout(ap)
 
-        lang_row = QHBoxLayout()
-        lang_row.addWidget(QLabel(tr("Language:"), self))
+        ap.addSpacing(24)
+
+        ap.addWidget(QLabel(tr("Language:"), self))
         self._language_combo = NoScrollComboBox(self)
         from core.i18n import available_languages
         for code, native_name in available_languages():
             self._language_combo.addItem(native_name, code)
         self._language_combo.setMinimumWidth(180)
         self._language_combo.currentIndexChanged.connect(self._on_language_changed)
-        lang_row.addWidget(self._language_combo)
-        lang_row.addStretch()
-        lang_row.addWidget(TooltipButton(
+        ap.addWidget(self._language_combo)
+        ap.addWidget(TooltipButton(
             tr("Language"),
             tr("Choose the language for everything ChromIQ shows you — menus, "
             "buttons, dialogs, help texts and tooltips.\n\n"
@@ -582,7 +581,8 @@ class SettingsDialog(QDialog):
             self,
             min_width=520,
         ))
-        ap_rows.addLayout(lang_row)
+        ap.addStretch()
+        ap_rows.addLayout(ap)
 
         self._language_restart_hint = QLabel(
             tr("Takes effect after you restart ChromIQ."), self)
