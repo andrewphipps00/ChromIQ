@@ -78,6 +78,13 @@ jobs:
         run: |
           git clone --depth=1 https://github.com/pbatard/libwdi.git libwdi-src
 
+          REM libwdi pins PlatformToolset=v143 (VS2022). The windows-latest image
+          REM moved to VS18 and dropped the v143 ARM64 component, so the solution's
+          REM installer_arm64.vcxproj fails with MSB8020. Retarget every project to
+          REM the runner's default toolset instead: v143 on windows-11-arm (VS2022,
+          REM unchanged), the current one on whatever VS the x64 image ships.
+          powershell -Command "Get-ChildItem -Recurse libwdi-src -Filter *.vcxproj | ForEach-Object { (Get-Content $_.FullName) -replace '<PlatformToolset>v\d+</PlatformToolset>', '<PlatformToolset>$(DefaultPlatformToolset)</PlatformToolset>' | Set-Content $_.FullName }"
+
           REM All prerequisites go inside libwdi-src\ — embedder resolves paths from libwdi-src\libwdi\
           curl -fsSL -o wdk-redist.msi "https://go.microsoft.com/fwlink/p/?LinkID=253170"
           msiexec /a wdk-redist.msi /qn TARGETDIR=%CD%\libwdi-src\wdk
