@@ -29,6 +29,7 @@ from core.logger import get_logger
 from core.platform_paths import (
     argyll_download_page,
     default_argyll_bin_dir,
+    is_macos,
     is_windows,
     native_print_supported,
 )
@@ -454,6 +455,33 @@ class SettingsDialog(QDialog):
             min_width=620,
         )
 
+        self._pdf_fallback_check = QCheckBox(
+            "Exact-size PDF fallback (ChromIQ printing)", self
+        )
+        pdf_fallback_tip = TooltipButton(
+            "Exact-size PDF fallback",
+            "Applies only to ChromIQ's own printing pipeline (the default when "
+            "the macOS printer dialog below is disabled).\n\n"
+            "ChromIQ first sends every chart as PostScript. Most home and photo "
+            "printers do not understand PostScript, so macOS rejects it and "
+            "ChromIQ resends the chart in another format:\n\n"
+            "  • OFF — resend as a plain TIFF. macOS then decides the size "
+            "itself and SHRINKS a full-page chart by about 3% so it fits "
+            "inside the printer's margins. The printed patches end up "
+            "slightly smaller and shifted compared to the on-screen layout.\n\n"
+            "  • ON — resend as a PDF built by ChromIQ with the chart placed "
+            "at exactly 100% scale. Anything that would fall into the "
+            "printer's unprintable margin is simply cut off (charts keep "
+            "white margins there, so nothing of value is lost). This matches "
+            "how Apple's ColorSync Utility prints.\n\n"
+            "Colour is unaffected either way — both formats reach the printer "
+            "without any colour conversion.\n\n"
+            "Greyed out while the macOS printer dialog is enabled, because no "
+            "fallback is involved on that path.",
+            self,
+            min_width=620,
+        )
+
         self._confirm_print_check = QCheckBox(
             "Confirm print settings before printing", self
         )
@@ -471,10 +499,11 @@ class SettingsDialog(QDialog):
             min_width=560,
         )
 
-        # The CUPS preflight summary only applies to ChromIQ's own print
-        # pipeline. When the macOS print dialog is in use, that dialog is the
-        # confirmation step, so grey the option out.
-        self._native_print_check.toggled.connect(self._sync_confirm_print_enabled)
+        # The CUPS preflight summary and the PDF fallback only apply to
+        # ChromIQ's own print pipeline. When the macOS print dialog is in use,
+        # that dialog is the confirmation step and no lp fallback ever runs,
+        # so grey both options out.
+        self._native_print_check.toggled.connect(self._sync_print_path_options)
 
         # Collect the options that apply on this platform, in order, then place
         # them two per row. Platform-specific options are simply omitted (rather
@@ -489,6 +518,10 @@ class SettingsDialog(QDialog):
         ]
         if native_print_supported():
             bh_cells.append(_bh_cell(self._native_print_check, native_tip))
+        # The exact-size PDF fallback addresses a macOS-specific CUPS filter
+        # behaviour (cgimagetopdf); skip it elsewhere.
+        if is_macos():
+            bh_cells.append(_bh_cell(self._pdf_fallback_check, pdf_fallback_tip))
         # The CUPS preflight summary is a macOS/Linux concept; skip it on Windows.
         if not is_windows():
             bh_cells.append(_bh_cell(self._confirm_print_check, confirm_tip))
@@ -583,13 +616,14 @@ class SettingsDialog(QDialog):
 
     # ------------------------------------------------------------------
 
-    def _sync_confirm_print_enabled(self) -> None:
-        """Grey out the CUPS preflight-confirmation option while the macOS print
-        dialog is selected — that dialog already serves as the confirmation."""
+    def _sync_print_path_options(self) -> None:
+        """Grey out the options that only apply to ChromIQ's own lp pipeline
+        while the macOS print dialog is selected — that dialog is its own
+        confirmation step, and no PS→PDF/TIFF fallback runs on its path."""
         if native_print_supported():
-            self._confirm_print_check.setEnabled(
-                not self._native_print_check.isChecked()
-            )
+            lp_path_active = not self._native_print_check.isChecked()
+            self._confirm_print_check.setEnabled(lp_path_active)
+            self._pdf_fallback_check.setEnabled(lp_path_active)
 
     def _load_settings(self) -> None:
         s = self._settings
@@ -602,8 +636,9 @@ class SettingsDialog(QDialog):
         self._chromiq_refine_check.setChecked(bool(s.get("chromiq_refinement", False)))
         self._averaging_check.setChecked(bool(s.get("averaging_enabled", False)))
         self._native_print_check.setChecked(bool(s.get("use_native_print_dialog", False)))
+        self._pdf_fallback_check.setChecked(bool(s.get("pdf_print_fallback", False)))
         self._confirm_print_check.setChecked(bool(s.get("confirm_before_printing", True)))
-        self._sync_confirm_print_enabled()
+        self._sync_print_path_options()
         from data.patch_db import I1PRO_DEFAULT_PRESET_KEY
         i1pro_key = str(s.get("i1pro_default_preset", I1PRO_DEFAULT_PRESET_KEY))
         idx = self._i1pro_preset_combo.findData(i1pro_key)
@@ -688,6 +723,7 @@ class SettingsDialog(QDialog):
         s.set("chromiq_refinement",        self._chromiq_refine_check.isChecked())
         s.set("averaging_enabled",         self._averaging_check.isChecked())
         s.set("use_native_print_dialog",   self._native_print_check.isChecked())
+        s.set("pdf_print_fallback",        self._pdf_fallback_check.isChecked())
         s.set("confirm_before_printing",   self._confirm_print_check.isChecked())
         s.set("appearance",                str(self._appearance_combo.currentData()))
         s.set("i1pro_default_preset",      str(self._i1pro_preset_combo.currentData()))
