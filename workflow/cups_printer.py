@@ -11,7 +11,7 @@ from typing import Callable
 
 from core.logger import get_logger
 from workflow.postscript_generator import PdfGenerator, PostScriptGenerator
-from workflow.ppd_color import vendor_no_cm_setting_for_queue
+from workflow.ppd_color import vendor_no_cm_settings_for_queue
 
 log = get_logger(__name__)
 
@@ -27,6 +27,17 @@ except ImportError:
 # Options injected into PS print jobs.
 # Colour space is declared in the PS document itself; only neutral job-ticket
 # options go here.  ColorSync=None is PS-specific — do NOT use for PDF.
+# Apple's PrintCore colour-matching key, honoured by cgpdftoraster as a plain
+# CUPS job option: it stops the OS applying the PPD's cupsICCProfile
+# destination transform.  Canon/Epson PPDs pass untagged device colour
+# through bit-exact even without it, but HP DesignJet PPDs (hundreds of
+# cupsICCProfile entries) re-render every job — including untagged device
+# colour — unless this key is present (2026-06 no-ink filter-chain test:
+# Z2100 PPD altered (255,0,0)→(219,0,0) etc.; with this key, 0 altered
+# colours; Canon PRO-300 / Epson ET-8550 stay bit-exact with it).  It is the
+# same key the native-dialog path locks via PMPrintSettings.
+_AP_NO_CM = {"AP_ColorMatchingMode": "AP_ApplicationColorMatching"}
+
 # Duplex/sides are also baked into the PS via setpagedevice — these are the
 # CUPS-level belt-and-suspenders for PPDs that ignore the PS directive or
 # strip it during filtering.
@@ -34,26 +45,31 @@ _PS_JOB_OPTIONS: dict[str, str] = {
     "ColorSync": "None",   # belt-and-suspenders alongside %cupsJobTicket
     "Duplex":    "None",
     "sides":     "one-sided",
+    **_AP_NO_CM,
 }
 
 # Options for the exact-size PDF fallback.  No ColorSync=None here (it is
-# PS-specific, see above) and none needed: the PDF embeds the chart as
-# *untagged* device colour, which Apple's cgpdftoraster passes through
-# bit-exact — verified against both Canon and Epson PPDs (which do declare
-# cupsICCProfile destinations) by rasterising no-ink and diffing patch
-# colours.  Geometry is likewise ours: the MediaBox matches PageSize and the
-# image is placed 1:1, so nothing downstream rescales it (unlike raw-TIFF
+# PS-specific, see above): the PDF embeds the chart as *untagged* device
+# colour, which Apple's cgpdftoraster passes through bit-exact — verified
+# against both Canon and Epson PPDs (which do declare cupsICCProfile
+# destinations) by rasterising no-ink and diffing patch colours — plus
+# _AP_NO_CM for PPDs where cupsICCProfile *is* applied regardless (HP
+# DesignJet).  Geometry is likewise ours: the MediaBox matches PageSize and
+# the image is placed 1:1, so nothing downstream rescales it (unlike raw-TIFF
 # submission, where cgimagetopdf shrinks full-page charts to the imageable
 # area and ignores ppi/scaling options).
 _PDF_JOB_OPTIONS: dict[str, str] = {
     "Duplex": "None",
     "sides":  "one-sided",
+    **_AP_NO_CM,
 }
 
 # TIFF fallback options per channel count.  These mirror the original
 # _COLOR_MGMT_OFF dict but are now colour-space-aware.  They tell CUPS
 # exactly how to format the raster data for the printer driver — bypassing
-# ColorSync — without hardcoding DeviceRGB for every job.
+# ColorSync — without hardcoding DeviceRGB for every job.  _AP_NO_CM also
+# fixes this path: the same Z2100 no-ink test through cgimagetopdf →
+# cgpdftoraster went from 5 altered patch colours to 0 with the key set.
 _TIFF_RASTER_OPTIONS: dict[int, dict[str, str]] = {
     1: {
         "ColorSync":        "None",
@@ -64,6 +80,7 @@ _TIFF_RASTER_OPTIONS: dict[int, dict[str, str]] = {
         "cupsBitsPerColor": "8",
         "Duplex":           "None",
         "sides":            "one-sided",
+        **_AP_NO_CM,
     },
     3: {  # RGB — original _COLOR_MGMT_OFF, confirmed working for ET-8550
         "ColorSync":        "None",
@@ -74,6 +91,7 @@ _TIFF_RASTER_OPTIONS: dict[int, dict[str, str]] = {
         "cupsBitsPerColor": "8",
         "Duplex":           "None",
         "sides":            "one-sided",
+        **_AP_NO_CM,
     },
     4: {  # CMYK
         "ColorSync":        "None",
@@ -84,6 +102,7 @@ _TIFF_RASTER_OPTIONS: dict[int, dict[str, str]] = {
         "cupsBitsPerColor": "8",
         "Duplex":           "None",
         "sides":            "one-sided",
+        **_AP_NO_CM,
     },
 }
 
@@ -308,24 +327,26 @@ class CupsRawPrinter:
 
     @staticmethod
     def _apply_vendor_no_cm(opts: dict[str, str], printer_name: str) -> None:
-        """Force the driver's own "no colour adjustment" option into *opts*.
+        """Force the driver's own "no colour adjustment" options into *opts*.
 
         ``ColorSync=None`` only stops CUPS' *own* ColorSync transform; a driver
         whose colour engine lives below that (e.g. Canon, whose PPD exposes
         ``CNIJIntent2=1001`` / "No Color Correction") keeps re-profiling the
         chart unless its key is set explicitly.  Mirrors the backstop the native
-        macOS print path applies.  Best-effort: silently does nothing if the PPD
-        isn't found or exposes no such option (e.g. Epson, already handled by the
-        raster options above).
+        macOS print path applies.  All pairs are applied — HP colour lasers
+        split the choice over per-object-type options (HPTextRGB /
+        HPGraphicsRGB / HPPhotoRGB).  Best-effort: silently does nothing if the
+        PPD isn't found or exposes no such option (e.g. Epson, already handled
+        by the raster options above).
         """
         try:
-            vendor = vendor_no_cm_setting_for_queue(printer_name)
+            pairs = vendor_no_cm_settings_for_queue(printer_name)
         except Exception as exc:  # pragma: no cover - defensive
             log.warning("vendor no-CM lookup failed for %s: %s", printer_name, exc)
             return
-        if vendor:
-            opts[vendor[0]] = vendor[1]
-            log.info("CUPS print: driver no-colour option %s=%s", *vendor)
+        for key, val in pairs:
+            opts[key] = val
+            log.info("CUPS print: driver no-colour option %s=%s", key, val)
 
     @staticmethod
     def _build_lp_command_ps(

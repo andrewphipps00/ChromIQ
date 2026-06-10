@@ -43,7 +43,7 @@ from pathlib import Path
 from PIL import Image
 
 from core.logger import get_logger
-from workflow.ppd_color import vendor_no_cm_setting
+from workflow.ppd_color import vendor_no_cm_settings
 
 log = get_logger(__name__)
 
@@ -67,7 +67,7 @@ _PT_PER_INCH = 72.0
 # ``PMSessionSetColorMatchingMode``), which is also what greys out the print
 # panel's Color Matching pane.  This settings key mirrors it into the Cocoa /
 # PrintCore settings as a backstop, set *locked* so it can't be silently
-# rewritten between dialog and submission.  ``vendor_no_cm_setting`` additionally
+# rewritten between dialog and submission.  ``vendor_no_cm_settings`` additionally
 # scans the selected printer's PPD for that driver's own "No Color Adjustment"
 # option (e.g. Canon ``CNIJIntent2=1001``) and locks it too, so it doesn't matter
 # whether a given vendor's PDE honours the Apple-level key.
@@ -254,7 +254,8 @@ def _queue_name(display_name: str) -> str:
 def _locked_settings_for(print_info) -> dict[str, str]:
     """The full set of (key, value) pairs to lock for *print_info* — the
     vendor-neutral base plus, if found, the selected printer's own no-colour
-    option."""
+    options (all of them: HP colour lasers split the choice over per-object
+    options like HPTextRGB / HPGraphicsRGB / HPPhotoRGB)."""
     settings = dict(_LOCKED_COLOR_SETTINGS)
     try:
         printer = print_info.printer()
@@ -263,10 +264,9 @@ def _locked_settings_for(print_info) -> dict[str, str]:
             from workflow.print_manager import PrintModule
             ppd = PrintModule.find_ppd_path(_queue_name(display))
             if ppd:
-                vk = vendor_no_cm_setting(ppd)
-                if vk:
-                    settings[vk[0]] = vk[1]
-                    log.info("native print: driver no-colour option %s=%s", *vk)
+                for key, val in vendor_no_cm_settings(ppd):
+                    settings[key] = val
+                    log.info("native print: driver no-colour option %s=%s", key, val)
     except Exception as exc:
         log.warning("native print: vendor PPD scan failed: %s", exc)
     return settings

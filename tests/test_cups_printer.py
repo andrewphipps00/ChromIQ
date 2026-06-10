@@ -47,8 +47,8 @@ def test_ps_command_injects_vendor_no_cm_option(monkeypatch) -> None:
     """A driver whose PPD exposes a no-CM option (e.g. Canon CNIJIntent2=1001)
     must get it forwarded to lp on the PostScript path."""
     monkeypatch.setattr(
-        cups_printer, "vendor_no_cm_setting_for_queue",
-        lambda name: ("CNIJIntent2", "1001"),
+        cups_printer, "vendor_no_cm_settings_for_queue",
+        lambda name: [("CNIJIntent2", "1001")],
     )
     cfg = PrintConfig(printer_name="Canon_PRO_300_series", options={})
     cmd = CupsRawPrinter._build_lp_command_ps(Path("/tmp/x.ps"), cfg, orientation=None)
@@ -57,8 +57,8 @@ def test_ps_command_injects_vendor_no_cm_option(monkeypatch) -> None:
 
 def test_tiff_command_injects_vendor_no_cm_option(monkeypatch) -> None:
     monkeypatch.setattr(
-        cups_printer, "vendor_no_cm_setting_for_queue",
-        lambda name: ("CNIJIntent2", "1001"),
+        cups_printer, "vendor_no_cm_settings_for_queue",
+        lambda name: [("CNIJIntent2", "1001")],
     )
     cfg = PrintConfig(printer_name="Canon_PRO_300_series", options={})
     cmd = CupsRawPrinter._build_lp_command_tiff(
@@ -67,11 +67,31 @@ def test_tiff_command_injects_vendor_no_cm_option(monkeypatch) -> None:
     assert "CNIJIntent2=1001" in cmd, cmd
 
 
+def test_all_lp_paths_send_apple_no_cm_key(monkeypatch) -> None:
+    """Every lp path must carry AP_ColorMatchingMode=AP_ApplicationColorMatching:
+    it stops cgpdftoraster applying the PPD's cupsICCProfile transform, which
+    HP DesignJet PPDs trigger even for untagged device colour (no-ink verified
+    2026-06; Canon/Epson stay bit-exact with the key set)."""
+    monkeypatch.setattr(
+        cups_printer, "vendor_no_cm_settings_for_queue", lambda name: [],
+    )
+    cfg = PrintConfig(printer_name="HP_Designjet_Z2100", options={})
+    cmds = [
+        CupsRawPrinter._build_lp_command_ps(Path("/tmp/x.ps"), cfg, orientation=None),
+        CupsRawPrinter._build_lp_command_pdf(Path("/tmp/x.pdf"), cfg),
+        CupsRawPrinter._build_lp_command_tiff(
+            Path("/tmp/x.tif"), cfg, n_ch=3, orientation=None,
+        ),
+    ]
+    for cmd in cmds:
+        assert "AP_ColorMatchingMode=AP_ApplicationColorMatching" in cmd, cmd
+
+
 def test_no_vendor_option_when_ppd_has_none(monkeypatch) -> None:
     """Epson (and anything without a matching PPD option) is unaffected — the
     raster options already disable CM there, so nothing extra is injected."""
     monkeypatch.setattr(
-        cups_printer, "vendor_no_cm_setting_for_queue", lambda name: None,
+        cups_printer, "vendor_no_cm_settings_for_queue", lambda name: [],
     )
     cfg = PrintConfig(printer_name="EPSON_ET_8550", options={})
     cmd = CupsRawPrinter._build_lp_command_ps(Path("/tmp/x.ps"), cfg, orientation=None)
@@ -96,8 +116,8 @@ def test_pdf_command_options(monkeypatch) -> None:
     neither ColorSync=None (PS-specific) nor orientation-requested (geometry
     is baked into the MediaBox)."""
     monkeypatch.setattr(
-        cups_printer, "vendor_no_cm_setting_for_queue",
-        lambda name: ("CNIJIntent2", "1001"),
+        cups_printer, "vendor_no_cm_settings_for_queue",
+        lambda name: [("CNIJIntent2", "1001")],
     )
     cfg = PrintConfig(printer_name="Canon_PRO_300_series", options={"PageSize": "A4"})
     cmd = CupsRawPrinter._build_lp_command_pdf(Path("/tmp/x.pdf"), cfg)
@@ -158,7 +178,7 @@ def test_pdf_submission_failure_retries_as_tiff(monkeypatch, tmp_path: Path) -> 
         printer, "_print_job_tiff", lambda *a, **k: calls.append("tiff"),
     )
     monkeypatch.setattr(
-        cups_printer, "vendor_no_cm_setting_for_queue", lambda name: None,
+        cups_printer, "vendor_no_cm_settings_for_queue", lambda name: [],
     )
     printer._print_job_pdf(tiff, PrintConfig(printer_name="Test"))
     assert calls == ["tiff"]
@@ -177,7 +197,7 @@ def test_pdf_success_reports_zero(monkeypatch, tmp_path: Path) -> None:
 
     monkeypatch.setattr(printer, "_run_lp_result", fake_run)
     monkeypatch.setattr(
-        cups_printer, "vendor_no_cm_setting_for_queue", lambda name: None,
+        cups_printer, "vendor_no_cm_settings_for_queue", lambda name: [],
     )
     printer._print_job_pdf(
         tiff, PrintConfig(printer_name="Test", options={"PageSize": "A4"}),
