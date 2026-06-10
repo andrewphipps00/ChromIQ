@@ -535,11 +535,25 @@ class SettingsDialog(QDialog):
 
         # ---- Appearance & Language ----
         # "&&" — QGroupBox treats a single "&" as a mnemonic marker.
+        # Same two-column grid geometry as the Behaviour section above so the
+        # cells line up visually.
         appearance_grp = QGroupBox(tr("Appearance && Language"), self)
-        ap_rows = QVBoxLayout(appearance_grp)
+        ap = QGridLayout(appearance_grp)
+        ap.setHorizontalSpacing(100)
+        ap.setColumnStretch(0, 1)
+        ap.setColumnStretch(1, 1)
 
-        ap = QHBoxLayout()
-        ap.addWidget(QLabel(tr("Theme:"), self))
+        def _ap_cell(label: str, combo: NoScrollComboBox,
+                     tooltip: TooltipButton) -> QWidget:
+            cell = QWidget(self)
+            row = QHBoxLayout(cell)
+            row.setContentsMargins(0, 0, 0, 0)
+            row.addWidget(QLabel(label, self))
+            row.addWidget(combo)
+            row.addStretch()
+            row.addWidget(tooltip)
+            return cell
+
         self._appearance_combo = NoScrollComboBox(self)
         # data values map combo index -> setting string
         self._appearance_combo.addItem(tr("System (Auto)"), "auto")
@@ -547,8 +561,7 @@ class SettingsDialog(QDialog):
         self._appearance_combo.addItem(tr("Dark"),         "dark")
         self._appearance_combo.setMinimumWidth(180)
         self._appearance_combo.currentIndexChanged.connect(self._on_appearance_preview)
-        ap.addWidget(self._appearance_combo)
-        ap.addWidget(TooltipButton(
+        appearance_tip = TooltipButton(
             tr("Appearance"),
             tr("Switches the entire app between light and dark visuals.\n\n"
             "  • System (Auto) — follow your macOS Appearance setting and "
@@ -558,19 +571,15 @@ class SettingsDialog(QDialog):
             "Changes preview instantly. Click OK to keep them, or Cancel to revert."),
             self,
             min_width=520,
-        ))
+        )
 
-        ap.addSpacing(24)
-
-        ap.addWidget(QLabel(tr("Language:"), self))
         self._language_combo = NoScrollComboBox(self)
         from core.i18n import available_languages
         for code, native_name in available_languages():
             self._language_combo.addItem(native_name, code)
         self._language_combo.setMinimumWidth(180)
         self._language_combo.currentIndexChanged.connect(self._on_language_changed)
-        ap.addWidget(self._language_combo)
-        ap.addWidget(TooltipButton(
+        language_tip = TooltipButton(
             tr("Language"),
             tr("Choose the language for everything ChromIQ shows you — menus, "
             "buttons, dialogs, help texts and tooltips.\n\n"
@@ -580,15 +589,18 @@ class SettingsDialog(QDialog):
             "English — it comes from the tools themselves, not from ChromIQ."),
             self,
             min_width=520,
-        ))
-        ap.addStretch()
-        ap_rows.addLayout(ap)
+        )
+
+        ap.addWidget(_ap_cell(tr("Theme:"), self._appearance_combo,
+                              appearance_tip), 0, 0)
+        ap.addWidget(_ap_cell(tr("Language:"), self._language_combo,
+                              language_tip), 0, 1)
 
         self._language_restart_hint = QLabel(
             tr("Takes effect after you restart ChromIQ."), self)
         self._language_restart_hint.setStyleSheet("color: #e6a23c; font-size: 11px;")
         self._language_restart_hint.setVisible(False)
-        ap_rows.addWidget(self._language_restart_hint)
+        ap.addWidget(self._language_restart_hint, 1, 0, 1, 2)
 
         layout.addWidget(appearance_grp)
 
