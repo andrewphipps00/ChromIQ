@@ -82,12 +82,23 @@ Samsung / Canon-laser / Xerox bundles.
 | Xerox | `XRColorCorrection=None`, plus on FFPS models 12 per-object-type `XR*ColorCorrection=None` siblings — the plural API applies them all | 77/162 |
 | Canon laser (UFR/PS) | none — matching options are single-value in these PPDs | |
 
-**Epson SureColor P-series could not be surveyed**: Epson's current macOS
-"drivers" (`SCP400/600/700/800/900_Lite_*.dmg`) are downloader apps that fetch
-the real package at runtime — no PPD on disk without executing vendor code.
-Evidence that the P-series behaves like the rest of Epson: all 828 round-1
-Epson PPDs plus the locally installed ET-8550 (2021 driver generation) use
-`EPIJ_CMat=3`.
+**Epson SureColor P-series — round 3, verified.** Epson's `*_Lite_*.dmg`
+"drivers" are downloader apps, but they fetch their catalog from public,
+plain-text URLs (observed in the downloader's `~/Library/Caches/
+com.epson.installer/Cache.db` while it ran — it was quit before any install):
+
+```
+https://files.support.epson.com/driver_updates/lst19.dat   # gen-19 catalog
+https://files.support.epson.com/driver_updates/lst22.dat   # gen-22 (2025)
+```
+
+Each is `model_std_driver = https://ftp.epson.com/drivers/<real dmg>;`. The
+real driver dmgs contain normal pkgs whose payload has the PPDs. Surveyed 16
+PPDs covering the entire modern photo/pro line — SC-P700/P900, SC-P5300,
+SC-P7300/P9300, SC-P7500/P9500, SC-P8500D, SC-T7700D, XP-15000, XP-6000/6100/
+7100/8500/8600/970: **16/16 detected, all `EPIJ_CMat=3` (+`EPIJ_OSCMProf=0`)**;
+the T7700D adds `EPIJ_Manu=201` ("Off (No Color Adjustment)" target preset).
+The P-series inference is now verified fact.
 
 ## Re-running the survey
 
