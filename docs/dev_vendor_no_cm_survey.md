@@ -75,7 +75,7 @@ Samsung / Canon-laser / Xerox bundles.
 
 | Vendor | Lever(s) | Notes |
 |--------|----------|-------|
-| Canon (current CNIJ) | `CNIJIntent2=1001` on PRO-200/310/510/1100 | PRO-1, PRO-100, G1000, G3000 genuinely lack the value (Photo Color/PRO Mode/Vivid only) |
+| Canon (current CNIJ) | `CNIJIntent2=1001` on PRO-200/310/510/1100 | PRO-1, PRO-10, PRO-100, G1000, G3000 genuinely lack the value (Photo Color/PRO Mode/Vivid only) — re-checked against the **newest** builds (PRO-100 v16.91, PRO-10 v16.90.1, 2025; PRO-1's latest is v16.50): still absent, so for that generation no-CM exists only inside Canon's own print-dialog PDE, not in the CUPS PPD |
 | Ricoh | `RPSRGBcorrect=None` ("Color Setting: Off" → `(none) RCsetrgbrevision`) | 179/356; misses are mono/production engines with no CM option |
 | Lexmark | `MediaColor=FalseM` — the key is misleadingly named; its *label* is "Color Correction" and Off emits `/ColorCorrection /Off` | label-based gating is what makes this safe: Xerox's `MediaColor` is literally "Paper Color" and stays undetected |
 | Samsung | `SECRGBColor=Device` / `id_RGBColor=Device` (`userdict /RGBColorMode (DEVICE) put`) | "Device" added as a gated value |
