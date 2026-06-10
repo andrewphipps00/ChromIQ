@@ -329,24 +329,45 @@ class PdfGenerator:
         tiff_path: Path,
         dpi: int = 300,
         ink_channels: list[str] | None = None,
+        page_size_pt: tuple[float, float] | None = None,
     ) -> bytes:
-        """Return a complete PDF as bytes for *tiff_path*."""
+        """Return a complete PDF as bytes for *tiff_path*.
+
+        page_size_pt: physical media size (w_pt, h_pt). When set, drives the
+        page MediaBox so the PDF and any `lp -o PageSize=...` agree; the image
+        is centred on it at its exact natural size — overhang is clipped at
+        the printer's hardware margins, never scaled. (Apple's cgimagetopdf
+        scales raw TIFFs down to fit the imageable area, which is exactly what
+        this path exists to avoid.) Defaults to the TIFF's own dimensions.
+        """
         arr, actual_dpi = PostScriptGenerator._read_tiff(tiff_path, fallback_dpi=dpi)
         h, w, n_ch = arr.shape
         bits = 16 if arr.dtype == np.uint16 else 8
         pts_w = w * _PT_PER_INCH / actual_dpi
         pts_h = h * _PT_PER_INCH / actual_dpi
 
+        if page_size_pt is None:
+            page_w, page_h = pts_w, pts_h
+        else:
+            page_w, page_h = page_size_pt
+            # Same rule as PostScriptGenerator: if the declared page
+            # orientation contradicts the TIFF's, swap so the MediaBox agrees
+            # with the image we draw instead of forcing a rotation downstream.
+            if (page_w > page_h) != (pts_w > pts_h):
+                page_w, page_h = page_h, page_w
+        x_off = (page_w - pts_w) / 2.0
+        y_off = (page_h - pts_h) / 2.0
+
         log.debug(
-            "PDF: %s  %dx%d px  %.1f×%.1f pt  %d dpi  %d-bit  %d-ch",
-            tiff_path.name, w, h, pts_w, pts_h, actual_dpi, bits, n_ch,
+            "PDF: %s  %dx%d px  %.1f×%.1f pt on %.1f×%.1f pt page  %d dpi  %d-bit  %d-ch",
+            tiff_path.name, w, h, pts_w, pts_h, page_w, page_h, actual_dpi, bits, n_ch,
         )
 
         raw = arr.astype(">u2").tobytes() if bits == 16 else arr.tobytes()
         img_data = zlib.compress(raw, 6)
         cs_str = self._pdf_colorspace(n_ch, ink_channels)
         content = (
-            f"q\n{pts_w:.4f} 0 0 {pts_h:.4f} 0 0 cm\n/Im Do\nQ"
+            f"q\n{pts_w:.4f} 0 0 {pts_h:.4f} {x_off:.4f} {y_off:.4f} cm\n/Im Do\nQ"
         ).encode("ascii")
 
         has_tint_fn = n_ch > 4
@@ -358,7 +379,7 @@ class PdfGenerator:
         obj_bodies[3] = (
             f"3 0 obj\n"
             f"<< /Type /Page\n"
-            f"   /MediaBox [0 0 {pts_w:.4f} {pts_h:.4f}]\n"
+            f"   /MediaBox [0 0 {page_w:.4f} {page_h:.4f}]\n"
             f"   /Parent 2 0 R\n"
             f"   /Resources << /XObject << /Im 5 0 R >> >>\n"
             f"   /Contents 4 0 R >>\n"

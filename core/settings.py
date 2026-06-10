@@ -68,6 +68,17 @@ DEFAULTS: dict[str, Any] = {
     # force-locked on there (in get()).
     "use_native_print_dialog":   is_windows() or is_macos(),
     "confirm_before_printing":   True,
+    # ChromIQ lp pipeline only (macOS): when CUPS rejects PostScript (every
+    # non-PostScript printer — Apple's CUPS ships no PS→raster chain), retry
+    # with a ChromIQ-generated exact-size PDF instead of the raw TIFF.  The
+    # raw-TIFF route hands placement to Apple's cgimagetopdf, which shrinks
+    # full-page charts ~3% to fit the imageable area and ignores every
+    # ppi/scaling option; the PDF places the chart 1:1 (overhang clips at the
+    # hardware margins, like ColorSync Utility) and stays colour-passthrough
+    # (untagged device RGB, verified no-ink against Canon + Epson PPDs).
+    # Irrelevant while use_native_print_dialog is on (no lp jobs then) —
+    # Settings greys it out accordingly.  Off until hardware-verified.
+    "pdf_print_fallback":        False,
     # Step 3 — measure
     "measure_disable_bidir":       True,
     # Suppresses the "forcing bidirectional on a non-randomised chart" warning

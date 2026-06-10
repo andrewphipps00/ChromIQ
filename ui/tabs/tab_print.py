@@ -945,6 +945,9 @@ class TabPrint(QWidget):
             on_finish=_cleanup_and_finish,
             orientation=orientation,
             page_size_pt=page_size_pt,
+            pdf_fallback=is_macos() and bool(
+                self._settings.get("pdf_print_fallback", False)
+            ),
         )
 
     def _on_print_done(self, code: int) -> None:
@@ -1101,15 +1104,27 @@ class TabPrint(QWidget):
                     "(at least 1 h; 24 h for best accuracy)."
                 )
         else:
+            if is_macos() and bool(self._settings.get("pdf_print_fallback", False)):
+                fallback_sentence = (
+                    "If CUPS rejects PostScript (most non-PostScript printers), it "
+                    "automatically retries with an exact-size PDF that keeps the chart "
+                    "at 100% scale (edges beyond the printable area are clipped, "
+                    "never shrunk)."
+                )
+            else:
+                fallback_sentence = (
+                    "If CUPS rejects PostScript (e.g. AirPrint or Driverless drivers), "
+                    "it automatically retries by sending the TIFF directly with "
+                    "colour-space-aware raster options."
+                )
             self._warn_lbl.setText(
                 "⚠  Verify that all print settings above match the media you are printing on.\n\n"
                 "Wrong media type or quality settings will cause incorrect ink laydown and "
                 "invalid colour measurements. Allow pigment inks to dry fully before measuring "
                 "(at least 1 h; 24 h for best accuracy).\n\n"
                 "Colour management is disabled automatically. ChromIQ converts the chart to "
-                "PostScript and sends it via lp, bypassing ColorSync entirely. If CUPS rejects "
-                "PostScript (e.g. AirPrint or Driverless drivers), it automatically retries "
-                "by sending the TIFF directly with colour-space-aware raster options."
+                "PostScript and sends it via lp, bypassing ColorSync entirely. "
+                + fallback_sentence
             )
 
     def _print_native(self, pages: list[tuple[Path, int]]) -> None:

@@ -152,3 +152,78 @@ def test_16bit_downcast_preserves_high_byte(tmp_path: Path) -> None:
     assert decoded[:6] == b"\xab" * 6, (
         f"expected high-byte 0xAB after downcast, got {decoded[:6].hex()}"
     )
+
+
+# ---------------------------------------------------------------------------
+# PdfGenerator page-size handling — the exact-size PDF fallback.
+#
+# Raw-TIFF lp submission lets Apple's cgimagetopdf place the image, which
+# shrinks a full-page chart ~3% to fit the imageable area (and ignores every
+# ppi/scaling option). The PDF fallback exists to keep the chart at 100%:
+# MediaBox matches the requested page, the image is drawn 1:1 and centred.
+# Pin that geometry.
+# ---------------------------------------------------------------------------
+
+from workflow.postscript_generator import PdfGenerator
+
+
+def _pdf_media_box(pdf: bytes) -> tuple[float, float]:
+    m = re.search(rb"/MediaBox \[0 0 (\S+) (\S+)\]", pdf)
+    assert m, "no MediaBox emitted"
+    return float(m.group(1)), float(m.group(2))
+
+
+def _pdf_image_ctm(pdf: bytes) -> tuple[float, float, float, float]:
+    """Return (scale_x, scale_y, offset_x, offset_y) of the image placement."""
+    m = re.search(rb"q\n(\S+) 0 0 (\S+) (\S+) (\S+) cm\n/Im Do", pdf)
+    assert m, "no image placement CTM emitted"
+    return tuple(float(m.group(i)) for i in (1, 2, 3, 4))  # type: ignore[return-value]
+
+
+def test_pdf_full_page_chart_drawn_1to1_never_shrunk(tmp_path: Path) -> None:
+    # The core regression: an A4-sized chart on an A4 page must be drawn at
+    # its full natural size — not fitted into the printer's imageable area.
+    tiff = tmp_path / "a4.tif"
+    _write_tiff(tiff, w_px=1654, h_px=2339, dpi=200)  # ~595 × 842 pt portrait
+    pdf = PdfGenerator().generate(tiff, page_size_pt=(595.28, 841.89))
+    pw, ph = _pdf_media_box(pdf)
+    sx, sy, ox, oy = _pdf_image_ctm(pdf)
+    assert abs(pw - 595.28) < 0.01 and abs(ph - 841.89) < 0.01
+    assert abs(sx - 595.44) < _PT_SLOP and abs(sy - 842.04) < _PT_SLOP, (
+        f"image must keep its natural size, got {sx}×{sy}"
+    )
+    assert abs(ox) < _PT_SLOP and abs(oy) < _PT_SLOP
+
+
+def test_pdf_smaller_chart_centred_on_page(tmp_path: Path) -> None:
+    tiff = tmp_path / "small.tif"
+    _write_tiff(tiff, w_px=1000, h_px=1500, dpi=200)  # 360 × 540 pt portrait
+    pdf = PdfGenerator().generate(tiff, page_size_pt=(595.28, 841.89))
+    sx, sy, ox, oy = _pdf_image_ctm(pdf)
+    assert abs(sx - 360.0) < _PT_SLOP and abs(sy - 540.0) < _PT_SLOP
+    assert abs(ox - (595.28 - sx) / 2) < 0.01
+    assert abs(oy - (841.89 - sy) / 2) < 0.01
+
+
+def test_pdf_landscape_tiff_on_portrait_page_swaps(tmp_path: Path) -> None:
+    # Same aspect-aware swap as the PS path: the MediaBox must agree with the
+    # image we draw, never force a rotation downstream.
+    tiff = tmp_path / "landscape.tif"
+    _write_tiff(tiff, w_px=3307, h_px=2339, dpi=200)  # ~1190 × 842 pt landscape
+    pdf = PdfGenerator().generate(tiff, page_size_pt=(842, 1191))
+    pw, ph = _pdf_media_box(pdf)
+    assert pw > ph, f"expected landscape MediaBox, got {pw}×{ph}"
+    _, _, ox, oy = _pdf_image_ctm(pdf)
+    assert ox >= -_PT_SLOP and oy >= -_PT_SLOP, (
+        f"offsets {ox}, {oy} should be ~non-negative — image must fit the page"
+    )
+
+
+def test_pdf_no_page_size_defaults_to_tiff_dims(tmp_path: Path) -> None:
+    tiff = tmp_path / "plain.tif"
+    _write_tiff(tiff, w_px=1000, h_px=1500, dpi=200)
+    pdf = PdfGenerator().generate(tiff)
+    pw, ph = _pdf_media_box(pdf)
+    sx, sy, ox, oy = _pdf_image_ctm(pdf)
+    assert abs(pw - sx) < 0.01 and abs(ph - sy) < 0.01
+    assert ox == 0.0 and oy == 0.0

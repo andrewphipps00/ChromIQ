@@ -76,3 +76,114 @@ def test_no_vendor_option_when_ppd_has_none(monkeypatch) -> None:
     cfg = PrintConfig(printer_name="EPSON_ET_8550", options={})
     cmd = CupsRawPrinter._build_lp_command_ps(Path("/tmp/x.ps"), cfg, orientation=None)
     assert not any("CNIJ" in token for token in cmd), cmd
+
+
+# ---------------------------------------------------------------------------
+# Exact-size PDF fallback (pdf_print_fallback setting)
+# ---------------------------------------------------------------------------
+
+import numpy as np
+import tifffile
+
+
+def _write_rgb_tiff(path: Path) -> None:
+    arr = np.zeros((30, 20, 3), dtype=np.uint8)
+    tifffile.imwrite(str(path), arr, resolution=(200, 200), resolutionunit="INCH")
+
+
+def test_pdf_command_options(monkeypatch) -> None:
+    """The PDF job must carry Duplex/sides and the vendor no-CM key, but
+    neither ColorSync=None (PS-specific) nor orientation-requested (geometry
+    is baked into the MediaBox)."""
+    monkeypatch.setattr(
+        cups_printer, "vendor_no_cm_setting_for_queue",
+        lambda name: ("CNIJIntent2", "1001"),
+    )
+    cfg = PrintConfig(printer_name="Canon_PRO_300_series", options={"PageSize": "A4"})
+    cmd = CupsRawPrinter._build_lp_command_pdf(Path("/tmp/x.pdf"), cfg)
+    assert cmd[:3] == ["lp", "-d", "Canon_PRO_300_series"]
+    assert "PageSize=A4" in cmd
+    assert "Duplex=None" in cmd
+    assert "sides=one-sided" in cmd
+    assert "CNIJIntent2=1001" in cmd
+    assert not any("ColorSync" in tok for tok in cmd), cmd
+    assert not any("orientation-requested" in tok for tok in cmd), cmd
+    assert cmd[-1] == "/tmp/x.pdf"
+
+
+def _reject_ps_then(monkeypatch, printer: CupsRawPrinter, calls: list[str]) -> None:
+    """Make lp reject PostScript, and record which fallback runs."""
+    monkeypatch.setattr(
+        printer, "_run_lp_result", lambda cmd: (1, "Unsupported document-format: postscript"),
+    )
+    monkeypatch.setattr(printer, "_cancel_pending_jobs", lambda name: None)
+    monkeypatch.setattr(
+        printer, "_print_job_pdf",
+        lambda *a, **k: calls.append("pdf"),
+    )
+    monkeypatch.setattr(
+        printer, "_print_job_tiff",
+        lambda *a, **k: calls.append("tiff"),
+    )
+
+
+def test_ps_rejection_falls_back_to_tiff_by_default(monkeypatch, tmp_path: Path) -> None:
+    tiff = tmp_path / "chart.tif"
+    _write_rgb_tiff(tiff)
+    printer = CupsRawPrinter()
+    calls: list[str] = []
+    _reject_ps_then(monkeypatch, printer, calls)
+    printer.print_job_ps(tiff, PrintConfig(printer_name="Test"))
+    assert calls == ["tiff"]
+
+
+def test_ps_rejection_falls_back_to_pdf_when_enabled(monkeypatch, tmp_path: Path) -> None:
+    tiff = tmp_path / "chart.tif"
+    _write_rgb_tiff(tiff)
+    printer = CupsRawPrinter()
+    calls: list[str] = []
+    _reject_ps_then(monkeypatch, printer, calls)
+    printer.print_job_ps(tiff, PrintConfig(printer_name="Test"), pdf_fallback=True)
+    assert calls == ["pdf"]
+
+
+def test_pdf_submission_failure_retries_as_tiff(monkeypatch, tmp_path: Path) -> None:
+    tiff = tmp_path / "chart.tif"
+    _write_rgb_tiff(tiff)
+    printer = CupsRawPrinter()
+    calls: list[str] = []
+    monkeypatch.setattr(printer, "_run_lp_result", lambda cmd: (1, "boom"))
+    monkeypatch.setattr(printer, "_cancel_pending_jobs", lambda name: None)
+    monkeypatch.setattr(
+        printer, "_print_job_tiff", lambda *a, **k: calls.append("tiff"),
+    )
+    monkeypatch.setattr(
+        cups_printer, "vendor_no_cm_setting_for_queue", lambda name: None,
+    )
+    printer._print_job_pdf(tiff, PrintConfig(printer_name="Test"))
+    assert calls == ["tiff"]
+
+
+def test_pdf_success_reports_zero(monkeypatch, tmp_path: Path) -> None:
+    tiff = tmp_path / "chart.tif"
+    _write_rgb_tiff(tiff)
+    printer = CupsRawPrinter()
+    results: list[int] = []
+    submitted: list[list[str]] = []
+
+    def fake_run(cmd):
+        submitted.append(cmd)
+        return 0, ""
+
+    monkeypatch.setattr(printer, "_run_lp_result", fake_run)
+    monkeypatch.setattr(
+        cups_printer, "vendor_no_cm_setting_for_queue", lambda name: None,
+    )
+    printer._print_job_pdf(
+        tiff, PrintConfig(printer_name="Test", options={"PageSize": "A4"}),
+        on_finish=results.append, page_size_pt=(595.28, 841.89),
+    )
+    assert results == [0]
+    assert len(submitted) == 1
+    assert submitted[0][-1].endswith(".pdf")
+    assert "PageSize=A4" in submitted[0]
