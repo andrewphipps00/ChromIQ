@@ -42,6 +42,10 @@ _PPD_GENERIC_OFF_RES = (
     # "Color Management" option — its PS invocation sets RGBColorManagement
     # to None, i.e. the driver hands colour over to the application.
     re.compile(r"^\s*application(\s+matching)?\s*$", re.I),
+    # Samsung colour lasers offer Standard/Vivid/"Device" on "RGB Color" —
+    # the Device invocation is `userdict /RGBColorMode (DEVICE) put`, i.e.
+    # raw device RGB without rendering treatment.
+    re.compile(r"^\s*device\s*$", re.I),
 )
 
 _PPD_OPENUI_RE = re.compile(r'^\*OpenUI\s+\*([A-Za-z0-9_]+)\s*/([^:]*):\s*PickOne', re.I)

@@ -182,6 +182,47 @@ def test_hp_laser_per_object_rgb_options_all_returned(tmp_path):
     ]
 
 
+def test_samsung_rgb_color_device(tmp_path):
+    """Samsung colour lasers: "RGB Color" Standard/Vivid/Device — "Device"
+    invokes `userdict /RGBColorMode (DEVICE) put`, the raw device-RGB mode.
+    From Samsung CLP-350."""
+    ppd = _write_ppd(tmp_path, """
+        *OpenUI *SECRGBColor/RGB Color: PickOne
+        *DefaultSECRGBColor: Standard
+        *SECRGBColor Standard/Standard: ""
+        *SECRGBColor Vivid/Vivid: ""
+        *SECRGBColor Device/Device: ""
+        *CloseUI: *SECRGBColor
+    """)
+    assert _vendor_no_cm_setting(ppd) == ("SECRGBColor", "Device")
+
+
+def test_lexmark_color_correction_off_on_mediacolor_key(tmp_path):
+    """Lexmark reuses the key name "MediaColor" for an option *labelled*
+    "Color Correction" whose Off value emits /ColorCorrection /Off — the label
+    qualifies it, the key name doesn't matter.  Conversely Xerox's MediaColor
+    really is "Paper Color" and must stay undetected.  From Lexmark C2100 /
+    Xerox D110."""
+    ppd = _write_ppd(tmp_path, """
+        *OpenUI *MediaColor/Color Correction: PickOne
+        *DefaultMediaColor: PrinterS
+        *MediaColor PrinterS/Use Printer Setting: ""
+        *MediaColor FalseM/Off: ""
+        *MediaColor Auto/Auto: ""
+        *CloseUI: *MediaColor
+    """)
+    assert _vendor_no_cm_setting(ppd) == ("MediaColor", "FalseM")
+    paper = _write_ppd(tmp_path, """
+        *OpenUI *MediaColor/Paper Color: PickOne
+        *DefaultMediaColor: Unspecified
+        *MediaColor Unspecified/Printer Default: ""
+        *MediaColor White/White: ""
+        *MediaColor Blue/Blue: ""
+        *CloseUI: *MediaColor
+    """)
+    assert _vendor_no_cm_setting(paper) is None
+
+
 def test_brother_inkjet_color_mode_none(tmp_path):
     """Brother inkjets: "Color Mode" with Natural/Vivid/None — "None" is the
     no-CM value.  From Brother MFC-J200."""

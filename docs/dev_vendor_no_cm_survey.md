@@ -64,6 +64,31 @@ with it. It is the same key the native-dialog path has always locked via
 `PMPrintSettings`. All three lp paths (PS / PDF / TIFF) now send it
 (`_AP_NO_CM` in `workflow/cups_printer.py`).
 
+## Round 2 (same day): vendor-site drivers + laser bundles
+
+A second pass added 927 PPDs from: Canon's own current CUPS drivers
+(PRO-1/100/200/310/510/1100, G1000/G3000 — downloaded via Canon's
+`pdisp01.c-wss.com/gdl/WWUFORedirectTarget.do?id=<base64 file id>` redirect
+service; the PPD hides in the installer's `Scripts/CIJModules/CanonIJPPD.tgz`,
+extracted with `pkgutil --expand` + `tar`), and Apple's Ricoh / Lexmark /
+Samsung / Canon-laser / Xerox bundles.
+
+| Vendor | Lever(s) | Notes |
+|--------|----------|-------|
+| Canon (current CNIJ) | `CNIJIntent2=1001` on PRO-200/310/510/1100 | PRO-1, PRO-100, G1000, G3000 genuinely lack the value (Photo Color/PRO Mode/Vivid only) |
+| Ricoh | `RPSRGBcorrect=None` ("Color Setting: Off" → `(none) RCsetrgbrevision`) | 179/356; misses are mono/production engines with no CM option |
+| Lexmark | `MediaColor=FalseM` — the key is misleadingly named; its *label* is "Color Correction" and Off emits `/ColorCorrection /Off` | label-based gating is what makes this safe: Xerox's `MediaColor` is literally "Paper Color" and stays undetected |
+| Samsung | `SECRGBColor=Device` / `id_RGBColor=Device` (`userdict /RGBColorMode (DEVICE) put`) | "Device" added as a gated value |
+| Xerox | `XRColorCorrection=None`, plus on FFPS models 12 per-object-type `XR*ColorCorrection=None` siblings — the plural API applies them all | 77/162 |
+| Canon laser (UFR/PS) | none — matching options are single-value in these PPDs | |
+
+**Epson SureColor P-series could not be surveyed**: Epson's current macOS
+"drivers" (`SCP400/600/700/800/900_Lite_*.dmg`) are downloader apps that fetch
+the real package at runtime — no PPD on disk without executing vendor code.
+Evidence that the P-series behaves like the rest of Epson: all 828 round-1
+Epson PPDs plus the locally installed ET-8550 (2021 driver generation) use
+`EPIJ_CMat=3`.
+
 ## Re-running the survey
 
 ```bash
