@@ -1,5 +1,34 @@
 # Changelog
 
+## v3.8.17
+A print-accuracy release: a new opt-in fallback keeps charts at exactly 100%
+size on macOS printers that don't speak PostScript, and ChromIQ now warns
+before a borderless print silently scales the chart.
+
+### ✨ Features
+- **Exact-size PDF fallback (macOS, opt-in).** ChromIQ always sends a chart as
+  PostScript first. Most home and photo printers don't understand PostScript,
+  so macOS rejects it and ChromIQ resends the chart as a plain TIFF — and at
+  that point macOS takes over the placement and quietly **shrinks a full-page
+  chart by about 3%** to fit inside the printer's margins, ignoring every
+  scaling option. The new Preferences option *Exact-size PDF fallback (ChromIQ
+  printing)* resends the chart as a PDF built by ChromIQ instead, with the
+  chart placed at exactly 100% scale — anything that would fall into the
+  unprintable margin is simply cut off (charts keep white margins there), the
+  same way Apple's ColorSync Utility prints. Colour is untouched either way:
+  the PDF carries the chart untagged in the printer's own colour space, so no
+  colour conversion can occur on the way to the driver — verified against both
+  Canon and Epson drivers. The option only applies to ChromIQ's own printing
+  pipeline, so it greys out while *Use default macOS printer dialog* is
+  enabled. It ships **off by default** for this release; flip it on in
+  Preferences to get exact-size prints.
+- **Borderless now warns before scaling your chart.** Borderless printing
+  enlarges the page a few percent so ink reaches past the paper edges — the
+  driver does this and it cannot be turned off. That shifts every patch of a
+  profiling chart. Printing with a borderless paper size, toggle, or page
+  setup now shows a clear warning first (with Cancel as the safe default),
+  and the print-settings summary explains the real consequence too.
+
 ## v3.8.16
 A small feature release: see how a chart's patches are spread through colour
 space, straight from the toolbar.
