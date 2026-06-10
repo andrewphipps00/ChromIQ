@@ -54,6 +54,30 @@ _BORDERLESS_KEYS = {
     "__BORDERLESS__",
 }
 
+
+def _borderless_selected(selected_opts: dict[str, str]) -> bool:
+    """True when the current option selection requests a borderless print.
+
+    Covers all three ways drivers encode it: a dedicated on/off toggle
+    (incl. ChromIQ's synthetic one), Epson's EPIJ_PSrc=3 page-setup value,
+    and borderless PageSize variants picked directly (e.g. "A4.FullBleed").
+    """
+    from workflow.print_manager import (
+        _BORDERLESS_SIZE_SUFFIXES,
+        _EPSON_PSRC_BORDERLESS,
+    )
+    if any(
+        selected_opts.get(k, "").lower() in ("true", "on", "yes", "1")
+        for k in _BORDERLESS_KEYS
+    ):
+        return True
+    if selected_opts.get("EPIJ_PSrc", "") == _EPSON_PSRC_BORDERLESS:
+        return True
+    return any(
+        selected_opts.get(k, "").endswith(_BORDERLESS_SIZE_SUFFIXES)
+        for k in _PAGE_SIZE_KEYS
+    )
+
 if TYPE_CHECKING:
     from core.settings import AppSettings
 
@@ -744,6 +768,15 @@ class TabPrint(QWidget):
             printer, selected_opts, first_tiff
         )
 
+        # Independent of the preflight setting: borderless physically cannot
+        # print at 100% (the driver enlarges the page a few percent so ink
+        # reaches past the paper edges — Epson PPDs bake a 1.03–1.07
+        # cupsBorderlessScalingFactor into their borderless sizes, Canon
+        # scales via its extension setting). A scaled chart shifts every
+        # patch, so always warn before wasting paper and ink.
+        if _borderless_selected(selected_opts) and not self._confirm_borderless():
+            return
+
         if self._settings.get("confirm_before_printing", True):
             if not self._show_preflight(
                 printer, selected_opts, orientation, page_size_pt,
@@ -755,6 +788,32 @@ class TabPrint(QWidget):
 
         for path, frame in pages:
             self._send_page(path, frame, orientation, page_size_pt)
+
+    def _confirm_borderless(self) -> bool:
+        """Warn that borderless scales the chart. Returns False to cancel."""
+        dlg = QMessageBox(self)
+        dlg.setWindowTitle("Borderless Will Scale the Chart")
+        dlg.setIcon(QMessageBox.Icon.Warning)
+        dlg.setText(
+            "Borderless printing enlarges the page by a few percent so the "
+            "ink reaches past the paper edges. The printer driver does this "
+            "and it cannot be turned off — it is what borderless means.\n\n"
+            "A profiling chart must print at exactly 100%: enlarging it "
+            "shifts every patch, so the measurement reads the wrong "
+            "positions.\n\n"
+            "Switch borderless off and print with borders instead — the "
+            "chart's white margins are made for that."
+        )
+        anyway_btn = dlg.addButton(
+            "Print Borderless Anyway", QMessageBox.ButtonRole.DestructiveRole
+        )
+        cancel_btn = dlg.addButton(QMessageBox.StandardButton.Cancel)
+        dlg.setDefaultButton(cancel_btn)
+        dlg.exec()
+        if dlg.clickedButton() is anyway_btn:
+            log.warning("Borderless print confirmed by user despite scaling warning")
+            return True
+        return False
 
     def _handle_stuck_jobs(self, printer: str) -> bool:
         """Prompt to clear stuck jobs. Returns False if user cancels."""
@@ -860,15 +919,11 @@ class TabPrint(QWidget):
         warnings: list[str] = []
         if mismatch:
             warnings.append(mismatch)
-        # Warn if borderless is on but no photo-ish media keyword detected.
-        borderless_on = any(
-            (selected_opts.get(k, "").lower() in ("true", "on", "yes"))
-            for k in _BORDERLESS_KEYS
-        )
-        if borderless_on:
+        if _borderless_selected(selected_opts):
             warnings.append(
-                "Borderless is enabled — make sure the chart was generated "
-                "for the full sheet area; standard chart margins will be clipped."
+                "Borderless is enabled — the driver enlarges the page a few "
+                "percent to reach past the paper edges, so the chart will NOT "
+                "print at 100% and patches shift. Print with borders instead."
             )
 
         dlg = PreflightDialog(rows, warnings, page_count, self)
