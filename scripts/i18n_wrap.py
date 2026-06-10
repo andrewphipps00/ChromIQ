@@ -60,6 +60,7 @@ METHOD_TEXT_ARGS: dict[str, object] = {
     "addTab": "any",
     "insertTab": "any",
     "addAction": {0},
+    "addButton": {0},
     "showMessage": {0},
     "setCancelButtonText": {0},
     "setButtonText": {1},

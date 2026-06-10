@@ -327,7 +327,7 @@ class ParameterWidget(QWidget):
                 self._tooltip_btn._body = tooltip_body.strip()
             if tooltip_min_width is not None:
                 self._tooltip_btn._min_width = tooltip_min_width
-            self._tooltip_btn.setToolTip(f"{tooltip_title}\n\nClick for details")
+            self._tooltip_btn.setToolTip(tooltip_title + "\n\n" + tr("Click for details"))
 
     def set_control_enabled(self, enabled: bool,
                             include_label: bool = True) -> None:

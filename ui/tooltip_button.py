@@ -22,6 +22,7 @@ from PyQt6.QtWidgets import (
 )
 
 from core.logger import get_logger
+from core.i18n import tr
 
 log = get_logger(__name__)
 
@@ -53,7 +54,7 @@ class TooltipButton(QToolButton):
             self._color_override = color
 
         self.setObjectName("tooltip_btn")
-        self.setToolTip(f"{title}\n\nClick for details")
+        self.setToolTip(title + "\n\n" + tr("Click for details"))
         self.setFixedSize(QSize(_ICON_SIZE + 4, _ICON_SIZE + 4))
         self._explicitly_disabled = False
         self._set_icon()

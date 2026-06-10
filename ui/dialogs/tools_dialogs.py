@@ -264,7 +264,7 @@ class _ToolDialogBase(QDialog):
         # Buttons
         bb = QDialogButtonBox(self)
         self._run_btn   = bb.addButton(self.RUN_LABEL, QDialogButtonBox.ButtonRole.AcceptRole)
-        self._close_btn = bb.addButton("Close",        QDialogButtonBox.ButtonRole.RejectRole)
+        self._close_btn = bb.addButton(tr("Close"),        QDialogButtonBox.ButtonRole.RejectRole)
         self._run_btn.setDefault(True)
         self._run_btn.clicked.connect(self._on_run_clicked)
         self._close_btn.clicked.connect(self.reject)
@@ -639,7 +639,8 @@ class AverageMeasurementsDialog(_ToolDialogBase):
             confirm = QMessageBox.question(
                 self,
                 tr("Overwrite existing file?"),
-                f"'{out.name}' already exists in:\n  {out.parent}\n\nOverwrite it?",
+                tr("'{name}' already exists in:\n  {folder}\n\nOverwrite it?"
+                   ).format(name=out.name, folder=out.parent),
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.No,
             )
@@ -802,7 +803,8 @@ class MergeMeasurementsDialog(_ToolDialogBase):
             confirm = QMessageBox.question(
                 self,
                 tr("Overwrite existing file?"),
-                f"'{out.name}' already exists in:\n  {out.parent}\n\nOverwrite it?",
+                tr("'{name}' already exists in:\n  {folder}\n\nOverwrite it?"
+                   ).format(name=out.name, folder=out.parent),
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.No,
             )
@@ -995,8 +997,9 @@ class Ti1ToI1ProfilerDialog(_ToolDialogBase):
         if not is_rgb and not no_file:
             self._wf_check.setChecked(False)
             self._wf_note.setText(
-                "Workflow files are RGB-only — this target is "
-                f"{self._ti1_kind}, so only the patch set will be written."
+                tr("Workflow files are RGB-only — this target is "
+                   "{kind}, so only the patch set will be written."
+                   ).format(kind=self._ti1_kind)
             )
             self._wf_note.setVisible(True)
         else:
@@ -1043,7 +1046,8 @@ class Ti1ToI1ProfilerDialog(_ToolDialogBase):
             confirm = QMessageBox.question(
                 self,
                 tr("Overwrite existing file(s)?"),
-                f"These file(s) already exist in:\n  {out_dir}\n\n  {names}\n\nOverwrite?",
+                tr("These files already exist in:\n  {folder}\n\n  {names}\n\nOverwrite?"
+                   ).format(folder=out_dir, names=names),
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.No,
             )
@@ -1210,7 +1214,8 @@ class I1ProfilerToTi3Dialog(_ToolDialogBase):
             confirm = QMessageBox.question(
                 self,
                 tr("Overwrite existing file?"),
-                f"'{out.name}' already exists in:\n  {out.parent}\n\nOverwrite it?",
+                tr("'{name}' already exists in:\n  {folder}\n\nOverwrite it?"
+                   ).format(name=out.name, folder=out.parent),
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.No,
             )
@@ -1352,7 +1357,8 @@ class I1ProfilerToTi1Dialog(_ToolDialogBase):
             confirm = QMessageBox.question(
                 self,
                 tr("Overwrite existing file?"),
-                f"'{out.name}' already exists in:\n  {out.parent}\n\nOverwrite it?",
+                tr("'{name}' already exists in:\n  {folder}\n\nOverwrite it?"
+                   ).format(name=out.name, folder=out.parent),
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.No,
             )

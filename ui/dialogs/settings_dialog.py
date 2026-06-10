@@ -81,9 +81,10 @@ class SettingsDialog(QDialog):
         path_row.addWidget(browse_btn)
         path_row.addWidget(TooltipButton(
             tr("ArgyllCMS Binary Path"),
-            "Directory containing targen, printtarg, chartread, and colprof.\n"
-            f"Default: {default_argyll_bin_dir()}\n"
-            "You can download the latest version from argyllcms.com.",
+            tr("Directory containing targen, printtarg, chartread, and colprof.\n"
+               "Default: {path}\n"
+               "You can download the latest version from argyllcms.com."
+               ).format(path=default_argyll_bin_dir()),
             self,
         ))
         ag.addLayout(path_row)
@@ -946,7 +947,7 @@ class SettingsDialog(QDialog):
                     btn_label = "Install Driver" if _wdi_available else "Open Zadig"
                 install_btn = btn_box.addButton(btn_label, QDialogButtonBox.ButtonRole.AcceptRole)
                 install_btn.setObjectName("primary")
-            refresh_btn = btn_box.addButton("Refresh", QDialogButtonBox.ButtonRole.ResetRole)
+            refresh_btn = btn_box.addButton(tr("Refresh"), QDialogButtonBox.ButtonRole.ResetRole)
             refresh_btn.clicked.connect(lambda checked=False, d=dlg: d.done(_REFRESH))
             btn_box.addButton(QDialogButtonBox.StandardButton.Close)
             # The install/reinstall/Open-Zadig button uses AcceptRole, which
@@ -1030,7 +1031,7 @@ class SettingsDialog(QDialog):
             ol.addWidget(lbl)
             obox = QDialogButtonBox()
             if offer_zadig:
-                zadig_btn = obox.addButton("Try Zadig", QDialogButtonBox.ButtonRole.AcceptRole)
+                zadig_btn = obox.addButton(tr("Try Zadig"), QDialogButtonBox.ButtonRole.AcceptRole)
                 zadig_btn.setObjectName("primary")
                 zadig_btn.clicked.connect(lambda: launch_zadig())
             obox.addButton(QDialogButtonBox.StandardButton.Ok)

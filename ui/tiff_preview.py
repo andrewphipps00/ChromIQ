@@ -567,7 +567,8 @@ class TiffPreview(QWidget):
         self._next_btn.setVisible(visible)
         self._page_label.setVisible(n > 0)
         if n > 0:
-            self._page_label.setText(f"Page {self._current + 1} / {n}")
+            self._page_label.setText(
+                tr("Page {page} / {total}").format(page=self._current + 1, total=n))
         else:
             self._page_label.setText("")
         self._prev_btn.setEnabled(self._current > 0)
@@ -592,7 +593,7 @@ class TiffPreview(QWidget):
             self._pixmap = self._pil_to_pixmap(img)
         except Exception as exc:
             log.warning("Preview render error: %s", exc)
-            self._img_label.setText(f"Preview error:\n{exc}")
+            self._img_label.setText(tr("Preview error:\n{exc}").format(exc=exc))
             return
 
         self._repaint_label()

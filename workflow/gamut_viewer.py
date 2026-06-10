@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Callable
 from PyQt6.QtCore import QObject, pyqtSignal
 
 from core.logger import get_logger
+from core.i18n import tr
 
 if TYPE_CHECKING:
     from core.argyll_runner import ArgyllRunner
@@ -288,7 +289,7 @@ class GamutViewer(QObject):
         bg:        str  = "#111111",
     ) -> None:
         if self._runner.is_running:
-            self.error.emit("Another process is already running.")
+            self.error.emit(tr("Another process is already running."))
             return
 
         self._log_lines = []
@@ -311,7 +312,7 @@ class GamutViewer(QObject):
             shutil.copyfile(params.icc_path, icc_copy)
         except OSError as exc:
             shutil.rmtree(work_dir, ignore_errors=True)
-            self.error.emit(f"Cannot copy ICC file: {exc}")
+            self.error.emit(tr("Cannot copy ICC file: {exc}").format(exc=exc))
             return
 
         args = self._build_args(params, icc_copy)
@@ -373,7 +374,7 @@ class GamutViewer(QObject):
                 suffix = f"\niccgamut reported: {tool_err}" if tool_err else ""
                 self.error.emit(f"tool_error:{code}{suffix}")
         else:
-            self.error.emit("Could not parse gamut volume from iccgamut output — try running with -v flag.")
+            self.error.emit(tr("Could not parse gamut volume from iccgamut output — try running with -v flag."))
 
 
         on_finish(code)

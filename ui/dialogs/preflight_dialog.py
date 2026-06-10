@@ -55,8 +55,10 @@ class PreflightDialog(QDialog):
         outer.setSpacing(12)
 
         header = QLabel(
-            f"About to send <b>{pages}</b> page{'s' if pages != 1 else ''} "
-            "to your printer. Please confirm:",
+            tr("About to send <b>1</b> page to your printer. Please confirm:")
+            if pages == 1 else
+            tr("About to send <b>{pages}</b> pages to your printer. "
+               "Please confirm:").format(pages=pages),
             self,
         )
         header.setWordWrap(True)
@@ -94,7 +96,7 @@ class PreflightDialog(QDialog):
             QDialogButtonBox.StandardButton.Cancel,
             self,
         )
-        print_btn = bb.addButton("Print", QDialogButtonBox.ButtonRole.AcceptRole)
+        print_btn = bb.addButton(tr("Print"), QDialogButtonBox.ButtonRole.AcceptRole)
         print_btn.setObjectName("primary")
         print_btn.setDefault(True)
         bb.accepted.connect(self._on_accept)

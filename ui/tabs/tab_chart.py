@@ -1973,7 +1973,8 @@ class TabChart(QWidget):
             if self._manual_cal_i_pw is not None:
                 self._manual_cal_i_pw.set_value(cal_str)
             self._cal_status_lbl.setText(
-                f"Calibration file found: {cal_file.name} — auto-filled into -I and -K fields below."
+                tr("Calibration file found: {name} — auto-filled into -I and -K "
+                   "fields below.").format(name=cal_file.name)
             )
             self._cal_status_lbl.setVisible(True)
         else:
@@ -2808,8 +2809,8 @@ class TabChart(QWidget):
         lay.addSpacing(8)               # breathing room below the field
 
         bb = QDialogButtonBox(dlg)
-        bb.addButton("Cancel", QDialogButtonBox.ButtonRole.RejectRole)
-        bb.addButton("Generate", QDialogButtonBox.ButtonRole.AcceptRole)
+        bb.addButton(tr("Cancel"), QDialogButtonBox.ButtonRole.RejectRole)
+        bb.addButton(tr("Generate"), QDialogButtonBox.ButtonRole.AcceptRole)
         bb.rejected.connect(dlg.reject)
         bb.accepted.connect(dlg.accept)
         lay.addWidget(bb)
@@ -3222,8 +3223,8 @@ class TabChart(QWidget):
 
         lay.addSpacing(4)
         bb = QDialogButtonBox(dlg)
-        bb.addButton("Cancel", QDialogButtonBox.ButtonRole.RejectRole)
-        bb.addButton("Save", QDialogButtonBox.ButtonRole.AcceptRole)
+        bb.addButton(tr("Cancel"), QDialogButtonBox.ButtonRole.RejectRole)
+        bb.addButton(tr("Save"), QDialogButtonBox.ButtonRole.AcceptRole)
         bb.rejected.connect(dlg.reject)
         bb.accepted.connect(dlg.accept)
         lay.addWidget(bb)
@@ -3281,8 +3282,8 @@ class TabChart(QWidget):
         info.setWordWrap(True)
         dlg_layout.addWidget(info)
         bb = QDialogButtonBox(dlg)
-        bb.addButton("Cancel", QDialogButtonBox.ButtonRole.RejectRole)
-        bb.addButton("Delete", QDialogButtonBox.ButtonRole.AcceptRole)
+        bb.addButton(tr("Cancel"), QDialogButtonBox.ButtonRole.RejectRole)
+        bb.addButton(tr("Delete"), QDialogButtonBox.ButtonRole.AcceptRole)
         bb.rejected.connect(dlg.reject)
         bb.accepted.connect(dlg.accept)
         dlg_layout.addWidget(bb)
@@ -3875,7 +3876,8 @@ class TabChart(QWidget):
             total = per_sheet * pages
             self._patch_count_lbl.setText(str(total))
             self._patch_detail_lbl.setText(
-                f"PATCHES · {pages} PAGES · {paper.upper()}"
+                tr("PATCHES · {pages} PAGES · {paper}").format(
+                    pages=pages, paper=paper.upper())
             )
         else:
             self._patch_count_lbl.setText("?")

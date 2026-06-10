@@ -1760,8 +1760,10 @@ class Ti2RelayoutDialog(QDialog):
             return
         note = getattr(self, "_chart_note", "")
         self._info.setText(
-            f"{note} — {self._grid.count()} patches, "
-            f"-i{self._spec.instrument_flag} -p{self._spec.paper_flag}")
+            tr("{note} — {n} patches, -i{instr} -p{paper}").format(
+                note=note, n=self._grid.count(),
+                instr=self._spec.instrument_flag,
+                paper=self._spec.paper_flag))
 
     def _set_swatch_size(self, size: int) -> None:
         """Resize the grid swatches; rebuild icons + delegate cell so the
@@ -1815,7 +1817,8 @@ class Ti2RelayoutDialog(QDialog):
             return
         if not extra:
             QMessageBox.warning(self, tr("No patches"),
-                                f"No RGB patches found in {Path(path).name}.")
+                                tr("No RGB patches found in {name}.").format(
+                                    name=Path(path).name))
             return
 
         n = len(extra)
@@ -1823,17 +1826,22 @@ class Ti2RelayoutDialog(QDialog):
         box.setWindowTitle(tr("Add the new colours"))
         box.setIcon(QMessageBox.Icon.Question)
         box.setText(tr("Where would you like the new colours?"))
+        if n == 1:
+            ready = tr("1 colour from “{name}” is ready to add."
+                       ).format(name=Path(path).name)
+        else:
+            ready = tr("{n} colours from “{name}” are ready to add."
+                       ).format(n=n, name=Path(path).name)
         box.setInformativeText(
-            f"{n} colour{'s' if n != 1 else ''} from "
-            f"“{Path(path).name}” {'are' if n != 1 else 'is'} ready to "
-            "add. You can place them right at the beginning of the chart or "
-            "tack them on at the end — whichever makes the combined set "
-            "easier to work with.")
-        start_btn = box.addButton("Add to the beginning",
+            ready + " "
+            + tr("You can place them right at the beginning of the chart or "
+                 "tack them on at the end — whichever makes the combined set "
+                 "easier to work with."))
+        start_btn = box.addButton(tr("Add to the beginning"),
                                    QMessageBox.ButtonRole.AcceptRole)
-        end_btn = box.addButton("Add to the end",
+        end_btn = box.addButton(tr("Add to the end"),
                                 QMessageBox.ButtonRole.AcceptRole)
-        cancel_btn = box.addButton("Cancel", QMessageBox.ButtonRole.RejectRole)
+        cancel_btn = box.addButton(tr("Cancel"), QMessageBox.ButtonRole.RejectRole)
         # The app's button stylesheet keeps buttons short, so the longer
         # "Add to the beginning"/"end" labels clip at the default width. Give
         # each button room for its full label plus the stylesheet's own
@@ -1854,9 +1862,11 @@ class Ti2RelayoutDialog(QDialog):
         else:
             return
         self._renumber()
-        self._status.setText(
-            f"Added {len(extra)} patch(es) at the {where}. "
-            "Updating preview…")
+        if where == "start":
+            added = tr("Added {n} patches at the beginning.").format(n=len(extra))
+        else:
+            added = tr("Added {n} patches at the end.").format(n=len(extra))
+        self._status.setText(added + " " + tr("Updating preview…"))
         self._schedule_auto_refresh()
 
     def _show_3d_distribution(self) -> None:
@@ -1886,7 +1896,8 @@ class Ti2RelayoutDialog(QDialog):
         self._populate_grid(program)
         self._renumber()
         self._status.setText(
-            f"Shuffled {len(program)} patches. Updating preview…")
+            tr("Shuffled {n} patches.").format(n=len(program))
+            + " " + tr("Updating preview…"))
         self._schedule_auto_refresh()
 
     def _remove_selected_patches(self) -> None:
@@ -1898,7 +1909,10 @@ class Ti2RelayoutDialog(QDialog):
         for r in rows:
             self._grid.takeItem(r)
         self._renumber()
-        self._status.setText(f"Removed {len(rows)} patch(es).")
+        n_removed = len(rows)
+        self._status.setText(
+            tr("Removed 1 patch.") if n_removed == 1
+            else tr("Removed {n} patches.").format(n=n_removed))
 
     def _program_from_grid(self) -> list[tuple]:
         return [self._grid.item(i).data(Qt.ItemDataRole.UserRole)
@@ -1947,8 +1961,11 @@ class Ti2RelayoutDialog(QDialog):
         except OSError as exc:
             QMessageBox.warning(self, tr("Save failed"), str(exc))
             return
-        self._status.setText(f"Exported {len(lines)} colour(s) to "
-                             f"{out_path.name}.")
+        n_exp = len(lines)
+        self._status.setText(
+            tr("Exported 1 colour to {name}.").format(name=out_path.name)
+            if n_exp == 1 else
+            tr("Exported {n} colours to {name}.").format(n=n_exp, name=out_path.name))
 
     def _set_patch_colour(self) -> None:
         items = self._grid.selectedItems()
@@ -1963,7 +1980,10 @@ class Ti2RelayoutDialog(QDialog):
         for it in items:
             it.setData(Qt.ItemDataRole.UserRole, rgb)
             it.setIcon(_swatch_icon(rgb))
-        self._status.setText(f"Set {len(items)} patch(es).")
+        n_set = len(items)
+        self._status.setText(
+            tr("Set 1 patch.") if n_set == 1
+            else tr("Set {n} patches.").format(n=n_set))
         self._schedule_auto_refresh()
 
     def _transform_selection(self, factor: float) -> None:
@@ -2339,13 +2359,16 @@ class Ti2RelayoutDialog(QDialog):
         # Refresh the 'Force randomised tag' affordance for this fresh layout.
         self._update_force_tag_state()
         if self._preview_pending_save is not None:
-            self._status.setText(f"Saved to {self._preview_pending_save}")
+            self._status.setText(
+                tr("Saved to {path}").format(path=self._preview_pending_save))
         else:
             pages = len(result.tiffs)
-            extra = f" across {pages} pages" if pages > 1 else ""
+            extra = (tr(" across {pages} pages").format(pages=pages)
+                     if pages > 1 else "")
             self._status.setText(
-                f"{len(self._spacers)} spacers on this page{extra}. "
-                "Spacers mode → click to select, then Paint.")
+                tr("{n} spacers on this page{extra}.").format(
+                    n=len(self._spacers), extra=extra)
+                + " " + tr("Spacers mode → click to select, then Paint."))
 
     def _show_page(self, page: int) -> None:
         """Switch the preview to ``page``: detect its spacers (cached), redraw."""
@@ -2411,7 +2434,8 @@ class Ti2RelayoutDialog(QDialog):
         n = len(self._regen.tiffs) if self._regen else 0
         self._page_bar.setVisible(n > 1)
         if n > 1:
-            self._page_label.setText(f"Page {self._page + 1}/{n}")
+            self._page_label.setText(
+                tr("Page {page}/{total}").format(page=self._page + 1, total=n))
             self._prev_btn.setEnabled(self._page > 0)
             self._next_btn.setEnabled(self._page < n - 1)
 
@@ -2634,7 +2658,10 @@ class Ti2RelayoutDialog(QDialog):
                 # selecting nothing should mean "clear").
                 self._sel_spacers = set(touched)
             self._refresh_preview()
-            self._status.setText(f"{len(self._sel_spacers)} spacer(s) selected.")
+            n_sp = len(self._sel_spacers)
+            self._status.setText(
+                tr("1 spacer selected.") if n_sp == 1
+                else tr("{n} spacers selected.").format(n=n_sp))
             return
 
         # Patches mode (+ highlight): marquee picks patches into the grid.
@@ -2663,8 +2690,10 @@ class Ti2RelayoutDialog(QDialog):
             row = min(touched_p) - 1
             if 0 <= row < self._grid.count():
                 self._grid.scrollToItem(self._grid.item(row))
+        n_pat = len(self._grid.selectedItems())
         self._status.setText(
-            f"{len(self._grid.selectedItems())} patch(es) selected.")
+            tr("1 patch selected.") if n_pat == 1
+            else tr("{n} patches selected.").format(n=n_pat))
 
     def _clear_spacer_selection(self) -> None:
         if not self._sel_spacers:
@@ -2709,7 +2738,10 @@ class Ti2RelayoutDialog(QDialog):
             else:
                 self._sel_spacers = {hit}
             self._refresh_preview()
-            self._status.setText(f"{len(self._sel_spacers)} spacer(s) selected.")
+            n_sp = len(self._sel_spacers)
+            self._status.setText(
+                tr("1 spacer selected.") if n_sp == 1
+                else tr("{n} spacers selected.").format(n=n_sp))
             return
 
         # Patches mode (+ highlight): click maps to the grid selection.
@@ -2732,8 +2764,10 @@ class Ti2RelayoutDialog(QDialog):
             self._select_patches_by_ids([sid], extend=False)
         if not is_alt:
             self._grid.scrollToItem(self._grid.item(row))
+        n_pat = len(self._grid.selectedItems())
         self._status.setText(
-            f"{len(self._grid.selectedItems())} patch(es) selected.")
+            tr("1 patch selected.") if n_pat == 1
+            else tr("{n} patches selected.").format(n=n_pat))
 
     def _spacer_at(self, ix: float, iy: float) -> int | None:
         for i, sp in enumerate(self._spacers):
@@ -2753,8 +2787,12 @@ class Ti2RelayoutDialog(QDialog):
         for i in self._sel_spacers:
             self._paint[(self._page, i)] = rgb
         self._apply_paint_and_show()
+        n_painted = len(self._sel_spacers)
         self._status.setText(
-            f"Painted {len(self._sel_spacers)} spacer(s) on page {self._page + 1}.")
+            tr("Painted 1 spacer on page {page}.").format(page=self._page + 1)
+            if n_painted == 1 else
+            tr("Painted {n} spacers on page {page}.").format(
+                n=n_painted, page=self._page + 1))
 
     # -- save ---------------------------------------------------------------
     def _save_as(self) -> None:
@@ -2852,24 +2890,25 @@ class Ti2RelayoutDialog(QDialog):
         lay.addWidget(heading)
 
         body = QLabel(
-            "When you measure a chart, your instrument has to work out which strip "
-            "it's looking at and which way round you scanned it. It does that by "
-            "matching the colours it reads against what it expects — and that only "
-            "works reliably when the colours are well shuffled, so every strip has "
-            "its own distinctive look.\n\n"
-            f"ChromIQ checked this chart and it looks structured instead: "
-            f"{report.reason[0].lower() + report.reason[1:]} On a layout like this "
-            "the strips can look alike, so the instrument may lock onto the wrong "
-            "strip or read it backwards. The frustrating part is that you usually "
-            "get no error at all — just measurements that are quietly wrong, which "
-            "then build a profile with colour casts.\n\n"
-            "Marking it as randomised anyway tells your instrument it's free to "
-            "read strips in either direction, which is exactly where this goes "
-            "wrong. It's only a sensible choice if you happen to know the order is "
-            "genuinely well mixed despite how it looks.\n\n"
-            "The safer alternatives: leave it untagged and simply scan every strip "
-            "the same way, or rebuild the chart so its colours are shuffled.\n\n"
-            "Would you like to mark it as randomised anyway?", dlg)
+            tr("When you measure a chart, your instrument has to work out which strip "
+               "it's looking at and which way round you scanned it. It does that by "
+               "matching the colours it reads against what it expects — and that only "
+               "works reliably when the colours are well shuffled, so every strip has "
+               "its own distinctive look.\n\n"
+               "ChromIQ checked this chart and it looks structured instead: "
+               "{reason} On a layout like this "
+               "the strips can look alike, so the instrument may lock onto the wrong "
+               "strip or read it backwards. The frustrating part is that you usually "
+               "get no error at all — just measurements that are quietly wrong, which "
+               "then build a profile with colour casts.\n\n"
+               "Marking it as randomised anyway tells your instrument it's free to "
+               "read strips in either direction, which is exactly where this goes "
+               "wrong. It's only a sensible choice if you happen to know the order is "
+               "genuinely well mixed despite how it looks.\n\n"
+               "The safer alternatives: leave it untagged and simply scan every strip "
+               "the same way, or rebuild the chart so its colours are shuffled.\n\n"
+               "Would you like to mark it as randomised anyway?").format(
+                reason=report.reason[0].lower() + report.reason[1:]), dlg)
         body.setWordWrap(True)
         lay.addWidget(body)
 
@@ -2877,8 +2916,8 @@ class Ti2RelayoutDialog(QDialog):
         lay.addWidget(hide_cb)
 
         bb = QDialogButtonBox(dlg)
-        tag_btn = bb.addButton("Tag anyway", QDialogButtonBox.ButtonRole.AcceptRole)
-        cancel_btn = bb.addButton("Leave untagged", QDialogButtonBox.ButtonRole.RejectRole)
+        tag_btn = bb.addButton(tr("Tag anyway"), QDialogButtonBox.ButtonRole.AcceptRole)
+        cancel_btn = bb.addButton(tr("Leave untagged"), QDialogButtonBox.ButtonRole.RejectRole)
         cancel_btn.setDefault(True)
         tag_btn.clicked.connect(dlg.accept)
         cancel_btn.clicked.connect(dlg.reject)

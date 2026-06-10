@@ -755,8 +755,9 @@ class TabPrint(QWidget):
         if not self._printer.is_printer_reachable(printer):
             QMessageBox.critical(
                 self, tr("Printer Offline"),
-                f"The printer \"{printer}\" appears to be offline or unreachable.\n"
-                "Please check that it is powered on and connected.",
+                tr("The printer \"{printer}\" appears to be offline or unreachable.\n"
+                   "Please check that it is powered on and connected."
+                   ).format(printer=printer),
             )
             return
 
@@ -806,7 +807,7 @@ class TabPrint(QWidget):
             "chart's white margins are made for that.")
         )
         anyway_btn = dlg.addButton(
-            "Print Borderless Anyway", QMessageBox.ButtonRole.DestructiveRole
+            tr("Print Borderless Anyway"), QMessageBox.ButtonRole.DestructiveRole
         )
         cancel_btn = dlg.addButton(QMessageBox.StandardButton.Cancel)
         dlg.setDefaultButton(cancel_btn)
@@ -825,14 +826,19 @@ class TabPrint(QWidget):
         dlg = QMessageBox(self)
         dlg.setWindowTitle(tr("Stuck Print Jobs Detected"))
         dlg.setIcon(QMessageBox.Icon.Warning)
+        if n == 1:
+            head = tr("There is 1 stuck print job in the queue for \"{printer}\"."
+                      ).format(printer=printer)
+        else:
+            head = tr("There are {n} stuck print jobs in the queue for \"{printer}\"."
+                      ).format(n=n, printer=printer)
         dlg.setText(
-            f"There {'is' if n == 1 else 'are'} {n} stuck print "
-            f"job{'s' if n != 1 else ''} in the queue for \"{printer}\".\n\n"
-            "Stuck jobs can block new print jobs from being processed.\n"
-            "Clear them before printing?"
+            head + "\n\n"
+            + tr("Stuck jobs can block new print jobs from being processed.\n"
+                 "Clear them before printing?")
         )
-        clear_btn  = dlg.addButton("Clear & Print",  QMessageBox.ButtonRole.AcceptRole)
-        dlg.addButton("Print Anyway", QMessageBox.ButtonRole.DestructiveRole)
+        clear_btn  = dlg.addButton(tr("Clear & Print"),  QMessageBox.ButtonRole.AcceptRole)
+        dlg.addButton(tr("Print Anyway"), QMessageBox.ButtonRole.DestructiveRole)
         cancel_btn = dlg.addButton(QMessageBox.StandardButton.Cancel)
         dlg.setDefaultButton(clear_btn)
         dlg.exec()
@@ -981,13 +987,14 @@ class TabPrint(QWidget):
         except Exception as exc:
             QMessageBox.critical(
                 self, tr("TIFF Error"),
-                f"Cannot read TIFF file:\n{tiff_path.name}\n\n{exc}",
+                tr("Cannot read TIFF file:\n{name}\n\n{exc}").format(name=tiff_path.name, exc=exc),
             )
             return
 
         selected_opts = {k: (c.currentData() or "") for k, c in self._option_combos.items()}
         config = self._module.build_config(printer=printer, options=selected_opts)
-        self._set_status(f"Sending {tiff_path.name} (page {frame + 1}) to {printer}…")
+        self._set_status(tr("Sending {name} (page {page}) to {printer}…").format(
+            name=tiff_path.name, page=frame + 1, printer=printer))
 
         def _cleanup_and_finish(code: int) -> None:
             if tmp_path and tmp_path.exists():
@@ -1008,13 +1015,14 @@ class TabPrint(QWidget):
 
     def _on_print_done(self, code: int) -> None:
         if code == 0:
-            self._set_status("Print job submitted successfully.")
+            self._set_status(tr("Print job submitted successfully."))
         else:
-            self._set_status(f"Print failed (lp exit code {code}).")
+            self._set_status(tr("Print failed (lp exit code {code}).").format(code=code))
             QMessageBox.critical(
                 self, tr("Print Error"),
-                f"CUPS rejected the print job (exit code {code}).\n"
-                "Check that the printer is online and the selected options are valid.",
+                tr("CUPS rejected the print job (exit code {code}).\n"
+                   "Check that the printer is online and the selected options are "
+                   "valid.").format(code=code),
             )
 
     def _on_clear_queue(self) -> None:
@@ -1194,18 +1202,19 @@ class TabPrint(QWidget):
                     log.warning("Native macOS print: %s", exc)
                     QMessageBox.warning(
                         self, tr("Colour Management Lock Not Verified"),
-                        "The print job was sent, but ChromIQ could not verify that "
-                        "the printer driver's colour management was disabled.\n\n"
-                        f"Details: {exc}\n\n"
-                        "The print may have been colour-managed by the driver. Check "
-                        "the swatch with Digital Color Meter or reprint after switching "
-                        "to the non-native (standard) print mode in Settings.",
+                        tr("The print job was sent, but ChromIQ could not verify that "
+                           "the printer driver's colour management was disabled.\n\n"
+                           "Details: {exc}\n\n"
+                           "The print may have been colour-managed by the driver. "
+                           "Check the swatch with Digital Color Meter or reprint "
+                           "after switching to the non-native (standard) print mode "
+                           "in Settings.").format(exc=exc),
                     )
             except Exception as exc:
                 log.error("Native macOS print failed: %s", exc)
                 QMessageBox.critical(
                     self, tr("Print Failed"),
-                    f"Could not open the macOS print dialog:\n{exc}",
+                    tr("Could not open the macOS print dialog:\n{exc}").format(exc=exc),
                 )
             return
         self._print_native_qt(pages)

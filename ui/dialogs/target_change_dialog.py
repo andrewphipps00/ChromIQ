@@ -97,7 +97,8 @@ class TargetChangeDialog(QDialog):
 
         # Show the two folders so the user can see exactly what is affected.
         paths = QLabel(
-            f"Existing:  {old_root}\nNew name:  {new_root}",
+            tr("Existing:  {old}\nNew name:  {new}").format(
+                old=old_root, new=new_root),
             self,
         )
         paths.setWordWrap(True)
@@ -112,33 +113,34 @@ class TargetChangeDialog(QDialog):
         # --- the three choices, most-likely / least-destructive first ---
         outer.addWidget(
             self._option_button(
-                f'Rename the existing target to "{new_name}"',
-                "Recommended if you simply picked the wrong name. ChromIQ moves "
-                f'the existing folder to "{new_name}", keeping everything inside '
-                "it (calibration, any earlier runs), and then regenerates the "
-                "chart so the printed sheet and files carry the new name. You end "
-                "up with one project, correctly named.",
+                tr('Rename the existing target to "{new}"').format(new=new_name),
+                tr('Recommended if you simply picked the wrong name. ChromIQ moves '
+                   'the existing folder to "{new}", keeping everything inside '
+                   'it (calibration, any earlier runs), and then regenerates the '
+                   'chart so the printed sheet and files carry the new name. You end '
+                   'up with one project, correctly named.').format(new=new_name),
                 TargetChangeAction.RENAME,
                 primary=True,
             )
         )
         outer.addWidget(
             self._option_button(
-                f'Create "{new_name}" and keep "{old_name}"',
-                "Safest option — nothing is deleted. ChromIQ creates a brand-new "
-                f'target for "{new_name}" and leaves the existing "{old_name}" '
-                "folder exactly as it is. You will have two separate targets on "
-                "disk.",
+                tr('Create "{new}" and keep "{old}"').format(new=new_name, old=old_name),
+                tr('Safest option — nothing is deleted. ChromIQ creates a brand-new '
+                   'target for "{new}" and leaves the existing "{old}" '
+                   'folder exactly as it is. You will have two separate targets on '
+                   'disk.').format(new=new_name, old=old_name),
                 TargetChangeAction.KEEP,
             )
         )
         outer.addWidget(
             self._option_button(
-                f'Create "{new_name}" and delete "{old_name}"',
-                f'ChromIQ creates the new "{new_name}" target and permanently '
-                f'deletes the old "{old_name}" folder and everything inside it '
-                "(charts, measurements, profiles). This cannot be undone — only "
-                "choose it if you are sure the old target is no longer needed.",
+                tr('Create "{new}" and delete "{old}"').format(new=new_name, old=old_name),
+                tr('ChromIQ creates the new "{new}" target and permanently '
+                   'deletes the old "{old}" folder and everything inside it '
+                   '(charts, measurements, profiles). This cannot be undone — only '
+                   'choose it if you are sure the old target is no longer '
+                   'needed.').format(new=new_name, old=old_name),
                 TargetChangeAction.DELETE,
                 danger=True,
             )

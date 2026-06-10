@@ -74,8 +74,8 @@ def _handle_inside(
     layout.setSpacing(12)
 
     lbl = QLabel(
-        f"<b>{txt_path.name}</b> is already in your working folder.<br><br>"
-        "What would you like to do?",
+        tr("<b>{name}</b> is already in your working folder.<br><br>"
+           "What would you like to do?").format(name=txt_path.name),
         dlg,
     )
     lbl.setWordWrap(True)
@@ -99,9 +99,9 @@ def _handle_inside(
     layout.addWidget(new_desc)
 
     btn_box    = QDialogButtonBox(dlg)
-    cont_btn   = btn_box.addButton("Continue",                      QDialogButtonBox.ButtonRole.AcceptRole)
-    new_btn    = btn_box.addButton("Use as base for a new profile", QDialogButtonBox.ButtonRole.ActionRole)
-    cancel_btn = btn_box.addButton("Cancel",                        QDialogButtonBox.ButtonRole.RejectRole)
+    cont_btn   = btn_box.addButton(tr("Continue"),                      QDialogButtonBox.ButtonRole.AcceptRole)
+    new_btn    = btn_box.addButton(tr("Use as base for a new profile"), QDialogButtonBox.ButtonRole.ActionRole)
+    cancel_btn = btn_box.addButton(tr("Cancel"),                        QDialogButtonBox.ButtonRole.RejectRole)
     layout.addWidget(btn_box)
 
     choice: list[str | None] = [None]
@@ -154,12 +154,13 @@ def _ask_profile_name(
     layout.setSpacing(10)
 
     info = QLabel(
-        f"The i1Profiler measurement <b>{txt_path.name}</b> will be copied into "
-        f"your working folder as a new profile set:<br><br>"
-        f"<pre>  • {txt_path.name}</pre>"
-        f"It will be placed in:<br>"
-        f"<code>{working_dir}/&lt;name&gt;/</code><br><br>"
-        "Enter a name for the profile you want to create:",
+        tr("The i1Profiler measurement <b>{name}</b> will be copied into "
+           "your working folder as a new profile set:<br><br>"
+           "<pre>  • {name}</pre>"
+           "It will be placed in:<br>"
+           "<code>{target}/&lt;name&gt;/</code><br><br>"
+           "Enter a name for the profile you want to create:").format(
+            name=txt_path.name, target=working_dir),
         dlg,
     )
     info.setWordWrap(True)
@@ -273,8 +274,9 @@ def _ask_profile_name(
         confirm = QMessageBox.warning(
             dlg,
             tr("Overwrite existing folder?"),
-            f"This will permanently delete:\n\n    {dest}\n\n"
-            "and replace it with the imported measurement. Continue?",
+            tr("This will permanently delete:\n\n    {dest}\n\n"
+               "and replace it with the imported measurement. Continue?"
+               ).format(dest=dest),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
         )

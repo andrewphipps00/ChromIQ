@@ -6,6 +6,7 @@ from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QSizePolicy, QVBoxLayout, QWidget
 
 from ui.tooltip_button import TooltipButton
+from core.i18n import tr
 
 
 class TabHeader(QWidget):
@@ -93,4 +94,4 @@ class TabHeader(QWidget):
             return
         self._tooltip_btn._title = title
         self._tooltip_btn._body = body.strip()
-        self._tooltip_btn.setToolTip(f"{title}\n\nClick for details")
+        self._tooltip_btn.setToolTip(title + "\n\n" + tr("Click for details"))

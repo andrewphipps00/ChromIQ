@@ -1145,8 +1145,8 @@ class TabCheckRefine(QWidget):
         info.setWordWrap(True)
         dlg_layout.addWidget(info)
         bb = QDialogButtonBox(dlg)
-        bb.addButton("Cancel", QDialogButtonBox.ButtonRole.RejectRole)
-        del_btn = bb.addButton("Delete", QDialogButtonBox.ButtonRole.AcceptRole)
+        bb.addButton(tr("Cancel"), QDialogButtonBox.ButtonRole.RejectRole)
+        del_btn = bb.addButton(tr("Delete"), QDialogButtonBox.ButtonRole.AcceptRole)
         del_btn.setObjectName("primary")
         bb.rejected.connect(dlg.reject)
         bb.accepted.connect(dlg.accept)
@@ -1224,8 +1224,8 @@ class TabCheckRefine(QWidget):
         QMessageBox.warning(
             self,
             tr("Profile Not Found"),
-            f"No matching .icc or .icm file was found in:\n{ti3.parent}\n\n"
-            "Please browse for the profile file manually.",
+            tr("No matching .icc or .icm file was found in:\n{folder}\n\n"
+               "Please browse for the profile file manually.").format(folder=ti3.parent),
         )
 
     # ------------------------------------------------------------------
@@ -1425,12 +1425,20 @@ class TabCheckRefine(QWidget):
             refine_lines = "  " + "   ".join(
                 f"{s} (max ΔE: {de:.2f})" for s, de in refine_strips
             )
+            n_refine = len(refine_strips)
+            if n_refine == 1:
+                head = tr("<b>1 strip has at least one patch above "
+                          "ΔE {limit:.1f} and should be re-measured:</b>").format(
+                    limit=self._threshold_spin.value())
+            else:
+                head = tr("<b>{n} strips have at least one patch above "
+                          "ΔE {limit:.1f} and should be re-measured:</b>").format(
+                    n=n_refine, limit=self._threshold_spin.value())
             action_lbl = QLabel(
-                f"<b>{len(refine_strips)} strip(s) have at least one patch above "
-                f"ΔE {self._threshold_spin.value():.1f} and should be re-measured:</b>"
-                f"<br><pre>{refine_lines}</pre>"
-                "Listed in measurement order — the app will navigate to each one "
-                "automatically.",
+                head
+                + "<br><pre>" + refine_lines + "</pre>"
+                + tr("Listed in measurement order — the app will navigate to each "
+                     "one automatically."),
                 dlg,
             )
             action_lbl.setWordWrap(True)

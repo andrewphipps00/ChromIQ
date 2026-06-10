@@ -648,8 +648,8 @@ class MainWindow(QMainWindow):
         layout.addWidget(msg)
 
         btn_box = QDialogButtonBox()
-        prefs_btn = btn_box.addButton("Open Preferences", QDialogButtonBox.ButtonRole.ActionRole)
-        btn_box.addButton("OK", QDialogButtonBox.ButtonRole.AcceptRole)
+        prefs_btn = btn_box.addButton(tr("Open Preferences"), QDialogButtonBox.ButtonRole.ActionRole)
+        btn_box.addButton(tr("OK"), QDialogButtonBox.ButtonRole.AcceptRole)
         btn_box.accepted.connect(dlg.accept)
         prefs_btn.clicked.connect(dlg.accept)
         prefs_btn.clicked.connect(self._open_settings)

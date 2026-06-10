@@ -1863,8 +1863,8 @@ class TabProfile(QWidget):
         info.setWordWrap(True)
         dlg_layout.addWidget(info)
         bb = QDialogButtonBox(dlg)
-        bb.addButton("Cancel", QDialogButtonBox.ButtonRole.RejectRole)
-        del_btn = bb.addButton("Delete", QDialogButtonBox.ButtonRole.AcceptRole)
+        bb.addButton(tr("Cancel"), QDialogButtonBox.ButtonRole.RejectRole)
+        del_btn = bb.addButton(tr("Delete"), QDialogButtonBox.ButtonRole.AcceptRole)
         del_btn.setObjectName("primary")
         bb.rejected.connect(dlg.reject)
         bb.accepted.connect(dlg.accept)
@@ -3302,10 +3302,13 @@ class TabProfile(QWidget):
         QMessageBox.critical(
             self,
             tr("Gamut source profile not found"),
-            f"The gamut-mapping source profile required by {flag} could not be located:\n\n"
-            f"    {src or '(empty path)'}\n\n"
-            f"Browse to a valid .icm/.icc file (e.g. sRGB.icm in your Argyll ref folder), "
-            f"or switch the Gamut Mapping mode to 'None' to build without it.",
+            tr("The gamut-mapping source profile required by {flag} could not "
+               "be located:\n\n"
+               "    {src}\n\n"
+               "Browse to a valid .icm/.icc file (e.g. sRGB.icm in your Argyll "
+               "ref folder), or switch the Gamut Mapping mode to 'None' to "
+               "build without it.").format(
+                flag=flag, src=src or tr("(empty path)")),
         )
         return False
 

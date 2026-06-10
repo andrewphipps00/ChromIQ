@@ -1003,7 +1003,7 @@ class GamutPanel(QWidget):
 
     def _update_volume_labels(self) -> None:
         if self._primary_volume is not None:
-            self._vol_label.setText(f"Volume: {self._primary_volume:,.0f} cc")
+            self._vol_label.setText(tr("Volume: {v:,.0f} cc").format(v=self._primary_volume))
         else:
             self._vol_label.setText(tr("Volume: —"))
 
@@ -1011,23 +1011,24 @@ class GamutPanel(QWidget):
             delta = (self._compare_volume - self._primary_volume) / self._primary_volume * 100
             sign  = "+" if delta >= 0 else ""
             self._compare_vol_label.setText(
-                f"Compare: {self._compare_volume:,.0f} cc  (Δ {sign}{delta:.1f}%)"
+                tr("Compare: {v:,.0f} cc  (Δ {sign}{delta:.1f}%)").format(
+                    v=self._compare_volume, sign=sign, delta=delta)
             )
         elif self._compare_volume is not None:
-            self._compare_vol_label.setText(f"Compare: {self._compare_volume:,.0f} cc")
+            self._compare_vol_label.setText(tr("Compare: {v:,.0f} cc").format(v=self._compare_volume))
         else:
             self._compare_vol_label.setText(tr("Compare: —"))
 
         r = self._viewgam_result
         if r and r.intersection_volume is not None:
-            self._intersection_label.setText(f"Intersection: {r.intersection_volume:,.0f} cc")
+            self._intersection_label.setText(tr("Intersection: {v:,.0f} cc").format(v=r.intersection_volume))
             self._coverage_ab_label.setText(
-                f"A covered by B: {r.primary_coverage_pct:.1f}%"
-                if r.primary_coverage_pct is not None else "A covered by B: —"
+                tr("A covered by B: {pct:.1f}%").format(pct=r.primary_coverage_pct)
+                if r.primary_coverage_pct is not None else tr("A covered by B: —")
             )
             self._coverage_ba_label.setText(
-                f"B covered by A: {r.compare_coverage_pct:.1f}%"
-                if r.compare_coverage_pct is not None else "B covered by A: —"
+                tr("B covered by A: {pct:.1f}%").format(pct=r.compare_coverage_pct)
+                if r.compare_coverage_pct is not None else tr("B covered by A: —")
             )
         else:
             self._intersection_label.setText(tr("Intersection: —"))
