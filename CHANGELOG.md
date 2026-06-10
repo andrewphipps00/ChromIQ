@@ -1,5 +1,42 @@
 # Changelog
 
+## v3.8.18
+A colour-fidelity release for many more printers: ChromIQ now knows how to
+switch off the driver's own colour management on HP, Brother, Ricoh, Lexmark,
+Samsung and Xerox printers too — and it blocks a hidden macOS colour
+conversion that could silently re-render charts on some printers.
+
+### ✨ Features
+- **Driver colour management now disabled on many more brands.** When ChromIQ
+  prints a chart it locks the printer driver's own "no colour adjustment"
+  setting so the driver can't re-profile the chart. Until now that lookup
+  reliably recognised Canon and Epson wording. After surveying nearly 3,000
+  official driver files from nine manufacturers, ChromIQ now also recognises
+  the equivalents used by **HP** (including DesignJet large-format and colour
+  LaserJets), **Brother**, **Ricoh**, **Lexmark**, **Samsung** and **Xerox**.
+  Where a driver splits the choice into several settings (some HP and Xerox
+  models manage text, graphics and photos separately), ChromIQ now sets all
+  of them — setting just one would leave the rest colour-managed.
+- **Hidden macOS colour conversion blocked.** Some printer drivers (notably
+  HP DesignJet) ship with built-in colour profiles that macOS applies to
+  every print job — even when the chart carries no colour profile at all,
+  and even with every visible colour option switched off. ChromIQ now sends
+  Apple's own "application manages colour" instruction with every print job,
+  which is the one switch that actually stops that conversion. Verified by
+  rasterising charts through Apple's real print pipeline: previously-shifted
+  patch colours come out bit-exact with the fix, and Canon/Epson output is
+  unchanged (it was already bit-exact).
+
+### 📝 Notes
+- Old Canon models (PIXMA PRO-1/PRO-10/PRO-100, older PIXMA and G series)
+  genuinely have no "no colour correction" setting in their macOS drivers —
+  ChromIQ re-checked the newest 2025 driver builds. On those printers the
+  driver always applies its own rendering; everything that can be locked is
+  locked, but for fully colour-managed-free charts a newer model is required.
+- Every modern Epson photo printer (SureColor P700/P900, P5300, P7300/P9300,
+  P7500/P9500, P8500D and the XP photo line) was verified to use the same
+  "No Color Adjustment" setting ChromIQ has always applied for Epson.
+
 ## v3.8.17
 A print-accuracy release: a new opt-in fallback keeps charts at exactly 100%
 size on macOS printers that don't speak PostScript, and ChromIQ now warns
