@@ -305,9 +305,9 @@ class TabProfile(QWidget):
         root.setSpacing(8)
 
         self._header = TabHeader(
-            "STEP 04 · CREATE ICC PROFILE", "Build ICC profile", "#37bcd6", self,
-            tooltip_title=_TOOLTIP_TITLE_NORMAL,
-            tooltip_body=_TOOLTIP_BODY_NORMAL,
+            tr("STEP 04 · CREATE ICC PROFILE"), tr("Build ICC profile"), "#37bcd6", self,
+            tooltip_title=tr(_TOOLTIP_TITLE_NORMAL),
+            tooltip_body=tr(_TOOLTIP_BODY_NORMAL),
         )
         root.addWidget(self._header)
 
@@ -473,13 +473,13 @@ class TabProfile(QWidget):
         self._cal_mode_row_widget.setVisible(enabled)
         self._mode_row_widget.setVisible(not enabled)
         if enabled:
-            self._header.set_texts("STEP 04 · CALIBRATE & PROFILE", "Calibration & Profiling")
-            self._header.set_tooltip(_TOOLTIP_TITLE_CAL, _TOOLTIP_BODY_CAL)
+            self._header.set_texts(tr("STEP 04 · CALIBRATE & PROFILE"), tr("Calibration & Profiling"))
+            self._header.set_tooltip(tr(_TOOLTIP_TITLE_CAL), tr(_TOOLTIP_BODY_CAL))
             self._switch_mode("manual")
             self._switch_cal_mode(0)  # default to Build Profile
         else:
-            self._header.set_texts("STEP 04 · CREATE ICC PROFILE", "Build ICC profile")
-            self._header.set_tooltip(_TOOLTIP_TITLE_NORMAL, _TOOLTIP_BODY_NORMAL)
+            self._header.set_texts(tr("STEP 04 · CREATE ICC PROFILE"), tr("Build ICC profile"))
+            self._header.set_tooltip(tr(_TOOLTIP_TITLE_NORMAL), tr(_TOOLTIP_BODY_NORMAL))
             self._outer_stack.setCurrentIndex(0)
 
     def _switch_cal_mode(self, page: int) -> None:
@@ -2549,9 +2549,9 @@ class TabProfile(QWidget):
         g.setSpacing(8)
 
         for attr, flag, placeholder, tip in [
-            ("_m_mfr",   "A", "e.g. Epson",   _META_MFR_TIP),
-            ("_m_model", "M", "e.g. SC-P900",  _META_MODEL_TIP),
-            ("_m_copy",  "C", "e.g. © 2026 …", _META_COPY_TIP),
+            ("_m_mfr",   "A", "e.g. Epson",   tr(_META_MFR_TIP)),
+            ("_m_model", "M", "e.g. SC-P900",  tr(_META_MODEL_TIP)),
+            ("_m_copy",  "C", "e.g. © 2026 …", tr(_META_COPY_TIP)),
         ]:
             label_text = "Manufacturer" if flag == "A" else "Model" if flag == "M" else "Copyright"
             check = QCheckBox(tr("{label_text} (-{flag}):").format(label_text=label_text, flag=flag), grp)
@@ -3093,9 +3093,9 @@ class TabProfile(QWidget):
         g = QVBoxLayout(grp)
 
         for attr, flag, placeholder, tip in [
-            ("_mfr",   "A", "e.g. Epson",         _META_MFR_TIP),
-            ("_model", "M", "e.g. SC-P900",        _META_MODEL_TIP),
-            ("_copy",  "C", "e.g. © 2026 …",       _META_COPY_TIP),
+            ("_mfr",   "A", "e.g. Epson",         tr(_META_MFR_TIP)),
+            ("_model", "M", "e.g. SC-P900",        tr(_META_MODEL_TIP)),
+            ("_copy",  "C", "e.g. © 2026 …",       tr(_META_COPY_TIP)),
         ]:
             label_text = "Manufacturer" if flag == "A" else "Model" if flag == "M" else "Copyright"
             check = QCheckBox(tr("{label_text} (-{flag}):").format(label_text=label_text, flag=flag), grp)

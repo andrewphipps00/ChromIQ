@@ -251,7 +251,7 @@ class TabPrint(QWidget):
 
         _initial_tt_title, _initial_tt_body = self._compute_print_tooltip()
         self._header = TabHeader(
-            "STEP 02 · PRINT TARGET", "Print test chart", "#ffb42d", left,
+            tr("STEP 02 · PRINT TARGET"), tr("Print test chart"), "#ffb42d", left,
             tooltip_title=_initial_tt_title,
             tooltip_body=_initial_tt_body,
         )
@@ -417,7 +417,7 @@ class TabPrint(QWidget):
         rl.setContentsMargins(0, 0, 0, 12)
         rl.setSpacing(0)
         self._preview = TiffPreview(right)
-        self._preview.set_caption("PRINT PREVIEW")
+        self._preview.set_caption(tr("PRINT PREVIEW"))
         rl.addWidget(self._preview, stretch=1)
         splitter.addWidget(right)
 
@@ -1111,14 +1111,14 @@ class TabPrint(QWidget):
 
     def _compute_print_tooltip(self) -> tuple[str, str]:
         if is_windows():
-            return _TT_TITLE_PRINT, _TT_BODY_PRINT_WINDOWS
+            return tr(_TT_TITLE_PRINT), tr(_TT_BODY_PRINT_WINDOWS)
         if is_linux():
-            return _TT_TITLE_PRINT, _TT_BODY_PRINT_LINUX
+            return tr(_TT_TITLE_PRINT), tr(_TT_BODY_PRINT_LINUX)
         if is_macos():
             if bool(self._settings.get("use_native_print_dialog", False)):
-                return _TT_TITLE_PRINT, _TT_BODY_PRINT_MACOS_NATIVE
-            return _TT_TITLE_PRINT, _TT_BODY_PRINT_MACOS_BYPASS
-        return _TT_TITLE_PRINT, _TT_BODY_PRINT_MACOS_BYPASS
+                return tr(_TT_TITLE_PRINT), tr(_TT_BODY_PRINT_MACOS_NATIVE)
+            return tr(_TT_TITLE_PRINT), tr(_TT_BODY_PRINT_MACOS_BYPASS)
+        return tr(_TT_TITLE_PRINT), tr(_TT_BODY_PRINT_MACOS_BYPASS)
 
     def _set_native_mode(self, enabled: bool) -> None:
         import sys as _sys

@@ -597,7 +597,7 @@ class TabChart(QWidget):
         left_layout.setSpacing(8)
 
         left_layout.addWidget(TabHeader(
-            "STEP 01 · GENERATE TARGET", "Create test chart", "#ff4573", left,
+            tr("STEP 01 · GENERATE TARGET"), tr("Create test chart"), "#ff4573", left,
             tooltip_title="Step 1 — Make a test chart",
             tooltip_body=(
                 "This is where you design the sheet of colour patches your printer "
@@ -729,7 +729,7 @@ class TabChart(QWidget):
         right_layout.setContentsMargins(0, 0, 0, 12)
         right_layout.setSpacing(0)
         self._preview = TiffPreview(right)
-        self._preview.set_caption("CHART PREVIEW")
+        self._preview.set_caption(tr("CHART PREVIEW"))
         right_layout.addWidget(self._preview, stretch=1)
 
         splitter.addWidget(right)
@@ -1461,13 +1461,13 @@ class TabChart(QWidget):
             override_l.setContentsMargins(0, 0, 0, 2)
             if tool == "targen":
                 ov_check = QCheckBox(tr("Edit patch recipe (override preset)"), override_row)
-                ov_tip = TooltipButton(tr("Edit patch recipe"), _OVERRIDE_TARGEN_TIP,
+                ov_tip = TooltipButton(tr("Edit patch recipe"), tr(_OVERRIDE_TARGEN_TIP),
                                        override_row, min_width=600)
                 self._override_targen_check = ov_check
                 self._override_targen_row = override_row
             else:
                 ov_check = QCheckBox(tr("Edit page layout (override preset)"), override_row)
-                ov_tip = TooltipButton(tr("Edit page layout"), _OVERRIDE_PRINTTARG_TIP,
+                ov_tip = TooltipButton(tr("Edit page layout"), tr(_OVERRIDE_PRINTTARG_TIP),
                                        override_row, min_width=600)
                 self._override_printtarg_check = ov_check
                 self._override_printtarg_row = override_row
@@ -3458,10 +3458,10 @@ class TabChart(QWidget):
         if not checked:
             return
         if tool == "targen":
-            InfoDialog(_OVERRIDE_TARGEN_POPUP_TITLE, _OVERRIDE_TARGEN_POPUP_BODY,
+            InfoDialog(tr(_OVERRIDE_TARGEN_POPUP_TITLE), tr(_OVERRIDE_TARGEN_POPUP_BODY),
                        self, min_width=560).exec()
         else:
-            InfoDialog(_OVERRIDE_PRINTTARG_POPUP_TITLE, _OVERRIDE_PRINTTARG_POPUP_BODY,
+            InfoDialog(tr(_OVERRIDE_PRINTTARG_POPUP_TITLE), tr(_OVERRIDE_PRINTTARG_POPUP_BODY),
                        self, min_width=560).exec()
 
     def _apply_tc918_preset(self, target_name: str | None = None) -> None:

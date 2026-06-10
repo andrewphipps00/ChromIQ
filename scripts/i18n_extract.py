@@ -7,9 +7,10 @@ Usage:
     python scripts/i18n_extract.py --stale de   # de.json keys no longer in code
     python scripts/i18n_extract.py --stats de   # one-line coverage summary
 
-The catalog key is the exact English source string passed to tr(), so
-this only finds literal (incl. implicitly concatenated) arguments —
-which is the project convention enforced by scripts/i18n_wrap.py.
+The catalog key is the exact English source string passed to tr().
+Both literal arguments (incl. implicitly concatenated) and module-level
+string constants are resolved:  tr(_TT_TITLE_PRINT) contributes the
+constant's value as a key.
 """
 from __future__ import annotations
 
@@ -35,14 +36,26 @@ def extract_keys() -> set[str]:
         if "__pycache__" in f.parts:
             continue
         tree = ast.parse(f.read_text(encoding="utf-8"))
+        # module-level NAME = "literal" assignments, for tr(NAME) resolution
+        consts: dict[str, str] = {}
+        for stmt in tree.body:
+            if (isinstance(stmt, ast.Assign)
+                    and len(stmt.targets) == 1
+                    and isinstance(stmt.targets[0], ast.Name)
+                    and isinstance(stmt.value, ast.Constant)
+                    and isinstance(stmt.value.value, str)):
+                consts[stmt.targets[0].id] = stmt.value.value
         for node in ast.walk(tree):
-            if (isinstance(node, ast.Call)
+            if not (isinstance(node, ast.Call)
                     and isinstance(node.func, ast.Name)
                     and node.func.id == "tr"
-                    and node.args
-                    and isinstance(node.args[0], ast.Constant)
-                    and isinstance(node.args[0].value, str)):
-                keys.add(node.args[0].value)
+                    and node.args):
+                continue
+            arg = node.args[0]
+            if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                keys.add(arg.value)
+            elif isinstance(arg, ast.Name) and arg.id in consts:
+                keys.add(consts[arg.id])
     return keys
 
 

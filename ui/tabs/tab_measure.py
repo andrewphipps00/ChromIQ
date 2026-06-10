@@ -389,8 +389,8 @@ def _detect_uniform_stripe_rects(tiff_path: Path, n_strips: int) -> list[QRect]:
 
 # Tooltip for the optional "also use pre-conditioning data" checkbox (shown only
 # when ChromIQ-style refinement is on and this run carries a preconditioning.ti3).
-_PRECOND_TOOLTIP = (
-    "Also Use Pre-conditioning Measurement Data",
+_PRECOND_TIP_TITLE = "Also Use Pre-conditioning Measurement Data"
+_PRECOND_TIP_BODY = (
     "ChromIQ found saved measurement data from the pre-conditioning profile you\n"
     "selected when creating this chart (the run's preconditioning.ti3).\n\n"
     "Tick this to fold those earlier measurements into your profile. When you\n"
@@ -401,7 +401,7 @@ _PRECOND_TOOLTIP = (
     "separate copy only at build time. You can still re-measure individual\n"
     "strips in Check && Refine exactly as usual.\n\n"
     "This option only appears when ChromIQ-style refinement is enabled in\n"
-    "Settings and saved pre-conditioning data is present.",
+    "Settings and saved pre-conditioning data is present."
 )
 
 
@@ -639,7 +639,7 @@ class TabMeasure(QWidget):
         top_layout.setContentsMargins(16, 12, 16, 6)
         top_layout.setSpacing(8)
         top_layout.addWidget(TabHeader(
-            "STEP 03 · MEASURE TARGET", "Measure printed chart", "#56d6a5", top_widget,
+            tr("STEP 03 · MEASURE TARGET"), tr("Measure printed chart"), "#56d6a5", top_widget,
             tooltip_title="Step 3 — Measure the print",
             tooltip_body=(
                 "On this screen, your spectrophotometer reads every colour patch "
@@ -811,7 +811,7 @@ class TabMeasure(QWidget):
         rl.setContentsMargins(0, 0, 0, 12)
         rl.setSpacing(0)
         self._preview = TiffPreview(right)
-        self._preview.set_caption("CHART PREVIEW")
+        self._preview.set_caption(tr("CHART PREVIEW"))
         rl.addWidget(self._preview, stretch=1)
         splitter.addWidget(right)
 
@@ -969,7 +969,7 @@ class TabMeasure(QWidget):
         self._use_precond_cb.setVisible(False)
         precond_row.addWidget(self._use_precond_cb)
         precond_row.addStretch()
-        self._precond_tip = TooltipButton(*_PRECOND_TOOLTIP, left)
+        self._precond_tip = TooltipButton(tr(_PRECOND_TIP_TITLE), tr(_PRECOND_TIP_BODY), left)
         self._precond_tip.setVisible(False)
         precond_row.addWidget(self._precond_tip)
         cg.addLayout(precond_row)
@@ -1235,7 +1235,7 @@ class TabMeasure(QWidget):
         self._m_use_precond_cb.setVisible(False)
         m_precond_row.addWidget(self._m_use_precond_cb)
         m_precond_row.addStretch()
-        self._m_precond_tip = TooltipButton(*_PRECOND_TOOLTIP, left)
+        self._m_precond_tip = TooltipButton(tr(_PRECOND_TIP_TITLE), tr(_PRECOND_TIP_BODY), left)
         self._m_precond_tip.setVisible(False)
         m_precond_row.addWidget(self._m_precond_tip)
         mcg.addLayout(m_precond_row)
