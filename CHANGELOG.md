@@ -1,5 +1,32 @@
 # Changelog
 
+## v3.8.19
+A small reliability release that hardens the engine running the ArgyllCMS
+tools behind every chart, measurement and profile build.
+
+### 🐞 Fixes
+- **Logs can no longer lose their final lines.** When a tool printed a large
+  burst of output right before finishing — for example chartread's
+  end-of-measurement summary — ChromIQ could stop listening before it had
+  read everything, leaving the log cut off mid-summary. ChromIQ now reads
+  everything the tool said before declaring the run finished.
+- **Closed a rare timing window between two runs.** In the few milliseconds
+  after a tool finished, starting the next operation could let leftover
+  bookkeeping from the previous run interfere with the new one (its output
+  silently dropped, or it reported the previous run's result). Each run is
+  now tagged so leftovers from an earlier run are recognised and ignored.
+- **A wrong Argyll folder is no longer hidden.** If the Argyll folder set in
+  Settings doesn't actually contain a tool, ChromIQ quietly looked for it
+  elsewhere on the system — and could end up running a different Argyll
+  version without any indication. It still falls back, but now writes a
+  clear warning to the log so a misconfigured path is visible.
+
+### 📝 Notes
+- Internal clean-up in the same engine: when a run finishes, only that run's
+  own log listener is detached instead of every listener — groundwork that
+  prevents a whole class of "output stopped appearing" bugs in future
+  features.
+
 ## v3.8.18
 A colour-fidelity release for many more printers: ChromIQ now knows how to
 switch off the driver's own colour management on HP, Brother, Ricoh, Lexmark,
