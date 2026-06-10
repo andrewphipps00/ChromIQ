@@ -166,7 +166,7 @@ class ArgyllRunner(QObject):
     line_received   = pyqtSignal(str)
     finished        = pyqtSignal(int)   # exit code
     keypress_failed = pyqtSignal(str, str)  # (key_label, reason) — Windows injection failed
-    _pty_done       = pyqtSignal(int)   # internal: PTY reader → main thread
+    _pty_done       = pyqtSignal(int, int)   # internal: PTY reader → main thread (exit code, run generation)
 
     # Map control bytes to human labels for logs and UI warnings.
     _KEY_LABELS = {
@@ -201,6 +201,11 @@ class ArgyllRunner(QObject):
         self._pty_master: int | None = None
         self._pty_thread: threading.Thread | None = None
         self._use_console_input: bool = False   # True = inject via WriteConsoleInputW
+        # Incremented per PTY/pipe run. A finished reader reports its own
+        # generation; a stale completion (next run already started in the
+        # window between child exit and the queued _pty_done delivery) must
+        # not tear down the new run's state or fire its callback.
+        self._pty_gen: int = 0
         self._pty_done.connect(self._on_pty_finished)
 
     # ------------------------------------------------------------------
@@ -361,6 +366,7 @@ class ArgyllRunner(QObject):
         )
         os.close(slave_fd)
         self._pty_master = master_fd
+        self._pty_gen += 1
 
         self._run_on_finish = on_finish
         self._run_on_line   = on_line
@@ -368,7 +374,9 @@ class ArgyllRunner(QObject):
             self.line_received.connect(on_line)
 
         self._pty_thread = threading.Thread(
-            target=self._pty_reader, args=(master_fd,), daemon=True
+            target=self._pty_reader,
+            args=(master_fd, self._pty_proc, self._pty_gen),
+            daemon=True,
         )
         self._pty_thread.start()
 
@@ -406,6 +414,7 @@ class ArgyllRunner(QObject):
         )
         self._pty_master        = None
         self._use_console_input = True
+        self._pty_gen += 1
 
         self._run_on_finish = on_finish
         self._run_on_line   = on_line
@@ -413,7 +422,7 @@ class ArgyllRunner(QObject):
             self.line_received.connect(on_line)
 
         self._pty_thread = threading.Thread(
-            target=self._pipe_reader, daemon=True
+            target=self._pipe_reader, args=(self._pty_gen,), daemon=True
         )
         self._pty_thread.start()
 
@@ -435,6 +444,7 @@ class ArgyllRunner(QObject):
             creationflags=_CREATE_NO_WINDOW,
         )
         self._pty_master = None
+        self._pty_gen += 1
 
         self._run_on_finish = on_finish
         self._run_on_line   = on_line
@@ -442,11 +452,11 @@ class ArgyllRunner(QObject):
             self.line_received.connect(on_line)
 
         self._pty_thread = threading.Thread(
-            target=self._pipe_reader, daemon=True
+            target=self._pipe_reader, args=(self._pty_gen,), daemon=True
         )
         self._pty_thread.start()
 
-    def _pty_reader(self, master_fd: int) -> None:
+    def _pty_reader(self, master_fd: int, proc: subprocess.Popen, gen: int) -> None:
         buf = b""
         FLUSH_AFTER = 0.15   # emit partial prompt lines after this silence
 
@@ -497,7 +507,11 @@ class ArgyllRunner(QObject):
                     if line:
                         _emit(line)
 
-            if self._pty_proc and self._pty_proc.poll() is not None:
+            # Safety net for a hung fd (e.g. a grandchild keeping the slave
+            # side open): only stop on child exit once nothing is readable,
+            # otherwise a >4 KB final output burst would be truncated. The
+            # normal exit path is EOF (`not data`) above.
+            if not r and proc.poll() is not None:
                 break
 
         # Flush remainder
@@ -506,22 +520,20 @@ class ArgyllRunner(QObject):
             if line:
                 self.line_received.emit(line)
 
-        code = 0
-        if self._pty_proc:
-            try:
-                code = self._pty_proc.wait(timeout=3)
-            except subprocess.TimeoutExpired:
-                self._pty_proc.kill()
-                code = self._pty_proc.wait()
+        try:
+            code = proc.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            code = proc.wait()
 
         try:
             os.close(master_fd)
         except OSError:
             pass
 
-        self._pty_done.emit(code)
+        self._pty_done.emit(code, gen)
 
-    def _pipe_reader(self) -> None:
+    def _pipe_reader(self, gen: int) -> None:
         """Read from subprocess stdout pipe (Windows fallback for PTY).
 
         A helper thread feeds bytes into a queue so the main loop can apply
@@ -532,7 +544,7 @@ class ArgyllRunner(QObject):
 
         proc = self._pty_proc
         if proc is None or proc.stdout is None:
-            self._pty_done.emit(0)
+            self._pty_done.emit(0, gen)
             return
 
         _last_line  = ""
@@ -599,27 +611,36 @@ class ArgyllRunner(QObject):
             if line:
                 self.line_received.emit(line)
 
-        code = 0
-        if proc:
-            try:
-                code = proc.wait(timeout=3)
-            except subprocess.TimeoutExpired:
-                proc.kill()
-                code = proc.wait()
+        try:
+            code = proc.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            code = proc.wait()
 
-        self._pty_done.emit(code)
+        self._pty_done.emit(code, gen)
 
-    def _on_pty_finished(self, code: int) -> None:
+    def _on_pty_finished(self, code: int, gen: int) -> None:
+        if gen != self._pty_gen:
+            # A newer run already started; this completion belongs to the
+            # previous process. Tearing down state here would orphan the new
+            # run and fire its on_finish with the old exit code.
+            log.warning(
+                "ArgyllRunner (PTY): stale completion (gen %d, current %d, code %d) ignored",
+                gen, self._pty_gen, code,
+            )
+            return
         self._pty_master        = None
         self._pty_proc          = None
         self._use_console_input = False
         on_finish = self._run_on_finish
+        on_line   = self._run_on_line
         self._run_on_finish = None
         self._run_on_line   = None
-        try:
-            self.line_received.disconnect()
-        except (TypeError, RuntimeError):
-            pass
+        if on_line:
+            try:
+                self.line_received.disconnect(on_line)
+            except (TypeError, RuntimeError):
+                pass
         log.info("ArgyllRunner (PTY): finished with code %d", code)
         self.finished.emit(code)
         if on_finish:
@@ -652,8 +673,9 @@ class ArgyllRunner(QObject):
                     log.debug("[argyll] %s", line)
                     self.line_received.emit(line)
 
-        # Capture per-run callback before it can be overwritten by a chained run()
+        # Capture per-run callbacks before they can be overwritten by a chained run()
         on_finish = self._run_on_finish
+        on_line   = self._run_on_line
         self._run_on_finish = None
         self._run_on_line   = None
         try:
@@ -661,10 +683,11 @@ class ArgyllRunner(QObject):
             self._process.finished.disconnect(self._on_finished)
         except RuntimeError:
             pass
-        try:
-            self.line_received.disconnect()
-        except (TypeError, RuntimeError):
-            pass
+        if on_line:
+            try:
+                self.line_received.disconnect(on_line)
+            except (TypeError, RuntimeError):
+                pass
         # Emit public signal for any external observers
         self.finished.emit(exit_code)
         # Call per-run callback directly so chained run() calls (targen→printtarg)
@@ -680,5 +703,10 @@ class ArgyllRunner(QObject):
         bin_dir = Path(self._settings.get("argyll_bin_path", "/Applications/Argyll/bin"))
         candidate = bin_dir / argyll_binary(tool)
         if not candidate.exists():
+            log.warning(
+                "%s not found in configured Argyll path %s — falling back to "
+                "PATH lookup; a different Argyll version may be picked up",
+                argyll_binary(tool), bin_dir,
+            )
             return Path(argyll_binary(tool))
         return candidate
