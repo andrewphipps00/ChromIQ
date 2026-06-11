@@ -210,7 +210,7 @@ class _ToolDialogBase(QDialog):
     TITLE: str      = ""
     DESCRIPTION: str = ""
     HELP: str       = ""    # extended ⓘ popup text; falls back to DESCRIPTION
-    RUN_LABEL: str  = "Run"
+    RUN_LABEL: str  = tr("Run")
     MIN_WIDTH: int  = 620
 
     def __init__(self, settings: "AppSettings", parent: QWidget | None = None) -> None:
@@ -497,7 +497,7 @@ class _OutputRow(QWidget):
 class AverageMeasurementsDialog(_ToolDialogBase):
     TOOL_KEY    = "average"
     TITLE       = tr("Average measurements")
-    RUN_LABEL   = "Average"
+    RUN_LABEL   = tr("Average")
     HELP = (
         tr("Measured the same chart a few times? This tool blends those readings "
         "into one cleaner result.\n\n"
@@ -683,7 +683,7 @@ class AverageMeasurementsDialog(_ToolDialogBase):
 class MergeMeasurementsDialog(_ToolDialogBase):
     TOOL_KEY    = "merge"
     TITLE       = tr("Merge measurements")
-    RUN_LABEL   = "Merge"
+    RUN_LABEL   = tr("Merge")
     HELP = (
         tr("This tool joins several measurement files together into one bigger set "
         "of patches.\n\n"
@@ -839,7 +839,7 @@ class MergeMeasurementsDialog(_ToolDialogBase):
 class Ti1ToI1ProfilerDialog(_ToolDialogBase):
     TOOL_KEY    = "ti1_to_i1p"
     TITLE       = tr("Convert TI1 → i1Profiler")
-    RUN_LABEL   = "Convert"
+    RUN_LABEL   = tr("Convert")
     HELP = (
         tr("Want to measure a ChromIQ chart using X-Rite's i1Profiler software (for "
         "example to drive an i1iSis scanner)? This tool gets your chart ready for "
@@ -1131,7 +1131,7 @@ class Ti1ToI1ProfilerDialog(_ToolDialogBase):
 class I1ProfilerToTi3Dialog(_ToolDialogBase):
     TOOL_KEY    = "i1p_to_ti3"
     TITLE       = tr("Convert i1Profiler → TI3")
-    RUN_LABEL   = "Convert"
+    RUN_LABEL   = tr("Convert")
     HELP = (
         tr("Measured your chart in X-Rite's i1Profiler? This brings those readings "
         "back into ChromIQ so you can build a profile from them.\n\n"
@@ -1273,7 +1273,7 @@ class I1ProfilerToTi3Dialog(_ToolDialogBase):
 class I1ProfilerToTi1Dialog(_ToolDialogBase):
     TOOL_KEY    = "i1p_to_ti1"
     TITLE       = tr("Convert i1Profiler → TI1")
-    RUN_LABEL   = "Convert"
+    RUN_LABEL   = tr("Convert")
     HELP = (
         tr("Have a chart from X-Rite's i1Profiler that you'd like to print and "
         "measure in ChromIQ? This brings it across.\n\n"
@@ -1388,7 +1388,7 @@ class I1ProfilerToTi1Dialog(_ToolDialogBase):
 class VerifyAgainstReferenceDialog(_ToolDialogBase):
     TOOL_KEY    = "verify"
     TITLE       = tr("Verify against reference")
-    RUN_LABEL   = "Verify"
+    RUN_LABEL   = tr("Verify")
     HELP = (
         tr("This tool tells you how close your colours came out compared to where "
         "they were supposed to be — without building a profile first.\n\n"
@@ -1727,7 +1727,7 @@ class VerifyAgainstReferenceDialog(_ToolDialogBase):
 class VerifyProfileDialog(_ToolDialogBase):
     TOOL_KEY    = "verify_profile"
     TITLE       = tr("Verify a profile (independent check)")
-    RUN_LABEL   = "Verify profile"
+    RUN_LABEL   = tr("Verify profile")
     MIN_WIDTH   = 660
     DESCRIPTION = (
         tr("Check how accurate a finished profile really is by testing it against a "

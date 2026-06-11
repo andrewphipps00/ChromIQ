@@ -50,7 +50,7 @@ CTOR_TEXT_ARGS: dict[str, object] = {
 
 # Class-level text constants (tools_dialogs tool classes). These modules are
 # imported lazily (after set_language), so import-time tr() is safe there.
-CLASS_TEXT_CONSTANTS = {"TITLE", "HELP", "DESCRIPTION"}
+CLASS_TEXT_CONSTANTS = {"TITLE", "HELP", "DESCRIPTION", "RUN_LABEL"}
 
 # Method names (called on any object) whose arg at the given positions
 # is display text.
