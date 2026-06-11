@@ -1,5 +1,16 @@
 # Changelog
 
+## v3.9.1
+
+### ✨ New
+- **Norwegian (Norsk)** — complete translation (1,203 strings + all
+  parameter tooltips), in the same extensive, friendly style as the
+  English and German texts.
+
+Note: Qt's stock dialog buttons (OK/Cancel/…) remain English under
+Norwegian — PyQt6 ships no Norwegian qtbase translation. All ChromIQ
+text is fully translated.
+
 ## v3.9.0
 
 ChromIQ now speaks your language. This release introduces a UI language
