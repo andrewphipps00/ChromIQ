@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 
 from PyQt6.QtCore import QRect, QSize, Qt, pyqtSignal
 from PyQt6.QtGui import (
-    QColor, QFont, QFontMetricsF, QPainter, QPaintEvent, QPen,
+    QColor, QFont, QFontMetrics, QFontMetricsF, QPainter, QPaintEvent, QPen,
 )
 from PyQt6.QtWidgets import (
     QCheckBox,
@@ -775,7 +775,10 @@ class WorkflowCard(QFrame):
         self._mode = "dark"
         self._hover = False
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setFixedHeight(190)
+        # Height is set uniformly for all cards by _build_menu_page via
+        # required_height() — translated titles/subtitles wrap to more lines
+        # than the English originals, so a hard-coded box would squeeze them
+        # into the icon.
         self.setMinimumWidth(220)
 
         layout = QVBoxLayout(self)
@@ -807,6 +810,30 @@ class WorkflowCard(QFrame):
         layout.addStretch(1)
 
         self._apply_style()
+
+    def required_height(self, text_width: int) -> int:
+        """Height this card needs at `text_width` for its wrapped labels —
+        margins + icon + spacings + title + subtitle (+ stretch floor)."""
+        m = self.layout().contentsMargins()
+        spacing = self.layout().spacing()
+
+        # Font metrics, not heightForWidth(): the latter returns -1 until the
+        # widget is polished, which silently collapses the computed height.
+        def _wrapped_h(label: QLabel) -> int:
+            fm = QFontMetrics(label.font())
+            return fm.boundingRect(
+                0, 0, text_width, 4000,
+                Qt.TextFlag.TextWordWrap, label.text(),
+            ).height()
+
+        # minimumHeight, not height()/sizeHint(): before the first layout
+        # pass height() is the default widget size, and a plain QWidget's
+        # sizeHint() is invalid — setFixedSize() only pins min/max.
+        icon_h = self._icon.minimumHeight()
+        # +12: QLabel renders wrapped text slightly taller than raw
+        # boundingRect metrics (leading / style margins).
+        return (m.top() + icon_h + spacing + _wrapped_h(self._title)
+                + spacing + _wrapped_h(self._subtitle) + m.bottom() + 12)
 
     def set_appearance(self, mode: str) -> None:
         self._mode = "light" if mode == "light" else "dark"
@@ -1020,6 +1047,14 @@ class WelcomeDialog(QDialog):
             else:
                 # Two extra cards — sit at cols 0 and 2, leaving col 1 empty.
                 grid.addWidget(card, 2, 0 if i == 6 else 2)
+
+        # Uniform tile height that fits the tallest translated card at the
+        # narrowest card width the minimum dialog size allows (~205px of
+        # label width at the 870px minimum dialog size, minus slack).
+        text_w = 200
+        tile_h = max(190, max(c.required_height(text_w) for c in self._cards))
+        for c in self._cards:
+            c.setFixedHeight(tile_h)
 
         self._menu_scroll = FadeScrollArea(page, surface="dialog")
         self._menu_scroll.setWidget(grid_host)
