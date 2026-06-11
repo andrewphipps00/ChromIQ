@@ -15,6 +15,7 @@ from PyQt6.QtGui import (
     QPaintEvent, QPen,
 )
 from PyQt6.QtWidgets import QApplication, QWidget
+from core.i18n import tr
 
 
 # Per-mode visual tokens. Hover background uses a translucent accent so the
@@ -44,15 +45,15 @@ class ToolEntry:
 
 
 _ENTRIES: tuple[ToolEntry, ...] = (
-    ToolEntry("ti2_relayout",  "Edit / create chart layout"),
-    ToolEntry("patch_cube",   "Show patch distribution (3D)"),
-    ToolEntry("average",      "Average measurements"),
-    ToolEntry("merge",        "Merge measurements"),
-    ToolEntry("ti1_to_i1p",   "Convert TI1 → i1Profiler"),
-    ToolEntry("i1p_to_ti3",   "Convert i1Profiler → TI3"),
-    ToolEntry("i1p_to_ti1",   "Convert i1Profiler → TI1"),
-    ToolEntry("verify_profile", "Verify a profile (independent check)"),
-    ToolEntry("verify",       "Verify against reference"),
+    ToolEntry("ti2_relayout",  tr("Edit / create chart layout")),
+    ToolEntry("patch_cube",   tr("Show patch distribution (3D)")),
+    ToolEntry("average",      tr("Average measurements")),
+    ToolEntry("merge",        tr("Merge measurements")),
+    ToolEntry("ti1_to_i1p",   tr("Convert TI1 → i1Profiler")),
+    ToolEntry("i1p_to_ti3",   tr("Convert i1Profiler → TI3")),
+    ToolEntry("i1p_to_ti1",   tr("Convert i1Profiler → TI1")),
+    ToolEntry("verify_profile", tr("Verify a profile (independent check)")),
+    ToolEntry("verify",       tr("Verify against reference")),
 )
 
 

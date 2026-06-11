@@ -64,6 +64,7 @@ from ui.builtin_preset_popup import BuiltinPresetButton, BuiltinPresetPopup
 from ui.tiff_preview import TiffPreview
 from ui.tooltip_button import InfoDialog, TooltipButton
 from ui.widgets import NoScrollComboBox, NoScrollSpinBox, icc_profile_paths, make_browse_button, open_file_dialog, set_folder_icon, set_preset_icon
+from core.i18n import tr
 from workflow.i1profiler_export import EXTRA_INK, export_from_ti1, parse_ti1
 from workflow.i1profiler_import import import_to_ti1
 from workflow.chart_creator import (
@@ -596,7 +597,7 @@ class TabChart(QWidget):
         left_layout.setSpacing(8)
 
         left_layout.addWidget(TabHeader(
-            "STEP 01 · GENERATE TARGET", "Create test chart", "#ff4573", left,
+            tr("STEP 01 · GENERATE TARGET"), tr("Create test chart"), "#ff4573", left,
             tooltip_title="Step 1 — Make a test chart",
             tooltip_body=(
                 "This is where you design the sheet of colour patches your printer "
@@ -647,12 +648,12 @@ class TabChart(QWidget):
         _mode_font.setFamilies(["Menlo", "Consolas", "Courier New", "monospace"])
         _mode_font.setPointSize(11)
         _mode_font.setWeight(QFont.Weight.Bold)
-        self._guided_btn = QPushButton("GUIDED", self)
+        self._guided_btn = QPushButton(tr("GUIDED"), self)
         self._guided_btn.setCheckable(True)
         self._guided_btn.setChecked(True)
         self._guided_btn.setObjectName("mode_btn")
         self._guided_btn.setFont(_mode_font)
-        self._manual_btn = QPushButton("MANUAL", self)
+        self._manual_btn = QPushButton(tr("MANUAL"), self)
         self._manual_btn.setCheckable(True)
         self._manual_btn.setObjectName("mode_btn")
         self._manual_btn.setFont(_mode_font)
@@ -679,23 +680,23 @@ class TabChart(QWidget):
 
         # Bottom buttons
         btn_row = QHBoxLayout()
-        self._generate_btn = QPushButton("Generate Chart", self)
+        self._generate_btn = QPushButton(tr("Generate Chart"), self)
         self._generate_btn.setObjectName("primary")
         self._generate_btn.setFixedHeight(36)
         self._generate_btn.clicked.connect(self._on_generate)
 
-        self._load_ti1_btn = QPushButton("Load patch set…", self)
+        self._load_ti1_btn = QPushButton(tr("Load patch set…"), self)
         self._load_ti1_btn.setFixedHeight(36)
         self._load_ti1_btn.setToolTip(
-            "Load an existing patch set and lay it out (targen is skipped).\n"
+            tr("Load an existing patch set and lay it out (targen is skipped).\n"
             "Accepts an Argyll .ti1, or an i1Profiler RGB patch set "
             "(.pxf or a CGATS .txt) — i1Profiler files are converted to .ti1 "
-            "automatically."
+            "automatically.")
         )
         set_folder_icon(self._load_ti1_btn, "folder_create")
         self._load_ti1_btn.clicked.connect(self._on_load_ti1)
 
-        self._save_defaults_btn = QPushButton("Save as Defaults", self)
+        self._save_defaults_btn = QPushButton(tr("Save as Defaults"), self)
         self._save_defaults_btn.setFixedHeight(36)
         self._save_defaults_btn.clicked.connect(self._on_save_defaults)
 
@@ -711,7 +712,7 @@ class TabChart(QWidget):
         self._log.setObjectName("log")
         self._log.setReadOnly(True)
         self._log.setMaximumHeight(67)
-        self._log.setPlaceholderText("Output will appear here…")
+        self._log.setPlaceholderText(tr("Output will appear here…"))
         left_layout.addWidget(self._log)
 
         # Status bar (replaces main-window status bar)
@@ -728,7 +729,7 @@ class TabChart(QWidget):
         right_layout.setContentsMargins(0, 0, 0, 12)
         right_layout.setSpacing(0)
         self._preview = TiffPreview(right)
-        self._preview.set_caption("CHART PREVIEW")
+        self._preview.set_caption(tr("CHART PREVIEW"))
         right_layout.addWidget(self._preview, stretch=1)
 
         splitter.addWidget(right)
@@ -757,24 +758,24 @@ class TabChart(QWidget):
         layout.setSpacing(8)
 
         # Working folder / target name
-        folder_grp = QGroupBox("Output", inner)
+        folder_grp = QGroupBox(tr("Output"), inner)
         folder_layout = QVBoxLayout(folder_grp)
 
         name_row = QHBoxLayout()
-        name_row.addWidget(QLabel("Target name:", inner))
+        name_row.addWidget(QLabel(tr("Target name:"), inner))
         self._target_name_edit = self._make_lineedit("", inner)
         # Live-update the guided command preview as the user types.
         self._target_name_edit.textChanged.connect(self._update_patch_count)
         name_row.addWidget(self._target_name_edit, stretch=1)
         name_row.addWidget(TooltipButton(
-            "Target Name",
-            "A short, descriptive name for this profiling session.\n\n"
+            tr("Target Name"),
+            tr("A short, descriptive name for this profiling session.\n\n"
             "This name is used for the output folder and all generated files "
             "(chart, TIFF, measurements, ICC profile) throughout the entire workflow. "
             "Choose a name that lets you identify the correct files for your printer "
             "and paper combination at a glance.\n\n"
             "Tip: combine your printer model, paper type, and instrument — "
-            "e.g. Canon_Pro1000_Baryta_i1Pro3. Use underscores or dashes instead of spaces.",
+            "e.g. Canon_Pro1000_Baryta_i1Pro3. Use underscores or dashes instead of spaces."),
             inner,
             min_width=540,
         ))
@@ -792,11 +793,11 @@ class TabChart(QWidget):
         layout.addWidget(folder_grp)
 
         # Instrument
-        instr_grp = QGroupBox("Measurement Instrument", inner)
+        instr_grp = QGroupBox(tr("Measurement Instrument"), inner)
         instr_layout = QVBoxLayout(instr_grp)
         instr_layout.setSpacing(6)
         row = QHBoxLayout()
-        instr_label = QLabel("Instrument:", inner)
+        instr_label = QLabel(tr("Instrument:"), inner)
         row.addWidget(instr_label)
         self._instr_combo = NoScrollComboBox(inner)
         # External-workflow instruments (i1iSis) are intentionally absent from
@@ -812,8 +813,8 @@ class TabChart(QWidget):
         self._instr_combo.currentIndexChanged.connect(self._rebuild_paper_combo)
         row.addWidget(self._instr_combo, stretch=1)
         row.addWidget(TooltipButton(
-            "Measurement Instrument",
-            "Tells the chart generator which spectrophotometer you will use to read "
+            tr("Measurement Instrument"),
+            tr("Tells the chart generator which spectrophotometer you will use to read "
             "the printed chart. The patch grid is built around that instrument's "
             "strip width, patch size and spacing — so getting this right is "
             "essential.\n\n"
@@ -831,7 +832,7 @@ class TabChart(QWidget):
             "Picking the wrong instrument produces a chart your device cannot "
             "align to or read reliably — you'll see \"patches not found\" or "
             "alignment errors when measuring.\n\n"
-            "In Guided mode the layout adapts to this choice automatically.",
+            "In Guided mode the layout adapts to this choice automatically."),
             inner,
             min_width=600,
         ))
@@ -843,15 +844,15 @@ class TabChart(QWidget):
         # both density options require the ColorMunki measuring rig accessory.
         # Shown only when ColorMunki is selected (hidden for SpectroScan's
         # hexagon-patches reuse of the same checkbox).
-        self._for_rig_label = QLabel("For rig:", inner)
+        self._for_rig_label = QLabel(tr("For rig:"), inner)
         self._for_rig_label.setMinimumWidth(instr_label.sizeHint().width())
         dd_row.addWidget(self._for_rig_label)
-        self._dd_check = QCheckBox("Double density", inner)
+        self._dd_check = QCheckBox(tr("Double density"), inner)
         self._dd_check.toggled.connect(self._update_patch_count)
         self._dd_check.toggled.connect(self._on_guided_dd_toggled)
         self._dd_tooltip = TooltipButton(
-            "Double Density (-h)",
-            "Doubles the number of patches that fit in each measurement strip when "
+            tr("Double Density (-h)"),
+            tr("Doubles the number of patches that fit in each measurement strip when "
             "using a ColorMunki / i1Studio / ColorChecker Studio.\n\n"
             "REQUIRES the physical measuring rig accessory — a clear plastic guide "
             "that mounts the instrument over the chart. Without the rig the device "
@@ -861,16 +862,16 @@ class TabChart(QWidget):
             "or the same profile quality on fewer sheets. Recommended for anyone "
             "with the rig — it's a strict upgrade on patch density.\n\n"
             "Has no effect on i1Pro, i1Pro 3 Plus or SpectroScan — the option is "
-            "hidden when those are selected.",
+            "hidden when those are selected."),
             inner,
             min_width=600,
         )
-        self._td_check = QCheckBox("Triple density", inner)
+        self._td_check = QCheckBox(tr("Triple density"), inner)
         self._td_check.toggled.connect(self._update_patch_count)
         self._td_check.toggled.connect(self._on_guided_td_toggled)
         self._td_tooltip = TooltipButton(
-            "Triple Density (i1Pro layout emulation)",
-            "ColorMunki + rig only. The chart is generated with the i1Pro strip "
+            tr("Triple Density (i1Pro layout emulation)"),
+            tr("ColorMunki + rig only. The chart is generated with the i1Pro strip "
             "layout (tighter, smaller patches than a native ColorMunki chart), "
             "then the produced .ti2 is rewritten so chartread still talks to "
             "your ColorMunki. Result: roughly 3× the patch count of a plain "
@@ -881,7 +882,7 @@ class TabChart(QWidget):
             "ColorMunki cannot track the tighter i1-style strips.\n\n"
             "Mutually exclusive with Double density — pick one or the other.\n\n"
             "Has no effect on i1Pro, i1Pro 3 Plus or SpectroScan — the option is "
-            "hidden when those are selected.",
+            "hidden when those are selected."),
             inner,
             min_width=600,
         )
@@ -895,10 +896,10 @@ class TabChart(QWidget):
         layout.addWidget(instr_grp)
 
         # Paper
-        paper_grp = QGroupBox("Paper", inner)
+        paper_grp = QGroupBox(tr("Paper"), inner)
         paper_layout = QVBoxLayout(paper_grp)
         paper_row = QHBoxLayout()
-        paper_row.addWidget(QLabel("Paper size:", inner))
+        paper_row.addWidget(QLabel(tr("Paper size:"), inner))
         self._paper_combo = NoScrollComboBox(inner)
         self._paper_combo.currentIndexChanged.connect(self._update_patch_count)
         # Paper changes also affect ChromIQ-style gating, which decides whether
@@ -906,8 +907,8 @@ class TabChart(QWidget):
         self._paper_combo.currentIndexChanged.connect(self._update_dd_visibility)
         paper_row.addWidget(self._paper_combo, stretch=1)
         paper_row.addWidget(TooltipButton(
-            "Paper Size",
-            "Sets the dimensions of each sheet in the printed chart. The chart "
+            tr("Paper Size"),
+            tr("Sets the dimensions of each sheet in the printed chart. The chart "
             "always fills the page edge to edge — bigger paper fits more "
             "patches, which means a more detailed profile from fewer sheets.\n\n"
             "Pick the same size you will actually print on, including its "
@@ -922,7 +923,7 @@ class TabChart(QWidget):
             "  •  Small photo formats (5×7\", 4×6\") are hidden for i1Pro 3 "
             "Plus — its large patches don't leave a usable profile on those.\n\n"
             "If you change paper size mid-workflow, the recommended patch count "
-            "and page count update automatically.",
+            "and page count update automatically."),
             inner,
             min_width=600,
         ))
@@ -930,12 +931,12 @@ class TabChart(QWidget):
         layout.addWidget(paper_grp)
 
         # Pages + left border
-        pages_grp = QGroupBox("Chart Size", inner)
+        pages_grp = QGroupBox(tr("Chart Size"), inner)
         pages_layout = QVBoxLayout(pages_grp)
         pages_layout.setSpacing(6)
 
         pages_row = QHBoxLayout()
-        pages_row.addWidget(QLabel("Number of pages:", inner))
+        pages_row.addWidget(QLabel(tr("Number of pages:"), inner))
         self._pages_spin = NoScrollSpinBox(inner)
         self._pages_spin.setRange(1, 20)
         self._pages_spin.setValue(1)
@@ -943,8 +944,8 @@ class TabChart(QWidget):
         pages_row.addWidget(self._pages_spin)
         pages_row.addStretch()
         pages_row.addWidget(TooltipButton(
-            "Number of Pages",
-            "How many physical sheets the chart spans. Each sheet is filled with "
+            tr("Number of Pages"),
+            tr("How many physical sheets the chart spans. Each sheet is filled with "
             "as many patches as fit for the selected paper, instrument and layout "
             "— so total patches = patches-per-page × pages.\n\n"
             "More pages means more colour samples, which produces a more accurate "
@@ -959,27 +960,27 @@ class TabChart(QWidget):
             "colours.\n\n"
             "How many patches you actually need depends on your printer's colour "
             "gamut, ink set and how non-linear it behaves. When in doubt, more is "
-            "better.",
+            "better."),
             inner,
             min_width=600,
         ))
         pages_layout.addLayout(pages_row)
 
         lb_row = QHBoxLayout()
-        self._lb_check = QCheckBox("Suppress left clip border (-L)", inner)
+        self._lb_check = QCheckBox(tr("Suppress left clip border (-L)"), inner)
         self._lb_check.setChecked(True)
         self._lb_check.toggled.connect(self._update_patch_count)
         self._lb_tooltip = TooltipButton(
-            "Suppress Left Clip Border (-L)",
-            "Removes the left-edge paper-clip border, gaining ~15 mm for extra patches.\n"
-            "Enable unless you use a physical page-clamp jig.  Recommended: ON.",
+            tr("Suppress Left Clip Border (-L)"),
+            tr("Removes the left-edge paper-clip border, gaining ~15 mm for extra patches.\n"
+            "Enable unless you use a physical page-clamp jig.  Recommended: ON."),
             inner,
         )
-        self._nsl_check = QCheckBox("Don't limit strip length (-P)", inner)
+        self._nsl_check = QCheckBox(tr("Don't limit strip length (-P)"), inner)
         self._nsl_check.toggled.connect(self._update_patch_count)
         self._nsl_tooltip = TooltipButton(
-            "Don't Limit Strip Length (-P)",
-            "Removes printtarg's built-in strip-length cap (~250 mm) so each "
+            tr("Don't Limit Strip Length (-P)"),
+            tr("Removes printtarg's built-in strip-length cap (~250 mm) so each "
             "measurement strip runs full-bleed across the paper.\n\n"
             "Why it helps:\n"
             "On larger papers (A2, A3+, 11×17, Legal, A3-landscape) the cap "
@@ -995,7 +996,7 @@ class TabChart(QWidget):
             "that struggles with strips near the paper edge, leave this off.\n\n"
             "Only affects i1Pro family strip readers. Hidden for ColorMunki "
             "(per-patch reader) and SpectroScan (XY flatbed) — -P has no "
-            "effect on either layout.",
+            "effect on either layout."),
             inner,
             min_width=600,
         )
@@ -1012,30 +1013,30 @@ class TabChart(QWidget):
         layout.addWidget(pages_grp)
 
         # Refinement / pre-conditioning (optional second-pass profile)
-        precond_grp = QGroupBox("Refinement (Optional)", inner)
+        precond_grp = QGroupBox(tr("Refinement (Optional)"), inner)
         precond_row = QHBoxLayout(precond_grp)
         precond_row.setSpacing(6)
 
-        self._guided_precond_check = QCheckBox("Refinement profile", inner)
+        self._guided_precond_check = QCheckBox(tr("Refinement profile"), inner)
         self._guided_precond_check.toggled.connect(self._on_guided_precond_toggled)
         precond_row.addWidget(self._guided_precond_check)
 
         self._guided_precond_path = QLineEdit(inner)
         self._guided_precond_path.setReadOnly(True)
-        self._guided_precond_path.setPlaceholderText("No profile selected")
+        self._guided_precond_path.setPlaceholderText(tr("No profile selected"))
         self._guided_precond_path.setEnabled(False)
         precond_row.addWidget(self._guided_precond_path, stretch=1)
 
         self._guided_precond_browse = make_browse_button(
-            inner, "Select pre-conditioning profile", icon="folder_create",
+            inner, tr("Select pre-conditioning profile"), icon="folder_create",
         )
         self._guided_precond_browse.setEnabled(False)
         self._guided_precond_browse.clicked.connect(self._on_guided_precond_browse)
         precond_row.addWidget(self._guided_precond_browse)
 
         precond_row.addWidget(TooltipButton(
-            "Refinement Profile (Pre-conditioning)",
-            "Use this to make a second, noticeably better profile after you have "
+            tr("Refinement Profile (Pre-conditioning)"),
+            tr("Use this to make a second, noticeably better profile after you have "
             "already built and confirmed a working one for the same printer + paper.\n\n"
             "How it helps:\n"
             "Your first profile tells ChromIQ which colours your printer gets right "
@@ -1055,7 +1056,7 @@ class TabChart(QWidget):
             "build the normal way.\n"
             "• If you don't have a working profile yet for this exact paper/printer.\n\n"
             "Tip: the more pages you print on the refinement pass, the more benefit "
-            "the cleverer patch placement gives you.",
+            "the cleverer patch placement gives you."),
             inner,
             min_width=580,
         ))
@@ -1063,7 +1064,7 @@ class TabChart(QWidget):
         layout.addWidget(precond_grp)
 
         # Patch count display
-        count_grp = QGroupBox("Calculated Patches", inner)
+        count_grp = QGroupBox(tr("Calculated Patches"), inner)
         # Only override what differs from the global QGroupBox QSS (zero top-padding
         # so the big number sits tight under the title). Border + title color come
         # from the active theme.
@@ -1129,15 +1130,15 @@ class TabChart(QWidget):
         layout.setSpacing(8)
 
         # Calibration target option (hidden until calibration mode is enabled)
-        self._cal_target_grp = QGroupBox("Calibration Target", w)
+        self._cal_target_grp = QGroupBox(tr("Calibration Target"), w)
         cal_tgt_layout = QVBoxLayout(self._cal_target_grp)
         cal_tgt_row = QHBoxLayout()
-        self._cal_target_check = QCheckBox("Create target for calibration", w)
+        self._cal_target_check = QCheckBox(tr("Create target for calibration"), w)
         cal_tgt_row.addWidget(self._cal_target_check)
         cal_tgt_row.addStretch()
         cal_tgt_row.addWidget(TooltipButton(
-            "Create Target for Calibration",
-            "Use this before running printcal to create a printer linearisation curve.\n\n"
+            tr("Create Target for Calibration"),
+            tr("Use this before running printcal to create a printer linearisation curve.\n\n"
             "When enabled:\n"
             "  • Output files are prefixed with 'cal_' (e.g. cal_MyChart.ti1)\n"
             "  • Patch count is set to 0 (auto), white and black patches set to 0\n"
@@ -1147,7 +1148,7 @@ class TabChart(QWidget):
             "file is automatically routed to the Create Calibration File module\n"
             "in the Calibration & Profiling tab.\n\n"
             "Existing cal_* files in your working folder are preserved when this\n"
-            "option is OFF, so your .cal file survives the next chart generation.",
+            "option is OFF, so your .cal file survives the next chart generation."),
             w,
             min_width=560,
         ))
@@ -1163,13 +1164,13 @@ class TabChart(QWidget):
         layout.addWidget(self._cal_target_grp)
 
         # Output (target name)
-        output_grp = QGroupBox("Output", w)
+        output_grp = QGroupBox(tr("Output"), w)
         output_layout = QVBoxLayout(output_grp)
         # Shared label width keeps the "Target name:" and "Chart notes:"
         # input fields aligned vertically.
         _OUTPUT_LBL_W = 96
         name_row = QHBoxLayout()
-        _name_lbl = QLabel("Target name:", w)
+        _name_lbl = QLabel(tr("Target name:"), w)
         _name_lbl.setFixedWidth(_OUTPUT_LBL_W)
         name_row.addWidget(_name_lbl)
         self._manual_target_name_edit = self._make_lineedit("", w)
@@ -1179,14 +1180,14 @@ class TabChart(QWidget):
         )
         name_row.addWidget(self._manual_target_name_edit, stretch=1)
         name_row.addWidget(TooltipButton(
-            "Target Name",
-            "A short, descriptive name for this profiling session.\n\n"
+            tr("Target Name"),
+            tr("A short, descriptive name for this profiling session.\n\n"
             "This name is used for the output folder and all generated files "
             "(chart, TIFF, measurements, ICC profile) throughout the entire workflow. "
             "Choose a name that lets you identify the correct files for your printer "
             "and paper combination at a glance.\n\n"
             "Tip: combine your printer model, paper type, and instrument — "
-            "e.g. Canon_Pro1000_Baryta_i1Pro3. Use underscores or dashes instead of spaces.",
+            "e.g. Canon_Pro1000_Baryta_i1Pro3. Use underscores or dashes instead of spaces."),
             w,
             min_width=540,
         ))
@@ -1208,20 +1209,20 @@ class TabChart(QWidget):
         self._manual_chart_notes_row = QWidget(w)
         m_notes_row = QHBoxLayout(self._manual_chart_notes_row)
         m_notes_row.setContentsMargins(0, 0, 0, 0)
-        _notes_lbl = QLabel("Chart notes:", self._manual_chart_notes_row)
+        _notes_lbl = QLabel(tr("Chart notes:"), self._manual_chart_notes_row)
         _notes_lbl.setFixedWidth(_OUTPUT_LBL_W)
         m_notes_row.addWidget(_notes_lbl)
         self._manual_chart_notes_edit = self._make_lineedit("", self._manual_chart_notes_row)
-        self._manual_chart_notes_edit.setPlaceholderText("e.g. Canon Pro-1000 / Hahnemühle Photo Rag 308")
+        self._manual_chart_notes_edit.setPlaceholderText(tr("e.g. Canon Pro-1000 / Hahnemühle Photo Rag 308"))
         m_notes_row.addWidget(self._manual_chart_notes_edit, stretch=1)
         m_notes_row.addWidget(TooltipButton(
-            "Chart Notes",
-            "Optional free-text label stamped onto the right edge of the chart "
+            tr("Chart Notes"),
+            tr("Optional free-text label stamped onto the right edge of the chart "
             "TIFFs alongside the targen and printtarg commands that produced them. "
             "Useful for recording the exact printer/paper combination this chart "
             "was made for, so you can match it to the right ICC profile months "
             "later. Patch pixels are not modified — only the white margin to the "
-            "right of the patches is stamped.",
+            "right of the patches is stamped."),
             self._manual_chart_notes_row,
             min_width=540,
         ))
@@ -1235,21 +1236,21 @@ class TabChart(QWidget):
         _stamp_lbl_spacer.setFixedWidth(_OUTPUT_LBL_W)
         stamp_row.addWidget(_stamp_lbl_spacer)
         self._manual_stamp_cmd_check = QCheckBox(
-            "Stamp targen and printtarg commands on the chart", self._manual_stamp_cmd_row
+            tr("Stamp targen and printtarg commands on the chart"), self._manual_stamp_cmd_row
         )
         self._manual_stamp_cmd_check.setChecked(True)
         stamp_row.addWidget(self._manual_stamp_cmd_check)
         stamp_row.addStretch()
         stamp_row.addWidget(TooltipButton(
-            "Stamp Commands",
-            "When enabled, the exact targen and printtarg commands used to "
+            tr("Stamp Commands"),
+            tr("When enabled, the exact targen and printtarg commands used to "
             "produce the chart — plus the ChromIQ version — are stamped onto "
             "the right edge of the generated TIFF (alongside Argyll's own "
             "vertical ID line). This makes the chart self-documenting: months "
             "later you can read the printed sheet and recreate the same chart "
             "exactly. Disable if you'd rather keep the right margin clean and "
             "only stamp your own notes (or leave the chart fully unstamped if "
-            "you also clear the notes field).",
+            "you also clear the notes field)."),
             self._manual_stamp_cmd_row,
             min_width=540,
         ))
@@ -1265,13 +1266,13 @@ class TabChart(QWidget):
         _left_clip_lbl_spacer.setFixedWidth(_OUTPUT_LBL_W)
         left_clip_row.addWidget(_left_clip_lbl_spacer)
         self._manual_left_clip_check = QCheckBox(
-            "Print info in left clip area", self._manual_left_clip_row
+            tr("Print info in left clip area"), self._manual_left_clip_row
         )
         left_clip_row.addWidget(self._manual_left_clip_check)
         left_clip_row.addStretch()
         left_clip_row.addWidget(TooltipButton(
-            "Left Clip Info",
-            "Fills the wide blank strip on the LEFT side of the chart — the "
+            tr("Left Clip Info"),
+            tr("Fills the wide blank strip on the LEFT side of the chart — the "
             "space printtarg reserves for the i1Pro 2 / i1Pro 3 Plus scanning-"
             "table clip — with two rotated text columns:\n\n"
             "• Outer column: a one-line chart summary (patch count + paper "
@@ -1290,7 +1291,7 @@ class TabChart(QWidget):
             "have no room for legible rotated text.\n\n"
             "The row hides automatically when these conditions aren't met. "
             "Patch pixels are never modified — only the otherwise-empty left "
-            "clip strip is stamped.",
+            "clip strip is stamped."),
             self._manual_left_clip_row,
             min_width=560,
         ))
@@ -1300,10 +1301,10 @@ class TabChart(QWidget):
         layout.addWidget(output_grp)
 
         # Presets
-        presets_grp = QGroupBox("Presets", w)
+        presets_grp = QGroupBox(tr("Presets"), w)
         presets_row = QHBoxLayout(presets_grp)
         presets_row.setContentsMargins(8, 4, 8, 8)
-        presets_row.addWidget(QLabel("Select preset:", w))
+        presets_row.addWidget(QLabel(tr("Select preset:"), w))
         self._preset_combo = NoScrollComboBox(w)
         # Long built-in preset names must not stretch the row and squeeze the
         # +/−/folder buttons: ignore the combo's content width, let it take only
@@ -1321,20 +1322,20 @@ class TabChart(QWidget):
         self._preset_combo.setItemDelegate(
             _ComboSeparatorDelegate(self._preset_combo)
         )
-        self._preset_combo.addItem("none", userData=None)
+        self._preset_combo.addItem(tr("none"), userData=None)
         presets_row.addWidget(self._preset_combo, stretch=1)
         self._preset_add_btn = QPushButton(w)
         self._preset_add_btn.setObjectName("icon_btn")
         self._preset_add_btn.setFixedSize(28, 28)
         set_preset_icon(self._preset_add_btn, "plus")
         self._preset_add_btn.setIconSize(QSize(14, 14))
-        self._preset_add_btn.setToolTip("Save current settings as a new preset")
+        self._preset_add_btn.setToolTip(tr("Save current settings as a new preset"))
         self._preset_del_btn = QPushButton(w)
         self._preset_del_btn.setObjectName("icon_btn")
         self._preset_del_btn.setFixedSize(28, 28)
         set_preset_icon(self._preset_del_btn, "minus")
         self._preset_del_btn.setIconSize(QSize(14, 14))
-        self._preset_del_btn.setToolTip("Delete selected preset")
+        self._preset_del_btn.setToolTip(tr("Delete selected preset"))
         self._preset_del_btn.setEnabled(False)
         self._preset_reveal_btn = QPushButton(w)
         self._preset_reveal_btn.setObjectName("icon_btn")
@@ -1342,9 +1343,9 @@ class TabChart(QWidget):
         set_folder_icon(self._preset_reveal_btn, "folder")
         self._preset_reveal_btn.setIconSize(QSize(14, 14))
         self._preset_reveal_btn.setToolTip(
-            "Open this tab's presets folder in Finder/Explorer.\n"
+            tr("Open this tab's presets folder in Finder/Explorer.\n"
             "Each preset is a plain .json file — copy one to a colleague\n"
-            "and they can drop it into their own folder to share."
+            "and they can drop it into their own folder to share.")
         )
         self._preset_reveal_btn.clicked.connect(
             lambda: reveal_in_file_manager(tab_dir("create_chart"))
@@ -1353,8 +1354,8 @@ class TabChart(QWidget):
         presets_row.addWidget(self._preset_del_btn)
         presets_row.addWidget(self._preset_reveal_btn)
         presets_row.addWidget(TooltipButton(
-            "Manual Presets",
-            "Save and recall named snapshots of all Manual mode settings.\n\n"
+            tr("Manual Presets"),
+            tr("Save and recall named snapshots of all Manual mode settings.\n\n"
             "  +  Save current parameter values as a new named preset.\n"
             "  −  Delete the currently selected preset.\n"
             "  ▢  Open this tab's presets folder in Finder/Explorer.\n\n"
@@ -1368,7 +1369,7 @@ class TabChart(QWidget):
             "shared preset, drop the .json into the matching folder on the\n"
             "target machine and ChromIQ will pick it up on the next launch.\n\n"
             "The target name field is not saved with presets.\n"
-            "Presets persist between sessions.",
+            "Presets persist between sessions."),
             w,
             min_width=600,
         ))
@@ -1441,7 +1442,7 @@ class TabChart(QWidget):
             ("targen",    self._params.get("targen", [])),
             ("printtarg", self._params.get("printtarg", [])),
         ]:
-            grp = QGroupBox(f"{tool} parameters", inner)
+            grp = QGroupBox(tr("{tool} parameters").format(tool=tool), inner)
             # Keep a handle to the outer group (its inner content is greyed via
             # _manual_*_content while a preset locks the panel).
             if tool == "targen":
@@ -1459,14 +1460,14 @@ class TabChart(QWidget):
             override_l = QHBoxLayout(override_row)
             override_l.setContentsMargins(0, 0, 0, 2)
             if tool == "targen":
-                ov_check = QCheckBox("Edit patch recipe (override preset)", override_row)
-                ov_tip = TooltipButton("Edit patch recipe", _OVERRIDE_TARGEN_TIP,
+                ov_check = QCheckBox(tr("Edit patch recipe (override preset)"), override_row)
+                ov_tip = TooltipButton(tr("Edit patch recipe"), tr(_OVERRIDE_TARGEN_TIP),
                                        override_row, min_width=600)
                 self._override_targen_check = ov_check
                 self._override_targen_row = override_row
             else:
-                ov_check = QCheckBox("Edit page layout (override preset)", override_row)
-                ov_tip = TooltipButton("Edit page layout", _OVERRIDE_PRINTTARG_TIP,
+                ov_check = QCheckBox(tr("Edit page layout (override preset)"), override_row)
+                ov_tip = TooltipButton(tr("Edit page layout"), tr(_OVERRIDE_PRINTTARG_TIP),
                                        override_row, min_width=600)
                 self._override_printtarg_check = ov_check
                 self._override_printtarg_row = override_row
@@ -1481,9 +1482,9 @@ class TabChart(QWidget):
                 lambda checked, t=tool: self._on_override_clicked(t, checked)
             )
 
-            basic_grp = QGroupBox("Basic", grp)
+            basic_grp = QGroupBox(tr("Basic"), grp)
             basic_layout = QVBoxLayout(basic_grp)
-            expert_grp = QGroupBox("Expert Options", grp)
+            expert_grp = QGroupBox(tr("Expert Options"), grp)
             expert_layout = QVBoxLayout(expert_grp)
             # Content widgets greyed out (not the override row) while locked.
             if tool == "targen":
@@ -1500,8 +1501,8 @@ class TabChart(QWidget):
                     # Shrink the DPI spinbox and add 8-bit/16-bit radio buttons
                     pw._control.setMaximumWidth(90)
                     bg = QButtonGroup(pw)
-                    self._bit8_radio = QRadioButton("8-bit", pw)
-                    self._bit16_radio = QRadioButton("16-bit", pw)
+                    self._bit8_radio = QRadioButton(tr("8-bit"), pw)
+                    self._bit16_radio = QRadioButton(tr("16-bit"), pw)
                     # Tag as param_label so the disabled QSS rule greys text +
                     # indicator when a preset locks the printtarg panel.
                     self._bit8_radio.setObjectName("param_label")
@@ -1519,11 +1520,11 @@ class TabChart(QWidget):
                     # that drives live estimation from current paper/layout settings.
                     self._manual_f_pw = pw
                     pw._control.setMaximumWidth(90)
-                    self._manual_auto_patches_check = QCheckBox("Auto", pw)
+                    self._manual_auto_patches_check = QCheckBox(tr("Auto"), pw)
                     self._manual_auto_patches_check.setToolTip(
-                        "Auto-compute the patch count to fill exactly the number of\n"
+                        tr("Auto-compute the patch count to fill exactly the number of\n"
                         "pages set under printtarg → Pages, using the current paper,\n"
-                        "instrument, double-density, left-border, patch scale and margin."
+                        "instrument, double-density, left-border, patch scale and margin.")
                     )
                     insert_at = pw.layout().count() - 1
                     pw.layout().insertWidget(insert_at, self._manual_auto_patches_check)
@@ -1537,11 +1538,11 @@ class TabChart(QWidget):
                 if tool == "targen" and flag == "-e":
                     self._manual_e_pw = pw
                     pw._control.setMaximumWidth(90)
-                    self._manual_auto_white_check = QCheckBox("Auto", pw)
+                    self._manual_auto_white_check = QCheckBox(tr("Auto"), pw)
                     self._manual_auto_white_check.setToolTip(
-                        "Auto-compute white patches (-e) from the chart's total\n"
+                        tr("Auto-compute white patches (-e) from the chart's total\n"
                         "patch count. Anchor: 560 patches → 4 whites. Doubling the\n"
-                        "total adds 50 % to the count, capped at 8 (min 2)."
+                        "total adds 50 % to the count, capped at 8 (min 2).")
                     )
                     insert_at = pw.layout().count() - 1
                     pw.layout().insertWidget(insert_at, self._manual_auto_white_check)
@@ -1552,11 +1553,11 @@ class TabChart(QWidget):
                 if tool == "targen" and flag == "-B":
                     self._manual_B_pw = pw
                     pw._control.setMaximumWidth(90)
-                    self._manual_auto_black_check = QCheckBox("Auto", pw)
+                    self._manual_auto_black_check = QCheckBox(tr("Auto"), pw)
                     self._manual_auto_black_check.setToolTip(
-                        "Auto-compute black patches (-B) from the chart's total\n"
+                        tr("Auto-compute black patches (-B) from the chart's total\n"
                         "patch count. Anchor: 560 patches → 4 blacks. Doubling the\n"
-                        "total adds 50 % to the count, capped at 8 (min 2)."
+                        "total adds 50 % to the count, capped at 8 (min 2).")
                     )
                     insert_at = pw.layout().count() - 1
                     pw.layout().insertWidget(insert_at, self._manual_auto_black_check)
@@ -1567,11 +1568,11 @@ class TabChart(QWidget):
                 if tool == "targen" and flag == "-g":
                     self._manual_g_pw = pw
                     pw._control.setMaximumWidth(90)
-                    self._manual_auto_grey_check = QCheckBox("Auto", pw)
+                    self._manual_auto_grey_check = QCheckBox(tr("Auto"), pw)
                     self._manual_auto_grey_check.setToolTip(
-                        "Auto-compute grey-axis steps (-g) from the chart's total\n"
+                        tr("Auto-compute grey-axis steps (-g) from the chart's total\n"
                         "patch count. Anchor: 560 patches → 32 steps. Doubling the\n"
-                        "total doubles the steps, capped at 128 (min 8)."
+                        "total doubles the steps, capped at 128 (min 8).")
                     )
                     insert_at = pw.layout().count() - 1
                     pw.layout().insertWidget(insert_at, self._manual_auto_grey_check)
@@ -1654,7 +1655,7 @@ class TabChart(QWidget):
                 pages_row_l = QHBoxLayout(pages_row_w)
                 pages_row_l.setContentsMargins(0, 2, 0, 2)
                 pages_row_l.setSpacing(8)
-                pages_lbl = QLabel("Pages:", pages_row_w)
+                pages_lbl = QLabel(tr("Pages:"), pages_row_w)
                 pages_lbl.setFixedWidth(190)
                 # param_label carries the right per-theme colour AND a :disabled
                 # rule, so it greys when a preset locks the printtarg panel.
@@ -1669,8 +1670,8 @@ class TabChart(QWidget):
                 pages_row_l.addWidget(self._manual_pages_spin)
                 pages_row_l.addStretch()
                 pages_row_l.addWidget(TooltipButton(
-                    "Pages (Auto patch count)",
-                    "How many physical sheets the chart should span. This control "
+                    tr("Pages (Auto patch count)"),
+                    tr("How many physical sheets the chart should span. This control "
                     "drives the Auto checkbox next to targen → Total Patch Count "
                     "above: when Auto is on, ChromIQ picks the patch count that "
                     "fills exactly this many sheets — using the current paper, "
@@ -1690,7 +1691,7 @@ class TabChart(QWidget):
                     "out-of-gamut colours.\n\n"
                     "This control is greyed out when Auto is off — without Auto, "
                     "printtarg just uses as many sheets as the explicit Total "
-                    "Patch Count requires.",
+                    "Patch Count requires."),
                     pages_row_w,
                     min_width=600,
                 ))
@@ -1761,7 +1762,7 @@ class TabChart(QWidget):
         try:
             p = self._collect_manual()
         except Exception:
-            self._manual_info_lbl.setText("Manual mode — preview unavailable.")
+            self._manual_info_lbl.setText(tr("Manual mode — preview unavailable."))
             return
 
         # targen
@@ -1839,21 +1840,21 @@ class TabChart(QWidget):
             self._manual_pages_spin.value()
             if self._manual_pages_spin is not None else 1
         )
-        notes = [f"{pages} page{'s' if pages != 1 else ''}"]
+        notes = [tr("1 page") if pages == 1 else tr("{pages} pages").format(pages=pages)]
         if self._manual_auto_patches_check is not None \
                 and self._manual_auto_patches_check.isChecked():
-            notes.append("Auto patch count")
+            notes.append(tr("Auto patch count"))
         auto_neutrals = [
             lbl for lbl, chk in (
-                ("grey",  self._manual_auto_grey_check),
-                ("white", self._manual_auto_white_check),
-                ("black", self._manual_auto_black_check),
+                (tr("grey"),  self._manual_auto_grey_check),
+                (tr("white"), self._manual_auto_white_check),
+                (tr("black"), self._manual_auto_black_check),
             ) if chk is not None and chk.isChecked()
         ]
         if auto_neutrals:
-            notes.append("Auto " + "/".join(auto_neutrals))
+            notes.append(tr("Auto") + " " + "/".join(auto_neutrals))
         if p.tiff_16bit:
-            notes.append("16-bit TIFF")
+            notes.append(tr("16-bit TIFF"))
 
         # While the TC9.18 built-in chart is the active patch source, "Generate"
         # runs printtarg only on the bundled .ti1 — targen is skipped. Say so,
@@ -1879,21 +1880,21 @@ class TabChart(QWidget):
                                  and self._printtarg_signature() != self._prebuilt_printtarg_sig)
             if targen_changed:
                 info = (
-                    f"Built-in preset — patch recipe changed ({' · '.join(notes)}):\n"
-                    "Builds a fresh chart from your settings — the patches will "
-                    "NOT match the preset.\n"
-                    f"targen {' '.join(targen_args)}\n"
-                    f"printtarg {' '.join(pt_args)}"
+                    tr("Built-in preset — patch recipe changed ({notes}):\n"
+                       "Builds a fresh chart from your settings — the patches "
+                       "will NOT match the preset.").format(notes=" · ".join(notes))
+                    + f"\ntargen {' '.join(targen_args)}"
+                    + f"\nprinttarg {' '.join(pt_args)}"
                 )
             elif printtarg_changed:
                 info = (
-                    f"Built-in preset — re-laid out ({' · '.join(notes)}):\n"
-                    "Re-arranges the preset's exact patches on the page (targen "
-                    "skipped).\n"
-                    f"printtarg {' '.join(pt_args)}"
+                    tr("Built-in preset — re-laid out ({notes}):\n"
+                       "Re-arranges the preset's exact patches on the page "
+                       "(targen skipped).").format(notes=" · ".join(notes))
+                    + f"\nprinttarg {' '.join(pt_args)}"
                 )
             else:
-                info = (
+                info = tr(
                     "Built-in preset — ready-made chart:\n"
                     "Copies the bundled patch set as-is (targen and printtarg "
                     "skipped).\n"
@@ -1904,23 +1905,26 @@ class TabChart(QWidget):
             return
         if tc918_repro:
             info = (
-                f"i1Pro TC9.18 by Pharmacist — fixed patch set ({' · '.join(notes)}):\n"
-                f"Uses the bundled tc918.ti1 (targen skipped).\n"
-                f"printtarg {' '.join(pt_args)}\n"
-                "Change a targen setting above to build a fresh chart instead."
+                tr("i1Pro TC9.18 by Pharmacist — fixed patch set ({notes}):\n"
+                   "Uses the bundled tc918.ti1 (targen skipped).").format(
+                    notes=" · ".join(notes))
+                + f"\nprinttarg {' '.join(pt_args)}\n"
+                + tr("Change a targen setting above to build a fresh chart instead.")
             )
         elif knut_repro:
             info = (
-                f"TC9.18+Spyderprint preset — fixed patch set ({' · '.join(notes)}):\n"
-                "Uses the bundled 1168-patch .ti1 (targen skipped).\n"
-                f"printtarg {' '.join(pt_args)}\n"
-                "Change a targen setting above to build a fresh chart instead."
+                tr("TC9.18+Spyderprint preset — fixed patch set ({notes}):\n"
+                   "Uses the bundled 1168-patch .ti1 (targen skipped).").format(
+                    notes=" · ".join(notes))
+                + f"\nprinttarg {' '.join(pt_args)}\n"
+                + tr("Change a targen setting above to build a fresh chart instead.")
             )
         else:
             info = (
-                f"Manual mode — your current configuration ({' · '.join(notes)}):\n"
-                f"targen {' '.join(targen_args)}\n"
-                f"printtarg {' '.join(pt_args)}"
+                tr("Manual mode — your current configuration ({notes}):").format(
+                    notes=" · ".join(notes))
+                + f"\ntargen {' '.join(targen_args)}"
+                + f"\nprinttarg {' '.join(pt_args)}"
             )
         self._manual_info_lbl.setText(info)
 
@@ -1972,7 +1976,8 @@ class TabChart(QWidget):
             if self._manual_cal_i_pw is not None:
                 self._manual_cal_i_pw.set_value(cal_str)
             self._cal_status_lbl.setText(
-                f"Calibration file found: {cal_file.name} — auto-filled into -I and -K fields below."
+                tr("Calibration file found: {name} — auto-filled into -I and -K "
+                   "fields below.").format(name=cal_file.name)
             )
             self._cal_status_lbl.setVisible(True)
         else:
@@ -2063,9 +2068,7 @@ class TabChart(QWidget):
         removed = raw[len(cleaned):]
         edit.setText(cleaned)
         hint.setText(
-            f"Removed “{removed}” — the target name is used for the output "
-            f"folder and every generated file, so it shouldn't include a file "
-            f"extension."
+            tr("Removed “{removed}” — the target name is used for the output folder and every generated file, so it shouldn't include a file extension.").format(removed=removed)
         )
         hint.setVisible(True)
 
@@ -2074,7 +2077,8 @@ class TabChart(QWidget):
         try:
             with open(path, encoding="utf-8") as f:
                 data = yaml.safe_load(f)
-            return data.get("parameters", {})
+            from core.i18n import translate_parameters
+            return translate_parameters(data.get("parameters", {}))
         except Exception as exc:
             log.error("Cannot load parameters.yaml: %s", exc)
             return {}
@@ -2290,7 +2294,7 @@ class TabChart(QWidget):
         # under "Double density (for measuring rig)" above it.
         row.setContentsMargins(0, 2, 0, 2)
         row.setSpacing(8)
-        lbl = QLabel("Triple density", row_w)
+        lbl = QLabel(tr("Triple density"), row_w)
         lbl.setFixedWidth(190)
         # param_label gives it the standard label colour plus the :disabled
         # rule, so it greys when a preset locks the printtarg panel.
@@ -2302,8 +2306,8 @@ class TabChart(QWidget):
         row.addWidget(self._manual_td_check)
         row.addStretch()
         row.addWidget(TooltipButton(
-            "Triple Density (i1Pro layout emulation)",
-            "ColorMunki + rig only. Generates the chart with the i1Pro strip "
+            tr("Triple Density (i1Pro layout emulation)"),
+            tr("ColorMunki + rig only. Generates the chart with the i1Pro strip "
             "layout (printtarg -ii1) plus the tuned scale / margin / strip-"
             "limit overrides needed for the ColorMunki to read it, then "
             "rewrites the produced .ti2 so chartread still talks to your "
@@ -2315,7 +2319,7 @@ class TabChart(QWidget):
             "triple-density preset (1.3 / 5 / on); unticking restores the "
             "stashed values.\n\n"
             "Has no effect on i1Pro, i1Pro 3 Plus or SpectroScan — the option "
-            "is hidden when those are selected.",
+            "is hidden when those are selected."),
             row_w,
             min_width=600,
         ))
@@ -2687,7 +2691,7 @@ class TabChart(QWidget):
     def _populate_preset_combo(self, presets: dict, select_name: str | None = None) -> None:
         self._preset_combo.blockSignals(True)
         self._preset_combo.clear()
-        self._preset_combo.addItem("none", userData=None)
+        self._preset_combo.addItem(tr("none"), userData=None)
         # User presets first, then the built-ins below them. A preset saved with
         # "generate on select" gets a ▶ prefix so the user knows picking it
         # starts the chart, not just loads values. userData stays the bare name.
@@ -2774,18 +2778,18 @@ class TabChart(QWidget):
         Returns the chosen name, or None if the user cancelled. An empty entry
         falls back to `default_name`."""
         dlg = QDialog(self)
-        dlg.setWindowTitle("Name this target")
+        dlg.setWindowTitle(tr("Name this target"))
         dlg.setMinimumWidth(540)
         lay = QVBoxLayout(dlg)
         lay.setContentsMargins(22, 20, 22, 16)
         lay.setSpacing(10)
 
-        heading = QLabel("Name this target", dlg)
+        heading = QLabel(tr("Name this target"), dlg)
         heading.setStyleSheet("font-weight: bold;")
         lay.addWidget(heading)
 
         info = QLabel(
-            "ChromIQ creates a folder with this name and reuses it for everything "
+            tr("ChromIQ creates a folder with this name and reuses it for everything "
             "that follows — the printed chart, the measurements, and the finished "
             "ICC profile. Choose a name you'll still recognise weeks from now.\n\n"
             "A good name usually combines the things that make this profile unique:\n"
@@ -2794,7 +2798,7 @@ class TabChart(QWidget):
             "  •  and the date or quality level (e.g. 2026-05 or HighQ)\n\n"
             "Example:  EpsonP900-CansonPlatine-2026-05\n\n"
             "Stick to letters, numbers, spaces and hyphens — avoid slashes and "
-            "other punctuation so the folder name stays valid.",
+            "other punctuation so the folder name stays valid."),
             dlg,
         )
         info.setWordWrap(True)
@@ -2808,8 +2812,8 @@ class TabChart(QWidget):
         lay.addSpacing(8)               # breathing room below the field
 
         bb = QDialogButtonBox(dlg)
-        bb.addButton("Cancel", QDialogButtonBox.ButtonRole.RejectRole)
-        bb.addButton("Generate", QDialogButtonBox.ButtonRole.AcceptRole)
+        bb.addButton(tr("Cancel"), QDialogButtonBox.ButtonRole.RejectRole)
+        bb.addButton(tr("Generate"), QDialogButtonBox.ButtonRole.AcceptRole)
         bb.rejected.connect(dlg.reject)
         bb.accepted.connect(dlg.accept)
         lay.addWidget(bb)
@@ -3154,19 +3158,19 @@ class TabChart(QWidget):
                     and self._current_ti1_path.is_file())
 
         dlg = QDialog(self)
-        dlg.setWindowTitle("Save Preset")
+        dlg.setWindowTitle(tr("Save Preset"))
         dlg.setMinimumWidth(500)
         lay = QVBoxLayout(dlg)
         lay.setContentsMargins(22, 20, 22, 16)
         lay.setSpacing(10)
 
-        heading = QLabel("Save preset", dlg)
+        heading = QLabel(tr("Save preset"), dlg)
         heading.setStyleSheet("font-weight: bold;")
         lay.addWidget(heading)
         info = QLabel(
-            "Give this preset a name. All current Manual-mode parameter values are "
+            tr("Give this preset a name. All current Manual-mode parameter values are "
             "saved under it and can be recalled any time from the preset list. "
-            "Re-saving with an existing name overwrites it.",
+            "Re-saving with an existing name overwrites it."),
             dlg,
         )
         info.setWordWrap(True)
@@ -3175,19 +3179,19 @@ class TabChart(QWidget):
         lay.addSpacing(6)
         edit = QLineEdit(prefill_name, dlg)
         edit.setMinimumHeight(28)
-        edit.setPlaceholderText("Preset name")
+        edit.setPlaceholderText(tr("Preset name"))
         edit.selectAll()
         lay.addWidget(edit)
 
         run_chk = QCheckBox(
-            "Generate the chart immediately when this preset is selected", dlg)
+            tr("Generate the chart immediately when this preset is selected"), dlg)
         run_chk.setChecked(prefill_run)
         lay.addWidget(run_chk)
         run_note = QLabel(
-            "When on, picking this preset asks for a target name and then creates "
+            tr("When on, picking this preset asks for a target name and then creates "
             "the chart straight away (it's shown with a ▶ in the list), instead of "
             "only loading the values. This is saved inside the preset file, so it "
-            "travels with a shared preset.",
+            "travels with a shared preset."),
             dlg,
         )
         run_note.setWordWrap(True)
@@ -3196,7 +3200,7 @@ class TabChart(QWidget):
 
         lay.addSpacing(6)
         attach_chk = QCheckBox(
-            "Build from the currently loaded patch set (attach its .ti1)", dlg)
+            tr("Build from the currently loaded patch set (attach its .ti1)"), dlg)
         attach_chk.setChecked(prefill_attach and have_ti1)
         attach_chk.setEnabled(have_ti1)
         lay.addWidget(attach_chk)
@@ -3222,8 +3226,8 @@ class TabChart(QWidget):
 
         lay.addSpacing(4)
         bb = QDialogButtonBox(dlg)
-        bb.addButton("Cancel", QDialogButtonBox.ButtonRole.RejectRole)
-        bb.addButton("Save", QDialogButtonBox.ButtonRole.AcceptRole)
+        bb.addButton(tr("Cancel"), QDialogButtonBox.ButtonRole.RejectRole)
+        bb.addButton(tr("Save"), QDialogButtonBox.ButtonRole.AcceptRole)
         bb.rejected.connect(dlg.reject)
         bb.accepted.connect(dlg.accept)
         lay.addWidget(bb)
@@ -3264,25 +3268,25 @@ class TabChart(QWidget):
         # Use userData (bare name), not the shown text which may carry a ▶ prefix.
         name = self._preset_combo.currentData()
         dlg = QDialog(self)
-        dlg.setWindowTitle("Delete Preset")
+        dlg.setWindowTitle(tr("Delete Preset"))
         dlg.setMinimumWidth(460)
         dlg_layout = QVBoxLayout(dlg)
         dlg_layout.setSpacing(10)
         dlg_layout.setContentsMargins(20, 20, 20, 16)
-        heading = QLabel(f'Delete the preset "{name}"?', dlg)
+        heading = QLabel(tr("Delete the preset \"{name}\"?").format(name=name), dlg)
         heading.setStyleSheet("font-weight: bold;")
         heading.setWordWrap(True)
         dlg_layout.addWidget(heading)
         info = QLabel(
-            "All parameter values saved in this preset will be permanently removed. "
-            "This cannot be undone.",
+            tr("All parameter values saved in this preset will be permanently removed. "
+            "This cannot be undone."),
             dlg,
         )
         info.setWordWrap(True)
         dlg_layout.addWidget(info)
         bb = QDialogButtonBox(dlg)
-        bb.addButton("Cancel", QDialogButtonBox.ButtonRole.RejectRole)
-        bb.addButton("Delete", QDialogButtonBox.ButtonRole.AcceptRole)
+        bb.addButton(tr("Cancel"), QDialogButtonBox.ButtonRole.RejectRole)
+        bb.addButton(tr("Delete"), QDialogButtonBox.ButtonRole.AcceptRole)
         bb.rejected.connect(dlg.reject)
         bb.accepted.connect(dlg.accept)
         dlg_layout.addWidget(bb)
@@ -3457,10 +3461,10 @@ class TabChart(QWidget):
         if not checked:
             return
         if tool == "targen":
-            InfoDialog(_OVERRIDE_TARGEN_POPUP_TITLE, _OVERRIDE_TARGEN_POPUP_BODY,
+            InfoDialog(tr(_OVERRIDE_TARGEN_POPUP_TITLE), tr(_OVERRIDE_TARGEN_POPUP_BODY),
                        self, min_width=560).exec()
         else:
-            InfoDialog(_OVERRIDE_PRINTTARG_POPUP_TITLE, _OVERRIDE_PRINTTARG_POPUP_BODY,
+            InfoDialog(tr(_OVERRIDE_PRINTTARG_POPUP_TITLE), tr(_OVERRIDE_PRINTTARG_POPUP_BODY),
                        self, min_width=560).exec()
 
     def _apply_tc918_preset(self, target_name: str | None = None) -> None:
@@ -3875,11 +3879,12 @@ class TabChart(QWidget):
             total = per_sheet * pages
             self._patch_count_lbl.setText(str(total))
             self._patch_detail_lbl.setText(
-                f"PATCHES · {pages} PAGES · {paper.upper()}"
+                tr("PATCHES · {pages} PAGES · {paper}").format(
+                    pages=pages, paper=paper.upper())
             )
         else:
             self._patch_count_lbl.setText("?")
-            self._patch_detail_lbl.setText("CUSTOM LAYOUT")
+            self._patch_detail_lbl.setText(tr("CUSTOM LAYOUT"))
 
         # Hidden-defaults info label (values mirror _collect_guided logic).
         # The base is fixed (no settings UI exposes it); reading it from settings
@@ -3917,13 +3922,11 @@ class TabChart(QWidget):
                 # chart_creator imports the pick into the run as
                 # preconditioning.icc; show that staged name in the preview.
                 precond_line = " -c preconditioning.icc"
-                recommendation = (
-                    "\nTip: use at least as many pages as the original profile."
-                )
+                recommendation = "\n" + tr(
+                    "Tip: use at least as many pages as the original profile.")
             else:
-                recommendation = (
-                    "\nPick a profile to refine from (Browse… above)."
-                )
+                recommendation = "\n" + tr(
+                    "Pick a profile to refine from (Browse… above).")
 
         # With a refinement profile (-c) the neutral ramp samples the profile-
         # defined neutral axis (-n) rather than naïve device grey (-g).
@@ -3931,8 +3934,8 @@ class TabChart(QWidget):
 
         target_name = self._preview_target_name("guided")
         info = (
-            f"Guided mode applies these fixed settings:\n"
-            f"targen -d2 -G -e{wp} -B{bp} {grey_flag}{grey_steps}{precond_line} {target_name}\n"
+            tr("Guided mode applies these fixed settings:")
+            + f"\ntargen -d2 -G -e{wp} -B{bp} {grey_flag}{grey_steps}{precond_line} {target_name}\n"
             f"printtarg -i{preview_instr} -p{paper} -t{dpi} {scale_flag}{lb_flag}{dd_flag}{margin_flag}{strip_flag}{target_name}"
             f"{recommendation}"
         )
@@ -3963,9 +3966,9 @@ class TabChart(QWidget):
         if instr == "CM":
             self._dd_check.setVisible(True)
             self._dd_tooltip.setVisible(True)
-            self._dd_check.setText("Double density")
-            self._dd_tooltip._title = "Double Density (-h)"
-            self._dd_tooltip._body = (
+            self._dd_check.setText(tr("Double density"))
+            self._dd_tooltip._title = tr("Double Density (-h)")
+            self._dd_tooltip._body = tr(
                 "Doubles the number of patches that fit in each measurement strip "
                 "when using a ColorMunki / i1Studio / ColorChecker Studio.\n\n"
                 "REQUIRES the physical measuring rig accessory — a clear plastic "
@@ -3981,13 +3984,13 @@ class TabChart(QWidget):
                 "is hidden when those are selected."
             )
             self._dd_tooltip._min_width = 600
-            self._dd_tooltip.setToolTip("Double Density (-h)\n\nClick for details")
+            self._dd_tooltip.setToolTip(tr("Double Density (-h)\n\nClick for details"))
         elif instr == "SS":
             self._dd_check.setVisible(True)
             self._dd_tooltip.setVisible(True)
-            self._dd_check.setText("Hexagon patches (packs ~15% more per sheet)")
-            self._dd_tooltip._title = "Hexagon Patches (-h)"
-            self._dd_tooltip._body = (
+            self._dd_check.setText(tr("Hexagon patches (packs ~15% more per sheet)"))
+            self._dd_tooltip._title = tr("Hexagon Patches (-h)")
+            self._dd_tooltip._body = tr(
                 "Switches the SpectroScan chart layout from rectangular to "
                 "hexagonal patches. Hexagons tessellate more tightly than "
                 "rectangles, so roughly 14% more patches fit on the same sheet — "
@@ -3999,7 +4002,7 @@ class TabChart(QWidget):
                 "is hidden when those are selected."
             )
             self._dd_tooltip._min_width = 600
-            self._dd_tooltip.setToolTip("Hexagon Patches (-h)\n\nClick for details")
+            self._dd_tooltip.setToolTip(tr("Hexagon Patches (-h)\n\nClick for details"))
         else:
             self._dd_check.setVisible(False)
             self._dd_tooltip.setVisible(False)

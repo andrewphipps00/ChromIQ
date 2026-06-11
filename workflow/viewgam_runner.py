@@ -74,6 +74,7 @@ _VIEWGAM_WARNING_PATTERNS: list[tuple[re.Pattern[str], str, str]] = [
 # worked. The X3D Background still has to be JS-driven because it reads
 # the CSS body background at runtime and needs to follow live theme swaps.
 from workflow.gamut_viewer import _apply_chromiq_colors
+from core.i18n import tr
 
 _THEMED_JS = """\
 (function () {
@@ -308,7 +309,7 @@ class ViewgamRunner(QObject):
         bg:           str  = "#111111",
     ) -> None:
         if self._runner.is_running:
-            self.error.emit("Another process is already running.")
+            self.error.emit(tr("Another process is already running."))
             return
 
         self._log_lines   = []
@@ -399,8 +400,8 @@ class ViewgamRunner(QObject):
             if failure is not None:
                 self.error.emit(failure[1])
             else:
-                self.error.emit(f"viewgam exited with code {code}.")
+                self.error.emit(tr("viewgam exited with code {code}.").format(code=code))
         else:
-            self.error.emit("viewgam produced no usable output.")
+            self.error.emit(tr("viewgam produced no usable output."))
 
         on_finish(code)

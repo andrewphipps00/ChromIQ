@@ -21,6 +21,7 @@ from PyQt6.QtGui import (
 from PyQt6.QtWidgets import QApplication, QToolButton, QWidget
 
 from ui.styles import SPEC_MAGENTA
+from core.i18n import tr
 
 
 # Per-mode visual tokens — kept in step with ui.tools_popup so the two popups
@@ -64,7 +65,7 @@ class BuiltinPresetButton(QToolButton):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setObjectName("tooltip_btn")
-        self.setToolTip("Built-in presets")
+        self.setToolTip(tr("Built-in presets"))
         self.setFixedSize(QSize(40, 40))
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self._hover = False

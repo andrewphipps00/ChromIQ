@@ -20,6 +20,7 @@ from PyQt6.QtWidgets import (
 )
 
 from core.logger import get_logger
+from core.i18n import tr
 
 log = get_logger(__name__)
 
@@ -423,7 +424,7 @@ class TiffPreview(QWidget):
         self._stripe_rects = []
         self._pixmap = None
         self._ink_channels = None
-        self._img_label.setText("No preview")
+        self._img_label.setText(tr("No preview"))
         self._update_nav()
         self._update_filename_label([])
 
@@ -489,7 +490,7 @@ class TiffPreview(QWidget):
         layout.addWidget(self._header_image_gap)
 
         # Image label
-        self._img_label = QLabel("No preview", self)
+        self._img_label = QLabel(tr("No preview"), self)
         self._img_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._img_label.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
@@ -518,7 +519,7 @@ class TiffPreview(QWidget):
         nav_layout = QHBoxLayout(nav)
         nav_layout.setContentsMargins(12, 0, 12, 0)
 
-        self._prev_btn = QPushButton("‹ Prev", nav)
+        self._prev_btn = QPushButton(tr("‹ Prev"), nav)
         self._prev_btn.setFixedWidth(84)
         self._prev_btn.clicked.connect(self._go_prev)
         nav_layout.addWidget(self._prev_btn)
@@ -530,7 +531,7 @@ class TiffPreview(QWidget):
         nav_layout.addWidget(self._page_label)
         nav_layout.addStretch()
 
-        self._next_btn = QPushButton("Next ›", nav)
+        self._next_btn = QPushButton(tr("Next ›"), nav)
         self._next_btn.setFixedWidth(84)
         self._next_btn.clicked.connect(self._go_next)
         nav_layout.addWidget(self._next_btn)
@@ -566,7 +567,8 @@ class TiffPreview(QWidget):
         self._next_btn.setVisible(visible)
         self._page_label.setVisible(n > 0)
         if n > 0:
-            self._page_label.setText(f"Page {self._current + 1} / {n}")
+            self._page_label.setText(
+                tr("Page {page} / {total}").format(page=self._current + 1, total=n))
         else:
             self._page_label.setText("")
         self._prev_btn.setEnabled(self._current > 0)
@@ -581,7 +583,7 @@ class TiffPreview(QWidget):
 
     def _update_display(self) -> None:
         if not self._pages:
-            self._img_label.setText("No preview")
+            self._img_label.setText(tr("No preview"))
             self._pixmap = None
             return
 
@@ -591,7 +593,7 @@ class TiffPreview(QWidget):
             self._pixmap = self._pil_to_pixmap(img)
         except Exception as exc:
             log.warning("Preview render error: %s", exc)
-            self._img_label.setText(f"Preview error:\n{exc}")
+            self._img_label.setText(tr("Preview error:\n{exc}").format(exc=exc))
             return
 
         self._repaint_label()

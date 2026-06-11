@@ -42,6 +42,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from core.i18n import tr
 from core.logger import get_logger
 from ui.styles import BG_INPUT, BORDER, TEXT_MAIN
 from ui.theme import resolve_mode
@@ -105,7 +106,7 @@ from workflow.profcheck_runner import (
 # width_mm, height_mm, orientation) — A4 (enum 2) is the validated case; the
 # others use Custom (enum 0). i1Profiler re-lays-out the chart on load anyway,
 # so the page geometry is a starting point the user can change in-app.
-_PWXF_SCAN_MODES = (("Single scan", 1), ("Dual scan", 2))
+_PWXF_SCAN_MODES = ((tr("Single scan"), 1), (tr("Dual scan"), 2))
 _PWXF_PAPERS: dict[str, tuple[int, float, float, str]] = {
     "A4":        (2, 296.93, 210.06, "Landscape"),
     "A3":        (0, 420.00, 297.00, "Landscape"),
@@ -209,7 +210,7 @@ class _ToolDialogBase(QDialog):
     TITLE: str      = ""
     DESCRIPTION: str = ""
     HELP: str       = ""    # extended ⓘ popup text; falls back to DESCRIPTION
-    RUN_LABEL: str  = "Run"
+    RUN_LABEL: str  = tr("Run")
     MIN_WIDTH: int  = 620
 
     def __init__(self, settings: "AppSettings", parent: QWidget | None = None) -> None:
@@ -257,13 +258,13 @@ class _ToolDialogBase(QDialog):
         self._log.setReadOnly(True)
         self._log.setMaximumBlockCount(2000)
         self._log.setFixedHeight(120)
-        self._log.setPlaceholderText("Status messages will appear here.")
+        self._log.setPlaceholderText(tr("Status messages will appear here."))
         outer.addWidget(self._log)
 
         # Buttons
         bb = QDialogButtonBox(self)
         self._run_btn   = bb.addButton(self.RUN_LABEL, QDialogButtonBox.ButtonRole.AcceptRole)
-        self._close_btn = bb.addButton("Close",        QDialogButtonBox.ButtonRole.RejectRole)
+        self._close_btn = bb.addButton(tr("Close"),        QDialogButtonBox.ButtonRole.RejectRole)
         self._run_btn.setDefault(True)
         self._run_btn.clicked.connect(self._on_run_clicked)
         self._close_btn.clicked.connect(self.reject)
@@ -452,16 +453,16 @@ class _OutputRow(QWidget):
         row.setSpacing(8)
 
         self._dir_edit = QLineEdit(str(initial_dir), self)
-        self._dir_edit.setPlaceholderText("Destination folder")
+        self._dir_edit.setPlaceholderText(tr("Destination folder"))
         self._dir_edit.textChanged.connect(lambda _t: self._on_change())
         row.addWidget(self._dir_edit, 3)
 
-        browse = QPushButton("Browse…", self)
+        browse = QPushButton(tr("Browse…"), self)
         browse.clicked.connect(self._browse)
         row.addWidget(browse)
 
         self._name_edit = QLineEdit(initial_name, self)
-        self._name_edit.setPlaceholderText("Filename")
+        self._name_edit.setPlaceholderText(tr("Filename"))
         self._name_edit.textChanged.connect(lambda _t: self._on_change())
         row.addWidget(self._name_edit, 2)
 
@@ -471,7 +472,7 @@ class _OutputRow(QWidget):
 
     def _browse(self) -> None:
         start = self._dir_edit.text() or str(Path.home())
-        path = open_dir_dialog(self, "Choose destination folder", start_dir=start)
+        path = open_dir_dialog(self, tr("Choose destination folder"), start_dir=start)
         if path:
             self._dir_edit.setText(path)
 
@@ -495,10 +496,10 @@ class _OutputRow(QWidget):
 
 class AverageMeasurementsDialog(_ToolDialogBase):
     TOOL_KEY    = "average"
-    TITLE       = "Average measurements"
-    RUN_LABEL   = "Average"
+    TITLE       = tr("Average measurements")
+    RUN_LABEL   = tr("Average")
     HELP = (
-        "Measured the same chart a few times? This tool blends those readings "
+        tr("Measured the same chart a few times? This tool blends those readings "
         "into one cleaner result.\n\n"
         "Every measurement has a little random noise in it. If you read the same "
         "chart two or three times and combine the results, those random wobbles "
@@ -517,9 +518,9 @@ class AverageMeasurementsDialog(_ToolDialogBase):
         "Build Profile tab.\n\n"
         "Just one thing to watch: every file you add has to be the same chart "
         "(same patches, same instrument) — otherwise there's nothing matching to "
-        "average together.")
+        "average together."))
     DESCRIPTION = (
-        "Combine two or more readings of the same printed chart into a single "
+        tr("Combine two or more readings of the same printed chart into a single "
         "averaged measurement. Reading the chart several times and averaging "
         "the results reduces instrument noise — every patch's colour value "
         "becomes the mean across the reads, so a stray bad sweep has less "
@@ -531,7 +532,7 @@ class AverageMeasurementsDialog(_ToolDialogBase):
         "mathematically identical, so the choice is locked to mean.\n\n"
         "Requirements: every input must be a .ti3 measurement of the SAME chart "
         "(identical patch list, made with the same instrument). The averaged "
-        ".ti3 can then be loaded into Build Profile."
+        ".ti3 can then be loaded into Build Profile.")
     )
 
     def __init__(self, runner: "ArgyllRunner", settings: "AppSettings", parent: QWidget | None = None) -> None:
@@ -543,7 +544,7 @@ class AverageMeasurementsDialog(_ToolDialogBase):
         self._refresh()
 
     def _build_inputs(self) -> None:
-        info = QLabel("Measurement files to average (.ti3) — pick at least two:", self)
+        info = QLabel(tr("Measurement files to average (.ti3) — pick at least two:"), self)
         self._content.addWidget(info)
 
         self._list = QListWidget(self)
@@ -551,10 +552,10 @@ class AverageMeasurementsDialog(_ToolDialogBase):
         self._content.addWidget(self._list)
 
         btn_row = QHBoxLayout()
-        add_btn = QPushButton("Add…", self)
+        add_btn = QPushButton(tr("Add…"), self)
         add_btn.clicked.connect(self._add_files)
         btn_row.addWidget(add_btn)
-        rem_btn = QPushButton("Remove selected", self)
+        rem_btn = QPushButton(tr("Remove selected"), self)
         rem_btn.clicked.connect(self._remove_selected)
         btn_row.addWidget(rem_btn)
         btn_row.addStretch(1)
@@ -562,22 +563,22 @@ class AverageMeasurementsDialog(_ToolDialogBase):
 
         # Method selector — median only meaningful for 3+ inputs.
         method_row = QHBoxLayout()
-        method_row.addWidget(QLabel("Method:", self))
-        self._mean_btn   = QRadioButton("Mean (average)", self)
-        self._median_btn = QRadioButton("Median",        self)
+        method_row.addWidget(QLabel(tr("Method:"), self))
+        self._mean_btn   = QRadioButton(tr("Mean (average)"), self)
+        self._median_btn = QRadioButton(tr("Median"),        self)
         self._mean_btn.setChecked(True)
         self._method_group = QButtonGroup(self)
         self._method_group.addButton(self._mean_btn)
         self._method_group.addButton(self._median_btn)
         method_row.addWidget(self._mean_btn)
         method_row.addWidget(self._median_btn)
-        self._median_hint = QLabel("(needs 3+ files)", self)
+        self._median_hint = QLabel(tr("(needs 3+ files)"), self)
         self._median_hint.setStyleSheet("color: #888;")
         method_row.addWidget(self._median_hint)
         method_row.addStretch(1)
         self._content.addLayout(method_row)
 
-        self._content.addWidget(QLabel("Save the averaged measurement as:", self))
+        self._content.addWidget(QLabel(tr("Save the averaged measurement as:"), self))
         self._output = _OutputRow(
             self,
             ext_hint=".ti3",
@@ -590,8 +591,8 @@ class AverageMeasurementsDialog(_ToolDialogBase):
 
     def _add_files(self) -> None:
         files = self._pick_input_files(
-            "Add measurement files",
-            "Measurement files (*.ti3);;All files (*)",
+            tr("Add measurement files"),
+            tr("Measurement files (*.ti3);;All files (*)"),
         )
         for p in files:
             if p not in self._inputs:
@@ -637,8 +638,9 @@ class AverageMeasurementsDialog(_ToolDialogBase):
         if out.exists():
             confirm = QMessageBox.question(
                 self,
-                "Overwrite existing file?",
-                f"'{out.name}' already exists in:\n  {out.parent}\n\nOverwrite it?",
+                tr("Overwrite existing file?"),
+                tr("'{name}' already exists in:\n  {folder}\n\nOverwrite it?"
+                   ).format(name=out.name, folder=out.parent),
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.No,
             )
@@ -680,10 +682,10 @@ class AverageMeasurementsDialog(_ToolDialogBase):
 
 class MergeMeasurementsDialog(_ToolDialogBase):
     TOOL_KEY    = "merge"
-    TITLE       = "Merge measurements"
-    RUN_LABEL   = "Merge"
+    TITLE       = tr("Merge measurements")
+    RUN_LABEL   = tr("Merge")
     HELP = (
-        "This tool joins several measurement files together into one bigger set "
+        tr("This tool joins several measurement files together into one bigger set "
         "of patches.\n\n"
         "It's easy to mix this up with averaging, so here's the difference in "
         "plain terms: averaging is for when you measured the SAME chart a few "
@@ -697,9 +699,9 @@ class MergeMeasurementsDialog(_ToolDialogBase):
         "2. Pick where to save the result and what to call it.\n"
         "3. Click Merge.\n\n"
         "You'll get a single measurement file containing all of the patches from "
-        "your inputs, ready to build a profile from.")
+        "your inputs, ready to build a profile from."))
     DESCRIPTION = (
-        "Combine the patches of several measurement files into one. Unlike "
+        tr("Combine the patches of several measurement files into one. Unlike "
         "averaging (which mixes repeated reads of the same chart), merging "
         "stacks the patches from DIFFERENT charts so the profiler has more data "
         "points to fit — useful for combining a pre-conditioning chart with a "
@@ -707,7 +709,7 @@ class MergeMeasurementsDialog(_ToolDialogBase):
         "Requirements: every file must use the same colour space and the same "
         "data layout (e.g. all spectral, all made with comparable instruments). "
         "Header information is taken from the primary file; the additional "
-        "files contribute only their patches."
+        "files contribute only their patches.")
     )
 
     def __init__(self, settings: "AppSettings", parent: QWidget | None = None) -> None:
@@ -718,20 +720,20 @@ class MergeMeasurementsDialog(_ToolDialogBase):
         self._refresh()
 
     def _build_inputs(self) -> None:
-        self._primary_lbl = QLabel("Primary measurement (.ti3) — its header is kept:", self)
+        self._primary_lbl = QLabel(tr("Primary measurement (.ti3) — its header is kept:"), self)
         self._content.addWidget(self._primary_lbl)
         row = QHBoxLayout()
         self._primary_field = QLineEdit(self)
         self._primary_field.setReadOnly(True)
-        self._primary_field.setPlaceholderText("No file selected")
+        self._primary_field.setPlaceholderText(tr("No file selected"))
         row.addWidget(self._primary_field, 1)
-        primary_btn = QPushButton("Browse…", self)
+        primary_btn = QPushButton(tr("Browse…"), self)
         primary_btn.clicked.connect(self._pick_primary)
         row.addWidget(primary_btn)
         self._content.addLayout(row)
 
         self._additional_lbl = QLabel(
-            "Additional measurements (.ti3) — their patches are appended:", self
+            tr("Additional measurements (.ti3) — their patches are appended:"), self
         )
         self._content.addWidget(self._additional_lbl)
 
@@ -740,16 +742,16 @@ class MergeMeasurementsDialog(_ToolDialogBase):
         self._content.addWidget(self._list)
 
         btn_row = QHBoxLayout()
-        add_btn = QPushButton("Add…", self)
+        add_btn = QPushButton(tr("Add…"), self)
         add_btn.clicked.connect(self._add_additional)
         btn_row.addWidget(add_btn)
-        rem_btn = QPushButton("Remove selected", self)
+        rem_btn = QPushButton(tr("Remove selected"), self)
         rem_btn.clicked.connect(self._remove_selected)
         btn_row.addWidget(rem_btn)
         btn_row.addStretch(1)
         self._content.addLayout(btn_row)
 
-        self._content.addWidget(QLabel("Save the merged measurement as:", self))
+        self._content.addWidget(QLabel(tr("Save the merged measurement as:"), self))
         self._output = _OutputRow(
             self,
             ext_hint=".ti3",
@@ -760,7 +762,7 @@ class MergeMeasurementsDialog(_ToolDialogBase):
         self._content.addWidget(self._output)
 
     def _pick_primary(self) -> None:
-        p = self._pick_input_file("Choose primary measurement", "Measurement files (*.ti3);;All files (*)")
+        p = self._pick_input_file(tr("Choose primary measurement"), tr("Measurement files (*.ti3);;All files (*)"))
         if p:
             self._primary = p
             self._primary_field.setText(str(p))
@@ -770,7 +772,7 @@ class MergeMeasurementsDialog(_ToolDialogBase):
 
     def _add_additional(self) -> None:
         files = self._pick_input_files(
-            "Add measurements to merge in", "Measurement files (*.ti3);;All files (*)"
+            tr("Add measurements to merge in"), tr("Measurement files (*.ti3);;All files (*)")
         )
         for p in files:
             if p not in self._additional and p != self._primary:
@@ -800,8 +802,9 @@ class MergeMeasurementsDialog(_ToolDialogBase):
         if out.exists():
             confirm = QMessageBox.question(
                 self,
-                "Overwrite existing file?",
-                f"'{out.name}' already exists in:\n  {out.parent}\n\nOverwrite it?",
+                tr("Overwrite existing file?"),
+                tr("'{name}' already exists in:\n  {folder}\n\nOverwrite it?"
+                   ).format(name=out.name, folder=out.parent),
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.No,
             )
@@ -835,10 +838,10 @@ class MergeMeasurementsDialog(_ToolDialogBase):
 
 class Ti1ToI1ProfilerDialog(_ToolDialogBase):
     TOOL_KEY    = "ti1_to_i1p"
-    TITLE       = "Convert TI1 → i1Profiler"
-    RUN_LABEL   = "Convert"
+    TITLE       = tr("Convert TI1 → i1Profiler")
+    RUN_LABEL   = tr("Convert")
     HELP = (
-        "Want to measure a ChromIQ chart using X-Rite's i1Profiler software (for "
+        tr("Want to measure a ChromIQ chart using X-Rite's i1Profiler software (for "
         "example to drive an i1iSis scanner)? This tool gets your chart ready for "
         "it.\n\n"
         "ChromIQ describes charts in Argyll's own \"TI1\" format, which i1Profiler "
@@ -853,9 +856,9 @@ class Ti1ToI1ProfilerDialog(_ToolDialogBase):
         "Then open the result in i1Profiler, print and measure as usual. When "
         "you're done, come back and use the \"i1Profiler → TI3\" tool to bring "
         "those measurements into ChromIQ.\n\n"
-        "Good to know: this works with RGB charts.")
+        "Good to know: this works with RGB charts."))
     DESCRIPTION = (
-        "Convert an Argyll TI1 chart definition into the formats that X-Rite "
+        tr("Convert an Argyll TI1 chart definition into the formats that X-Rite "
         "i1Profiler reads. Use this when you want an i1iSis (or another "
         "i1Profiler-driven instrument) to measure a chart that Argyll's targen "
         "produced.\n\n"
@@ -866,7 +869,7 @@ class Ti1ToI1ProfilerDialog(_ToolDialogBase):
         "only as CxF3)\n\n"
         "Optionally also write a workflow file (.pwxf) — RGB only — that opens "
         "in i1Profiler with the instrument, paper and patch layout already set "
-        "up, so you don't have to configure them by hand."
+        "up, so you don't have to configure them by hand.")
     )
 
     def __init__(self, settings: "AppSettings", parent: QWidget | None = None) -> None:
@@ -877,18 +880,18 @@ class Ti1ToI1ProfilerDialog(_ToolDialogBase):
         self._refresh()
 
     def _build_inputs(self) -> None:
-        self._content.addWidget(QLabel("Argyll chart definition (.ti1):", self))
+        self._content.addWidget(QLabel(tr("Argyll chart definition (.ti1):"), self))
         row = QHBoxLayout()
         self._ti1_field = QLineEdit(self)
         self._ti1_field.setReadOnly(True)
-        self._ti1_field.setPlaceholderText("No file selected")
+        self._ti1_field.setPlaceholderText(tr("No file selected"))
         row.addWidget(self._ti1_field, 1)
-        btn = QPushButton("Browse…", self)
+        btn = QPushButton(tr("Browse…"), self)
         btn.clicked.connect(self._pick_ti1)
         row.addWidget(btn)
         self._content.addLayout(row)
 
-        self._content.addWidget(QLabel("Save the i1Profiler files as:", self))
+        self._content.addWidget(QLabel(tr("Save the i1Profiler files as:"), self))
         self._output = _OutputRow(
             self,
             ext_hint=".pxf (+ .txt / .pwxf)",
@@ -907,7 +910,7 @@ class Ti1ToI1ProfilerDialog(_ToolDialogBase):
         self._content.addWidget(sep)
 
         self._wf_check = QCheckBox(
-            "Also write an i1Profiler workflow file (.pwxf)", self
+            tr("Also write an i1Profiler workflow file (.pwxf)"), self
         )
         self._wf_check.toggled.connect(self._update_workflow_state)
         self._content.addWidget(self._wf_check)
@@ -923,17 +926,17 @@ class Ti1ToI1ProfilerDialog(_ToolDialogBase):
         grid.setHorizontalSpacing(10)
         grid.setVerticalSpacing(8)
 
-        grid.addWidget(QLabel("Instrument:", self._wf_box), 0, 0)
+        grid.addWidget(QLabel(tr("Instrument:"), self._wf_box), 0, 0)
         self._wf_instrument = NoScrollComboBox(self._wf_box)
         self._wf_instrument.addItems(list(_PWXF_DEVICES))
         grid.addWidget(self._wf_instrument, 0, 1)
 
-        grid.addWidget(QLabel("Scan mode:", self._wf_box), 1, 0)
+        grid.addWidget(QLabel(tr("Scan mode:"), self._wf_box), 1, 0)
         self._wf_scan = NoScrollComboBox(self._wf_box)
         self._wf_scan.addItems([label for label, _ in _PWXF_SCAN_MODES])
         grid.addWidget(self._wf_scan, 1, 1)
 
-        grid.addWidget(QLabel("Paper:", self._wf_box), 2, 0)
+        grid.addWidget(QLabel(tr("Paper:"), self._wf_box), 2, 0)
         self._wf_paper = NoScrollComboBox(self._wf_box)
         self._wf_paper.addItems(list(_PWXF_PAPERS))
         grid.addWidget(self._wf_paper, 2, 1)
@@ -941,7 +944,7 @@ class Ti1ToI1ProfilerDialog(_ToolDialogBase):
         # Optional patch-size override. Off = i1Profiler picks its own sensible
         # size. On = write the exact patch size, encoded as the per-device slider
         # percent (see _PWXF_DEVICES). i1iSis adds a "Lead-in" (Vorlauf) field.
-        self._wf_size = QCheckBox("Set patch size (otherwise i1Profiler decides)",
+        self._wf_size = QCheckBox(tr("Set patch size (otherwise i1Profiler decides)"),
                                   self._wf_box)
         self._wf_size.toggled.connect(self._update_size_state)
         grid.addWidget(self._wf_size, 3, 0, 1, 2)
@@ -950,12 +953,12 @@ class Ti1ToI1ProfilerDialog(_ToolDialogBase):
         srow = QHBoxLayout(self._wf_size_row)
         srow.setContentsMargins(18, 0, 0, 0)
         srow.setSpacing(6)
-        srow.addWidget(QLabel("W", self._wf_size_row))
+        srow.addWidget(QLabel(tr("W"), self._wf_size_row))
         self._wf_w = NoScrollSpinBox(self._wf_size_row)
         self._wf_w.setSuffix(" mm")
         srow.addWidget(self._wf_w)
         srow.addSpacing(6)
-        srow.addWidget(QLabel("H", self._wf_size_row))
+        srow.addWidget(QLabel(tr("H"), self._wf_size_row))
         self._wf_h = NoScrollSpinBox(self._wf_size_row)
         self._wf_h.setSuffix(" mm")
         srow.addWidget(self._wf_h)
@@ -994,8 +997,9 @@ class Ti1ToI1ProfilerDialog(_ToolDialogBase):
         if not is_rgb and not no_file:
             self._wf_check.setChecked(False)
             self._wf_note.setText(
-                "Workflow files are RGB-only — this target is "
-                f"{self._ti1_kind}, so only the patch set will be written."
+                tr("Workflow files are RGB-only — this target is "
+                   "{kind}, so only the patch set will be written."
+                   ).format(kind=self._ti1_kind)
             )
             self._wf_note.setVisible(True)
         else:
@@ -1005,7 +1009,7 @@ class Ti1ToI1ProfilerDialog(_ToolDialogBase):
 
     def _pick_ti1(self) -> None:
         p = self._pick_input_file(
-            "Choose chart definition", "Argyll chart files (*.ti1);;All files (*)"
+            tr("Choose chart definition"), tr("Argyll chart files (*.ti1);;All files (*)")
         )
         if p:
             self._ti1 = p
@@ -1041,8 +1045,9 @@ class Ti1ToI1ProfilerDialog(_ToolDialogBase):
             names = ", ".join(p.name for p in existing)
             confirm = QMessageBox.question(
                 self,
-                "Overwrite existing file(s)?",
-                f"These file(s) already exist in:\n  {out_dir}\n\n  {names}\n\nOverwrite?",
+                tr("Overwrite existing file(s)?"),
+                tr("These files already exist in:\n  {folder}\n\n  {names}\n\nOverwrite?"
+                   ).format(folder=out_dir, names=names),
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.No,
             )
@@ -1125,10 +1130,10 @@ class Ti1ToI1ProfilerDialog(_ToolDialogBase):
 
 class I1ProfilerToTi3Dialog(_ToolDialogBase):
     TOOL_KEY    = "i1p_to_ti3"
-    TITLE       = "Convert i1Profiler → TI3"
-    RUN_LABEL   = "Convert"
+    TITLE       = tr("Convert i1Profiler → TI3")
+    RUN_LABEL   = tr("Convert")
     HELP = (
-        "Measured your chart in X-Rite's i1Profiler? This brings those readings "
+        tr("Measured your chart in X-Rite's i1Profiler? This brings those readings "
         "back into ChromIQ so you can build a profile from them.\n\n"
         "i1Profiler saves its measurements in its own text format, which ChromIQ "
         "can't read directly. This tool translates that file into the measurement "
@@ -1139,15 +1144,15 @@ class I1ProfilerToTi3Dialog(_ToolDialogBase):
         "3. Click Convert.\n\n"
         "You'll get a ChromIQ measurement file (.ti3) you can take straight to the "
         "Build Profile tab — which neatly closes the loop after measuring an "
-        "exported chart over in i1Profiler.")
+        "exported chart over in i1Profiler."))
     DESCRIPTION = (
-        "Convert an i1Profiler measurement export (.txt) into an Argyll .ti3 "
+        tr("Convert an i1Profiler measurement export (.txt) into an Argyll .ti3 "
         "measurement file. Use this when you measured a chart in i1Profiler "
         "(typically because you used an i1iSis scanner) and want to build the "
         "ICC profile with Argyll instead.\n\n"
         "Requirements: the .txt must contain real measured colour data (Lab/XYZ "
         "or spectral) for every patch — not just a reference patch list. The "
-        "resulting .ti3 can be loaded into Build Profile."
+        "resulting .ti3 can be loaded into Build Profile.")
     )
 
     def __init__(self, runner: "ArgyllRunner", settings: "AppSettings", parent: QWidget | None = None) -> None:
@@ -1158,18 +1163,18 @@ class I1ProfilerToTi3Dialog(_ToolDialogBase):
         self._refresh()
 
     def _build_inputs(self) -> None:
-        self._content.addWidget(QLabel("i1Profiler measurement file (.txt):", self))
+        self._content.addWidget(QLabel(tr("i1Profiler measurement file (.txt):"), self))
         row = QHBoxLayout()
         self._txt_field = QLineEdit(self)
         self._txt_field.setReadOnly(True)
-        self._txt_field.setPlaceholderText("No file selected")
+        self._txt_field.setPlaceholderText(tr("No file selected"))
         row.addWidget(self._txt_field, 1)
-        btn = QPushButton("Browse…", self)
+        btn = QPushButton(tr("Browse…"), self)
         btn.clicked.connect(self._pick_txt)
         row.addWidget(btn)
         self._content.addLayout(row)
 
-        self._content.addWidget(QLabel("Save the Argyll measurement as:", self))
+        self._content.addWidget(QLabel(tr("Save the Argyll measurement as:"), self))
         self._output = _OutputRow(
             self,
             ext_hint=".ti3",
@@ -1181,7 +1186,7 @@ class I1ProfilerToTi3Dialog(_ToolDialogBase):
 
     def _pick_txt(self) -> None:
         p = self._pick_input_file(
-            "Choose i1Profiler measurement", "i1Profiler exports (*.txt);;All files (*)"
+            tr("Choose i1Profiler measurement"), tr("i1Profiler exports (*.txt);;All files (*)")
         )
         if p:
             self._txt = p
@@ -1208,8 +1213,9 @@ class I1ProfilerToTi3Dialog(_ToolDialogBase):
         if out.exists():
             confirm = QMessageBox.question(
                 self,
-                "Overwrite existing file?",
-                f"'{out.name}' already exists in:\n  {out.parent}\n\nOverwrite it?",
+                tr("Overwrite existing file?"),
+                tr("'{name}' already exists in:\n  {folder}\n\nOverwrite it?"
+                   ).format(name=out.name, folder=out.parent),
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.No,
             )
@@ -1266,10 +1272,10 @@ class I1ProfilerToTi3Dialog(_ToolDialogBase):
 
 class I1ProfilerToTi1Dialog(_ToolDialogBase):
     TOOL_KEY    = "i1p_to_ti1"
-    TITLE       = "Convert i1Profiler → TI1"
-    RUN_LABEL   = "Convert"
+    TITLE       = tr("Convert i1Profiler → TI1")
+    RUN_LABEL   = tr("Convert")
     HELP = (
-        "Have a chart from X-Rite's i1Profiler that you'd like to print and "
+        tr("Have a chart from X-Rite's i1Profiler that you'd like to print and "
         "measure in ChromIQ? This brings it across.\n\n"
         "It takes i1Profiler's chart description and turns it into the format "
         "ChromIQ uses, so you can lay the chart out, print it, and measure it just "
@@ -1282,9 +1288,9 @@ class I1ProfilerToTi1Dialog(_ToolDialogBase):
         "You'll get a ChromIQ chart definition (.ti1) you can open in the chart "
         "layout editor, print, and then measure.\n\n"
         "Good to know: this works with RGB charts; ChromIQ reconstructs the patch "
-        "colours so it can lay the chart out for printing.")
+        "colours so it can lay the chart out for printing."))
     DESCRIPTION = (
-        "Convert an i1Profiler patch set (.pxf), a workflow file (.pwxf), or a "
+        tr("Convert an i1Profiler patch set (.pxf), a workflow file (.pwxf), or a "
         ".cgats table into an Argyll TI1 chart definition. Use this to bring a "
         "chart that only exists in i1Profiler — for example a TC9.18 target, or "
         "a workflow someone sent you — into the Argyll workflow, so you can lay "
@@ -1295,7 +1301,7 @@ class I1ProfilerToTi1Dialog(_ToolDialogBase):
         "that to space the patches for reliable strip reading.\n\n"
         "Supported colour space: RGB only. A .pwxf carries its layout/instrument "
         "settings too, but only the patch list is read; the patch order is "
-        "preserved and printtarg re-lays-out the chart anyway."
+        "preserved and printtarg re-lays-out the chart anyway.")
     )
 
     def __init__(self, settings: "AppSettings", parent: QWidget | None = None) -> None:
@@ -1305,18 +1311,18 @@ class I1ProfilerToTi1Dialog(_ToolDialogBase):
         self._refresh()
 
     def _build_inputs(self) -> None:
-        self._content.addWidget(QLabel("i1Profiler patch set (.pxf / .pwxf / .cgats):", self))
+        self._content.addWidget(QLabel(tr("i1Profiler patch set (.pxf / .pwxf / .cgats):"), self))
         row = QHBoxLayout()
         self._src_field = QLineEdit(self)
         self._src_field.setReadOnly(True)
-        self._src_field.setPlaceholderText("No file selected")
+        self._src_field.setPlaceholderText(tr("No file selected"))
         row.addWidget(self._src_field, 1)
-        btn = QPushButton("Browse…", self)
+        btn = QPushButton(tr("Browse…"), self)
         btn.clicked.connect(self._pick_src)
         row.addWidget(btn)
         self._content.addLayout(row)
 
-        self._content.addWidget(QLabel("Save the Argyll chart definition as:", self))
+        self._content.addWidget(QLabel(tr("Save the Argyll chart definition as:"), self))
         self._output = _OutputRow(
             self,
             ext_hint=".ti1",
@@ -1328,8 +1334,8 @@ class I1ProfilerToTi1Dialog(_ToolDialogBase):
 
     def _pick_src(self) -> None:
         p = self._pick_input_file(
-            "Choose i1Profiler patch set",
-            "i1Profiler patch sets (*.pxf *.pwxf *.cgats *.txt);;All files (*)",
+            tr("Choose i1Profiler patch set"),
+            tr("i1Profiler patch sets (*.pxf *.pwxf *.cgats *.txt);;All files (*)"),
         )
         if p:
             self._src = p
@@ -1350,8 +1356,9 @@ class I1ProfilerToTi1Dialog(_ToolDialogBase):
         if out.exists():
             confirm = QMessageBox.question(
                 self,
-                "Overwrite existing file?",
-                f"'{out.name}' already exists in:\n  {out.parent}\n\nOverwrite it?",
+                tr("Overwrite existing file?"),
+                tr("'{name}' already exists in:\n  {folder}\n\nOverwrite it?"
+                   ).format(name=out.name, folder=out.parent),
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.No,
             )
@@ -1380,10 +1387,10 @@ class I1ProfilerToTi1Dialog(_ToolDialogBase):
 
 class VerifyAgainstReferenceDialog(_ToolDialogBase):
     TOOL_KEY    = "verify"
-    TITLE       = "Verify against reference"
-    RUN_LABEL   = "Verify"
+    TITLE       = tr("Verify against reference")
+    RUN_LABEL   = tr("Verify")
     HELP = (
-        "This tool tells you how close your colours came out compared to where "
+        tr("This tool tells you how close your colours came out compared to where "
         "they were supposed to be — without building a profile first.\n\n"
         "The idea is simple: you give it what you actually measured, and what the "
         "colours were meant to be, and it tells you how far apart they are. That "
@@ -1406,10 +1413,10 @@ class VerifyAgainstReferenceDialog(_ToolDialogBase):
         "paper physically can't reproduce, so they stop dominating the score.\n\n"
         "It's a quick way to sanity-check a profile, compare one paper or ink "
         "batch against another, or keep an eye on a printer drifting over time — "
-        "all without building anything.")
+        "all without building anything."))
     MIN_WIDTH   = 660
     DESCRIPTION = (
-        "Compare a measured chart against a set of expected colour values and "
+        tr("Compare a measured chart against a set of expected colour values and "
         "report the colour error (ΔE) per patch — without building a "
         "profile. Use this to check how closely a print matches known target "
         "values, e.g. a profile-evaluation target someone shared with you.\n\n"
@@ -1417,7 +1424,7 @@ class VerifyAgainstReferenceDialog(_ToolDialogBase):
         "order as the chart — pick your measured .ti3, and optionally the "
         "chart's .ti1/.ti2 so the patch count is cross-checked. ChromIQ builds "
         "a reference file whose patch IDs line up with your measurement and "
-        "runs Argyll's colverify."
+        "runs Argyll's colverify.")
     )
 
     def __init__(self, runner: "ArgyllRunner", settings: "AppSettings", parent: QWidget | None = None) -> None:
@@ -1448,9 +1455,9 @@ class VerifyAgainstReferenceDialog(_ToolDialogBase):
         row = QHBoxLayout()
         field = QLineEdit(self)
         field.setReadOnly(True)
-        field.setPlaceholderText("No file selected")
+        field.setPlaceholderText(tr("No file selected"))
         row.addWidget(field, 1)
-        btn = QPushButton("Browse…", self)
+        btn = QPushButton(tr("Browse…"), self)
         btn.clicked.connect(on_browse)
         row.addWidget(btn)
         return row, field
@@ -1458,32 +1465,32 @@ class VerifyAgainstReferenceDialog(_ToolDialogBase):
     def _build_inputs(self) -> None:
         # Expected values: colour-space picker + load-from-file + paste box.
         head = QHBoxLayout()
-        head.addWidget(QLabel("Expected values:", self))
+        head.addWidget(QLabel(tr("Expected values:"), self))
         self._space = NoScrollComboBox(self)
-        self._space.addItem("CIE L*a*b*", "LAB")
-        self._space.addItem("CIE XYZ", "XYZ")
+        self._space.addItem(tr("CIE L*a*b*"), "LAB")
+        self._space.addItem(tr("CIE XYZ"), "XYZ")
         head.addWidget(self._space)
         head.addStretch(1)
-        load_btn = QPushButton("Load from file…", self)
+        load_btn = QPushButton(tr("Load from file…"), self)
         load_btn.clicked.connect(self._load_reference_file)
         head.addWidget(load_btn)
         self._content.addLayout(head)
 
         self._ref_edit = QPlainTextEdit(self)
         self._ref_edit.setPlaceholderText(
-            "One patch per line, in chart order, e.g.:\n"
-            "100  0  0\n95.2  -1.1  2.3\n…"
+            tr("One patch per line, in chart order, e.g.:\n"
+            "100  0  0\n95.2  -1.1  2.3\n…")
         )
         self._ref_edit.setFixedHeight(110)
         self._ref_edit.textChanged.connect(self._refresh)
         self._content.addWidget(self._ref_edit)
 
-        self._content.addWidget(QLabel("Measured chart (.ti3):", self))
+        self._content.addWidget(QLabel(tr("Measured chart (.ti3):"), self))
         row, self._measured_field = self._file_row(self._pick_measured)
         self._content.addLayout(row)
 
         self._content.addWidget(
-            QLabel("Chart definition (.ti1 / .ti2) — optional, cross-checks patch count:", self)
+            QLabel(tr("Chart definition (.ti1 / .ti2) — optional, cross-checks patch count:"), self)
         )
         row, self._chart_field = self._file_row(self._pick_chart)
         self._content.addLayout(row)
@@ -1491,14 +1498,14 @@ class VerifyAgainstReferenceDialog(_ToolDialogBase):
         prof_row = QHBoxLayout()
         prof_row.addWidget(
             QLabel(
-                "Your profile (.icc) — optional, skips reference colours this "
-                "paper can't print:", self
+                tr("Your profile (.icc) — optional, skips reference colours this "
+                "paper can't print:"), self
             )
         )
         prof_row.addWidget(
             TooltipButton(
-                "Skip unprintable colours",
-                "If your reference values were made for a different paper or finish "
+                tr("Skip unprintable colours"),
+                tr("If your reference values were made for a different paper or finish "
                 "(say glossy values checked on matte), some of them are colours your "
                 "paper simply can't produce — most often the very darkest shadows, "
                 "because matte paper can't go as dark as glossy. Comparing against "
@@ -1506,7 +1513,7 @@ class VerifyAgainstReferenceDialog(_ToolDialogBase):
                 "Point this at the profile for the paper you actually printed on, and "
                 "ChromIQ asks Argyll to leave those unreachable colours out of the "
                 "score, then tells you how many it skipped. What's left is a fair "
-                "measure of how well the colours your paper CAN make were reproduced.",
+                "measure of how well the colours your paper CAN make were reproduced."),
                 self, min_width=520, color=_indicator_color(self._settings),
             ),
             0, Qt.AlignmentFlag.AlignVCenter,
@@ -1517,24 +1524,24 @@ class VerifyAgainstReferenceDialog(_ToolDialogBase):
         self._content.addLayout(row)
 
         opts = QHBoxLayout()
-        opts.addWidget(QLabel("ΔE formula:", self))
+        opts.addWidget(QLabel(tr("ΔE formula:"), self))
         self._formula = NoScrollComboBox(self)
-        self._formula.addItem("CIEDE2000", "-k")
-        self._formula.addItem("CIE94", "-c")
-        self._formula.addItem("CIE76", "")
+        self._formula.addItem(tr("CIEDE2000"), "-k")
+        self._formula.addItem(tr("CIE94"), "-c")
+        self._formula.addItem(tr("CIE76"), "")
         opts.addWidget(self._formula)
         opts.addWidget(
             TooltipButton(
-                "ΔE formula",
-                "How the colour difference is scored. CIEDE2000 is the modern "
+                tr("ΔE formula"),
+                tr("How the colour difference is scored. CIEDE2000 is the modern "
                 "standard and best matches what your eye sees — leave it on this "
                 "unless you need to match an older report. CIE94 and CIE76 are older "
-                "formulas kept for comparison.",
+                "formulas kept for comparison."),
                 self, min_width=460, color=_indicator_color(self._settings),
             ),
             0, Qt.AlignmentFlag.AlignVCenter,
         )
-        self._sort_cb = QCheckBox("List worst patches first", self)
+        self._sort_cb = QCheckBox(tr("List worst patches first"), self)
         self._sort_cb.setChecked(True)
         opts.addSpacing(16)
         opts.addWidget(self._sort_cb)
@@ -1542,18 +1549,18 @@ class VerifyAgainstReferenceDialog(_ToolDialogBase):
         self._content.addLayout(opts)
 
         plot_row = QHBoxLayout()
-        self._vrml_cb = QCheckBox("Create a 3D difference map", self)
+        self._vrml_cb = QCheckBox(tr("Create a 3D difference map"), self)
         plot_row.addWidget(self._vrml_cb)
         plot_row.addWidget(
             TooltipButton(
-                "3D difference map",
-                "Opens an interactive 3D picture of the result when the check "
+                tr("3D difference map"),
+                tr("Opens an interactive 3D picture of the result when the check "
                 "finishes. Every patch is drawn as a short line from the colour you "
                 "asked for (a green dot) to the colour you actually measured (a red "
                 "dot), placed in 3D colour space. Long lines all leaning the same way "
                 "tell you the print drifts consistently in that direction; a few long "
                 "lines among short ones point to specific problem patches. Drag to "
-                "rotate, scroll to zoom.",
+                "rotate, scroll to zoom."),
                 self, min_width=500, color=_indicator_color(self._settings),
             ),
             0, Qt.AlignmentFlag.AlignVCenter,
@@ -1562,7 +1569,7 @@ class VerifyAgainstReferenceDialog(_ToolDialogBase):
         self._content.addLayout(plot_row)
         if not webengine_available():
             self._vrml_cb.setEnabled(False)
-            self._vrml_cb.setToolTip("Install PyQt6-WebEngine to enable the 3D map.")
+            self._vrml_cb.setToolTip(tr("Install PyQt6-WebEngine to enable the 3D map."))
 
         self._banner = QLabel("", self)
         self._banner.setWordWrap(True)
@@ -1572,8 +1579,8 @@ class VerifyAgainstReferenceDialog(_ToolDialogBase):
     # -- pickers --------------------------------------------------------
     def _load_reference_file(self) -> None:
         p = self._pick_input_file(
-            "Choose expected-values file",
-            "Reference values (*.txt *.cgats *.ti3 *.csv);;All files (*)",
+            tr("Choose expected-values file"),
+            tr("Reference values (*.txt *.cgats *.ti3 *.csv);;All files (*)"),
         )
         if not p:
             return
@@ -1586,21 +1593,21 @@ class VerifyAgainstReferenceDialog(_ToolDialogBase):
         self._refresh()
 
     def _pick_measured(self) -> None:
-        p = self._pick_input_file("Choose measured chart", "Measurements (*.ti3);;All files (*)")
+        p = self._pick_input_file(tr("Choose measured chart"), tr("Measurements (*.ti3);;All files (*)"))
         if p:
             self._measured = p
             self._measured_field.setText(str(p))
             self._refresh()
 
     def _pick_chart(self) -> None:
-        p = self._pick_input_file("Choose chart definition", "Charts (*.ti1 *.ti2);;All files (*)")
+        p = self._pick_input_file(tr("Choose chart definition"), tr("Charts (*.ti1 *.ti2);;All files (*)"))
         if p:
             self._chart = p
             self._chart_field.setText(str(p))
             self._refresh()
 
     def _pick_profile(self) -> None:
-        p = self._pick_input_file("Choose your profile", "ICC profiles (*.icc *.icm);;All files (*)")
+        p = self._pick_input_file(tr("Choose your profile"), tr("ICC profiles (*.icc *.icm);;All files (*)"))
         if p:
             self._profile = p
             self._profile_field.setText(str(p))
@@ -1719,19 +1726,19 @@ class VerifyAgainstReferenceDialog(_ToolDialogBase):
 
 class VerifyProfileDialog(_ToolDialogBase):
     TOOL_KEY    = "verify_profile"
-    TITLE       = "Verify a profile (independent check)"
-    RUN_LABEL   = "Verify profile"
+    TITLE       = tr("Verify a profile (independent check)")
+    RUN_LABEL   = tr("Verify profile")
     MIN_WIDTH   = 660
     DESCRIPTION = (
-        "Check how accurate a finished profile really is by testing it against a "
+        tr("Check how accurate a finished profile really is by testing it against a "
         "chart it has never seen.\n\n"
         "Pick your profile (.icc) and a measured chart (.ti3) that you printed "
         "through that profile and read back. ChromIQ runs Argyll's profcheck, "
         "which asks the profile what each patch should look like and compares that "
-        "to what you actually measured — then grades the result for you."
+        "to what you actually measured — then grades the result for you.")
     )
     HELP = (
-        "This is the most honest way to answer “is my profile any good?”.\n\n"
+        tr("This is the most honest way to answer “is my profile any good?”.\n\n"
         "Why a *separate* chart? When you build a profile, it is tuned to the exact "
         "patches you measured — so checking it against those same patches almost "
         "always looks great, even if the profile is weak elsewhere. Printing and "
@@ -1752,7 +1759,7 @@ class VerifyProfileDialog(_ToolDialogBase):
         "low average usually means one or two odd patches rather than a bad profile.\n\n"
         "Tip: this checks the profile itself. If instead you want to compare your "
         "print to colour targets someone else gave you, use “Verify against "
-        "reference”."
+        "reference”.")
     )
 
     def __init__(self, runner: "ArgyllRunner", settings: "AppSettings", parent: QWidget | None = None) -> None:
@@ -1768,9 +1775,9 @@ class VerifyProfileDialog(_ToolDialogBase):
         row = QHBoxLayout()
         field = QLineEdit(self)
         field.setReadOnly(True)
-        field.setPlaceholderText("No file selected")
+        field.setPlaceholderText(tr("No file selected"))
         row.addWidget(field, 1)
-        btn = QPushButton("Browse…", self)
+        btn = QPushButton(tr("Browse…"), self)
         btn.clicked.connect(on_browse)
         row.addWidget(btn)
         return row, field
@@ -1810,39 +1817,39 @@ class VerifyProfileDialog(_ToolDialogBase):
         self._content.addLayout(row)
 
         opts = QHBoxLayout()
-        opts.addWidget(QLabel("ΔE formula:", self))
+        opts.addWidget(QLabel(tr("ΔE formula:"), self))
         self._formula = NoScrollComboBox(self)
-        self._formula.addItem("CIEDE2000", "-k")
-        self._formula.addItem("CIE94", "-c")
-        self._formula.addItem("CIE76", "")
+        self._formula.addItem(tr("CIEDE2000"), "-k")
+        self._formula.addItem(tr("CIE94"), "-c")
+        self._formula.addItem(tr("CIE76"), "")
         opts.addWidget(self._formula)
         formula_tip = TooltipButton(
-            "ΔE formula",
-            "How the colour difference is scored. CIEDE2000 is the modern standard "
+            tr("ΔE formula"),
+            tr("How the colour difference is scored. CIEDE2000 is the modern standard "
             "and best matches what your eye sees — leave it on this unless you need "
             "to match an older report. CIE94 and CIE76 are older formulas kept for "
-            "comparison.",
+            "comparison."),
             self, min_width=460, color=_indicator_color(self._settings),
         )
         opts.addWidget(formula_tip, 0, Qt.AlignmentFlag.AlignVCenter)
 
         opts.addSpacing(16)
-        opts.addWidget(QLabel("Intent:", self))
+        opts.addWidget(QLabel(tr("Intent:"), self))
         self._intent = NoScrollComboBox(self)
-        self._intent.addItem("Absolute", "a")
-        self._intent.addItem("Relative", "r")
+        self._intent.addItem(tr("Absolute"), "a")
+        self._intent.addItem(tr("Relative"), "r")
         opts.addWidget(self._intent)
         intent_tip = TooltipButton(
-            "Rendering intent",
-            "Which way the profile is asked to reproduce colour for the check. "
+            tr("Rendering intent"),
+            tr("Which way the profile is asked to reproduce colour for the check. "
             "Absolute compares exact colours including the paper white, and is the "
             "usual choice for judging accuracy. Relative ignores the paper-white "
-            "difference, which can look kinder on papers whose white isn't neutral.",
+            "difference, which can look kinder on papers whose white isn't neutral."),
             self, min_width=460, color=_indicator_color(self._settings),
         )
         opts.addWidget(intent_tip, 0, Qt.AlignmentFlag.AlignVCenter)
 
-        self._sort_cb = QCheckBox("List worst patches first", self)
+        self._sort_cb = QCheckBox(tr("List worst patches first"), self)
         self._sort_cb.setChecked(True)
         opts.addSpacing(16)
         opts.addWidget(self._sort_cb)
@@ -1856,14 +1863,14 @@ class VerifyProfileDialog(_ToolDialogBase):
 
     # -- pickers --------------------------------------------------------
     def _pick_profile(self) -> None:
-        p = self._pick_input_file("Choose profile to test", "ICC profiles (*.icc *.icm);;All files (*)")
+        p = self._pick_input_file(tr("Choose profile to test"), tr("ICC profiles (*.icc *.icm);;All files (*)"))
         if p:
             self._profile = p
             self._profile_field.setText(str(p))
             self._refresh()
 
     def _pick_measured(self) -> None:
-        p = self._pick_input_file("Choose measured chart", "Measurements (*.ti3);;All files (*)")
+        p = self._pick_input_file(tr("Choose measured chart"), tr("Measurements (*.ti3);;All files (*)"))
         if p:
             self._measured = p
             self._measured_field.setText(str(p))

@@ -88,6 +88,7 @@ _INSTRUMENTS = [("i1", "i1Pro / i1Pro2 / i1Pro3(+)"), ("CM", "ColorMunki / i1Stu
 
 # Paper sizes the new-chart dropdown offers — matches the Create Chart tab.
 from data.patch_db import PAPER_LABELS, PAPER_PRINTTARG_ARG
+from core.i18n import tr
 _PAPER_ORDER = ("A2", "594x420", "329x483", "483x329", "A3", "420x297",
                 "11x17", "Legal", "A4", "A4R", "Letter", "LetterR",
                 "203x254", "127x178", "4x6", "custom")
@@ -493,7 +494,7 @@ class _NewChartDialog(QDialog):
 
     def __init__(self, bin_dir: Path, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("New chart")
+        self.setWindowTitle(tr("New chart"))
         self.setMinimumWidth(560)
         self._bin_dir = bin_dir
         self.result_spec: R.ChartSpec | None = None
@@ -521,7 +522,7 @@ class _NewChartDialog(QDialog):
         lay.setSpacing(10)
 
         head = QHBoxLayout()
-        head.addWidget(QLabel("Set up a new chart, then edit it.", self))
+        head.addWidget(QLabel(tr("Set up a new chart, then edit it."), self))
         head.addStretch(1)
         head.addWidget(_magenta_tip(
             "New chart",
@@ -548,19 +549,19 @@ class _NewChartDialog(QDialog):
         lay.addLayout(head)
 
         # --- Chart identity --------------------------------------------------
-        chart_box = QGroupBox("Chart", self)
+        chart_box = QGroupBox(tr("Chart"), self)
         cg = QGridLayout(chart_box)
-        cg.addWidget(QLabel("Name:"), 0, 0)
+        cg.addWidget(QLabel(tr("Name:")), 0, 0)
         self._name = QLineEdit("chart", chart_box)
         self._name.setObjectName("compact_input")
-        self._name.setToolTip("Used as the file basename and stamped onto the chart")
+        self._name.setToolTip(tr("Used as the file basename and stamped onto the chart"))
         cg.addWidget(self._name, 0, 1, 1, 3)
-        cg.addWidget(QLabel("Instrument:"), 1, 0)
+        cg.addWidget(QLabel(tr("Instrument:")), 1, 0)
         self._instr = NoScrollComboBox(chart_box)
         for code, label in _INSTRUMENTS:
             self._instr.addItem(label, code)
         cg.addWidget(self._instr, 1, 1)
-        cg.addWidget(QLabel("Paper:"), 1, 2)
+        cg.addWidget(QLabel(tr("Paper:")), 1, 2)
         self._paper = NoScrollComboBox(chart_box)
         for code in _PAPER_ORDER:
             self._paper.addItem(
@@ -577,12 +578,12 @@ class _NewChartDialog(QDialog):
         cust_l = QHBoxLayout(self._paper_custom_row)
         cust_l.setContentsMargins(0, 0, 0, 0)
         cust_l.setSpacing(6)
-        cust_l.addWidget(QLabel("W (mm):"))
+        cust_l.addWidget(QLabel(tr("W (mm):")))
         self._paper_w = NoScrollSpinBox(self._paper_custom_row)
         self._paper_w.setRange(10, 9999)
         self._paper_w.setValue(210)
         cust_l.addWidget(self._paper_w)
-        cust_l.addWidget(QLabel("H (mm):"))
+        cust_l.addWidget(QLabel(tr("H (mm):")))
         self._paper_h = NoScrollSpinBox(self._paper_custom_row)
         self._paper_h.setRange(10, 9999)
         self._paper_h.setValue(297)
@@ -595,16 +596,16 @@ class _NewChartDialog(QDialog):
         lay.addWidget(chart_box)
 
         # --- Source ---------------------------------------------------------
-        src_box = QGroupBox("Patches", self)
+        src_box = QGroupBox(tr("Patches"), self)
         sl = QVBoxLayout(src_box)
-        self._mode_blank = QRadioButton("Blank canvas (add patches by hand)", src_box)
-        self._mode_seed = QRadioButton("Seed from targen (optimised patch set)", src_box)
-        self._mode_paste = QRadioButton("Paste colour values (or load a file)", src_box)
+        self._mode_blank = QRadioButton(tr("Blank canvas (add patches by hand)"), src_box)
+        self._mode_seed = QRadioButton(tr("Seed from targen (optimised patch set)"), src_box)
+        self._mode_paste = QRadioButton(tr("Paste colour values (or load a file)"), src_box)
         self._mode_seed.setChecked(True)
         sl.addWidget(self._mode_seed)
         seed_row = QHBoxLayout()
         seed_row.addSpacing(22)
-        seed_row.addWidget(QLabel("Patches:"))
+        seed_row.addWidget(QLabel(tr("Patches:")))
         self._count = NoScrollSpinBox(src_box)
         self._count.setRange(8, 4000)
         self._count.setValue(200)
@@ -618,13 +619,13 @@ class _NewChartDialog(QDialog):
         paste_indent.setContentsMargins(22, 0, 0, 0)
         self._paste_edit = QPlainTextEdit(src_box)
         self._paste_edit.setPlaceholderText(
-            "One colour per line — hex (#ff00aa or ff00aa) or RGB "
-            "(255,0,170 / 1.0 0 0.67). Scale auto-detected."
+            tr("One colour per line — hex (#ff00aa or ff00aa) or RGB "
+            "(255,0,170 / 1.0 0 0.67). Scale auto-detected.")
         )
         self._paste_edit.setFixedHeight(110)
         paste_indent.addWidget(self._paste_edit)
         paste_btns = QHBoxLayout()
-        load_btn = QPushButton("Load from file…", src_box)
+        load_btn = QPushButton(tr("Load from file…"), src_box)
         load_btn.clicked.connect(self._load_paste_file)
         self._paste_status = QLabel("", src_box)
         self._paste_status.setStyleSheet("color: #888;")
@@ -642,15 +643,15 @@ class _NewChartDialog(QDialog):
         lay.addWidget(src_box)
 
         # --- Layout options -------------------------------------------------
-        opt_box = QGroupBox("Layout options (printtarg)", self)
+        opt_box = QGroupBox(tr("Layout options (printtarg)"), self)
         og = QGridLayout(opt_box)
         # Spacer-mode checkboxes wired as a mutex group, with the all-off
         # state permitted. "None" disables Spacer scale (-A) since there
         # are no spacers to scale.
-        og.addWidget(QLabel("Spacers:"), 0, 0)
-        self._sp_colored = QCheckBox("Coloured", opt_box)
-        self._sp_bw      = QCheckBox("B&&W", opt_box)
-        self._sp_none    = QCheckBox("None", opt_box)
+        og.addWidget(QLabel(tr("Spacers:")), 0, 0)
+        self._sp_colored = QCheckBox(tr("Coloured"), opt_box)
+        self._sp_bw      = QCheckBox(tr("B&&W"), opt_box)
+        self._sp_none    = QCheckBox(tr("None"), opt_box)
         self._sp_colored.setChecked(True)
         _wire_spacer_mutex((self._sp_colored, self._sp_bw, self._sp_none))
         sp_row = QHBoxLayout()
@@ -660,13 +661,13 @@ class _NewChartDialog(QDialog):
         og.addLayout(sp_row, 0, 1, 1, 3)
         self._sp_none.toggled.connect(self._refresh_spacer_scale_enabled)
 
-        og.addWidget(QLabel("Patch scale (-a):"), 1, 0)
+        og.addWidget(QLabel(tr("Patch scale (-a):")), 1, 0)
         self._patch_scale = NoScrollDoubleSpinBox(opt_box)
         self._patch_scale.setRange(0.3, 3.0)
         self._patch_scale.setSingleStep(0.05)
         self._patch_scale.setValue(1.0)
         og.addWidget(self._patch_scale, 1, 1)
-        og.addWidget(QLabel("Spacer scale (-A):"), 1, 2)
+        og.addWidget(QLabel(tr("Spacer scale (-A):")), 1, 2)
         self._spacer_scale = NoScrollDoubleSpinBox(opt_box)
         self._spacer_scale.setRange(0.3, 3.0)
         self._spacer_scale.setSingleStep(0.05)
@@ -675,14 +676,14 @@ class _NewChartDialog(QDialog):
 
         # Margin / DPI / bit depth — match the Create Chart tab so the
         # editor offers the same printtarg knobs.
-        og.addWidget(QLabel("Margin (-m / -M, mm):"), 2, 0)
+        og.addWidget(QLabel(tr("Margin (-m / -M, mm):")), 2, 0)
         self._margin = NoScrollSpinBox(opt_box)
         self._margin.setRange(0, 50)
         self._margin.setValue(6)
-        self._margin.setToolTip("Inter-strip and outer page margin in mm. "
-                                "printtarg's default is 6.")
+        self._margin.setToolTip(tr("Inter-strip and outer page margin in mm. "
+                                "printtarg's default is 6."))
         og.addWidget(self._margin, 2, 1)
-        og.addWidget(QLabel("DPI:"), 2, 2)
+        og.addWidget(QLabel(tr("DPI:")), 2, 2)
         self._dpi = NoScrollSpinBox(opt_box)
         self._dpi.setRange(72, 1200)
         self._dpi.setSingleStep(50)
@@ -691,9 +692,9 @@ class _NewChartDialog(QDialog):
         _as_compact(self._patch_scale, self._spacer_scale,
                     self._margin, self._dpi)
 
-        og.addWidget(QLabel("Bit depth:"), 3, 0)
-        self._bd_8 = QRadioButton("8-bit", opt_box)
-        self._bd_16 = QRadioButton("16-bit", opt_box)
+        og.addWidget(QLabel(tr("Bit depth:")), 3, 0)
+        self._bd_8 = QRadioButton(tr("8-bit"), opt_box)
+        self._bd_16 = QRadioButton(tr("16-bit"), opt_box)
         self._bd_8.setChecked(True)
         bd_grp = QButtonGroup(opt_box)
         bd_grp.addButton(self._bd_8)
@@ -707,21 +708,21 @@ class _NewChartDialog(QDialog):
         # Instrument-conditional knobs — laid out in a self-contained 2-col
         # grid below the always-visible options. We toggle the *whole row*
         # visibility from the instrument signal so the dialog stays compact.
-        self._cb_L = QCheckBox("Suppress left clip border (-L)", opt_box)
-        self._cb_L.setToolTip("i1Pro / 3+ only. Frees the strip for patches.")
-        self._cb_P = QCheckBox("Don't limit strip length (-P)", opt_box)
-        self._cb_P.setToolTip("i1Pro / 3+ only. Lets a long strip span multiple "
-                              "physical strokes for very tall charts.")
-        self._cb_h = QCheckBox("Double density (-h)", opt_box)
-        self._cb_h.setToolTip("ColorMunki only. Tighter strip layout for the "
-                              "ColorMunki rig. Mutually exclusive with Triple.")
-        self._cb_td = QCheckBox("Triple density (i1Pro layout emulation)", opt_box)
+        self._cb_L = QCheckBox(tr("Suppress left clip border (-L)"), opt_box)
+        self._cb_L.setToolTip(tr("i1Pro / 3+ only. Frees the strip for patches."))
+        self._cb_P = QCheckBox(tr("Don't limit strip length (-P)"), opt_box)
+        self._cb_P.setToolTip(tr("i1Pro / 3+ only. Lets a long strip span multiple "
+                              "physical strokes for very tall charts."))
+        self._cb_h = QCheckBox(tr("Double density (-h)"), opt_box)
+        self._cb_h.setToolTip(tr("ColorMunki only. Tighter strip layout for the "
+                              "ColorMunki rig. Mutually exclusive with Triple."))
+        self._cb_td = QCheckBox(tr("Triple density (i1Pro layout emulation)"), opt_box)
         self._cb_td.setToolTip(
-            "ColorMunki + rig only. Renders the chart with the i1Pro strip "
+            tr("ColorMunki + rig only. Renders the chart with the i1Pro strip "
             "layout (printtarg -ii1) at the tuned scale (1.3) / margin (5) / "
             "strip-limit-off / left-border-suppressed preset, then patches "
             "TARGET_INSTRUMENT back to ColorMunki so chartread still drives "
-            "your meter. Mutually exclusive with Double density."
+            "your meter. Mutually exclusive with Double density.")
         )
         og.addWidget(self._cb_L,  4, 0, 1, 2)
         og.addWidget(self._cb_P,  4, 2, 1, 2)
@@ -737,10 +738,10 @@ class _NewChartDialog(QDialog):
 
         btns = QHBoxLayout()
         btns.addStretch(1)
-        ok = QPushButton("Create", self)
+        ok = QPushButton(tr("Create"), self)
         ok.setDefault(True)
         ok.clicked.connect(self._on_ok)
-        cancel = QPushButton("Cancel", self)
+        cancel = QPushButton(tr("Cancel"), self)
         cancel.clicked.connect(self.reject)
         btns.addWidget(ok)
         btns.addWidget(cancel)
@@ -839,7 +840,7 @@ class _NewChartDialog(QDialog):
             self._paste_edit.setPlainText(Path(path).read_text(errors="ignore"))
             self._mode_paste.setChecked(True)
         except OSError as exc:
-            QMessageBox.warning(self, "Could not read file", str(exc))
+            QMessageBox.warning(self, tr("Could not read file"), str(exc))
 
     def _on_ok(self) -> None:
         paper_code = self._paper.currentData() or self._paper.currentText()
@@ -857,14 +858,14 @@ class _NewChartDialog(QDialog):
             try:
                 program = R.seed_from_targen(self._bin_dir, self._count.value())
             except Exception as exc:
-                QMessageBox.warning(self, "targen failed", str(exc))
+                QMessageBox.warning(self, tr("targen failed"), str(exc))
                 return
         elif self._mode_paste.isChecked():
             program = R.parse_color_values(self._paste_edit.toPlainText())
             if not program:
-                QMessageBox.warning(self, "No values",
-                                    "Couldn't parse any RGB / hex values "
-                                    "from the pasted text.")
+                QMessageBox.warning(self, tr("No values"),
+                                    tr("Couldn't parse any RGB / hex values "
+                                    "from the pasted text."))
                 return
 
         # Mutex-checkbox group: at most one is on; all-off falls through
@@ -904,7 +905,7 @@ class Ti2RelayoutDialog(QDialog):
         super().__init__(parent)
         self._settings = settings
         self._bin_dir = Path(settings.get("argyll_bin_path", "/Applications/Argyll/bin"))
-        self.setWindowTitle("Edit / create chart layout")
+        self.setWindowTitle(tr("Edit / create chart layout"))
         # Wider default so the printtarg-options column doesn't clip its
         # row labels ("Margin (mm):", "Spacer -A:") or its combo content
         # ("A4 (210 × 297 mm) Portrait") on first open.
@@ -957,14 +958,14 @@ class Ti2RelayoutDialog(QDialog):
 
         # Source row
         src = QHBoxLayout()
-        load_btn = QPushButton("Load .ti2…", self)
+        load_btn = QPushButton(tr("Load .ti2…"), self)
         load_btn.clicked.connect(self._load_ti2)
-        new_btn = QPushButton("New chart…", self)
+        new_btn = QPushButton(tr("New chart…"), self)
         new_btn.clicked.connect(self._new_chart)
         src.addWidget(load_btn)
         src.addWidget(new_btn)
         src.addStretch(1)
-        self._info = QLabel("No chart loaded.", self)
+        self._info = QLabel(tr("No chart loaded."), self)
         src.addWidget(self._info)
         src.addWidget(_magenta_tip(
             "Chart layout editor",
@@ -1007,7 +1008,7 @@ class Ti2RelayoutDialog(QDialog):
         lv.setContentsMargins(0, 0, 0, 0)
         lv.setSpacing(6)
         top = QHBoxLayout()
-        top.addWidget(QLabel("Swatch size:"))
+        top.addWidget(QLabel(tr("Swatch size:")))
         top.addSpacing(20)
         self._size_slider = QSlider(Qt.Orientation.Horizontal, left)
         self._size_slider.setRange(24, 96)
@@ -1116,7 +1117,7 @@ class Ti2RelayoutDialog(QDialog):
         midv.setSpacing(6)
         self._preview = _PreviewLabel(self)
         self._preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._preview.setText("Preview will appear here.")
+        self._preview.setText(tr("Preview will appear here."))
         self._preview.clicked.connect(self._on_preview_click)
         self._preview.marquee_finished.connect(self._on_marquee)
         # Re-scale the preview from the full-res cache when the label resizes,
@@ -1139,8 +1140,8 @@ class Ti2RelayoutDialog(QDialog):
         self._page_bar = QWidget(mid)
         pbl = QHBoxLayout(self._page_bar)
         pbl.setContentsMargins(0, 0, 0, 0)
-        self._prev_btn = QPushButton("◀ Page", self._page_bar)
-        self._next_btn = QPushButton("Page ▶", self._page_bar)
+        self._prev_btn = QPushButton(tr("◀ Page"), self._page_bar)
+        self._next_btn = QPushButton(tr("Page ▶"), self._page_bar)
         self._page_label = QLabel("", self._page_bar)
         self._prev_btn.clicked.connect(lambda: self._show_page(self._page - 1))
         self._next_btn.clicked.connect(lambda: self._show_page(self._page + 1))
@@ -1233,10 +1234,10 @@ class Ti2RelayoutDialog(QDialog):
         v.setSpacing(8)
 
         # Target mode
-        mode_box = QGroupBox("Edit target", panel)
+        mode_box = QGroupBox(tr("Edit target"), panel)
         mb = QVBoxLayout(mode_box)
-        self._mode_patches = QRadioButton("Patches", mode_box)
-        self._mode_spacers = QRadioButton("Spacers", mode_box)
+        self._mode_patches = QRadioButton(tr("Patches"), mode_box)
+        self._mode_spacers = QRadioButton(tr("Spacers"), mode_box)
         self._mode_patches.setChecked(True)
         self._mode_group = QButtonGroup(self)
         self._mode_group.addButton(self._mode_patches)
@@ -1249,20 +1250,20 @@ class Ti2RelayoutDialog(QDialog):
         # printtarg options — all the knobs the New chart dialog exposes,
         # editable on an already-loaded chart. Mirrors LayoutOptions; each
         # widget pushes back to self._options + schedules an auto-preview.
-        pt_box = QGroupBox("printtarg", panel)
+        pt_box = QGroupBox(tr("printtarg"), panel)
         ptg = QGridLayout(pt_box)
         ptg.setHorizontalSpacing(4)
         ptg.setVerticalSpacing(4)
         # Instrument + Paper rows — affect ChartSpec, not LayoutOptions
         # (printtarg reads them as -i / -p), but they live here so the
         # editor has the same coverage as the New chart dialog.
-        ptg.addWidget(QLabel("Instrument:"), 0, 0)
+        ptg.addWidget(QLabel(tr("Instrument:")), 0, 0)
         self._pt_instr = NoScrollComboBox(pt_box)
         for code, label in _INSTRUMENTS:
             self._pt_instr.addItem(label, code)
         self._pt_instr.currentIndexChanged.connect(self._on_pt_instr_changed)
         ptg.addWidget(self._pt_instr, 0, 1, 1, 3)
-        ptg.addWidget(QLabel("Paper:"), 1, 0)
+        ptg.addWidget(QLabel(tr("Paper:")), 1, 0)
         # Vertical container: paper combo on top, custom W/H row below
         # (hidden unless "Custom" is the selection). Keeps the rest of
         # the grid's row indices untouched.
@@ -1280,13 +1281,13 @@ class Ti2RelayoutDialog(QDialog):
         cust_l = QHBoxLayout(self._pt_paper_custom_row)
         cust_l.setContentsMargins(0, 0, 0, 0)
         cust_l.setSpacing(6)
-        cust_l.addWidget(QLabel("W (mm):"))
+        cust_l.addWidget(QLabel(tr("W (mm):")))
         self._pt_paper_w = NoScrollSpinBox(self._pt_paper_custom_row)
         self._pt_paper_w.setRange(10, 9999)
         self._pt_paper_w.setValue(210)
         self._pt_paper_w.setMinimumWidth(76)
         cust_l.addWidget(self._pt_paper_w)
-        cust_l.addWidget(QLabel("H (mm):"))
+        cust_l.addWidget(QLabel(tr("H (mm):")))
         self._pt_paper_h = NoScrollSpinBox(self._pt_paper_custom_row)
         self._pt_paper_h.setRange(10, 9999)
         self._pt_paper_h.setValue(297)
@@ -1305,12 +1306,12 @@ class Ti2RelayoutDialog(QDialog):
         # all-off picker just falls back to that). Picking "None" also
         # disables the Spacer -A field since there are no spacers to
         # scale.
-        ptg.addWidget(QLabel("Spacers:"), 2, 0)
+        ptg.addWidget(QLabel(tr("Spacers:")), 2, 0)
         sp_row = QHBoxLayout()
         sp_row.setSpacing(6)
-        self._pt_sp_col  = QCheckBox("Coloured", pt_box)
-        self._pt_sp_bw   = QCheckBox("B&&W", pt_box)
-        self._pt_sp_none = QCheckBox("None", pt_box)
+        self._pt_sp_col  = QCheckBox(tr("Coloured"), pt_box)
+        self._pt_sp_bw   = QCheckBox(tr("B&&W"), pt_box)
+        self._pt_sp_none = QCheckBox(tr("None"), pt_box)
         self._pt_sp_col.setChecked(True)
         _wire_spacer_mutex(
             (self._pt_sp_col, self._pt_sp_bw, self._pt_sp_none)
@@ -1323,7 +1324,7 @@ class Ti2RelayoutDialog(QDialog):
         # Scales row. Min-width on every spinbox so 3-digit / decimal
         # values don't truncate to "30" / "1.0" inside the panel.
         SPIN_W = 76
-        ptg.addWidget(QLabel("Patch -a:"), 3, 0)
+        ptg.addWidget(QLabel(tr("Patch -a:")), 3, 0)
         self._pt_a = NoScrollDoubleSpinBox(pt_box)
         self._pt_a.setRange(0.3, 3.0)
         self._pt_a.setSingleStep(0.05)
@@ -1331,7 +1332,7 @@ class Ti2RelayoutDialog(QDialog):
         self._pt_a.setMinimumWidth(SPIN_W)
         self._pt_a.valueChanged.connect(self._on_printtarg_changed)
         ptg.addWidget(self._pt_a, 3, 1)
-        ptg.addWidget(QLabel("Spacer -A:"), 3, 2)
+        ptg.addWidget(QLabel(tr("Spacer -A:")), 3, 2)
         self._pt_A = NoScrollDoubleSpinBox(pt_box)
         self._pt_A.setRange(0.3, 3.0)
         self._pt_A.setSingleStep(0.05)
@@ -1340,14 +1341,14 @@ class Ti2RelayoutDialog(QDialog):
         self._pt_A.valueChanged.connect(self._on_printtarg_changed)
         ptg.addWidget(self._pt_A, 3, 3)
         # Margin + DPI row
-        ptg.addWidget(QLabel("Margin (mm):"), 4, 0)
+        ptg.addWidget(QLabel(tr("Margin (mm):")), 4, 0)
         self._pt_m = NoScrollSpinBox(pt_box)
         self._pt_m.setRange(0, 50)
         self._pt_m.setValue(6)
         self._pt_m.setMinimumWidth(SPIN_W)
         self._pt_m.valueChanged.connect(self._on_printtarg_changed)
         ptg.addWidget(self._pt_m, 4, 1)
-        ptg.addWidget(QLabel("DPI:"), 4, 2)
+        ptg.addWidget(QLabel(tr("DPI:")), 4, 2)
         self._pt_dpi = NoScrollSpinBox(pt_box)
         self._pt_dpi.setRange(72, 1200)
         self._pt_dpi.setSingleStep(50)
@@ -1357,10 +1358,10 @@ class Ti2RelayoutDialog(QDialog):
         ptg.addWidget(self._pt_dpi, 4, 3)
         _as_compact(self._pt_a, self._pt_A, self._pt_m, self._pt_dpi)
         # Bit depth row
-        ptg.addWidget(QLabel("Bit depth:"), 5, 0)
+        ptg.addWidget(QLabel(tr("Bit depth:")), 5, 0)
         bd_row = QHBoxLayout()
-        self._pt_bd8  = QRadioButton("8-bit", pt_box)
-        self._pt_bd16 = QRadioButton("16-bit", pt_box)
+        self._pt_bd8  = QRadioButton(tr("8-bit"), pt_box)
+        self._pt_bd16 = QRadioButton(tr("16-bit"), pt_box)
         self._pt_bd8.setChecked(True)
         bd_grp = QButtonGroup(pt_box)
         bd_grp.addButton(self._pt_bd8)
@@ -1373,32 +1374,32 @@ class Ti2RelayoutDialog(QDialog):
         ptg.addLayout(bd_row, 5, 1, 1, 3)
         # Instrument-conditional checkboxes (visibility flipped from
         # self._spec.instrument_flag in _sync_printtarg_widgets).
-        self._pt_L = QCheckBox("Suppress left clip border (-L)", pt_box)
-        self._pt_L.setToolTip("i1Pro / 3+ only. Frees the strip for patches.")
+        self._pt_L = QCheckBox(tr("Suppress left clip border (-L)"), pt_box)
+        self._pt_L.setToolTip(tr("i1Pro / 3+ only. Frees the strip for patches."))
         self._pt_L.toggled.connect(self._on_printtarg_changed)
-        self._pt_P = QCheckBox("Don't limit strip length (-P)", pt_box)
-        self._pt_P.setToolTip("i1Pro / 3+ only. Lets a long strip span "
-                              "multiple strokes.")
+        self._pt_P = QCheckBox(tr("Don't limit strip length (-P)"), pt_box)
+        self._pt_P.setToolTip(tr("i1Pro / 3+ only. Lets a long strip span "
+                              "multiple strokes."))
         self._pt_P.toggled.connect(self._on_printtarg_changed)
-        self._pt_dd = QCheckBox("Double density (-h)", pt_box)
-        self._pt_dd.setToolTip("ColorMunki only. Tighter strip layout for "
+        self._pt_dd = QCheckBox(tr("Double density (-h)"), pt_box)
+        self._pt_dd.setToolTip(tr("ColorMunki only. Tighter strip layout for "
                                "the ColorMunki rig. Mutually exclusive "
-                               "with Triple.")
+                               "with Triple."))
         self._pt_dd.toggled.connect(self._on_dd_toggled)
-        self._pt_td = QCheckBox("Triple density (i1Pro layout)", pt_box)
+        self._pt_td = QCheckBox(tr("Triple density (i1Pro layout)"), pt_box)
         self._pt_td.setToolTip(
-            "ColorMunki + rig only. Renders with the i1Pro strip layout at "
+            tr("ColorMunki + rig only. Renders with the i1Pro strip layout at "
             "scale 1.3 / margin 5 / strip-limit off / left-border suppressed, "
             "then patches TARGET_INSTRUMENT back to ColorMunki so chartread "
-            "still drives your meter. Mutually exclusive with Double.")
+            "still drives your meter. Mutually exclusive with Double."))
         self._pt_td.toggled.connect(self._on_td_toggled)
-        self._pt_force_tag = QCheckBox("Force “randomised” tag", pt_box)
+        self._pt_force_tag = QCheckBox(tr("Force “randomised” tag"), pt_box)
         self._pt_force_tag.setChecked(bool(
             self._settings.get("ti2_editor_force_tag", False)))
         self._pt_force_tag.setEnabled(False)   # enabled only on an unsafe layout
         self._pt_force_tag.setToolTip(
-            "Only needed for risky layouts (click the ⓘ for details). Charts that "
-            "are already well mixed get tagged as randomised automatically.")
+            tr("Only needed for risky layouts (click the ⓘ for details). Charts that "
+            "are already well mixed get tagged as randomised automatically."))
         self._pt_force_tag.toggled.connect(self._on_force_tag_toggled)
         ptg.addWidget(self._pt_L,  6, 0, 1, 4)
         ptg.addWidget(self._pt_P,  7, 0, 1, 4)
@@ -1443,55 +1444,55 @@ class Ti2RelayoutDialog(QDialog):
         self._pt_box = pt_box
 
         # Patch controls
-        self._patch_box = QGroupBox("Patches", panel)
+        self._patch_box = QGroupBox(tr("Patches"), panel)
         pb = QVBoxLayout(self._patch_box)
         self._hl_patches = QCheckBox(
-            "Highlight selected in preview", self._patch_box)
+            tr("Highlight selected in preview"), self._patch_box)
         self._hl_patches.setToolTip(
-            "Two-way link between the swatch grid and the preview:\n"
+            tr("Two-way link between the swatch grid and the preview:\n"
             "• selecting patches on the left highlights them in the preview\n"
             "• clicking or marquee-dragging on the preview selects them on "
-            "the left")
+            "the left"))
         self._hl_patches.toggled.connect(self._on_patch_highlight_toggled)
         pb.addWidget(self._hl_patches)
-        set_col = QPushButton("Set colour of selection…", self._patch_box)
+        set_col = QPushButton(tr("Set colour of selection…"), self._patch_box)
         set_col.clicked.connect(self._set_patch_colour)
         pb.addWidget(set_col)
-        tr = QHBoxLayout()
-        dark = QPushButton("Darken 10%", self._patch_box)
-        light = QPushButton("Lighten 10%", self._patch_box)
+        tone_row = QHBoxLayout()
+        dark = QPushButton(tr("Darken 10%"), self._patch_box)
+        light = QPushButton(tr("Lighten 10%"), self._patch_box)
         dark.clicked.connect(lambda: self._transform_selection(0.9))
         light.clicked.connect(lambda: self._transform_selection(1.0 / 0.9))
-        tr.addWidget(dark)
-        tr.addWidget(light)
-        pb.addLayout(tr)
+        tone_row.addWidget(dark)
+        tone_row.addWidget(light)
+        pb.addLayout(tone_row)
         addrem = QHBoxLayout()
-        add_b = QPushButton("Add…", self._patch_box)
-        add_b.setToolTip("Add a new patch with a chosen colour")
+        add_b = QPushButton(tr("Add…"), self._patch_box)
+        add_b.setToolTip(tr("Add a new patch with a chosen colour"))
         add_b.clicked.connect(self._add_patch)
-        rem_b = QPushButton("Remove", self._patch_box)
-        rem_b.setToolTip("Remove the selected patches")
+        rem_b = QPushButton(tr("Remove"), self._patch_box)
+        rem_b.setToolTip(tr("Remove the selected patches"))
         rem_b.clicked.connect(self._remove_selected_patches)
         addrem.addWidget(add_b)
         addrem.addWidget(rem_b)
         pb.addLayout(addrem)
         combine = QHBoxLayout()
-        append_b = QPushButton("Append from file…", self._patch_box)
+        append_b = QPushButton(tr("Append from file…"), self._patch_box)
         append_b.setToolTip(
-            "Load another patch set (.ti2 / .ti1 / .ti3 / CGATS .txt / "
+            tr("Load another patch set (.ti2 / .ti1 / .ti3 / CGATS .txt / "
             "i1Profiler .pxf / .pwxf) and add its colours to the start or end "
-            "of this chart — an easy way to combine sets. RGB only.")
+            "of this chart — an easy way to combine sets. RGB only."))
         append_b.clicked.connect(self._append_from_file)
         combine.addWidget(append_b)
-        view3d_b = QPushButton("3D distribution…", self._patch_box)
+        view3d_b = QPushButton(tr("3D distribution…"), self._patch_box)
         view3d_b.setToolTip(
-            "Show the patch set as a rotatable 3D RGB cube so you can see how "
-            "evenly the colours cover the gamut and where they bunch up.")
+            tr("Show the patch set as a rotatable 3D RGB cube so you can see how "
+            "evenly the colours cover the gamut and where they bunch up."))
         view3d_b.clicked.connect(self._show_3d_distribution)
         combine.addWidget(view3d_b)
         pb.addLayout(combine)
         reorder_lbl = QLabel(
-            "Reorder (drag, Alt+arrows, F/L, or):", self._patch_box)
+            tr("Reorder (drag, Alt+arrows, F/L, or):"), self._patch_box)
         reorder_lbl.setWordWrap(True)
         pb.addWidget(reorder_lbl)
         order = QGridLayout()
@@ -1509,33 +1510,33 @@ class Ti2RelayoutDialog(QDialog):
         v.addWidget(self._patch_box)
 
         # Spacer controls
-        self._spacer_box = QGroupBox("Spacers", panel)
+        self._spacer_box = QGroupBox(tr("Spacers"), panel)
         sb = QVBoxLayout(self._spacer_box)
         pal_lbl = QLabel(
-            "Native palette (printtarg picks one per gap for best contrast):",
+            tr("Native palette (printtarg picks one per gap for best contrast):"),
             self._spacer_box)
         pal_lbl.setWordWrap(True)
         sb.addWidget(pal_lbl)
         self._palette_row = QHBoxLayout()
         sb.addLayout(self._palette_row)
         sb.addSpacing(10)
-        reset = QPushButton("Reset palette", self._spacer_box)
-        reset.setToolTip("Reset the spacer palette to printtarg's defaults")
+        reset = QPushButton(tr("Reset palette"), self._spacer_box)
+        reset.setToolTip(tr("Reset the spacer palette to printtarg's defaults"))
         reset.clicked.connect(self._reset_palette)
         sb.addWidget(reset)
         sb.addWidget(self._hline())
         paint_lbl = QLabel(
-            "Per-spacer paint: click a spacer (drag for a marquee). "
-            "Hold Alt to remove from selection. Selected = magenta outline.",
+            tr("Per-spacer paint: click a spacer (drag for a marquee). "
+            "Hold Alt to remove from selection. Selected = magenta outline."),
             self._spacer_box)
         paint_lbl.setWordWrap(True)
         sb.addWidget(paint_lbl)
         paint_row = QHBoxLayout()
-        paint = QPushButton("Paint…", self._spacer_box)
-        paint.setToolTip("Paint the spacers selected in the preview")
+        paint = QPushButton(tr("Paint…"), self._spacer_box)
+        paint.setToolTip(tr("Paint the spacers selected in the preview"))
         paint.clicked.connect(self._paint_spacers)
-        clear = QPushButton("Clear", self._spacer_box)
-        clear.setToolTip("Clear the spacer selection")
+        clear = QPushButton(tr("Clear"), self._spacer_box)
+        clear.setToolTip(tr("Clear the spacer selection"))
         clear.clicked.connect(self._clear_spacer_selection)
         paint_row.addWidget(paint)
         paint_row.addWidget(clear)
@@ -1562,8 +1563,7 @@ class Ti2RelayoutDialog(QDialog):
         ml.setContentsMargins(0, 0, 0, 0)
         ml.setSpacing(4)
         mess_head = QLabel(
-            f'What a mess<span style="color: {SPEC_MAGENTA}; '
-            f'font-style: italic;">!</span>',
+            tr("What a mess<span style=\"color: {SPEC_MAGENTA}; font-style: italic;\">!</span>").format(SPEC_MAGENTA=SPEC_MAGENTA),
             mess_box,
         )
         mess_head.setTextFormat(Qt.TextFormat.RichText)
@@ -1573,7 +1573,7 @@ class Ti2RelayoutDialog(QDialog):
             " font-family: Georgia; font-size: 22px;"
         )
         ml.addWidget(mess_head)
-        mess_sub = QLabel("Time to tidy up.", mess_box)
+        mess_sub = QLabel(tr("Time to tidy up."), mess_box)
         mess_sub.setAlignment(Qt.AlignmentFlag.AlignCenter)
         mess_sub.setStyleSheet(
             "color: #808080; background: transparent;"
@@ -1619,15 +1619,15 @@ class Ti2RelayoutDialog(QDialog):
         # sits right beside it.
         top_row = QHBoxLayout()
         top_row.setSpacing(6)
-        self._preview_btn = QPushButton("Update preview", bar)
+        self._preview_btn = QPushButton(tr("Update preview"), bar)
         self._preview_btn.clicked.connect(lambda: self._regenerate(save_to=None))
         top_row.addWidget(self._preview_btn, 1)
-        self._shuffle_btn = QPushButton("Shuffle", bar)
+        self._shuffle_btn = QPushButton(tr("Shuffle"), bar)
         self._shuffle_btn.setToolTip(
-            "Randomise the patch order. Mixing up a structured set (a smooth "
+            tr("Randomise the patch order. Mixing up a structured set (a smooth "
             "ramp or an RGB grid) so neighbouring strips read differently is "
             "what lets a chart be safely read in either direction — it also "
-            "unlocks the “tag as randomised” option on Save.")
+            "unlocks the “tag as randomised” option on Save."))
         self._shuffle_btn.clicked.connect(self._randomise_patches)
         top_row.addWidget(self._shuffle_btn, 1)
         bv.addLayout(top_row)
@@ -1636,14 +1636,14 @@ class Ti2RelayoutDialog(QDialog):
         # Export sits next to Save As since both are "write the chart out"
         # actions — Save As writes the full deliverable, Export writes the
         # colour list (hex / RGB) for re-use in a fresh chart.
-        self._export_btn = QPushButton("Export colours…", bar)
+        self._export_btn = QPushButton(tr("Export colours…"), bar)
         self._export_btn.setToolTip(
-            "Save the patch colours as a text file you can paste back into "
+            tr("Save the patch colours as a text file you can paste back into "
             "the New chart dialog (or import elsewhere). Hex (#rrggbb) or "
-            "decimal RGB, one colour per line, in chart order.")
+            "decimal RGB, one colour per line, in chart order."))
         self._export_btn.clicked.connect(self._export_patch_colours)
         save_row.addWidget(self._export_btn)
-        self._save_btn = QPushButton("Save As…", bar)
+        self._save_btn = QPushButton(tr("Save As…"), bar)
         self._save_btn.clicked.connect(self._save_as)
         save_row.addWidget(self._save_btn)
         bv.addLayout(save_row)
@@ -1677,7 +1677,7 @@ class Ti2RelayoutDialog(QDialog):
             spec = R.ChartSpec.from_ti2(Path(path))
             program = R.default_program(spec)
         except Exception as exc:
-            QMessageBox.warning(self, "Could not load chart", str(exc))
+            QMessageBox.warning(self, tr("Could not load chart"), str(exc))
             return
         # Restore the printtarg layout knobs from the chart folder's meta.json
         # if this chart was saved by ChromIQ (the .ti2 itself only carries
@@ -1724,10 +1724,10 @@ class Ti2RelayoutDialog(QDialog):
         # Auto-render the initial preview so the user sees the chart
         # immediately instead of having to click "Update preview" first.
         if program:
-            self._status.setText("Rendering initial preview…")
+            self._status.setText(tr("Rendering initial preview…"))
             self._regenerate(save_to=None)
         else:
-            self._status.setText("Empty chart — add patches, then preview.")
+            self._status.setText(tr("Empty chart — add patches, then preview."))
 
     def _schedule_auto_refresh(self) -> None:
         """Restart the debounced preview timer (called from user edit hooks)."""
@@ -1760,8 +1760,10 @@ class Ti2RelayoutDialog(QDialog):
             return
         note = getattr(self, "_chart_note", "")
         self._info.setText(
-            f"{note} — {self._grid.count()} patches, "
-            f"-i{self._spec.instrument_flag} -p{self._spec.paper_flag}")
+            tr("{note} — {n} patches, -i{instr} -p{paper}").format(
+                note=note, n=self._grid.count(),
+                instr=self._spec.instrument_flag,
+                paper=self._spec.paper_flag))
 
     def _set_swatch_size(self, size: int) -> None:
         """Resize the grid swatches; rebuild icons + delegate cell so the
@@ -1787,7 +1789,7 @@ class Ti2RelayoutDialog(QDialog):
             return
         self._grid.addItem(self._grid_item(_to100(c)))
         self._renumber()
-        self._status.setText("Patch added. Update preview to apply.")
+        self._status.setText(tr("Patch added. Update preview to apply."))
 
     def _append_from_file(self) -> None:
         """Combine another patch set into this chart (start or end).
@@ -1798,7 +1800,7 @@ class Ti2RelayoutDialog(QDialog):
         and re-previews. RGB-only — non-RGB sources surface the parser's error.
         """
         if self._spec is None:
-            self._status.setText("Load or create a chart first.")
+            self._status.setText(tr("Load or create a chart first."))
             return
         start = (self._settings.get("custom_output_path", "")
                  or str(Path.home() / "ChromIQ"))
@@ -1811,29 +1813,35 @@ class Ti2RelayoutDialog(QDialog):
         try:
             extra = R.load_rgb_program(Path(path))
         except Exception as exc:  # noqa: BLE001 — show the parser's message
-            QMessageBox.warning(self, "Could not load patches", str(exc))
+            QMessageBox.warning(self, tr("Could not load patches"), str(exc))
             return
         if not extra:
-            QMessageBox.warning(self, "No patches",
-                                f"No RGB patches found in {Path(path).name}.")
+            QMessageBox.warning(self, tr("No patches"),
+                                tr("No RGB patches found in {name}.").format(
+                                    name=Path(path).name))
             return
 
         n = len(extra)
         box = QMessageBox(self)
-        box.setWindowTitle("Add the new colours")
+        box.setWindowTitle(tr("Add the new colours"))
         box.setIcon(QMessageBox.Icon.Question)
-        box.setText("Where would you like the new colours?")
+        box.setText(tr("Where would you like the new colours?"))
+        if n == 1:
+            ready = tr("1 colour from “{name}” is ready to add."
+                       ).format(name=Path(path).name)
+        else:
+            ready = tr("{n} colours from “{name}” are ready to add."
+                       ).format(n=n, name=Path(path).name)
         box.setInformativeText(
-            f"{n} colour{'s' if n != 1 else ''} from "
-            f"“{Path(path).name}” {'are' if n != 1 else 'is'} ready to "
-            "add. You can place them right at the beginning of the chart or "
-            "tack them on at the end — whichever makes the combined set "
-            "easier to work with.")
-        start_btn = box.addButton("Add to the beginning",
+            ready + " "
+            + tr("You can place them right at the beginning of the chart or "
+                 "tack them on at the end — whichever makes the combined set "
+                 "easier to work with."))
+        start_btn = box.addButton(tr("Add to the beginning"),
                                    QMessageBox.ButtonRole.AcceptRole)
-        end_btn = box.addButton("Add to the end",
+        end_btn = box.addButton(tr("Add to the end"),
                                 QMessageBox.ButtonRole.AcceptRole)
-        cancel_btn = box.addButton("Cancel", QMessageBox.ButtonRole.RejectRole)
+        cancel_btn = box.addButton(tr("Cancel"), QMessageBox.ButtonRole.RejectRole)
         # The app's button stylesheet keeps buttons short, so the longer
         # "Add to the beginning"/"end" labels clip at the default width. Give
         # each button room for its full label plus the stylesheet's own
@@ -1854,16 +1862,18 @@ class Ti2RelayoutDialog(QDialog):
         else:
             return
         self._renumber()
-        self._status.setText(
-            f"Added {len(extra)} patch(es) at the {where}. "
-            "Updating preview…")
+        if where == "start":
+            added = tr("Added {n} patches at the beginning.").format(n=len(extra))
+        else:
+            added = tr("Added {n} patches at the end.").format(n=len(extra))
+        self._status.setText(added + " " + tr("Updating preview…"))
         self._schedule_auto_refresh()
 
     def _show_3d_distribution(self) -> None:
         """Open the rotatable 3D RGB-cube view of the current patch set."""
         program = self._program_from_grid()
         if not program:
-            self._status.setText("Add patches first to see their distribution.")
+            self._status.setText(tr("Add patches first to see their distribution."))
             return
         from ui.dialogs.patch_cube_dialog import PatchCubeDialog
         from ui.theme import resolve_mode
@@ -1880,25 +1890,29 @@ class Ti2RelayoutDialog(QDialog):
         import random
         program = self._program_from_grid()
         if len(program) < 2:
-            self._status.setText("Need at least two patches to shuffle.")
+            self._status.setText(tr("Need at least two patches to shuffle."))
             return
         random.shuffle(program)
         self._populate_grid(program)
         self._renumber()
         self._status.setText(
-            f"Shuffled {len(program)} patches. Updating preview…")
+            tr("Shuffled {n} patches.").format(n=len(program))
+            + " " + tr("Updating preview…"))
         self._schedule_auto_refresh()
 
     def _remove_selected_patches(self) -> None:
         rows = sorted((self._grid.row(it) for it in self._grid.selectedItems()),
                       reverse=True)
         if not rows:
-            self._status.setText("Select one or more patches first.")
+            self._status.setText(tr("Select one or more patches first."))
             return
         for r in rows:
             self._grid.takeItem(r)
         self._renumber()
-        self._status.setText(f"Removed {len(rows)} patch(es).")
+        n_removed = len(rows)
+        self._status.setText(
+            tr("Removed 1 patch.") if n_removed == 1
+            else tr("Removed {n} patches.").format(n=n_removed))
 
     def _program_from_grid(self) -> list[tuple]:
         return [self._grid.item(i).data(Qt.ItemDataRole.UserRole)
@@ -1912,11 +1926,11 @@ class Ti2RelayoutDialog(QDialog):
         "Paste colour values" mode.
         """
         if self._grid.count() == 0:
-            self._status.setText("No patches to export.")
+            self._status.setText(tr("No patches to export."))
             return
         from PyQt6.QtWidgets import QInputDialog
         fmt, ok = QInputDialog.getItem(
-            self, "Export patch colours", "Format:",
+            self, tr("Export patch colours"), tr("Format:"),
             ["Hex (#rrggbb)", "RGB 0..255 (R G B)"], 0, False,
         )
         if not ok:
@@ -1945,15 +1959,18 @@ class Ti2RelayoutDialog(QDialog):
         try:
             out_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
         except OSError as exc:
-            QMessageBox.warning(self, "Save failed", str(exc))
+            QMessageBox.warning(self, tr("Save failed"), str(exc))
             return
-        self._status.setText(f"Exported {len(lines)} colour(s) to "
-                             f"{out_path.name}.")
+        n_exp = len(lines)
+        self._status.setText(
+            tr("Exported 1 colour to {name}.").format(name=out_path.name)
+            if n_exp == 1 else
+            tr("Exported {n} colours to {name}.").format(n=n_exp, name=out_path.name))
 
     def _set_patch_colour(self) -> None:
         items = self._grid.selectedItems()
         if not items:
-            self._status.setText("Select one or more patches first.")
+            self._status.setText(tr("Select one or more patches first."))
             return
         start = _qcolor(items[0].data(Qt.ItemDataRole.UserRole))
         c = self._pick_color(start, "Patch colour")
@@ -1963,13 +1980,16 @@ class Ti2RelayoutDialog(QDialog):
         for it in items:
             it.setData(Qt.ItemDataRole.UserRole, rgb)
             it.setIcon(_swatch_icon(rgb))
-        self._status.setText(f"Set {len(items)} patch(es).")
+        n_set = len(items)
+        self._status.setText(
+            tr("Set 1 patch.") if n_set == 1
+            else tr("Set {n} patches.").format(n=n_set))
         self._schedule_auto_refresh()
 
     def _transform_selection(self, factor: float) -> None:
         items = self._grid.selectedItems()
         if not items:
-            self._status.setText("Select one or more patches first.")
+            self._status.setText(tr("Select one or more patches first."))
             return
         for it in items:
             rgb = it.data(Qt.ItemDataRole.UserRole)
@@ -2037,7 +2057,7 @@ class Ti2RelayoutDialog(QDialog):
                 " padding: 0; margin: 0;"
                 " min-width: 0; min-height: 0;"
             )
-            btn.setToolTip(f"Spacer palette colour #{idx} — click to edit")
+            btn.setToolTip(tr("Spacer palette colour #{idx} — click to edit").format(idx=idx))
             btn.clicked.connect(lambda _=False, i=idx: self._edit_palette(i))
             self._palette_row.addWidget(btn)
         self._palette_row.addStretch(1)
@@ -2054,13 +2074,13 @@ class Ti2RelayoutDialog(QDialog):
         pal[idx] = _to100(c)
         self._palette = pal
         self._build_palette_row()
-        self._status.setText("Palette changed.")
+        self._status.setText(tr("Palette changed."))
         self._schedule_auto_refresh()
 
     def _reset_palette(self) -> None:
         self._palette = None
         self._build_palette_row()
-        self._status.setText("Palette reset to default.")
+        self._status.setText(tr("Palette reset to default."))
 
     # -- printtarg-options panel -------------------------------------------
     def _on_printtarg_changed(self, *_a) -> None:
@@ -2292,7 +2312,7 @@ class Ti2RelayoutDialog(QDialog):
     # -- regeneration / preview --------------------------------------------
     def _regenerate(self, save_to: Path | None) -> None:
         if self._spec is None or self._grid.count() == 0:
-            self._status.setText("Load or create a chart first.")
+            self._status.setText(tr("Load or create a chart first."))
             return
         if self._worker is not None and self._worker.isRunning():
             return
@@ -2304,7 +2324,7 @@ class Ti2RelayoutDialog(QDialog):
                     p.unlink()
         self._preview_pending_save = save_to
         self._set_busy(True)
-        self._status.setText("Rendering with printtarg…")
+        self._status.setText(tr("Rendering with printtarg…"))
         self._worker = _RegenWorker(
             self._spec, self._program_from_grid(), out_dir, self._bin_dir,
             tuple(self._palette) if self._palette else None,
@@ -2315,8 +2335,8 @@ class Ti2RelayoutDialog(QDialog):
     def _on_regen_done(self, result) -> None:
         self._set_busy(False)
         if isinstance(result, Exception):
-            QMessageBox.warning(self, "Render failed", str(result))
-            self._status.setText("Render failed.")
+            QMessageBox.warning(self, tr("Render failed"), str(result))
+            self._status.setText(tr("Render failed."))
             return
         self._regen = result
         # New render → previous per-page spacer segmentations are stale.
@@ -2339,13 +2359,16 @@ class Ti2RelayoutDialog(QDialog):
         # Refresh the 'Force randomised tag' affordance for this fresh layout.
         self._update_force_tag_state()
         if self._preview_pending_save is not None:
-            self._status.setText(f"Saved to {self._preview_pending_save}")
+            self._status.setText(
+                tr("Saved to {path}").format(path=self._preview_pending_save))
         else:
             pages = len(result.tiffs)
-            extra = f" across {pages} pages" if pages > 1 else ""
+            extra = (tr(" across {pages} pages").format(pages=pages)
+                     if pages > 1 else "")
             self._status.setText(
-                f"{len(self._spacers)} spacers on this page{extra}. "
-                "Spacers mode → click to select, then Paint.")
+                tr("{n} spacers on this page{extra}.").format(
+                    n=len(self._spacers), extra=extra)
+                + " " + tr("Spacers mode → click to select, then Paint."))
 
     def _show_page(self, page: int) -> None:
         """Switch the preview to ``page``: detect its spacers (cached), redraw."""
@@ -2411,7 +2434,8 @@ class Ti2RelayoutDialog(QDialog):
         n = len(self._regen.tiffs) if self._regen else 0
         self._page_bar.setVisible(n > 1)
         if n > 1:
-            self._page_label.setText(f"Page {self._page + 1}/{n}")
+            self._page_label.setText(
+                tr("Page {page}/{total}").format(page=self._page + 1, total=n))
             self._prev_btn.setEnabled(self._page > 0)
             self._next_btn.setEnabled(self._page < n - 1)
 
@@ -2634,7 +2658,10 @@ class Ti2RelayoutDialog(QDialog):
                 # selecting nothing should mean "clear").
                 self._sel_spacers = set(touched)
             self._refresh_preview()
-            self._status.setText(f"{len(self._sel_spacers)} spacer(s) selected.")
+            n_sp = len(self._sel_spacers)
+            self._status.setText(
+                tr("1 spacer selected.") if n_sp == 1
+                else tr("{n} spacers selected.").format(n=n_sp))
             return
 
         # Patches mode (+ highlight): marquee picks patches into the grid.
@@ -2663,15 +2690,17 @@ class Ti2RelayoutDialog(QDialog):
             row = min(touched_p) - 1
             if 0 <= row < self._grid.count():
                 self._grid.scrollToItem(self._grid.item(row))
+        n_pat = len(self._grid.selectedItems())
         self._status.setText(
-            f"{len(self._grid.selectedItems())} patch(es) selected.")
+            tr("1 patch selected.") if n_pat == 1
+            else tr("{n} patches selected.").format(n=n_pat))
 
     def _clear_spacer_selection(self) -> None:
         if not self._sel_spacers:
             return
         self._sel_spacers.clear()
         self._refresh_preview()
-        self._status.setText("Spacer selection cleared.")
+        self._status.setText(tr("Spacer selection cleared."))
 
     def _on_preview_click(self, pos: QPoint, mods) -> None:
         """Click in the preview — standard select semantics for both modes.
@@ -2700,7 +2729,7 @@ class Ti2RelayoutDialog(QDialog):
                 if not (is_alt or is_shift):
                     self._sel_spacers.clear()
                     self._refresh_preview()
-                    self._status.setText("Spacer selection cleared.")
+                    self._status.setText(tr("Spacer selection cleared."))
                 return
             if is_alt:
                 self._sel_spacers.discard(hit)
@@ -2709,7 +2738,10 @@ class Ti2RelayoutDialog(QDialog):
             else:
                 self._sel_spacers = {hit}
             self._refresh_preview()
-            self._status.setText(f"{len(self._sel_spacers)} spacer(s) selected.")
+            n_sp = len(self._sel_spacers)
+            self._status.setText(
+                tr("1 spacer selected.") if n_sp == 1
+                else tr("{n} spacers selected.").format(n=n_sp))
             return
 
         # Patches mode (+ highlight): click maps to the grid selection.
@@ -2719,7 +2751,7 @@ class Ti2RelayoutDialog(QDialog):
         if sid is None:
             if not (is_alt or is_shift):
                 self._grid.clearSelection()
-                self._status.setText("Patch selection cleared.")
+                self._status.setText(tr("Patch selection cleared."))
             return
         row = sid - 1
         if not (0 <= row < self._grid.count()):
@@ -2732,8 +2764,10 @@ class Ti2RelayoutDialog(QDialog):
             self._select_patches_by_ids([sid], extend=False)
         if not is_alt:
             self._grid.scrollToItem(self._grid.item(row))
+        n_pat = len(self._grid.selectedItems())
         self._status.setText(
-            f"{len(self._grid.selectedItems())} patch(es) selected.")
+            tr("1 patch selected.") if n_pat == 1
+            else tr("{n} patches selected.").format(n=n_pat))
 
     def _spacer_at(self, ix: float, iy: float) -> int | None:
         for i, sp in enumerate(self._spacers):
@@ -2744,7 +2778,7 @@ class Ti2RelayoutDialog(QDialog):
 
     def _paint_spacers(self) -> None:
         if not self._sel_spacers:
-            self._status.setText("Click spacers in the preview to select them first.")
+            self._status.setText(tr("Click spacers in the preview to select them first."))
             return
         c = self._pick_color(QColor(128, 128, 128), "Spacer colour")
         if not c.isValid():
@@ -2753,8 +2787,12 @@ class Ti2RelayoutDialog(QDialog):
         for i in self._sel_spacers:
             self._paint[(self._page, i)] = rgb
         self._apply_paint_and_show()
+        n_painted = len(self._sel_spacers)
         self._status.setText(
-            f"Painted {len(self._sel_spacers)} spacer(s) on page {self._page + 1}.")
+            tr("Painted 1 spacer on page {page}.").format(page=self._page + 1)
+            if n_painted == 1 else
+            tr("Painted {n} spacers on page {page}.").format(
+                n=n_painted, page=self._page + 1))
 
     # -- save ---------------------------------------------------------------
     def _save_as(self) -> None:
@@ -2793,7 +2831,7 @@ class Ti2RelayoutDialog(QDialog):
             # never fatal).
             R.save_editor_meta(res.ti2, self._spec, self._options, name)
         except Exception as exc:
-            QMessageBox.warning(self, "Save failed", str(exc))
+            QMessageBox.warning(self, tr("Save failed"), str(exc))
             return
         tag_note = self._maybe_tag_randomised(res.ti2)
         msg = f"Saved {res.ti2.name} + {len(res.tiffs)} page(s) to {target}"
@@ -2801,7 +2839,7 @@ class Ti2RelayoutDialog(QDialog):
             msg += f"\nprinttarg added {pad} patch(es) to complete the last strip."
         if tag_note:
             msg += "\n" + tag_note
-        QMessageBox.information(self, "Saved", msg)
+        QMessageBox.information(self, tr("Saved"), msg)
         self._status.setText(msg.splitlines()[0])
 
     def _maybe_tag_randomised(self, ti2: Path) -> str:
@@ -2838,47 +2876,48 @@ class Ti2RelayoutDialog(QDialog):
             return True
 
         dlg = QDialog(self)
-        dlg.setWindowTitle("Force “randomised” tag?")
+        dlg.setWindowTitle(tr("Force “randomised” tag?"))
         dlg.setMinimumWidth(560)
         lay = QVBoxLayout(dlg)
         lay.setContentsMargins(24, 20, 24, 16)
         lay.setSpacing(12)
 
         heading = QLabel(
-            "You're about to mark a structured chart as randomised. Please read "
-            "this first.", dlg)
+            tr("You're about to mark a structured chart as randomised. Please read "
+            "this first."), dlg)
         heading.setWordWrap(True)
         heading.setStyleSheet("font-weight: 600;")
         lay.addWidget(heading)
 
         body = QLabel(
-            "When you measure a chart, your instrument has to work out which strip "
-            "it's looking at and which way round you scanned it. It does that by "
-            "matching the colours it reads against what it expects — and that only "
-            "works reliably when the colours are well shuffled, so every strip has "
-            "its own distinctive look.\n\n"
-            f"ChromIQ checked this chart and it looks structured instead: "
-            f"{report.reason[0].lower() + report.reason[1:]} On a layout like this "
-            "the strips can look alike, so the instrument may lock onto the wrong "
-            "strip or read it backwards. The frustrating part is that you usually "
-            "get no error at all — just measurements that are quietly wrong, which "
-            "then build a profile with colour casts.\n\n"
-            "Marking it as randomised anyway tells your instrument it's free to "
-            "read strips in either direction, which is exactly where this goes "
-            "wrong. It's only a sensible choice if you happen to know the order is "
-            "genuinely well mixed despite how it looks.\n\n"
-            "The safer alternatives: leave it untagged and simply scan every strip "
-            "the same way, or rebuild the chart so its colours are shuffled.\n\n"
-            "Would you like to mark it as randomised anyway?", dlg)
+            tr("When you measure a chart, your instrument has to work out which strip "
+               "it's looking at and which way round you scanned it. It does that by "
+               "matching the colours it reads against what it expects — and that only "
+               "works reliably when the colours are well shuffled, so every strip has "
+               "its own distinctive look.\n\n"
+               "ChromIQ checked this chart and it looks structured instead: "
+               "{reason} On a layout like this "
+               "the strips can look alike, so the instrument may lock onto the wrong "
+               "strip or read it backwards. The frustrating part is that you usually "
+               "get no error at all — just measurements that are quietly wrong, which "
+               "then build a profile with colour casts.\n\n"
+               "Marking it as randomised anyway tells your instrument it's free to "
+               "read strips in either direction, which is exactly where this goes "
+               "wrong. It's only a sensible choice if you happen to know the order is "
+               "genuinely well mixed despite how it looks.\n\n"
+               "The safer alternatives: leave it untagged and simply scan every strip "
+               "the same way, or rebuild the chart so its colours are shuffled.\n\n"
+               "Would you like to mark it as randomised anyway?").format(
+                reason=report.reason[0].lower() + report.reason[1:]), dlg)
         body.setWordWrap(True)
         lay.addWidget(body)
 
-        hide_cb = QCheckBox("Don't show this again", dlg)
+        hide_cb = QCheckBox(tr("Don't show this again"), dlg)
         lay.addWidget(hide_cb)
 
         bb = QDialogButtonBox(dlg)
-        tag_btn = bb.addButton("Tag anyway", QDialogButtonBox.ButtonRole.AcceptRole)
-        cancel_btn = bb.addButton("Leave untagged", QDialogButtonBox.ButtonRole.RejectRole)
+        tag_btn = bb.addButton(tr("Tag anyway"), QDialogButtonBox.ButtonRole.AcceptRole)
+        cancel_btn = bb.addButton(tr("Leave untagged"), QDialogButtonBox.ButtonRole.RejectRole)
         cancel_btn.setDefault(True)
         tag_btn.clicked.connect(dlg.accept)
         cancel_btn.clicked.connect(dlg.reject)

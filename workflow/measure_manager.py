@@ -11,6 +11,7 @@ from PyQt6.QtCore import QObject, pyqtSignal
 
 from core.logger import get_logger
 from core.strip_utils import letter_to_idx
+from core.i18n import tr
 
 if TYPE_CHECKING:
     from core.argyll_runner import ArgyllRunner
@@ -336,7 +337,7 @@ class MeasureManager(QObject):
         if m:
             try:
                 pct = round(float(m.group(1)))
-                self.info_message.emit("battery", f"Instrument battery: {pct}%")
+                self.info_message.emit("battery", tr("Instrument battery: {pct}%").format(pct=pct))
             except ValueError:
                 pass
         if _INFO_NO_SPECTRAL_RE.search(line):
@@ -377,7 +378,7 @@ class MeasureManager(QObject):
             self.abort_confirm.emit()
         m = _PATCH_NOT_FOUND_RE.search(line)
         if m:
-            self.info_message.emit("patch_not_found", f"Patch '{m.group(1)}' not found.")
+            self.info_message.emit("patch_not_found", tr("Patch '{name}' not found.").format(name=m.group(1)))
 
     # ------------------------------------------------------------------
     # Guided strip navigation

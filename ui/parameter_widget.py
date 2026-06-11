@@ -18,6 +18,7 @@ from PyQt6.QtWidgets import (
 from core.logger import get_logger
 from ui.tooltip_button import TooltipButton
 from ui.widgets import NoScrollComboBox, NoScrollDoubleSpinBox, NoScrollSpinBox, make_browse_button, open_file_dialog
+from core.i18n import tr
 
 log = get_logger(__name__)
 
@@ -288,7 +289,7 @@ class ParameterWidget(QWidget):
 
         # Browse button for file_path
         if self._param.get("type") == "file_path":
-            self._browse_btn = make_browse_button(self, "Browse…", icon=self._browse_icon)
+            self._browse_btn = make_browse_button(self, tr("Browse…"), icon=self._browse_icon)
             self._browse_btn.clicked.connect(self._browse)
             layout.addWidget(self._browse_btn)
 
@@ -326,7 +327,7 @@ class ParameterWidget(QWidget):
                 self._tooltip_btn._body = tooltip_body.strip()
             if tooltip_min_width is not None:
                 self._tooltip_btn._min_width = tooltip_min_width
-            self._tooltip_btn.setToolTip(f"{tooltip_title}\n\nClick for details")
+            self._tooltip_btn.setToolTip(tooltip_title + "\n\n" + tr("Click for details"))
 
     def set_control_enabled(self, enabled: bool,
                             include_label: bool = True) -> None:
@@ -447,7 +448,7 @@ class ParameterWidget(QWidget):
         hbox.setContentsMargins(0, 0, 0, 0)
         hbox.setSpacing(6)
 
-        lbl_w = QLabel("W (mm):", dim_row)
+        lbl_w = QLabel(tr("W (mm):"), dim_row)
         lbl_w.setObjectName("param_label")
         hbox.addWidget(lbl_w)
 
@@ -458,7 +459,7 @@ class ParameterWidget(QWidget):
         self._custom_w_spin = w_spin
         hbox.addWidget(w_spin)
 
-        lbl_h = QLabel("H (mm):", dim_row)
+        lbl_h = QLabel(tr("H (mm):"), dim_row)
         lbl_h.setObjectName("param_label")
         hbox.addWidget(lbl_h)
 

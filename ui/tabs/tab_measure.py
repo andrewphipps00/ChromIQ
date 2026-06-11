@@ -54,6 +54,7 @@ from ui.styles import SPEC_GREEN, TAB_COLORS
 from workflow.average_runner import AverageParams, AverageRunner
 from workflow.measure_manager import MeasureManager, MeasureParams
 from ui.tiff_preview import TiffPreview
+from core.i18n import tr
 
 if TYPE_CHECKING:
     from core.argyll_runner import ArgyllRunner
@@ -388,8 +389,8 @@ def _detect_uniform_stripe_rects(tiff_path: Path, n_strips: int) -> list[QRect]:
 
 # Tooltip for the optional "also use pre-conditioning data" checkbox (shown only
 # when ChromIQ-style refinement is on and this run carries a preconditioning.ti3).
-_PRECOND_TOOLTIP = (
-    "Also Use Pre-conditioning Measurement Data",
+_PRECOND_TIP_TITLE = "Also Use Pre-conditioning Measurement Data"
+_PRECOND_TIP_BODY = (
     "ChromIQ found saved measurement data from the pre-conditioning profile you\n"
     "selected when creating this chart (the run's preconditioning.ti3).\n\n"
     "Tick this to fold those earlier measurements into your profile. When you\n"
@@ -400,7 +401,7 @@ _PRECOND_TOOLTIP = (
     "separate copy only at build time. You can still re-measure individual\n"
     "strips in Check && Refine exactly as usual.\n\n"
     "This option only appears when ChromIQ-style refinement is enabled in\n"
-    "Settings and saved pre-conditioning data is present.",
+    "Settings and saved pre-conditioning data is present."
 )
 
 
@@ -638,10 +639,10 @@ class TabMeasure(QWidget):
         top_layout.setContentsMargins(16, 12, 16, 6)
         top_layout.setSpacing(8)
         top_layout.addWidget(TabHeader(
-            "STEP 03 · MEASURE TARGET", "Measure printed chart", "#56d6a5", top_widget,
-            tooltip_title="Step 3 — Measure the print",
+            tr("STEP 03 · MEASURE TARGET"), tr("Measure printed chart"), "#56d6a5", top_widget,
+            tooltip_title=tr("Step 3 — Measure the print"),
             tooltip_body=(
-                "On this screen, your spectrophotometer reads every colour patch "
+                tr("On this screen, your spectrophotometer reads every colour patch "
                 "on the printed chart and records what colour your printer actually "
                 "produced. ChromIQ pairs each measurement with the RGB value that "
                 "was requested in step 1, and saves the result as a .ti3 file.\n\n"
@@ -661,7 +662,7 @@ class TabMeasure(QWidget):
                 "beep before moving to the next.\n\n"
                 "If you misread a patch, you can usually re-do that strip from the "
                 "prompt. Don't rush — accurate reads now mean an accurate profile.\n\n"
-                "Next step: build the ICC profile on tab 4."
+                "Next step: build the ICC profile on tab 4.")
             ),
         ))
         _mode_font = QFont()
@@ -671,12 +672,12 @@ class TabMeasure(QWidget):
         self._mode_row_widget = QWidget(top_widget)
         mode_row = QHBoxLayout(self._mode_row_widget)
         mode_row.setContentsMargins(0, 0, 0, 0)
-        self._guided_btn = QPushButton("GUIDED", self._mode_row_widget)
+        self._guided_btn = QPushButton(tr("GUIDED"), self._mode_row_widget)
         self._guided_btn.setCheckable(True)
         self._guided_btn.setChecked(True)
         self._guided_btn.setObjectName("mode_btn")
         self._guided_btn.setFont(_mode_font)
-        self._manual_btn = QPushButton("MANUAL", self._mode_row_widget)
+        self._manual_btn = QPushButton(tr("MANUAL"), self._mode_row_widget)
         self._manual_btn.setCheckable(True)
         self._manual_btn.setObjectName("mode_btn")
         self._manual_btn.setFont(_mode_font)
@@ -693,15 +694,15 @@ class TabMeasure(QWidget):
         fo_layout = QVBoxLayout(file_outer)
         fo_layout.setContentsMargins(16, 4, 16, 0)
         fo_layout.setSpacing(0)
-        self._file_grp = file_grp = QGroupBox("Target File (.ti2)", file_outer)
+        self._file_grp = file_grp = QGroupBox(tr("Target File (.ti2)"), file_outer)
         file_grp.setFlat(True)
         fg = QVBoxLayout(file_grp)
         fg.setContentsMargins(8, 6, 8, 8)
         file_row = QHBoxLayout()
-        self._load_ti1_btn = QPushButton("Load .ti2 file…", file_outer)
+        self._load_ti1_btn = QPushButton(tr("Load .ti2 file…"), file_outer)
         set_folder_icon(self._load_ti1_btn, "folder_measure")
         self._load_ti1_btn.clicked.connect(self._on_load_ti2)
-        self._ti1_lbl = ElidingLabel("No file selected", file_outer)
+        self._ti1_lbl = ElidingLabel(tr("No file selected"), file_outer)
         self._ti1_lbl.setStyleSheet("color: #909090; font-size: 11px;")
         file_row.addWidget(self._load_ti1_btn)
         file_row.addWidget(self._ti1_lbl, stretch=1)
@@ -729,7 +730,7 @@ class TabMeasure(QWidget):
         calm_layout = QVBoxLayout(calm_box)
         calm_layout.setContentsMargins(0, 0, 0, 0)
         calm_layout.setSpacing(4)
-        headline = QLabel(f'Keep calm<span style="color: {SPEC_GREEN}; font-style: italic;">!</span>', calm_box)
+        headline = QLabel(tr("Keep calm<span style=\"color: {SPEC_GREEN}; font-style: italic;\">!</span>").format(SPEC_GREEN=SPEC_GREEN), calm_box)
         headline.setTextFormat(Qt.TextFormat.RichText)
         headline.setAlignment(Qt.AlignmentFlag.AlignCenter)
         headline.setStyleSheet(
@@ -737,7 +738,7 @@ class TabMeasure(QWidget):
             " font-family: Georgia; font-size: 28px;"
         )
         calm_layout.addWidget(headline)
-        subtext = QLabel("Scan each strip with a slow, steady motion.", calm_box)
+        subtext = QLabel(tr("Scan each strip with a slow, steady motion."), calm_box)
         subtext.setAlignment(Qt.AlignmentFlag.AlignCenter)
         subtext.setStyleSheet(
             "color: #808080; background: transparent;"
@@ -764,16 +765,16 @@ class TabMeasure(QWidget):
         bo_layout = QVBoxLayout(btn_outer)
         bo_layout.setContentsMargins(16, 6, 16, 8)
         btn_row = QHBoxLayout()
-        self._start_btn = QPushButton("Start Measurement", btn_outer)
+        self._start_btn = QPushButton(tr("Start Measurement"), btn_outer)
         self._start_btn.setObjectName("primary")
         self._start_btn.setFixedHeight(36)
         self._start_btn.clicked.connect(self._on_start)
-        self._stop_btn = QPushButton("Stop", btn_outer)
+        self._stop_btn = QPushButton(tr("Stop"), btn_outer)
         self._stop_btn.setFixedHeight(36)
         self._apply_stop_btn_style()
         self._stop_btn.clicked.connect(self._on_stop)
         self._stop_btn.setEnabled(False)
-        self._save_defaults_btn = QPushButton("Save as Defaults", btn_outer)
+        self._save_defaults_btn = QPushButton(tr("Save as Defaults"), btn_outer)
         self._save_defaults_btn.setFixedHeight(36)
         self._save_defaults_btn.clicked.connect(self._on_save_defaults)
         btn_row.addWidget(self._start_btn)
@@ -792,7 +793,7 @@ class TabMeasure(QWidget):
         self._log.setReadOnly(True)
         self._log.setMinimumHeight(100)
         self._log.setMaximumHeight(100)
-        self._log.setPlaceholderText("chartread output will appear here…")
+        self._log.setPlaceholderText(tr("chartread output will appear here…"))
         lo_layout.addWidget(self._log)
         lc_layout.addWidget(log_outer)
 
@@ -810,7 +811,7 @@ class TabMeasure(QWidget):
         rl.setContentsMargins(0, 0, 0, 12)
         rl.setSpacing(0)
         self._preview = TiffPreview(right)
-        self._preview.set_caption("CHART PREVIEW")
+        self._preview.set_caption(tr("CHART PREVIEW"))
         rl.addWidget(self._preview, stretch=1)
         splitter.addWidget(right)
 
@@ -833,25 +834,25 @@ class TabMeasure(QWidget):
         ll.setSpacing(10)
 
         # Instrument
-        self._instr_grp = instr_grp = QGroupBox("Measurement Instrument", left)
+        self._instr_grp = instr_grp = QGroupBox(tr("Measurement Instrument"), left)
         instr_grp.setFlat(True)
         ig = QVBoxLayout(instr_grp)
         ig.setContentsMargins(8, 6, 8, 8)
         instr_row = QHBoxLayout()
-        instr_row.addWidget(QLabel("Instrument port number:", left))
+        instr_row.addWidget(QLabel(tr("Instrument port number:"), left))
         self._instr_spin = NoScrollSpinBox(left)
         self._instr_spin.setRange(1, 9)
         self._instr_spin.setValue(1)
         instr_row.addWidget(self._instr_spin)
         instr_row.addStretch()
         instr_row.addWidget(TooltipButton(
-            "Instrument Port",
-            "Port index passed to chartread via -c.\n\n"
+            tr("Instrument Port"),
+            tr("Port index passed to chartread via -c.\n\n"
             "Most setups use 1. When chartread starts it prints a numbered\n"
             "list of detected instruments — set this to the number shown\n"
             "next to your spectrophotometer in that list.\n\n"
             "Only change it if you have more than one instrument connected\n"
-            "at the same time.",
+            "at the same time."),
             left,
         ))
         ig.addLayout(instr_row)
@@ -859,7 +860,7 @@ class TabMeasure(QWidget):
         instr_grp.setVisible(False)
 
         # Core measurement options (always shown)
-        self._core_grp = core_grp = QGroupBox("Measurement Options", left)
+        self._core_grp = core_grp = QGroupBox(tr("Measurement Options"), left)
         cg = QVBoxLayout(core_grp)
         cg.setContentsMargins(8, 14, 8, 8)
         cg.setSpacing(8)
@@ -881,54 +882,54 @@ class TabMeasure(QWidget):
         self._make_bidir_row(left, cg, "guided")
 
         self._suppress_cb, _ = _bool_row(
-            "Suppress warning messages (-S)", True,
-            "Suppress Warnings (-S)",
-            "Suppresses non-fatal instrument warnings from chartread.\n\n"
+            tr("Suppress warning messages (-S)"), True,
+            tr("Suppress Warnings (-S)"),
+            tr("Suppresses non-fatal instrument warnings from chartread.\n\n"
             "Suppressed messages include: calibration drift notices,\n"
             "reflectance range warnings on very dark patches, and strip\n"
             "timing cautions. These rarely affect measurement quality.\n\n"
             "Fatal errors that would prevent a .ti3 from being written are\n"
-            "always shown regardless of this setting.",
+            "always shown regardless of this setting."),
         )
         self._nocal_cb, _nocal_tip = _bool_row(
-            "Skip initial calibration (-N)", False,
-            "Skip Initial Calibration (-N)",
-            "Skips the automatic white-tile calibration at chartread startup.\n\n"
+            tr("Skip initial calibration (-N)"), False,
+            tr("Skip Initial Calibration (-N)"),
+            tr("Skips the automatic white-tile calibration at chartread startup.\n\n"
             "Normally chartread prompts you to place the instrument on its\n"
             "white calibration tile before measuring begins. This ensures\n"
             "accurate absolute reflectance values and takes only a few seconds.\n\n"
             "Enable this only if you have already calibrated the instrument\n"
-            "earlier in the same session and do not want to repeat the step.",
+            "earlier in the same session and do not want to repeat the step."),
         )
         self._nocal_cb.setVisible(False)
         _nocal_tip.setVisible(False)
         self._pbp_cb, _pbp_tip = _bool_row(
-            "Patch-by-patch mode (-p)", False,
-            "Patch-by-Patch Mode (-p)",
-            "Switches from strip reading to single-patch measurement mode.\n\n"
+            tr("Patch-by-patch mode (-p)"), False,
+            tr("Patch-by-Patch Mode (-p)"),
+            tr("Switches from strip reading to single-patch measurement mode.\n\n"
             "Instead of scanning entire strips, chartread guides you patch\n"
             "by patch across the chart. This is significantly slower — one\n"
             "reading per patch — but more reliable on heavily textured\n"
             "surfaces or when strip reading consistently fails on a\n"
-            "particular chart layout.",
+            "particular chart layout."),
         )
         self._pbp_cb.setVisible(False)
         _pbp_tip.setVisible(False)
 
         resume_row = QHBoxLayout()
-        self._resume_cb = QCheckBox("Refine / resume existing measurement (-r)", left)
+        self._resume_cb = QCheckBox(tr("Refine / resume existing measurement (-r)"), left)
         self._resume_cb.setChecked(False)
         self._resume_cb.setVisible(False)
         resume_row.addWidget(self._resume_cb)
         resume_row.addStretch()
         self._resume_tip = TooltipButton(
-            "Refine / Resume Existing Measurement (-r)",
-            "Reuses the existing .ti3 file in the same folder as the\n"
+            tr("Refine / Resume Existing Measurement (-r)"),
+            tr("Reuses the existing .ti3 file in the same folder as the\n"
             ".ti2 file. Previously measured strips are kept — you only need\n"
             "to scan the strips you want to update or add.\n\n"
             "Use this after a quality check to re-measure problem strips,\n"
             "or to continue a measurement that was interrupted.\n\n"
-            "This option appears only when a matching .ti3 file is found.",
+            "This option appears only when a matching .ti3 file is found."),
             left,
         )
         self._resume_tip.setVisible(False)
@@ -941,20 +942,20 @@ class TabMeasure(QWidget):
         refine_rl.setContentsMargins(20, 0, 0, 0)
         refine_rl.setSpacing(6)
         self._refine_cb = QCheckBox(
-            "Use refinement strips file for guided re-measurement",
+            tr("Use refinement strips file for guided re-measurement"),
             self._refine_row,
         )
         self._refine_cb.setEnabled(False)
         refine_rl.addWidget(self._refine_cb, stretch=1)
         refine_rl.addWidget(TooltipButton(
-            "Refinement Strips File",
-            "Available when a Refine_Strips_<name>.txt file exists next\n"
+            tr("Refinement Strips File"),
+            tr("Available when a Refine_Strips_<name>.txt file exists next\n"
             "to your .ti2 file.\n\n"
             "That file is created automatically by the Check && Refine\n"
             "tab after a quality check. It lists the strips with the\n"
             "highest colour errors, sorted worst-first.\n\n"
             "When active, the app navigates chartread to each of those\n"
-            "strips automatically — you only need to scan them.",
+            "strips automatically — you only need to scan them."),
             self._refine_row,
         ))
         self._refine_row.setVisible(False)
@@ -962,13 +963,13 @@ class TabMeasure(QWidget):
 
         precond_row = QHBoxLayout()
         self._use_precond_cb = QCheckBox(
-            "Also use measurement data from the pre-conditioning profile", left
+            tr("Also use measurement data from the pre-conditioning profile"), left
         )
         self._use_precond_cb.setChecked(False)
         self._use_precond_cb.setVisible(False)
         precond_row.addWidget(self._use_precond_cb)
         precond_row.addStretch()
-        self._precond_tip = TooltipButton(*_PRECOND_TOOLTIP, left)
+        self._precond_tip = TooltipButton(tr(_PRECOND_TIP_TITLE), tr(_PRECOND_TIP_BODY), left)
         self._precond_tip.setVisible(False)
         precond_row.addWidget(self._precond_tip)
         cg.addLayout(precond_row)
@@ -983,7 +984,7 @@ class TabMeasure(QWidget):
         ll.addWidget(core_grp)
 
         # Additional chartread arguments — structured
-        self._adv_grp = adv_grp = QGroupBox("Additional Options", left)
+        self._adv_grp = adv_grp = QGroupBox(tr("Additional Options"), left)
         ag = QVBoxLayout(adv_grp)
         ag.setContentsMargins(8, 14, 8, 8)
         ag.setSpacing(6)
@@ -1038,32 +1039,32 @@ class TabMeasure(QWidget):
         cl.setSpacing(0)
 
         # Presets group
-        presets_grp = QGroupBox("Presets", container)
+        presets_grp = QGroupBox(tr("Presets"), container)
         presets_row = QHBoxLayout(presets_grp)
         presets_row.setContentsMargins(8, 4, 8, 8)
-        presets_row.addWidget(QLabel("Select preset:", container))
+        presets_row.addWidget(QLabel(tr("Select preset:"), container))
         self._m_preset_combo = NoScrollComboBox(container)
-        self._m_preset_combo.addItem("none", userData=None)
+        self._m_preset_combo.addItem(tr("none"), userData=None)
         presets_row.addWidget(self._m_preset_combo, stretch=1)
         self._m_preset_add_btn = QPushButton(container)
         self._m_preset_add_btn.setObjectName("icon_btn")
         self._m_preset_add_btn.setFixedSize(28, 28)
         set_preset_icon(self._m_preset_add_btn, "plus")
-        self._m_preset_add_btn.setToolTip("Save current settings as a new preset")
+        self._m_preset_add_btn.setToolTip(tr("Save current settings as a new preset"))
         self._m_preset_del_btn = QPushButton(container)
         self._m_preset_del_btn.setObjectName("icon_btn")
         self._m_preset_del_btn.setFixedSize(28, 28)
         set_preset_icon(self._m_preset_del_btn, "minus")
-        self._m_preset_del_btn.setToolTip("Delete selected preset")
+        self._m_preset_del_btn.setToolTip(tr("Delete selected preset"))
         self._m_preset_del_btn.setEnabled(False)
         self._m_preset_reveal_btn = QPushButton(container)
         self._m_preset_reveal_btn.setObjectName("icon_btn")
         self._m_preset_reveal_btn.setFixedSize(28, 28)
         set_folder_icon(self._m_preset_reveal_btn, "folder")
         self._m_preset_reveal_btn.setToolTip(
-            "Open this tab's presets folder in Finder/Explorer.\n"
+            tr("Open this tab's presets folder in Finder/Explorer.\n"
             "Each preset is a plain .json file — copy one to a colleague\n"
-            "and they can drop it into their own folder to share."
+            "and they can drop it into their own folder to share.")
         )
         self._m_preset_reveal_btn.clicked.connect(
             lambda: reveal_in_file_manager(tab_dir("measure"))
@@ -1072,8 +1073,8 @@ class TabMeasure(QWidget):
         presets_row.addWidget(self._m_preset_del_btn)
         presets_row.addWidget(self._m_preset_reveal_btn)
         presets_row.addWidget(TooltipButton(
-            "Manual Presets",
-            "Save and recall named snapshots of all Manual mode settings.\n\n"
+            tr("Manual Presets"),
+            tr("Save and recall named snapshots of all Manual mode settings.\n\n"
             "  +  Save current parameter values as a new named preset.\n"
             "  −  Delete the currently selected preset.\n"
             "  ▢  Open this tab's presets folder in Finder/Explorer.\n\n"
@@ -1086,7 +1087,7 @@ class TabMeasure(QWidget):
             "out of that folder and send it to a colleague; to install a\n"
             "shared preset, drop the .json into the matching folder on the\n"
             "target machine and ChromIQ will pick it up on the next launch.\n\n"
-            "Presets persist between sessions.",
+            "Presets persist between sessions."),
             container,
             min_width=600,
         ))
@@ -1106,12 +1107,12 @@ class TabMeasure(QWidget):
         ll.setSpacing(10)
 
         # Instrument — mirrors guided "Measurement Instrument" group
-        m_instr_grp = QGroupBox("Measurement Instrument", left)
+        m_instr_grp = QGroupBox(tr("Measurement Instrument"), left)
         m_instr_grp.setFlat(True)
         mig = QVBoxLayout(m_instr_grp)
         mig.setContentsMargins(8, 6, 8, 8)
         m_instr_row = QHBoxLayout()
-        m_instr_row.addWidget(QLabel("Instrument port number:", left))
+        m_instr_row.addWidget(QLabel(tr("Instrument port number:"), left))
         self._m_instr_spin = NoScrollSpinBox(left)
         self._m_instr_spin.setRange(1, 9)
         self._m_instr_spin.setValue(1)
@@ -1120,20 +1121,20 @@ class TabMeasure(QWidget):
         m_instr_row.addWidget(self._m_instr_spin)
         m_instr_row.addStretch()
         m_instr_row.addWidget(TooltipButton(
-            "Instrument Port",
-            "Port index passed to chartread via -c.\n\n"
+            tr("Instrument Port"),
+            tr("Port index passed to chartread via -c.\n\n"
             "Most setups use 1. When chartread starts it prints a numbered\n"
             "list of detected instruments — set this to the number shown\n"
             "next to your spectrophotometer in that list.\n\n"
             "Only change it if you have more than one instrument connected\n"
-            "at the same time.",
+            "at the same time."),
             left,
         ))
         mig.addLayout(m_instr_row)
         ll.addWidget(m_instr_grp)
 
         # Measurement Options — mirrors guided "Measurement Options" group
-        m_core_grp = QGroupBox("Measurement Options", left)
+        m_core_grp = QGroupBox(tr("Measurement Options"), left)
         mcg = QVBoxLayout(m_core_grp)
         mcg.setContentsMargins(8, 14, 8, 8)
         mcg.setSpacing(8)
@@ -1152,50 +1153,50 @@ class TabMeasure(QWidget):
         self._make_bidir_row(left, mcg, "manual")
 
         self._m_suppress_cb = _bool_row_m(
-            "Suppress warning messages (-S)", True,
-            "Suppress Warnings (-S)",
-            "Suppresses non-fatal instrument warnings from chartread.\n\n"
+            tr("Suppress warning messages (-S)"), True,
+            tr("Suppress Warnings (-S)"),
+            tr("Suppresses non-fatal instrument warnings from chartread.\n\n"
             "Suppressed messages include: calibration drift notices,\n"
             "reflectance range warnings on very dark patches, and strip\n"
             "timing cautions. These rarely affect measurement quality.\n\n"
             "Fatal errors that would prevent a .ti3 from being written are\n"
-            "always shown regardless of this setting.",
+            "always shown regardless of this setting."),
         )
         self._m_nocal_cb = _bool_row_m(
-            "Skip initial calibration (-N)", False,
-            "Skip Initial Calibration (-N)",
-            "Skips the automatic white-tile calibration at chartread startup.\n\n"
+            tr("Skip initial calibration (-N)"), False,
+            tr("Skip Initial Calibration (-N)"),
+            tr("Skips the automatic white-tile calibration at chartread startup.\n\n"
             "Normally chartread prompts you to place the instrument on its\n"
             "white calibration tile before measuring begins. This ensures\n"
             "accurate absolute reflectance values and takes only a few seconds.\n\n"
             "Enable this only if you have already calibrated the instrument\n"
-            "earlier in the same session and do not want to repeat the step.",
+            "earlier in the same session and do not want to repeat the step."),
         )
         self._m_pbp_cb = _bool_row_m(
-            "Patch-by-patch mode (-p)", False,
-            "Patch-by-Patch Mode (-p)",
-            "Switches from strip reading to single-patch measurement mode.\n\n"
+            tr("Patch-by-patch mode (-p)"), False,
+            tr("Patch-by-Patch Mode (-p)"),
+            tr("Switches from strip reading to single-patch measurement mode.\n\n"
             "Instead of scanning entire strips, chartread guides you patch\n"
             "by patch across the chart. This is significantly slower — one\n"
             "reading per patch — but more reliable on heavily textured\n"
             "surfaces or when strip reading consistently fails on a\n"
-            "particular chart layout.",
+            "particular chart layout."),
         )
 
         m_resume_row = QHBoxLayout()
-        self._m_resume_cb = QCheckBox("Refine / resume existing measurement (-r)", left)
+        self._m_resume_cb = QCheckBox(tr("Refine / resume existing measurement (-r)"), left)
         self._m_resume_cb.setChecked(False)
         self._m_resume_cb.setVisible(False)
         m_resume_row.addWidget(self._m_resume_cb)
         m_resume_row.addStretch()
         self._m_resume_tip = TooltipButton(
-            "Refine / Resume Existing Measurement (-r)",
-            "Reuses the existing .ti3 file in the same folder as the\n"
+            tr("Refine / Resume Existing Measurement (-r)"),
+            tr("Reuses the existing .ti3 file in the same folder as the\n"
             ".ti2 file. Previously measured strips are kept — you only need\n"
             "to scan the strips you want to update or add.\n\n"
             "Use this after a quality check to re-measure problem strips,\n"
             "or to continue a measurement that was interrupted.\n\n"
-            "This option appears only when a matching .ti3 file is found.",
+            "This option appears only when a matching .ti3 file is found."),
             left,
         )
         self._m_resume_tip.setVisible(False)
@@ -1207,20 +1208,20 @@ class TabMeasure(QWidget):
         m_refine_rl.setContentsMargins(20, 0, 0, 0)
         m_refine_rl.setSpacing(6)
         self._m_refine_cb = QCheckBox(
-            "Use refinement strips file for guided re-measurement",
+            tr("Use refinement strips file for guided re-measurement"),
             self._m_refine_row,
         )
         self._m_refine_cb.setEnabled(False)
         m_refine_rl.addWidget(self._m_refine_cb, stretch=1)
         m_refine_rl.addWidget(TooltipButton(
-            "Refinement Strips File",
-            "Available when a Refine_Strips_<name>.txt file exists next\n"
+            tr("Refinement Strips File"),
+            tr("Available when a Refine_Strips_<name>.txt file exists next\n"
             "to your .ti2 file.\n\n"
             "That file is created automatically by the Check && Refine\n"
             "tab after a quality check. It lists the strips with the\n"
             "highest colour errors, sorted worst-first.\n\n"
             "When active, the app navigates chartread to each of those\n"
-            "strips automatically — you only need to scan them.",
+            "strips automatically — you only need to scan them."),
             self._m_refine_row,
         ))
         self._m_refine_row.setVisible(False)
@@ -1228,13 +1229,13 @@ class TabMeasure(QWidget):
 
         m_precond_row = QHBoxLayout()
         self._m_use_precond_cb = QCheckBox(
-            "Also use measurement data from the pre-conditioning profile", left
+            tr("Also use measurement data from the pre-conditioning profile"), left
         )
         self._m_use_precond_cb.setChecked(False)
         self._m_use_precond_cb.setVisible(False)
         m_precond_row.addWidget(self._m_use_precond_cb)
         m_precond_row.addStretch()
-        self._m_precond_tip = TooltipButton(*_PRECOND_TOOLTIP, left)
+        self._m_precond_tip = TooltipButton(tr(_PRECOND_TIP_TITLE), tr(_PRECOND_TIP_BODY), left)
         self._m_precond_tip.setVisible(False)
         m_precond_row.addWidget(self._m_precond_tip)
         mcg.addLayout(m_precond_row)
@@ -1249,7 +1250,7 @@ class TabMeasure(QWidget):
         ll.addWidget(m_core_grp)
 
         # Additional Options — mirrors guided "Additional Options" group
-        m_adv_grp = QGroupBox("Additional Options", left)
+        m_adv_grp = QGroupBox(tr("Additional Options"), left)
         mag = QVBoxLayout(m_adv_grp)
         mag.setContentsMargins(8, 14, 8, 8)
         mag.setSpacing(6)
@@ -1292,7 +1293,7 @@ class TabMeasure(QWidget):
     def _m_populate_preset_combo(self, presets: dict, select_name: str | None = None) -> None:
         self._m_preset_combo.blockSignals(True)
         self._m_preset_combo.clear()
-        self._m_preset_combo.addItem("none", userData=None)
+        self._m_preset_combo.addItem(tr("none"), userData=None)
         for name in presets:
             self._m_preset_combo.addItem(name, userData=name)
         if select_name is not None:
@@ -1390,11 +1391,11 @@ class TabMeasure(QWidget):
     def _on_m_preset_save(self) -> None:
         data = self._m_collect_preset_data()
         dlg = QInputDialog(self)
-        dlg.setWindowTitle("Save Preset")
+        dlg.setWindowTitle(tr("Save Preset"))
         dlg.setLabelText(
-            "Give this preset a name.\n"
+            tr("Give this preset a name.\n"
             "All current Manual mode settings will be saved under that name\n"
-            "and can be recalled at any time from the preset list."
+            "and can be recalled at any time from the preset list.")
         )
         dlg.setMinimumWidth(460)
         if not dlg.exec():
@@ -1410,25 +1411,25 @@ class TabMeasure(QWidget):
     def _on_m_preset_delete(self) -> None:
         name = self._m_preset_combo.currentText()
         dlg = QDialog(self)
-        dlg.setWindowTitle("Delete Preset")
+        dlg.setWindowTitle(tr("Delete Preset"))
         dlg.setMinimumWidth(460)
         dlg_layout = QVBoxLayout(dlg)
         dlg_layout.setSpacing(10)
         dlg_layout.setContentsMargins(20, 20, 20, 16)
-        heading = QLabel(f'Delete the preset "{name}"?', dlg)
+        heading = QLabel(tr("Delete the preset \"{name}\"?").format(name=name), dlg)
         heading.setStyleSheet("font-weight: bold;")
         heading.setWordWrap(True)
         dlg_layout.addWidget(heading)
         info = QLabel(
-            "All parameter values saved in this preset will be permanently removed. "
-            "This cannot be undone.",
+            tr("All parameter values saved in this preset will be permanently removed. "
+            "This cannot be undone."),
             dlg,
         )
         info.setWordWrap(True)
         dlg_layout.addWidget(info)
         bb = QDialogButtonBox(dlg)
-        bb.addButton("Cancel", QDialogButtonBox.ButtonRole.RejectRole)
-        del_btn = bb.addButton("Delete", QDialogButtonBox.ButtonRole.AcceptRole)
+        bb.addButton(tr("Cancel"), QDialogButtonBox.ButtonRole.RejectRole)
+        del_btn = bb.addButton(tr("Delete"), QDialogButtonBox.ButtonRole.AcceptRole)
         del_btn.setObjectName("primary")
         bb.rejected.connect(dlg.reject)
         bb.accepted.connect(dlg.accept)
@@ -1467,10 +1468,10 @@ class TabMeasure(QWidget):
 
         opts.append(_ChartreadOption(
             key="highres", flag="-H",
-            label="High resolution spectral mode (-H)",
-            tooltip_title="High Resolution Spectral Mode (-H)",
+            label=tr("High resolution spectral mode (-H)"),
+            tooltip_title=tr("High Resolution Spectral Mode (-H)"),
             tooltip_body=(
-                "Enables high-resolution spectral sampling on instruments that\n"
+                tr("Enables high-resolution spectral sampling on instruments that\n"
                 "support it (i1Pro 2 and i1Pro 3).\n\n"
                 "Standard mode samples the spectrum at 10 nm intervals.\n"
                 "High-resolution mode uses 5 nm intervals, capturing finer\n"
@@ -1478,7 +1479,7 @@ class TabMeasure(QWidget):
                 "particularly on saturated or fluorescent colours.\n\n"
                 "The measurement time increase is small (roughly 10–20% per\n"
                 "strip). Leave this off unless you specifically need the\n"
-                "extra spectral resolution."
+                "extra spectral resolution.")
             ),
         ))
 
@@ -1490,10 +1491,10 @@ class TabMeasure(QWidget):
         filter_combo.setCurrentIndex(1)  # default to D50 (M1)
         opts.append(_ChartreadOption(
             key="filter", flag="-F",
-            label="Spectral filter type (-F)",
-            tooltip_title="Spectral Filter (-F)",
+            label=tr("Spectral filter type (-F)"),
+            tooltip_title=tr("Spectral Filter (-F)"),
             tooltip_body=(
-                "Overrides the illuminant/filter condition used for measurement.\n\n"
+                tr("Overrides the illuminant/filter condition used for measurement.\n\n"
                 "Select the filter physically in use on your spectrophotometer:\n\n"
                 "  n = None  (M0 — no filter, uncontrolled UV)\n"
                 "  5 = D50   (M1 — controlled UV, ISO 13655 standard)\n"
@@ -1503,7 +1504,7 @@ class TabMeasure(QWidget):
                 "The app defaults to D50 (M1), which matches the most common\n"
                 "workflow for ICC print profiling with the i1Pro family.\n"
                 "Change this only if your instrument has a different filter\n"
-                "physically fitted. Wrong selection silently skews measured values."
+                "physically fitted. Wrong selection silently skews measured values.")
             ),
             widget=filter_combo,
         ))
@@ -1512,10 +1513,10 @@ class TabMeasure(QWidget):
         _tol_spin.setObjectName("")
         opts.append(_ChartreadOption(
             key="tolerance", flag="-T",
-            label="Patch consistency tolerance (-T)",
-            tooltip_title="Patch Tolerance Multiplier (-T)",
+            label=tr("Patch consistency tolerance (-T)"),
+            tooltip_title=tr("Patch Tolerance Multiplier (-T)"),
             tooltip_body=(
-                "A multiplier on chartread's built-in patch consistency\n"
+                tr("A multiplier on chartread's built-in patch consistency\n"
                 "threshold — not a delta-E value. chartread re-reads each patch\n"
                 "and rejects strips where the readings disagree by more than\n"
                 "the threshold × this number.\n\n"
@@ -1527,34 +1528,34 @@ class TabMeasure(QWidget):
                 "Raise to 0.8–1.5 if you get false \"inconsistent patch\" errors\n"
                 "on textured, matte, or fine-art papers — the surface itself\n"
                 "contributes real variance there. Values above 2 mostly mask\n"
-                "genuine issues; if you need them, fix the printer first."
+                "genuine issues; if you need them, fix the printer first.")
             ),
             widget=_tol_spin,
         ))
 
         opts.append(_ChartreadOption(
             key="save_lab", flag="-l",
-            label="Save L*a*b* instead of XYZ (-l)",
-            tooltip_title="Save L*a*b* Values (-l)",
+            label=tr("Save L*a*b* instead of XYZ (-l)"),
+            tooltip_title=tr("Save L*a*b* Values (-l)"),
             tooltip_body=(
-                "Saves measurement data as D50 L*a*b* instead of XYZ in the\n"
+                tr("Saves measurement data as D50 L*a*b* instead of XYZ in the\n"
                 "output .ti3 file.\n\n"
                 "Standard ArgyllCMS tools (including colprof) work with XYZ.\n"
                 "This option is almost never needed — enable it only if a\n"
-                "downstream tool explicitly requires D50 L*a*b* input."
+                "downstream tool explicitly requires D50 L*a*b* input.")
             ),
         ))
 
         opts.append(_ChartreadOption(
             key="save_lab_and_xyz", flag="-L",
-            label="Save L*a*b* AND XYZ (-L)",
-            tooltip_title="Save L*a*b* AND XYZ (-L)",
+            label=tr("Save L*a*b* AND XYZ (-L)"),
+            tooltip_title=tr("Save L*a*b* AND XYZ (-L)"),
             tooltip_body=(
-                "Saves both D50 L*a*b* values and XYZ values in the output\n"
+                tr("Saves both D50 L*a*b* values and XYZ values in the output\n"
                 ".ti3 file.\n\n"
                 "Use this when you need the .ti3 to be compatible with tools\n"
                 "that require L*a*b* while keeping the XYZ data that colprof\n"
-                "and other ArgyllCMS tools expect."
+                "and other ArgyllCMS tools expect.")
             ),
         ))
 
@@ -1566,10 +1567,10 @@ class TabMeasure(QWidget):
             xrga_combo.addItem(lbl, code)
         opts.append(_ChartreadOption(
             key="xrga", flag="-A",
-            label="XRGA instrument correction (-A)",
-            tooltip_title="XRGA Correction (-A)",
+            label=tr("XRGA instrument correction (-A)"),
+            tooltip_title=tr("XRGA Correction (-A)"),
             tooltip_body=(
-                "Applies a colorimetric correction to convert between\n"
+                tr("Applies a colorimetric correction to convert between\n"
                 "spectrophotometer calibration standards.\n\n"
                 "Different instrument generations use slightly different white\n"
                 "references. XRGA standardisation corrects for these offsets:\n\n"
@@ -1578,7 +1579,7 @@ class TabMeasure(QWidget):
                 "  X = XRDI   (older X-Rite reference)\n"
                 "  G = GMDI   (GretagMacbeth reference)\n\n"
                 "Only change this if you are combining measurements from\n"
-                "instruments of different generations or manufacturers."
+                "instruments of different generations or manufacturers.")
             ),
             widget=xrga_combo,
         ))
@@ -1608,10 +1609,10 @@ class TabMeasure(QWidget):
 
         opts.append(_ChartreadOption(
             key="highres", flag="-H",
-            label="High resolution spectral mode (-H)",
-            tooltip_title="High Resolution Spectral Mode (-H)",
+            label=tr("High resolution spectral mode (-H)"),
+            tooltip_title=tr("High Resolution Spectral Mode (-H)"),
             tooltip_body=(
-                "Enables high-resolution spectral sampling on instruments that\n"
+                tr("Enables high-resolution spectral sampling on instruments that\n"
                 "support it (i1Pro 2 and i1Pro 3).\n\n"
                 "Standard mode samples the spectrum at 10 nm intervals.\n"
                 "High-resolution mode uses 5 nm intervals, capturing finer\n"
@@ -1619,7 +1620,7 @@ class TabMeasure(QWidget):
                 "particularly on saturated or fluorescent colours.\n\n"
                 "The measurement time increase is small (roughly 10–20% per\n"
                 "strip). Leave this off unless you specifically need the\n"
-                "extra spectral resolution."
+                "extra spectral resolution.")
             ),
         ))
 
@@ -1631,10 +1632,10 @@ class TabMeasure(QWidget):
         filter_combo.setCurrentIndex(1)
         opts.append(_ChartreadOption(
             key="filter", flag="-F",
-            label="Spectral filter type (-F)",
-            tooltip_title="Spectral Filter (-F)",
+            label=tr("Spectral filter type (-F)"),
+            tooltip_title=tr("Spectral Filter (-F)"),
             tooltip_body=(
-                "Overrides the illuminant/filter condition used for measurement.\n\n"
+                tr("Overrides the illuminant/filter condition used for measurement.\n\n"
                 "Select the filter physically in use on your spectrophotometer:\n\n"
                 "  n = None  (M0 — no filter, uncontrolled UV)\n"
                 "  5 = D50   (M1 — controlled UV, ISO 13655 standard)\n"
@@ -1644,17 +1645,17 @@ class TabMeasure(QWidget):
                 "The app defaults to D50 (M1), which matches the most common\n"
                 "workflow for ICC print profiling with the i1Pro family.\n"
                 "Change this only if your instrument has a different filter\n"
-                "physically fitted. Wrong selection silently skews measured values."
+                "physically fitted. Wrong selection silently skews measured values.")
             ),
             widget=filter_combo,
         ))
 
         opts.append(_ChartreadOption(
             key="tolerance", flag="-T",
-            label="Patch consistency tolerance (-T)",
-            tooltip_title="Patch Tolerance Multiplier (-T)",
+            label=tr("Patch consistency tolerance (-T)"),
+            tooltip_title=tr("Patch Tolerance Multiplier (-T)"),
             tooltip_body=(
-                "A multiplier on chartread's built-in patch consistency\n"
+                tr("A multiplier on chartread's built-in patch consistency\n"
                 "threshold — not a delta-E value. chartread re-reads each patch\n"
                 "and rejects strips where the readings disagree by more than\n"
                 "the threshold × this number.\n\n"
@@ -1666,44 +1667,44 @@ class TabMeasure(QWidget):
                 "Raise to 0.8–1.5 if you get false \"inconsistent patch\" errors\n"
                 "on textured, matte, or fine-art papers — the surface itself\n"
                 "contributes real variance there. Values above 2 mostly mask\n"
-                "genuine issues; if you need them, fix the printer first."
+                "genuine issues; if you need them, fix the printer first.")
             ),
             widget=_spinbox(0.1, 10.0, 0.1, 0.5, decimals=1),
         ))
 
         opts.append(_ChartreadOption(
             key="save_lab", flag="-l",
-            label="Save L*a*b* instead of XYZ (-l)",
-            tooltip_title="Save L*a*b* Values (-l)",
+            label=tr("Save L*a*b* instead of XYZ (-l)"),
+            tooltip_title=tr("Save L*a*b* Values (-l)"),
             tooltip_body=(
-                "Saves measurement data as D50 L*a*b* instead of XYZ in the\n"
+                tr("Saves measurement data as D50 L*a*b* instead of XYZ in the\n"
                 "output .ti3 file.\n\n"
                 "Standard ArgyllCMS tools (including colprof) work with XYZ.\n"
                 "This option is almost never needed — enable it only if a\n"
-                "downstream tool explicitly requires D50 L*a*b* input."
+                "downstream tool explicitly requires D50 L*a*b* input.")
             ),
         ))
 
         opts.append(_ChartreadOption(
             key="save_lab_and_xyz", flag="-L",
-            label="Save L*a*b* AND XYZ (-L)",
-            tooltip_title="Save L*a*b* AND XYZ (-L)",
+            label=tr("Save L*a*b* AND XYZ (-L)"),
+            tooltip_title=tr("Save L*a*b* AND XYZ (-L)"),
             tooltip_body=(
-                "Saves both D50 L*a*b* values and XYZ values in the output\n"
+                tr("Saves both D50 L*a*b* values and XYZ values in the output\n"
                 ".ti3 file.\n\n"
                 "Use this when you need the .ti3 to be compatible with tools\n"
                 "that require L*a*b* while keeping the XYZ data that colprof\n"
-                "and other ArgyllCMS tools expect."
+                "and other ArgyllCMS tools expect.")
             ),
         ))
 
         opts.append(_ChartreadOption(
             key="no_spectral", flag="-n",
             tooltip_width=540,
-            label="Don't save spectral data (-n)",
-            tooltip_title="Don't Save Spectral Data (-n)",
+            label=tr("Don't save spectral data (-n)"),
+            tooltip_title=tr("Don't Save Spectral Data (-n)"),
             tooltip_body=(
-                "What this does\n"
+                tr("What this does\n"
                 "\n"
                 "When you measure a chart, your instrument records two kinds of\n"
                 "numbers for every patch:\n"
@@ -1749,7 +1750,7 @@ class TabMeasure(QWidget):
                 "If none of that applies — and for everyday printer profiling it\n"
                 "usually doesn't — this option is perfectly safe to turn on. It is\n"
                 "off by default, so the spectrum is always kept unless you ask for\n"
-                "it to be dropped."
+                "it to be dropped.")
             ),
         ))
 
@@ -1760,10 +1761,10 @@ class TabMeasure(QWidget):
             xrga_combo.addItem(lbl, code)
         opts.append(_ChartreadOption(
             key="xrga", flag="-A",
-            label="XRGA instrument correction (-A)",
-            tooltip_title="XRGA Correction (-A)",
+            label=tr("XRGA instrument correction (-A)"),
+            tooltip_title=tr("XRGA Correction (-A)"),
             tooltip_body=(
-                "Applies a colorimetric correction to convert between\n"
+                tr("Applies a colorimetric correction to convert between\n"
                 "spectrophotometer calibration standards.\n\n"
                 "Different instrument generations use slightly different white\n"
                 "references. XRGA standardisation corrects for these offsets:\n\n"
@@ -1772,7 +1773,7 @@ class TabMeasure(QWidget):
                 "  X = XRDI   (older X-Rite reference)\n"
                 "  G = GMDI   (GretagMacbeth reference)\n\n"
                 "Only change this if you are combining measurements from\n"
-                "instruments of different generations or manufacturers."
+                "instruments of different generations or manufacturers.")
             ),
             widget=xrga_combo,
         ))
@@ -1801,7 +1802,7 @@ class TabMeasure(QWidget):
     def clear_chart_file(self) -> None:
         self._ti1_path = None
         self._averaging_active = False
-        self._ti1_lbl.setText("No file selected")
+        self._ti1_lbl.setText(tr("No file selected"))
         self._ti1_lbl.setStyleSheet("color: #909090; font-size: 11px;")
         self._start_btn.setEnabled(False)
         self._tiff_pages = []
@@ -1847,16 +1848,17 @@ class TabMeasure(QWidget):
                 if is_spectroscan(instr):
                     # XY table — reads patches individually, so the
                     # bidirectional "reading direction" note does not apply.
-                    msg = f"Chart instrument: {label}."
+                    msg = tr("Chart instrument: {label}.").format(label=label)
                 else:
                     value = self._detected_bidir_value()
                     if value == "disable":
-                        detail = "reading one direction only (-B)"
+                        detail = tr("reading one direction only (-B)")
                     elif value == "force":
-                        detail = "reading both directions (forced, -b)"
+                        detail = tr("reading both directions (forced, -b)")
                     else:
-                        detail = "using Argyll's default strip recognition"
-                    msg = f"Chart instrument: {label} → {detail}."
+                        detail = tr("using Argyll's default strip recognition")
+                    msg = tr("Chart instrument: {label} → {detail}.").format(
+                        label=label, detail=detail)
                 self._log.appendPlainText(msg)
                 self._instr_log_text = msg
 
@@ -1896,11 +1898,6 @@ class TabMeasure(QWidget):
 
     # Strip-recognition combo entries: (userData, label). The userData maps to
     # a chartread flag — "default" = no flag, "disable" = -B, "force" = -b.
-    _BIDIR_ITEMS = (
-        ("default", "Argyll default"),
-        ("disable", "Bidirectional disabled (-B)"),
-        ("force",   "Bidirectional forced (-b)"),
-    )
 
     def _make_bidir_row(self, parent: QWidget, layout, mode: str) -> None:
         """Build the 'Strip recognition' combo + Auto toggle for a mode.
@@ -1910,7 +1907,7 @@ class TabMeasure(QWidget):
         instrument and greys out (but still shows) the combo while on.
         """
         row = QHBoxLayout()
-        row.addWidget(QLabel("Strip recognition:", parent))
+        row.addWidget(QLabel(tr("Strip recognition:"), parent))
         combo = NoScrollComboBox(parent)
         # Guided mode shows a full-size (non-compact) combo; Manual keeps the
         # compact styling that matches its other dense option rows.
@@ -1919,13 +1916,19 @@ class TabMeasure(QWidget):
             combo.setMinimumWidth(210)
         else:
             combo.setMinimumWidth(240)
-        for data, label in self._BIDIR_ITEMS:
+        # tr() at build time, not import time — tabs are imported before
+        # set_language() runs, so a class-level constant would stay English.
+        for data, label in (
+            ("default", tr("Argyll default")),
+            ("disable", tr("Bidirectional disabled (-B)")),
+            ("force",   tr("Bidirectional forced (-b)")),
+        ):
             combo.addItem(label, data)
         row.addWidget(combo)
         row.addSpacing(12)
         row.addWidget(TooltipButton(
-            "Strip recognition",
-            "When you measure a chart you slide the instrument along each row\n"
+            tr("Strip recognition"),
+            tr("When you measure a chart you slide the instrument along each row\n"
             "of colour patches — that row is called a \"strip\". You can slide\n"
             "it either way: left-to-right or right-to-left. This setting tells\n"
             "the measuring tool which sliding directions to accept.\n\n"
@@ -1964,19 +1967,19 @@ class TabMeasure(QWidget):
             "      i1 Pro, \"Argyll default\" for a ColorMunki and most others.\n"
             "      While Auto is on, the menu is locked and shows the choice it\n"
             "      made.\n\n"
-            "Leave Auto on unless you specifically want to choose by hand.",
+            "Leave Auto on unless you specifically want to choose by hand."),
             parent,
             min_width=560,
         ))
         row.addStretch()
-        auto_cb = QCheckBox("Auto", parent)
+        auto_cb = QCheckBox(tr("Auto"), parent)
         auto_cb.setChecked(True)
         auto_cb.toggled.connect(lambda _checked, m=mode: self._apply_bidir_auto_state(m))
         row.addWidget(auto_cb)
         row.addSpacing(18)
         row.addWidget(TooltipButton(
-            "Auto (recommended)",
-            "Lets ChromIQ choose the \"Strip recognition\" option for you, based\n"
+            tr("Auto (recommended)"),
+            tr("Lets ChromIQ choose the \"Strip recognition\" option for you, based\n"
             "on the measuring instrument saved in the chart you loaded:\n\n"
             "  • i1 Pro / i1 Pro 2 / i1 Pro 3 — reads strips in both\n"
             "      directions, so Auto chooses \"Bidirectional forced\".\n"
@@ -1988,7 +1991,7 @@ class TabMeasure(QWidget):
             "the option Auto has chosen, so you can always see what will be\n"
             "used. Switch Auto off to pick the option yourself.\n\n"
             "Auto is the recommended setting — most people never need to\n"
-            "change it.",
+            "change it."),
             parent,
             min_width=520,
         ))
@@ -2085,7 +2088,7 @@ class TabMeasure(QWidget):
     def _on_load_ti2(self) -> None:
         from ui.ti2_loader import resolve_ti2
         path = open_file_dialog(
-            self, "Load .ti2 file", "TI2 files (*.ti2)",
+            self, tr("Load .ti2 file"), tr("TI2 files (*.ti2)"),
             extra_path=self._settings.get("custom_output_path", ""),
         )
         if not path:
@@ -2182,9 +2185,9 @@ class TabMeasure(QWidget):
         chartread's -r flag)."""
         cb = self._resume_cb if self._current_mode() == "guided" else self._m_resume_cb
         if cb.isVisible() and cb.isChecked():
-            self._start_btn.setText("Continue Measurement")
+            self._start_btn.setText(tr("Continue Measurement"))
         else:
-            self._start_btn.setText("Start Measurement")
+            self._start_btn.setText(tr("Start Measurement"))
 
     def _load_refine_strips(self, path: Path) -> None:
         from workflow.profcheck_runner import parse_refine_strips
@@ -2361,15 +2364,15 @@ class TabMeasure(QWidget):
             return True
 
         dlg = QDialog(self)
-        dlg.setWindowTitle("Bidirectional reading on a fixed-order chart")
+        dlg.setWindowTitle(tr("Bidirectional reading on a fixed-order chart"))
         dlg.setMinimumWidth(560)
         lay = QVBoxLayout(dlg)
         lay.setContentsMargins(24, 20, 24, 16)
         lay.setSpacing(12)
 
         heading = QLabel(
-            "This chart is laid out in a fixed (non-randomised) patch order, "
-            "and strip recognition is set to <b>Bidirectional forced (-b)</b>.",
+            tr("This chart is laid out in a fixed (non-randomised) patch order, "
+            "and strip recognition is set to <b>Bidirectional forced (-b)</b>."),
             dlg,
         )
         heading.setWordWrap(True)
@@ -2377,7 +2380,7 @@ class TabMeasure(QWidget):
         lay.addWidget(heading)
 
         body = QLabel(
-            "Forcing bidirectional reading lets you scan each strip in either "
+            tr("Forcing bidirectional reading lets you scan each strip in either "
             "direction. To do that reliably, chartread depends on the patches "
             "being printed in a shuffled (randomised) order — that is what gives "
             "every strip a unique colour signature.<br><br>"
@@ -2391,18 +2394,18 @@ class TabMeasure(QWidget):
             "• Or regenerate this chart with randomisation enabled, then measure "
             "that copy.<br>"
             "• If you know this chart's patch order is already well mixed, it is "
-            "safe to continue.",
+            "safe to continue."),
             dlg,
         )
         body.setWordWrap(True)
         lay.addWidget(body)
 
-        hide_cb = QCheckBox("Don't show this again", dlg)
+        hide_cb = QCheckBox(tr("Don't show this again"), dlg)
         lay.addWidget(hide_cb)
 
         bb = QDialogButtonBox(dlg)
-        continue_btn = bb.addButton("Continue anyway", QDialogButtonBox.ButtonRole.AcceptRole)
-        cancel_btn = bb.addButton("Cancel", QDialogButtonBox.ButtonRole.RejectRole)
+        continue_btn = bb.addButton(tr("Continue anyway"), QDialogButtonBox.ButtonRole.AcceptRole)
+        cancel_btn = bb.addButton(tr("Cancel"), QDialogButtonBox.ButtonRole.RejectRole)
         cancel_btn.setDefault(True)
         continue_btn.clicked.connect(dlg.accept)
         cancel_btn.clicked.connect(dlg.reject)
@@ -2484,7 +2487,7 @@ class TabMeasure(QWidget):
         QApplication.instance().removeEventFilter(self)
 
         dlg = QDialog(self)
-        dlg.setWindowTitle("Wrong Strip Read")
+        dlg.setWindowTitle(tr("Wrong Strip Read"))
         dlg.setMinimumWidth(500)
 
         layout = QVBoxLayout(dlg)
@@ -2492,18 +2495,7 @@ class TabMeasure(QWidget):
         layout.setContentsMargins(24, 20, 24, 20)
 
         msg = QLabel(
-            f"<b>This reading looks like strip {read}, but strip {expected} "
-            "was expected.</b><br><br>"
-            "This usually means the instrument was placed on the wrong row — "
-            "or two rows simply look very similar. You have three options:<br><br>"
-            "&nbsp;&nbsp;<b>Use Anyway</b> — keep this reading and save it as "
-            f"strip {expected} (the row you were asked to scan). Only choose "
-            f"this if you are sure the instrument really was on strip {expected} "
-            "and the warning is a false alarm — the reading is always filed "
-            f"under {expected}, not {read}.<br><br>"
-            "&nbsp;&nbsp;<b>Retry</b> — discard this reading and try again. "
-            f"Place your instrument on strip {expected} and re-scan.<br><br>"
-            "&nbsp;&nbsp;<b>Give Up</b> — stop the measurement without saving.",
+            tr("<b>This reading looks like strip {read}, but strip {expected} was expected.</b><br><br>This usually means the instrument was placed on the wrong row — or two rows simply look very similar. You have three options:<br><br>&nbsp;&nbsp;<b>Use Anyway</b> — keep this reading and save it as strip {expected} (the row you were asked to scan). Only choose this if you are sure the instrument really was on strip {expected} and the warning is a false alarm — the reading is always filed under {expected}, not {read}.<br><br>&nbsp;&nbsp;<b>Retry</b> — discard this reading and try again. Place your instrument on strip {expected} and re-scan.<br><br>&nbsp;&nbsp;<b>Give Up</b> — stop the measurement without saving.").format(read=read, expected=expected),
             dlg,
         )
         msg.setWordWrap(True)
@@ -2514,9 +2506,9 @@ class TabMeasure(QWidget):
         btn_row = QHBoxLayout()
         btn_row.setSpacing(8)
 
-        use_btn   = QPushButton("Use Anyway", dlg)
-        retry_btn = QPushButton("Retry",      dlg)
-        give_btn  = QPushButton("Give Up",    dlg)
+        use_btn   = QPushButton(tr("Use Anyway"), dlg)
+        retry_btn = QPushButton(tr("Retry"),      dlg)
+        give_btn  = QPushButton(tr("Give Up"),    dlg)
         use_btn.setObjectName("primary")
         use_btn.setFixedHeight(32)
         retry_btn.setFixedHeight(32)
@@ -2559,7 +2551,7 @@ class TabMeasure(QWidget):
         QApplication.instance().removeEventFilter(self)
 
         dlg = QDialog(self)
-        dlg.setWindowTitle("Unexpected Color Response")
+        dlg.setWindowTitle(tr("Unexpected Color Response"))
         dlg.setMinimumWidth(500)
 
         layout = QVBoxLayout(dlg)
@@ -2567,16 +2559,7 @@ class TabMeasure(QWidget):
         layout.setContentsMargins(24, 20, 24, 20)
 
         msg = QLabel(
-            f"<b>An unexpected color response was detected (ΔE {delta_e}).</b><br><br>"
-            "This usually means the instrument was not aligned correctly with "
-            "the stripe, was moved during the scan, or the wrong stripe was read. "
-            "A ΔE this high indicates the measured colors are very far from what "
-            "is expected.<br><br>"
-            "&nbsp;&nbsp;<b>Use Anyway</b> — accept the reading and continue. "
-            "Only use this if you are sure the scan was correct.<br><br>"
-            "&nbsp;&nbsp;<b>Retry</b> — discard this reading, re-position your "
-            "instrument carefully on the correct stripe, and try again.<br><br>"
-            "&nbsp;&nbsp;<b>Give Up</b> — stop the measurement without saving.",
+            tr("<b>An unexpected color response was detected (ΔE {delta_e}).</b><br><br>This usually means the instrument was not aligned correctly with the stripe, was moved during the scan, or the wrong stripe was read. A ΔE this high indicates the measured colors are very far from what is expected.<br><br>&nbsp;&nbsp;<b>Use Anyway</b> — accept the reading and continue. Only use this if you are sure the scan was correct.<br><br>&nbsp;&nbsp;<b>Retry</b> — discard this reading, re-position your instrument carefully on the correct stripe, and try again.<br><br>&nbsp;&nbsp;<b>Give Up</b> — stop the measurement without saving.").format(delta_e=delta_e),
             dlg,
         )
         msg.setWordWrap(True)
@@ -2587,9 +2570,9 @@ class TabMeasure(QWidget):
         btn_row = QHBoxLayout()
         btn_row.setSpacing(8)
 
-        use_btn   = QPushButton("Use Anyway", dlg)
-        retry_btn = QPushButton("Retry",      dlg)
-        give_btn  = QPushButton("Give Up",    dlg)
+        use_btn   = QPushButton(tr("Use Anyway"), dlg)
+        retry_btn = QPushButton(tr("Retry"),      dlg)
+        give_btn  = QPushButton(tr("Give Up"),    dlg)
         use_btn.setObjectName("primary")
         use_btn.setFixedHeight(32)
         retry_btn.setFixedHeight(32)
@@ -2631,7 +2614,7 @@ class TabMeasure(QWidget):
         QApplication.instance().removeEventFilter(self)
 
         dlg = QDialog(self)
-        dlg.setWindowTitle("Instrument in Wrong Position")
+        dlg.setWindowTitle(tr("Instrument in Wrong Position"))
         dlg.setMinimumWidth(500)
 
         layout = QVBoxLayout(dlg)
@@ -2639,7 +2622,7 @@ class TabMeasure(QWidget):
         layout.setContentsMargins(24, 20, 24, 20)
 
         msg = QLabel(
-            "<b>The measurement device is in the wrong position.</b><br><br>"
+            tr("<b>The measurement device is in the wrong position.</b><br><br>"
             "It looks like the instrument is still in its <b>calibration position</b> "
             "(sensor facing up or to the side). "
             "To scan a strip, it needs to be switched to <b>measuring position</b> "
@@ -2647,7 +2630,7 @@ class TabMeasure(QWidget):
             "How to fix it:<br>"
             "&nbsp;&nbsp;1. Flip or slide the sensor head so it faces <b>downward</b>.<br>"
             "&nbsp;&nbsp;2. Place the instrument at the beginning of the strip.<br>"
-            "&nbsp;&nbsp;3. Press <b>OK</b> — chartread is still waiting and you can scan straight away.",
+            "&nbsp;&nbsp;3. Press <b>OK</b> — chartread is still waiting and you can scan straight away."),
             dlg,
         )
         msg.setWordWrap(True)
@@ -2665,7 +2648,7 @@ class TabMeasure(QWidget):
         QApplication.instance().removeEventFilter(self)
 
         dlg = QDialog(self)
-        dlg.setWindowTitle("Strip Read Interrupted")
+        dlg.setWindowTitle(tr("Strip Read Interrupted"))
         dlg.setMinimumWidth(500)
 
         layout = QVBoxLayout(dlg)
@@ -2673,12 +2656,12 @@ class TabMeasure(QWidget):
         layout.setContentsMargins(24, 20, 24, 20)
 
         msg = QLabel(
-            "<b>The strip read was stopped before it finished.</b><br><br>"
+            tr("<b>The strip read was stopped before it finished.</b><br><br>"
             "This usually happens if the instrument switch is pressed mid-scan "
             "or if scanning is interrupted by another process.<br><br>"
             "&nbsp;&nbsp;<b>Resume</b> — chartread is still waiting; "
             "re-position the instrument at the start of the current strip and continue.<br><br>"
-            "&nbsp;&nbsp;<b>Give Up</b> — stop the measurement without saving.",
+            "&nbsp;&nbsp;<b>Give Up</b> — stop the measurement without saving."),
             dlg,
         )
         msg.setWordWrap(True)
@@ -2688,8 +2671,8 @@ class TabMeasure(QWidget):
 
         btn_row = QHBoxLayout()
         btn_row.setSpacing(8)
-        resume_btn = QPushButton("Resume", dlg)
-        give_btn   = QPushButton("Give Up", dlg)
+        resume_btn = QPushButton(tr("Resume"), dlg)
+        give_btn   = QPushButton(tr("Give Up"), dlg)
         resume_btn.setObjectName("primary")
         resume_btn.setFixedHeight(32)
         give_btn.setFixedHeight(32)
@@ -2722,7 +2705,7 @@ class TabMeasure(QWidget):
         QApplication.instance().removeEventFilter(self)
 
         dlg = QDialog(self)
-        dlg.setWindowTitle("Patches Still Unread")
+        dlg.setWindowTitle(tr("Patches Still Unread"))
         dlg.setMinimumWidth(500)
 
         layout = QVBoxLayout(dlg)
@@ -2730,11 +2713,7 @@ class TabMeasure(QWidget):
         layout.setContentsMargins(24, 20, 24, 20)
 
         msg = QLabel(
-            "<b>The chart is not fully measured yet.</b><br><br>"
-            f"At least one patch is still unread: <b>{patch_info}</b>.<br><br>"
-            "&nbsp;&nbsp;<b>Save Partial</b> — save what's been measured so far. "
-            "You can resume later by ticking <i>Refine / resume existing measurement (-r)</i>.<br><br>"
-            "&nbsp;&nbsp;<b>Keep Measuring</b> — return to the strip menu and continue.",
+            tr("<b>The chart is not fully measured yet.</b><br><br>At least one patch is still unread: <b>{patch_info}</b>.<br><br>&nbsp;&nbsp;<b>Save Partial</b> — save what's been measured so far. You can resume later by ticking <i>Refine / resume existing measurement (-r)</i>.<br><br>&nbsp;&nbsp;<b>Keep Measuring</b> — return to the strip menu and continue.").format(patch_info=patch_info),
             dlg,
         )
         msg.setWordWrap(True)
@@ -2744,8 +2723,8 @@ class TabMeasure(QWidget):
 
         btn_row = QHBoxLayout()
         btn_row.setSpacing(8)
-        save_btn = QPushButton("Save Partial", dlg)
-        keep_btn = QPushButton("Keep Measuring", dlg)
+        save_btn = QPushButton(tr("Save Partial"), dlg)
+        keep_btn = QPushButton(tr("Keep Measuring"), dlg)
         save_btn.setObjectName("primary")
         save_btn.setFixedHeight(32)
         keep_btn.setFixedHeight(32)
@@ -2780,7 +2759,7 @@ class TabMeasure(QWidget):
         QApplication.instance().removeEventFilter(self)
 
         dlg = QDialog(self)
-        dlg.setWindowTitle("Instrument Error")
+        dlg.setWindowTitle(tr("Instrument Error"))
         dlg.setMinimumWidth(500)
 
         layout = QVBoxLayout(dlg)
@@ -2789,10 +2768,7 @@ class TabMeasure(QWidget):
 
         # Show the friendly message first, with the technical detail as a smaller line.
         msg = QLabel(
-            f"<b>{friendly}</b><br>"
-            f"<span style='color:#888;'>({technical})</span><br><br>"
-            "&nbsp;&nbsp;<b>Retry</b> — try the operation again.<br><br>"
-            "&nbsp;&nbsp;<b>Give Up</b> — stop the measurement without saving.",
+            tr("<b>{friendly}</b><br><span style='color:#888;'>({technical})</span><br><br>&nbsp;&nbsp;<b>Retry</b> — try the operation again.<br><br>&nbsp;&nbsp;<b>Give Up</b> — stop the measurement without saving.").format(friendly=friendly, technical=technical),
             dlg,
         )
         msg.setWordWrap(True)
@@ -2802,8 +2778,8 @@ class TabMeasure(QWidget):
 
         btn_row = QHBoxLayout()
         btn_row.setSpacing(8)
-        retry_btn = QPushButton("Retry", dlg)
-        give_btn  = QPushButton("Give Up", dlg)
+        retry_btn = QPushButton(tr("Retry"), dlg)
+        give_btn  = QPushButton(tr("Give Up"), dlg)
         retry_btn.setObjectName("primary")
         retry_btn.setFixedHeight(32)
         give_btn.setFixedHeight(32)
@@ -2873,16 +2849,14 @@ class TabMeasure(QWidget):
         QApplication.instance().removeEventFilter(self)
 
         dlg = QDialog(self)
-        dlg.setWindowTitle("Place Sheet on XY Table")
+        dlg.setWindowTitle(tr("Place Sheet on XY Table"))
         dlg.setMinimumWidth(460)
 
         layout = QVBoxLayout(dlg)
         layout.setSpacing(16)
         layout.setContentsMargins(24, 20, 24, 20)
         msg = QLabel(
-            f"<b>Place sheet {sheet_n} of {total} on the XY table.</b><br><br>"
-            "Press <b>Continue</b> when the sheet is positioned, or <b>Give Up</b> "
-            "to stop without saving.",
+            tr("<b>Place sheet {sheet_n} of {total} on the XY table.</b><br><br>Press <b>Continue</b> when the sheet is positioned, or <b>Give Up</b> to stop without saving.").format(sheet_n=sheet_n, total=total),
             dlg,
         )
         msg.setWordWrap(True)
@@ -2892,8 +2866,8 @@ class TabMeasure(QWidget):
 
         btn_row = QHBoxLayout()
         btn_row.setSpacing(8)
-        cont_btn = QPushButton("Continue", dlg)
-        give_btn = QPushButton("Give Up", dlg)
+        cont_btn = QPushButton(tr("Continue"), dlg)
+        give_btn = QPushButton(tr("Give Up"), dlg)
         cont_btn.setObjectName("primary")
         cont_btn.setFixedHeight(32)
         give_btn.setFixedHeight(32)
@@ -2926,8 +2900,9 @@ class TabMeasure(QWidget):
         # enough — the keyboard event filter still passes f/b/n/d/Enter/Esc
         # through to chartread so the user can drive it manually.
         self._flash_status(
-            f"Spot mode: ready to read patch '{patch_id}'. "
-            "Press Enter to read, f/b to navigate, d when done.",
+            tr("Spot mode: ready to read patch '{patch}'. "
+               "Press Enter to read, f/b to navigate, d when done.").format(
+                patch=patch_id),
             duration_ms=10000,
         )
 
@@ -2935,15 +2910,15 @@ class TabMeasure(QWidget):
         QApplication.instance().removeEventFilter(self)
 
         dlg = QDialog(self)
-        dlg.setWindowTitle("Confirm Abort")
+        dlg.setWindowTitle(tr("Confirm Abort"))
         dlg.setMinimumWidth(420)
 
         layout = QVBoxLayout(dlg)
         layout.setSpacing(16)
         layout.setContentsMargins(24, 20, 24, 20)
         msg = QLabel(
-            "<b>Stop measuring without saving?</b><br><br>"
-            "Choose <b>Yes</b> to abort, or <b>No</b> to keep measuring.",
+            tr("<b>Stop measuring without saving?</b><br><br>"
+            "Choose <b>Yes</b> to abort, or <b>No</b> to keep measuring."),
             dlg,
         )
         msg.setWordWrap(True)
@@ -2953,8 +2928,8 @@ class TabMeasure(QWidget):
 
         btn_row = QHBoxLayout()
         btn_row.setSpacing(8)
-        yes_btn = QPushButton("Yes — Abort", dlg)
-        no_btn  = QPushButton("No — Keep Measuring", dlg)
+        yes_btn = QPushButton(tr("Yes — Abort"), dlg)
+        no_btn  = QPushButton(tr("No — Keep Measuring"), dlg)
         no_btn.setObjectName("primary")
         yes_btn.setFixedHeight(32)
         no_btn.setFixedHeight(32)
@@ -2998,7 +2973,7 @@ class TabMeasure(QWidget):
         QApplication.instance().removeEventFilter(self)
 
         dlg = QDialog(self)
-        dlg.setWindowTitle("Strip Read Failed")
+        dlg.setWindowTitle(tr("Strip Read Failed"))
         dlg.setMinimumWidth(520)
 
         layout = QVBoxLayout(dlg)
@@ -3007,28 +2982,27 @@ class TabMeasure(QWidget):
 
         is_coms = "communication" in reason.lower()
         if is_coms:
-            advice = (
+            advice = tr(
                 "<b>The instrument lost communication with the computer.</b><br><br>"
                 "Check that the instrument's cable is firmly connected (try a "
                 "different USB port or cable), make sure no other application is "
-                "using the device, then reconnect it before retrying.<br><br>"
-            )
+                "using the device, then reconnect it before retrying.") + "<br><br>"
         else:
-            advice = (
-                f"<b>The stripe could not be read:</b> {reason}<br><br>"
+            advice = tr(
+                "<b>The stripe could not be read:</b> {reason}<br><br>"
                 "Re-position your instrument at the beginning of the stripe and try again. "
                 "If the error keeps occurring, try scanning more slowly and steadily, or "
-                "raise the <i>Patch consistency tolerance</i> setting before the next run.<br><br>"
-            )
+                "raise the <i>Patch consistency tolerance</i> setting before the next run."
+            ).format(reason=reason) + "<br><br>"
 
         msg = QLabel(
             advice +
-            "&nbsp;&nbsp;<b>Retry</b> — read this same stripe again.<br>"
-            "&nbsp;&nbsp;<b>Skip Stripe</b> — leave this stripe unread for now and "
-            "jump to the next unread one. You can come back to it later in this session.<br>"
-            "&nbsp;&nbsp;<b>Save Partial &amp; Quit</b> — stop here and save what you "
-            "have read so far. Next time you load this chart, "
-            "<i>Continue Measurement</i> will pick up where you left off.",
+            tr("&nbsp;&nbsp;<b>Retry</b> — read this same stripe again.<br>"
+               "&nbsp;&nbsp;<b>Skip Stripe</b> — leave this stripe unread for now and "
+               "jump to the next unread one. You can come back to it later in this session.<br>"
+               "&nbsp;&nbsp;<b>Save Partial &amp; Quit</b> — stop here and save what you "
+               "have read so far. Next time you load this chart, "
+               "<i>Continue Measurement</i> will pick up where you left off."),
             dlg,
         )
         msg.setWordWrap(True)
@@ -3042,9 +3016,9 @@ class TabMeasure(QWidget):
         btn_row = QHBoxLayout()
         btn_row.setSpacing(8)
 
-        retry_btn = QPushButton("Retry",              dlg)
-        skip_btn  = QPushButton("Skip Stripe",        dlg)
-        save_btn  = QPushButton("Save Partial && Quit", dlg)
+        retry_btn = QPushButton(tr("Retry"),              dlg)
+        skip_btn  = QPushButton(tr("Skip Stripe"),        dlg)
+        save_btn  = QPushButton(tr("Save Partial && Quit"), dlg)
         retry_btn.setObjectName("primary")
         retry_btn.setFixedHeight(32)
         skip_btn.setFixedHeight(32)
@@ -3097,7 +3071,7 @@ class TabMeasure(QWidget):
         QApplication.instance().removeEventFilter(self)
 
         dlg = QDialog(self)
-        dlg.setWindowTitle("Calibration Required")
+        dlg.setWindowTitle(tr("Calibration Required"))
         dlg.setMinimumWidth(500)
 
         layout = QVBoxLayout(dlg)
@@ -3105,19 +3079,19 @@ class TabMeasure(QWidget):
         layout.setContentsMargins(24, 20, 24, 20)
 
         msg = QLabel(
-            "<b>Your instrument needs to be calibrated before measuring.</b><br><br>"
+            tr("<b>Your instrument needs to be calibrated before measuring.</b><br><br>"
             "Place the instrument in the <b>calibration position</b> as described "
             "in its manual, then click <b>Start Calibration</b>.<br><br>"
             "The calibration takes only a few seconds. Once it is complete, another "
             "message will appear with instructions on how to start measuring the "
-            "stripes.",
+            "stripes."),
             dlg,
         )
         msg.setWordWrap(True)
         layout.addWidget(msg)
 
         btn_box = QDialogButtonBox()
-        ok_btn = btn_box.addButton("Start Calibration", QDialogButtonBox.ButtonRole.AcceptRole)
+        ok_btn = btn_box.addButton(tr("Start Calibration"), QDialogButtonBox.ButtonRole.AcceptRole)
         ok_btn.setObjectName("primary")
         btn_box.accepted.connect(dlg.accept)
         layout.addWidget(btn_box)
@@ -3171,13 +3145,10 @@ class TabMeasure(QWidget):
         if self._guided_refinement_active and self._strip_list:
             first = self._strip_list[0]
             n = len(self._strip_list)
-            dlg.setWindowTitle("Calibration Complete — Guided Refinement Ready")
+            dlg.setWindowTitle(tr("Calibration Complete — Guided Refinement Ready"))
 
             msg = QLabel(
-                "<b>Calibration complete. The app will guide you to each strip.</b><br><br>"
-                f"There are <b>{n} strip(s)</b> to re-measure. "
-                "The app will automatically navigate chartread to each one — "
-                "<b>you do not need to press f or b yourself.</b>",
+                tr("<b>Calibration complete. The app will guide you to each strip.</b><br><br>There are <b>{n} strip(s)</b> to re-measure. The app will automatically navigate chartread to each one — <b>you do not need to press f or b yourself.</b>").format(n=n),
                 dlg,
             )
             msg.setWordWrap(True)
@@ -3188,28 +3159,28 @@ class TabMeasure(QWidget):
             hfl = QVBoxLayout(hint_frame)
             hfl.setContentsMargins(16, 12, 16, 12)
             hfl.setSpacing(6)
-            hdr = QLabel("To identify which strip to scan:", dlg)
+            hdr = QLabel(tr("To identify which strip to scan:"), dlg)
             hdr.setStyleSheet("font-weight: 600; " + _plain_style)
             hfl.addWidget(hdr)
             for bullet_text in (
-                "Watch the <b>highlighted strip</b> in the preview panel on the right.",
-                "Or follow the <b>output field</b> below — it will name the strip.",
+                tr("Watch the <b>highlighted strip</b> in the preview panel on the right."),
+                tr("Or follow the <b>output field</b> below — it will name the strip."),
             ):
-                b = QLabel(f"  •  {bullet_text}", dlg)
+                b = QLabel(tr("  •  {bullet_text}").format(bullet_text=bullet_text), dlg)
                 b.setWordWrap(True)
                 b.setStyleSheet(_plain_style)
                 hfl.addWidget(b)
             layout.addWidget(hint_frame)
 
             first_lbl = QLabel(
-                f"<b>First strip: {first}</b> — place your instrument there and scan when ready.",
+                tr("<b>First strip: {first}</b> — place your instrument there and scan when ready.").format(first=first),
                 dlg,
             )
             first_lbl.setWordWrap(True)
             layout.addWidget(first_lbl)
 
             footnote = QLabel(
-                "When all strips are done, the output field will tell you to press ‘d’ to finish and save.",
+                tr("When all strips are done, the output field will tell you to press ‘d’ to finish and save."),
                 dlg,
             )
             footnote.setWordWrap(True)
@@ -3217,13 +3188,13 @@ class TabMeasure(QWidget):
             layout.addWidget(footnote)
 
         elif self._resume_active:
-            dlg.setWindowTitle("Calibration Complete — Manual Re-measurement")
+            dlg.setWindowTitle(tr("Calibration Complete — Manual Re-measurement"))
 
             msg = QLabel(
-                "<b>Calibration complete. You are ready to re-measure strips manually.</b><br><br>"
+                tr("<b>Calibration complete. You are ready to re-measure strips manually.</b><br><br>"
                 "chartread is resuming from your existing measurement. Re-scan any strip "
                 "to overwrite it, or scan unread strips to fill them in — follow the steps "
-                "below to pick which one.",
+                "below to pick which one."),
                 dlg,
             )
             msg.setWordWrap(True)
@@ -3237,9 +3208,9 @@ class TabMeasure(QWidget):
             sfl.setVerticalSpacing(7)
             sfl.setColumnStretch(1, 1)
             steps = [
-                ("1.", "Press <b>f</b> (forward) or <b>b</b> (back) until chartread shows the strip you want."),
-                ("2.", "Place your instrument on that strip and scan it."),
-                ("3.", "Repeat for each strip you want to update, then press <b>d</b> to finish and save."),
+                ("1.", tr("Press <b>f</b> (forward) or <b>b</b> (back) until chartread shows the strip you want.")),
+                ("2.", tr("Place your instrument on that strip and scan it.")),
+                ("3.", tr("Repeat for each strip you want to update, then press <b>d</b> to finish and save.")),
             ]
             for row, (num, text) in enumerate(steps):
                 n_lbl = QLabel(num)
@@ -3253,7 +3224,7 @@ class TabMeasure(QWidget):
             layout.addWidget(step_frame)
 
             footnote = QLabel(
-                "<b>n</b> jumps to the next unread strip  —  <b>Esc / q</b> quits without saving.",
+                tr("<b>n</b> jumps to the next unread strip  —  <b>Esc / q</b> quits without saving."),
                 dlg,
             )
             footnote.setWordWrap(True)
@@ -3261,12 +3232,12 @@ class TabMeasure(QWidget):
             layout.addWidget(footnote)
 
         else:
-            dlg.setWindowTitle("Calibration Complete — How to Measure")
+            dlg.setWindowTitle(tr("Calibration Complete — How to Measure"))
 
             msg = QLabel(
-                "<b>Calibration complete. You are ready to start measuring.</b><br><br>"
+                tr("<b>Calibration complete. You are ready to start measuring.</b><br><br>"
                 "Place your instrument at the beginning of the first stripe and trigger it to scan. "
-                "Then proceed stripe by stripe until all are done.",
+                "Then proceed stripe by stripe until all are done."),
                 dlg,
             )
             msg.setWordWrap(True)
@@ -3280,11 +3251,11 @@ class TabMeasure(QWidget):
             kfl.setVerticalSpacing(6)
             kfl.setColumnStretch(1, 1)
             key_rows = [
-                ("f", "Move to the next stripe"),
-                ("b", "Move back to the previous stripe"),
-                ("n", "Jump to the next unread stripe"),
-                ("d", "Finish and save when all stripes are done"),
-                ("Esc / q", "Quit without saving"),
+                ("f", tr("Move to the next stripe")),
+                ("b", tr("Move back to the previous stripe")),
+                ("n", tr("Jump to the next unread stripe")),
+                ("d", tr("Finish and save when all stripes are done")),
+                ("Esc / q", tr("Quit without saving")),
             ]
             for row, (key, desc) in enumerate(key_rows):
                 k = QLabel(key)
@@ -3295,7 +3266,7 @@ class TabMeasure(QWidget):
                 kfl.addWidget(d, row, 1, Qt.AlignmentFlag.AlignLeft)
             layout.addWidget(key_frame)
 
-            footnote = QLabel("These instructions are always visible in the output log below.", dlg)
+            footnote = QLabel(tr("These instructions are always visible in the output log below."), dlg)
             footnote.setWordWrap(True)
             footnote.setStyleSheet(_dim_style)
             layout.addWidget(footnote)
@@ -3351,25 +3322,15 @@ class TabMeasure(QWidget):
 
         if self._guided_refinement_active:
             n = len(self._strip_list)
-            dlg.setWindowTitle("Re-measurement Complete")
+            dlg.setWindowTitle(tr("Re-measurement Complete"))
             msg = QLabel(
-                f"<b>All {n} target strip(s) have been re-measured successfully.</b><br><br>"
-                "What would you like to do next?<br><br>"
-                "&nbsp;&nbsp;•&nbsp; <b>Build Profile</b> — saves the measurement "
-                "and takes you straight to the Build Profile tab to create your updated "
-                "ICC profile.<br><br>"
-                "&nbsp;&nbsp;•&nbsp; <b>Continue Measuring Manually</b> — keeps "
-                "chartread running so you can scan additional strips yourself. "
-                "You will have <b>full manual control</b>: use <b>f</b>&nbsp;/&nbsp;<b>b</b> "
-                "to move between strips, <b>n</b> to jump to the next unread one, and "
-                "<b>d</b> when you are done. "
-                "The automatic strip navigation is switched off for the rest of this session.",
+                tr("<b>All {n} target strip(s) have been re-measured successfully.</b><br><br>What would you like to do next?<br><br>&nbsp;&nbsp;•&nbsp; <b>Build Profile</b> — saves the measurement and takes you straight to the Build Profile tab to create your updated ICC profile.<br><br>&nbsp;&nbsp;•&nbsp; <b>Continue Measuring Manually</b> — keeps chartread running so you can scan additional strips yourself. You will have <b>full manual control</b>: use <b>f</b>&nbsp;/&nbsp;<b>b</b> to move between strips, <b>n</b> to jump to the next unread one, and <b>d</b> when you are done. The automatic strip navigation is switched off for the rest of this session.").format(n=n),
                 dlg,
             )
         elif is_cal:
-            dlg.setWindowTitle("Calibration Measurement Complete")
+            dlg.setWindowTitle(tr("Calibration Measurement Complete"))
             msg = QLabel(
-                "<b>All stripes of your calibration target have been read successfully.</b><br><br>"
+                tr("<b>All stripes of your calibration target have been read successfully.</b><br><br>"
                 "The measurement data has been saved. The next step is to turn it into a "
                 "<b>calibration file (.cal)</b> — click <b>Create Calibration File</b> to go "
                 "directly to the <b>4. Calibration &amp; Profiling</b> tab, where the file "
@@ -3379,13 +3340,13 @@ class TabMeasure(QWidget):
                 "<b>n</b> to jump to the next unread stripe, and press <b>d</b> when you "
                 "are done.<br><br>"
                 "<span style='color:#909090;'>These instructions are always visible in "
-                "the output log below.</span>",
+                "the output log below.</span>"),
                 dlg,
             )
         else:
-            dlg.setWindowTitle("All Stripes Read")
+            dlg.setWindowTitle(tr("All Stripes Read"))
             msg = QLabel(
-                "<b>All stripes have been read successfully.</b><br><br>"
+                tr("<b>All stripes have been read successfully.</b><br><br>"
                 "Click <b>Build Profile</b> to finalise the measurement and go directly "
                 "to the Build Profile tab — the next and final step.<br><br>"
                 "If you would like to re-read any stripe first, click <b>Re-read Stripes</b>. "
@@ -3393,7 +3354,7 @@ class TabMeasure(QWidget):
                 "<b>n</b> to jump to the next unread stripe, and press <b>d</b> when you "
                 "are done.<br><br>"
                 "<span style='color:#909090;'>These instructions are always visible in "
-                "the output log below.</span>",
+                "the output log below.</span>"),
                 dlg,
             )
 
@@ -3462,19 +3423,19 @@ class TabMeasure(QWidget):
 
         dlg = QDialog(self)
         dlg.setMinimumWidth(560)
-        dlg.setWindowTitle("All Stripes Read")
+        dlg.setWindowTitle(tr("All Stripes Read"))
         layout = QVBoxLayout(dlg)
         layout.setSpacing(16)
         layout.setContentsMargins(24, 20, 24, 20)
 
         if in_set:
-            body = (
-                f"<b>All stripes read — {n_total} reads of this chart are now saved.</b>"
+            body = tr(
+                "<b>All stripes read — {n} reads of this chart are now saved.</b>"
                 "<br><br>"
                 "Combining repeated reads of the same chart averages out instrument "
                 "noise and can improve profile accuracy.<br><br>"
                 "&nbsp;&nbsp;•&nbsp; <b>Average all reads &amp; build</b> — combine all "
-                f"{n_total} reads into one measurement, then continue to Build Profile.<br>"
+                "{n} reads into one measurement, then continue to Build Profile.<br>"
                 "&nbsp;&nbsp;•&nbsp; <b>Measure again to average</b> — read the whole "
                 "chart once more and add it to the set.<br>"
                 "&nbsp;&nbsp;•&nbsp; <b>Use last read only</b> — build from this most "
@@ -3483,9 +3444,9 @@ class TabMeasure(QWidget):
                 "instrument is set up again — this can take a few seconds and may ask you "
                 "to recalibrate before the next read starts, so a brief pause here is "
                 "normal.</span>"
-            )
+            ).format(n=n_total)
         else:
-            body = (
+            body = tr(
                 "<b>All stripes have been read successfully.</b><br><br>"
                 "&nbsp;&nbsp;•&nbsp; <b>Build Profile</b> — finalise the measurement and "
                 "go to the Build Profile tab.<br>"
@@ -3512,15 +3473,15 @@ class TabMeasure(QWidget):
             # — see _input_bg_qss in ui/widgets.py) and the wheel doesn't change
             # the selection on accidental page-scroll.
             method_combo = NoScrollComboBox(dlg)
-            method_combo.addItem("Mean (recommended)", "mean")
-            method_combo.addItem("Median — needs 3+ reads", "median")
+            method_combo.addItem(tr("Mean (recommended)"), "mean")
+            method_combo.addItem(tr("Median — needs 3+ reads"), "median")
             saved = self._settings.get("average_method", "mean")
             method_combo.setCurrentIndex(max(0, method_combo.findData(saved)))
             method_combo.setToolTip(
-                "Mean averages every read. Median rejects a single outlier read, "
-                "but only differs from the mean with three or more reads."
+                tr("Mean averages every read. Median rejects a single outlier read, "
+                "but only differs from the mean with three or more reads.")
             )
-            method_row.addWidget(QLabel("Combine method:", dlg))
+            method_row.addWidget(QLabel(tr("Combine method:"), dlg))
             method_row.addWidget(method_combo, 1)
             layout.addLayout(method_row)
 
@@ -3533,21 +3494,21 @@ class TabMeasure(QWidget):
         btn_row = QHBoxLayout()
         btn_row.addStretch(1)
         if in_set:
-            last_btn = QPushButton("Use last read only", dlg)
+            last_btn = QPushButton(tr("Use last read only"), dlg)
             last_btn.clicked.connect(lambda: _pick("use_last"))
-            again_btn = QPushButton("Measure again to average", dlg)
+            again_btn = QPushButton(tr("Measure again to average"), dlg)
             again_btn.clicked.connect(lambda: _pick("again"))
-            avg_btn = QPushButton("Average all reads & build →", dlg)
+            avg_btn = QPushButton(tr("Average all reads & build →"), dlg)
             avg_btn.setObjectName("primary")
             avg_btn.clicked.connect(lambda: _pick("average"))
             for b in (last_btn, again_btn, avg_btn):
                 btn_row.addWidget(b)
         else:
-            reread_btn = QPushButton("Re-read Stripes", dlg)
+            reread_btn = QPushButton(tr("Re-read Stripes"), dlg)
             reread_btn.clicked.connect(lambda: _pick("reread"))
-            again_btn = QPushButton("Measure again to average", dlg)
+            again_btn = QPushButton(tr("Measure again to average"), dlg)
             again_btn.clicked.connect(lambda: _pick("again"))
-            build_btn = QPushButton("Build Profile →", dlg)
+            build_btn = QPushButton(tr("Build Profile →"), dlg)
             build_btn.setObjectName("primary")
             build_btn.clicked.connect(lambda: _pick("build"))
             for b in (reread_btn, again_btn, build_btn):
@@ -3591,13 +3552,13 @@ class TabMeasure(QWidget):
             self._usb_claimed_by_vm = False
             from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QVBoxLayout
             dlg = QDialog(self)
-            dlg.setWindowTitle("Instrument Not Accessible")
+            dlg.setWindowTitle(tr("Instrument Not Accessible"))
             dlg.setMinimumWidth(500)
             layout = QVBoxLayout(dlg)
             layout.setSpacing(16)
             layout.setContentsMargins(24, 20, 24, 20)
             msg = QLabel(
-                "<b>Your measurement device could not be opened — it appears to be "
+                tr("<b>Your measurement device could not be opened — it appears to be "
                 "connected to a virtual machine.</b><br><br>"
                 "When a device is assigned to a VM (Parallels, VMware, VirtualBox, etc.), "
                 "the host operating system cannot access it at the same time.<br><br>"
@@ -3605,7 +3566,7 @@ class TabMeasure(QWidget):
                 "&nbsp;&nbsp;1. In your VM software, disconnect the device from the "
                 "virtual machine<br>"
                 "&nbsp;&nbsp;2. Reconnect the USB cable if needed<br>"
-                "&nbsp;&nbsp;3. Press <b>Start Measurement</b> again",
+                "&nbsp;&nbsp;3. Press <b>Start Measurement</b> again"),
                 dlg,
             )
             msg.setWordWrap(True)
@@ -3621,29 +3582,29 @@ class TabMeasure(QWidget):
             self._no_instrument = False
             from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QVBoxLayout
             dlg = QDialog(self)
-            dlg.setWindowTitle("No Instrument Found")
+            dlg.setWindowTitle(tr("No Instrument Found"))
             dlg.setMinimumWidth(460)
             layout = QVBoxLayout(dlg)
             layout.setSpacing(16)
             layout.setContentsMargins(24, 20, 24, 20)
             _conn_bullet = (
-                "&nbsp;&nbsp;• connected to your Windows PC via USB<br>"
+                tr("&nbsp;&nbsp;• connected to your Windows PC via USB<br>")
                 if sys.platform == "win32" else
-                "&nbsp;&nbsp;• connected to your Mac via USB<br>"
+                tr("&nbsp;&nbsp;• connected to your Mac via USB<br>")
             )
             _driver_hint = (
-                "<br>If the instrument is connected but still not found, make sure the "
-                "Argyll WinUSB driver is installed for your device (use Argyll's "
-                "ArgyllInstallers tool or Zadig). See the Argyll documentation for details."
+                tr("<br>If the instrument is connected but still not found, make sure the "
+                   "Argyll WinUSB driver is installed for your device (use Argyll's "
+                   "ArgyllInstallers tool or Zadig). See the Argyll documentation for details.")
                 if sys.platform == "win32" else ""
             )
             msg = QLabel(
-                "<b>No measurement instrument was detected.</b><br><br>"
-                "Please make sure your instrument is:<br>"
+                tr("<b>No measurement instrument was detected.</b><br><br>"
+                   "Please make sure your instrument is:<br>")
                 + _conn_bullet +
-                "&nbsp;&nbsp;• switched on<br>"
-                "&nbsp;&nbsp;• not in use by another application<br><br>"
-                "Once the instrument is ready, press <b>Start Measurement</b> again."
+                tr("&nbsp;&nbsp;• switched on<br>"
+                   "&nbsp;&nbsp;• not in use by another application<br><br>"
+                   "Once the instrument is ready, press <b>Start Measurement</b> again.")
                 + _driver_hint,
                 dlg,
             )
@@ -3660,18 +3621,18 @@ class TabMeasure(QWidget):
             self._device_busy = False
             from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QVBoxLayout
             dlg = QDialog(self)
-            dlg.setWindowTitle("Instrument Not Available")
+            dlg.setWindowTitle(tr("Instrument Not Available"))
             dlg.setMinimumWidth(480)
             layout = QVBoxLayout(dlg)
             layout.setSpacing(16)
             layout.setContentsMargins(24, 20, 24, 20)
             msg = QLabel(
-                "<b>The instrument could not be opened — it is already in use by "
+                tr("<b>The instrument could not be opened — it is already in use by "
                 "another process.</b><br><br>"
                 "This usually happens when a previous measurement session was not "
                 "stopped properly before closing the app. ChromIQ automatically "
                 "tries to free the device when starting a new measurement.<br><br>"
-                "Please click OK and then press <b>Start Measurement</b> again.",
+                "Please click OK and then press <b>Start Measurement</b> again."),
                 dlg,
             )
             msg.setWordWrap(True)
@@ -3687,16 +3648,16 @@ class TabMeasure(QWidget):
             self._instrument_disconnected = False
             from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QVBoxLayout
             dlg = QDialog(self)
-            dlg.setWindowTitle("Instrument Disconnected")
+            dlg.setWindowTitle(tr("Instrument Disconnected"))
             dlg.setMinimumWidth(460)
             layout = QVBoxLayout(dlg)
             layout.setSpacing(16)
             layout.setContentsMargins(24, 20, 24, 20)
             msg = QLabel(
-                "<b>The measurement instrument was disconnected.</b><br><br>"
+                tr("<b>The measurement instrument was disconnected.</b><br><br>"
                 "The measurement has been stopped automatically. Please check "
                 "the USB connection, reconnect your instrument, and start a "
-                "new measurement.",
+                "new measurement."),
                 dlg,
             )
             msg.setWordWrap(True)
@@ -3717,19 +3678,13 @@ class TabMeasure(QWidget):
             self._inst_init_failed_msg = None
             from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QVBoxLayout
             dlg = QDialog(self)
-            dlg.setWindowTitle("Instrument Failed to Initialize")
+            dlg.setWindowTitle(tr("Instrument Failed to Initialize"))
             dlg.setMinimumWidth(480)
             layout = QVBoxLayout(dlg)
             layout.setSpacing(16)
             layout.setContentsMargins(24, 20, 24, 20)
             msg = QLabel(
-                "<b>The instrument could not be initialised.</b><br><br>"
-                f"Argyll reported: <i>{_b_init_msg}</i><br><br>"
-                "Try the following:<br>"
-                "&nbsp;&nbsp;• Unplug and replug the USB cable<br>"
-                "&nbsp;&nbsp;• Make sure the instrument is switched on<br>"
-                "&nbsp;&nbsp;• Close any other application that might be using it<br><br>"
-                "Then press <b>Start Measurement</b> again.",
+                tr("<b>The instrument could not be initialised.</b><br><br>Argyll reported: <i>{_b_init_msg}</i><br><br>Try the following:<br>&nbsp;&nbsp;• Unplug and replug the USB cable<br>&nbsp;&nbsp;• Make sure the instrument is switched on<br>&nbsp;&nbsp;• Close any other application that might be using it<br><br>Then press <b>Start Measurement</b> again.").format(_b_init_msg=_b_init_msg),
                 dlg,
             )
             msg.setWordWrap(True)
@@ -3746,18 +3701,13 @@ class TabMeasure(QWidget):
             self._instrument_wrong_type = None
             from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QVBoxLayout
             dlg = QDialog(self)
-            dlg.setWindowTitle("Instrument Type Mismatch")
+            dlg.setWindowTitle(tr("Instrument Type Mismatch"))
             dlg.setMinimumWidth(480)
             layout = QVBoxLayout(dlg)
             layout.setSpacing(16)
             layout.setContentsMargins(24, 20, 24, 20)
             msg = QLabel(
-                f"<b>This instrument cannot measure in {cap} mode.</b><br><br>"
-                "ChromIQ measures printed test charts, which need a "
-                "<b>reflection-capable</b> instrument (e.g. i1Pro, i1Pro 2, "
-                "i1Pro 3, ColorMunki, SpectroScan).<br><br>"
-                "Display-only colorimeters (e.g. i1Display) cannot read paper. "
-                "Connect a reflection-capable instrument and try again.",
+                tr("<b>This instrument cannot measure in {cap} mode.</b><br><br>ChromIQ measures printed test charts, which need a <b>reflection-capable</b> instrument (e.g. i1Pro, i1Pro 2, i1Pro 3, ColorMunki, SpectroScan).<br><br>Display-only colorimeters (e.g. i1Display) cannot read paper. Connect a reflection-capable instrument and try again.").format(cap=cap),
                 dlg,
             )
             msg.setWordWrap(True)
@@ -3774,16 +3724,13 @@ class TabMeasure(QWidget):
             self._ccmx_load_failed_msg = None
             from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QVBoxLayout
             dlg = QDialog(self)
-            dlg.setWindowTitle("Correction File Failed to Load")
+            dlg.setWindowTitle(tr("Correction File Failed to Load"))
             dlg.setMinimumWidth(500)
             layout = QVBoxLayout(dlg)
             layout.setSpacing(16)
             layout.setContentsMargins(24, 20, 24, 20)
             msg = QLabel(
-                "<b>The colorimeter correction file could not be applied.</b><br><br>"
-                f"Argyll reported: <i>{err}</i><br><br>"
-                "Check the path in <b>Settings → Argyll Options</b>, or remove the "
-                "CCMX / CCSS reference from the extra-args field and try again.",
+                tr("<b>The colorimeter correction file could not be applied.</b><br><br>Argyll reported: <i>{err}</i><br><br>Check the path in <b>Settings → Argyll Options</b>, or remove the CCMX / CCSS reference from the extra-args field and try again.").format(err=err),
                 dlg,
             )
             msg.setWordWrap(True)
@@ -3800,16 +3747,13 @@ class TabMeasure(QWidget):
             self._mode_set_failed_msg = None
             from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QVBoxLayout
             dlg = QDialog(self)
-            dlg.setWindowTitle("Instrument Mode Rejected")
+            dlg.setWindowTitle(tr("Instrument Mode Rejected"))
             dlg.setMinimumWidth(480)
             layout = QVBoxLayout(dlg)
             layout.setSpacing(16)
             layout.setContentsMargins(24, 20, 24, 20)
             msg = QLabel(
-                "<b>The instrument refused the requested measurement mode.</b><br><br>"
-                f"Argyll reported: <i>{err}</i><br><br>"
-                "Check the instrument-specific flags in your settings (high-res, UV mode, "
-                "scan tolerance, etc.) and try again.",
+                tr("<b>The instrument refused the requested measurement mode.</b><br><br>Argyll reported: <i>{err}</i><br><br>Check the instrument-specific flags in your settings (high-res, UV mode, scan tolerance, etc.) and try again.").format(err=err),
                 dlg,
             )
             msg.setWordWrap(True)
@@ -3854,21 +3798,21 @@ class TabMeasure(QWidget):
             if cb.isVisible():
                 cb.setChecked(True)
             self._log.appendPlainText(
-                "\n[INFO] Measurement was interrupted — partial readings saved.\n"
-                f"Saved: {ti3}\n\n"
-                "→ Press Continue Measurement to resume where you left off, "
-                "or untick 'Refine / resume existing measurement (-r)' to start over."
+                "\n" + tr("[INFO] Measurement was interrupted — partial readings saved.")
+                + f"\nSaved: {ti3}\n\n"
+                + tr("→ Press Continue Measurement to resume where you left off, "
+                     "or untick 'Refine / resume existing measurement (-r)' to start over.")
             )
             self.measure_finished.emit(ti3)
         elif ti3_exists and (is_cal or self._guided_refinement_active):
             # Calibration and guided-refinement reads keep their dedicated flow.
             if is_cal:
-                next_step = "→ Next step: go to the '4. Calibration & Profiling' tab to create your calibration file."
+                next_step = tr("→ Next step: go to the '4. Calibration & Profiling' tab to create your calibration file.")
             else:
-                next_step = "→ Next step: go to the '4. Build Profile' tab to create your ICC profile."
+                next_step = tr("→ Next step: go to the '4. Build Profile' tab to create your ICC profile.")
             self._log.appendPlainText(
-                "\n[OK] Measurement complete.\n"
-                f"Saved: {ti3}\n\n"
+                "\n" + tr("[OK] Measurement complete.")
+                + f"\nSaved: {ti3}\n\n"
                 + next_step
             )
             self.measure_finished.emit(ti3)
@@ -3893,9 +3837,9 @@ class TabMeasure(QWidget):
             # and proceed straight to Build Profile (mirrors the cal/refinement
             # branch above, minus the dedicated next-step wording).
             self._log.appendPlainText(
-                "\n[OK] Measurement complete.\n"
-                f"Saved: {ti3}\n\n"
-                "→ Next step: go to the '4. Build Profile' tab to create your ICC profile."
+                "\n" + tr("[OK] Measurement complete.")
+                + f"\nSaved: {ti3}\n\n"
+                + tr("→ Next step: go to the '4. Build Profile' tab to create your ICC profile.")
             )
             self.measure_finished.emit(ti3)
             if self._auto_proceed:
@@ -3906,7 +3850,7 @@ class TabMeasure(QWidget):
             # "Calibration Required" dialog). Don't claim success or a saved
             # file that doesn't exist.
             self._log.appendPlainText(
-                "\n[INFO] Measurement stopped — no measurement (.ti3) file was created."
+                "\n" + tr("[INFO] Measurement stopped — no measurement (.ti3) file was created.")
             )
         self._auto_proceed = False
         self._log.ensureCursorVisible()
@@ -3992,26 +3936,26 @@ class TabMeasure(QWidget):
 
         dlg = QDialog(self)
         dlg.setMinimumWidth(580)
-        dlg.setWindowTitle("Measurement Complete")
+        dlg.setWindowTitle(tr("Measurement Complete"))
         layout = QVBoxLayout(dlg)
         layout.setSpacing(16)
         layout.setContentsMargins(24, 20, 24, 20)
 
         if n_reads >= 2:
-            body = (
-                f"<b>Measurement complete — {n_reads} reads of this chart are saved.</b>"
+            body = tr(
+                "<b>Measurement complete — {n} reads of this chart are saved.</b>"
                 "<br><br>"
                 "Combining repeated reads of the same chart averages out instrument "
                 "noise and can improve profile accuracy.<br><br>"
                 "&nbsp;&nbsp;•&nbsp; <b>Average all reads &amp; build</b> — combine all "
-                f"{n_reads} reads into one measurement, then continue to Build Profile.<br>"
+                "{n} reads into one measurement, then continue to Build Profile.<br>"
                 "&nbsp;&nbsp;•&nbsp; <b>Use last read only</b> — build from the most "
                 "recent read and ignore the others.<br>"
                 "&nbsp;&nbsp;•&nbsp; <b>Measure again</b> — read the chart once more and "
                 "add it to the set."
-            )
+            ).format(n=n_reads)
         else:
-            body = (
+            body = tr(
                 "<b>Measurement complete — your readings have been saved.</b><br><br>"
                 "Reading the same chart a second time and averaging the two results "
                 "reduces instrument noise and can improve profile accuracy.<br><br>"
@@ -4030,15 +3974,15 @@ class TabMeasure(QWidget):
             # NoScrollComboBox: per-widget input-bg QSS (white in light mode) +
             # wheel-scroll guard. See _input_bg_qss in ui/widgets.py.
             method_combo = NoScrollComboBox(dlg)
-            method_combo.addItem("Mean (recommended)", "mean")
-            method_combo.addItem("Median — needs 3+ reads", "median")
+            method_combo.addItem(tr("Mean (recommended)"), "mean")
+            method_combo.addItem(tr("Median — needs 3+ reads"), "median")
             saved = self._settings.get("average_method", "mean")
             method_combo.setCurrentIndex(max(0, method_combo.findData(saved)))
             method_combo.setToolTip(
-                "Mean averages every read. Median rejects a single outlier read, "
-                "but only differs from the mean with three or more reads."
+                tr("Mean averages every read. Median rejects a single outlier read, "
+                "but only differs from the mean with three or more reads.")
             )
-            method_row.addWidget(QLabel("Combine method:", dlg))
+            method_row.addWidget(QLabel(tr("Combine method:"), dlg))
             method_row.addWidget(method_combo, 1)
             layout.addLayout(method_row)
 
@@ -4051,19 +3995,19 @@ class TabMeasure(QWidget):
         btn_row = QHBoxLayout()
         btn_row.addStretch(1)
         if n_reads >= 2:
-            again_btn = QPushButton("Measure again", dlg)
+            again_btn = QPushButton(tr("Measure again"), dlg)
             again_btn.clicked.connect(lambda: _pick("again"))
-            last_btn = QPushButton("Use last read only", dlg)
+            last_btn = QPushButton(tr("Use last read only"), dlg)
             last_btn.clicked.connect(lambda: _pick("use_last"))
-            avg_btn = QPushButton("Average all reads & build →", dlg)
+            avg_btn = QPushButton(tr("Average all reads & build →"), dlg)
             avg_btn.setObjectName("primary")
             avg_btn.clicked.connect(lambda: _pick("average"))
             for b in (again_btn, last_btn, avg_btn):
                 btn_row.addWidget(b)
         else:
-            again_btn = QPushButton("Measure again to average", dlg)
+            again_btn = QPushButton(tr("Measure again to average"), dlg)
             again_btn.clicked.connect(lambda: _pick("again"))
-            cont_btn = QPushButton("Continue to Build Profile →", dlg)
+            cont_btn = QPushButton(tr("Continue to Build Profile →"), dlg)
             cont_btn.setObjectName("primary")
             cont_btn.clicked.connect(lambda: _pick("continue"))
             for b in (again_btn, cont_btn):
@@ -4105,13 +4049,13 @@ class TabMeasure(QWidget):
         def _on_avg_finish(result: Path | None) -> None:
             if result is None:
                 fail = self._avg_runner.primary_failure()
-                detail = fail[1] if fail else "see the output log above."
+                detail = fail[1] if fail else tr("see the output log above.")
                 self._log.appendPlainText(f"[ERROR] Averaging failed — {detail}")
                 self._show_average_failed_dialog(detail)
                 return
             self._log.appendPlainText(
-                f"[OK] Averaged measurement saved: {result.name}\n"
-                "→ Next step: go to the '4. Build Profile' tab to create your ICC profile."
+                tr("[OK] Averaged measurement saved: {name}").format(name=result.name)
+                + "\n" + tr("→ Next step: go to the '4. Build Profile' tab to create your ICC profile.")
             )
             self.measure_finished.emit(result)
             self.proceed_to_profile.emit()
@@ -4125,7 +4069,7 @@ class TabMeasure(QWidget):
     def _show_average_failed_dialog(self, detail: str) -> None:
         from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QVBoxLayout
         dlg = QDialog(self)
-        dlg.setWindowTitle("Averaging Failed")
+        dlg.setWindowTitle(tr("Averaging Failed"))
         dlg.setMinimumWidth(500)
         layout = QVBoxLayout(dlg)
         layout.setSpacing(16)

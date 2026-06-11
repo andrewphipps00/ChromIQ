@@ -30,11 +30,15 @@ class CubeStats:
     occupancy_pct: float    # % of a 10×10×10 cube grid that holds ≥1 patch
 
     def summary(self) -> str:
+        from core.i18n import tr
         if self.count == 0:
-            return "No patches to analyse."
-        return (f"{self.count} patches · gamut fill {self.occupancy_pct:.0f}% "
-                f"· spacing mean {self.nn_mean:.1f}, closest {self.nn_min:.1f} "
-                "(0–100 RGB)")
+            return tr("No patches to analyse.")
+        return tr("{count} patches · gamut fill {fill:.0f}% "
+                  "· spacing mean {mean:.1f}, closest {closest:.1f} "
+                  "(0–100 RGB)").format(count=self.count,
+                                        fill=self.occupancy_pct,
+                                        mean=self.nn_mean,
+                                        closest=self.nn_min)
 
 
 def _as_array(program: list[tuple[float, ...]]) -> np.ndarray:

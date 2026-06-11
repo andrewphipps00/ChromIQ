@@ -22,7 +22,6 @@ from core.logger import get_logger
 from core.settings import AppSettings
 from core.updater import UpdateChecker
 from ui.dialogs.settings_dialog import SettingsDialog
-from ui.dialogs.welcome_dialog import WelcomeDialog
 from ui.gradient_overlay import GradientOverlay
 from ui.masthead_header import MastheadHeader
 from ui.spectrum_tab_bar import SpectrumTabBar
@@ -31,6 +30,7 @@ from ui.tabs.tab_check_refine import TabCheckRefine
 from ui.tabs.tab_measure import TabMeasure
 from ui.tabs.tab_print import TabPrint
 from ui.tabs.tab_profile import TabProfile
+from core.i18n import tr
 
 log = get_logger(__name__)
 
@@ -62,7 +62,7 @@ class MainWindow(QMainWindow):
         self._runner    = ArgyllRunner(settings, self)
         self._file_mgr  = FileManager(settings)
 
-        self.setWindowTitle("ChromIQ — Printer Profiling")
+        self.setWindowTitle(tr("ChromIQ — Printer Profiling"))
         self.setMinimumSize(900, 650)
         self._title_bar_mode: str = "dark"
         screen = QApplication.primaryScreen().availableGeometry()
@@ -97,11 +97,11 @@ class MainWindow(QMainWindow):
         self._tab_check   = TabCheckRefine(self._runner, self._settings, self)
         self._load_state_snapshot: dict | None = None
 
-        self._tabs.addTab(self._tab_chart,   "1. Create Chart")
-        self._tabs.addTab(self._tab_print,   "2. Print Chart")
-        self._tabs.addTab(self._tab_measure, "3. Measure")
-        self._tabs.addTab(self._tab_profile, "4. Build Profile")
-        self._tabs.addTab(self._tab_check,   "5. Check & Refine")
+        self._tabs.addTab(self._tab_chart,   tr("1. Create Chart"))
+        self._tabs.addTab(self._tab_print,   tr("2. Print Chart"))
+        self._tabs.addTab(self._tab_measure, tr("3. Measure"))
+        self._tabs.addTab(self._tab_profile, tr("4. Build Profile"))
+        self._tabs.addTab(self._tab_check,   tr("5. Check & Refine"))
 
         # Gradient wash — left panel only for splitter tabs, full pane for the rest
         from ui.styles import TAB_COLORS
@@ -459,6 +459,9 @@ class MainWindow(QMainWindow):
                 return
             except RuntimeError:
                 self._welcome_dialog = None
+        # Imported lazily: welcome_dialog translates its guide texts at
+        # module level, which must happen after set_language().
+        from ui.dialogs.welcome_dialog import WelcomeDialog
         dlg = WelcomeDialog(
             self._settings,
             parent=self,
@@ -499,7 +502,7 @@ class MainWindow(QMainWindow):
         """
         from PyQt6.QtWidgets import QMessageBox
 
-        no_chart = (
+        no_chart = tr(
             "No chart is loaded yet.\n\n"
             "Generate or open a chart first (Create Chart tab), then this tool "
             "will show how its patches are spread across the RGB cube."
@@ -507,23 +510,23 @@ class MainWindow(QMainWindow):
         # project() materialises a project.json as a side effect, so guard on the
         # manifest existing first — exactly as session restore does.
         if not (self._file_mgr.working_dir() / "project.json").exists():
-            QMessageBox.information(self, "Show patch distribution (3D)", no_chart)
+            QMessageBox.information(self, tr("Show patch distribution (3D)"), no_chart)
             return
 
         run = self._file_mgr.project().current_run()
         chart = run.chart_ti2 if run.chart_ti2.exists() else run.chart_ti1
         if not chart.exists():
-            QMessageBox.information(self, "Show patch distribution (3D)", no_chart)
+            QMessageBox.information(self, tr("Show patch distribution (3D)"), no_chart)
             return
 
         from workflow.ti2_relayout import load_rgb_program
         try:
             program = load_rgb_program(chart)
         except ValueError as exc:
-            QMessageBox.information(self, "Show patch distribution (3D)", str(exc))
+            QMessageBox.information(self, tr("Show patch distribution (3D)"), str(exc))
             return
         if not program:
-            QMessageBox.information(self, "Show patch distribution (3D)", no_chart)
+            QMessageBox.information(self, tr("Show patch distribution (3D)"), no_chart)
             return
 
         from ui.dialogs.patch_cube_dialog import PatchCubeDialog
@@ -563,7 +566,7 @@ class MainWindow(QMainWindow):
         profile_idx = self._tabs.indexOf(self._tab_profile)
         self._tabs.setTabText(
             profile_idx,
-            "4. Calibration & Profiling" if enabled else "4. Build Profile",
+            tr("4. Calibration & Profiling") if enabled else tr("4. Build Profile"),
         )
 
     def _check_for_updates_on_startup(self) -> None:
@@ -620,7 +623,7 @@ class MainWindow(QMainWindow):
         from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QVBoxLayout
 
         dlg = QDialog(self)
-        dlg.setWindowTitle("ArgyllCMS Not Found")
+        dlg.setWindowTitle(tr("ArgyllCMS Not Found"))
         dlg.setMinimumWidth(520)
 
         layout = QVBoxLayout(dlg)
@@ -628,7 +631,7 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(24, 20, 24, 20)
 
         msg = QLabel(
-            "<b>ArgyllCMS could not be found on your system.</b><br><br>"
+            tr("<b>ArgyllCMS could not be found on your system.</b><br><br>"
             "ChromIQ requires ArgyllCMS to create and measure ICC profiles. "
             "It was not detected in any of the usual locations.<br><br>"
             "<b>To install ArgyllCMS:</b><br>"
@@ -639,7 +642,7 @@ class MainWindow(QMainWindow):
             "&nbsp;&nbsp;3. Restart ChromIQ — it will detect the installation "
             "automatically.<br><br>"
             "If ArgyllCMS is already installed in a custom location, click "
-            "<b>Open Preferences</b> to set the path manually.",
+            "<b>Open Preferences</b> to set the path manually."),
             dlg,
         )
         msg.setOpenExternalLinks(True)
@@ -647,8 +650,8 @@ class MainWindow(QMainWindow):
         layout.addWidget(msg)
 
         btn_box = QDialogButtonBox()
-        prefs_btn = btn_box.addButton("Open Preferences", QDialogButtonBox.ButtonRole.ActionRole)
-        btn_box.addButton("OK", QDialogButtonBox.ButtonRole.AcceptRole)
+        prefs_btn = btn_box.addButton(tr("Open Preferences"), QDialogButtonBox.ButtonRole.ActionRole)
+        btn_box.addButton(tr("OK"), QDialogButtonBox.ButtonRole.AcceptRole)
         btn_box.accepted.connect(dlg.accept)
         prefs_btn.clicked.connect(dlg.accept)
         prefs_btn.clicked.connect(self._open_settings)

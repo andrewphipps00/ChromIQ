@@ -25,6 +25,7 @@ from PyQt6.QtWidgets import (
 from core.logger import get_logger
 from ui.theme import resolve_mode
 from workflow.gamut_viewer import _patch_html
+from core.i18n import tr
 
 log = get_logger(__name__)
 
@@ -46,7 +47,7 @@ class DriftPlotDialog(QDialog):
 
     def __init__(self, html_path: Path, settings, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("3D difference map")
+        self.setWindowTitle(tr("3D difference map"))
         self.setMinimumSize(640, 520)
         self.resize(760, 640)
         self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint)
@@ -65,10 +66,10 @@ class DriftPlotDialog(QDialog):
         layout.setSpacing(10)
 
         legend = QLabel(
-            "Each line runs from the colour you asked for to the colour you got. "
+            tr("Each line runs from the colour you asked for to the colour you got. "
             "<b><span style='color:#3ec95a;'>Green</span></b> dots are the reference "
             "(target) values; <b><span style='color:#e34d4d;'>red</span></b> dots are "
-            "your measurement. Drag to rotate, scroll to zoom.",
+            "your measurement. Drag to rotate, scroll to zoom."),
             self,
         )
         legend.setWordWrap(True)
@@ -92,7 +93,7 @@ class DriftPlotDialog(QDialog):
             layout.addWidget(view, 1)
         except ImportError:
             fallback = QLabel(
-                "Install PyQt6-WebEngine to view the interactive 3D difference map.",
+                tr("Install PyQt6-WebEngine to view the interactive 3D difference map."),
                 self,
             )
             fallback.setAlignment(Qt.AlignmentFlag.AlignCenter)

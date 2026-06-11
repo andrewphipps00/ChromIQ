@@ -44,6 +44,7 @@ if TYPE_CHECKING:
 log = get_logger(__name__)
 
 import sys as _sys
+from core.i18n import tr
 
 
 class SettingsDialog(QDialog):
@@ -51,7 +52,7 @@ class SettingsDialog(QDialog):
         super().__init__(parent)
         self._settings = settings
         self._update_checker: UpdateChecker | None = None
-        self.setWindowTitle("ChromIQ Preferences")
+        self.setWindowTitle(tr("ChromIQ Preferences"))
         self.setMinimumWidth(960)
         self.setWindowFlags(
             self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint
@@ -68,41 +69,42 @@ class SettingsDialog(QDialog):
         layout.setContentsMargins(20, 16, 20, 16)
 
         # ---- ArgyllCMS ----
-        argyll_grp = QGroupBox("ArgyllCMS Binaries", self)
+        argyll_grp = QGroupBox(tr("ArgyllCMS Binaries"), self)
         ag = QVBoxLayout(argyll_grp)
 
         path_row = QHBoxLayout()
-        path_row.addWidget(QLabel("Binary path:", self))
+        path_row.addWidget(QLabel(tr("Binary path:"), self))
         self._argyll_edit = QLineEdit(self)
         path_row.addWidget(self._argyll_edit, stretch=1)
-        browse_btn = make_browse_button(self, "Select ArgyllCMS bin folder", icon="folder")
+        browse_btn = make_browse_button(self, tr("Select ArgyllCMS bin folder"), icon="folder")
         browse_btn.clicked.connect(self._browse_argyll)
         path_row.addWidget(browse_btn)
         path_row.addWidget(TooltipButton(
-            "ArgyllCMS Binary Path",
-            "Directory containing targen, printtarg, chartread, and colprof.\n"
-            f"Default: {default_argyll_bin_dir()}\n"
-            "You can download the latest version from argyllcms.com.",
+            tr("ArgyllCMS Binary Path"),
+            tr("Directory containing targen, printtarg, chartread, and colprof.\n"
+               "Default: {path}\n"
+               "You can download the latest version from argyllcms.com."
+               ).format(path=default_argyll_bin_dir()),
             self,
         ))
         ag.addLayout(path_row)
 
         btn_row = QHBoxLayout()
-        test_btn = QPushButton("Test binaries", self)
+        test_btn = QPushButton(tr("Test binaries"), self)
         test_btn.clicked.connect(self._test_argyll)
-        detect_btn = QPushButton("Auto-detect", self)
+        detect_btn = QPushButton(tr("Auto-detect"), self)
         detect_btn.clicked.connect(self._auto_detect)
-        dl_btn = QPushButton("Download latest ArgyllCMS…", self)
+        dl_btn = QPushButton(tr("Download latest ArgyllCMS…"), self)
         dl_btn.clicked.connect(self._open_argyll_download)
         btn_row.addWidget(test_btn)
         btn_row.addWidget(detect_btn)
         btn_row.addWidget(dl_btn)
 
         if _sys.platform == "win32":
-            driver_btn = QPushButton("Install USB Driver…", self)
+            driver_btn = QPushButton(tr("Install USB Driver…"), self)
             driver_btn.setToolTip(
-                "Install the WinUSB driver for your colorimeter — "
-                "no test-signing mode required, works on x64 and ARM64"
+                tr("Install the WinUSB driver for your colorimeter — "
+                "no test-signing mode required, works on x64 and ARM64")
             )
             driver_btn.clicked.connect(self._show_usb_installer)
             btn_row.addWidget(driver_btn)
@@ -117,20 +119,20 @@ class SettingsDialog(QDialog):
         layout.addWidget(argyll_grp)
 
         # ---- Output folder ----
-        folder_grp = QGroupBox("Output Folder", self)
+        folder_grp = QGroupBox(tr("Output Folder"), self)
         fl = QVBoxLayout(folder_grp)
 
         folder_lbl = QLabel(
-            "Default output folder (leave blank to use ~/ChromIQ/):", self
+            tr("Default output folder (leave blank to use ~/ChromIQ/):"), self
         )
         folder_lbl.setWordWrap(True)
         fl.addWidget(folder_lbl)
 
         folder_row = QHBoxLayout()
         self._folder_edit = QLineEdit(self)
-        self._folder_edit.setPlaceholderText("~/ChromIQ/  (default)")
+        self._folder_edit.setPlaceholderText(tr("~/ChromIQ/  (default)"))
         folder_row.addWidget(self._folder_edit, stretch=1)
-        folder_browse = make_browse_button(self, "Select output folder", icon="folder")
+        folder_browse = make_browse_button(self, tr("Select output folder"), icon="folder")
         folder_browse.clicked.connect(self._browse_folder)
         folder_row.addWidget(folder_browse)
         fl.addLayout(folder_row)
@@ -139,12 +141,12 @@ class SettingsDialog(QDialog):
 
         # ---- i1Pro chart defaults ----
         from data.patch_db import I1PRO_DEFAULT_PRESETS, I1PRO_PRESET_LABELS
-        i1pro_grp = QGroupBox("i1Pro Chart Defaults", self)
+        i1pro_grp = QGroupBox(tr("i1Pro Chart Defaults"), self)
         i1g = QVBoxLayout(i1pro_grp)
 
         # Row 1: default layout preset
         i1_preset_row = QHBoxLayout()
-        i1_preset_row.addWidget(QLabel("Default layout:", self))
+        i1_preset_row.addWidget(QLabel(tr("Default layout:"), self))
         self._i1pro_preset_combo = NoScrollComboBox(self)
         for key in ("m10_a0.95", "m10_a1.0", "m6_a1.0"):
             self._i1pro_preset_combo.addItem(I1PRO_PRESET_LABELS[key], key)
@@ -152,8 +154,8 @@ class SettingsDialog(QDialog):
         i1_preset_row.addWidget(self._i1pro_preset_combo)
         i1_preset_row.addStretch()
         i1_preset_row.addWidget(TooltipButton(
-            "i1Pro Chart Defaults",
-            "Sets the default printtarg layout flags (−m / −M margin and −a patch "
+            tr("i1Pro Chart Defaults"),
+            tr("Sets the default printtarg layout flags (−m / −M margin and −a patch "
             "scale) used by the Create Chart tab whenever the active instrument is "
             "an i1Pro (i1Pro / i1Pro 2 / i1Pro 3).\n\n"
             "  • −m 10  −a 0.95  — recommended. Wider margin protects strip optics "
@@ -168,7 +170,7 @@ class SettingsDialog(QDialog):
             "Changes apply to both Guided and Manual mode. A custom margin or "
             "patch-scale you set manually is preserved — switching instruments "
             "only updates the value if it currently matches one of the three "
-            "preset values above.",
+            "preset values above."),
             self,
             min_width=620,
         ))
@@ -177,13 +179,13 @@ class SettingsDialog(QDialog):
         # Row 2: ChromIQ-style clipping border checkbox
         i1_clip_row = QHBoxLayout()
         self._chromiq_clip_check = QCheckBox(
-            "Use ChromIQ-style clipping border", self
+            tr("Use ChromIQ-style clipping border"), self
         )
         i1_clip_row.addWidget(self._chromiq_clip_check)
         i1_clip_row.addStretch()
         i1_clip_row.addWidget(TooltipButton(
-            "ChromIQ-Style Clipping Border",
-            "Replaces printtarg's plain white i1Pro clip strip with a "
+            tr("ChromIQ-Style Clipping Border"),
+            tr("Replaces printtarg's plain white i1Pro clip strip with a "
             "ChromIQ-branded version that includes a spectrum accent and "
             "three columns of useful info (chart summary + print reminders, "
             "a fill-in-the-blank form for archival notes, and scanning-table "
@@ -203,7 +205,7 @@ class SettingsDialog(QDialog):
             "Only takes effect when the chart uses an i1Pro / i1Pro 2 / "
             "i1Pro 3 / i1Pro 3 Plus AND paper is A4 / Letter or larger. "
             "On smaller paper or other instruments the setting is silently "
-            "ignored and the chart is generated normally.",
+            "ignored and the chart is generated normally."),
             self,
             min_width=620,
         ))
@@ -212,10 +214,10 @@ class SettingsDialog(QDialog):
         layout.addWidget(i1pro_grp)
 
         # ---- Neutral patches ----
-        neutral_grp = QGroupBox("Neutral Patches", self)
+        neutral_grp = QGroupBox(tr("Neutral Patches"), self)
         ng = QVBoxLayout(neutral_grp)
         gr_row = QHBoxLayout()
-        gr_row.addWidget(QLabel("Grey ramp reference:", self))
+        gr_row.addWidget(QLabel(tr("Grey ramp reference:"), self))
         self._grey_ref_spin = NoScrollSpinBox(self)
         self._grey_ref_spin.setRange(200, 2000)
         self._grey_ref_spin.setSingleStep(10)
@@ -224,8 +226,8 @@ class SettingsDialog(QDialog):
         gr_row.addWidget(self._grey_ref_spin)
         gr_row.addStretch()
         gr_row.addWidget(TooltipButton(
-            "Grey Ramp Reference",
-            "Controls how many neutral patches (the grey ramp plus the white and "
+            tr("Grey Ramp Reference"),
+            tr("Controls how many neutral patches (the grey ramp plus the white and "
             "black anchors) ChromIQ adds, relative to the size of the chart.\n\n"
             "It is the patch count at which a chart gets the standard set of "
             "32 grey + 4 white + 4 black. Bigger charts get proportionally more; "
@@ -237,7 +239,7 @@ class SettingsDialog(QDialog):
             "Small charts always keep a sensible minimum — they never receive the "
             "full neutral set, so a tiny target won't be swamped by greys.\n\n"
             "Applies to both Guided and Manual mode (Manual only when the "
-            "Auto −g / −e / −B checkboxes are on). Default: 560.",
+            "Auto −g / −e / −B checkboxes are on). Default: 560."),
             self,
             min_width=600,
         ))
@@ -247,7 +249,7 @@ class SettingsDialog(QDialog):
         # ---- Behaviour ----
         # Options are laid out in two equal-width columns to keep the dialog
         # short; each option (checkbox + optional tooltip) is one grid cell.
-        behaviour_grp = QGroupBox("Behaviour", self)
+        behaviour_grp = QGroupBox(tr("Behaviour"), self)
         bh = QGridLayout(behaviour_grp)
         bh.setHorizontalSpacing(100)
         bh.setColumnStretch(0, 1)
@@ -264,11 +266,11 @@ class SettingsDialog(QDialog):
             return cell
 
         self._restore_tab_check = QCheckBox(
-            "Restore last active tab on launch", self
+            tr("Restore last active tab on launch"), self
         )
         restore_tab_tip = TooltipButton(
-            "Restore Last Active Tab on Launch",
-            "ChromIQ is organised as five numbered steps along the top of the "
+            tr("Restore Last Active Tab on Launch"),
+            tr("ChromIQ is organised as five numbered steps along the top of the "
             "window:\n\n"
             "  1. Create Chart\n"
             "  2. Print Chart\n"
@@ -283,17 +285,17 @@ class SettingsDialog(QDialog):
             "When OFF, ChromIQ always starts on step 1 (Create Chart).\n\n"
             "This only remembers which step was open — it does not reload any of "
             "your files. To have your files come back too, also turn on "
-            "\"Restore last session on launch\".",
+            "\"Restore last session on launch\"."),
             self,
             min_width=600,
         )
 
         self._restore_session_check = QCheckBox(
-            "Restore last session on launch", self
+            tr("Restore last session on launch"), self
         )
         restore_session_tip = TooltipButton(
-            "Restore Last Session on Launch",
-            "When this option is ON, ChromIQ remembers the files you were working "
+            tr("Restore Last Session on Launch"),
+            tr("When this option is ON, ChromIQ remembers the files you were working "
             "with and reloads them automatically the next time you start the app, "
             "so you can carry on exactly where you left off.\n\n"
             "What gets restored:\n\n"
@@ -307,17 +309,17 @@ class SettingsDialog(QDialog):
             "deleted a file, ChromIQ just skips that one and loads the rest.\n\n"
             "When OFF, ChromIQ starts with an empty session every time and you load "
             "the files you need by hand. This is the default — turn the option on if "
-            "you usually continue the same job across several sessions.",
+            "you usually continue the same job across several sessions."),
             self,
             min_width=560,
         )
 
         self._themed_colors_check = QCheckBox(
-            "Use app theme colors for 3D gamut viewer", self
+            tr("Use app theme colors for 3D gamut viewer"), self
         )
         themed_colors_tip = TooltipButton(
-            "Use App Theme Colours for 3D Gamut Viewer",
-            "On the Check & Refine step, ChromIQ can show a rotatable 3D model of "
+            tr("Use App Theme Colours for 3D Gamut Viewer"),
+            tr("On the Check & Refine step, ChromIQ can show a rotatable 3D model of "
             "your printer and paper's colour range (its \"gamut\") — the full set of "
             "colours that combination can actually reproduce.\n\n"
             "When this option is ON, the colours of that 3D model are recoloured to "
@@ -328,15 +330,15 @@ class SettingsDialog(QDialog):
             "is drawn roughly in the colour it represents.\n\n"
             "This setting is purely cosmetic. It changes only how the 3D preview "
             "looks — it has no effect whatsoever on your measurements or on the ICC "
-            "profile ChromIQ builds.",
+            "profile ChromIQ builds."),
             self,
             min_width=560,
         )
 
-        self._cal_mode_check = QCheckBox("Enable calibration options", self)
+        self._cal_mode_check = QCheckBox(tr("Enable calibration options"), self)
         cal_tip = TooltipButton(
-            "Enable Calibration Options",
-            "Unlocks the full printer calibration workflow (printcal / applycal).\n\n"
+            tr("Enable Calibration Options"),
+            tr("Unlocks the full printer calibration workflow (printcal / applycal).\n\n"
             "Most users do NOT need this — consumer and prosumer inkjet printers "
             "typically produce better results from a direct profiling run without "
             "any hardware calibration step.\n\n"
@@ -345,17 +347,17 @@ class SettingsDialog(QDialog):
             "ArgyllCMS calibration guide.\n\n"
             "When active: the guided modes in all tabs are hidden, a calibration "
             "target option appears in Create Chart, and a full printcal → applycal "
-            "workflow is added to the Calibration & Profiling tab.",
+            "workflow is added to the Calibration & Profiling tab."),
             self,
             min_width=620,
         )
 
         self._chromiq_refine_check = QCheckBox(
-            "ChromIQ-style refinement process", self
+            tr("ChromIQ-style refinement process"), self
         )
         refine_tip = TooltipButton(
-            "ChromIQ-style refinement process",
-            "Builds a more accurate profile by REUSING the measurements you "
+            tr("ChromIQ-style refinement process"),
+            tr("Builds a more accurate profile by REUSING the measurements you "
             "already made for an earlier profile, instead of throwing them away.\n\n"
             "Normally, every profiling run starts from scratch: you print a chart, "
             "measure it, and build a profile from only those patches. If you later "
@@ -381,17 +383,17 @@ class SettingsDialog(QDialog):
             "the earlier run.\n\n"
             "When this option is OFF, ChromIQ behaves exactly as it always has — "
             "nothing in your normal workflow changes. Leave it off unless you "
-            "specifically want to reuse measurements across refinement runs.",
+            "specifically want to reuse measurements across refinement runs."),
             self,
             min_width=680,
         )
 
         self._averaging_check = QCheckBox(
-            "Enable measurement averaging", self
+            tr("Enable measurement averaging"), self
         )
         averaging_tip = TooltipButton(
-            "Enable Measurement Averaging",
-            "Lets you read the SAME printed chart more than once and combine the "
+            tr("Enable Measurement Averaging"),
+            tr("Lets you read the SAME printed chart more than once and combine the "
             "readings, to even out the small random errors every measuring device "
             "makes. The more times you read a chart, the closer the averaged "
             "result gets to its \"true\" colour — which can make for a slightly "
@@ -425,15 +427,15 @@ class SettingsDialog(QDialog):
             "Tip: two reads already remove most of the random noise; three or four "
             "give diminishing returns. There is no benefit to averaging reads of "
             "DIFFERENT charts — this is only for re-reading one and the same chart.\n\n"
-            "With thanks to Alan Goldhammer, who suggested this feature.",
+            "With thanks to Alan Goldhammer, who suggested this feature."),
             self,
             min_width=660,
         )
 
-        self._native_print_check = QCheckBox("Use default macOS printer dialog", self)
+        self._native_print_check = QCheckBox(tr("Use default macOS printer dialog"), self)
         native_tip = TooltipButton(
-            "Use default macOS printer dialog",
-            "When enabled, clicking Print in the Print Chart tab opens the standard\n"
+            tr("Use default macOS printer dialog"),
+            tr("When enabled, clicking Print in the Print Chart tab opens the standard\n"
             "macOS print dialog instead of ChromIQ's built-in PostScript / CUPS pipeline.\n\n"
             "⚠  IMPORTANT: You MUST disable colour management manually in the\n"
             "printer driver panel every time you print — otherwise the printer applies\n"
@@ -450,17 +452,17 @@ class SettingsDialog(QDialog):
             "            'Application Controlled'\n\n"
             "If you are unsure, leave this option disabled and use ChromIQ's\n"
             "default printing method instead — it disables colour management\n"
-            "automatically with no extra steps required.",
+            "automatically with no extra steps required."),
             self,
             min_width=620,
         )
 
         self._pdf_fallback_check = QCheckBox(
-            "Exact-size PDF fallback (ChromIQ printing)", self
+            tr("Exact-size PDF fallback (ChromIQ printing)"), self
         )
         pdf_fallback_tip = TooltipButton(
-            "Exact-size PDF fallback",
-            "Applies only to ChromIQ's own printing pipeline (the default when "
+            tr("Exact-size PDF fallback"),
+            tr("Applies only to ChromIQ's own printing pipeline (the default when "
             "the macOS printer dialog below is disabled).\n\n"
             "ChromIQ first sends every chart as PostScript. Most home and photo "
             "printers do not understand PostScript, so macOS rejects it and "
@@ -477,24 +479,24 @@ class SettingsDialog(QDialog):
             "Colour is unaffected either way — both formats reach the printer "
             "without any colour conversion.\n\n"
             "Greyed out while the macOS printer dialog is enabled, because no "
-            "fallback is involved on that path.",
+            "fallback is involved on that path."),
             self,
             min_width=620,
         )
 
         self._confirm_print_check = QCheckBox(
-            "Confirm print settings before printing", self
+            tr("Confirm print settings before printing"), self
         )
         confirm_tip = TooltipButton(
-            "Confirm Print Settings",
-            "When enabled, ChromIQ shows a summary dialog of every option that "
+            tr("Confirm Print Settings"),
+            tr("When enabled, ChromIQ shows a summary dialog of every option that "
             "will be sent to CUPS before each print job:\n\n"
             "  • Printer, paper size, media type, quality, tray, borderless\n"
             "  • Auto-detected orientation (portrait or landscape)\n"
             "  • The forced-off state of duplex and colour management\n"
             "  • Any detected mismatches (e.g. paper size ≠ chart size)\n\n"
             "Highly recommended — profiling targets waste expensive paper and "
-            "ink when printed with the wrong settings.",
+            "ink when printed with the wrong settings."),
             self,
             min_width=560,
         )
@@ -531,41 +533,86 @@ class SettingsDialog(QDialog):
 
         layout.addWidget(behaviour_grp)
 
-        # ---- Appearance ----
-        appearance_grp = QGroupBox("Appearance", self)
-        ap = QHBoxLayout(appearance_grp)
-        ap.addWidget(QLabel("Theme:", self))
+        # ---- Appearance & Language ----
+        # "&&" — QGroupBox treats a single "&" as a mnemonic marker.
+        # Same two-column grid geometry as the Behaviour section above so the
+        # cells line up visually.
+        appearance_grp = QGroupBox(tr("Appearance && Language"), self)
+        ap = QGridLayout(appearance_grp)
+        ap.setHorizontalSpacing(100)
+        ap.setColumnStretch(0, 1)
+        ap.setColumnStretch(1, 1)
+
+        def _ap_cell(label: str, combo: NoScrollComboBox,
+                     tooltip: TooltipButton) -> QWidget:
+            cell = QWidget(self)
+            row = QHBoxLayout(cell)
+            row.setContentsMargins(0, 0, 0, 0)
+            row.addWidget(QLabel(label, self))
+            row.addWidget(combo)
+            row.addStretch()
+            row.addWidget(tooltip)
+            return cell
+
         self._appearance_combo = NoScrollComboBox(self)
         # data values map combo index -> setting string
-        self._appearance_combo.addItem("System (Auto)", "auto")
-        self._appearance_combo.addItem("Light",        "light")
-        self._appearance_combo.addItem("Dark",         "dark")
+        self._appearance_combo.addItem(tr("System (Auto)"), "auto")
+        self._appearance_combo.addItem(tr("Light"),        "light")
+        self._appearance_combo.addItem(tr("Dark"),         "dark")
         self._appearance_combo.setMinimumWidth(180)
         self._appearance_combo.currentIndexChanged.connect(self._on_appearance_preview)
-        ap.addWidget(self._appearance_combo)
-        ap.addStretch()
-        ap.addWidget(TooltipButton(
-            "Appearance",
-            "Switches the entire app between light and dark visuals.\n\n"
+        appearance_tip = TooltipButton(
+            tr("Appearance"),
+            tr("Switches the entire app between light and dark visuals.\n\n"
             "  • System (Auto) — follow your macOS Appearance setting and "
             "react if you change it while ChromIQ is running.\n"
             "  • Light — force the light theme even if your system is dark.\n"
             "  • Dark  — force the dark theme even if your system is light.\n\n"
-            "Changes preview instantly. Click OK to keep them, or Cancel to revert.",
+            "Changes preview instantly. Click OK to keep them, or Cancel to revert."),
             self,
             min_width=520,
-        ))
+        )
+
+        self._language_combo = NoScrollComboBox(self)
+        from core.i18n import available_languages
+        for code, native_name in available_languages():
+            self._language_combo.addItem(native_name, code)
+        self._language_combo.setMinimumWidth(180)
+        self._language_combo.currentIndexChanged.connect(self._on_language_changed)
+        language_tip = TooltipButton(
+            tr("Language"),
+            tr("Choose the language for everything ChromIQ shows you — menus, "
+            "buttons, dialogs, help texts and tooltips.\n\n"
+            "The change takes effect the next time you start ChromIQ, so "
+            "nothing on screen jumps around mid-session.\n\n"
+            "Output from the ArgyllCMS tools in the log view stays in "
+            "English — it comes from the tools themselves, not from ChromIQ."),
+            self,
+            min_width=520,
+        )
+
+        ap.addWidget(_ap_cell(tr("Theme:"), self._appearance_combo,
+                              appearance_tip), 0, 0)
+        ap.addWidget(_ap_cell(tr("Language:"), self._language_combo,
+                              language_tip), 0, 1)
+
+        self._language_restart_hint = QLabel(
+            tr("Takes effect after you restart ChromIQ."), self)
+        self._language_restart_hint.setStyleSheet("color: #e6a23c; font-size: 11px;")
+        self._language_restart_hint.setVisible(False)
+        ap.addWidget(self._language_restart_hint, 1, 0, 1, 2)
+
         layout.addWidget(appearance_grp)
 
         # ---- About / Updates ----
-        credit1 = QLabel(f"ChromIQ v{APP_VERSION} · Created by Sebastian Reiprich", self)
+        credit1 = QLabel(tr("ChromIQ v{APP_VERSION} · Created by Sebastian Reiprich").format(APP_VERSION=APP_VERSION), self)
         credit1.setAlignment(Qt.AlignmentFlag.AlignCenter)
         credit1.setStyleSheet("color: #606060; font-size: 11px;")
         layout.addWidget(credit1)
 
         credit2 = QLabel(
-            "Built on ArgyllCMS by Graeme Gill · Made possible by Knut Georg Larsson · "
-            "Testing & feedback: Nelson (Pharmacist), Alan Goldhammer", self
+            tr("Built on ArgyllCMS by Graeme Gill · Made possible by Knut Georg Larsson · "
+            "Testing & feedback: Nelson (Pharmacist), Alan Goldhammer"), self
         )
         credit2.setAlignment(Qt.AlignmentFlag.AlignCenter)
         credit2.setStyleSheet("color: #606060; font-size: 11px;")
@@ -579,18 +626,18 @@ class SettingsDialog(QDialog):
 
         # ---- Bottom row: Restore Defaults | Report a Bug | Check for Updates  ...  Cancel / OK ----
         bottom_row = QHBoxLayout()
-        reset_btn = QPushButton("Restore Factory Defaults", self)
+        reset_btn = QPushButton(tr("Restore Factory Defaults"), self)
         reset_btn.setObjectName("reset_defaults")
         reset_btn.clicked.connect(self._restore_defaults)
         bottom_row.addWidget(reset_btn)
 
-        bug_btn = QPushButton("Report a Bug…", self)
-        bug_btn.setToolTip("Open the bug-report form on GitHub in your browser.")
+        bug_btn = QPushButton(tr("Report a Bug…"), self)
+        bug_btn.setToolTip(tr("Open the bug-report form on GitHub in your browser."))
         bug_btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(
             "https://github.com/itsab1989/ChromIQ/issues/new?template=bug_report.yml")))
         bottom_row.addWidget(bug_btn)
 
-        self._update_btn = QPushButton("Check for Updates", self)
+        self._update_btn = QPushButton(tr("Check for Updates"), self)
         self._update_btn.clicked.connect(self._check_for_updates)
         bottom_row.addWidget(self._update_btn)
         bottom_row.addStretch()
@@ -655,6 +702,13 @@ class SettingsDialog(QDialog):
         self._appearance_combo.blockSignals(True)
         self._appearance_combo.setCurrentIndex(idx if idx >= 0 else 0)
         self._appearance_combo.blockSignals(False)
+        # Language: restart-to-apply, no preview — just select the saved code.
+        lang = str(s.get("language", "en"))
+        lang_idx = self._language_combo.findData(lang)
+        self._language_combo.blockSignals(True)
+        self._language_combo.setCurrentIndex(lang_idx if lang_idx >= 0 else 0)
+        self._language_combo.blockSignals(False)
+        self._language_restart_hint.setVisible(False)
 
     def _apply_indicator_theme(self, mode: str) -> None:
         """Apply the neutral indicator colour to checkboxes, line-edit focus and
@@ -699,6 +753,14 @@ class SettingsDialog(QDialog):
         mode = apply_appearance(app, main_window, str(setting))
         self._apply_indicator_theme(mode)
 
+    def _on_language_changed(self, _index: int) -> None:
+        # Language is restart-to-apply (strings are translated at widget
+        # construction) — just surface the hint when the pick differs from
+        # what's persisted.
+        picked = str(self._language_combo.currentData())
+        stored = str(self._settings.get("language", "en"))
+        self._language_restart_hint.setVisible(picked != stored)
+
     def reject(self) -> None:  # type: ignore[override]
         # Revert any live theme preview to whatever was persisted on open.
         # Only when the theme was actually previewed to something different —
@@ -726,6 +788,7 @@ class SettingsDialog(QDialog):
         s.set("pdf_print_fallback",        self._pdf_fallback_check.isChecked())
         s.set("confirm_before_printing",   self._confirm_print_check.isChecked())
         s.set("appearance",                str(self._appearance_combo.currentData()))
+        s.set("language",                  str(self._language_combo.currentData()))
         s.set("i1pro_default_preset",      str(self._i1pro_preset_combo.currentData()))
         s.set("i1pro_chromiq_clip_style",  self._chromiq_clip_check.isChecked())
         s.set("grey_ramp_reference",       int(self._grey_ref_spin.value()))
@@ -734,7 +797,7 @@ class SettingsDialog(QDialog):
 
     def _browse_argyll(self) -> None:
         d = open_dir_dialog(
-            self, "Select ArgyllCMS bin directory",
+            self, tr("Select ArgyllCMS bin directory"),
             start_dir=self._argyll_edit.text() or "/Applications",
         )
         if d:
@@ -742,7 +805,7 @@ class SettingsDialog(QDialog):
 
     def _browse_folder(self) -> None:
         d = open_dir_dialog(
-            self, "Select output folder",
+            self, tr("Select output folder"),
             start_dir=self._folder_edit.text() or str(Path.home()),
         )
         if d:
@@ -753,12 +816,12 @@ class SettingsDialog(QDialog):
         if detected:
             self._argyll_edit.setText(str(detected))
             self._argyll_status.setStyleSheet("color: #4caf50;")
-            self._argyll_status.setText(f"Auto-detected at {detected}")
+            self._argyll_status.setText(tr("Auto-detected at {detected}").format(detected=detected))
         else:
             self._argyll_status.setStyleSheet("color: #ff5252;")
             self._argyll_status.setText(
-                "ArgyllCMS not found in any known location. "
-                "Install it or set the path manually."
+                tr("ArgyllCMS not found in any known location. "
+                "Install it or set the path manually.")
             )
         log.info("ArgyllCMS auto-detect: %s", detected)
 
@@ -808,8 +871,7 @@ class SettingsDialog(QDialog):
             hint = "the binary tar.bz2 matching your distro's architecture (x86_64 or aarch64) — " \
                    "or install via your package manager (e.g. sudo apt install argyll)"
         self._argyll_status.setText(
-            f"Opening argyllcms.com — download the latest version ({hint}), "
-            "then unpack and set the bin path above."
+            tr("Opening argyllcms.com — download the latest version ({hint}), then unpack and set the bin path above.").format(hint=hint)
         )
         QDesktopServices.openUrl(QUrl(argyll_download_page()))
 
@@ -833,7 +895,7 @@ class SettingsDialog(QDialog):
             needs_install = [d for d in devices if not d.has_winusb]
 
             dlg = QDialog(self)
-            dlg.setWindowTitle("Install USB Driver")
+            dlg.setWindowTitle(tr("Install USB Driver"))
             dlg.setMinimumWidth(500)
             layout = QVBoxLayout(dlg)
             layout.setSpacing(14)
@@ -897,7 +959,7 @@ class SettingsDialog(QDialog):
                     btn_label = "Install Driver" if _wdi_available else "Open Zadig"
                 install_btn = btn_box.addButton(btn_label, QDialogButtonBox.ButtonRole.AcceptRole)
                 install_btn.setObjectName("primary")
-            refresh_btn = btn_box.addButton("Refresh", QDialogButtonBox.ButtonRole.ResetRole)
+            refresh_btn = btn_box.addButton(tr("Refresh"), QDialogButtonBox.ButtonRole.ResetRole)
             refresh_btn.clicked.connect(lambda checked=False, d=dlg: d.done(_REFRESH))
             btn_box.addButton(QDialogButtonBox.StandardButton.Close)
             # The install/reinstall/Open-Zadig button uses AcceptRole, which
@@ -971,7 +1033,7 @@ class SettingsDialog(QDialog):
                 offer_zadig = False
 
             outcome_dlg = QDialog(self)
-            outcome_dlg.setWindowTitle("Driver Installation")
+            outcome_dlg.setWindowTitle(tr("Driver Installation"))
             outcome_dlg.setMinimumWidth(420)
             ol = QVBoxLayout(outcome_dlg)
             ol.setContentsMargins(24, 20, 24, 20)
@@ -981,7 +1043,7 @@ class SettingsDialog(QDialog):
             ol.addWidget(lbl)
             obox = QDialogButtonBox()
             if offer_zadig:
-                zadig_btn = obox.addButton("Try Zadig", QDialogButtonBox.ButtonRole.AcceptRole)
+                zadig_btn = obox.addButton(tr("Try Zadig"), QDialogButtonBox.ButtonRole.AcceptRole)
                 zadig_btn.setObjectName("primary")
                 zadig_btn.clicked.connect(lambda: launch_zadig())
             obox.addButton(QDialogButtonBox.StandardButton.Ok)
@@ -998,7 +1060,7 @@ class SettingsDialog(QDialog):
 
     def _check_for_updates(self) -> None:
         self._update_btn.setEnabled(False)
-        self._update_btn.setText("Checking…")
+        self._update_btn.setText(tr("Checking…"))
         self._update_status.setText("")
 
         self._update_checker = UpdateChecker(self)
@@ -1009,21 +1071,21 @@ class SettingsDialog(QDialog):
 
     def _on_update_available(self, latest: str) -> None:
         self._update_btn.setEnabled(True)
-        self._update_btn.setText("Check for Updates")
+        self._update_btn.setText(tr("Check for Updates"))
         self._update_status.setStyleSheet("font-size: 11px; color: #e67e00;")
         self._update_status.setText(
-            f'{latest} available — <a href="{_RELEASES_PAGE}">open GitHub Releases</a>'
+            tr("{latest} available — <a href=\"{_RELEASES_PAGE}\">open GitHub Releases</a>").format(latest=latest, _RELEASES_PAGE=_RELEASES_PAGE)
         )
         self._update_status.setOpenExternalLinks(True)
 
     def _on_up_to_date(self) -> None:
         self._update_btn.setEnabled(True)
-        self._update_btn.setText("Check for Updates")
+        self._update_btn.setText(tr("Check for Updates"))
         self._update_status.setStyleSheet("font-size: 11px; color: #4caf50;")
-        self._update_status.setText("You're up to date.")
+        self._update_status.setText(tr("You're up to date."))
 
     def _on_update_failed(self, reason: str) -> None:
         self._update_btn.setEnabled(True)
-        self._update_btn.setText("Check for Updates")
+        self._update_btn.setText(tr("Check for Updates"))
         self._update_status.setStyleSheet("font-size: 11px; color: #888;")
-        self._update_status.setText(f"Check failed: {reason}")
+        self._update_status.setText(tr("Check failed: {reason}").format(reason=reason))

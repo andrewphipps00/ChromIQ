@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ui.ti2_loader import _project_root_for, _resolve_working_dir
+from core.i18n import tr
 
 if TYPE_CHECKING:
     from PyQt6.QtWidgets import QWidget
@@ -66,41 +67,41 @@ def _handle_inside(
     from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QVBoxLayout
 
     dlg = QDialog(parent)
-    dlg.setWindowTitle("Load Measurement")
+    dlg.setWindowTitle(tr("Load Measurement"))
     dlg.setMinimumWidth(460)
     layout = QVBoxLayout(dlg)
     layout.setContentsMargins(24, 20, 24, 20)
     layout.setSpacing(12)
 
     lbl = QLabel(
-        f"<b>{txt_path.name}</b> is already in your working folder.<br><br>"
-        "What would you like to do?",
+        tr("<b>{name}</b> is already in your working folder.<br><br>"
+           "What would you like to do?").format(name=txt_path.name),
         dlg,
     )
     lbl.setWordWrap(True)
     layout.addWidget(lbl)
 
     cont_desc = QLabel(
-        "<i>Continue</i> — convert and use the measurement in this folder as-is — "
-        "nothing will be copied or moved.",
+        tr("<i>Continue</i> — convert and use the measurement in this folder as-is — "
+        "nothing will be copied or moved."),
         dlg,
     )
     cont_desc.setWordWrap(True)
     layout.addWidget(cont_desc)
 
     new_desc = QLabel(
-        "<i>Use as base for a new profile</i> — copy the measurement to a new "
+        tr("<i>Use as base for a new profile</i> — copy the measurement to a new "
         "subfolder so you can build a separate ICC profile without overwriting "
-        "the original.",
+        "the original."),
         dlg,
     )
     new_desc.setWordWrap(True)
     layout.addWidget(new_desc)
 
     btn_box    = QDialogButtonBox(dlg)
-    cont_btn   = btn_box.addButton("Continue",                      QDialogButtonBox.ButtonRole.AcceptRole)
-    new_btn    = btn_box.addButton("Use as base for a new profile", QDialogButtonBox.ButtonRole.ActionRole)
-    cancel_btn = btn_box.addButton("Cancel",                        QDialogButtonBox.ButtonRole.RejectRole)
+    cont_btn   = btn_box.addButton(tr("Continue"),                      QDialogButtonBox.ButtonRole.AcceptRole)
+    new_btn    = btn_box.addButton(tr("Use as base for a new profile"), QDialogButtonBox.ButtonRole.ActionRole)
+    cancel_btn = btn_box.addButton(tr("Cancel"),                        QDialogButtonBox.ButtonRole.RejectRole)
     layout.addWidget(btn_box)
 
     choice: list[str | None] = [None]
@@ -146,26 +147,27 @@ def _ask_profile_name(
     )
 
     dlg = QDialog(parent)
-    dlg.setWindowTitle("Choose a name for the profile")
+    dlg.setWindowTitle(tr("Choose a name for the profile"))
     dlg.setMinimumWidth(580)
     layout = QVBoxLayout(dlg)
     layout.setContentsMargins(24, 20, 24, 20)
     layout.setSpacing(10)
 
     info = QLabel(
-        f"The i1Profiler measurement <b>{txt_path.name}</b> will be copied into "
-        f"your working folder as a new profile set:<br><br>"
-        f"<pre>  • {txt_path.name}</pre>"
-        f"It will be placed in:<br>"
-        f"<code>{working_dir}/&lt;name&gt;/</code><br><br>"
-        "Enter a name for the profile you want to create:",
+        tr("The i1Profiler measurement <b>{name}</b> will be copied into "
+           "your working folder as a new profile set:<br><br>"
+           "<pre>  • {name}</pre>"
+           "It will be placed in:<br>"
+           "<code>{target}/&lt;name&gt;/</code><br><br>"
+           "Enter a name for the profile you want to create:").format(
+            name=txt_path.name, target=working_dir),
         dlg,
     )
     info.setWordWrap(True)
     layout.addWidget(info)
 
     name_edit = QLineEdit(dlg)
-    name_edit.setPlaceholderText("e.g. Canon_ProGraf_Glossy_240g")
+    name_edit.setPlaceholderText(tr("e.g. Canon_ProGraf_Glossy_240g"))
     layout.addWidget(name_edit)
 
     error_lbl = QLabel("", dlg)
@@ -175,18 +177,18 @@ def _ask_profile_name(
 
     btn_row = QHBoxLayout()
 
-    ok_btn = QPushButton("OK", dlg)
+    ok_btn = QPushButton(tr("OK"), dlg)
     ok_btn.setDefault(True)
     btn_row.addWidget(ok_btn)
 
-    overwrite_btn = QPushButton("Overwrite existing folder", dlg)
+    overwrite_btn = QPushButton(tr("Overwrite existing folder"), dlg)
     overwrite_btn.setAutoDefault(False)
     overwrite_btn.setVisible(False)
     btn_row.addWidget(overwrite_btn)
 
     btn_row.addStretch(1)
 
-    cancel_btn = QPushButton("Cancel", dlg)
+    cancel_btn = QPushButton(tr("Cancel"), dlg)
     cancel_btn.setAutoDefault(False)
     cancel_btn.clicked.connect(dlg.reject)
     btn_row.addWidget(cancel_btn)
@@ -222,7 +224,7 @@ def _ask_profile_name(
         collision = bool(name) and (working_dir / name).exists() and not _is_self_collision(name)
         if collision:
             error_lbl.setText(
-                f"“{name}” already exists. Click “Overwrite existing folder” to replace it."
+                tr("“{name}” already exists. Click “Overwrite existing folder” to replace it.").format(name=name)
             )
             ok_btn.setVisible(False)
             overwrite_btn.setVisible(True)
@@ -244,7 +246,7 @@ def _ask_profile_name(
             return
         if _is_self_collision(name):
             error_lbl.setText(
-                "That name points to the measurement's own folder. Pick a different name."
+                tr("That name points to the measurement's own folder. Pick a different name.")
             )
             return
         result["name"] = name
@@ -259,8 +261,8 @@ def _ask_profile_name(
             return
         if _is_self_collision(name):
             error_lbl.setText(
-                "You're trying to overwrite the measurement's own folder. "
-                "Pick a different name."
+                tr("You're trying to overwrite the measurement's own folder. "
+                "Pick a different name.")
             )
             return
         dest = working_dir / name
@@ -271,9 +273,10 @@ def _ask_profile_name(
             return
         confirm = QMessageBox.warning(
             dlg,
-            "Overwrite existing folder?",
-            f"This will permanently delete:\n\n    {dest}\n\n"
-            "and replace it with the imported measurement. Continue?",
+            tr("Overwrite existing folder?"),
+            tr("This will permanently delete:\n\n    {dest}\n\n"
+               "and replace it with the imported measurement. Continue?"
+               ).format(dest=dest),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
         )

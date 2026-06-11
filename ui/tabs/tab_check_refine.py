@@ -56,6 +56,7 @@ from workflow.profcheck_runner import (
     ProfcheckRunner,
     group_by_strip,
     parse_refine_strips,
+    grade_display,
     quality_explanation,
     quality_grade,
     strips_to_refine,
@@ -63,6 +64,7 @@ from workflow.profcheck_runner import (
     write_quality_report,
     write_refine_strips,
 )
+from core.i18n import tr
 
 if TYPE_CHECKING:
     from core.argyll_runner import ArgyllRunner
@@ -270,7 +272,7 @@ class TabCheckRefine(QWidget):
         left_layout.setSpacing(8)
 
         left_layout.addWidget(TabHeader(
-            "STEP 05 · SANITY CHECK", "Check & refine", "#9f82ff", left,
+            tr("STEP 05 · SANITY CHECK"), tr("Check & refine"), "#9f82ff", left,
             tooltip_title="Step 5 — Check the profile",
             tooltip_body=(
                 "On this final screen you sanity-check the profile you just built. "
@@ -304,12 +306,12 @@ class TabCheckRefine(QWidget):
         self._mode_row_widget = QWidget(self)
         mode_row = QHBoxLayout(self._mode_row_widget)
         mode_row.setContentsMargins(0, 0, 0, 0)
-        self._guided_btn = QPushButton("GUIDED", self._mode_row_widget)
+        self._guided_btn = QPushButton(tr("GUIDED"), self._mode_row_widget)
         self._guided_btn.setCheckable(True)
         self._guided_btn.setChecked(True)
         self._guided_btn.setObjectName("mode_btn")
         self._guided_btn.setFont(_mode_font)
-        self._manual_btn = QPushButton("MANUAL", self._mode_row_widget)
+        self._manual_btn = QPushButton(tr("MANUAL"), self._mode_row_widget)
         self._manual_btn.setCheckable(True)
         self._manual_btn.setObjectName("mode_btn")
         self._manual_btn.setFont(_mode_font)
@@ -321,30 +323,30 @@ class TabCheckRefine(QWidget):
         left_layout.addWidget(self._mode_row_widget)
 
         # ── File selection (shared, outside stack) ──────────────────────
-        file_grp = QGroupBox("Test Data && Profile", self)
+        file_grp = QGroupBox(tr("Test Data && Profile"), self)
         file_grp.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
         fg = QVBoxLayout(file_grp)
         fg.setContentsMargins(8, 10, 8, 6)
         fg.setSpacing(4)
 
         ti3_row = QHBoxLayout()
-        ti3_row.addWidget(QLabel(".ti3 test data file:", self))
+        ti3_row.addWidget(QLabel(tr(".ti3 test data file:"), self))
         self._ti3_edit = QLineEdit(self)
-        self._ti3_edit.setPlaceholderText("Path to .ti3 measurement file")
+        self._ti3_edit.setPlaceholderText(tr("Path to .ti3 measurement file"))
         self._ti3_edit.setReadOnly(True)
         ti3_row.addWidget(self._ti3_edit, stretch=1)
-        ti3_browse = make_browse_button(self, "Browse for .ti3 file", icon="folder_check")
+        ti3_browse = make_browse_button(self, tr("Browse for .ti3 file"), icon="folder_check")
         ti3_browse.clicked.connect(self._on_browse_ti3)
         ti3_row.addWidget(ti3_browse)
         fg.addLayout(ti3_row)
 
         icc_row = QHBoxLayout()
-        icc_row.addWidget(QLabel("ICC / ICM profile:", self))
+        icc_row.addWidget(QLabel(tr("ICC / ICM profile:"), self))
         self._icc_edit = QLineEdit(self)
-        self._icc_edit.setPlaceholderText("Path to .icc or .icm profile (auto-filled when .ti3 is loaded)")
+        self._icc_edit.setPlaceholderText(tr("Path to .icc or .icm profile (auto-filled when .ti3 is loaded)"))
         self._icc_edit.setReadOnly(True)
         icc_row.addWidget(self._icc_edit, stretch=1)
-        icc_browse = make_browse_button(self, "Browse for ICC/ICM profile", icon="folder_check")
+        icc_browse = make_browse_button(self, tr("Browse for ICC/ICM profile"), icon="folder_check")
         icc_browse.clicked.connect(self._on_browse_icc)
         icc_row.addWidget(icc_browse)
         fg.addLayout(icc_row)
@@ -369,7 +371,7 @@ class TabCheckRefine(QWidget):
         nervous_layout.setContentsMargins(0, 0, 0, 0)
         nervous_layout.setSpacing(4)
         headline = QLabel(
-            f'Are you nervous<span style="color: {SPEC_VIOLET}; font-style: italic;">?</span>',
+            tr("Are you nervous<span style=\"color: {SPEC_VIOLET}; font-style: italic;\">?</span>").format(SPEC_VIOLET=SPEC_VIOLET),
             nervous_box,
         )
         headline.setTextFormat(Qt.TextFormat.RichText)
@@ -379,7 +381,7 @@ class TabCheckRefine(QWidget):
             " font-family: Georgia; font-size: 28px;"
         )
         nervous_layout.addWidget(headline)
-        subtext = QLabel("Your colors are in good hands.", nervous_box)
+        subtext = QLabel(tr("Your colors are in good hands."), nervous_box)
         subtext.setAlignment(Qt.AlignmentFlag.AlignCenter)
         subtext.setStyleSheet(
             "color: #808080; background: transparent;"
@@ -402,11 +404,11 @@ class TabCheckRefine(QWidget):
 
         # ── Action buttons (outside stack) ──────────────────────────────
         btn_row = QHBoxLayout()
-        self._run_btn = QPushButton("Analyse Profile Quality", self)
+        self._run_btn = QPushButton(tr("Analyse Profile Quality"), self)
         self._run_btn.setObjectName("primary")
         self._run_btn.setFixedHeight(36)
         self._run_btn.clicked.connect(self._on_run)
-        self._save_defaults_btn = QPushButton("Save as Defaults", self)
+        self._save_defaults_btn = QPushButton(tr("Save as Defaults"), self)
         self._save_defaults_btn.setFixedHeight(36)
         self._save_defaults_btn.clicked.connect(self._on_save_defaults)
         btn_row.addWidget(self._run_btn)
@@ -419,7 +421,7 @@ class TabCheckRefine(QWidget):
         self._log.setObjectName("log")
         self._log.setReadOnly(True)
         self._log.setMaximumHeight(67)
-        self._log.setPlaceholderText("profcheck output will appear here…")
+        self._log.setPlaceholderText(tr("profcheck output will appear here…"))
         left_layout.addWidget(self._log, stretch=1)
 
         splitter.addWidget(left)
@@ -451,7 +453,7 @@ class TabCheckRefine(QWidget):
         inner_layout.setSpacing(8)
 
         # ── Check options ───────────────────────────────────────────────
-        opts_grp = QGroupBox("Check Options", inner)
+        opts_grp = QGroupBox(tr("Check Options"), inner)
         og = QVBoxLayout(opts_grp)
         og.setContentsMargins(8, 14, 8, 8)
         og.setSpacing(8)
@@ -460,18 +462,18 @@ class TabCheckRefine(QWidget):
         _de_w = QWidget(opts_grp)
         de_row = QHBoxLayout(_de_w)
         de_row.setContentsMargins(0, 0, 0, 0)
-        de_row.addWidget(QLabel("Delta E formula:", _de_w))
+        de_row.addWidget(QLabel(tr("Delta E formula:"), _de_w))
         self._de_combo = NoScrollComboBox(_de_w)
-        self._de_combo.addItem("CIEDE2000 (recommended)", "k")
-        self._de_combo.addItem("CIE76 (classic)", "")
-        self._de_combo.addItem("CIE94", "c")
+        self._de_combo.addItem(tr("CIEDE2000 (recommended)"), "k")
+        self._de_combo.addItem(tr("CIE76 (classic)"), "")
+        self._de_combo.addItem(tr("CIE94"), "c")
         de_row.addWidget(self._de_combo)
         de_row.addStretch()
         de_row.addWidget(TooltipButton(
-            "Delta E Formula",
-            "Selects the colour-difference formula used to compute errors.\n"
+            tr("Delta E Formula"),
+            tr("Selects the colour-difference formula used to compute errors.\n"
             "CIEDE2000 is the most perceptually accurate and is recommended\n"
-            "for modern RGB printer profiling workflows.",
+            "for modern RGB printer profiling workflows."),
             _de_w,
         ))
         og.addWidget(_de_w)
@@ -481,18 +483,18 @@ class TabCheckRefine(QWidget):
         _intent_w = QWidget(opts_grp)
         intent_row = QHBoxLayout(_intent_w)
         intent_row.setContentsMargins(0, 0, 0, 0)
-        intent_row.addWidget(QLabel("Rendering intent:", _intent_w))
+        intent_row.addWidget(QLabel(tr("Rendering intent:"), _intent_w))
         self._intent_combo = NoScrollComboBox(_intent_w)
-        self._intent_combo.addItem("Absolute colorimetric (default)", "a")
-        self._intent_combo.addItem("Relative colorimetric", "r")
+        self._intent_combo.addItem(tr("Absolute colorimetric (default)"), "a")
+        self._intent_combo.addItem(tr("Relative colorimetric"), "r")
         intent_row.addWidget(self._intent_combo)
         intent_row.addStretch()
         intent_row.addWidget(TooltipButton(
-            "Rendering Intent",
-            "Absolute colorimetric checks the profile's absolute colour\n"
+            tr("Rendering Intent"),
+            tr("Absolute colorimetric checks the profile's absolute colour\n"
             "accuracy including white-point, which is the standard for\n"
             "printer profiling. Relative colorimetric normalises to\n"
-            "the media white point.",
+            "the media white point."),
             _intent_w,
         ))
         og.addWidget(_intent_w)
@@ -502,13 +504,13 @@ class TabCheckRefine(QWidget):
         _sort_w = QWidget(opts_grp)
         sort_row = QHBoxLayout(_sort_w)
         sort_row.setContentsMargins(0, 0, 0, 0)
-        self._sort_cb = QCheckBox("Sort patches by ΔE (worst first)", _sort_w)
+        self._sort_cb = QCheckBox(tr("Sort patches by ΔE (worst first)"), _sort_w)
         sort_row.addWidget(self._sort_cb)
         sort_row.addStretch()
         sort_row.addWidget(TooltipButton(
-            "Sort by ΔE",
-            "Sorts profcheck output so the worst-performing patches appear\n"
-            "first. Useful for quickly identifying problem areas.",
+            tr("Sort by ΔE"),
+            tr("Sorts profcheck output so the worst-performing patches appear\n"
+            "first. Useful for quickly identifying problem areas."),
             _sort_w,
         ))
         og.addWidget(_sort_w)
@@ -518,17 +520,17 @@ class TabCheckRefine(QWidget):
         _verb_w = QWidget(opts_grp)
         verb_row = QHBoxLayout(_verb_w)
         verb_row.setContentsMargins(0, 0, 0, 0)
-        verb_row.addWidget(QLabel("Verbosity:", _verb_w))
+        verb_row.addWidget(QLabel(tr("Verbosity:"), _verb_w))
         self._verb_combo = NoScrollComboBox(_verb_w)
-        self._verb_combo.addItem("Per-patch (required for strip analysis)", "2")
-        self._verb_combo.addItem("Summary only", "1")
+        self._verb_combo.addItem(tr("Per-patch (required for strip analysis)"), "2")
+        self._verb_combo.addItem(tr("Summary only"), "1")
         verb_row.addWidget(self._verb_combo)
         verb_row.addStretch()
         verb_row.addWidget(TooltipButton(
-            "Verbosity",
-            "Per-patch mode outputs each patch's individual ΔE value,\n"
+            tr("Verbosity"),
+            tr("Per-patch mode outputs each patch's individual ΔE value,\n"
             "which is required for strip-level analysis and guided\n"
-            "refinement. Summary mode only shows average and peak errors.",
+            "refinement. Summary mode only shows average and peak errors."),
             _verb_w,
         ))
         og.addWidget(_verb_w)
@@ -544,7 +546,7 @@ class TabCheckRefine(QWidget):
 
         # Re-measurement threshold
         threshold_row = QHBoxLayout()
-        threshold_row.addWidget(QLabel("Flag strips for re-measurement above ΔE:", inner))
+        threshold_row.addWidget(QLabel(tr("Flag strips for re-measurement above ΔE:"), inner))
         self._threshold_spin = NoScrollDoubleSpinBox(inner)
         self._threshold_spin.setRange(0.5, 10.0)
         self._threshold_spin.setSingleStep(0.5)
@@ -553,8 +555,8 @@ class TabCheckRefine(QWidget):
         threshold_row.addWidget(self._threshold_spin)
         threshold_row.addStretch()
         threshold_row.addWidget(TooltipButton(
-            "Re-measurement Threshold (ΔE)",
-            "Sets how sensitive the quality check is when deciding which strips\n"
+            tr("Re-measurement Threshold (ΔE)"),
+            tr("Sets how sensitive the quality check is when deciding which strips\n"
             "need to be re-measured.\n\n"
             "A strip is flagged if any single patch on it has a colour error (ΔE)\n"
             "higher than this value.\n\n"
@@ -565,7 +567,7 @@ class TabCheckRefine(QWidget):
             "offenders only.\n\n"
             "The default of 2.0 is a good balance for most RGB printer profiles.\n"
             "Note: this does not affect the profcheck analysis itself — only which\n"
-            "strips appear in the re-measurement recommendation.",
+            "strips appear in the re-measurement recommendation."),
             inner,
         ))
         og.addLayout(threshold_row)
@@ -573,7 +575,7 @@ class TabCheckRefine(QWidget):
         inner_layout.addWidget(opts_grp)
 
         # ── Advanced options ────────────────────────────────────────────
-        adv_grp = QGroupBox("Advanced Options", inner)
+        adv_grp = QGroupBox(tr("Advanced Options"), inner)
         adv_grp.setCheckable(True)
         adv_grp.setChecked(False)
         adv_layout = QVBoxLayout(adv_grp)
@@ -582,7 +584,7 @@ class TabCheckRefine(QWidget):
 
         # FWA compensation
         fwa_row = QHBoxLayout()
-        self._fwa_cb = QCheckBox("FWA compensation (-f):", inner)
+        self._fwa_cb = QCheckBox(tr("FWA compensation (-f):"), inner)
         fwa_row.addWidget(self._fwa_cb)
         self._fwa_combo = NoScrollComboBox(inner)
         for label, val in _ILLUMINANTS:
@@ -592,61 +594,61 @@ class TabCheckRefine(QWidget):
         fwa_row.addWidget(self._fwa_combo)
         fwa_row.addStretch()
         fwa_row.addWidget(TooltipButton(
-            "FWA Compensation (-f)",
-            "Some papers contain optical brighteners (fluorescent whitening agents)\n"
+            tr("FWA Compensation (-f)"),
+            tr("Some papers contain optical brighteners (fluorescent whitening agents)\n"
             "that make the paper look extra white under certain lighting. This option\n"
             "compensates for that effect during the check.\n\n"
             "Only works if your .ti3 file contains spectral measurement data\n"
             "(not all instruments produce this). If you are unsure, leave it off.\n\n"
             "Set the illuminant to match the light source you view your prints under\n"
-            "(D50 = standard daylight, D65 = cooler daylight).",
+            "(D50 = standard daylight, D65 = cooler daylight)."),
             inner,
         ))
         adv_layout.addLayout(fwa_row)
 
         # Illuminant
         illum_row = QHBoxLayout()
-        illum_row.addWidget(QLabel("Illuminant (-i):", inner))
+        illum_row.addWidget(QLabel(tr("Illuminant (-i):"), inner))
         self._illum_combo = NoScrollComboBox(inner)
         for label, val in _ILLUMINANTS:
             self._illum_combo.addItem(label, val)
         illum_row.addWidget(self._illum_combo)
         illum_row.addStretch()
         illum_row.addWidget(TooltipButton(
-            "Illuminant (-i)",
-            "Selects the light source used when converting spectral measurements\n"
+            tr("Illuminant (-i)"),
+            tr("Selects the light source used when converting spectral measurements\n"
             "to colour values. Only relevant if your .ti3 contains spectral data.\n\n"
             "D50 is the standard for print profiling and the right choice for most\n"
             "workflows. D65 is used in some video and photography contexts.\n\n"
-            "Leave at D50 unless you have a specific reason to change it.",
+            "Leave at D50 unless you have a specific reason to change it."),
             inner,
         ))
         adv_layout.addLayout(illum_row)
 
         # Observer
         obs_row = QHBoxLayout()
-        obs_row.addWidget(QLabel("CIE Observer (-o):", inner))
+        obs_row.addWidget(QLabel(tr("CIE Observer (-o):"), inner))
         self._obs_combo = NoScrollComboBox(inner)
         for label, val in _OBSERVERS:
             self._obs_combo.addItem(label, val)
         obs_row.addWidget(self._obs_combo)
         obs_row.addStretch()
         obs_row.addWidget(TooltipButton(
-            "CIE Observer (-o)",
-            "Defines the mathematical model used to represent how the human eye\n"
+            tr("CIE Observer (-o)"),
+            tr("Defines the mathematical model used to represent how the human eye\n"
             "sees colour.\n\n"
             "1931 2° is the international standard for print and ICC profiling\n"
             "and the correct choice for virtually all printer profiling work.\n\n"
             "The 1964 10° observer can be used for large-area colour matching,\n"
             "but is rarely needed here. Leave at 1931 2° unless specifically\n"
-            "requested by your colour management workflow.",
+            "requested by your colour management workflow."),
             inner,
         ))
         adv_layout.addLayout(obs_row)
 
         # Prune
         prune_row = QHBoxLayout()
-        self._prune_cb = QCheckBox("Prune .ti3 to patches with ΔE ≤ (-P):", inner)
+        self._prune_cb = QCheckBox(tr("Prune .ti3 to patches with ΔE ≤ (-P):"), inner)
         prune_row.addWidget(self._prune_cb)
         self._prune_spin = NoScrollDoubleSpinBox(inner)
         self._prune_spin.setRange(0.0, 20.0)
@@ -656,35 +658,35 @@ class TabCheckRefine(QWidget):
         self._prune_spin.setEnabled(False)
         self._prune_cb.toggled.connect(self._prune_spin.setEnabled)
         prune_row.addWidget(self._prune_spin)
-        prune_row.addWidget(QLabel("ΔE", inner))
+        prune_row.addWidget(QLabel(tr("ΔE"), inner))
         prune_row.addStretch()
         prune_row.addWidget(TooltipButton(
-            "Prune .ti3 (-P)",
-            "Creates a reduced copy of your .ti3 file containing only patches\n"
+            tr("Prune .ti3 (-P)"),
+            tr("Creates a reduced copy of your .ti3 file containing only patches\n"
             "whose colour error is at or below the threshold you set.\n\n"
             "Useful if a small number of badly measured patches are pulling\n"
             "the profile down. Pruning them out lets you build a cleaner\n"
             "profile from the remaining good patches — at the cost of\n"
             "having fewer data points overall.\n\n"
             "The pruned file is saved next to the original .ti3 and can be\n"
-            "loaded directly in the Build Profile tab.",
+            "loaded directly in the Build Profile tab."),
             inner,
         ))
         adv_layout.addLayout(prune_row)
 
         # X3DOM visualisation
         x3d_row = QHBoxLayout()
-        self._x3dom_cb = QCheckBox("Create X3DOM 3D visualisation (-w)", inner)
+        self._x3dom_cb = QCheckBox(tr("Create X3DOM 3D visualisation (-w)"), inner)
         x3d_row.addWidget(self._x3dom_cb)
         x3d_row.addStretch()
         x3d_row.addWidget(TooltipButton(
-            "X3DOM Visualisation (-w)",
-            "Generates an interactive 3D visualisation of your profile's colour\n"
+            tr("X3DOM Visualisation (-w)"),
+            tr("Generates an interactive 3D visualisation of your profile's colour\n"
             "errors and saves it as an HTML file next to your .ti3.\n\n"
             "Open the .x3d.html file in any modern web browser to explore a\n"
             "3D diagram showing where errors are largest — useful for seeing\n"
             "which parts of the colour gamut your profile handles well and\n"
-            "which areas need improvement.",
+            "which areas need improvement."),
             inner,
         ))
         adv_layout.addLayout(x3d_row)
@@ -707,32 +709,32 @@ class TabCheckRefine(QWidget):
         cl.setSpacing(0)
 
         # Presets group
-        presets_grp = QGroupBox("Presets", container)
+        presets_grp = QGroupBox(tr("Presets"), container)
         presets_row = QHBoxLayout(presets_grp)
         presets_row.setContentsMargins(8, 4, 8, 8)
-        presets_row.addWidget(QLabel("Select preset:", container))
+        presets_row.addWidget(QLabel(tr("Select preset:"), container))
         self._m_preset_combo = NoScrollComboBox(container)
-        self._m_preset_combo.addItem("none", userData=None)
+        self._m_preset_combo.addItem(tr("none"), userData=None)
         presets_row.addWidget(self._m_preset_combo, stretch=1)
         self._m_preset_add_btn = QPushButton(container)
         self._m_preset_add_btn.setObjectName("icon_btn")
         self._m_preset_add_btn.setFixedSize(28, 28)
         set_preset_icon(self._m_preset_add_btn, "plus")
-        self._m_preset_add_btn.setToolTip("Save current settings as a new preset")
+        self._m_preset_add_btn.setToolTip(tr("Save current settings as a new preset"))
         self._m_preset_del_btn = QPushButton(container)
         self._m_preset_del_btn.setObjectName("icon_btn")
         self._m_preset_del_btn.setFixedSize(28, 28)
         set_preset_icon(self._m_preset_del_btn, "minus")
-        self._m_preset_del_btn.setToolTip("Delete selected preset")
+        self._m_preset_del_btn.setToolTip(tr("Delete selected preset"))
         self._m_preset_del_btn.setEnabled(False)
         self._m_preset_reveal_btn = QPushButton(container)
         self._m_preset_reveal_btn.setObjectName("icon_btn")
         self._m_preset_reveal_btn.setFixedSize(28, 28)
         set_folder_icon(self._m_preset_reveal_btn, "folder")
         self._m_preset_reveal_btn.setToolTip(
-            "Open this tab's presets folder in Finder/Explorer.\n"
+            tr("Open this tab's presets folder in Finder/Explorer.\n"
             "Each preset is a plain .json file — copy one to a colleague\n"
-            "and they can drop it into their own folder to share."
+            "and they can drop it into their own folder to share.")
         )
         self._m_preset_reveal_btn.clicked.connect(
             lambda: reveal_in_file_manager(tab_dir("check_refine"))
@@ -741,8 +743,8 @@ class TabCheckRefine(QWidget):
         presets_row.addWidget(self._m_preset_del_btn)
         presets_row.addWidget(self._m_preset_reveal_btn)
         presets_row.addWidget(TooltipButton(
-            "Manual Presets",
-            "Save and recall named snapshots of all Manual mode settings.\n\n"
+            tr("Manual Presets"),
+            tr("Save and recall named snapshots of all Manual mode settings.\n\n"
             "  +  Save current parameter values as a new named preset.\n"
             "  −  Delete the currently selected preset.\n"
             "  ▢  Open this tab's presets folder in Finder/Explorer.\n\n"
@@ -755,7 +757,7 @@ class TabCheckRefine(QWidget):
             "out of that folder and send it to a colleague; to install a\n"
             "shared preset, drop the .json into the matching folder on the\n"
             "target machine and ChromIQ will pick it up on the next launch.\n\n"
-            "Presets persist between sessions.",
+            "Presets persist between sessions."),
             container,
             min_width=600,
         ))
@@ -776,84 +778,84 @@ class TabCheckRefine(QWidget):
         layout.setSpacing(8)
 
         # ── Check Options ───────────────────────────────────────────────
-        m_opts_grp = QGroupBox("Check Options", inner)
+        m_opts_grp = QGroupBox(tr("Check Options"), inner)
         mog = QVBoxLayout(m_opts_grp)
         mog.setContentsMargins(8, 14, 8, 8)
         mog.setSpacing(8)
 
         de_row = QHBoxLayout()
-        de_row.addWidget(QLabel("Delta E formula:", inner))
+        de_row.addWidget(QLabel(tr("Delta E formula:"), inner))
         self._m_de_combo = NoScrollComboBox(inner)
-        self._m_de_combo.addItem("CIEDE2000 (recommended)", "k")
-        self._m_de_combo.addItem("CIE76 (classic)", "")
-        self._m_de_combo.addItem("CIE94", "c")
+        self._m_de_combo.addItem(tr("CIEDE2000 (recommended)"), "k")
+        self._m_de_combo.addItem(tr("CIE76 (classic)"), "")
+        self._m_de_combo.addItem(tr("CIE94"), "c")
         self._m_de_combo.setObjectName("compact_input")
         self._m_de_combo.style().unpolish(self._m_de_combo)
         self._m_de_combo.style().polish(self._m_de_combo)
         de_row.addWidget(self._m_de_combo)
         de_row.addStretch()
         de_row.addWidget(TooltipButton(
-            "Delta E Formula",
-            "Selects the colour-difference formula used to compute errors.\n"
+            tr("Delta E Formula"),
+            tr("Selects the colour-difference formula used to compute errors.\n"
             "CIEDE2000 is the most perceptually accurate and is recommended\n"
-            "for modern RGB printer profiling workflows.",
+            "for modern RGB printer profiling workflows."),
             inner,
         ))
         mog.addLayout(de_row)
 
         intent_row = QHBoxLayout()
-        intent_row.addWidget(QLabel("Rendering intent:", inner))
+        intent_row.addWidget(QLabel(tr("Rendering intent:"), inner))
         self._m_intent_combo = NoScrollComboBox(inner)
-        self._m_intent_combo.addItem("Absolute colorimetric (default)", "a")
-        self._m_intent_combo.addItem("Relative colorimetric", "r")
+        self._m_intent_combo.addItem(tr("Absolute colorimetric (default)"), "a")
+        self._m_intent_combo.addItem(tr("Relative colorimetric"), "r")
         self._m_intent_combo.setObjectName("compact_input")
         self._m_intent_combo.style().unpolish(self._m_intent_combo)
         self._m_intent_combo.style().polish(self._m_intent_combo)
         intent_row.addWidget(self._m_intent_combo)
         intent_row.addStretch()
         intent_row.addWidget(TooltipButton(
-            "Rendering Intent",
-            "Absolute colorimetric checks the profile's absolute colour\n"
+            tr("Rendering Intent"),
+            tr("Absolute colorimetric checks the profile's absolute colour\n"
             "accuracy including white-point, which is the standard for\n"
             "printer profiling. Relative colorimetric normalises to\n"
-            "the media white point.",
+            "the media white point."),
             inner,
         ))
         mog.addLayout(intent_row)
 
         m_sort_row = QHBoxLayout()
-        self._m_sort_cb = QCheckBox("Sort patches by ΔE (worst first)", inner)
+        self._m_sort_cb = QCheckBox(tr("Sort patches by ΔE (worst first)"), inner)
         m_sort_row.addWidget(self._m_sort_cb)
         m_sort_row.addStretch()
         m_sort_row.addWidget(TooltipButton(
-            "Sort by ΔE",
-            "Sorts profcheck output so the worst-performing patches appear\n"
-            "first. Useful for quickly identifying problem areas.",
+            tr("Sort by ΔE"),
+            tr("Sorts profcheck output so the worst-performing patches appear\n"
+            "first. Useful for quickly identifying problem areas."),
             inner,
         ))
         mog.addLayout(m_sort_row)
 
         verb_row = QHBoxLayout()
-        verb_row.addWidget(QLabel("Verbosity:", inner))
+        verb_row.addWidget(QLabel(tr("Verbosity:"), inner))
         self._m_verb_combo = NoScrollComboBox(inner)
-        self._m_verb_combo.addItem("Per-patch (required for strip analysis)", "2")
-        self._m_verb_combo.addItem("Summary only", "1")
+        self._m_verb_combo.addItem(tr("Per-patch (required for strip analysis)"), "2")
+        self._m_verb_combo.addItem(tr("Summary only"), "1")
         self._m_verb_combo.setObjectName("compact_input")
         self._m_verb_combo.style().unpolish(self._m_verb_combo)
         self._m_verb_combo.style().polish(self._m_verb_combo)
         verb_row.addWidget(self._m_verb_combo)
         verb_row.addStretch()
         verb_row.addWidget(TooltipButton(
-            "Verbosity",
-            "Per-patch mode outputs each patch's individual ΔE value,\n"
+            tr("Verbosity"),
+            tr("Per-patch mode outputs each patch's individual ΔE value,\n"
             "which is required for strip-level analysis and guided\n"
-            "refinement. Summary mode only shows average and peak errors.",
+            "refinement. Summary mode only shows average and peak errors."),
             inner,
         ))
         mog.addLayout(verb_row)
 
         m_threshold_row = QHBoxLayout()
-        m_threshold_row.addWidget(QLabel("Flag strips for re-measurement above ΔE:", inner))
+        m_threshold_row.addWidget(QLabel(tr("Flag strips for re-measurement above ΔE:"), inner))
         self._m_threshold_spin = NoScrollDoubleSpinBox(inner)
         self._m_threshold_spin.setRange(0.5, 10.0)
         self._m_threshold_spin.setSingleStep(0.5)
@@ -865,8 +867,8 @@ class TabCheckRefine(QWidget):
         m_threshold_row.addWidget(self._m_threshold_spin)
         m_threshold_row.addStretch()
         m_threshold_row.addWidget(TooltipButton(
-            "Re-measurement Threshold (ΔE)",
-            "Sets how sensitive the quality check is when deciding which strips\n"
+            tr("Re-measurement Threshold (ΔE)"),
+            tr("Sets how sensitive the quality check is when deciding which strips\n"
             "need to be re-measured.\n\n"
             "A strip is flagged if any single patch on it has a colour error (ΔE)\n"
             "higher than this value.\n\n"
@@ -877,7 +879,7 @@ class TabCheckRefine(QWidget):
             "offenders only.\n\n"
             "The default of 2.0 is a good balance for most RGB printer profiles.\n"
             "Note: this does not affect the profcheck analysis itself — only which\n"
-            "strips appear in the re-measurement recommendation.",
+            "strips appear in the re-measurement recommendation."),
             inner,
         ))
         mog.addLayout(m_threshold_row)
@@ -885,7 +887,7 @@ class TabCheckRefine(QWidget):
         layout.addWidget(m_opts_grp)
 
         # ── Advanced Options ────────────────────────────────────────────
-        m_adv_grp = QGroupBox("Advanced Options", inner)
+        m_adv_grp = QGroupBox(tr("Advanced Options"), inner)
         m_adv_grp.setCheckable(True)
         m_adv_grp.setChecked(False)
         madv = QVBoxLayout(m_adv_grp)
@@ -893,7 +895,7 @@ class TabCheckRefine(QWidget):
         madv.setSpacing(8)
 
         m_fwa_row = QHBoxLayout()
-        self._m_fwa_cb = QCheckBox("FWA compensation (-f):", inner)
+        self._m_fwa_cb = QCheckBox(tr("FWA compensation (-f):"), inner)
         m_fwa_row.addWidget(self._m_fwa_cb)
         self._m_fwa_combo = NoScrollComboBox(inner)
         for label, val in _ILLUMINANTS:
@@ -906,20 +908,20 @@ class TabCheckRefine(QWidget):
         m_fwa_row.addWidget(self._m_fwa_combo)
         m_fwa_row.addStretch()
         m_fwa_row.addWidget(TooltipButton(
-            "FWA Compensation (-f)",
-            "Some papers contain optical brighteners (fluorescent whitening agents)\n"
+            tr("FWA Compensation (-f)"),
+            tr("Some papers contain optical brighteners (fluorescent whitening agents)\n"
             "that make the paper look extra white under certain lighting. This option\n"
             "compensates for that effect during the check.\n\n"
             "Only works if your .ti3 file contains spectral measurement data\n"
             "(not all instruments produce this). If you are unsure, leave it off.\n\n"
             "Set the illuminant to match the light source you view your prints under\n"
-            "(D50 = standard daylight, D65 = cooler daylight).",
+            "(D50 = standard daylight, D65 = cooler daylight)."),
             inner,
         ))
         madv.addLayout(m_fwa_row)
 
         m_illum_row = QHBoxLayout()
-        m_illum_row.addWidget(QLabel("Illuminant (-i):", inner))
+        m_illum_row.addWidget(QLabel(tr("Illuminant (-i):"), inner))
         self._m_illum_combo = NoScrollComboBox(inner)
         for label, val in _ILLUMINANTS:
             self._m_illum_combo.addItem(label, val)
@@ -929,18 +931,18 @@ class TabCheckRefine(QWidget):
         m_illum_row.addWidget(self._m_illum_combo)
         m_illum_row.addStretch()
         m_illum_row.addWidget(TooltipButton(
-            "Illuminant (-i)",
-            "Selects the light source used when converting spectral measurements\n"
+            tr("Illuminant (-i)"),
+            tr("Selects the light source used when converting spectral measurements\n"
             "to colour values. Only relevant if your .ti3 contains spectral data.\n\n"
             "D50 is the standard for print profiling and the right choice for most\n"
             "workflows. D65 is used in some video and photography contexts.\n\n"
-            "Leave at D50 unless you have a specific reason to change it.",
+            "Leave at D50 unless you have a specific reason to change it."),
             inner,
         ))
         madv.addLayout(m_illum_row)
 
         m_obs_row = QHBoxLayout()
-        m_obs_row.addWidget(QLabel("CIE Observer (-o):", inner))
+        m_obs_row.addWidget(QLabel(tr("CIE Observer (-o):"), inner))
         self._m_obs_combo = NoScrollComboBox(inner)
         for label, val in _OBSERVERS:
             self._m_obs_combo.addItem(label, val)
@@ -950,20 +952,20 @@ class TabCheckRefine(QWidget):
         m_obs_row.addWidget(self._m_obs_combo)
         m_obs_row.addStretch()
         m_obs_row.addWidget(TooltipButton(
-            "CIE Observer (-o)",
-            "Defines the mathematical model used to represent how the human eye\n"
+            tr("CIE Observer (-o)"),
+            tr("Defines the mathematical model used to represent how the human eye\n"
             "sees colour.\n\n"
             "1931 2° is the international standard for print and ICC profiling\n"
             "and the correct choice for virtually all printer profiling work.\n\n"
             "The 1964 10° observer can be used for large-area colour matching,\n"
             "but is rarely needed here. Leave at 1931 2° unless specifically\n"
-            "requested by your colour management workflow.",
+            "requested by your colour management workflow."),
             inner,
         ))
         madv.addLayout(m_obs_row)
 
         m_prune_row = QHBoxLayout()
-        self._m_prune_cb = QCheckBox("Prune .ti3 to patches with ΔE ≤ (-P):", inner)
+        self._m_prune_cb = QCheckBox(tr("Prune .ti3 to patches with ΔE ≤ (-P):"), inner)
         m_prune_row.addWidget(self._m_prune_cb)
         self._m_prune_spin = NoScrollDoubleSpinBox(inner)
         self._m_prune_spin.setRange(0.0, 20.0)
@@ -976,34 +978,34 @@ class TabCheckRefine(QWidget):
         self._m_prune_spin.style().unpolish(self._m_prune_spin)
         self._m_prune_spin.style().polish(self._m_prune_spin)
         m_prune_row.addWidget(self._m_prune_spin)
-        m_prune_row.addWidget(QLabel("ΔE", inner))
+        m_prune_row.addWidget(QLabel(tr("ΔE"), inner))
         m_prune_row.addStretch()
         m_prune_row.addWidget(TooltipButton(
-            "Prune .ti3 (-P)",
-            "Creates a reduced copy of your .ti3 file containing only patches\n"
+            tr("Prune .ti3 (-P)"),
+            tr("Creates a reduced copy of your .ti3 file containing only patches\n"
             "whose colour error is at or below the threshold you set.\n\n"
             "Useful if a small number of badly measured patches are pulling\n"
             "the profile down. Pruning them out lets you build a cleaner\n"
             "profile from the remaining good patches — at the cost of\n"
             "having fewer data points overall.\n\n"
             "The pruned file is saved next to the original .ti3 and can be\n"
-            "loaded directly in the Build Profile tab.",
+            "loaded directly in the Build Profile tab."),
             inner,
         ))
         madv.addLayout(m_prune_row)
 
         m_x3d_row = QHBoxLayout()
-        self._m_x3dom_cb = QCheckBox("Create X3DOM 3D visualisation (-w)", inner)
+        self._m_x3dom_cb = QCheckBox(tr("Create X3DOM 3D visualisation (-w)"), inner)
         m_x3d_row.addWidget(self._m_x3dom_cb)
         m_x3d_row.addStretch()
         m_x3d_row.addWidget(TooltipButton(
-            "X3DOM Visualisation (-w)",
-            "Generates an interactive 3D visualisation of your profile's colour\n"
+            tr("X3DOM Visualisation (-w)"),
+            tr("Generates an interactive 3D visualisation of your profile's colour\n"
             "errors and saves it as an HTML file next to your .ti3.\n\n"
             "Open the .x3d.html file in any modern web browser to explore a\n"
             "3D diagram showing where errors are largest — useful for seeing\n"
             "which parts of the colour gamut your profile handles well and\n"
-            "which areas need improvement.",
+            "which areas need improvement."),
             inner,
         ))
         madv.addLayout(m_x3d_row)
@@ -1028,7 +1030,7 @@ class TabCheckRefine(QWidget):
     def _m_populate_preset_combo(self, presets: dict, select_name: str | None = None) -> None:
         self._m_preset_combo.blockSignals(True)
         self._m_preset_combo.clear()
-        self._m_preset_combo.addItem("none", userData=None)
+        self._m_preset_combo.addItem(tr("none"), userData=None)
         for name in presets:
             self._m_preset_combo.addItem(name, userData=name)
         if select_name is not None:
@@ -1107,11 +1109,11 @@ class TabCheckRefine(QWidget):
     def _on_m_preset_save(self) -> None:
         data = self._m_collect_preset_data()
         dlg = QInputDialog(self)
-        dlg.setWindowTitle("Save Preset")
+        dlg.setWindowTitle(tr("Save Preset"))
         dlg.setLabelText(
-            "Give this preset a name.\n"
+            tr("Give this preset a name.\n"
             "All current Manual mode settings will be saved under that name\n"
-            "and can be recalled at any time from the preset list."
+            "and can be recalled at any time from the preset list.")
         )
         dlg.setMinimumWidth(460)
         if not dlg.exec():
@@ -1127,25 +1129,25 @@ class TabCheckRefine(QWidget):
     def _on_m_preset_delete(self) -> None:
         name = self._m_preset_combo.currentText()
         dlg = QDialog(self)
-        dlg.setWindowTitle("Delete Preset")
+        dlg.setWindowTitle(tr("Delete Preset"))
         dlg.setMinimumWidth(460)
         dlg_layout = QVBoxLayout(dlg)
         dlg_layout.setSpacing(10)
         dlg_layout.setContentsMargins(20, 20, 20, 16)
-        heading = QLabel(f'Delete the preset "{name}"?', dlg)
+        heading = QLabel(tr("Delete the preset \"{name}\"?").format(name=name), dlg)
         heading.setStyleSheet("font-weight: bold;")
         heading.setWordWrap(True)
         dlg_layout.addWidget(heading)
         info = QLabel(
-            "All parameter values saved in this preset will be permanently removed. "
-            "This cannot be undone.",
+            tr("All parameter values saved in this preset will be permanently removed. "
+            "This cannot be undone."),
             dlg,
         )
         info.setWordWrap(True)
         dlg_layout.addWidget(info)
         bb = QDialogButtonBox(dlg)
-        bb.addButton("Cancel", QDialogButtonBox.ButtonRole.RejectRole)
-        del_btn = bb.addButton("Delete", QDialogButtonBox.ButtonRole.AcceptRole)
+        bb.addButton(tr("Cancel"), QDialogButtonBox.ButtonRole.RejectRole)
+        del_btn = bb.addButton(tr("Delete"), QDialogButtonBox.ButtonRole.AcceptRole)
         del_btn.setObjectName("primary")
         bb.rejected.connect(dlg.reject)
         bb.accepted.connect(dlg.accept)
@@ -1222,9 +1224,9 @@ class TabCheckRefine(QWidget):
         from PyQt6.QtWidgets import QMessageBox
         QMessageBox.warning(
             self,
-            "Profile Not Found",
-            f"No matching .icc or .icm file was found in:\n{ti3.parent}\n\n"
-            "Please browse for the profile file manually.",
+            tr("Profile Not Found"),
+            tr("No matching .icc or .icm file was found in:\n{folder}\n\n"
+               "Please browse for the profile file manually.").format(folder=ti3.parent),
         )
 
     # ------------------------------------------------------------------
@@ -1294,7 +1296,8 @@ class TabCheckRefine(QWidget):
                 folder = self._ti3_path.parent
                 grade = quality_grade(result.avg_de, result.peak_de)
                 explanation = quality_explanation(result.avg_de, result.peak_de)
-                summary_text = f"Profile Quality Assessment: {grade}\n\n{explanation}"
+                summary_text = tr("Profile Quality Assessment: {grade}").format(
+                    grade=grade_display(grade)) + f"\n\n{explanation}"
                 if all_strips_display:
                     strip_lines = "\n".join(
                         f"  {s:4s}  avg ΔE: {de:.2f}" for s, de in all_strips_display[:10]
@@ -1346,7 +1349,7 @@ class TabCheckRefine(QWidget):
         explanation = quality_explanation(result.avg_de, result.peak_de)
 
         dlg = QDialog(self)
-        dlg.setWindowTitle("Profile Quality Assessment")
+        dlg.setWindowTitle(tr("Profile Quality Assessment"))
         dlg.setMinimumWidth(640)
 
         layout = QVBoxLayout(dlg)
@@ -1354,7 +1357,8 @@ class TabCheckRefine(QWidget):
         layout.setContentsMargins(24, 20, 24, 20)
 
         # Grade headline
-        grade_lbl = QLabel(f"Profile Quality: <b>{grade}</b>", dlg)
+        grade_lbl = QLabel(tr("Profile Quality: <b>{grade}</b>").format(
+            grade=grade_display(grade)), dlg)
         grade_lbl.setStyleSheet("font-size: 15px;")
         layout.addWidget(grade_lbl)
 
@@ -1375,8 +1379,7 @@ class TabCheckRefine(QWidget):
                     for s, de in all_strips_display[:5]
                 )
                 strip_lbl = QLabel(
-                    "<b>Strips with the highest error</b><br>(worst first, avg ΔE):"
-                    f"<pre>{strip_lines}</pre>",
+                    tr("<b>Strips with the highest error</b><br>(worst first, avg ΔE):<pre>{strip_lines}</pre>").format(strip_lines=strip_lines),
                     dlg,
                 )
                 strip_lbl.setWordWrap(True)
@@ -1391,8 +1394,7 @@ class TabCheckRefine(QWidget):
                     f"  • Patch {p}  (ΔE: {de:.2f})" for p, de in worst_patches
                 )
                 patch_lbl = QLabel(
-                    "<b>Patches with the highest error</b><br>(worst first, ΔE):"
-                    f"<pre>{patch_lines}</pre>",
+                    tr("<b>Patches with the highest error</b><br>(worst first, ΔE):<pre>{patch_lines}</pre>").format(patch_lines=patch_lines),
                     dlg,
                 )
                 patch_lbl.setWordWrap(True)
@@ -1417,10 +1419,7 @@ class TabCheckRefine(QWidget):
                     f"re-measuring — more than three-quarters of your chart."
                 )
             action_lbl = QLabel(
-                f"<b>{reason}</b><br><br>"
-                "Re-measuring individual strips is unlikely to reliably fix this. "
-                "<b>Starting over with a freshly printed and measured chart is "
-                "strongly recommended.</b>",
+                tr("<b>{reason}</b><br><br>Re-measuring individual strips is unlikely to reliably fix this. <b>Starting over with a freshly printed and measured chart is strongly recommended.</b>").format(reason=reason),
                 dlg,
             )
             action_lbl.setWordWrap(True)
@@ -1429,12 +1428,20 @@ class TabCheckRefine(QWidget):
             refine_lines = "  " + "   ".join(
                 f"{s} (max ΔE: {de:.2f})" for s, de in refine_strips
             )
+            n_refine = len(refine_strips)
+            if n_refine == 1:
+                head = tr("<b>1 strip has at least one patch above "
+                          "ΔE {limit:.1f} and should be re-measured:</b>").format(
+                    limit=self._threshold_spin.value())
+            else:
+                head = tr("<b>{n} strips have at least one patch above "
+                          "ΔE {limit:.1f} and should be re-measured:</b>").format(
+                    n=n_refine, limit=self._threshold_spin.value())
             action_lbl = QLabel(
-                f"<b>{len(refine_strips)} strip(s) have at least one patch above "
-                f"ΔE {self._threshold_spin.value():.1f} and should be re-measured:</b>"
-                f"<br><pre>{refine_lines}</pre>"
-                "Listed in measurement order — the app will navigate to each one "
-                "automatically.",
+                head
+                + "<br><pre>" + refine_lines + "</pre>"
+                + tr("Listed in measurement order — the app will navigate to each "
+                     "one automatically."),
                 dlg,
             )
             action_lbl.setWordWrap(True)
@@ -1443,13 +1450,13 @@ class TabCheckRefine(QWidget):
         # Description for the "Use as pre-conditioning" path
         if self._icc_path:
             precond_desc = QLabel(
-                "<b>Use as pre-conditioning profile</b> — start a second profiling pass "
+                tr("<b>Use as pre-conditioning profile</b> — start a second profiling pass "
                 "that uses this profile to place the new test patches more intelligently. "
                 "The next chart will sample more in the colour regions your printer "
                 "reproduces least accurately, producing a noticeably better profile on "
                 "the second round. This profile and its measurements are kept intact "
                 "in their own run folder so nothing is lost. Recommended once "
-                "you've confirmed a working profile for this paper.",
+                "you've confirmed a working profile for this paper."),
                 dlg,
             )
             precond_desc.setWordWrap(True)
@@ -1459,28 +1466,28 @@ class TabCheckRefine(QWidget):
         # Buttons — laid out individually with stretches between each so they
         # spread evenly across the dialog width regardless of how many are shown.
         _install_labels = {
-            "Excellent":  "Install Profile",
-            "Good":       "Install Profile As Is",
-            "Acceptable": "Install Profile As Is",
-            "Needs Work": "Install Profile Anyway",
+            "Excellent":  tr("Install Profile"),
+            "Good":       tr("Install Profile As Is"),
+            "Acceptable": tr("Install Profile As Is"),
+            "Needs Work": tr("Install Profile Anyway"),
         }
 
-        close_btn = QPushButton("Close", dlg)
+        close_btn = QPushButton(tr("Close"), dlg)
         close_btn.clicked.connect(dlg.reject)
 
         install_btn: QPushButton | None = None
         if self._icc_path:
-            install_label = _install_labels.get(grade, "Install Profile Anyway")
+            install_label = _install_labels.get(grade, tr("Install Profile Anyway"))
             install_btn = QPushButton(install_label, dlg)
 
         precond_btn: QPushButton | None = None
         if self._icc_path:
-            precond_btn = QPushButton("← Use as Pre-conditioning", dlg)
+            precond_btn = QPushButton(tr("← Use as Pre-conditioning"), dlg)
             precond_btn.setObjectName("primary")
 
         guide_btn: QPushButton | None = None
         if strips_file and refine_strips and not recommend_start_over and self._ti3_path:
-            guide_btn = QPushButton("Guide Me Through Refinement", dlg)
+            guide_btn = QPushButton(tr("Guide Me Through Refinement"), dlg)
             guide_btn.setObjectName("primary")
         elif install_btn and grade == "Excellent":
             install_btn.setObjectName("primary")

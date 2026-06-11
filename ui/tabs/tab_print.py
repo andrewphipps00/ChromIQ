@@ -83,6 +83,7 @@ if TYPE_CHECKING:
 
 log = get_logger(__name__)
 from ui.styles import SPEC_AMBER, TAB_COLORS
+from core.i18n import tr
 
 
 _TT_TITLE_PRINT = "Step 2 — Print the chart"
@@ -250,19 +251,19 @@ class TabPrint(QWidget):
 
         _initial_tt_title, _initial_tt_body = self._compute_print_tooltip()
         self._header = TabHeader(
-            "STEP 02 · PRINT TARGET", "Print test chart", "#ffb42d", left,
+            tr("STEP 02 · PRINT TARGET"), tr("Print test chart"), "#ffb42d", left,
             tooltip_title=_initial_tt_title,
             tooltip_body=_initial_tt_body,
         )
         ll.addWidget(self._header)
 
         # Printer selection (pinned above scroll area)
-        self._printer_grp = QGroupBox("Printer", left)
+        self._printer_grp = QGroupBox(tr("Printer"), left)
         printer_grp = self._printer_grp
         pg = QVBoxLayout(printer_grp)
 
         pr_row = QHBoxLayout()
-        pr_row.addWidget(QLabel("Printer:", left))
+        pr_row.addWidget(QLabel(tr("Printer:"), left))
         self._printer_combo = NoScrollComboBox(left)
         pr_row.addWidget(self._printer_combo, stretch=1)
 
@@ -270,19 +271,19 @@ class TabPrint(QWidget):
         refresh_btn.setIcon(load_refresh_icon("refresh_print"))
         refresh_btn.setFixedSize(34, 34)
         refresh_btn.setStyleSheet("QPushButton { padding: 0; min-height: 0; }")
-        refresh_btn.setToolTip("Refresh printer list")
+        refresh_btn.setToolTip(tr("Refresh printer list"))
         refresh_btn.clicked.connect(self._refresh_printers)
         pr_row.addWidget(refresh_btn)
 
         pr_row.addWidget(TooltipButton(
-            "Printer Selection",
-            "Select the printer to send the chart to.  Only printers installed in\n"
+            tr("Printer Selection"),
+            tr("Select the printer to send the chart to.  Only printers installed in\n"
             "the system CUPS print queue are listed.\n\n"
             "ChromIQ converts the chart to PostScript and sends it via lp —\n"
             "bypassing ColorSync entirely.  If CUPS rejects PostScript (e.g.\n"
             "AirPrint or Driverless drivers), it automatically retries by sending\n"
             "the TIFF directly with colour-space-aware raster options.\n"
-            "Colour management is always disabled automatically.",
+            "Colour management is always disabled automatically."),
             left,
         ))
         pg.addLayout(pr_row)
@@ -299,11 +300,11 @@ class TabPrint(QWidget):
         scl.setSpacing(10)
 
         # Print options — dynamically built from CUPS lpoptions output
-        self._opts_grp = QGroupBox("Print Options", scroll_content)
+        self._opts_grp = QGroupBox(tr("Print Options"), scroll_content)
         self._opts_layout = QVBoxLayout(self._opts_grp)
         self._option_combos: dict[str, QComboBox] = {}
         self._opts_layout.addWidget(
-            QLabel("Select a printer to see its options.", scroll_content)
+            QLabel(tr("Select a printer to see its options."), scroll_content)
         )
         scl.addWidget(self._opts_grp)
 
@@ -335,7 +336,7 @@ class TabPrint(QWidget):
         beast_layout.setContentsMargins(0, 0, 0, 0)
         beast_layout.setSpacing(4)
         beast_headline = QLabel(
-            f'Feed the beast<span style="color: {SPEC_AMBER}; font-style: italic;">!</span>',
+            tr("Feed the beast<span style=\"color: {SPEC_AMBER}; font-style: italic;\">!</span>").format(SPEC_AMBER=SPEC_AMBER),
             beast_box,
         )
         beast_headline.setTextFormat(Qt.TextFormat.RichText)
@@ -345,7 +346,7 @@ class TabPrint(QWidget):
             " font-family: Georgia; font-size: 28px;"
         )
         beast_layout.addWidget(beast_headline)
-        beast_subtext = QLabel("Your printer is hungry.", beast_box)
+        beast_subtext = QLabel(tr("Your printer is hungry."), beast_box)
         beast_subtext.setAlignment(Qt.AlignmentFlag.AlignCenter)
         beast_subtext.setStyleSheet(
             "color: #808080; background: transparent;"
@@ -366,26 +367,26 @@ class TabPrint(QWidget):
         ll.addWidget(beast_box)
 
         # Load existing target button
-        self._load_btn = QPushButton("Load existing target — select .ti2 file", left)
+        self._load_btn = QPushButton(tr("Load existing target — select .ti2 file"), left)
         set_folder_icon(self._load_btn, "folder_print")
         self._load_btn.clicked.connect(self._on_load_ti2)
         ll.addWidget(self._load_btn)
 
         # Print buttons
         btn_row = QHBoxLayout()
-        self._print_page_btn = QPushButton("Print\nCurrent Page", left)
+        self._print_page_btn = QPushButton(tr("Print\nCurrent Page"), left)
         self._print_page_btn.setObjectName("primary")
         self._print_page_btn.clicked.connect(self._on_print_current)
 
-        self._print_all_btn = QPushButton("Print All\nPages", left)
+        self._print_all_btn = QPushButton(tr("Print All\nPages"), left)
         self._print_all_btn.clicked.connect(self._on_print_all)
 
-        self._save_defaults_btn = QPushButton("Save as\nDefaults", left)
+        self._save_defaults_btn = QPushButton(tr("Save as\nDefaults"), left)
         self._save_defaults_btn.clicked.connect(self._on_save_defaults)
 
-        self._clear_queue_btn = QPushButton("Clear\nPrint Queue", left)
+        self._clear_queue_btn = QPushButton(tr("Clear\nPrint Queue"), left)
         self._clear_queue_btn.setToolTip(
-            "Cancel all pending and stuck jobs for the selected printer."
+            tr("Cancel all pending and stuck jobs for the selected printer.")
         )
         self._clear_queue_btn.clicked.connect(self._on_clear_queue)
 
@@ -416,7 +417,7 @@ class TabPrint(QWidget):
         rl.setContentsMargins(0, 0, 0, 12)
         rl.setSpacing(0)
         self._preview = TiffPreview(right)
-        self._preview.set_caption("PRINT PREVIEW")
+        self._preview.set_caption(tr("PRINT PREVIEW"))
         rl.addWidget(self._preview, stretch=1)
         splitter.addWidget(right)
 
@@ -449,7 +450,7 @@ class TabPrint(QWidget):
         for p in printers:
             self._printer_combo.addItem(p, p)
         if not printers:
-            self._printer_combo.addItem("No printers found", "")
+            self._printer_combo.addItem(tr("No printers found"), "")
         self._printer_combo.blockSignals(False)
 
         last = self._settings.get("last_printer", "")
@@ -534,7 +535,7 @@ class TabPrint(QWidget):
         self._raw_value_pairs.clear()
 
         if not printer:
-            self._opts_layout.addWidget(QLabel("Select a printer to see its options.", self))
+            self._opts_layout.addWidget(QLabel(tr("Select a printer to see its options."), self))
             return
 
         opts = self._module.query_options(printer)
@@ -546,12 +547,12 @@ class TabPrint(QWidget):
             box_layout.setContentsMargins(10, 8, 10, 8)
             box_layout.setSpacing(6)
 
-            title = QLabel("No configurable options detected", box)
+            title = QLabel(tr("No configurable options detected"), box)
             title.setObjectName("airprintInfoTitle")
             box_layout.addWidget(title)
 
             body = QLabel(
-                "macOS often installs an <b>AirPrint</b> or <b>Driverless</b> driver "
+                tr("macOS often installs an <b>AirPrint</b> or <b>Driverless</b> driver "
                 "automatically when you add a printer. These work fine for everyday "
                 "printing, but don't expose the detailed settings needed for ICC profiling."
                 "<br><br>"
@@ -564,7 +565,7 @@ class TabPrint(QWidget):
                 "1. Click the <b>−</b> button to remove the printer.<br>"
                 "2. Download the native driver from your printer manufacturer's website.<br>"
                 "3. Re-add the printer — macOS should now use the native PPD driver "
-                "with all options available.",
+                "with all options available."),
                 box,
             )
             body.setWordWrap(True)
@@ -587,12 +588,12 @@ class TabPrint(QWidget):
         for i, (opt_name, (label, value_pairs)) in enumerate(opts.items()):
             self._raw_value_pairs[opt_name] = value_pairs
             row = QHBoxLayout()
-            lbl = QLabel(f"{label}:", self)
+            lbl = QLabel(tr("{label}:").format(label=label), self)
             lbl.setMinimumWidth(160)
             row.addWidget(lbl)
             combo = NoScrollComboBox(self)
             combo.setMaxVisibleItems(12)
-            combo.addItem("Printer Default", "")
+            combo.addItem(tr("Printer Default"), "")
             for display, raw_val in value_pairs:
                 combo.addItem(display, raw_val)
             # All combos start enabled — "Printer Default" on a leading combo means
@@ -665,7 +666,7 @@ class TabPrint(QWidget):
 
         next_combo.blockSignals(True)
         next_combo.clear()
-        next_combo.addItem("Printer Default", "")
+        next_combo.addItem(tr("Printer Default"), "")
         for display, raw_val in next_all_pairs:
             if raw_val in valid_vals:
                 next_combo.addItem(display, raw_val)
@@ -748,14 +749,15 @@ class TabPrint(QWidget):
         """Run pre-send checks + preflight once, then submit each page."""
         printer = self._printer_combo.currentData() or ""
         if not printer:
-            QMessageBox.warning(self, "No Printer", "Please select a printer before printing.")
+            QMessageBox.warning(self, tr("No Printer"), tr("Please select a printer before printing."))
             return
 
         if not self._printer.is_printer_reachable(printer):
             QMessageBox.critical(
-                self, "Printer Offline",
-                f"The printer \"{printer}\" appears to be offline or unreachable.\n"
-                "Please check that it is powered on and connected.",
+                self, tr("Printer Offline"),
+                tr("The printer \"{printer}\" appears to be offline or unreachable.\n"
+                   "Please check that it is powered on and connected."
+                   ).format(printer=printer),
             )
             return
 
@@ -792,20 +794,20 @@ class TabPrint(QWidget):
     def _confirm_borderless(self) -> bool:
         """Warn that borderless scales the chart. Returns False to cancel."""
         dlg = QMessageBox(self)
-        dlg.setWindowTitle("Borderless Will Scale the Chart")
+        dlg.setWindowTitle(tr("Borderless Will Scale the Chart"))
         dlg.setIcon(QMessageBox.Icon.Warning)
         dlg.setText(
-            "Borderless printing enlarges the page by a few percent so the "
+            tr("Borderless printing enlarges the page by a few percent so the "
             "ink reaches past the paper edges. The printer driver does this "
             "and it cannot be turned off — it is what borderless means.\n\n"
             "A profiling chart must print at exactly 100%: enlarging it "
             "shifts every patch, so the measurement reads the wrong "
             "positions.\n\n"
             "Switch borderless off and print with borders instead — the "
-            "chart's white margins are made for that."
+            "chart's white margins are made for that.")
         )
         anyway_btn = dlg.addButton(
-            "Print Borderless Anyway", QMessageBox.ButtonRole.DestructiveRole
+            tr("Print Borderless Anyway"), QMessageBox.ButtonRole.DestructiveRole
         )
         cancel_btn = dlg.addButton(QMessageBox.StandardButton.Cancel)
         dlg.setDefaultButton(cancel_btn)
@@ -822,16 +824,21 @@ class TabPrint(QWidget):
             return True
         n = len(stuck)
         dlg = QMessageBox(self)
-        dlg.setWindowTitle("Stuck Print Jobs Detected")
+        dlg.setWindowTitle(tr("Stuck Print Jobs Detected"))
         dlg.setIcon(QMessageBox.Icon.Warning)
+        if n == 1:
+            head = tr("There is 1 stuck print job in the queue for \"{printer}\"."
+                      ).format(printer=printer)
+        else:
+            head = tr("There are {n} stuck print jobs in the queue for \"{printer}\"."
+                      ).format(n=n, printer=printer)
         dlg.setText(
-            f"There {'is' if n == 1 else 'are'} {n} stuck print "
-            f"job{'s' if n != 1 else ''} in the queue for \"{printer}\".\n\n"
-            "Stuck jobs can block new print jobs from being processed.\n"
-            "Clear them before printing?"
+            head + "\n\n"
+            + tr("Stuck jobs can block new print jobs from being processed.\n"
+                 "Clear them before printing?")
         )
-        clear_btn  = dlg.addButton("Clear & Print",  QMessageBox.ButtonRole.AcceptRole)
-        dlg.addButton("Print Anyway", QMessageBox.ButtonRole.DestructiveRole)
+        clear_btn  = dlg.addButton(tr("Clear & Print"),  QMessageBox.ButtonRole.AcceptRole)
+        dlg.addButton(tr("Print Anyway"), QMessageBox.ButtonRole.DestructiveRole)
         cancel_btn = dlg.addButton(QMessageBox.StandardButton.Cancel)
         dlg.setDefaultButton(clear_btn)
         dlg.exec()
@@ -960,7 +967,7 @@ class TabPrint(QWidget):
     ) -> None:
         printer = self._printer_combo.currentData() or ""
         if not printer:
-            QMessageBox.warning(self, "No Printer", "Please select a printer before printing.")
+            QMessageBox.warning(self, tr("No Printer"), tr("Please select a printer before printing."))
             return
 
         # Extract the target frame to a temporary single-page TIFF when needed.
@@ -979,14 +986,15 @@ class TabPrint(QWidget):
                 print_path = tiff_path
         except Exception as exc:
             QMessageBox.critical(
-                self, "TIFF Error",
-                f"Cannot read TIFF file:\n{tiff_path.name}\n\n{exc}",
+                self, tr("TIFF Error"),
+                tr("Cannot read TIFF file:\n{name}\n\n{exc}").format(name=tiff_path.name, exc=exc),
             )
             return
 
         selected_opts = {k: (c.currentData() or "") for k, c in self._option_combos.items()}
         config = self._module.build_config(printer=printer, options=selected_opts)
-        self._set_status(f"Sending {tiff_path.name} (page {frame + 1}) to {printer}…")
+        self._set_status(tr("Sending {name} (page {page}) to {printer}…").format(
+            name=tiff_path.name, page=frame + 1, printer=printer))
 
         def _cleanup_and_finish(code: int) -> None:
             if tmp_path and tmp_path.exists():
@@ -1007,19 +1015,20 @@ class TabPrint(QWidget):
 
     def _on_print_done(self, code: int) -> None:
         if code == 0:
-            self._set_status("Print job submitted successfully.")
+            self._set_status(tr("Print job submitted successfully."))
         else:
-            self._set_status(f"Print failed (lp exit code {code}).")
+            self._set_status(tr("Print failed (lp exit code {code}).").format(code=code))
             QMessageBox.critical(
-                self, "Print Error",
-                f"CUPS rejected the print job (exit code {code}).\n"
-                "Check that the printer is online and the selected options are valid.",
+                self, tr("Print Error"),
+                tr("CUPS rejected the print job (exit code {code}).\n"
+                   "Check that the printer is online and the selected options are "
+                   "valid.").format(code=code),
             )
 
     def _on_clear_queue(self) -> None:
         printer = self._printer_combo.currentData() or ""
         if not printer:
-            QMessageBox.warning(self, "No Printer", "Select a printer first.")
+            QMessageBox.warning(self, tr("No Printer"), tr("Select a printer first."))
             return
         count = self._module.cancel_all_jobs(printer)
         if count:
@@ -1102,14 +1111,14 @@ class TabPrint(QWidget):
 
     def _compute_print_tooltip(self) -> tuple[str, str]:
         if is_windows():
-            return _TT_TITLE_PRINT, _TT_BODY_PRINT_WINDOWS
+            return tr(_TT_TITLE_PRINT), tr(_TT_BODY_PRINT_WINDOWS)
         if is_linux():
-            return _TT_TITLE_PRINT, _TT_BODY_PRINT_LINUX
+            return tr(_TT_TITLE_PRINT), tr(_TT_BODY_PRINT_LINUX)
         if is_macos():
             if bool(self._settings.get("use_native_print_dialog", False)):
-                return _TT_TITLE_PRINT, _TT_BODY_PRINT_MACOS_NATIVE
-            return _TT_TITLE_PRINT, _TT_BODY_PRINT_MACOS_BYPASS
-        return _TT_TITLE_PRINT, _TT_BODY_PRINT_MACOS_BYPASS
+                return tr(_TT_TITLE_PRINT), tr(_TT_BODY_PRINT_MACOS_NATIVE)
+            return tr(_TT_TITLE_PRINT), tr(_TT_BODY_PRINT_MACOS_BYPASS)
+        return tr(_TT_TITLE_PRINT), tr(_TT_BODY_PRINT_MACOS_BYPASS)
 
     def _set_native_mode(self, enabled: bool) -> None:
         import sys as _sys
@@ -1119,7 +1128,7 @@ class TabPrint(QWidget):
         if enabled:
             if _sys.platform == "win32":
                 self._warn_lbl.setText(
-                    "⚠  You are printing via the Windows printer dialog. You must disable "
+                    tr("⚠  You are printing via the Windows printer dialog. You must disable "
                     "colour management in your printer driver before printing — otherwise "
                     "the printer applies its own corrections and the chart will be unusable "
                     "for accurate ICC profiling.\n\n"
@@ -1132,11 +1141,11 @@ class TabPrint(QWidget):
                     "  • Others: look for \"No Color Management\", \"Off\", or "
                     "\"Application Controlled\"\n\n"
                     "Allow pigment inks to dry fully before measuring "
-                    "(at least 1 h; 24 h for best accuracy)."
+                    "(at least 1 h; 24 h for best accuracy).")
                 )
             else:
                 self._warn_lbl.setText(
-                    "⚠  You are printing via the macOS printer dialog. Verify that the paper, "
+                    tr("⚠  You are printing via the macOS printer dialog. Verify that the paper, "
                     "media type, and quality you pick match the media you are printing on — "
                     "wrong settings cause incorrect ink laydown and invalid colour "
                     "measurements.\n\n"
@@ -1156,7 +1165,7 @@ class TabPrint(QWidget):
                     "Settings to send the chart straight to the queue via lp (colour "
                     "management is forced off there too).\n\n"
                     "Allow pigment inks to dry fully before measuring "
-                    "(at least 1 h; 24 h for best accuracy)."
+                    "(at least 1 h; 24 h for best accuracy).")
                 )
         else:
             if is_macos() and bool(self._settings.get("pdf_print_fallback", False)):
@@ -1192,19 +1201,20 @@ class TabPrint(QWidget):
                 except ColorManagementMismatch as exc:
                     log.warning("Native macOS print: %s", exc)
                     QMessageBox.warning(
-                        self, "Colour Management Lock Not Verified",
-                        "The print job was sent, but ChromIQ could not verify that "
-                        "the printer driver's colour management was disabled.\n\n"
-                        f"Details: {exc}\n\n"
-                        "The print may have been colour-managed by the driver. Check "
-                        "the swatch with Digital Color Meter or reprint after switching "
-                        "to the non-native (standard) print mode in Settings.",
+                        self, tr("Colour Management Lock Not Verified"),
+                        tr("The print job was sent, but ChromIQ could not verify that "
+                           "the printer driver's colour management was disabled.\n\n"
+                           "Details: {exc}\n\n"
+                           "The print may have been colour-managed by the driver. "
+                           "Check the swatch with Digital Color Meter or reprint "
+                           "after switching to the non-native (standard) print mode "
+                           "in Settings.").format(exc=exc),
                     )
             except Exception as exc:
                 log.error("Native macOS print failed: %s", exc)
                 QMessageBox.critical(
-                    self, "Print Failed",
-                    f"Could not open the macOS print dialog:\n{exc}",
+                    self, tr("Print Failed"),
+                    tr("Could not open the macOS print dialog:\n{exc}").format(exc=exc),
                 )
             return
         self._print_native_qt(pages)

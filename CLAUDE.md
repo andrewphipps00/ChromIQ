@@ -122,6 +122,28 @@ TIFF → `PostScriptGenerator` (hex RGB, PS Level 2, exact PageSize, no scaling)
 Default path: `/Applications/Argyll/bin`  
 Configurable in Settings dialog. The app shows a statusbar warning if binaries are missing.
 
+### Translations (i18n)
+
+UI language is a Settings option (restart-to-apply). `core/i18n.py` provides
+`tr("English text")` — a plain string-catalog lookup against
+`data/i18n/<code>.json` (key = exact English source string, miss = English).
+`data/parameters.yaml` is translated separately by a
+`data/i18n/parameters.<code>.yaml` overlay merged in `translate_parameters()`.
+
+Rules when touching UI code:
+- Wrap every new user-facing literal in `tr()`; runtime values use
+  `tr("… {name} …").format(name=…)` (placeholders are part of the key).
+- Count-bearing messages get explicit singular/plural variants, never `(s)`.
+- After string changes run `python scripts/i18n_extract.py --missing de`
+  and add the German translations — `tests/test_i18n.py` fails CI on missing
+  keys, stale keys, placeholder mismatches, and over-long short labels.
+- Adding a language = new `data/i18n/<code>.json` (with `@language_name`)
+  + `parameters.<code>.yaml`; the Settings combobox discovers it automatically.
+  `python scripts/i18n_agent/new_language.py <code> "<English>" "<Native>"`
+  prints a complete, self-validating translation-agent prompt (style contract,
+  hard rules, validation commands). Partial work staged in
+  `data/i18n/staging/<code>.partial.json` is picked up automatically.
+
 ### Adding a parameter
 
 1. Add entry to `data/parameters.yaml` with `tool`, `flag`, `type`, `default`, `tooltip_title`, `tooltip_body`.

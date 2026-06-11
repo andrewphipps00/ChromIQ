@@ -16,6 +16,7 @@ from PyQt6.QtWidgets import QToolButton, QWidget
 
 from core.resource_path import resource_path
 from ui.welcome_button import WelcomeButton
+from core.i18n import tr
 
 _STOPS = (
     "#ff4573",  # Create Chart
@@ -78,7 +79,7 @@ class MastheadHeader(QWidget):
         # ---- Embedded settings button (absolute child) ----
         self._btn = QToolButton(self)
         self._btn.setObjectName("tooltip_btn")
-        self._btn.setToolTip("Preferences")
+        self._btn.setToolTip(tr("Preferences"))
         self._btn.setFixedSize(QSize(44, 44))
         self._btn.clicked.connect(self.settings_clicked)
         self._load_settings_icon()
@@ -86,7 +87,7 @@ class MastheadHeader(QWidget):
         # ---- Embedded tools button (absolute child, left of settings) ----
         self._tools_btn = QToolButton(self)
         self._tools_btn.setObjectName("tooltip_btn")
-        self._tools_btn.setToolTip("Tools")
+        self._tools_btn.setToolTip(tr("Tools"))
         self._tools_btn.setFixedSize(QSize(44, 44))
         self._tools_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._tools_btn.clicked.connect(self.tools_clicked)
