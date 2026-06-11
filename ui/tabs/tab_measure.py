@@ -1848,16 +1848,17 @@ class TabMeasure(QWidget):
                 if is_spectroscan(instr):
                     # XY table — reads patches individually, so the
                     # bidirectional "reading direction" note does not apply.
-                    msg = f"Chart instrument: {label}."
+                    msg = tr("Chart instrument: {label}.").format(label=label)
                 else:
                     value = self._detected_bidir_value()
                     if value == "disable":
-                        detail = "reading one direction only (-B)"
+                        detail = tr("reading one direction only (-B)")
                     elif value == "force":
-                        detail = "reading both directions (forced, -b)"
+                        detail = tr("reading both directions (forced, -b)")
                     else:
-                        detail = "using Argyll's default strip recognition"
-                    msg = f"Chart instrument: {label} → {detail}."
+                        detail = tr("using Argyll's default strip recognition")
+                    msg = tr("Chart instrument: {label} → {detail}.").format(
+                        label=label, detail=detail)
                 self._log.appendPlainText(msg)
                 self._instr_log_text = msg
 
@@ -2899,8 +2900,9 @@ class TabMeasure(QWidget):
         # enough — the keyboard event filter still passes f/b/n/d/Enter/Esc
         # through to chartread so the user can drive it manually.
         self._flash_status(
-            f"Spot mode: ready to read patch '{patch_id}'. "
-            "Press Enter to read, f/b to navigate, d when done.",
+            tr("Spot mode: ready to read patch '{patch}'. "
+               "Press Enter to read, f/b to navigate, d when done.").format(
+                patch=patch_id),
             duration_ms=10000,
         )
 
@@ -2980,28 +2982,27 @@ class TabMeasure(QWidget):
 
         is_coms = "communication" in reason.lower()
         if is_coms:
-            advice = (
+            advice = tr(
                 "<b>The instrument lost communication with the computer.</b><br><br>"
                 "Check that the instrument's cable is firmly connected (try a "
                 "different USB port or cable), make sure no other application is "
-                "using the device, then reconnect it before retrying.<br><br>"
-            )
+                "using the device, then reconnect it before retrying.") + "<br><br>"
         else:
-            advice = (
-                f"<b>The stripe could not be read:</b> {reason}<br><br>"
+            advice = tr(
+                "<b>The stripe could not be read:</b> {reason}<br><br>"
                 "Re-position your instrument at the beginning of the stripe and try again. "
                 "If the error keeps occurring, try scanning more slowly and steadily, or "
-                "raise the <i>Patch consistency tolerance</i> setting before the next run.<br><br>"
-            )
+                "raise the <i>Patch consistency tolerance</i> setting before the next run."
+            ).format(reason=reason) + "<br><br>"
 
         msg = QLabel(
             advice +
-            "&nbsp;&nbsp;<b>Retry</b> — read this same stripe again.<br>"
-            "&nbsp;&nbsp;<b>Skip Stripe</b> — leave this stripe unread for now and "
-            "jump to the next unread one. You can come back to it later in this session.<br>"
-            "&nbsp;&nbsp;<b>Save Partial &amp; Quit</b> — stop here and save what you "
-            "have read so far. Next time you load this chart, "
-            "<i>Continue Measurement</i> will pick up where you left off.",
+            tr("&nbsp;&nbsp;<b>Retry</b> — read this same stripe again.<br>"
+               "&nbsp;&nbsp;<b>Skip Stripe</b> — leave this stripe unread for now and "
+               "jump to the next unread one. You can come back to it later in this session.<br>"
+               "&nbsp;&nbsp;<b>Save Partial &amp; Quit</b> — stop here and save what you "
+               "have read so far. Next time you load this chart, "
+               "<i>Continue Measurement</i> will pick up where you left off."),
             dlg,
         )
         msg.setWordWrap(True)
@@ -3162,8 +3163,8 @@ class TabMeasure(QWidget):
             hdr.setStyleSheet("font-weight: 600; " + _plain_style)
             hfl.addWidget(hdr)
             for bullet_text in (
-                "Watch the <b>highlighted strip</b> in the preview panel on the right.",
-                "Or follow the <b>output field</b> below — it will name the strip.",
+                tr("Watch the <b>highlighted strip</b> in the preview panel on the right."),
+                tr("Or follow the <b>output field</b> below — it will name the strip."),
             ):
                 b = QLabel(tr("  •  {bullet_text}").format(bullet_text=bullet_text), dlg)
                 b.setWordWrap(True)
@@ -3207,9 +3208,9 @@ class TabMeasure(QWidget):
             sfl.setVerticalSpacing(7)
             sfl.setColumnStretch(1, 1)
             steps = [
-                ("1.", "Press <b>f</b> (forward) or <b>b</b> (back) until chartread shows the strip you want."),
-                ("2.", "Place your instrument on that strip and scan it."),
-                ("3.", "Repeat for each strip you want to update, then press <b>d</b> to finish and save."),
+                ("1.", tr("Press <b>f</b> (forward) or <b>b</b> (back) until chartread shows the strip you want.")),
+                ("2.", tr("Place your instrument on that strip and scan it.")),
+                ("3.", tr("Repeat for each strip you want to update, then press <b>d</b> to finish and save.")),
             ]
             for row, (num, text) in enumerate(steps):
                 n_lbl = QLabel(num)
@@ -3250,11 +3251,11 @@ class TabMeasure(QWidget):
             kfl.setVerticalSpacing(6)
             kfl.setColumnStretch(1, 1)
             key_rows = [
-                ("f", "Move to the next stripe"),
-                ("b", "Move back to the previous stripe"),
-                ("n", "Jump to the next unread stripe"),
-                ("d", "Finish and save when all stripes are done"),
-                ("Esc / q", "Quit without saving"),
+                ("f", tr("Move to the next stripe")),
+                ("b", tr("Move back to the previous stripe")),
+                ("n", tr("Jump to the next unread stripe")),
+                ("d", tr("Finish and save when all stripes are done")),
+                ("Esc / q", tr("Quit without saving")),
             ]
             for row, (key, desc) in enumerate(key_rows):
                 k = QLabel(key)
@@ -3428,13 +3429,13 @@ class TabMeasure(QWidget):
         layout.setContentsMargins(24, 20, 24, 20)
 
         if in_set:
-            body = (
-                f"<b>All stripes read — {n_total} reads of this chart are now saved.</b>"
+            body = tr(
+                "<b>All stripes read — {n} reads of this chart are now saved.</b>"
                 "<br><br>"
                 "Combining repeated reads of the same chart averages out instrument "
                 "noise and can improve profile accuracy.<br><br>"
                 "&nbsp;&nbsp;•&nbsp; <b>Average all reads &amp; build</b> — combine all "
-                f"{n_total} reads into one measurement, then continue to Build Profile.<br>"
+                "{n} reads into one measurement, then continue to Build Profile.<br>"
                 "&nbsp;&nbsp;•&nbsp; <b>Measure again to average</b> — read the whole "
                 "chart once more and add it to the set.<br>"
                 "&nbsp;&nbsp;•&nbsp; <b>Use last read only</b> — build from this most "
@@ -3443,9 +3444,9 @@ class TabMeasure(QWidget):
                 "instrument is set up again — this can take a few seconds and may ask you "
                 "to recalibrate before the next read starts, so a brief pause here is "
                 "normal.</span>"
-            )
+            ).format(n=n_total)
         else:
-            body = (
+            body = tr(
                 "<b>All stripes have been read successfully.</b><br><br>"
                 "&nbsp;&nbsp;•&nbsp; <b>Build Profile</b> — finalise the measurement and "
                 "go to the Build Profile tab.<br>"
@@ -3587,23 +3588,23 @@ class TabMeasure(QWidget):
             layout.setSpacing(16)
             layout.setContentsMargins(24, 20, 24, 20)
             _conn_bullet = (
-                "&nbsp;&nbsp;• connected to your Windows PC via USB<br>"
+                tr("&nbsp;&nbsp;• connected to your Windows PC via USB<br>")
                 if sys.platform == "win32" else
-                "&nbsp;&nbsp;• connected to your Mac via USB<br>"
+                tr("&nbsp;&nbsp;• connected to your Mac via USB<br>")
             )
             _driver_hint = (
-                "<br>If the instrument is connected but still not found, make sure the "
-                "Argyll WinUSB driver is installed for your device (use Argyll's "
-                "ArgyllInstallers tool or Zadig). See the Argyll documentation for details."
+                tr("<br>If the instrument is connected but still not found, make sure the "
+                   "Argyll WinUSB driver is installed for your device (use Argyll's "
+                   "ArgyllInstallers tool or Zadig). See the Argyll documentation for details.")
                 if sys.platform == "win32" else ""
             )
             msg = QLabel(
-                "<b>No measurement instrument was detected.</b><br><br>"
-                "Please make sure your instrument is:<br>"
+                tr("<b>No measurement instrument was detected.</b><br><br>"
+                   "Please make sure your instrument is:<br>")
                 + _conn_bullet +
-                "&nbsp;&nbsp;• switched on<br>"
-                "&nbsp;&nbsp;• not in use by another application<br><br>"
-                "Once the instrument is ready, press <b>Start Measurement</b> again."
+                tr("&nbsp;&nbsp;• switched on<br>"
+                   "&nbsp;&nbsp;• not in use by another application<br><br>"
+                   "Once the instrument is ready, press <b>Start Measurement</b> again.")
                 + _driver_hint,
                 dlg,
             )
@@ -3797,21 +3798,21 @@ class TabMeasure(QWidget):
             if cb.isVisible():
                 cb.setChecked(True)
             self._log.appendPlainText(
-                "\n[INFO] Measurement was interrupted — partial readings saved.\n"
-                f"Saved: {ti3}\n\n"
-                "→ Press Continue Measurement to resume where you left off, "
-                "or untick 'Refine / resume existing measurement (-r)' to start over."
+                "\n" + tr("[INFO] Measurement was interrupted — partial readings saved.")
+                + f"\nSaved: {ti3}\n\n"
+                + tr("→ Press Continue Measurement to resume where you left off, "
+                     "or untick 'Refine / resume existing measurement (-r)' to start over.")
             )
             self.measure_finished.emit(ti3)
         elif ti3_exists and (is_cal or self._guided_refinement_active):
             # Calibration and guided-refinement reads keep their dedicated flow.
             if is_cal:
-                next_step = "→ Next step: go to the '4. Calibration & Profiling' tab to create your calibration file."
+                next_step = tr("→ Next step: go to the '4. Calibration & Profiling' tab to create your calibration file.")
             else:
-                next_step = "→ Next step: go to the '4. Build Profile' tab to create your ICC profile."
+                next_step = tr("→ Next step: go to the '4. Build Profile' tab to create your ICC profile.")
             self._log.appendPlainText(
-                "\n[OK] Measurement complete.\n"
-                f"Saved: {ti3}\n\n"
+                "\n" + tr("[OK] Measurement complete.")
+                + f"\nSaved: {ti3}\n\n"
                 + next_step
             )
             self.measure_finished.emit(ti3)
@@ -3836,9 +3837,9 @@ class TabMeasure(QWidget):
             # and proceed straight to Build Profile (mirrors the cal/refinement
             # branch above, minus the dedicated next-step wording).
             self._log.appendPlainText(
-                "\n[OK] Measurement complete.\n"
-                f"Saved: {ti3}\n\n"
-                "→ Next step: go to the '4. Build Profile' tab to create your ICC profile."
+                "\n" + tr("[OK] Measurement complete.")
+                + f"\nSaved: {ti3}\n\n"
+                + tr("→ Next step: go to the '4. Build Profile' tab to create your ICC profile.")
             )
             self.measure_finished.emit(ti3)
             if self._auto_proceed:
@@ -3849,7 +3850,7 @@ class TabMeasure(QWidget):
             # "Calibration Required" dialog). Don't claim success or a saved
             # file that doesn't exist.
             self._log.appendPlainText(
-                "\n[INFO] Measurement stopped — no measurement (.ti3) file was created."
+                "\n" + tr("[INFO] Measurement stopped — no measurement (.ti3) file was created.")
             )
         self._auto_proceed = False
         self._log.ensureCursorVisible()
@@ -3941,20 +3942,20 @@ class TabMeasure(QWidget):
         layout.setContentsMargins(24, 20, 24, 20)
 
         if n_reads >= 2:
-            body = (
-                f"<b>Measurement complete — {n_reads} reads of this chart are saved.</b>"
+            body = tr(
+                "<b>Measurement complete — {n} reads of this chart are saved.</b>"
                 "<br><br>"
                 "Combining repeated reads of the same chart averages out instrument "
                 "noise and can improve profile accuracy.<br><br>"
                 "&nbsp;&nbsp;•&nbsp; <b>Average all reads &amp; build</b> — combine all "
-                f"{n_reads} reads into one measurement, then continue to Build Profile.<br>"
+                "{n} reads into one measurement, then continue to Build Profile.<br>"
                 "&nbsp;&nbsp;•&nbsp; <b>Use last read only</b> — build from the most "
                 "recent read and ignore the others.<br>"
                 "&nbsp;&nbsp;•&nbsp; <b>Measure again</b> — read the chart once more and "
                 "add it to the set."
-            )
+            ).format(n=n_reads)
         else:
-            body = (
+            body = tr(
                 "<b>Measurement complete — your readings have been saved.</b><br><br>"
                 "Reading the same chart a second time and averaging the two results "
                 "reduces instrument noise and can improve profile accuracy.<br><br>"
@@ -4048,13 +4049,13 @@ class TabMeasure(QWidget):
         def _on_avg_finish(result: Path | None) -> None:
             if result is None:
                 fail = self._avg_runner.primary_failure()
-                detail = fail[1] if fail else "see the output log above."
+                detail = fail[1] if fail else tr("see the output log above.")
                 self._log.appendPlainText(f"[ERROR] Averaging failed — {detail}")
                 self._show_average_failed_dialog(detail)
                 return
             self._log.appendPlainText(
-                f"[OK] Averaged measurement saved: {result.name}\n"
-                "→ Next step: go to the '4. Build Profile' tab to create your ICC profile."
+                tr("[OK] Averaged measurement saved: {name}").format(name=result.name)
+                + "\n" + tr("→ Next step: go to the '4. Build Profile' tab to create your ICC profile.")
             )
             self.measure_finished.emit(result)
             self.proceed_to_profile.emit()
