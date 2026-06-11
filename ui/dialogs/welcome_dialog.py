@@ -49,10 +49,10 @@ if TYPE_CHECKING:
 WORKFLOWS: list[dict] = [
     {
         "key": "first_profile",
-        "title": "Build my first ICC profile",
-        "subtitle": "The full walk-through from blank chart to finished profile.",
+        "title": tr("Build my first ICC profile"),
+        "subtitle": tr("The full walk-through from blank chart to finished profile."),
         "steps": [
-            (1, "On the Create Chart tab, pick which instrument you'll measure "
+            (1, tr("On the Create Chart tab, pick which instrument you'll measure "
                 "with (e.g. i1Pro) and choose your paper size. Set the number "
                 "of pages — more pages means more patches and a more accurate "
                 "profile. Two or three A4 pages is a sensible starting point "
@@ -64,16 +64,16 @@ WORKFLOWS: list[dict] = [
                 "“EpsonP900_HahnemuhlePhotoRag_2026-05”; avoid spaces and "
                 "special characters. Click “Create Chart”. ChromIQ writes a "
                 "chart TIFF plus a .ti2 file that records exactly where every "
-                "patch sits on the page."),
-            (2, "Move to the Print Chart tab and pick your printer and media. "
+                "patch sits on the page.")),
+            (2, tr("Move to the Print Chart tab and pick your printer and media. "
                 "Driver colour management must be OFF — if the driver re-maps "
                 "colours the patches won't match their definition and the "
                 "profile will be wrong. On macOS ChromIQ disables it "
                 "automatically; just confirm nothing in the print dialog has "
                 "switched it back on. On Windows and other systems you need "
                 "to switch it off yourself in the driver dialog. "
-                "Click “Print”."),
-            (3, "On the Measure tab, connect and switch on your "
+                "Click “Print”.")),
+            (3, tr("On the Measure tab, connect and switch on your "
                 "spectrophotometer, then place the printed chart on a white "
                 "surface (a plain sheet of paper underneath works perfectly) — "
                 "a coloured or dark backing can bleed through thin stock and "
@@ -84,8 +84,8 @@ WORKFLOWS: list[dict] = [
                 "motion, turn this option OFF first — leaving it on while you "
                 "sweep bidirectionally is the classic cause of mis-recognised "
                 "strips and bad data. Click “Measure Chart” and follow the "
-                "strip-by-strip prompts."),
-            (4, "On the Build Profile tab the new .ti3 measurement is "
+                "strip-by-strip prompts.")),
+            (4, tr("On the Build Profile tab the new .ti3 measurement is "
                 "already loaded. If you like, fill in the optional metadata "
                 "fields (Description, Manufacturer, Copyright) — they get "
                 "embedded in the .icc header so colour-management apps can "
@@ -93,33 +93,33 @@ WORKFLOWS: list[dict] = [
                 "build finishes a result popup appears — install the .icc "
                 "system-wide from there, or jump to Check & Refine to "
                 "verify its accuracy and start guided refinement (the steps "
-                "below) for a noticeably more accurate profile."),
-            (5, "Optional — On the Check & Refine tab click “Analyse”. "
+                "below) for a noticeably more accurate profile.")),
+            (5, tr("Optional — On the Check & Refine tab click “Analyse”. "
                 "ChromIQ runs profcheck and flags any patches whose ΔE is "
                 "above your refinement threshold (2.0 is a sensible starting "
                 "point). If outliers are found, ChromIQ offers to send you "
-                "back to the Measure tab to re-read only the affected strips.",
+                "back to the Measure tab to re-read only the affected strips."),
                 True),
-            (3, "Optional — Re-measure the strips ChromIQ marks. The new "
+            (3, tr("Optional — Re-measure the strips ChromIQ marks. The new "
                 "readings are merged into the .ti3; patches that were already "
-                "good are kept as they are.",
+                "good are kept as they are."),
                 True),
-            (4, "Optional — Click “Build Profile” again. The refined .ti3 "
-                "produces a more accurate profile.",
+            (4, tr("Optional — Click “Build Profile” again. The refined .ti3 "
+                "produces a more accurate profile."),
                 True),
-            (5, "Optional — Run “Analyse” one more time to confirm the "
+            (5, tr("Optional — Run “Analyse” one more time to confirm the "
                 "worst outliers are now below threshold. Repeat the refine "
                 "loop as often as you like — each pass should reduce ΔE "
-                "further.",
+                "further."),
                 True),
         ],
     },
     {
         "key": "two_pass",
-        "title": "Build a high-quality profile (2-pass)",
-        "subtitle": "A pre-conditioning pass produces a sharper second profile.",
+        "title": tr("Build a high-quality profile (2-pass)"),
+        "subtitle": tr("A pre-conditioning pass produces a sharper second profile."),
         "steps": [
-            (1, "Start a fresh chart on the Create Chart tab. Pick the "
+            (1, tr("Start a fresh chart on the Create Chart tab. Pick the "
                 "instrument and paper size as normal. For this first pass "
                 "you can keep the page count low — one A4 page is plenty. "
                 "The pre-conditioning profile is throwaway, its only job is "
@@ -133,16 +133,16 @@ WORKFLOWS: list[dict] = [
                 "“EpsonP900_HahnemuhlePhotoRag_pre_2026-05”; avoid spaces "
                 "and special characters. Click “Create Chart”. This first "
                 "chart will produce the pre-conditioning profile — not yet "
-                "the final one."),
-            (2, "Move to the Print Chart tab and pick your printer and media. "
+                "the final one.")),
+            (2, tr("Move to the Print Chart tab and pick your printer and media. "
                 "Driver colour management must be OFF — if the driver re-maps "
                 "colours the patches won't match their definition and the "
                 "first-pass profile will be wrong. On macOS ChromIQ disables "
                 "it automatically; just confirm nothing in the print dialog "
                 "has switched it back on. On Windows and other systems you "
                 "need to switch it off yourself in the driver dialog. "
-                "Click “Print”."),
-            (3, "On the Measure tab, connect and switch on your "
+                "Click “Print”.")),
+            (3, tr("On the Measure tab, connect and switch on your "
                 "spectrophotometer, then place the printed chart on a white "
                 "surface (a plain sheet of paper underneath works perfectly) — "
                 "a coloured or dark backing can bleed through thin stock and "
@@ -153,24 +153,24 @@ WORKFLOWS: list[dict] = [
                 "motion, turn this option OFF first — leaving it on while you "
                 "sweep bidirectionally is the classic cause of mis-recognised "
                 "strips and bad data. Click “Measure Chart” and follow the "
-                "strip-by-strip prompts."),
-            (4, "On the Build Profile tab click “Build Profile” to "
+                "strip-by-strip prompts.")),
+            (4, tr("On the Build Profile tab click “Build Profile” to "
                 "produce the first .icc. Treat this profile as a colour-"
                 "space map rather than a finished result. In the result popup "
                 "(or in Check & Refine) click “Use as Pre-conditioning "
                 "Profile” — ChromIQ jumps back to the Create Chart tab with "
-                "the new .icc loaded as the pre-conditioning profile."),
-            (1, "Optionally raise the patch count — a second-pass chart "
+                "the new .icc loaded as the pre-conditioning profile.")),
+            (1, tr("Optionally raise the patch count — a second-pass chart "
                 "benefits from more patches because they're placed where "
                 "the printer is most non-linear. Click “Create Chart” to "
-                "generate the high-quality chart."),
-            (2, "Print the new chart on the Print Chart tab. Driver colour "
+                "generate the high-quality chart.")),
+            (2, tr("Print the new chart on the Print Chart tab. Driver colour "
                 "management must be OFF — on macOS ChromIQ disables it "
                 "automatically; just confirm nothing in the print dialog has "
                 "switched it back on. On Windows and other systems you need "
                 "to switch it off yourself in the driver dialog. "
-                "Click “Print”."),
-            (3, "On the Measure tab, connect the spectrophotometer and place "
+                "Click “Print”.")),
+            (3, tr("On the Measure tab, connect the spectrophotometer and place "
                 "the printed chart on a white surface. Check the “Disable "
                 "bidirectional reading” option: it's ON by default, the "
                 "safest setting for any spectro. If you use an i1Pro and "
@@ -179,37 +179,37 @@ WORKFLOWS: list[dict] = [
                 "leaving it on while you sweep bidirectionally is the "
                 "classic cause of mis-recognised strips and bad data. "
                 "Click “Measure Chart” and follow the strip-by-strip "
-                "prompts."),
-            (4, "Click “Build Profile” one more time. The result is "
+                "prompts.")),
+            (4, tr("Click “Build Profile” one more time. The result is "
                 "noticeably more accurate than the first-pass profile "
                 "because targen could place patches where they actually "
-                "mattered. This is the profile to install."),
-            (5, "Optional — On the Check & Refine tab click “Analyse”. "
+                "mattered. This is the profile to install.")),
+            (5, tr("Optional — On the Check & Refine tab click “Analyse”. "
                 "ChromIQ runs profcheck and flags any patches whose ΔE is "
                 "above your refinement threshold. After a clean 2-pass build "
                 "the result is often already good enough; the steps below "
-                "are for squeezing out the last few outliers.",
+                "are for squeezing out the last few outliers."),
                 True),
-            (3, "Optional — Re-measure the strips ChromIQ marks. The new "
+            (3, tr("Optional — Re-measure the strips ChromIQ marks. The new "
                 "readings are merged into the .ti3; patches that were already "
-                "good are kept as they are.",
+                "good are kept as they are."),
                 True),
-            (4, "Optional — Click “Build Profile” again. The refined .ti3 "
-                "produces a more accurate profile.",
+            (4, tr("Optional — Click “Build Profile” again. The refined .ti3 "
+                "produces a more accurate profile."),
                 True),
-            (5, "Optional — Run “Analyse” one more time to confirm the "
+            (5, tr("Optional — Run “Analyse” one more time to confirm the "
                 "worst outliers are now below threshold. Repeat the refine "
                 "loop as often as you like — each pass should reduce ΔE "
-                "further.",
+                "further."),
                 True),
         ],
     },
     {
         "key": "improve_existing_profile",
-        "title": "Improve an existing ICC profile",
-        "subtitle": "Seed ChromIQ with a current profile to build a sharper one.",
+        "title": tr("Improve an existing ICC profile"),
+        "subtitle": tr("Seed ChromIQ with a current profile to build a sharper one."),
         "steps": [
-            (1, "On the Create Chart tab, find the “Refinement (Optional)” "
+            (1, tr("On the Create Chart tab, find the “Refinement (Optional)” "
                 "section, tick “Refinement profile”, then click “Select "
                 "pre-conditioning profile” and pick the existing .icc for "
                 "this printer + paper combination. Choose the instrument "
@@ -218,16 +218,16 @@ WORKFLOWS: list[dict] = [
                 "“EpsonP900_HahnemuhlePhotoRag_v2_2026-05”. Because the "
                 "seed profile tells ChromIQ exactly where your printer is "
                 "most non-linear, raise the patch count so those tricky "
-                "regions get more samples. Click “Create Chart”."),
-            (2, "Move to the Print Chart tab and pick your printer and media. "
+                "regions get more samples. Click “Create Chart”.")),
+            (2, tr("Move to the Print Chart tab and pick your printer and media. "
                 "Driver colour management must be OFF — if the driver re-maps "
                 "colours the patches won't match their definition and the "
                 "refined profile will be wrong. On macOS ChromIQ disables it "
                 "automatically; just confirm nothing in the print dialog has "
                 "switched it back on. On Windows and other systems you need "
                 "to switch it off yourself in the driver dialog. "
-                "Click “Print”."),
-            (3, "On the Measure tab, connect and switch on your "
+                "Click “Print”.")),
+            (3, tr("On the Measure tab, connect and switch on your "
                 "spectrophotometer, then place the printed chart on a white "
                 "surface (a plain sheet of paper underneath works perfectly) — "
                 "a coloured or dark backing can bleed through thin stock and "
@@ -238,8 +238,8 @@ WORKFLOWS: list[dict] = [
                 "motion, turn this option OFF first — leaving it on while you "
                 "sweep bidirectionally is the classic cause of mis-recognised "
                 "strips and bad data. Click “Measure Chart” and follow the "
-                "strip-by-strip prompts."),
-            (4, "On the Build Profile tab the new .ti3 is already loaded. "
+                "strip-by-strip prompts.")),
+            (4, tr("On the Build Profile tab the new .ti3 is already loaded. "
                 "If you like, fill in the optional metadata fields "
                 "(Description, Manufacturer, Copyright) — they get embedded "
                 "in the .icc header so colour-management apps can identify "
@@ -247,42 +247,42 @@ WORKFLOWS: list[dict] = [
                 "result popup appears — the new .icc is more accurate than "
                 "the seed profile because ChromIQ placed patches where they "
                 "mattered. Install it from the popup, or jump to Check & "
-                "Refine to verify it before installing."),
-            (5, "Optional — On the Check & Refine tab click “Analyse”. "
+                "Refine to verify it before installing.")),
+            (5, tr("Optional — On the Check & Refine tab click “Analyse”. "
                 "ChromIQ runs profcheck and flags any patches whose ΔE is "
                 "above your refinement threshold (2.0 is a sensible starting "
                 "point). If outliers are found, ChromIQ offers to send you "
-                "back to the Measure tab to re-read only the affected strips.",
+                "back to the Measure tab to re-read only the affected strips."),
                 True),
-            (3, "Optional — Re-measure the strips ChromIQ marks. The new "
+            (3, tr("Optional — Re-measure the strips ChromIQ marks. The new "
                 "readings are merged into the .ti3; patches that were already "
-                "good are kept as they are.",
+                "good are kept as they are."),
                 True),
-            (4, "Optional — Click “Build Profile” again. The refined .ti3 "
-                "produces a more accurate profile.",
+            (4, tr("Optional — Click “Build Profile” again. The refined .ti3 "
+                "produces a more accurate profile."),
                 True),
-            (5, "Optional — Run “Analyse” one more time to confirm the "
+            (5, tr("Optional — Run “Analyse” one more time to confirm the "
                 "worst outliers are now below threshold. Repeat the refine "
                 "loop as often as you like — each pass should reduce ΔE "
-                "further.",
+                "further."),
                 True),
         ],
     },
     {
         "key": "print_chart",
-        "title": "Print an existing test chart",
-        "subtitle": "You already have a chart on disk and just want to print it.",
+        "title": tr("Print an existing test chart"),
+        "subtitle": tr("You already have a chart on disk and just want to print it."),
         "steps": [
-            (2, "On the Print Chart tab, click “Load .ti2” and pick the "
+            (2, tr("On the Print Chart tab, click “Load .ti2” and pick the "
                 "chart definition file. ChromIQ finds the matching TIFF "
-                "pages automatically — you don't pick them by hand."),
-            (2, "Choose your printer, paper type and any quality settings "
+                "pages automatically — you don't pick them by hand.")),
+            (2, tr("Choose your printer, paper type and any quality settings "
                 "the print dialog exposes. Make sure driver colour "
-                "management is OFF, just like a fresh print."),
-            (2, "Click “Print”. The TIFF is sent as raw PostScript so no "
+                "management is OFF, just like a fresh print.")),
+            (2, tr("Click “Print”. The TIFF is sent as raw PostScript so no "
                 "driver filter alters the patches on the way to the "
-                "printer."),
-            (3, "Once the print is dry, head to the Measure tab and connect "
+                "printer.")),
+            (3, tr("Once the print is dry, head to the Measure tab and connect "
                 "your spectrophotometer, then place the chart on a white "
                 "surface (a plain sheet of paper underneath works). Before "
                 "scanning, check the “Disable bidirectional reading” option "
@@ -290,8 +290,8 @@ WORKFLOWS: list[dict] = [
                 "i1Pro and you're used to scanning each strip in one "
                 "continuous left-and-right motion, turn it OFF first. "
                 "Click “Measure Chart” and follow the strip-by-strip "
-                "prompts."),
-            (4, "On the Build Profile tab the new .ti3 is already loaded. "
+                "prompts.")),
+            (4, tr("On the Build Profile tab the new .ti3 is already loaded. "
                 "If you like, fill in the optional metadata fields "
                 "(Description, Manufacturer, Copyright) — they get embedded "
                 "in the .icc header so colour-management apps can identify "
@@ -299,49 +299,49 @@ WORKFLOWS: list[dict] = [
                 "finishes a result popup appears — install the .icc system-"
                 "wide from there, or jump to Check & Refine to verify its "
                 "accuracy and start guided refinement (the steps below) for "
-                "a noticeably more accurate profile."),
-            (5, "Optional — On the Check & Refine tab click “Analyse”. "
+                "a noticeably more accurate profile.")),
+            (5, tr("Optional — On the Check & Refine tab click “Analyse”. "
                 "ChromIQ runs profcheck and flags any patches whose ΔE is "
                 "above your refinement threshold (2.0 is a sensible starting "
                 "point). If outliers are found, ChromIQ offers to send you "
-                "back to the Measure tab to re-read only the affected strips.",
+                "back to the Measure tab to re-read only the affected strips."),
                 True),
-            (3, "Optional — Re-measure the strips ChromIQ marks. The new "
+            (3, tr("Optional — Re-measure the strips ChromIQ marks. The new "
                 "readings are merged into the .ti3; patches that were already "
-                "good are kept as they are.",
+                "good are kept as they are."),
                 True),
-            (4, "Optional — Click “Build Profile” again. The refined .ti3 "
-                "produces a more accurate profile.",
+            (4, tr("Optional — Click “Build Profile” again. The refined .ti3 "
+                "produces a more accurate profile."),
                 True),
-            (5, "Optional — Run “Analyse” one more time to confirm the "
+            (5, tr("Optional — Run “Analyse” one more time to confirm the "
                 "worst outliers are now below threshold. Repeat the refine "
                 "loop as often as you like — each pass should reduce ΔE "
-                "further.",
+                "further."),
                 True),
         ],
     },
     {
         "key": "measure_existing",
-        "title": "Measure a chart I already printed",
-        "subtitle": "Jump straight to reading patches with your spectrophotometer.",
+        "title": tr("Measure a chart I already printed"),
+        "subtitle": tr("Jump straight to reading patches with your spectrophotometer."),
         "steps": [
-            (3, "On the Measure tab, click “Load Chart File” and pick the "
+            (3, tr("On the Measure tab, click “Load Chart File” and pick the "
                 ".ti1 or .ti2 that matches your printed chart. The .ti2 is "
                 "preferred where available — it contains the exact patch "
-                "positions printtarg used."),
-            (3, "Connect and switch on the spectrophotometer. ChromIQ "
+                "positions printtarg used.")),
+            (3, tr("Connect and switch on the spectrophotometer. ChromIQ "
                 "detects it automatically; a green status pill appears in "
-                "the toolbar when it's ready."),
-            (3, "Check the “Disable bidirectional reading” option before "
+                "the toolbar when it's ready.")),
+            (3, tr("Check the “Disable bidirectional reading” option before "
                 "you start. It's ON by default — safe for any spectro but "
                 "slower. If you use an i1Pro and you're used to scanning "
                 "each strip in one continuous left-and-right sweep, turn "
                 "it OFF first; leaving it on while you scan bidirectionally "
-                "causes mis-recognised strips and bad measurements."),
-            (3, "Click “Measure Chart” and follow the strip-by-strip "
+                "causes mis-recognised strips and bad measurements.")),
+            (3, tr("Click “Measure Chart” and follow the strip-by-strip "
                 "prompts. Results save as a .ti3 next to the chart, "
-                "ready for the Build Profile tab."),
-            (4, "On the Build Profile tab the new .ti3 is already loaded. "
+                "ready for the Build Profile tab.")),
+            (4, tr("On the Build Profile tab the new .ti3 is already loaded. "
                 "If you like, fill in the optional metadata fields "
                 "(Description, Manufacturer, Copyright) — they get embedded "
                 "in the .icc header so colour-management apps can identify "
@@ -349,108 +349,108 @@ WORKFLOWS: list[dict] = [
                 "finishes a result popup appears — install the .icc system-"
                 "wide from there, or jump to Check & Refine to verify its "
                 "accuracy and start guided refinement (the steps below) for "
-                "a noticeably more accurate profile."),
-            (5, "Optional — On the Check & Refine tab click “Analyse”. "
+                "a noticeably more accurate profile.")),
+            (5, tr("Optional — On the Check & Refine tab click “Analyse”. "
                 "ChromIQ runs profcheck and flags any patches whose ΔE is "
                 "above your refinement threshold (2.0 is a sensible starting "
                 "point). If outliers are found, ChromIQ offers to send you "
-                "back to the Measure tab to re-read only the affected strips.",
+                "back to the Measure tab to re-read only the affected strips."),
                 True),
-            (3, "Optional — Re-measure the strips ChromIQ marks. The new "
+            (3, tr("Optional — Re-measure the strips ChromIQ marks. The new "
                 "readings are merged into the .ti3; patches that were already "
-                "good are kept as they are.",
+                "good are kept as they are."),
                 True),
-            (4, "Optional — Click “Build Profile” again. The refined .ti3 "
-                "produces a more accurate profile.",
+            (4, tr("Optional — Click “Build Profile” again. The refined .ti3 "
+                "produces a more accurate profile."),
                 True),
-            (5, "Optional — Run “Analyse” one more time to confirm the "
+            (5, tr("Optional — Run “Analyse” one more time to confirm the "
                 "worst outliers are now below threshold. Repeat the refine "
                 "loop as often as you like — each pass should reduce ΔE "
-                "further.",
+                "further."),
                 True),
         ],
     },
     {
         "key": "build_from_measurement",
-        "title": "Build a profile from an existing measurement",
-        "subtitle": "You have a .ti3 file — turn it into an ICC profile.",
+        "title": tr("Build a profile from an existing measurement"),
+        "subtitle": tr("You have a .ti3 file — turn it into an ICC profile."),
         "steps": [
-            (4, "On the Build Profile tab, click “Load .ti3” and pick your "
+            (4, tr("On the Build Profile tab, click “Load .ti3” and pick your "
                 "existing measurement file. The matching .ti1/.ti2 is "
-                "found and loaded automatically."),
-            (4, "If you like, fill in the optional metadata fields "
+                "found and loaded automatically.")),
+            (4, tr("If you like, fill in the optional metadata fields "
                 "(Description, Manufacturer, Copyright). These get embedded "
                 "in the .icc header so colour-management apps can identify "
                 "the profile later — you can leave them empty if you don't "
-                "care."),
-            (4, "Click “Build Profile”. The .icc lands next to the .ti3 "
-                "in the same folder."),
-            (4, "A result popup appears with three actions: install the "
+                "care.")),
+            (4, tr("Click “Build Profile”. The .icc lands next to the .ti3 "
+                "in the same folder.")),
+            (4, tr("A result popup appears with three actions: install the "
                 "profile to your system colour folder, jump to Check & "
                 "Refine to inspect its accuracy, or feed it back as a "
                 "pre-conditioning profile (workflow 2). You can dismiss "
-                "the popup and come back to any of these later."),
-            (5, "Optional — On the Check & Refine tab click “Analyse”. "
+                "the popup and come back to any of these later.")),
+            (5, tr("Optional — On the Check & Refine tab click “Analyse”. "
                 "ChromIQ runs profcheck and flags any patches whose ΔE is "
                 "above your refinement threshold (2.0 is a sensible starting "
                 "point). If outliers are found, ChromIQ offers to send you "
-                "back to the Measure tab to re-read only the affected strips.",
+                "back to the Measure tab to re-read only the affected strips."),
                 True),
-            (3, "Optional — Re-measure the strips ChromIQ marks. The new "
+            (3, tr("Optional — Re-measure the strips ChromIQ marks. The new "
                 "readings are merged into the .ti3; patches that were already "
-                "good are kept as they are.",
+                "good are kept as they are."),
                 True),
-            (4, "Optional — Click “Build Profile” again. The refined .ti3 "
-                "produces a more accurate profile.",
+            (4, tr("Optional — Click “Build Profile” again. The refined .ti3 "
+                "produces a more accurate profile."),
                 True),
-            (5, "Optional — Run “Analyse” one more time to confirm the "
+            (5, tr("Optional — Run “Analyse” one more time to confirm the "
                 "worst outliers are now below threshold. Repeat the refine "
                 "loop as often as you like — each pass should reduce ΔE "
-                "further.",
+                "further."),
                 True),
         ],
     },
     {
         "key": "refine",
-        "title": "Refine an existing profile",
-        "subtitle": "Re-measure only the strips where ΔE is worst.",
+        "title": tr("Refine an existing profile"),
+        "subtitle": tr("Re-measure only the strips where ΔE is worst."),
         "steps": [
-            (5, "On the Check & Refine tab, click “Load .ti3” and open the "
+            (5, tr("On the Check & Refine tab, click “Load .ti3” and open the "
                 "measurement of the profile you want to improve. The "
-                "matching .icc loads automatically."),
-            (5, "Click “Analyse”. ChromIQ runs profcheck and looks for "
+                "matching .icc loads automatically.")),
+            (5, tr("Click “Analyse”. ChromIQ runs profcheck and looks for "
                 "patches whose ΔE is above your refinement threshold "
                 "(configurable in the panel — 2.0 is a sensible "
-                "starting point)."),
-            (5, "If outlier patches are found, ChromIQ offers to send you "
+                "starting point).")),
+            (5, tr("If outlier patches are found, ChromIQ offers to send you "
                 "back to the Measure tab to re-read only the affected "
                 "strips — much faster than reprinting and re-measuring "
-                "the whole chart."),
-            (3, "Re-measure the strips ChromIQ marks. The new readings "
+                "the whole chart.")),
+            (3, tr("Re-measure the strips ChromIQ marks. The new readings "
                 "are merged into the .ti3 — old patches are kept where "
-                "they were already good."),
-            (4, "Click “Build Profile” again. The refined .ti3 produces "
+                "they were already good.")),
+            (4, tr("Click “Build Profile” again. The refined .ti3 produces "
                 "a more accurate profile, and you can repeat this cycle "
-                "until the worst outliers are below threshold."),
+                "until the worst outliers are below threshold.")),
         ],
     },
     {
         "key": "check_visualise",
-        "title": "Visualise a profile's gamut",
-        "subtitle": "See in 3D what colours a printer can and can't reproduce.",
+        "title": tr("Visualise a profile's gamut"),
+        "subtitle": tr("See in 3D what colours a printer can and can't reproduce."),
         "steps": [
-            (5, "On the Check & Refine tab, load the .icc profile you "
+            (5, tr("On the Check & Refine tab, load the .icc profile you "
                 "want to inspect. A matching .ti3 is helpful but not "
-                "required for the gamut viewer."),
-            (5, "Open the Gamut Viewer pane. ChromIQ runs iccgamut on the "
+                "required for the gamut viewer.")),
+            (5, tr("Open the Gamut Viewer pane. ChromIQ runs iccgamut on the "
                 "profile and renders the printer's colour volume as a 3D "
-                "mesh that you can rotate, zoom and pan freely."),
-            (5, "Optionally overlay a reference gamut (e.g. sRGB or "
+                "mesh that you can rotate, zoom and pan freely.")),
+            (5, tr("Optionally overlay a reference gamut (e.g. sRGB or "
                 "AdobeRGB) to see at a glance which colours of the "
                 "reference space the printer can hit and which it has "
-                "to clip."),
-            (5, "This workflow is read-only — no files are written, so "
-                "you can poke around freely without changing anything."),
+                "to clip.")),
+            (5, tr("This workflow is read-only — no files are written, so "
+                "you can poke around freely without changing anything.")),
         ],
     },
 ]
@@ -1097,7 +1097,9 @@ class WelcomeDialog(QDialog):
 
                 fm_r = QFontMetricsF(font_r)
                 fm_i = QFontMetricsF(font_i)
-                text_pre = "Welcome to Chrom"
+                # The trailing "Chrom" stays attached to the painted
+                # magenta "IQ" wordmark; only the greeting translates.
+                text_pre = tr("Welcome to") + " Chrom"
                 text_iq  = "IQ"
                 wpre = fm_r.horizontalAdvance(text_pre)
                 wiq  = fm_i.horizontalAdvance(text_iq)

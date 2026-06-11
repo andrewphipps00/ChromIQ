@@ -22,7 +22,6 @@ from core.logger import get_logger
 from core.settings import AppSettings
 from core.updater import UpdateChecker
 from ui.dialogs.settings_dialog import SettingsDialog
-from ui.dialogs.welcome_dialog import WelcomeDialog
 from ui.gradient_overlay import GradientOverlay
 from ui.masthead_header import MastheadHeader
 from ui.spectrum_tab_bar import SpectrumTabBar
@@ -460,6 +459,9 @@ class MainWindow(QMainWindow):
                 return
             except RuntimeError:
                 self._welcome_dialog = None
+        # Imported lazily: welcome_dialog translates its guide texts at
+        # module level, which must happen after set_language().
+        from ui.dialogs.welcome_dialog import WelcomeDialog
         dlg = WelcomeDialog(
             self._settings,
             parent=self,
