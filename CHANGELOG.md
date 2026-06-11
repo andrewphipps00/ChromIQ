@@ -1,5 +1,16 @@
 # Changelog
 
+## v3.9.3
+
+### ✨ New
+- **Italian (Italiano)** — complete translation (1,203 strings + all
+  parameter tooltips), in the same extensive, friendly style as the
+  other languages.
+- **Norwegian dialog buttons now translated.** Qt ships no Norwegian
+  translation of its stock dialog buttons (OK/Cancel/Close/Yes/No…), so
+  they stayed English. ChromIQ now answers those lookups from its own
+  fallback catalog whenever Qt's translation is missing.
+
 ## v3.9.2
 
 ### ✨ New
