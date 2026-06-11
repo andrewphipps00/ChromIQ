@@ -139,9 +139,68 @@ def install_qt_translator(app) -> None:
                 _qt_translator = t
                 log.info("Qt base translations loaded: qtbase_%s", cand)
                 return
+        # PyQt6 ships no qtbase .qm for this language (e.g. Norwegian).
+        # Fall back to our own minimal catalog of Qt's standard-button
+        # strings so OK/Cancel/Close still follow the UI language.
+        fb = _load_qt_fallback(_language)
+        if fb:
+            t = _JsonQtTranslator(fb, app)
+            app.installTranslator(t)
+            _qt_translator = t
+            log.info("Qt fallback button translations loaded for %r", _language)
+            return
         log.warning("No qtbase translations for %r in %s", _language, tr_dir)
     except Exception:
         log.warning("Could not install Qt base translations", exc_info=True)
+
+
+# Qt-internal contexts whose user-visible strings the fallback covers.
+_QT_FALLBACK_CONTEXTS = frozenset(
+    {"QPlatformTheme", "QDialogButtonBox", "QMessageBox", "QGnomeTheme"}
+)
+
+
+def _load_qt_fallback(code: str) -> dict | None:
+    """data/i18n/qt/<code>.json — flat source→translation map for Qt's
+    standard-button strings. Kept outside data/i18n/*.json so the language
+    combobox and the catalog-hygiene tests don't pick it up."""
+    path = resource_path(f"data/i18n/qt/{code}.json")
+    if not path.exists():
+        return None
+    try:
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        log.warning("Broken Qt fallback catalog %s", path, exc_info=True)
+        return None
+
+
+def _make_json_qt_translator():
+    from PyQt6.QtCore import QTranslator
+
+    class _JsonQtTranslator(QTranslator):
+        """Answers Qt-internal lookups from a plain dict; returning an
+        empty string lets Qt fall through to the untranslated source."""
+
+        def __init__(self, catalog: dict, parent=None):
+            super().__init__(parent)
+            self._catalog = catalog
+
+        def isEmpty(self) -> bool:  # noqa: N802 — Qt naming
+            return False
+
+        def translate(self, context, source, disambiguation=None, n=-1):
+            if context in _QT_FALLBACK_CONTEXTS:
+                return self._catalog.get(source, "")
+            return ""
+
+    return _JsonQtTranslator
+
+
+try:
+    _JsonQtTranslator = _make_json_qt_translator()
+except Exception:  # PyQt6 absent (pure-logic test environments)
+    _JsonQtTranslator = None
 
 
 # ----------------------------------------------------------------------

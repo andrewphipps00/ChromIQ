@@ -170,3 +170,18 @@ def test_label_count_mismatch_keeps_english_labels(tmp_path, monkeypatch):
     out = i18n.translate_parameters(params)
     assert out["targen"][0]["name"] == "Gerätetyp"
     assert out["targen"][0]["labels"] == ["a", "b", "c"]
+
+
+def test_qt_fallback_translates_norwegian_buttons(qapp):
+    """PyQt6 ships no qtbase_nb.qm — the JSON fallback in data/i18n/qt/
+    must still translate Qt's standard dialog buttons for Norwegian."""
+    from PyQt6.QtCore import QCoreApplication
+    i18n.set_language("no")
+    i18n.install_qt_translator(qapp)
+    try:
+        assert QCoreApplication.translate("QPlatformTheme", "Cancel") == "Avbryt"
+        assert QCoreApplication.translate("QPlatformTheme", "Close") == "Lukk"
+    finally:
+        if i18n._qt_translator is not None:
+            qapp.removeTranslator(i18n._qt_translator)
+            i18n._qt_translator = None
