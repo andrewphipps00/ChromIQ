@@ -1,5 +1,35 @@
 # Changelog
 
+## v3.9.0
+
+ChromIQ now speaks your language. This release introduces a UI language
+setting with complete German and Dutch translations.
+
+### ✨ New
+- **Language setting** (Settings → Appearance & Language). Every menu,
+  button, dialog, tooltip, guide and help text is translatable; the change
+  applies on the next start so nothing jumps around mid-session. Output from
+  the ArgyllCMS tools in the log stays English — it comes from the tools
+  themselves.
+- **German (Deutsch)** — complete translation (1,203 strings + all
+  parameter tooltips), written in the same extensive, friendly style as the
+  English texts.
+- **Dutch (Nederlands)** — complete translation, same coverage.
+- Qt's standard dialog buttons (OK/Cancel/…) follow the chosen language.
+
+### 🐞 Fixes
+- Tool dialogs' main action buttons (Convert/Average/Merge/Verify) and the
+  3D patch-cube statistics line are now translated.
+- German: sentence-initial "Du" after the warning glyph in the print-tab
+  info boxes.
+
+### 🧰 Internals
+- Per-language CI guards: catalog completeness, stale keys, placeholder
+  integrity, button-length budgets and parameter-name width checks run for
+  every shipped language automatically.
+- `scripts/i18n_agent/new_language.py` generates a complete, self-validating
+  translation brief for adding further languages.
+
 ## v3.8.19
 A small reliability release that hardens the engine running the ArgyllCMS
 tools behind every chart, measurement and profile build.
