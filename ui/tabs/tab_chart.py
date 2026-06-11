@@ -1840,21 +1840,21 @@ class TabChart(QWidget):
             self._manual_pages_spin.value()
             if self._manual_pages_spin is not None else 1
         )
-        notes = [f"{pages} page{'s' if pages != 1 else ''}"]
+        notes = [tr("1 page") if pages == 1 else tr("{pages} pages").format(pages=pages)]
         if self._manual_auto_patches_check is not None \
                 and self._manual_auto_patches_check.isChecked():
-            notes.append("Auto patch count")
+            notes.append(tr("Auto patch count"))
         auto_neutrals = [
             lbl for lbl, chk in (
-                ("grey",  self._manual_auto_grey_check),
-                ("white", self._manual_auto_white_check),
-                ("black", self._manual_auto_black_check),
+                (tr("grey"),  self._manual_auto_grey_check),
+                (tr("white"), self._manual_auto_white_check),
+                (tr("black"), self._manual_auto_black_check),
             ) if chk is not None and chk.isChecked()
         ]
         if auto_neutrals:
-            notes.append("Auto " + "/".join(auto_neutrals))
+            notes.append(tr("Auto") + " " + "/".join(auto_neutrals))
         if p.tiff_16bit:
-            notes.append("16-bit TIFF")
+            notes.append(tr("16-bit TIFF"))
 
         # While the TC9.18 built-in chart is the active patch source, "Generate"
         # runs printtarg only on the bundled .ti1 — targen is skipped. Say so,
@@ -1880,21 +1880,21 @@ class TabChart(QWidget):
                                  and self._printtarg_signature() != self._prebuilt_printtarg_sig)
             if targen_changed:
                 info = (
-                    f"Built-in preset — patch recipe changed ({' · '.join(notes)}):\n"
-                    "Builds a fresh chart from your settings — the patches will "
-                    "NOT match the preset.\n"
-                    f"targen {' '.join(targen_args)}\n"
-                    f"printtarg {' '.join(pt_args)}"
+                    tr("Built-in preset — patch recipe changed ({notes}):\n"
+                       "Builds a fresh chart from your settings — the patches "
+                       "will NOT match the preset.").format(notes=" · ".join(notes))
+                    + f"\ntargen {' '.join(targen_args)}"
+                    + f"\nprinttarg {' '.join(pt_args)}"
                 )
             elif printtarg_changed:
                 info = (
-                    f"Built-in preset — re-laid out ({' · '.join(notes)}):\n"
-                    "Re-arranges the preset's exact patches on the page (targen "
-                    "skipped).\n"
-                    f"printtarg {' '.join(pt_args)}"
+                    tr("Built-in preset — re-laid out ({notes}):\n"
+                       "Re-arranges the preset's exact patches on the page "
+                       "(targen skipped).").format(notes=" · ".join(notes))
+                    + f"\nprinttarg {' '.join(pt_args)}"
                 )
             else:
-                info = (
+                info = tr(
                     "Built-in preset — ready-made chart:\n"
                     "Copies the bundled patch set as-is (targen and printtarg "
                     "skipped).\n"
@@ -1905,23 +1905,26 @@ class TabChart(QWidget):
             return
         if tc918_repro:
             info = (
-                f"i1Pro TC9.18 by Pharmacist — fixed patch set ({' · '.join(notes)}):\n"
-                f"Uses the bundled tc918.ti1 (targen skipped).\n"
-                f"printtarg {' '.join(pt_args)}\n"
-                "Change a targen setting above to build a fresh chart instead."
+                tr("i1Pro TC9.18 by Pharmacist — fixed patch set ({notes}):\n"
+                   "Uses the bundled tc918.ti1 (targen skipped).").format(
+                    notes=" · ".join(notes))
+                + f"\nprinttarg {' '.join(pt_args)}\n"
+                + tr("Change a targen setting above to build a fresh chart instead.")
             )
         elif knut_repro:
             info = (
-                f"TC9.18+Spyderprint preset — fixed patch set ({' · '.join(notes)}):\n"
-                "Uses the bundled 1168-patch .ti1 (targen skipped).\n"
-                f"printtarg {' '.join(pt_args)}\n"
-                "Change a targen setting above to build a fresh chart instead."
+                tr("TC9.18+Spyderprint preset — fixed patch set ({notes}):\n"
+                   "Uses the bundled 1168-patch .ti1 (targen skipped).").format(
+                    notes=" · ".join(notes))
+                + f"\nprinttarg {' '.join(pt_args)}\n"
+                + tr("Change a targen setting above to build a fresh chart instead.")
             )
         else:
             info = (
-                f"Manual mode — your current configuration ({' · '.join(notes)}):\n"
-                f"targen {' '.join(targen_args)}\n"
-                f"printtarg {' '.join(pt_args)}"
+                tr("Manual mode — your current configuration ({notes}):").format(
+                    notes=" · ".join(notes))
+                + f"\ntargen {' '.join(targen_args)}"
+                + f"\nprinttarg {' '.join(pt_args)}"
             )
         self._manual_info_lbl.setText(info)
 
@@ -3919,13 +3922,11 @@ class TabChart(QWidget):
                 # chart_creator imports the pick into the run as
                 # preconditioning.icc; show that staged name in the preview.
                 precond_line = " -c preconditioning.icc"
-                recommendation = (
-                    "\nTip: use at least as many pages as the original profile."
-                )
+                recommendation = "\n" + tr(
+                    "Tip: use at least as many pages as the original profile.")
             else:
-                recommendation = (
-                    "\nPick a profile to refine from (Browse… above)."
-                )
+                recommendation = "\n" + tr(
+                    "Pick a profile to refine from (Browse… above).")
 
         # With a refinement profile (-c) the neutral ramp samples the profile-
         # defined neutral axis (-n) rather than naïve device grey (-g).
@@ -3933,8 +3934,8 @@ class TabChart(QWidget):
 
         target_name = self._preview_target_name("guided")
         info = (
-            f"Guided mode applies these fixed settings:\n"
-            f"targen -d2 -G -e{wp} -B{bp} {grey_flag}{grey_steps}{precond_line} {target_name}\n"
+            tr("Guided mode applies these fixed settings:")
+            + f"\ntargen -d2 -G -e{wp} -B{bp} {grey_flag}{grey_steps}{precond_line} {target_name}\n"
             f"printtarg -i{preview_instr} -p{paper} -t{dpi} {scale_flag}{lb_flag}{dd_flag}{margin_flag}{strip_flag}{target_name}"
             f"{recommendation}"
         )
@@ -3966,8 +3967,8 @@ class TabChart(QWidget):
             self._dd_check.setVisible(True)
             self._dd_tooltip.setVisible(True)
             self._dd_check.setText(tr("Double density"))
-            self._dd_tooltip._title = "Double Density (-h)"
-            self._dd_tooltip._body = (
+            self._dd_tooltip._title = tr("Double Density (-h)")
+            self._dd_tooltip._body = tr(
                 "Doubles the number of patches that fit in each measurement strip "
                 "when using a ColorMunki / i1Studio / ColorChecker Studio.\n\n"
                 "REQUIRES the physical measuring rig accessory — a clear plastic "
@@ -3988,8 +3989,8 @@ class TabChart(QWidget):
             self._dd_check.setVisible(True)
             self._dd_tooltip.setVisible(True)
             self._dd_check.setText(tr("Hexagon patches (packs ~15% more per sheet)"))
-            self._dd_tooltip._title = "Hexagon Patches (-h)"
-            self._dd_tooltip._body = (
+            self._dd_tooltip._title = tr("Hexagon Patches (-h)")
+            self._dd_tooltip._body = tr(
                 "Switches the SpectroScan chart layout from rectangular to "
                 "hexagonal patches. Hexagons tessellate more tightly than "
                 "rectangles, so roughly 14% more patches fit on the same sheet — "
