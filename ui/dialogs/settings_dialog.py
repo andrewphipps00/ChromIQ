@@ -531,6 +531,21 @@ class SettingsDialog(QDialog):
         for i, cell in enumerate(bh_cells):
             bh.addWidget(cell, i // 2, i % 2)
 
+        # The platform-gated print options above are constructed unconditionally
+        # (their attributes are referenced by _load_settings / _save_and_close /
+        # _sync_print_path_options), but only wrapped in a _bh_cell — which
+        # reparents them into the grid — on the platforms that use them. On the
+        # others they keep parent=self with no layout, so Qt floats them at the
+        # dialog's top-left corner, where they pile up over the first group box.
+        # Hide whatever wasn't placed.
+        for widget in (
+            self._native_print_check, native_tip,
+            self._pdf_fallback_check, pdf_fallback_tip,
+            self._confirm_print_check, confirm_tip,
+        ):
+            if widget.parent() is self:
+                widget.hide()
+
         layout.addWidget(behaviour_grp)
 
         # ---- Appearance & Language ----
