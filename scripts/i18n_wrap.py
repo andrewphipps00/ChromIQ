@@ -40,7 +40,17 @@ CTOR_TEXT_ARGS: dict[str, object] = {
     # ChromIQ helpers with (parent, text, …) signatures
     "make_browse_button": {1},
     "open_dir_dialog": {1},
+    # (key, label) registry rows — label only, never the key
+    "ToolEntry": {1},
+    "open_file_dialog": {1, 2},
+    # tab_measure local helpers: (label, default, tooltip_title, tooltip_body)
+    "_bool_row": {0, 2, 3},
+    "_bool_row_m": {0, 2, 3},
 }
+
+# Class-level text constants (tools_dialogs tool classes). These modules are
+# imported lazily (after set_language), so import-time tr() is safe there.
+CLASS_TEXT_CONSTANTS = {"TITLE", "HELP", "DESCRIPTION"}
 
 # Method names (called on any object) whose arg at the given positions
 # is display text.
@@ -64,6 +74,11 @@ METHOD_TEXT_ARGS: dict[str, object] = {
     "showMessage": {0},
     "setCancelButtonText": {0},
     "setButtonText": {1},
+    # tools_dialogs picker helpers: (caption, name_filter)
+    "_pick_input_file": {0, 1},
+    "_pick_input_files": {0, 1},
+    # tab_measure row helper: (label, default, tooltip_title, tooltip_body)
+    "_bool_row": {0, 2, 3},
 }
 
 # Methods whose first arg is a list of display strings.
@@ -71,6 +86,12 @@ METHOD_TEXT_LIST_ARGS = {"addItems", "setHeaderLabels"}
 
 # addItem("label", userData) — label only, never the data value.
 METHOD_FIRST_ONLY = {"addItem"}
+
+# Calls whose *keyword* arguments carry display text.
+KWARG_TEXT_ARGS: dict[str, set[str]] = {
+    "_ChartreadOption": {"label", "tooltip_title", "tooltip_body"},
+    "TabHeader": {"tooltip_title", "tooltip_body"},
+}
 
 # Static/class calls:  QMessageBox.warning(parent, title, text, …)
 STATIC_TEXT_ARGS: dict[tuple[str, str], object] = {
@@ -108,6 +129,19 @@ class _Collector(ast.NodeVisitor):
         return s, e
 
     # ------------------------------------------------------------------
+    def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        for stmt in node.body:
+            target = None
+            if (isinstance(stmt, ast.Assign) and len(stmt.targets) == 1
+                    and isinstance(stmt.targets[0], ast.Name)):
+                target = stmt.targets[0].id
+            elif (isinstance(stmt, ast.AnnAssign)
+                    and isinstance(stmt.target, ast.Name) and stmt.value):
+                target = stmt.target.id
+            if target in CLASS_TEXT_CONSTANTS:
+                self._wrap_text_node(stmt.value, f"class {node.name}")
+        self.generic_visit(node)
+
     def visit_Call(self, node: ast.Call) -> None:
         positions = None
         func = node.func
@@ -137,6 +171,11 @@ class _Collector(ast.NodeVisitor):
             for i, arg in enumerate(node.args):
                 if positions == "any" or i in positions:  # type: ignore[comparison-overlap]
                     self._wrap_text_node(arg, _func_label(func))
+        kw_names = KWARG_TEXT_ARGS.get(_func_label(func))
+        if kw_names:
+            for kw in node.keywords:
+                if kw.arg in kw_names:
+                    self._wrap_text_node(kw.value, _func_label(func))
         self.generic_visit(node)
 
     # ------------------------------------------------------------------

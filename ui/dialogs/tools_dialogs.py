@@ -42,6 +42,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from core.i18n import tr
 from core.logger import get_logger
 from ui.styles import BG_INPUT, BORDER, TEXT_MAIN
 from ui.theme import resolve_mode
@@ -105,7 +106,7 @@ from workflow.profcheck_runner import (
 # width_mm, height_mm, orientation) — A4 (enum 2) is the validated case; the
 # others use Custom (enum 0). i1Profiler re-lays-out the chart on load anyway,
 # so the page geometry is a starting point the user can change in-app.
-_PWXF_SCAN_MODES = (("Single scan", 1), ("Dual scan", 2))
+_PWXF_SCAN_MODES = ((tr("Single scan"), 1), (tr("Dual scan"), 2))
 _PWXF_PAPERS: dict[str, tuple[int, float, float, str]] = {
     "A4":        (2, 296.93, 210.06, "Landscape"),
     "A3":        (0, 420.00, 297.00, "Landscape"),
@@ -164,7 +165,6 @@ def _device_default_size(w_lo: int, w_hi: int, h_lo: int, h_hi: int) -> tuple[in
         return min(20, w_hi), min(20, h_hi)
     return max(8, w_lo), max(7, h_lo)
 from workflow.ti3_merge import Ti3MergeError, merge_measurements
-from core.i18n import tr
 
 if TYPE_CHECKING:
     from core.argyll_runner import ArgyllRunner
@@ -496,10 +496,10 @@ class _OutputRow(QWidget):
 
 class AverageMeasurementsDialog(_ToolDialogBase):
     TOOL_KEY    = "average"
-    TITLE       = "Average measurements"
+    TITLE       = tr("Average measurements")
     RUN_LABEL   = "Average"
     HELP = (
-        "Measured the same chart a few times? This tool blends those readings "
+        tr("Measured the same chart a few times? This tool blends those readings "
         "into one cleaner result.\n\n"
         "Every measurement has a little random noise in it. If you read the same "
         "chart two or three times and combine the results, those random wobbles "
@@ -518,9 +518,9 @@ class AverageMeasurementsDialog(_ToolDialogBase):
         "Build Profile tab.\n\n"
         "Just one thing to watch: every file you add has to be the same chart "
         "(same patches, same instrument) — otherwise there's nothing matching to "
-        "average together.")
+        "average together."))
     DESCRIPTION = (
-        "Combine two or more readings of the same printed chart into a single "
+        tr("Combine two or more readings of the same printed chart into a single "
         "averaged measurement. Reading the chart several times and averaging "
         "the results reduces instrument noise — every patch's colour value "
         "becomes the mean across the reads, so a stray bad sweep has less "
@@ -532,7 +532,7 @@ class AverageMeasurementsDialog(_ToolDialogBase):
         "mathematically identical, so the choice is locked to mean.\n\n"
         "Requirements: every input must be a .ti3 measurement of the SAME chart "
         "(identical patch list, made with the same instrument). The averaged "
-        ".ti3 can then be loaded into Build Profile."
+        ".ti3 can then be loaded into Build Profile.")
     )
 
     def __init__(self, runner: "ArgyllRunner", settings: "AppSettings", parent: QWidget | None = None) -> None:
@@ -591,8 +591,8 @@ class AverageMeasurementsDialog(_ToolDialogBase):
 
     def _add_files(self) -> None:
         files = self._pick_input_files(
-            "Add measurement files",
-            "Measurement files (*.ti3);;All files (*)",
+            tr("Add measurement files"),
+            tr("Measurement files (*.ti3);;All files (*)"),
         )
         for p in files:
             if p not in self._inputs:
@@ -682,10 +682,10 @@ class AverageMeasurementsDialog(_ToolDialogBase):
 
 class MergeMeasurementsDialog(_ToolDialogBase):
     TOOL_KEY    = "merge"
-    TITLE       = "Merge measurements"
+    TITLE       = tr("Merge measurements")
     RUN_LABEL   = "Merge"
     HELP = (
-        "This tool joins several measurement files together into one bigger set "
+        tr("This tool joins several measurement files together into one bigger set "
         "of patches.\n\n"
         "It's easy to mix this up with averaging, so here's the difference in "
         "plain terms: averaging is for when you measured the SAME chart a few "
@@ -699,9 +699,9 @@ class MergeMeasurementsDialog(_ToolDialogBase):
         "2. Pick where to save the result and what to call it.\n"
         "3. Click Merge.\n\n"
         "You'll get a single measurement file containing all of the patches from "
-        "your inputs, ready to build a profile from.")
+        "your inputs, ready to build a profile from."))
     DESCRIPTION = (
-        "Combine the patches of several measurement files into one. Unlike "
+        tr("Combine the patches of several measurement files into one. Unlike "
         "averaging (which mixes repeated reads of the same chart), merging "
         "stacks the patches from DIFFERENT charts so the profiler has more data "
         "points to fit — useful for combining a pre-conditioning chart with a "
@@ -709,7 +709,7 @@ class MergeMeasurementsDialog(_ToolDialogBase):
         "Requirements: every file must use the same colour space and the same "
         "data layout (e.g. all spectral, all made with comparable instruments). "
         "Header information is taken from the primary file; the additional "
-        "files contribute only their patches."
+        "files contribute only their patches.")
     )
 
     def __init__(self, settings: "AppSettings", parent: QWidget | None = None) -> None:
@@ -762,7 +762,7 @@ class MergeMeasurementsDialog(_ToolDialogBase):
         self._content.addWidget(self._output)
 
     def _pick_primary(self) -> None:
-        p = self._pick_input_file("Choose primary measurement", "Measurement files (*.ti3);;All files (*)")
+        p = self._pick_input_file(tr("Choose primary measurement"), tr("Measurement files (*.ti3);;All files (*)"))
         if p:
             self._primary = p
             self._primary_field.setText(str(p))
@@ -772,7 +772,7 @@ class MergeMeasurementsDialog(_ToolDialogBase):
 
     def _add_additional(self) -> None:
         files = self._pick_input_files(
-            "Add measurements to merge in", "Measurement files (*.ti3);;All files (*)"
+            tr("Add measurements to merge in"), tr("Measurement files (*.ti3);;All files (*)")
         )
         for p in files:
             if p not in self._additional and p != self._primary:
@@ -838,10 +838,10 @@ class MergeMeasurementsDialog(_ToolDialogBase):
 
 class Ti1ToI1ProfilerDialog(_ToolDialogBase):
     TOOL_KEY    = "ti1_to_i1p"
-    TITLE       = "Convert TI1 → i1Profiler"
+    TITLE       = tr("Convert TI1 → i1Profiler")
     RUN_LABEL   = "Convert"
     HELP = (
-        "Want to measure a ChromIQ chart using X-Rite's i1Profiler software (for "
+        tr("Want to measure a ChromIQ chart using X-Rite's i1Profiler software (for "
         "example to drive an i1iSis scanner)? This tool gets your chart ready for "
         "it.\n\n"
         "ChromIQ describes charts in Argyll's own \"TI1\" format, which i1Profiler "
@@ -856,9 +856,9 @@ class Ti1ToI1ProfilerDialog(_ToolDialogBase):
         "Then open the result in i1Profiler, print and measure as usual. When "
         "you're done, come back and use the \"i1Profiler → TI3\" tool to bring "
         "those measurements into ChromIQ.\n\n"
-        "Good to know: this works with RGB charts.")
+        "Good to know: this works with RGB charts."))
     DESCRIPTION = (
-        "Convert an Argyll TI1 chart definition into the formats that X-Rite "
+        tr("Convert an Argyll TI1 chart definition into the formats that X-Rite "
         "i1Profiler reads. Use this when you want an i1iSis (or another "
         "i1Profiler-driven instrument) to measure a chart that Argyll's targen "
         "produced.\n\n"
@@ -869,7 +869,7 @@ class Ti1ToI1ProfilerDialog(_ToolDialogBase):
         "only as CxF3)\n\n"
         "Optionally also write a workflow file (.pwxf) — RGB only — that opens "
         "in i1Profiler with the instrument, paper and patch layout already set "
-        "up, so you don't have to configure them by hand."
+        "up, so you don't have to configure them by hand.")
     )
 
     def __init__(self, settings: "AppSettings", parent: QWidget | None = None) -> None:
@@ -1009,7 +1009,7 @@ class Ti1ToI1ProfilerDialog(_ToolDialogBase):
 
     def _pick_ti1(self) -> None:
         p = self._pick_input_file(
-            "Choose chart definition", "Argyll chart files (*.ti1);;All files (*)"
+            tr("Choose chart definition"), tr("Argyll chart files (*.ti1);;All files (*)")
         )
         if p:
             self._ti1 = p
@@ -1130,10 +1130,10 @@ class Ti1ToI1ProfilerDialog(_ToolDialogBase):
 
 class I1ProfilerToTi3Dialog(_ToolDialogBase):
     TOOL_KEY    = "i1p_to_ti3"
-    TITLE       = "Convert i1Profiler → TI3"
+    TITLE       = tr("Convert i1Profiler → TI3")
     RUN_LABEL   = "Convert"
     HELP = (
-        "Measured your chart in X-Rite's i1Profiler? This brings those readings "
+        tr("Measured your chart in X-Rite's i1Profiler? This brings those readings "
         "back into ChromIQ so you can build a profile from them.\n\n"
         "i1Profiler saves its measurements in its own text format, which ChromIQ "
         "can't read directly. This tool translates that file into the measurement "
@@ -1144,15 +1144,15 @@ class I1ProfilerToTi3Dialog(_ToolDialogBase):
         "3. Click Convert.\n\n"
         "You'll get a ChromIQ measurement file (.ti3) you can take straight to the "
         "Build Profile tab — which neatly closes the loop after measuring an "
-        "exported chart over in i1Profiler.")
+        "exported chart over in i1Profiler."))
     DESCRIPTION = (
-        "Convert an i1Profiler measurement export (.txt) into an Argyll .ti3 "
+        tr("Convert an i1Profiler measurement export (.txt) into an Argyll .ti3 "
         "measurement file. Use this when you measured a chart in i1Profiler "
         "(typically because you used an i1iSis scanner) and want to build the "
         "ICC profile with Argyll instead.\n\n"
         "Requirements: the .txt must contain real measured colour data (Lab/XYZ "
         "or spectral) for every patch — not just a reference patch list. The "
-        "resulting .ti3 can be loaded into Build Profile."
+        "resulting .ti3 can be loaded into Build Profile.")
     )
 
     def __init__(self, runner: "ArgyllRunner", settings: "AppSettings", parent: QWidget | None = None) -> None:
@@ -1186,7 +1186,7 @@ class I1ProfilerToTi3Dialog(_ToolDialogBase):
 
     def _pick_txt(self) -> None:
         p = self._pick_input_file(
-            "Choose i1Profiler measurement", "i1Profiler exports (*.txt);;All files (*)"
+            tr("Choose i1Profiler measurement"), tr("i1Profiler exports (*.txt);;All files (*)")
         )
         if p:
             self._txt = p
@@ -1272,10 +1272,10 @@ class I1ProfilerToTi3Dialog(_ToolDialogBase):
 
 class I1ProfilerToTi1Dialog(_ToolDialogBase):
     TOOL_KEY    = "i1p_to_ti1"
-    TITLE       = "Convert i1Profiler → TI1"
+    TITLE       = tr("Convert i1Profiler → TI1")
     RUN_LABEL   = "Convert"
     HELP = (
-        "Have a chart from X-Rite's i1Profiler that you'd like to print and "
+        tr("Have a chart from X-Rite's i1Profiler that you'd like to print and "
         "measure in ChromIQ? This brings it across.\n\n"
         "It takes i1Profiler's chart description and turns it into the format "
         "ChromIQ uses, so you can lay the chart out, print it, and measure it just "
@@ -1288,9 +1288,9 @@ class I1ProfilerToTi1Dialog(_ToolDialogBase):
         "You'll get a ChromIQ chart definition (.ti1) you can open in the chart "
         "layout editor, print, and then measure.\n\n"
         "Good to know: this works with RGB charts; ChromIQ reconstructs the patch "
-        "colours so it can lay the chart out for printing.")
+        "colours so it can lay the chart out for printing."))
     DESCRIPTION = (
-        "Convert an i1Profiler patch set (.pxf), a workflow file (.pwxf), or a "
+        tr("Convert an i1Profiler patch set (.pxf), a workflow file (.pwxf), or a "
         ".cgats table into an Argyll TI1 chart definition. Use this to bring a "
         "chart that only exists in i1Profiler — for example a TC9.18 target, or "
         "a workflow someone sent you — into the Argyll workflow, so you can lay "
@@ -1301,7 +1301,7 @@ class I1ProfilerToTi1Dialog(_ToolDialogBase):
         "that to space the patches for reliable strip reading.\n\n"
         "Supported colour space: RGB only. A .pwxf carries its layout/instrument "
         "settings too, but only the patch list is read; the patch order is "
-        "preserved and printtarg re-lays-out the chart anyway."
+        "preserved and printtarg re-lays-out the chart anyway.")
     )
 
     def __init__(self, settings: "AppSettings", parent: QWidget | None = None) -> None:
@@ -1334,8 +1334,8 @@ class I1ProfilerToTi1Dialog(_ToolDialogBase):
 
     def _pick_src(self) -> None:
         p = self._pick_input_file(
-            "Choose i1Profiler patch set",
-            "i1Profiler patch sets (*.pxf *.pwxf *.cgats *.txt);;All files (*)",
+            tr("Choose i1Profiler patch set"),
+            tr("i1Profiler patch sets (*.pxf *.pwxf *.cgats *.txt);;All files (*)"),
         )
         if p:
             self._src = p
@@ -1387,10 +1387,10 @@ class I1ProfilerToTi1Dialog(_ToolDialogBase):
 
 class VerifyAgainstReferenceDialog(_ToolDialogBase):
     TOOL_KEY    = "verify"
-    TITLE       = "Verify against reference"
+    TITLE       = tr("Verify against reference")
     RUN_LABEL   = "Verify"
     HELP = (
-        "This tool tells you how close your colours came out compared to where "
+        tr("This tool tells you how close your colours came out compared to where "
         "they were supposed to be — without building a profile first.\n\n"
         "The idea is simple: you give it what you actually measured, and what the "
         "colours were meant to be, and it tells you how far apart they are. That "
@@ -1413,10 +1413,10 @@ class VerifyAgainstReferenceDialog(_ToolDialogBase):
         "paper physically can't reproduce, so they stop dominating the score.\n\n"
         "It's a quick way to sanity-check a profile, compare one paper or ink "
         "batch against another, or keep an eye on a printer drifting over time — "
-        "all without building anything.")
+        "all without building anything."))
     MIN_WIDTH   = 660
     DESCRIPTION = (
-        "Compare a measured chart against a set of expected colour values and "
+        tr("Compare a measured chart against a set of expected colour values and "
         "report the colour error (ΔE) per patch — without building a "
         "profile. Use this to check how closely a print matches known target "
         "values, e.g. a profile-evaluation target someone shared with you.\n\n"
@@ -1424,7 +1424,7 @@ class VerifyAgainstReferenceDialog(_ToolDialogBase):
         "order as the chart — pick your measured .ti3, and optionally the "
         "chart's .ti1/.ti2 so the patch count is cross-checked. ChromIQ builds "
         "a reference file whose patch IDs line up with your measurement and "
-        "runs Argyll's colverify."
+        "runs Argyll's colverify.")
     )
 
     def __init__(self, runner: "ArgyllRunner", settings: "AppSettings", parent: QWidget | None = None) -> None:
@@ -1579,8 +1579,8 @@ class VerifyAgainstReferenceDialog(_ToolDialogBase):
     # -- pickers --------------------------------------------------------
     def _load_reference_file(self) -> None:
         p = self._pick_input_file(
-            "Choose expected-values file",
-            "Reference values (*.txt *.cgats *.ti3 *.csv);;All files (*)",
+            tr("Choose expected-values file"),
+            tr("Reference values (*.txt *.cgats *.ti3 *.csv);;All files (*)"),
         )
         if not p:
             return
@@ -1593,21 +1593,21 @@ class VerifyAgainstReferenceDialog(_ToolDialogBase):
         self._refresh()
 
     def _pick_measured(self) -> None:
-        p = self._pick_input_file("Choose measured chart", "Measurements (*.ti3);;All files (*)")
+        p = self._pick_input_file(tr("Choose measured chart"), tr("Measurements (*.ti3);;All files (*)"))
         if p:
             self._measured = p
             self._measured_field.setText(str(p))
             self._refresh()
 
     def _pick_chart(self) -> None:
-        p = self._pick_input_file("Choose chart definition", "Charts (*.ti1 *.ti2);;All files (*)")
+        p = self._pick_input_file(tr("Choose chart definition"), tr("Charts (*.ti1 *.ti2);;All files (*)"))
         if p:
             self._chart = p
             self._chart_field.setText(str(p))
             self._refresh()
 
     def _pick_profile(self) -> None:
-        p = self._pick_input_file("Choose your profile", "ICC profiles (*.icc *.icm);;All files (*)")
+        p = self._pick_input_file(tr("Choose your profile"), tr("ICC profiles (*.icc *.icm);;All files (*)"))
         if p:
             self._profile = p
             self._profile_field.setText(str(p))
@@ -1726,19 +1726,19 @@ class VerifyAgainstReferenceDialog(_ToolDialogBase):
 
 class VerifyProfileDialog(_ToolDialogBase):
     TOOL_KEY    = "verify_profile"
-    TITLE       = "Verify a profile (independent check)"
+    TITLE       = tr("Verify a profile (independent check)")
     RUN_LABEL   = "Verify profile"
     MIN_WIDTH   = 660
     DESCRIPTION = (
-        "Check how accurate a finished profile really is by testing it against a "
+        tr("Check how accurate a finished profile really is by testing it against a "
         "chart it has never seen.\n\n"
         "Pick your profile (.icc) and a measured chart (.ti3) that you printed "
         "through that profile and read back. ChromIQ runs Argyll's profcheck, "
         "which asks the profile what each patch should look like and compares that "
-        "to what you actually measured — then grades the result for you."
+        "to what you actually measured — then grades the result for you.")
     )
     HELP = (
-        "This is the most honest way to answer “is my profile any good?”.\n\n"
+        tr("This is the most honest way to answer “is my profile any good?”.\n\n"
         "Why a *separate* chart? When you build a profile, it is tuned to the exact "
         "patches you measured — so checking it against those same patches almost "
         "always looks great, even if the profile is weak elsewhere. Printing and "
@@ -1759,7 +1759,7 @@ class VerifyProfileDialog(_ToolDialogBase):
         "low average usually means one or two odd patches rather than a bad profile.\n\n"
         "Tip: this checks the profile itself. If instead you want to compare your "
         "print to colour targets someone else gave you, use “Verify against "
-        "reference”."
+        "reference”.")
     )
 
     def __init__(self, runner: "ArgyllRunner", settings: "AppSettings", parent: QWidget | None = None) -> None:
@@ -1863,14 +1863,14 @@ class VerifyProfileDialog(_ToolDialogBase):
 
     # -- pickers --------------------------------------------------------
     def _pick_profile(self) -> None:
-        p = self._pick_input_file("Choose profile to test", "ICC profiles (*.icc *.icm);;All files (*)")
+        p = self._pick_input_file(tr("Choose profile to test"), tr("ICC profiles (*.icc *.icm);;All files (*)"))
         if p:
             self._profile = p
             self._profile_field.setText(str(p))
             self._refresh()
 
     def _pick_measured(self) -> None:
-        p = self._pick_input_file("Choose measured chart", "Measurements (*.ti3);;All files (*)")
+        p = self._pick_input_file(tr("Choose measured chart"), tr("Measurements (*.ti3);;All files (*)"))
         if p:
             self._measured = p
             self._measured_field.setText(str(p))

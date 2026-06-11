@@ -500,7 +500,7 @@ class MainWindow(QMainWindow):
         """
         from PyQt6.QtWidgets import QMessageBox
 
-        no_chart = (
+        no_chart = tr(
             "No chart is loaded yet.\n\n"
             "Generate or open a chart first (Create Chart tab), then this tool "
             "will show how its patches are spread across the RGB cube."
@@ -564,7 +564,7 @@ class MainWindow(QMainWindow):
         profile_idx = self._tabs.indexOf(self._tab_profile)
         self._tabs.setTabText(
             profile_idx,
-            "4. Calibration & Profiling" if enabled else "4. Build Profile",
+            tr("4. Calibration & Profiling") if enabled else tr("4. Build Profile"),
         )
 
     def _check_for_updates_on_startup(self) -> None:

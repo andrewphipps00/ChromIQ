@@ -42,7 +42,7 @@ parameters:
         Mit -D (Experte) lässt sich der Farbmittelsatz bei Bedarf feinjustieren.
 
     "-D":
-      name: "Farbmittel hinzufügen/entfernen"
+      name: "Farbmittel ändern"
       labels:
         - "Additiv"
         - "Cyan"
@@ -183,7 +183,7 @@ parameters:
         derselben Idee.)
 
     "-G":
-      name: "Gründliche Optimierung (langsam)"
+      name: "Gründliche Optimierung"
       tooltip_title: "Gründliche Optimierung (-G)"
       tooltip_body: |
         Lässt targen zusätzliche Zeit darauf verwenden, die Messfelder so
@@ -223,7 +223,7 @@ parameters:
         zweiten Profilierungsdurchlauf.  Beim allerersten Profil leer lassen.
 
     "-C":
-      name: "Kalibrierungs-Übersteuerung"
+      name: "Kalibrier-Übersteuerung"
       tooltip_title: "Kalibrierungs-Übersteuerung (-C)"
       tooltip_body: |
         Optionale .cal-Datei, deren Kalibrierungskurven beim Schätzen des
@@ -281,7 +281,7 @@ parameters:
         Erfordert ein gesetztes -c; sonst ohne Wirkung.
 
     "-N":
-      name: "Neutralachsen-Gewichtung"
+      name: "Neutral-Gewichtung"
       tooltip_title: "Neutralachsen-Gewichtung (-N)"
       tooltip_body: |
         Steuert, wie stark sich Messfelder nahe der Neutralachse häufen.
@@ -289,7 +289,7 @@ parameters:
         Der Standard 0.5 passt für die meisten Drucker.
 
     "-V":
-      name: "Schattenbereich-Gewichtung"
+      name: "Schatten-Gewichtung"
       tooltip_title: "Schattenbereich-Gewichtung (-V)"
       tooltip_body: |
         Fügt zusätzliche Messfelder in dunklen (Schatten-)Bereichen des
@@ -455,7 +455,7 @@ parameters:
           • Vergleich, wie verschiedene Tinten/Papiere die Gamut-Hülle
             verschieben — Oberflächenfelder sind davon am stärksten betroffen.
     "-b":
-      name: "Kubisch-raumzentrierte Stufen"
+      name: "BCC-Gitterstufen"
       tooltip_title: "Kubisch-raumzentrierte Stufen (-b)"
       tooltip_body: |
         Fügt Felder auf einem kubisch-raumzentrierten Gitter (BCC) hinzu —
@@ -597,7 +597,7 @@ parameters:
         Höhere Werte (600+) braucht man selten — sie erzeugen große Dateien.
 
     "-L":
-      name: "Linken Klemmrand unterdrücken"
+      name: "Ohne linken Klemmrand"
       tooltip_title: "Linken Klemmrand unterdrücken (-L)"
       tooltip_body: |
         Entfernt den Klemmrand-Streifen an der linken Kante und gewinnt
@@ -640,7 +640,7 @@ parameters:
         Werte lösen eine Live-Neuberechnung per binärer Suche aus.
 
     "-r":
-      name: "Feldreihenfolge beibehalten (nicht randomisieren)"
+      name: "Reihenfolge beibehalten"
       tooltip_title: "Keine Randomisierung (-r)"
       tooltip_body: |
         Standardmäßig randomisiert printtarg die Feldpositionen, um
@@ -685,7 +685,7 @@ parameters:
         brauchst du diese Option nicht.
 
     "-K":
-      name: "Kalibrierungsdatei anwenden"
+      name: "Kalibrierung anwenden"
       tooltip_title: "Kalibrierung auf Messfelder anwenden (-K)"
       tooltip_body: |
         Verwende dies, wenn dein Drucker kein eingebautes
@@ -707,7 +707,7 @@ parameters:
         nur eine Kalibrierungsoption kann gleichzeitig aktiv sein.
 
     "-I":
-      name: "Kalibrierungsdatei einbetten (nicht anwenden)"
+      name: "Kalibrierung nur einbetten"
       tooltip_title: "Kalibrierung einbetten, nicht anwenden (-I)"
       tooltip_body: |
         Verwende dies, wenn dein Drucker oder RIP bereits selbst eine
@@ -748,7 +748,7 @@ parameters:
         Wirkt nur, wenn 8-Bit-TIFF-Ausgabe gewählt ist.
 
     "-U":
-      name: "CUPS-Farbmanagement-Header unterdrücken"
+      name: "CUPS-CMM-Header weglassen"
       tooltip_title: "CUPS-CMM-Header unterdrücken (-U)"
       tooltip_body: |
         Entfernt den Kommentar 'cupsJobTicket: cups-disable-cmm' aus
@@ -759,7 +759,7 @@ parameters:
         Farbmanagement angewendet wird.
 
     "-R":
-      name: "Randomisierungs-Startwert"
+      name: "Zufalls-Startwert"
       tooltip_title: "Randomisierungs-Startwert (-R)"
       tooltip_body: |
         Setzt den Startwert für den Feld-Randomisierungsalgorithmus.
@@ -823,7 +823,7 @@ parameters:
   chartread:
 
     "-B":
-      name: "Bidirektionale Streifenerkennung deaktivieren"
+      name: "Bidirektional deaktivieren"
       tooltip_title: "Bidirektionales Lesen deaktivieren (-B)"
       tooltip_body: |
         Hindert chartread daran, automatisch zu erkennen, ob ein Streifen
@@ -835,7 +835,7 @@ parameters:
         Richtungsfehler meldet.
 
     "-b":
-      name: "Bidirektionale Streifenerkennung erzwingen"
+      name: "Bidirektional erzwingen"
       tooltip_title: "Bidirektionales Lesen erzwingen (-b)"
       tooltip_body: |
         Zwingt chartread, einen in beliebiger Richtung gescannten Streifen
@@ -858,7 +858,7 @@ parameters:
         weiterhin gemeldet.
 
     "-N":
-      name: "Anfangskalibrierung deaktivieren"
+      name: "Keine Startkalibrierung"
       tooltip_title: "Anfangskalibrierung deaktivieren (-N)"
       tooltip_body: |
         Überspringt die automatische Weißkachel-Kalibrierung des Geräts
@@ -876,7 +876,7 @@ parameters:
         Charts deutlich langsamer.
 
     "-H":
-      name: "Hochauflösender Spektralmodus"
+      name: "Hochauflösendes Spektrum"
       tooltip_title: "Hochauflösendes Spektrum (-H)"
       tooltip_body: |
         Aktiviert hochauflösende Spektralabtastung auf Geräten, die das
@@ -1003,7 +1003,7 @@ parameters:
         (reine Ausgabeprofile brauchen kein B2A).
 
     "-r":
-      name: "Glättung / Geräterauschen (% ΔE)"
+      name: "Glättung / Rauschen (% ΔE)"
       tooltip_title: "Mittleres Geräterauschen (-r)"
       tooltip_body: |
         Geschätztes mittleres Mess- oder Geräterauschen als Prozentsatz
@@ -1014,7 +1014,7 @@ parameters:
         • 3.0–5.0 %: sehr verrauscht; erhöht die Glättung deutlich
 
     "-s":
-      name: "Gamut-Mapping-Quelle (perzeptiv)"
+      name: "Gamut-Quelle (perzeptiv)"
       tooltip_title: "Perzeptive Gamut-Mapping-Quelle (-s)"
       tooltip_body: |
         Quell-ICC-Profil zur Berechnung der Gamut-Mapping-Tabellen der
@@ -1027,7 +1027,7 @@ parameters:
         Name für das ICC-Profilformat, die Dateien sind identisch.
 
     "-S":
-      name: "Gamut-Mapping-Quelle (perzeptiv + Sättigung)"
+      name: "Gamut-Quelle (Perz.+Sätt.)"
       tooltip_title: "Quelle für Perzeptiv + Sättigung (-S)"
       tooltip_body: |
         Wie -s, wendet das Gamut-Mapping aber auf die perzeptive UND die
@@ -1053,7 +1053,7 @@ parameters:
         Copyright-Hinweis im ICC-Profil.
 
     "-ni":
-      name: "Keine Eingangs-Shaper-Kurven"
+      name: "Keine Eingangs-Shaper"
       tooltip_title: "Keine Eingangs-Shaper-Kurven (-ni)"
       tooltip_body: |
         Deaktiviert die 1D-Eingangskurven (Tonwertkurven), die Gerätewerte
@@ -1062,13 +1062,13 @@ parameters:
         deaktivieren.
 
     "-no":
-      name: "Keine Ausgangs-Shaper-Kurven"
+      name: "Keine Ausgangs-Shaper"
       tooltip_title: "Keine Ausgangs-Shaper-Kurven (-no)"
       tooltip_body: |
         Deaktiviert die 1D-Ausgangskurven nach der 3D-cLUT.
         Nur zu Diagnosezwecken deaktivieren.
     "-V":
-      name: "Gitter-Gewichtung dunkler Bereiche"
+      name: "Schattengitter-Gewichtung"
       tooltip_title: "Gitter-Gewichtung dunkler Bereiche (-V)"
       tooltip_body: |
         Fügt zusätzliche cLUT-Gitterpunkte in dunklen (Schatten-)Bereichen
@@ -1103,7 +1103,7 @@ parameters:
         Relativ farbmetrisch normalisiert auf den Weißpunkt des Papiers.
 
     "-s":
-      name: "Messfelder nach ΔE sortieren (schlechteste zuerst)"
+      name: "Nach ΔE sortieren"
       tooltip_title: "Nach ΔE sortieren (-s)"
       tooltip_body: |
         Sortiert die profcheck-Ausgabe so, dass die schlechtesten
@@ -1144,7 +1144,7 @@ parameters:
         Beim Standard belassen, sofern nichts anderes verlangt ist.
 
     "-P":
-      name: "Ausreißer-Felder entfernen (ΔE ≤)"
+      name: "Ausreißer entfernen (ΔE ≤)"
       tooltip_title: ".ti3 beschränken auf ΔE ≤ (-P)"
       tooltip_body: |
         Erstellt eine reduzierte Kopie deiner .ti3-Datei, die nur Messfelder
@@ -1155,7 +1155,7 @@ parameters:
         akzeptable ΔE.
 
     "-w":
-      name: "X3DOM-3D-Visualisierung erstellen"
+      name: "X3DOM-Visualisierung"
       tooltip_title: "X3DOM-Visualisierung (-w)"
       tooltip_body: |
         Erzeugt eine interaktive 3D-HTML-Visualisierung der Farbfehler

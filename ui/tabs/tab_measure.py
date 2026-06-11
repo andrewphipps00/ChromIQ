@@ -640,9 +640,9 @@ class TabMeasure(QWidget):
         top_layout.setSpacing(8)
         top_layout.addWidget(TabHeader(
             tr("STEP 03 · MEASURE TARGET"), tr("Measure printed chart"), "#56d6a5", top_widget,
-            tooltip_title="Step 3 — Measure the print",
+            tooltip_title=tr("Step 3 — Measure the print"),
             tooltip_body=(
-                "On this screen, your spectrophotometer reads every colour patch "
+                tr("On this screen, your spectrophotometer reads every colour patch "
                 "on the printed chart and records what colour your printer actually "
                 "produced. ChromIQ pairs each measurement with the RGB value that "
                 "was requested in step 1, and saves the result as a .ti3 file.\n\n"
@@ -662,7 +662,7 @@ class TabMeasure(QWidget):
                 "beep before moving to the next.\n\n"
                 "If you misread a patch, you can usually re-do that strip from the "
                 "prompt. Don't rush — accurate reads now mean an accurate profile.\n\n"
-                "Next step: build the ICC profile on tab 4."
+                "Next step: build the ICC profile on tab 4.")
             ),
         ))
         _mode_font = QFont()
@@ -882,36 +882,36 @@ class TabMeasure(QWidget):
         self._make_bidir_row(left, cg, "guided")
 
         self._suppress_cb, _ = _bool_row(
-            "Suppress warning messages (-S)", True,
-            "Suppress Warnings (-S)",
-            "Suppresses non-fatal instrument warnings from chartread.\n\n"
+            tr("Suppress warning messages (-S)"), True,
+            tr("Suppress Warnings (-S)"),
+            tr("Suppresses non-fatal instrument warnings from chartread.\n\n"
             "Suppressed messages include: calibration drift notices,\n"
             "reflectance range warnings on very dark patches, and strip\n"
             "timing cautions. These rarely affect measurement quality.\n\n"
             "Fatal errors that would prevent a .ti3 from being written are\n"
-            "always shown regardless of this setting.",
+            "always shown regardless of this setting."),
         )
         self._nocal_cb, _nocal_tip = _bool_row(
-            "Skip initial calibration (-N)", False,
-            "Skip Initial Calibration (-N)",
-            "Skips the automatic white-tile calibration at chartread startup.\n\n"
+            tr("Skip initial calibration (-N)"), False,
+            tr("Skip Initial Calibration (-N)"),
+            tr("Skips the automatic white-tile calibration at chartread startup.\n\n"
             "Normally chartread prompts you to place the instrument on its\n"
             "white calibration tile before measuring begins. This ensures\n"
             "accurate absolute reflectance values and takes only a few seconds.\n\n"
             "Enable this only if you have already calibrated the instrument\n"
-            "earlier in the same session and do not want to repeat the step.",
+            "earlier in the same session and do not want to repeat the step."),
         )
         self._nocal_cb.setVisible(False)
         _nocal_tip.setVisible(False)
         self._pbp_cb, _pbp_tip = _bool_row(
-            "Patch-by-patch mode (-p)", False,
-            "Patch-by-Patch Mode (-p)",
-            "Switches from strip reading to single-patch measurement mode.\n\n"
+            tr("Patch-by-patch mode (-p)"), False,
+            tr("Patch-by-Patch Mode (-p)"),
+            tr("Switches from strip reading to single-patch measurement mode.\n\n"
             "Instead of scanning entire strips, chartread guides you patch\n"
             "by patch across the chart. This is significantly slower — one\n"
             "reading per patch — but more reliable on heavily textured\n"
             "surfaces or when strip reading consistently fails on a\n"
-            "particular chart layout.",
+            "particular chart layout."),
         )
         self._pbp_cb.setVisible(False)
         _pbp_tip.setVisible(False)
@@ -1153,34 +1153,34 @@ class TabMeasure(QWidget):
         self._make_bidir_row(left, mcg, "manual")
 
         self._m_suppress_cb = _bool_row_m(
-            "Suppress warning messages (-S)", True,
-            "Suppress Warnings (-S)",
-            "Suppresses non-fatal instrument warnings from chartread.\n\n"
+            tr("Suppress warning messages (-S)"), True,
+            tr("Suppress Warnings (-S)"),
+            tr("Suppresses non-fatal instrument warnings from chartread.\n\n"
             "Suppressed messages include: calibration drift notices,\n"
             "reflectance range warnings on very dark patches, and strip\n"
             "timing cautions. These rarely affect measurement quality.\n\n"
             "Fatal errors that would prevent a .ti3 from being written are\n"
-            "always shown regardless of this setting.",
+            "always shown regardless of this setting."),
         )
         self._m_nocal_cb = _bool_row_m(
-            "Skip initial calibration (-N)", False,
-            "Skip Initial Calibration (-N)",
-            "Skips the automatic white-tile calibration at chartread startup.\n\n"
+            tr("Skip initial calibration (-N)"), False,
+            tr("Skip Initial Calibration (-N)"),
+            tr("Skips the automatic white-tile calibration at chartread startup.\n\n"
             "Normally chartread prompts you to place the instrument on its\n"
             "white calibration tile before measuring begins. This ensures\n"
             "accurate absolute reflectance values and takes only a few seconds.\n\n"
             "Enable this only if you have already calibrated the instrument\n"
-            "earlier in the same session and do not want to repeat the step.",
+            "earlier in the same session and do not want to repeat the step."),
         )
         self._m_pbp_cb = _bool_row_m(
-            "Patch-by-patch mode (-p)", False,
-            "Patch-by-Patch Mode (-p)",
-            "Switches from strip reading to single-patch measurement mode.\n\n"
+            tr("Patch-by-patch mode (-p)"), False,
+            tr("Patch-by-Patch Mode (-p)"),
+            tr("Switches from strip reading to single-patch measurement mode.\n\n"
             "Instead of scanning entire strips, chartread guides you patch\n"
             "by patch across the chart. This is significantly slower — one\n"
             "reading per patch — but more reliable on heavily textured\n"
             "surfaces or when strip reading consistently fails on a\n"
-            "particular chart layout.",
+            "particular chart layout."),
         )
 
         m_resume_row = QHBoxLayout()
@@ -1468,10 +1468,10 @@ class TabMeasure(QWidget):
 
         opts.append(_ChartreadOption(
             key="highres", flag="-H",
-            label="High resolution spectral mode (-H)",
-            tooltip_title="High Resolution Spectral Mode (-H)",
+            label=tr("High resolution spectral mode (-H)"),
+            tooltip_title=tr("High Resolution Spectral Mode (-H)"),
             tooltip_body=(
-                "Enables high-resolution spectral sampling on instruments that\n"
+                tr("Enables high-resolution spectral sampling on instruments that\n"
                 "support it (i1Pro 2 and i1Pro 3).\n\n"
                 "Standard mode samples the spectrum at 10 nm intervals.\n"
                 "High-resolution mode uses 5 nm intervals, capturing finer\n"
@@ -1479,7 +1479,7 @@ class TabMeasure(QWidget):
                 "particularly on saturated or fluorescent colours.\n\n"
                 "The measurement time increase is small (roughly 10–20% per\n"
                 "strip). Leave this off unless you specifically need the\n"
-                "extra spectral resolution."
+                "extra spectral resolution.")
             ),
         ))
 
@@ -1491,10 +1491,10 @@ class TabMeasure(QWidget):
         filter_combo.setCurrentIndex(1)  # default to D50 (M1)
         opts.append(_ChartreadOption(
             key="filter", flag="-F",
-            label="Spectral filter type (-F)",
-            tooltip_title="Spectral Filter (-F)",
+            label=tr("Spectral filter type (-F)"),
+            tooltip_title=tr("Spectral Filter (-F)"),
             tooltip_body=(
-                "Overrides the illuminant/filter condition used for measurement.\n\n"
+                tr("Overrides the illuminant/filter condition used for measurement.\n\n"
                 "Select the filter physically in use on your spectrophotometer:\n\n"
                 "  n = None  (M0 — no filter, uncontrolled UV)\n"
                 "  5 = D50   (M1 — controlled UV, ISO 13655 standard)\n"
@@ -1504,7 +1504,7 @@ class TabMeasure(QWidget):
                 "The app defaults to D50 (M1), which matches the most common\n"
                 "workflow for ICC print profiling with the i1Pro family.\n"
                 "Change this only if your instrument has a different filter\n"
-                "physically fitted. Wrong selection silently skews measured values."
+                "physically fitted. Wrong selection silently skews measured values.")
             ),
             widget=filter_combo,
         ))
@@ -1513,10 +1513,10 @@ class TabMeasure(QWidget):
         _tol_spin.setObjectName("")
         opts.append(_ChartreadOption(
             key="tolerance", flag="-T",
-            label="Patch consistency tolerance (-T)",
-            tooltip_title="Patch Tolerance Multiplier (-T)",
+            label=tr("Patch consistency tolerance (-T)"),
+            tooltip_title=tr("Patch Tolerance Multiplier (-T)"),
             tooltip_body=(
-                "A multiplier on chartread's built-in patch consistency\n"
+                tr("A multiplier on chartread's built-in patch consistency\n"
                 "threshold — not a delta-E value. chartread re-reads each patch\n"
                 "and rejects strips where the readings disagree by more than\n"
                 "the threshold × this number.\n\n"
@@ -1528,34 +1528,34 @@ class TabMeasure(QWidget):
                 "Raise to 0.8–1.5 if you get false \"inconsistent patch\" errors\n"
                 "on textured, matte, or fine-art papers — the surface itself\n"
                 "contributes real variance there. Values above 2 mostly mask\n"
-                "genuine issues; if you need them, fix the printer first."
+                "genuine issues; if you need them, fix the printer first.")
             ),
             widget=_tol_spin,
         ))
 
         opts.append(_ChartreadOption(
             key="save_lab", flag="-l",
-            label="Save L*a*b* instead of XYZ (-l)",
-            tooltip_title="Save L*a*b* Values (-l)",
+            label=tr("Save L*a*b* instead of XYZ (-l)"),
+            tooltip_title=tr("Save L*a*b* Values (-l)"),
             tooltip_body=(
-                "Saves measurement data as D50 L*a*b* instead of XYZ in the\n"
+                tr("Saves measurement data as D50 L*a*b* instead of XYZ in the\n"
                 "output .ti3 file.\n\n"
                 "Standard ArgyllCMS tools (including colprof) work with XYZ.\n"
                 "This option is almost never needed — enable it only if a\n"
-                "downstream tool explicitly requires D50 L*a*b* input."
+                "downstream tool explicitly requires D50 L*a*b* input.")
             ),
         ))
 
         opts.append(_ChartreadOption(
             key="save_lab_and_xyz", flag="-L",
-            label="Save L*a*b* AND XYZ (-L)",
-            tooltip_title="Save L*a*b* AND XYZ (-L)",
+            label=tr("Save L*a*b* AND XYZ (-L)"),
+            tooltip_title=tr("Save L*a*b* AND XYZ (-L)"),
             tooltip_body=(
-                "Saves both D50 L*a*b* values and XYZ values in the output\n"
+                tr("Saves both D50 L*a*b* values and XYZ values in the output\n"
                 ".ti3 file.\n\n"
                 "Use this when you need the .ti3 to be compatible with tools\n"
                 "that require L*a*b* while keeping the XYZ data that colprof\n"
-                "and other ArgyllCMS tools expect."
+                "and other ArgyllCMS tools expect.")
             ),
         ))
 
@@ -1567,10 +1567,10 @@ class TabMeasure(QWidget):
             xrga_combo.addItem(lbl, code)
         opts.append(_ChartreadOption(
             key="xrga", flag="-A",
-            label="XRGA instrument correction (-A)",
-            tooltip_title="XRGA Correction (-A)",
+            label=tr("XRGA instrument correction (-A)"),
+            tooltip_title=tr("XRGA Correction (-A)"),
             tooltip_body=(
-                "Applies a colorimetric correction to convert between\n"
+                tr("Applies a colorimetric correction to convert between\n"
                 "spectrophotometer calibration standards.\n\n"
                 "Different instrument generations use slightly different white\n"
                 "references. XRGA standardisation corrects for these offsets:\n\n"
@@ -1579,7 +1579,7 @@ class TabMeasure(QWidget):
                 "  X = XRDI   (older X-Rite reference)\n"
                 "  G = GMDI   (GretagMacbeth reference)\n\n"
                 "Only change this if you are combining measurements from\n"
-                "instruments of different generations or manufacturers."
+                "instruments of different generations or manufacturers.")
             ),
             widget=xrga_combo,
         ))
@@ -1609,10 +1609,10 @@ class TabMeasure(QWidget):
 
         opts.append(_ChartreadOption(
             key="highres", flag="-H",
-            label="High resolution spectral mode (-H)",
-            tooltip_title="High Resolution Spectral Mode (-H)",
+            label=tr("High resolution spectral mode (-H)"),
+            tooltip_title=tr("High Resolution Spectral Mode (-H)"),
             tooltip_body=(
-                "Enables high-resolution spectral sampling on instruments that\n"
+                tr("Enables high-resolution spectral sampling on instruments that\n"
                 "support it (i1Pro 2 and i1Pro 3).\n\n"
                 "Standard mode samples the spectrum at 10 nm intervals.\n"
                 "High-resolution mode uses 5 nm intervals, capturing finer\n"
@@ -1620,7 +1620,7 @@ class TabMeasure(QWidget):
                 "particularly on saturated or fluorescent colours.\n\n"
                 "The measurement time increase is small (roughly 10–20% per\n"
                 "strip). Leave this off unless you specifically need the\n"
-                "extra spectral resolution."
+                "extra spectral resolution.")
             ),
         ))
 
@@ -1632,10 +1632,10 @@ class TabMeasure(QWidget):
         filter_combo.setCurrentIndex(1)
         opts.append(_ChartreadOption(
             key="filter", flag="-F",
-            label="Spectral filter type (-F)",
-            tooltip_title="Spectral Filter (-F)",
+            label=tr("Spectral filter type (-F)"),
+            tooltip_title=tr("Spectral Filter (-F)"),
             tooltip_body=(
-                "Overrides the illuminant/filter condition used for measurement.\n\n"
+                tr("Overrides the illuminant/filter condition used for measurement.\n\n"
                 "Select the filter physically in use on your spectrophotometer:\n\n"
                 "  n = None  (M0 — no filter, uncontrolled UV)\n"
                 "  5 = D50   (M1 — controlled UV, ISO 13655 standard)\n"
@@ -1645,17 +1645,17 @@ class TabMeasure(QWidget):
                 "The app defaults to D50 (M1), which matches the most common\n"
                 "workflow for ICC print profiling with the i1Pro family.\n"
                 "Change this only if your instrument has a different filter\n"
-                "physically fitted. Wrong selection silently skews measured values."
+                "physically fitted. Wrong selection silently skews measured values.")
             ),
             widget=filter_combo,
         ))
 
         opts.append(_ChartreadOption(
             key="tolerance", flag="-T",
-            label="Patch consistency tolerance (-T)",
-            tooltip_title="Patch Tolerance Multiplier (-T)",
+            label=tr("Patch consistency tolerance (-T)"),
+            tooltip_title=tr("Patch Tolerance Multiplier (-T)"),
             tooltip_body=(
-                "A multiplier on chartread's built-in patch consistency\n"
+                tr("A multiplier on chartread's built-in patch consistency\n"
                 "threshold — not a delta-E value. chartread re-reads each patch\n"
                 "and rejects strips where the readings disagree by more than\n"
                 "the threshold × this number.\n\n"
@@ -1667,44 +1667,44 @@ class TabMeasure(QWidget):
                 "Raise to 0.8–1.5 if you get false \"inconsistent patch\" errors\n"
                 "on textured, matte, or fine-art papers — the surface itself\n"
                 "contributes real variance there. Values above 2 mostly mask\n"
-                "genuine issues; if you need them, fix the printer first."
+                "genuine issues; if you need them, fix the printer first.")
             ),
             widget=_spinbox(0.1, 10.0, 0.1, 0.5, decimals=1),
         ))
 
         opts.append(_ChartreadOption(
             key="save_lab", flag="-l",
-            label="Save L*a*b* instead of XYZ (-l)",
-            tooltip_title="Save L*a*b* Values (-l)",
+            label=tr("Save L*a*b* instead of XYZ (-l)"),
+            tooltip_title=tr("Save L*a*b* Values (-l)"),
             tooltip_body=(
-                "Saves measurement data as D50 L*a*b* instead of XYZ in the\n"
+                tr("Saves measurement data as D50 L*a*b* instead of XYZ in the\n"
                 "output .ti3 file.\n\n"
                 "Standard ArgyllCMS tools (including colprof) work with XYZ.\n"
                 "This option is almost never needed — enable it only if a\n"
-                "downstream tool explicitly requires D50 L*a*b* input."
+                "downstream tool explicitly requires D50 L*a*b* input.")
             ),
         ))
 
         opts.append(_ChartreadOption(
             key="save_lab_and_xyz", flag="-L",
-            label="Save L*a*b* AND XYZ (-L)",
-            tooltip_title="Save L*a*b* AND XYZ (-L)",
+            label=tr("Save L*a*b* AND XYZ (-L)"),
+            tooltip_title=tr("Save L*a*b* AND XYZ (-L)"),
             tooltip_body=(
-                "Saves both D50 L*a*b* values and XYZ values in the output\n"
+                tr("Saves both D50 L*a*b* values and XYZ values in the output\n"
                 ".ti3 file.\n\n"
                 "Use this when you need the .ti3 to be compatible with tools\n"
                 "that require L*a*b* while keeping the XYZ data that colprof\n"
-                "and other ArgyllCMS tools expect."
+                "and other ArgyllCMS tools expect.")
             ),
         ))
 
         opts.append(_ChartreadOption(
             key="no_spectral", flag="-n",
             tooltip_width=540,
-            label="Don't save spectral data (-n)",
-            tooltip_title="Don't Save Spectral Data (-n)",
+            label=tr("Don't save spectral data (-n)"),
+            tooltip_title=tr("Don't Save Spectral Data (-n)"),
             tooltip_body=(
-                "What this does\n"
+                tr("What this does\n"
                 "\n"
                 "When you measure a chart, your instrument records two kinds of\n"
                 "numbers for every patch:\n"
@@ -1750,7 +1750,7 @@ class TabMeasure(QWidget):
                 "If none of that applies — and for everyday printer profiling it\n"
                 "usually doesn't — this option is perfectly safe to turn on. It is\n"
                 "off by default, so the spectrum is always kept unless you ask for\n"
-                "it to be dropped."
+                "it to be dropped.")
             ),
         ))
 
@@ -1761,10 +1761,10 @@ class TabMeasure(QWidget):
             xrga_combo.addItem(lbl, code)
         opts.append(_ChartreadOption(
             key="xrga", flag="-A",
-            label="XRGA instrument correction (-A)",
-            tooltip_title="XRGA Correction (-A)",
+            label=tr("XRGA instrument correction (-A)"),
+            tooltip_title=tr("XRGA Correction (-A)"),
             tooltip_body=(
-                "Applies a colorimetric correction to convert between\n"
+                tr("Applies a colorimetric correction to convert between\n"
                 "spectrophotometer calibration standards.\n\n"
                 "Different instrument generations use slightly different white\n"
                 "references. XRGA standardisation corrects for these offsets:\n\n"
@@ -1773,7 +1773,7 @@ class TabMeasure(QWidget):
                 "  X = XRDI   (older X-Rite reference)\n"
                 "  G = GMDI   (GretagMacbeth reference)\n\n"
                 "Only change this if you are combining measurements from\n"
-                "instruments of different generations or manufacturers."
+                "instruments of different generations or manufacturers.")
             ),
             widget=xrga_combo,
         ))
@@ -2086,7 +2086,7 @@ class TabMeasure(QWidget):
     def _on_load_ti2(self) -> None:
         from ui.ti2_loader import resolve_ti2
         path = open_file_dialog(
-            self, "Load .ti2 file", "TI2 files (*.ti2)",
+            self, tr("Load .ti2 file"), tr("TI2 files (*.ti2)"),
             extra_path=self._settings.get("custom_output_path", ""),
         )
         if not path:

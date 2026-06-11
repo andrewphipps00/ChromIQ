@@ -1028,9 +1028,18 @@ class TabProfile(QWidget):
         g.addLayout(desc_row)
 
         for attr, flag, label, placeholder, tip in [
-            ("_pc_mfr",   "A", "Manufacturer", "e.g. Epson",    "Optional manufacturer name embedded in the .cal file header.\nIdentifies the company or person who created this calibration.\nCan be left empty."),
-            ("_pc_model", "M", "Model",        "e.g. SC-P900",  "Optional printer model name embedded in the .cal file header.\nHelps identify which printer this calibration was built for.\nCan be left empty."),
-            ("_pc_copy",  "C", "Copyright",    "e.g. © 2026 …", "Optional copyright string embedded in the .cal file header.\nUse to record ownership or licensing terms for this calibration.\nCan be left empty."),
+            ("_pc_mfr",   "A", tr("Manufacturer"), "e.g. Epson",
+             tr("Optional manufacturer name embedded in the .cal file header.\n"
+                "Identifies the company or person who created this calibration.\n"
+                "Can be left empty.")),
+            ("_pc_model", "M", tr("Model"),        "e.g. SC-P900",
+             tr("Optional printer model name embedded in the .cal file header.\n"
+                "Helps identify which printer this calibration was built for.\n"
+                "Can be left empty.")),
+            ("_pc_copy",  "C", tr("Copyright"),    "e.g. © 2026 …",
+             tr("Optional copyright string embedded in the .cal file header.\n"
+                "Use to record ownership or licensing terms for this calibration.\n"
+                "Can be left empty.")),
         ]:
             check = QCheckBox(tr("{label} (-{flag}):").format(label=label, flag=flag), grp)
             edit  = QLineEdit(grp)
@@ -2553,7 +2562,7 @@ class TabProfile(QWidget):
             ("_m_model", "M", "e.g. SC-P900",  tr(_META_MODEL_TIP)),
             ("_m_copy",  "C", "e.g. © 2026 …", tr(_META_COPY_TIP)),
         ]:
-            label_text = "Manufacturer" if flag == "A" else "Model" if flag == "M" else "Copyright"
+            label_text = tr("Manufacturer") if flag == "A" else tr("Model") if flag == "M" else tr("Copyright")
             check = QCheckBox(tr("{label_text} (-{flag}):").format(label_text=label_text, flag=flag), grp)
             edit  = QLineEdit(grp)
             edit.setPlaceholderText(placeholder)
@@ -3097,7 +3106,7 @@ class TabProfile(QWidget):
             ("_model", "M", "e.g. SC-P900",        tr(_META_MODEL_TIP)),
             ("_copy",  "C", "e.g. © 2026 …",       tr(_META_COPY_TIP)),
         ]:
-            label_text = "Manufacturer" if flag == "A" else "Model" if flag == "M" else "Copyright"
+            label_text = tr("Manufacturer") if flag == "A" else tr("Model") if flag == "M" else tr("Copyright")
             check = QCheckBox(tr("{label_text} (-{flag}):").format(label_text=label_text, flag=flag), grp)
             edit  = QLineEdit(grp)
             edit.setPlaceholderText(placeholder)
