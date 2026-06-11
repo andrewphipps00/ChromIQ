@@ -702,7 +702,7 @@ class TabMeasure(QWidget):
         self._load_ti1_btn = QPushButton(tr("Load .ti2 file…"), file_outer)
         set_folder_icon(self._load_ti1_btn, "folder_measure")
         self._load_ti1_btn.clicked.connect(self._on_load_ti2)
-        self._ti1_lbl = ElidingLabel("No file selected", file_outer)
+        self._ti1_lbl = ElidingLabel(tr("No file selected"), file_outer)
         self._ti1_lbl.setStyleSheet("color: #909090; font-size: 11px;")
         file_row.addWidget(self._load_ti1_btn)
         file_row.addWidget(self._ti1_lbl, stretch=1)
@@ -1897,11 +1897,6 @@ class TabMeasure(QWidget):
 
     # Strip-recognition combo entries: (userData, label). The userData maps to
     # a chartread flag — "default" = no flag, "disable" = -B, "force" = -b.
-    _BIDIR_ITEMS = (
-        ("default", "Argyll default"),
-        ("disable", "Bidirectional disabled (-B)"),
-        ("force",   "Bidirectional forced (-b)"),
-    )
 
     def _make_bidir_row(self, parent: QWidget, layout, mode: str) -> None:
         """Build the 'Strip recognition' combo + Auto toggle for a mode.
@@ -1920,7 +1915,13 @@ class TabMeasure(QWidget):
             combo.setMinimumWidth(210)
         else:
             combo.setMinimumWidth(240)
-        for data, label in self._BIDIR_ITEMS:
+        # tr() at build time, not import time — tabs are imported before
+        # set_language() runs, so a class-level constant would stay English.
+        for data, label in (
+            ("default", tr("Argyll default")),
+            ("disable", tr("Bidirectional disabled (-B)")),
+            ("force",   tr("Bidirectional forced (-b)")),
+        ):
             combo.addItem(label, data)
         row.addWidget(combo)
         row.addSpacing(12)

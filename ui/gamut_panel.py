@@ -686,7 +686,9 @@ class GamutPanel(QWidget):
             f"<html><body style='background:{bg}; margin:0; display:flex;"
             " align-items:center; justify-content:center; height:100vh;'>"
             f"<p style='color:{fg}; font-family:Menlo, Consolas, \"Courier New\", monospace; font-size:12px;"
-            " text-align:center;'>Run gamut analysis<br>to view the 3D gamut</p>"
+            " text-align:center;'>"
+            + tr("Run gamut analysis<br>to view the 3D gamut") +
+            "</p>"
             "</body></html>"
         )
         self._web_view.setHtml(html)

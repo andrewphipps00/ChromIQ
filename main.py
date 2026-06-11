@@ -134,8 +134,11 @@ def main() -> int:
 
     # Language must be set before any widget is built — strings are
     # translated at construction time (restart-to-apply, see core/i18n.py).
-    from core.i18n import set_language
+    from core.i18n import install_qt_translator, set_language
     set_language(settings.get("language", "en"))
+    # Qt's own strings (OK/Cancel/Close buttons, context menus) come from
+    # qtbase_<code>.qm, not our catalog.
+    install_qt_translator(app)
 
     appearance = settings.get("appearance", "auto")
     apply_appearance(app, None, appearance)

@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
+from core.i18n import tr
 from core.logger import get_logger
 from core.strip_utils import letter_to_idx
 
@@ -222,9 +223,21 @@ def quality_grade(avg_de: float | None, peak_de: float | None) -> str:
     return _GRADE_LABELS[max(avg_rank, peak_rank)]
 
 
+def grade_display(grade: str) -> str:
+    """Translated display form of a quality grade (grades stay English
+    internally — they are dict keys and comparison values)."""
+    return {
+        "Excellent": tr("Excellent"),
+        "Good": tr("Good"),
+        "Acceptable": tr("Acceptable"),
+        "Needs Work": tr("Needs Work"),
+        "Unknown": tr("Unknown"),
+    }.get(grade, grade)
+
+
 def quality_explanation(avg_de: float | None, peak_de: float | None) -> str:
     if avg_de is None:
-        return (
+        return tr(
             "profcheck did not return summary statistics. "
             "Make sure the .ti3 and .icc files match and that "
             "per-patch verbosity is enabled."
@@ -236,60 +249,60 @@ def quality_explanation(avg_de: float | None, peak_de: float | None) -> str:
 
     lines: list[str] = []
     lines.append(
-        f"Average \u0394E: {avg_de:.2f}  |  Peak \u0394E: {peak_de:.2f}"
-        if peak_de is not None else f"Average \u0394E: {avg_de:.2f}"
+        tr("Average \u0394E: {avg:.2f}  |  Peak \u0394E: {peak:.2f}").format(avg=avg_de, peak=peak_de)
+        if peak_de is not None else tr("Average \u0394E: {avg:.2f}").format(avg=avg_de)
     )
 
     overall_rank = max(avg_rank, peak_rank)
     if overall_rank == 0:
-        lines.append(
+        lines.append(tr(
             "Your profile is excellent. Both average and peak colour errors are very low — "
             "typical for a well-measured printer/paper combination."
-        )
+        ))
     elif overall_rank == 1:
         if limiting == "peak":
-            lines.append(
-                f"Your profile is good overall (average \u0394E {avg_de:.2f}), but one or more "
-                f"individual patches have higher errors (peak \u0394E {peak_de:.2f}). "
+            lines.append(tr(
+                "Your profile is good overall (average \u0394E {avg:.2f}), but one or more "
+                "individual patches have higher errors (peak \u0394E {peak:.2f}). "
                 "Most colours will reproduce accurately; the outlier patches may cause "
                 "subtle shifts in specific colours."
-            )
+            ).format(avg=avg_de, peak=peak_de))
         else:
-            lines.append(
+            lines.append(tr(
                 "Your profile is good. Most colours will reproduce accurately. "
                 "Small errors may be visible only in critical colour-matching situations."
-            )
+            ))
     elif overall_rank == 2:
         if limiting == "peak":
-            lines.append(
-                f"Your profile's average accuracy is reasonable (\u0394E {avg_de:.2f}), but "
-                f"there are individual patches with significant errors (peak \u0394E {peak_de:.2f}). "
+            lines.append(tr(
+                "Your profile's average accuracy is reasonable (\u0394E {avg:.2f}), but "
+                "there are individual patches with significant errors (peak \u0394E {peak:.2f}). "
                 "These outliers will likely cause noticeable colour shifts in specific areas. "
                 "Re-measuring the flagged strips can help."
-            )
+            ).format(avg=avg_de, peak=peak_de))
         else:
-            lines.append(
+            lines.append(tr(
                 "Your profile is acceptable but has room for improvement. "
                 "Some colours may look slightly off in prints. "
                 "Re-measuring the strips with the highest error can help."
-            )
+            ))
     else:
         if limiting == "peak":
-            avg_label = _GRADE_LABELS[avg_rank].lower()
-            lines.append(
-                f"Your average colour accuracy is {avg_label} (\u0394E {avg_de:.2f}), but "
-                f"one or more individual patches have very high errors (peak \u0394E {peak_de:.2f}). "
+            avg_label = grade_display(_GRADE_LABELS[avg_rank]).lower()
+            lines.append(tr(
+                "Your average colour accuracy is {avg_label} (\u0394E {avg:.2f}), but "
+                "one or more individual patches have very high errors (peak \u0394E {peak:.2f}). "
                 "These outliers will cause clearly visible colour shifts in specific areas. "
                 "Re-measuring the worst strips — or re-printing and measuring "
                 "a fresh chart — is strongly recommended."
-            )
+            ).format(avg_label=avg_label, avg=avg_de, peak=peak_de))
         else:
-            lines.append(
+            lines.append(tr(
                 "Your profile needs work. Colour accuracy is low and prints "
                 "will likely show noticeable colour shifts. "
                 "Re-measuring the worst strips — or re-printing and measuring "
                 "a fresh chart — is strongly recommended."
-            )
+            ))
 
     return "\n\n".join(lines)
 

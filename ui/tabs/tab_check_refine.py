@@ -56,6 +56,7 @@ from workflow.profcheck_runner import (
     ProfcheckRunner,
     group_by_strip,
     parse_refine_strips,
+    grade_display,
     quality_explanation,
     quality_grade,
     strips_to_refine,
@@ -1295,7 +1296,8 @@ class TabCheckRefine(QWidget):
                 folder = self._ti3_path.parent
                 grade = quality_grade(result.avg_de, result.peak_de)
                 explanation = quality_explanation(result.avg_de, result.peak_de)
-                summary_text = f"Profile Quality Assessment: {grade}\n\n{explanation}"
+                summary_text = tr("Profile Quality Assessment: {grade}").format(
+                    grade=grade_display(grade)) + f"\n\n{explanation}"
                 if all_strips_display:
                     strip_lines = "\n".join(
                         f"  {s:4s}  avg ΔE: {de:.2f}" for s, de in all_strips_display[:10]
@@ -1355,7 +1357,8 @@ class TabCheckRefine(QWidget):
         layout.setContentsMargins(24, 20, 24, 20)
 
         # Grade headline
-        grade_lbl = QLabel(tr("Profile Quality: <b>{grade}</b>").format(grade=grade), dlg)
+        grade_lbl = QLabel(tr("Profile Quality: <b>{grade}</b>").format(
+            grade=grade_display(grade)), dlg)
         grade_lbl.setStyleSheet("font-size: 15px;")
         layout.addWidget(grade_lbl)
 
@@ -1463,10 +1466,10 @@ class TabCheckRefine(QWidget):
         # Buttons — laid out individually with stretches between each so they
         # spread evenly across the dialog width regardless of how many are shown.
         _install_labels = {
-            "Excellent":  "Install Profile",
-            "Good":       "Install Profile As Is",
-            "Acceptable": "Install Profile As Is",
-            "Needs Work": "Install Profile Anyway",
+            "Excellent":  tr("Install Profile"),
+            "Good":       tr("Install Profile As Is"),
+            "Acceptable": tr("Install Profile As Is"),
+            "Needs Work": tr("Install Profile Anyway"),
         }
 
         close_btn = QPushButton(tr("Close"), dlg)
@@ -1474,7 +1477,7 @@ class TabCheckRefine(QWidget):
 
         install_btn: QPushButton | None = None
         if self._icc_path:
-            install_label = _install_labels.get(grade, "Install Profile Anyway")
+            install_label = _install_labels.get(grade, tr("Install Profile Anyway"))
             install_btn = QPushButton(install_label, dlg)
 
         precond_btn: QPushButton | None = None

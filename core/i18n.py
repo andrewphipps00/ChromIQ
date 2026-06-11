@@ -114,6 +114,33 @@ def set_language(code: str) -> None:
         _language, _catalog = SOURCE_LANGUAGE, {}
 
 
+_qt_translator = None  # keep a reference — Qt does not own installed translators
+
+
+def install_qt_translator(app) -> None:
+    """Load Qt's own qtbase translations for the active language.
+
+    QDialogButtonBox standard buttons (OK / Cancel / Close), context menus
+    and other Qt-internal strings are translated by Qt itself, not by our
+    catalog — without qtbase_<code>.qm they stay English.
+    """
+    global _qt_translator
+    if _language == SOURCE_LANGUAGE:
+        return
+    try:
+        from PyQt6.QtCore import QLibraryInfo, QTranslator
+        tr_dir = QLibraryInfo.path(QLibraryInfo.LibraryPath.TranslationsPath)
+        t = QTranslator(app)
+        if t.load(f"qtbase_{_language}", tr_dir):
+            app.installTranslator(t)
+            _qt_translator = t
+            log.info("Qt base translations loaded for %r", _language)
+        else:
+            log.warning("No qtbase translations for %r in %s", _language, tr_dir)
+    except Exception:
+        log.warning("Could not install Qt base translations", exc_info=True)
+
+
 # ----------------------------------------------------------------------
 # parameters.yaml overlay
 # ----------------------------------------------------------------------

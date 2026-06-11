@@ -1405,13 +1405,13 @@ class TabProfile(QWidget):
 
         install_desc = QLabel(
             (
-                "<b>Install on this Mac</b> — adds the calibrated profile to your Mac's "
-                "colour management system so it is immediately available in Photoshop, "
-                "Lightroom, and other colour-managed apps."
+                tr("<b>Install on this Mac</b> — adds the calibrated profile to your Mac's "
+                   "colour management system so it is immediately available in Photoshop, "
+                   "Lightroom, and other colour-managed apps.")
                 if is_macos() else
-                "<b>Install Profile</b> — copies the calibrated profile to your system's "
-                "colour profile directory so it is immediately available in "
-                "colour-managed applications."
+                tr("<b>Install Profile</b> — copies the calibrated profile to your system's "
+                   "colour profile directory so it is immediately available in "
+                   "colour-managed applications.")
             ),
             dlg,
         )
@@ -1419,7 +1419,7 @@ class TabProfile(QWidget):
         install_desc.setStyleSheet("color: #b0b0b0; font-size: 11px;")
         layout.addWidget(install_desc)
 
-        _install_label = "Install on this Mac" if is_macos() else "Install Profile"
+        _install_label = tr("Install on this Mac") if is_macos() else tr("Install Profile")
         install_btn = QPushButton(_install_label, dlg)
         install_btn.setObjectName("primary")
         done_btn = QPushButton(tr("Done"), dlg)
@@ -3630,7 +3630,7 @@ class TabProfile(QWidget):
 
         if issues:
             warn_lbl = QLabel(
-                "<b>Warnings detected:</b><br>" +
+                tr("<b>Warnings detected:</b>") + "<br>" +
                 "<br>".join(f"&nbsp;&nbsp;• {i}" for i in issues),
                 dlg,
             )
@@ -3643,12 +3643,12 @@ class TabProfile(QWidget):
 
         install_desc = QLabel(
             (
-                "<b>Install on this Mac</b> — adds the profile to your Mac's colour management "
-                "system so it is immediately available in Photoshop, Lightroom, and other "
-                "colour-managed apps."
+                tr("<b>Install on this Mac</b> — adds the profile to your Mac's colour management "
+                   "system so it is immediately available in Photoshop, Lightroom, and other "
+                   "colour-managed apps.")
                 if is_macos() else
-                "<b>Install Profile</b> — copies the profile to your system's colour profile "
-                "directory so it is immediately available in colour-managed applications."
+                tr("<b>Install Profile</b> — copies the profile to your system's colour profile "
+                   "directory so it is immediately available in colour-managed applications.")
             ),
             dlg,
         )
@@ -3694,7 +3694,7 @@ class TabProfile(QWidget):
             apply_desc.setStyleSheet("color: #b0b0b0; font-size: 11px;")
             layout.addWidget(apply_desc)
 
-        _install_label = "Install on this Mac" if is_macos() else "Install Profile"
+        _install_label = tr("Install on this Mac") if is_macos() else tr("Install Profile")
         install_btn = QPushButton(_install_label, dlg)
         install_btn.setObjectName("primary")
         precond_btn = QPushButton(tr("← Use as Pre-conditioning"), dlg)
