@@ -139,6 +139,10 @@ Rules when touching UI code:
   keys, stale keys, placeholder mismatches, and over-long short labels.
 - Adding a language = new `data/i18n/<code>.json` (with `@language_name`)
   + `parameters.<code>.yaml`; the Settings combobox discovers it automatically.
+  `python scripts/i18n_agent/new_language.py <code> "<English>" "<Native>"`
+  prints a complete, self-validating translation-agent prompt (style contract,
+  hard rules, validation commands). Partial work staged in
+  `data/i18n/staging/<code>.partial.json` is picked up automatically.
 
 ### Adding a parameter
 
