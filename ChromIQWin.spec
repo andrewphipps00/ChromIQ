@@ -65,6 +65,7 @@ a = Analysis(
     datas=[
         ('assets',               'assets'),
         ('data/parameters.yaml', 'data'),
+        ('data/i18n',            'data/i18n'),
         (certifi_where,          'certifi'),
         *_ic_datas,
         *_winpty_datas,

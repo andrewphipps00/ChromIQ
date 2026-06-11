@@ -1,5 +1,18 @@
 # Changelog
 
+## v3.9.2
+
+### ✨ New
+- **Swedish (Svenska)** — complete translation (1,203 strings + all
+  parameter tooltips), in the same extensive, friendly style as the
+  other languages.
+
+### 🐞 Fixes
+- Windows: the frozen build now bundles the language catalogs (the
+  Language dropdown previously only offered English), and three
+  macOS-only print checkboxes no longer float garbled over the
+  Settings dialog.
+
 ## v3.9.1
 
 ### ✨ New
