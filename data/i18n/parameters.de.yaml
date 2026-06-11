@@ -223,7 +223,7 @@ parameters:
         zweiten Profilierungsdurchlauf.  Beim allerersten Profil leer lassen.
 
     "-C":
-      name: "Kalibrier-Übersteuerung"
+      name: "Kalibrier-Override"
       tooltip_title: "Kalibrierungs-Übersteuerung (-C)"
       tooltip_body: |
         Optionale .cal-Datei, deren Kalibrierungskurven beim Schätzen des
@@ -914,7 +914,7 @@ parameters:
         wenn nachgelagerte Werkzeuge ausdrücklich L*a*b* verlangen.
 
     "-X":
-      name: "Colorimeter-Korrekturmatrix"
+      name: "Colorimeter-Korrektur"
       tooltip_title: "Colorimeter-Korrekturmatrix (-X)"
       tooltip_body: |
         Wendet eine Colorimeter-Korrekturmatrix (.ccmx) oder ein
@@ -1003,7 +1003,7 @@ parameters:
         (reine Ausgabeprofile brauchen kein B2A).
 
     "-r":
-      name: "Glättung / Rauschen (% ΔE)"
+      name: "Glättung/Rauschen (% ΔE)"
       tooltip_title: "Mittleres Geräterauschen (-r)"
       tooltip_body: |
         Geschätztes mittleres Mess- oder Geräterauschen als Prozentsatz
@@ -1027,7 +1027,7 @@ parameters:
         Name für das ICC-Profilformat, die Dateien sind identisch.
 
     "-S":
-      name: "Gamut-Quelle (Perz.+Sätt.)"
+      name: "Gamut-Quelle (P+S)"
       tooltip_title: "Quelle für Perzeptiv + Sättigung (-S)"
       tooltip_body: |
         Wie -s, wendet das Gamut-Mapping aber auf die perzeptive UND die

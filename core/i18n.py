@@ -130,13 +130,16 @@ def install_qt_translator(app) -> None:
     try:
         from PyQt6.QtCore import QLibraryInfo, QTranslator
         tr_dir = QLibraryInfo.path(QLibraryInfo.LibraryPath.TranslationsPath)
+        # Qt ships some languages only under a variant name.
+        candidates = [_language, {"pt": "pt_BR", "no": "nb"}.get(_language)]
         t = QTranslator(app)
-        if t.load(f"qtbase_{_language}", tr_dir):
-            app.installTranslator(t)
-            _qt_translator = t
-            log.info("Qt base translations loaded for %r", _language)
-        else:
-            log.warning("No qtbase translations for %r in %s", _language, tr_dir)
+        for cand in filter(None, candidates):
+            if t.load(f"qtbase_{cand}", tr_dir):
+                app.installTranslator(t)
+                _qt_translator = t
+                log.info("Qt base translations loaded: qtbase_%s", cand)
+                return
+        log.warning("No qtbase translations for %r in %s", _language, tr_dir)
     except Exception:
         log.warning("Could not install Qt base translations", exc_info=True)
 

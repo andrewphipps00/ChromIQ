@@ -65,39 +65,45 @@ def test_available_languages_lists_english_and_german():
 # German catalog hygiene
 # ----------------------------------------------------------------------
 
-def _load_de() -> dict[str, str]:
-    with open(ROOT / "data" / "i18n" / "de.json", encoding="utf-8") as f:
+def _catalog_codes() -> list[str]:
+    return sorted(p.stem for p in (ROOT / "data" / "i18n").glob("*.json"))
+
+
+def _load_catalog(code: str) -> dict[str, str]:
+    with open(ROOT / "data" / "i18n" / f"{code}.json", encoding="utf-8") as f:
         return {k: v for k, v in json.load(f).items() if not k.startswith("@")}
 
 
-def test_de_catalog_is_complete():
-    missing = sorted(extract_keys() - set(_load_de()))
-    assert not missing, f"{len(missing)} untranslated strings, e.g. {missing[:5]}"
+@pytest.mark.parametrize("code", _catalog_codes())
+def test_catalog_is_complete(code):
+    missing = sorted(extract_keys() - set(_load_catalog(code)))
+    assert not missing, f"[{code}] {len(missing)} untranslated, e.g. {missing[:5]}"
 
 
-def test_de_catalog_has_no_stale_keys():
-    stale = sorted(set(_load_de()) - extract_keys())
-    assert not stale, f"{len(stale)} stale catalog keys, e.g. {stale[:5]}"
+@pytest.mark.parametrize("code", _catalog_codes())
+def test_catalog_has_no_stale_keys(code):
+    stale = sorted(set(_load_catalog(code)) - extract_keys())
+    assert not stale, f"[{code}] {len(stale)} stale keys, e.g. {stale[:5]}"
 
 
-def test_de_placeholders_match_source():
-    bad = i18n.check_placeholders(_load_de())
-    assert not bad, f"placeholder mismatch in: {bad[:5]}"
+@pytest.mark.parametrize("code", _catalog_codes())
+def test_placeholders_match_source(code):
+    bad = i18n.check_placeholders(_load_catalog(code))
+    assert not bad, f"[{code}] placeholder mismatch in: {bad[:5]}"
 
 
-def test_de_short_labels_stay_compact():
-    """Button/label-sized strings must not balloon in German (clipping).
-
-    Short English strings are the ones that end up on buttons and tab
-    labels; allow modest growth plus a small constant, flag the rest.
-    """
+@pytest.mark.parametrize("code", _catalog_codes())
+def test_short_labels_stay_compact(code):
+    """Button/label-sized strings must not balloon in translation
+    (clipping). Short English strings are the ones that end up on buttons
+    and tab labels; allow modest growth plus a small constant."""
     offenders = []
-    for src, dst in _load_de().items():
+    for src, dst in _load_catalog(code).items():
         if "\n" in src or len(src) > 24 or "{" in src:
             continue
         if len(dst) > int(len(src) * 1.6) + 6:
             offenders.append((src, dst))
-    assert not offenders, f"over-long German for short labels: {offenders}"
+    assert not offenders, f"[{code}] over-long short labels: {offenders}"
 
 
 # ----------------------------------------------------------------------
@@ -109,9 +115,15 @@ def _load_params() -> dict:
         return yaml.safe_load(f)["parameters"]
 
 
-def test_parameters_overlay_covers_every_parameter():
+def _overlay_codes() -> list[str]:
+    return sorted(p.suffixes[0].lstrip(".")
+                  for p in (ROOT / "data" / "i18n").glob("parameters.*.yaml"))
+
+
+@pytest.mark.parametrize("code", _overlay_codes())
+def test_parameters_overlay_covers_every_parameter(code):
     overlay = yaml.safe_load(
-        (ROOT / "data" / "i18n" / "parameters.de.yaml").read_text(encoding="utf-8")
+        (ROOT / "data" / "i18n" / f"parameters.{code}.yaml").read_text(encoding="utf-8")
     )["parameters"]
     problems = []
     for tool, defs in _load_params().items():
