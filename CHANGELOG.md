@@ -1,5 +1,14 @@
 # Changelog
 
+## v3.9.10
+
+### ✨ New
+- **Simplified Chinese (简体中文)** — complete translation (1,203 strings
+  + all parameter tooltips), in the same extensive, friendly style as the
+  other languages. ChromIQ now ships in twelve languages: English, German,
+  Dutch, Norwegian, Swedish, Italian, Spanish, French, Polish, Portuguese,
+  Japanese and Simplified Chinese.
+
 ## v3.9.9
 
 ### ✨ New
