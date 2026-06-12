@@ -1,5 +1,14 @@
 # Changelog
 
+## v3.9.11
+
+### ✨ New
+- **Russian (Русский)** — complete translation (1,203 strings + all
+  parameter tooltips), in the same extensive, friendly style as the
+  other languages. ChromIQ now ships in thirteen languages: English,
+  German, Dutch, Norwegian, Swedish, Italian, Spanish, French, Polish,
+  Portuguese, Japanese, Simplified Chinese and Russian.
+
 ## v3.9.10
 
 ### ✨ New
