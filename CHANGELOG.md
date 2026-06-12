@@ -11,6 +11,13 @@
   measurement modes are supported, with the same plain-language calibration
   guidance as the Measure tab. Available in all thirteen languages. Resolves #36.
 
+### 🐛 Fixed
+- **Create Chart tab rendered blank on first show** — the tab now draws
+  correctly the first time you open it. Fixes #35.
+- **Crash on quit after opening the 3D patch cube** — closing the app after
+  viewing the 3D patch distribution no longer triggers a "quit unexpectedly"
+  crash. Fixes #38.
+
 ## v3.9.11
 
 ### ✨ New
