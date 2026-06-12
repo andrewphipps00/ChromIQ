@@ -1,5 +1,14 @@
 # Changelog
 
+## v3.9.9
+
+### ✨ New
+- **Japanese (日本語)** — complete translation (1,203 strings + all
+  parameter tooltips), in the same extensive, friendly style as the
+  other languages. ChromIQ now ships in eleven languages: English,
+  German, Dutch, Norwegian, Swedish, Italian, Spanish, French, Polish,
+  Portuguese and Japanese.
+
 ## v3.9.8
 
 ### ✨ New
