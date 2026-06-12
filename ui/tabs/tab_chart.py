@@ -1167,10 +1167,15 @@ class TabChart(QWidget):
         output_grp = QGroupBox(tr("Output"), w)
         output_layout = QVBoxLayout(output_grp)
         # Shared label width keeps the "Target name:" and "Chart notes:"
-        # input fields aligned vertically.
-        _OUTPUT_LBL_W = 96
+        # input fields aligned vertically. Sized to the translated labels so
+        # longer locales widen the column (the stretchy edits absorb it).
         name_row = QHBoxLayout()
         _name_lbl = QLabel(tr("Target name:"), w)
+        _OUTPUT_LBL_W = max(
+            96,
+            _name_lbl.fontMetrics().horizontalAdvance(tr("Target name:")) + 8,
+            _name_lbl.fontMetrics().horizontalAdvance(tr("Chart notes:")) + 8,
+        )
         _name_lbl.setFixedWidth(_OUTPUT_LBL_W)
         name_row.addWidget(_name_lbl)
         self._manual_target_name_edit = self._make_lineedit("", w)

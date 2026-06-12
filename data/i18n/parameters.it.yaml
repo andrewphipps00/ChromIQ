@@ -370,13 +370,13 @@ parameters:
 
         La maggior parte degli utenti dovrebbe lasciarlo su OFPS.
       labels:
-        - "OFPS — punto più lontano ottimizzato (consigliato)"
-        - "Incremental Far Point (-t) — più veloce, meno uniforme"
-        - "Casuale uniforme — spazio dispositivo (-r)"
-        - "Casuale uniforme — percettivo (-R)"
-        - "Quasi-casuale riempitivo — spazio dispositivo (-q)"
-        - "Quasi-casuale riempitivo — percettivo (-Q)"
-        - "Reticolo BCC — spazio dispositivo (-i)"
+        - "OFPS — ottimizzato (consigliato)"
+        - "Incremental Far Point (-t)"
+        - "Casuale — dispositivo (-r)"
+        - "Casuale — percettivo (-R)"
+        - "Quasi-casuale — dispositivo (-q)"
+        - "Quasi-casuale — percettivo (-Q)"
+        - "Reticolo BCC — dispositivo (-i)"
         - "Reticolo BCC — percettivo (-I)"
     "-A":
       name: "Adattamento OFPS"
