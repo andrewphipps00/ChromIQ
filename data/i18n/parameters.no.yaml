@@ -354,12 +354,12 @@ parameters:
 
         De fleste bør la dette stå på OFPS.
       labels:
-        - "OFPS — optimalisert fjernpunkt (anbefalt)"
-        - "Incremental Far Point (-t) — raskere, mindre jevn"
+        - "OFPS — optimalisert (anbefalt)"
+        - "Incremental Far Point (-t)"
         - "Jevnt tilfeldig — enhetsrom (-r)"
         - "Jevnt tilfeldig — perseptuelt (-R)"
-        - "Kvasi-tilfeldig fyllende — enhetsrom (-q)"
-        - "Kvasi-tilfeldig fyllende — perseptuelt (-Q)"
+        - "Kvasi-tilfeldig — enhetsrom (-q)"
+        - "Kvasi-tilfeldig — persept. (-Q)"
         - "BCC-gitter — enhetsrom (-i)"
         - "BCC-gitter — perseptuelt (-I)"
     "-A":

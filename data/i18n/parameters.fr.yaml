@@ -378,12 +378,12 @@ parameters:
 
         La plupart des utilisateurs devraient le laisser sur OFPS.
       labels:
-        - "OFPS — point le plus lointain optimisé (recommandé)"
-        - "Incremental Far Point (-t) — plus rapide, moins uniforme"
-        - "Aléatoire uniforme — espace périphérique (-r)"
-        - "Aléatoire uniforme — perceptuel (-R)"
-        - "Quasi-aléatoire remplissant — espace périphérique (-q)"
-        - "Quasi-aléatoire remplissant — perceptuel (-Q)"
+        - "OFPS — optimisé (recommandé)"
+        - "Incremental Far Point (-t)"
+        - "Aléatoire — périphérique (-r)"
+        - "Aléatoire — perceptuel (-R)"
+        - "Quasi-aléatoire — périph. (-q)"
+        - "Quasi-aléatoire — percept. (-Q)"
         - "Réseau BCC — espace périphérique (-i)"
         - "Réseau BCC — perceptuel (-I)"
     "-A":

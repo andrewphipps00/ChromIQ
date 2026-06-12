@@ -1,5 +1,18 @@
 # Changelog
 
+## v3.9.6
+
+### 🐞 Fixed
+- **Translated UI no longer clips or overflows.** The two-line print
+  buttons (Print Current Page / Print All Pages / Clear Print Queue /
+  Save as Defaults), the Create Chart and Measure option panes, and
+  several long option labels were clipped or forced a horizontal
+  scrollbar in the translated languages. All eight languages audited
+  and fixed; the Target name / Chart notes label column now sizes
+  itself to the translated text instead of clipping it.
+- The onscreen i18n audit now also checks multi-line buttons and
+  horizontal overflow of scroll panes (`scripts/i18n_onscreen_audit.py`).
+
 ## v3.9.5
 
 ### ✨ New

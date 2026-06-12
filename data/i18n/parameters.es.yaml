@@ -374,13 +374,13 @@ parameters:
 
         La mayoría de los usuarios deberían dejarlo en OFPS.
       labels:
-        - "OFPS — punto más lejano optimizado (recomendado)"
-        - "Incremental Far Point (-t) — más rápido, menos uniforme"
-        - "Aleatoria uniforme — espacio dispositivo (-r)"
-        - "Aleatoria uniforme — perceptual (-R)"
-        - "Cuasialeatoria de relleno — espacio dispositivo (-q)"
-        - "Cuasialeatoria de relleno — perceptual (-Q)"
-        - "Retícula BCC — espacio dispositivo (-i)"
+        - "OFPS — optimizado (recomendado)"
+        - "Incremental Far Point (-t)"
+        - "Aleatoria — dispositivo (-r)"
+        - "Aleatoria — perceptual (-R)"
+        - "Cuasialeatoria — dispositivo (-q)"
+        - "Cuasialeatoria — perceptual (-Q)"
+        - "Retícula BCC — dispositivo (-i)"
         - "Retícula BCC — perceptual (-I)"
     "-A":
       name: "Adaptación OFPS"

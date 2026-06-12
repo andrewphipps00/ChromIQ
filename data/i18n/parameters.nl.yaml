@@ -362,12 +362,12 @@ parameters:
 
         De meeste gebruikers laten dit op OFPS staan.
       labels:
-        - "OFPS — geoptimaliseerd verstepunt (aanbevolen)"
-        - "Incremental Far Point (-t) — sneller, minder egaal"
-        - "Egaal willekeurig — apparaatruimte (-r)"
+        - "OFPS — geoptimaliseerd (aanbevolen)"
+        - "Incremental Far Point (-t)"
+        - "Willekeurig — apparaat (-r)"
         - "Egaal willekeurig — perceptueel (-R)"
-        - "Quasi-willekeurig vullend — apparaatruimte (-q)"
-        - "Quasi-willekeurig vullend — perceptueel (-Q)"
+        - "Quasi-willekeurig — apparaat (-q)"
+        - "Quasi-willekeurig — percept. (-Q)"
         - "BCC-rooster — apparaatruimte (-i)"
         - "BCC-rooster — perceptueel (-I)"
     "-A":
