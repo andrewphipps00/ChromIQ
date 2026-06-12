@@ -1,5 +1,12 @@
 # Changelog
 
+## v3.9.4
+
+### ✨ New
+- **Spanish (Español)** — complete translation (1,203 strings + all
+  parameter tooltips), in the same extensive, friendly style as the
+  other languages.
+
 ## v3.9.3
 
 ### ✨ New
