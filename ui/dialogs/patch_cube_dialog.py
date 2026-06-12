@@ -14,9 +14,11 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 
-from PyQt6.QtCore import QUrl, Qt
+from PyQt6.QtCore import QEventLoop, QTimer, QUrl, Qt
 from PyQt6.QtGui import QColor
-from PyQt6.QtWidgets import QDialogButtonBox, QLabel, QVBoxLayout, QDialog
+from PyQt6.QtWidgets import (
+    QApplication, QDialogButtonBox, QLabel, QVBoxLayout, QDialog,
+)
 
 from core.logger import get_logger
 from core.resource_path import resource_path
@@ -50,6 +52,9 @@ class PatchCubeDialog(QDialog):
         lay.setSpacing(0)
 
         self._web = self._make_web_view(theme["bg"])
+        # Real QWebEngineView when WebEngine is present, else None (placeholder
+        # label). Held separately so _teardown_webengine can drain it on close.
+        self._web_view = self._web if hasattr(self._web, "setUrl") else None
         lay.addWidget(self._web, 1)
 
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close, self)
@@ -92,3 +97,57 @@ class PatchCubeDialog(QDialog):
         out = Path(self._tmp.name) / "patch_cube.html"
         out.write_text(html, encoding="utf-8")
         self._web.setUrl(QUrl.fromLocalFile(str(out)))
+
+    # ------------------------------------------------------------------
+    def _teardown_webengine(self) -> None:
+        """Drain the QWebEngineView before the dialog is dismissed.
+
+        Same shutdown drain GamutPanel / DriftPlotDialog use. Without it the
+        cube's Chromium subtree stays alive (the dialog is parented, so it is
+        not collected when .exec() returns) and is torn down only when the app
+        quits — during _Py_Finalize, where SIP walks a dangling Chromium
+        pointer and crashes with EXC_BAD_ACCESS. See issue #38.
+        """
+        view = self._web_view
+        if view is None:
+            return
+        self._web_view = None
+        try:
+            view.loadFinished.disconnect()
+        except (TypeError, RuntimeError):
+            pass
+        try:
+            view.stop()
+            view.setUrl(QUrl("about:blank"))
+        except RuntimeError:
+            pass
+        # Let about:blank settle so pending Chromium IPC drains.
+        loop = QEventLoop()
+        QTimer.singleShot(200, loop.quit)
+        loop.exec()
+        try:
+            page = view.page()
+            if page is not None:
+                page.setParent(None)
+                page.deleteLater()
+        except RuntimeError:
+            pass
+        try:
+            view.setParent(None)
+            view.deleteLater()
+        except RuntimeError:
+            pass
+        # Actually run the deferred deletes before the dialog is destroyed.
+        app = QApplication.instance()
+        if app is not None:
+            for _ in range(3):
+                app.processEvents()
+
+    def done(self, result: int) -> None:  # noqa: N802
+        # done() is the single chokepoint for both accept() and reject().
+        self._teardown_webengine()
+        super().done(result)
+
+    def closeEvent(self, event) -> None:  # noqa: N802
+        self._teardown_webengine()
+        super().closeEvent(event)
