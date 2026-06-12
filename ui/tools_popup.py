@@ -45,6 +45,7 @@ class ToolEntry:
 
 
 _ENTRIES: tuple[ToolEntry, ...] = (
+    ToolEntry("spot_read",     tr("Read single patches")),
     ToolEntry("ti2_relayout",  tr("Edit / create chart layout")),
     ToolEntry("patch_cube",   tr("Show patch distribution (3D)")),
     ToolEntry("average",      tr("Average measurements")),
