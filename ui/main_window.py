@@ -148,6 +148,14 @@ class MainWindow(QMainWindow):
         self._accent_line.setFixedWidth(2)
         self._accent_line.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
 
+        # Style every tab's own widget tree up front. _on_tab_changed otherwise
+        # injects the per-tab accent stylesheet lazily, only when a tab is first
+        # navigated to — so a tab whose first show happens while it was never the
+        # current tab (the app restores active_tab, which may be any tab) renders
+        # unstyled on macOS until the user switches away and back. See issue #35.
+        for _i in range(self._tabs.count()):
+            self._apply_tab_widget_styling(_i)
+
         self._tabs.currentChanged.connect(self._on_tab_changed)
         QTimer.singleShot(0, lambda: self._on_tab_changed(self._tabs.currentIndex()))
 
@@ -194,22 +202,57 @@ class MainWindow(QMainWindow):
 
     def _on_tab_changed(self, index: int) -> None:
         from ui.styles import TAB_COLORS
-        from ui.tooltip_button import TooltipButton
 
         log.info("---- Tab → %s ----", self._tabs.tabText(index))
 
         color = TAB_COLORS[index] if index < len(TAB_COLORS) else TAB_COLORS[-1]
-
         # Compute variants without broken hex-alpha (Qt reads #AARRGGBB, not #RRGGBBAA)
         r, g, b = int(color[1:3], 16), int(color[3:5], 16), int(color[5:7], 16)
-        color_hover = "#{:02x}{:02x}{:02x}".format(int(r * 0.82), int(g * 0.82), int(b * 0.82))
-        color_glow  = f"rgba({r},{g},{b},0.33)"
+        color_glow = f"rgba({r},{g},{b},0.33)"
+        is_light = getattr(self, "_title_bar_mode", "dark") == "light"
+        pane_bg = "#ffffff" if is_light else "#181818"
 
         self._accent_line.setStyleSheet(f"background: {color}; border: none;")
         self._refit_accent_line()
 
+        # The tab's own widget tree (mode buttons, primary button, combos, the
+        # tooltip-button icons) is styled here. Split into its own method so it
+        # can also run for every tab at construction — see _apply_tab_widget_styling.
+        self._apply_tab_widget_styling(index)
+
+        # The shared QTabWidget pane background follows the *current* tab only.
+        self._tabs.setStyleSheet(f"""
+            QTabWidget::pane {{
+                border: none;
+                border-top: 1px solid {color_glow};
+                background: {pane_bg};
+            }}
+        """)
+
+    def _apply_tab_widget_styling(self, index: int) -> None:
+        """Inject a tab's per-tab accent stylesheet into its own widget tree.
+
+        Split out of _on_tab_changed so it can run for *every* tab at
+        construction, not just lazily when a tab is first navigated to. The app
+        restores the last-used tab (active_tab), so a tab is often first shown
+        without ever having been the current one. On macOS the first style-polish
+        of the heavy Create Chart tree (Manual panel, the built-in-presets star,
+        the light-mode combos) lands a beat late on that first show, leaving the
+        preset combo, the star and the parameter rows looking blank until the
+        user switches away and back. Pre-styling every tab up front makes the
+        first show correct. See issue #35.
+        """
+        from ui.styles import TAB_COLORS
+        from ui.tooltip_button import TooltipButton
 
         tab_w = self._tabs.widget(index)
+        if not tab_w:
+            return
+
+        color = TAB_COLORS[index] if index < len(TAB_COLORS) else TAB_COLORS[-1]
+        # Compute variants without broken hex-alpha (Qt reads #AARRGGBB, not #RRGGBBAA)
+        r, g, b = int(color[1:3], 16), int(color[3:5], 16), int(color[5:7], 16)
+        color_hover = "#{:02x}{:02x}{:02x}".format(int(r * 0.82), int(g * 0.82), int(b * 0.82))
         is_light = getattr(self, "_title_bar_mode", "dark") == "light"
 
         if is_light:
@@ -226,7 +269,6 @@ class MainWindow(QMainWindow):
             # Greyed checkbox/radio indicator — matches light_styles disabled rule
             disabled_ind_bg      = "#eeece8"   # LM_BG_WINDOW
             disabled_ind_border  = "#d0ccc6"   # LM_BORDER
-            pane_bg              = "#ffffff"
             # Big "Calculated Patches" number anchors to the masthead
             # "Chrom" wordmark colour, not the tab's spectrum accent, so
             # it reads as a text anchor rather than a per-tab tint.
@@ -245,12 +287,10 @@ class MainWindow(QMainWindow):
             # Greyed checkbox/radio indicator — matches styles.py disabled rule
             disabled_ind_bg      = "#1f1f1f"
             disabled_ind_border  = "#3a3a3a"
-            pane_bg              = "#181818"
             patch_count_color    = "#ffffff"   # _PALETTE_DARK["wordmark"]
             log_color            = color
 
-        if tab_w:
-            tab_w.setStyleSheet(f"""
+        tab_w.setStyleSheet(f"""
                 QPushButton#primary {{
                     background: {color};
                     border: 1px solid {color};
@@ -332,18 +372,9 @@ class MainWindow(QMainWindow):
                 }}
             """)
 
-        self._tabs.setStyleSheet(f"""
-            QTabWidget::pane {{
-                border: none;
-                border-top: 1px solid {color_glow};
-                background: {pane_bg};
-            }}
-        """)
-
         TooltipButton.ACCENT = color
-        if tab_w:
-            for btn in tab_w.findChildren(TooltipButton):
-                btn._set_icon()
+        for btn in tab_w.findChildren(TooltipButton):
+            btn._set_icon()
 
     def _on_chart_generated(
         self, tiffs: object, ti2: object, is_external_workflow: bool = False
@@ -687,8 +718,14 @@ class MainWindow(QMainWindow):
         reapply_groupbox_surface(self)
         reapply_input_stylesheet(self)
         # Re-run the per-tab QSS injector — its mode_btn / primary colors are
-        # baked in per-mode, so a theme switch needs to regenerate them.
+        # baked in per-mode, so a theme switch needs to regenerate them. Restyle
+        # *every* tab, not just the current one, so non-current tabs (pre-styled
+        # at construction for issue #35) don't keep stale-mode colors until they
+        # are next navigated to. _on_tab_changed then refreshes the current tab's
+        # accent line and pane background.
         if hasattr(self, "_tabs"):
+            for _i in range(self._tabs.count()):
+                self._apply_tab_widget_styling(_i)
             self._on_tab_changed(self._tabs.currentIndex())
         # Boost the log-widget weight in light mode — QSS font-weight on
         # QPlainTextEdit text is unreliable on Windows because the document
