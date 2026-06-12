@@ -1,5 +1,16 @@
 # Changelog
 
+## v3.9.12
+
+### ✨ New
+- **Read single patches** (Tools ▸ Read single patches) — measure individual
+  colours off any material with your instrument: printed sheets, fabric, paint
+  chips, even a display. Each reading shows its L\*a\*b\* value and an approximate
+  on-screen colour swatch; save the whole set as a CSV (for a spreadsheet) and an
+  Argyll `.ti3` (for other tools). Reflective, emissive (display) and ambient
+  measurement modes are supported, with the same plain-language calibration
+  guidance as the Measure tab. Available in all thirteen languages. Resolves #36.
+
 ## v3.9.11
 
 ### ✨ New
