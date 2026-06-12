@@ -5,7 +5,7 @@
 ### ✨ New
 - **Portuguese (Português)** — complete translation (1,203 strings + all
   parameter tooltips), in the same extensive, friendly style as the
-  other languages. ChromIQ now ships in nine languages: English, German,
+  other languages. ChromIQ now ships in ten languages: English, German,
   Dutch, Norwegian, Swedish, Italian, Spanish, French, Polish and
   Portuguese.
 
