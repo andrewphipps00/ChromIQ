@@ -1701,6 +1701,16 @@ class Ti2RelayoutDialog(QDialog):
             self, min_width=520))
         top.addSpacing(10)
         lv.addLayout(top)
+        # It isn't obvious the swatches can be rearranged, so spell it out right
+        # above the grid (Knut's suggestion) where it's always visible — the full
+        # story stays in the ⓘ. (Below the grid it gets squeezed by the list.)
+        grid_hint = QLabel(
+            tr("Tip: drag a swatch to move it. Shift- or ⌘/Ctrl-click to pick "
+               "several, then drag — or use the First / Up / Down / Last buttons."),
+            left)
+        grid_hint.setWordWrap(True)
+        grid_hint.setStyleSheet("color: palette(mid); font-size: 10px;")
+        lv.addWidget(grid_hint, 0)
 
         self._grid = _ReorderListWidget(left)
         # ListMode + LeftToRight + Wrapping is the canonical Qt pattern for a
@@ -1750,15 +1760,6 @@ class Ti2RelayoutDialog(QDialog):
             for k in keys:
                 QShortcut(QKeySequence(k), self._grid, activated=fn)
         lv.addWidget(self._grid, 1)
-        # It isn't obvious the swatches can be rearranged, so spell it out right
-        # under the grid (Knut's suggestion) — the full story stays in the ⓘ.
-        grid_hint = QLabel(
-            tr("Tip: drag a swatch to move it. Shift- or ⌘/Ctrl-click to pick "
-               "several, then drag — or use the First / Up / Down / Last buttons."),
-            left)
-        grid_hint.setWordWrap(True)
-        grid_hint.setStyleSheet("color: palette(mid); font-size: 10px;")
-        lv.addWidget(grid_hint, 0)
         split.addWidget(left)
 
         # Middle: preview + page navigation
