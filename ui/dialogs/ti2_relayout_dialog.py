@@ -866,7 +866,7 @@ class _NewChartDialog(QDialog):
         gg.addWidget(self._gen_cube, 0, 0)
         gg.addWidget(QLabel(tr("per axis:")), 0, 1)
         gg.addWidget(self._gen_cube_n, 0, 2)
-        gg.addWidget(self._gen_cube_count, 0, 5)
+        gg.addWidget(self._gen_cube_count, 0, 7)
 
         # Fitzpatrick skin tones — per-type ramp × parallel hue ranges.
         self._gen_skin = QCheckBox(tr("Skin tones (Fitzpatrick)"), self._gen_panel)
@@ -883,7 +883,7 @@ class _NewChartDialog(QDialog):
         gg.addWidget(self._gen_skin_n, 1, 2)
         gg.addWidget(QLabel(tr("ranges:")), 1, 3)
         gg.addWidget(self._gen_skin_ranges, 1, 4)
-        gg.addWidget(self._gen_skin_count, 1, 5)
+        gg.addWidget(self._gen_skin_count, 1, 7)
 
         # Enhanced blues / turquoise.
         self._gen_blues = QCheckBox(tr("Blues / turquoise"), self._gen_panel)
@@ -900,7 +900,7 @@ class _NewChartDialog(QDialog):
         gg.addWidget(self._gen_blues_n, 2, 2)
         gg.addWidget(QLabel(tr("layers:")), 2, 3)
         gg.addWidget(self._gen_blues_layers, 2, 4)
-        gg.addWidget(self._gen_blues_count, 2, 5)
+        gg.addWidget(self._gen_blues_count, 2, 7)
 
         # Enhanced greens (foliage).
         self._gen_greens = QCheckBox(tr("Greens (foliage)"), self._gen_panel)
@@ -917,7 +917,7 @@ class _NewChartDialog(QDialog):
         gg.addWidget(self._gen_greens_n, 3, 2)
         gg.addWidget(QLabel(tr("layers:")), 3, 3)
         gg.addWidget(self._gen_greens_layers, 3, 4)
-        gg.addWidget(self._gen_greens_count, 3, 5)
+        gg.addWidget(self._gen_greens_count, 3, 7)
 
         # Near-neutral greys — neutral ramp + 6 hue rings per step.
         self._gen_greys = QCheckBox(tr("Near-neutral greys"), self._gen_panel)
@@ -936,15 +936,18 @@ class _NewChartDialog(QDialog):
         gg.addWidget(self._gen_greys_n, 4, 2)
         gg.addWidget(QLabel(tr("offset:")), 4, 3)
         gg.addWidget(self._gen_greys_off, 4, 4)
-        gg.addWidget(QLabel(tr("rings:")), 4, 6)
-        gg.addWidget(self._gen_greys_rings, 4, 7)
-        gg.addWidget(self._gen_greys_count, 4, 5)
+        gg.addWidget(QLabel(tr("rings:")), 4, 5)
+        gg.addWidget(self._gen_greys_rings, 4, 6)
+        gg.addWidget(self._gen_greys_count, 4, 7)
 
-        # Reserve room for the live counts so growing numbers ("27000 patches")
-        # don't reflow the size columns as the user dials them up. The counts
-        # stay aligned in col 5; greys' extra "rings:" control trails in 6/7 and
-        # a stretchy trailing column (8) absorbs any spare width.
-        gg.setColumnMinimumWidth(5, 124)
+        # The counts all live in one column (7), so they stay left-aligned in a
+        # tidy column for every set. Greys' extra "rings:" control sits in cols
+        # 5/6 *before* the count (those columns are empty — but reserved at full
+        # width by the grid — for the other rows, so every count lines up). The
+        # count column gets a min width so growing numbers ("27000 patches")
+        # don't reflow the size columns; a stretchy trailing column (8) soaks up
+        # spare width.
+        gg.setColumnMinimumWidth(7, 124)
         gg.setColumnStretch(8, 1)
 
         # Cross-set de-duplication — keep combined patches unique (#37 follow-up).
@@ -954,11 +957,11 @@ class _NewChartDialog(QDialog):
                                     "repeated colours apart by a small offset "
                                     "so no patch is printed twice."))
         self._gen_unique.toggled.connect(self._update_gen_counts)
-        gg.addWidget(self._gen_unique, 5, 0, 1, 6)
+        gg.addWidget(self._gen_unique, 5, 0, 1, 8)
 
         self._gen_total = QLabel("", self._gen_panel)
         self._gen_total.setStyleSheet("font-weight: bold;")
-        gg.addWidget(self._gen_total, 6, 0, 1, 6)
+        gg.addWidget(self._gen_total, 6, 0, 1, 8)
 
         for cb in (self._gen_cube, self._gen_skin, self._gen_blues,
                    self._gen_greens, self._gen_greys):
