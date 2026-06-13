@@ -1,5 +1,16 @@
 # Changelog
 
+## v3.9.16
+
+### 🐛 Fixed
+- **Crash on quit after using the 3D views** (issue #38). Opening the 3D RGB
+  cube (Tools ▸ patch distribution, or the Edit-chart layout editor), the gamut
+  viewer or the measurement drift map and then quitting could end the app with
+  a hard crash ("ChromIQ quit unexpectedly") on macOS. The embedded web views
+  were not being fully torn down, so they were still half-alive when the app
+  shut down and the cleanup tripped over them. They are now disposed of
+  immediately and cleanly when their window closes, so quitting is reliable.
+
 ## v3.9.15
 
 ### ✨ New
