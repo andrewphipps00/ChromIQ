@@ -328,6 +328,45 @@ def gamut_edges_count(per_edge: int) -> int:
     return 12 * max(1, int(per_edge))
 
 
+# The 6 faces of the cube (one channel pinned at 0 or 100) — the gamut *surface*,
+# of which the 12 edges are just the wireframe. (channel-to-pin, pinned-value).
+_CUBE_FACES = (
+    (0, 0.0), (0, 100.0), (1, 0.0), (1, 100.0), (2, 0.0), (2, 100.0),
+)
+
+
+def gamut_faces(per_face: int) -> list[tuple[float, float, float]]:
+    """An ``per_face × per_face`` interior grid on each of the cube's 6 faces.
+
+    Where :func:`gamut_edges` traces the gamut wireframe, this samples the gamut
+    *surface* — the saturated boundary the printer can just reach. Points sit at
+    cell centres ``(i + 0.5) / per_face`` so they fall strictly inside each face,
+    not on the edges already covered by :func:`gamut_edges`. ``per_face = 0``
+    means no face sampling.
+
+    Total = ``6 * per_face**2``.
+    """
+    per_face = max(0, int(per_face))
+    if per_face == 0:
+        return []
+    out: list[tuple[float, float, float]] = []
+    for fixed, val in _CUBE_FACES:
+        free = [k for k in range(3) if k != fixed]
+        for i in range(per_face):
+            for j in range(per_face):
+                p = [0.0, 0.0, 0.0]
+                p[fixed] = val
+                p[free[0]] = (i + 0.5) / per_face * 100.0
+                p[free[1]] = (j + 0.5) / per_face * 100.0
+                out.append((p[0], p[1], p[2]))
+    return out
+
+
+def gamut_faces_count(per_face: int) -> int:
+    pf = max(0, int(per_face))
+    return 6 * pf * pf
+
+
 # ---------------------------------------------------------------------------
 # 7. Highlight & shadow detail — the two tonal ends, across the hue wheel.
 # ---------------------------------------------------------------------------
@@ -347,7 +386,8 @@ def _wheel(n: int, v_lo: float, v_hi: float,
     return out[:n]
 
 
-def highlight_shadow_detail(per_end: int) -> list[tuple[float, float, float]]:
+def highlight_shadow_detail(per_end: int,
+                            reach: float = 16.0) -> list[tuple[float, float, float]]:
     """``per_end`` light pastel tints near paper white + ``per_end`` deep dark
     tones near black, each spread across the hue wheel.
 
@@ -356,11 +396,15 @@ def highlight_shadow_detail(per_end: int) -> list[tuple[float, float, float]]:
     in shadows bite hardest. This fills them in with bright pale tints (high
     value, low saturation) and deep saturated tones (low value), across all hues.
 
-    Total = ``2 * per_end``.
+    ``reach`` (in device units, 0..100) is how far in from each end the band
+    extends: a small reach hugs paper white / pure black tightly, a larger one
+    samples deeper toward the midtones. ``per_end`` controls how many patches
+    sit at each end, so the set adds ``2 * per_end`` in total.
     """
     per_end = max(1, int(per_end))
-    highlights = _wheel(per_end, 0.86, 0.99, 0.05, 0.22)
-    shadows = _wheel(per_end, 0.10, 0.26, 0.35, 0.80)
+    f = max(2.0, min(45.0, float(reach))) / 100.0
+    highlights = _wheel(per_end, 1.0 - f, 0.99, 0.05, 0.22)
+    shadows = _wheel(per_end, 0.02, max(0.05, f), 0.35, 0.80)
     return highlights + shadows
 
 
@@ -450,26 +494,40 @@ def image_palette_count(count: int, has_image: bool) -> int:
 # ---------------------------------------------------------------------------
 # 9. Pastels — low-chroma midtones, the bulk of real photographic content.
 # ---------------------------------------------------------------------------
-def pastels(count: int) -> list[tuple[float, float, float]]:
+def pastels(count: int, layers: int = 1) -> list[tuple[float, float, float]]:
     """``count`` gentle, low-chroma colours across the hue wheel and mid-to-light
     tones — the muted, desaturated region most photos actually live in.
 
     This fills the gap between the near-neutral greys (almost no chroma) and the
     vivid sets (full chroma): soft pinks, sages, dusty blues, taupes and the like.
+    ``layers`` splits the patches across that many **chroma shells**, from barely
+    tinted near-greys out to fuller pastels, so the muted band is filled in depth
+    rather than as a single sheet (each shell's hues interleave with its
+    neighbours'). With ``layers == 1`` it is one shell at a moderate pastel chroma.
 
     Total = ``count``.
     """
-    n = max(1, int(count))
-    n_h = max(1, round(math.sqrt(n)))             # hues across, tone/chroma down
-    n_r = max(1, math.ceil(n / n_h))
+    count = max(1, int(count))
+    layers = max(1, int(layers))
+    base, rem = divmod(count, layers)
     out: list[tuple[float, float, float]] = []
-    for ri in range(n_r):
-        tr = ri / (n_r - 1) if n_r > 1 else 0.5
-        v = 0.58 + 0.32 * tr                      # mid → light
-        s = 0.26 - 0.13 * tr                      # a touch more chroma when darker
-        for hi in range(n_h):
-            out.append(_hsv((hi / n_h) * 360.0, s, v))
-    return out[:n]
+    for li in range(layers):
+        n = base + (1 if li < rem else 0)
+        if n <= 0:
+            continue
+        tl = li / (layers - 1) if layers > 1 else 0.5
+        s_shell = 0.12 + 0.18 * tl                # near-grey → fuller pastel
+        n_h = max(1, round(math.sqrt(n)))         # hues across, tone down
+        n_r = max(1, math.ceil(n / n_h))
+        sheet: list[tuple[float, float, float]] = []
+        for ri in range(n_r):
+            tr = ri / (n_r - 1) if n_r > 1 else 0.5
+            v = 0.55 + 0.34 * tr                  # mid → light
+            for hi in range(n_h):
+                h = ((hi + li / layers) / n_h) * 360.0   # interleave shells in hue
+                sheet.append(_hsv(h, s_shell, v))
+        out.extend(sheet[:n])
+    return out[:count]
 
 
 def pastels_count(count: int) -> int:

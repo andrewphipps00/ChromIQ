@@ -198,6 +198,24 @@ def test_gamut_edges_include_corners():
         assert tuple(float(c) for c in corner) in patches
 
 
+# --- gamut faces -----------------------------------------------------------
+@pytest.mark.parametrize("per_face", [0, 1, 2, 5])
+def test_gamut_faces_count_and_range(per_face):
+    patches = G.gamut_faces(per_face)
+    assert len(patches) == 6 * per_face * per_face == G.gamut_faces_count(per_face)
+    assert _all_in_range(patches)
+
+
+def test_gamut_faces_interior_and_on_a_face():
+    # Every face point pins exactly one channel at 0 or 100 (it's on a face),
+    # and the other two are strictly interior (not on an edge/corner).
+    for p in G.gamut_faces(4):
+        pinned = [i for i, c in enumerate(p) if c in (0.0, 100.0)]
+        assert len(pinned) == 1
+        free = [c for i, c in enumerate(p) if i not in pinned]
+        assert all(0.0 < c < 100.0 for c in free)
+
+
 # --- highlight & shadow detail ---------------------------------------------
 @pytest.mark.parametrize("per_end", [1, 6, 12, 40])
 def test_highlight_shadow_count_and_range(per_end):
@@ -214,6 +232,19 @@ def test_highlights_lighter_than_shadows():
     hi = [val(p) for p in patches[:per]]
     lo = [val(p) for p in patches[per:]]
     assert min(hi) > max(lo)            # every highlight lighter than every shadow
+
+
+def test_highlight_shadow_reach_deepens_the_bands():
+    import colorsys
+    per = 12
+    val = lambda p: colorsys.rgb_to_hsv(p[0] / 100, p[1] / 100, p[2] / 100)[2]
+    shallow = G.highlight_shadow_detail(per, reach=8)
+    deep = G.highlight_shadow_detail(per, reach=30)
+    # Deeper reach => shadows extend higher toward the midtones.
+    assert max(val(p) for p in deep[per:]) > max(val(p) for p in shallow[per:])
+    # ...and highlights extend lower.
+    assert min(val(p) for p in deep[:per]) < min(val(p) for p in shallow[:per])
+    assert _all_in_range(deep) and len(deep) == 2 * per
 
 
 # --- image palette ---------------------------------------------------------
@@ -240,8 +271,9 @@ def test_image_palette_count_needs_image():
 
 # --- pastels ---------------------------------------------------------------
 @pytest.mark.parametrize("count", [1, 7, 24, 60])
-def test_pastels_count_and_range(count):
-    patches = G.pastels(count)
+@pytest.mark.parametrize("layers", [1, 2, 3, 4])
+def test_pastels_count_and_range(count, layers):
+    patches = G.pastels(count, layers)
     assert len(patches) == count == G.pastels_count(count)
     assert _all_in_range(patches)
 
@@ -249,9 +281,19 @@ def test_pastels_count_and_range(count):
 def test_pastels_are_low_chroma():
     import colorsys
     sats = [colorsys.rgb_to_hsv(r / 100, g / 100, b / 100)[1]
-            for r, g, b in G.pastels(40)]
+            for r, g, b in G.pastels(40, 2)]
     assert max(sats) < 0.45            # muted, never vivid
     assert sum(sats) / len(sats) > 0.05  # but not pure greys
+
+
+def test_pastel_layers_widen_chroma_spread():
+    import colorsys
+    sat = lambda ps: [colorsys.rgb_to_hsv(r / 100, g / 100, b / 100)[1]
+                      for r, g, b in ps]
+    one = sat(G.pastels(60, 1))
+    three = sat(G.pastels(60, 3))
+    # More layers = chroma sampled at more depths = a wider saturation spread.
+    assert (max(three) - min(three)) > (max(one) - min(one))
 
 
 # --- fill the gaps ---------------------------------------------------------

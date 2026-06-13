@@ -607,20 +607,25 @@ class _NewChartDialog(QDialog):
             "many rings to circle each grey with ('rings'): one ring is six "
             "tints, and each extra ring adds a wider, denser one (12, then 18 "
             "tints) for fuller near-neutral coverage when you want it.\n\n"
-            "• Saturated edges — the most vivid colours the printer can manage, "
-            "traced along the twelve edges of the colour cube (black up to each "
-            "pure colour and on to white, plus the colourful edges between). This "
-            "outer boundary is exactly where profiles tend to go wrong, so it pays "
-            "to sample it well. 'Per edge' sets how many patches sit on each edge.\n\n"
+            "• Saturated edges — the most vivid colours the printer can manage. "
+            "'Per edge' traces the twelve edges of the colour cube — the gamut "
+            "wireframe (black up to each pure colour and on to white, plus the "
+            "colourful edges between); 'per face' goes further and also fills the "
+            "six cube faces — the full gamut surface — with that many patches per "
+            "side, or leave it at 0 for edges only. This outer boundary is exactly "
+            "where profiles tend to go wrong, so it pays to sample it well.\n\n"
             "• Highlights & shadows — extra detail at the two ends where printers "
             "struggle most: pale tints just below paper white, and deep tones just "
             "above black, spread across every hue. These ends often band or block "
             "up, and the cube alone samples them thinly. 'Per end' is how many "
-            "patches go at each end, so the set adds twice that many.\n\n"
+            "patches go at each end (so the set adds twice that many), and 'depth' "
+            "is how far in from white and black the tones reach.\n\n"
             "• Pastels — soft, muted colours all around the hue wheel: dusty blues, "
             "sages, soft pinks, taupes. This is where a great deal of real "
             "photography actually lives — the gentle region between the clean greys "
-            "and the vivid sets. 'Patches' is simply how many to spread there.\n\n"
+            "and the vivid sets. Each of the 'layers' is a chroma shell — from "
+            "barely-tinted near-greys out to fuller pastels — of 'per layer' "
+            "patches, so the two multiply.\n\n"
             "• From image — load one of your own photos and ChromIQ finds its most "
             "representative colours and adds them to the chart, so the profile is "
             "tuned to the kind of pictures you really print. Click 'Load image…', "
@@ -851,6 +856,11 @@ class _NewChartDialog(QDialog):
         lay.addWidget(opt_box)
 
         btns = QHBoxLayout()
+        restore = QPushButton(tr("Restore defaults"), self)
+        restore.setToolTip(tr("Reset the colour-set options on this window back "
+                           "to their defaults."))
+        restore.clicked.connect(self._restore_factory_defaults)
+        btns.addWidget(restore)
         btns.addStretch(1)
         ok = QPushButton(tr("Create"), self)
         ok.setDefault(True)
@@ -884,8 +894,21 @@ class _NewChartDialog(QDialog):
                    "hs", "pastel", "image", "fill", "unique")
     _GEN_SPINS = ("cube_n", "skin_n", "skin_ranges", "blues_n", "blues_layers",
                   "greens_n", "greens_layers", "greys_n", "greys_off",
-                  "greys_rings", "edges_n", "hs_n", "pastel_n", "image_n",
-                  "fill_to")
+                  "greys_rings", "edges_n", "edges_faces", "hs_n", "hs_reach",
+                  "pastel_n", "pastel_layers", "image_n", "fill_to")
+    # Factory defaults — what "Restore defaults" resets the colour sets to (and
+    # the fresh-install state). Must mirror the inline widget defaults. No
+    # "mode" key, so restoring defaults leaves the current source mode alone.
+    _GEN_FACTORY = {
+        "cb": {"cube": True, "skin": True, "blues": True, "greens": True,
+               "greys": True, "edges": False, "hs": False, "pastel": False,
+               "image": False, "fill": False, "unique": True},
+        "sp": {"cube_n": 8, "skin_n": 8, "skin_ranges": 3, "blues_n": 64,
+               "blues_layers": 3, "greens_n": 64, "greens_layers": 3,
+               "greys_n": 16, "greys_off": 5, "greys_rings": 1, "edges_n": 6,
+               "edges_faces": 0, "hs_n": 24, "hs_reach": 16, "pastel_n": 24,
+               "pastel_layers": 2, "image_n": 24, "fill_to": 1000},
+    }
 
     def _collect_gen_state(self) -> dict:
         mode = ("generate" if self._mode_generate.isChecked() else
@@ -899,14 +922,9 @@ class _NewChartDialog(QDialog):
                    for n in self._GEN_SPINS},
         }
 
-    def _save_gen_state(self) -> None:
-        if self._settings is not None:
-            self._settings.set("new_chart_gen", self._collect_gen_state())
-
-    def _restore_gen_state(self) -> None:
-        st = self._settings.get("new_chart_gen", None) if self._settings else None
-        if not isinstance(st, dict):
-            return
+    def _apply_gen_state(self, st: dict) -> None:
+        """Set every colour-set widget from a {mode?, cb, sp} dict. Unknown /
+        missing keys are skipped, so old saved states load forward-compatibly."""
         for n, val in (st.get("sp") or {}).items():
             w = getattr(self, f"_gen_{n}", None)
             if w is not None:
@@ -924,6 +942,20 @@ class _NewChartDialog(QDialog):
         if radio is not None:
             radio.setChecked(True)
         self._refresh_source_widgets()
+
+    def _save_gen_state(self) -> None:
+        if self._settings is not None:
+            self._settings.set("new_chart_gen", self._collect_gen_state())
+
+    def _restore_gen_state(self) -> None:
+        st = self._settings.get("new_chart_gen", None) if self._settings else None
+        if isinstance(st, dict):
+            self._apply_gen_state(st)
+
+    def _restore_factory_defaults(self) -> None:
+        """Reset the colour-set options to their factory defaults (leaving the
+        source mode, name, instrument and paper as they are)."""
+        self._apply_gen_state(self._GEN_FACTORY)
 
     # -- generate-colour-sets panel ---------------------------------------
     def _build_generate_panel(self, parent: QWidget) -> QVBoxLayout:
@@ -1038,16 +1070,20 @@ class _NewChartDialog(QDialog):
         # Saturated edges — the gamut-boundary wireframe of the RGB cube.
         self._gen_edges = QCheckBox(tr("Saturated edges"), self._gen_panel)
         self._gen_edges.setToolTip(tr("The most saturated colours the printer can "
-                                   "reach, sampled along the 12 edges of the RGB "
-                                   "cube (black→primary→white and the colourful "
-                                   "edges between). This gamut boundary is where "
-                                   "profiles err most. 'Per edge' is the patches "
-                                   "on each edge."))
+                                   "reach. 'Per edge' samples the 12 edges of the "
+                                   "RGB cube — the gamut wireframe; 'per face' "
+                                   "also fills the 6 cube faces (the full gamut "
+                                   "surface) with that many patches per side, or "
+                                   "0 for edges only. This boundary is where "
+                                   "profiles err most."))
         self._gen_edges_n = _spin(1, 60, 6)
+        self._gen_edges_faces = _spin(0, 20, 0)
         self._gen_edges_count = _count_label()
         gg.addWidget(self._gen_edges, 5, 0)
         gg.addWidget(QLabel(tr("per edge:")), 5, 1)
         gg.addWidget(self._gen_edges_n, 5, 2)
+        gg.addWidget(QLabel(tr("per face:")), 5, 3)
+        gg.addWidget(self._gen_edges_faces, 5, 4)
         gg.addWidget(self._gen_edges_count, 5, 7)
 
         # Highlights & shadows — detail at the two tonal ends. The label's "&"
@@ -1060,12 +1096,16 @@ class _NewChartDialog(QDialog):
                                 "struggle: pale tints just below paper white and "
                                 "deep tones just above black, spread across every "
                                 "hue. 'Per end' is the patches at each end (so the "
-                                "total is twice that)."))
+                                "total is twice that); 'depth' is how far in from "
+                                "white and black the tones reach."))
         self._gen_hs_n = _spin(1, 200, 24)
+        self._gen_hs_reach = _spin(2, 45, 16)
         self._gen_hs_count = _count_label()
         gg.addWidget(self._gen_hs, 6, 0)
         gg.addWidget(QLabel(tr("per end:")), 6, 1)
         gg.addWidget(self._gen_hs_n, 6, 2)
+        gg.addWidget(QLabel(tr("depth:")), 6, 3)
+        gg.addWidget(self._gen_hs_reach, 6, 4)
         gg.addWidget(self._gen_hs_count, 6, 7)
 
         # Pastels — low-chroma midtones.
@@ -1074,12 +1114,16 @@ class _NewChartDialog(QDialog):
                                     "dusty blues, sages, soft pinks and taupes. "
                                     "This is where most photos actually live, "
                                     "between the near-neutral greys and the vivid "
-                                    "sets. 'Patches' is how many to spread."))
-        self._gen_pastel_n = _spin(1, 400, 48)
+                                    "sets. Each of the 'layers' is a chroma shell "
+                                    "of 'per layer' patches, so the two multiply."))
+        self._gen_pastel_n = _spin(1, 200, 24)
+        self._gen_pastel_layers = _spin(1, 4, 2)
         self._gen_pastel_count = _count_label()
         gg.addWidget(self._gen_pastel, 7, 0)
-        gg.addWidget(QLabel(tr("patches:")), 7, 1)
+        gg.addWidget(QLabel(tr("per layer:")), 7, 1)
         gg.addWidget(self._gen_pastel_n, 7, 2)
+        gg.addWidget(QLabel(tr("layers:")), 7, 3)
+        gg.addWidget(self._gen_pastel_layers, 7, 4)
         gg.addWidget(self._gen_pastel_count, 7, 7)
 
         # From image — the most representative colours of a chosen photo.
@@ -1204,16 +1248,22 @@ class _NewChartDialog(QDialog):
                                                 self._gen_greys_rings.value()),
              self._gen_greys_count),
             (self._gen_edges,
-             lambda: G.gamut_edges(self._gen_edges_n.value()),
-             lambda: G.gamut_edges_count(self._gen_edges_n.value()),
+             lambda: (G.gamut_edges(self._gen_edges_n.value())
+                      + G.gamut_faces(self._gen_edges_faces.value())),
+             lambda: (G.gamut_edges_count(self._gen_edges_n.value())
+                      + G.gamut_faces_count(self._gen_edges_faces.value())),
              self._gen_edges_count),
             (self._gen_hs,
-             lambda: G.highlight_shadow_detail(self._gen_hs_n.value()),
+             lambda: G.highlight_shadow_detail(self._gen_hs_n.value(),
+                                               float(self._gen_hs_reach.value())),
              lambda: G.highlight_shadow_detail_count(self._gen_hs_n.value()),
              self._gen_hs_count),
             (self._gen_pastel,
-             lambda: G.pastels(self._gen_pastel_n.value()),
-             lambda: G.pastels_count(self._gen_pastel_n.value()),
+             lambda: G.pastels(self._gen_pastel_n.value()
+                               * self._gen_pastel_layers.value(),
+                               self._gen_pastel_layers.value()),
+             lambda: G.pastels_count(self._gen_pastel_n.value()
+                                     * self._gen_pastel_layers.value()),
              self._gen_pastel_count),
             (self._gen_image,
              lambda: (G.image_palette(self._gen_image_px, self._gen_image_n.value())
@@ -1236,9 +1286,9 @@ class _NewChartDialog(QDialog):
             (self._gen_greens, (self._gen_greens_n, self._gen_greens_layers)),
             (self._gen_greys, (self._gen_greys_n, self._gen_greys_off,
                                self._gen_greys_rings)),
-            (self._gen_edges, (self._gen_edges_n,)),
-            (self._gen_hs, (self._gen_hs_n,)),
-            (self._gen_pastel, (self._gen_pastel_n,)),
+            (self._gen_edges, (self._gen_edges_n, self._gen_edges_faces)),
+            (self._gen_hs, (self._gen_hs_n, self._gen_hs_reach)),
+            (self._gen_pastel, (self._gen_pastel_n, self._gen_pastel_layers)),
             (self._gen_image, (self._gen_image_btn, self._gen_image_n)),
             (self._gen_fill, (self._gen_fill_to,)),
         ):
