@@ -183,6 +183,144 @@ def test_near_neutral_outer_ring_is_farther_and_balanced():
     assert r1 < r2 < r3
 
 
+# --- gamut edges -----------------------------------------------------------
+@pytest.mark.parametrize("per_edge", [1, 2, 5, 20])
+def test_gamut_edges_count_and_range(per_edge):
+    patches = G.gamut_edges(per_edge)
+    assert len(patches) == 12 * per_edge == G.gamut_edges_count(per_edge)
+    assert _all_in_range(patches)
+
+
+def test_gamut_edges_include_corners():
+    patches = G.gamut_edges(3)
+    for corner in [(0, 0, 0), (100, 0, 0), (0, 100, 0), (0, 0, 100),
+                   (100, 100, 0), (0, 100, 100), (100, 0, 100), (100, 100, 100)]:
+        assert tuple(float(c) for c in corner) in patches
+
+
+# --- gamut faces -----------------------------------------------------------
+@pytest.mark.parametrize("per_face", [0, 1, 2, 5])
+def test_gamut_faces_count_and_range(per_face):
+    patches = G.gamut_faces(per_face)
+    assert len(patches) == 6 * per_face * per_face == G.gamut_faces_count(per_face)
+    assert _all_in_range(patches)
+
+
+def test_gamut_faces_interior_and_on_a_face():
+    # Every face point pins exactly one channel at 0 or 100 (it's on a face),
+    # and the other two are strictly interior (not on an edge/corner).
+    for p in G.gamut_faces(4):
+        pinned = [i for i, c in enumerate(p) if c in (0.0, 100.0)]
+        assert len(pinned) == 1
+        free = [c for i, c in enumerate(p) if i not in pinned]
+        assert all(0.0 < c < 100.0 for c in free)
+
+
+# --- highlight & shadow detail ---------------------------------------------
+@pytest.mark.parametrize("per_end", [1, 6, 12, 40])
+def test_highlight_shadow_count_and_range(per_end):
+    patches = G.highlight_shadow_detail(per_end)
+    assert len(patches) == 2 * per_end == G.highlight_shadow_detail_count(per_end)
+    assert _all_in_range(patches)
+
+
+def test_highlights_lighter_than_shadows():
+    import colorsys
+    per = 16
+    patches = G.highlight_shadow_detail(per)
+    val = lambda p: colorsys.rgb_to_hsv(p[0] / 100, p[1] / 100, p[2] / 100)[2]
+    hi = [val(p) for p in patches[:per]]
+    lo = [val(p) for p in patches[per:]]
+    assert min(hi) > max(lo)            # every highlight lighter than every shadow
+
+
+def test_highlight_shadow_reach_deepens_the_bands():
+    import colorsys
+    per = 12
+    val = lambda p: colorsys.rgb_to_hsv(p[0] / 100, p[1] / 100, p[2] / 100)[2]
+    shallow = G.highlight_shadow_detail(per, reach=8)
+    deep = G.highlight_shadow_detail(per, reach=30)
+    # Deeper reach => shadows extend higher toward the midtones.
+    assert max(val(p) for p in deep[per:]) > max(val(p) for p in shallow[per:])
+    # ...and highlights extend lower.
+    assert min(val(p) for p in deep[:per]) < min(val(p) for p in shallow[:per])
+    assert _all_in_range(deep) and len(deep) == 2 * per
+
+
+# --- image palette ---------------------------------------------------------
+def test_image_palette_recovers_distinct_colours():
+    import numpy as np
+    rng = np.random.default_rng(1)
+    blobs = [(220, 30, 40), (40, 180, 60), (30, 50, 200)]
+    px = np.clip(np.vstack([np.tile(c, (400, 1)) + rng.integers(-6, 6, (400, 3))
+                            for c in blobs]), 0, 255)
+    pal = G.image_palette(px, 3, seed=0)
+    assert len(pal) == 3
+    assert _all_in_range(pal)
+    # Each source blob should have a near match among the three centres.
+    for c in blobs:
+        c100 = tuple(v / 255 * 100 for v in c)
+        assert min(sum((a - b) ** 2 for a, b in zip(p, c100)) for p in pal) < 200
+
+
+def test_image_palette_count_needs_image():
+    assert G.image_palette_count(24, has_image=True) == 24
+    assert G.image_palette_count(24, has_image=False) == 0
+    assert G.image_palette([], 5) == []
+
+
+# --- pastels ---------------------------------------------------------------
+@pytest.mark.parametrize("count", [1, 7, 24, 60])
+@pytest.mark.parametrize("layers", [1, 2, 3, 4])
+def test_pastels_count_and_range(count, layers):
+    patches = G.pastels(count, layers)
+    assert len(patches) == count == G.pastels_count(count)
+    assert _all_in_range(patches)
+
+
+def test_pastels_are_low_chroma():
+    import colorsys
+    sats = [colorsys.rgb_to_hsv(r / 100, g / 100, b / 100)[1]
+            for r, g, b in G.pastels(40, 2)]
+    assert max(sats) < 0.45            # muted, never vivid
+    assert sum(sats) / len(sats) > 0.05  # but not pure greys
+
+
+def test_pastel_layers_widen_chroma_spread():
+    import colorsys
+    sat = lambda ps: [colorsys.rgb_to_hsv(r / 100, g / 100, b / 100)[1]
+                      for r, g, b in ps]
+    one = sat(G.pastels(60, 1))
+    three = sat(G.pastels(60, 3))
+    # More layers = chroma sampled at more depths = a wider saturation spread.
+    assert (max(three) - min(three)) > (max(one) - min(one))
+
+
+# --- fill the gaps ---------------------------------------------------------
+def test_fill_gaps_tops_up_to_total():
+    existing = G.rgb_cube(3)           # 27 patches
+    add = G.fill_gaps(existing, 60, seed=0)
+    assert len(add) == 60 - 27 == G.fill_gaps_count(len(existing), 60)
+    assert _all_in_range(add)
+
+
+def test_fill_gaps_noop_when_already_full():
+    existing = G.rgb_cube(4)           # 64 patches
+    assert G.fill_gaps(existing, 50) == []
+    assert G.fill_gaps_count(len(existing), 50) == 0
+
+
+def test_fill_gaps_avoids_existing_points():
+    # New points should sit away from a tight existing cluster, not on top of it.
+    existing = [(50.0, 50.0, 50.0)] * 5
+    add = G.fill_gaps(existing, 25, candidates=16, seed=2)
+    assert len(add) == 20
+    # Mean distance of added points from the cluster centre is substantial.
+    import math as _m
+    dists = [_m.dist(p, (50, 50, 50)) for p in add]
+    assert sum(dists) / len(dists) > 20.0
+
+
 # --- de-duplication --------------------------------------------------------
 def _keys(patches, quantum=0.5):
     return [tuple(round(c / quantum) for c in p) for p in patches]

@@ -499,11 +499,13 @@ class _NewChartDialog(QDialog):
     """New-chart setup: source (blank / targen seed / pasted colours) plus the
     printtarg layout knobs that affect rendering."""
 
-    def __init__(self, bin_dir: Path, parent: QWidget | None = None) -> None:
+    def __init__(self, bin_dir: Path, settings=None,
+                 parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setWindowTitle(tr("New chart"))
         self.setMinimumWidth(620)
         self._bin_dir = bin_dir
+        self._settings = settings
         self.result_spec: R.ChartSpec | None = None
         self.result_program: list[tuple] | None = None
         self.result_options: R.LayoutOptions | None = None
@@ -533,7 +535,10 @@ class _NewChartDialog(QDialog):
             }}
         """)
 
-        lay = QVBoxLayout(self)
+        # Content lives in a scroll area so the dialog fits small screens even
+        # with every colour set expanded (the panel can get tall).
+        content = QWidget(self)
+        lay = QVBoxLayout(content)
         lay.setSpacing(10)
 
         head = QHBoxLayout()
@@ -602,6 +607,37 @@ class _NewChartDialog(QDialog):
             "many rings to circle each grey with ('rings'): one ring is six "
             "tints, and each extra ring adds a wider, denser one (12, then 18 "
             "tints) for fuller near-neutral coverage when you want it.\n\n"
+            "• Saturated edges — the most vivid colours the printer can manage. "
+            "'Per edge' traces the twelve edges of the colour cube — the gamut "
+            "wireframe (black up to each pure colour and on to white, plus the "
+            "colourful edges between); 'per face' goes further and also fills the "
+            "six cube faces — the full gamut surface — with that many patches per "
+            "side, or leave it at 0 for edges only. This outer boundary is exactly "
+            "where profiles tend to go wrong, so it pays to sample it well.\n\n"
+            "• Highlights & shadows — extra detail at the two ends where printers "
+            "struggle most: pale tints just below paper white, and deep tones just "
+            "above black, spread across every hue. These ends often band or block "
+            "up, and the cube alone samples them thinly. 'Per end' is how many "
+            "patches go at each end (so the set adds twice that many), and 'depth' "
+            "is how far in from white and black the tones reach.\n\n"
+            "• Pastels — soft, muted colours all around the hue wheel: dusty blues, "
+            "sages, soft pinks, taupes. This is where a great deal of real "
+            "photography actually lives — the gentle region between the clean greys "
+            "and the vivid sets. Each of the 'layers' is a chroma shell — from "
+            "barely-tinted near-greys out to fuller pastels — of 'per layer' "
+            "patches, so the two multiply.\n\n"
+            "• From image — load one of your own photos and ChromIQ finds its most "
+            "representative colours and adds them to the chart, so the profile is "
+            "tuned to the kind of pictures you really print. Click 'Load image…', "
+            "pick a file, and set how many 'Colours' to pull out. Lovely combined "
+            "with a cube for all-round coverage plus your image's own palette on "
+            "top.\n\n"
+            "• Fill remaining gaps — a tidy-up that comes last. After the sets you "
+            "picked are laid down, it scatters extra patches into the empty parts "
+            "of colour space — evenly and without repeating — until the chart "
+            "reaches the size you ask for. 'Fill to' is that target total, so the "
+            "whole chart lands on a round number with nothing left clumped or "
+            "bare.\n\n"
             "Mix them freely — say a 3D cube for overall coverage plus "
             "near-neutral greys for clean neutrals, or skin tones plus greens for "
             "portraits out in nature.\n\n"
@@ -820,6 +856,11 @@ class _NewChartDialog(QDialog):
         lay.addWidget(opt_box)
 
         btns = QHBoxLayout()
+        restore = QPushButton(tr("Restore defaults"), self)
+        restore.setToolTip(tr("Reset the colour-set options on this window back "
+                           "to their defaults."))
+        restore.clicked.connect(self._restore_factory_defaults)
+        btns.addWidget(restore)
         btns.addStretch(1)
         ok = QPushButton(tr("Create"), self)
         ok.setDefault(True)
@@ -828,7 +869,93 @@ class _NewChartDialog(QDialog):
         cancel.clicked.connect(self.reject)
         btns.addWidget(ok)
         btns.addWidget(cancel)
-        lay.addLayout(btns)
+
+        scroll = QScrollArea(self)
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setWidget(content)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.addWidget(scroll, 1)
+        btns.setContentsMargins(12, 4, 12, 10)
+        outer.addLayout(btns)
+        # Open at a height that fits common laptop screens; the panel scrolls
+        # when the chosen colour sets make the content taller than this.
+        self.resize(max(self.minimumWidth(), content.sizeHint().width() + 24), 760)
+
+        # Restore the source mode + colour-set values the user picked last time
+        # so creating another chart doesn't start from scratch.
+        self._restore_gen_state()
+
+    # -- last-used settings persistence -----------------------------------
+    # The widget suffixes whose checked/value state is remembered between
+    # New-chart sessions (attribute = "_gen_<name>").
+    _GEN_CHECKS = ("cube", "skin", "blues", "greens", "greys", "edges",
+                   "hs", "pastel", "image", "fill", "unique")
+    _GEN_SPINS = ("cube_n", "skin_n", "skin_ranges", "blues_n", "blues_layers",
+                  "greens_n", "greens_layers", "greys_n", "greys_off",
+                  "greys_rings", "edges_n", "edges_faces", "hs_n", "hs_reach",
+                  "pastel_n", "pastel_layers", "image_n", "fill_to")
+    # Factory defaults — what "Restore defaults" resets the colour sets to (and
+    # the fresh-install state). Must mirror the inline widget defaults. No
+    # "mode" key, so restoring defaults leaves the current source mode alone.
+    _GEN_FACTORY = {
+        "cb": {"cube": True, "skin": True, "blues": True, "greens": True,
+               "greys": True, "edges": False, "hs": False, "pastel": False,
+               "image": False, "fill": False, "unique": True},
+        "sp": {"cube_n": 8, "skin_n": 8, "skin_ranges": 3, "blues_n": 64,
+               "blues_layers": 3, "greens_n": 64, "greens_layers": 3,
+               "greys_n": 16, "greys_off": 5, "greys_rings": 1, "edges_n": 6,
+               "edges_faces": 0, "hs_n": 24, "hs_reach": 16, "pastel_n": 24,
+               "pastel_layers": 2, "image_n": 24, "fill_to": 1000},
+    }
+
+    def _collect_gen_state(self) -> dict:
+        mode = ("generate" if self._mode_generate.isChecked() else
+                "paste" if self._mode_paste.isChecked() else
+                "blank" if self._mode_blank.isChecked() else "seed")
+        return {
+            "mode": mode,
+            "cb": {n: getattr(self, f"_gen_{n}").isChecked()
+                   for n in self._GEN_CHECKS},
+            "sp": {n: getattr(self, f"_gen_{n}").value()
+                   for n in self._GEN_SPINS},
+        }
+
+    def _apply_gen_state(self, st: dict) -> None:
+        """Set every colour-set widget from a {mode?, cb, sp} dict. Unknown /
+        missing keys are skipped, so old saved states load forward-compatibly."""
+        for n, val in (st.get("sp") or {}).items():
+            w = getattr(self, f"_gen_{n}", None)
+            if w is not None:
+                try:
+                    w.setValue(int(val))
+                except (TypeError, ValueError):
+                    pass
+        for n, val in (st.get("cb") or {}).items():
+            w = getattr(self, f"_gen_{n}", None)
+            if w is not None:
+                w.setChecked(bool(val))
+        radio = {"generate": self._mode_generate, "paste": self._mode_paste,
+                 "blank": self._mode_blank, "seed": self._mode_seed}.get(
+                     st.get("mode"))
+        if radio is not None:
+            radio.setChecked(True)
+        self._refresh_source_widgets()
+
+    def _save_gen_state(self) -> None:
+        if self._settings is not None:
+            self._settings.set("new_chart_gen", self._collect_gen_state())
+
+    def _restore_gen_state(self) -> None:
+        st = self._settings.get("new_chart_gen", None) if self._settings else None
+        if isinstance(st, dict):
+            self._apply_gen_state(st)
+
+    def _restore_factory_defaults(self) -> None:
+        """Reset the colour-set options to their factory defaults (leaving the
+        source mode, name, instrument and paper as they are)."""
+        self._apply_gen_state(self._GEN_FACTORY)
 
     # -- generate-colour-sets panel ---------------------------------------
     def _build_generate_panel(self, parent: QWidget) -> QVBoxLayout:
@@ -940,15 +1067,129 @@ class _NewChartDialog(QDialog):
         gg.addWidget(self._gen_greys_rings, 4, 6)
         gg.addWidget(self._gen_greys_count, 4, 7)
 
+        # Saturated edges — the gamut-boundary wireframe of the RGB cube.
+        self._gen_edges = QCheckBox(tr("Saturated edges"), self._gen_panel)
+        self._gen_edges.setToolTip(tr("The most saturated colours the printer can "
+                                   "reach. 'Per edge' samples the 12 edges of the "
+                                   "RGB cube — the gamut wireframe; 'per face' "
+                                   "also fills the 6 cube faces (the full gamut "
+                                   "surface) with that many patches per side, or "
+                                   "0 for edges only. This boundary is where "
+                                   "profiles err most."))
+        self._gen_edges_n = _spin(1, 60, 6)
+        self._gen_edges_faces = _spin(0, 20, 0)
+        self._gen_edges_count = _count_label()
+        gg.addWidget(self._gen_edges, 5, 0)
+        gg.addWidget(QLabel(tr("per edge:")), 5, 1)
+        gg.addWidget(self._gen_edges_n, 5, 2)
+        gg.addWidget(QLabel(tr("per face:")), 5, 3)
+        gg.addWidget(self._gen_edges_faces, 5, 4)
+        gg.addWidget(self._gen_edges_count, 5, 7)
+
+        # Highlights & shadows — detail at the two tonal ends. The label's "&"
+        # is doubled so Qt shows it literally instead of eating it as a mnemonic;
+        # the tr() key stays the plain text (and the fix covers translations
+        # whose names also contain "&", e.g. de "Lichter & Schatten").
+        self._gen_hs = QCheckBox(tr("Highlights & shadows").replace("&", "&&"),
+                                 self._gen_panel)
+        self._gen_hs.setToolTip(tr("Extra detail at the two ends where printers "
+                                "struggle: pale tints just below paper white and "
+                                "deep tones just above black, spread across every "
+                                "hue. 'Per end' is the patches at each end (so the "
+                                "total is twice that); 'depth' is how far in from "
+                                "white and black the tones reach."))
+        self._gen_hs_n = _spin(1, 200, 24)
+        self._gen_hs_reach = _spin(2, 45, 16)
+        self._gen_hs_count = _count_label()
+        gg.addWidget(self._gen_hs, 6, 0)
+        gg.addWidget(QLabel(tr("per end:")), 6, 1)
+        gg.addWidget(self._gen_hs_n, 6, 2)
+        gg.addWidget(QLabel(tr("depth:")), 6, 3)
+        gg.addWidget(self._gen_hs_reach, 6, 4)
+        gg.addWidget(self._gen_hs_count, 6, 7)
+
+        # Pastels — low-chroma midtones.
+        self._gen_pastel = QCheckBox(tr("Pastels"), self._gen_panel)
+        self._gen_pastel.setToolTip(tr("Soft, muted colours across every hue — "
+                                    "dusty blues, sages, soft pinks and taupes. "
+                                    "This is where most photos actually live, "
+                                    "between the near-neutral greys and the vivid "
+                                    "sets. Each of the 'layers' is a chroma shell "
+                                    "of 'per layer' patches, so the two multiply."))
+        self._gen_pastel_n = _spin(1, 200, 24)
+        self._gen_pastel_layers = _spin(1, 4, 2)
+        self._gen_pastel_count = _count_label()
+        gg.addWidget(self._gen_pastel, 7, 0)
+        gg.addWidget(QLabel(tr("per layer:")), 7, 1)
+        gg.addWidget(self._gen_pastel_n, 7, 2)
+        gg.addWidget(QLabel(tr("layers:")), 7, 3)
+        gg.addWidget(self._gen_pastel_layers, 7, 4)
+        gg.addWidget(self._gen_pastel_count, 7, 7)
+
+        # From image — the most representative colours of a chosen photo.
+        self._gen_image = QCheckBox(tr("From image"), self._gen_panel)
+        self._gen_image.setToolTip(tr("Load a photo and ChromIQ picks out its most "
+                                   "representative colours and adds them, so the "
+                                   "profile is tuned to the kind of images you "
+                                   "actually print. 'Colours' is how many to "
+                                   "extract."))
+        self._gen_image_px = None        # decoded (N,3) pixels, or None
+        self._gen_image_name = ""
+        self._gen_image_btn = QPushButton(tr("Load image…"), self._gen_panel)
+        self._gen_image_btn.setObjectName("compact_input")
+        self._gen_image_btn.clicked.connect(self._load_gen_image)
+        self._gen_image_n = _spin(1, 500, 24)
+        self._gen_image_count = _count_label()
+        gg.addWidget(self._gen_image, 8, 0)
+        gg.addWidget(self._gen_image_btn, 8, 1, 1, 2)
+        gg.addWidget(QLabel(tr("colours:")), 8, 3)
+        gg.addWidget(self._gen_image_n, 8, 4)
+        gg.addWidget(self._gen_image_count, 8, 7)
+
+        # Fill remaining gaps — blue-noise top-up of whatever's left sparse.
+        # Special: its count depends on the combined total of the sets above.
+        self._gen_fill = QCheckBox(tr("Fill remaining gaps"), self._gen_panel)
+        self._gen_fill.setToolTip(tr("After the sets above, scatter extra patches "
+                                  "into the empty parts of colour space until the "
+                                  "chart reaches the size you set, evenly and "
+                                  "without repeating. 'Fill to' is the target "
+                                  "total patch count."))
+        self._gen_fill_to = _spin(1, 30000, 1000)
+        self._gen_fill_count = _count_label()
+        gg.addWidget(self._gen_fill, 9, 0)
+        gg.addWidget(QLabel(tr("fill to:")), 9, 1)
+        gg.addWidget(self._gen_fill_to, 9, 2)
+        gg.addWidget(self._gen_fill_count, 9, 7)
+
+        # A per-set ⓘ icon (col 8) opens the set's explanation in its own little
+        # window — more discoverable than a hover tooltip. The body reuses each
+        # checkbox's tooltip (already written + translated), the title is the set
+        # name, so this adds no new strings. Titles use the plain name (the "&"
+        # in "Highlights & shadows" is fine here — the icon has no mnemonic).
+        row_tips = (
+            (0, self._gen_cube,   tr("3D RGB cube")),
+            (1, self._gen_skin,   tr("Skin tones (Fitzpatrick)")),
+            (2, self._gen_blues,  tr("Blues / turquoise")),
+            (3, self._gen_greens, tr("Greens (foliage)")),
+            (4, self._gen_greys,  tr("Near-neutral greys")),
+            (5, self._gen_edges,  tr("Saturated edges")),
+            (6, self._gen_hs,     tr("Highlights & shadows")),
+            (7, self._gen_pastel, tr("Pastels")),
+            (8, self._gen_image,  tr("From image")),
+            (9, self._gen_fill,   tr("Fill remaining gaps")),
+        )
+        for row, cb, title in row_tips:
+            gg.addWidget(
+                _magenta_tip(title, cb.toolTip(), self._gen_panel, min_width=360),
+                row, 8, Qt.AlignmentFlag.AlignCenter)
+
         # The counts all live in one column (7), so they stay left-aligned in a
         # tidy column for every set. Greys' extra "rings:" control sits in cols
         # 5/6 *before* the count (those columns are empty — but reserved at full
-        # width by the grid — for the other rows, so every count lines up). The
-        # count column gets a min width so growing numbers ("27000 patches")
-        # don't reflow the size columns; a stretchy trailing column (8) soaks up
-        # spare width.
+        # width by the grid — for the other rows, so every count lines up). Per-set
+        # ⓘ icons sit in col 8; a stretchy trailing column (9) soaks up spare width.
         gg.setColumnMinimumWidth(7, 124)
-        gg.setColumnStretch(8, 1)
+        gg.setColumnStretch(9, 1)
 
         # Cross-set de-duplication — keep combined patches unique (#37 follow-up).
         self._gen_unique = QCheckBox(tr("Ensure unique colours"), self._gen_panel)
@@ -957,14 +1198,16 @@ class _NewChartDialog(QDialog):
                                     "repeated colours apart by a small offset "
                                     "so no patch is printed twice."))
         self._gen_unique.toggled.connect(self._update_gen_counts)
-        gg.addWidget(self._gen_unique, 5, 0, 1, 8)
+        gg.addWidget(self._gen_unique, 10, 0, 1, 8)
 
         self._gen_total = QLabel("", self._gen_panel)
         self._gen_total.setStyleSheet("font-weight: bold;")
-        gg.addWidget(self._gen_total, 6, 0, 1, 8)
+        gg.addWidget(self._gen_total, 11, 0, 1, 8)
 
         for cb in (self._gen_cube, self._gen_skin, self._gen_blues,
-                   self._gen_greens, self._gen_greys):
+                   self._gen_greens, self._gen_greys, self._gen_edges,
+                   self._gen_hs, self._gen_pastel, self._gen_image,
+                   self._gen_fill):
             cb.toggled.connect(self._update_gen_counts)
 
         indent.addWidget(self._gen_panel)
@@ -1004,6 +1247,30 @@ class _NewChartDialog(QDialog):
              lambda: G.near_neutral_greys_count(self._gen_greys_n.value(),
                                                 self._gen_greys_rings.value()),
              self._gen_greys_count),
+            (self._gen_edges,
+             lambda: (G.gamut_edges(self._gen_edges_n.value())
+                      + G.gamut_faces(self._gen_edges_faces.value())),
+             lambda: (G.gamut_edges_count(self._gen_edges_n.value())
+                      + G.gamut_faces_count(self._gen_edges_faces.value())),
+             self._gen_edges_count),
+            (self._gen_hs,
+             lambda: G.highlight_shadow_detail(self._gen_hs_n.value(),
+                                               float(self._gen_hs_reach.value())),
+             lambda: G.highlight_shadow_detail_count(self._gen_hs_n.value()),
+             self._gen_hs_count),
+            (self._gen_pastel,
+             lambda: G.pastels(self._gen_pastel_n.value()
+                               * self._gen_pastel_layers.value(),
+                               self._gen_pastel_layers.value()),
+             lambda: G.pastels_count(self._gen_pastel_n.value()
+                                     * self._gen_pastel_layers.value()),
+             self._gen_pastel_count),
+            (self._gen_image,
+             lambda: (G.image_palette(self._gen_image_px, self._gen_image_n.value())
+                      if self._gen_image_px is not None else []),
+             lambda: G.image_palette_count(self._gen_image_n.value(),
+                                           self._gen_image_px is not None),
+             self._gen_image_count),
         )
 
     def _update_gen_counts(self, *_a) -> None:
@@ -1019,6 +1286,11 @@ class _NewChartDialog(QDialog):
             (self._gen_greens, (self._gen_greens_n, self._gen_greens_layers)),
             (self._gen_greys, (self._gen_greys_n, self._gen_greys_off,
                                self._gen_greys_rings)),
+            (self._gen_edges, (self._gen_edges_n, self._gen_edges_faces)),
+            (self._gen_hs, (self._gen_hs_n, self._gen_hs_reach)),
+            (self._gen_pastel, (self._gen_pastel_n, self._gen_pastel_layers)),
+            (self._gen_image, (self._gen_image_btn, self._gen_image_n)),
+            (self._gen_fill, (self._gen_fill_to,)),
         ):
             for s in spins:
                 s.setEnabled(cb.isChecked())
@@ -1028,6 +1300,15 @@ class _NewChartDialog(QDialog):
             label.setText(_patches_label(n))
             if cb.isChecked():
                 total += n
+        # "From image" shows a hint until a photo is loaded.
+        if self._gen_image.isChecked() and self._gen_image_px is None:
+            self._gen_image_count.setText(tr("load an image"))
+        # Fill remaining gaps tops the combined total up to its target; its added
+        # count therefore depends on everything above it.
+        fill_n = G.fill_gaps_count(total, self._gen_fill_to.value())
+        self._gen_fill_count.setText(_patches_label(fill_n))
+        if self._gen_fill.isChecked():
+            total += fill_n
         self._gen_total.setText(tr("Total: {label}").format(
             label=_patches_label(total)))
 
@@ -1038,9 +1319,42 @@ class _NewChartDialog(QDialog):
         for cb, build, _count, _label in self._gen_specs():
             if cb.isChecked():
                 program.extend(build())
+        # Fill runs last so it tops up whatever the chosen sets left sparse.
+        if self._gen_fill.isChecked():
+            program.extend(G.fill_gaps(program, self._gen_fill_to.value()))
         if self._gen_unique.isChecked():
             program = G.deduplicate(program)
         return program
+
+    def _load_gen_image(self) -> None:
+        """Load + decode an image for the 'From image' colour set.
+
+        Decoding (Pillow) and down-sampling happen here; the pure
+        :func:`patch_generators.image_palette` does the clustering. The image is
+        shrunk to a small thumbnail first — plenty for finding representative
+        colours and keeps k-means fast.
+        """
+        from PyQt6.QtWidgets import QFileDialog
+        start = (self._settings.get("custom_output_path", "")
+                 or str(Path.home()))
+        path, _ = QFileDialog.getOpenFileName(
+            self, tr("Load image"), start,
+            "Images (*.png *.jpg *.jpeg *.tif *.tiff *.bmp *.webp)")
+        if not path:
+            return
+        try:
+            from PIL import Image
+            import numpy as np
+            im = Image.open(path).convert("RGB")
+            im.thumbnail((200, 200))
+            self._gen_image_px = np.asarray(im).reshape(-1, 3)
+        except Exception as exc:  # noqa: BLE001 — surface any decode failure
+            QMessageBox.warning(self, tr("Load failed"), str(exc))
+            return
+        self._gen_image_name = Path(path).name
+        self._gen_image_btn.setText(self._gen_image_name)
+        self._gen_image.setChecked(True)
+        self._update_gen_counts()
 
     # -- helpers -----------------------------------------------------------
     def _refresh_source_widgets(self) -> None:
@@ -1197,6 +1511,7 @@ class _NewChartDialog(QDialog):
         self.result_program = program
         self.result_options = opts
         self.result_basename = name
+        self._save_gen_state()   # remember these choices for next time
         self.accept()
 
 
@@ -2005,7 +2320,7 @@ class Ti2RelayoutDialog(QDialog):
         self._set_chart(spec, program, note)
 
     def _new_chart(self) -> None:
-        dlg = _NewChartDialog(self._bin_dir, self)
+        dlg = _NewChartDialog(self._bin_dir, self._settings, self)
         if dlg.exec() != QDialog.DialogCode.Accepted or dlg.result_spec is None:
             return
         if dlg.result_options is not None:
