@@ -1,5 +1,30 @@
 # Changelog
 
+## v3.9.17
+
+### ✨ New
+- **Export & Save As now also write i1Profiler files.** The layout editor's
+  *Export colours…* button has a new *"i1Profiler (.txt + .pxf)"* format, and
+  *Save As* drops an `<name>-i1profiler.txt` + `.pxf` pair into the chart folder
+  alongside the .ti1/.ti2/TIFFs — so a chart you design here can go straight to
+  i1Profiler.
+- **More layers for Blues / turquoise and Greens.** The per-set *layers* control
+  now goes up to 10 (was 5), for denser coverage of those wide-gamut corners.
+
+### 🔧 Changed
+- **"Generate colour sets" starts from a fuller default.** All five sets are
+  ticked out of the box with a balanced 1152-patch starting point (cube 8³, skin
+  8×3, blues 64×3, greens 64×3, near-neutral greys 16), so a useful chart is one
+  click away.
+
+### 🐛 Fixed
+- **Save no longer aborts with a false "requested patch … missing from
+  regenerated chart" warning.** Charts built from the colour-set generators use
+  arbitrary device values that can sit exactly on an 8-bit boundary, where the
+  save-time integrity check's rounding disagreed with printtarg's by a single
+  code. The check now tolerates that one-code shift (it is below the device's
+  own 8-bit resolution) while still catching a genuinely dropped patch.
+
 ## v3.9.16
 
 ### 🐛 Fixed

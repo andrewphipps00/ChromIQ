@@ -129,6 +129,27 @@ def test_seed_from_targen_then_regenerate(tmp_path: Path):
     R.assert_data_integrity(prog, res.ti2)
 
 
+@argyll
+def test_integrity_tolerates_8bit_boundary_rounding(tmp_path: Path):
+    """Arbitrary-float patches (e.g. the colour-set generators) can land exactly
+    on an 8-bit half-boundary, where our predicted code and printtarg's differ by
+    one. That one-code shift must NOT be reported as a missing patch (issue:
+    "requested patch … missing from regenerated chart")."""
+    def boundary(c: int) -> float:
+        return (c + 0.5) / 255 * 100
+    prog = []
+    for c in range(20, 240, 7):
+        b = boundary(c)
+        for eps in (-0.05, -0.01, 0.0, 0.01, 0.05):
+            prog.append((b + eps, 50.0, 50.0))
+    spec = R.ChartSpec.new("i1", "A4")
+    res = R.regenerate(spec, prog, tmp_path, ARGYLL_BIN)
+    R.assert_data_integrity(prog, res.ti2)        # no false "missing" alarm
+    # A genuinely absent colour is still caught (off by the full distance).
+    with pytest.raises(AssertionError):
+        R.assert_data_integrity(prog + [(12.34, 78.9, 4.0)], res.ti2)
+
+
 # --- "tag as randomised" gate + keyword rewrite ----------------------------
 
 _TI2_HEAD = (

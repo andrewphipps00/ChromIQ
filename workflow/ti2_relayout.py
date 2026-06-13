@@ -1269,24 +1269,40 @@ def assert_data_integrity(
     """
     new = ChartSpec.from_ti2(new_ti2)
 
-    def _q8(v: float) -> float:
-        # Snap a 0..100 device value to the nearest 8-bit code, as printtarg does.
-        return round(round(v / 100 * 255) / 255 * 100, 3)
+    def _code(v: float) -> int:
+        # The 8-bit code printtarg renders this 0..100 device value to.
+        return round(v / 100 * 255)
 
-    def _bag(values) -> dict[tuple, int]:
-        bag: dict[tuple, int] = {}
-        for v in values:
-            key = tuple(_q8(x) for x in v)
-            bag[key] = bag.get(key, 0) + 1
-        return bag
+    def _codes(values) -> tuple[int, ...]:
+        return tuple(_code(x) for x in values)
 
-    want = _bag(dev_values)
-    out_bag = _bag(p.dev for p in new.patches)
-    for key, n in want.items():
-        if out_bag.get(key, 0) < n:
+    # ±1-code tolerance per channel. printtarg snaps every device value to 8-bit;
+    # our prediction of *which* code can differ from printtarg's by one at a
+    # half-way boundary (round-half-to-even vs printtarg's own rounding). Charts
+    # built from targen / imports are already 8-bit-aligned so this never bit,
+    # but the "Generate colour sets" feature emits arbitrary floats that land on
+    # those boundaries — a one-code shift there is below the device's own 8-bit
+    # resolution, not a lost patch. A genuinely dropped patch is off by the full
+    # colour distance and still fails. Neighbours are tried nearest-first so an
+    # exact match is always preferred.
+    from collections import Counter
+    from itertools import product
+
+    avail: Counter = Counter(_codes(p.dev) for p in new.patches)
+    _offsets = sorted(product((0, -1, 1), repeat=3),
+                      key=lambda o: sum(abs(c) for c in o))
+
+    for want in dev_values:
+        key = _codes(want)
+        for off in _offsets:
+            cand = tuple(c + d for c, d in zip(key, off))
+            if avail.get(cand, 0) > 0:
+                avail[cand] -= 1
+                break
+        else:
             raise AssertionError(
-                f"requested patch {key} missing from regenerated chart "
-                f"({out_bag.get(key, 0)} < {n})"
+                f"requested patch {tuple(round(v, 3) for v in want)} missing "
+                f"from regenerated chart (no 8-bit match within ±1 code)"
             )
     return len(new.patches) - len(dev_values)
 

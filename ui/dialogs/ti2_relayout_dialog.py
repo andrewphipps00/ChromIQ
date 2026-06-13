@@ -857,7 +857,7 @@ class _NewChartDialog(QDialog):
         self._gen_cube.setChecked(True)
         self._gen_cube.setToolTip(tr("An even N×N×N grid across the whole RGB "
                                   "range. N is the steps per axis."))
-        self._gen_cube_n = _spin(2, 30, 6)
+        self._gen_cube_n = _spin(2, 30, 8)
         self._gen_cube_count = _count_label()
         gg.addWidget(self._gen_cube, 0, 0)
         gg.addWidget(QLabel(tr("per axis:")), 0, 1)
@@ -866,11 +866,12 @@ class _NewChartDialog(QDialog):
 
         # Fitzpatrick skin tones — per-type ramp × parallel hue ranges.
         self._gen_skin = QCheckBox(tr("Skin tones (Fitzpatrick)"), self._gen_panel)
+        self._gen_skin.setChecked(True)
         self._gen_skin.setToolTip(tr("Light→dark ramps through each of the six "
                                   "Fitzpatrick skin phototypes. 'Ranges' adds "
                                   "parallel ramps offset in hue for broader "
                                   "coverage."))
-        self._gen_skin_n = _spin(1, 36, 5)
+        self._gen_skin_n = _spin(1, 36, 8)
         self._gen_skin_ranges = _spin(1, 5, 3)
         self._gen_skin_count = _count_label()
         gg.addWidget(self._gen_skin, 1, 0)
@@ -882,12 +883,13 @@ class _NewChartDialog(QDialog):
 
         # Enhanced blues / turquoise.
         self._gen_blues = QCheckBox(tr("Blues / turquoise"), self._gen_panel)
+        self._gen_blues.setChecked(True)
         self._gen_blues.setToolTip(tr("Denser sampling of the green-turquoise→blue "
                                    "band wide-gamut spaces stretch furthest. "
                                    "Each of the 'layers' is a non-parallel sheet "
                                    "of 'per layer' patches, so the two multiply."))
-        self._gen_blues_n = _spin(1, 200, 24)
-        self._gen_blues_layers = _spin(1, 5, 3)
+        self._gen_blues_n = _spin(1, 200, 64)
+        self._gen_blues_layers = _spin(1, 10, 3)
         self._gen_blues_count = _count_label()
         gg.addWidget(self._gen_blues, 2, 0)
         gg.addWidget(QLabel(tr("per layer:")), 2, 1)
@@ -898,12 +900,13 @@ class _NewChartDialog(QDialog):
 
         # Enhanced greens (foliage).
         self._gen_greens = QCheckBox(tr("Greens (foliage)"), self._gen_panel)
+        self._gen_greens.setChecked(True)
         self._gen_greens.setToolTip(tr("Forest, jungle and foliage greens for "
                                     "nature images. Each of the 'layers' is a "
                                     "non-parallel sheet of 'per layer' patches, "
                                     "so the two multiply."))
-        self._gen_greens_n = _spin(1, 200, 24)
-        self._gen_greens_layers = _spin(1, 5, 2)
+        self._gen_greens_n = _spin(1, 200, 64)
+        self._gen_greens_layers = _spin(1, 10, 3)
         self._gen_greens_count = _count_label()
         gg.addWidget(self._gen_greens, 3, 0)
         gg.addWidget(QLabel(tr("per layer:")), 3, 1)
@@ -914,11 +917,12 @@ class _NewChartDialog(QDialog):
 
         # Near-neutral greys — neutral ramp + 6 hue rings per step.
         self._gen_greys = QCheckBox(tr("Near-neutral greys"), self._gen_panel)
+        self._gen_greys.setChecked(True)
         self._gen_greys.setToolTip(tr("A neutral grey ramp plus, at each step, six "
                                    "small hue tints around the neutral axis "
                                    "(1 neutral + 6 tints per step)."))
         self._gen_greys_n = _spin(1, 64, 16)
-        self._gen_greys_off = _spin(1, 50, 6)
+        self._gen_greys_off = _spin(1, 50, 5)
         self._gen_greys_count = _count_label()
         gg.addWidget(self._gen_greys, 4, 0)
         gg.addWidget(QLabel(tr("steps:")), 4, 1)
@@ -2221,9 +2225,13 @@ class Ti2RelayoutDialog(QDialog):
         from PyQt6.QtWidgets import QInputDialog
         fmt, ok = QInputDialog.getItem(
             self, tr("Export patch colours"), tr("Format:"),
-            ["Hex (#rrggbb)", "RGB 0..255 (R G B)"], 0, False,
+            ["Hex (#rrggbb)", "RGB 0..255 (R G B)",
+             "i1Profiler (.txt + .pxf)"], 0, False,
         )
         if not ok:
+            return
+        if fmt.startswith("i1Profiler"):
+            self._export_i1profiler()
             return
         as_hex = fmt.startswith("Hex")
         start = (self._settings.get("custom_output_path", "")
@@ -2256,6 +2264,49 @@ class Ti2RelayoutDialog(QDialog):
             tr("Exported 1 colour to {name}.").format(name=out_path.name)
             if n_exp == 1 else
             tr("Exported {n} colours to {name}.").format(n=n_exp, name=out_path.name))
+
+    def _export_i1profiler(self) -> None:
+        """Export the current patch program as i1Profiler-ready files.
+
+        Writes the same ``<base>.txt`` (CGATS) + ``<base>.pxf`` (CxF3) pair the
+        Create Chart tab produces, so the layout the user designed here can be
+        handed straight to i1Profiler. RGB only (matching the editor and the
+        i1Profiler exporter); the program goes via a temp .ti1 the exporter
+        reads.
+        """
+        import tempfile
+        from workflow.i1profiler_import import RgbPatch, write_ti1 as _write_ti1
+        from workflow import i1profiler_export as X
+
+        prog = self._program_from_grid()
+        start = (self._settings.get("custom_output_path", "")
+                 or str(Path.home() / "ChromIQ"))
+        default_name = f"{self._basename or 'chart'}-i1profiler"
+        path = save_file_dialog(
+            self, "Export i1Profiler files",
+            "i1Profiler (*.pxf)",
+            start_path=str(Path(start) / default_name),
+        )
+        if not path:
+            return
+        out_path = Path(path)
+        base = out_path.stem or "i1profiler"
+        out_dir = out_path.parent
+        try:
+            with tempfile.TemporaryDirectory() as td:
+                ti1 = Path(td) / f"{base}.ti1"
+                _write_ti1([RgbPatch(*rgb) for rgb in prog], ti1)
+                txt_out, pxf_out = X.export_from_ti1(
+                    ti1, out_dir, base_name=base, descriptor=base)
+        except Exception as exc:  # noqa: BLE001 — surface any writer failure
+            QMessageBox.warning(self, tr("Save failed"), str(exc))
+            return
+        name = (f"{txt_out.name} + {pxf_out.name}" if txt_out else pxf_out.name)
+        n_exp = len(prog)
+        self._status.setText(
+            tr("Exported 1 colour to {name}.").format(name=name)
+            if n_exp == 1 else
+            tr("Exported {n} colours to {name}.").format(n=n_exp, name=name))
 
     def _set_patch_colour(self) -> None:
         items = self._grid.selectedItems()
@@ -3123,8 +3174,23 @@ class Ti2RelayoutDialog(QDialog):
         except Exception as exc:
             QMessageBox.warning(self, tr("Save failed"), str(exc))
             return
+        # Also write the i1Profiler-ready pair (<name>-i1profiler.txt/.pxf) into
+        # the chart folder so the saved chart can be handed straight to
+        # i1Profiler (best-effort — never fail the save over it).
+        i1_note = ""
+        try:
+            from workflow import i1profiler_export as X
+            ti1 = res.ti2.with_suffix(".ti1")
+            if ti1.exists():
+                _txt, pxf = X.export_from_ti1(
+                    ti1, target, base_name=f"{name}-i1profiler", descriptor=name)
+                i1_note = f"i1Profiler files: {pxf.stem}.txt/.pxf"
+        except Exception as exc:  # noqa: BLE001
+            log.warning("i1Profiler export during save failed: %s", exc)
         tag_note = self._maybe_tag_randomised(res.ti2)
         msg = f"Saved {res.ti2.name} + {len(res.tiffs)} page(s) to {target}"
+        if i1_note:
+            msg += f"\n{i1_note}"
         if pad:
             msg += f"\nprinttarg added {pad} patch(es) to complete the last strip."
         if tag_note:
