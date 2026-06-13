@@ -78,28 +78,41 @@ def skin_tones(per_type: int, ranges: int = 3) -> list[tuple[float, float, float
     the paler highlights and deeper shadows real skin holds. The lightest ramps
     drift toward porcelain and the darkest pick up a faint cool undertone.
 
+    The light end of the sweep reaches *further toward the cube centre the
+    darker the anchor is*, so the deep-brown phototypes (V/VI) span a comparable
+    tonal length to the pale ones instead of bunching into a short, dense ramp
+    near the dark corner (GitHub #37 follow-up — Knut's "darkest range is too
+    dense" note). Pale anchors are essentially unchanged.
+
     Total = ``6 * ranges * per_type``, ordered type-by-type, then ramp-by-ramp,
-    each ramp light → dark. ``ranges = 1`` reproduces a single central ramp.
+    each ramp dark → light. ``ranges = 1`` reproduces a single central ramp.
     """
     per_type = max(1, int(per_type))
     ranges = max(1, int(ranges))
     out: list[tuple[float, float, float]] = []
     for r8, g8, b8 in _FITZPATRICK_ANCHORS:
         h, s, v = colorsys.rgb_to_hsv(r8 / 255.0, g8 / 255.0, b8 / 255.0)
+        # Absolute value endpoints for this anchor's ramp. The dark end stays a
+        # fixed fraction below the anchor; the light end is lifted toward the
+        # cube centre, with the lift scaled by (1 - v) so dark anchors stretch
+        # the most and a near-white type I barely moves.
+        v_dark = v * 0.74
+        v_light = min(1.0, v * 1.08 + 0.22 * (1.0 - v))
         for ri in range(ranges):
             # Parallel ramps fanned ±9° in hue around the anchor; the centre
             # ramp keeps the exact phototype hue.
             tr = (ri / (ranges - 1) - 0.5) if ranges > 1 else 0.0
             dh = tr * 18.0 / 360.0
             for i in range(per_type):
-                # Sweep value 0.74×..1.08× the anchor (clamped); lift saturation
-                # a little in the shadows so darker shades don't wash to grey,
-                # and ease it down in the highlights so they go porcelain-pale.
+                # Sweep value v_dark → v_light; lift saturation a little in the
+                # shadows so darker shades don't wash to grey, and ease it down
+                # toward the lighter (centre-ward) end so it goes porcelain-pale.
                 t = i / (per_type - 1) if per_type > 1 else 0.5
-                vf = 0.74 + 0.34 * t
+                val = v_dark + (v_light - v_dark) * t
                 sf = 1.14 - 0.30 * t
                 r, g, b = colorsys.hsv_to_rgb(
-                    (h + dh) % 1.0, min(1.0, max(0.0, s * sf)), min(1.0, v * vf)
+                    (h + dh) % 1.0, min(1.0, max(0.0, s * sf)),
+                    min(1.0, max(0.0, val))
                 )
                 out.append((r * 100.0, g * 100.0, b * 100.0))
     return out

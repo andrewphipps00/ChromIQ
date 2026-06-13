@@ -59,6 +59,24 @@ def test_skin_tones_light_to_dark_ordering():
     assert lums == sorted(lums, reverse=True)
 
 
+def test_skin_tones_dark_ramp_not_cramped():
+    # Knut #37: the darkest phototype (VI) used to span a tiny tonal range
+    # because the brightness sweep was multiplicative. Every phototype's centre
+    # ramp should now cover a comparable lightness length (no group much denser
+    # than the others).
+    import colorsys
+    per = 8
+    patches = G.skin_tones(per, 1)
+    spans = []
+    for gi in range(6):
+        vs = [colorsys.rgb_to_hsv(r / 100, g / 100, b / 100)[2]
+              for r, g, b in patches[gi * per:(gi + 1) * per]]
+        spans.append(max(vs) - min(vs))
+    # The darkest group (VI) is no longer a fraction of the lightest's length.
+    assert min(spans) > 0.6 * max(spans)
+    assert spans[5] > 0.2          # VI specifically has a real, usable range
+
+
 def test_skin_tones_ranges_add_hue_variation():
     # With >1 range, a phototype's patches span more than one hue.
     import colorsys
