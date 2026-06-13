@@ -142,3 +142,54 @@ def test_real_view_drained_then_exit_is_clean():
         f"STDOUT:\n{proc.stdout}\nSTDERR:\n{proc.stderr}"
     )
     assert "CLEAN EXIT" in proc.stdout
+
+
+def test_undrained_view_exits_clean_via_hard_exit():
+    """The belt-and-braces guarantee (issue #38, second recurrence): even with
+    a web view left fully alive — the WebEngine-global state that no per-view
+    drain can reach — ``main._hard_exit`` reaches the OS without the SIGSEGV,
+    because it skips CPython finalization (and thus SIP's cleanup_on_exit walk
+    of the dangling Chromium wrapper graph) entirely.
+
+    Mirrors Knut's reproduction: a process that has used a web view and then
+    quits. Run in a subprocess because a real QWebEngineView destabilises the
+    shared offscreen test interpreter."""
+    if (
+        subprocess.run(
+            [sys.executable, "-c", "import PyQt6.QtWebEngineWidgets"],
+            capture_output=True,
+        ).returncode
+        != 0
+    ):
+        pytest.skip("PyQt6-WebEngine not available")
+
+    script = textwrap.dedent(
+        """
+        import sys
+        from PyQt6.QtWidgets import QApplication
+        from PyQt6.QtCore import QEventLoop, QTimer
+        from PyQt6.QtWebEngineWidgets import QWebEngineView
+        from main import _hard_exit
+
+        app = QApplication(sys.argv)
+        view = QWebEngineView()
+        view.setHtml("<html><body><h1>x</h1></body></html>")
+        loop = QEventLoop(); QTimer.singleShot(600, loop.quit); loop.exec()
+        # Deliberately do NOT drain/destroy the view: this is the global-state
+        # case that crashed on quit in 3.9.16. _hard_exit must still be clean.
+        print("CLEAN EXIT", flush=True)
+        _hard_exit(0)
+        print("UNREACHABLE", flush=True)  # os._exit never returns
+        """
+    )
+    env = dict(os.environ, QT_QPA_PLATFORM="offscreen", PYTHONPATH=REPO_ROOT)
+    proc = subprocess.run(
+        [sys.executable, "-c", script],
+        capture_output=True, text=True, env=env, timeout=60,
+    )
+    assert proc.returncode == 0, (
+        f"process crashed at exit (rc={proc.returncode}):\n"
+        f"STDOUT:\n{proc.stdout}\nSTDERR:\n{proc.stderr}"
+    )
+    assert "CLEAN EXIT" in proc.stdout
+    assert "UNREACHABLE" not in proc.stdout  # os._exit really bypassed finalize
