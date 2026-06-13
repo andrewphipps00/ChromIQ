@@ -533,6 +533,15 @@ class _NewChartDialog(QDialog):
             QSpinBox:focus, QDoubleSpinBox:focus {{
                 border-color: {SPEC_MAGENTA};
             }}
+            /* The dropdown's hovered/selected row defaulted to the app-wide
+               cyan; tint it magenta to match the rest of the dialog. */
+            QComboBox QAbstractItemView {{
+                selection-background-color: {SPEC_MAGENTA};
+                selection-color: white;
+            }}
+            QComboBox QAbstractItemView::item:hover {{
+                background: {SPEC_MAGENTA}; color: white;
+            }}
         """)
 
         # Content lives in a scroll area so the dialog fits small screens even
@@ -666,7 +675,11 @@ class _NewChartDialog(QDialog):
         for code, label in _INSTRUMENTS:
             self._instr.addItem(label, code)
         cg.addWidget(self._instr, 1, 1)
-        cg.addWidget(QLabel(tr("Paper:")), 1, 2)
+        # Breathing room between the instrument combo and the Paper label so the
+        # two controls don't read as one run-on field.
+        _paper_lbl = QLabel(tr("Paper:"))
+        _paper_lbl.setContentsMargins(20, 0, 0, 0)
+        cg.addWidget(_paper_lbl, 1, 2)
         self._paper = NoScrollComboBox(chart_box)
         for code in _PAPER_ORDER:
             self._paper.addItem(
@@ -702,7 +715,13 @@ class _NewChartDialog(QDialog):
         cust_l.addStretch(1)
         _as_compact(self._paper_w, self._paper_h)
         self._paper_custom_row.setVisible(False)
-        cg.addWidget(self._paper_custom_row, 2, 0, 1, 4)
+        # Sit the W/H row directly under the Paper combo it belongs to (cols 2–3)
+        # instead of stranded on the far left under "Instrument".
+        cg.addWidget(self._paper_custom_row, 2, 2, 1, 2)
+        # Keep the two control columns balanced so the Instrument/Paper combos
+        # get equal width and the row doesn't crowd the label gap.
+        cg.setColumnStretch(1, 1)
+        cg.setColumnStretch(3, 1)
         self._paper.currentIndexChanged.connect(self._on_paper_changed)
         lay.addWidget(chart_box)
 
@@ -1519,9 +1538,14 @@ class _NewChartDialog(QDialog):
 # Main editor
 # ---------------------------------------------------------------------------
 class Ti2RelayoutDialog(QDialog):
-    def __init__(self, runner, settings, parent: QWidget | None = None) -> None:
+    def __init__(self, runner, settings, parent: QWidget | None = None,
+                 on_apply: "Callable[[Path, str], bool | None] | None" = None) -> None:
         super().__init__(parent)
         self._settings = settings
+        # Callback that hands a freshly-saved chart folder to the Create Chart
+        # tab (set by the main window). When present, the action footer offers
+        # "Save & apply" instead of the plain colour-export button.
+        self._on_apply = on_apply
         self._bin_dir = Path(settings.get("argyll_bin_path", "/Applications/Argyll/bin"))
         self.setWindowTitle(tr("Edit / create chart layout"))
         # Wider default so the printtarg-options column doesn't clip its
@@ -1726,6 +1750,15 @@ class Ti2RelayoutDialog(QDialog):
             for k in keys:
                 QShortcut(QKeySequence(k), self._grid, activated=fn)
         lv.addWidget(self._grid, 1)
+        # It isn't obvious the swatches can be rearranged, so spell it out right
+        # under the grid (Knut's suggestion) — the full story stays in the ⓘ.
+        grid_hint = QLabel(
+            tr("Tip: drag a swatch to move it. Shift- or ⌘/Ctrl-click to pick "
+               "several, then drag — or use the First / Up / Down / Last buttons."),
+            left)
+        grid_hint.setWordWrap(True)
+        grid_hint.setStyleSheet("color: palette(mid); font-size: 10px;")
+        lv.addWidget(grid_hint, 0)
         split.addWidget(left)
 
         # Middle: preview + page navigation
@@ -1853,6 +1886,15 @@ class Ti2RelayoutDialog(QDialog):
             QLineEdit:focus, QComboBox:focus,
             QSpinBox:focus, QDoubleSpinBox:focus {{
                 border-color: {SPEC_MAGENTA};
+            }}
+            /* The dropdown's hovered/selected row defaulted to the app-wide
+               cyan; tint it magenta to match the rest of the dialog. */
+            QComboBox QAbstractItemView {{
+                selection-background-color: {SPEC_MAGENTA};
+                selection-color: white;
+            }}
+            QComboBox QAbstractItemView::item:hover {{
+                background: {SPEC_MAGENTA}; color: white;
             }}
         """)
         v = QVBoxLayout(panel)
@@ -2259,17 +2301,32 @@ class Ti2RelayoutDialog(QDialog):
         bv.addLayout(top_row)
         save_row = QHBoxLayout()
         save_row.setSpacing(6)
-        # Export sits next to Save As since both are "write the chart out"
-        # actions — Save As writes the full deliverable, Export writes the
-        # colour list (hex / RGB) for re-use in a fresh chart.
-        self._export_btn = QPushButton(tr("Export colours…"), bar)
-        self._export_btn.setToolTip(
-            tr("Save the patch colours as a text file you can paste back into "
-            "the New chart dialog (or import elsewhere). Hex (#rrggbb) or "
-            "decimal RGB, one colour per line, in chart order."))
-        self._export_btn.clicked.connect(self._export_patch_colours)
-        save_row.addWidget(self._export_btn)
+        # "Save & apply" is the headline action: it writes the full chart folder
+        # AND hands it to the Create Chart tab, ready to print and measure.
+        # "Save As" writes the same deliverable to a folder you pick without
+        # leaving the editor.
+        # ".replace" doubles the ampersand so Qt shows a literal "&" instead of
+        # eating it as a mnemonic; the tr() key stays plain (translations carry a
+        # single "&"). Styled in the scheme's magenta to mark it the lead action.
+        self._apply_btn = QPushButton(tr("Save & apply…").replace("&", "&&"), bar)
+        self._apply_btn.setStyleSheet(
+            f"QPushButton {{ background: {SPEC_MAGENTA}; color: white; "
+            f"border: none; border-radius: 4px; padding: 4px 10px; "
+            f"min-height: 26px; font-size: 11px; font-weight: 600; }}"
+            f"QPushButton:hover {{ background: #ff6690; }}"
+            f"QPushButton:disabled {{ background: #4a4a4a; color: #9a9a9a; }}"
+        )
+        self._apply_btn.setToolTip(
+            tr("Save this chart and open it straight away in the Create Chart "
+            "tab, ready to print and measure. Creates a new profiling project "
+            "folder under the name you choose."))
+        self._apply_btn.clicked.connect(self._save_and_apply)
+        save_row.addWidget(self._apply_btn)
         self._save_btn = QPushButton(tr("Save As…"), bar)
+        self._save_btn.setToolTip(
+            tr("Save the full chart to a folder you pick (.ti1 / .ti2 / TIFF "
+            "pages, i1Profiler files, a colour list and the layout settings) "
+            "without leaving the editor."))
         self._save_btn.clicked.connect(self._save_as)
         save_row.addWidget(self._save_btn)
         bv.addLayout(save_row)
@@ -3489,26 +3546,48 @@ class Ti2RelayoutDialog(QDialog):
         target_path = Path(path)
         name = target_path.stem or "chart"
         target = target_path.parent / name
-        target.mkdir(parents=True, exist_ok=True)
-        # regenerate straight into the target, then bake per-spacer paint into pages
         try:
-            res = R.regenerate(self._spec, self._program_from_grid(), target,
-                               self._bin_dir,
-                               spacer_palette=tuple(self._palette) if self._palette else None,
-                               basename=name, options=self._options)
-            pad = R.assert_data_integrity(self._program_from_grid(), res.ti2)
-            self._bake_paint_into_saved(res)
-            # Write meta.json (the same RunMeta the main app uses) into the
-            # chart folder so reopening restores the printtarg knobs exactly as
-            # saved, and the folder reads like a main-app chart (best-effort;
-            # never fatal).
-            R.save_editor_meta(res.ti2, self._spec, self._options, name)
-        except Exception as exc:
+            msg = self._write_chart_into(target, name)
+        except Exception as exc:  # noqa: BLE001 — surface any writer failure
             QMessageBox.warning(self, tr("Save failed"), str(exc))
             return
-        # Also write the i1Profiler-ready pair (<name>-i1profiler.txt/.pxf) into
-        # the chart folder so the saved chart can be handed straight to
-        # i1Profiler (best-effort — never fail the save over it).
+        QMessageBox.information(self, tr("Saved"), msg)
+        self._status.setText(msg.splitlines()[0])
+
+    def _write_chart_into(self, target: Path, name: str) -> str:
+        """Write the complete chart deliverable into ``target`` and return a note.
+
+        Shared by "Save As" and "Save & apply". Produces the same set of files a
+        Create Chart build leaves in a run folder, plus the editor extras:
+        ``<name>.ti1`` / ``.ti2`` / ``<name>_NN.tif`` (+ B&W spacer twin),
+        ``meta.json`` (full layout), ``<name>-i1profiler.txt/.pxf`` and
+        ``<name>-colours.txt`` (the colour list the old Export button wrote).
+        Raises on a hard failure (regenerate / integrity); the extras are
+        best-effort and never abort the save.
+        """
+        target.mkdir(parents=True, exist_ok=True)
+        # regenerate straight into the target, then bake per-spacer paint into pages
+        res = R.regenerate(self._spec, self._program_from_grid(), target,
+                           self._bin_dir,
+                           spacer_palette=tuple(self._palette) if self._palette else None,
+                           basename=name, options=self._options)
+        pad = R.assert_data_integrity(self._program_from_grid(), res.ti2)
+        self._bake_paint_into_saved(res)
+        # Write meta.json (the same RunMeta the main app uses) into the chart
+        # folder so reopening restores the printtarg knobs exactly as saved, and
+        # the folder reads like a main-app chart.
+        R.save_editor_meta(res.ti2, self._spec, self._options, name)
+        # Colour list (<name>-colours.txt) — what the old Export button wrote, so
+        # the design can be pasted back into the New chart dialog later.
+        colour_note = ""
+        try:
+            cpath = target / f"{name}-colours.txt"
+            self._write_colour_values_file(cpath)
+            colour_note = f"Colour list: {cpath.name}"
+        except OSError as exc:
+            log.warning("colour-list export during save failed: %s", exc)
+        # i1Profiler-ready pair (<name>-i1profiler.txt/.pxf) so the saved chart
+        # can be handed straight to i1Profiler (best-effort).
         i1_note = ""
         try:
             from workflow import i1profiler_export as X
@@ -3521,14 +3600,130 @@ class Ti2RelayoutDialog(QDialog):
             log.warning("i1Profiler export during save failed: %s", exc)
         tag_note = self._maybe_tag_randomised(res.ti2)
         msg = f"Saved {res.ti2.name} + {len(res.tiffs)} page(s) to {target}"
+        if colour_note:
+            msg += f"\n{colour_note}"
         if i1_note:
             msg += f"\n{i1_note}"
         if pad:
             msg += f"\nprinttarg added {pad} patch(es) to complete the last strip."
         if tag_note:
             msg += "\n" + tag_note
-        QMessageBox.information(self, tr("Saved"), msg)
-        self._status.setText(msg.splitlines()[0])
+        return msg
+
+    def _write_colour_values_file(self, path: Path, as_hex: bool = True) -> None:
+        """Write the current patch program as a colour list (hex by default).
+
+        Same format :func:`workflow.ti2_relayout.parse_color_values` accepts, so
+        the file round-trips through the New chart dialog's "Paste colour values".
+        """
+        lines: list[str] = []
+        for r100, g100, b100 in self._program_from_grid():
+            r = max(0, min(255, round(r100 / 100 * 255)))
+            g = max(0, min(255, round(g100 / 100 * 255)))
+            b = max(0, min(255, round(b100 / 100 * 255)))
+            lines.append(f"#{r:02x}{g:02x}{b:02x}" if as_hex else f"{r} {g} {b}")
+        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    def _save_and_apply(self) -> None:
+        """Save the chart and hand it to the Create Chart tab, ready to use.
+
+        Explains what will happen, asks for a profile name (the working-folder
+        name), writes the full deliverable to a staging folder, then calls the
+        host callback that imports it into a fresh run and switches to manual
+        mode. Falls back to a plain Save As when opened without a host.
+        """
+        if self._spec is None or self._grid.count() == 0:
+            return
+        if self._on_apply is None:
+            # No host to apply into (e.g. dialog opened standalone) — save only.
+            self._save_as()
+            return
+        name = self._prompt_apply_name()
+        if not name:
+            return
+        import tempfile
+        staging = Path(tempfile.mkdtemp(prefix="chromiq_apply_"))
+        try:
+            self._write_chart_into(staging, name)
+        except Exception as exc:  # noqa: BLE001
+            QMessageBox.warning(self, tr("Could not prepare chart"), str(exc))
+            return
+        self._status.setText(
+            tr("Applying “{name}” to the Create Chart tab…").format(name=name))
+        try:
+            applied = self._on_apply(staging, name)
+        except Exception as exc:  # noqa: BLE001
+            log.exception("apply callback failed")
+            QMessageBox.warning(self, tr("Could not apply chart"), str(exc))
+            return
+        # The host returns False when the user backed out of a name-collision
+        # prompt — keep the editor open so they can try again with another name.
+        if applied is False:
+            self._status.setText(tr("Apply cancelled — the editor is still open."))
+            return
+        self.accept()
+
+    def _prompt_apply_name(self) -> str | None:
+        """Friendly explanation + name field for Save & apply.
+
+        Returns a file/folder-safe profile name, or None if cancelled. The field
+        is pre-filled with the name carried through the editor.
+        """
+        dlg = QDialog(self)
+        dlg.setWindowTitle(tr("Save & apply this chart"))
+        dlg.setMinimumWidth(580)
+        lay = QVBoxLayout(dlg)
+        lay.setContentsMargins(24, 20, 24, 16)
+        lay.setSpacing(12)
+
+        heading = QLabel(
+            tr("Set this chart up as a new profiling project"), dlg)
+        heading.setWordWrap(True)
+        heading.setStyleSheet("font-weight: 600; font-size: 14px;")
+        lay.addWidget(heading)
+
+        body = QLabel(
+            tr("This takes the chart you've designed here and gets it ready to "
+               "print and measure. When you continue:\n\n"
+               "  •  ChromIQ creates a new working folder named after the "
+               "profile name you choose below. Everything for this profile — "
+               "the chart, your measurements and the finished profile — will "
+               "live there.\n"
+               "  •  The chart's files (the patch list, the layout and the "
+               "printable pages) are copied into it.\n"
+               "  •  You're taken to the Create Chart tab with this chart "
+               "loaded and ready. The patch recipe and the layout are locked so "
+               "they can't be changed by accident; if you ever need to adjust "
+               "them, just tick the unlock boxes there.\n"
+               "  •  From there you carry on to Print and Measure as usual.\n\n"
+               "Pick a clear, memorable name — it names the whole project "
+               "folder, so something describing the printer, paper and date "
+               "works well (for example “Pro300-CansonRag-June”)."), dlg)
+        body.setWordWrap(True)
+        lay.addWidget(body)
+
+        name_row = QHBoxLayout()
+        name_row.addWidget(QLabel(tr("Profile name:"), dlg))
+        name_edit = QLineEdit(self._basename or "chart", dlg)
+        name_edit.selectAll()
+        name_row.addWidget(name_edit, 1)
+        lay.addLayout(name_row)
+
+        bb = QDialogButtonBox(dlg)
+        ok_btn = bb.addButton(tr("Create project"), QDialogButtonBox.ButtonRole.AcceptRole)
+        cancel_btn = bb.addButton(tr("Cancel"), QDialogButtonBox.ButtonRole.RejectRole)
+        ok_btn.setDefault(True)
+        ok_btn.clicked.connect(dlg.accept)
+        cancel_btn.clicked.connect(dlg.reject)
+        lay.addWidget(bb)
+
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return None
+        import re
+        raw = name_edit.text().strip()
+        clean = re.sub(r"\s+", "-", raw)
+        clean = re.sub(r"[^\w\-]", "_", clean).strip("-_")
+        return clean or "chart"
 
     def _maybe_tag_randomised(self, ti2: Path) -> str:
         """Decide how the just-saved .ti2 is tagged as randomised, and do it.
@@ -3649,14 +3844,14 @@ class Ti2RelayoutDialog(QDialog):
         self._preview_btn.setEnabled(not busy)
         self._shuffle_btn.setEnabled(not busy)
         self._save_btn.setEnabled(not busy)
-        self._export_btn.setEnabled(not busy)
+        self._apply_btn.setEnabled(not busy)
 
     def _refresh_enabled(self) -> None:
         has = self._spec is not None
         self._preview_btn.setEnabled(has)
         self._shuffle_btn.setEnabled(has)
         self._save_btn.setEnabled(has)
-        self._export_btn.setEnabled(has)
+        self._apply_btn.setEnabled(has)
         # Initial pass for the conditional checkboxes — without this the
         # default Qt state shows ALL four (L, P, double, triple) at
         # startup before any chart is loaded.

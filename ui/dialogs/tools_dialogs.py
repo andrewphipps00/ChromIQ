@@ -1937,14 +1937,19 @@ def open_tool_dialog(
     runner: "ArgyllRunner",
     settings: "AppSettings",
     parent: QWidget | None = None,
+    on_apply: "Callable[[Path, str], bool | None] | None" = None,
 ) -> None:
-    """Open the dialog for the given tool key (no-op for unknown keys)."""
+    """Open the dialog for the given tool key (no-op for unknown keys).
+
+    ``on_apply`` is forwarded to the TI2 layout editor so its "Save & apply"
+    button can hand a freshly-saved chart folder back to the Create Chart tab.
+    """
     if key == "spot_read":
         from ui.dialogs.spot_read_dialog import SpotReadDialog
         dlg = SpotReadDialog(runner, settings, parent)
     elif key == "ti2_relayout":
         from ui.dialogs.ti2_relayout_dialog import Ti2RelayoutDialog
-        dlg = Ti2RelayoutDialog(runner, settings, parent)
+        dlg = Ti2RelayoutDialog(runner, settings, parent, on_apply=on_apply)
     elif key == "average":
         dlg = AverageMeasurementsDialog(runner, settings, parent)
     elif key == "merge":

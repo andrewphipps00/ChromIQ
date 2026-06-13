@@ -14,10 +14,40 @@ shelling out to ArgyllCMS (generation is stubbed).
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+# Argyll is needed only by the applied-editor-chart tests that stage a real
+# chart; they skip cleanly when it isn't installed.
+_BIN_DIR = Path("/Applications/Argyll/bin")
+_HAS_ARGYLL = (_BIN_DIR / "printtarg").exists()
+
+# A minimal but valid .ti2 the layout editor can lay out (mirrors the fixture
+# in test_ti2_relayout.py).
+_TI2 = """CTI2
+
+ORIGINATOR "test"
+TARGET_INSTRUMENT "GretagMacbeth i1 Pro"
+COLOR_REP "iRGB"
+PAPER_SIZE "210.0x297.0"
+APPROX_WHITE_POINT "95.1 100.0 108.8"
+
+NUMBER_OF_FIELDS 8
+BEGIN_DATA_FORMAT
+SAMPLE_ID SAMPLE_LOC RGB_R RGB_G RGB_B XYZ_X XYZ_Y XYZ_Z
+END_DATA_FORMAT
+
+NUMBER_OF_SETS 4
+BEGIN_DATA
+1 "A1" 100.0 100.0 100.0 95.1 100.0 108.8
+2 "A2" 0.0 0.0 0.0 0.0 0.0 0.0
+3 "A3" 100.0 0.0 0.0 41.2 21.3 1.9
+4 "B1" 0.0 0.0 100.0 18.0 7.2 95.0
+END_DATA
+"""
 
 pytest.importorskip("PyQt6")
 from PyQt6.QtCore import QSettings  # noqa: E402
@@ -42,6 +72,10 @@ def qapp():
 def settings(tmp_path):
     s = AppSettings()
     s._qs = QSettings(str(tmp_path / "chromiq_test.ini"), QSettings.Format.IniFormat)
+    # Keep every project ChromIQ writes inside the test's tmp dir, never the
+    # real ~/ChromIQ — otherwise the applied-chart tests pollute the home folder
+    # (and a rerun would trip the name-collision dialog into a modal hang).
+    s.set("custom_output_path", str(tmp_path / "out"))
     return s
 
 
@@ -194,3 +228,125 @@ def test_leaving_prebuilt_restores_panels(qapp, settings, monkeypatch):
     assert tab._override_targen_row.isHidden()
     assert tab._override_printtarg_row.isHidden()
     assert not tab._override_printtarg_check.isChecked()
+
+
+# ---------------------------------------------------------------------------
+# Applied editor chart: behaves like a prebuilt preset (both panels greyed),
+# but its source is the editor's staging folder rather than a bundled asset.
+# ---------------------------------------------------------------------------
+
+applied_argyll = pytest.mark.skipif(not _HAS_ARGYLL, reason="ArgyllCMS not installed")
+
+
+def _stage_chart(tmp_path, name="applied-test"):
+    """A minimal but valid staging folder, as the layout editor's
+    _write_chart_into would leave: <name>.ti1/.ti2 + one TIFF page."""
+    from workflow import ti2_relayout as R
+    src_ti2 = tmp_path / "src.ti2"
+    src_ti2.write_text(_TI2)
+    spec = R.ChartSpec.from_ti2(src_ti2)
+    staging = tmp_path / "staging"
+    staging.mkdir()
+    res = R.regenerate(spec, R.default_program(spec), staging,
+                       _BIN_DIR, basename=name)
+    R.save_editor_meta(res.ti2, spec, R.LayoutOptions(), name)
+    # _write_chart_into also drops the i1Profiler pair + colour list; stub the
+    # i1Profiler file so the carry-over-into-the-run-folder path is exercised.
+    (staging / f"{name}-i1profiler.txt").write_text("stub\n")
+    return staging, name
+
+
+@applied_argyll
+def test_applied_chart_locks_both(qapp, settings, monkeypatch, tmp_path):
+    tab = _make_tab(qapp, settings)
+    monkeypatch.setattr(tab, "_import_applied_chart", lambda *a, **k: None)
+    staging, name = _stage_chart(tmp_path)
+    tab.apply_external_chart(staging, name)
+
+    assert tab._applied_active
+    assert tab._current_mode() == "manual"      # applied always lands in manual
+    assert not _targen_enabled(tab)
+    assert not _printtarg_enabled(tab)
+    assert not tab._override_targen_row.isHidden()
+    assert not tab._override_printtarg_row.isHidden()
+    assert tab._applied_targen_sig is not None
+    assert tab._applied_printtarg_sig is not None
+
+
+@applied_argyll
+def test_applied_chart_imports_files(qapp, settings, tmp_path, monkeypatch):
+    """End-to-end: apply copies the staged chart into a fresh run folder."""
+    tab = _make_tab(qapp, settings)
+    # _on_generate_finished drives the TIFF preview + downstream signals, which
+    # need the full window wiring; stub it so we test only the file copy (it runs
+    # after the copy, and the meta/i1profiler copies run after it).
+    monkeypatch.setattr(tab, "_on_generate_finished", lambda *a, **k: None)
+    staging, name = _stage_chart(tmp_path)
+    assert tab.apply_external_chart(staging, name) is True
+
+    run = tab._file_mgr.project().current_run()
+    assert run.chart_ti1.is_file()
+    assert run.chart_ti2.is_file()
+    assert sorted(run.dir.glob(f"{run.stem}_*.tif"))
+    assert run.meta_path.is_file()               # editor meta carried over
+    assert sorted(run.dir.glob(f"{run.stem}-i1profiler.*"))  # extras carried over
+
+
+def _route_applied(qapp, settings, monkeypatch, tmp_path, edit=None):
+    calls: list[str] = []
+    tab = _make_tab(qapp, settings)
+    monkeypatch.setattr(tab, "_import_applied_chart",
+                        lambda *a, **k: calls.append("copy"))
+    monkeypatch.setattr(tab, "_generate_from_ti1",
+                        lambda *a, **k: calls.append("relayout"))
+    # apply_external_chart consults the rename guard up front — let it pass so the
+    # applied state is established. The fresh-targen branch then falls through to
+    # the real generate path; stub the runner call so it scores "fresh" without
+    # shelling out.
+    monkeypatch.setattr(tab, "_handle_target_rename", lambda *a, **k: True)
+    monkeypatch.setattr(tab._creator, "generate",
+                        lambda *a, **k: calls.append("fresh"))
+    staging, name = _stage_chart(tmp_path)
+    tab.apply_external_chart(staging, name)
+    calls.clear()
+    if edit == "printtarg":
+        tab._override_printtarg_check.setChecked(True)
+        tab._set_manual_value("printtarg", "-m", 15)
+    elif edit == "targen":
+        tab._override_targen_check.setChecked(True)
+        tab._set_manual_value("targen", "-f", 333)
+    tab._on_generate()
+    return calls[-1] if calls else "fresh"
+
+
+@applied_argyll
+def test_applied_generate_reimports_when_untouched(qapp, settings, monkeypatch, tmp_path):
+    assert _route_applied(qapp, settings, monkeypatch, tmp_path) == "copy"
+
+
+@applied_argyll
+def test_applied_generate_relayout_on_printtarg_change(qapp, settings, monkeypatch, tmp_path):
+    assert _route_applied(qapp, settings, monkeypatch, tmp_path,
+                          edit="printtarg") == "relayout"
+
+
+@applied_argyll
+def test_applied_generate_fresh_on_targen_change(qapp, settings, monkeypatch, tmp_path):
+    assert _route_applied(qapp, settings, monkeypatch, tmp_path,
+                          edit="targen") == "fresh"
+
+
+@applied_argyll
+def test_selecting_preset_clears_applied(qapp, settings, monkeypatch, tmp_path):
+    tab = _make_tab(qapp, settings)
+    monkeypatch.setattr(tab, "_import_applied_chart", lambda *a, **k: None)
+    staging, name = _stage_chart(tmp_path)
+    tab.apply_external_chart(staging, name)
+    assert tab._applied_active
+
+    tab._leave_applied()
+    assert not tab._applied_active
+    assert _targen_enabled(tab)
+    assert _printtarg_enabled(tab)
+    assert tab._override_targen_row.isHidden()
+    assert tab._override_printtarg_row.isHidden()

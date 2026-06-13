@@ -520,7 +520,21 @@ class MainWindow(QMainWindow):
             self._show_patch_cube()
             return
         from ui.dialogs.tools_dialogs import open_tool_dialog
-        open_tool_dialog(key, self._runner, self._settings, self)
+        # The TI2 layout editor's "Save & apply" hands its chart folder back to
+        # the Create Chart tab through this callback.
+        on_apply = self._apply_editor_chart if key == "ti2_relayout" else None
+        open_tool_dialog(key, self._runner, self._settings, self, on_apply=on_apply)
+
+    def _apply_editor_chart(self, src_dir: "Path", name: str) -> bool:
+        """Adopt a chart the layout editor just saved and show the Create Chart tab.
+
+        Returns False when the user cancelled a name-collision prompt, so the
+        editor stays open instead of closing on a no-op.
+        """
+        applied = self._tab_chart.apply_external_chart(src_dir, name)
+        if applied:
+            self._tabs.setCurrentWidget(self._tab_chart)
+        return applied
 
     def _show_patch_cube(self) -> None:
         """Open the 3D RGB-cube view of the chart currently loaded in the app.

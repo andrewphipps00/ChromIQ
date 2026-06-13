@@ -548,6 +548,16 @@ class TabChart(QWidget):
         # .ti1 (same patches, new layout); else copy the bundled files verbatim.
         self._prebuilt_targen_sig: list | None = None
         self._prebuilt_printtarg_sig: list | None = None
+        # A chart handed over from the TI2 layout editor ("Save & apply"): its
+        # files live in a staging folder we copy into a fresh run. Behaves like a
+        # prebuilt-files preset — both panels start greyed, "Generate Chart"
+        # re-imports the files verbatim (or re-lays the staged .ti1 if the user
+        # unlocks printtarg, or runs a fresh targen if they unlock the recipe).
+        self._applied_active = False
+        self._applied_src_dir: Path | None = None
+        self._applied_stem: str | None = None
+        self._applied_targen_sig: list | None = None
+        self._applied_printtarg_sig: list | None = None
         # Absolute path of the .ti1 backing the chart currently shown (set after a
         # successful generate / load). Offered for attachment in the Save Preset
         # dialog.
@@ -2919,6 +2929,9 @@ class TabChart(QWidget):
             # (TC9.18 / ColorMunki) must re-enable the greyed param panels.
             if self._prebuilt_active and data not in PREBUILT_PRESETS:
                 self._leave_prebuilt()
+            # Picking any preset drops an applied editor chart's binding.
+            if self._applied_active:
+                self._leave_applied()
             self._preset_ti1_path = None  # built-ins are not ti1-user-presets
             self._preset_ti1_targen_sig = None
             # Start the freshly-picked built-in with its panels locked again.
@@ -2955,6 +2968,9 @@ class TabChart(QWidget):
         # Leaving a prebuilt-files preset re-enables the greyed param panels.
         if self._prebuilt_active:
             self._leave_prebuilt()
+        # Likewise an applied editor chart is dropped for Default / a user preset.
+        if self._applied_active:
+            self._leave_applied()
 
         self._last_preset_index = index
         self._preset_del_btn.setEnabled(self._is_deletable_preset(index))
@@ -3422,7 +3438,9 @@ class TabChart(QWidget):
         Each panel is enabled when no lock applies, or when its override box is
         ticked."""
         ti1 = self._ti1_preset_active()
-        prebuilt = self._prebuilt_active
+        # An applied editor chart locks both panels exactly like a prebuilt-files
+        # preset (the patches AND the layout are fixed until the user opts in).
+        prebuilt = self._prebuilt_active or self._applied_active
         show_targen_cb = ti1 or prebuilt
         show_printtarg_cb = prebuilt
 
@@ -3714,6 +3732,230 @@ class TabChart(QWidget):
         self._prebuilt_printtarg_sig = None
         self._reset_override_checks()
         self._update_preset_locks()
+
+    def _leave_applied(self) -> None:
+        """Clear applied-editor-chart state and re-enable the param panels."""
+        self._applied_active = False
+        self._applied_src_dir = None
+        self._applied_stem = None
+        self._applied_targen_sig = None
+        self._applied_printtarg_sig = None
+        self._reset_override_checks()
+        self._update_preset_locks()
+
+    def apply_external_chart(self, src_dir: Path, name: str) -> bool:
+        """Adopt a chart the TI2 layout editor just wrote into ``src_dir``.
+
+        Called by the main window when the user clicks "Save & apply" in the
+        layout editor. ``src_dir`` is a staging folder holding ``<name>.ti1`` /
+        ``.ti2`` / ``<name>_NN.tif`` / ``meta.json``. Switches to manual mode,
+        copies the files into a run under ``name`` (same folder layout the
+        Create Chart tab produces), and greys both param panels so the applied
+        patches and layout can't be overwritten by accident — the override
+        boxes let the user opt back in, exactly like a prebuilt preset.
+
+        Returns True when the chart was applied, False when the user backed out
+        of a name-collision prompt (so the editor knows to stay open).
+        """
+        src_dir = Path(src_dir)
+        # Guard against silently clobbering an existing project of the same name
+        # (it may already hold measurements / a finished profile). Decide up
+        # front whether to add a new run, replace the current chart, or abort.
+        add_new_run = False
+        root = self._file_mgr.preview_project_root(name)
+        if root is not None and (root / "project.json").exists():
+            choice = self._ask_apply_name_collision(name, root)
+            if choice is None:
+                return False
+            add_new_run = (choice == "new_run")
+        # Reconcile a target created earlier this session under another name
+        # (same rename/keep/delete chooser the Generate button uses), so applying
+        # under a new name doesn't silently orphan it. Cancel aborts.
+        if not self._handle_target_rename(name):
+            return False
+        # Applied charts always land in the manual module (the override boxes and
+        # locked panels only exist there).
+        self._switch_mode("manual")
+        # Drop any other fixed-layout binding so the locks stay consistent.
+        self._tc918_active = False
+        self._tc918_targen_sig = None
+        self._knut_active = False
+        self._knut_targen_sig = None
+        self._preset_ti1_path = None
+        self._preset_ti1_targen_sig = None
+        if self._prebuilt_active:
+            self._leave_prebuilt()
+        self._applied_active = True
+        self._applied_src_dir = src_dir
+        self._applied_stem = name
+        self._reset_override_checks()
+        # Seed the instrument + page the editor laid the chart out for, so an
+        # unlock-and-edit of printtarg starts from the right device/paper.
+        try:
+            from workflow.ti2_relayout import ChartSpec
+            spec = ChartSpec.from_ti2(src_dir / f"{name}.ti2")
+            self._set_manual_value("printtarg", "-i", spec.instrument_flag)
+            self._set_manual_value("printtarg", "-p", spec.paper_flag)
+        except Exception as exc:  # noqa: BLE001 — seeding is best-effort
+            log.warning("Could not seed instrument/paper from applied chart: %s", exc)
+        if self._manual_target_name_edit is not None:
+            self._manual_target_name_edit.setText(name)
+        # Baselines for the Generate-time change detection, taken after seeding.
+        self._applied_targen_sig = self._targen_signature()
+        self._applied_printtarg_sig = self._printtarg_signature()
+        self._update_preset_locks()      # grey both panels
+        self._import_applied_chart(add_new_run=add_new_run)
+        return True
+
+    def _ask_apply_name_collision(self, name: str, root: Path) -> str | None:
+        """Friendly chooser shown when "Save & apply" hits an existing project.
+
+        Returns ``"new_run"`` to add the chart as a fresh run (keeping
+        everything already there), ``"replace"`` to overwrite the project's
+        current chart, or ``None`` to cancel.
+        """
+        dlg = QDialog(self)
+        dlg.setWindowTitle(tr("A project with this name already exists"))
+        dlg.setMinimumWidth(600)
+        lay = QVBoxLayout(dlg)
+        lay.setContentsMargins(24, 20, 24, 16)
+        lay.setSpacing(12)
+
+        heading = QLabel(
+            tr("You already have a profiling project called “{name}”").format(name=name),
+            dlg)
+        heading.setWordWrap(True)
+        heading.setStyleSheet("font-weight: 600; font-size: 14px;")
+        lay.addWidget(heading)
+
+        body = QLabel(
+            tr("It lives at:\n{path}\n\n"
+               "That folder may already hold a printed chart, your measurements "
+               "and even a finished profile from before. ChromIQ won't touch any "
+               "of that unless you ask it to. How would you like to add this new "
+               "chart?\n\n"
+               "  •  Add as a new run (recommended) — keeps everything already "
+               "in “{name}” and files this chart as a new attempt alongside it. "
+               "Nothing you've done before is lost.\n"
+               "  •  Replace the current chart — overwrites only the chart in "
+               "this project's current run with the new one. Earlier runs and "
+               "their measurements stay where they are.\n"
+               "  •  Cancel — change nothing. You can then pick a different name "
+               "back in the editor.").format(name=name, path=root),
+            dlg)
+        body.setWordWrap(True)
+        lay.addWidget(body)
+
+        bb = QDialogButtonBox(dlg)
+        new_btn = bb.addButton(tr("Add as a new run"),
+                               QDialogButtonBox.ButtonRole.AcceptRole)
+        replace_btn = bb.addButton(tr("Replace current chart"),
+                                   QDialogButtonBox.ButtonRole.DestructiveRole)
+        cancel_btn = bb.addButton(tr("Cancel"),
+                                  QDialogButtonBox.ButtonRole.RejectRole)
+        new_btn.setDefault(True)
+        result = {"v": None}
+        new_btn.clicked.connect(lambda: (result.__setitem__("v", "new_run"), dlg.accept()))
+        replace_btn.clicked.connect(lambda: (result.__setitem__("v", "replace"), dlg.accept()))
+        cancel_btn.clicked.connect(dlg.reject)
+        lay.addWidget(bb)
+
+        dlg.exec()
+        return result["v"]
+
+    def _import_applied_chart(self, add_new_run: bool = False) -> None:
+        """Copy the applied editor chart's files into the current run and load it.
+
+        No targen/printtarg is run: the staged ``.ti1`` / ``.ti2`` / TIFF pages
+        are copied into runs/<current>/ under the fixed ``chart`` stem and the
+        TIFFs are shown in the preview, then routed downstream like any chart.
+        The editor's richer ``meta.json`` (full layout) is copied in afterwards
+        so reopening the run restores it exactly as the editor saved it.
+        """
+        import shutil
+        if self._runner.is_running:
+            log.warning("Applied chart: a process is already running")
+            return
+        if self._applied_src_dir is None or self._applied_stem is None:
+            return
+        src_dir = self._applied_src_dir
+        stem = self._applied_stem
+        src_ti1 = src_dir / f"{stem}.ti1"
+        src_ti2 = src_dir / f"{stem}.ti2"
+        # Multi-page charts are "<stem>_01.tif…"; a single page is just
+        # "<stem>.tif". Accept both so a one-page applied chart still imports.
+        src_tiffs = sorted(src_dir.glob(f"{stem}_*.tif"))
+        if not src_tiffs and (src_dir / f"{stem}.tif").is_file():
+            src_tiffs = [src_dir / f"{stem}.tif"]
+        if not src_ti1.is_file() or not src_tiffs:
+            InfoDialog(
+                "Applied chart not found",
+                "The chart handed over from the layout editor could not be "
+                f"located:\n\n{src_dir}",
+                self, min_width=520,
+            ).exec()
+            return
+
+        self.target_started.emit()
+        name = (self._manual_target_name_edit.text().strip()
+                if self._manual_target_name_edit is not None else "") or stem
+        self._file_mgr.set_target_name(name)
+        project = self._file_mgr.project()
+        # "Add as a new run" preserves the existing project's runs (and their
+        # measurements) by filing this chart in a fresh runN; otherwise it goes
+        # into — and resets — the project's current run.
+        run = project.new_run() if add_new_run else project.current_run()
+        run.reset_chart_artefacts()
+        work_dir = run.ensure_dir()
+
+        self._log.clear()
+        self._preview.clear()
+        try:
+            shutil.copy(src_ti1, run.chart_ti1)
+            if src_ti2.is_file():
+                shutil.copy(src_ti2, run.chart_ti2)
+            tiffs: list[Path] = []
+            for i, src_tif in enumerate(src_tiffs, start=1):
+                dest = work_dir / f"{run.stem}_{i:02d}.tif"
+                shutil.copy(src_tif, dest)
+                tiffs.append(dest)
+        except OSError as exc:
+            log.error("Applied-chart copy failed: %s", exc)
+            InfoDialog(
+                "Could not create target",
+                f"Copying the chart into\n\n{work_dir}\n\nfailed:\n{exc}",
+                self, min_width=520,
+            ).exec()
+            return
+
+        self._last_target_name = name
+        self._log.appendPlainText(
+            f"Applied chart from the layout editor into {work_dir} "
+            f"({len(tiffs)} page(s)). targen and printtarg skipped."
+        )
+        # The chart wasn't built from ChartParams; clear them so the meta stamp
+        # falls back to instrument/paper only and preserves the editor layout we
+        # copy in next.
+        self._last_params = None
+        self._on_generate_finished(tiffs)
+        # Overlay the editor's full meta.json (richer editor_layout) so reopening
+        # this run in the editor restores every knob, not just instrument/paper.
+        src_meta = src_dir / "meta.json"
+        if src_meta.is_file():
+            try:
+                shutil.copy(src_meta, run.meta_path)
+            except OSError as exc:
+                log.warning("Could not copy applied-chart meta.json: %s", exc)
+        # Carry the i1Profiler hand-off pair (and the colour list) the editor
+        # wrote into the run folder too, so the working folder is self-contained
+        # for users who profile in i1Profiler instead of measuring here.
+        for extra in sorted(src_dir.glob(f"{stem}-i1profiler.*")) + \
+                sorted(src_dir.glob(f"{stem}-colours.txt")):
+            try:
+                shutil.copy(extra, run.dir / extra.name)
+            except OSError as exc:
+                log.warning("Could not copy applied-chart extra %s: %s",
+                            extra.name, exc)
 
     def _apply_prebuilt_preset(self, key: str, target_name: str) -> None:
         """Select a prebuilt-files preset: grey the panels and copy the bundle.
@@ -4119,6 +4361,29 @@ class TabChart(QWidget):
         if self._runner.is_running:
             log.warning("A process is already running")
             return
+        # Chart applied from the TI2 layout editor. Mirrors the prebuilt-files
+        # logic, but the source is the editor's staging folder rather than a
+        # bundled asset:
+        #   • targen changed   → fresh targen run (different patches): fall through
+        #   • else printtarg changed → re-lay-out the staged .ti1 (same patches)
+        #   • else                   → re-import the staged files verbatim
+        if self._applied_active and self._applied_src_dir is not None \
+                and self._current_mode() == "manual":
+            targen_changed = (self._applied_targen_sig is not None
+                              and self._targen_signature() != self._applied_targen_sig)
+            printtarg_changed = (self._applied_printtarg_sig is not None
+                                 and self._printtarg_signature() != self._applied_printtarg_sig)
+            if targen_changed:
+                # User unlocked the recipe — drop the applied binding and build a
+                # fresh chart from the current settings (fall through below).
+                self._leave_applied()
+            elif printtarg_changed:
+                self._generate_from_ti1(
+                    self._applied_src_dir / f"{self._applied_stem}.ti1")
+                return
+            else:
+                self._import_applied_chart()
+                return
         # Prebuilt-files preset. By default nothing is computed — the bundled
         # files are copied verbatim. But the user can unlock the panels:
         #   • targen changed   → fresh targen run (different patches): fall through
@@ -4340,13 +4605,26 @@ class TabChart(QWidget):
                 f"Converted {src.name} to .ti1 ({n} patches)."
             )
 
-        # Loading a different patch set means we're no longer on the TC9.18 chart
-        # or any preset-bound patch set; re-enable panels if a prebuilt was active.
+        # A loaded patch set supplies its own fixed colorimetry, so it's built by
+        # printtarg only — targen is skipped, exactly like a user preset that
+        # bundled a .ti1. Point Generate at the loaded file and snapshot the
+        # targen controls so the override box can still opt into a fresh targen
+        # run; clear any other preset binding that was active.
         self._tc918_active = False
         self._tc918_targen_sig = None
-        self._preset_ti1_path = None
+        self._knut_active = False
+        self._knut_targen_sig = None
         if self._prebuilt_active:
             self._leave_prebuilt()
+        if self._applied_active:
+            self._leave_applied()
+        self._preset_ti1_path = ti1
+        self._preset_ti1_targen_sig = self._targen_signature()
+        # Grey the targen panel (printtarg stays editable) so the loaded patch
+        # set can't be silently overwritten by a stray targen run, and so
+        # "Generate Chart" re-lays the same patches with the new printtarg knobs.
+        self._reset_override_checks()
+        self._update_preset_locks()
         self._file_mgr.set_target_name(src.stem)
         params = self._collect_params()
         self._preview.clear()
