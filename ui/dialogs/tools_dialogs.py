@@ -1959,6 +1959,9 @@ def open_tool_dialog(
         dlg = VerifyAgainstReferenceDialog(runner, settings, parent)
     elif key == "verify_profile":
         dlg = VerifyProfileDialog(runner, settings, parent)
+    elif key == "translate":
+        from ui.dialogs.translation_dialog import TranslationDialog
+        dlg = TranslationDialog(settings, parent)
     else:
         log.warning("Unknown tool key: %s", key)
         return

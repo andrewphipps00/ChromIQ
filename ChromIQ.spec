@@ -102,6 +102,7 @@ a = Analysis(
         'PIL.ImageCms',
         'PIL.TiffImagePlugin',
         'yaml',
+        'openpyxl',
         'cups',
         'tifffile',
         'numpy',

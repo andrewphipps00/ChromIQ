@@ -30,6 +30,7 @@ from __future__ import annotations
 import json
 import re
 import string
+from pathlib import Path
 from typing import Any
 
 from core.logger import get_logger
@@ -46,6 +47,34 @@ _META_PREFIX = "@"
 
 _language: str = SOURCE_LANGUAGE
 _catalog: dict[str, str] = {}
+
+
+def user_i18n_dir() -> Path:
+    """Writable directory for user-imported translation catalogs.
+
+    Mirrors ``FileManager.root_dir()`` (``custom_output_path`` setting, else
+    ``~/ChromIQ``) and appends ``i18n/``.  Imported catalogs land here so the
+    read-only frozen ``.app`` bundle never needs to be written, and the loaders
+    below prefer this directory over the bundled ``data/i18n``.  Read lazily and
+    defensively so importing this module needs no Qt and no QApplication.
+    """
+    root: Path | None = None
+    try:
+        from PyQt6.QtCore import QSettings
+        custom = QSettings("ChromIQ", "ChromIQ").value("custom_output_path", "")
+        if custom:
+            root = Path(str(custom))
+    except Exception:
+        pass
+    if root is None:
+        root = Path.home() / "ChromIQ"
+    return root / "i18n"
+
+
+def _catalog_file(code: str) -> Path:
+    """Path to ``<code>.json`` — user override if present, else bundled."""
+    override = user_i18n_dir() / f"{code}.json"
+    return override if override.exists() else resource_path(f"data/i18n/{code}.json")
 
 
 def tr(text: str) -> str:
@@ -65,22 +94,30 @@ def current_language() -> str:
 
 def available_languages() -> list[tuple[str, str]]:
     """[(code, native name), …] — English plus every data/i18n/<code>.json."""
+    names: dict[str, str] = {}
+    # Bundled catalogs first, then user overrides — a user entry wins on a code
+    # clash, and a newly imported language (no bundled file) still appears.
+    dirs = [resource_path("data/i18n")]
+    user = user_i18n_dir()
+    if user.exists():
+        dirs.append(user)
+    for i18n_dir in dirs:
+        try:
+            for path in sorted(i18n_dir.glob("*.json")):
+                code = path.stem
+                if code == SOURCE_LANGUAGE:
+                    continue
+                name = code
+                try:
+                    with open(path, encoding="utf-8") as f:
+                        name = json.load(f).get("@language_name", code)
+                except Exception:
+                    log.warning("Unreadable language catalog: %s", path, exc_info=True)
+                names[code] = name
+        except Exception:
+            log.warning("Cannot scan %s for languages", i18n_dir, exc_info=True)
     langs = [(SOURCE_LANGUAGE, SOURCE_LANGUAGE_NAME)]
-    try:
-        i18n_dir = resource_path("data/i18n")
-        for path in sorted(i18n_dir.glob("*.json")):
-            code = path.stem
-            if code == SOURCE_LANGUAGE:
-                continue
-            name = code
-            try:
-                with open(path, encoding="utf-8") as f:
-                    name = json.load(f).get("@language_name", code)
-            except Exception:
-                log.warning("Unreadable language catalog: %s", path, exc_info=True)
-            langs.append((code, name))
-    except Exception:
-        log.warning("Cannot scan data/i18n for languages", exc_info=True)
+    langs.extend(sorted(names.items()))
     return langs
 
 
@@ -96,7 +133,7 @@ def set_language(code: str) -> None:
         _language, _catalog = SOURCE_LANGUAGE, {}
         return
     try:
-        path = resource_path(f"data/i18n/{code}.json")
+        path = _catalog_file(code)
         with open(path, encoding="utf-8") as f:
             raw = json.load(f)
         _catalog = {
@@ -252,7 +289,9 @@ def translate_parameters(params: dict[str, Any]) -> dict[str, Any]:
 
 def _load_parameters_overlay(code: str) -> dict[str, Any]:
     try:
-        path = resource_path(f"data/i18n/parameters.{code}.yaml")
+        override = user_i18n_dir() / f"parameters.{code}.yaml"
+        path = override if override.exists() else \
+            resource_path(f"data/i18n/parameters.{code}.yaml")
         if not path.exists():
             return {}
         import yaml
