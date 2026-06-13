@@ -1,6 +1,7 @@
 """ChromIQ — Printer Profiling GUI.  Entry point."""
 from __future__ import annotations
 
+import logging
 import os
 import sys
 import traceback
@@ -184,5 +185,40 @@ def main() -> int:
     return app.exec()
 
 
+def _hard_exit(code: int) -> None:
+    """Flush our own buffers and hand straight to the OS, skipping CPython
+    finalization.
+
+    QtWebEngine + SIP crash on quit (issue #38). Once ``app.exec()`` returns
+    the app is already shutting down and every bit of our own cleanup —
+    settings save, ArgyllRunner shutdown, the per-view WebEngine drain — has
+    already run inside ``MainWindow.closeEvent`` (while the event loop was
+    still alive, which is the only safe time). What's left is pure teardown
+    risk: letting the interpreter finalize from here runs SIP's ``atexit``
+    ``cleanup_on_exit`` handler, which walks the Qt wrapper graph and follows a
+    freed pointer into Chromium's already-released browser-main subtree —
+    ``EXC_BAD_ACCESS`` in ``CrBrowserMain`` at ``_Py_Finalize``. This is *not*
+    fixable by destroying individual web views: once any ``QWebEngineView`` has
+    existed, WebEngine-global state (the default profile / Chromium main)
+    outlives every view and is what the finalize walk trips over. So we don't
+    finalize: flush logs and ``os._exit``, letting the OS reclaim everything.
+    There are no ``atexit`` hooks of our own to lose."""
+    try:
+        logging.shutdown()
+    except Exception:
+        pass
+    try:
+        if _crash_log is not None:
+            _crash_log.flush()
+    except Exception:
+        pass
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.flush()
+        except Exception:
+            pass
+    os._exit(code)
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    _hard_exit(main())
