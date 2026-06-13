@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PyQt6.QtCore import QEventLoop, QTimer, QUrl, Qt
+from PyQt6.QtCore import QUrl, Qt
 from PyQt6.QtGui import QColor
 from PyQt6.QtWidgets import (
     QDialog,
@@ -23,6 +23,7 @@ from PyQt6.QtWidgets import (
 )
 
 from core.logger import get_logger
+from core.webengine_shutdown import drain_web_view
 from ui.theme import resolve_mode
 from workflow.gamut_viewer import _patch_html
 from core.i18n import tr
@@ -107,43 +108,11 @@ class DriftPlotDialog(QDialog):
 
     # ------------------------------------------------------------------
     def _teardown_webengine(self) -> None:
-        """Same WebEngine shutdown drain GamutPanel uses, so closing the dialog
-        can't leave a live Chromium subtree for SIP to walk into later."""
-        view = self._web_view
-        if view is None:
-            return
+        """Synchronously destroy the web view when the dialog closes, so it
+        can't leave a live Chromium subtree for SIP to walk into at quit. See
+        :mod:`core.webengine_shutdown` and issue #38."""
+        drain_web_view(self._web_view)
         self._web_view = None
-        try:
-            view.loadFinished.disconnect()
-        except (TypeError, RuntimeError):
-            pass
-        try:
-            view.stop()
-            view.setUrl(QUrl("about:blank"))
-        except RuntimeError:
-            pass
-        # Let about:blank settle so pending Chromium IPC drains.
-        loop = QEventLoop()
-        QTimer.singleShot(200, loop.quit)
-        loop.exec()
-        try:
-            page = view.page()
-            if page is not None:
-                page.setParent(None)
-                page.deleteLater()
-        except RuntimeError:
-            pass
-        try:
-            view.setParent(None)
-            view.deleteLater()
-        except RuntimeError:
-            pass
-        # Actually run the deferred deletes before anything tears down further.
-        from PyQt6.QtWidgets import QApplication
-        app = QApplication.instance()
-        if app is not None:
-            for _ in range(3):
-                app.processEvents()
 
     def reject(self) -> None:  # noqa: D102
         self._teardown_webengine()
