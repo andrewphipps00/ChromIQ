@@ -1,5 +1,39 @@
 # Changelog
 
+## v3.9.20
+
+A big expansion of the New-chart **Generate colour sets** panel: five new
+optional colour-set generators plus extra controls on the existing sets, all
+off by default so existing charts are unchanged.
+
+### ✨ New
+- **Five new colour-set generators** in the New-chart dialog (each optional,
+  off by default):
+  - **Saturated edges** — samples the 12 RGB-cube gamut-boundary edges, with a
+    new **per-face** control to also sample the 6 cube faces (the full gamut
+    surface).
+  - **Highlights & shadows** — pale tints near white and deep tones near black
+    across the hue wheel, with a **depth** control for how far in from
+    white/black the bands reach.
+  - **Pastels** — low-chroma midtones across all hues, with **per-layer ×
+    layers** chroma shells, from barely-tinted near-greys out to fuller pastels.
+  - **From image** — load a photo and let k-means (in Lab) pick its most
+    representative colours.
+  - **Fill remaining gaps** — blue-noise top-up to a target patch total,
+    computed against everything else you've selected.
+- **Restore defaults** button resets the colour-set options to factory defaults
+  without touching your source mode, name, instrument or paper.
+- The New-chart dialog now **remembers your last-used settings** — source mode
+  and every colour-set value — between sessions.
+- **Per-set ⓘ info icons** open each set's explanation in its own window; the
+  "Load image…" button is now compact to match the spinboxes; the dialog
+  scrolls so it fits small screens.
+- Friendly tooltips for every set, translated across all 12 languages.
+
+### 🐛 Fixed
+- The **Highlights & shadows** checkbox now shows its literal "&" (Qt was
+  swallowing it as a keyboard mnemonic).
+
 ## v3.9.19
 
 ### 🐛 Fixed
