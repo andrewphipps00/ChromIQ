@@ -526,8 +526,12 @@ QSpinBox#compact_input, QDoubleSpinBox#compact_input {{
     min-height: 0;
     max-height: 22px;
 }}
+/* combobox-popup: 0 — see styles.py: a styled combobox this short makes Qt
+   miscompute the scrollable-popup height and clip to ~1.5 rows. Non-scrollable
+   popup sizes to content; the QListView stays QSS-styled (light dropdown). */
 QComboBox#compact_input {{
     padding-right: 28px;
+    combobox-popup: 0;
 }}
 QLineEdit#compact_path {{
     min-height: 22px;

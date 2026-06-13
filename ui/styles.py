@@ -347,7 +347,14 @@ QSpinBox#compact_input, QDoubleSpinBox#compact_input, QComboBox#compact_input {{
 QSpinBox#compact_input, QDoubleSpinBox#compact_input {{
     padding: 0 20px 0 6px; min-height: 0; max-height: 22px;
 }}
-QComboBox#compact_input {{ padding-right: 28px; }}
+/* combobox-popup: 0 — a styled combobox forced this short (max-height 22px +
+   vertical padding) makes Qt miscompute the scrollable-popup height: the popup
+   reserves scroller space and clips to ~1.5 rows even with only 2 entries (the
+   instrument dropdown in the chart-layout editor's New-chart dialog). Switching
+   off the scrollable-popup style sizes the popup to its content. The QListView
+   is still QSS-styled (QComboBox QAbstractItemView above), so the dark dropdown
+   theme is preserved. */
+QComboBox#compact_input {{ padding-right: 28px; combobox-popup: 0; }}
 QLineEdit#compact_path {{
     min-height: 22px;
     max-height: 22px;
