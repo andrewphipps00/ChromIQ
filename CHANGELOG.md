@@ -1,5 +1,30 @@
 # Changelog
 
+## v3.9.13
+
+### ✨ New
+- **Generate colour sets** (Tools ▸ Edit / create chart layout ▸ New chart ▸
+  Patches) — a new way to fill a fresh chart with purpose-built colour spreads
+  instead of, or alongside, a targen seed. Tick any combination of five
+  generators and they're laid down in sequence, with a live patch count shown
+  for each set and a running total:
+  - **3D RGB cube** — an even N×N×N grid across the whole RGB range (you choose
+    the number of steps per axis).
+  - **Skin tones (Fitzpatrick)** — a light-to-dark ramp through each of the six
+    Fitzpatrick skin phototypes.
+  - **Blues / turquoise** — denser sampling of the turquoise-to-blue band that
+    wide-gamut spaces (AdobeRGB and friends) stretch furthest.
+  - **Greens (foliage)** — forest, jungle and foliage greens for nature images.
+  - **Near-neutral greys** — a neutral grey ramp plus, at each step, six small
+    hue tints around the neutral axis.
+
+  Available in all thirteen languages. Resolves #37.
+
+### 🐛 Fixed
+- **Measuring-instrument dropdown in the New-chart dialog showed only one
+  entry** — the device list (Tools ▸ Edit / create chart layout ▸ New chart)
+  now opens at full height instead of clipping to a row and a half.
+
 ## v3.9.12
 
 ### ✨ New
