@@ -4,10 +4,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from PyQt6.QtCore import QEventLoop, QSize, QTimer, QUrl, Qt
+from PyQt6.QtCore import QSize, QTimer, QUrl, Qt
 from PyQt6.QtGui import QColor, QFont
 from PyQt6.QtWidgets import (
-    QApplication,
     QCheckBox,
     QGroupBox,
     QHBoxLayout,
@@ -22,6 +21,7 @@ from PyQt6.QtWidgets import (
 )
 
 from core.logger import get_logger
+from core.webengine_shutdown import drain_web_view
 from ui.fade_scroll import FadeScrollArea
 from ui.styles import SPEC_VIOLET, TEXT_DIM
 from ui.tooltip_button import InfoDialog, TooltipButton
@@ -949,52 +949,14 @@ class GamutPanel(QWidget):
 
     def shutdown_webengine(self) -> None:
         # PyQt6 + QtWebEngine shutdown race: if the view (and its Chromium
-        # child objects) is still alive when QApplication enters its
-        # destructor, SIP walks the wrapper graph and follows a dangling
-        # pointer in the Chromium subtree — EXC_BAD_ACCESS inside
-        # sip_api_visit_wrappers/dealloc_QApplication. Called from
-        # MainWindow.closeEvent so the main event loop is still running and
-        # the deleteLater/processEvents drain below actually fires before SIP
-        # tears down QApplication. (aboutToQuit is too late — events posted
-        # from that slot are not reliably delivered.)
-        view = self._web_view
-        if view is None:
-            return
+        # child objects) is still alive when the interpreter finalises, SIP
+        # walks the wrapper graph and follows a dangling pointer into the
+        # Chromium subtree — EXC_BAD_ACCESS. Called from MainWindow.closeEvent
+        # so the event loop is still running; drain_web_view destroys the view
+        # synchronously there (deleteLater would never flush — see #38 and
+        # core.webengine_shutdown).
+        drain_web_view(self._web_view)
         self._web_view = None
-
-        try:
-            view.loadFinished.disconnect()
-        except (TypeError, RuntimeError):
-            pass
-        try:
-            view.stop()
-            view.setUrl(QUrl("about:blank"))
-        except RuntimeError:
-            pass
-
-        # Let about:blank settle so pending Chromium IPC drains.
-        _loop = QEventLoop()
-        QTimer.singleShot(200, _loop.quit)
-        _loop.exec()
-
-        try:
-            page = view.page()
-            if page is not None:
-                page.setParent(None)
-                page.deleteLater()
-        except RuntimeError:
-            pass
-        try:
-            view.setParent(None)
-            view.deleteLater()
-        except RuntimeError:
-            pass
-
-        # Actually run the deferred deletes before QApplication destructs.
-        app = QApplication.instance()
-        if app is not None:
-            for _ in range(3):
-                app.processEvents()
 
     def _on_reset_view(self) -> None:
         if self._web_view is not None:
