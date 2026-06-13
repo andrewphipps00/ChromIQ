@@ -1,5 +1,25 @@
 # Changelog
 
+## v3.9.14
+
+### ✨ New
+- **Translate / edit language** (Tools menu) — contribute or tweak a translation
+  without editing any code. Export every phrase in ChromIQ to a **CSV or Excel
+  (XLSX)** spreadsheet, translate the right-hand column in Excel, LibreOffice or
+  Google Sheets, then import the file back. Covers both the interface text and
+  the parameter tooltips. Imports are checked first (it tells you how many
+  phrases were translated and flags any broken `{…}` placeholders or incomplete
+  option lists) and saved to your personal ChromIQ folder, so your edits survive
+  app updates and take effect after a restart. You can also start a brand-new
+  language, and a **Send to developer** button opens a pre-filled GitHub issue so
+  finished translations can be shared back. _Thanks to Knut (soul-traveller) for
+  suggesting this in #39._
+
+### 🐛 Fixed
+- Windows: the XLSX export in the new translation tool no longer crashes in the
+  packaged build (the `openpyxl` dependency is now bundled), and the test suite
+  runs cleanly on Windows.
+
 ## v3.9.13
 
 ### ✨ New
