@@ -340,7 +340,7 @@ QToolButton#tooltip_btn:hover {{
 }}
 
 /* ---- Compact inputs (Measure tab, Create Chart parameters) -------- */
-QLineEdit#compact_input,
+QLineEdit#compact_input, QPushButton#compact_input,
 QSpinBox#compact_input, QDoubleSpinBox#compact_input, QComboBox#compact_input {{
     min-height: 0; max-height: 22px; padding: 1px 6px;
 }}

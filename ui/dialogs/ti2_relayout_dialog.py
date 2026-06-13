@@ -1050,8 +1050,12 @@ class _NewChartDialog(QDialog):
         gg.addWidget(self._gen_edges_n, 5, 2)
         gg.addWidget(self._gen_edges_count, 5, 7)
 
-        # Highlights & shadows — detail at the two tonal ends.
-        self._gen_hs = QCheckBox(tr("Highlights & shadows"), self._gen_panel)
+        # Highlights & shadows — detail at the two tonal ends. The label's "&"
+        # is doubled so Qt shows it literally instead of eating it as a mnemonic;
+        # the tr() key stays the plain text (and the fix covers translations
+        # whose names also contain "&", e.g. de "Lichter & Schatten").
+        self._gen_hs = QCheckBox(tr("Highlights & shadows").replace("&", "&&"),
+                                 self._gen_panel)
         self._gen_hs.setToolTip(tr("Extra detail at the two ends where printers "
                                 "struggle: pale tints just below paper white and "
                                 "deep tones just above black, spread across every "
@@ -1113,15 +1117,35 @@ class _NewChartDialog(QDialog):
         gg.addWidget(self._gen_fill_to, 9, 2)
         gg.addWidget(self._gen_fill_count, 9, 7)
 
+        # A per-set ⓘ icon (col 8) opens the set's explanation in its own little
+        # window — more discoverable than a hover tooltip. The body reuses each
+        # checkbox's tooltip (already written + translated), the title is the set
+        # name, so this adds no new strings. Titles use the plain name (the "&"
+        # in "Highlights & shadows" is fine here — the icon has no mnemonic).
+        row_tips = (
+            (0, self._gen_cube,   tr("3D RGB cube")),
+            (1, self._gen_skin,   tr("Skin tones (Fitzpatrick)")),
+            (2, self._gen_blues,  tr("Blues / turquoise")),
+            (3, self._gen_greens, tr("Greens (foliage)")),
+            (4, self._gen_greys,  tr("Near-neutral greys")),
+            (5, self._gen_edges,  tr("Saturated edges")),
+            (6, self._gen_hs,     tr("Highlights & shadows")),
+            (7, self._gen_pastel, tr("Pastels")),
+            (8, self._gen_image,  tr("From image")),
+            (9, self._gen_fill,   tr("Fill remaining gaps")),
+        )
+        for row, cb, title in row_tips:
+            gg.addWidget(
+                _magenta_tip(title, cb.toolTip(), self._gen_panel, min_width=360),
+                row, 8, Qt.AlignmentFlag.AlignCenter)
+
         # The counts all live in one column (7), so they stay left-aligned in a
         # tidy column for every set. Greys' extra "rings:" control sits in cols
         # 5/6 *before* the count (those columns are empty — but reserved at full
-        # width by the grid — for the other rows, so every count lines up). The
-        # count column gets a min width so growing numbers ("27000 patches")
-        # don't reflow the size columns; a stretchy trailing column (8) soaks up
-        # spare width.
+        # width by the grid — for the other rows, so every count lines up). Per-set
+        # ⓘ icons sit in col 8; a stretchy trailing column (9) soaks up spare width.
         gg.setColumnMinimumWidth(7, 124)
-        gg.setColumnStretch(8, 1)
+        gg.setColumnStretch(9, 1)
 
         # Cross-set de-duplication — keep combined patches unique (#37 follow-up).
         self._gen_unique = QCheckBox(tr("Ensure unique colours"), self._gen_panel)
