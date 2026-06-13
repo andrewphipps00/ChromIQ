@@ -403,7 +403,14 @@ def highlight_shadow_detail(per_end: int,
     """
     per_end = max(1, int(per_end))
     f = max(2.0, min(45.0, float(reach))) / 100.0
-    highlights = _wheel(per_end, 1.0 - f, 0.99, 0.05, 0.22)
+    # Both ends grow inward in *value* with the depth — but on the highlight
+    # side that alone reads as "nothing happening": as the value drops the
+    # near-white tints slide straight down the neutral axis toward mid-grey,
+    # losing chroma, so the white corner of the cube looks unchanged while the
+    # black corner visibly blossoms into colour. Scale the highlight saturation
+    # up with the depth too, so deeper highlights fan into pale *coloured*
+    # tints across the hue wheel and the white side fills like the dark one.
+    highlights = _wheel(per_end, 1.0 - f, 0.99, 0.05, 0.12 + f)
     shadows = _wheel(per_end, 0.02, max(0.05, f), 0.35, 0.80)
     return highlights + shadows
 
