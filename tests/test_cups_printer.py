@@ -24,7 +24,7 @@ def test_ps_command_omits_orientation_requested_even_when_set() -> None:
     # Sanity: the rest of the command is still well-formed.
     assert cmd[:3] == ["lp", "-d", "Test"]
     assert "PageSize=A3" in cmd
-    assert cmd[-1] == "/tmp/x.ps"
+    assert cmd[-1] == str(Path("/tmp/x.ps"))
 
 
 def test_tiff_command_includes_orientation_requested_when_set() -> None:
@@ -128,7 +128,7 @@ def test_pdf_command_options(monkeypatch) -> None:
     assert "CNIJIntent2=1001" in cmd
     assert not any("ColorSync" in tok for tok in cmd), cmd
     assert not any("orientation-requested" in tok for tok in cmd), cmd
-    assert cmd[-1] == "/tmp/x.pdf"
+    assert cmd[-1] == str(Path("/tmp/x.pdf"))
 
 
 def _reject_ps_then(monkeypatch, printer: CupsRawPrinter, calls: list[str]) -> None:

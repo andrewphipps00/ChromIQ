@@ -1,0 +1,14 @@
+# Development / test-only dependencies.
+#
+# Install the runtime deps first (see requirements.txt), then:
+#     pip install -r requirements-dev.txt
+#
+# Kept separate from requirements.txt on purpose: requirements.txt pins
+# pycups, which only builds on macOS/Linux. On Windows install the runtime
+# deps with pycups filtered out (as the build-windows workflow does), then
+# add these test tools.
+#
+# Run the suite:  QT_QPA_PLATFORM=offscreen pytest   (see CLAUDE.md)
+
+pytest>=8.0
+pytest-qt>=4.4      # provides the `qapp` fixture used across the UI tests

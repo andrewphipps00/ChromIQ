@@ -84,6 +84,7 @@ a = Analysis(
         'PIL.ImageCms',
         'PIL.TiffImagePlugin',
         'yaml',
+        'openpyxl',  # lazily imported in workflow/i18n_roundtrip.py — PyInstaller misses it
         'tifffile',
         'numpy',
         *_ic_hiddenimports,

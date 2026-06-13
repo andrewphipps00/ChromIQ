@@ -6,6 +6,7 @@
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+pip install -r requirements-dev.txt   # test-only tools (pytest, pytest-qt)
 ```
 
 ## Run
@@ -19,7 +20,7 @@ python main.py
 
 ```bash
 source .venv/bin/activate
-QT_QPA_PLATFORM=offscreen pytest      # ~1-2s, 284 tests
+QT_QPA_PLATFORM=offscreen pytest      # ~20s, 724 tests
 ```
 
 `pytest.ini` scopes collection to `tests/` (via `testpaths`). Without it a bare

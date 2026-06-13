@@ -117,10 +117,10 @@ def test_project_load_rewrites_blank_readme(tmp_path: Path) -> None:
 def test_project_load_does_not_overwrite_edited_readme(tmp_path: Path) -> None:
     """A README the user edited is left alone on load."""
     proj = Project.create(tmp_path / "P", "P")
-    proj.readme_path.write_text("MY OWN NOTES — please leave alone\n")
+    proj.readme_path.write_text("MY OWN NOTES — please leave alone\n", encoding="utf-8")
 
     Project.load(tmp_path / "P")
-    assert proj.readme_path.read_text() == "MY OWN NOTES — please leave alone\n"
+    assert proj.readme_path.read_text(encoding="utf-8") == "MY OWN NOTES — please leave alone\n"
 
 
 def test_project_load_roundtrip(tmp_path: Path) -> None:
@@ -527,7 +527,7 @@ def test_project_rename_fixes_stems_manifest_and_readme(tmp_path: Path) -> None:
     # Manifest + README reflect the new name.
     manifest = json.loads(proj.manifest_path.read_text())
     assert manifest["target_name"] == "New"
-    assert "New" in proj.readme_path.read_text()
+    assert "New" in proj.readme_path.read_text(encoding="utf-8")
 
 
 def test_project_rename_noop_when_same_name(tmp_path: Path) -> None:
