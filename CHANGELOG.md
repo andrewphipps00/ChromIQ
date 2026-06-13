@@ -23,7 +23,13 @@
 ### 🐛 Fixed
 - **Measuring-instrument dropdown in the New-chart dialog showed only one
   entry** — the device list (Tools ▸ Edit / create chart layout ▸ New chart)
-  now opens at full height instead of clipping to a row and a half.
+  now opens at full, comfortable height instead of clipping to a row and a half.
+- **Untranslated text in the chart-layout editor** — the New-chart info (ⓘ)
+  panel and the patch-reorder buttons (First / Up / Last / Down) now appear in
+  your language in all thirteen languages, and the info panel explains the new
+  colour-set generators in full.
+- **Ticked colour-set option stayed highlighted while inactive** — a checked
+  generator now greys out properly until "Generate colour sets" is selected.
 
 ## v3.9.12
 

@@ -540,8 +540,8 @@ class _NewChartDialog(QDialog):
         head.addWidget(QLabel(tr("Set up a new chart, then edit it."), self))
         head.addStretch(1)
         head.addWidget(_magenta_tip(
-            "New chart",
-            "Let's start a brand-new chart. You only need to make a few quick "
+            tr("New chart"),
+            tr("Let's start a brand-new chart. You only need to make a few quick "
             "choices here — once you're done, the chart opens in the editor where "
             "you can arrange and fine-tune everything.\n\n"
             "What each choice means:\n\n"
@@ -550,16 +550,48 @@ class _NewChartDialog(QDialog):
             "• Instrument & Paper — which measuring device you'll use and what "
             "paper you'll print on. ChromIQ uses these to lay the patches out in a "
             "way your device can read, at the right page size.\n\n"
-            "• Patches — how to fill the chart to begin with. You can start with an "
-            "empty page and add your own colours, or just enter a number and let "
-            "ChromIQ spread that many colours evenly across the whole colour range "
-            "as a ready-made starting point you can then rearrange.\n\n"
+            "• Patches — how to fill the chart to begin with. There are four ways:\n"
+            "    – Blank canvas — start empty and add every colour by hand in the "
+            "editor.\n"
+            "    – Seed from targen — enter a number and let ChromIQ spread that "
+            "many colours evenly across the whole colour range. A great all-round "
+            "starting point you can then rearrange.\n"
+            "    – Paste colour values — paste, or load from a file, your own list "
+            "of hex or RGB colours.\n"
+            "    – Generate colour sets — build the chart from one or more "
+            "ready-made colour spreads (described below).\n\n"
             "• Layout options — the finer print settings (spacer squares, sizing, "
             "page margin, resolution). The defaults are sensible, so feel free to "
             "leave these alone until you need them.\n\n"
+            "About “Generate colour sets”:\n\n"
+            "Tick any combination of these five sets and ChromIQ lays them down "
+            "one after another. Each set shows how many patches it adds, and a "
+            "running total appears underneath, so you always know how big the "
+            "chart will get before you create it:\n\n"
+            "• 3D RGB cube — an even grid of colours across the whole range. You "
+            "pick how many steps each of red, green and blue is split into, and "
+            "the chart then holds every combination (for example 6 steps makes "
+            "6×6×6 = 216 patches). A solid, neutral foundation for almost any "
+            "profile.\n\n"
+            "• Skin tones (Fitzpatrick) — lifelike skin colours running light to "
+            "dark through each of the six Fitzpatrick skin types. You choose how "
+            "many shades per type. Worth adding whenever faces and portraits "
+            "matter most.\n\n"
+            "• Blues / turquoise — extra colours packed into the turquoise-to-blue "
+            "part of the range, where wide-gamut papers and inks reach furthest. "
+            "Helpful for skies, water and deep blues.\n\n"
+            "• Greens (foliage) — a spread of forest, jungle and leaf greens, for "
+            "landscapes and nature shots where the greens carry the picture.\n\n"
+            "• Near-neutral greys — a grey ramp from black to white and, at each "
+            "step, six gentle tints just off neutral. This is what helps greys "
+            "print cleanly without an unwanted colour cast. You set how many grey "
+            "steps there are and how far the tints stray from neutral.\n\n"
+            "Mix them freely — say a 3D cube for overall coverage plus "
+            "near-neutral greys for clean neutrals, or skin tones plus greens for "
+            "portraits out in nature.\n\n"
             "When you confirm, your new chart opens in the editor — there you can "
             "drag patches around, recolour them, add or remove some, and save when "
-            "it's ready.",
+            "it's ready."),
             self, min_width=520))
         lay.addLayout(head)
 
@@ -582,6 +614,12 @@ class _NewChartDialog(QDialog):
             self._paper.addItem(
                 _PAPER_LABELS_WITH_CUSTOM.get(code, code), code)
         _as_compact(self._instr, self._paper)
+        # The compact closed combo (max-height 22px) otherwise yields cramped
+        # dropdown rows; give each popup view a comfortable row height so the
+        # open list is easy to read. Scoped to these two combos' views only.
+        for _cb in (self._instr, self._paper):
+            _cb.view().setStyleSheet(
+                "QAbstractItemView::item { min-height: 28px; padding: 3px 8px; }")
         # Default to A4 portrait
         ix = self._paper.findData("A4")
         if ix >= 0:
@@ -1696,8 +1734,8 @@ class Ti2RelayoutDialog(QDialog):
         order.setVerticalSpacing(4)
         # 2×2 grid — "FRONT/UP/DOWN/BACK" in caps doesn't fit a 4-wide row at
         # 230 px panel width, so split into two rows of two.
-        btns = (("First", self._move_front, 0, 0), ("Up",   self._move_up,    0, 1),
-                ("Last",  self._move_back,  1, 0), ("Down", self._move_down,  1, 1))
+        btns = ((tr("First"), self._move_front, 0, 0), (tr("Up"),   self._move_up,    0, 1),
+                (tr("Last"),  self._move_back,  1, 0), (tr("Down"), self._move_down,  1, 1))
         for label, fn, r, c in btns:
             b = QPushButton(label, self._patch_box)
             b.clicked.connect(fn)
