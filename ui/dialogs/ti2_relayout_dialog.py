@@ -502,7 +502,7 @@ class _NewChartDialog(QDialog):
     def __init__(self, bin_dir: Path, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setWindowTitle(tr("New chart"))
-        self.setMinimumWidth(560)
+        self.setMinimumWidth(620)
         self._bin_dir = bin_dir
         self.result_spec: R.ChartSpec | None = None
         self.result_program: list[tuple] | None = None
@@ -574,14 +574,26 @@ class _NewChartDialog(QDialog):
             "6×6×6 = 216 patches). A solid, neutral foundation for almost any "
             "profile.\n\n"
             "• Skin tones (Fitzpatrick) — lifelike skin colours running light to "
-            "dark through each of the six Fitzpatrick skin types. You choose how "
-            "many shades per type. Worth adding whenever faces and portraits "
-            "matter most.\n\n"
-            "• Blues / turquoise — extra colours packed into the turquoise-to-blue "
-            "part of the range, where wide-gamut papers and inks reach furthest. "
-            "Helpful for skies, water and deep blues.\n\n"
+            "dark through each of the six Fitzpatrick skin types, now reaching "
+            "from porcelain-pale highlights down to very deep, faintly cool "
+            "shadows. 'Per type' sets how many shades each type gets from light "
+            "to dark; 'Ranges' adds that many parallel ramps, each nudged a "
+            "little in hue, so a single skin type is covered by a small spread of "
+            "tones rather than one straight line — handy because real faces vary. "
+            "Worth adding whenever faces and portraits matter most.\n\n"
+            "• Blues / turquoise — extra colours packed into the green-turquoise "
+            "to deep-blue part of the range, where wide-gamut papers and inks "
+            "reach furthest (it now dips into the greenish turquoise too). "
+            "'Per layer' is how many patches each sheet holds and 'Layers' is how "
+            "many sheets, so the two multiply (24 per layer × 3 layers = 72). The "
+            "sheets are gently angled rather than one flat blanket, so the whole "
+            "turquoise corner is filled in depth. Helpful for skies, water and "
+            "deep blues.\n\n"
             "• Greens (foliage) — a spread of forest, jungle and leaf greens, for "
-            "landscapes and nature shots where the greens carry the picture.\n\n"
+            "landscapes and nature shots where the greens carry the picture. As "
+            "with the blues, 'Per layer' × 'Layers' patches are spread across "
+            "angled sheets so the green part of the range is covered with more "
+            "depth.\n\n"
             "• Near-neutral greys — a grey ramp from black to white and, at each "
             "step, six gentle tints just off neutral. This is what helps greys "
             "print cleanly without an unwanted colour cast. You set how many grey "
@@ -589,6 +601,12 @@ class _NewChartDialog(QDialog):
             "Mix them freely — say a 3D cube for overall coverage plus "
             "near-neutral greys for clean neutrals, or skin tones plus greens for "
             "portraits out in nature.\n\n"
+            "• Ensure unique colours — when this is ticked and your sets happen to "
+            "share a colour (for example a 3D cube and a grey ramp both include "
+            "black and white), ChromIQ keeps one and nudges the duplicates apart "
+            "by a tiny amount, so no colour is printed and measured twice. The "
+            "patch total stays the same. Leave it on unless you have a reason not "
+            "to.\n\n"
             "When you confirm, your new chart opens in the editor — there you can "
             "drag patches around, recolour them, add or remove some, and save when "
             "it's ready."),
@@ -846,37 +864,52 @@ class _NewChartDialog(QDialog):
         gg.addWidget(self._gen_cube_n, 0, 2)
         gg.addWidget(self._gen_cube_count, 0, 5)
 
-        # Fitzpatrick skin tones — per-type ramp.
+        # Fitzpatrick skin tones — per-type ramp × parallel hue ranges.
         self._gen_skin = QCheckBox(tr("Skin tones (Fitzpatrick)"), self._gen_panel)
-        self._gen_skin.setToolTip(tr("A light→dark ramp through each of the six "
-                                  "Fitzpatrick skin phototypes."))
+        self._gen_skin.setToolTip(tr("Light→dark ramps through each of the six "
+                                  "Fitzpatrick skin phototypes. 'Ranges' adds "
+                                  "parallel ramps offset in hue for broader "
+                                  "coverage."))
         self._gen_skin_n = _spin(1, 36, 5)
+        self._gen_skin_ranges = _spin(1, 5, 3)
         self._gen_skin_count = _count_label()
         gg.addWidget(self._gen_skin, 1, 0)
         gg.addWidget(QLabel(tr("per type:")), 1, 1)
         gg.addWidget(self._gen_skin_n, 1, 2)
+        gg.addWidget(QLabel(tr("ranges:")), 1, 3)
+        gg.addWidget(self._gen_skin_ranges, 1, 4)
         gg.addWidget(self._gen_skin_count, 1, 5)
 
         # Enhanced blues / turquoise.
         self._gen_blues = QCheckBox(tr("Blues / turquoise"), self._gen_panel)
-        self._gen_blues.setToolTip(tr("Denser sampling of the turquoise→blue band "
-                                   "wide-gamut spaces stretch furthest."))
-        self._gen_blues_n = _spin(1, 500, 24)
+        self._gen_blues.setToolTip(tr("Denser sampling of the green-turquoise→blue "
+                                   "band wide-gamut spaces stretch furthest. "
+                                   "Each of the 'layers' is a non-parallel sheet "
+                                   "of 'per layer' patches, so the two multiply."))
+        self._gen_blues_n = _spin(1, 200, 24)
+        self._gen_blues_layers = _spin(1, 5, 3)
         self._gen_blues_count = _count_label()
         gg.addWidget(self._gen_blues, 2, 0)
-        gg.addWidget(QLabel(tr("patches:")), 2, 1)
+        gg.addWidget(QLabel(tr("per layer:")), 2, 1)
         gg.addWidget(self._gen_blues_n, 2, 2)
+        gg.addWidget(QLabel(tr("layers:")), 2, 3)
+        gg.addWidget(self._gen_blues_layers, 2, 4)
         gg.addWidget(self._gen_blues_count, 2, 5)
 
         # Enhanced greens (foliage).
         self._gen_greens = QCheckBox(tr("Greens (foliage)"), self._gen_panel)
         self._gen_greens.setToolTip(tr("Forest, jungle and foliage greens for "
-                                    "nature images."))
-        self._gen_greens_n = _spin(1, 500, 24)
+                                    "nature images. Each of the 'layers' is a "
+                                    "non-parallel sheet of 'per layer' patches, "
+                                    "so the two multiply."))
+        self._gen_greens_n = _spin(1, 200, 24)
+        self._gen_greens_layers = _spin(1, 5, 2)
         self._gen_greens_count = _count_label()
         gg.addWidget(self._gen_greens, 3, 0)
-        gg.addWidget(QLabel(tr("patches:")), 3, 1)
+        gg.addWidget(QLabel(tr("per layer:")), 3, 1)
         gg.addWidget(self._gen_greens_n, 3, 2)
+        gg.addWidget(QLabel(tr("layers:")), 3, 3)
+        gg.addWidget(self._gen_greens_layers, 3, 4)
         gg.addWidget(self._gen_greens_count, 3, 5)
 
         # Near-neutral greys — neutral ramp + 6 hue rings per step.
@@ -894,11 +927,23 @@ class _NewChartDialog(QDialog):
         gg.addWidget(self._gen_greys_off, 4, 4)
         gg.addWidget(self._gen_greys_count, 4, 5)
 
+        # Reserve room for the live counts so growing numbers ("27000 patches")
+        # don't reflow the size columns as the user dials them up.
+        gg.setColumnMinimumWidth(5, 124)
         gg.setColumnStretch(5, 1)
+
+        # Cross-set de-duplication — keep combined patches unique (#37 follow-up).
+        self._gen_unique = QCheckBox(tr("Ensure unique colours"), self._gen_panel)
+        self._gen_unique.setChecked(True)
+        self._gen_unique.setToolTip(tr("When sets are combined, nudge any "
+                                    "repeated colours apart by a small offset "
+                                    "so no patch is printed twice."))
+        self._gen_unique.toggled.connect(self._update_gen_counts)
+        gg.addWidget(self._gen_unique, 5, 0, 1, 6)
 
         self._gen_total = QLabel("", self._gen_panel)
         self._gen_total.setStyleSheet("font-weight: bold;")
-        gg.addWidget(self._gen_total, 5, 0, 1, 6)
+        gg.addWidget(self._gen_total, 6, 0, 1, 6)
 
         for cb in (self._gen_cube, self._gen_skin, self._gen_blues,
                    self._gen_greens, self._gen_greys):
@@ -915,16 +960,24 @@ class _NewChartDialog(QDialog):
              lambda: G.rgb_cube_count(self._gen_cube_n.value()),
              self._gen_cube_count),
             (self._gen_skin,
-             lambda: G.skin_tones(self._gen_skin_n.value()),
-             lambda: G.skin_tones_count(self._gen_skin_n.value()),
+             lambda: G.skin_tones(self._gen_skin_n.value(),
+                                  self._gen_skin_ranges.value()),
+             lambda: G.skin_tones_count(self._gen_skin_n.value(),
+                                        self._gen_skin_ranges.value()),
              self._gen_skin_count),
             (self._gen_blues,
-             lambda: G.blues(self._gen_blues_n.value()),
-             lambda: G.blues_count(self._gen_blues_n.value()),
+             lambda: G.blues(self._gen_blues_n.value()
+                             * self._gen_blues_layers.value(),
+                             self._gen_blues_layers.value()),
+             lambda: G.blues_count(self._gen_blues_n.value()
+                                   * self._gen_blues_layers.value()),
              self._gen_blues_count),
             (self._gen_greens,
-             lambda: G.greens(self._gen_greens_n.value()),
-             lambda: G.greens_count(self._gen_greens_n.value()),
+             lambda: G.greens(self._gen_greens_n.value()
+                              * self._gen_greens_layers.value(),
+                              self._gen_greens_layers.value()),
+             lambda: G.greens_count(self._gen_greens_n.value()
+                                    * self._gen_greens_layers.value()),
              self._gen_greens_count),
             (self._gen_greys,
              lambda: G.near_neutral_greys(self._gen_greys_n.value(),
@@ -941,9 +994,9 @@ class _NewChartDialog(QDialog):
         # Grey each row's size control(s) when its set is unticked.
         for cb, spins in (
             (self._gen_cube, (self._gen_cube_n,)),
-            (self._gen_skin, (self._gen_skin_n,)),
-            (self._gen_blues, (self._gen_blues_n,)),
-            (self._gen_greens, (self._gen_greens_n,)),
+            (self._gen_skin, (self._gen_skin_n, self._gen_skin_ranges)),
+            (self._gen_blues, (self._gen_blues_n, self._gen_blues_layers)),
+            (self._gen_greens, (self._gen_greens_n, self._gen_greens_layers)),
             (self._gen_greys, (self._gen_greys_n, self._gen_greys_off)),
         ):
             for s in spins:
@@ -958,11 +1011,14 @@ class _NewChartDialog(QDialog):
             label=_patches_label(total)))
 
     def _build_generated_program(self) -> list[tuple]:
-        """Concatenate every ticked generator's patches, in panel order."""
+        """Concatenate every ticked generator's patches, in panel order,
+        de-duplicating across sets when 'Ensure unique colours' is on."""
         program: list[tuple] = []
         for cb, build, _count, _label in self._gen_specs():
             if cb.isChecked():
                 program.extend(build())
+        if self._gen_unique.isChecked():
+            program = G.deduplicate(program)
         return program
 
     # -- helpers -----------------------------------------------------------

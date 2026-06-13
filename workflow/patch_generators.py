@@ -50,89 +50,122 @@ def rgb_cube_count(n: int) -> int:
 
 
 # ---------------------------------------------------------------------------
-# 2. Fitzpatrick skin tones — 6 types, a lightness ramp through each.
+# 2. Fitzpatrick skin tones — 6 types × parallel hue ramps × a lightness sweep.
 # ---------------------------------------------------------------------------
 # Representative sRGB anchors (0..255) for the six Fitzpatrick skin phototypes,
-# light (I) to dark (VI). Each type becomes a tonal ramp around its anchor so a
-# group of patches spans the natural light→dark spread within that category.
+# light (I) to dark (VI). Each type becomes one or more tonal ramps around its
+# anchor so a group of patches spans the natural light→dark spread of that
+# category. The light end is pulled paler (towards porcelain white) and the
+# dark end is given a faint cool/blue undertone — both ranges the original
+# single ramp missed (GitHub #37 follow-up).
 _FITZPATRICK_ANCHORS = (
     (255, 224, 196),   # I   — very fair / pale white
     (241, 194, 167),   # II  — fair / white
     (224, 172, 138),   # III — medium / light brown
     (198, 134, 95),    # IV  — olive / moderate brown
     (141, 85, 56),     # V   — brown / dark brown
-    (89, 56, 41),      # VI  — very dark brown
+    (84, 56, 47),      # VI  — very dark brown (faintly cool/blue undertone)
 )
 
 
-def skin_tones(per_group: int) -> list[tuple[float, float, float]]:
-    """A skin-tone spread: ``per_group`` patches for each of the 6 Fitzpatrick
-    phototypes (``6 * per_group`` total), ordered light type → dark type.
+def skin_tones(per_type: int, ranges: int = 3) -> list[tuple[float, float, float]]:
+    """A skin-tone spread for the 6 Fitzpatrick phototypes, light → dark.
 
-    Within a type the anchor is swept in brightness (and very slightly in
-    saturation) to cover the lighter and darker shades a real face holds, while
-    keeping the hue of that phototype.
+    Each phototype gets ``ranges`` *parallel* ramps offset slightly in hue
+    (cooler ↔ warmer) so the spread covers the natural hue variation within a
+    category rather than a single line through it; every ramp is then swept in
+    brightness (and a touch in saturation) over ``per_type`` patches to reach
+    the paler highlights and deeper shadows real skin holds. The lightest ramps
+    drift toward porcelain and the darkest pick up a faint cool undertone.
+
+    Total = ``6 * ranges * per_type``, ordered type-by-type, then ramp-by-ramp,
+    each ramp light → dark. ``ranges = 1`` reproduces a single central ramp.
     """
-    per_group = max(1, int(per_group))
+    per_type = max(1, int(per_type))
+    ranges = max(1, int(ranges))
     out: list[tuple[float, float, float]] = []
     for r8, g8, b8 in _FITZPATRICK_ANCHORS:
         h, s, v = colorsys.rgb_to_hsv(r8 / 255.0, g8 / 255.0, b8 / 255.0)
-        for i in range(per_group):
-            # Sweep value 0.78×..1.06× the anchor (clamped to 1.0); nudge
-            # saturation up a touch in the shadows so darker shades don't wash
-            # out to grey. Single-patch groups land exactly on the anchor.
-            t = i / (per_group - 1) if per_group > 1 else 0.5
-            vf = (0.78 + 0.28 * t)
-            sf = (1.10 - 0.20 * t)
-            r, g, b = colorsys.hsv_to_rgb(h, min(1.0, s * sf), min(1.0, v * vf))
-            out.append((r * 100.0, g * 100.0, b * 100.0))
+        for ri in range(ranges):
+            # Parallel ramps fanned ±9° in hue around the anchor; the centre
+            # ramp keeps the exact phototype hue.
+            tr = (ri / (ranges - 1) - 0.5) if ranges > 1 else 0.0
+            dh = tr * 18.0 / 360.0
+            for i in range(per_type):
+                # Sweep value 0.74×..1.08× the anchor (clamped); lift saturation
+                # a little in the shadows so darker shades don't wash to grey,
+                # and ease it down in the highlights so they go porcelain-pale.
+                t = i / (per_type - 1) if per_type > 1 else 0.5
+                vf = 0.74 + 0.34 * t
+                sf = 1.14 - 0.30 * t
+                r, g, b = colorsys.hsv_to_rgb(
+                    (h + dh) % 1.0, min(1.0, max(0.0, s * sf)), min(1.0, v * vf)
+                )
+                out.append((r * 100.0, g * 100.0, b * 100.0))
     return out
 
 
-def skin_tones_count(per_group: int) -> int:
-    return 6 * max(1, int(per_group))
+def skin_tones_count(per_type: int, ranges: int = 3) -> int:
+    return 6 * max(1, int(ranges)) * max(1, int(per_type))
 
 
 # ---------------------------------------------------------------------------
-# Shared hue-region filler for the blues / greens spreads.
+# Shared layered hue-region filler for the blues / greens spreads.
 # ---------------------------------------------------------------------------
-def _hue_region(
+def _hue_region_layered(
     count: int,
     h0: float, h1: float,
-    s0: float, s1: float,
+    s_lo: float, s_hi: float,
     v0: float, v1: float,
+    layers: int = 1,
 ) -> list[tuple[float, float, float]]:
-    """``count`` patches spread over a hue × value grid in one hue band.
+    """``count`` patches spread over ``layers`` non-parallel sheets in one band.
 
-    Hue sweeps ``h0``→``h1`` across the grid columns; value sweeps ``v0``→``v1``
-    down the rows; saturation tracks the hue sweep ``s0``→``s1`` so the band
-    can ease from a punchy edge to a softer one. The grid is chosen as square
-    as possible and trimmed to exactly ``count`` patches.
+    A single sheet sweeps hue ``h0``→``h1`` across its columns and value
+    ``v0``→``v1`` down its rows. With ``layers`` > 1 the ``count`` is split
+    across that many sheets, each sitting at a **different saturation shell**
+    (from the punchy ``s_hi`` edge in toward the softer ``s_lo`` core) and
+    **tilted** so its hue skews with brightness in a per-layer direction — the
+    sheets fan out rather than stacking parallel, filling the 3-D wedge of the
+    band instead of a single flat blanket. The grid of each sheet is kept as
+    square as possible and the whole is trimmed to exactly ``count``.
     """
     count = max(1, int(count))
-    n_h = max(1, round(math.sqrt(count)))
-    n_v = max(1, math.ceil(count / n_h))
+    layers = max(1, int(layers))
+    base, rem = divmod(count, layers)
     out: list[tuple[float, float, float]] = []
-    for vi in range(n_v):
-        tv = vi / (n_v - 1) if n_v > 1 else 0.5
-        v = v0 + (v1 - v0) * tv
-        for hi in range(n_h):
-            th = hi / (n_h - 1) if n_h > 1 else 0.5
-            h = h0 + (h1 - h0) * th
-            s = s0 + (s1 - s0) * th
-            out.append(_hsv(h, s, v))
+    for li in range(layers):
+        n = base + (1 if li < rem else 0)
+        if n <= 0:
+            continue
+        tl = li / (layers - 1) if layers > 1 else 0.5
+        s_layer = s_hi - (s_hi - s_lo) * tl     # each layer its own saturation
+        skew = (tl - 0.5) * 22.0                # degrees of hue tilt vs value
+        n_h = max(1, round(math.sqrt(n)))
+        n_v = max(1, math.ceil(n / n_h))
+        sheet: list[tuple[float, float, float]] = []
+        for vi in range(n_v):
+            tv = vi / (n_v - 1) if n_v > 1 else 0.5
+            v = v0 + (v1 - v0) * tv
+            for hi in range(n_h):
+                th = hi / (n_h - 1) if n_h > 1 else 0.5
+                h = h0 + (h1 - h0) * th + skew * (tv - 0.5)
+                sheet.append(_hsv(h, min(1.0, max(0.0, s_layer)), v))
+        out.extend(sheet[:n])
     return out[:count]
 
 
 # ---------------------------------------------------------------------------
 # 3. Enhanced blues / turquoise — for wide-gamut spaces (AdobeRGB etc.).
 # ---------------------------------------------------------------------------
-def blues(count: int) -> list[tuple[float, float, float]]:
-    """``count`` patches concentrated in the turquoise→blue→blue-violet band
-    (hue ≈ 175°–260°) at high saturation across a few brightness levels — the
-    region wide-gamut spaces stretch furthest and benefit from denser sampling.
+def blues(count: int, layers: int = 3) -> list[tuple[float, float, float]]:
+    """``count`` patches concentrated in the green-turquoise→blue→blue-violet
+    band (hue ≈ 150°–262°) — the corner wide-gamut spaces stretch furthest. The
+    band now reaches down into the **greenish turquoise** the original spread
+    missed, and ``layers`` non-parallel saturation shells give the turquoise
+    wedge real volume coverage instead of one flat blanket.
     """
-    return _hue_region(count, 175.0, 260.0, 0.95, 0.80, 0.45, 1.0)
+    return _hue_region_layered(count, 150.0, 262.0, 0.55, 0.98, 0.45, 1.0, layers)
 
 
 def blues_count(count: int) -> int:
@@ -142,12 +175,13 @@ def blues_count(count: int) -> int:
 # ---------------------------------------------------------------------------
 # 4. Enhanced greens — forest / jungle / foliage.
 # ---------------------------------------------------------------------------
-def greens(count: int) -> list[tuple[float, float, float]]:
+def greens(count: int, layers: int = 2) -> list[tuple[float, float, float]]:
     """``count`` patches across the foliage greens (hue ≈ 80°–160°), spanning
     yellow-greens through deep forest greens with varied brightness so nature
-    images are well covered.
+    images are well covered. ``layers`` non-parallel saturation shells fill the
+    green wedge in depth rather than as a single sheet.
     """
-    return _hue_region(count, 80.0, 160.0, 0.95, 0.65, 0.30, 0.95)
+    return _hue_region_layered(count, 80.0, 160.0, 0.50, 0.95, 0.30, 0.95, layers)
 
 
 def greens_count(count: int) -> int:
@@ -188,3 +222,45 @@ def near_neutral_greys(steps: int, offset: float) -> list[tuple[float, float, fl
 
 def near_neutral_greys_count(steps: int) -> int:
     return max(1, int(steps)) * 7
+
+
+# ---------------------------------------------------------------------------
+# Cross-set de-duplication — keep every patch unique when sets are combined.
+# ---------------------------------------------------------------------------
+def _dedupe_key(p: tuple[float, float, float], quantum: float) -> tuple[int, int, int]:
+    return tuple(int(round(c / quantum)) for c in p)  # type: ignore[return-value]
+
+
+def deduplicate(
+    patches: list[tuple[float, float, float]],
+    quantum: float = 0.5,
+    step: float = 1.0,
+) -> list[tuple[float, float, float]]:
+    """Return ``patches`` with near-duplicates nudged apart so each is unique.
+
+    Two patches collide when they round to the same point on a ``quantum``-unit
+    grid (device units, 0..100). On a collision the later patch is nudged by a
+    growing multiple of ``step`` along rotating channels — toward whichever side
+    has room — until it lands on a free cell, staying within 0..100. Input order
+    is preserved, so combining e.g. a cube with a grey ramp keeps shared corners
+    from being printed twice (GitHub #37 follow-up).
+    """
+    seen: set[tuple[int, int, int]] = set()
+    out: list[tuple[float, float, float]] = []
+    for p in patches:
+        r, g, b = (_clamp(p[0]), _clamp(p[1]), _clamp(p[2]))
+        key = _dedupe_key((r, g, b), quantum)
+        tries = 0
+        while key in seen and tries < 600:
+            ch = tries % 3
+            delta = step * (1 + tries // 3)
+            base = (r, g, b)[ch]
+            cand = base + delta if base + delta <= 100.0 else base - delta
+            nud = [r, g, b]
+            nud[ch] = _clamp(cand)
+            r, g, b = nud
+            key = _dedupe_key((r, g, b), quantum)
+            tries += 1
+        seen.add(key)
+        out.append((r, g, b))
+    return out

@@ -38,25 +38,43 @@ def test_rgb_cube_clamps_tiny_n():
 
 # --- skin tones ------------------------------------------------------------
 @pytest.mark.parametrize("per", [1, 5, 12, 36])
-def test_skin_tones_count_and_range(per):
-    patches = G.skin_tones(per)
-    assert len(patches) == 6 * per == G.skin_tones_count(per)
+@pytest.mark.parametrize("ranges", [1, 3, 5])
+def test_skin_tones_count_and_range(per, ranges):
+    patches = G.skin_tones(per, ranges)
+    assert len(patches) == 6 * ranges * per == G.skin_tones_count(per, ranges)
     assert _all_in_range(patches)
 
 
+def test_skin_tones_default_ranges_is_three():
+    assert G.skin_tones_count(5) == 6 * 3 * 5
+    assert len(G.skin_tones(5)) == 90
+
+
 def test_skin_tones_light_to_dark_ordering():
-    # Each group's mid patch should get darker from Fitzpatrick I to VI.
-    per = 5
-    patches = G.skin_tones(per)
+    # Each phototype's mid patch (centre ramp) should get darker I → VI.
+    per, ranges = 5, 1
+    patches = G.skin_tones(per, ranges)
     mids = [patches[g * per + per // 2] for g in range(6)]
     lums = [0.3 * r + 0.59 * gg + 0.11 * b for r, gg, b in mids]
     assert lums == sorted(lums, reverse=True)
 
 
+def test_skin_tones_ranges_add_hue_variation():
+    # With >1 range, a phototype's patches span more than one hue.
+    import colorsys
+    per, ranges = 4, 3
+    patches = G.skin_tones(per, ranges)
+    block = patches[:per * ranges]  # all ramps of Fitzpatrick I
+    hues = {round(colorsys.rgb_to_hsv(r / 100, g / 100, b / 100)[0], 3)
+            for r, g, b in block}
+    assert len(hues) > 1
+
+
 # --- blues / greens --------------------------------------------------------
 @pytest.mark.parametrize("count", [1, 5, 7, 20, 50])
-def test_blues_count_and_range(count):
-    patches = G.blues(count)
+@pytest.mark.parametrize("layers", [1, 2, 3, 5])
+def test_blues_count_and_range(count, layers):
+    patches = G.blues(count, layers)
     assert len(patches) == count == G.blues_count(count)
     assert _all_in_range(patches)
 
@@ -67,9 +85,17 @@ def test_blues_are_blue_dominant():
     assert sum(b for _, _, b in patches) > sum(r for r, _, _ in patches)
 
 
+def test_blues_reach_greenish_turquoise():
+    # The widened band must include patches where green leads red (the
+    # green-turquoise corner Knut asked for).
+    patches = G.blues(40)
+    assert any(g > r and g > 10 for r, g, _ in patches)
+
+
 @pytest.mark.parametrize("count", [1, 5, 7, 20, 50])
-def test_greens_count_and_range(count):
-    patches = G.greens(count)
+@pytest.mark.parametrize("layers", [1, 2, 3, 5])
+def test_greens_count_and_range(count, layers):
+    patches = G.greens(count, layers)
     assert len(patches) == count == G.greens_count(count)
     assert _all_in_range(patches)
 
@@ -105,3 +131,32 @@ def test_near_neutral_shift_is_balanced():
         r, gg, b = patches[2 * 7 + k]
         assert abs((r + gg + b) / 3.0 - g) < 1e-6
         assert (r, gg, b) != (g, g, g)  # actually shifted
+
+
+# --- de-duplication --------------------------------------------------------
+def _keys(patches, quantum=0.5):
+    return [tuple(round(c / quantum) for c in p) for p in patches]
+
+
+def test_deduplicate_preserves_count_and_makes_unique():
+    # A program full of identical patches stays the same length but every
+    # entry ends up on a distinct grid cell.
+    dupes = [(50.0, 50.0, 50.0)] * 20
+    out = G.deduplicate(dupes)
+    assert len(out) == 20
+    assert _all_in_range(out)
+    assert len(set(_keys(out))) == 20
+
+
+def test_deduplicate_leaves_unique_input_untouched():
+    src = G.rgb_cube(4)  # already distinct
+    out = G.deduplicate(src)
+    assert out == src
+
+
+def test_deduplicate_collapses_shared_corners():
+    # Cube + grey ramp share black/white/grey corners; after dedupe none repeat.
+    combined = G.rgb_cube(3) + G.near_neutral_greys(3, 6.0)
+    out = G.deduplicate(combined)
+    assert len(out) == len(combined)
+    assert len(set(_keys(out))) == len(out)

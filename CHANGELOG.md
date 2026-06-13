@@ -1,5 +1,30 @@
 # Changelog
 
+## v3.9.15
+
+### ✨ New
+- **Generate colour sets — round two** (Tools ▸ Edit / create chart layout ▸
+  New chart ▸ Patches). Building on the five generators from v3.9.13, the
+  three palettes that benefit most are now richer, and combined sets stay clean:
+  - **Skin tones (Fitzpatrick)** reach further — from porcelain-pale highlights
+    down to very deep, faintly cool shadows — and a new **Ranges** control
+    (1–5, default 3) adds parallel ramps offset in hue, so each skin type is
+    covered by a small spread of tones instead of a single line. Total is now
+    6 × ranges × per-type.
+  - **Blues / turquoise** now dips into the **greenish turquoise** corner and
+    gains a **Layers** control (1–5, default 3): each layer is a non-parallel,
+    gently angled sheet, so the turquoise wedge is filled in depth rather than as
+    one flat blanket. Count is **per-layer × layers**.
+  - **Greens (foliage)** gains the same **Layers** control (1–5, default 2).
+  - **Ensure unique colours** (on by default) — when sets share a colour (a 3D
+    cube and a grey ramp both include black and white, say), duplicates are
+    nudged apart by a tiny amount so no patch is printed and measured twice. The
+    patch total is unchanged.
+  - The New-chart window is a little wider and reserves room for the live
+    counts, so the layout no longer jumps as the numbers grow.
+
+  _Thanks to Knut (soul-traveller) for the detailed follow-up in #37._
+
 ## v3.9.14
 
 ### ✨ New
