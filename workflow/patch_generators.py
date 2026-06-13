@@ -285,6 +285,238 @@ def near_neutral_greys_count(steps: int, rings: int = 1) -> int:
 
 
 # ---------------------------------------------------------------------------
+# 6. Gamut edges — the wireframe of the RGB cube (the device's gamut boundary).
+# ---------------------------------------------------------------------------
+# The eight cube corners and the twelve edges joining them. A printer's most
+# saturated reproducible colours live on this surface, and it is where profiles
+# carry the most error — so sampling the boundary densely is worthwhile.
+_CUBE_CORNERS = {
+    "K": (0.0, 0.0, 0.0),     "R": (100.0, 0.0, 0.0),
+    "G": (0.0, 100.0, 0.0),   "B": (0.0, 0.0, 100.0),
+    "Y": (100.0, 100.0, 0.0), "C": (0.0, 100.0, 100.0),
+    "M": (100.0, 0.0, 100.0), "W": (100.0, 100.0, 100.0),
+}
+_CUBE_EDGES = (
+    ("K", "R"), ("K", "G"), ("K", "B"),   # black → primaries
+    ("R", "Y"), ("R", "M"), ("G", "Y"),   # primaries → secondaries
+    ("G", "C"), ("B", "C"), ("B", "M"),
+    ("Y", "W"), ("C", "W"), ("M", "W"),   # secondaries → white
+)
+
+
+def gamut_edges(per_edge: int) -> list[tuple[float, float, float]]:
+    """``per_edge`` patches along each of the 12 edges of the RGB cube.
+
+    This traces the device's gamut boundary — the black→primary, primary→
+    secondary and secondary→white ramps that bound everything the printer can
+    reproduce. Endpoints (the cube corners) are included, so adjacent edges
+    share corners; combined with 'Ensure unique colours' those collapse to one.
+
+    Total = ``12 * per_edge``.
+    """
+    per_edge = max(1, int(per_edge))
+    out: list[tuple[float, float, float]] = []
+    for a, b in _CUBE_EDGES:
+        ca, cb = _CUBE_CORNERS[a], _CUBE_CORNERS[b]
+        for i in range(per_edge):
+            t = i / (per_edge - 1) if per_edge > 1 else 0.5
+            out.append(tuple(_clamp(ca[j] + (cb[j] - ca[j]) * t) for j in range(3)))
+    return out
+
+
+def gamut_edges_count(per_edge: int) -> int:
+    return 12 * max(1, int(per_edge))
+
+
+# ---------------------------------------------------------------------------
+# 7. Highlight & shadow detail — the two tonal ends, across the hue wheel.
+# ---------------------------------------------------------------------------
+def _wheel(n: int, v_lo: float, v_hi: float,
+           s_lo: float, s_hi: float) -> list[tuple[float, float, float]]:
+    """``n`` patches over a hue wheel × a few value/saturation sub-levels."""
+    n = max(1, int(n))
+    n_h = max(1, round(math.sqrt(n * 1.6)))       # favour hue spread over levels
+    n_l = max(1, math.ceil(n / n_h))
+    out: list[tuple[float, float, float]] = []
+    for li in range(n_l):
+        tl = li / (n_l - 1) if n_l > 1 else 0.5
+        v = v_hi - (v_hi - v_lo) * tl
+        s = s_lo + (s_hi - s_lo) * tl
+        for hi in range(n_h):
+            out.append(_hsv((hi / n_h) * 360.0, s, v))
+    return out[:n]
+
+
+def highlight_shadow_detail(per_end: int) -> list[tuple[float, float, float]]:
+    """``per_end`` light pastel tints near paper white + ``per_end`` deep dark
+    tones near black, each spread across the hue wheel.
+
+    The cube's even grid samples the very-light and very-dark tones coarsely,
+    yet those two ends are where banding in highlights and ink-limit nonlinearity
+    in shadows bite hardest. This fills them in with bright pale tints (high
+    value, low saturation) and deep saturated tones (low value), across all hues.
+
+    Total = ``2 * per_end``.
+    """
+    per_end = max(1, int(per_end))
+    highlights = _wheel(per_end, 0.86, 0.99, 0.05, 0.22)
+    shadows = _wheel(per_end, 0.10, 0.26, 0.35, 0.80)
+    return highlights + shadows
+
+
+def highlight_shadow_detail_count(per_end: int) -> int:
+    return 2 * max(1, int(per_end))
+
+
+# ---------------------------------------------------------------------------
+# 8. Image palette — the most representative colours of a loaded image.
+# ---------------------------------------------------------------------------
+def _srgb_to_lab(rgb01):
+    """(N,3) sRGB in 0..1 → (N,3) CIELab (D65). NumPy-vectorised."""
+    import numpy as np
+    a = np.asarray(rgb01, dtype=float)
+    lin = np.where(a <= 0.04045, a / 12.92, ((a + 0.055) / 1.055) ** 2.4)
+    m = np.array([[0.4124, 0.3576, 0.1805],
+                  [0.2126, 0.7152, 0.0722],
+                  [0.0193, 0.1192, 0.9505]])
+    xyz = lin @ m.T
+    white = np.array([0.95047, 1.0, 1.08883])
+    f = xyz / white
+    f = np.where(f > 0.008856, np.cbrt(f), 7.787 * f + 16.0 / 116.0)
+    L = 116.0 * f[:, 1] - 16.0
+    return np.stack([L, 500.0 * (f[:, 0] - f[:, 1]),
+                     200.0 * (f[:, 1] - f[:, 2])], axis=1)
+
+
+def image_palette(pixels, count: int,
+                  seed: int = 0) -> list[tuple[float, float, float]]:
+    """The ``count`` most representative colours of ``pixels``, as device RGB.
+
+    ``pixels`` is an ``(N, 3)`` array-like of 0..255 RGB (e.g. a decoded,
+    down-sampled image). The colours are clustered perceptually (k-means in
+    CIELab with a k-means++ start) so the result spans the image's real colour
+    families rather than over-counting one busy area. Cluster centres are
+    returned on the 0..100 device scale, brightest first.
+
+    Pure and deterministic (fixed ``seed``): the UI handles loading / decoding
+    the file and hands the pixels here, so this stays unit-testable.
+    """
+    import numpy as np
+
+    count = max(1, int(count))
+    px = np.asarray(pixels, dtype=float).reshape(-1, 3)
+    if px.size == 0:
+        return []
+    if px.max() > 1.0:
+        px = px / 255.0
+    lab = _srgb_to_lab(px)
+
+    rng = np.random.default_rng(seed)
+    uniq = np.unique(lab, axis=0)
+    k = min(count, len(uniq))
+    # k-means++ seeding on the unique colours.
+    centres = [uniq[rng.integers(len(uniq))]]
+    for _ in range(1, k):
+        d2 = np.min([np.sum((uniq - c) ** 2, axis=1) for c in centres], axis=0)
+        tot = d2.sum()
+        probs = d2 / tot if tot > 0 else None
+        centres.append(uniq[rng.choice(len(uniq), p=probs)])
+    C = np.array(centres)
+    # A few Lloyd iterations over the full pixel set.
+    for _ in range(16):
+        assign = np.argmin(((lab[:, None, :] - C[None, :, :]) ** 2).sum(2), axis=1)
+        newC = np.array([lab[assign == j].mean(0) if np.any(assign == j) else C[j]
+                         for j in range(k)])
+        if np.allclose(newC, C):
+            break
+        C = newC
+
+    # Map each Lab centre back to device RGB via the nearest source pixel
+    # (avoids an inverse-Lab round-trip and keeps centres in-gamut for real
+    # image colours).
+    out: list[tuple[float, float, float]] = []
+    for c in C:
+        idx = int(np.argmin(((lab - c) ** 2).sum(1)))
+        r, g, b = px[idx]
+        out.append((float(r) * 100.0, float(g) * 100.0, float(b) * 100.0))
+    out.sort(key=lambda p: 0.3 * p[0] + 0.59 * p[1] + 0.11 * p[2], reverse=True)
+    return out
+
+
+def image_palette_count(count: int, has_image: bool) -> int:
+    return max(1, int(count)) if has_image else 0
+
+
+# ---------------------------------------------------------------------------
+# 9. Pastels — low-chroma midtones, the bulk of real photographic content.
+# ---------------------------------------------------------------------------
+def pastels(count: int) -> list[tuple[float, float, float]]:
+    """``count`` gentle, low-chroma colours across the hue wheel and mid-to-light
+    tones — the muted, desaturated region most photos actually live in.
+
+    This fills the gap between the near-neutral greys (almost no chroma) and the
+    vivid sets (full chroma): soft pinks, sages, dusty blues, taupes and the like.
+
+    Total = ``count``.
+    """
+    n = max(1, int(count))
+    n_h = max(1, round(math.sqrt(n)))             # hues across, tone/chroma down
+    n_r = max(1, math.ceil(n / n_h))
+    out: list[tuple[float, float, float]] = []
+    for ri in range(n_r):
+        tr = ri / (n_r - 1) if n_r > 1 else 0.5
+        v = 0.58 + 0.32 * tr                      # mid → light
+        s = 0.26 - 0.13 * tr                      # a touch more chroma when darker
+        for hi in range(n_h):
+            out.append(_hsv((hi / n_h) * 360.0, s, v))
+    return out[:n]
+
+
+def pastels_count(count: int) -> int:
+    return max(1, int(count))
+
+
+# ---------------------------------------------------------------------------
+# 10. Fill the gaps — blue-noise top-up of whatever the other sets left sparse.
+# ---------------------------------------------------------------------------
+def fill_gaps(existing, total: int, candidates: int = 12,
+              seed: int = 0) -> list[tuple[float, float, float]]:
+    """Add patches until the program reaches ``total``, placed where it is sparse.
+
+    Given the already-chosen ``existing`` patches, this returns ``total -
+    len(existing)`` new device-RGB patches via best-candidate (Mitchell)
+    sampling: each new point is the farthest of several random candidates from
+    everything chosen so far. The result is an even, lattice-free "blue-noise"
+    fill of the cube's empty regions — coverage without near-duplicates. Returns
+    ``[]`` if the program already meets or exceeds ``total``.
+    """
+    import numpy as np
+
+    total = int(total)
+    pts = [(float(p[0]), float(p[1]), float(p[2])) for p in existing]
+    n_add = total - len(pts)
+    if n_add <= 0:
+        return []
+    rng = np.random.default_rng(seed)
+    arr = np.array(pts, dtype=float) if pts else np.empty((0, 3))
+    added: list[tuple[float, float, float]] = []
+    for _ in range(n_add):
+        cand = rng.uniform(0.0, 100.0, size=(max(1, candidates), 3))
+        if len(arr):
+            d2 = ((cand[:, None, :] - arr[None, :, :]) ** 2).sum(2).min(axis=1)
+            pick = cand[int(np.argmax(d2))]
+        else:
+            pick = cand[0]
+        added.append((float(pick[0]), float(pick[1]), float(pick[2])))
+        arr = np.vstack([arr, pick[None, :]]) if len(arr) else pick[None, :]
+    return added
+
+
+def fill_gaps_count(existing_count: int, total: int) -> int:
+    return max(0, int(total) - int(existing_count))
+
+
+# ---------------------------------------------------------------------------
 # Cross-set de-duplication — keep every patch unique when sets are combined.
 # ---------------------------------------------------------------------------
 def _dedupe_key(p: tuple[float, float, float], quantum: float) -> tuple[int, int, int]:
