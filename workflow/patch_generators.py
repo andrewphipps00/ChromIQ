@@ -198,30 +198,77 @@ _HUE_MASKS = (
 )
 
 
-def near_neutral_greys(steps: int, offset: float) -> list[tuple[float, float, float]]:
-    """A neutral grey ramp plus, at each step, 6 near-neutral hue variants.
+# Orthonormal basis of the plane perpendicular to the neutral axis (both sum to
+# zero, unit length, mutually orthogonal) — so cosθ·U + sinθ·V traces a true
+# circle of unit Euclidean radius in "constant-mean" (pure-chroma) space.
+_PLANE_U = (1.0 / math.sqrt(2), -1.0 / math.sqrt(2), 0.0)
+_PLANE_V = (1.0 / math.sqrt(6), 1.0 / math.sqrt(6), -2.0 / math.sqrt(6))
+
+
+def _ring_tints(g: float, radius: float, n: int,
+                phase: float) -> list[tuple[float, float, float]]:
+    """``n`` balanced hue tints on a ring of Euclidean radius ``radius``.
+
+    The tints sit at evenly spaced hue angles (starting at ``phase`` degrees) in
+    the plane perpendicular to the neutral axis, so the ring is a pure hue
+    excursion around grey ``g`` — the mean of R/G/B stays at ``g``, not a
+    lightness change. ``radius`` is the RGB-space (Euclidean) distance from the
+    neutral point, in device units on the 0..100 scale.
+    """
+    out: list[tuple[float, float, float]] = []
+    for k in range(n):
+        th = math.radians(phase + k * 360.0 / n)
+        cos_t, sin_t = math.cos(th), math.sin(th)
+        out.append(tuple(
+            _clamp(g + radius * (cos_t * _PLANE_U[j] + sin_t * _PLANE_V[j]))
+            for j in range(3)))
+    return out
+
+
+def near_neutral_greys(steps: int, offset: float,
+                       rings: int = 1) -> list[tuple[float, float, float]]:
+    """A neutral grey ramp plus, at each step, ``rings`` rings of hue tints.
 
     ``steps`` neutral greys are spread from black to white. At each grey level
-    ``g`` the six hue vertices (R/Y/G/C/B/M) are added as a *balanced* shift of
-    ``offset`` device units — the shifted channels rise and the others fall so
-    the mean stays at ``g``: a true hue ring around the neutral axis rather than
-    a lightness change. Total = ``steps * 7`` (1 neutral + 6 tints per step).
+    ``g`` one or more concentric hue rings circle the neutral axis: ring *n* has
+    ``6 * n`` tints (6, 12, 18, …) at chroma radius ``n * offset``, so outer
+    rings keep roughly the same angular spacing as the inner one and fill the
+    near-neutral disk rather than forming spokes (each ring is phase-rotated to
+    interleave with its neighbours). Every tint is a *balanced* shift — the mean
+    of R/G/B stays at ``g`` — a true hue excursion, not a lightness change.
+
+    With ``rings == 1`` this is the original 6-tint hexagon, identical to before.
+    Total = ``steps * (1 + 6 + 12 + … )`` = ``steps * (1 + 3 * rings * (rings+1))``.
 
     ``offset`` is in device units on the 0..100 scale (e.g. 6.25 ≈ 16/256).
     """
     steps = max(1, int(steps))
+    rings = max(1, int(rings))
     out: list[tuple[float, float, float]] = []
     for i in range(steps):
         g = (i / (steps - 1) if steps > 1 else 0.5) * 100.0
         out.append((g, g, g))
-        for mask in _HUE_MASKS:
-            m = sum(mask) / 3.0
-            out.append(tuple(_clamp(g + offset * (c - m)) for c in mask))
+        if rings == 1:
+            # Preserve the exact original R/Y/G/C/B/M hexagon (and its values).
+            for mask in _HUE_MASKS:
+                m = sum(mask) / 3.0
+                out.append(tuple(_clamp(g + offset * (c - m)) for c in mask))
+            continue
+        # Hexagon vertices sit sqrt(6)/3 · offset from neutral in RGB space;
+        # match that for ring 1 so the offset control feels the same in both
+        # modes, then space outer rings at integer multiples.
+        base_radius = math.sqrt(6) / 3.0 * offset
+        for r in range(1, rings + 1):
+            n = 6 * r
+            phase = (r - 1) * (360.0 / n) / 2.0   # interleave with inner ring
+            out.extend(_ring_tints(g, r * base_radius, n, phase))
     return out
 
 
-def near_neutral_greys_count(steps: int) -> int:
-    return max(1, int(steps)) * 7
+def near_neutral_greys_count(steps: int, rings: int = 1) -> int:
+    rings = max(1, int(rings))
+    tints = 3 * rings * (rings + 1)               # 6 + 12 + … = sum(6r)
+    return max(1, int(steps)) * (1 + tints)
 
 
 # ---------------------------------------------------------------------------

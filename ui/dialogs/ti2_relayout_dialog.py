@@ -595,9 +595,13 @@ class _NewChartDialog(QDialog):
             "angled sheets so the green part of the range is covered with more "
             "depth.\n\n"
             "• Near-neutral greys — a grey ramp from black to white and, at each "
-            "step, six gentle tints just off neutral. This is what helps greys "
-            "print cleanly without an unwanted colour cast. You set how many grey "
-            "steps there are and how far the tints stray from neutral.\n\n"
+            "step, a ring of gentle tints just off neutral. This is what helps "
+            "greys print cleanly without an unwanted colour cast — the most "
+            "important region for a clean profile. You set how many grey steps "
+            "there are, how far the tints stray from neutral ('offset'), and how "
+            "many rings to circle each grey with ('rings'): one ring is six "
+            "tints, and each extra ring adds a wider, denser one (12, then 18 "
+            "tints) for fuller near-neutral coverage when you want it.\n\n"
             "Mix them freely — say a 3D cube for overall coverage plus "
             "near-neutral greys for clean neutrals, or skin tones plus greens for "
             "portraits out in nature.\n\n"
@@ -918,23 +922,30 @@ class _NewChartDialog(QDialog):
         # Near-neutral greys — neutral ramp + 6 hue rings per step.
         self._gen_greys = QCheckBox(tr("Near-neutral greys"), self._gen_panel)
         self._gen_greys.setChecked(True)
-        self._gen_greys.setToolTip(tr("A neutral grey ramp plus, at each step, six "
-                                   "small hue tints around the neutral axis "
-                                   "(1 neutral + 6 tints per step)."))
+        self._gen_greys.setToolTip(tr("A neutral grey ramp plus, at each step, "
+                                   "rings of small hue tints around the neutral "
+                                   "axis. 'Offset' sets the first ring's "
+                                   "distance; 'rings' adds wider rings (6, 12, "
+                                   "18 tints) for a denser near-neutral cluster."))
         self._gen_greys_n = _spin(1, 64, 16)
         self._gen_greys_off = _spin(1, 50, 5)
+        self._gen_greys_rings = _spin(1, 3, 1)
         self._gen_greys_count = _count_label()
         gg.addWidget(self._gen_greys, 4, 0)
         gg.addWidget(QLabel(tr("steps:")), 4, 1)
         gg.addWidget(self._gen_greys_n, 4, 2)
         gg.addWidget(QLabel(tr("offset:")), 4, 3)
         gg.addWidget(self._gen_greys_off, 4, 4)
+        gg.addWidget(QLabel(tr("rings:")), 4, 6)
+        gg.addWidget(self._gen_greys_rings, 4, 7)
         gg.addWidget(self._gen_greys_count, 4, 5)
 
         # Reserve room for the live counts so growing numbers ("27000 patches")
-        # don't reflow the size columns as the user dials them up.
+        # don't reflow the size columns as the user dials them up. The counts
+        # stay aligned in col 5; greys' extra "rings:" control trails in 6/7 and
+        # a stretchy trailing column (8) absorbs any spare width.
         gg.setColumnMinimumWidth(5, 124)
-        gg.setColumnStretch(5, 1)
+        gg.setColumnStretch(8, 1)
 
         # Cross-set de-duplication — keep combined patches unique (#37 follow-up).
         self._gen_unique = QCheckBox(tr("Ensure unique colours"), self._gen_panel)
@@ -985,8 +996,10 @@ class _NewChartDialog(QDialog):
              self._gen_greens_count),
             (self._gen_greys,
              lambda: G.near_neutral_greys(self._gen_greys_n.value(),
-                                          float(self._gen_greys_off.value())),
-             lambda: G.near_neutral_greys_count(self._gen_greys_n.value()),
+                                          float(self._gen_greys_off.value()),
+                                          self._gen_greys_rings.value()),
+             lambda: G.near_neutral_greys_count(self._gen_greys_n.value(),
+                                                self._gen_greys_rings.value()),
              self._gen_greys_count),
         )
 
@@ -1001,7 +1014,8 @@ class _NewChartDialog(QDialog):
             (self._gen_skin, (self._gen_skin_n, self._gen_skin_ranges)),
             (self._gen_blues, (self._gen_blues_n, self._gen_blues_layers)),
             (self._gen_greens, (self._gen_greens_n, self._gen_greens_layers)),
-            (self._gen_greys, (self._gen_greys_n, self._gen_greys_off)),
+            (self._gen_greys, (self._gen_greys_n, self._gen_greys_off,
+                               self._gen_greys_rings)),
         ):
             for s in spins:
                 s.setEnabled(cb.isChecked())

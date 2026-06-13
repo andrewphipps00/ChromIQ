@@ -133,6 +133,38 @@ def test_near_neutral_shift_is_balanced():
         assert (r, gg, b) != (g, g, g)  # actually shifted
 
 
+@pytest.mark.parametrize("rings,per_step", [(1, 7), (2, 19), (3, 37)])
+def test_near_neutral_rings_count(rings, per_step):
+    # Ring n adds 6n tints: 1 + 6 (+12) (+18) per step.
+    steps = 8
+    patches = G.near_neutral_greys(steps, 6.0, rings)
+    assert len(patches) == steps * per_step
+    assert len(patches) == G.near_neutral_greys_count(steps, rings)
+    assert _all_in_range(patches)
+
+
+def test_near_neutral_rings_default_is_one_and_unchanged():
+    # The default (rings=1) is byte-for-byte the original 6-tint hexagon.
+    assert G.near_neutral_greys(10, 6.25) == G.near_neutral_greys(10, 6.25, 1)
+    assert G.near_neutral_greys_count(10) == G.near_neutral_greys_count(10, 1)
+
+
+def test_near_neutral_outer_ring_is_farther_and_balanced():
+    # With 3 rings each step is: neutral, then ring1 (6), ring2 (12), ring3 (18).
+    # Outer rings sit farther from neutral and stay balanced at mid-grey.
+    patches = G.near_neutral_greys(5, 8.0, 3)
+    base = 2 * 37  # middle step's neutral index
+    g = patches[base][0]
+    def dist(idx):
+        r, gg, b = patches[base + idx]
+        assert abs((r + gg + b) / 3.0 - g) < 1e-6   # balanced
+        return ((r - g) ** 2 + (gg - g) ** 2 + (b - g) ** 2) ** 0.5
+    r1 = dist(1)            # first tint of ring 1
+    r2 = dist(1 + 6)        # first tint of ring 2
+    r3 = dist(1 + 6 + 12)   # first tint of ring 3
+    assert r1 < r2 < r3
+
+
 # --- de-duplication --------------------------------------------------------
 def _keys(patches, quantum=0.5):
     return [tuple(round(c / quantum) for c in p) for p in patches]

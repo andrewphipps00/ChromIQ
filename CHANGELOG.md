@@ -1,5 +1,17 @@
 # Changelog
 
+## v3.9.18
+
+### ✨ New
+- **Near-neutral greys can now use multiple rings.** The greys set gains a
+  *rings* control (1–3). Each grey step is still circled by gentle off-neutral
+  tints, but now you can add wider, denser rings around it — ring 1 is 6 tints,
+  ring 2 adds 12, ring 3 adds 18 — for fuller coverage of the near-neutral
+  region, the part that matters most for clean, cast-free greys. Purely opt-in:
+  the default (1 ring) is byte-for-byte the previous behaviour, so nobody who
+  leaves it alone is affected. The rings are spaced at multiples of the existing
+  *offset* and interleaved so they fill the disk instead of forming spokes.
+
 ## v3.9.17
 
 ### ✨ New
