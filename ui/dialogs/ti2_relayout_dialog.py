@@ -78,8 +78,15 @@ def _wire_spacer_mutex(boxes: tuple) -> None:
     for i, cb in enumerate(boxes):
         cb.toggled.connect(_make(i))
 from workflow import ti2_relayout as R
+from workflow import patch_generators as G
 
 log = get_logger(__name__)
+
+
+def _patches_label(n: int) -> str:
+    """Count-bearing patch label with explicit singular / plural (no "(s)")."""
+    return (tr("{n} patch") if n == 1 else tr("{n} patches")).format(n=n)
+
 
 _SWATCH = 46  # grid swatch px
 
@@ -512,6 +519,14 @@ class _NewChartDialog(QDialog):
             QRadioButton::indicator:checked {{
                 background: {SPEC_MAGENTA}; border-color: {SPEC_MAGENTA};
             }}
+            /* A ticked-but-disabled box must read as off — without this the
+               magenta :checked fill wins over Qt's disabled greying, so an
+               unselected panel (e.g. "Generate colour sets") still showed bright
+               ticks. The two-state selector outranks the single :checked rule. */
+            QCheckBox::indicator:checked:disabled,
+            QRadioButton::indicator:checked:disabled {{
+                background: #4a4a4a; border-color: #4a4a4a;
+            }}
             QLineEdit:focus, QComboBox:focus,
             QSpinBox:focus, QDoubleSpinBox:focus {{
                 border-color: {SPEC_MAGENTA};
@@ -635,9 +650,17 @@ class _NewChartDialog(QDialog):
         paste_indent.addLayout(paste_btns)
         sl.addLayout(paste_indent)
         self._paste_edit.textChanged.connect(self._update_paste_count)
+
+        # Generate colour sets — combinable generators (#37). Each ticked set
+        # contributes its patches, concatenated top-to-bottom into the program.
+        self._mode_generate = QRadioButton(tr("Generate colour sets"), src_box)
+        sl.addWidget(self._mode_generate)
+        sl.addLayout(self._build_generate_panel(src_box))
+
         # Enable/disable subcontrols by mode
         self._mode_seed.toggled.connect(lambda on: self._count.setEnabled(on))
-        for r in (self._mode_blank, self._mode_seed, self._mode_paste):
+        for r in (self._mode_blank, self._mode_seed, self._mode_paste,
+                  self._mode_generate):
             r.toggled.connect(self._refresh_source_widgets)
         self._refresh_source_widgets()
         lay.addWidget(src_box)
@@ -747,10 +770,168 @@ class _NewChartDialog(QDialog):
         btns.addWidget(cancel)
         lay.addLayout(btns)
 
+    # -- generate-colour-sets panel ---------------------------------------
+    def _build_generate_panel(self, parent: QWidget) -> QVBoxLayout:
+        """Build the combinable colour-set generators (#37) under the
+        "Generate colour sets" radio: a checkbox + size control(s) + live
+        count per generator, and a running total."""
+        indent = QVBoxLayout()
+        indent.setContentsMargins(22, 0, 0, 0)
+        self._gen_panel = QWidget(parent)
+        gg = QGridLayout(self._gen_panel)
+        gg.setContentsMargins(0, 0, 0, 0)
+        gg.setHorizontalSpacing(8)
+        gg.setVerticalSpacing(4)
+
+        def _spin(lo: int, hi: int, val: int) -> NoScrollSpinBox:
+            s = NoScrollSpinBox(self._gen_panel)
+            s.setRange(lo, hi)
+            s.setValue(val)
+            s.setObjectName("compact_input")
+            s.valueChanged.connect(self._update_gen_counts)
+            return s
+
+        def _count_label() -> QLabel:
+            lb = QLabel("", self._gen_panel)
+            lb.setStyleSheet("color: #888;")
+            return lb
+
+        # 3D RGB cube — N per axis ⇒ N³ patches.
+        self._gen_cube = QCheckBox(tr("3D RGB cube"), self._gen_panel)
+        self._gen_cube.setChecked(True)
+        self._gen_cube.setToolTip(tr("An even N×N×N grid across the whole RGB "
+                                  "range. N is the steps per axis."))
+        self._gen_cube_n = _spin(2, 30, 6)
+        self._gen_cube_count = _count_label()
+        gg.addWidget(self._gen_cube, 0, 0)
+        gg.addWidget(QLabel(tr("per axis:")), 0, 1)
+        gg.addWidget(self._gen_cube_n, 0, 2)
+        gg.addWidget(self._gen_cube_count, 0, 5)
+
+        # Fitzpatrick skin tones — per-type ramp.
+        self._gen_skin = QCheckBox(tr("Skin tones (Fitzpatrick)"), self._gen_panel)
+        self._gen_skin.setToolTip(tr("A light→dark ramp through each of the six "
+                                  "Fitzpatrick skin phototypes."))
+        self._gen_skin_n = _spin(1, 36, 5)
+        self._gen_skin_count = _count_label()
+        gg.addWidget(self._gen_skin, 1, 0)
+        gg.addWidget(QLabel(tr("per type:")), 1, 1)
+        gg.addWidget(self._gen_skin_n, 1, 2)
+        gg.addWidget(self._gen_skin_count, 1, 5)
+
+        # Enhanced blues / turquoise.
+        self._gen_blues = QCheckBox(tr("Blues / turquoise"), self._gen_panel)
+        self._gen_blues.setToolTip(tr("Denser sampling of the turquoise→blue band "
+                                   "wide-gamut spaces stretch furthest."))
+        self._gen_blues_n = _spin(1, 500, 24)
+        self._gen_blues_count = _count_label()
+        gg.addWidget(self._gen_blues, 2, 0)
+        gg.addWidget(QLabel(tr("patches:")), 2, 1)
+        gg.addWidget(self._gen_blues_n, 2, 2)
+        gg.addWidget(self._gen_blues_count, 2, 5)
+
+        # Enhanced greens (foliage).
+        self._gen_greens = QCheckBox(tr("Greens (foliage)"), self._gen_panel)
+        self._gen_greens.setToolTip(tr("Forest, jungle and foliage greens for "
+                                    "nature images."))
+        self._gen_greens_n = _spin(1, 500, 24)
+        self._gen_greens_count = _count_label()
+        gg.addWidget(self._gen_greens, 3, 0)
+        gg.addWidget(QLabel(tr("patches:")), 3, 1)
+        gg.addWidget(self._gen_greens_n, 3, 2)
+        gg.addWidget(self._gen_greens_count, 3, 5)
+
+        # Near-neutral greys — neutral ramp + 6 hue rings per step.
+        self._gen_greys = QCheckBox(tr("Near-neutral greys"), self._gen_panel)
+        self._gen_greys.setToolTip(tr("A neutral grey ramp plus, at each step, six "
+                                   "small hue tints around the neutral axis "
+                                   "(1 neutral + 6 tints per step)."))
+        self._gen_greys_n = _spin(1, 64, 16)
+        self._gen_greys_off = _spin(1, 50, 6)
+        self._gen_greys_count = _count_label()
+        gg.addWidget(self._gen_greys, 4, 0)
+        gg.addWidget(QLabel(tr("steps:")), 4, 1)
+        gg.addWidget(self._gen_greys_n, 4, 2)
+        gg.addWidget(QLabel(tr("offset:")), 4, 3)
+        gg.addWidget(self._gen_greys_off, 4, 4)
+        gg.addWidget(self._gen_greys_count, 4, 5)
+
+        gg.setColumnStretch(5, 1)
+
+        self._gen_total = QLabel("", self._gen_panel)
+        self._gen_total.setStyleSheet("font-weight: bold;")
+        gg.addWidget(self._gen_total, 5, 0, 1, 6)
+
+        for cb in (self._gen_cube, self._gen_skin, self._gen_blues,
+                   self._gen_greens, self._gen_greys):
+            cb.toggled.connect(self._update_gen_counts)
+
+        indent.addWidget(self._gen_panel)
+        return indent
+
+    # The generators in fixed concatenation order: (checkbox, builder, counter).
+    def _gen_specs(self):
+        return (
+            (self._gen_cube,
+             lambda: G.rgb_cube(self._gen_cube_n.value()),
+             lambda: G.rgb_cube_count(self._gen_cube_n.value()),
+             self._gen_cube_count),
+            (self._gen_skin,
+             lambda: G.skin_tones(self._gen_skin_n.value()),
+             lambda: G.skin_tones_count(self._gen_skin_n.value()),
+             self._gen_skin_count),
+            (self._gen_blues,
+             lambda: G.blues(self._gen_blues_n.value()),
+             lambda: G.blues_count(self._gen_blues_n.value()),
+             self._gen_blues_count),
+            (self._gen_greens,
+             lambda: G.greens(self._gen_greens_n.value()),
+             lambda: G.greens_count(self._gen_greens_n.value()),
+             self._gen_greens_count),
+            (self._gen_greys,
+             lambda: G.near_neutral_greys(self._gen_greys_n.value(),
+                                          float(self._gen_greys_off.value())),
+             lambda: G.near_neutral_greys_count(self._gen_greys_n.value()),
+             self._gen_greys_count),
+        )
+
+    def _update_gen_counts(self, *_a) -> None:
+        """Refresh each generator's patch count + the running total, and gate
+        the per-row spin boxes on their checkbox."""
+        on = self._mode_generate.isChecked()
+        self._gen_panel.setEnabled(on)
+        # Grey each row's size control(s) when its set is unticked.
+        for cb, spins in (
+            (self._gen_cube, (self._gen_cube_n,)),
+            (self._gen_skin, (self._gen_skin_n,)),
+            (self._gen_blues, (self._gen_blues_n,)),
+            (self._gen_greens, (self._gen_greens_n,)),
+            (self._gen_greys, (self._gen_greys_n, self._gen_greys_off)),
+        ):
+            for s in spins:
+                s.setEnabled(cb.isChecked())
+        total = 0
+        for cb, _build, count, label in self._gen_specs():
+            n = count()
+            label.setText(_patches_label(n))
+            if cb.isChecked():
+                total += n
+        self._gen_total.setText(tr("Total: {label}").format(
+            label=_patches_label(total)))
+
+    def _build_generated_program(self) -> list[tuple]:
+        """Concatenate every ticked generator's patches, in panel order."""
+        program: list[tuple] = []
+        for cb, build, _count, _label in self._gen_specs():
+            if cb.isChecked():
+                program.extend(build())
+        return program
+
     # -- helpers -----------------------------------------------------------
     def _refresh_source_widgets(self) -> None:
         self._count.setEnabled(self._mode_seed.isChecked())
         self._paste_edit.setEnabled(self._mode_paste.isChecked())
+        self._update_gen_counts()
 
     def _refresh_spacer_scale_enabled(self, *_a) -> None:
         """Disable Spacer scale (-A) when "None" is the spacer choice —
@@ -866,6 +1047,13 @@ class _NewChartDialog(QDialog):
                 QMessageBox.warning(self, tr("No values"),
                                     tr("Couldn't parse any RGB / hex values "
                                     "from the pasted text."))
+                return
+        elif self._mode_generate.isChecked():
+            program = self._build_generated_program()
+            if not program:
+                QMessageBox.warning(self, tr("No colour sets"),
+                                    tr("Tick at least one colour set to "
+                                    "generate patches from."))
                 return
 
         # Mutex-checkbox group: at most one is on; all-off falls through
@@ -1223,6 +1411,14 @@ class Ti2RelayoutDialog(QDialog):
             QCheckBox::indicator:hover {{ border-color: {SPEC_MAGENTA}; }}
             QRadioButton::indicator:checked {{
                 background: {SPEC_MAGENTA}; border-color: {SPEC_MAGENTA};
+            }}
+            /* A ticked-but-disabled box must read as off — without this the
+               magenta :checked fill wins over Qt's disabled greying, so an
+               unselected panel (e.g. "Generate colour sets") still showed bright
+               ticks. The two-state selector outranks the single :checked rule. */
+            QCheckBox::indicator:checked:disabled,
+            QRadioButton::indicator:checked:disabled {{
+                background: #4a4a4a; border-color: #4a4a4a;
             }}
             QLineEdit:focus, QComboBox:focus,
             QSpinBox:focus, QDoubleSpinBox:focus {{
