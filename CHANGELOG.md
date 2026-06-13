@@ -1,5 +1,21 @@
 # Changelog
 
+## v3.9.19
+
+### 🐛 Fixed
+- **Crash on quit after using the 3D views — fixed for good (issue #38).** The
+  previous fix tore each 3D view (RGB cube, gamut viewer, drift map) down the
+  moment its window closed, which helped but didn't fully cure it: a couple of
+  testers still hit the same crash on quit after using the patch generator and
+  the 3D cube. The real cause is deeper than any single view — once a 3D view
+  has been shown, some of the browser engine's shared machinery stays alive for
+  the rest of the session, and the crash happened while Python was shutting that
+  down at the very end. ChromIQ now does all of its real cleanup (saving your
+  settings and window position, finishing any running tool) *before* exiting and
+  then hands straight back to the operating system, skipping the fragile final
+  shutdown step entirely. Quitting after using the 3D cube, gamut viewer or
+  drift map is now clean every time. A new automated test keeps it that way.
+
 ## v3.9.18
 
 ### ✨ New
