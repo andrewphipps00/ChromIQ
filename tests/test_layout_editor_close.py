@@ -18,7 +18,10 @@ def qapp():
 
 def _editor(monkeypatch):
     s = AppSettings()
-    s._qs = QSettings("chromiq-test", "close-btn")
+    # IniFormat (not the native Windows registry) so the per-test clear() never
+    # hits "key marked for deletion" registry warnings on Windows.
+    s._qs = QSettings(QSettings.Format.IniFormat, QSettings.Scope.UserScope,
+                      "chromiq-test", "close-btn")
     s._qs.clear()
     ed = M.Ti2RelayoutDialog(ArgyllRunner(s), s)
     # _set_chart auto-renders an initial preview; stub it out (no Argyll).

@@ -39,7 +39,10 @@ def qapp():
 
 def _settings():
     s = AppSettings()
-    s._qs = QSettings("chromiq-test", "editor-preload")
+    # IniFormat (not the native Windows registry) so clear() never hits
+    # "key marked for deletion" registry warnings on Windows.
+    s._qs = QSettings(QSettings.Format.IniFormat, QSettings.Scope.UserScope,
+                      "chromiq-test", "editor-preload")
     s._qs.clear()
     return s
 

@@ -105,7 +105,10 @@ def test_add_with_no_chart_open_seeds_a_chart_and_previews(qapp, monkeypatch):
     import ui.dialogs.ti2_relayout_dialog as M
 
     settings = AppSettings()
-    settings._qs = QSettings("chromiq-test", "add-patches")
+    # IniFormat (not the native Windows registry) so clear() never hits
+    # "key marked for deletion" registry warnings on Windows.
+    settings._qs = QSettings(QSettings.Format.IniFormat, QSettings.Scope.UserScope,
+                             "chromiq-test", "add-patches")
     settings._qs.clear()
     editor = M.Ti2RelayoutDialog(ArgyllRunner(settings), settings)
     assert editor._spec is None
