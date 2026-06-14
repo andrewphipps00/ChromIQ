@@ -1203,7 +1203,13 @@ class _NewChartDialog(QDialog):
                                 "deep tones just above black, spread across every "
                                 "hue. 'Per end' is the patches at each end (so the "
                                 "total is twice that); 'depth' is how far in from "
-                                "white and black the tones reach."))
+                                "white and black the tones reach. The two ends are "
+                                "built as mirror images, so they match. This set "
+                                "works together with 'Near-neutral greys': when "
+                                "that set is on, these patches stay just outside "
+                                "its grey rings so no colour is printed twice; "
+                                "when it is off, they also fill in the "
+                                "near-neutral light and dark tones themselves."))
         self._gen_hs_n = _spin(1, 200, 24)
         self._gen_hs_reach = _spin(2, 45, 16)
         self._gen_hs_count = _count_label()
@@ -1360,8 +1366,15 @@ class _NewChartDialog(QDialog):
                       + G.gamut_faces_count(self._gen_edges_faces.value())),
              self._gen_edges_count),
             (self._gen_hs,
-             lambda: G.highlight_shadow_detail(self._gen_hs_n.value(),
-                                               float(self._gen_hs_reach.value())),
+             # Highlights & shadows interlocks with Near-neutral greys: when that
+             # set is on, H&S stays just outside its rings (no colour printed
+             # twice); when off, H&S also fills the near-neutral light/dark tones.
+             lambda: G.highlight_shadow_detail(
+                 self._gen_hs_n.value(),
+                 float(self._gen_hs_reach.value()),
+                 greys_enabled=self._gen_greys.isChecked(),
+                 greys_offset=float(self._gen_greys_off.value()),
+                 greys_rings=self._gen_greys_rings.value()),
              lambda: G.highlight_shadow_detail_count(self._gen_hs_n.value()),
              self._gen_hs_count),
             (self._gen_pastel,

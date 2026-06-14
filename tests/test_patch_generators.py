@@ -6,6 +6,8 @@ generator must hold (0..100, three channels).
 """
 from __future__ import annotations
 
+import math
+
 import pytest
 
 from workflow import patch_generators as G
@@ -245,6 +247,45 @@ def test_highlight_shadow_reach_deepens_the_bands():
     # ...and highlights extend lower.
     assert min(val(p) for p in deep[:per]) < min(val(p) for p in shallow[:per])
     assert _all_in_range(deep) and len(deep) == 2 * per
+
+
+def _chroma(p):
+    m = sum(p) / 3.0
+    return math.sqrt(sum((c - m) ** 2 for c in p))
+
+
+@pytest.mark.parametrize("per_end", [1, 6, 24])
+def test_highlight_shadow_ends_are_mirror_images(per_end):
+    # The shadow cap is the exact point-inversion of the highlight cap, so the
+    # two ends come out congruent (Knut's lopsided-cone fix, #37).
+    patches = G.highlight_shadow_detail(per_end)
+    hi, sh = patches[:per_end], patches[per_end:]
+    for h, s in zip(hi, sh):
+        assert all(abs(s[j] - (100.0 - h[j])) < 1e-9 for j in range(3))
+    # Congruent => identical set of chroma radii at both ends.
+    assert sorted(round(_chroma(p), 6) for p in hi) == \
+           sorted(round(_chroma(p), 6) for p in sh)
+
+
+def test_highlight_shadow_clears_greys_when_enabled():
+    # With Near-neutral greys on, every H&S tint must sit outside the greys'
+    # outermost ring so the two sets never print the same colour.
+    off, rings = 5.0, 1
+    greys_outer = rings * (math.sqrt(6) / 3.0) * off
+    patches = G.highlight_shadow_detail(24, reach=20, greys_enabled=True,
+                                        greys_offset=off, greys_rings=rings)
+    assert _all_in_range(patches)
+    assert min(_chroma(p) for p in patches) > greys_outer
+
+
+def test_highlight_shadow_reaches_neutral_when_greys_off():
+    # With greys off, H&S must cover the near-neutral tones itself — so some
+    # patches sit much closer to the axis than the greys ring would allow.
+    off, rings = 5.0, 1
+    greys_outer = rings * (math.sqrt(6) / 3.0) * off
+    patches = G.highlight_shadow_detail(24, reach=20, greys_enabled=False,
+                                        greys_offset=off, greys_rings=rings)
+    assert min(_chroma(p) for p in patches) < greys_outer
 
 
 # --- image palette ---------------------------------------------------------

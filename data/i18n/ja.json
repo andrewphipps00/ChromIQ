@@ -474,7 +474,7 @@
  "Export…": "書き出す…",
  "Extended Inkset Channels": "拡張インクセットチャンネル",
  "Extended inkset channels (Ch4–Ch7)": "拡張インクセットチャンネル (Ch4〜Ch7)",
- "Extra detail at the two ends where printers struggle: pale tints just below paper white and deep tones just above black, spread across every hue. 'Per end' is the patches at each end (so the total is twice that); 'depth' is how far in from white and black the tones reach.": "プリンターが苦手な両端の追加ディテール：用紙の白のすぐ下の淡い色味と、黒のすぐ上の深い色味を、全色相に広げます。「端あたり」は各端のパッチ数（合計はその 2 倍）、「深さ」は白と黒からどれだけ内側まで届くかです。",
+ "Extra detail at the two ends where printers struggle: pale tints just below paper white and deep tones just above black, spread across every hue. 'Per end' is the patches at each end (so the total is twice that); 'depth' is how far in from white and black the tones reach. The two ends are built as mirror images, so they match. This set works together with 'Near-neutral greys': when that set is on, these patches stay just outside its grey rings so no colour is printed twice; when it is off, they also fill in the near-neutral light and dark tones themselves.": "プリンターが苦手な両端の追加ディテール：用紙の白のすぐ下の淡い色味と、黒のすぐ上の深い色味を、全色相に広げます。「端あたり」は各端のパッチ数（合計はその 2 倍）、「深さ」は白と黒からどれだけ内側まで届くかです。両端は鏡像として作られるので、互いに一致します。このセットは「ほぼニュートラルなグレー」と連携します。そのセットが有効なときは、これらのパッチはそのグレーのリングのすぐ外側にとどまり、同じ色が二度印刷されません。無効なときは、ほぼニュートラルな明暗の色味もこのセット自身が埋めます。",
  "FWA Compensation (-f)": "FWA補正 (-f)",
  "FWA Compensation (-f):": "FWA補正 (-f):",
  "FWA compensation (-f):": "FWA補正 (-f):",

@@ -474,7 +474,7 @@
  "Export…": "导出…",
  "Extended Inkset Channels": "扩展墨水通道",
  "Extended inkset channels (Ch4–Ch7)": "扩展墨水通道（Ch4〜Ch7）",
- "Extra detail at the two ends where printers struggle: pale tints just below paper white and deep tones just above black, spread across every hue. 'Per end' is the patches at each end (so the total is twice that); 'depth' is how far in from white and black the tones reach.": "在打印机最吃力的两端补充细节：略低于纸白的淡色和略高于黑的深色，遍布所有色相。「每端」是每一端的色块数（因此总数是其两倍）；「深度」是色调从白和黑向内延伸多远。",
+ "Extra detail at the two ends where printers struggle: pale tints just below paper white and deep tones just above black, spread across every hue. 'Per end' is the patches at each end (so the total is twice that); 'depth' is how far in from white and black the tones reach. The two ends are built as mirror images, so they match. This set works together with 'Near-neutral greys': when that set is on, these patches stay just outside its grey rings so no colour is printed twice; when it is off, they also fill in the near-neutral light and dark tones themselves.": "在打印机最吃力的两端补充细节：略低于纸白的淡色和略高于黑的深色，遍布所有色相。「每端」是每一端的色块数（因此总数是其两倍）；「深度」是色调从白和黑向内延伸多远。两端以镜像方式生成，因此彼此匹配。此组与「近中性灰」协同工作：启用该组时，这些色块会停留在其灰色圆环之外，以免同一颜色打印两次；关闭时，它们也会自行填充近中性的亮部和暗部色调。",
  "FWA Compensation (-f)": "FWA补偿 (-f)",
  "FWA Compensation (-f):": "FWA补偿 (-f):",
  "FWA compensation (-f):": "FWA补偿 (-f):",

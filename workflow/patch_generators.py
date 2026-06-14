@@ -370,48 +370,73 @@ def gamut_faces_count(per_face: int) -> int:
 # ---------------------------------------------------------------------------
 # 7. Highlight & shadow detail — the two tonal ends, across the hue wheel.
 # ---------------------------------------------------------------------------
-def _wheel(n: int, v_lo: float, v_hi: float,
-           s_lo: float, s_hi: float) -> list[tuple[float, float, float]]:
-    """``n`` patches over a hue wheel × a few value/saturation sub-levels."""
-    n = max(1, int(n))
-    n_h = max(1, round(math.sqrt(n * 1.6)))       # favour hue spread over levels
-    n_l = max(1, math.ceil(n / n_h))
-    out: list[tuple[float, float, float]] = []
-    for li in range(n_l):
-        tl = li / (n_l - 1) if n_l > 1 else 0.5
-        v = v_hi - (v_hi - v_lo) * tl
-        s = s_lo + (s_hi - s_lo) * tl
-        for hi in range(n_h):
-            out.append(_hsv((hi / n_h) * 360.0, s, v))
-    return out[:n]
-
-
 def highlight_shadow_detail(per_end: int,
-                            reach: float = 16.0) -> list[tuple[float, float, float]]:
-    """``per_end`` light pastel tints near paper white + ``per_end`` deep dark
-    tones near black, each spread across the hue wheel.
+                            reach: float = 16.0,
+                            *,
+                            greys_enabled: bool = False,
+                            greys_offset: float = 5.0,
+                            greys_rings: int = 1) -> list[tuple[float, float, float]]:
+    """``per_end`` patches packed into the extreme highlights + ``per_end`` into
+    the extreme shadows, as two **mirror-image** end-caps around the neutral
+    axis.
 
     The cube's even grid samples the very-light and very-dark tones coarsely,
-    yet those two ends are where banding in highlights and ink-limit nonlinearity
-    in shadows bite hardest. This fills them in with bright pale tints (high
-    value, low saturation) and deep saturated tones (low value), across all hues.
+    yet those two ends are where printers band (highlights) and block up at the
+    ink limit (shadows), so this concentrates fine tonal steps there. The shadow
+    cap is the exact point-inversion of the highlight cap
+    (``(r,g,b) → (100-r, 100-g, 100-b)``); because the RGB cube is symmetric
+    about its centre, the two ends therefore come out the *same* shape and
+    spacing — no lopsided cones.
 
-    ``reach`` (in device units, 0..100) is how far in from each end the band
-    extends: a small reach hugs paper white / pure black tightly, a larger one
-    samples deeper toward the midtones. ``per_end`` controls how many patches
-    sit at each end, so the set adds ``2 * per_end`` in total.
+    ``reach`` (device units, 0..100) is how far in from each end the cap
+    reaches; ``per_end`` is the patch count at each end (total ``2 * per_end``).
+
+    The cap interlocks with the near-neutral greys set so the two never sample
+    the same colour:
+
+    * ``greys_enabled=True`` keeps every tint *outside* the greys' outermost
+      ring (sized from ``greys_offset`` / ``greys_rings``) — greys own the
+      central neutral tube, H&S the dense chromatic rim around the two ends.
+    * ``greys_enabled=False`` lets the caps reach in to the neutral axis, so
+      H&S also covers the near-neutral light/dark tones nothing else would.
     """
     per_end = max(1, int(per_end))
-    f = max(2.0, min(45.0, float(reach))) / 100.0
-    # Both ends grow inward in *value* with the depth — but on the highlight
-    # side that alone reads as "nothing happening": as the value drops the
-    # near-white tints slide straight down the neutral axis toward mid-grey,
-    # losing chroma, so the white corner of the cube looks unchanged while the
-    # black corner visibly blossoms into colour. Scale the highlight saturation
-    # up with the depth too, so deeper highlights fan into pale *coloured*
-    # tints across the hue wheel and the white side fills like the dark one.
-    highlights = _wheel(per_end, 1.0 - f, 0.99, 0.05, 0.12 + f)
-    shadows = _wheel(per_end, 0.02, max(0.05, f), 0.35, 0.80)
+    reach = max(2.0, min(45.0, float(reach)))
+    unit = math.sqrt(6) / 3.0          # RGB-space chroma radius of a unit hue mask
+
+    # Inner chroma floor: clear the greys' outermost ring when that set is on
+    # (with half a ring of headroom so they never touch), else start on the
+    # neutral axis so the near-neutral tones are covered here instead.
+    r_inner = 0.0
+    if greys_enabled:
+        off = max(0.0, float(greys_offset))
+        greys_outer = max(1, int(greys_rings)) * unit * off
+        r_inner = greys_outer + 0.5 * unit * max(1.0, off)
+
+    # Spread per_end over a few tonal levels (favour tonal resolution — the whole
+    # point of the feature) × a hue ring at each level.
+    n_lev = max(1, round(math.sqrt(per_end * 0.6)))
+    counts = [per_end // n_lev + (1 if i < per_end % n_lev else 0)
+              for i in range(n_lev)]
+
+    # Lightness span of the highlight cap: from `inset` below white down to
+    # `reach` below white. The inset keeps the lightest level off pure white
+    # (where no chroma fits) and, when greys are on, far enough in that the ring
+    # clears them with gamut headroom to spare.
+    inset = min(max(reach / (n_lev + 1), r_inner), reach * 0.5)
+    L_top = 100.0 - inset
+    L_bot = 100.0 - reach
+
+    highlights: list[tuple[float, float, float]] = []
+    for i in range(n_lev):
+        tl = i / (n_lev - 1) if n_lev > 1 else 0.0
+        L = L_top - (L_top - L_bot) * tl
+        head = (100.0 - L) * 1.3                # ≳ max balanced chroma that fits
+        radius = min(head, max(r_inner, head * 0.7))
+        phase = i * 27.0                        # rotate levels so hues interleave
+        highlights.extend(_ring_tints(L, radius, counts[i], phase))
+
+    shadows = [(100.0 - r, 100.0 - g, 100.0 - b) for (r, g, b) in highlights]
     return highlights + shadows
 
 
