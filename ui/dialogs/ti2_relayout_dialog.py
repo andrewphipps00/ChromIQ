@@ -1282,6 +1282,26 @@ class _NewChartDialog(QDialog):
         gg.addWidget(self._gen_image_n, 8, 4)
         gg.addWidget(self._gen_image_count, 8, 7)
 
+        # Pure white & black — the two tonal anchors, N of each, kept verbatim.
+        self._gen_whiteblack = QCheckBox(
+            tr("Pure white & black").replace("&", "&&"), self._gen_panel)
+        self._gen_whiteblack.setToolTip(tr("Adds pure paper white and the "
+                                        "deepest black the printer can lay — two "
+                                        "anchors that matter for a good profile. "
+                                        "'Each' is how many of white and of black "
+                                        "to include; they're kept even when "
+                                        "'Ensure unique colours' is on, which is "
+                                        "handy for averaging repeats. The 3D cube, "
+                                        "near-neutral greys and saturated edges "
+                                        "already include one of each, and any they "
+                                        "provide counts toward your number."))
+        self._gen_whiteblack_n = _spin(1, 50, 1)
+        self._gen_whiteblack_count = _count_label()
+        gg.addWidget(self._gen_whiteblack, 9, 0)
+        gg.addWidget(QLabel(tr("each:")), 9, 1)
+        gg.addWidget(self._gen_whiteblack_n, 9, 2)
+        gg.addWidget(self._gen_whiteblack_count, 9, 7)
+
         # Fill remaining gaps — blue-noise top-up of whatever's left sparse.
         # Special: its count depends on the combined total of the sets above.
         self._gen_fill = QCheckBox(tr("Fill remaining gaps"), self._gen_panel)
@@ -1292,10 +1312,10 @@ class _NewChartDialog(QDialog):
                                   "total patch count."))
         self._gen_fill_to = _spin(1, 30000, 1000)
         self._gen_fill_count = _count_label()
-        gg.addWidget(self._gen_fill, 9, 0)
-        gg.addWidget(QLabel(tr("fill to:")), 9, 1)
-        gg.addWidget(self._gen_fill_to, 9, 2)
-        gg.addWidget(self._gen_fill_count, 9, 7)
+        gg.addWidget(self._gen_fill, 10, 0)
+        gg.addWidget(QLabel(tr("fill to:")), 10, 1)
+        gg.addWidget(self._gen_fill_to, 10, 2)
+        gg.addWidget(self._gen_fill_count, 10, 7)
 
         # A per-set ⓘ icon (col 8) opens the set's explanation in its own little
         # window — more discoverable than a hover tooltip. The body reuses each
@@ -1312,7 +1332,8 @@ class _NewChartDialog(QDialog):
             (6, self._gen_hs,     tr("Highlights & shadows")),
             (7, self._gen_pastel, tr("Pastels")),
             (8, self._gen_image,  tr("From image")),
-            (9, self._gen_fill,   tr("Fill remaining gaps")),
+            (9, self._gen_whiteblack, tr("Pure white & black")),
+            (10, self._gen_fill,  tr("Fill remaining gaps")),
         )
         for row, cb, title in row_tips:
             gg.addWidget(
@@ -1334,16 +1355,16 @@ class _NewChartDialog(QDialog):
                                     "repeated colours apart by a small offset "
                                     "so no patch is printed twice."))
         self._gen_unique.toggled.connect(self._update_gen_counts)
-        gg.addWidget(self._gen_unique, 10, 0, 1, 8)
+        gg.addWidget(self._gen_unique, 11, 0, 1, 8)
 
         self._gen_total = QLabel("", self._gen_panel)
         self._gen_total.setStyleSheet("font-weight: bold;")
-        gg.addWidget(self._gen_total, 11, 0, 1, 8)
+        gg.addWidget(self._gen_total, 12, 0, 1, 8)
 
         for cb in (self._gen_cube, self._gen_skin, self._gen_blues,
                    self._gen_greens, self._gen_greys, self._gen_edges,
                    self._gen_hs, self._gen_pastel, self._gen_image,
-                   self._gen_fill):
+                   self._gen_whiteblack, self._gen_fill):
             cb.toggled.connect(self._update_gen_counts)
 
         indent.addWidget(self._gen_panel)
@@ -1397,6 +1418,7 @@ class _NewChartDialog(QDialog):
                  self._gen_hs_n.value(),
                  float(self._gen_hs_reach.value()),
                  greys_enabled=self._gen_greys.isChecked(),
+                 greys_steps=self._gen_greys_n.value(),
                  greys_offset=float(self._gen_greys_off.value()),
                  greys_rings=self._gen_greys_rings.value()),
              lambda: G.highlight_shadow_detail_count(self._gen_hs_n.value()),
@@ -1415,6 +1437,10 @@ class _NewChartDialog(QDialog):
                                            self._gen_image_px is not None),
              self._gen_image_count),
         )
+        # NB: "Pure white & black" is deliberately *not* a _gen_specs entry — it
+        # tops up to N of each *after* de-duplication (so its repeats survive) and
+        # counts whatever the other sets already contributed. Built/counted in
+        # _build_generated_program / _update_gen_counts instead.
 
     def _install_magenta_accents(self) -> None:
         """Scope the editor's magenta accent onto this dialog's checked /
@@ -1476,6 +1502,7 @@ class _NewChartDialog(QDialog):
             (self._gen_hs, (self._gen_hs_n, self._gen_hs_reach)),
             (self._gen_pastel, (self._gen_pastel_n, self._gen_pastel_layers)),
             (self._gen_image, (self._gen_image_btn, self._gen_image_n)),
+            (self._gen_whiteblack, (self._gen_whiteblack_n,)),
             (self._gen_fill, (self._gen_fill_to,)),
         ):
             for s in spins:
@@ -1495,6 +1522,19 @@ class _NewChartDialog(QDialog):
         self._gen_fill_count.setText(_patches_label(fill_n))
         if self._gen_fill.isChecked():
             total += fill_n
+        # Pure white & black only adds what the corner-bearing sets (cube, greys
+        # ramp with ≥2 steps, saturated edges) don't already give — one of each
+        # if any of them are on (collapsed by de-dup), else one per such set.
+        each = self._gen_whiteblack_n.value()
+        corner = ((1 if self._gen_cube.isChecked() else 0)
+                  + (1 if self._gen_edges.isChecked() else 0)
+                  + (1 if (self._gen_greys.isChecked()
+                           and self._gen_greys_n.value() >= 2) else 0))
+        have = (1 if corner else 0) if self._gen_unique.isChecked() else corner
+        wb_n = G.white_black_count(each, have, have)
+        self._gen_whiteblack_count.setText(_patches_label(wb_n))
+        if self._gen_whiteblack.isChecked():
+            total += wb_n
         self._gen_total.setText(tr("Total: {label}").format(
             label=_patches_label(total)))
 
@@ -1510,6 +1550,13 @@ class _NewChartDialog(QDialog):
             program.extend(G.fill_gaps(program, self._gen_fill_to.value()))
         if self._gen_unique.isChecked():
             program = G.deduplicate(program)
+        # Pure white & black is added *after* de-dup so its deliberate repeats
+        # survive, and only tops the chart up to N of each — whatever the other
+        # sets already put there counts toward that N.
+        if self._gen_whiteblack.isChecked():
+            have_w, have_b = G.count_white_black(program)
+            program.extend(G.white_black(
+                self._gen_whiteblack_n.value(), have_w, have_b))
         return program
 
     def _load_gen_image(self) -> None:
@@ -2925,8 +2972,73 @@ class Ti2RelayoutDialog(QDialog):
             self._status.setText(tr("Patch added. Updating preview…"))
             self._schedule_auto_refresh()
             return
+        extra = self._resolve_existing_overlap(extra)
+        if extra is None:
+            return
+        if not extra:
+            self._status.setText(
+                tr("Those colours are all already in the chart — nothing new "
+                   "to add."))
+            return
         self._place_patches_into_grid(
             extra, tr("{n} colours are ready to add.").format(n=len(extra)))
+
+    def _resolve_existing_overlap(self, extra: list[tuple]) -> list[tuple] | None:
+        """If any generated colour already sits in the loaded chart, explain it
+        in plain language and let the user nudge the repeats unique, add only the
+        new ones, add everything as-is, or cancel. Returns the patches to add
+        (possibly relocated or filtered), or ``None`` to cancel. No overlap ⇒
+        returns ``extra`` unchanged."""
+        existing = self._program_from_grid()
+        dup = G.overlap_count(existing, extra)
+        if dup == 0:
+            return extra
+        box = QMessageBox(self)
+        box.setWindowTitle(tr("Some of these colours are already in your chart"))
+        box.setIcon(QMessageBox.Icon.NoIcon)
+        box.setText(
+            tr("1 of the {total} colours you're about to add is already in "
+               "this chart.").format(total=len(extra)) if dup == 1
+            else tr("{dup} of the {total} colours you're about to add are "
+                    "already in this chart.").format(dup=dup, total=len(extra)))
+        box.setInformativeText(tr(
+            "Printing the same colour twice doesn't make your profile any more "
+            "accurate — the second patch just measures the same thing again — "
+            "so it mostly wastes paper, ink and measuring time.\n\n"
+            "Here's what each choice does:\n\n"
+            "• Make them unique (recommended) — keeps every colour you're "
+            "adding, but gently shifts each repeat to the nearest unused colour "
+            "right beside it. You still get the full number of patches, just "
+            "with no exact duplicates.\n\n"
+            "• Add only the new ones — adds just the colours that aren't in the "
+            "chart yet and quietly drops the repeats, so nothing is printed "
+            "twice.\n\n"
+            "• Add anyway — adds them exactly as generated, repeats and all. "
+            "Pick this only if you deliberately want the same colour more than "
+            "once, for example to average several readings of it.\n\n"
+            "• Cancel — go back without adding anything, so you can adjust the "
+            "generator options first."))
+        unique_btn = box.addButton(tr("Make them unique"),
+                                   QMessageBox.ButtonRole.AcceptRole)
+        onlynew_btn = box.addButton(tr("Add only the new ones"),
+                                    QMessageBox.ButtonRole.AcceptRole)
+        anyway_btn = box.addButton(tr("Add anyway"),
+                                   QMessageBox.ButtonRole.AcceptRole)
+        cancel_btn = box.addButton(tr("Cancel"), QMessageBox.ButtonRole.RejectRole)
+        # The app's button stylesheet keeps buttons short, so longer labels clip
+        # at the default width — give each room for its full label plus padding.
+        for b in (unique_btn, onlynew_btn, anyway_btn, cancel_btn):
+            b.setMinimumWidth(b.fontMetrics().horizontalAdvance(b.text()) + 64)
+        box.setDefaultButton(unique_btn)
+        box.exec()
+        clicked = box.clickedButton()
+        if clicked is unique_btn:
+            return G.dedupe_against(existing, extra)
+        if clicked is onlynew_btn:
+            return G.only_new(existing, extra)
+        if clicked is anyway_btn:
+            return extra
+        return None
 
     def _append_from_file(self) -> None:
         """Combine another patch set into this chart (start or end).

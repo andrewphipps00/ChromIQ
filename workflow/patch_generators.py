@@ -374,6 +374,12 @@ def gamut_faces_count(per_face: int) -> int:
 # so a cone's patches spread without radial spokes or gaps.
 _GOLDEN_DEG = 180.0 * (3.0 - math.sqrt(5.0))         # ≈ 137.508°
 
+# A highlight/shadow cone disc only yields its core to the near-neutral greys
+# when it sits within this many device units (0..100) of an actual grey step in
+# lightness — i.e. when a grey disc is really there to clash with. ≈ 3 eight-bit
+# code values; discs that fall in the gaps between grey steps fill to the axis.
+_GREY_CLASH_TOL = 1.5
+
 
 def _allocate_by_weight(total: int, weights: list[float]) -> list[int]:
     """Split ``total`` items across bins in proportion to ``weights`` (a weight
@@ -404,6 +410,7 @@ def highlight_shadow_detail(per_end: int,
                             reach: float = 16.0,
                             *,
                             greys_enabled: bool = False,
+                            greys_steps: int = 16,
                             greys_offset: float = 5.0,
                             greys_rings: int = 1) -> list[tuple[float, float, float]]:
     """``per_end`` patches into the extreme highlights + ``per_end`` into the
@@ -424,11 +431,13 @@ def highlight_shadow_detail(per_end: int,
 
     The cones interlock with the near-neutral greys set:
 
-    * ``greys_enabled=True`` drops the core of each cone that falls inside the
-      greys' outermost ring (sized from ``greys_offset`` / ``greys_rings``), so
-      the two sets never sample the same colour — greys own the central neutral
-      tube, H&S the chromatic rim. The dropped patches aren't lost: the per-end
-      budget is re-laid in the rim that remains.
+    * ``greys_enabled=True`` drops a cone disc's core (inside the greys'
+      outermost ring, sized from ``greys_offset`` / ``greys_rings``) *only where
+      a grey disc actually sits* — i.e. when the disc is within a couple of code
+      values of one of the ``greys_steps`` grey levels. Discs that fall in the
+      gaps between grey steps keep filling to the axis, so few grey steps leave
+      the cones mostly intact while many steps carve out more. The dropped
+      patches aren't lost: the per-end budget is re-laid in the rims that remain.
     * ``greys_enabled=False`` lets the cones reach in to the neutral axis, so
       H&S also covers the near-neutral light/dark tones nothing else would.
     """
@@ -443,19 +452,31 @@ def highlight_shadow_detail(per_end: int,
     depths = [reach * (i + 1) / n_lev for i in range(n_lev)]      # 100-L, tip→base
     r_max = [0.85 * d / unit for d in depths]
 
-    # Inner radius: clear the greys' outermost ring when that set is on, else 0
-    # so the cones reach the neutral axis. Capped just under the base cone's own
-    # radius so at least the widest level can always hold patches.
-    r_in = 0.0
+    # Per-level inner radius. When greys are on, a disc only yields its core if a
+    # grey step really sits at (near) its lightness — discs in the gaps between
+    # steps fill to the axis. The clearance is capped just under the base cone's
+    # radius so the widest level can always hold patches.
+    r_clear = 0.0
+    step_ls: list[float] = []
     if greys_enabled:
         off = max(0.0, float(greys_offset))
         greys_outer = max(1, int(greys_rings)) * unit * off
-        r_in = greys_outer + 0.5 * unit * max(1.0, off)
-    r_in = min(r_in, 0.9 * r_max[-1])
+        r_clear = min(greys_outer + 0.5 * unit * max(1.0, off), 0.9 * r_max[-1])
+        s = max(1, int(greys_steps))
+        step_ls = [(k / (s - 1) if s > 1 else 0.5) * 100.0 for k in range(s)]
 
-    # Budget each level by its annulus area, so density is even across the cone
-    # (levels too close to the corner to clear the greys core get nothing).
-    weights = [max(0.0, rm * rm - r_in * r_in) for rm in r_max]
+    def _inner(L: float) -> float:
+        if not step_ls:
+            return 0.0
+        near = min(abs(L - sl) for sl in step_ls) <= _GREY_CLASH_TOL
+        return r_clear if near else 0.0
+
+    r_in = [_inner(100.0 - d) for d in depths]
+
+    # Budget each level by its (annulus) area, so density is even across the cone
+    # (levels too close to the corner to clear a grey core get nothing).
+    weights = [max(0.0, r_max[i] * r_max[i] - r_in[i] * r_in[i])
+               for i in range(n_lev)]
     counts = _allocate_by_weight(per_end, weights)
 
     highlights: list[tuple[float, float, float]] = []
@@ -464,10 +485,10 @@ def highlight_shadow_detail(per_end: int,
         if m <= 0:
             continue
         L = 100.0 - depths[i]
-        span = r_max[i] * r_max[i] - r_in * r_in
+        span = r_max[i] * r_max[i] - r_in[i] * r_in[i]
         for j in range(m):
             t = j / (m - 1) if m > 1 else 0.0
-            r = math.sqrt(r_in * r_in + span * t)    # even areal fill, r_in → r_max
+            r = math.sqrt(r_in[i] * r_in[i] + span * t)   # areal fill, r_in → r_max
             highlights.append(_ring_tints(L, r, 1, seq * _GOLDEN_DEG)[0])
             seq += 1
 
@@ -681,3 +702,73 @@ def deduplicate(
         seen.add(key)
         out.append((r, g, b))
     return out
+
+
+def white_black(count: int = 1, have_white: int = 0,
+                have_black: int = 0) -> list[tuple[float, float, float]]:
+    """``count`` pure-white + ``count`` pure-black anchors, *minus* any already
+    present (``have_white`` / ``have_black``) so the chart ends up with exactly
+    ``count`` of each.
+
+    Both matter for a good profile (the media white point and the maximum
+    black). The copies are deliberately identical — e.g. to average several
+    readings of paper white — so this set is meant to be appended *after*
+    de-duplication and left out of it. Whatever the other sets (3D cube, greys
+    ramp, saturated edges) already contribute counts toward ``count``."""
+    count = max(0, int(count))
+    whites = max(0, count - max(0, int(have_white)))
+    blacks = max(0, count - max(0, int(have_black)))
+    return [(100.0, 100.0, 100.0)] * whites + [(0.0, 0.0, 0.0)] * blacks
+
+
+def white_black_count(count: int = 1, have_white: int = 0,
+                      have_black: int = 0) -> int:
+    count = max(0, int(count))
+    return (max(0, count - max(0, int(have_white)))
+            + max(0, count - max(0, int(have_black))))
+
+
+def count_white_black(patches, quantum: float = 0.5) -> tuple[int, int]:
+    """``(pure_white, pure_black)`` — how many of each ``patches`` already holds
+    (on the same grid :func:`deduplicate` uses)."""
+    wk = _dedupe_key((100.0, 100.0, 100.0), quantum)
+    bk = _dedupe_key((0.0, 0.0, 0.0), quantum)
+    w = b = 0
+    for p in patches:
+        k = _dedupe_key((_clamp(p[0]), _clamp(p[1]), _clamp(p[2])), quantum)
+        if k == wk:
+            w += 1
+        elif k == bk:
+            b += 1
+    return w, b
+
+
+def overlap_count(existing, new, quantum: float = 0.5) -> int:
+    """How many of ``new`` land on a cell already occupied by ``existing`` (on
+    the same ``quantum``-unit grid :func:`deduplicate` uses) — i.e. how many
+    would be printed twice if appended to a chart that already holds
+    ``existing``."""
+    seen = {_dedupe_key((_clamp(p[0]), _clamp(p[1]), _clamp(p[2])), quantum)
+            for p in existing}
+    return sum(_dedupe_key((_clamp(p[0]), _clamp(p[1]), _clamp(p[2])), quantum)
+               in seen for p in new)
+
+
+def dedupe_against(existing, new, quantum: float = 0.5,
+                   step: float = 1.0) -> list[tuple[float, float, float]]:
+    """Return ``new`` with any patch that collides with ``existing`` (or with
+    another ``new`` patch) nudged to a free cell — ``existing`` is left
+    untouched. Order and count of ``new`` are preserved, so it can be appended
+    to a chart already holding ``existing`` without printing any colour twice."""
+    merged = deduplicate(list(existing) + list(new), quantum, step)
+    return merged[len(existing):]
+
+
+def only_new(existing, new, quantum: float = 0.5) -> list[tuple[float, float, float]]:
+    """Return only the ``new`` patches that aren't already in ``existing`` —
+    the repeats are dropped rather than relocated, so the result is shorter."""
+    seen = {_dedupe_key((_clamp(p[0]), _clamp(p[1]), _clamp(p[2])), quantum)
+            for p in existing}
+    return [p for p in new
+            if _dedupe_key((_clamp(p[0]), _clamp(p[1]), _clamp(p[2])), quantum)
+            not in seen]

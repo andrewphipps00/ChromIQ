@@ -267,15 +267,31 @@ def test_highlight_shadow_ends_are_mirror_images(per_end):
            sorted(round(_chroma(p), 6) for p in sh)
 
 
-def test_highlight_shadow_clears_greys_when_enabled():
-    # With Near-neutral greys on, every H&S tint must sit outside the greys'
-    # outermost ring so the two sets never print the same colour.
-    off, rings = 5.0, 1
+def test_highlight_shadow_no_clash_with_grey_discs():
+    # With greys on, no H&S patch may sit both inside the greys' ring radius AND
+    # at (near) a grey step's lightness — that's where a grey disc actually is.
+    steps, off, rings = 16, 5.0, 1
     greys_outer = rings * (math.sqrt(6) / 3.0) * off
-    patches = G.highlight_shadow_detail(24, reach=20, greys_enabled=True,
-                                        greys_offset=off, greys_rings=rings)
+    step_ls = [k / (steps - 1) * 100.0 for k in range(steps)]
+    patches = G.highlight_shadow_detail(64, reach=20, greys_enabled=True,
+                                        greys_steps=steps, greys_offset=off,
+                                        greys_rings=rings)
     assert _all_in_range(patches)
-    assert min(_chroma(p) for p in patches) > greys_outer
+    for p in patches:
+        if _chroma(p) < greys_outer:                  # inside a grey ring radius
+            L = sum(p) / 3.0                           # balanced tint => mean = level
+            assert min(abs(L - sl) for sl in step_ls) > G._GREY_CLASH_TOL
+
+
+def test_highlight_shadow_fills_gaps_between_grey_steps():
+    # Few grey steps => the cones still reach the axis in the wide gaps between
+    # them (so the chart isn't left with empty bands), unlike many tight steps.
+    common = dict(greys_enabled=True, greys_offset=5.0, greys_rings=1)
+    sparse = G.highlight_shadow_detail(64, reach=20, greys_steps=8, **common)
+    dense = G.highlight_shadow_detail(64, reach=20, greys_steps=48, **common)
+    greys_outer = (math.sqrt(6) / 3.0) * 5.0
+    near_axis = lambda ps: sum(_chroma(p) < greys_outer for p in ps)
+    assert near_axis(sparse) > near_axis(dense)       # gaps populated when sparse
 
 
 def test_highlight_shadow_reaches_neutral_when_greys_off():
@@ -396,3 +412,60 @@ def test_deduplicate_collapses_shared_corners():
     out = G.deduplicate(combined)
     assert len(out) == len(combined)
     assert len(set(_keys(out))) == len(out)
+
+
+def test_overlap_count_counts_only_collisions_with_existing():
+    existing = G.rgb_cube(3)                       # 27 distinct corners/edges/centre
+    # Half the new set reuses existing colours, half is brand new.
+    reused = existing[:5]
+    fresh = [(1.0, 2.0, 3.0), (4.0, 5.0, 6.0), (7.0, 8.0, 9.0)]
+    assert G.overlap_count(existing, reused + fresh) == 5
+    assert G.overlap_count(existing, fresh) == 0
+    assert G.overlap_count([], fresh) == 0
+
+
+def test_dedupe_against_relocates_only_the_new_and_keeps_count():
+    existing = [(50.0, 50.0, 50.0), (0.0, 0.0, 0.0)]
+    new = [(50.0, 50.0, 50.0), (0.0, 0.0, 0.0), (80.0, 10.0, 20.0)]
+    out = G.dedupe_against(existing, new)
+    assert len(out) == len(new)                    # count preserved
+    # None of the returned patches now collides with existing …
+    assert G.overlap_count(existing, out) == 0
+    # … nor with each other, and the already-unique one is untouched.
+    assert (80.0, 10.0, 20.0) in out
+    assert _all_in_range(out)
+
+
+def test_only_new_drops_existing_and_keeps_the_rest():
+    existing = [(50.0, 50.0, 50.0), (0.0, 0.0, 0.0)]
+    new = [(50.0, 50.0, 50.0), (0.0, 0.0, 0.0), (80.0, 10.0, 20.0)]
+    out = G.only_new(existing, new)
+    assert out == [(80.0, 10.0, 20.0)]            # only the genuinely-new one
+    assert G.only_new([], new) == new             # nothing to drop
+    assert G.only_new(existing, existing) == []   # all already present
+
+
+def test_white_black_is_the_two_corners():
+    wb = G.white_black()
+    assert wb == [(100.0, 100.0, 100.0), (0.0, 0.0, 0.0)]
+    assert len(wb) == 2 == G.white_black_count()
+    assert _all_in_range(wb)
+
+
+def test_white_black_amount_and_topup():
+    # N of each when nothing is there yet.
+    assert G.white_black(3) == [(100.0, 100.0, 100.0)] * 3 + [(0.0, 0.0, 0.0)] * 3
+    assert G.white_black_count(3) == 6
+    # One of each already present => only two more each, for a total of three.
+    assert G.white_black(3, have_white=1, have_black=1) == \
+        [(100.0, 100.0, 100.0)] * 2 + [(0.0, 0.0, 0.0)] * 2
+    assert G.white_black_count(3, 1, 1) == 4
+    # Already at/over the target => adds nothing.
+    assert G.white_black(2, have_white=2, have_black=5) == []
+
+
+def test_count_white_black_finds_existing_corners():
+    prog = G.rgb_cube(3) + [(100.0, 100.0, 100.0), (0.0, 0.0, 0.0)]
+    w, b = G.count_white_black(prog)
+    assert w == 2 and b == 2          # cube corner + the explicit one, each
+    assert G.count_white_black([(50.0, 50.0, 50.0)]) == (0, 0)
