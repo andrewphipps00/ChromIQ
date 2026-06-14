@@ -63,11 +63,28 @@ def test_layout_knob_change_makes_it_dirty(qapp, monkeypatch):
     assert ed._is_dirty() is True
 
 
-def test_close_button_exists_and_is_wired(qapp, monkeypatch):
+def test_close_button_just_closes(qapp, monkeypatch):
+    """The Close button only calls close(); the unsaved-changes prompt lives in
+    closeEvent so the button and the window X share a single prompt (Knut's #49
+    follow-up: confirming in both asked twice)."""
     ed = _editor(monkeypatch)
     assert ed._close_btn.text()
     calls = []
-    monkeypatch.setattr(ed, "_confirm_discard", lambda: calls.append(1) or True)
+    monkeypatch.setattr(ed, "_confirm_discard",
+                        lambda: calls.append("confirm") or True)
     monkeypatch.setattr(ed, "close", lambda: calls.append("closed"))
     ed._on_close_clicked()
-    assert calls == [1, "closed"]
+    assert calls == ["closed"]          # no direct confirm here
+
+
+def test_close_event_confirms_exactly_once(qapp, monkeypatch):
+    from PyQt6.QtGui import QCloseEvent
+    ed = _editor(monkeypatch)
+    calls = []
+    # Cancel the close — closeEvent must ask exactly once and ignore the event.
+    monkeypatch.setattr(ed, "_confirm_discard", lambda: calls.append(1) or False)
+    ev = QCloseEvent()
+    ev.accept()
+    ed.closeEvent(ev)
+    assert calls == [1]
+    assert not ev.isAccepted()          # cancelled → window stays open

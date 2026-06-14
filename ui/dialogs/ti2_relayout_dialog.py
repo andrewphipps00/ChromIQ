@@ -2805,13 +2805,20 @@ class Ti2RelayoutDialog(QDialog):
                                 QMessageBox.ButtonRole.DestructiveRole)
         keep = box.addButton(tr("Keep editing"),
                              QMessageBox.ButtonRole.RejectRole)
+        # The app's button stylesheet keeps buttons short, which clips these
+        # longer labels; give each room for its full text plus the stylesheet's
+        # padding + Fusion frame (same fix as the Append-from-file prompt).
+        for b in (discard, keep):
+            b.setMinimumWidth(b.fontMetrics().horizontalAdvance(b.text()) + 64)
         box.setDefaultButton(keep)
         box.exec()
         return box.clickedButton() is discard
 
     def _on_close_clicked(self) -> None:
-        if self._confirm_discard():
-            self.close()
+        # Just close — the confirmation lives in closeEvent so the Close button
+        # and the window-corner X share one prompt. (Confirming here *and*
+        # letting closeEvent re-confirm asked twice — Knut's #49 report.)
+        self.close()
 
     def _schedule_auto_refresh(self) -> None:
         """Restart the debounced preview timer (called from user edit hooks)."""
