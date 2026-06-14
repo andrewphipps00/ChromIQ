@@ -1,5 +1,50 @@
 # Changelog
 
+## v3.9.22
+
+More layout-editor polish and workflow fixes, again driven by careful testing
+and suggestions from **Knut (@soul-traveller)** — thank you! 🙏
+
+### ✨ New
+- **Generate colour sets straight into the editor (issue #46).** The *Edit /
+  create chart layout* tool's **Add…** button now opens a dialog where you can
+  add a single chosen colour *or* generate one or more colour sets — 3D RGB
+  cube, skin tones, blues, greens, near-neutral greys, saturated edges,
+  highlights & shadows, pastels, from an image, and fill-the-gaps — and drop
+  them at the start or end of the chart. The same generators the New-chart
+  window offers, now available on a chart you're already editing (and they work
+  even when no chart is open yet — a fresh one is created for you).
+- **Close button in the layout editor (issue #49).** There's now an explicit
+  **Close** button alongside Save As / Save & apply. If you have unsaved edits,
+  Close (and the window's X) ask you to confirm first; saving clears that, so
+  closing right after a save just closes.
+- **i1Pro 3 Plus is its own instrument (issue #41).** In the layout editor the
+  instrument list now offers *i1Pro 3 Plus* separately from the i1Pro family,
+  so its larger-aperture strip layout is generated correctly.
+
+### 💡 Improved
+- **Save & apply now carries every layout setting (issue #43).** Handing a chart
+  from the layout editor to the Create Chart tab used to transfer only the
+  instrument and paper; the patch scale, margin, spacers, double/triple
+  density, DPI, bit depth and strip options came along too now — so the manual
+  panel reflects exactly what you laid out, even while it's locked. The sync is
+  fully two-way.
+- **The New-chart window remembers everything (issue #42).** Instrument, paper,
+  the seed count and all the layout options are now kept between charts (not
+  just the colour-set choices), and **Restore defaults** resets the whole
+  window. The redundant *Name* field was removed — the name is chosen later at
+  Save & apply.
+- **Save Preset is friendlier (issue #50).** Saving a new preset pre-fills the
+  name with your current target name (with a clear *Preset name:* label and a
+  hint to change it), and defaults the *Generate immediately* and *Build from
+  the loaded patch set* options on.
+- The layout editor's **"Load from file…"** button is now compact, matching the
+  *Load image…* button.
+
+### 🐛 Fixed
+- The i1Pro 3 Plus strip-only options (`-L` / `-P`) are now offered for it in
+  the layout editor (previously gated to the plain i1Pro only).
+
 ## v3.9.21
 
 A round of fixes and quality-of-life improvements for the chart workflow, most
