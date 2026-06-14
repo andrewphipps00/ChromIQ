@@ -2484,7 +2484,9 @@ class Ti2RelayoutDialog(QDialog):
         self._spacer_box = QGroupBox(tr("Spacers"), panel)
         sb = QVBoxLayout(self._spacer_box)
         pal_lbl = QLabel(
-            tr("Native palette (printtarg picks one per gap for best contrast):"),
+            tr("Spacer palette — the colours printtarg can put in the gaps "
+            "between strips (it auto-picks the best-contrast one for each gap). "
+            "Click a swatch to change a palette colour:"),
             self._spacer_box)
         pal_lbl.setWordWrap(True)
         sb.addWidget(pal_lbl)
@@ -2497,14 +2499,18 @@ class Ti2RelayoutDialog(QDialog):
         sb.addWidget(reset)
         sb.addWidget(self._hline())
         paint_lbl = QLabel(
-            tr("Per-spacer paint: click a spacer (drag for a marquee). "
-            "Hold Alt to remove from selection. Selected = magenta outline."),
+            tr("Recolour individual spacers (overrides the palette for those "
+            "gaps): on the page preview in the centre, click a spacer to "
+            "select it, or drag a box to select several. ⌘/Shift adds to the "
+            "selection, ⌥/Alt removes. Selected spacers get a magenta outline "
+            "— then click “Paint…”."),
             self._spacer_box)
         paint_lbl.setWordWrap(True)
         sb.addWidget(paint_lbl)
         paint_row = QHBoxLayout()
         paint = QPushButton(tr("Paint…"), self._spacer_box)
-        paint.setToolTip(tr("Paint the spacers selected in the preview"))
+        paint.setToolTip(tr("Recolour the spacers you selected on the page "
+                            "preview in the centre."))
         paint.clicked.connect(self._paint_spacers)
         clear = QPushButton(tr("Clear"), self._spacer_box)
         clear.setToolTip(tr("Clear the spacer selection"))
@@ -3486,7 +3492,8 @@ class Ti2RelayoutDialog(QDialog):
             self._status.setText(
                 tr("{n} spacers on this page{extra}.").format(
                     n=len(self._spacers), extra=extra)
-                + " " + tr("Spacers mode → click to select, then Paint."))
+                + " " + tr("Spacers mode → click a spacer on the page preview "
+                           "to select it, then “Paint…”."))
 
     def _show_page(self, page: int) -> None:
         """Switch the preview to ``page``: detect its spacers (cached), redraw."""
