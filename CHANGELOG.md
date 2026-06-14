@@ -1,5 +1,36 @@
 # Changelog
 
+## v3.9.23
+
+A small follow-up release, again shaped by **Knut (@soul-traveller)**'s testing
+and analysis — thank you! 🙏
+
+### 💡 Improved
+- **Open the layout editor on the chart you're working on (issue #45).** Opening
+  *Edit / create chart layout* now pre-loads the Create Chart tab's current
+  chart — patches *and* every printtarg setting (instrument, paper, scales,
+  margin, spacers, density, DPI, bit depth, strip options) — so it's ready to
+  edit straight away. It loads a copy, so your working folder is untouched
+  unless you Save & apply; **New chart** / **Load .ti2** still let you start
+  from something else. (The natural counterpart to v3.9.22's Save & apply, so
+  charts now travel both ways.)
+- **Clearer spacer-editing wording in the layout editor (issue #47).** The
+  Spacers-mode text now says *where* to act — click a spacer **on the page
+  preview in the centre** (drag a box for several; ⌘/Shift to add, ⌥/Alt to
+  remove) — and the palette is relabelled to explain it's the candidate colours
+  printtarg auto-assigns per gap, as distinct from the per-spacer paint
+  override. No behaviour change, just copy.
+
+### 🐛 Fixed
+- **"Highlights & shadows" ends are now symmetric (issue #37).** The shadow end
+  of the *Highlights & shadows* colour set is now the exact mirror of the
+  highlight end, so the two come out congruent instead of lopsided (the old
+  asymmetry was an HSV-lightness artefact, not real gamut geometry). The set
+  also interlocks with **Near-neutral greys**: with greys on it sits just
+  outside their rings so no colour is printed twice, and with greys off it
+  reaches in to cover the near-neutral light/dark tones itself. Applies in both
+  the New-chart window and the new Add-patches popup.
+
 ## v3.9.22
 
 More layout-editor polish and workflow fixes, again driven by careful testing
