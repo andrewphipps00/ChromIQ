@@ -201,7 +201,9 @@ def test_write_ti1_has_three_tables(tmp_path):
     assert text.count("BEGIN_DATA\n") == 3
     assert 'DENSITY_EXTREME_VALUES "8"' in text
     assert 'DEVICE_COMBINATION_VALUES "9"' in text
-    assert 'COLOR_REP "RGB"' in text
+    # "iRGB" (printer RGB) matches what `targen -d2` writes, so charts from this
+    # emitter and native targen charts carry the same COLOR_REP (see write_ti1).
+    assert 'COLOR_REP "iRGB"' in text
 
 
 def test_write_ti1_counts_white_and_black(tmp_path):

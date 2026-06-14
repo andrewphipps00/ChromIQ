@@ -326,7 +326,14 @@ def write_ti1(
     main = _table(
         header_keywords=[
             f'APPROX_WHITE_POINT "{wx:.6f} {wy:.6f} {wz:.6f}"',
-            'COLOR_REP "RGB"',
+            # "iRGB" (inverted/printer RGB) is what `targen -d2` writes — ChromIQ
+            # only ever profiles printers, so match it. "RGB" parses as ICX_RGB
+            # (additive *video* RGB): printtarg/colprof treat it equivalently for
+            # layout and profiling, but it propagates into the .ti3 as "RGB_XYZ"
+            # vs the native "iRGB_XYZ", which makes a refinement merge of the two
+            # fail the COLOR_REP-match check (workflow/ti3_merge.py). Keeping the
+            # label canonical avoids that mismatch.
+            'COLOR_REP "iRGB"',
             f'WHITE_COLOR_PATCHES "{n_white}"',
             f'BLACK_COLOR_PATCHES "{n_black}"',
         ],
