@@ -1,5 +1,59 @@
 # Changelog
 
+## v3.9.21
+
+A round of fixes and quality-of-life improvements for the chart workflow, most
+of them sparked by detailed bug reports and suggestions from **Knut
+(@soul-traveller)** — thank you! 🙏
+
+### ✨ New
+- **"Save & apply" in the layout editor.** The *Edit / create chart layout* tool
+  now has a one-click **Save & apply** button that saves the chart you've
+  designed *and* sets it up as a ready-to-use profiling project: it copies the
+  files into a new working folder under a name you choose and opens it in the
+  Create Chart tab, ready to print and measure. A friendly dialog walks you
+  through exactly what will happen, and if the name you pick already exists
+  you're asked whether to add it as a new run, replace the current chart, or
+  cancel — so earlier measurements are never overwritten by accident.
+- **A loaded chart now shows up everywhere.** Open a `.ti2` in the Print or
+  Measure tab and the Create Chart tab mirrors it too, so every tab agrees on
+  what you're working with. It's shown read-only — the patch recipe and layout
+  are locked, with unlock boxes if you want to build your own from it — and a
+  one-time note reminds you that any chart you'd built before is still safe in
+  its own folder. Nothing is copied or overwritten.
+- **A hint under the swatch grid** in the layout editor now spells out that you
+  can drag swatches to reorder them, and Shift- or ⌘/Ctrl-click to move several
+  at once.
+
+### 🐛 Fixed
+- **"Highlights & shadows" depth now affects the white side too (issue #37).**
+  Turning up the *depth* control visibly filled in the dark (shadow) end of the
+  cube but seemed to do nothing on the bright (highlight) end. It was actually
+  moving both — but the highlights slid toward grey instead of fanning out into
+  pale colour, so the change was invisible. They now spread into pale tints as
+  you increase depth, mirroring the shadow side.
+- **Loading a patch set no longer errors on "Generate Chart" (issue #40).**
+  After loading a `.ti1` or i1Profiler patch set, the patch-generation panel
+  stayed active and the loaded file was forgotten, so clicking Generate Chart
+  failed with *"Nothing for targen to generate"* (and changing the patch count
+  quietly overwrote your file). Loading a patch set now locks the recipe and
+  lays it out as-is, exactly like a bundled preset — with an unlock box if you
+  *do* want a fresh set.
+- **Charts now carry the correct colour-space tag (issue #40).** Charts made by
+  the layout editor or imported from i1Profiler were tagged as *video* RGB
+  rather than *printer* RGB. It didn't affect the printed chart or the finished
+  profile, but it could make a refinement *merge* of such a chart with a
+  normally-built one fail. They now use the exact tag ArgyllCMS itself writes.
+
+### 🔧 Changed
+- The layout editor's **Save As** now also writes the patch colour list (what
+  the old *Export* button produced), so the new **Save & apply** button could
+  take its place — one button now saves everything.
+- Small visual polish in the layout / new-chart dialogs: the lead action button
+  and combo-box highlights use the app's magenta accent, and the
+  Instrument / Paper row is tidier (including when *Custom* paper size is
+  selected).
+
 ## v3.9.20
 
 A big expansion of the New-chart **Generate colour sets** panel: five new
