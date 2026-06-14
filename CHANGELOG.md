@@ -1,5 +1,45 @@
 # Changelog
 
+## v3.9.24
+
+Another round driven by **Knut (@soul-traveller)**'s testing — thank you! 🙏
+
+### 💡 Improved
+- **The layout editor preview is much faster (issue #44).** It used to render
+  the chart twice (once for a hidden helper image) at full print resolution and
+  re-scan every page after each change, which made generating and page-flipping
+  sluggish. The on-screen preview now renders at a low resolution (the chart you
+  *save* still uses your full DPI), skips the helper render unless you're
+  actually editing spacers, and analyses only the page you're looking at. On a
+  400-patch A4 chart the render step dropped from ~0.55 s to ~0.08 s (~7×), and
+  page navigation is snappy.
+- **Save Preset suggests the right name (issue #50, follow-up).** The suggested
+  preset name now comes from the target name in the output frame rather than a
+  preset that merely happened to still be selected, so it matches the chart you
+  actually built.
+- **Platform-correct key hints (issue #45, follow-up).** The spacer/patch
+  selection hints in the editor now show **Ctrl / Alt** on Windows and Linux
+  (and ⌘ / ⌥ on macOS) instead of always showing the Mac symbols.
+
+### 🐛 Fixed
+- **"Highlights & shadows" now fills the corners and the neutral tones (issue
+  #37).** Following Knut's on-device testing, the highlight/shadow cones are
+  filled rather than hollow shells, run all the way into the paper-white and
+  pure-black corners, and — with *Near-neutral greys* off — cover the
+  near-neutral light/dark tones that were previously missed. With greys on, the
+  overlapping core is dropped and those patches are re-spent in the chromatic
+  rim, so none are wasted. The two ends stay mirror-symmetric.
+- **Highlight outline aligned on double-density charts (issue #48).** With the
+  ColorMunki *double density* zig-zag layout (every other strip shifted half a
+  patch), the "Highlight selected in preview" outlines were off by half a patch
+  on the shifted strips. Each strip's patch positions are now detected
+  individually, so the outlines line up. (This also restored the highlight and
+  click-to-select-a-patch features, which had briefly stopped drawing after the
+  preview-speed change above.)
+- **Close dialog no longer asks twice (issue #49, follow-up).** Discarding
+  unsaved changes from the editor's Close button prompted a second time; it now
+  asks exactly once, and the dialog's buttons no longer clip their labels.
+
 ## v3.9.23
 
 A small follow-up release, again shaped by **Knut (@soul-traveller)**'s testing
