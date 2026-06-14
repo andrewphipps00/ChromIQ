@@ -51,6 +51,12 @@ def instrument_to_flag(target_instrument: str | None) -> str:
     if "spectroscan" in name:
         return "SS"
     if "i1 pro" in name or "i1pro" in name:
+        # i1Pro 3 Plus has its own (larger-aperture) strip layout. printtarg
+        # itself stamps both the i1Pro family and the 3 Plus as "i1Pro3", so a
+        # plain printtarg-made chart can't be told apart here — but honour an
+        # explicit "Plus" / "3+" marker when one is present (forward-compat).
+        if "plus" in name or "3+" in name:
+            return "3p"
         return "i1"
     return "i1"  # safe default: i1Pro strip layout reads the widest range
 

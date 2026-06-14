@@ -90,8 +90,20 @@ def _patches_label(n: int) -> str:
 
 _SWATCH = 46  # grid swatch px
 
-# printtarg -i codes the editor offers, with friendly labels.
-_INSTRUMENTS = [("i1", "i1Pro / i1Pro2 / i1Pro3(+)"), ("CM", "ColorMunki / i1Studio")]
+# printtarg -i codes the editor offers, with friendly labels. The codes are
+# passed straight through to printtarg (see workflow.ti2_relayout.regenerate),
+# so they must be printtarg's own -i values: "i1" (i1Pro family), "3p"
+# (i1Pro 3 Plus — larger aperture, far fewer patches per sheet, so its strip
+# layout differs), "CM" (ColorMunki / i1Studio).
+_INSTRUMENTS = [
+    ("i1", "i1Pro / i1Pro2 / i1Pro3"),
+    ("3p", "i1Pro3 Plus"),
+    ("CM", "ColorMunki / i1Studio"),
+]
+
+# Strip readers (i1Pro family + 3 Plus) — the instruments for which printtarg's
+# -L (suppress left clip) and -P (no per-strip patch limit) apply.
+_STRIP_INSTRUMENTS = frozenset({"i1", "3p"})
 
 # Paper sizes the new-chart dropdown offers — matches the Create Chart tab.
 from data.patch_db import PAPER_LABELS, PAPER_PRINTTARG_ARG
@@ -1394,20 +1406,21 @@ class _NewChartDialog(QDialog):
     def _refresh_instr_widgets(self) -> None:
         """Show/hide instrument-conditional options.
 
-        i1Pro: ``-L`` (suppress left clip) + ``-P`` (no strip limit) — both
-        layout flags Argyll documents as i1-only.
+        Strip readers (i1Pro family + i1Pro 3 Plus): ``-L`` (suppress left
+        clip) + ``-P`` (no strip limit) — both layout flags Argyll documents
+        as strip-reader-only.
         ColorMunki: ``-h`` (double density) + Triple density — the rig-only
         layout tweaks. Hidden controls also reset to off so a hidden value
         can't leak through into the printtarg command on Create.
         """
         code = self._instr.currentData()
-        is_i1 = code == "i1"
+        is_strip = code in _STRIP_INSTRUMENTS
         is_cm = code == "CM"
-        self._cb_L.setVisible(is_i1)
-        self._cb_P.setVisible(is_i1)
+        self._cb_L.setVisible(is_strip)
+        self._cb_P.setVisible(is_strip)
         self._cb_h.setVisible(is_cm)
         self._cb_td.setVisible(is_cm)
-        if not is_i1:
+        if not is_strip:
             self._cb_L.setChecked(False)
             self._cb_P.setChecked(False)
         if not is_cm:
@@ -2969,10 +2982,10 @@ class Ti2RelayoutDialog(QDialog):
         """Show/hide -L / -P / -h / triple-density rows based on the
         currently-selected instrument — same rule as the New chart dialog."""
         code = self._pt_instr.currentData()
-        is_i1 = code == "i1"
+        is_strip = code in _STRIP_INSTRUMENTS
         is_cm = code == "CM"
-        self._pt_L.setVisible(is_i1)
-        self._pt_P.setVisible(is_i1)
+        self._pt_L.setVisible(is_strip)
+        self._pt_P.setVisible(is_strip)
         self._pt_dd.setVisible(is_cm)
         self._pt_td.setVisible(is_cm)
         # Hidden controls reset to off so they can't leak into the
@@ -2980,7 +2993,7 @@ class Ti2RelayoutDialog(QDialog):
         # toggled signals here so the per-widget callbacks don't each
         # kick off a re-render — _on_pt_instr_changed schedules one at
         # the end.
-        for w, on in ((self._pt_L, is_i1), (self._pt_P, is_i1),
+        for w, on in ((self._pt_L, is_strip), (self._pt_P, is_strip),
                        (self._pt_dd, is_cm), (self._pt_td, is_cm)):
             if not on and w.isChecked():
                 w.blockSignals(True)
