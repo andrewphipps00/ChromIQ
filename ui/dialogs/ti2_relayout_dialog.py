@@ -13,6 +13,7 @@ and an optional per-spacer paint applied to the rendered TIFF.
 """
 from __future__ import annotations
 
+import sys
 import tempfile
 from dataclasses import astuple
 from pathlib import Path
@@ -96,6 +97,8 @@ _SWATCH = 46  # grid swatch px
 # read / diff / segmentation. The saved chart still uses the user's full DPI.
 _PREVIEW_DPI = 100
 
+_IS_MAC = sys.platform == "darwin"
+
 # printtarg -i codes the editor offers, with friendly labels. The codes are
 # passed straight through to printtarg (see workflow.ti2_relayout.regenerate),
 # so they must be printtarg's own -i values: "i1" (i1Pro family), "3p"
@@ -114,6 +117,17 @@ _STRIP_INSTRUMENTS = frozenset({"i1", "3p"})
 # Paper sizes the new-chart dropdown offers — matches the Create Chart tab.
 from data.patch_db import PAPER_LABELS, PAPER_PRINTTARG_ARG
 from core.i18n import tr
+
+
+def _mod_keys() -> dict[str, str]:
+    """Platform- and language-aware modifier-key names for the editor's
+    selection hints (#45): macOS shows ⌘/⌥, every other platform the localized
+    Ctrl / Alt. Built at call time so the language (restart-applied) is set."""
+    shift = tr("Shift")
+    if _IS_MAC:
+        return {"ext": "⌘", "add": f"⌘/{shift}", "remove": "⌥"}
+    ctrl = tr("Ctrl")
+    return {"ext": ctrl, "add": f"{ctrl}/{shift}", "remove": tr("Alt")}
 _PAPER_ORDER = ("A2", "594x420", "329x483", "483x329", "A3", "420x297",
                 "11x17", "Legal", "A4", "A4R", "Letter", "LetterR",
                 "203x254", "127x178", "4x6", "custom")
@@ -2039,8 +2053,9 @@ class Ti2RelayoutDialog(QDialog):
         # above the grid (Knut's suggestion) where it's always visible — the full
         # story stays in the ⓘ. (Below the grid it gets squeezed by the list.)
         grid_hint = QLabel(
-            tr("Tip: drag a swatch to move it. Shift- or ⌘/Ctrl-click to pick "
-               "several, then drag — or use the First / Up / Down / Last buttons."),
+            tr("Tip: drag a swatch to move it. Shift- or {ext}-click to pick "
+               "several, then drag — or use the First / Up / Down / Last buttons."
+               ).format(ext=_mod_keys()["ext"]),
             left)
         grid_hint.setWordWrap(True)
         # palette(mid) was nearly invisible on the dark grid background; use an
@@ -2538,9 +2553,10 @@ class Ti2RelayoutDialog(QDialog):
         paint_lbl = QLabel(
             tr("Recolour individual spacers (overrides the palette for those "
             "gaps): on the page preview in the centre, click a spacer to "
-            "select it, or drag a box to select several. ⌘/Shift adds to the "
-            "selection, ⌥/Alt removes. Selected spacers get a magenta outline "
-            "— then click “Paint…”."),
+            "select it, or drag a box to select several. {add} adds to the "
+            "selection, {remove} removes. Selected spacers get a magenta outline "
+            "— then click “Paint…”.").format(**{k: _mod_keys()[k]
+                                                 for k in ("add", "remove")}),
             self._spacer_box)
         paint_lbl.setWordWrap(True)
         sb.addWidget(paint_lbl)
