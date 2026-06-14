@@ -146,6 +146,35 @@ def test_regenerate_with_twin_false_skips_the_second_run(tmp_path: Path):
     assert any(res2.bw_tiffs)
 
 
+def test_per_strip_grids_zigzag_uses_own_offsets():
+    """#48: double-density zig-zag — alternate strips offset by half a patch.
+    Each clean strip keeps its own offset; unresolved strips use same parity."""
+    steps = 4
+    even = [10.0, 30.0, 50.0, 70.0]
+    odd = [20.0, 40.0, 60.0, 80.0]          # shifted +10 (half pitch)
+    clean = [even, odd, even, None]          # strip 3 unresolved (odd parity)
+    lookup = R._per_strip_step_grids(clean, steps)
+    assert lookup(0) == even
+    assert lookup(1) == odd
+    assert lookup(2) == even
+    assert lookup(3) == odd                  # parity-matched fallback (odd)
+
+
+def test_per_strip_grids_normal_chart_is_one_grid():
+    """A non-zig-zag chart: all strips share a grid; an unresolved strip with no
+    same-parity clean sibling falls back to the global median."""
+    steps = 3
+    g = [10.0, 20.0, 30.0]
+    lookup = R._per_strip_step_grids([g, None, g], steps)   # only even clean
+    assert lookup(0) == g
+    assert lookup(1) == g                    # odd has none → global median (g)
+    assert lookup(2) == g
+
+
+def test_per_strip_grids_none_when_nothing_clean():
+    assert R._per_strip_step_grids([None, None, None], 4) is None
+
+
 @argyll
 def test_regenerate_dpi_override_shrinks_the_preview(tmp_path: Path):
     """A dpi_override renders a smaller TIFF without changing the .ti2 (#44)."""

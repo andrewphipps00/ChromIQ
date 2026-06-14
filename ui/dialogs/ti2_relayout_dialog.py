@@ -3520,14 +3520,20 @@ class Ti2RelayoutDialog(QDialog):
         self._worker.start()
 
     def _needs_twin(self) -> bool:
-        """Whether to render the B&W spacer twin (a second printtarg run, #44).
+        """Whether to render the B&W twin (a second printtarg run, #44).
 
-        It's needed when spacers exist and either we're in Spacers mode (for the
-        per-spacer selection masks) or some spacers have been painted (so those
-        colours still show in the preview). The common Patches-mode preview on
-        an unpainted chart skips it — the big speed win."""
+        Needed when something requires the pixel masks it provides:
+          • "Highlight selected in preview" is on — patch geometry (the outline
+            overlay + click-a-patch-to-select) is derived from the twin diff and
+            is empty without it (would otherwise silently do nothing — #48 note);
+          • Spacers mode — the per-spacer selection masks;
+          • painted spacers — so those colours still show in the preview.
+        The common Patches-mode browse (highlight off, unpainted) skips it — the
+        big speed win."""
+        if self._hl_patches.isChecked():
+            return True
         if self._options is None or self._options.spacer_mode == "none":
-            return False
+            return bool(self._paint)
         return self._mode_spacers.isChecked() or bool(self._paint)
 
     def _on_regen_done(self, result) -> None:
@@ -3758,8 +3764,12 @@ class Ti2RelayoutDialog(QDialog):
         self._preview.set_base_pixmap(pm)
 
     def _on_patch_highlight_toggled(self, on: bool) -> None:
-        # Toggling either direction needs a redraw to show / clear the
-        # overlay. No status change — the checkbox label is the affordance.
+        # Turning highlight on needs the B&W twin for patch geometry, which the
+        # fast Patches-mode preview skips (#44); render it now if it's missing.
+        # Otherwise just redraw to show / clear the overlay.
+        if (on and self._regen is not None and not any(self._regen.bw_tiffs)):
+            self._regenerate(save_to=None)
+            return
         self._refresh_preview()
 
     def _on_grid_selection_changed(self) -> None:

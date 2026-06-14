@@ -93,7 +93,13 @@ def test_needs_twin_gating(qapp, monkeypatch):
 
     ed._options = R.LayoutOptions(spacer_mode="colored")
     ed._mode_patches.setChecked(True)
+    ed._hl_patches.setChecked(False)
     assert ed._needs_twin() is False              # patches, unpainted → skip
+
+    # Highlight on needs patch geometry (= the twin), even in Patches mode (#44).
+    ed._hl_patches.setChecked(True)
+    assert ed._needs_twin() is True
+    ed._hl_patches.setChecked(False)
 
     ed._mode_spacers.setChecked(True)
     assert ed._needs_twin() is True               # spacers mode → twin

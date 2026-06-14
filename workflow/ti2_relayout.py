@@ -1343,6 +1343,50 @@ def _imread_rgb(path: Path) -> np.ndarray:
 # ---------------------------------------------------------------------------
 # Per-patch pixel geometry (for the preview's click + highlight overlay)
 # ---------------------------------------------------------------------------
+def _per_strip_step_grids(clean_centres, steps):
+    """Build a ``within_strip -> [step-centre y, …]`` lookup from the per-strip
+    detected patch-run centres.
+
+    ``clean_centres[s]`` is strip *s*'s list of ``steps`` patch y-centres, or
+    ``None`` when that strip's runs couldn't be resolved (patches matched their
+    spacer colour, so they merge in the twin diff).
+
+    A clean strip uses its own centres, which already carry any vertical offset
+    — so ColorMunki double-density (``-h``) charts, where printtarg shifts
+    alternate strips by half a patch (a zig-zag), are placed correctly (#48).
+    An unresolved strip falls back to a grid pooled from the same-parity clean
+    strips (the zig-zag is parity-regular), then to a global grid. Normal charts
+    have every strip on one grid, so all parity grids coincide.
+
+    Returns ``None`` when no strip resolved cleanly (caller uses a coarser
+    image-anchored uniform divide instead).
+    """
+    import statistics
+
+    def _median_grid(rows):
+        return ([statistics.median(row[k] for row in rows) for k in range(steps)]
+                if rows else None)
+
+    by_parity = {0: [], 1: []}
+    for s, c in enumerate(clean_centres):
+        if c is not None:
+            by_parity[s % 2].append(c)
+    grid_all = _median_grid(by_parity[0] + by_parity[1])
+    if grid_all is None:
+        return None
+    grid_by_parity = {0: _median_grid(by_parity[0]) or grid_all,
+                      1: _median_grid(by_parity[1]) or grid_all}
+
+    def lookup(within_strip: int) -> list[float]:
+        c = (clean_centres[within_strip]
+             if 0 <= within_strip < len(clean_centres) else None)
+        if c is not None:
+            return c
+        return grid_by_parity[within_strip % 2]
+
+    return lookup
+
+
 def patch_geometry_for_page(
     ti2_path: Path, tif_path: Path, page: int,
     *, bw_tif_path: Path | None = None,
@@ -1492,21 +1536,30 @@ def patch_geometry_for_page(
     if loc_i is None:
         return {}
 
-    # Build a SHARED step→y grid from the strips that detected a clean full
-    # set of `steps` patch runs. printtarg lays every strip on the same
-    # vertical grid, so pooling the clean strips gives a per-step y-centre
-    # that's robust to strips whose patches happened to match their spacer
-    # colour — those strips' runs merge in the diff and can't be trusted on
-    # their own (this is the failure the per-strip lookup hit at larger patch
-    # scales, producing duplicated / non-monotonic highlight boxes). Falls
-    # back to a uniform divide of the patch block when no strip came out clean.
+    # Build a step→y grid from the strips that detected a clean full set of
+    # `steps` patch runs. A *single* shared grid would be wrong for ColorMunki
+    # double density (-h), where printtarg offsets alternate strips by half a
+    # patch (a zig-zag) — averaging the offset and non-offset strips lands every
+    # box half a patch off on the shifted ones (issue #48). So:
+    #   * a clean strip uses its OWN run centres (they already carry its offset);
+    #   * a strip whose runs merged (patch == spacer colour, no clean set) falls
+    #     back to a grid pooled from the *same-parity* clean strips, then to a
+    #     global grid — preserving the robustness the pooled grid was added for.
+    # Normal charts have all strips on one grid, so every parity grid coincides.
     import statistics
-    clean = [r for r in strip_ranges if r is not None and len(r) == steps]
-    if clean:
-        step_cy = [statistics.median((r[k][0] + r[k][1]) / 2 for r in clean)
-                   for k in range(steps)]
+
+    clean_centres: list[list[float] | None] = [
+        [(r0 + r1) / 2 for r0, r1 in r]
+        if (r is not None and len(r) == steps) else None
+        for r in strip_ranges
+    ]
+    _grid_for_strip = _per_strip_step_grids(clean_centres, steps)
+
+    if _grid_for_strip is not None:
+        all_clean = [r for r in strip_ranges if r is not None and len(r) == steps]
         box_half = statistics.median(
-            r[k][1] - r[k][0] + 1 for r in clean for k in range(steps)) / 2
+            r[k][1] - r[k][0] + 1 for r in all_clean for k in range(steps)) / 2
+        step_cy = _grid_for_strip(0)   # representative grid (mid-y scan + range check)
     else:
         # No strip yielded a clean run set — the B&W twin is unusable (e.g. it
         # paginated differently from the deliverable, so its page doesn't line
@@ -1530,6 +1583,9 @@ def patch_geometry_for_page(
         row_h = (block_bot - block_top + 1) / steps
         step_cy = [block_top + (k + 0.5) * row_h for k in range(steps)]
         box_half = row_h * 0.45
+
+        def _grid_for_strip(within_strip: int) -> list[float]:
+            return step_cy
 
     # Half-width of the highlight box, measured from the rendered image rather
     # than guessed. printtarg tiles strips uniformly and (for the common
@@ -1582,10 +1638,13 @@ def patch_geometry_for_page(
             continue
         within_strip = strip_idx - strips_before
         cx = x0 + (within_strip + 0.5) * strip_w
-        if 0 <= step_idx < len(step_cy):
-            cy = step_cy[step_idx]
+        # Per-strip y-grid so the -h zig-zag (alternate strips offset half a
+        # patch) lands on the right row; falls back to the shared grid (#48).
+        strip_cy = _grid_for_strip(within_strip)
+        if 0 <= step_idx < len(strip_cy):
+            cy = strip_cy[step_idx]
         else:
-            cy = y_top + (step_idx + 0.5) * fallback_row_h
+            continue   # step out of the resolved grid — skip rather than guess
         geom[sid] = (int(cx - half_w), int(cy - box_half),
                      int(cx + half_w), int(cy + box_half))
     return geom
