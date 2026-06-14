@@ -765,6 +765,7 @@ class _NewChartDialog(QDialog):
         paste_indent.addWidget(self._paste_edit)
         paste_btns = QHBoxLayout()
         load_btn = QPushButton(tr("Load from file…"), src_box)
+        load_btn.setObjectName("compact_input")  # match the compact "Load image…" button
         load_btn.clicked.connect(self._load_paste_file)
         self._paste_status = QLabel("", src_box)
         self._paste_status.setStyleSheet("color: #888;")
