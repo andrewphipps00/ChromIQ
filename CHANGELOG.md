@@ -1,5 +1,42 @@
 # Changelog
 
+## v3.9.26
+
+A Dutch-language polish pass, with big thanks to **Pharmacist** for the careful
+review. 🙏
+
+### 🌍 Translations
+- **Dutch terminology made consistent.** Pharmacist noticed the Dutch UI used
+  several different words for the same thing — a *patch* was variously a `vak`,
+  `meetvak` or `vlak`, and *spacers* showed up as both `tussenvak` and
+  `scheidingsvak`. Every other language had already settled on one term each, so
+  Dutch was the odd one out. It now uses a single word throughout, in labels
+  *and* in the tooltip text behind them:
+  - **patch → `meetveld`** (a "measurement field"). Chosen over `meetpunt`
+    because you scale a field's *size* — a dimensionless "point" reads oddly
+    there — and it lines up with how German (`Messfeld`), Norwegian and Swedish
+    already name it.
+  - **spacer → `scheidingslijn`** (a "separator line"), matching the Spanish,
+    Portuguese and Polish translations.
+  - **shuffle / randomise → `randomiseren`**. The old `husselen` is an archaic
+    word for shuffling *physical* objects like playing cards, not abstract
+    colour patches — so it's gone, along with the now-redundant
+    "gehusselde (gerandomiseerde)" explanations.
+- **More natural phrasing.** A few clunky hyphenated labels were rewritten the
+  way Dutch actually reads (*Neutrale-as-nadruk* → *Nadruk neutrale as*,
+  *Schaduwgebied-nadruk* → *Nadruk schaduwgebied*), and the cryptic
+  *Kleurmiddel +/−* is now spelled out as *Kleurmiddel toevoegen/verwijderen*.
+- **Meanings left intact on purpose.** Where a "nicer-sounding" word would have
+  quietly changed the meaning, we kept the accurate one: *Apparaattype* stays
+  **device type** (not colour space), *Doelnaam* stays **target name** (not
+  profile name), and *Neutrale-as-stappen* stays **steps**.
+
+### 🐛 Fixed
+- **German: the reorder hint now matches its buttons.** In the chart-layout
+  editor the tip text mentioned *Erstes / Letztes* while the actual buttons
+  read *Anfang / Ende*. The hint now says *Anfang … Ende* to match — and to stay
+  consistent with the existing *Am Anfang / Am Ende* wording elsewhere.
+
 ## v3.9.25
 
 More from **Knut (@soul-traveller)**'s testing on #37 — thank you! 🙏
