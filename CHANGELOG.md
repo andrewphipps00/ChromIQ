@@ -1,5 +1,32 @@
 # Changelog
 
+## v3.9.27
+
+A fix-up release on the back of **Knut (@soul-traveller)**'s and **Pharmacist**'s
+testing of the previous build — thank you both! 🙏
+
+### 🐛 Fixed
+- **Editor *Fill remaining gaps* now tops up the chart instead of overfilling
+  (issue #51).** In the editor's *Add…* dialog, "Fill remaining gaps: N" now
+  brings the *whole* chart up to N — the patches already present count toward the
+  target and the fill works around them — rather than appending N more. Building
+  a brand-new chart is unchanged.
+- **Long names no longer clip the rename chooser's buttons (issue #52).** The
+  target-rename dialog's option buttons embed the (variable-length) target name,
+  so long names — or longer translations — could clip the text at both ends. Each
+  button now reserves at least its text width plus padding and the dialog grows
+  to fit, in every language.
+- **Dutch labels that overflowed their row are shortened.** Pharmacist spotted
+  *Kleurmiddel toevoegen/verwijderen* being cut off in the Create Chart manual
+  options — it's a fixed-width control. It's now *Kleurmiddel wijzigen* (matching
+  the German *Farbmittel ändern*), and the patch-consistency setting is now the
+  shorter *Consistentietolerantie*. Also fixed a stray *Meetmeetveld* typo left
+  by the v3.9.26 terminology sweep.
+- **"Pure white & black" settings now persist and reset.** Filling a gap from
+  v3.9.25: the generator's checkbox and amount are wired into the save/restore
+  and factory-reset paths, so they're remembered between sessions and cleared by
+  *Reset to defaults*.
+
 ## v3.9.26
 
 A Dutch-language polish pass, with big thanks to **Pharmacist** for the careful
