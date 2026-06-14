@@ -3120,6 +3120,22 @@ class TabChart(QWidget):
         if self._manual_td_check is not None:
             self._manual_td_check.setChecked(bool(data.get("triple_density", False)))
 
+    def _preset_save_prefill(self) -> tuple[str, bool, bool, bool]:
+        """Initial (name, auto_run, attach, suggested_from_target) for the Save
+        Preset dialog. Re-saving an existing user preset reuses its name + the
+        options stored with it (so tweaking is one step); a brand-new preset
+        suggests the current target name and defaults the two "do it now"
+        options on — the common case (#50)."""
+        cur_key = self._preset_combo.currentData()
+        if cur_key is not None and cur_key not in BUILTIN_PRESET_KEYS:
+            existing = self._load_presets_from_settings().get(cur_key, {})
+            is_d = isinstance(existing, dict)
+            return (str(cur_key), bool(is_d and existing.get("auto_run")),
+                    bool(is_d and existing.get("attached_ti1")), False)
+        target = (self._manual_target_name_edit.text().strip()
+                  if self._manual_target_name_edit is not None else "")
+        return (target, True, True, bool(target))
+
     def _on_preset_save(self) -> None:
         capture: dict = {}
         # When Triple density is active the four widgets it owns currently
@@ -3175,15 +3191,8 @@ class TabChart(QWidget):
         capture["triple_density"] = bool(
             self._manual_td_check is not None and self._manual_td_check.isChecked()
         )
-        # Pre-fill name + checkbox from the currently-selected user preset, so
-        # re-saving to tweak it (e.g. just toggling auto-run) is one step.
-        cur_key = self._preset_combo.currentData()
-        prefill_name, prefill_run, prefill_attach = "", False, False
-        if cur_key is not None and cur_key not in BUILTIN_PRESET_KEYS:
-            prefill_name = str(cur_key)
-            existing = self._load_presets_from_settings().get(cur_key, {})
-            prefill_run = bool(isinstance(existing, dict) and existing.get("auto_run"))
-            prefill_attach = bool(isinstance(existing, dict) and existing.get("attached_ti1"))
+        (prefill_name, prefill_run, prefill_attach,
+         prefilled_from_target) = self._preset_save_prefill()
         # A patch set can only be attached if one is currently loaded.
         have_ti1 = (self._current_ti1_path is not None
                     and self._current_ti1_path.is_file())
@@ -3208,11 +3217,23 @@ class TabChart(QWidget):
         lay.addWidget(info)
 
         lay.addSpacing(6)
+        # An explicit label above the field — the placeholder is hidden once the
+        # field is pre-filled, so a visible "Preset name:" keeps it clear (#50).
+        name_lbl = QLabel(tr("Preset name:"), dlg)
+        lay.addWidget(name_lbl)
         edit = QLineEdit(prefill_name, dlg)
         edit.setMinimumHeight(28)
         edit.setPlaceholderText(tr("Preset name"))
         edit.selectAll()
         lay.addWidget(edit)
+        if prefilled_from_target:
+            name_hint = QLabel(
+                tr("Suggested from your current target name — change it to "
+                "something you'll recognise in the preset list."),
+                dlg)
+            name_hint.setWordWrap(True)
+            name_hint.setObjectName("info")
+            lay.addWidget(name_hint)
 
         run_chk = QCheckBox(
             tr("Generate the chart immediately when this preset is selected"), dlg)
