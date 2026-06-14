@@ -370,71 +370,106 @@ def gamut_faces_count(per_face: int) -> int:
 # ---------------------------------------------------------------------------
 # 7. Highlight & shadow detail — the two tonal ends, across the hue wheel.
 # ---------------------------------------------------------------------------
+# Golden angle — successive points spiral to fill a disk evenly (phyllotaxis),
+# so a cone's patches spread without radial spokes or gaps.
+_GOLDEN_DEG = 180.0 * (3.0 - math.sqrt(5.0))         # ≈ 137.508°
+
+
+def _allocate_by_weight(total: int, weights: list[float]) -> list[int]:
+    """Split ``total`` items across bins in proportion to ``weights`` (a weight
+    of 0 skips the bin). Every eligible bin gets at least one; the remainder is
+    handed out by largest fractional remainder, so the totals always add up."""
+    elig = [i for i, w in enumerate(weights) if w > 0.0]
+    alloc = [0] * len(weights)
+    if not elig:
+        return alloc
+    if total <= len(elig):                           # not enough to seed each one
+        for i in sorted(elig, key=lambda i: -weights[i])[:total]:
+            alloc[i] = 1
+        return alloc
+    for i in elig:
+        alloc[i] = 1
+    rem = total - len(elig)
+    wsum = sum(weights[i] for i in elig)
+    quota = {i: rem * weights[i] / wsum for i in elig}
+    for i in elig:
+        alloc[i] += int(quota[i])
+    left = rem - sum(int(quota[i]) for i in elig)
+    for i in sorted(elig, key=lambda i: -(quota[i] - int(quota[i])))[:left]:
+        alloc[i] += 1
+    return alloc
+
+
 def highlight_shadow_detail(per_end: int,
                             reach: float = 16.0,
                             *,
                             greys_enabled: bool = False,
                             greys_offset: float = 5.0,
                             greys_rings: int = 1) -> list[tuple[float, float, float]]:
-    """``per_end`` patches packed into the extreme highlights + ``per_end`` into
-    the extreme shadows, as two **mirror-image** end-caps around the neutral
-    axis.
+    """``per_end`` patches into the extreme highlights + ``per_end`` into the
+    extreme shadows, as two **mirror-image, filled cones** around the neutral
+    axis — narrowing to the paper-white / pure-black corner and fanning inward.
 
     The cube's even grid samples the very-light and very-dark tones coarsely,
     yet those two ends are where printers band (highlights) and block up at the
-    ink limit (shadows), so this concentrates fine tonal steps there. The shadow
-    cap is the exact point-inversion of the highlight cap
-    (``(r,g,b) → (100-r, 100-g, 100-b)``); because the RGB cube is symmetric
-    about its centre, the two ends therefore come out the *same* shape and
-    spacing — no lopsided cones.
+    ink limit (shadows). The shadow cone is the exact point-inversion of the
+    highlight cone (``(r,g,b) → (100-r, 100-g, 100-b)``), so — the RGB cube
+    being symmetric about its centre — the two ends come out congruent. Each
+    cone is *filled*: at every lightness level a phyllotaxis spiral lays patches
+    from the neutral axis out to the gamut-limited cone surface, so the
+    near-neutral light/dark tones are covered too, not just an outer shell.
 
-    ``reach`` (device units, 0..100) is how far in from each end the cap
-    reaches; ``per_end`` is the patch count at each end (total ``2 * per_end``).
+    ``reach`` (device units, 0..100) is how far in from each end the cones
+    reach; ``per_end`` is the patch count at each end (total ``2 * per_end``).
 
-    The cap interlocks with the near-neutral greys set so the two never sample
-    the same colour:
+    The cones interlock with the near-neutral greys set:
 
-    * ``greys_enabled=True`` keeps every tint *outside* the greys' outermost
-      ring (sized from ``greys_offset`` / ``greys_rings``) — greys own the
-      central neutral tube, H&S the dense chromatic rim around the two ends.
-    * ``greys_enabled=False`` lets the caps reach in to the neutral axis, so
+    * ``greys_enabled=True`` drops the core of each cone that falls inside the
+      greys' outermost ring (sized from ``greys_offset`` / ``greys_rings``), so
+      the two sets never sample the same colour — greys own the central neutral
+      tube, H&S the chromatic rim. The dropped patches aren't lost: the per-end
+      budget is re-laid in the rim that remains.
+    * ``greys_enabled=False`` lets the cones reach in to the neutral axis, so
       H&S also covers the near-neutral light/dark tones nothing else would.
     """
     per_end = max(1, int(per_end))
     reach = max(2.0, min(45.0, float(reach)))
     unit = math.sqrt(6) / 3.0          # RGB-space chroma radius of a unit hue mask
 
-    # Inner chroma floor: clear the greys' outermost ring when that set is on
-    # (with half a ring of headroom so they never touch), else start on the
-    # neutral axis so the near-neutral tones are covered here instead.
-    r_inner = 0.0
+    # Tonal levels from just below the white corner in to `reach`. The cone
+    # radius is gamut-limited (0.85 of the headroom, so no hue ever clamps), so
+    # it narrows to a point at the corner — the cone reaches the very end.
+    n_lev = max(1, round(math.sqrt(per_end * 0.5)))
+    depths = [reach * (i + 1) / n_lev for i in range(n_lev)]      # 100-L, tip→base
+    r_max = [0.85 * d / unit for d in depths]
+
+    # Inner radius: clear the greys' outermost ring when that set is on, else 0
+    # so the cones reach the neutral axis. Capped just under the base cone's own
+    # radius so at least the widest level can always hold patches.
+    r_in = 0.0
     if greys_enabled:
         off = max(0.0, float(greys_offset))
         greys_outer = max(1, int(greys_rings)) * unit * off
-        r_inner = greys_outer + 0.5 * unit * max(1.0, off)
+        r_in = greys_outer + 0.5 * unit * max(1.0, off)
+    r_in = min(r_in, 0.9 * r_max[-1])
 
-    # Spread per_end over a few tonal levels (favour tonal resolution — the whole
-    # point of the feature) × a hue ring at each level.
-    n_lev = max(1, round(math.sqrt(per_end * 0.6)))
-    counts = [per_end // n_lev + (1 if i < per_end % n_lev else 0)
-              for i in range(n_lev)]
-
-    # Lightness span of the highlight cap: from `inset` below white down to
-    # `reach` below white. The inset keeps the lightest level off pure white
-    # (where no chroma fits) and, when greys are on, far enough in that the ring
-    # clears them with gamut headroom to spare.
-    inset = min(max(reach / (n_lev + 1), r_inner), reach * 0.5)
-    L_top = 100.0 - inset
-    L_bot = 100.0 - reach
+    # Budget each level by its annulus area, so density is even across the cone
+    # (levels too close to the corner to clear the greys core get nothing).
+    weights = [max(0.0, rm * rm - r_in * r_in) for rm in r_max]
+    counts = _allocate_by_weight(per_end, weights)
 
     highlights: list[tuple[float, float, float]] = []
-    for i in range(n_lev):
-        tl = i / (n_lev - 1) if n_lev > 1 else 0.0
-        L = L_top - (L_top - L_bot) * tl
-        head = (100.0 - L) * 1.3                # ≳ max balanced chroma that fits
-        radius = min(head, max(r_inner, head * 0.7))
-        phase = i * 27.0                        # rotate levels so hues interleave
-        highlights.extend(_ring_tints(L, radius, counts[i], phase))
+    seq = 0
+    for i, m in enumerate(counts):
+        if m <= 0:
+            continue
+        L = 100.0 - depths[i]
+        span = r_max[i] * r_max[i] - r_in * r_in
+        for j in range(m):
+            t = j / (m - 1) if m > 1 else 0.0
+            r = math.sqrt(r_in * r_in + span * t)    # even areal fill, r_in → r_max
+            highlights.append(_ring_tints(L, r, 1, seq * _GOLDEN_DEG)[0])
+            seq += 1
 
     shadows = [(100.0 - r, 100.0 - g, 100.0 - b) for (r, g, b) in highlights]
     return highlights + shadows

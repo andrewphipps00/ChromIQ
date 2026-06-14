@@ -279,13 +279,20 @@ def test_highlight_shadow_clears_greys_when_enabled():
 
 
 def test_highlight_shadow_reaches_neutral_when_greys_off():
-    # With greys off, H&S must cover the near-neutral tones itself — so some
-    # patches sit much closer to the axis than the greys ring would allow.
-    off, rings = 5.0, 1
-    greys_outer = rings * (math.sqrt(6) / 3.0) * off
-    patches = G.highlight_shadow_detail(24, reach=20, greys_enabled=False,
-                                        greys_offset=off, greys_rings=rings)
-    assert min(_chroma(p) for p in patches) < greys_outer
+    # With greys off, the filled cones must reach the neutral axis itself — so
+    # the near-neutral light/dark tones are covered (Knut's "greys missing", #37).
+    patches = G.highlight_shadow_detail(40, reach=20, greys_enabled=False)
+    assert min(_chroma(p) for p in patches) < 0.5     # a genuine on-axis patch
+
+
+def test_highlight_shadow_cones_reach_the_corners():
+    # The cones must run all the way to paper white / pure black, not stop in
+    # mid-air short of the ends (Knut's "cone stops in mid air", #37).
+    patches = G.highlight_shadow_detail(64, reach=16, greys_enabled=False)
+    hi = patches[:64]
+    assert max(max(p) for p in hi) > 96              # highlights reach near white
+    # mirror => shadows reach symmetrically near black
+    assert min(min(p) for p in patches[64:]) < 4
 
 
 # --- image palette ---------------------------------------------------------
