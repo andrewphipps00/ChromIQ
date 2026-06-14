@@ -52,3 +52,6 @@ assets/app_icon.ico
 .env
 *.key
 *.pem
+
+# Local promo/marketing deliverables (not part of the app)
+*.docx

@@ -1,5 +1,18 @@
 # Changelog
 
+## v3.9.28
+
+A small follow-up to v3.9.27's *Fill remaining gaps* fix.
+
+### 🐛 Fixed
+- **"Fill remaining gaps" now counts the pure white & black anchors toward its
+  target.** "Pure white & black" was being added *after* the fill, so it stacked
+  on top of an already-full chart and you ended up with more patches than the
+  "fill to N" target. Generation now runs sets → white/black → fill, and the live
+  count matches, so "fill to N" lands on exactly N patches. (White and black are
+  still kept even if they duplicate another patch, and the fill still avoids
+  placing patches on top of them.)
+
 ## v3.9.27
 
 A fix-up release on the back of **Knut (@soul-traveller)**'s and **Pharmacist**'s
