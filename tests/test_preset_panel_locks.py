@@ -351,6 +351,105 @@ def test_selecting_preset_clears_applied(qapp, settings, monkeypatch, tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# Save & apply round-trip (#43): the printtarg knobs the layout editor saved
+# must be reflected on the Create Chart manual panel — both directions.
+#
+# These don't need Argyll: apply_external_chart's panel seeding reads the
+# staged .ti2 (instrument/paper) + meta.json (LayoutOptions); the file copy
+# is stubbed. So we stage a .ti2 + editor meta directly.
+# ---------------------------------------------------------------------------
+
+
+def _stage_meta(tmp_path, opts, ti2_text=_TI2, name="applied-test"):
+    from workflow import ti2_relayout as R
+    staging = tmp_path / "staging"
+    staging.mkdir()
+    ti2 = staging / f"{name}.ti2"
+    ti2.write_text(ti2_text)
+    spec = R.ChartSpec.from_ti2(ti2)
+    R.save_editor_meta(ti2, spec, opts, name)
+    return staging, name
+
+
+_TI2_CM = _TI2.replace('TARGET_INSTRUMENT "GretagMacbeth i1 Pro"',
+                       'TARGET_INSTRUMENT "X-Rite ColorMunki"')
+
+
+def _apply_meta(qapp, settings, monkeypatch, tmp_path, opts, ti2_text=_TI2):
+    tab = _make_tab(qapp, settings)
+    monkeypatch.setattr(tab, "_import_applied_chart", lambda *a, **k: None)
+    monkeypatch.setattr(tab, "_handle_target_rename", lambda *a, **k: True)
+    staging, name = _stage_meta(tmp_path, opts, ti2_text)
+    # Forward direction (Create Chart -> editor) sanity: the knobs we just
+    # saved load back unchanged through the same meta.json the editor reads.
+    from workflow.ti2_relayout import load_editor_meta
+    loaded = load_editor_meta(staging / f"{name}.ti2")
+    assert loaded is not None and loaded[0] == opts
+    assert tab.apply_external_chart(staging, name) is True
+    return tab
+
+
+def test_applied_reflects_i1_layout(qapp, settings, monkeypatch, tmp_path):
+    """Reverse direction: an i1 chart's scalar + boolean knobs land on the panel."""
+    from workflow.ti2_relayout import LayoutOptions
+    opts = LayoutOptions(spacer_mode="bw", patch_scale=0.85, spacer_scale=1.2,
+                         margin_mm=10, suppress_left_clip=True,
+                         no_strip_limit=True, dpi=600, tiff_16bit=True)
+    tab = _apply_meta(qapp, settings, monkeypatch, tmp_path, opts)
+    p = tab._collect_manual()
+    assert p.instrument == "i1" and p.paper == "A4"
+    assert abs(p.patch_scale - 0.85) < 1e-9
+    assert abs(p.spacer_scale - 1.2) < 1e-9
+    assert p.margin_mm == 10
+    assert p.bw_spacers is True
+    assert p.no_strip_limit is True
+    assert p.disable_left_border is True
+    assert p.tiff_dpi == 600
+    assert p.tiff_16bit is True
+    assert p.double_density is False
+    assert p.triple_density is False
+
+
+def test_applied_reflects_default_layout_clean(qapp, settings, monkeypatch, tmp_path):
+    """Default knobs read back as defaults — and the expert -m row stays
+    disabled rather than being spuriously enabled (or left on the i1 preset
+    margin the instrument-default handler applies on -i change)."""
+    from workflow.ti2_relayout import LayoutOptions
+    tab = _apply_meta(qapp, settings, monkeypatch, tmp_path, LayoutOptions())
+    p = tab._collect_manual()
+    assert abs(p.patch_scale - 1.0) < 1e-9
+    assert p.margin_mm == 6
+    m = next(pw for pw in tab._manual_widgets["printtarg"] if pw.flag == "-m")
+    assert not m.is_enabled_by_user
+
+
+def test_applied_reflects_cm_double_density(qapp, settings, monkeypatch, tmp_path):
+    """A ColorMunki double-density chart turns -h on after apply."""
+    from workflow.ti2_relayout import LayoutOptions
+    opts = LayoutOptions(double_density=True)
+    tab = _apply_meta(qapp, settings, monkeypatch, tmp_path, opts, ti2_text=_TI2_CM)
+    p = tab._collect_manual()
+    assert p.instrument == "CM"
+    assert p.double_density is True
+    assert p.triple_density is False
+
+
+def test_applied_reflects_cm_triple_density(qapp, settings, monkeypatch, tmp_path):
+    """A ColorMunki triple-density chart restores the canonical i1-layout preset."""
+    from workflow.ti2_relayout import LayoutOptions
+    opts = LayoutOptions(triple_density=True, patch_scale=1.3, margin_mm=5,
+                         no_strip_limit=True, suppress_left_clip=True)
+    tab = _apply_meta(qapp, settings, monkeypatch, tmp_path, opts, ti2_text=_TI2_CM)
+    p = tab._collect_manual()
+    assert p.instrument == "CM"
+    assert p.triple_density is True
+    assert p.double_density is False
+    assert abs(p.patch_scale - 1.3) < 1e-9
+    assert p.margin_mm == 5
+    assert p.no_strip_limit is True
+
+
+# ---------------------------------------------------------------------------
 # Reflected chart (loaded in Print/Measure): read-only, both panels greyed,
 # nothing copied, generate is a no-op until the user unlocks a panel.
 # ---------------------------------------------------------------------------

@@ -3385,6 +3385,50 @@ class TabChart(QWidget):
                 pw.reset_to_default()
                 return
 
+    def _seed_manual_printtarg_from_layout(self, opts) -> None:
+        """Reflect an editor ``LayoutOptions`` bundle onto the manual printtarg
+        panel so a chart handed over from the layout editor shows the exact
+        knobs it was laid out with — patch scale (-a), spacer scale (-A),
+        margin (-m), spacers (-b/-n), double/triple density, DPI and bit depth,
+        -L/-P — not just instrument + paper.
+
+        The panel is locked right after this, so the seeding is display-faithful
+        (the override boxes let the user unlock and edit). Scalar expert rows
+        mirror :meth:`LayoutOptions.to_printtarg_args`' default-suppression: a
+        row at its default value is reset (disabled) rather than spuriously
+        enabled, so the panel reads exactly like the flags printtarg received.
+        """
+        # Spacers: at most one of -b / -n; "colored" leaves both off.
+        self._set_manual_value("printtarg", "-b", opts.spacer_mode == "bw")
+        self._set_manual_value("printtarg", "-n", opts.spacer_mode == "none")
+        # DPI + bit depth.
+        self._set_manual_value("printtarg", "-t", opts.dpi)
+        if self._bit16_radio is not None and self._bit8_radio is not None:
+            (self._bit16_radio if opts.tiff_16bit
+             else self._bit8_radio).setChecked(True)
+        # Strip-reader / density booleans.
+        self._set_manual_value("printtarg", "-L", opts.suppress_left_clip)
+        self._set_manual_value("printtarg", "-P", opts.no_strip_limit)
+        self._set_manual_value("printtarg", "-h", opts.double_density)
+        # Scalar expert rows: set+enable only when non-default, else reset.
+        if abs(opts.patch_scale - 1.0) > 0.01:
+            self._set_manual_value("printtarg", "-a", opts.patch_scale)
+        else:
+            self._reset_manual_value("printtarg", "-a")
+        if abs(opts.spacer_scale - 1.0) > 0.01:
+            self._set_manual_value("printtarg", "-A", opts.spacer_scale)
+        else:
+            self._reset_manual_value("printtarg", "-A")
+        if opts.margin_mm != 6:
+            self._set_manual_value("printtarg", "-m", opts.margin_mm)
+        else:
+            self._reset_manual_value("printtarg", "-m")
+        # Triple density last: its toggle handler re-applies the canonical
+        # i1Pro-layout preset (-a1.3 / -m5 / -P / -L) matching how the chart was
+        # rendered, and is a no-op when off.
+        if self._manual_td_check is not None:
+            self._manual_td_check.setChecked(bool(opts.triple_density))
+
     def _targen_signature(self) -> list:
         """Snapshot of every targen-affecting control.
 
@@ -3898,15 +3942,22 @@ class TabChart(QWidget):
         self._applied_src_dir = src_dir
         self._applied_stem = name
         self._reset_override_checks()
-        # Seed the instrument + page the editor laid the chart out for, so an
-        # unlock-and-edit of printtarg starts from the right device/paper.
+        # Seed the printtarg panel from what the editor laid the chart out with,
+        # so an unlock-and-edit starts from the right state and — even while
+        # locked — the panel shows the chosen layout. Instrument + paper come
+        # from the .ti2; the rest (patch scale, margin, spacers, density, DPI,
+        # bit depth, -L/-P) come from the editor's meta.json LayoutOptions.
         try:
-            from workflow.ti2_relayout import ChartSpec
-            spec = ChartSpec.from_ti2(src_dir / f"{name}.ti2")
+            from workflow.ti2_relayout import ChartSpec, load_editor_meta
+            ti2 = src_dir / f"{name}.ti2"
+            spec = ChartSpec.from_ti2(ti2)
             self._set_manual_value("printtarg", "-i", spec.instrument_flag)
             self._set_manual_value("printtarg", "-p", spec.paper_flag)
+            meta = load_editor_meta(ti2)
+            if meta is not None:
+                self._seed_manual_printtarg_from_layout(meta[0])
         except Exception as exc:  # noqa: BLE001 — seeding is best-effort
-            log.warning("Could not seed instrument/paper from applied chart: %s", exc)
+            log.warning("Could not seed printtarg layout from applied chart: %s", exc)
         if self._manual_target_name_edit is not None:
             self._manual_target_name_edit.setText(name)
         # Baselines for the Generate-time change detection, taken after seeding.
