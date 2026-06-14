@@ -14,6 +14,7 @@ and an optional per-spacer paint applied to the rendered TIFF.
 from __future__ import annotations
 
 import tempfile
+from dataclasses import astuple
 from pathlib import Path
 
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSize, QPoint, QRect, QTimer
@@ -1846,6 +1847,11 @@ class Ti2RelayoutDialog(QDialog):
         self.setMinimumSize(1000, 620)
 
         self._spec: R.ChartSpec | None = None
+        # Snapshot of the chart's content (patches + spacers + layout knobs) as
+        # last saved / loaded-from-disk. Compared against the live signature to
+        # tell whether there are unsaved edits to warn about on Close (#49). A
+        # fresh sentinel means "never saved" (a created chart is dirty at once).
+        self._saved_sig: object = object()
         self._palette: list[tuple] | None = None       # native spacer palette
         self._regen: R.RegenResult | None = None
         self._page = 0                                  # previewed page index
@@ -2626,6 +2632,13 @@ class Ti2RelayoutDialog(QDialog):
             "without leaving the editor."))
         self._save_btn.clicked.connect(self._save_as)
         save_row.addWidget(self._save_btn)
+        self._close_btn = QPushButton(tr("Close"), bar)
+        self._close_btn.setToolTip(
+            tr("Close the editor without saving. If the layout has unsaved "
+            "changes you'll be asked to confirm first; “Save & apply…” and "
+            "“Save As…” keep your work."))
+        self._close_btn.clicked.connect(self._on_close_clicked)
+        save_row.addWidget(self._close_btn)
         bv.addLayout(save_row)
         return bar
 
@@ -2671,7 +2684,7 @@ class Ti2RelayoutDialog(QDialog):
             self._options = R.LayoutOptions()
             self._basename = Path(path).stem or "chart"
             note = f"Loaded {Path(path).name}"
-        self._set_chart(spec, program, note)
+        self._set_chart(spec, program, note, is_saved=True)
 
     def _new_chart(self) -> None:
         dlg = _NewChartDialog(self._bin_dir, self._settings, self)
@@ -2682,7 +2695,8 @@ class Ti2RelayoutDialog(QDialog):
         self._basename = dlg.result_basename or "chart"
         self._set_chart(dlg.result_spec, dlg.result_program or [], "New chart")
 
-    def _set_chart(self, spec: R.ChartSpec, program: list[tuple], note: str) -> None:
+    def _set_chart(self, spec: R.ChartSpec, program: list[tuple], note: str,
+                   *, is_saved: bool = False) -> None:
         self._spec = spec
         # Seed the spacer palette from the source chart's own .ti1 (if its
         # sibling was found by ChartSpec.from_ti2), so loaded charts render
@@ -2699,6 +2713,11 @@ class Ti2RelayoutDialog(QDialog):
         # user picked, and loading a file resets to defaults).
         self._sync_printtarg_widgets()
         self._chart_note = note
+        # Baseline for unsaved-change detection (#49): a chart loaded from disk
+        # starts clean; a freshly created / generated one is dirty until saved
+        # (the sentinel _saved_sig never matches the live signature).
+        if is_saved:
+            self._saved_sig = self._current_signature()
         self._refresh_info()
         self._refresh_enabled()
         # Auto-render the initial preview so the user sees the chart
@@ -2708,6 +2727,53 @@ class Ti2RelayoutDialog(QDialog):
             self._regenerate(save_to=None)
         else:
             self._status.setText(tr("Empty chart — add patches, then preview."))
+
+    # -- unsaved-change tracking (#49) -------------------------------------
+    def _current_signature(self) -> tuple:
+        """A hashable snapshot of everything the user can edit: the patch
+        program (colours + order), the spacer palette + per-spacer paint, and
+        the printtarg layout knobs. Compared against _saved_sig to detect
+        unsaved edits — so any change (re-colour, reorder, add/remove, spacer
+        paint, layout tweak) flips the dialog dirty without per-edit hooks."""
+        return (
+            tuple(self._program_from_grid()),
+            tuple(self._palette) if self._palette else None,
+            tuple(sorted(self._paint.items())),
+            astuple(self._options) if self._options is not None else None,
+        )
+
+    def _is_dirty(self) -> bool:
+        """True when a chart is open and differs from its last saved state."""
+        return (self._spec is not None
+                and self._current_signature() != self._saved_sig)
+
+    def _mark_saved(self) -> None:
+        """Record the current content as the saved baseline (clean)."""
+        self._saved_sig = self._current_signature()
+
+    def _confirm_discard(self) -> bool:
+        """Ask before throwing away unsaved edits. Returns True to proceed
+        (close), False to stay. No prompt when there's nothing unsaved."""
+        if not self._is_dirty():
+            return True
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Warning)
+        box.setWindowTitle(tr("Discard changes?"))
+        box.setText(tr("This chart has unsaved changes."))
+        box.setInformativeText(
+            tr("If you close now they'll be lost. Use “Save As…” or "
+               "“Save & apply…” first to keep them."))
+        discard = box.addButton(tr("Discard changes"),
+                                QMessageBox.ButtonRole.DestructiveRole)
+        keep = box.addButton(tr("Keep editing"),
+                             QMessageBox.ButtonRole.RejectRole)
+        box.setDefaultButton(keep)
+        box.exec()
+        return box.clickedButton() is discard
+
+    def _on_close_clicked(self) -> None:
+        if self._confirm_discard():
+            self.close()
 
     def _schedule_auto_refresh(self) -> None:
         """Restart the debounced preview timer (called from user edit hooks)."""
@@ -3875,6 +3941,7 @@ class Ti2RelayoutDialog(QDialog):
             return
         QMessageBox.information(self, tr("Saved"), msg)
         self._status.setText(msg.splitlines()[0])
+        self._mark_saved()   # Save As clears the unsaved-changes flag (#49)
 
     def _write_chart_into(self, target: Path, name: str) -> str:
         """Write the complete chart deliverable into ``target`` and return a note.
@@ -3983,6 +4050,7 @@ class Ti2RelayoutDialog(QDialog):
         if applied is False:
             self._status.setText(tr("Apply cancelled — the editor is still open."))
             return
+        self._mark_saved()   # applied + saved — closing must not warn (#49)
         self.accept()
 
     def _prompt_apply_name(self) -> str | None:
@@ -4180,6 +4248,12 @@ class Ti2RelayoutDialog(QDialog):
         self._refresh_pt_instr_visibility()
 
     def closeEvent(self, ev) -> None:  # noqa: N802
+        # The window-corner X gets the same unsaved-changes guard as the
+        # Close button (#49). Saves clear the flag first, so closing right
+        # after Save As / Save & apply doesn't prompt.
+        if not self._confirm_discard():
+            ev.ignore()
+            return
         if self._worker is not None and self._worker.isRunning():
             self._worker.wait(3000)
         self._preview_tmp.cleanup()
