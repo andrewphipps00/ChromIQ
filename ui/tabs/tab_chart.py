@@ -3122,19 +3122,31 @@ class TabChart(QWidget):
 
     def _preset_save_prefill(self) -> tuple[str, bool, bool, bool]:
         """Initial (name, auto_run, attach, suggested_from_target) for the Save
-        Preset dialog. Re-saving an existing user preset reuses its name + the
-        options stored with it (so tweaking is one step); a brand-new preset
-        suggests the current target name and defaults the two "do it now"
-        options on — the common case (#50)."""
-        cur_key = self._preset_combo.currentData()
-        if cur_key is not None and cur_key not in BUILTIN_PRESET_KEYS:
-            existing = self._load_presets_from_settings().get(cur_key, {})
-            is_d = isinstance(existing, dict)
-            return (str(cur_key), bool(is_d and existing.get("auto_run")),
-                    bool(is_d and existing.get("attached_ti1")), False)
+        Preset dialog.
+
+        The name is based on the **target name** in the output frame — that's
+        the chart's actual identity. A stale preset still selected in the combo
+        is *not* a reliable basis: you may have started a completely different
+        layout since (Knut's #50 follow-up). A selected user preset's name is
+        used only as a fallback when no target name is set, so re-opening the
+        dialog to overwrite that preset still works.
+
+        Options follow the *name*, not the combo: if it matches an existing user
+        preset (i.e. you're about to overwrite it) its stored auto_run / attach
+        are reused; otherwise it's a new preset and both default on — the common
+        case."""
         target = (self._manual_target_name_edit.text().strip()
                   if self._manual_target_name_edit is not None else "")
-        return (target, True, True, bool(target))
+        cur_key = self._preset_combo.currentData()
+        selected_preset = (str(cur_key)
+                           if cur_key is not None and cur_key not in BUILTIN_PRESET_KEYS
+                           else "")
+        name = target or selected_preset
+        existing = self._load_presets_from_settings().get(name)
+        if isinstance(existing, dict):
+            return (name, bool(existing.get("auto_run")),
+                    bool(existing.get("attached_ti1")), bool(target))
+        return (name, True, True, bool(target))
 
     def _on_preset_save(self) -> None:
         capture: dict = {}
