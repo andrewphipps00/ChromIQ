@@ -525,36 +525,7 @@ class _NewChartDialog(QDialog):
         # Magenta accents on checked / focused state — same scoped rules
         # as the parent dialog so the New-chart dialog matches it instead
         # of falling back to the app-wide cyan.
-        self.setStyleSheet(f"""
-            QCheckBox::indicator:checked {{
-                background: {SPEC_MAGENTA}; border-color: {SPEC_MAGENTA};
-            }}
-            QCheckBox::indicator:hover {{ border-color: {SPEC_MAGENTA}; }}
-            QRadioButton::indicator:checked {{
-                background: {SPEC_MAGENTA}; border-color: {SPEC_MAGENTA};
-            }}
-            /* A ticked-but-disabled box must read as off — without this the
-               magenta :checked fill wins over Qt's disabled greying, so an
-               unselected panel (e.g. "Generate colour sets") still showed bright
-               ticks. The two-state selector outranks the single :checked rule. */
-            QCheckBox::indicator:checked:disabled,
-            QRadioButton::indicator:checked:disabled {{
-                background: #4a4a4a; border-color: #4a4a4a;
-            }}
-            QLineEdit:focus, QComboBox:focus,
-            QSpinBox:focus, QDoubleSpinBox:focus {{
-                border-color: {SPEC_MAGENTA};
-            }}
-            /* The dropdown's hovered/selected row defaulted to the app-wide
-               cyan; tint it magenta to match the rest of the dialog. */
-            QComboBox QAbstractItemView {{
-                selection-background-color: {SPEC_MAGENTA};
-                selection-color: white;
-            }}
-            QComboBox QAbstractItemView::item:hover {{
-                background: {SPEC_MAGENTA}; color: white;
-            }}
-        """)
+        self._install_magenta_accents()
 
         # Content lives in a scroll area so the dialog fits small screens even
         # with every colour set expanded (the panel can get tall).
@@ -959,12 +930,39 @@ class _NewChartDialog(QDialog):
             return "none"
         return "colored"
 
+    def _collect_gen_sets(self) -> dict:
+        """The colour-set checkboxes + size spins as a {"cb":…, "sp":…} dict.
+        Shared by the New-chart persistence and the editor's Add dialog."""
+        return {
+            "cb": {n: getattr(self, f"_gen_{n}").isChecked()
+                   for n in self._GEN_CHECKS},
+            "sp": {n: getattr(self, f"_gen_{n}").value()
+                   for n in self._GEN_SPINS},
+        }
+
+    def _apply_gen_sets(self, st: dict) -> None:
+        """Set the colour-set checkboxes + size spins from a {"cb":…, "sp":…}
+        dict (missing/unknown keys skipped). Does not touch the source mode or
+        any chart/layout widget, so subclasses without those can reuse it."""
+        for n, val in (st.get("sp") or {}).items():
+            w = getattr(self, f"_gen_{n}", None)
+            if w is not None:
+                try:
+                    w.setValue(int(val))
+                except (TypeError, ValueError):
+                    pass
+        for n, val in (st.get("cb") or {}).items():
+            w = getattr(self, f"_gen_{n}", None)
+            if w is not None:
+                w.setChecked(bool(val))
+
     def _collect_gen_state(self) -> dict:
         mode = ("generate" if self._mode_generate.isChecked() else
                 "paste" if self._mode_paste.isChecked() else
                 "blank" if self._mode_blank.isChecked() else "seed")
         return {
             "mode": mode,
+            **self._collect_gen_sets(),
             "instr": self._instr.currentData(),
             "paper": self._paper.currentData(),
             "paper_w": self._paper_w.value(),
@@ -982,10 +980,6 @@ class _NewChartDialog(QDialog):
                 "h": self._cb_h.isChecked(),
                 "td": self._cb_td.isChecked(),
             },
-            "cb": {n: getattr(self, f"_gen_{n}").isChecked()
-                   for n in self._GEN_CHECKS},
-            "sp": {n: getattr(self, f"_gen_{n}").value()
-                   for n in self._GEN_SPINS},
         }
 
     def _apply_gen_state(self, st: dict) -> None:
@@ -1045,17 +1039,7 @@ class _NewChartDialog(QDialog):
         if "bit16" in lo:
             (self._bd_16 if lo["bit16"] else self._bd_8).setChecked(True)
 
-        for n, val in (st.get("sp") or {}).items():
-            w = getattr(self, f"_gen_{n}", None)
-            if w is not None:
-                try:
-                    w.setValue(int(val))
-                except (TypeError, ValueError):
-                    pass
-        for n, val in (st.get("cb") or {}).items():
-            w = getattr(self, f"_gen_{n}", None)
-            if w is not None:
-                w.setChecked(bool(val))
+        self._apply_gen_sets(st)
         radio = {"generate": self._mode_generate, "paste": self._mode_paste,
                  "blank": self._mode_blank, "seed": self._mode_seed}.get(
                      st.get("mode"))
@@ -1394,10 +1378,53 @@ class _NewChartDialog(QDialog):
              self._gen_image_count),
         )
 
+    def _install_magenta_accents(self) -> None:
+        """Scope the editor's magenta accent onto this dialog's checked /
+        focused controls (shared by the New-chart dialog and the Add dialog)
+        so they don't fall back to the app-wide cyan."""
+        self.setStyleSheet(f"""
+            QCheckBox::indicator:checked {{
+                background: {SPEC_MAGENTA}; border-color: {SPEC_MAGENTA};
+            }}
+            QCheckBox::indicator:hover {{ border-color: {SPEC_MAGENTA}; }}
+            QRadioButton::indicator:checked {{
+                background: {SPEC_MAGENTA}; border-color: {SPEC_MAGENTA};
+            }}
+            /* A ticked-but-disabled box must read as off — without this the
+               magenta :checked fill wins over Qt's disabled greying, so an
+               unselected panel (e.g. "Generate colour sets") still showed bright
+               ticks. The two-state selector outranks the single :checked rule. */
+            QCheckBox::indicator:checked:disabled,
+            QRadioButton::indicator:checked:disabled {{
+                background: #4a4a4a; border-color: #4a4a4a;
+            }}
+            QLineEdit:focus, QComboBox:focus,
+            QSpinBox:focus, QDoubleSpinBox:focus {{
+                border-color: {SPEC_MAGENTA};
+            }}
+            /* The dropdown's hovered/selected row defaulted to the app-wide
+               cyan; tint it magenta to match the rest of the dialog. */
+            QComboBox QAbstractItemView {{
+                selection-background-color: {SPEC_MAGENTA};
+                selection-color: white;
+            }}
+            QComboBox QAbstractItemView::item:hover {{
+                background: {SPEC_MAGENTA}; color: white;
+            }}
+        """)
+
+    def _gen_sets_active(self) -> bool:
+        """Whether the generate-colour-sets panel is the active source.
+
+        In the New-chart dialog that's the "Generate colour sets" radio;
+        subclasses that reuse the panel under a different control (e.g. the
+        editor's Add dialog) override this."""
+        return self._mode_generate.isChecked()
+
     def _update_gen_counts(self, *_a) -> None:
         """Refresh each generator's patch count + the running total, and gate
         the per-row spin boxes on their checkbox."""
-        on = self._mode_generate.isChecked()
+        on = self._gen_sets_active()
         self._gen_panel.setEnabled(on)
         # Grey each row's size control(s) when its set is unticked.
         for cb, spins in (
@@ -1635,6 +1662,166 @@ class _NewChartDialog(QDialog):
         # Save & apply time. Keep the neutral "chart" placeholder basename.
         self.result_basename = "chart"
         self._save_gen_state()   # remember these choices for next time
+        self.accept()
+
+
+class _AddPatchesDialog(_NewChartDialog):
+    """The editor's "Add…" dialog: add a single chosen colour, or generate one
+    or more colour sets (the New-chart generate panel — 3D cube, skin tones,
+    blues, greens, greys, edges, highlights/shadows, pastels, from image, fill)
+    to append to the loaded chart.
+
+    Reuses :class:`_NewChartDialog`'s generate panel + program builder, but the
+    surrounding chrome is different (no chart-identity / layout frames, no
+    source-mode radios), so it deliberately bypasses the full New-chart
+    ``__init__`` and builds only what it needs. On accept, ``result_program``
+    holds the RGB triples to splice into the grid.
+    """
+
+    def __init__(self, settings=None, parent: QWidget | None = None) -> None:
+        QDialog.__init__(self, parent)
+        self.setWindowTitle(tr("Add patches"))
+        self.setMinimumWidth(620)
+        self._settings = settings
+        self.result_program: list[tuple] | None = None
+        # State the inherited generate-panel methods expect.
+        self._gen_image_px = None
+        self._gen_image_name = ""
+        self._single_rgb: tuple[float, float, float] = (50.0, 50.0, 50.0)
+        self._install_magenta_accents()
+
+        content = QWidget(self)
+        lay = QVBoxLayout(content)
+        lay.setSpacing(10)
+
+        head = QHBoxLayout()
+        head.addWidget(QLabel(tr("Add patches to the current chart."), self))
+        head.addStretch(1)
+        lay.addLayout(head)
+
+        # Mode: a single colour, or generated colour sets.
+        self._add_mode_single = QRadioButton(
+            tr("Add a single colour"), self)
+        self._add_mode_gen = QRadioButton(tr("Generate colour sets"), self)
+        self._add_mode_single.setChecked(True)
+        grp = QButtonGroup(self)
+        grp.addButton(self._add_mode_single)
+        grp.addButton(self._add_mode_gen)
+        lay.addWidget(self._add_mode_single)
+
+        # Single-colour row: a swatch + colour picker.
+        single_row = QHBoxLayout()
+        single_row.setContentsMargins(22, 0, 0, 0)
+        self._single_swatch = QLabel(self)
+        self._single_swatch.setFixedSize(28, 22)
+        self._single_swatch.setFrameShape(QFrame.Shape.StyledPanel)
+        self._paint_single_swatch()
+        single_btn = QPushButton(tr("Choose colour…"), self)
+        single_btn.setObjectName("compact_input")
+        single_btn.clicked.connect(self._pick_single_colour)
+        single_row.addWidget(self._single_swatch)
+        single_row.addWidget(single_btn)
+        single_row.addStretch(1)
+        lay.addLayout(single_row)
+
+        lay.addWidget(self._add_mode_gen)
+        lay.addLayout(self._build_generate_panel(content))
+        self._add_mode_single.toggled.connect(self._refresh_add_mode)
+        self._refresh_add_mode()
+        # Soak up any extra height at the bottom so the controls stay packed at
+        # the top instead of drifting apart when the dialog is taller than its
+        # content (single-colour mode is short).
+        lay.addStretch(1)
+
+        btns = QHBoxLayout()
+        restore = QPushButton(tr("Restore defaults"), self)
+        restore.setToolTip(tr("Reset the colour sets back to their defaults."))
+        restore.clicked.connect(lambda: self._apply_gen_sets_and_refresh(
+            self._GEN_FACTORY))
+        btns.addWidget(restore)
+        btns.addStretch(1)
+        ok = QPushButton(tr("Add to chart"), self)
+        ok.setDefault(True)
+        ok.clicked.connect(self._on_add)
+        cancel = QPushButton(tr("Cancel"), self)
+        cancel.clicked.connect(self.reject)
+        btns.addWidget(ok)
+        btns.addWidget(cancel)
+
+        scroll = QScrollArea(self)
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setWidget(content)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.addWidget(scroll, 1)
+        btns.setContentsMargins(12, 4, 12, 10)
+        outer.addLayout(btns)
+        # Open sized to the content (capped) rather than a fixed tall height, so
+        # the dialog isn't mostly empty space; the scroll area only kicks in on
+        # short screens.
+        hint = content.sizeHint()
+        self.resize(max(self.minimumWidth(), hint.width() + 24),
+                    min(760, hint.height() + 72))
+
+        # Share the New-chart dialog's last-used colour-set choices.
+        st = (self._settings.get("new_chart_gen", None)
+              if self._settings else None)
+        if isinstance(st, dict):
+            self._apply_gen_sets(st)
+        self._update_gen_counts()
+
+    # The generate panel is the active source only in "Generate colour sets"
+    # mode — drives the panel-enable in the inherited _update_gen_counts.
+    def _gen_sets_active(self) -> bool:
+        return self._add_mode_gen.isChecked()
+
+    def _refresh_add_mode(self, *_a) -> None:
+        self._update_gen_counts()
+
+    def _paint_single_swatch(self) -> None:
+        r, g, b = (max(0, min(255, round(c / 100 * 255)))
+                   for c in self._single_rgb)
+        self._single_swatch.setStyleSheet(
+            f"background:#{r:02x}{g:02x}{b:02x}; border:1px solid #888;")
+
+    def _pick_single_colour(self) -> None:
+        r, g, b = (max(0, min(255, round(c / 100 * 255)))
+                   for c in self._single_rgb)
+        # Non-native picker (same as the editor's _pick_color) so the hex field
+        # + RGB/HSV spinners are available, matching the rest of the editor.
+        c = QColorDialog.getColor(
+            QColor(r, g, b), self, tr("Pick colour"),
+            QColorDialog.ColorDialogOption.DontUseNativeDialog)
+        if not c.isValid():
+            return
+        self._single_rgb = (c.red() / 255 * 100, c.green() / 255 * 100,
+                            c.blue() / 255 * 100)
+        self._paint_single_swatch()
+        self._add_mode_single.setChecked(True)
+
+    def _apply_gen_sets_and_refresh(self, st: dict) -> None:
+        self._apply_gen_sets(st)
+        self._update_gen_counts()
+
+    def _on_add(self) -> None:
+        if self._add_mode_gen.isChecked():
+            program = self._build_generated_program()
+            if not program:
+                QMessageBox.warning(self, tr("No colour sets"),
+                                    tr("Tick at least one colour set to "
+                                    "generate patches from."))
+                return
+            # Remember the colour-set choices for next time (shared with the
+            # New-chart dialog), without disturbing its chart/layout state.
+            if self._settings is not None:
+                cur = self._settings.get("new_chart_gen", None)
+                cur = dict(cur) if isinstance(cur, dict) else {}
+                cur.update(self._collect_gen_sets())
+                self._settings.set("new_chart_gen", cur)
+        else:
+            program = [self._single_rgb]
+        self.result_program = program
         self.accept()
 
 
@@ -2244,7 +2431,9 @@ class Ti2RelayoutDialog(QDialog):
         pb.addLayout(tone_row)
         addrem = QHBoxLayout()
         add_b = QPushButton(tr("Add…"), self._patch_box)
-        add_b.setToolTip(tr("Add a new patch with a chosen colour"))
+        add_b.setToolTip(tr("Add a single chosen colour, or generate colour "
+                            "sets (3D cube, skin tones, blues, greens, …) and "
+                            "add them to the chart"))
         add_b.clicked.connect(self._add_patch)
         rem_b = QPushButton(tr("Remove"), self._patch_box)
         rem_b.setToolTip(tr("Remove the selected patches"))
@@ -2575,12 +2764,30 @@ class Ti2RelayoutDialog(QDialog):
         return it
 
     def _add_patch(self) -> None:
-        c = self._pick_color(QColor(128, 128, 128), "Add patch — pick colour")
-        if not c.isValid():
+        """Open the Add dialog — a single chosen colour, or one or more
+        generated colour sets (3D cube, skin tones, blues, greens, greys, …) —
+        and splice the result into the chart."""
+        dlg = _AddPatchesDialog(self._settings, self)
+        if dlg.exec() != QDialog.DialogCode.Accepted or not dlg.result_program:
             return
-        self._grid.addItem(self._grid_item(_to100(c)))
-        self._renumber()
-        self._status.setText(tr("Patch added. Update preview to apply."))
+        extra = dlg.result_program
+        if self._spec is None:
+            # Nothing loaded yet — seed a fresh blank chart from the added
+            # patches (there's nothing to append to). _set_chart renders the
+            # initial preview; plain grid edits don't, since _schedule_auto_
+            # refresh needs a spec.
+            self._set_chart(R.ChartSpec.new("i1", "A4"), list(extra),
+                            tr("New chart"))
+            return
+        if len(extra) == 1:
+            # A single hand-picked colour goes straight on the end (no prompt).
+            self._grid.addItem(self._grid_item(extra[0]))
+            self._renumber()
+            self._status.setText(tr("Patch added. Updating preview…"))
+            self._schedule_auto_refresh()
+            return
+        self._place_patches_into_grid(
+            extra, tr("{n} colours are ready to add.").format(n=len(extra)))
 
     def _append_from_file(self) -> None:
         """Combine another patch set into this chart (start or end).
@@ -2613,16 +2820,23 @@ class Ti2RelayoutDialog(QDialog):
             return
 
         n = len(extra)
-        box = QMessageBox(self)
-        box.setWindowTitle(tr("Add the new colours"))
-        box.setIcon(QMessageBox.Icon.Question)
-        box.setText(tr("Where would you like the new colours?"))
         if n == 1:
             ready = tr("1 colour from “{name}” is ready to add."
                        ).format(name=Path(path).name)
         else:
             ready = tr("{n} colours from “{name}” are ready to add."
                        ).format(n=n, name=Path(path).name)
+        self._place_patches_into_grid(extra, ready)
+
+    def _place_patches_into_grid(self, extra: list[tuple], ready: str) -> None:
+        """Ask whether to add *extra* RGB patches at the start or the end of the
+        chart, splice them in, and re-preview. ``ready`` is the lead sentence of
+        the prompt (it names where the colours came from). Shared by "Add…"
+        (generated sets) and "Append from file…"."""
+        box = QMessageBox(self)
+        box.setWindowTitle(tr("Add the new colours"))
+        box.setIcon(QMessageBox.Icon.Question)
+        box.setText(tr("Where would you like the new colours?"))
         box.setInformativeText(
             ready + " "
             + tr("You can place them right at the beginning of the chart or "
