@@ -445,6 +445,7 @@ class TabMeasure(QWidget):
     measurement_active = pyqtSignal(bool)  # True when chartread is running, False when done
     ti2_replaced       = pyqtSignal()      # emitted when the user manually loads a different .ti2 file
     ti2_loaded         = pyqtSignal(Path)  # emitted when the user loads a .ti2 file (for cross-tab sync)
+    chart_load_requested = pyqtSignal(Path, list)  # user loaded a .ti2 here → reflect it in Create Chart
 
     def __init__(
         self,
@@ -2096,11 +2097,13 @@ class TabMeasure(QWidget):
         result = resolve_ti2(self, Path(path), self._settings)
         if result is None:
             return
-        ti2_path, _ = result   # TIFFs re-discovered by set_ti1_path → _try_load_tiffs
+        ti2_path, tiffs = result   # TIFFs re-discovered by set_ti1_path → _try_load_tiffs
         if ti2_path != self._ti1_path:
             self.ti2_replaced.emit()
         self.set_ti1_path(ti2_path)
         self.ti2_loaded.emit(ti2_path)
+        # Mirror this explicit load into the Create Chart tab (reflect-only).
+        self.chart_load_requested.emit(ti2_path, list(tiffs or []))
 
     def _update_resume_availability(self) -> None:
         if self._ti1_path is None:

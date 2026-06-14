@@ -139,6 +139,11 @@ class MainWindow(QMainWindow):
         self._tab_measure.ti2_replaced.connect(self._tab_check.clear_files)
         self._tab_profile.ti3_manually_loaded.connect(self._tab_check.clear_files)
         self._tab_measure.measure_finished.connect(lambda _: self._tab_check.clear_files())
+        # Loading a chart in Print/Measure reflects it (read-only) in Create Chart
+        # so every tab agrees on the active target. Reflect-only: no copy, no
+        # folder — see TabChart.reflect_loaded_chart.
+        self._tab_print.chart_load_requested.connect(self._tab_chart.reflect_loaded_chart)
+        self._tab_measure.chart_load_requested.connect(self._tab_chart.reflect_loaded_chart)
 
         main_layout.addWidget(self._tabs, stretch=1)
 

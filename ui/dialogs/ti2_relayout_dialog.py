@@ -1709,7 +1709,10 @@ class Ti2RelayoutDialog(QDialog):
                "several, then drag — or use the First / Up / Down / Last buttons."),
             left)
         grid_hint.setWordWrap(True)
-        grid_hint.setStyleSheet("color: palette(mid); font-size: 10px;")
+        # palette(mid) was nearly invisible on the dark grid background; use an
+        # explicit readable grey with a little breathing room.
+        grid_hint.setStyleSheet(
+            "color: #b0b0b0; font-size: 11px; font-style: italic; padding: 2px 0;")
         lv.addWidget(grid_hint, 0)
 
         self._grid = _ReorderListWidget(left)

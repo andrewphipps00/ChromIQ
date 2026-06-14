@@ -199,6 +199,7 @@ class TabPrint(QWidget):
     ti2_replaced       = pyqtSignal()      # emitted when a different .ti2 file is loaded by the user
     ti2_load_cancelled = pyqtSignal()      # emitted when the cross-tab dialog is cancelled
     chart_relocated    = pyqtSignal(Path)  # emitted when files were copied to a new folder
+    chart_load_requested = pyqtSignal(Path, list)  # user loaded a .ti2 here → reflect it in Create Chart
     """Step 2: print the test chart via CUPS."""
 
     def __init__(
@@ -722,6 +723,8 @@ class TabPrint(QWidget):
             self._current_ti2 = ti2_path
             self.ti2_replaced.emit()
         self.ti2_loaded.emit(ti2_path)
+        # Mirror this explicit load into the Create Chart tab (reflect-only).
+        self.chart_load_requested.emit(ti2_path, list(tiffs or []))
         if tiffs:
             self.load_tiffs(tiffs)
         else:

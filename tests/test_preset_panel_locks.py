@@ -348,5 +348,66 @@ def test_selecting_preset_clears_applied(qapp, settings, monkeypatch, tmp_path):
     assert not tab._applied_active
     assert _targen_enabled(tab)
     assert _printtarg_enabled(tab)
+
+
+# ---------------------------------------------------------------------------
+# Reflected chart (loaded in Print/Measure): read-only, both panels greyed,
+# nothing copied, generate is a no-op until the user unlocks a panel.
+# ---------------------------------------------------------------------------
+
+def _reflect(tab, settings, tmp_path):
+    """Write a tiny .ti2 and reflect it (warning suppressed, no TIFFs)."""
+    settings.set("reflect_backfill_hide_warning", True)
+    ti2 = tmp_path / "loaded.ti2"
+    ti2.write_text(_TI2)
+    tab.reflect_loaded_chart(ti2, [])
+    return ti2
+
+
+def test_reflect_locks_both(qapp, settings, tmp_path):
+    tab = _make_tab(qapp, settings)
+    _reflect(tab, settings, tmp_path)
+    assert tab._reflected_active
+    assert tab._current_mode() == "manual"
+    assert not _targen_enabled(tab)
+    assert not _printtarg_enabled(tab)
+    assert not tab._override_targen_row.isHidden()
+    assert not tab._override_printtarg_row.isHidden()
+
+
+def test_reflect_generate_is_noop_when_untouched(qapp, settings, tmp_path, monkeypatch):
+    tab = _make_tab(qapp, settings)
+    _reflect(tab, settings, tmp_path)
+    calls: list[str] = []
+    # The no-op path shows an explanatory InfoDialog — stub it (no event loop).
+    monkeypatch.setattr("ui.tabs.tab_chart.InfoDialog",
+                        lambda *a, **k: type("D", (), {"exec": lambda self: None})())
+    monkeypatch.setattr(tab._creator, "generate", lambda *a, **k: calls.append("gen"))
+    tab._on_generate()
+    assert calls == []                 # nothing generated
+    assert tab._reflected_active       # still just reflecting
+
+
+def test_reflect_generate_drops_reflection_on_unlock(qapp, settings, tmp_path, monkeypatch):
+    tab = _make_tab(qapp, settings)
+    _reflect(tab, settings, tmp_path)
+    calls: list[str] = []
+    monkeypatch.setattr(tab, "_handle_target_rename", lambda *a, **k: True)
+    monkeypatch.setattr(tab._creator, "generate", lambda *a, **k: calls.append("gen"))
+    tab._override_targen_check.setChecked(True)      # unlock → "build my own"
+    tab._set_manual_value("targen", "-f", 100)       # give the fresh build patches
+    tab._on_generate()
+    assert not tab._reflected_active   # reflection dropped
+    assert calls == ["gen"]            # fell through to a real (stubbed) build
+
+
+def test_selecting_preset_clears_reflection(qapp, settings, tmp_path):
+    tab = _make_tab(qapp, settings)
+    _reflect(tab, settings, tmp_path)
+    assert tab._reflected_active
+    tab._leave_reflected()
+    assert not tab._reflected_active
+    assert _targen_enabled(tab)
+    assert _printtarg_enabled(tab)
     assert tab._override_targen_row.isHidden()
     assert tab._override_printtarg_row.isHidden()

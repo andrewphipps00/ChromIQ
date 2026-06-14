@@ -558,6 +558,12 @@ class TabChart(QWidget):
         self._applied_stem: str | None = None
         self._applied_targen_sig: list | None = None
         self._applied_printtarg_sig: list | None = None
+        # A chart loaded in the Print/Measure tab is *reflected* here (read-only):
+        # both panels grey, the pages show in the preview, but NOTHING is copied
+        # and no project is created. Generating does nothing until the user
+        # unlocks a panel (which drops the reflection and starts a fresh chart).
+        self._reflected_active = False
+        self._reflected_ti2: Path | None = None
         # Absolute path of the .ti1 backing the chart currently shown (set after a
         # successful generate / load). Offered for attachment in the Save Preset
         # dialog.
@@ -2932,6 +2938,8 @@ class TabChart(QWidget):
             # Picking any preset drops an applied editor chart's binding.
             if self._applied_active:
                 self._leave_applied()
+            if self._reflected_active:
+                self._leave_reflected()
             self._preset_ti1_path = None  # built-ins are not ti1-user-presets
             self._preset_ti1_targen_sig = None
             # Start the freshly-picked built-in with its panels locked again.
@@ -2971,6 +2979,8 @@ class TabChart(QWidget):
         # Likewise an applied editor chart is dropped for Default / a user preset.
         if self._applied_active:
             self._leave_applied()
+        if self._reflected_active:
+            self._leave_reflected()
 
         self._last_preset_index = index
         self._preset_del_btn.setEnabled(self._is_deletable_preset(index))
@@ -3438,9 +3448,10 @@ class TabChart(QWidget):
         Each panel is enabled when no lock applies, or when its override box is
         ticked."""
         ti1 = self._ti1_preset_active()
-        # An applied editor chart locks both panels exactly like a prebuilt-files
-        # preset (the patches AND the layout are fixed until the user opts in).
-        prebuilt = self._prebuilt_active or self._applied_active
+        # An applied editor chart — or a chart reflected from the Print/Measure
+        # tab — locks both panels exactly like a prebuilt-files preset (the
+        # patches AND the layout are fixed until the user opts in).
+        prebuilt = self._prebuilt_active or self._applied_active or self._reflected_active
         show_targen_cb = ti1 or prebuilt
         show_printtarg_cb = prebuilt
 
@@ -3743,6 +3754,102 @@ class TabChart(QWidget):
         self._reset_override_checks()
         self._update_preset_locks()
 
+    def _leave_reflected(self) -> None:
+        """Clear the reflected-chart state and re-enable the param panels."""
+        self._reflected_active = False
+        self._reflected_ti2 = None
+        self._reset_override_checks()
+        self._update_preset_locks()
+
+    def reflect_loaded_chart(self, ti2_path: Path, tiffs: list[Path]) -> None:
+        """Mirror a chart loaded in the Print/Measure tab, read-only.
+
+        Called by the main window when the user clicks "Load .ti2" in Print or
+        Measure. Shows the chart's pages here with both panels greyed (so it's
+        clear the loaded layout is what's active), WITHOUT copying anything or
+        creating a project — the chart already lives in its own folder. A
+        one-time note explains that the previously-shown layout is preserved.
+        """
+        ti2_path = Path(ti2_path)
+        self._switch_mode("manual")
+        # Drop any other fixed-layout binding for a consistent lock state.
+        self._tc918_active = False
+        self._tc918_targen_sig = None
+        self._knut_active = False
+        self._knut_targen_sig = None
+        self._preset_ti1_path = None
+        self._preset_ti1_targen_sig = None
+        if self._prebuilt_active:
+            self._leave_prebuilt()
+        if self._applied_active:
+            self._leave_applied()
+        self._reflected_active = True
+        self._reflected_ti2 = ti2_path
+        self._reset_override_checks()
+        # Seed the instrument + page the chart was laid out for, so an
+        # unlock-and-edit starts from the right device/paper.
+        try:
+            from workflow.ti2_relayout import ChartSpec
+            spec = ChartSpec.from_ti2(ti2_path)
+            self._set_manual_value("printtarg", "-i", spec.instrument_flag)
+            self._set_manual_value("printtarg", "-p", spec.paper_flag)
+        except Exception as exc:  # noqa: BLE001 — seeding is best-effort
+            log.warning("Could not seed instrument/paper from reflected chart: %s", exc)
+        if self._manual_target_name_edit is not None:
+            self._manual_target_name_edit.setText(ti2_path.stem)
+        self._update_preset_locks()      # grey both panels
+        self._log.clear()
+        self._log.appendPlainText(
+            f"Reflecting loaded chart “{ti2_path.name}” "
+            f"({len(tiffs)} page(s)). Loaded for reference only — not generated."
+        )
+        if tiffs:
+            self._preview.load_tiff(list(tiffs))
+        else:
+            self._preview.clear()
+        self._maybe_warn_reflected_backfill(ti2_path)
+
+    def _maybe_warn_reflected_backfill(self, ti2_path: Path) -> None:
+        """One-time, friendly heads-up that a loaded chart now shows here."""
+        if bool(self._settings.get("reflect_backfill_hide_warning", False)):
+            return
+        dlg = QDialog(self)
+        dlg.setWindowTitle(tr("Loaded chart is now shown in Create Chart"))
+        dlg.setMinimumWidth(560)
+        lay = QVBoxLayout(dlg)
+        lay.setContentsMargins(24, 20, 24, 16)
+        lay.setSpacing(12)
+        heading = QLabel(
+            tr("The chart you just loaded is now also shown in “Create Chart”"),
+            dlg)
+        heading.setWordWrap(True)
+        heading.setStyleSheet("font-weight: 600; font-size: 14px;")
+        lay.addWidget(heading)
+        body = QLabel(
+            tr("So every tab agrees on what you're working with, the Create "
+               "Chart tab now mirrors this loaded chart — “{name}”. Its patch "
+               "recipe and page layout are shown locked, because the chart "
+               "already exists; ChromIQ won't change it.\n\n"
+               "Nothing you built before is lost: any chart you'd generated "
+               "earlier is still safe in its own project folder under "
+               "~/ChromIQ, and you can open it again any time from Print or "
+               "Measure.\n\n"
+               "If you'd like to build a NEW chart starting from these "
+               "settings, just tick an unlock box in Create Chart, make your "
+               "changes, and click Generate Chart — the loaded chart stays "
+               "untouched.").format(name=ti2_path.name),
+            dlg)
+        body.setWordWrap(True)
+        lay.addWidget(body)
+        hide_cb = QCheckBox(tr("Don't show this again"), dlg)
+        lay.addWidget(hide_cb)
+        bb = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok, dlg)
+        bb.accepted.connect(dlg.accept)
+        lay.addWidget(bb)
+        dlg.exec()
+        if hide_cb.isChecked():
+            self._settings.set("reflect_backfill_hide_warning", True)
+
     def apply_external_chart(self, src_dir: Path, name: str) -> bool:
         """Adopt a chart the TI2 layout editor just wrote into ``src_dir``.
 
@@ -3785,6 +3892,8 @@ class TabChart(QWidget):
         self._preset_ti1_targen_sig = None
         if self._prebuilt_active:
             self._leave_prebuilt()
+        if self._reflected_active:
+            self._leave_reflected()
         self._applied_active = True
         self._applied_src_dir = src_dir
         self._applied_stem = name
@@ -4361,6 +4470,32 @@ class TabChart(QWidget):
         if self._runner.is_running:
             log.warning("A process is already running")
             return
+        # Chart reflected from the Print/Measure tab — read-only. While nothing
+        # is unlocked there is nothing to generate (the chart lives in its own
+        # folder already); say so and stop. Unlocking a panel means the user
+        # wants to build their own, so drop the reflection and fall through to
+        # the normal fresh-chart path.
+        if self._reflected_active and self._current_mode() == "manual":
+            unlocked = (
+                (self._override_targen_check is not None
+                 and self._override_targen_check.isChecked())
+                or (self._override_printtarg_check is not None
+                    and self._override_printtarg_check.isChecked()))
+            if not unlocked:
+                InfoDialog(
+                    "This chart is loaded from elsewhere",
+                    "This chart was loaded in the Print or Measure tab, so it's "
+                    "shown here just for reference — it already lives in its own "
+                    "folder and there's nothing to generate.\n\n"
+                    "If you want to build your own chart from these settings, "
+                    "tick “Edit patch recipe” or “Edit page layout” above to "
+                    "unlock the panels, make your changes, then click Generate "
+                    "Chart — that creates a brand-new chart and leaves the loaded "
+                    "one untouched.",
+                    self, min_width=540,
+                ).exec()
+                return
+            self._leave_reflected()
         # Chart applied from the TI2 layout editor. Mirrors the prebuilt-files
         # logic, but the source is the editor's staging folder rather than a
         # bundled asset:
@@ -4618,6 +4753,8 @@ class TabChart(QWidget):
             self._leave_prebuilt()
         if self._applied_active:
             self._leave_applied()
+        if self._reflected_active:
+            self._leave_reflected()
         self._preset_ti1_path = ti1
         self._preset_ti1_targen_sig = self._targen_signature()
         # Grey the targen panel (printtarg stays editable) so the loaded patch
