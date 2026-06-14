@@ -917,11 +917,12 @@ class _NewChartDialog(QDialog):
     # The widget suffixes whose checked/value state is remembered between
     # New-chart sessions (attribute = "_gen_<name>").
     _GEN_CHECKS = ("cube", "skin", "blues", "greens", "greys", "edges",
-                   "hs", "pastel", "image", "fill", "unique")
+                   "hs", "pastel", "image", "whiteblack", "fill", "unique")
     _GEN_SPINS = ("cube_n", "skin_n", "skin_ranges", "blues_n", "blues_layers",
                   "greens_n", "greens_layers", "greys_n", "greys_off",
                   "greys_rings", "edges_n", "edges_faces", "hs_n", "hs_reach",
-                  "pastel_n", "pastel_layers", "image_n", "fill_to")
+                  "pastel_n", "pastel_layers", "image_n", "whiteblack_n",
+                  "fill_to")
     # Factory defaults — what "Restore defaults" resets the whole window to
     # (also the fresh-install state). Must mirror the inline widget defaults.
     # Covers the source mode, chart instrument/paper, the seed count, every
@@ -939,12 +940,14 @@ class _NewChartDialog(QDialog):
                    "td": False},
         "cb": {"cube": True, "skin": True, "blues": True, "greens": True,
                "greys": True, "edges": False, "hs": False, "pastel": False,
-               "image": False, "fill": False, "unique": True},
+               "image": False, "whiteblack": False, "fill": False,
+               "unique": True},
         "sp": {"cube_n": 8, "skin_n": 8, "skin_ranges": 3, "blues_n": 64,
                "blues_layers": 3, "greens_n": 64, "greens_layers": 3,
                "greys_n": 16, "greys_off": 5, "greys_rings": 1, "edges_n": 6,
                "edges_faces": 0, "hs_n": 24, "hs_reach": 16, "pastel_n": 24,
-               "pastel_layers": 2, "image_n": 24, "fill_to": 1000},
+               "pastel_layers": 2, "image_n": 24, "whiteblack_n": 1,
+               "fill_to": 1000},
     }
 
     def _spacer_mode(self) -> str:
@@ -1092,6 +1095,11 @@ class _NewChartDialog(QDialog):
         """Build the combinable colour-set generators (#37) under the
         "Generate colour sets" radio: a checkbox + size control(s) + live
         count per generator, and a running total."""
+        # Patches already on the chart we're adding to (empty for New-chart);
+        # "Fill remaining gaps" counts these toward its target so it tops the
+        # whole chart up rather than appending that many patches (#51).
+        if not hasattr(self, "_existing_patches"):
+            self._existing_patches = []
         indent = QVBoxLayout()
         indent.setContentsMargins(22, 0, 0, 0)
         self._gen_panel = QWidget(parent)
@@ -1518,7 +1526,8 @@ class _NewChartDialog(QDialog):
             self._gen_image_count.setText(tr("load an image"))
         # Fill remaining gaps tops the combined total up to its target; its added
         # count therefore depends on everything above it.
-        fill_n = G.fill_gaps_count(total, self._gen_fill_to.value())
+        fill_n = G.fill_gaps_count(total + len(self._existing_patches),
+                                   self._gen_fill_to.value())
         self._gen_fill_count.setText(_patches_label(fill_n))
         if self._gen_fill.isChecked():
             total += fill_n
@@ -1546,8 +1555,12 @@ class _NewChartDialog(QDialog):
             if cb.isChecked():
                 program.extend(build())
         # Fill runs last so it tops up whatever the chosen sets left sparse.
+        # The patches already on the chart count toward the target too (so in
+        # the Add dialog "fill to N" tops the *whole* chart to N rather than
+        # adding N more), and the fill avoids landing on them (#51).
         if self._gen_fill.isChecked():
-            program.extend(G.fill_gaps(program, self._gen_fill_to.value()))
+            seed = self._existing_patches + program
+            program.extend(G.fill_gaps(seed, self._gen_fill_to.value()))
         if self._gen_unique.isChecked():
             program = G.deduplicate(program)
         # Pure white & black is added *after* de-dup so its deliberate repeats
@@ -1763,13 +1776,17 @@ class _AddPatchesDialog(_NewChartDialog):
     holds the RGB triples to splice into the grid.
     """
 
-    def __init__(self, settings=None, parent: QWidget | None = None) -> None:
+    def __init__(self, settings=None, parent: QWidget | None = None,
+                 existing_patches=None) -> None:
         QDialog.__init__(self, parent)
         self.setWindowTitle(tr("Add patches"))
         self.setMinimumWidth(620)
         self._settings = settings
         self.result_program: list[tuple] | None = None
-        # State the inherited generate-panel methods expect.
+        # State the inherited generate-panel methods expect. The chart's current
+        # patches let "Fill remaining gaps" top the whole chart up to its target
+        # instead of appending that many (#51); set before _build_generate_panel.
+        self._existing_patches = list(existing_patches or [])
         self._gen_image_px = None
         self._gen_image_name = ""
         self._single_rgb: tuple[float, float, float] = (50.0, 50.0, 50.0)
@@ -2953,7 +2970,8 @@ class Ti2RelayoutDialog(QDialog):
         """Open the Add dialog — a single chosen colour, or one or more
         generated colour sets (3D cube, skin tones, blues, greens, greys, …) —
         and splice the result into the chart."""
-        dlg = _AddPatchesDialog(self._settings, self)
+        dlg = _AddPatchesDialog(self._settings, self,
+                                existing_patches=self._program_from_grid())
         if dlg.exec() != QDialog.DialogCode.Accepted or not dlg.result_program:
             return
         extra = dlg.result_program

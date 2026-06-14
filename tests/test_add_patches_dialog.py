@@ -129,3 +129,46 @@ def test_add_with_no_chart_open_seeds_a_chart_and_previews(qapp, monkeypatch):
     assert editor._spec is not None          # a chart was seeded
     assert editor._grid.count() == 2         # patches landed in the grid
     assert rendered                          # initial preview was kicked off
+
+
+def test_fill_counts_existing_chart_patches(qapp):
+    """#51: in the Add dialog, "Fill remaining gaps: N" tops the *whole* chart
+    up to N — patches already on the chart count, rather than adding N more."""
+    existing = [(float(i % 100), 0.0, 0.0) for i in range(60)]
+    dlg = _AddPatchesDialog(_FakeSettings(), existing_patches=existing)
+    dlg._add_mode_gen.setChecked(True)
+    dlg._refresh_add_mode()
+    for n in dlg._GEN_CHECKS:
+        getattr(dlg, f"_gen_{n}").setChecked(False)
+    dlg._gen_fill.setChecked(True)
+    dlg._gen_fill_to.setValue(100)
+    dlg._update_gen_counts()
+    assert len(dlg._build_generated_program()) == 40        # 60 there + 40 = 100
+
+
+def test_fill_over_target_adds_nothing(qapp):
+    existing = [(float(i % 100), 1.0, 2.0) for i in range(150)]
+    dlg = _AddPatchesDialog(_FakeSettings(), existing_patches=existing)
+    dlg._add_mode_gen.setChecked(True)
+    dlg._refresh_add_mode()
+    for n in dlg._GEN_CHECKS:
+        getattr(dlg, f"_gen_{n}").setChecked(False)
+    dlg._gen_fill.setChecked(True)
+    dlg._gen_fill_to.setValue(100)              # already past it
+    dlg._update_gen_counts()
+    assert dlg._build_generated_program() == []
+
+
+def test_fill_without_existing_chart_unchanged(qapp):
+    """New-chart-style use (no existing patches) still fills to the target."""
+    dlg = _AddPatchesDialog(_FakeSettings())    # existing_patches defaults to []
+    dlg._add_mode_gen.setChecked(True)
+    dlg._refresh_add_mode()
+    for n in dlg._GEN_CHECKS:
+        getattr(dlg, f"_gen_{n}").setChecked(False)
+    dlg._gen_cube.setChecked(True)
+    dlg._gen_cube_n.setValue(3)                 # 27
+    dlg._gen_fill.setChecked(True)
+    dlg._gen_fill_to.setValue(100)
+    dlg._update_gen_counts()
+    assert len(dlg._build_generated_program()) == 100

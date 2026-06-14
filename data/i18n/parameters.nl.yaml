@@ -40,8 +40,8 @@ parameters:
         - "CMYK + oranje + groen + licht CM"
         - "CMYK + licht CM + middel CM"
     "-D":
-      name: "Kleurmiddel toevoegen/verwijderen"
-      tooltip_title: "Kleurmiddel toevoegen/verwijderen (-D)"
+      name: "Kleurmiddel wijzigen"
+      tooltip_title: "Kleurmiddel wijzigen (-D)"
       tooltip_body: |-
         Wijzigt de kleurmiddelset van het apparaattype (-d) door één
         afzonderlijk kleurmiddel toe te voegen of te verwijderen.  Zit het
@@ -836,8 +836,8 @@ parameters:
         die dat ondersteunen (bijv. i1Pro 2/3).  Levert nauwkeurigere
         Lab-waarden op, maar verlengt de meettijd iets.
     "-T":
-      name: "Meetveld-consistentietolerantie"
-      tooltip_title: "Meetveld-tolerantiefactor (-T)"
+      name: "Consistentietolerantie"
+      tooltip_title: "Consistentietolerantie (-T)"
       tooltip_body: |-
         Een vermenigvuldiger op chartreads ingebouwde
         meetveld-consistentiedrempel — geen delta-E-waarde. chartread leest elk

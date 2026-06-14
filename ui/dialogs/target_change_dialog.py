@@ -57,7 +57,10 @@ class TargetChangeDialog(QDialog):
         self._action = TargetChangeAction.CANCEL
         self.setWindowTitle(tr("This target already exists under a different name"))
         self.setMinimumWidth(580)
-        self.setMaximumWidth(720)
+        # Cap generously: the option titles embed the (variable-length) target
+        # names, so the dialog must be able to grow wide enough to show them in
+        # full — see the per-button setMinimumWidth in _option_button (#52).
+        self.setMaximumWidth(1100)
         self.setWindowFlags(
             self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint
         )
@@ -186,6 +189,12 @@ class TargetChangeDialog(QDialog):
             btn.setDefault(True)
         elif danger:
             btn.setObjectName("danger")
+        # The title carries the target name(s); a long name (or a longer
+        # translation) used to overflow the fixed width and clip at both ends
+        # (#52). Demand at least the text width plus the stylesheet's 18px×2
+        # padding (+ a safety margin), so the button — and the dialog — grow to
+        # fit instead of clipping, in every language.
+        btn.setMinimumWidth(btn.fontMetrics().horizontalAdvance(title) + 48)
         btn.clicked.connect(lambda: self._choose(action))
         col.addWidget(btn)
 
