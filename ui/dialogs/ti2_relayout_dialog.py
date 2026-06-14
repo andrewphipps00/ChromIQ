@@ -571,8 +571,6 @@ class _NewChartDialog(QDialog):
             "choices here — once you're done, the chart opens in the editor where "
             "you can arrange and fine-tune everything.\n\n"
             "What each choice means:\n\n"
-            "• Name — what the chart is called. It becomes the file name and is "
-            "also printed on the page, so you can tell your charts apart later.\n\n"
             "• Instrument & Paper — which measuring device you'll use and what "
             "paper you'll print on. ChromIQ uses these to lay the patches out in a "
             "way your device can read, at the right page size.\n\n"
@@ -675,23 +673,22 @@ class _NewChartDialog(QDialog):
         lay.addLayout(head)
 
         # --- Chart identity --------------------------------------------------
+        # The chart name is no longer asked for here — it's chosen later when
+        # the chart is saved (Save & apply), which is what becomes the folder
+        # and file names. The basename stays a neutral "chart" placeholder
+        # until then (see _on_ok / result_basename).
         chart_box = QGroupBox(tr("Chart"), self)
         cg = QGridLayout(chart_box)
-        cg.addWidget(QLabel(tr("Name:")), 0, 0)
-        self._name = QLineEdit("chart", chart_box)
-        self._name.setObjectName("compact_input")
-        self._name.setToolTip(tr("Used as the file basename and stamped onto the chart"))
-        cg.addWidget(self._name, 0, 1, 1, 3)
-        cg.addWidget(QLabel(tr("Instrument:")), 1, 0)
+        cg.addWidget(QLabel(tr("Instrument:")), 0, 0)
         self._instr = NoScrollComboBox(chart_box)
         for code, label in _INSTRUMENTS:
             self._instr.addItem(label, code)
-        cg.addWidget(self._instr, 1, 1)
+        cg.addWidget(self._instr, 0, 1)
         # Breathing room between the instrument combo and the Paper label so the
         # two controls don't read as one run-on field.
         _paper_lbl = QLabel(tr("Paper:"))
         _paper_lbl.setContentsMargins(20, 0, 0, 0)
-        cg.addWidget(_paper_lbl, 1, 2)
+        cg.addWidget(_paper_lbl, 0, 2)
         self._paper = NoScrollComboBox(chart_box)
         for code in _PAPER_ORDER:
             self._paper.addItem(
@@ -707,7 +704,7 @@ class _NewChartDialog(QDialog):
         ix = self._paper.findData("A4")
         if ix >= 0:
             self._paper.setCurrentIndex(ix)
-        cg.addWidget(self._paper, 1, 3)
+        cg.addWidget(self._paper, 0, 3)
         # Custom W/H row appears under the paper combo when "Custom" is
         # selected — same UX as the Create Chart tab.
         self._paper_custom_row = QWidget(chart_box)
@@ -729,7 +726,7 @@ class _NewChartDialog(QDialog):
         self._paper_custom_row.setVisible(False)
         # Sit the W/H row directly under the Paper combo it belongs to (cols 2–3)
         # instead of stranded on the far left under "Instrument".
-        cg.addWidget(self._paper_custom_row, 2, 2, 1, 2)
+        cg.addWidget(self._paper_custom_row, 1, 2, 1, 2)
         # Keep the two control columns balanced so the Instrument/Paper combos
         # get equal width and the row doesn't crowd the label gap.
         cg.setColumnStretch(1, 1)
@@ -888,8 +885,9 @@ class _NewChartDialog(QDialog):
 
         btns = QHBoxLayout()
         restore = QPushButton(tr("Restore defaults"), self)
-        restore.setToolTip(tr("Reset the colour-set options on this window back "
-                           "to their defaults."))
+        restore.setToolTip(tr("Reset every setting on this window — instrument, "
+                           "paper, layout options and colour sets — back to "
+                           "their defaults."))
         restore.clicked.connect(self._restore_factory_defaults)
         btns.addWidget(restore)
         btns.addStretch(1)
@@ -927,10 +925,21 @@ class _NewChartDialog(QDialog):
                   "greens_n", "greens_layers", "greys_n", "greys_off",
                   "greys_rings", "edges_n", "edges_faces", "hs_n", "hs_reach",
                   "pastel_n", "pastel_layers", "image_n", "fill_to")
-    # Factory defaults — what "Restore defaults" resets the colour sets to (and
-    # the fresh-install state). Must mirror the inline widget defaults. No
-    # "mode" key, so restoring defaults leaves the current source mode alone.
+    # Factory defaults — what "Restore defaults" resets the whole window to
+    # (also the fresh-install state). Must mirror the inline widget defaults.
+    # Covers the source mode, chart instrument/paper, the seed count, every
+    # Layout-options knob and the colour sets, so one click puts every
+    # parameter back to a known-good baseline.
     _GEN_FACTORY = {
+        "mode": "seed",
+        "instr": "i1",
+        "paper": "A4",
+        "paper_w": 210, "paper_h": 297,
+        "count": 200,
+        "layout": {"spacer_mode": "colored", "patch_scale": 1.0,
+                   "spacer_scale": 1.0, "margin": 6, "dpi": 300,
+                   "bit16": False, "L": False, "P": False, "h": False,
+                   "td": False},
         "cb": {"cube": True, "skin": True, "blues": True, "greens": True,
                "greys": True, "edges": False, "hs": False, "pastel": False,
                "image": False, "fill": False, "unique": True},
@@ -941,12 +950,37 @@ class _NewChartDialog(QDialog):
                "pastel_layers": 2, "image_n": 24, "fill_to": 1000},
     }
 
+    def _spacer_mode(self) -> str:
+        """Current spacer-mode mutex selection (matches _on_ok's mapping)."""
+        if self._sp_bw.isChecked():
+            return "bw"
+        if self._sp_none.isChecked():
+            return "none"
+        return "colored"
+
     def _collect_gen_state(self) -> dict:
         mode = ("generate" if self._mode_generate.isChecked() else
                 "paste" if self._mode_paste.isChecked() else
                 "blank" if self._mode_blank.isChecked() else "seed")
         return {
             "mode": mode,
+            "instr": self._instr.currentData(),
+            "paper": self._paper.currentData(),
+            "paper_w": self._paper_w.value(),
+            "paper_h": self._paper_h.value(),
+            "count": self._count.value(),
+            "layout": {
+                "spacer_mode": self._spacer_mode(),
+                "patch_scale": self._patch_scale.value(),
+                "spacer_scale": self._spacer_scale.value(),
+                "margin": self._margin.value(),
+                "dpi": self._dpi.value(),
+                "bit16": self._bd_16.isChecked(),
+                "L": self._cb_L.isChecked(),
+                "P": self._cb_P.isChecked(),
+                "h": self._cb_h.isChecked(),
+                "td": self._cb_td.isChecked(),
+            },
             "cb": {n: getattr(self, f"_gen_{n}").isChecked()
                    for n in self._GEN_CHECKS},
             "sp": {n: getattr(self, f"_gen_{n}").value()
@@ -954,8 +988,62 @@ class _NewChartDialog(QDialog):
         }
 
     def _apply_gen_state(self, st: dict) -> None:
-        """Set every colour-set widget from a {mode?, cb, sp} dict. Unknown /
-        missing keys are skipped, so old saved states load forward-compatibly."""
+        """Set every window widget from a saved/factory state dict. Unknown /
+        missing keys are skipped, so old saved states load forward-compatibly.
+
+        Order matters: the instrument combo is set first (its change handler
+        hides + clears the strip-only -L / -P knobs for non-strip readers), and
+        within the layout block the density toggles run before the values they
+        overwrite, so a restored triple-density preset doesn't get clobbered."""
+        # Chart identity — instrument + paper (+ custom dimensions).
+        instr = st.get("instr")
+        if instr is not None:
+            ix = self._instr.findData(instr)
+            if ix >= 0:
+                self._instr.setCurrentIndex(ix)
+        paper = st.get("paper")
+        if paper is not None:
+            ix = self._paper.findData(paper)
+            if ix >= 0:
+                self._paper.setCurrentIndex(ix)
+        for key, w in (("paper_w", self._paper_w), ("paper_h", self._paper_h),
+                       ("count", self._count)):
+            if key in st:
+                try:
+                    w.setValue(int(st[key]))
+                except (TypeError, ValueError):
+                    pass
+
+        # Layout options. Spacer mode + density toggles first; their signal
+        # handlers (mutex, triple-density preset) settle before we restore the
+        # exact scale / margin / -L / -P values the user had saved.
+        lo = st.get("layout") or {}
+        sm = lo.get("spacer_mode")
+        if sm == "bw":
+            self._sp_bw.setChecked(True)
+        elif sm == "none":
+            self._sp_none.setChecked(True)
+        elif sm == "colored":
+            self._sp_colored.setChecked(True)
+        if "h" in lo:
+            self._cb_h.setChecked(bool(lo["h"]))
+        if "td" in lo:
+            self._cb_td.setChecked(bool(lo["td"]))
+        if "L" in lo:
+            self._cb_L.setChecked(bool(lo["L"]))
+        if "P" in lo:
+            self._cb_P.setChecked(bool(lo["P"]))
+        if "patch_scale" in lo:
+            self._patch_scale.setValue(float(lo["patch_scale"]))
+        if "spacer_scale" in lo:
+            self._spacer_scale.setValue(float(lo["spacer_scale"]))
+        if "margin" in lo:
+            self._margin.setValue(int(lo["margin"]))
+        if "dpi" in lo:
+            self._dpi.setValue(int(lo["dpi"]))
+        if "bit16" in lo:
+            (self._bd_16 if lo["bit16"] else self._bd_8).setChecked(True)
+
         for n, val in (st.get("sp") or {}).items():
             w = getattr(self, f"_gen_{n}", None)
             if w is not None:
@@ -984,8 +1072,9 @@ class _NewChartDialog(QDialog):
             self._apply_gen_state(st)
 
     def _restore_factory_defaults(self) -> None:
-        """Reset the colour-set options to their factory defaults (leaving the
-        source mode, name, instrument and paper as they are)."""
+        """Reset every parameter in the window — source mode, instrument,
+        paper, seed count, Layout options and the colour sets — back to its
+        factory default."""
         self._apply_gen_state(self._GEN_FACTORY)
 
     # -- generate-colour-sets panel ---------------------------------------
@@ -1538,11 +1627,12 @@ class _NewChartDialog(QDialog):
             dpi=self._dpi.value(),
         )
 
-        name = self._name.text().strip() or "chart"
         self.result_spec = spec
         self.result_program = program
         self.result_options = opts
-        self.result_basename = name
+        # No name is asked for here any more — the real name is chosen at
+        # Save & apply time. Keep the neutral "chart" placeholder basename.
+        self.result_basename = "chart"
         self._save_gen_state()   # remember these choices for next time
         self.accept()
 
