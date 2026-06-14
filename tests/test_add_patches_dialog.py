@@ -172,3 +172,23 @@ def test_fill_without_existing_chart_unchanged(qapp):
     dlg._gen_fill_to.setValue(100)
     dlg._update_gen_counts()
     assert len(dlg._build_generated_program()) == 100
+
+
+def test_fill_counts_white_black_not_on_top(qapp):
+    """Pure white & black must count toward the fill target, not stack on top:
+    3 of each + fill-to-50 yields 50 total (with all 6 anchors present)."""
+    dlg = _AddPatchesDialog(_FakeSettings())
+    dlg._add_mode_gen.setChecked(True)
+    dlg._refresh_add_mode()
+    for n in dlg._GEN_CHECKS:
+        getattr(dlg, f"_gen_{n}").setChecked(False)
+    dlg._gen_whiteblack.setChecked(True)
+    dlg._gen_whiteblack_n.setValue(3)            # 3 white + 3 black
+    dlg._gen_fill.setChecked(True)
+    dlg._gen_fill_to.setValue(50)
+    dlg._update_gen_counts()
+    prog = dlg._build_generated_program()
+    assert len(prog) == 50                       # counted within, not 56
+    anchors = sum(1 for p in prog
+                  if tuple(p) in {(100.0, 100.0, 100.0), (0.0, 0.0, 0.0)})
+    assert anchors == 6                          # the repeats are kept verbatim

@@ -332,10 +332,54 @@ a System/Auto mode that follows your OS live). Click any step to expand it.
 - **Profile-vs-profile comparison** — volume delta, intersection volume, and
   bidirectional coverage.
 
+### Design your own chart — layout editor & colour-set generator
+Most people never need this — Guided mode already picks a great chart. But when
+you want full control over *which colours* you measure and *how the sheet is laid
+out*, the **chart layout editor** (Tools → **Edit / create chart layout**) is a
+complete design surface:
+
+- **Start from anything** — load an existing `.ti2`, pull in the chart you just
+  made on the Create Chart tab, or begin from a blank canvas.
+- **Rearrange freely** — move patches and whole strips with Front / Up / Down /
+  Back, and see the printed sheet redraw in a live, multi-page preview.
+- **Recolour patches and spacers** — set or nudge patch colours, edit the spacer
+  palette, or paint individual separator strips, all while ChromIQ keeps the
+  measurement data and the printed pixels perfectly in sync.
+- **Combine charts** — append or prepend the colours from another `.ti2`/`.ti1`/
+  `.ti3`/i1Profiler file to merge two targets into one.
+- **See it in 3D** — the **3D distribution** viewer plots your whole patch set as
+  an interactive RGB cube so you can spot gaps and clumps at a glance.
+- **Save & apply** pushes your custom layout straight back into the Create Chart
+  tab, ready to print.
+
+**Build a target around the colours you actually print.** The **colour-set
+generator** (in *New chart* and *Add patches*) lets you stack any mix of these,
+with live patch counts and automatic de-duplication so combined sets never
+double up:
+
+- **3D RGB cube** — even coverage across the whole colour range.
+- **Skin tones** — light→dark ramps through all six Fitzpatrick phototypes.
+- **Blues / turquoise** and **Greens (foliage)** — denser sampling of skies,
+  water, forests, and foliage.
+- **Near-neutral greys** — a neutral ramp plus subtle hue rings for clean,
+  cast-free greys.
+- **Saturated edges** and **gamut faces** — the most vivid colours your printer
+  can reach, for accurate gamut boundaries.
+- **Highlights & shadows** — extra detail at the bright and dark ends where
+  printers struggle most.
+- **Pastels** — soft, low-chroma colours across every hue.
+- **From image** — load a photo and ChromIQ extracts its most representative
+  colours, so you can profile around a specific image or palette.
+- **White & black anchors** and **Fill remaining gaps** — guarantee pure
+  paper-white/black, then scatter extra patches into the sparsest parts of the
+  set up to a target count.
+
 ### Tools menu — standalone utilities
 The masthead **Tools** button opens a menu of conversions and checks you can run
 on their own, outside the five-step flow:
-- **Edit / create chart layout** — reorder strips or build a custom patch layout.
+- **Edit / create chart layout** — the full layout editor and colour-set
+  generator described above: reorder strips, recolour patches and spacers,
+  combine charts, generate custom colour sets, and view them in 3D.
 - **Average measurements** — combine repeat reads of the same chart for lower noise.
 - **Merge measurements** — fold extra measurements into an existing set.
 - **Convert TI1 → i1Profiler** and **Convert i1Profiler → TI1 / TI3** — move charts
