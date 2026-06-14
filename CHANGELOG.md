@@ -1,5 +1,34 @@
 # Changelog
 
+## v3.9.25
+
+More from **Knut (@soul-traveller)**'s testing on #37 — thank you! 🙏
+
+### ✨ New
+- **"Pure white & black" colour set.** A new generator option that adds pure
+  paper white and the deepest printable black — the two anchor points a good
+  profile needs. A spin sets how many of *each* to include, and they're kept
+  verbatim even with *Ensure unique colours* on (handy for averaging repeated
+  readings of paper white). It's also aware of the rest of the chart: whatever
+  the 3D cube, near-neutral greys or saturated edges already contribute counts
+  toward your number, so asking for three of each when one is already there adds
+  just two more.
+- **A heads-up when added colours already exist.** When you use the editor's
+  *Add… → Generate colour sets* and some of the generated colours are already in
+  the loaded chart, ChromIQ now explains it in plain language and lets you *Make
+  them unique* (nudge the repeats to free cells, keeping the full count), *Add
+  only the new ones* (drop the repeats), *Add anyway*, or *Cancel* — so the same
+  patch isn't silently printed twice.
+
+### 🐛 Fixed
+- **"Highlights & shadows" interlocks more precisely with *Near-neutral greys*
+  (issue #37).** Following more of Knut's on-device testing, a highlight/shadow
+  cone now yields its centre only where a grey step actually sits (within a
+  couple of code values) rather than along its whole length. The gaps between
+  grey steps keep filling in to the neutral axis, so few grey steps leave the
+  cones almost whole while many tight steps carve out more — matching the grey
+  ramp you actually chose.
+
 ## v3.9.24
 
 Another round driven by **Knut (@soul-traveller)**'s testing — thank you! 🙏
