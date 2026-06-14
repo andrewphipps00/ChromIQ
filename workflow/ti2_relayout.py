@@ -632,6 +632,8 @@ def regenerate(
     extra_args: list[str] | None = None,
     spacer_palette: tuple[tuple[float, float, float], ...] | None = None,
     options: "LayoutOptions | None" = None,
+    with_twin: bool = True,
+    dpi_override: int | None = None,
 ) -> RegenResult:
     """Run printtarg twice (default + ``-b``) and return the artefact paths.
 
@@ -668,7 +670,10 @@ def regenerate(
     # back to ColorMunki after the run (see _patch_ti2_for_triple_density).
     triple = bool(options and options.triple_density)
     instr_flag = "i1" if triple else spec.instrument_flag
-    use_dpi = options.dpi if options else dpi
+    # dpi_override lets the editor render a fast low-res *preview* while the
+    # saved chart still uses options.dpi (the .ti2 patch data is DPI-independent,
+    # so only the on-screen TIFF resolution changes).
+    use_dpi = dpi_override if dpi_override else (options.dpi if options else dpi)
     dpi_flag = "-T" if options and options.tiff_16bit else "-t"
     base_args = [
         f"-i{instr_flag}",
@@ -692,7 +697,11 @@ def regenerate(
         return sorted({*work.glob(f"{basename}*.tif"), *work.glob(f"{basename}*.tiff")})
 
     tiffs = _run(out_dir, bw=False)
-    bw_tiffs = _run(bw_dir, bw=True)
+    # The B&W twin is a second printtarg run, used only to locate spacer pixels
+    # (Spacers-mode selection) and to refine patch y-bands. The editor skips it
+    # for the common Patches-mode preview (with_twin=False) to halve the render
+    # cost; patch geometry then falls back to coarser bbox-only y-bands.
+    bw_tiffs = _run(bw_dir, bw=True) if with_twin else []
     if not tiffs:
         raise RuntimeError("printtarg produced no TIFF pages")
     # The B&W twin exists only as a spacer-mask source for the editor. Its

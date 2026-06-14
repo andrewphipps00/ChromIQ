@@ -82,3 +82,47 @@ def test_no_initial_chart_opens_empty(qapp, monkeypatch):
     monkeypatch.setattr(ed, "_regenerate", lambda **k: None)
     qapp.processEvents()
     assert ed._spec is None
+
+
+def test_needs_twin_gating(qapp, monkeypatch):
+    """#44: the B&W twin (second printtarg run) is skipped for the common
+    Patches-mode preview, and rendered for Spacers mode or a painted chart."""
+    ed = M.Ti2RelayoutDialog(ArgyllRunner(_settings()), _settings())
+    monkeypatch.setattr(ed, "_regenerate", lambda **k: None)
+    monkeypatch.setattr(ed, "_refresh_preview", lambda *a, **k: None)
+
+    ed._options = R.LayoutOptions(spacer_mode="colored")
+    ed._mode_patches.setChecked(True)
+    assert ed._needs_twin() is False              # patches, unpainted → skip
+
+    ed._mode_spacers.setChecked(True)
+    assert ed._needs_twin() is True               # spacers mode → twin
+
+    ed._mode_patches.setChecked(True)
+    ed._paint = {(0, 0): (50.0, 50.0, 50.0)}
+    assert ed._needs_twin() is True               # painted → twin even in patches
+
+    ed._paint = {}
+    ed._options = R.LayoutOptions(spacer_mode="none")
+    ed._mode_spacers.setChecked(True)
+    assert ed._needs_twin() is False              # no spacers at all
+
+
+def test_patch_geometry_is_lazy_and_cached(qapp, monkeypatch):
+    """Geometry is computed per visited page on demand, then cached (#44)."""
+    ed = M.Ti2RelayoutDialog(ArgyllRunner(_settings()), _settings())
+    assert ed._patch_geom_cache == {}
+    assert ed._patch_geom_for_page(0) == {}       # no render yet → empty, no crash
+
+    calls = []
+    monkeypatch.setattr(R, "patch_geometry_for_page",
+                        lambda *a, **k: calls.append(1) or {1: (0, 0, 5, 5)})
+
+    class _Regen:
+        ti2 = None
+        tiffs = ["p0", "p1"]
+        bw_tiffs = [None, None]
+    ed._regen = _Regen()
+    assert ed._patch_geom_for_page(0) == {1: (0, 0, 5, 5)}
+    ed._patch_geom_for_page(0)                     # cached — no recompute
+    assert calls == [1]

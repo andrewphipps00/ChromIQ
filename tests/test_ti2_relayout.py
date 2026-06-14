@@ -129,6 +129,36 @@ def test_seed_from_targen_then_regenerate(tmp_path: Path):
     R.assert_data_integrity(prog, res.ti2)
 
 
+_PROG4 = [(0.0, 0.0, 0.0), (100.0, 100.0, 100.0),
+          (100.0, 0.0, 0.0), (0.0, 0.0, 100.0)]
+
+
+@argyll
+def test_regenerate_with_twin_false_skips_the_second_run(tmp_path: Path):
+    """Fast preview (#44): with_twin=False renders only the deliverable."""
+    spec = R.ChartSpec.new("i1", "A4")
+    res = R.regenerate(spec, _PROG4, tmp_path / "notwin", ARGYLL_BIN,
+                       with_twin=False)
+    assert res.tiffs
+    assert all(b is None for b in res.bw_tiffs)     # no twin produced
+    # The default still renders a twin (Spacers mode / save path rely on it).
+    res2 = R.regenerate(spec, _PROG4, tmp_path / "twin", ARGYLL_BIN)
+    assert any(res2.bw_tiffs)
+
+
+@argyll
+def test_regenerate_dpi_override_shrinks_the_preview(tmp_path: Path):
+    """A dpi_override renders a smaller TIFF without changing the .ti2 (#44)."""
+    from PIL import Image
+    spec = R.ChartSpec.new("i1", "A4")
+    full = R.regenerate(spec, _PROG4, tmp_path / "full", ARGYLL_BIN,
+                        options=R.LayoutOptions(dpi=300), with_twin=False)
+    low = R.regenerate(spec, _PROG4, tmp_path / "low", ARGYLL_BIN,
+                       options=R.LayoutOptions(dpi=300), with_twin=False,
+                       dpi_override=100)
+    assert Image.open(low.tiffs[0]).size[0] < Image.open(full.tiffs[0]).size[0]
+
+
 @argyll
 def test_integrity_tolerates_8bit_boundary_rounding(tmp_path: Path):
     """Arbitrary-float patches (e.g. the colour-set generators) can land exactly

@@ -91,6 +91,11 @@ def _patches_label(n: int) -> str:
 
 _SWATCH = 46  # grid swatch px
 
+# On-screen preview render resolution (#44). The preview never needs print DPI;
+# rendering it low-res makes printtarg far faster and shrinks every image
+# read / diff / segmentation. The saved chart still uses the user's full DPI.
+_PREVIEW_DPI = 100
+
 # printtarg -i codes the editor offers, with friendly labels. The codes are
 # passed straight through to printtarg (see workflow.ti2_relayout.regenerate),
 # so they must be printtarg's own -i values: "i1" (i1Pro family), "3p"
@@ -179,17 +184,22 @@ class _RegenWorker(QThread):
     done = pyqtSignal(object)  # RegenResult | Exception
 
     def __init__(self, spec, program, out_dir, bin_dir, palette,
-                 *, options=None, basename="chart"):
+                 *, options=None, basename="chart", with_twin=True,
+                 dpi_override=None):
         super().__init__()
-        self._args = (spec, program, out_dir, bin_dir, palette, options, basename)
+        self._args = (spec, program, out_dir, bin_dir, palette, options,
+                      basename, with_twin, dpi_override)
 
     def run(self) -> None:
-        spec, program, out_dir, bin_dir, palette, options, basename = self._args
+        (spec, program, out_dir, bin_dir, palette, options, basename,
+         with_twin, dpi_override) = self._args
         try:
             self.done.emit(R.regenerate(spec, program, out_dir, bin_dir,
                                         spacer_palette=palette,
                                         options=options,
-                                        basename=basename))
+                                        basename=basename,
+                                        with_twin=with_twin,
+                                        dpi_override=dpi_override))
         except Exception as exc:  # surfaced to the user, not swallowed
             log.exception("relayout regenerate failed")
             self.done.emit(exc)
@@ -1894,7 +1904,9 @@ class Ti2RelayoutDialog(QDialog):
         # Per-page {sample_id: (x0,y0,x1,y1)} pixel boxes, computed once
         # after each regen and used by the "highlight selected patches"
         # overlay + the preview's patch-click/marquee handlers.
-        self._patch_geom: list[dict[int, tuple[int, int, int, int]]] = []
+        # Per-page patch geometry (sample-id → pixel bbox), computed lazily for
+        # the visited page only and cached; cleared on each fresh render (#44).
+        self._patch_geom_cache: dict[int, dict[int, tuple[int, int, int, int]]] = {}
 
         # Debounced auto-preview: fire 1.8s after the last edit.
         self._auto_timer = QTimer(self)
@@ -3195,7 +3207,14 @@ class Ti2RelayoutDialog(QDialog):
         patches = self._mode_patches.isChecked()
         self._patch_box.setVisible(patches)
         self._spacer_box.setVisible(not patches)
-        # selection outlines only show in Spacers mode
+        # Entering Spacers mode needs the B&W spacer twin (for the per-spacer
+        # masks), which the Patches-mode fast preview skips (#44). Render it now
+        # if it's missing; otherwise just redraw (selection outlines only show
+        # in Spacers mode).
+        if (not patches and self._needs_twin() and self._regen is not None
+                and not any(self._regen.bw_tiffs)):
+            self._regenerate(save_to=None)
+            return
         self._refresh_preview()
 
     def _build_palette_row(self) -> None:
@@ -3488,12 +3507,28 @@ class Ti2RelayoutDialog(QDialog):
         self._preview_pending_save = save_to
         self._set_busy(True)
         self._status.setText(tr("Rendering with printtarg…"))
+        # Fast preview (#44): low DPI, and only render the B&W spacer twin when
+        # we're actually in Spacers mode (it exists only for spacer selection).
+        full_dpi = self._options.dpi if self._options else 300
         self._worker = _RegenWorker(
             self._spec, self._program_from_grid(), out_dir, self._bin_dir,
             tuple(self._palette) if self._palette else None,
-            options=self._options, basename=self._basename)
+            options=self._options, basename=self._basename,
+            with_twin=self._needs_twin(),
+            dpi_override=min(full_dpi, _PREVIEW_DPI))
         self._worker.done.connect(self._on_regen_done)
         self._worker.start()
+
+    def _needs_twin(self) -> bool:
+        """Whether to render the B&W spacer twin (a second printtarg run, #44).
+
+        It's needed when spacers exist and either we're in Spacers mode (for the
+        per-spacer selection masks) or some spacers have been painted (so those
+        colours still show in the preview). The common Patches-mode preview on
+        an unpainted chart skips it — the big speed win."""
+        if self._options is None or self._options.spacer_mode == "none":
+            return False
+        return self._mode_spacers.isChecked() or bool(self._paint)
 
     def _on_regen_done(self, result) -> None:
         self._set_busy(False)
@@ -3502,20 +3537,12 @@ class Ti2RelayoutDialog(QDialog):
             self._status.setText(tr("Render failed."))
             return
         self._regen = result
-        # New render → previous per-page spacer segmentations are stale.
+        # New render → previous per-page spacer segmentations + patch geometry
+        # are stale. Both are now recomputed lazily for the visited page (#44).
         self._spacer_cache.clear()
+        self._patch_geom_cache.clear()
         # Authoritative per-page strip count from the regenerated .ti2.
         self._strips_per_page = parse_passes_per_page(result.ti2)
-        # Per-page patch geometry (sample-id → pixel bbox) used by the
-        # highlight overlay and preview patch hit-tests. Computed eagerly
-        # here so toggling Highlight or selecting in the grid is instant.
-        # The BW twin is required for the central-column scan that locates
-        # patch y-bands precisely (instead of guessing from the full bbox).
-        self._patch_geom = [
-            R.patch_geometry_for_page(
-                result.ti2, tif, page, bw_tif_path=result.bw_tiffs[page])
-            for page, tif in enumerate(result.tiffs)
-        ]
         if self._page >= len(result.tiffs):
             self._page = 0
         self._show_page(self._page)
@@ -3710,8 +3737,8 @@ class Ti2RelayoutDialog(QDialog):
             p.end()
         elif (self._mode_patches.isChecked()
                 and self._hl_patches.isChecked()
-                and self._patch_geom):
-            geom = self._patch_geom[self._page] if self._page < len(self._patch_geom) else {}
+                and self._regen is not None):
+            geom = self._patch_geom_for_page(self._page)
             sel = {self._grid.row(it) + 1 for it in self._grid.selectedItems()}
             if sel and geom:
                 p = QPainter(pm)
@@ -3740,14 +3767,31 @@ class Ti2RelayoutDialog(QDialog):
         # repaint with the new selection.
         if (self._mode_patches.isChecked()
                 and self._hl_patches.isChecked()
-                and self._patch_geom):
+                and self._regen is not None):
             self._refresh_preview()
+
+    def _patch_geom_for_page(self, page: int) -> dict:
+        """Patch sample-id → pixel bbox for a page, computed once and cached.
+
+        Lazy (visited page only) so a fresh render doesn't scan every page up
+        front (#44). The B&W twin refines the y-bands when present; without it
+        (Patches-mode fast preview) geometry falls back to the coarser bbox,
+        which patch_geometry_for_page tolerates."""
+        if self._regen is None or page >= len(self._regen.tiffs):
+            return {}
+        cached = self._patch_geom_cache.get(page)
+        if cached is not None:
+            return cached
+        bw = (self._regen.bw_tiffs[page]
+              if page < len(self._regen.bw_tiffs) else None)
+        geom = R.patch_geometry_for_page(
+            self._regen.ti2, self._regen.tiffs[page], page, bw_tif_path=bw)
+        self._patch_geom_cache[page] = geom
+        return geom
 
     def _patch_at(self, ix: float, iy: float) -> int | None:
         """Return the SAMPLE_ID under (ix, iy) on the current page, or None."""
-        if self._page >= len(self._patch_geom):
-            return None
-        for sid, (x0, y0, x1, y1) in self._patch_geom[self._page].items():
+        for sid, (x0, y0, x1, y1) in self._patch_geom_for_page(self._page).items():
             if x0 <= ix <= x1 and y0 <= iy <= y1:
                 return sid
         return None
@@ -3829,11 +3873,11 @@ class Ti2RelayoutDialog(QDialog):
             return
 
         # Patches mode (+ highlight): marquee picks patches into the grid.
-        if not (self._hl_patches.isChecked() and self._patch_geom):
+        if not (self._hl_patches.isChecked() and self._regen is not None):
             return
-        if self._page >= len(self._patch_geom):
+        geom = self._patch_geom_for_page(self._page)
+        if not geom:
             return
-        geom = self._patch_geom[self._page]
         touched_p = [
             sid for sid, (x0, y0, x1, y1) in geom.items()
             if not (x1 < ix0 or x0 > ix1 or y1 < iy0 or y0 > iy1)
@@ -3909,7 +3953,7 @@ class Ti2RelayoutDialog(QDialog):
             return
 
         # Patches mode (+ highlight): click maps to the grid selection.
-        if not (self._hl_patches.isChecked() and self._patch_geom):
+        if not (self._hl_patches.isChecked() and self._regen is not None):
             return
         sid = self._patch_at(ix, iy)
         if sid is None:
