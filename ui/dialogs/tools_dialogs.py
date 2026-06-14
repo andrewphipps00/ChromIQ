@@ -1938,18 +1938,22 @@ def open_tool_dialog(
     settings: "AppSettings",
     parent: QWidget | None = None,
     on_apply: "Callable[[Path, str], bool | None] | None" = None,
+    initial_chart: "Path | None" = None,
 ) -> None:
     """Open the dialog for the given tool key (no-op for unknown keys).
 
     ``on_apply`` is forwarded to the TI2 layout editor so its "Save & apply"
     button can hand a freshly-saved chart folder back to the Create Chart tab.
+    ``initial_chart`` pre-loads that editor with the Create Chart tab's current
+    chart so it opens ready to edit (#45).
     """
     if key == "spot_read":
         from ui.dialogs.spot_read_dialog import SpotReadDialog
         dlg = SpotReadDialog(runner, settings, parent)
     elif key == "ti2_relayout":
         from ui.dialogs.ti2_relayout_dialog import Ti2RelayoutDialog
-        dlg = Ti2RelayoutDialog(runner, settings, parent, on_apply=on_apply)
+        dlg = Ti2RelayoutDialog(runner, settings, parent, on_apply=on_apply,
+                                initial_chart=initial_chart)
     elif key == "average":
         dlg = AverageMeasurementsDialog(runner, settings, parent)
     elif key == "merge":

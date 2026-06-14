@@ -528,7 +528,25 @@ class MainWindow(QMainWindow):
         # The TI2 layout editor's "Save & apply" hands its chart folder back to
         # the Create Chart tab through this callback.
         on_apply = self._apply_editor_chart if key == "ti2_relayout" else None
-        open_tool_dialog(key, self._runner, self._settings, self, on_apply=on_apply)
+        # Pre-load that editor with the current chart so it opens ready to edit
+        # (#45) — same accessor as the 3D-cube tool, guarded on the project
+        # manifest existing (project() would otherwise materialise one).
+        initial_chart = None
+        if key == "ti2_relayout":
+            initial_chart = self._current_chart_ti2()
+        open_tool_dialog(key, self._runner, self._settings, self,
+                         on_apply=on_apply, initial_chart=initial_chart)
+
+    def _current_chart_ti2(self) -> "Path | None":
+        """The current run's generated chart .ti2, or None when no chart has
+        been generated yet (so the layout editor opens empty as before)."""
+        if not (self._file_mgr.working_dir() / "project.json").exists():
+            return None
+        try:
+            ti2 = self._file_mgr.project().current_run().chart_ti2
+        except Exception:  # noqa: BLE001 — never block opening the tool
+            return None
+        return ti2 if ti2.exists() else None
 
     def _apply_editor_chart(self, src_dir: "Path", name: str) -> bool:
         """Adopt a chart the layout editor just saved and show the Create Chart tab.

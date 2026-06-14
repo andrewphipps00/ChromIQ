@@ -1831,13 +1831,18 @@ class _AddPatchesDialog(_NewChartDialog):
 # ---------------------------------------------------------------------------
 class Ti2RelayoutDialog(QDialog):
     def __init__(self, runner, settings, parent: QWidget | None = None,
-                 on_apply: "Callable[[Path, str], bool | None] | None" = None) -> None:
+                 on_apply: "Callable[[Path, str], bool | None] | None" = None,
+                 initial_chart: "Path | None" = None) -> None:
         super().__init__(parent)
         self._settings = settings
         # Callback that hands a freshly-saved chart folder to the Create Chart
         # tab (set by the main window). When present, the action footer offers
         # "Save & apply" instead of the plain colour-export button.
         self._on_apply = on_apply
+        # Chart to pre-load when the editor opens — the Create Chart tab's
+        # current generated chart, so it's ready to edit (#45). Loaded after
+        # the UI is built (end of __init__).
+        self._initial_chart = initial_chart
         self._bin_dir = Path(settings.get("argyll_bin_path", "/Applications/Argyll/bin"))
         self.setWindowTitle(tr("Edit / create chart layout"))
         # Wider default so the printtarg-options column doesn't clip its
@@ -1888,6 +1893,13 @@ class Ti2RelayoutDialog(QDialog):
 
         self._build_ui()
         self._refresh_enabled()
+
+        # Pre-load the Create Chart tab's current chart, ready to edit (#45).
+        # Deferred to the event loop so the window is shown first and the
+        # initial preview render doesn't block the open. is_saved=True (set in
+        # _load_chart_from) means a clean open — closing without edits won't warn.
+        if self._initial_chart is not None and Path(self._initial_chart).is_file():
+            QTimer.singleShot(0, lambda: self._load_chart_from(Path(self._initial_chart)))
 
     # -- UI -----------------------------------------------------------------
     def _build_ui(self) -> None:
@@ -2672,25 +2684,32 @@ class Ti2RelayoutDialog(QDialog):
                                 "Argyll chart (*.ti2)", start_dir=start)
         if not path:
             return
+        self._load_chart_from(Path(path))
+
+    def _load_chart_from(self, path: Path) -> bool:
+        """Load a ``.ti2`` (+ its sibling ``meta.json`` layout knobs, if any)
+        into the editor. Shared by the Load .ti2 button and the open-time
+        pre-load from the Create Chart tab (#45). Returns True on success."""
         try:
-            spec = R.ChartSpec.from_ti2(Path(path))
+            spec = R.ChartSpec.from_ti2(path)
             program = R.default_program(spec)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — surface the parser's message
             QMessageBox.warning(self, tr("Could not load chart"), str(exc))
-            return
+            return False
         # Restore the printtarg layout knobs from the chart folder's meta.json
         # if this chart was saved by ChromIQ (the .ti2 itself only carries
         # instrument / paper / spacer palette). Foreign charts have no editor
         # meta: reset to defaults and take the basename from the file stem.
-        saved = R.load_editor_meta(Path(path))
+        saved = R.load_editor_meta(path)
         if saved is not None:
             self._options, self._basename = saved
-            note = f"Loaded {Path(path).name} (restored saved settings)"
+            note = f"Loaded {path.name} (restored saved settings)"
         else:
             self._options = R.LayoutOptions()
-            self._basename = Path(path).stem or "chart"
-            note = f"Loaded {Path(path).name}"
+            self._basename = path.stem or "chart"
+            note = f"Loaded {path.name}"
         self._set_chart(spec, program, note, is_saved=True)
+        return True
 
     def _new_chart(self) -> None:
         dlg = _NewChartDialog(self._bin_dir, self._settings, self)
