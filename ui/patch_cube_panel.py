@@ -56,16 +56,38 @@ class PatchCubePanel(QWidget):
         self._loaded = False
         self._pending_payload: dict | None = None
 
-        lay = QVBoxLayout(self)
-        lay.setContentsMargins(0, 0, 0, 0)
-        lay.setSpacing(0)
+        self._lay = QVBoxLayout(self)
+        self._lay.setContentsMargins(0, 0, 0, 0)
+        self._lay.setSpacing(0)
+        # The QWebEngineView is created lazily on first show (see showEvent),
+        # NOT here. Instantiating it spins up a Chromium compositor surface — a
+        # native child window — which on macOS reorders the parent window. When
+        # the host dialog (New chart / Add patches) opens with the cube folded
+        # away (the default), that reorder made the editor appear to close and
+        # reopen and, inside the nested-modal stack, left the app with a stuck
+        # modal grab so the main window froze. Deferring creation until the cube
+        # is actually shown keeps the folded-open path free of any web view.
+        self._web = None
+        self._web_view = None  # real QWebEngineView once built; None = not yet
+        self._view_ready = False
+
+    # ------------------------------------------------------------------
+    def showEvent(self, ev) -> None:  # noqa: N802
+        # Build the web view the first time the panel actually becomes visible
+        # (i.e. when the host unfolds the cube), never while it sits folded.
+        super().showEvent(ev)
+        self._ensure_view()
+
+    def _ensure_view(self) -> None:
+        """Create and load the QWebEngineView on first show. Idempotent."""
+        if self._view_ready:
+            return
+        self._view_ready = True
         self._web = self._make_web_view(self._theme["bg"])
-        # Real QWebEngineView when WebEngine is present, else None (placeholder
-        # label). Held separately so teardown() can drain it on close.
         self._web_view = self._web if hasattr(self._web, "setUrl") else None
         if self._web_view is not None:
             self._web_view.loadFinished.connect(self._on_load_finished)
-        lay.addWidget(self._web, 1)
+        self._lay.addWidget(self._web, 1)
         self._render()
 
     # ------------------------------------------------------------------

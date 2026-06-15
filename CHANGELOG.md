@@ -1,5 +1,27 @@
 # Changelog
 
+## v3.9.31
+
+A fix for a nasty freeze when opening the New chart / Add patches windows from
+the layout editor, plus some visual polish to those windows.
+
+### 🐛 Fixed
+- **Opening *New chart* or *Add patches* from the layout editor no longer makes
+  the editor flicker (close + reopen) and could freeze the whole app.** The
+  embedded 3D-cube preview built its web view up front — even while folded away —
+  and on macOS that reordered the windows mid-dialog and left the app with a
+  stuck modal grab, so the main window stopped responding. The cube's web view is
+  now created only when you actually unfold the preview, so opening these windows
+  with the cube hidden (the default) is clean and instant.
+
+### 🔧 Changed
+- **Tab-style headings in the chart-design windows.** The layout editor, *New
+  chart* and *Add patches* windows now carry the same eyebrow + serif-title
+  heading as the main-window tabs, set off by a full-width spectrum bar.
+- **Layout-editor tidy-ups.** The *New chart* / *Load .ti2* buttons swapped
+  places, and the status line now sits under the patch grid and fades itself
+  away a few seconds after each message instead of spanning the whole window.
+
 ## v3.9.30
 
 Undo and redo come to the chart layout editor — experiment freely, nothing is a
