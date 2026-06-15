@@ -1,5 +1,21 @@
 # Changelog
 
+## v3.9.29
+
+A new way to *see* the colour sets you're building before you commit to them.
+
+### ✨ Added
+- **Live 3D RGB-cube preview in the chart generators.** The New chart and
+  *Add patches* dialogs now have a foldable 3D cube panel that shows exactly
+  what your ticked colour sets ("Generate colour sets") would produce, redrawing
+  live as you change the steps, layers and other settings. In the *Add* dialog it
+  also draws the chart's existing patches (dimmed) underneath the ones you're
+  about to add, so you can see at a glance how your additions fill the gaps.
+  Click **"Show 3D preview ▸"** to reveal it — it stays folded away by default
+  and remembers your choice — then rotate, zoom and pan the cube to judge gamut
+  coverage and patch clumping. It's the same cube as the editor's
+  *3D distribution…* view, now wired straight into the generator.
+
 ## v3.9.28
 
 A small follow-up to v3.9.27's *Fill remaining gaps* fix.
