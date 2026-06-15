@@ -1,5 +1,34 @@
 # Changelog
 
+## v3.10.1
+
+A Windows-focused follow-up to v3.10.0, plus a refinement to the Saturated-edges
+colour set. Once again driven by **Knut (@soul-traveller)**, whose Windows
+testing and design notes turned up every item below. 🙏
+
+### 🔧 Changed
+- **"Saturated edges" now fills the gaps left by other sets.** On its own the
+  set was already evenly placed, but combined with sets that also sit on the
+  gamut boundary — the 3D cube above all — it re-sampled the very same edge and
+  face points instead of filling between them. It now reads the patches already
+  placed and lays its samples at the midpoints of the boundary gaps (largest-gap
+  splits along each edge, a blue-noise-then-centroidal fill on each face), so it
+  complements the cube rather than doubling up on it. Used on its own the output
+  is byte-for-byte the original even spacing; the patch count is unchanged.
+
+### 🐛 Fixed
+- **The New chart / Add patches windows no longer freeze the first time you open
+  the 3D preview on Windows.** Opening the very first preview spun Chromium up
+  from scratch in the middle of the window's modal transition, which reordered
+  and "reloaded" the editor and left the whole app unresponsive. ChromIQ now
+  warms the preview engine up once at startup — off to the side, out of any
+  dialog — so opening a preview is quick and side-effect-free every time.
+- **The layout editor's preview no longer jumps around on Windows after each
+  update.** When a preview finished rendering, the status line below the patch
+  grid briefly forced its column wider — squeezing the preview — then snapped
+  back a few seconds later when the message cleared. The status line is now
+  free of the layout, so the preview and patch-grid columns hold their width.
+
 ## v3.10.0
 
 **The chart layout editor takes centre stage.** Over the last dozen releases the
@@ -61,13 +90,6 @@ A spec sheet for the feature this release celebrates:
 
 ### 🌍 Translations
 - The new "Sunrises (warm)" set is translated into all twelve languages.
-
-### 🐛 Fixed
-- **The layout editor's preview no longer jumps around on Windows after each
-  update.** When a preview finished rendering, the status line below the patch
-  grid briefly forced its column wider — squeezing the preview — then snapped
-  back a few seconds later when the message cleared. The status line is now
-  free of the layout, so the preview and patch-grid columns hold their width.
 
 ## v3.9.31
 
