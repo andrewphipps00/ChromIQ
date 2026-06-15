@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-3.9.29-7c5cff">
+  <img alt="Version" src="https://img.shields.io/badge/version-3.9.30-7c5cff">
   <img alt="Downloads" src="https://img.shields.io/endpoint?url=https://itsab1989.github.io/github-traffic-downloads-dashboard/assets/badges/itsab1989_ChromIQ-downloads.json">
   <img alt="Platforms" src="https://img.shields.io/badge/platforms-macOS%20%C2%B7%20Windows%20%C2%B7%20Linux-2a9d8f">
   <img alt="License" src="https://img.shields.io/badge/license-GPLv3-blue">
@@ -92,7 +92,8 @@ The pre-built downloads are all most people need — you only need the
 
 ### macOS
 
-1. Download **`ChromIQ-macOS-universal.dmg`** (works on both Apple Silicon and Intel).
+1. Download the universal DMG — **`ChromIQ-macOS-universal_<version>.dmg`**
+   (works on both Apple Silicon and Intel).
 2. Open the DMG, then drag **ChromIQ** into your **Applications** folder.
 3. Eject the DMG (⌘E).
 4. The first time only: open **Applications**, **right-click ChromIQ → Open**,
@@ -108,8 +109,8 @@ The pre-built downloads are all most people need — you only need the
 ### Windows
 
 1. Download the build for your PC:
-   - **`ChromIQ-Windows-x64.zip`** — Intel/AMD (most PCs)
-   - **`ChromIQ-Windows-arm64.zip`** — ARM64 (e.g. Snapdragon X laptops)
+   - **`ChromIQ-Windows-x64_<version>.zip`** — Intel/AMD (most PCs)
+   - **`ChromIQ-Windows-arm64_<version>.zip`** — ARM64 (e.g. Snapdragon X laptops)
 2. Right-click the ZIP → **Extract All…**, open the extracted `ChromIQ` folder.
 3. Double-click **`ChromIQ.exe`**.
 
@@ -122,11 +123,11 @@ The pre-built downloads are all most people need — you only need the
 ### Linux (beta)
 
 1. Download the build for your machine:
-   - **`ChromIQ-Linux-x86_64.tar.gz`** — Intel/AMD
-   - **`ChromIQ-Linux-aarch64.tar.gz`** — ARM (Raspberry Pi 4/5, ARM workstations)
+   - **`ChromIQ-Linux-x86_64_<version>.tar.gz`** — Intel/AMD
+   - **`ChromIQ-Linux-aarch64_<version>.tar.gz`** — ARM (Raspberry Pi 4/5, ARM workstations)
 2. Extract and run:
    ```bash
-   tar xzf ChromIQ-Linux-x86_64.tar.gz
+   tar xzf ChromIQ-Linux-x86_64_*.tar.gz
    ./ChromIQ/ChromIQ
    ```
 

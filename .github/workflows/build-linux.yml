@@ -135,4 +135,13 @@ jobs:
       - name: Upload tarball to release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${{ env.RELEASE_TAG }}" "${{ matrix.artifact }}" --clobber
+        run: |
+          # Version-stamp the asset filename
+          # (ChromIQ-Linux-x86_64_v3.9.29.tar.gz) so downloads don't collide and
+          # each file is self-identifying. The download-stats dashboard
+          # classifies by the platform/arch tokens, which the suffix leaves
+          # intact.
+          ART="${{ matrix.artifact }}"
+          VERSIONED="${ART%.tar.gz}_${RELEASE_TAG}.tar.gz"
+          mv "$ART" "$VERSIONED"
+          gh release upload "$RELEASE_TAG" "$VERSIONED" --clobber

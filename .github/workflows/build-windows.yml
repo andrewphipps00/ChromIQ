@@ -164,4 +164,13 @@ jobs:
       - name: Upload ZIP to release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${{ env.RELEASE_TAG }}" "${{ matrix.artifact }}" --clobber
+        shell: bash
+        run: |
+          # Version-stamp the asset filename (ChromIQ-Windows-x64_v3.9.29.zip)
+          # so downloads don't collide as "...(1).zip" and each file is
+          # self-identifying. The download-stats dashboard classifies by the
+          # platform/arch tokens, which the suffix leaves intact.
+          ART="${{ matrix.artifact }}"
+          VERSIONED="${ART%.zip}_${RELEASE_TAG}.zip"
+          mv "$ART" "$VERSIONED"
+          gh release upload "$RELEASE_TAG" "$VERSIONED" --clobber

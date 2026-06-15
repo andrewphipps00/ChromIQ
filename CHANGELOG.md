@@ -1,5 +1,29 @@
 # Changelog
 
+## v3.9.30
+
+Undo and redo come to the chart layout editor — experiment freely, nothing is a
+one-way door anymore.
+
+### ✨ Added
+- **Undo / redo in the chart layout editor.** New **↶ Undo** and **Redo ↷**
+  buttons (centred above the editor, with the usual **Ctrl+Z** / **Ctrl+Shift+Z**
+  shortcuts) step back and forth through your last 20 edits. Everything is
+  covered: deleted patches come back, added ones go away again, and recolours,
+  reorders, spacer painting and layout-knob tweaks all reverse cleanly. The
+  history lives only in memory and is cleared the moment you close the editor —
+  it never touches your drive — and it starts fresh whenever you load or create a
+  different chart.
+- **A spectrum separator in the layout editor.** A thin full-width band of the
+  ChromIQ tab colours now sits under the Load / New / Undo / Redo row, matching
+  the main-window masthead, to set the controls apart from the editing area.
+
+### 🔧 Changed
+- **Downloads are now version-stamped.** Release files now carry the version in
+  their name (e.g. `ChromIQ-macOS-universal_v3.9.30.dmg`), so saved downloads no
+  longer collide as "…(1).dmg" and each file says which build it is. The install
+  guides in the README and manual reflect the new names.
+
 ## v3.9.29
 
 A new way to *see* the colour sets you're building before you commit to them.
