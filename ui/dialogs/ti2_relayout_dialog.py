@@ -731,6 +731,32 @@ class _NewChartDialog(QDialog):
         # full-width spectrum stripe), not to the scrolled content, so the
         # heading spans the window and the cube preview sits below it.
 
+        # --- Load setup from preset (#55) ------------------------------------
+        # Create Chart presets that were saved carrying a creation recipe
+        # (Set B) can be reloaded here in one go — colour sets, instrument /
+        # paper and layout. The row is shown only when at least one qualifies;
+        # selecting one applies its recipe to the whole window.
+        self._preset_recipes = self._available_preset_recipes()
+        if self._preset_recipes:
+            pr_row = QHBoxLayout()
+            pr_row.addWidget(QLabel(tr("Load setup from preset:")))
+            self._preset_setup_combo = NoScrollComboBox(self)
+            self._preset_setup_combo.addItem(tr("None"), None)
+            for pname in self._preset_recipes:
+                self._preset_setup_combo.addItem(pname, pname)
+            _as_compact(self._preset_setup_combo)
+            self._preset_setup_combo.activated.connect(
+                self._on_preset_setup_selected)
+            pr_row.addWidget(self._preset_setup_combo, 1)
+            pr_row.addWidget(_magenta_tip(
+                tr("Load setup from preset"),
+                tr("Load the full New-chart setup — colour sets, instrument, "
+                   "paper and layout — that was saved with a preset, so you can "
+                   "reuse or tweak an existing design instead of setting "
+                   "everything by hand.\n\nOnly presets saved with a stored "
+                   "setup appear here.")))
+            lay.addLayout(pr_row)
+
         # --- Chart identity --------------------------------------------------
         # The chart name is no longer asked for here — it's chosen later when
         # the chart is saved (Save & apply), which is what becomes the folder
@@ -1165,6 +1191,31 @@ class _NewChartDialog(QDialog):
         if radio is not None:
             radio.setChecked(True)
         self._refresh_source_widgets()
+
+    # -- "Load setup from preset" (#55) -----------------------------------
+    def _available_preset_recipes(self) -> dict:
+        """Create Chart presets that carry a populated creation recipe (Set B),
+        as ``{preset_name: recipe_dict}``. Presets with an empty / missing
+        recipe (or no json) are skipped, per the feature spec."""
+        out: dict = {}
+        if self._settings is None:
+            return out
+        try:
+            from core.preset_store import load_presets
+            for name, payload in load_presets("create_chart", self._settings).items():
+                rec = payload.get("editor_recipe") if isinstance(payload, dict) else None
+                if isinstance(rec, dict) and rec:
+                    out[name] = rec
+        except Exception:  # noqa: BLE001 — never block opening the window
+            pass
+        return out
+
+    def _on_preset_setup_selected(self, idx: int) -> None:
+        name = self._preset_setup_combo.itemData(idx)
+        rec = self._preset_recipes.get(name) if name else None
+        if isinstance(rec, dict):
+            self._apply_gen_state(rec)
+            self._do_push_live_preview()
 
     def _save_gen_state(self) -> None:
         if self._settings is not None:

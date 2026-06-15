@@ -663,11 +663,19 @@ class SettingsDialog(QDialog):
         reset_btn.clicked.connect(self._restore_defaults)
         bottom_row.addWidget(reset_btn)
 
+        from core.issue_report import build_bug_report_url, build_feature_request_url
         bug_btn = QPushButton(tr("Report a Bug…"), self)
         bug_btn.setToolTip(tr("Open the bug-report form on GitHub in your browser."))
-        bug_btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(
-            "https://github.com/itsab1989/ChromIQ/issues/new?template=bug_report.yml")))
+        bug_btn.clicked.connect(lambda: QDesktopServices.openUrl(
+            QUrl(build_bug_report_url())))
         bottom_row.addWidget(bug_btn)
+
+        feature_btn = QPushButton(tr("Request a Feature…"), self)
+        feature_btn.setToolTip(
+            tr("Open the feature-request form on GitHub in your browser."))
+        feature_btn.clicked.connect(lambda: QDesktopServices.openUrl(
+            QUrl(build_feature_request_url())))
+        bottom_row.addWidget(feature_btn)
 
         self._update_btn = QPushButton(tr("Check for Updates"), self)
         self._update_btn.clicked.connect(self._check_for_updates)

@@ -64,6 +64,25 @@ def test_recipe_none_preserves_existing():
         assert R.load_editor_recipe(ti2) == recipe
 
 
+def test_divergence_layout_save_updates_set_a_keeps_set_b():
+    """#54: a layout-only save (a Create Chart printtarg edit, recipe=None)
+    updates editor_layout (Set A) yet preserves editor_recipe (Set B), so the
+    two data sets diverge exactly as specified."""
+    with tempfile.TemporaryDirectory() as tmp:
+        ti2 = Path(tmp) / "chart.ti2"
+        ti2.write_text("")
+        spec = R.ChartSpec.new("i1", "A4")
+        recipe = {"mode": "generate", "sp": {"cube_n": 8}}
+        R.save_editor_meta(ti2, spec, R.LayoutOptions(margin_mm=6), "c",
+                           recipe=recipe)
+        # Create Chart changes the margin and regenerates → layout-only save.
+        R.save_editor_meta(ti2, spec, R.LayoutOptions(margin_mm=12), "c",
+                           recipe=None)
+        opts, _ = R.load_editor_meta(ti2)
+        assert opts.margin_mm == 12                  # Set A followed the edit
+        assert R.load_editor_recipe(ti2) == recipe   # Set B stayed pristine
+
+
 def test_recipe_absent_returns_none():
     with tempfile.TemporaryDirectory() as tmp:
         ti2 = Path(tmp) / "chart.ti2"
@@ -94,3 +113,35 @@ def test_add_dialog_prefers_chart_recipe(qapp):
     recipe["cb"]["cube"] = True
     dlg = _AddPatchesDialog(_FakeSettings(), initial_recipe=recipe)
     assert dlg._gen_cube_n.value() == 5
+
+
+# ---------------------------------------------------------------------------
+# #55 — "Load setup from preset" dropdown
+# ---------------------------------------------------------------------------
+
+def test_dropdown_lists_only_presets_with_recipe(qapp, monkeypatch):
+    recipe = {"mode": "generate", "cb": {"cube": True}, "sp": {"cube_n": 5},
+              "edges_auto": True}
+    import core.preset_store as ps
+    monkeypatch.setattr(ps, "load_presets", lambda tab, settings=None: {
+        "with recipe": {"editor_recipe": recipe},
+        "empty recipe": {"editor_recipe": {}},      # skipped
+        "no recipe": {"targen_-f": 800},            # skipped
+    })
+    d = _NewChartDialog(Path("/x"), _FakeSettings())
+    assert list(d._preset_recipes) == ["with recipe"]
+    # None + the one qualifying preset
+    assert d._preset_setup_combo.count() == 2
+
+
+def test_dropdown_select_applies_recipe(qapp, monkeypatch):
+    recipe = {"mode": "generate", "cb": {"cube": True}, "sp": {"cube_n": 5},
+              "edges_auto": True}
+    import core.preset_store as ps
+    monkeypatch.setattr(ps, "load_presets", lambda tab, settings=None:
+                        {"p": {"editor_recipe": recipe}})
+    d = _NewChartDialog(Path("/x"), _FakeSettings())
+    d._gen_cube_n.setValue(8)                       # move away from the recipe
+    idx = d._preset_setup_combo.findData("p")
+    d._on_preset_setup_selected(idx)
+    assert d._gen_cube_n.value() == 5               # recipe applied

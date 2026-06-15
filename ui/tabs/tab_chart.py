@@ -3359,10 +3359,30 @@ class TabChart(QWidget):
             log.warning("preset .ti1 sidecar update failed for '%s': %s", name, exc)
             if attach:
                 capture["attached_ti1"] = False
+        # Carry the chart's creation recipe (Set B) into the preset when the
+        # current chart has one (e.g. applied from the editor), so it can later
+        # be reloaded into the New chart window via "Load setup from preset"
+        # (#55). Presets without it simply won't appear in that dropdown.
+        recipe = self._current_chart_recipe()
+        if recipe:
+            capture["editor_recipe"] = recipe
         presets = self._load_presets_from_settings()
         presets[name] = capture
         self._save_presets_to_settings(presets)
         self._populate_preset_combo(presets, select_name=name)
+
+    def _current_chart_recipe(self) -> dict | None:
+        """The current run's stored New-chart creation recipe (Set B), or None.
+
+        Read from the run's ``meta.json`` (``editor_recipe``) — present for charts
+        applied from the layout editor; absent for plain targen charts."""
+        try:
+            if not (self._file_mgr.working_dir() / "project.json").exists():
+                return None
+            meta = self._file_mgr.project().current_run().load_meta()
+        except Exception:  # noqa: BLE001 — recipe capture is best-effort
+            return None
+        return meta.editor_recipe if isinstance(meta.editor_recipe, dict) else None
 
     def _on_preset_delete(self) -> None:
         if not self._is_deletable_preset(self._preset_combo.currentIndex()):
