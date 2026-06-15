@@ -306,3 +306,25 @@ def test_fill_counts_white_black_not_on_top(qapp):
     anchors = sum(1 for p in prog
                   if tuple(p) in {(100.0, 100.0, 100.0), (0.0, 0.0, 0.0)})
     assert anchors == 6                          # the repeats are kept verbatim
+
+
+def test_total_matches_built_program_with_foreign_existing(qapp):
+    # #60: when the chart's existing patches come from elsewhere (e.g. a preset's
+    # .ti1), the per-set count estimate can drift from the actual build. The live
+    # total must reflect the built program (so it agrees with the 3D cube).
+    import re
+    import workflow.patch_generators as G
+    existing = G.rgb_cube(9)  # a "foreign" chart, not built by the recipe
+    dlg = _AddPatchesDialog(_FakeSettings(), existing_patches=existing)
+    dlg._add_mode_gen.setChecked(True)
+    dlg._refresh_add_mode()
+    for n in dlg._GEN_CHECKS:
+        getattr(dlg, f"_gen_{n}").setChecked(False)
+    dlg._gen_cube.setChecked(True)
+    dlg._gen_whiteblack.setChecked(True)
+    dlg._gen_fill.setChecked(True)
+    dlg._gen_fill_to.setValue(900)
+    dlg._update_gen_counts()
+    dlg._do_push_live_preview()           # the debounced exact rebuild
+    shown = int(re.search(r"(\d+)", dlg._gen_total.text()).group(1))
+    assert shown == len(dlg._build_generated_program())

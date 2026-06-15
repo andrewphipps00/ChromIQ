@@ -1936,19 +1936,27 @@ class _NewChartDialog(QDialog):
             self.resize(self.width(), need)
 
     def _push_live_preview(self) -> None:
-        """Schedule a debounced cube redraw (skipped while folded away)."""
-        if getattr(self, "_cube_panel", None) is not None and self._cube_shown:
+        """Schedule a debounced rebuild — refreshes the exact total (and the cube
+        if it's unfolded). Runs even while folded so the total stays correct."""
+        if getattr(self, "_preview_timer", None) is not None:
             self._preview_timer.start()
 
     def _do_push_live_preview(self) -> None:
-        if getattr(self, "_cube_panel", None) is None or not self._cube_shown:
+        if getattr(self, "_gen_total", None) is None:
             return
         # In generate mode show the generated set; otherwise just the chart's
         # existing patches (empty for a brand-new chart) so the panel still
         # reflects reality rather than a stale generated view.
         program = (self._build_generated_program()
                    if self._gen_sets_active() else [])
-        self._cube_panel.set_program(program, self._existing_patches)
+        # The total reflects the ACTUAL built program. The per-set count
+        # estimates can drift from it when the chart's existing patches come
+        # from elsewhere (e.g. a preset's .ti1, whose white/black structure the
+        # estimate can't see), so the live total + the cube agree (#60).
+        self._gen_total.setText(tr("Total: {label}").format(
+            label=_patches_label(len(program))))
+        if getattr(self, "_cube_panel", None) is not None and self._cube_shown:
+            self._cube_panel.set_program(program, self._existing_patches)
 
     def showEvent(self, ev) -> None:  # noqa: N802
         super().showEvent(ev)
