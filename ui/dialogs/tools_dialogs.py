@@ -48,7 +48,7 @@ from ui.styles import BG_INPUT, BORDER, TEXT_MAIN
 from ui.theme import resolve_mode
 from ui.tooltip_button import TooltipButton
 from ui.widgets import (
-    NoScrollComboBox, NoScrollSpinBox, open_dir_dialog, open_file_dialog,
+    confirm, NoScrollComboBox, NoScrollSpinBox, open_dir_dialog, open_file_dialog,
     open_files_dialog,
 )
 
@@ -636,7 +636,7 @@ class AverageMeasurementsDialog(_ToolDialogBase):
         out = out_dir / f"{self._output.name}.ti3"
 
         if out.exists():
-            confirm = QMessageBox.question(
+            choice = confirm(
                 self,
                 tr("Overwrite existing file?"),
                 tr("'{name}' already exists in:\n  {folder}\n\nOverwrite it?"
@@ -644,7 +644,7 @@ class AverageMeasurementsDialog(_ToolDialogBase):
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.No,
             )
-            if confirm != QMessageBox.StandardButton.Yes:
+            if choice != QMessageBox.StandardButton.Yes:
                 self._finish(False)
                 return
 
@@ -800,7 +800,7 @@ class MergeMeasurementsDialog(_ToolDialogBase):
         out = out_dir / f"{self._output.name}.ti3"
 
         if out.exists():
-            confirm = QMessageBox.question(
+            choice = confirm(
                 self,
                 tr("Overwrite existing file?"),
                 tr("'{name}' already exists in:\n  {folder}\n\nOverwrite it?"
@@ -808,7 +808,7 @@ class MergeMeasurementsDialog(_ToolDialogBase):
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.No,
             )
-            if confirm != QMessageBox.StandardButton.Yes:
+            if choice != QMessageBox.StandardButton.Yes:
                 self._finish(False)
                 return
 
@@ -1043,7 +1043,7 @@ class Ti1ToI1ProfilerDialog(_ToolDialogBase):
         existing = [p for p in candidates if p.exists()]
         if existing:
             names = ", ".join(p.name for p in existing)
-            confirm = QMessageBox.question(
+            choice = confirm(
                 self,
                 tr("Overwrite existing file(s)?"),
                 tr("These files already exist in:\n  {folder}\n\n  {names}\n\nOverwrite?"
@@ -1051,7 +1051,7 @@ class Ti1ToI1ProfilerDialog(_ToolDialogBase):
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.No,
             )
-            if confirm != QMessageBox.StandardButton.Yes:
+            if choice != QMessageBox.StandardButton.Yes:
                 self._finish(False)
                 return
 
@@ -1211,7 +1211,7 @@ class I1ProfilerToTi3Dialog(_ToolDialogBase):
         out = out_dir / f"{base}.ti3"
 
         if out.exists():
-            confirm = QMessageBox.question(
+            choice = confirm(
                 self,
                 tr("Overwrite existing file?"),
                 tr("'{name}' already exists in:\n  {folder}\n\nOverwrite it?"
@@ -1219,7 +1219,7 @@ class I1ProfilerToTi3Dialog(_ToolDialogBase):
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.No,
             )
-            if confirm != QMessageBox.StandardButton.Yes:
+            if choice != QMessageBox.StandardButton.Yes:
                 self._finish(False)
                 return
 
@@ -1354,7 +1354,7 @@ class I1ProfilerToTi1Dialog(_ToolDialogBase):
         out = out_dir / f"{self._output.name}.ti1"
 
         if out.exists():
-            confirm = QMessageBox.question(
+            choice = confirm(
                 self,
                 tr("Overwrite existing file?"),
                 tr("'{name}' already exists in:\n  {folder}\n\nOverwrite it?"
@@ -1362,7 +1362,7 @@ class I1ProfilerToTi1Dialog(_ToolDialogBase):
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.No,
             )
-            if confirm != QMessageBox.StandardButton.Yes:
+            if choice != QMessageBox.StandardButton.Yes:
                 self._finish(False)
                 return
 

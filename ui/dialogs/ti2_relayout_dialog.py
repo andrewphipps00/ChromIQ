@@ -3107,7 +3107,7 @@ class Ti2RelayoutDialog(QDialog):
         (generated sets) and "Append from file…"."""
         box = QMessageBox(self)
         box.setWindowTitle(tr("Add the new colours"))
-        box.setIcon(QMessageBox.Icon.Question)
+        box.setIcon(QMessageBox.Icon.NoIcon)
         box.setText(tr("Where would you like the new colours?"))
         box.setInformativeText(
             ready + " "

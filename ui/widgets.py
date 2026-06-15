@@ -15,6 +15,7 @@ from PyQt6.QtWidgets import (
     QFileDialog,
     QGroupBox,
     QLabel,
+    QMessageBox,
     QPlainTextEdit,
     QPushButton,
     QSizeGrip,
@@ -80,6 +81,29 @@ def _input_bg_qss() -> str:
         f" background-color: {bg};"
         "}"
     )
+
+
+def confirm(
+    parent,
+    title: str,
+    text: str,
+    buttons: QMessageBox.StandardButton,
+    default: "QMessageBox.StandardButton | None" = None,
+) -> QMessageBox.StandardButton:
+    """Yes/No-style confirmation prompt without the question-mark icon.
+
+    A drop-in for ``QMessageBox.question`` (which bakes in the “?” icon the
+    user dislikes): same signature shape, returns the StandardButton clicked.
+    """
+    box = QMessageBox(parent)
+    box.setWindowTitle(title)
+    box.setText(text)
+    box.setIcon(QMessageBox.Icon.NoIcon)
+    box.setStandardButtons(buttons)
+    if default is not None:
+        box.setDefaultButton(default)
+    box.exec()
+    return box.standardButton(box.clickedButton())
 
 
 class NoScrollComboBox(QComboBox):

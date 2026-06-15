@@ -36,7 +36,7 @@ from core.logger import get_logger
 from core.preset_store import reveal_in_file_manager
 from ui.dialogs.tools_dialogs import _indicator_color, neutral_controls_qss
 from ui.theme import resolve_mode
-from ui.widgets import NoScrollComboBox, open_file_dialog, save_file_dialog
+from ui.widgets import confirm, NoScrollComboBox, open_file_dialog, save_file_dialog
 from workflow import i18n_roundtrip as rt
 
 try:
@@ -257,7 +257,7 @@ class TranslationDialog(QDialog):
             return
 
         if report.code_mismatch:
-            keep = QMessageBox.question(
+            keep = confirm(
                 self, tr("Different language"),
                 tr(
                     "This file was exported for “{sheet}”, but you selected "
@@ -273,7 +273,7 @@ class TranslationDialog(QDialog):
             return
 
         summary = self._summary_text(report)
-        if QMessageBox.question(
+        if confirm(
             self, tr("Import translation"), summary + "\n\n" + tr("Save now?"),
             QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Cancel,
         ) != QMessageBox.StandardButton.Save:
