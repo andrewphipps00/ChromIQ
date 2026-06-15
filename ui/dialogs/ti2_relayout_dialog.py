@@ -13,9 +13,10 @@ and an optional per-spacer paint applied to the rendered TIFF.
 """
 from __future__ import annotations
 
+import copy
 import sys
 import tempfile
-from dataclasses import astuple
+from dataclasses import astuple, dataclass, field
 from pathlib import Path
 
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSize, QPoint, QRect, QTimer
@@ -45,6 +46,31 @@ def _magenta_tip(title: str, body: str, parent: QWidget | None = None,
                  min_width: int = 480) -> TooltipButton:
     """A TooltipButton drawn in the editor's magenta accent."""
     return TooltipButton(title, body, parent, min_width=min_width, color=SPEC_MAGENTA)
+
+
+class _SpectrumStripe(QWidget):
+    """A thin full-width band of the five ChromIQ tab hues, painted as equal
+    blocks — the same stripe the main-window masthead uses (see
+    MastheadHeader). The hues (TAB_COLORS) are plain spectrum colours, identical
+    in light and dark mode; only the chrome around them changes per theme, so
+    this needs no per-mode palette."""
+
+    HEIGHT = 4
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setFixedHeight(self.HEIGHT)
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
+
+    def paintEvent(self, _ev) -> None:  # noqa: N802
+        p = QPainter(self)
+        w = self.width()
+        n = len(TAB_COLORS)
+        for i, col in enumerate(TAB_COLORS):
+            x0 = int(round(i * w / n))
+            x1 = int(round((i + 1) * w / n)) if i < n - 1 else w
+            p.fillRect(x0, 0, x1 - x0, self.HEIGHT, QColor(col))
+        p.end()
 
 
 def _as_compact(*widgets) -> None:
@@ -2041,6 +2067,43 @@ class _AddPatchesDialog(_NewChartDialog):
 # ---------------------------------------------------------------------------
 # Main editor
 # ---------------------------------------------------------------------------
+# How many editing steps the undo/redo history keeps. Edits here are coarse
+# (recolour a selection, reorder, add/remove a batch, paint spacers, one layout
+# tweak), not fine brush strokes, so 20 is generous. Each snapshot is a cheap
+# in-memory copy of the editable state (a few hundred KB for a huge chart, tens
+# of KB typically) — the history never touches disk and is dropped when the
+# dialog closes.
+_UNDO_DEPTH = 20
+
+
+@dataclass
+class _EditorSnapshot:
+    """A point-in-time copy of everything the user can edit in one chart: the
+    patch program (colours + order), the spacer palette + per-spacer paint, the
+    printtarg layout knobs, and the instrument/paper (which live on the spec).
+
+    Captured by :meth:`Ti2RelayoutDialog._make_snapshot` and re-applied by
+    :meth:`Ti2RelayoutDialog._restore_snapshot`. ``key`` is a hashable digest
+    used only to skip capturing a step that didn't actually change anything."""
+    program: list = field(default_factory=list)
+    palette: "list | None" = None
+    paint: dict = field(default_factory=dict)
+    options: "R.LayoutOptions | None" = None
+    instr: str = ""
+    paper: str = ""
+    paper_mm: tuple = (0.0, 0.0)
+
+    @property
+    def key(self) -> tuple:
+        return (
+            tuple(self.program),
+            tuple(self.palette) if self.palette else None,
+            tuple(sorted(self.paint.items())),
+            astuple(self.options) if self.options is not None else None,
+            self.instr, self.paper, tuple(self.paper_mm),
+        )
+
+
 class Ti2RelayoutDialog(QDialog):
     def __init__(self, runner, settings, parent: QWidget | None = None,
                  on_apply: "Callable[[Path, str], bool | None] | None" = None,
@@ -2105,6 +2168,21 @@ class Ti2RelayoutDialog(QDialog):
             lambda: self._regenerate(save_to=None) if self._spec else None
         )
 
+        # Undo/redo history (in-memory only; see _UNDO_DEPTH). _undo_stack holds
+        # _EditorSnapshots with the live state at _undo_index as its tail-or-
+        # earlier entry; the baseline (index 0) is the chart as loaded/created.
+        # _suppress_undo blocks capture while we ourselves repopulate the grid
+        # (load / restore), so programmatic changes never land on the stack.
+        self._undo_stack: list[_EditorSnapshot] = []
+        self._undo_index: int = -1
+        self._suppress_undo: bool = False
+        # Capture is debounced so spinbox scrubbing or a multi-patch recolour
+        # coalesce into one undo step rather than dozens.
+        self._undo_timer = QTimer(self)
+        self._undo_timer.setSingleShot(True)
+        self._undo_timer.setInterval(500)
+        self._undo_timer.timeout.connect(self._capture_undo)
+
         self._build_ui()
         self._refresh_enabled()
 
@@ -2118,11 +2196,15 @@ class Ti2RelayoutDialog(QDialog):
     # -- UI -----------------------------------------------------------------
     def _build_ui(self) -> None:
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(16, 14, 16, 12)
+        # Zero side margins so the spectrum stripe under the source row can run
+        # edge-to-edge (full window width), like the masthead stripe. The three
+        # real content rows re-add the 16 px side inset themselves.
+        outer.setContentsMargins(0, 14, 0, 12)
         outer.setSpacing(10)
 
         # Source row
         src = QHBoxLayout()
+        src.setContentsMargins(16, 0, 16, 0)
         load_btn = QPushButton(tr("Load .ti2…"), self)
         load_btn.clicked.connect(self._load_ti2)
         new_btn = QPushButton(tr("New chart…"), self)
@@ -2130,6 +2212,20 @@ class Ti2RelayoutDialog(QDialog):
         src.addWidget(load_btn)
         src.addWidget(new_btn)
         src.addStretch(1)
+        # Undo / redo, centred between the source buttons and the info readout.
+        self._undo_btn = QPushButton(tr("↶ Undo"), self)
+        self._undo_btn.setToolTip(tr("Undo the last edit (Ctrl+Z)."))
+        self._undo_btn.clicked.connect(self._undo)
+        self._redo_btn = QPushButton(tr("Redo ↷"), self)
+        self._redo_btn.setToolTip(tr("Redo the last undone edit (Ctrl+Shift+Z)."))
+        self._redo_btn.clicked.connect(self._redo)
+        src.addWidget(self._undo_btn)
+        src.addWidget(self._redo_btn)
+        src.addStretch(1)
+        # Ctrl+Z / Ctrl+Shift+Z (and Ctrl+Y) work anywhere in the dialog.
+        QShortcut(QKeySequence.StandardKey.Undo, self, activated=self._undo)
+        QShortcut(QKeySequence.StandardKey.Redo, self, activated=self._redo)
+        QShortcut(QKeySequence("Ctrl+Y"), self, activated=self._redo)
         self._info = QLabel(tr("No chart loaded."), self)
         src.addWidget(self._info)
         src.addWidget(_magenta_tip(
@@ -2164,6 +2260,10 @@ class Ti2RelayoutDialog(QDialog):
             "\"Force randomised tag\" option in the controls for more.",
             self, min_width=560))
         outer.addLayout(src)
+
+        # Full-width spectrum stripe — a visual separator between the source /
+        # undo-redo controls and the editing area, mirroring the masthead.
+        outer.addWidget(_SpectrumStripe(self))
 
         split = QSplitter(Qt.Orientation.Horizontal, self)
 
@@ -2344,7 +2444,9 @@ class Ti2RelayoutDialog(QDialog):
         # a top/bottom fade so the user can tell content continues above /
         # below the visible band.
         body = QHBoxLayout()
-        body.setContentsMargins(0, 0, 0, 0)
+        # 16 px side inset (outer layout now has zero side margins so the
+        # spectrum stripe can be full-bleed).
+        body.setContentsMargins(16, 0, 16, 0)
         body.setSpacing(8)
         body.addWidget(split, 1)
         controls = self._build_controls()
@@ -2375,6 +2477,7 @@ class Ti2RelayoutDialog(QDialog):
 
         self._status = QLabel("", self)
         self._status.setStyleSheet("color: #888;")
+        self._status.setContentsMargins(16, 0, 16, 0)
         outer.addWidget(self._status)
 
     def _build_controls(self) -> QWidget:
@@ -2938,6 +3041,10 @@ class Ti2RelayoutDialog(QDialog):
 
     def _set_chart(self, spec: R.ChartSpec, program: list[tuple], note: str,
                    *, is_saved: bool = False) -> None:
+        # Loading/creating a chart replaces the document: suppress capture while
+        # we repopulate, then start a fresh history with this chart as baseline.
+        self._suppress_undo = True
+        self._undo_timer.stop()
         self._spec = spec
         # Seed the spacer palette from the source chart's own .ti1 (if its
         # sibling was found by ChartSpec.from_ti2), so loaded charts render
@@ -2961,6 +3068,8 @@ class Ti2RelayoutDialog(QDialog):
             self._saved_sig = self._current_signature()
         self._refresh_info()
         self._refresh_enabled()
+        self._suppress_undo = False
+        self._reset_undo()
         # Auto-render the initial preview so the user sees the chart
         # immediately instead of having to click "Update preview" first.
         if program:
@@ -2991,6 +3100,112 @@ class Ti2RelayoutDialog(QDialog):
     def _mark_saved(self) -> None:
         """Record the current content as the saved baseline (clean)."""
         self._saved_sig = self._current_signature()
+
+    # -- undo / redo --------------------------------------------------------
+    def _make_snapshot(self) -> _EditorSnapshot:
+        """Deep-copy the current editable state into a history snapshot."""
+        return _EditorSnapshot(
+            program=self._program_from_grid(),       # tuples → immutable items
+            palette=list(self._palette) if self._palette else None,
+            paint=dict(self._paint),
+            options=copy.deepcopy(self._options),
+            instr=self._spec.instrument_flag if self._spec else "",
+            paper=self._spec.paper_flag if self._spec else "",
+            paper_mm=tuple(self._spec.paper_mm) if self._spec else (0.0, 0.0),
+        )
+
+    def _reset_undo(self) -> None:
+        """Start a fresh history with the current chart as the baseline. Called
+        whenever a different chart is loaded/created — undo never crosses charts."""
+        if self._spec is None:
+            self._undo_stack = []
+            self._undo_index = -1
+        else:
+            self._undo_stack = [self._make_snapshot()]
+            self._undo_index = 0
+        self._refresh_undo_enabled()
+
+    def _clear_undo_history(self) -> None:
+        """Drop the entire in-memory history (on close). Nothing is persisted —
+        this just frees the snapshots a touch sooner than garbage collection."""
+        self._undo_timer.stop()
+        self._undo_stack = []
+        self._undo_index = -1
+
+    def _note_edit(self) -> None:
+        """Mark that the user changed something; (re)arm the debounced capture.
+        No-op while we're repopulating the grid ourselves (load / undo / redo)."""
+        if self._suppress_undo or self._spec is None:
+            return
+        self._undo_timer.start()
+
+    def _capture_undo(self) -> None:
+        """Push the current state as a new history step, unless it matches the
+        step we're already sitting on. Pushing past an undone branch discards
+        the redo tail, and the stack is capped at _UNDO_DEPTH steps."""
+        if self._suppress_undo or self._spec is None:
+            return
+        snap = self._make_snapshot()
+        if (0 <= self._undo_index < len(self._undo_stack)
+                and snap.key == self._undo_stack[self._undo_index].key):
+            return  # nothing actually changed
+        del self._undo_stack[self._undo_index + 1:]   # drop the redo branch
+        self._undo_stack.append(snap)
+        # Keep baseline + _UNDO_DEPTH steps; drop the oldest beyond that.
+        excess = len(self._undo_stack) - (_UNDO_DEPTH + 1)
+        if excess > 0:
+            del self._undo_stack[:excess]
+        self._undo_index = len(self._undo_stack) - 1
+        self._refresh_undo_enabled()
+
+    def _undo(self) -> None:
+        # A pending capture would otherwise fire mid-undo and corrupt the index.
+        if self._undo_timer.isActive():
+            self._undo_timer.stop()
+            self._capture_undo()
+        if self._undo_index <= 0:
+            return
+        self._undo_index -= 1
+        self._restore_snapshot(self._undo_stack[self._undo_index])
+        self._status.setText(tr("Undid one step."))
+        self._refresh_undo_enabled()
+
+    def _redo(self) -> None:
+        if self._undo_index >= len(self._undo_stack) - 1:
+            return
+        self._undo_index += 1
+        self._restore_snapshot(self._undo_stack[self._undo_index])
+        self._status.setText(tr("Redid one step."))
+        self._refresh_undo_enabled()
+
+    def _restore_snapshot(self, snap: _EditorSnapshot) -> None:
+        """Re-apply a history snapshot to the live editor, then re-render."""
+        if self._spec is None:
+            return
+        self._suppress_undo = True
+        try:
+            self._spec.instrument_flag = snap.instr
+            self._spec.paper_flag = snap.paper
+            self._spec.paper_mm = tuple(snap.paper_mm)
+            self._options = copy.deepcopy(snap.options) if snap.options else R.LayoutOptions()
+            self._palette = list(snap.palette) if snap.palette else None
+            self._paint = dict(snap.paint)
+            self._sel_spacers.clear()
+            self._populate_grid(snap.program)
+            self._renumber()
+            self._build_palette_row()
+            self._sync_printtarg_widgets()
+            self._refresh_info()
+            self._refresh_enabled()
+        finally:
+            self._suppress_undo = False
+        if snap.program:
+            self._regenerate(save_to=None)
+
+    def _refresh_undo_enabled(self) -> None:
+        self._undo_btn.setEnabled(self._undo_index > 0)
+        self._redo_btn.setEnabled(
+            0 <= self._undo_index < len(self._undo_stack) - 1)
 
     def _confirm_discard(self) -> bool:
         """Ask before throwing away unsaved edits. Returns True to proceed
@@ -3027,6 +3242,11 @@ class Ti2RelayoutDialog(QDialog):
         """Restart the debounced preview timer (called from user edit hooks)."""
         if self._spec is not None and self._grid.count() > 0:
             self._auto_timer.start()
+        # Nearly every edit funnels through here (reorder/remove via _after_drag,
+        # add/recolour/options/paper/palette directly), so it's the natural place
+        # to note an undo step. Spacer paint and palette-reset bypass it and call
+        # _note_edit themselves.
+        self._note_edit()
 
     # -- patch grid ---------------------------------------------------------
     def _populate_grid(self, program: list[tuple]) -> None:
@@ -3519,6 +3739,7 @@ class Ti2RelayoutDialog(QDialog):
     def _reset_palette(self) -> None:
         self._palette = None
         self._build_palette_row()
+        self._note_edit()
         self._status.setText(tr("Palette reset to default."))
 
     # -- printtarg-options panel -------------------------------------------
@@ -4262,6 +4483,7 @@ class Ti2RelayoutDialog(QDialog):
         for i in self._sel_spacers:
             self._paint[(self._page, i)] = rgb
         self._apply_paint_and_show()
+        self._note_edit()
         n_painted = len(self._sel_spacers)
         self._status.setText(
             tr("Painted 1 spacer on page {page}.").format(page=self._page + 1)
@@ -4408,6 +4630,7 @@ class Ti2RelayoutDialog(QDialog):
             self._status.setText(tr("Apply cancelled — the editor is still open."))
             return
         self._mark_saved()   # applied + saved — closing must not warn (#49)
+        self._clear_undo_history()
         self.accept()
 
     def _prompt_apply_name(self) -> str | None:
@@ -4599,6 +4822,7 @@ class Ti2RelayoutDialog(QDialog):
         self._shuffle_btn.setEnabled(has)
         self._save_btn.setEnabled(has)
         self._apply_btn.setEnabled(has)
+        self._refresh_undo_enabled()
         # Initial pass for the conditional checkboxes — without this the
         # default Qt state shows ALL four (L, P, double, triple) at
         # startup before any chart is loaded.
@@ -4613,5 +4837,6 @@ class Ti2RelayoutDialog(QDialog):
             return
         if self._worker is not None and self._worker.isRunning():
             self._worker.wait(3000)
+        self._clear_undo_history()
         self._preview_tmp.cleanup()
         super().closeEvent(ev)

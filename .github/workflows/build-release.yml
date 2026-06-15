@@ -441,8 +441,17 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release upload "$RELEASE_TAG" "${{ matrix.artifact }}" --clobber
+          # Version-stamp the asset filename (ChromIQ-macOS-arm64_v3.9.29.dmg)
+          # so downloads don't collide as "...(1).dmg" and each file is
+          # self-identifying. The download-stats dashboard classifies by the
+          # platform/arch tokens, which the suffix leaves intact.
+          ART="${{ matrix.artifact }}"
+          VERSIONED="${ART%.dmg}_${RELEASE_TAG}.dmg"
+          mv "$ART" "$VERSIONED"
+          gh release upload "$RELEASE_TAG" "$VERSIONED" --clobber
           # universal2 job also publishes the x86_64-thinned DMG.
           if [ "${{ matrix.arch }}" = "universal2" ] && [ -f "ChromIQ-macOS-x86_64.dmg" ]; then
-            gh release upload "$RELEASE_TAG" "ChromIQ-macOS-x86_64.dmg" --clobber
+            X86_VERSIONED="ChromIQ-macOS-x86_64_${RELEASE_TAG}.dmg"
+            mv "ChromIQ-macOS-x86_64.dmg" "$X86_VERSIONED"
+            gh release upload "$RELEASE_TAG" "$X86_VERSIONED" --clobber
           fi
