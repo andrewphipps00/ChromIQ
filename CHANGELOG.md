@@ -1,5 +1,25 @@
 # Changelog
 
+## v3.10.4
+
+Reuse a chart's design, and file issues with less typing — from **Knut
+(@soul-traveller)**'s suggestions. 🙏
+
+### ✨ Added
+- **Reuse a chart's recipe.** The New chart / Add window settings that produced a
+  chart — colour sets, instrument, paper and layout — are now saved with the
+  chart and reloaded into those windows when you reopen it, so you can tweak or
+  recreate a design instead of rebuilding it by hand. Charts without a saved
+  recipe still fall back to your last-used values, and Reset still restores the
+  app defaults.
+- **"Load setup from preset" in the New chart window.** A dropdown that loads a
+  whole saved setup from a preset in one go. Presets you save now carry their
+  setup; the dropdown lists the ones that have it and otherwise stays at *None*
+  (with a tooltip explaining what it does).
+- **Pre-filled issue forms.** **"Report a Bug…"** and a new **"Request a
+  Feature…"** button in Preferences open GitHub's forms with your ChromIQ
+  version, platform and OS version already filled in — fewer fields to type.
+
 ## v3.10.3
 
 Chart-design polish, new presets, and a friendlier update notice — most of it
