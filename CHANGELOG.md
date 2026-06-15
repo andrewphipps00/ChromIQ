@@ -1,5 +1,67 @@
 # Changelog
 
+## v3.10.0
+
+**The chart layout editor takes centre stage.** Over the last dozen releases the
+editor and its colour-set generators have grown from a simple `.ti2` viewer into
+a full chart-design studio — this release rounds that work off with three new
+generator improvements and gathers the whole feature into one place. Huge thanks
+to **Knut (@soul-traveller)**, whose relentless testing and design ideas drove
+almost all of it — including everything new below (issue #53). 🙏
+
+### ✨ Added
+- **New "Sunrises (warm)" colour set.** A warm-side companion to the Blues and
+  Greens sets: golden yellows, oranges, reds and pinks — the sunrise side of the
+  gamut nothing else concentrated on, for skies, flowers and warm highlights. It
+  has the same **per layer × layers** controls as its cool siblings, joins the
+  *Ensure unique colours* de-duplication, and counts toward the *Fill remaining
+  gaps* top-up. On by default alongside Blues and Greens.
+
+### 🔧 Changed
+- **"Fill remaining gaps" now fills evenly, at the gap midpoints.** Instead of
+  scattering the top-up patches at random, the fill now seeds the sparsest
+  regions and then relaxes every added patch onto the centroid of its
+  neighbourhood (a few Lloyd passes) — so they settle at the midpoints of the
+  empty space and come out balanced rather than clumped. The "fill to N" target,
+  the existing-chart top-up and the white/black accounting are all unchanged.
+- **Skin-tone ranges stay true skin tones.** Adding more than one range used to
+  fan parallel lines that drifted out of the skin region toward yellow-green and
+  olive. The generator now works in CIELAB and keeps every range inside the real
+  skin locus — grounded in the **Pantone SkinTone Guide** (its colours split into
+  red/yellow undertones at the 60° hue angle) and the Fitzpatrick/ITA literature.
+  Extra ranges now vary the **undertone** (rosier ↔ more golden) within that
+  wedge, while lightness sweeps along each phototype's natural pathway with
+  chroma easing off at the pale and deep extremes. Up to five ranges per type now
+  give genuine skin-tone variety instead of wandering off into greens.
+
+### 📋 The chart layout editor — what it can do
+
+A spec sheet for the feature this release celebrates:
+
+- **Open & create** — load any ArgyllCMS `.ti2`, or build a brand-new chart from
+  scratch, then re-layout it for any instrument and paper size.
+- **Direct patch editing** — add, delete, recolour and reorder patches on a live
+  swatch grid, with a two-way link to the chart preview (select on either side).
+- **Combinable colour-set generators** — eleven sets you can mix freely: an even
+  **3D RGB cube**, **Fitzpatrick skin tones**, **Blues / turquoise**, **Greens
+  (foliage)**, **Sunrises (warm)**, **near-neutral greys** (with hue rings),
+  **saturated edges** (gamut wireframe + faces), **highlights & shadows**,
+  **pastels**, **colours pulled from one of your own images**, and **pure white
+  & black** anchors — each with its own size controls and a live patch count.
+- **Even, unique coverage** — *Ensure unique colours* nudges any repeats apart,
+  and **Fill remaining gaps** tops the whole chart up to a target count, placed
+  evenly in the empty space.
+- **Live 3D preview** — a foldable RGB-cube view shows exactly what your ticked
+  sets would produce as you tune them, drawing the existing chart underneath when
+  you're adding to one, so you can see gamut coverage and clumping at a glance.
+- **Full undo / redo** — Ctrl+Z / Ctrl+Shift+Z through your last 20 edits, in
+  memory only, cleared when you close the editor.
+- **Settings that stick** — every generator choice is remembered between sessions
+  and restored by *Reset to defaults*.
+
+### 🌍 Translations
+- The new "Sunrises (warm)" set is translated into all twelve languages.
+
 ## v3.9.31
 
 A fix for a nasty freeze when opening the New chart / Add patches windows from

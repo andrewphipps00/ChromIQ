@@ -90,6 +90,29 @@ def test_skin_tones_ranges_add_hue_variation():
     assert len(hues) > 1
 
 
+def _lab_hue_angles(patches):
+    import math as _m
+    labs = G._srgb_to_lab([[r / 100, g / 100, b / 100] for r, g, b in patches])
+    return labs, [_m.degrees(_m.atan2(b, a)) % 360.0 for _, a, b in labs]
+
+
+def test_skin_tones_stay_in_skin_locus_with_many_ranges():
+    # #53: extra ranges must not wander out of the warm skin wedge — every patch
+    # keeps a positive a* (never greenish) and a hue angle inside the band, even
+    # at the maximum five ranges where the old HSV fan drifted toward 85°.
+    labs, hues = _lab_hue_angles(G.skin_tones(10, 5))
+    assert (labs[:, 1] >= 0).all()                 # no green undertones
+    assert all(G._SKIN_HUE_LO - 1.0 <= h <= G._SKIN_HUE_HI + 1.0 for h in hues)
+
+
+def test_skin_tones_undertone_fan_clamped_to_wedge():
+    # The undertone fan is symmetric about each anchor but clamped, so even the
+    # widest fan stays inside the wedge rather than escaping it.
+    _, hues = _lab_hue_angles(G.skin_tones(3, 5))
+    assert min(hues) >= G._SKIN_HUE_LO - 1.0
+    assert max(hues) <= G._SKIN_HUE_HI + 1.0
+
+
 # --- blues / greens --------------------------------------------------------
 @pytest.mark.parametrize("count", [1, 5, 7, 20, 50])
 @pytest.mark.parametrize("layers", [1, 2, 3, 5])
@@ -124,6 +147,33 @@ def test_greens_are_green_dominant():
     patches = G.greens(20)
     assert sum(g for _, g, _ in patches) > sum(r for r, _, _ in patches)
     assert sum(g for _, g, _ in patches) > sum(b for _, _, b in patches)
+
+
+# --- sunrises (warm band) --------------------------------------------------
+@pytest.mark.parametrize("count", [1, 5, 7, 20, 50])
+@pytest.mark.parametrize("layers", [1, 2, 3, 5])
+def test_sunrises_count_and_range(count, layers):
+    patches = G.sunrises(count, layers)
+    assert len(patches) == count == G.sunrises_count(count)
+    assert _all_in_range(patches)
+
+
+def test_sunrises_are_warm():
+    # The warm band is red-dominant: red leads blue everywhere, and on average
+    # red is the strongest channel (yellows/oranges/reds/pinks all have high R).
+    patches = G.sunrises(40)
+    assert all(r >= b for r, _, b in patches)
+    assert sum(r for r, _, _ in patches) > sum(g for _, g, _ in patches)
+    assert sum(r for r, _, _ in patches) > sum(b for _, _, b in patches)
+
+
+def test_sunrises_span_yellow_through_pink():
+    import colorsys
+    hues = sorted((colorsys.rgb_to_hsv(r / 100, g / 100, b / 100)[0] * 360.0)
+                  for r, g, b in G.sunrises(80))
+    # Yellows near 60° and warm pinks/magentas up near 330°+ are both present.
+    assert any(h >= 55.0 for h in hues)
+    assert any(h >= 320.0 for h in hues)
 
 
 # --- near-neutral greys ----------------------------------------------------
@@ -383,6 +433,36 @@ def test_fill_gaps_avoids_existing_points():
     import math as _m
     dists = [_m.dist(p, (50, 50, 50)) for p in add]
     assert sum(dists) / len(dists) > 20.0
+
+
+def _nn_spacing(pts):
+    """List of each point's distance to its nearest neighbour."""
+    import math as _m
+    out = []
+    for i, a in enumerate(pts):
+        out.append(min(_m.dist(a, b) for j, b in enumerate(pts) if j != i))
+    return out
+
+
+def test_fill_gaps_relaxation_is_more_even():
+    # Lloyd relaxation should make the fill more uniform than the raw blue-noise
+    # seed: the spread of nearest-neighbour spacings (its coefficient of
+    # variation) drops once the added points settle onto their cell centroids.
+    import statistics as st
+    raw = G.fill_gaps([], 80, seed=1, relax=0)
+    even = G.fill_gaps([], 80, seed=1, relax=6)
+    cv_raw = st.pstdev(_nn_spacing(raw)) / st.mean(_nn_spacing(raw))
+    cv_even = st.pstdev(_nn_spacing(even)) / st.mean(_nn_spacing(even))
+    assert cv_even < cv_raw
+    assert _all_in_range(even)
+
+
+def test_fill_gaps_relaxed_keeps_clear_of_existing():
+    # Relaxation must not pull added points onto the fixed existing patches.
+    existing = G.rgb_cube(3)
+    add = G.fill_gaps(existing, 90, seed=3, relax=6)
+    assert len(add) == 90 - 27
+    assert G.overlap_count(existing, add) == 0
 
 
 # --- de-duplication --------------------------------------------------------

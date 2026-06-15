@@ -68,53 +68,92 @@ _FITZPATRICK_ANCHORS = (
 )
 
 
+# The skin locus is a warm CIELAB wedge: the Pantone SkinTone Guide's 110
+# colours divide into a "yellow" and a "red" group at the 60° hue angle, and
+# real-skin hue angles sit roughly between deep-red ruddiness and golden yellow.
+# Ranges fan the undertone within this band (clamped, so no range escapes into
+# the yellow-green / olive tints the old HSV sweep drifted into — GitHub #53,
+# grounded in the Pantone SkinTone chart + Fitzpatrick/ITA literature).
+_SKIN_HUE_LO = 35.0
+_SKIN_HUE_HI = 78.0
+_SKIN_UNDERTONE_FAN = 15.0          # total ° spread of undertone across ranges
+
+
+def _lab_to_srgb(lab):
+    """(N,3) CIELab (D65) → (N,3) sRGB on 0..1, clamped to gamut. Inverse of
+    :func:`_srgb_to_lab`."""
+    import numpy as np
+    a = np.asarray(lab, dtype=float)
+    L, A, B = a[:, 0], a[:, 1], a[:, 2]
+    fy = (L + 16.0) / 116.0
+    fx = fy + A / 500.0
+    fz = fy - B / 200.0
+    f = np.stack([fx, fy, fz], axis=1)
+    f3 = f ** 3
+    xyz = np.where(f3 > 0.008856, f3, (f - 16.0 / 116.0) / 7.787)
+    xyz = xyz * np.array([0.95047, 1.0, 1.08883])
+    m = np.array([[0.4124, 0.3576, 0.1805],
+                  [0.2126, 0.7152, 0.0722],
+                  [0.0193, 0.1192, 0.9505]])
+    lin = xyz @ np.linalg.inv(m).T
+    lin = np.clip(lin, 0.0, None)
+    srgb = np.where(lin <= 0.0031308, 12.92 * lin,
+                    1.055 * np.power(lin, 1.0 / 2.4) - 0.055)
+    return np.clip(srgb, 0.0, 1.0)
+
+
 def skin_tones(per_type: int, ranges: int = 3) -> list[tuple[float, float, float]]:
     """A skin-tone spread for the 6 Fitzpatrick phototypes, light → dark.
 
-    Each phototype gets ``ranges`` *parallel* ramps offset slightly in hue
-    (cooler ↔ warmer) so the spread covers the natural hue variation within a
-    category rather than a single line through it; every ramp is then swept in
-    brightness (and a touch in saturation) over ``per_type`` patches to reach
-    the paler highlights and deeper shadows real skin holds. The lightest ramps
-    drift toward porcelain and the darkest pick up a faint cool undertone.
+    Built in CIELAB so every patch stays inside the real skin locus (#53). Each
+    of the six Fitzpatrick anchors fixes a lightness (its ITA / melanin level)
+    and an undertone (its CIELAB hue angle — lighter types lean golden-yellow,
+    deeper types lean red, just like real skin and the Pantone SkinTone Guide).
 
-    The light end of the sweep reaches *further toward the cube centre the
-    darker the anchor is*, so the deep-brown phototypes (V/VI) span a comparable
-    tonal length to the pale ones instead of bunching into a short, dense ramp
-    near the dark corner (GitHub #37 follow-up — Knut's "darkest range is too
-    dense" note). Pale anchors are essentially unchanged.
+    * ``ranges`` fans the **undertone**: each ramp is rotated a little around
+      the anchor's hue (rosier ↔ more golden), clamped to the skin wedge
+      (≈ 35°–78°), so added ranges are genuine skin-undertone variants rather
+      than the parallel HSV lines that used to wander into yellow-green / olive.
+    * ``per_type`` sweeps **lightness** dark → light along the anchor's ITA
+      pathway, with chroma tapering at the pale and deep extremes (real skin is
+      least chromatic when very light or very dark). The light end reaches
+      *further toward mid-tone the darker the anchor*, so deep phototypes (V/VI)
+      span a comparable tonal length to the pale ones instead of bunching into a
+      short, dense ramp (GitHub #37 — Knut's "darkest range too dense" note).
 
     Total = ``6 * ranges * per_type``, ordered type-by-type, then ramp-by-ramp,
-    each ramp dark → light. ``ranges = 1`` reproduces a single central ramp.
+    each ramp dark → light. ``ranges = 1`` is a single central-undertone ramp.
     """
+    import numpy as np
+
     per_type = max(1, int(per_type))
     ranges = max(1, int(ranges))
+    labs = _srgb_to_lab([[r / 255.0, g / 255.0, b / 255.0]
+                         for r, g, b in _FITZPATRICK_ANCHORS])
     out: list[tuple[float, float, float]] = []
-    for r8, g8, b8 in _FITZPATRICK_ANCHORS:
-        h, s, v = colorsys.rgb_to_hsv(r8 / 255.0, g8 / 255.0, b8 / 255.0)
-        # Absolute value endpoints for this anchor's ramp. The dark end stays a
-        # fixed fraction below the anchor; the light end is lifted toward the
-        # cube centre, with the lift scaled by (1 - v) so dark anchors stretch
-        # the most and a near-white type I barely moves.
-        v_dark = v * 0.74
-        v_light = min(1.0, v * 1.08 + 0.22 * (1.0 - v))
+    for L0, a0, b0 in labs:
+        chroma0 = math.hypot(a0, b0)
+        hue0 = math.degrees(math.atan2(b0, a0))
+        # Lightness endpoints: stretch a fixed fraction of the headroom up to
+        # near-white and down toward deep tone, so every anchor (pale or deep)
+        # covers a comparable tonal length.
+        l_light = L0 + (96.0 - L0) * 0.32
+        l_dark = L0 - (L0 - 18.0) * 0.32
         for ri in range(ranges):
-            # Parallel ramps fanned ±9° in hue around the anchor; the centre
-            # ramp keeps the exact phototype hue.
             tr = (ri / (ranges - 1) - 0.5) if ranges > 1 else 0.0
-            dh = tr * 18.0 / 360.0
+            hue = max(_SKIN_HUE_LO, min(_SKIN_HUE_HI,
+                                        hue0 + tr * _SKIN_UNDERTONE_FAN))
+            hr = math.radians(hue)
+            ramp_lab = []
             for i in range(per_type):
-                # Sweep value v_dark → v_light; lift saturation a little in the
-                # shadows so darker shades don't wash to grey, and ease it down
-                # toward the lighter (centre-ward) end so it goes porcelain-pale.
                 t = i / (per_type - 1) if per_type > 1 else 0.5
-                val = v_dark + (v_light - v_dark) * t
-                sf = 1.14 - 0.30 * t
-                r, g, b = colorsys.hsv_to_rgb(
-                    (h + dh) % 1.0, min(1.0, max(0.0, s * sf)),
-                    min(1.0, max(0.0, val))
-                )
-                out.append((r * 100.0, g * 100.0, b * 100.0))
+                L = l_dark + (l_light - l_dark) * t
+                # Chroma peaks in the mid-tones, eases off at both ends.
+                chroma = chroma0 * (1.0 - 0.35 * (2.0 * t - 1.0) ** 2)
+                ramp_lab.append((L, chroma * math.cos(hr),
+                                 chroma * math.sin(hr)))
+            for r, g, b in _lab_to_srgb(ramp_lab):
+                out.append((float(r) * 100.0, float(g) * 100.0, float(b) * 100.0))
     return out
 
 
@@ -198,6 +237,26 @@ def greens(count: int, layers: int = 2) -> list[tuple[float, float, float]]:
 
 
 def greens_count(count: int) -> int:
+    return max(1, int(count))
+
+
+# ---------------------------------------------------------------------------
+# 4b. Sunrises — the warm band: yellows, oranges, reds and pinks.
+# ---------------------------------------------------------------------------
+def sunrises(count: int, layers: int = 3) -> list[tuple[float, float, float]]:
+    """``count`` patches across the warm "sunrise" band — golden yellows through
+    oranges and reds into pinks (hue ≈ 335°–60°, wrapping through red at 0°) —
+    the warm side of the cube the blues and greens sets leave uncovered (#53).
+
+    Built exactly like :func:`blues` and :func:`greens`: ``layers`` non-parallel
+    saturation shells fill the wedge in depth rather than as one flat sheet, so
+    the soft pinks at the low-saturation core and the vivid reds / oranges on the
+    outer shell are both sampled, across mid-to-light brightness.
+    """
+    return _hue_region_layered(count, -25.0, 60.0, 0.45, 0.98, 0.55, 1.0, layers)
+
+
+def sunrises_count(count: int) -> int:
     return max(1, int(count))
 
 
@@ -625,16 +684,38 @@ def pastels_count(count: int) -> int:
 # ---------------------------------------------------------------------------
 # 10. Fill the gaps — blue-noise top-up of whatever the other sets left sparse.
 # ---------------------------------------------------------------------------
+def _nearest_site(samples, sites, chunk: int = 4096):
+    """Index of the nearest ``sites`` row for each ``samples`` row (Euclidean),
+    evaluated in sample chunks so the distance matrix never blows up memory."""
+    import numpy as np
+    out = np.empty(len(samples), dtype=np.intp)
+    for s in range(0, len(samples), chunk):
+        blk = samples[s:s + chunk]
+        d2 = ((blk[:, None, :] - sites[None, :, :]) ** 2).sum(2)
+        out[s:s + chunk] = d2.argmin(1)
+    return out
+
+
 def fill_gaps(existing, total: int, candidates: int = 12,
-              seed: int = 0) -> list[tuple[float, float, float]]:
-    """Add patches until the program reaches ``total``, placed where it is sparse.
+              seed: int = 0, relax: int = 4) -> list[tuple[float, float, float]]:
+    """Add patches until the program reaches ``total``, evenly filling the gaps.
 
     Given the already-chosen ``existing`` patches, this returns ``total -
-    len(existing)`` new device-RGB patches via best-candidate (Mitchell)
-    sampling: each new point is the farthest of several random candidates from
-    everything chosen so far. The result is an even, lattice-free "blue-noise"
-    fill of the cube's empty regions — coverage without near-duplicates. Returns
-    ``[]`` if the program already meets or exceeds ``total``.
+    len(existing)`` new device-RGB patches, placed in two stages (#53):
+
+    1. **Seed** — best-candidate (Mitchell) sampling: each new point is the
+       farthest of several random candidates from everything so far, so the
+       seeds drop into the sparsest regions first (a coarse density analysis).
+    2. **Relax** — ``relax`` passes of Lloyd's iteration: every *added* point
+       slides to the centroid of its Voronoi cell (the midpoint of the patches
+       surrounding it), with the existing chart and the chosen sets held fixed.
+       This turns the blue-noise seed into a balanced, centroidal fill — new
+       patches sit at the midpoints of the empty space, the analysis re-done
+       each pass — instead of an unorganised scatter.
+
+    The centroid of a cell is the mean of the in-cube samples nearest that point,
+    so added points stay within 0..100 and away from the fixed patches (no
+    near-duplicates). Returns ``[]`` if the program already meets ``total``.
     """
     import numpy as np
 
@@ -644,18 +725,39 @@ def fill_gaps(existing, total: int, candidates: int = 12,
     if n_add <= 0:
         return []
     rng = np.random.default_rng(seed)
-    arr = np.array(pts, dtype=float) if pts else np.empty((0, 3))
-    added: list[tuple[float, float, float]] = []
-    for _ in range(n_add):
+    fixed = np.array(pts, dtype=float) if pts else np.empty((0, 3))
+
+    # 1. Blue-noise seeding — drop each point into the current sparsest region.
+    arr = fixed.copy()
+    added = np.empty((n_add, 3), dtype=float)
+    for i in range(n_add):
         cand = rng.uniform(0.0, 100.0, size=(max(1, candidates), 3))
         if len(arr):
             d2 = ((cand[:, None, :] - arr[None, :, :]) ** 2).sum(2).min(axis=1)
             pick = cand[int(np.argmax(d2))]
         else:
             pick = cand[0]
-        added.append((float(pick[0]), float(pick[1]), float(pick[2])))
-        arr = np.vstack([arr, pick[None, :]]) if len(arr) else pick[None, :]
-    return added
+        added[i] = pick
+        arr = np.vstack([arr, pick[None, :]])
+
+    # 2. Lloyd relaxation — settle each added point onto its cell centroid, with
+    # the existing/seeded-from patches fixed, so the fill comes out balanced.
+    base = len(fixed)
+    # Scale the relaxation passes down for very large fills so a 30k top-up
+    # stays bounded; small/typical fills get the full smoothing.
+    passes = int(relax) if n_add <= 4000 else max(1, int(relax) * 4000 // n_add)
+    if relax > 0 and n_add:
+        n_s = min(40000, max(3000, 40 * n_add))
+        for _ in range(passes):
+            sites = np.vstack([fixed, added]) if base else added
+            samp = rng.uniform(0.0, 100.0, size=(n_s, 3))
+            owner = _nearest_site(samp, sites)
+            for j in range(n_add):
+                sel = samp[owner == base + j]
+                if len(sel):
+                    added[j] = sel.mean(0)
+
+    return [(float(x), float(y), float(z)) for x, y, z in added]
 
 
 def fill_gaps_count(existing_count: int, total: int) -> int:
