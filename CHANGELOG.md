@@ -62,6 +62,13 @@ A spec sheet for the feature this release celebrates:
 ### 🌍 Translations
 - The new "Sunrises (warm)" set is translated into all twelve languages.
 
+### 🐛 Fixed
+- **The layout editor's preview no longer jumps around on Windows after each
+  update.** When a preview finished rendering, the status line below the patch
+  grid briefly forced its column wider — squeezing the preview — then snapped
+  back a few seconds later when the message cleared. The status line is now
+  free of the layout, so the preview and patch-grid columns hold their width.
+
 ## v3.9.31
 
 A fix for a nasty freeze when opening the New chart / Add patches windows from

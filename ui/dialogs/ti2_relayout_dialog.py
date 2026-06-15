@@ -28,7 +28,7 @@ from PyQt6.QtWidgets import (
     QDialogButtonBox,
     QDoubleSpinBox, QFrame, QGridLayout, QGroupBox, QHBoxLayout, QLabel,
     QLineEdit, QListWidget, QListWidgetItem, QMessageBox, QPlainTextEdit,
-    QPushButton, QRadioButton, QScrollArea, QSlider, QSplitter,
+    QPushButton, QRadioButton, QScrollArea, QSizePolicy, QSlider, QSplitter,
     QStyle, QStyledItemDelegate, QVBoxLayout, QWidget,
 )
 
@@ -58,6 +58,15 @@ class _AutoHideLabel(QLabel):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__("", parent)
+        # The status line lives in the left pane of a horizontal QSplitter. A
+        # plain QLabel reports its full (unwrapped) text width as its minimum,
+        # so a long message would force the splitter to widen this pane and
+        # shrink the preview — then snap back when the text auto-clears 4 s
+        # later (a Windows-only jitter, where the system font renders the text
+        # wider than the pane's share). Ignored horizontal policy means the
+        # text never dictates the pane width; the label just takes whatever the
+        # layout gives it and clips an over-long message.
+        self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         self._clear_timer = QTimer(self)
         self._clear_timer.setSingleShot(True)
         self._clear_timer.setInterval(self.HIDE_MS)

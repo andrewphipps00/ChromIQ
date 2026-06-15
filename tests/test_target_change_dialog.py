@@ -25,7 +25,14 @@ def test_option_buttons_are_wide_enough_for_their_text(qapp, old, new):
     dlg.show()
     qapp.processEvents()
     try:
-        for b in dlg.findChildren(QPushButton):
+        # Only the #52 option buttons carry an explicit minimum width
+        # (advance + 48); the plain Cancel button uses Qt's own default sizing,
+        # which fits "Cancel" without our heuristic (its natural width is
+        # narrower than need+36 on Windows, wider on macOS — not a clip).
+        option_btns = [b for b in dlg.findChildren(QPushButton)
+                       if b.minimumWidth() > 0]
+        assert option_btns
+        for b in option_btns:
             need = b.fontMetrics().horizontalAdvance(b.text())
             # text + the stylesheet's 18px*2 padding must fit inside the button
             assert b.width() >= need + 36, f"clipped: {b.text()!r}"
