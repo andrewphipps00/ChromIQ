@@ -1662,7 +1662,17 @@ class _NewChartDialog(QDialog):
         de-duplicating across sets when 'Ensure unique colours' is on."""
         program: list[tuple] = []
         for cb, build, _count, _label in self._gen_specs():
-            if cb.isChecked():
+            if not cb.isChecked():
+                continue
+            if cb is self._gen_edges:
+                # Saturated edges fills the boundary gaps the other sets (the 3D
+                # cube above all) already left, so its patches land at the
+                # midpoints between what's there rather than re-sampling it (#53).
+                seed = self._existing_patches + program
+                program.extend(
+                    G.gamut_edges(self._gen_edges_n.value(), seed)
+                    + G.gamut_faces(self._gen_edges_faces.value(), seed))
+            else:
                 program.extend(build())
         if self._gen_unique.isChecked():
             program = G.deduplicate(program)

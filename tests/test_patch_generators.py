@@ -268,6 +268,38 @@ def test_gamut_faces_interior_and_on_a_face():
         assert all(0.0 < c < 100.0 for c in free)
 
 
+# --- saturated edges/faces are boundary-aware (#53) ------------------------
+def test_gamut_edges_standalone_unchanged():
+    # With no existing patches the layout is the original even spacing.
+    assert G.gamut_edges(6, None) == G.gamut_edges(6)
+    assert G.gamut_edges(6, []) == G.gamut_edges(6)
+    assert G.gamut_faces(5, None) == G.gamut_faces(5)
+
+
+def test_gamut_edges_fill_gaps_left_by_a_cube():
+    # When the 3D cube has already sampled the boundary, the saturated set must
+    # land at the midpoints between those points, not on top of them (#53, Knut).
+    cube = G.rgb_cube(8)
+    naive = G.gamut_edges(6) + G.gamut_faces(6)
+    aware = G.gamut_edges(6, cube) + G.gamut_faces(6, cube)
+    assert len(aware) == len(naive)                       # count is unchanged
+    assert G.overlap_count(cube, aware) == 0              # no exact re-sampling
+    assert G.overlap_count(cube, naive) > 0               # the old behaviour did
+    # And the boundary-aware patches sit farther from the cube points on average.
+    import math as _m
+    mean = lambda S: sum(min(_m.dist(p, c) for c in cube) for p in S) / len(S)
+    assert mean(aware) > mean(naive)
+
+
+def test_gamut_boundary_aware_stays_on_the_boundary():
+    # Even when filling gaps, every patch keeps a channel pinned at 0 or 100.
+    cube = G.rgb_cube(6)
+    aware = G.gamut_edges(5, cube) + G.gamut_faces(5, cube)
+    for p in aware:
+        assert any(abs(c) < 1e-6 or abs(c - 100.0) < 1e-6 for c in p)
+    assert _all_in_range(aware)
+
+
 # --- highlight & shadow detail ---------------------------------------------
 @pytest.mark.parametrize("per_end", [1, 6, 12, 40])
 def test_highlight_shadow_count_and_range(per_end):

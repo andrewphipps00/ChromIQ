@@ -363,22 +363,64 @@ _CUBE_EDGES = (
 )
 
 
-def gamut_edges(per_edge: int) -> list[tuple[float, float, float]]:
+def _edge_param(p, fixed_idx, fixed_vals, var_idx, tol):
+    """Parameter ``t`` in 0..1 of ``p`` along an edge (the edge's two other
+    channels pinned at ``fixed_vals``), or ``None`` if ``p`` isn't on it."""
+    if all(abs(p[j] - v) <= tol for j, v in zip(fixed_idx, fixed_vals)):
+        t = p[var_idx] / 100.0
+        if -0.01 <= t <= 1.01:
+            return min(1.0, max(0.0, t))
+    return None
+
+
+def _fill_line_midpoints(anchors, k: int) -> list[float]:
+    """``k`` new positions in 0..1 that bisect the largest gaps between the
+    sorted ``anchors`` (fixed points already on the line), re-splitting after
+    each insertion — a 1-D version of the gap-fill, so new points land at the
+    midpoints between the closest surrounding patches."""
+    occupied = sorted(anchors)
+    added: list[float] = []
+    for _ in range(k):
+        merged = sorted(occupied + added)
+        gi = max(range(len(merged) - 1), key=lambda i: merged[i + 1] - merged[i])
+        added.append((merged[gi] + merged[gi + 1]) / 2.0)
+    return added
+
+
+def gamut_edges(per_edge: int, existing=None,
+                tol: float = 1.0) -> list[tuple[float, float, float]]:
     """``per_edge`` patches along each of the 12 edges of the RGB cube.
 
     This traces the device's gamut boundary — the black→primary, primary→
     secondary and secondary→white ramps that bound everything the printer can
-    reproduce. Endpoints (the cube corners) are included, so adjacent edges
-    share corners; combined with 'Ensure unique colours' those collapse to one.
+    reproduce.
+
+    When ``existing`` patches are given (e.g. the 3D cube, already placed on the
+    boundary), each edge's new patches are laid at the **midpoints of the gaps**
+    between the patches already on that edge — so the saturated set fills the
+    spaces the cube left rather than re-sampling the same points (#53). With no
+    ``existing`` patches on an edge the layout is the original even spacing,
+    endpoints (corners) included.
 
     Total = ``12 * per_edge``.
     """
     per_edge = max(1, int(per_edge))
+    existing = list(existing or [])
     out: list[tuple[float, float, float]] = []
     for a, b in _CUBE_EDGES:
         ca, cb = _CUBE_CORNERS[a], _CUBE_CORNERS[b]
-        for i in range(per_edge):
-            t = i / (per_edge - 1) if per_edge > 1 else 0.5
+        var_idx = next(j for j in range(3) if ca[j] != cb[j])
+        fixed_idx = [j for j in range(3) if ca[j] == cb[j]]
+        fixed_vals = [ca[j] for j in fixed_idx]
+        occ = [t for t in (_edge_param(p, fixed_idx, fixed_vals, var_idx, tol)
+                           for p in existing) if t is not None]
+        if occ:
+            # Fill the gaps between what's already here (corners are anchors too).
+            ts = _fill_line_midpoints(occ + [0.0, 1.0], per_edge)
+        else:
+            ts = [i / (per_edge - 1) if per_edge > 1 else 0.5
+                  for i in range(per_edge)]
+        for t in ts:
             out.append(tuple(_clamp(ca[j] + (cb[j] - ca[j]) * t) for j in range(3)))
     return out
 
@@ -394,30 +436,84 @@ _CUBE_FACES = (
 )
 
 
-def gamut_faces(per_face: int) -> list[tuple[float, float, float]]:
-    """An ``per_face × per_face`` interior grid on each of the cube's 6 faces.
+def _fill_plane_midpoints(occupied, k: int, seed: int = 0,
+                          candidates: int = 12, relax: int = 3):
+    """``k`` new (u, v) points in the 0..100 square placed in the sparsest spots
+    around the fixed ``occupied`` points, then relaxed onto their cell centroids
+    — the 2-D version of :func:`fill_gaps`, so face patches land at the midpoints
+    between the patches already on that face."""
+    import numpy as np
+    rng = np.random.default_rng(seed)
+    fixed = np.array(occupied, dtype=float) if len(occupied) else np.empty((0, 2))
+    arr = fixed.copy()
+    added = np.empty((k, 2), dtype=float)
+    for i in range(k):
+        cand = rng.uniform(0.0, 100.0, size=(max(1, candidates), 2))
+        if len(arr):
+            d2 = ((cand[:, None, :] - arr[None, :, :]) ** 2).sum(2).min(axis=1)
+            pick = cand[int(d2.argmax())]
+        else:
+            pick = cand[0]
+        added[i] = pick
+        arr = np.vstack([arr, pick[None, :]])
+    base = len(fixed)
+    if relax > 0 and k:
+        n_s = min(20000, max(2000, 60 * k))
+        for _ in range(int(relax)):
+            sites = np.vstack([fixed, added]) if base else added
+            samp = rng.uniform(0.0, 100.0, size=(n_s, 2))
+            owner = (((samp[:, None, :] - sites[None, :, :]) ** 2)
+                     .sum(2).argmin(1))
+            for j in range(k):
+                sel = samp[owner == base + j]
+                if len(sel):
+                    added[j] = sel.mean(0)
+    return added
+
+
+def gamut_faces(per_face: int, existing=None,
+                tol: float = 1.0) -> list[tuple[float, float, float]]:
+    """An ``per_face × per_face`` sampling on each of the cube's 6 faces.
 
     Where :func:`gamut_edges` traces the gamut wireframe, this samples the gamut
-    *surface* — the saturated boundary the printer can just reach. Points sit at
-    cell centres ``(i + 0.5) / per_face`` so they fall strictly inside each face,
-    not on the edges already covered by :func:`gamut_edges`. ``per_face = 0``
-    means no face sampling.
+    *surface* — the saturated boundary the printer can just reach. ``per_face =
+    0`` means no face sampling.
+
+    With no ``existing`` patches on a face the points sit at grid cell centres
+    ``(i + 0.5) / per_face`` (the original even layout). When ``existing``
+    patches already lie on a face (e.g. the 3D cube's face points), the new
+    patches instead fill the **midpoints of the gaps** between them — an even
+    blue-noise-then-centroidal fill of that face's empty space (#53), so the
+    saturated set complements the cube rather than doubling up on it.
 
     Total = ``6 * per_face**2``.
     """
     per_face = max(0, int(per_face))
     if per_face == 0:
         return []
+    existing = list(existing or [])
+    n = per_face * per_face
     out: list[tuple[float, float, float]] = []
-    for fixed, val in _CUBE_FACES:
+    for fi, (fixed, val) in enumerate(_CUBE_FACES):
         free = [k for k in range(3) if k != fixed]
-        for i in range(per_face):
-            for j in range(per_face):
+        occ = [(p[free[0]], p[free[1]]) for p in existing
+               if abs(p[fixed] - val) <= tol]
+        if occ:
+            uv = _fill_plane_midpoints(occ, n, seed=fi)
+            for u, v in uv:
                 p = [0.0, 0.0, 0.0]
                 p[fixed] = val
-                p[free[0]] = (i + 0.5) / per_face * 100.0
-                p[free[1]] = (j + 0.5) / per_face * 100.0
+                p[free[0]] = float(_clamp(u))
+                p[free[1]] = float(_clamp(v))
                 out.append((p[0], p[1], p[2]))
+        else:
+            for i in range(per_face):
+                for j in range(per_face):
+                    p = [0.0, 0.0, 0.0]
+                    p[fixed] = val
+                    p[free[0]] = (i + 0.5) / per_face * 100.0
+                    p[free[1]] = (j + 0.5) / per_face * 100.0
+                    out.append((p[0], p[1], p[2]))
     return out
 
 

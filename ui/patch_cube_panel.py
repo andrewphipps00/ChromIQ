@@ -75,8 +75,15 @@ class PatchCubePanel(QWidget):
     def showEvent(self, ev) -> None:  # noqa: N802
         # Build the web view the first time the panel actually becomes visible
         # (i.e. when the host unfolds the cube), never while it sits folded.
+        # Defer the actual creation to the next event-loop tick so it lands at
+        # idle rather than inside the host's synchronous unfold (setVisible →
+        # resize → layout) transition — instantiating a QWebEngineView creates
+        # a native surface that can reorder the parent window, which mid-modal
+        # froze the editor on Windows (issue #38 follow-up).
         super().showEvent(ev)
-        self._ensure_view()
+        if not self._view_ready:
+            from PyQt6.QtCore import QTimer
+            QTimer.singleShot(0, self._ensure_view)
 
     def _ensure_view(self) -> None:
         """Create and load the QWebEngineView on first show. Idempotent."""

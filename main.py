@@ -174,6 +174,13 @@ def main() -> int:
     elif settings.get("window_maximized", False):
         QTimer.singleShot(0, win.showMaximized)
 
+    # Pay QtWebEngine's costly first-init now, at idle on the main loop and
+    # outside any modal, so the chart-design windows' on-demand 3D-cube preview
+    # never spins Chromium up mid-transition (issue #38 follow-up: that froze
+    # the editor on Windows the first time the preview was opened).
+    from core.webengine_warmup import warm_up_webengine
+    QTimer.singleShot(0, warm_up_webengine)
+
     if settings.get("show_welcome_dialog", True):
         # Welcome dialog is non-modal (see MainWindow.open_welcome_dialog),
         # so it no longer blocks the event loop or preempts the maximize /
