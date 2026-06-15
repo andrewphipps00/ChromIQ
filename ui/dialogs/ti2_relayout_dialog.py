@@ -584,12 +584,19 @@ class _NewChartDialog(QDialog):
     printtarg layout knobs that affect rendering."""
 
     def __init__(self, bin_dir: Path, settings=None,
-                 parent: QWidget | None = None) -> None:
+                 parent: QWidget | None = None,
+                 initial_recipe: dict | None = None) -> None:
         super().__init__(parent)
         self.setWindowTitle(tr("New chart"))
         self.setMinimumWidth(620)
         self._bin_dir = bin_dir
         self._settings = settings
+        # The chart's stored creation recipe, if reopened from a chart that has
+        # one — applied instead of the app-wide last-used state (see the restore
+        # in __init__ below). The window reports its own recipe back via
+        # result_recipe so the editor can persist it.
+        self._initial_recipe = initial_recipe
+        self.result_recipe: dict | None = None
         self.result_spec: R.ChartSpec | None = None
         self.result_program: list[tuple] | None = None
         self.result_options: R.LayoutOptions | None = None
@@ -969,9 +976,13 @@ class _NewChartDialog(QDialog):
         # Height fits common laptop screens; width follows the fold state.
         self._init_fold_state(760)
 
-        # Restore the source mode + colour-set values the user picked last time
-        # so creating another chart doesn't start from scratch.
-        self._restore_gen_state()
+        # Prefer the chart's own creation recipe (reopened to tweak/recreate it);
+        # otherwise restore the app-wide last-used state so creating another chart
+        # doesn't start from scratch.
+        if isinstance(self._initial_recipe, dict):
+            self._apply_gen_state(self._initial_recipe)
+        else:
+            self._restore_gen_state()
         self._do_push_live_preview()   # seed the cube with the restored state
 
     # -- last-used settings persistence -----------------------------------
@@ -2095,6 +2106,9 @@ class _NewChartDialog(QDialog):
         self.result_spec = spec
         self.result_program = program
         self.result_options = opts
+        # The full creation recipe, so the editor can persist it on the chart
+        # (reloaded into New chart / Add later to tweak/recreate the design).
+        self.result_recipe = self._collect_gen_state()
         # No name is asked for here any more — the real name is chosen at
         # Save & apply time. Keep the neutral "chart" placeholder basename.
         self.result_basename = "chart"
@@ -2116,11 +2130,16 @@ class _AddPatchesDialog(_NewChartDialog):
     """
 
     def __init__(self, settings=None, parent: QWidget | None = None,
-                 existing_patches=None) -> None:
+                 existing_patches=None, initial_recipe=None) -> None:
         QDialog.__init__(self, parent)
         self.setWindowTitle(tr("Add patches"))
         self.setMinimumWidth(620)
         self._settings = settings
+        # The chart's creation recipe, if reopened from a chart that has one —
+        # its colour-set choices pre-fill the generate panel instead of the
+        # app-wide last-used ones (Add only has the generate panel, so just the
+        # cb/sp portion applies).
+        self._initial_recipe = initial_recipe
         self.result_program: list[tuple] | None = None
         # State the inherited generate-panel methods expect. The chart's current
         # patches let "Fill remaining gaps" top the whole chart up to its target
@@ -2219,9 +2238,10 @@ class _AddPatchesDialog(_NewChartDialog):
         # _fit_content_height / the exec override).
         self._init_fold_state(min(760, hint.height() + 72))
 
-        # Share the New-chart dialog's last-used colour-set choices.
-        st = (self._settings.get("new_chart_gen", None)
-              if self._settings else None)
+        # Prefer the chart's own recipe (reopened to extend that design);
+        # otherwise share the New-chart dialog's last-used colour-set choices.
+        st = self._initial_recipe if isinstance(self._initial_recipe, dict) else (
+            self._settings.get("new_chart_gen", None) if self._settings else None)
         if isinstance(st, dict):
             self._apply_gen_sets(st)
         self._update_gen_counts()
@@ -2344,6 +2364,10 @@ class Ti2RelayoutDialog(QDialog):
         self.setMinimumSize(1000, 620)
 
         self._spec: R.ChartSpec | None = None
+        # The chart's creation recipe (New chart / Add window state) when known —
+        # threaded from the New chart dialog, or loaded from meta.json — so it
+        # can be re-persisted on save and reloaded into New chart / Add.
+        self._chart_recipe: dict | None = None
         # Snapshot of the chart's content (patches + spacers + layout knobs) as
         # last saved / loaded-from-disk. Compared against the live signature to
         # tell whether there are unsaved edits to warn about on Close (#49). A
@@ -3266,16 +3290,23 @@ class Ti2RelayoutDialog(QDialog):
             self._options = R.LayoutOptions()
             self._basename = path.stem or "chart"
             note = f"Loaded {path.name}"
+        # The chart's creation recipe (if it carries one) — so New chart / Add
+        # reopen with this design rather than the app-wide last-used state.
+        self._chart_recipe = R.load_editor_recipe(path)
         self._set_chart(spec, program, note, is_saved=True)
         return True
 
     def _new_chart(self) -> None:
-        dlg = _NewChartDialog(self._bin_dir, self._settings, self)
+        # Pre-load the current chart's recipe (if any) so the design can be
+        # tweaked/recreated; capture the recipe the dialog reports back.
+        dlg = _NewChartDialog(self._bin_dir, self._settings, self,
+                              initial_recipe=self._chart_recipe)
         if dlg.exec() != QDialog.DialogCode.Accepted or dlg.result_spec is None:
             return
         if dlg.result_options is not None:
             self._options = dlg.result_options
         self._basename = dlg.result_basename or "chart"
+        self._chart_recipe = dlg.result_recipe
         self._set_chart(dlg.result_spec, dlg.result_program or [], "New chart")
 
     def _set_chart(self, spec: R.ChartSpec, program: list[tuple], note: str,
@@ -3545,7 +3576,8 @@ class Ti2RelayoutDialog(QDialog):
         generated colour sets (3D cube, skin tones, blues, greens, greys, …) —
         and splice the result into the chart."""
         dlg = _AddPatchesDialog(self._settings, self,
-                                existing_patches=self._program_from_grid())
+                                existing_patches=self._program_from_grid(),
+                                initial_recipe=self._chart_recipe)
         if dlg.exec() != QDialog.DialogCode.Accepted or not dlg.result_program:
             return
         extra = dlg.result_program
@@ -4790,7 +4822,8 @@ class Ti2RelayoutDialog(QDialog):
         # Write meta.json (the same RunMeta the main app uses) into the chart
         # folder so reopening restores the printtarg knobs exactly as saved, and
         # the folder reads like a main-app chart.
-        R.save_editor_meta(res.ti2, self._spec, self._options, name)
+        R.save_editor_meta(res.ti2, self._spec, self._options, name,
+                           recipe=self._chart_recipe)
         # Colour list (<name>-colours.txt) — what the old Export button wrote, so
         # the design can be pasted back into the New chart dialog later.
         colour_note = ""

@@ -363,11 +363,17 @@ def _layout_from_dict(raw: dict | None) -> "LayoutOptions":
 
 
 def save_editor_meta(ti2_path: Path, spec: "ChartSpec",
-                     options: "LayoutOptions", basename: str) -> None:
+                     options: "LayoutOptions", basename: str,
+                     recipe: dict | None = None) -> None:
     """Write a main-app-style ``meta.json`` into the chart folder (next to
     *ti2_path*), carrying the editor's layout knobs so reopening restores the
     panel. Best-effort: a failure here must never block a successful chart
-    save, so errors are swallowed."""
+    save, so errors are swallowed.
+
+    ``recipe`` is the New chart / Add window's creation recipe
+    (``_collect_gen_state``); when given it's stored as ``editor_recipe`` so the
+    design can be reloaded for tweaking/recreation. ``None`` leaves any existing
+    recipe untouched (a layout-only save mustn't wipe it)."""
     from core.file_manager import Run, RunMeta
     try:
         run = Run.for_dir(Path(ti2_path).parent)
@@ -379,9 +385,22 @@ def save_editor_meta(ti2_path: Path, spec: "ChartSpec",
             meta.created_at = datetime.now().isoformat(timespec="seconds")
         meta.editor_layout = asdict(options)
         meta.editor_basename = basename
+        if recipe is not None:
+            meta.editor_recipe = recipe
         run.save_meta(meta)
     except Exception:  # noqa: BLE001 — sidecar write must never be fatal
         log.exception("could not write editor meta.json")
+
+
+def load_editor_recipe(ti2_path: Path) -> dict | None:
+    """Read the New chart / Add creation recipe back from the chart folder's
+    ``meta.json`` (``editor_recipe``), or ``None`` when absent."""
+    from core.file_manager import Run
+    try:
+        meta = Run.for_dir(Path(ti2_path).parent).load_meta()
+    except Exception:  # noqa: BLE001
+        return None
+    return meta.editor_recipe if isinstance(meta.editor_recipe, dict) else None
 
 
 def load_editor_meta(ti2_path: Path) -> tuple["LayoutOptions", str] | None:
