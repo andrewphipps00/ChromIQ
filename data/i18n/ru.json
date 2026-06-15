@@ -646,7 +646,7 @@
  "Load patch set…": "Загрузить патчи…",
  "Load setup from preset": "Загрузить настройки из пресета",
  "Load setup from preset:": "Загрузить настройки из пресета:",
- "Load the full New-chart setup — colour sets, instrument, paper and layout — that was saved with a preset, so you can reuse or tweak an existing design instead of setting everything by hand.\n\nOnly presets saved with a stored setup appear here.": "Загружает весь набор настроек Новой мишени — наборы цветов, прибор, бумагу и макет, — сохранённый вместе с пресетом, чтобы повторно использовать или изменить готовый дизайн, а не настраивать всё вручную.\n\nЗдесь показаны только пресеты, сохранённые с настройками.",
+ "Load the full New-chart setup — colour sets, instrument, paper and layout — that was saved with a preset, so you can reuse or tweak an existing design instead of setting everything by hand.\n\nOnly presets saved with such a setup show up here, so the list stays empty (just \"None\") until you save one.": "Загружает весь набор настроек Новой мишени — наборы цветов, прибор, бумагу и макет, — сохранённый вместе с пресетом, чтобы повторно использовать или изменить готовый дизайн, а не настраивать всё вручную.\n\nЗдесь показаны только пресеты, сохранённые с такими настройками, поэтому список остаётся пустым, пока вы не сохраните хотя бы один.",
  "Loaded chart is now shown in Create Chart": "Загруженная мишень теперь показана во вкладке «Создать мишень»",
  "MANUAL": "РУЧНОЙ",
  "MEASUREMENTS · AVERAGE": "ИЗМЕРЕНИЯ · СРЕДНЕЕ",

@@ -646,7 +646,7 @@
  "Load patch set…": "Last feltsett…",
  "Load setup from preset": "Last oppsett fra preset",
  "Load setup from preset:": "Last oppsett fra preset:",
- "Load the full New-chart setup — colour sets, instrument, paper and layout — that was saved with a preset, so you can reuse or tweak an existing design instead of setting everything by hand.\n\nOnly presets saved with a stored setup appear here.": "Last inn hele Ny chart-oppsettet — fargesett, instrument, papir og layout — som ble lagret med en preset, slik at du kan gjenbruke eller justere et eksisterende design i stedet for å stille inn alt for hånd.\n\nBare presets som er lagret med et oppsett, vises her.",
+ "Load the full New-chart setup — colour sets, instrument, paper and layout — that was saved with a preset, so you can reuse or tweak an existing design instead of setting everything by hand.\n\nOnly presets saved with such a setup show up here, so the list stays empty (just \"None\") until you save one.": "Last inn hele Ny chart-oppsettet — fargesett, instrument, papir og layout — som ble lagret med en preset, slik at du kan gjenbruke eller justere et eksisterende design i stedet for å stille inn alt for hånd.\n\nBare presets som er lagret med et slikt oppsett, vises her, så listen forblir tom til du lagrer en.",
  "Loaded chart is now shown in Create Chart": "Det innlastede diagrammet vises nå i Lag diagram",
  "MANUAL": "MANUELL",
  "MEASUREMENTS · AVERAGE": "MÅLINGER · MIDLE",

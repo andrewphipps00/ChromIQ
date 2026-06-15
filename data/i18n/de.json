@@ -646,7 +646,7 @@
  "Load patch set…": "Felder laden…",
  "Load setup from preset": "Setup aus Preset laden",
  "Load setup from preset:": "Setup aus Preset laden:",
- "Load the full New-chart setup — colour sets, instrument, paper and layout — that was saved with a preset, so you can reuse or tweak an existing design instead of setting everything by hand.\n\nOnly presets saved with a stored setup appear here.": "Lade das komplette Neues-Chart-Setup – Farbsets, Gerät, Papier und Layout –, das mit einem Preset gespeichert wurde, damit du ein bestehendes Design wiederverwenden oder anpassen kannst, statt alles von Hand einzustellen.\n\nHier erscheinen nur Presets, die mit einem gespeicherten Setup angelegt wurden.",
+ "Load the full New-chart setup — colour sets, instrument, paper and layout — that was saved with a preset, so you can reuse or tweak an existing design instead of setting everything by hand.\n\nOnly presets saved with such a setup show up here, so the list stays empty (just \"None\") until you save one.": "Lade das komplette Neues-Chart-Setup – Farbsets, Gerät, Papier und Layout –, das mit einem Preset gespeichert wurde, damit du ein bestehendes Design wiederverwenden oder anpassen kannst, statt alles von Hand einzustellen.\n\nHier erscheinen nur Presets, die mit einem solchen Setup gespeichert wurden – die Liste bleibt also leer, bis du eines speicherst.",
  "Loaded chart is now shown in Create Chart": "Geladenes Chart wird jetzt in „Chart erstellen“ angezeigt",
  "MANUAL": "MANUELL",
  "MEASUREMENTS · AVERAGE": "MESSUNGEN · MITTELN",

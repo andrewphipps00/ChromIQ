@@ -734,28 +734,30 @@ class _NewChartDialog(QDialog):
         # --- Load setup from preset (#55) ------------------------------------
         # Create Chart presets that were saved carrying a creation recipe
         # (Set B) can be reloaded here in one go — colour sets, instrument /
-        # paper and layout. The row is shown only when at least one qualifies;
-        # selecting one applies its recipe to the whole window.
+        # paper and layout. The row is ALWAYS shown (even with no qualifying
+        # presets) so the layout stays consistent and users know it's there
+        # (Knut's request); the list is just "None" until a preset with a saved
+        # setup exists. Selecting one applies its recipe to the whole window.
         self._preset_recipes = self._available_preset_recipes()
-        if self._preset_recipes:
-            pr_row = QHBoxLayout()
-            pr_row.addWidget(QLabel(tr("Load setup from preset:")))
-            self._preset_setup_combo = NoScrollComboBox(self)
-            self._preset_setup_combo.addItem(tr("None"), None)
-            for pname in self._preset_recipes:
-                self._preset_setup_combo.addItem(pname, pname)
-            _as_compact(self._preset_setup_combo)
-            self._preset_setup_combo.activated.connect(
-                self._on_preset_setup_selected)
-            pr_row.addWidget(self._preset_setup_combo, 1)
-            pr_row.addWidget(_magenta_tip(
-                tr("Load setup from preset"),
-                tr("Load the full New-chart setup — colour sets, instrument, "
-                   "paper and layout — that was saved with a preset, so you can "
-                   "reuse or tweak an existing design instead of setting "
-                   "everything by hand.\n\nOnly presets saved with a stored "
-                   "setup appear here.")))
-            lay.addLayout(pr_row)
+        pr_row = QHBoxLayout()
+        pr_row.addWidget(QLabel(tr("Load setup from preset:")))
+        self._preset_setup_combo = NoScrollComboBox(self)
+        self._preset_setup_combo.addItem(tr("None"), None)
+        for pname in self._preset_recipes:
+            self._preset_setup_combo.addItem(pname, pname)
+        _as_compact(self._preset_setup_combo)
+        self._preset_setup_combo.activated.connect(
+            self._on_preset_setup_selected)
+        pr_row.addWidget(self._preset_setup_combo, 1)
+        pr_row.addWidget(_magenta_tip(
+            tr("Load setup from preset"),
+            tr("Load the full New-chart setup — colour sets, instrument, "
+               "paper and layout — that was saved with a preset, so you can "
+               "reuse or tweak an existing design instead of setting "
+               "everything by hand.\n\nOnly presets saved with such a setup "
+               "show up here, so the list stays empty (just \"None\") until "
+               "you save one.")))
+        lay.addLayout(pr_row)
 
         # --- Chart identity --------------------------------------------------
         # The chart name is no longer asked for here — it's chosen later when

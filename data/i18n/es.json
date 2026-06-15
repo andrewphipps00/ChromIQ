@@ -646,7 +646,7 @@
  "Load patch set…": "Cargar parches…",
  "Load setup from preset": "Cargar configuración de preset",
  "Load setup from preset:": "Cargar configuración de preset:",
- "Load the full New-chart setup — colour sets, instrument, paper and layout — that was saved with a preset, so you can reuse or tweak an existing design instead of setting everything by hand.\n\nOnly presets saved with a stored setup appear here.": "Carga toda la configuración de Nueva carta —conjuntos de color, instrumento, papel y diseño— guardada con un preset, para reutilizar o ajustar un diseño existente en vez de configurarlo todo a mano.\n\nAquí solo aparecen los presets guardados con una configuración.",
+ "Load the full New-chart setup — colour sets, instrument, paper and layout — that was saved with a preset, so you can reuse or tweak an existing design instead of setting everything by hand.\n\nOnly presets saved with such a setup show up here, so the list stays empty (just \"None\") until you save one.": "Carga toda la configuración de Nueva carta —conjuntos de color, instrumento, papel y diseño— guardada con un preset, para reutilizar o ajustar un diseño existente en vez de configurarlo todo a mano.\n\nAquí solo aparecen los presets guardados con una configuración así, por lo que la lista permanece vacía hasta que guardes uno.",
  "Loaded chart is now shown in Create Chart": "El gráfico cargado ahora se muestra en Crear gráfico",
  "MANUAL": "MANUAL",
  "MEASUREMENTS · AVERAGE": "MEDICIONES · PROMEDIAR",

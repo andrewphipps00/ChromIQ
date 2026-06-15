@@ -646,7 +646,7 @@
  "Load patch set…": "加载色块集…",
  "Load setup from preset": "从预设载入设置",
  "Load setup from preset:": "从预设载入设置：",
- "Load the full New-chart setup — colour sets, instrument, paper and layout — that was saved with a preset, so you can reuse or tweak an existing design instead of setting everything by hand.\n\nOnly presets saved with a stored setup appear here.": "载入随预设保存的整套“新建色卡”设置——颜色集、仪器、纸张和布局——这样你就能重用或调整现有设计，而不必手动设置所有内容。\n\n此处仅显示保存了设置的预设。",
+ "Load the full New-chart setup — colour sets, instrument, paper and layout — that was saved with a preset, so you can reuse or tweak an existing design instead of setting everything by hand.\n\nOnly presets saved with such a setup show up here, so the list stays empty (just \"None\") until you save one.": "载入随预设保存的整套“新建色卡”设置——颜色集、仪器、纸张和布局——这样你就能重用或调整现有设计，而不必手动设置所有内容。\n\n此处仅显示保存了此类设置的预设，因此在你保存一个之前列表会一直为空。",
  "Loaded chart is now shown in Create Chart": "加载的图表现已显示在“创建图表”中",
  "MANUAL": "手动",
  "MEASUREMENTS · AVERAGE": "测量 · 平均",

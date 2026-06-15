@@ -646,7 +646,7 @@
  "Load patch set…": "Läs in fältset…",
  "Load setup from preset": "Läs in setup från preset",
  "Load setup from preset:": "Läs in setup från preset:",
- "Load the full New-chart setup — colour sets, instrument, paper and layout — that was saved with a preset, so you can reuse or tweak an existing design instead of setting everything by hand.\n\nOnly presets saved with a stored setup appear here.": "Läser in hela Ny chart-inställningen — färguppsättningar, instrument, papper och layout — som sparades med en förinställning, så att du kan återanvända eller justera en befintlig design i stället för att ställa in allt för hand.\n\nHär visas bara förinställningar som sparats med en inställning.",
+ "Load the full New-chart setup — colour sets, instrument, paper and layout — that was saved with a preset, so you can reuse or tweak an existing design instead of setting everything by hand.\n\nOnly presets saved with such a setup show up here, so the list stays empty (just \"None\") until you save one.": "Läser in hela Ny chart-inställningen — färguppsättningar, instrument, papper och layout — som sparades med en förinställning, så att du kan återanvända eller justera en befintlig design i stället för att ställa in allt för hand.\n\nHär visas bara förinställningar som sparats med en sådan inställning, så listan förblir tom tills du sparar en.",
  "Loaded chart is now shown in Create Chart": "Det inlästa diagrammet visas nu i Skapa diagram",
  "MANUAL": "MANUELLT",
  "MEASUREMENTS · AVERAGE": "MÄTNINGAR · MEDELVÄRDE",

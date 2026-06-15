@@ -646,7 +646,7 @@
  "Load patch set…": "Wczytaj pola…",
  "Load setup from preset": "Wczytaj ustawienia z presetu",
  "Load setup from preset:": "Wczytaj ustawienia z presetu:",
- "Load the full New-chart setup — colour sets, instrument, paper and layout — that was saved with a preset, so you can reuse or tweak an existing design instead of setting everything by hand.\n\nOnly presets saved with a stored setup appear here.": "Wczytuje całą konfigurację Nowej karty — zestawy kolorów, przyrząd, papier i układ — zapisaną z presetem, dzięki czemu możesz ponownie użyć lub zmodyfikować istniejący projekt zamiast ustawiać wszystko ręcznie.\n\nTutaj pojawiają się tylko presety zapisane z konfiguracją.",
+ "Load the full New-chart setup — colour sets, instrument, paper and layout — that was saved with a preset, so you can reuse or tweak an existing design instead of setting everything by hand.\n\nOnly presets saved with such a setup show up here, so the list stays empty (just \"None\") until you save one.": "Wczytuje całą konfigurację Nowej karty — zestawy kolorów, przyrząd, papier i układ — zapisaną z presetem, dzięki czemu możesz ponownie użyć lub zmodyfikować istniejący projekt zamiast ustawiać wszystko ręcznie.\n\nTutaj pojawiają się tylko presety zapisane z taką konfiguracją, więc lista pozostaje pusta, dopóki nie zapiszesz żadnego.",
  "Loaded chart is now shown in Create Chart": "Wczytany wykres jest teraz pokazywany w Utwórz wykres",
  "MANUAL": "RĘCZNY",
  "MEASUREMENTS · AVERAGE": "POMIARY · UŚREDNIANIE",

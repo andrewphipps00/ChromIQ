@@ -646,7 +646,7 @@
  "Load patch set…": "パッチを読み込む…",
  "Load setup from preset": "プリセットから設定を読み込む",
  "Load setup from preset:": "プリセットから設定を読み込む：",
- "Load the full New-chart setup — colour sets, instrument, paper and layout — that was saved with a preset, so you can reuse or tweak an existing design instead of setting everything by hand.\n\nOnly presets saved with a stored setup appear here.": "新規チャートの設定一式（カラーセット、測定器、用紙、レイアウト）をプリセットとともに保存したものから読み込み、すべてを手作業で設定する代わりに既存のデザインを再利用・調整できます。\n\nここには設定が保存されたプリセットのみが表示されます。",
+ "Load the full New-chart setup — colour sets, instrument, paper and layout — that was saved with a preset, so you can reuse or tweak an existing design instead of setting everything by hand.\n\nOnly presets saved with such a setup show up here, so the list stays empty (just \"None\") until you save one.": "新規チャートの設定一式（カラーセット、測定器、用紙、レイアウト）をプリセットとともに保存したものから読み込み、すべてを手作業で設定する代わりに既存のデザインを再利用・調整できます。\n\nここにはそのような設定を保存したプリセットのみが表示されるため、1つ保存するまでリストは空のままです。",
  "Loaded chart is now shown in Create Chart": "読み込んだチャートが「チャート作成」に表示されました",
  "MANUAL": "手動",
  "MEASUREMENTS · AVERAGE": "測定 · 平均化",

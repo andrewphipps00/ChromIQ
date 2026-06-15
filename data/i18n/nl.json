@@ -646,7 +646,7 @@
  "Load patch set…": "Meetveldset laden…",
  "Load setup from preset": "Setup uit preset laden",
  "Load setup from preset:": "Setup uit preset laden:",
- "Load the full New-chart setup — colour sets, instrument, paper and layout — that was saved with a preset, so you can reuse or tweak an existing design instead of setting everything by hand.\n\nOnly presets saved with a stored setup appear here.": "Laad de volledige Nieuw-chart-setup — kleursets, instrument, papier en lay-out — die met een preset is opgeslagen, zodat je een bestaand ontwerp kunt hergebruiken of aanpassen in plaats van alles met de hand in te stellen.\n\nAlleen presets die met een opgeslagen setup zijn aangemaakt, verschijnen hier.",
+ "Load the full New-chart setup — colour sets, instrument, paper and layout — that was saved with a preset, so you can reuse or tweak an existing design instead of setting everything by hand.\n\nOnly presets saved with such a setup show up here, so the list stays empty (just \"None\") until you save one.": "Laad de volledige Nieuw-chart-setup — kleursets, instrument, papier en lay-out — die met een preset is opgeslagen, zodat je een bestaand ontwerp kunt hergebruiken of aanpassen in plaats van alles met de hand in te stellen.\n\nAlleen presets die met zo'n setup zijn opgeslagen, verschijnen hier; de lijst blijft dus leeg totdat je er een opslaat.",
  "Loaded chart is now shown in Create Chart": "Geladen grafiek wordt nu getoond in Grafiek maken",
  "MANUAL": "HANDMATIG",
  "MEASUREMENTS · AVERAGE": "METINGEN · MIDDELEN",

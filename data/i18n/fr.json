@@ -646,7 +646,7 @@
  "Load patch set…": "Charger des plages…",
  "Load setup from preset": "Charger les réglages d'un préréglage",
  "Load setup from preset:": "Charger les réglages d'un préréglage :",
- "Load the full New-chart setup — colour sets, instrument, paper and layout — that was saved with a preset, so you can reuse or tweak an existing design instead of setting everything by hand.\n\nOnly presets saved with a stored setup appear here.": "Charge toute la configuration de Nouvelle mire — jeux de couleurs, instrument, papier et mise en page — enregistrée avec un préréglage, pour réutiliser ou ajuster un design existant au lieu de tout régler à la main.\n\nSeuls les préréglages enregistrés avec une configuration apparaissent ici.",
+ "Load the full New-chart setup — colour sets, instrument, paper and layout — that was saved with a preset, so you can reuse or tweak an existing design instead of setting everything by hand.\n\nOnly presets saved with such a setup show up here, so the list stays empty (just \"None\") until you save one.": "Charge toute la configuration de Nouvelle mire — jeux de couleurs, instrument, papier et mise en page — enregistrée avec un préréglage, pour réutiliser ou ajuster un design existant au lieu de tout régler à la main.\n\nSeuls les préréglages enregistrés avec une telle configuration apparaissent ici ; la liste reste donc vide jusqu'à ce que vous en enregistriez un.",
  "Loaded chart is now shown in Create Chart": "La mire chargée s’affiche maintenant dans Créer une mire",
  "MANUAL": "MANUEL",
  "MEASUREMENTS · AVERAGE": "MESURES · MOYENNER",
