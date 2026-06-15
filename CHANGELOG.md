@@ -1,5 +1,15 @@
 # Changelog
 
+## v3.10.6
+
+### 🐛 Fixed
+- **Add-patches total now matches the 3D preview.** When you opened the editor's
+  **Add** window for a chart loaded from a preset, the running patch total could
+  read a few patches lower than the 3D cube showed (it was an estimate that
+  couldn't see the existing chart's white/black structure). The total is now
+  taken straight from the patches actually generated, so it always agrees with
+  the preview. (#60) — thanks **Knut (@soul-traveller)**.
+
 ## v3.10.5
 
 Bug fixes for the new presets and preset handling, all reported by **Knut
