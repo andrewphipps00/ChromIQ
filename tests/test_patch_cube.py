@@ -56,12 +56,13 @@ def test_build_html_contains_data_and_js_url():
     assert "rgb(255,0,0)" in html
     assert "rgb(0,255,0)" in html
     # The embedded JSON is well-formed (newPlot's data argument parses).
-    m = re.search(r"Plotly\.newPlot\(\"plot\", (\[.*?\]), (\{.*?\}),\s*(\{.*?\})\);",
+    m = re.search(r"Plotly\.newPlot\(\"plot\", (\[.*?\]), CQ_LAYOUT, CQ_CONFIG\);",
                   html, re.DOTALL)
     assert m, "newPlot call not found"
     data = json.loads(m.group(1))
-    json.loads(m.group(2))
-    json.loads(m.group(3))
+    # Layout + config are hoisted to consts the live-update hook reuses.
+    json.loads(re.search(r"var CQ_LAYOUT = (\{.*?\});", html, re.DOTALL).group(1))
+    json.loads(re.search(r"var CQ_CONFIG = (\{.*?\});", html, re.DOTALL).group(1))
     # cube + neutral axis + points
     assert len(data) == 3
     assert data[-1]["type"] == "scatter3d"
@@ -72,3 +73,37 @@ def test_build_html_empty_program():
     html = C.build_cube_html([], "file:///tmp/plotly.js")
     assert "No patches" in html
     assert "Plotly.newPlot" in html
+    # The live-update hook is always present so the host can push fresh data.
+    assert "window.cqUpdateCube" in html
+
+
+def test_build_html_existing_split_adds_trace():
+    # Existing patches are drawn as their own dimmed trace beneath the new ones.
+    html = C.build_cube_html(
+        [(100.0, 0.0, 0.0)], "file:///tmp/plotly.js",
+        existing_program=[(0.0, 0.0, 0.0), (50.0, 50.0, 50.0)])
+    m = re.search(r"Plotly\.newPlot\(\"plot\", (\[.*?\]), CQ_LAYOUT, CQ_CONFIG\);",
+                  html, re.DOTALL)
+    data = json.loads(m.group(1))
+    # cube + neutral + existing + new
+    assert len(data) == 4
+    names = [d.get("name") for d in data]
+    assert "existing" in names and "new" in names
+    # Footer shows the split over the combined set.
+    assert "2 existing + 1 new" in html
+
+
+def test_cube_payload_shape():
+    p = C.cube_payload([(10.0, 20.0, 30.0)],
+                       existing_program=[(0.0, 0.0, 0.0)])
+    assert set(p) == {"data", "stats"}
+    assert isinstance(p["data"], list) and len(p["data"]) == 4
+    assert "1 existing + 1 new" in p["stats"]
+    # Serialisable for runJavaScript hand-off.
+    json.loads(json.dumps(p))
+
+
+def test_combined_summary_no_existing_is_plain():
+    s = C.combined_summary([(10.0, 20.0, 30.0), (90.0, 90.0, 90.0)])
+    assert "existing" not in s
+    assert "2 patches" in s

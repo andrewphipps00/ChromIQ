@@ -109,38 +109,41 @@ def _edge_lines() -> tuple[list, list, list]:
     return xs, ys, zs
 
 
-def build_cube_html(
-    program: list[tuple[float, ...]],
-    plotly_js_url: str,
-    *,
-    bg: str = "#111111",
-    fg: str = "#cccccc",
-    grid: str = "#444444",
-) -> str:
-    """Return a self-contained HTML page plotting ``program`` as a 3D RGB cube.
-
-    ``plotly_js_url`` is the ``file://`` (or http) URL of the bundled
-    ``plotly-gl3d.min.js``. Markers sit at each patch's (R, G, B) on the 0..100
-    axes and are painted in that patch's own colour; a wireframe cube and a
-    black→white neutral axis are drawn for reference. ``bg`` / ``fg`` / ``grid``
-    theme the page so it matches the host dialog's light / dark appearance.
-    """
-    arr = _as_array(program)
-    # 0..100 → 0..255 for CSS rgb() marker colours + readable hover text.
+def _points_trace(arr: np.ndarray, *, name: str, size: float, opacity: float,
+                  hover_prefix: str) -> dict:
+    """A ``scatter3d`` marker trace placing each patch at its (R,G,B) and
+    painting it its own colour. ``size`` / ``opacity`` let the caller dim the
+    already-present patches so the freshly-generated ones read on top."""
     rgb255 = np.clip(np.round(arr / 100.0 * 255.0), 0, 255).astype(int)
     colors = [f"rgb({r},{g},{b})" for r, g, b in rgb255.tolist()]
-    hover = [f"#{i + 1} · RGB {r} {g} {b}"
-             for i, (r, g, b) in enumerate(rgb255.tolist())]
-    stats = cube_stats(program)
-
-    ex, ey, ez = _edge_lines()
-    points = {
-        "type": "scatter3d", "mode": "markers", "name": "patches",
-        "x": arr[:, 0].tolist(), "y": arr[:, 1].tolist(), "z": arr[:, 2].tolist(),
-        "marker": {"size": 3.5, "color": colors,
-                   "line": {"width": 0}, "opacity": 1.0},
-        "text": hover, "hoverinfo": "text",
+    hover = [f"{hover_prefix} · RGB {r} {g} {b}" for r, g, b in rgb255.tolist()]
+    return {
+        "type": "scatter3d", "mode": "markers", "name": name,
+        "x": arr[:, 0].tolist(), "y": arr[:, 1].tolist(),
+        "z": arr[:, 2].tolist(),
+        "marker": {"size": size, "color": colors,
+                   "line": {"width": 0}, "opacity": opacity},
+        "text": hover, "hoverinfo": "text", "showlegend": False,
     }
+
+
+def cube_traces(
+    new_program: list[tuple[float, ...]],
+    existing_program: list[tuple[float, ...]] | None = None,
+    *,
+    fg: str = "#cccccc",
+    grid: str = "#444444",
+) -> list[dict]:
+    """The Plotly ``data`` list: wireframe + neutral axis + patch markers.
+
+    When ``existing_program`` is given (the editor's Add flow), its patches are
+    drawn smaller and semi-transparent as a separate trace and the freshly
+    generated ``new_program`` patches are drawn full-size on top — one merged
+    cloud in which the about-to-be-added patches still stand out.
+    """
+    ex_arr = _as_array(existing_program or [])
+    new_arr = _as_array(new_program)
+    ex, ey, ez = _edge_lines()
     cube = {
         "type": "scatter3d", "mode": "lines", "name": "cube",
         "x": ex, "y": ey, "z": ez,
@@ -153,7 +156,76 @@ def build_cube_html(
         "line": {"color": fg, "width": 2, "dash": "dot"}, "hoverinfo": "skip",
         "showlegend": False,
     }
-    data = [cube, neutral, points]
+    data = [cube, neutral]
+    has_existing = len(ex_arr) > 0
+    if has_existing:
+        data.append(_points_trace(ex_arr, name="existing", size=2.4,
+                                  opacity=0.35, hover_prefix="existing"))
+    data.append(_points_trace(
+        new_arr, name="new" if has_existing else "patches",
+        size=3.6, opacity=1.0,
+        hover_prefix="new" if has_existing else "patch"))
+    return data
+
+
+def combined_summary(
+    new_program: list[tuple[float, ...]],
+    existing_program: list[tuple[float, ...]] | None = None,
+) -> str:
+    """Footer text — a plain coverage line, or an ``N existing + M new`` split
+    over the combined set when there are already-present patches."""
+    existing = list(existing_program or [])
+    if not existing:
+        return cube_stats(new_program).summary()
+    from core.i18n import tr
+    combined = cube_stats(existing + list(new_program))
+    return tr("{ex} existing + {new} new · gamut fill {fill:.0f}% "
+              "(combined)").format(ex=len(existing), new=len(new_program),
+                                   fill=combined.occupancy_pct)
+
+
+def cube_payload(
+    new_program: list[tuple[float, ...]],
+    existing_program: list[tuple[float, ...]] | None = None,
+    *,
+    fg: str = "#cccccc",
+    grid: str = "#444444",
+) -> dict:
+    """JSON-serialisable ``{"data", "stats"}`` for a live in-place update.
+
+    The live preview window feeds this (via ``json.dumps``) to the page's
+    ``cqUpdateCube`` function, which calls ``Plotly.react`` — no page reload,
+    so the cube redraws smoothly while generator settings change."""
+    return {
+        "data": cube_traces(new_program, existing_program, fg=fg, grid=grid),
+        "stats": combined_summary(new_program, existing_program),
+    }
+
+
+def build_cube_html(
+    program: list[tuple[float, ...]],
+    plotly_js_url: str,
+    *,
+    existing_program: list[tuple[float, ...]] | None = None,
+    bg: str = "#111111",
+    fg: str = "#cccccc",
+    grid: str = "#444444",
+) -> str:
+    """Return a self-contained HTML page plotting ``program`` as a 3D RGB cube.
+
+    ``plotly_js_url`` is the ``file://`` (or http) URL of the bundled
+    ``plotly-gl3d.min.js``. Markers sit at each patch's (R, G, B) on the 0..100
+    axes and are painted in that patch's own colour; a wireframe cube and a
+    black→white neutral axis are drawn for reference. ``bg`` / ``fg`` / ``grid``
+    theme the page so it matches the host dialog's light / dark appearance.
+
+    ``existing_program`` (the editor's Add flow) is drawn dimmed underneath the
+    freshly generated ``program``. The page also exposes ``window.cqUpdateCube``
+    so a host can push a new :func:`cube_payload` via ``Plotly.react`` and have
+    the cube redraw in place — no reload — as generator settings change.
+    """
+    data = cube_traces(program, existing_program, fg=fg, grid=grid)
+    stats_text = combined_summary(program, existing_program)
 
     def _axis(title: str) -> dict:
         return {"title": title, "range": [0, 100], "color": fg,
@@ -177,19 +249,29 @@ def build_cube_html(
 <html><head><meta charset="utf-8">
 <script src="{plotly_js_url}"></script>
 <style>
-  html, body {{ margin: 0; padding: 0; height: 100%; background: {bg};
+  html, body {{ margin: 0; padding: 0; height: 100%; width: 100%;
+                overflow: hidden; background: {bg};
                 font-family: Menlo, Consolas, "Courier New", monospace; }}
-  #plot {{ width: 100%; height: calc(100% - 26px); }}
+  #plot {{ width: 100%; height: calc(100% - 26px); overflow: hidden; }}
   #stats {{ height: 26px; line-height: 26px; color: {fg}; font-size: 11px;
             padding: 0 10px; background: {bg};
             white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
 </style></head>
 <body>
   <div id="plot"></div>
-  <div id="stats">{stats.summary()}</div>
+  <div id="stats">{stats_text}</div>
   <script>
-    Plotly.newPlot("plot", {json.dumps(data)}, {json.dumps(layout)},
-                   {json.dumps(config)});
+    var CQ_LAYOUT = {json.dumps(layout)};
+    var CQ_CONFIG = {json.dumps(config)};
+    Plotly.newPlot("plot", {json.dumps(data)}, CQ_LAYOUT, CQ_CONFIG);
+    // Live in-place update: the host pushes a {{data, stats}} payload and the
+    // cube redraws via Plotly.react without reloading the page or the WebGL
+    // context (see workflow.patch_cube.cube_payload).
+    window.cqUpdateCube = function(payload) {{
+      Plotly.react("plot", payload.data, CQ_LAYOUT, CQ_CONFIG);
+      var s = document.getElementById("stats");
+      if (s) {{ s.textContent = payload.stats; }}
+    }};
   </script>
 </body></html>
 """

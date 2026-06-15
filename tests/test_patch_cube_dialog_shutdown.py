@@ -1,15 +1,16 @@
-"""PatchCubeDialog drains its QWebEngineView on close (issue #38).
+"""PatchCubePanel drains its QWebEngineView on teardown (issue #38).
 
-The 3D RGB-cube popup (Edit Color Chart → 3D distribution) embeds a
-QWebEngineView. The dialog is parented, so when ``.exec()`` returns it is not
-garbage-collected — its Chromium subtree stayed alive until the app quit and was
-then torn down during ``_Py_Finalize``, where SIP followed a dangling pointer
-and crashed (EXC_BAD_ACCESS). PatchCubeDialog now drains the view on close, the
-same way GamutPanel and DriftPlotDialog already do.
+The 3D RGB-cube view (the editor's "3D distribution…" popup and the generator
+dialogs' inline live preview) embeds a QWebEngineView via PatchCubePanel. Hosts
+are parented, so when a dialog closes the panel is not garbage-collected — its
+Chromium subtree stayed alive until the app quit and was then torn down during
+``_Py_Finalize``, where SIP followed a dangling pointer and crashed
+(EXC_BAD_ACCESS). PatchCubePanel.teardown() drains the view on close, the same
+way GamutPanel and DriftPlotDialog already do.
 
 The drain logic is exercised against a stub view: constructing a real
 QWebEngineView headless is unreliable (it spawns a Chromium child process and
-destabilises the rest of the suite), and ``_teardown_webengine`` only touches
+destabilises the rest of the suite), and ``teardown`` only touches
 ``self._web_view`` plus the view's own methods, so the stub is faithful.
 """
 from __future__ import annotations
@@ -23,7 +24,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 pytest.importorskip("PyQt6")
 from PyQt6.QtWidgets import QApplication  # noqa: E402
 
-from ui.dialogs.patch_cube_dialog import PatchCubeDialog  # noqa: E402
+from ui.patch_cube_panel import PatchCubePanel  # noqa: E402
 
 
 @pytest.fixture(scope="module")
@@ -74,7 +75,7 @@ class _FakeView:
 
 
 class _Stub:
-    """Bare object carrying only the attribute _teardown_webengine reads."""
+    """Bare object carrying only the attribute teardown reads."""
 
 
 def test_teardown_drains_and_clears_the_view(qapp):
@@ -82,7 +83,7 @@ def test_teardown_drains_and_clears_the_view(qapp):
     view = _FakeView()
     stub._web_view = view
 
-    PatchCubeDialog._teardown_webengine(stub)
+    PatchCubePanel.teardown(stub)
 
     assert stub._web_view is None                 # cleared so it can't run twice
     assert view.stopped                           # loading halted
@@ -95,11 +96,11 @@ def test_teardown_is_idempotent_and_safe_without_a_view(qapp):
     stub = _Stub()
     stub._web_view = None
     # No WebEngine (placeholder label) — must be a no-op, not an error.
-    PatchCubeDialog._teardown_webengine(stub)
+    PatchCubePanel.teardown(stub)
     assert stub._web_view is None
 
     # A second call after the view is already cleared is harmless.
     stub._web_view = _FakeView()
-    PatchCubeDialog._teardown_webengine(stub)
-    PatchCubeDialog._teardown_webengine(stub)
+    PatchCubePanel.teardown(stub)
+    PatchCubePanel.teardown(stub)
     assert stub._web_view is None

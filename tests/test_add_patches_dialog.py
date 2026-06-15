@@ -174,6 +174,81 @@ def test_fill_without_existing_chart_unchanged(qapp):
     assert len(dlg._build_generated_program()) == 100
 
 
+class _StubPanel:
+    """Captures what the dialog pushes to the embedded cube panel."""
+    def __init__(self):
+        self.pushed = None
+        self.torn_down = 0
+
+    def set_program(self, program, existing_program=None):
+        self.pushed = (list(program), list(existing_program or []))
+
+    def teardown(self):
+        self.torn_down += 1
+
+
+def test_cube_panel_is_embedded(qapp):
+    """Both dialogs build an always-present embedded cube panel."""
+    assert _AddPatchesDialog(_FakeSettings())._cube_panel is not None
+
+
+def test_cube_folded_by_default_and_toggles(qapp):
+    """The cube starts folded away; the toggle reveals it and remembers it."""
+    s = _FakeSettings()
+    dlg = _AddPatchesDialog(s)
+    assert dlg._cube_shown is False
+    assert dlg._fold_btn.isChecked() is False
+    dlg._fold_btn.setChecked(True)                    # user reveals the cube
+    assert dlg._cube_shown is True
+    assert s.get("new_chart_show_cube") is True       # remembered
+
+    # A second dialog opens with the cube already shown.
+    assert _AddPatchesDialog(s)._cube_shown is True
+
+
+def test_live_preview_pushes_existing_plus_new(qapp):
+    """In generate mode the panel gets the generated program *and* the chart's
+    existing patches (the merged view from the Add flow)."""
+    existing = [(0.0, 0.0, 0.0), (100.0, 100.0, 100.0)]
+    dlg = _AddPatchesDialog(_FakeSettings(), existing_patches=existing)
+    dlg._add_mode_gen.setChecked(True)
+    dlg._refresh_add_mode()
+    for n in dlg._GEN_CHECKS:
+        getattr(dlg, f"_gen_{n}").setChecked(False)
+    dlg._gen_cube.setChecked(True)
+    dlg._gen_cube_n.setValue(3)                       # 27
+
+    dlg._cube_panel = _StubPanel()
+    dlg._cube_shown = True                            # preview unfolded
+    dlg._do_push_live_preview()
+    program, pushed_existing = dlg._cube_panel.pushed
+    assert len(program) == 27
+    assert pushed_existing == existing
+
+
+def test_live_preview_shows_existing_only_outside_generate_mode(qapp):
+    """In single-colour mode the panel shows just the existing patches (empty
+    generated set), not a stale generated view."""
+    existing = [(10.0, 10.0, 10.0)]
+    dlg = _AddPatchesDialog(_FakeSettings(), existing_patches=existing)
+    dlg._add_mode_single.setChecked(True)             # not generating
+
+    dlg._cube_panel = _StubPanel()
+    dlg._cube_shown = True                            # preview unfolded
+    dlg._do_push_live_preview()
+    program, pushed_existing = dlg._cube_panel.pushed
+    assert program == []
+    assert pushed_existing == existing
+
+
+def test_done_tears_down_cube_panel(qapp):
+    """Closing the dialog (any path) drains the embedded web view once."""
+    dlg = _AddPatchesDialog(_FakeSettings())
+    dlg._cube_panel = _StubPanel()
+    dlg.reject()                                       # Cancel routes via done()
+    assert dlg._cube_panel.torn_down == 1
+
+
 def test_fill_counts_white_black_not_on_top(qapp):
     """Pure white & black must count toward the fill target, not stack on top:
     3 of each + fill-to-50 yields 50 total (with all 6 anchors present)."""

@@ -887,6 +887,7 @@ class _NewChartDialog(QDialog):
                            "their defaults."))
         restore.clicked.connect(self._restore_factory_defaults)
         btns.addWidget(restore)
+        btns.addWidget(self._make_fold_button())
         btns.addStretch(1)
         ok = QPushButton(tr("Create"), self)
         ok.setDefault(True)
@@ -900,18 +901,20 @@ class _NewChartDialog(QDialog):
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
         scroll.setWidget(content)
+        # Controls on the left (kept at their natural width so the options are
+        # never clipped), the foldable live 3D cube on the right.
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
-        outer.addWidget(scroll, 1)
+        outer.addLayout(self._build_body(scroll, content.sizeHint().width()), 1)
         btns.setContentsMargins(12, 4, 12, 10)
         outer.addLayout(btns)
-        # Open at a height that fits common laptop screens; the panel scrolls
-        # when the chosen colour sets make the content taller than this.
-        self.resize(max(self.minimumWidth(), content.sizeHint().width() + 24), 760)
+        # Height fits common laptop screens; width follows the fold state.
+        self._init_fold_state(760)
 
         # Restore the source mode + colour-set values the user picked last time
         # so creating another chart doesn't start from scratch.
         self._restore_gen_state()
+        self._do_push_live_preview()   # seed the cube with the restored state
 
     # -- last-used settings persistence -----------------------------------
     # The widget suffixes whose checked/value state is remembered between
@@ -1549,6 +1552,8 @@ class _NewChartDialog(QDialog):
             total += fill_n
         self._gen_total.setText(tr("Total: {label}").format(
             label=_patches_label(total)))
+        # Keep the embedded live cube in step with the colour-set controls.
+        self._push_live_preview()
 
     def _build_generated_program(self) -> list[tuple]:
         """Concatenate every ticked generator's patches, in panel order,
@@ -1574,6 +1579,107 @@ class _NewChartDialog(QDialog):
             seed = self._existing_patches + program
             program.extend(G.fill_gaps(seed, self._gen_fill_to.value()))
         return program
+
+    # -- live 3D-cube preview (embedded panel) ----------------------------
+    # An always-visible cube panel docked beside the colour-set controls that
+    # mirrors the generator in real time: it shows exactly what the ticked sets
+    # would produce (plus the chart's existing patches, dimmed, in the Add flow),
+    # redrawing whenever a setting changes. Embedded — not a separate window —
+    # so it can't fight the dialog's modal session (which on macOS broke Create/
+    # Add and left the editor unclosable). Shared by New-chart and Add dialogs.
+    # Extra dialog width the cube adds when unfolded (controls keep their own
+    # natural width; the cube takes this much beside them).
+    _CUBE_WIDTH = 460
+
+    def _make_cube_panel(self) -> QWidget:
+        from ui.patch_cube_panel import PatchCubePanel
+        from ui.theme import resolve_mode
+        mode = resolve_mode(self._settings.get("appearance", "auto")
+                            if self._settings else "auto")
+        self._cube_panel = PatchCubePanel(mode=mode, parent=self)
+        self._cube_panel.setMinimumWidth(360)
+        self._cube_shown = True
+        # Coalesce bursts of control changes into one redraw ~300 ms after the
+        # last change — a full Plotly.react on every spinbox tick would thrash.
+        self._preview_timer = QTimer(self)
+        self._preview_timer.setSingleShot(True)
+        self._preview_timer.setInterval(300)
+        self._preview_timer.timeout.connect(self._do_push_live_preview)
+        return self._cube_panel
+
+    def _build_body(self, scroll: QScrollArea, content_w: int) -> "QHBoxLayout":
+        """Lay the controls (`scroll`, kept at their natural width) beside the
+        embedded cube (which takes the remaining space). Records the widths the
+        fold toggle needs."""
+        # +room for the vertical scrollbar so the options are never clipped.
+        self._controls_w = content_w + 22
+        scroll.setMinimumWidth(self._controls_w)
+        body = QHBoxLayout()
+        body.setContentsMargins(0, 0, 0, 0)
+        body.setSpacing(0)
+        body.addWidget(scroll, 0)              # controls: keep their width
+        body.addWidget(self._make_cube_panel(), 1)  # cube: take the rest
+        return body
+
+    def _make_fold_button(self) -> QPushButton:
+        btn = QPushButton(self)
+        btn.setCheckable(True)
+        btn.setToolTip(tr("Show or hide the live 3D-cube preview."))
+        btn.toggled.connect(self._on_fold_toggled)
+        self._fold_btn = btn
+        return btn
+
+    def _init_fold_state(self, base_height: int) -> None:
+        """Apply the remembered fold state and size the dialog accordingly.
+        The cube starts folded away by default — opt in per session."""
+        shown = (bool(self._settings.get("new_chart_show_cube", False))
+                 if self._settings else False)
+        self.resize(self._controls_w, base_height)   # set the height once
+        self._fold_btn.blockSignals(True)
+        self._fold_btn.setChecked(shown)
+        self._fold_btn.blockSignals(False)
+        self._on_fold_toggled(shown)
+
+    def _on_fold_toggled(self, shown: bool) -> None:
+        self._cube_shown = shown
+        self._cube_panel.setVisible(shown)
+        # Cube sits on the right: hiding collapses it inward (◂), showing
+        # expands it outward (▸).
+        self._fold_btn.setText(tr("◂ Hide 3D preview") if shown
+                               else tr("Show 3D preview ▸"))
+        if self._settings is not None:
+            self._settings.set("new_chart_show_cube", shown)
+        # Clamp the minimum width to fit both panes when shown, so the window
+        # can't be dragged narrow enough for the cube to overrun the options.
+        cube_min = self._cube_panel.minimumWidth() if shown else 0
+        self.setMinimumWidth(self._controls_w + cube_min)
+        self.resize(self._controls_w + (self._CUBE_WIDTH if shown else 0),
+                    self.height())
+        if shown:
+            self._do_push_live_preview()   # refresh after being hidden
+
+    def _push_live_preview(self) -> None:
+        """Schedule a debounced cube redraw (skipped while folded away)."""
+        if getattr(self, "_cube_panel", None) is not None and self._cube_shown:
+            self._preview_timer.start()
+
+    def _do_push_live_preview(self) -> None:
+        if getattr(self, "_cube_panel", None) is None or not self._cube_shown:
+            return
+        # In generate mode show the generated set; otherwise just the chart's
+        # existing patches (empty for a brand-new chart) so the panel still
+        # reflects reality rather than a stale generated view.
+        program = (self._build_generated_program()
+                   if self._gen_sets_active() else [])
+        self._cube_panel.set_program(program, self._existing_patches)
+
+    def done(self, result: int) -> None:  # noqa: N802
+        # done() is the chokepoint for accept (Create / Add), reject (Cancel)
+        # and the window's X — drain the embedded cube's web view while the loop
+        # is still alive (issue #38) before the dialog goes away.
+        if getattr(self, "_cube_panel", None) is not None:
+            self._cube_panel.teardown()
+        super().done(result)
 
     def _load_gen_image(self) -> None:
         """Load + decode an image for the 'From image' colour set.
@@ -1844,6 +1950,7 @@ class _AddPatchesDialog(_NewChartDialog):
         restore.clicked.connect(lambda: self._apply_gen_sets_and_refresh(
             self._GEN_FACTORY))
         btns.addWidget(restore)
+        btns.addWidget(self._make_fold_button())
         btns.addStretch(1)
         ok = QPushButton(tr("Add to chart"), self)
         ok.setDefault(True)
@@ -1857,17 +1964,17 @@ class _AddPatchesDialog(_NewChartDialog):
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
         scroll.setWidget(content)
+        # Controls on the left (kept at their natural width), the foldable live
+        # 3D cube on the right.
+        hint = content.sizeHint()
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
-        outer.addWidget(scroll, 1)
+        outer.addLayout(self._build_body(scroll, hint.width()), 1)
         btns.setContentsMargins(12, 4, 12, 10)
         outer.addLayout(btns)
-        # Open sized to the content (capped) rather than a fixed tall height, so
-        # the dialog isn't mostly empty space; the scroll area only kicks in on
-        # short screens.
-        hint = content.sizeHint()
-        self.resize(max(self.minimumWidth(), hint.width() + 24),
-                    min(760, hint.height() + 72))
+        # Height tracks the content (capped) so the dialog isn't mostly empty
+        # space; width follows the fold state.
+        self._init_fold_state(min(760, hint.height() + 72))
 
         # Share the New-chart dialog's last-used colour-set choices.
         st = (self._settings.get("new_chart_gen", None)
@@ -1875,6 +1982,7 @@ class _AddPatchesDialog(_NewChartDialog):
         if isinstance(st, dict):
             self._apply_gen_sets(st)
         self._update_gen_counts()
+        self._do_push_live_preview()   # seed the cube (existing patches + sets)
 
     # The generate panel is the active source only in "Generate colour sets"
     # mode — drives the panel-enable in the inherited _update_gen_counts.
