@@ -53,13 +53,18 @@ class SettingsDialog(QDialog):
         self._settings = settings
         self._update_checker: UpdateChecker | None = None
         self.setWindowTitle(tr("ChromIQ Preferences"))
-        self.setMinimumWidth(960)
         self.setWindowFlags(
             self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint
         )
         self._build_ui()
         self._load_settings()
-        self.resize(960, self.sizeHint().height())
+        # Size to the content's natural width with a comfortable floor. The
+        # bottom-row buttons render wider on macOS than the headless fallback
+        # font suggests, so a fixed width clipped the row once #56 added the
+        # "Request a Feature…" button — fit the real sizeHint instead.
+        _w = max(1040, self.sizeHint().width())
+        self.setMinimumWidth(_w)
+        self.resize(_w, self.sizeHint().height())
 
     # ------------------------------------------------------------------
 
