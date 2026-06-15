@@ -1,5 +1,25 @@
 # Changelog
 
+## v3.10.5
+
+Bug fixes for the new presets and preset handling, all reported by **Knut
+(@soul-traveller)**. 🙏
+
+### 🐛 Fixed
+- **Custom paper size no longer collapses the dropdown.** Loading a preset with
+  a custom W×H paper (e.g. the Wide-gamut ColorMunki charts) squished the Create
+  Chart paper-size dropdown to a thin line and made the panel scroll sideways on
+  macOS. The dropdown now keeps its full height and the row stays within the
+  panel. (#57)
+- **Wide-gamut presets keep their own patch set when regenerated.** Generating
+  one again — for example after ticking *Preserve patch order* — loaded the
+  shared TC9.18 1168-patch set instead of the preset's own, producing a different
+  chart. It now reuses the correct patch set, and the info text and tooltip show
+  the preset's real patch count. The command preview is also selectable now. (#58)
+- **Saving a preset over an existing name asks first.** Instead of silently
+  overwriting (or, on macOS, duplicating) a preset, ChromIQ now confirms the
+  overwrite or lets you cancel and pick a different name. (#59)
+
 ## v3.10.4
 
 Reuse a chart's design, and file issues with less typing — from **Knut
