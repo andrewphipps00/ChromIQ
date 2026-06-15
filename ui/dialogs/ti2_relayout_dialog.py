@@ -35,6 +35,7 @@ from PyQt6.QtWidgets import (
 from core.logger import get_logger
 from core.strip_utils import parse_passes_per_page
 from ui.styles import SPEC_AMBER, SPEC_MAGENTA, TAB_COLORS
+from ui.tab_header import TabHeader
 from ui.tooltip_button import TooltipButton
 from ui.widgets import (
     NoScrollComboBox, NoScrollDoubleSpinBox, NoScrollSpinBox,
@@ -46,6 +47,29 @@ def _magenta_tip(title: str, body: str, parent: QWidget | None = None,
                  min_width: int = 480) -> TooltipButton:
     """A TooltipButton drawn in the editor's magenta accent."""
     return TooltipButton(title, body, parent, min_width=min_width, color=SPEC_MAGENTA)
+
+
+class _AutoHideLabel(QLabel):
+    """Status line that clears itself a few seconds after its last message, so
+    the bottom bar is normally empty instead of holding stale text. Every
+    ``setText`` (re)starts the clear timer; setting empty text cancels it."""
+
+    HIDE_MS = 4000
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__("", parent)
+        self._clear_timer = QTimer(self)
+        self._clear_timer.setSingleShot(True)
+        self._clear_timer.setInterval(self.HIDE_MS)
+        # Clear via the base setText so the timeout doesn't re-arm itself.
+        self._clear_timer.timeout.connect(lambda: QLabel.setText(self, ""))
+
+    def setText(self, text: str) -> None:  # noqa: N802
+        super().setText(text)
+        if text:
+            self._clear_timer.start()
+        else:
+            self._clear_timer.stop()
 
 
 class _SpectrumStripe(QWidget):
@@ -585,7 +609,14 @@ class _NewChartDialog(QDialog):
         lay.setSpacing(10)
 
         head = QHBoxLayout()
-        head.addWidget(QLabel(tr("Set up a new chart, then edit it."), self))
+        # Tab-style heading (uppercase eyebrow + large serif title), matching
+        # the main-window tab headers, in the editor's magenta accent. Lives at
+        # the top of the dialog above a full-width spectrum stripe (added to
+        # ``outer`` below), so the 3D-cube preview starts beneath it.
+        head.setContentsMargins(16, 12, 16, 0)
+        head.addWidget(TabHeader(
+            tr("NEW CHART · SETUP"), tr("Set up your chart"),
+            SPEC_MAGENTA, self), 0, Qt.AlignmentFlag.AlignVCenter)
         head.addStretch(1)
         head.addWidget(_magenta_tip(
             tr("New chart"),
@@ -692,7 +723,9 @@ class _NewChartDialog(QDialog):
             "drag patches around, recolour them, add or remove some, and save when "
             "it's ready."),
             self, min_width=520))
-        lay.addLayout(head)
+        # NB: ``head`` is added to the dialog's ``outer`` layout (above the
+        # full-width spectrum stripe), not to the scrolled content, so the
+        # heading spans the window and the cube preview sits below it.
 
         # --- Chart identity --------------------------------------------------
         # The chart name is no longer asked for here — it's chosen later when
@@ -931,6 +964,8 @@ class _NewChartDialog(QDialog):
         # never clipped), the foldable live 3D cube on the right.
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
+        outer.addLayout(head)
+        outer.addWidget(_SpectrumStripe(self))
         outer.addLayout(self._build_body(scroll, content.sizeHint().width()), 1)
         btns.setContentsMargins(12, 4, 12, 10)
         outer.addLayout(btns)
@@ -1699,6 +1734,23 @@ class _NewChartDialog(QDialog):
                    if self._gen_sets_active() else [])
         self._cube_panel.set_program(program, self._existing_patches)
 
+    def showEvent(self, ev) -> None:  # noqa: N802
+        super().showEvent(ev)
+        # Centre over the parent window on first show. The dialog used to settle
+        # its size early because the cube's QWebEngineView forced a layout pass
+        # in __init__; now that the cube is built lazily, exec() can drop the
+        # window at the screen's top-left, so recentre once the size is known.
+        if getattr(self, "_centred_once", False):
+            return
+        self._centred_once = True
+        par = self.parentWidget()
+        ref = (par.window().frameGeometry()
+               if par is not None and par.window() is not None
+               else self.screen().availableGeometry())
+        fg = self.frameGeometry()
+        fg.moveCenter(ref.center())
+        self.move(fg.topLeft())
+
     def done(self, result: int) -> None:  # noqa: N802
         # done() is the chokepoint for accept (Create / Add), reject (Cancel)
         # and the window's X — drain the embedded cube's web view while the loop
@@ -1931,10 +1983,9 @@ class _AddPatchesDialog(_NewChartDialog):
         lay = QVBoxLayout(content)
         lay.setSpacing(10)
 
-        head = QHBoxLayout()
-        head.addWidget(QLabel(tr("Add patches to the current chart."), self))
-        head.addStretch(1)
-        lay.addLayout(head)
+        # NB: the tab-style heading + full-width spectrum stripe are added to the
+        # dialog's ``outer`` layout (above the body), not here, so they span the
+        # window and the 3D-cube preview sits below them.
 
         # Mode: a single colour, or generated colour sets.
         self._add_mode_single = QRadioButton(
@@ -1995,6 +2046,14 @@ class _AddPatchesDialog(_NewChartDialog):
         hint = content.sizeHint()
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
+        head = QHBoxLayout()
+        head.setContentsMargins(16, 12, 16, 0)
+        head.addWidget(TabHeader(
+            tr("EXTEND THE CHART"), tr("Add patches"), SPEC_MAGENTA, self),
+            0, Qt.AlignmentFlag.AlignVCenter)
+        head.addStretch(1)
+        outer.addLayout(head)
+        outer.addWidget(_SpectrumStripe(self))
         outer.addLayout(self._build_body(scroll, hint.width()), 1)
         btns.setContentsMargins(12, 4, 12, 10)
         outer.addLayout(btns)
@@ -2205,12 +2264,19 @@ class Ti2RelayoutDialog(QDialog):
         # Source row
         src = QHBoxLayout()
         src.setContentsMargins(16, 0, 16, 0)
+        # Tab-style heading at the far left, mirroring the main-window tab
+        # headers (uppercase eyebrow + large serif title), in the editor's
+        # magenta accent.
+        src.addWidget(TabHeader(
+            tr("CHART LAYOUT · EDITOR"), tr("Design your chart"),
+            SPEC_MAGENTA, self), 0, Qt.AlignmentFlag.AlignVCenter)
+        src.addSpacing(16)
         load_btn = QPushButton(tr("Load .ti2…"), self)
         load_btn.clicked.connect(self._load_ti2)
         new_btn = QPushButton(tr("New chart…"), self)
         new_btn.clicked.connect(self._new_chart)
-        src.addWidget(load_btn)
-        src.addWidget(new_btn)
+        src.addWidget(new_btn, 0, Qt.AlignmentFlag.AlignVCenter)
+        src.addWidget(load_btn, 0, Qt.AlignmentFlag.AlignVCenter)
         src.addStretch(1)
         # Undo / redo, centred between the source buttons and the info readout.
         self._undo_btn = QPushButton(tr("↶ Undo"), self)
@@ -2387,6 +2453,11 @@ class Ti2RelayoutDialog(QDialog):
             for k in keys:
                 QShortcut(QKeySequence(k), self._grid, activated=fn)
         lv.addWidget(self._grid, 1)
+        # Status / info line sits under the patch grid (left column only), not
+        # spanning the whole window. Auto-hides a few seconds after each message.
+        self._status = _AutoHideLabel(left)
+        self._status.setStyleSheet("color: #888;")
+        lv.addWidget(self._status)
         split.addWidget(left)
 
         # Middle: preview + page navigation
@@ -2474,11 +2545,6 @@ class Ti2RelayoutDialog(QDialog):
         rv.addWidget(self._build_action_bar(right), 0)
         body.addWidget(right, 0)
         outer.addLayout(body, 1)
-
-        self._status = QLabel("", self)
-        self._status.setStyleSheet("color: #888;")
-        self._status.setContentsMargins(16, 0, 16, 0)
-        outer.addWidget(self._status)
 
     def _build_controls(self) -> QWidget:
         panel = QWidget(self)
