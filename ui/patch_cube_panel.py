@@ -85,6 +85,16 @@ class PatchCubePanel(QWidget):
             from PyQt6.QtCore import QTimer
             QTimer.singleShot(0, self._ensure_view)
 
+    def ensure_view(self) -> None:
+        """Public: build the web view now (idempotent).
+
+        The host calls this while the dialog is still *non-modal* so the web
+        view's native child surface is created off the modal grab — creating it
+        inside an application-modal dialog wedges that grab on Windows and
+        freezes the app (issue #38 follow-up). Safe to call before or after the
+        deferred ``showEvent`` path; whichever runs first wins."""
+        self._ensure_view()
+
     def _ensure_view(self) -> None:
         """Create and load the QWebEngineView on first show. Idempotent."""
         if self._view_ready:

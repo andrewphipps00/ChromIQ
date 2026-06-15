@@ -206,6 +206,45 @@ def test_cube_folded_by_default_and_toggles(qapp):
     assert _AddPatchesDialog(s)._cube_shown is True
 
 
+@pytest.mark.parametrize("show_cube", [False, True])
+def test_exec_builds_cube_view_before_going_modal(qapp, monkeypatch, show_cube):
+    """Regression (issue #38 / app freeze): the cube's QWebEngineView must be
+    realized while the dialog is still non-modal — for BOTH a folded and an
+    unfolded open. Creating its native surface inside the application-modal
+    dialog wedges the modal grab and freezes the whole app on Windows. So
+    exec() must call panel.ensure_view() before delegating to QDialog's modal
+    loop; a folded open still pre-builds it (hidden) so a later unfold reuses
+    the surface instead of spawning one while modal."""
+    from PyQt6.QtWidgets import QApplication, QDialog
+
+    s = _FakeSettings()
+    s.set("new_chart_show_cube", show_cube)
+    dlg = _AddPatchesDialog(s)
+
+    order = []
+
+    class _Panel:
+        def __init__(self): self._v = show_cube
+        def ensure_view(self): order.append("ensure_view")
+        def isVisible(self): return self._v
+        def setVisible(self, v): self._v = v
+        def minimumWidth(self): return 360
+    dlg._cube_panel = _Panel()
+
+    # Replace the real show / event pump / modal loop so the test neither opens
+    # a window nor blocks; just record the call order.
+    monkeypatch.setattr(dlg, "show", lambda: order.append("show"))
+    monkeypatch.setattr(QApplication, "processEvents",
+                        staticmethod(lambda *a, **k: None))
+    monkeypatch.setattr(
+        QDialog, "exec",
+        lambda self: order.append("modal") or QDialog.DialogCode.Rejected.value)
+
+    dlg.exec()
+    assert "ensure_view" in order, order
+    assert order.index("ensure_view") < order.index("modal"), order
+
+
 def test_live_preview_pushes_existing_plus_new(qapp):
     """In generate mode the panel gets the generated program *and* the chart's
     existing patches (the merged view from the Add flow)."""

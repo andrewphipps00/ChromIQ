@@ -1,5 +1,19 @@
 # Changelog
 
+## v3.10.2
+
+A fix for an app freeze when using the 3D-cube preview in the chart-design
+windows (seen on Windows).
+
+### 🐛 Fixed
+- **The New chart / Add patches windows no longer freeze the app when the
+  3D-cube preview is used.** The cube's browser view was built while the window
+  was already open as a modal dialog, which on Windows wedged the modal grab and
+  locked up every other window — whether the preview opened unfolded or you
+  unfolded it afterwards. The view is now always built while the window is still
+  non-modal, so the modal grab is never created mid-build. This is the robust
+  path on every platform, not a Windows-only workaround.
+
 ## v3.10.1
 
 A Windows-focused follow-up to v3.10.0, plus a refinement to the Saturated-edges

@@ -24,8 +24,8 @@ from PyQt6.QtGui import (
     QColor, QFont, QIcon, QKeySequence, QPainter, QPen, QPixmap, QShortcut,
 )
 from PyQt6.QtWidgets import (
-    QAbstractItemView, QButtonGroup, QCheckBox, QColorDialog, QDialog,
-    QDialogButtonBox,
+    QAbstractItemView, QApplication, QButtonGroup, QCheckBox, QColorDialog,
+    QDialog, QDialogButtonBox,
     QDoubleSpinBox, QFrame, QGridLayout, QGroupBox, QHBoxLayout, QLabel,
     QLineEdit, QListWidget, QListWidgetItem, QMessageBox, QPlainTextEdit,
     QPushButton, QRadioButton, QScrollArea, QSizePolicy, QSlider, QSplitter,
@@ -1769,6 +1769,35 @@ class _NewChartDialog(QDialog):
                     self.height())
         if shown:
             self._do_push_live_preview()   # refresh after being hidden
+
+    def exec(self) -> int:  # noqa: A003 - intentional QDialog.exec override
+        """Enter the modal loop, but first realize the cube's web view while the
+        dialog is still non-modal — even when it opens folded.
+
+        Creating a ``QWebEngineView``'s native child surface *inside* an
+        application-modal dialog wedges the modal grab on Windows and freezes
+        the whole app (issue #38 follow-up). The startup warm-up keeps Chromium
+        alive but each view still spawns its own surface. So we show the dialog
+        non-modally, build the view off the modal path, let the surface settle,
+        then enter the modal loop with it already in place — whether the cube
+        starts unfolded (the view stays visible) or folded (a later unfold just
+        re-shows the existing surface instead of creating one while modal). A
+        folded-open cube must be momentarily shown to realize the surface; we
+        hide that behind window-opacity 0 so there's no flash."""
+        panel = getattr(self, "_cube_panel", None)
+        if panel is not None:
+            folded = not getattr(self, "_cube_shown", False)
+            if folded:
+                self.setWindowOpacity(0.0)   # hide the brief realize-unfold
+            self.show()                      # non-modal: realize the dialog
+            if folded:
+                panel.setVisible(True)       # must be visible to realize the surface
+            panel.ensure_view()              # build the web view off the grab
+            QApplication.processEvents()     # let the native surface settle
+            if folded:
+                panel.setVisible(False)      # restore folded; the surface persists
+                self.setWindowOpacity(1.0)
+        return super().exec()
 
     def _push_live_preview(self) -> None:
         """Schedule a debounced cube redraw (skipped while folded away)."""
