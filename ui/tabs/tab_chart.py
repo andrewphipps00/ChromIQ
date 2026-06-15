@@ -573,6 +573,9 @@ class TabChart(QWidget):
         # like _tc918_active, so they don't bleed into the next preset.
         self._knut_active = False
         self._knut_targen_sig: list | None = None
+        # Which Knut preset is active — each Wide-gamut one has its OWN .ti1, so a
+        # regenerate must reuse that preset's .ti1, not the shared TC9.18 one (#58).
+        self._knut_active_key: str | None = None
         # Prebuilt-files built-in preset state. While active the targen/printtarg
         # panels are greyed out and "Generate Chart" re-copies the bundled files
         # instead of running any tool. Cleared when another preset / Default is
@@ -1787,6 +1790,10 @@ class TabChart(QWidget):
         self._manual_info_lbl = QLabel("", inner)
         self._manual_info_lbl.setObjectName("info")
         self._manual_info_lbl.setWordWrap(True)
+        # The command preview is meant to be copied (e.g. into a bug report), so
+        # make it text-selectable (#58).
+        self._manual_info_lbl.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse)
         inner_layout.addWidget(self._manual_info_lbl)
 
         # Wire every parameter widget to refresh the live command preview.
@@ -1971,10 +1978,12 @@ class TabChart(QWidget):
                 + tr("Change a targen setting above to build a fresh chart instead.")
             )
         elif knut_repro:
+            kp = KNUT_PRESETS_BY_KEY.get(self._knut_active_key or "")
+            npatch = kp.patches if kp is not None else KNUT_PATCHES
             info = (
-                tr("TC9.18+Spyderprint preset — fixed patch set ({notes}):\n"
-                   "Uses the bundled 1168-patch .ti1 (targen skipped).").format(
-                    notes=" · ".join(notes))
+                tr("Built-in preset — fixed patch set ({notes}):\n"
+                   "Uses the bundled {n}-patch .ti1 (targen skipped).").format(
+                    notes=" · ".join(notes), n=npatch)
                 + f"\nprinttarg {' '.join(pt_args)}\n"
                 + tr("Change a targen setting above to build a fresh chart instead.")
             )
@@ -2814,9 +2823,11 @@ class TabChart(QWidget):
 
     @staticmethod
     def _knut_tooltip(key: str) -> str:
-        """Tooltip for a TC9.18+Spyderprint (ti1 → printtarg) built-in preset."""
+        """Tooltip for a ti1 → printtarg built-in preset (TC9.18 or Wide-gamut)."""
         p = KNUT_PRESETS_BY_KEY[key]
         instr = "i1Pro" if p.instrument == _KNUT_I1 else "ColorMunki (double density)"
+        family = ("TC9.18 + Spyderprint-greys" if p.suffix == KNUT_SUFFIX
+                  else "Wide-gamut")
         bits = [f"-p{p.paper}", f"-a{p.patch_scale:g}", f"-M{p.margin}"]
         if p.spacer_scale is not None:
             bits.append(f"-A{p.spacer_scale:g}")
@@ -2824,7 +2835,7 @@ class TabChart(QWidget):
             bits.append(f"-R{p.seed}")
         return (
             "Built-in chart — cannot be deleted.\n"
-            f"Loads the bundled 1168-patch TC9.18 + Spyderprint-greys set and\n"
+            f"Loads the bundled {p.patches}-patch {family} set and\n"
             f"lays it out for the {instr} ({p.pages}-page):\n"
             f"printtarg -i{p.instrument} -T200 {' '.join(bits)}\n"
             "Creates the target right away; the patch set stays fixed but you\n"
@@ -3342,6 +3353,15 @@ class TabChart(QWidget):
         name = edit.text().strip()
         if not name:
             return
+        # Don't silently overwrite (or, on macOS's case-insensitive filesystem,
+        # duplicate) an existing preset — ask first (#59). Match case-insensitively
+        # and reuse the existing key so a case-variant name replaces it cleanly.
+        existing = self._load_presets_from_settings()
+        match = next((k for k in existing if k.casefold() == name.casefold()), None)
+        if match is not None:
+            if not self._confirm_overwrite_preset(match):
+                return
+            name = match
         capture["auto_run"] = bool(run_chk.isChecked())
         attach = bool(attach_chk.isChecked() and have_ti1)
         capture["attached_ti1"] = attach
@@ -3383,6 +3403,22 @@ class TabChart(QWidget):
         except Exception:  # noqa: BLE001 — recipe capture is best-effort
             return None
         return meta.editor_recipe if isinstance(meta.editor_recipe, dict) else None
+
+    def _confirm_overwrite_preset(self, name: str) -> bool:
+        """Ask whether to overwrite an existing same-named preset (#59).
+
+        Returns True to overwrite, False to cancel (the user can retry with a
+        different name)."""
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Question)
+        box.setWindowTitle(tr("Preset already exists"))
+        box.setText(tr("A preset named “{name}” already exists. Overwrite it, "
+                       "or cancel and choose a different name.").format(name=name))
+        overwrite = box.addButton(tr("Overwrite"),
+                                  QMessageBox.ButtonRole.AcceptRole)
+        box.addButton(tr("Cancel"), QMessageBox.ButtonRole.RejectRole)
+        box.exec()
+        return box.clickedButton() is overwrite
 
     def _on_preset_delete(self) -> None:
         if not self._is_deletable_preset(self._preset_combo.currentIndex()):
@@ -3831,6 +3867,7 @@ class TabChart(QWidget):
             return
         self._seed_knut_preset(key, target_name)
         self._knut_active = True
+        self._knut_active_key = key
         # Snapshot the targen controls so later "Generate" clicks know whether to
         # re-lay-out the bundled .ti1 (printtarg only, targen untouched) or build a
         # fresh targen chart (the user changed a targen setting) — mirrors the
@@ -4730,10 +4767,16 @@ class TabChart(QWidget):
         # only). Changing a targen setting opts into a fresh targen chart.
         if self._knut_active and self._current_mode() == "manual":
             if self._targen_signature() == self._knut_targen_sig:
-                self._generate_from_ti1(self._knut_ti1_path())
+                # Reuse THIS preset's own .ti1 (Wide-gamut presets each bundle a
+                # different one); never the shared TC9.18 set (#58).
+                p = KNUT_PRESETS_BY_KEY.get(self._knut_active_key or "")
+                ti1 = (resource_path(p.ti1_asset) if p is not None
+                       else self._knut_ti1_path())
+                self._generate_from_ti1(ti1)
                 return
             self._knut_active = False
             self._knut_targen_sig = None
+            self._knut_active_key = None
         name = (
             self._target_name_edit.text().strip()
             if self._current_mode() == "guided"

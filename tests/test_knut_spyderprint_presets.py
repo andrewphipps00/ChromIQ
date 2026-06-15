@@ -135,6 +135,24 @@ def test_seeded_command_matches_recipe(qapp, settings, key):
         assert not any(a.startswith("-R") for a in args)
 
 
+def test_widegamut_preset_uses_its_own_ti1_and_count(qapp, settings):
+    # #58: a Wide-gamut preset bundles its OWN .ti1 (not the shared TC9.18 set),
+    # and its reuse info box reports that preset's patch count, not 1168.
+    key = "__chromiq_knut_wg_cm_a3_2016_4p__"
+    p = KNUT_PRESETS_BY_KEY[key]
+    assert p.ti1_asset != KNUT_TI1_ASSET
+    assert p.patches == 2016
+    tab = _make_tab(qapp, settings)
+    tab._seed_knut_preset(key)
+    tab._knut_active = True
+    tab._knut_active_key = key
+    tab._knut_targen_sig = tab._targen_signature()
+    tab._refresh_manual_command_preview()
+    info = tab._manual_info_lbl.text()
+    assert "2016" in info and "1168" not in info
+    assert "Wide-gamut" in tab._knut_tooltip(key)
+
+
 def test_three_decimal_scale_survives(qapp, settings):
     # 0.929 must not be rounded to 0.93 (the whole reason for decimals: 3).
     tab = _make_tab(qapp, settings)

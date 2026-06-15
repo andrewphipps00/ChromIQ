@@ -429,6 +429,11 @@ class ParameterWidget(QWidget):
         vbox.setSpacing(4)
 
         combo = NoScrollComboBox(container)
+        # Size to a minimum contents length (not the widest item) so the long
+        # paper names don't widen the row past the panel and force a horizontal
+        # scrollbar (#57); the combo still stretches to fill the column.
+        combo.setSizeAdjustPolicy(
+            combo.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
         choices = self._param.get("choices", [])
         labels  = self._param.get("labels", choices)
         for ch, lb in zip(choices, labels):
@@ -448,23 +453,29 @@ class ParameterWidget(QWidget):
         hbox.setContentsMargins(0, 0, 0, 0)
         hbox.setSpacing(6)
 
-        lbl_w = QLabel(tr("W (mm):"), dim_row)
+        # Compact single-letter labels (mm is conventional for paper) so the row
+        # doesn't widen the panel past its width and overflow it (#57).
+        lbl_w = QLabel(tr("W"), dim_row)
         lbl_w.setObjectName("param_label")
         hbox.addWidget(lbl_w)
 
         w_spin = NoScrollSpinBox(dim_row)
+        w_spin.setObjectName("compact_input")
         w_spin.setRange(10, 9999)
+        w_spin.setMaximumWidth(84)
         w_spin.setValue(210)
         w_spin.valueChanged.connect(self.value_changed)
         self._custom_w_spin = w_spin
         hbox.addWidget(w_spin)
 
-        lbl_h = QLabel(tr("H (mm):"), dim_row)
+        lbl_h = QLabel(tr("H"), dim_row)
         lbl_h.setObjectName("param_label")
         hbox.addWidget(lbl_h)
 
         h_spin = NoScrollSpinBox(dim_row)
+        h_spin.setObjectName("compact_input")
         h_spin.setRange(10, 9999)
+        h_spin.setMaximumWidth(84)
         h_spin.setValue(297)
         h_spin.valueChanged.connect(self.value_changed)
         self._custom_h_spin = h_spin
@@ -480,4 +491,14 @@ class ParameterWidget(QWidget):
     def _on_custom_dim_changed(self) -> None:
         if self._custom_dim_row is None or self._custom_combo is None:
             return
-        self._custom_dim_row.setVisible(self._custom_combo.currentData() == "custom")
+        show = self._custom_combo.currentData() == "custom"
+        self._custom_dim_row.setVisible(show)
+        # Showing the W/H row makes this control need both the combo and the row,
+        # but on macOS the parent QHBoxLayout's height sizeHint didn't recompute
+        # when the row toggled, squeezing the dropdown to a thin line (#57). Pin
+        # the control's minimum height to its real content height so the row is
+        # forced to grow; reset to 0 when the row is hidden again.
+        ctrl = self._control
+        if ctrl is not None:
+            ctrl.setMinimumHeight(ctrl.sizeHint().height() if show else 0)
+        self.updateGeometry()
