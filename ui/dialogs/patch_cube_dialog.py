@@ -12,11 +12,12 @@ after edits re-renders the new snapshot.
 """
 from __future__ import annotations
 
-from PyQt6.QtWidgets import QDialogButtonBox, QVBoxLayout, QDialog
+from PyQt6.QtWidgets import QApplication, QDialogButtonBox, QVBoxLayout, QDialog
 
 from core.logger import get_logger
 from core.i18n import tr
 from ui.patch_cube_panel import PatchCubePanel
+from ui.tab_header import dialog_masthead
 
 log = get_logger(__name__)
 
@@ -35,6 +36,14 @@ class PatchCubeDialog(QDialog):
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(0)
 
+        # Tab-style masthead (eyebrow + serif title) over a full-width spectrum
+        # stripe, matching the chart-design windows; the cube sits beneath it.
+        head, _header, stripe = dialog_masthead(
+            self, tr("PATCH SET · 3D VIEW"), tr("Patch distribution"),
+            top=14, bottom=10)
+        lay.addLayout(head)
+        lay.addWidget(stripe)
+
         self._panel = PatchCubePanel(mode=mode, parent=self)
         lay.addWidget(self._panel, 1)
         self._panel.set_program(program)
@@ -44,6 +53,20 @@ class PatchCubeDialog(QDialog):
         buttons.accepted.connect(self.accept)
         buttons.setContentsMargins(8, 6, 8, 6)
         lay.addWidget(buttons)
+
+    # ------------------------------------------------------------------
+    def exec(self) -> int:  # noqa: A003
+        """Build the cube's web view *before* entering the modal loop.
+
+        Instantiating a ``QWebEngineView`` creates a native surface; doing that
+        while this dialog already holds the application-modal grab wedges the
+        grab on Windows and freezes the app (issue #38 follow-up). So realise
+        the dialog non-modally, build the view off the grab, let the surface
+        settle, then go modal with the cube already in place."""
+        self.show()                      # non-modal: realize the dialog
+        self._panel.ensure_view()        # build the web view off the grab
+        QApplication.processEvents()     # let the native surface settle
+        return super().exec()
 
     # ------------------------------------------------------------------
     def done(self, result: int) -> None:  # noqa: N802

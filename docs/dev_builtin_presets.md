@@ -219,6 +219,22 @@ spacer scale, `-R` seed). Selecting one:
   Leaving a preset reverts its forced printtarg flags (`_reset_knut_overrides`),
   unticks the override box, and clears the flags.
 
+### Wide-gamut family (#53) — per-preset `.ti1`
+
+Four more `_Ti1Preset` rows (slugs `wg_*`, label suffix `KNUT_WG_SUFFIX = " · Wide-gamut"`)
+are Knut's multi-colour-set charts. They use the **same** ti1→printtarg machinery
+but each carries its **own** bundled `.ti1` (different patch sets: 924 / 1196 /
+1575 / 2016) under `assets/charts/knut/rgb/widegamut/<leaf>/<stem>.ti1`. The
+`_Ti1Preset` dataclass grew optional fields whose **defaults reproduce the shared
+TC9.18 presets byte-for-byte**, so only the new family sets them: `ti1_asset`
+(per-preset `.ti1`), `patches`/`white`/`black` (descriptive targen display),
+`no_strip_limit` (`-P`), `suppress_left_clip` (`-L`), `tiff_16bit` (8- vs 16-bit
+`-T`/`-t`), and `suffix` (so `default_target_name` strips the right tail).
+`_seed_knut_preset` reads those fields instead of the old hard-coded constants, and
+`_apply_knut_preset` resolves `p.ti1_asset` rather than the shared one. To add
+another, append a row — no other wiring changes. `test_knut_spyderprint_presets.py`
+is field-driven, so it pins both families.
+
 `_Ti1Preset.key` is `__chromiq_knut_<slug>__`; the **slug**, not the display
 name, is the stable identity — renaming a `name` must not change a slug.
 `KNUT_PRESET_KEYS` folds into `BUILTIN_PRESET_KEYS`, the combo labels into

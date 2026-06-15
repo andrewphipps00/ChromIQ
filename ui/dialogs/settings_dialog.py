@@ -335,6 +335,22 @@ class SettingsDialog(QDialog):
             min_width=560,
         )
 
+        self._update_notify_check = QCheckBox(
+            tr("Check for updates on startup"), self
+        )
+        update_notify_tip = TooltipButton(
+            tr("Check for Updates on Startup"),
+            tr("When this is on, ChromIQ quietly checks for a newer version each "
+            "time it starts and, if one is available, shows a small popup that "
+            "links to the download page.\n\n"
+            "It never downloads or installs anything on its own — it only lets "
+            "you know. You can also turn this off straight from that popup (the "
+            "\"Don't remind me of new available versions\" box), and turn it back "
+            "on again here."),
+            self,
+            min_width=560,
+        )
+
         self._cal_mode_check = QCheckBox(tr("Enable calibration options"), self)
         cal_tip = TooltipButton(
             tr("Enable Calibration Options"),
@@ -513,6 +529,7 @@ class SettingsDialog(QDialog):
         bh_cells = [
             _bh_cell(self._restore_tab_check, restore_tab_tip),
             _bh_cell(self._restore_session_check, restore_session_tip),
+            _bh_cell(self._update_notify_check, update_notify_tip),
             _bh_cell(self._themed_colors_check, themed_colors_tip),
             _bh_cell(self._cal_mode_check, cal_tip),
             _bh_cell(self._chromiq_refine_check, refine_tip),
@@ -693,6 +710,7 @@ class SettingsDialog(QDialog):
         self._folder_edit.setText(s.get("custom_output_path", ""))
         self._restore_tab_check.setChecked(s.get("restore_last_tab", True))
         self._restore_session_check.setChecked(bool(s.get("restore_last_session", False)))
+        self._update_notify_check.setChecked(bool(s.get("update_notify", True)))
         self._themed_colors_check.setChecked(bool(s.get("gamut_themed_colors", True)))
         self._cal_mode_check.setChecked(bool(s.get("calibration_mode", False)))
         self._chromiq_refine_check.setChecked(bool(s.get("chromiq_refinement", False)))
@@ -795,6 +813,7 @@ class SettingsDialog(QDialog):
         s.set("custom_output_path",    self._folder_edit.text().strip())
         s.set("restore_last_tab",          self._restore_tab_check.isChecked())
         s.set("restore_last_session",      self._restore_session_check.isChecked())
+        s.set("update_notify",             self._update_notify_check.isChecked())
         s.set("gamut_themed_colors",       self._themed_colors_check.isChecked())
         s.set("calibration_mode",          self._cal_mode_check.isChecked())
         s.set("chromiq_refinement",        self._chromiq_refine_check.isChecked())

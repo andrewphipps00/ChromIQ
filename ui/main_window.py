@@ -638,6 +638,9 @@ class MainWindow(QMainWindow):
         )
 
     def _check_for_updates_on_startup(self) -> None:
+        # Honour the global opt-out the update popup offers.
+        if not self._settings.get("update_notify", True):
+            return
         self._startup_update_checker = UpdateChecker(self)
         self._startup_update_checker.update_available.connect(
             self._on_startup_update_available
@@ -658,10 +661,13 @@ class MainWindow(QMainWindow):
             lbl.setVisible(bool(msg))
 
     def _on_startup_update_available(self, latest: str) -> None:
-        if not self._status_msg:
-            self._set_tab_status(
-                f"Update available: ChromIQ {latest} — open Preferences (⚙) to download."
-            )
+        # Notify with a popup (the masthead-styled UpdateAvailableDialog), not a
+        # status-bar line. If the user opts out, suppress all future popups.
+        from ui.dialogs.update_dialog import UpdateAvailableDialog
+        dlg = UpdateAvailableDialog(latest, self)
+        dlg.exec()
+        if dlg.disable_notifications:
+            self._settings.set("update_notify", False)
 
     def _check_argyll_binaries(self, initial: bool = False) -> None:
         bin_dir = Path(self._settings.get("argyll_bin_path", "/Applications/Argyll/bin"))

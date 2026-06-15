@@ -35,6 +35,7 @@ from core.i18n import SOURCE_LANGUAGE, available_languages, tr
 from core.logger import get_logger
 from core.preset_store import reveal_in_file_manager
 from ui.dialogs.tools_dialogs import _indicator_color, neutral_controls_qss
+from ui.tab_header import dialog_masthead
 from ui.theme import resolve_mode
 from ui.widgets import confirm, NoScrollComboBox, open_file_dialog, save_file_dialog
 from workflow import i18n_roundtrip as rt
@@ -62,21 +63,32 @@ class TranslationDialog(QDialog):
             self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint
         )
 
-        outer = QVBoxLayout(self)
-        outer.setContentsMargins(22, 20, 22, 16)
-        outer.setSpacing(12)
-
-        heading = QLabel(tr("Translate / edit language"), self)
-        heading.setStyleSheet("font-size: 15px; font-weight: bold;")
-        outer.addWidget(heading)
-
-        body = QLabel(tr(
+        # Tab-style masthead (eyebrow + serif title + ⓘ) over a full-width
+        # spectrum stripe, matching the chart-design windows. The outer layout
+        # spans full width so the stripe bleeds to the edges; the content below
+        # re-adds the side inset.
+        body_text = tr(
             "Export every phrase in ChromIQ to a spreadsheet, translate the "
             "right-hand column in Excel, LibreOffice or Google Sheets, then "
             "import the file back. Imported translations apply after a restart "
             "and are saved to your personal ChromIQ folder — your edits survive "
             "app updates."
-        ), self)
+        )
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
+        head, _header, stripe = dialog_masthead(
+            self, tr("LANGUAGE · TRANSLATE"), tr("Translate / edit language"),
+            tooltip_title=tr("Translate / edit language"), tooltip_body=body_text)
+        root.addLayout(head)
+        root.addWidget(stripe)
+
+        outer = QVBoxLayout()
+        outer.setContentsMargins(22, 14, 22, 16)
+        outer.setSpacing(12)
+        root.addLayout(outer)
+
+        body = QLabel(body_text, self)
         body.setWordWrap(True)
         body.setTextFormat(Qt.TextFormat.PlainText)
         outer.addWidget(body)

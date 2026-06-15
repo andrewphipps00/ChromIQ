@@ -37,7 +37,8 @@ from PyQt6.QtWidgets import (
 
 from core.i18n import tr
 from ui.dialogs.tools_dialogs import _indicator_color, neutral_controls_qss
-from ui.tooltip_button import TooltipButton
+from ui.styles import SPEC_GREEN
+from ui.tab_header import dialog_masthead
 from ui.widgets import NoScrollComboBox, tint_dialog_primary
 from workflow.spot_read_io import SpotReading, write_csv, write_ti3
 from workflow.spot_read_manager import SpotReadManager, SpotReadParams
@@ -73,24 +74,27 @@ class SpotReadDialog(QDialog):
         self._readings: list[SpotReading] = []
 
         self.setWindowTitle(tr("Read single patches"))
-        self.setMinimumWidth(640)
+        self.setMinimumWidth(960)
         self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint)
 
-        outer = QVBoxLayout(self)
-        outer.setContentsMargins(22, 20, 22, 16)
-        outer.setSpacing(12)
+        # Tab-style masthead (eyebrow + serif title + ⓘ) over a full-width
+        # spectrum stripe, matching the chart-design windows. The outer layout
+        # spans full width so the stripe bleeds to the edges; the content below
+        # re-adds the side inset.
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
+        head, _header, stripe = dialog_masthead(
+            self, tr("INSTRUMENT · SPOT READ"), tr("Read single patches"),
+            tooltip_title=tr("Read single patches"), tooltip_body=_HELP,
+            accent=SPEC_GREEN)
+        root.addLayout(head)
+        root.addWidget(stripe)
 
-        # Heading + help tip
-        head = QHBoxLayout()
-        title = QLabel(tr("Read single patches"), self)
-        title.setStyleSheet("font-size: 15px; font-weight: bold;")
-        head.addWidget(title, 1)
-        head.addWidget(
-            TooltipButton(tr("Read single patches"), _HELP, self,
-                          min_width=560, color=_indicator_color(settings)),
-            0, Qt.AlignmentFlag.AlignTop,
-        )
-        outer.addLayout(head)
+        outer = QVBoxLayout()
+        outer.setContentsMargins(22, 14, 22, 16)
+        outer.setSpacing(12)
+        root.addLayout(outer)
 
         body = QLabel(
             tr("Measure single colours off any material and save their L*a*b* values."),

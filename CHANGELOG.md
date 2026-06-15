@@ -1,5 +1,37 @@
 # Changelog
 
+## v3.10.3
+
+Chart-design polish, new presets, and a friendlier update notice — most of it
+driven by **Knut (@soul-traveller)**'s testing and ideas. 🙏
+
+### ✨ Added
+- **Four "Wide-gamut" built-in presets** (Knut's multi-colour-set charts, each
+  with its own patch set): i1Pro A4-924p, and ColorMunki A3 1196p / 1575p / 2016p.
+- **Startup "update available" popup.** When a newer release exists, ChromIQ now
+  shows a tidy popup (tab-style header + spectrum stripe) that links to the
+  download page, replacing the old status-bar line. It never installs anything
+  on its own. A new **Settings → "Check for updates on startup"** toggle (and the
+  popup's "Don't remind me of new available versions" box) turn it off and on.
+- **Tab-style headers across the Tools windows** — uppercase eyebrow + serif
+  title over the five-colour spectrum stripe, with a per-tool accent colour.
+
+### 🔧 Changed
+- **Saturated edges auto-follows the 3D cube** (cube per-axis − 1, to fill the
+  cube's frame gaps once) until you set it yourself; your choice is remembered.
+- **Near-neutral greys default to 16 / 4 / 1.**
+- The **Add patches** window opens tall enough to show its whole left column, and
+  both chart-design windows now grow **symmetrically** when you unfold the 3D
+  preview (instead of only to the right).
+
+### 🐛 Fixed
+- **Applied editor charts now randomise correctly.** Unchecking "Preserve patch
+  order" after Save & apply re-runs printtarg (randomised) instead of being seen
+  as "no change" and copying the fixed-order chart — so randomisation no longer
+  depends on toggling an unrelated option.
+- The editor's **instrument / paper readout updates live** when you change them.
+- The editor's **New chart / Load .ti2 buttons no longer clip** their text.
+
 ## v3.10.2
 
 A fix for an app freeze when using the 3D-cube preview in the chart-design

@@ -2,9 +2,10 @@
 from __future__ import annotations
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QFont
+from PyQt6.QtGui import QColor, QFont, QPainter
 from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QSizePolicy, QVBoxLayout, QWidget
 
+from ui.styles import SPEC_MAGENTA, TAB_COLORS
 from ui.tooltip_button import TooltipButton
 from core.i18n import tr
 
@@ -25,6 +26,7 @@ class TabHeader(QWidget):
         *,
         tooltip_title: str | None = None,
         tooltip_body: str | None = None,
+        tooltip_color: str | None = None,
     ) -> None:
         super().__init__(parent)
         self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
@@ -71,8 +73,11 @@ class TabHeader(QWidget):
 
         self._tooltip_btn: TooltipButton | None = None
         if tooltip_title and tooltip_body:
+            tip_kwargs = {"min_width": 560}
+            if tooltip_color is not None:
+                tip_kwargs["color"] = tooltip_color
             self._tooltip_btn = TooltipButton(
-                tooltip_title, tooltip_body, self, min_width=560
+                tooltip_title, tooltip_body, self, **tip_kwargs
             )
             btn_wrap = QWidget(self)
             btn_layout = QVBoxLayout(btn_wrap)
@@ -95,3 +100,61 @@ class TabHeader(QWidget):
         self._tooltip_btn._title = title
         self._tooltip_btn._body = body.strip()
         self._tooltip_btn.setToolTip(title + "\n\n" + tr("Click for details"))
+
+
+class SpectrumStripe(QWidget):
+    """A thin full-width band of the five ChromIQ tab hues, painted as equal
+    blocks — the same stripe the main-window masthead and the chart-design
+    windows use. The hues (TAB_COLORS) are plain spectrum colours, identical in
+    light and dark mode; only the chrome around them changes per theme, so this
+    needs no per-mode palette."""
+
+    HEIGHT = 4
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setFixedHeight(self.HEIGHT)
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
+
+    def paintEvent(self, _ev) -> None:  # noqa: N802
+        p = QPainter(self)
+        w = self.width()
+        n = len(TAB_COLORS)
+        for i, col in enumerate(TAB_COLORS):
+            x0 = int(round(i * w / n))
+            x1 = int(round((i + 1) * w / n)) if i < n - 1 else w
+            p.fillRect(x0, 0, x1 - x0, self.HEIGHT, QColor(col))
+        p.end()
+
+
+def dialog_masthead(
+    parent: QWidget,
+    eyebrow: str,
+    title: str,
+    *,
+    tooltip_title: str | None = None,
+    tooltip_body: str | None = None,
+    accent: str = SPEC_MAGENTA,
+    side: int = 22,
+    top: int = 18,
+    bottom: int = 12,
+):
+    """Build the standard ChromIQ dialog masthead: an inset :class:`TabHeader`
+    (uppercase eyebrow + large serif title, optional ⓘ) above a full-width
+    :class:`SpectrumStripe` — the same look the chart-design windows use.
+
+    Returns ``(head_layout, header, stripe)``. The caller adds ``head_layout``
+    then ``stripe`` to an outer layout whose side margins are **0** so the
+    stripe runs edge to edge; the header carries its own ``side`` inset, and the
+    body below should re-add the same inset.
+    """
+    head = QHBoxLayout()
+    head.setContentsMargins(side, top, side, bottom)
+    header = TabHeader(
+        eyebrow, title, accent, parent,
+        tooltip_title=tooltip_title, tooltip_body=tooltip_body,
+        tooltip_color=accent,
+    )
+    head.addWidget(header, 1, Qt.AlignmentFlag.AlignVCenter)
+    stripe = SpectrumStripe(parent)
+    return head, header, stripe

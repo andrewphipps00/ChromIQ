@@ -35,7 +35,7 @@ from PyQt6.QtWidgets import (
 from core.logger import get_logger
 from core.strip_utils import parse_passes_per_page
 from ui.styles import SPEC_AMBER, SPEC_MAGENTA, TAB_COLORS
-from ui.tab_header import TabHeader
+from ui.tab_header import SpectrumStripe as _SpectrumStripe, TabHeader
 from ui.tooltip_button import TooltipButton
 from ui.widgets import (
     NoScrollComboBox, NoScrollDoubleSpinBox, NoScrollSpinBox,
@@ -81,29 +81,17 @@ class _AutoHideLabel(QLabel):
             self._clear_timer.stop()
 
 
-class _SpectrumStripe(QWidget):
-    """A thin full-width band of the five ChromIQ tab hues, painted as equal
-    blocks — the same stripe the main-window masthead uses (see
-    MastheadHeader). The hues (TAB_COLORS) are plain spectrum colours, identical
-    in light and dark mode; only the chrome around them changes per theme, so
-    this needs no per-mode palette."""
-
-    HEIGHT = 4
-
-    def __init__(self, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
-        self.setFixedHeight(self.HEIGHT)
-        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
-
-    def paintEvent(self, _ev) -> None:  # noqa: N802
-        p = QPainter(self)
-        w = self.width()
-        n = len(TAB_COLORS)
-        for i, col in enumerate(TAB_COLORS):
-            x0 = int(round(i * w / n))
-            x1 = int(round((i + 1) * w / n)) if i < n - 1 else w
-            p.fillRect(x0, 0, x1 - x0, self.HEIGHT, QColor(col))
-        p.end()
+def _uniform_button_width(buttons, *, pad: int = 0) -> None:
+    """Give every button in ``buttons`` one minimum width = the widest
+    ``sizeHint`` + ``pad``, so their labels never clip (macOS's Fusion style
+    under-sizes button hints by a few px) and the buttons line up. Derived from
+    the rendered sizeHints, so it adapts to the active language."""
+    buttons = [b for b in buttons if b is not None]
+    if not buttons:
+        return
+    w = max(b.sizeHint().width() for b in buttons) + pad
+    for b in buttons:
+        b.setMinimumWidth(w)
 
 
 def _as_compact(*widgets) -> None:
@@ -1020,7 +1008,7 @@ class _NewChartDialog(QDialog):
         "sp": {"cube_n": 8, "skin_n": 8, "skin_ranges": 3, "blues_n": 64,
                "blues_layers": 3, "greens_n": 64, "greens_layers": 3,
                "sunrises_n": 64, "sunrises_layers": 3,
-               "greys_n": 16, "greys_off": 5, "greys_rings": 1, "edges_n": 6,
+               "greys_n": 16, "greys_off": 4, "greys_rings": 1, "edges_n": 7,
                "edges_faces": 0, "hs_n": 24, "hs_reach": 16, "pastel_n": 24,
                "pastel_layers": 2, "image_n": 24, "whiteblack_n": 1,
                "fill_to": 1000},
@@ -1042,23 +1030,39 @@ class _NewChartDialog(QDialog):
                    for n in self._GEN_CHECKS},
             "sp": {n: getattr(self, f"_gen_{n}").value()
                    for n in self._GEN_SPINS},
+            # Whether saturated-edges still auto-follows the cube (see
+            # _sync_edges_to_cube); persisted so an override survives reopen.
+            "edges_auto": getattr(self, "_edges_auto", True),
         }
 
     def _apply_gen_sets(self, st: dict) -> None:
         """Set the colour-set checkboxes + size spins from a {"cb":…, "sp":…}
         dict (missing/unknown keys skipped). Does not touch the source mode or
         any chart/layout widget, so subclasses without those can reuse it."""
-        for n, val in (st.get("sp") or {}).items():
-            w = getattr(self, f"_gen_{n}", None)
-            if w is not None:
-                try:
-                    w.setValue(int(val))
-                except (TypeError, ValueError):
-                    pass
-        for n, val in (st.get("cb") or {}).items():
-            w = getattr(self, f"_gen_{n}", None)
-            if w is not None:
-                w.setChecked(bool(val))
+        # Suppress the edges↔cube coupling while we bulk-apply, so setting the
+        # cube can't clobber the edges value we're about to restore (and vice
+        # versa).
+        self._syncing_edges = True
+        try:
+            for n, val in (st.get("sp") or {}).items():
+                w = getattr(self, f"_gen_{n}", None)
+                if w is not None:
+                    try:
+                        w.setValue(int(val))
+                    except (TypeError, ValueError):
+                        pass
+            for n, val in (st.get("cb") or {}).items():
+                w = getattr(self, f"_gen_{n}", None)
+                if w is not None:
+                    w.setChecked(bool(val))
+        finally:
+            self._syncing_edges = False
+        # Restore the auto-follow flag — default ON so factory defaults and any
+        # pre-existing saved state (which predates this feature) both get the
+        # cube→edges coupling — then re-sync so a stale saved edges value snaps
+        # to cube − 1 straight away.
+        self._edges_auto = bool(st.get("edges_auto", True))
+        self._sync_edges_to_cube()
 
     def _collect_gen_state(self) -> dict:
         mode = ("generate" if self._mode_generate.isChecked() else
@@ -1288,7 +1292,7 @@ class _NewChartDialog(QDialog):
                                    "distance; 'rings' adds wider rings (6, 12, "
                                    "18 tints) for a denser near-neutral cluster."))
         self._gen_greys_n = _spin(1, 64, 16)
-        self._gen_greys_off = _spin(1, 50, 5)
+        self._gen_greys_off = _spin(1, 50, 4)
         self._gen_greys_rings = _spin(1, 3, 1)
         self._gen_greys_count = _count_label()
         gg.addWidget(self._gen_greys, 5, 0)
@@ -1309,7 +1313,7 @@ class _NewChartDialog(QDialog):
                                    "surface) with that many patches per side, or "
                                    "0 for edges only. This boundary is where "
                                    "profiles err most."))
-        self._gen_edges_n = _spin(1, 60, 6)
+        self._gen_edges_n = _spin(1, 60, 7)
         self._gen_edges_faces = _spin(0, 20, 0)
         self._gen_edges_count = _count_label()
         gg.addWidget(self._gen_edges, 6, 0)
@@ -1471,8 +1475,34 @@ class _NewChartDialog(QDialog):
                    self._gen_image, self._gen_whiteblack, self._gen_fill):
             cb.toggled.connect(self._update_gen_counts)
 
+        # Saturated edges defaults to "cube per-axis − 1" so it fills the 3D
+        # cube's frame gaps exactly once (Knut's rule: cube 8 → edges 7). It
+        # tracks the cube live until the user edits the edges value themselves,
+        # after which their choice is left alone.
+        self._edges_auto = True
+        self._syncing_edges = False
+        self._gen_cube_n.valueChanged.connect(self._sync_edges_to_cube)
+        self._gen_edges_n.valueChanged.connect(self._on_edges_user_edited)
+
         indent.addWidget(self._gen_panel)
         return indent
+
+    # -- saturated-edges ↔ cube auto-coupling -----------------------------
+    def _sync_edges_to_cube(self) -> None:
+        """Keep saturated-edges per-edge at cube per-axis − 1 while auto."""
+        if self._syncing_edges or not self._edges_auto:
+            return
+        target = max(self._gen_edges_n.minimum(), self._gen_cube_n.value() - 1)
+        if target != self._gen_edges_n.value():
+            self._syncing_edges = True
+            self._gen_edges_n.setValue(target)
+            self._syncing_edges = False
+
+    def _on_edges_user_edited(self) -> None:
+        """A real (non-programmatic) edit to the edges spin unlatches auto."""
+        if self._syncing_edges:
+            return
+        self._edges_auto = False
 
     # The generators in fixed concatenation order: (checkbox, builder, counter).
     def _gen_specs(self):
@@ -1754,6 +1784,12 @@ class _NewChartDialog(QDialog):
 
     def _on_fold_toggled(self, shown: bool) -> None:
         self._cube_shown = shown
+        # Capture the centre *first*: when unfolding, raising the minimum width
+        # below makes Qt resize the window immediately (and rightward, top-left
+        # fixed), so a centre read after that already reflects the grown, shifted
+        # geometry. Remembering it up front lets us recentre symmetrically.
+        was_visible = self.isVisible()
+        center = self.frameGeometry().center()
         self._cube_panel.setVisible(shown)
         # Cube sits on the right: hiding collapses it inward (◂), showing
         # expands it outward (▸).
@@ -1765,8 +1801,15 @@ class _NewChartDialog(QDialog):
         # can't be dragged narrow enough for the cube to overrun the options.
         cube_min = self._cube_panel.minimumWidth() if shown else 0
         self.setMinimumWidth(self._controls_w + cube_min)
-        self.resize(self._controls_w + (self._CUBE_WIDTH if shown else 0),
-                    self.height())
+        new_w = self._controls_w + (self._CUBE_WIDTH if shown else 0)
+        self.resize(new_w, self.height())
+        if was_visible:
+            # Grow / shrink symmetrically about the pre-toggle centre so the
+            # dialog extends to both sides equally instead of only to the right.
+            fg = self.frameGeometry()
+            fg.moveCenter(center)
+            self.move(fg.topLeft())
+        # (Not shown yet → construction; showEvent centres it over the parent.)
         if shown:
             self._do_push_live_preview()   # refresh after being hidden
 
@@ -1797,7 +1840,36 @@ class _NewChartDialog(QDialog):
             if folded:
                 panel.setVisible(False)      # restore folded; the surface persists
                 self.setWindowOpacity(1.0)
+        self._fit_content_min_height()
         return super().exec()
+
+    def _fit_content_min_height(self) -> None:
+        """Pin a minimum height that fully shows the scrolled left column.
+
+        The controls live in a ``QScrollArea`` whose own sizeHint is small, so
+        the dialog could open (or be dragged) shorter than the column needs and
+        clip it. The column's realized height is only known once shown, so do
+        this from exec() after the window has settled: needed dialog height =
+        the content's natural height + the chrome around the scroll viewport
+        (masthead, buttons, margins). Capped at 92 % of the screen."""
+        if not getattr(self, "_fit_content_height", False):
+            return
+        sc = getattr(self, "_scroll", None)
+        if sc is None or sc.widget() is None:
+            return
+        self.layout().activate()
+        QApplication.processEvents()
+        viewport_h = sc.viewport().height()
+        if viewport_h <= 0:
+            return  # geometry not settled — leave the initial sizing in place
+        chrome = self.height() - viewport_h
+        need = sc.widget().sizeHint().height() + chrome
+        screen = self.screen() or QApplication.primaryScreen()
+        if screen is not None:
+            need = min(need, int(screen.availableGeometry().height() * 0.92))
+        self.setMinimumHeight(need)
+        if self.height() < need:
+            self.resize(self.width(), need)
 
     def _push_live_preview(self) -> None:
         """Schedule a debounced cube redraw (skipped while folded away)."""
@@ -2121,6 +2193,10 @@ class _AddPatchesDialog(_NewChartDialog):
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
         scroll.setWidget(content)
+        # Kept for exec()'s content-fit pass: the left column lives in this
+        # scroll area, and its realized height is only known once shown.
+        self._scroll = scroll
+        self._fit_content_height = True
         # Controls on the left (kept at their natural width), the foldable live
         # 3D cube on the right.
         hint = content.sizeHint()
@@ -2138,7 +2214,9 @@ class _AddPatchesDialog(_NewChartDialog):
         btns.setContentsMargins(12, 4, 12, 10)
         outer.addLayout(btns)
         # Height tracks the content (capped) so the dialog isn't mostly empty
-        # space; width follows the fold state.
+        # space; width follows the fold state. exec() pins a proper minimum
+        # height once the left column's realized size is known (see
+        # _fit_content_height / the exec override).
         self._init_fold_state(min(760, hint.height() + 72))
 
         # Share the New-chart dialog's last-used colour-set choices.
@@ -2368,11 +2446,26 @@ class Ti2RelayoutDialog(QDialog):
         src.addWidget(self._undo_btn)
         src.addWidget(self._redo_btn)
         src.addStretch(1)
+        # Give each pair of source-row buttons one uniform width sized to its
+        # widest label plus padding, so the text never clips — macOS's Fusion
+        # button metrics under-size the hint by a few px, which cut "New chart…"
+        # on both sides (Knut). Derived from the rendered sizeHints, so it holds
+        # in any language; uniform widths also line the buttons up neatly.
+        _uniform_button_width((new_btn, load_btn), pad=24)
+        _uniform_button_width((self._undo_btn, self._redo_btn), pad=18)
         # Ctrl+Z / Ctrl+Shift+Z (and Ctrl+Y) work anywhere in the dialog.
         QShortcut(QKeySequence.StandardKey.Undo, self, activated=self._undo)
         QShortcut(QKeySequence.StandardKey.Redo, self, activated=self._redo)
         QShortcut(QKeySequence("Ctrl+Y"), self, activated=self._redo)
         self._info = QLabel(tr("No chart loaded."), self)
+        # A long chart name makes this readout's text long; with the default
+        # Preferred policy its minimumSizeHint forced the whole source row wider
+        # than the window, which clipped the New chart / Load .ti2 buttons.
+        # Ignored horizontal policy lets the label shrink (clipping its own text)
+        # so it can never dictate the row width — the buttons keep their natural
+        # size. The full readout stays available as a tooltip (see _refresh_info).
+        self._info.setSizePolicy(QSizePolicy.Policy.Ignored,
+                                 QSizePolicy.Policy.Preferred)
         src.addWidget(self._info)
         src.addWidget(_magenta_tip(
             "Chart layout editor",
@@ -3419,11 +3512,15 @@ class Ti2RelayoutDialog(QDialog):
         if self._spec is None:
             return
         note = getattr(self, "_chart_note", "")
-        self._info.setText(
-            tr("{note} — {n} patches, -i{instr} -p{paper}").format(
-                note=note, n=self._grid.count(),
-                instr=self._spec.instrument_flag,
-                paper=self._spec.paper_flag))
+        text = tr("{note} — {n} patches, -i{instr} -p{paper}").format(
+            note=note, n=self._grid.count(),
+            instr=self._spec.instrument_flag,
+            paper=self._spec.paper_flag)
+        self._info.setText(text)
+        # The label may be clipped (Ignored width policy keeps long names from
+        # pushing the source-row buttons off-screen), so keep the full readout
+        # reachable on hover.
+        self._info.setToolTip(text)
 
     def _set_swatch_size(self, size: int) -> None:
         """Resize the grid swatches; rebuild icons + delegate cell so the
@@ -4074,6 +4171,7 @@ class Ti2RelayoutDialog(QDialog):
             return
         self._spec.instrument_flag = code
         self._on_printtarg_changed()
+        self._refresh_info()   # keep the -i/-p readout in step (Knut)
 
     def _on_pt_paper_changed(self) -> None:
         """User flipped the paper combo — update spec.paper_flag + paper_mm
@@ -4097,6 +4195,7 @@ class Ti2RelayoutDialog(QDialog):
         inv = {v: k for k, v in _NAMED_PAPERS.items()}
         self._spec.paper_mm = inv.get(code, self._spec.paper_mm)
         self._schedule_auto_refresh()
+        self._refresh_info()   # keep the -i/-p readout in step (Knut)
 
     def _on_pt_paper_custom_changed(self) -> None:
         """Apply the W/H spinbox values to spec.paper_flag + paper_mm and
@@ -4113,6 +4212,7 @@ class Ti2RelayoutDialog(QDialog):
         self._spec.paper_flag = flag
         self._spec.paper_mm = (float(w), float(h))
         self._schedule_auto_refresh()
+        self._refresh_info()   # keep the -i/-p readout in step (Knut)
 
 
     # -- regeneration / preview --------------------------------------------

@@ -72,8 +72,11 @@ def _fmt_scale(v: float) -> str:
 # ---------------------------------------------------------------------------
 
 def test_registry_shape():
-    assert len(KNUT_PRESETS) == 17
-    assert len(KNUT_PRESET_KEYS) == 17  # all keys unique
+    # 17 TC9.18+Spyderprint presets (shared .ti1) + 4 "Wide-gamut" presets
+    # (#53; each its own .ti1).
+    assert len(KNUT_PRESETS) == 21
+    assert len(KNUT_PRESET_KEYS) == 21  # all keys unique
+    assert sum(1 for p in KNUT_PRESETS if p.slug.startswith("wg_")) == 4
     assert KNUT_PRESET_KEYS <= BUILTIN_PRESET_KEYS
     assert all(p.combo_label in BUILTIN_PRESET_LABELS for p in KNUT_PRESETS)
     # every preset is reachable from a dropdown/overlay group
@@ -103,28 +106,32 @@ def test_seeded_command_matches_recipe(qapp, settings, key):
     tab._seed_knut_preset(key)
     args = _printtarg_args(tab)
 
-    # Common to every preset.
+    # Field-driven so it covers both the TC9.18 family and the Wide-gamut one.
     assert f"-i{p.instrument}" in args
     assert f"-p{p.paper}" in args
-    assert "-T200" in args            # 16-bit raster at 200 dpi
-    assert "-t200" not in args
-    assert "-P" in args               # don't limit strip length
+    if p.tiff_16bit:
+        assert "-T200" in args and "-t200" not in args   # 16-bit raster at 200 dpi
+    else:
+        assert "-t200" in args and "-T200" not in args    # 8-bit raster at 200 dpi
+    assert ("-P" in args) == p.no_strip_limit             # don't limit strip length
+    assert ("-L" in args) == p.suppress_left_clip         # left clip border
+    assert ("-h" in args) == p.double_density             # double density
     assert f"-M{p.margin}" in args
     assert f"-a{_fmt_scale(p.patch_scale)}" in args
     assert "-r" not in args           # charts are randomised
-
-    if p.instrument == "i1":
-        assert "-L" not in args       # keep the left clip border
-        assert "-h" not in args
-        assert f"-m{p.margin}" in args            # margin 8 ≠ 6 → -m emitted too
-        assert p.spacer_scale is not None and p.seed is not None
-        joined = " ".join(args)
+    # -m is emitted alongside -M only when the margin differs from the default 6.
+    if p.margin != 6:
+        assert f"-m{p.margin}" in args
+    else:
+        assert f"-m{p.margin}" not in args
+    joined = " ".join(args)
+    if p.spacer_scale is not None:
         assert f"-A {p.spacer_scale:.2f}" in joined
-        assert f"-R {p.seed}" in joined
-    else:  # ColorMunki
-        assert "-h" in args                       # double density
-        assert "-m6" not in args                  # margin 6 == default → only -M6
+    else:
         assert not any(a.startswith("-A") for a in args)
+    if p.seed is not None:
+        assert f"-R {p.seed}" in joined
+    else:
         assert not any(a.startswith("-R") for a in args)
 
 

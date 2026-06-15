@@ -197,6 +197,13 @@ KNUT_DPI = 200                                        # -T200 (16-bit) on every 
 KNUT_SUFFIX = " TC9.18+Spyderprint Grays"             # common name tail
 _KNUT_I1, _KNUT_CM = "i1", "CM"
 
+# Knut's "Wide-gamut" family (#53): multi-colour-set charts, each with its OWN
+# bundled .ti1 (unlike the shared-.ti1 TC9.18 presets). Recipes transcribed from
+# his exported Create Chart presets; 8-bit, default randomise (printtarg -r off,
+# no fixed -R seed).
+KNUT_WG_SUFFIX = " · Wide-gamut"
+_KNUT_WG_DIR = "assets/charts/knut/rgb/widegamut"
+
 
 @dataclass(frozen=True)
 class _Ti1Preset:
@@ -211,6 +218,16 @@ class _Ti1Preset:
     double_density: bool = False        # printtarg -h (ColorMunki)
     spacer_scale: float | None = None   # printtarg -A (None → leave at default)
     seed: int | None = None             # printtarg -R (None → default randomise)
+    # Wide-gamut family (#53) extensions. The defaults reproduce the shared-.ti1
+    # TC9.18+Spyderprint presets byte-for-byte, so only the new family sets them:
+    ti1_asset: str = KNUT_TI1_ASSET     # bundled .ti1 (shared one by default)
+    patches: int = KNUT_PATCHES         # descriptive targen -f (panel display only)
+    white: int = KNUT_WHITE             # descriptive targen -e
+    black: int = KNUT_BLACK             # descriptive targen -B
+    no_strip_limit: bool = True         # printtarg -P
+    suppress_left_clip: bool = False    # printtarg -L
+    tiff_16bit: bool = True             # 16-bit TIFF (→ -T)
+    suffix: str = KNUT_SUFFIX           # family name tail (stripped for target name)
 
     @property
     def key(self) -> str:
@@ -227,8 +244,8 @@ class _Ti1Preset:
 
     @property
     def default_target_name(self) -> str:
-        if self.name.endswith(KNUT_SUFFIX):
-            return self.name[: -len(KNUT_SUFFIX)]
+        if self.suffix and self.name.endswith(self.suffix):
+            return self.name[: -len(self.suffix)]
         return self.name
 
 
@@ -292,6 +309,27 @@ KNUT_PRESETS: list[_Ti1Preset] = [
     # -a1.29 (Knut's corrected value; the 1.4 he first sent overflowed to 3 pages).
     _Ti1Preset("cm_a2_port_2p",  "A2-1168p-2pages-w17.0mm-Portrait"      + KNUT_SUFFIX, _KNUT_CM, "420x594", 1.29,  6, 2, double_density=True),
     _Ti1Preset("cm_a2_land_2p",  "A2-1168p-2pages-w17.0mm-Landscape"     + KNUT_SUFFIX, _KNUT_CM, "594x420", 1.27,  6, 2, double_density=True),
+
+    # Wide-gamut family — each with its own bundled .ti1 (per-preset patch set).
+    # i1Pro keeps the left clip + strip limit (-L/-P) and is 8-bit; the ColorMunki
+    # ones drop -P, use double density, and are 8-bit too.
+    _Ti1Preset("wg_i1_a4_924_2p",  "A4-924p-2pages-Portrait"          + KNUT_WG_SUFFIX,
+               _KNUT_I1, "A4", 1.06, 10, 2,
+               ti1_asset=f"{_KNUT_WG_DIR}/i1pro-a4-924p/924p.ti1", patches=924,
+               suppress_left_clip=True, no_strip_limit=True,
+               tiff_16bit=False, suffix=KNUT_WG_SUFFIX),
+    _Ti1Preset("wg_cm_a3_1196_2p", "A3-1196p-2pages-w11.5mm-Portrait" + KNUT_WG_SUFFIX,
+               _KNUT_CM, "297x420", 0.88, 6, 2, double_density=True,
+               ti1_asset=f"{_KNUT_WG_DIR}/colormunki-a3-1196p/1196p.ti1", patches=1196,
+               no_strip_limit=False, tiff_16bit=False, suffix=KNUT_WG_SUFFIX),
+    _Ti1Preset("wg_cm_a3_1575_3p", "A3-1575p-3pages-Portrait"        + KNUT_WG_SUFFIX,
+               _KNUT_CM, "297x420", 0.94, 6, 3, double_density=True,
+               ti1_asset=f"{_KNUT_WG_DIR}/colormunki-a3-1575p/1575p.ti1", patches=1575,
+               no_strip_limit=False, tiff_16bit=False, suffix=KNUT_WG_SUFFIX),
+    _Ti1Preset("wg_cm_a3_2016_4p", "A3-2016p-4pages-Portrait"        + KNUT_WG_SUFFIX,
+               _KNUT_CM, "297x420", 0.96, 6, 4, double_density=True,
+               ti1_asset=f"{_KNUT_WG_DIR}/colormunki-a3-2016p/2016p.ti1", patches=2016,
+               no_strip_limit=False, tiff_16bit=False, suffix=KNUT_WG_SUFFIX),
 ]
 KNUT_PRESETS_BY_KEY: dict[str, _Ti1Preset] = {p.key: p for p in KNUT_PRESETS}
 KNUT_PRESET_KEYS = frozenset(KNUT_PRESETS_BY_KEY)
@@ -3443,6 +3481,14 @@ class TabChart(QWidget):
         self._set_manual_value("printtarg", "-L", opts.suppress_left_clip)
         self._set_manual_value("printtarg", "-P", opts.no_strip_limit)
         self._set_manual_value("printtarg", "-h", opts.double_density)
+        # The layout editor always lays its charts out in fixed order
+        # (printtarg -r — see workflow/ti2_relayout.py), so the applied chart is
+        # "preserve patch order". Reflect that on the panel and in the baseline:
+        # otherwise -r sits at its factory default and unchecking Preserve Patch
+        # Order to get randomisation reads as "no change", so Generate copies the
+        # fixed-order files verbatim and the chart is never randomised (the
+        # randomisation only appeared as a side effect of toggling another knob).
+        self._set_manual_value("printtarg", "-r", True)
         # Scalar expert rows: set+enable only when non-default, else reset.
         if abs(opts.patch_scale - 1.0) > 0.01:
             self._set_manual_value("printtarg", "-a", opts.patch_scale)
@@ -3719,12 +3765,13 @@ class TabChart(QWidget):
         self._set_manual_value("printtarg", "-i", p.instrument)
         self._set_manual_value("printtarg", "-p", p.paper)
         self._set_manual_value("printtarg", "-t", KNUT_DPI)        # dpi (with -T)
-        if self._bit16_radio is not None:
-            self._bit16_radio.setChecked(True)                     # 16-bit → -T200
+        if self._bit16_radio is not None and self._bit8_radio is not None:
+            (self._bit16_radio if p.tiff_16bit
+             else self._bit8_radio).setChecked(True)               # -T (16-bit) / 8-bit
         self._set_manual_value("printtarg", "-a", p.patch_scale)
-        self._set_manual_value("printtarg", "-P", True)            # don't limit strips
+        self._set_manual_value("printtarg", "-P", p.no_strip_limit)  # don't limit strips
         self._set_manual_value("printtarg", "-m", p.margin)        # → -m/-M
-        self._set_manual_value("printtarg", "-L", False)           # keep left clip border
+        self._set_manual_value("printtarg", "-L", p.suppress_left_clip)  # left clip border
         self._set_manual_value("printtarg", "-r", False)           # randomise (default)
         self._set_manual_value("printtarg", "-b", False)           # coloured spacers
         self._set_manual_value("printtarg", "-h", p.double_density)  # CM double density
@@ -3739,9 +3786,9 @@ class TabChart(QWidget):
 
         # Descriptive targen values (the bundled patch set; .ti1 is the real
         # source, so these only make the panel reflect what was loaded).
-        self._set_manual_value("targen", "-f", KNUT_PATCHES)
-        self._set_manual_value("targen", "-e", KNUT_WHITE)
-        self._set_manual_value("targen", "-B", KNUT_BLACK)
+        self._set_manual_value("targen", "-f", p.patches)
+        self._set_manual_value("targen", "-e", p.white)
+        self._set_manual_value("targen", "-B", p.black)
 
         if self._manual_pages_spin is not None:
             self._manual_pages_spin.setValue(p.pages)
@@ -3751,13 +3798,13 @@ class TabChart(QWidget):
     def _apply_knut_preset(self, key: str, target_name: str | None = None) -> None:
         """Seed a TC9.18+Spyderprint preset and build it from the bundled .ti1."""
         if self._runner.is_running:
-            log.warning("TC9.18+Spyderprint preset: a process is already running")
+            log.warning("Knut preset: a process is already running")
             return
-        ti1 = self._knut_ti1_path()
+        ti1 = resource_path(KNUT_PRESETS_BY_KEY[key].ti1_asset)
         if not ti1.is_file():
             InfoDialog(
                 "Patch set not found",
-                "The bundled TC9.18 + Spyderprint-greys patch set could not be "
+                "The bundled patch set for this preset could not be "
                 f"located:\n\n{ti1}\n\nThe app bundle may be incomplete.",
                 self, min_width=520,
             ).exec()

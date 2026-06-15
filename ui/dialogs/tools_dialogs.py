@@ -44,8 +44,9 @@ from PyQt6.QtWidgets import (
 
 from core.i18n import tr
 from core.logger import get_logger
-from ui.styles import BG_INPUT, BORDER, TEXT_MAIN
+from ui.styles import BG_INPUT, BORDER, SPEC_GREEN, SPEC_MAGENTA, SPEC_VIOLET, TEXT_MAIN
 from ui.theme import resolve_mode
+from ui.tab_header import dialog_masthead
 from ui.tooltip_button import TooltipButton
 from ui.widgets import (
     confirm, NoScrollComboBox, NoScrollSpinBox, open_dir_dialog, open_file_dialog,
@@ -208,6 +209,8 @@ class _ToolDialogBase(QDialog):
 
     TOOL_KEY: str   = ""
     TITLE: str      = ""
+    EYEBROW: str    = ""    # uppercase masthead eyebrow above the title
+    ACCENT: str     = SPEC_MAGENTA   # masthead accent (stroke + ⓘ tint)
     DESCRIPTION: str = ""
     HELP: str       = ""    # extended ⓘ popup text; falls back to DESCRIPTION
     RUN_LABEL: str  = tr("Run")
@@ -224,34 +227,41 @@ class _ToolDialogBase(QDialog):
         )
 
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(22, 20, 22, 16)
-        outer.setSpacing(14)
+        # Zero side margins so the masthead's spectrum stripe runs edge to edge;
+        # the header and the inner content re-add the side inset themselves.
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
 
-        head_row = QHBoxLayout()
-        self._heading = QLabel(self.TITLE, self)
-        self._heading.setStyleSheet("font-size: 15px; font-weight: bold;")
-        self._heading.setWordWrap(True)
-        head_row.addWidget(self._heading, 1)
-        self._help_tip = TooltipButton(
-            self.TITLE, self.HELP or self.DESCRIPTION, self,
-            min_width=560, color=_indicator_color(settings))
-        head_row.addWidget(self._help_tip, 0, Qt.AlignmentFlag.AlignTop)
-        outer.addLayout(head_row)
+        # Tab-style masthead (uppercase eyebrow + large serif title + ⓘ) over a
+        # full-width spectrum stripe — the same look as the chart-design windows.
+        head, self._header, stripe = dialog_masthead(
+            self, self.EYEBROW, self.TITLE,
+            tooltip_title=self.TITLE, tooltip_body=self.HELP or self.DESCRIPTION,
+            accent=self.ACCENT)
+        outer.addLayout(head)
+        outer.addWidget(stripe)
+
+        # Everything below the stripe is inset like the original dialog body.
+        inner = QVBoxLayout()
+        inner.setContentsMargins(22, 14, 22, 16)
+        inner.setSpacing(14)
+        outer.addLayout(inner)
+        self._inner = inner
 
         self._body = QLabel(self.DESCRIPTION, self)
         self._body.setWordWrap(True)
         self._body.setTextFormat(Qt.TextFormat.PlainText)
-        outer.addWidget(self._body)
+        inner.addWidget(self._body)
 
         sep = QFrame(self)
         sep.setFrameShape(QFrame.Shape.HLine)
         sep.setFrameShadow(QFrame.Shadow.Sunken)
-        outer.addWidget(sep)
+        inner.addWidget(sep)
 
         # Subclasses populate this area with their input rows.
         self._content = QVBoxLayout()
         self._content.setSpacing(10)
-        outer.addLayout(self._content)
+        inner.addLayout(self._content)
 
         # Log / status area
         self._log = QPlainTextEdit(self)
@@ -259,7 +269,7 @@ class _ToolDialogBase(QDialog):
         self._log.setMaximumBlockCount(2000)
         self._log.setFixedHeight(120)
         self._log.setPlaceholderText(tr("Status messages will appear here."))
-        outer.addWidget(self._log)
+        inner.addWidget(self._log)
 
         # Buttons
         bb = QDialogButtonBox(self)
@@ -268,7 +278,7 @@ class _ToolDialogBase(QDialog):
         self._run_btn.setDefault(True)
         self._run_btn.clicked.connect(self._on_run_clicked)
         self._close_btn.clicked.connect(self.reject)
-        outer.addWidget(bb)
+        inner.addWidget(bb)
 
         # Highlight checkboxes, focused inputs and combos with the same neutral
         # indicator the Settings window uses, instead of the global tab-accent
@@ -317,10 +327,11 @@ class _ToolDialogBase(QDialog):
         # label's height to its true heightForWidth at the content width so the
         # floor we read back below is accurate.
         target_w = max(self.MIN_WIDTH, layout.sizeHint().width())
-        margins = layout.contentsMargins()
+        # The body label is inset by the inner layout's side margins (the outer
+        # layout now spans full width so the spectrum stripe can bleed to edge).
+        margins = self._inner.contentsMargins()
         avail = target_w - margins.left() - margins.right()
-        for lbl in (self._heading, self._body):
-            lbl.setMinimumHeight(max(0, lbl.heightForWidth(avail)))
+        self._body.setMinimumHeight(max(0, self._body.heightForWidth(avail)))
 
         hint  = layout.sizeHint()
         floor = layout.minimumSize()
@@ -497,6 +508,8 @@ class _OutputRow(QWidget):
 class AverageMeasurementsDialog(_ToolDialogBase):
     TOOL_KEY    = "average"
     TITLE       = tr("Average measurements")
+    EYEBROW     = tr("MEASUREMENTS · AVERAGE")
+    ACCENT      = SPEC_GREEN
     RUN_LABEL   = tr("Average")
     HELP = (
         tr("Measured the same chart a few times? This tool blends those readings "
@@ -683,6 +696,8 @@ class AverageMeasurementsDialog(_ToolDialogBase):
 class MergeMeasurementsDialog(_ToolDialogBase):
     TOOL_KEY    = "merge"
     TITLE       = tr("Merge measurements")
+    EYEBROW     = tr("MEASUREMENTS · MERGE")
+    ACCENT      = SPEC_GREEN
     RUN_LABEL   = tr("Merge")
     HELP = (
         tr("This tool joins several measurement files together into one bigger set "
@@ -839,6 +854,7 @@ class MergeMeasurementsDialog(_ToolDialogBase):
 class Ti1ToI1ProfilerDialog(_ToolDialogBase):
     TOOL_KEY    = "ti1_to_i1p"
     TITLE       = tr("Convert TI1 → i1Profiler")
+    EYEBROW     = tr("FORMAT CONVERSION")
     RUN_LABEL   = tr("Convert")
     HELP = (
         tr("Want to measure a ChromIQ chart using X-Rite's i1Profiler software (for "
@@ -1131,6 +1147,8 @@ class Ti1ToI1ProfilerDialog(_ToolDialogBase):
 class I1ProfilerToTi3Dialog(_ToolDialogBase):
     TOOL_KEY    = "i1p_to_ti3"
     TITLE       = tr("Convert i1Profiler → TI3")
+    EYEBROW     = tr("FORMAT CONVERSION")
+    ACCENT      = SPEC_GREEN
     RUN_LABEL   = tr("Convert")
     HELP = (
         tr("Measured your chart in X-Rite's i1Profiler? This brings those readings "
@@ -1273,6 +1291,7 @@ class I1ProfilerToTi3Dialog(_ToolDialogBase):
 class I1ProfilerToTi1Dialog(_ToolDialogBase):
     TOOL_KEY    = "i1p_to_ti1"
     TITLE       = tr("Convert i1Profiler → TI1")
+    EYEBROW     = tr("FORMAT CONVERSION")
     RUN_LABEL   = tr("Convert")
     HELP = (
         tr("Have a chart from X-Rite's i1Profiler that you'd like to print and "
@@ -1388,6 +1407,8 @@ class I1ProfilerToTi1Dialog(_ToolDialogBase):
 class VerifyAgainstReferenceDialog(_ToolDialogBase):
     TOOL_KEY    = "verify"
     TITLE       = tr("Verify against reference")
+    EYEBROW     = tr("QUALITY CHECK")
+    ACCENT      = SPEC_VIOLET
     RUN_LABEL   = tr("Verify")
     HELP = (
         tr("This tool tells you how close your colours came out compared to where "
@@ -1727,6 +1748,8 @@ class VerifyAgainstReferenceDialog(_ToolDialogBase):
 class VerifyProfileDialog(_ToolDialogBase):
     TOOL_KEY    = "verify_profile"
     TITLE       = tr("Verify a profile (independent check)")
+    EYEBROW     = tr("QUALITY CHECK")
+    ACCENT      = SPEC_VIOLET
     RUN_LABEL   = tr("Verify profile")
     MIN_WIDTH   = 660
     DESCRIPTION = (

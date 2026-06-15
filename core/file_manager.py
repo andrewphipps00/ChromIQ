@@ -120,6 +120,13 @@ class RunMeta:
     # The main app never sets or reads these — they stay None / "" for its runs.
     editor_layout: dict | None = None
     editor_basename: str = ""
+    # TI2 layout editor only: the "creation recipe" — the New chart / Add window
+    # state (_collect_gen_state: source mode, colour-set generators, instrument /
+    # paper, layout) that produced the chart. Distinct from editor_layout (the
+    # printtarg layout the Create Chart tab can edit): editor_layout is reloaded
+    # when the chart reopens in the editor, while editor_recipe is reloaded into
+    # the New chart / Add windows so the design can be tweaked / recreated.
+    editor_recipe: dict | None = None
 
     @classmethod
     def fresh(cls, run_id: str, parent: str | None = None) -> "RunMeta":
