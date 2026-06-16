@@ -135,7 +135,7 @@ def test_seeded_command_matches_recipe(qapp, settings, key):
     assert f"-M{p.margin}" in args
     if abs(p.patch_scale - 1.0) > 0.01:                   # -a only when non-default
         assert f"-a{_fmt_scale(p.patch_scale)}" in args
-    assert "-r" not in args           # charts are randomised
+    assert ("-r" in args) == p.no_randomise   # preserve order honours the preset
     # -m is emitted alongside -M only when the margin differs from the default 6.
     if p.margin != 6:
         assert f"-m{p.margin}" in args

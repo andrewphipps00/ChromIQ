@@ -257,6 +257,7 @@ class _Ti1Preset:
     black: int = KNUT_BLACK             # descriptive targen -B
     no_strip_limit: bool = True         # printtarg -P
     suppress_left_clip: bool = False    # printtarg -L
+    no_randomise: bool = False          # printtarg -r (False = randomise, the default)
     tiff_16bit: bool = True             # 16-bit TIFF (→ -T)
     suffix: str = KNUT_SUFFIX           # family name tail (stripped for target name)
 
@@ -3970,7 +3971,7 @@ class TabChart(QWidget):
         self._set_manual_value("printtarg", "-P", p.no_strip_limit)  # don't limit strips
         self._set_manual_value("printtarg", "-m", p.margin)        # → -m/-M
         self._set_manual_value("printtarg", "-L", p.suppress_left_clip)  # left clip border
-        self._set_manual_value("printtarg", "-r", False)           # randomise (default)
+        self._set_manual_value("printtarg", "-r", p.no_randomise)  # preserve order? (default: randomise)
         self._set_manual_value("printtarg", "-b", False)           # coloured spacers
         self._set_manual_value("printtarg", "-h", p.double_density)  # CM double density
         if p.spacer_scale is not None:
