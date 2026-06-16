@@ -147,6 +147,11 @@ def dialog_masthead(
     then ``stripe`` to an outer layout whose side margins are **0** so the
     stripe runs edge to edge; the header carries its own ``side`` inset, and the
     body below should re-add the same inset.
+
+    Also installs an accent-coloured :class:`~ui.gradient_overlay.GradientOverlay`
+    over the top of ``parent`` — the same colour wash the main-window tabs have
+    behind their headline (it's parented to the dialog, so it lives as long as
+    the dialog and refits/raises itself).
     """
     head = QHBoxLayout()
     head.setContentsMargins(side, top, side, bottom)
@@ -157,4 +162,7 @@ def dialog_masthead(
     )
     head.addWidget(header, 1, Qt.AlignmentFlag.AlignVCenter)
     stripe = SpectrumStripe(parent)
+    if parent is not None:
+        from ui.gradient_overlay import GradientOverlay
+        GradientOverlay(accent, parent=parent)
     return head, header, stripe

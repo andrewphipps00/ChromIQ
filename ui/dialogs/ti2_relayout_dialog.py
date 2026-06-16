@@ -35,6 +35,7 @@ from PyQt6.QtWidgets import (
 from core.logger import get_logger
 from core.strip_utils import parse_passes_per_page
 from ui.styles import SPEC_AMBER, SPEC_MAGENTA, TAB_COLORS
+from ui.gradient_overlay import GradientOverlay
 from ui.tab_header import SpectrumStripe as _SpectrumStripe, TabHeader
 from ui.tooltip_button import TooltipButton
 from ui.widgets import (
@@ -621,6 +622,7 @@ class _NewChartDialog(QDialog):
         head.addWidget(TabHeader(
             tr("NEW CHART · SETUP"), tr("Set up your chart"),
             SPEC_MAGENTA, self), 0, Qt.AlignmentFlag.AlignVCenter)
+        GradientOverlay(SPEC_MAGENTA, parent=self)  # accent wash behind headline
         head.addStretch(1)
         head.addWidget(_magenta_tip(
             tr("New chart"),
@@ -2311,6 +2313,7 @@ class _AddPatchesDialog(_NewChartDialog):
         head.addWidget(TabHeader(
             tr("EXTEND THE CHART"), tr("Add patches"), SPEC_MAGENTA, self),
             0, Qt.AlignmentFlag.AlignVCenter)
+        GradientOverlay(SPEC_MAGENTA, parent=self)  # accent wash behind headline
         head.addStretch(1)
         outer.addLayout(head)
         outer.addWidget(_SpectrumStripe(self))
@@ -2537,6 +2540,7 @@ class Ti2RelayoutDialog(QDialog):
         src.addWidget(TabHeader(
             tr("CHART LAYOUT · EDITOR"), tr("Design your chart"),
             SPEC_MAGENTA, self), 0, Qt.AlignmentFlag.AlignVCenter)
+        GradientOverlay(SPEC_MAGENTA, parent=self)  # accent wash behind headline
         src.addSpacing(16)
         load_btn = QPushButton(tr("Load .ti2…"), self)
         load_btn.clicked.connect(self._load_ti2)
