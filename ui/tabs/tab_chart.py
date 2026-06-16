@@ -100,14 +100,13 @@ def _preset_match_key(name: str) -> str:
     """A normalised key for deciding whether two preset names are "the same"
     for the overwrite check (#59).
 
-    Beyond stripping invisible characters and case, it treats any run of
-    non-alphanumeric characters as one separator, so names that differ only by
-    punctuation — e.g. ``w11.5mm`` vs ``w11_5mm`` (a dot the app's name cleaning
-    turns into an underscore in some flows) — collide and prompt to overwrite
-    instead of silently creating a near-identical duplicate.
+    Strips invisible characters and folds case, but keeps dots, hyphens, spaces
+    and underscores *distinct* — they're legitimate, meaning-bearing parts of a
+    name (e.g. ``w11.5mm`` ≠ ``w11_5mm``), so they must not be collapsed. The
+    dot-vs-underscore duplicate is prevented at the source instead: the layout
+    editor's Save & apply now keeps dots rather than forcing them to underscores.
     """
-    s = _clean_preset_name(name).casefold()
-    return re.sub(r"[^a-z0-9]+", "_", s).strip("_")
+    return _clean_preset_name(name).casefold()
 
 # Built-in, read-only preset for the Create Chart → Manual presets dropdown.
 # Unlike user presets (one .json file each under presets_dir()), this one is

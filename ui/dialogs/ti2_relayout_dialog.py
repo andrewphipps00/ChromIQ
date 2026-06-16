@@ -5121,8 +5121,13 @@ class Ti2RelayoutDialog(QDialog):
             return None
         import re
         raw = name_edit.text().strip()
+        # Match FileManager._sanitise so the applied name is consistent
+        # everywhere: spaces → hyphen, and KEEP dots / hyphens (only truly
+        # filesystem-illegal characters become underscores). Forcing dots to
+        # underscores here is what made "w11.5mm" become "w11_5mm" and then
+        # mismatch the dotted name the user re-typed in Create Chart (#59).
         clean = re.sub(r"\s+", "-", raw)
-        clean = re.sub(r"[^\w\-]", "_", clean).strip("-_")
+        clean = re.sub(r"[^\w\-.]", "_", clean).strip("._-")
         return clean or "chart"
 
     def _maybe_tag_randomised(self, ti2: Path) -> str:

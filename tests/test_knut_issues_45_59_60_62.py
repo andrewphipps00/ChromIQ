@@ -71,25 +71,42 @@ def test_save_with_invisible_char_still_matches(qapp, settings, monkeypatch):
     assert asked == ["MyChart"]
 
 
-def test_save_with_punctuation_variant_matches(qapp, settings, monkeypatch):
-    # #59: a name differing only by punctuation (a dot the name cleaning turns
-    # into an underscore in some flows) must still be caught as the same preset.
+def test_punctuation_variants_are_distinct_names(qapp, settings, monkeypatch):
+    # #59 (Knut): dots, underscores and hyphens are meaning-bearing — a dot and
+    # an underscore name must stay DISTINCT (not collapsed), so saving one when
+    # the other exists does NOT prompt to overwrite. The dot-vs-underscore
+    # duplicate is prevented at the source (the editor keeps dots) instead.
     from ui.tabs.tab_chart import TabChart, _preset_match_key
-    assert _preset_match_key("A3-w11.5mm-Portrait") == _preset_match_key("A3-w11_5mm-Portrait")
+    assert _preset_match_key("A3-w11.5mm") != _preset_match_key("A3-w11_5mm")
     t = TabChart(ArgyllRunner(settings), FileManager(settings), settings)
     t._switch_mode("manual")
-    t._save_presets_to_settings({"A3-w11.5mm-Portrait": {"auto_run": True, "attached_ti1": False}})
+    t._save_presets_to_settings({"A3-w11.5mm": {"auto_run": True, "attached_ti1": False}})
     asked = []
     monkeypatch.setattr(t, "_confirm_overwrite_preset",
                         lambda n: (asked.append(n), False)[1])
 
     def fake_exec(self):
         for le in self.findChildren(QLineEdit):
-            le.setText("A3-w11_5mm-Portrait")     # dot saved as underscore
+            le.setText("A3-w11_5mm")               # a genuinely different name
         return QDialog.DialogCode.Accepted
     monkeypatch.setattr(QDialog, "exec", fake_exec)
     t._on_preset_save()
-    assert asked == ["A3-w11.5mm-Portrait"]        # matched the existing dot name
+    assert asked == []                              # distinct → no overwrite prompt
+
+
+def test_editor_apply_name_keeps_dots(qapp, settings, monkeypatch):
+    # #59: the editor's Save & apply must keep dots (so "w11.5mm" stays dotted
+    # and matches what the user re-types in Create Chart), not force underscores.
+    from ui.dialogs.ti2_relayout_dialog import Ti2RelayoutDialog
+    from PyQt6.QtWidgets import QDialog, QLineEdit
+    d = Ti2RelayoutDialog(ArgyllRunner(settings), settings)
+
+    def fake_exec(self):
+        for le in self.findChildren(QLineEdit):
+            le.setText("Epson-A3-w11.5mm-Portrait")
+        return QDialog.DialogCode.Accepted
+    monkeypatch.setattr(QDialog, "exec", fake_exec)
+    assert d._prompt_apply_name() == "Epson-A3-w11.5mm-Portrait"   # dot preserved
 
 
 def test_save_under_new_name_does_not_ask(qapp, settings, monkeypatch):
