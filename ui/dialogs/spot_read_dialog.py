@@ -159,13 +159,16 @@ class SpotReadDialog(QDialog):
         self._table.verticalHeader().setDefaultSectionSize(34)
         self._table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         hdr = self._table.horizontalHeader()
-        # Name takes a modest fixed-ish width (interactive, so it can be dragged);
-        # the remaining columns stretch to share the rest evenly instead of Name
-        # hogging all the free space.
-        hdr.setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive)
-        self._table.setColumnWidth(0, 150)
-        for c in range(1, 8):
-            hdr.setSectionResizeMode(c, QHeaderView.ResizeMode.Stretch)
+        # Name keeps the lion's share (stretches to fill), but the value /
+        # Colour columns get comfortable fixed widths — wider than auto-sizing to
+        # their short contents — so they're not cramped while Name stays the
+        # biggest column by far.
+        hdr.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        for c in range(1, 7):                       # L* a* b* X Y Z
+            hdr.setSectionResizeMode(c, QHeaderView.ResizeMode.Interactive)
+            self._table.setColumnWidth(c, 86)
+        hdr.setSectionResizeMode(7, QHeaderView.ResizeMode.Interactive)
+        self._table.setColumnWidth(7, 124)          # Colour swatch
         self._table.itemChanged.connect(self._on_item_changed)
         outer.addWidget(self._table, 1)
 
