@@ -77,6 +77,13 @@ def neutral_controls_qss(color: str) -> str:
         f"QCheckBox::indicator:hover {{ border-color: {color}; }}"
         f"QRadioButton::indicator:checked {{ background: {color}; border-color: {color}; }}"
         f"QRadioButton::indicator:hover {{ border-color: {color}; }}"
+        # A disabled checkbox/radio must read as off even when checked — without
+        # this the accent :checked fill wins over Qt's disabled greying, so a
+        # greyed-out option (e.g. "Highlight out-of-gamut" while soft-proof is
+        # off) kept its bright tick. The two-state selector outranks :checked.
+        f"QCheckBox::indicator:checked:disabled,"
+        f" QRadioButton::indicator:checked:disabled {{"
+        f" background: #4a4a4a; border-color: #4a4a4a; }}"
     )
 from workflow.average_runner import AverageParams, AverageRunner
 from workflow.colverify_runner import (
