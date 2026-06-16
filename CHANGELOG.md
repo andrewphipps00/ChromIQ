@@ -1,5 +1,27 @@
 # Changelog
 
+## v3.10.13
+
+More from **Knut (@soul-traveller)**'s testing. 🙏
+
+### ✨ Added
+- **13 ready-made example charts built in.** Knut's exported Create-Chart charts
+  (i1Pro and ColorMunki, A4/A3/A3+, various patch counts, page counts and
+  orientations — several triple-density) now ship as built-in presets in the
+  Create Chart dropdown, and the ones with a colour-set design also appear in the
+  New-chart "Load setup from preset" list. They replace the earlier four
+  Wide-gamut presets. (#63)
+- **"Suggest name" everywhere it's useful.** The button is now on the guided
+  Create Chart Target-name field (with the predicted patch count) and the Save
+  Preset dialog, in addition to manual mode and the layout editor. (#62)
+- **Soft-proof remembers your last image** — it pre-fills it and opens the file
+  picker in its folder.
+
+### 🐛 Changed
+- **Add window shows the resulting chart size too.** Beneath the additions
+  total, the Add dialog now shows "Chart after adding" (existing patches + the
+  generated additions). (#60)
+
 ## v3.10.12
 
 More fixes from **Knut (@soul-traveller)**'s testing. 🙏
