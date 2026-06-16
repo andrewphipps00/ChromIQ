@@ -1,5 +1,14 @@
 # Changelog
 
+## v3.10.8
+
+### 🔧 Changed
+- **A subtle accent wash behind the headers.** The tab-style headers in the Tools
+  windows, the "update available" popup and the layout-editor windows now carry
+  the same gentle accent-colour gradient behind their headline that the
+  main-window tabs have — washing softly behind the title text while buttons and
+  controls sit cleanly on top.
+
 ## v3.10.7
 
 More fixes and polish from **Knut (@soul-traveller)**'s testing. 🙏
