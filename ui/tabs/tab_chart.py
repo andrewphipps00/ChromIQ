@@ -24,6 +24,7 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QMessageBox,
     QPushButton,
     QRadioButton,
     QScrollArea,
@@ -3264,13 +3265,44 @@ class TabChart(QWidget):
                     bool(existing.get("attached_ti1")), bool(target))
         return (name, True, True, bool(target))
 
+    @staticmethod
+    def _paper_name_and_orientation(paper: str) -> tuple[str, str]:
+        """(base paper name, orientation) for a printtarg -p value, read from the
+        paper labels (which carry "… Portrait" / "… Landscape"), e.g.
+        ``"A4R"`` → ``("A4", "Landscape")``. Custom ``WxH`` sizes derive the
+        orientation from their dimensions."""
+        label = PAPER_LABELS.get(paper, "")
+        if label:
+            base = re.split(r"\s*[(/]", label)[0].strip() or paper
+            orient = ("Landscape" if "Landscape" in label
+                      else "Portrait" if "Portrait" in label else "")
+            return base, orient
+        if "x" in str(paper):
+            try:
+                w, h = (float(v) for v in str(paper).split("x", 1))
+                return str(paper), ("Landscape" if w > h else "Portrait")
+            except ValueError:
+                pass
+        return str(paper), ""
+
+    def _loaded_ti1_patch_count(self) -> int | None:
+        """Patch count of the currently loaded preset's bundled .ti1, if any."""
+        p = getattr(self, "_preset_ti1_path", None)
+        if p and Path(p).is_file():
+            try:
+                txt = Path(p).read_text(encoding="latin-1", errors="ignore")
+                m = re.search(r"NUMBER_OF_SETS\s+(\d+)", txt)
+                if m:
+                    return int(m.group(1))
+            except OSError:
+                pass
+        return None
+
     def _suggest_target_name(self) -> str:
         """A descriptive default name from the current settings (#62):
-        ``<instrument>-<paper>[-<N>p]-<pages>pages``. In guided mode the
-        predicted patch count is included (it's shown on screen); in manual mode
-        the count isn't known until the chart is generated, so it's left out.
-        Page orientation is only known once laid out (the editor's Save & apply,
-        which has a built chart, includes it)."""
+        ``<instrument>-<paper>[-<N>p]-<pages>pages-<orientation>``. The patch
+        count comes from the predicted count (guided) or the loaded preset's
+        .ti1 (manual); the orientation comes from the paper selection."""
         instr_lbl = {"i1": "i1Pro", "CM": "ColorMunki", "3p": "i1Pro3Plus",
                      "p3": "i1Pro3", "SS": "SpectroScan"}
         manual = self._manual_btn is not None and self._manual_btn.isChecked()
@@ -3281,7 +3313,7 @@ class TabChart(QWidget):
                      if self._manual_paper_pw is not None else "") or "A4"
             pages = (int(self._manual_pages_spin.value())
                      if self._manual_pages_spin is not None else 1)
-            patches = None
+            patches = self._loaded_ti1_patch_count()
         else:
             instr = (self._instr_combo.currentData()
                      if self._instr_combo is not None else "") or "i1"
@@ -3290,10 +3322,13 @@ class TabChart(QWidget):
             pages = (int(self._pages_spin.value())
                      if self._pages_spin is not None else 1)
             patches = getattr(self, "_predicted_patch_count", None)
-        parts = [instr_lbl.get(str(instr), str(instr)), str(paper)]
+        base_paper, orient = self._paper_name_and_orientation(str(paper))
+        parts = [instr_lbl.get(str(instr), str(instr)), base_paper]
         if patches:
             parts.append(f"{patches}p")
         parts.append("1page" if pages == 1 else f"{pages}pages")
+        if orient:
+            parts.append(orient)
         return "-".join(parts)
 
     def _on_suggest_target_name(self) -> None:

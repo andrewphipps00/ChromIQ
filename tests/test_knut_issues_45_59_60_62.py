@@ -109,6 +109,36 @@ def test_editor_apply_name_keeps_dots(qapp, settings, monkeypatch):
     assert d._prompt_apply_name() == "Epson-A3-w11.5mm-Portrait"   # dot preserved
 
 
+def test_confirm_overwrite_preset_runs(qapp, settings, monkeypatch):
+    # Regression (#59): _confirm_overwrite_preset built a QMessageBox that wasn't
+    # imported → NameError at runtime, so the prompt never showed even though the
+    # match was found. Earlier tests monkeypatched this method and missed it.
+    from PyQt6.QtWidgets import QMessageBox
+    from ui.tabs.tab_chart import TabChart
+    t = TabChart(ArgyllRunner(settings), FileManager(settings), settings)
+    t._switch_mode("manual")
+    monkeypatch.setattr(QMessageBox, "exec", lambda self: 0)   # don't block
+    assert t._confirm_overwrite_preset("test") in (True, False)   # must not raise
+
+
+def test_save_over_existing_name_calls_real_confirm(qapp, settings, monkeypatch):
+    # End-to-end with the REAL confirm dialog (auto-cancelled): saving over an
+    # existing preset reaches the prompt without crashing.
+    from PyQt6.QtWidgets import QMessageBox, QDialog, QLineEdit
+    from ui.tabs.tab_chart import TabChart
+    t = TabChart(ArgyllRunner(settings), FileManager(settings), settings)
+    t._switch_mode("manual")
+    t._save_presets_to_settings({"test": {"auto_run": True, "attached_ti1": False}})
+    seen = {}
+    monkeypatch.setattr(QMessageBox, "exec",
+                        lambda self: seen.setdefault("shown", True) or 0)
+    monkeypatch.setattr(QDialog, "exec", lambda self: (
+        [le.setText("test") for le in self.findChildren(QLineEdit)],
+        QDialog.DialogCode.Accepted)[1])
+    t._on_preset_save()
+    assert seen.get("shown")    # the overwrite prompt actually appeared
+
+
 def test_save_under_new_name_does_not_ask(qapp, settings, monkeypatch):
     from ui.tabs.tab_chart import TabChart
     t = TabChart(ArgyllRunner(settings), FileManager(settings), settings)
@@ -197,6 +227,33 @@ def test_td_chart_transfers_custom_margin_and_scale(qapp, settings):
 
 
 # --- #62: Save & apply suggested / default name -----------------------------
+
+def test_create_chart_suggest_includes_patches_and_orientation(qapp, settings, tmp_path):
+    # #62 (Knut): the Create Chart Suggest-name must include the patch count
+    # (predicted in guided, the loaded .ti1's count in manual) and the page
+    # orientation (from the paper selection), not just instrument-paper-pages.
+    from ui.tabs.tab_chart import TabChart
+    t = TabChart(ArgyllRunner(settings), FileManager(settings), settings)
+
+    # Guided: A3 landscape (420x297), 3 pages, predicted 1575 patches.
+    t._switch_mode("guided")
+    t._instr_combo.setCurrentIndex(max(0, t._instr_combo.findData("CM")))
+    t._paper_combo.setCurrentIndex(max(0, t._paper_combo.findData("420x297")))
+    t._pages_spin.setValue(3)
+    t._predicted_patch_count = 1575
+    assert t._suggest_target_name() == "ColorMunki-A3-1575p-3pages-Landscape"
+
+    # Manual: a loaded preset .ti1 supplies the count; paper A4 → Portrait.
+    t._switch_mode("manual")
+    ti1 = tmp_path / "set.ti1"
+    ti1.write_text("NUMBER_OF_SETS 484\n")
+    t._preset_ti1_path = ti1
+    t._set_manual_value("printtarg", "-i", "i1")
+    t._set_manual_value("printtarg", "-p", "A4")
+    if t._manual_pages_spin is not None:
+        t._manual_pages_spin.setValue(1)
+    assert t._suggest_target_name() == "i1Pro-A4-484p-1page-Portrait"
+
 
 def test_suggested_name_from_settings(qapp, settings):
     from ui.dialogs.ti2_relayout_dialog import Ti2RelayoutDialog
