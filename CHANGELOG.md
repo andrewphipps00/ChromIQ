@@ -1,5 +1,18 @@
 # Changelog
 
+## v3.10.16
+
+### 🐛 Fixed
+- **The "preset already exists" prompt works again.** Saving a preset with a
+  name that already exists now reliably asks to overwrite — it had been crashing
+  silently behind the scenes (an unimported dialog), so no warning appeared and
+  a duplicate could be created. (#59, thanks **Knut (@soul-traveller)** for the
+  log that pinpointed it)
+- **"Suggest name" is more complete.** The Create Chart Suggest-name button now
+  includes the patch count (the predicted count in guided mode, the loaded
+  preset's count in manual mode) and the page orientation, e.g.
+  `ColorMunki-A3-1575p-3pages-Landscape`. (#62)
+
 ## v3.10.15
 
 ### ✨ Added
