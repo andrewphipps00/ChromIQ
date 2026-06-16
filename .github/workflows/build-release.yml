@@ -265,8 +265,15 @@ jobs:
           ln -sf /Applications "$MOUNT/Applications"
           sync
 
-          # Step 4: detach
-          hdiutil detach "$MOUNT" -force
+          # Step 4: detach (retry — the volume is sometimes still busy
+          # right after sync, giving "Resource busy"/exit 16 on the runner)
+          for i in 1 2 3 4 5; do
+            if hdiutil detach "$MOUNT" -force; then
+              break
+            fi
+            echo "detach attempt $i failed (volume busy); retrying in 3s…"
+            sleep 3
+          done
 
           # Step 5: convert to compressed read-only (UDZO = zlib)
           hdiutil convert /tmp/rw.dmg \
