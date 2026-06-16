@@ -219,21 +219,32 @@ spacer scale, `-R` seed). Selecting one:
   Leaving a preset reverts its forced printtarg flags (`_reset_knut_overrides`),
   unticks the override box, and clears the flags.
 
-### Wide-gamut family (#53) — per-preset `.ti1`
+### Wide-gamut family (#63) — per-preset `.ti1`
 
-Four more `_Ti1Preset` rows (slugs `wg_*`, label suffix `KNUT_WG_SUFFIX = " · Wide-gamut"`)
-are Knut's multi-colour-set charts. They use the **same** ti1→printtarg machinery
-but each carries its **own** bundled `.ti1` (different patch sets: 924 / 1196 /
-1575 / 2016) under `assets/charts/knut/rgb/widegamut/<leaf>/<stem>.ti1`. The
+**13** `_Ti1Preset` rows (slugs `wg_*`, label suffix `KNUT_WG_SUFFIX = " · Wide-gamut"`)
+are Knut's exported Create-Chart charts (#63 superseded the original four #53
+ones — the 924/1196/1575/2016 charts). They use the **same** ti1→printtarg
+machinery but each carries its **own** bundled `.ti1` (varied patch sets:
+480 … 2016) under `assets/charts/knut/rgb/widegamut/<leaf>/chart.ti1`. The
 `_Ti1Preset` dataclass grew optional fields whose **defaults reproduce the shared
-TC9.18 presets byte-for-byte**, so only the new family sets them: `ti1_asset`
+TC9.18 presets byte-for-byte**, so only this family sets them: `ti1_asset`
 (per-preset `.ti1`), `patches`/`white`/`black` (descriptive targen display),
 `no_strip_limit` (`-P`), `suppress_left_clip` (`-L`), `tiff_16bit` (8- vs 16-bit
-`-T`/`-t`), and `suffix` (so `default_target_name` strips the right tail).
-`_seed_knut_preset` reads those fields instead of the old hard-coded constants, and
-`_apply_knut_preset` resolves `p.ti1_asset` rather than the shared one. To add
-another, append a row — no other wiring changes. `test_knut_spyderprint_presets.py`
-is field-driven, so it pins both families.
+`-T`/`-t`), `triple_density` (the i1Pro-layout + ColorMunki-tag trick — set on
+the manual TD checkbox in `_seed_knut_preset` **before** `-a`/`-m` so the recipe's
+own scale/margin win over the TD `-a1.3/-m5` preset), and `suffix` (so
+`default_target_name` strips the right tail). `_seed_knut_preset` reads those
+fields instead of the old hard-coded constants, and `_apply_knut_preset` resolves
+`p.ti1_asset`. To add another, append a row — no other wiring changes.
+`test_knut_spyderprint_presets.py` is field-driven, so it pins both families.
+
+**"Load setup from preset" (New chart):** each chart that was saved with an
+`editor_recipe` also has that recipe in
+`assets/charts/knut/rgb/widegamut/recipes.json` (keyed `"<instrument> <name>"`,
+e.g. `"i1Pro A4-924p-2pages-Portrait"`, since i1Pro and ColorMunki variants can
+share a chart name). `_NewChartDialog._available_preset_recipes` lists those with
+a ★. Two of the 13 (the 1196-2pages and 1224 ColorMunki charts) were saved without
+a recipe, so they're selectable built-in charts but don't appear there.
 
 `_Ti1Preset.key` is `__chromiq_knut_<slug>__`; the **slug**, not the display
 name, is the stable identity — renaming a `name` must not change a slug.

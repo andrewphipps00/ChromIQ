@@ -232,6 +232,7 @@ class _Ti1Preset:
     margin: int          # printtarg -m / -M
     pages: int           # informational (the page count in the name)
     double_density: bool = False        # printtarg -h (ColorMunki)
+    triple_density: bool = False        # ChromIQ triple density (i1Pro layout + CM tag)
     spacer_scale: float | None = None   # printtarg -A (None → leave at default)
     seed: int | None = None             # printtarg -R (None → default randomise)
     # Wide-gamut family (#53) extensions. The defaults reproduce the shared-.ti1
@@ -326,26 +327,49 @@ KNUT_PRESETS: list[_Ti1Preset] = [
     _Ti1Preset("cm_a2_port_2p",  "A2-1168p-2pages-w17.0mm-Portrait"      + KNUT_SUFFIX, _KNUT_CM, "420x594", 1.29,  6, 2, double_density=True),
     _Ti1Preset("cm_a2_land_2p",  "A2-1168p-2pages-w17.0mm-Landscape"     + KNUT_SUFFIX, _KNUT_CM, "594x420", 1.27,  6, 2, double_density=True),
 
-    # Wide-gamut family — each with its own bundled .ti1 (per-preset patch set).
-    # i1Pro keeps the left clip + strip limit (-L/-P) and is 8-bit; the ColorMunki
-    # ones drop -P, use double density, and are 8-bit too.
-    _Ti1Preset("wg_i1_a4_924_2p",  "A4-924p-2pages-Portrait"          + KNUT_WG_SUFFIX,
+    # Wide-gamut family (#63) — Knut's exported Create Chart charts, each with its
+    # own bundled .ti1 (per-preset patch set + layout). Several ColorMunki ones
+    # are triple density (i1Pro layout + ColorMunki tag); the i1Pro ones keep the
+    # left clip + strip limit (-L/-P). All 8-bit. Generated from his presets.
+    _Ti1Preset("wg_colormunki_a3_1196p_2pages_w11_5mm_protrait", "A3-1196p-2pages-w11.5mm-Portrait" + KNUT_WG_SUFFIX,
+               _KNUT_CM, "A3", 0.88, 6, 2,
+               double_density=True, ti1_asset=f"{_KNUT_WG_DIR}/colormunki_a3_1196p_2pages_w11_5mm_protrait/chart.ti1", patches=1196, no_strip_limit=True, tiff_16bit=False, suffix=KNUT_WG_SUFFIX),
+    _Ti1Preset("wg_colormunki_a3_1224p_2pages_w11_5mm_landscape", "A3-1224p-2pages-w11.5mm-Landscape" + KNUT_WG_SUFFIX,
+               _KNUT_CM, "420x297", 0.85, 6, 2,
+               double_density=True, ti1_asset=f"{_KNUT_WG_DIR}/colormunki_a3_1224p_2pages_w11_5mm_landscape/chart.ti1", patches=1224, no_strip_limit=True, tiff_16bit=False, suffix=KNUT_WG_SUFFIX),
+    _Ti1Preset("wg_colormunki_a3_1575p_3pages_portrait", "A3-1575p-3pages-Portrait" + KNUT_WG_SUFFIX,
+               _KNUT_CM, "A3", 0.94, 6, 3,
+               double_density=True, ti1_asset=f"{_KNUT_WG_DIR}/colormunki_a3_1575p_3pages_portrait/chart.ti1", patches=1575, no_strip_limit=False, tiff_16bit=False, suffix=KNUT_WG_SUFFIX),
+    _Ti1Preset("wg_colormunki_a3_2016p_4pages_portrait", "A3-2016p-4pages-Portrait" + KNUT_WG_SUFFIX,
+               _KNUT_CM, "A3", 0.96, 6, 4,
+               double_density=True, ti1_asset=f"{_KNUT_WG_DIR}/colormunki_a3_2016p_4pages_portrait/chart.ti1", patches=2016, no_strip_limit=False, tiff_16bit=False, suffix=KNUT_WG_SUFFIX),
+    _Ti1Preset("wg_colormunki_a3plus_1190p_1page_portrait", "A3Plus-1190p-1page-Portrait" + KNUT_WG_SUFFIX,
+               _KNUT_CM, "329x483", 1.0, 6, 1,
+               triple_density=True, ti1_asset=f"{_KNUT_WG_DIR}/colormunki_a3plus_1190p_1page_portrait/chart.ti1", patches=1190, no_strip_limit=True, suppress_left_clip=True, tiff_16bit=False, suffix=KNUT_WG_SUFFIX),
+    _Ti1Preset("wg_colormunki_a3plus_1196p_1page_landscape", "A3Plus-1196p-1page-Landscape" + KNUT_WG_SUFFIX,
+               _KNUT_CM, "483x329", 1.0, 6, 1,
+               triple_density=True, ti1_asset=f"{_KNUT_WG_DIR}/colormunki_a3plus_1196p_1page_landscape/chart.ti1", patches=1196, no_strip_limit=True, suppress_left_clip=True, tiff_16bit=False, suffix=KNUT_WG_SUFFIX),
+    _Ti1Preset("wg_colormunki_a4_480p_1page_landscape", "A4-480p-1page-Landscape" + KNUT_WG_SUFFIX,
+               _KNUT_CM, "A4R", 1.04, 6, 1,
+               triple_density=True, ti1_asset=f"{_KNUT_WG_DIR}/colormunki_a4_480p_1page_landscape/chart.ti1", patches=480, no_strip_limit=True, suppress_left_clip=True, tiff_16bit=False, suffix=KNUT_WG_SUFFIX),
+    _Ti1Preset("wg_colormunki_a4_480p_2pages_portrait", "A4-480p-2pages-Portrait" + KNUT_WG_SUFFIX,
+               _KNUT_CM, "A4", 0.93, 6, 2,
+               double_density=True, ti1_asset=f"{_KNUT_WG_DIR}/colormunki_a4_480p_2pages_portrait/chart.ti1", patches=480, no_strip_limit=True, tiff_16bit=False, suffix=KNUT_WG_SUFFIX),
+    _Ti1Preset("wg_colormunki_a4_484p_1page_portrait", "A4-484p-1page-Portrait" + KNUT_WG_SUFFIX,
+               _KNUT_CM, "A4", 1.08, 6, 1,
+               triple_density=True, ti1_asset=f"{_KNUT_WG_DIR}/colormunki_a4_484p_1page_portrait/chart.ti1", patches=484, no_strip_limit=True, suppress_left_clip=True, tiff_16bit=False, suffix=KNUT_WG_SUFFIX),
+    _Ti1Preset("wg_i1pro_a4_480p_1page_landscape", "A4-480p-1page-Landscape" + KNUT_WG_SUFFIX,
+               _KNUT_I1, "A4R", 1.04, 10, 1,
+               ti1_asset=f"{_KNUT_WG_DIR}/i1pro_a4_480p_1page_landscape/chart.ti1", patches=480, no_strip_limit=True, suppress_left_clip=True, tiff_16bit=False, suffix=KNUT_WG_SUFFIX),
+    _Ti1Preset("wg_i1pro_a4_484p_1page_portrait", "A4-484p-1page-Portrait" + KNUT_WG_SUFFIX,
+               _KNUT_I1, "A4", 1.05, 10, 1,
+               ti1_asset=f"{_KNUT_WG_DIR}/i1pro_a4_484p_1page_portrait/chart.ti1", patches=484, no_strip_limit=True, suppress_left_clip=True, tiff_16bit=False, suffix=KNUT_WG_SUFFIX),
+    _Ti1Preset("wg_i1pro_a4_924p_2pages_portrait", "A4-924p-2pages-Portrait" + KNUT_WG_SUFFIX,
                _KNUT_I1, "A4", 1.06, 10, 2,
-               ti1_asset=f"{_KNUT_WG_DIR}/i1pro-a4-924p/924p.ti1", patches=924,
-               suppress_left_clip=True, no_strip_limit=True,
-               tiff_16bit=False, suffix=KNUT_WG_SUFFIX),
-    _Ti1Preset("wg_cm_a3_1196_2p", "A3-1196p-2pages-w11.5mm-Portrait" + KNUT_WG_SUFFIX,
-               _KNUT_CM, "297x420", 0.88, 6, 2, double_density=True,
-               ti1_asset=f"{_KNUT_WG_DIR}/colormunki-a3-1196p/1196p.ti1", patches=1196,
-               no_strip_limit=False, tiff_16bit=False, suffix=KNUT_WG_SUFFIX),
-    _Ti1Preset("wg_cm_a3_1575_3p", "A3-1575p-3pages-Portrait"        + KNUT_WG_SUFFIX,
-               _KNUT_CM, "297x420", 0.94, 6, 3, double_density=True,
-               ti1_asset=f"{_KNUT_WG_DIR}/colormunki-a3-1575p/1575p.ti1", patches=1575,
-               no_strip_limit=False, tiff_16bit=False, suffix=KNUT_WG_SUFFIX),
-    _Ti1Preset("wg_cm_a3_2016_4p", "A3-2016p-4pages-Portrait"        + KNUT_WG_SUFFIX,
-               _KNUT_CM, "297x420", 0.96, 6, 4, double_density=True,
-               ti1_asset=f"{_KNUT_WG_DIR}/colormunki-a3-2016p/2016p.ti1", patches=2016,
-               no_strip_limit=False, tiff_16bit=False, suffix=KNUT_WG_SUFFIX),
+               ti1_asset=f"{_KNUT_WG_DIR}/i1pro_a4_924p_2pages_portrait/chart.ti1", patches=924, no_strip_limit=True, suppress_left_clip=True, tiff_16bit=False, suffix=KNUT_WG_SUFFIX),
+    _Ti1Preset("wg_i1pro_a4_960p_2pages_landscape", "A4-960p-2pages-Landscape" + KNUT_WG_SUFFIX,
+               _KNUT_I1, "A4R", 1.04, 10, 2,
+               ti1_asset=f"{_KNUT_WG_DIR}/i1pro_a4_960p_2pages_landscape/chart.ti1", patches=960, no_strip_limit=True, suppress_left_clip=True, tiff_16bit=False, suffix=KNUT_WG_SUFFIX),
 ]
 KNUT_PRESETS_BY_KEY: dict[str, _Ti1Preset] = {p.key: p for p in KNUT_PRESETS}
 KNUT_PRESET_KEYS = frozenset(KNUT_PRESETS_BY_KEY)
@@ -3903,6 +3927,7 @@ class TabChart(QWidget):
         which preset was selected before. Split from _apply_knut_preset so it can
         be unit-tested without running printtarg."""
         p = KNUT_PRESETS_BY_KEY[key]
+        triple = p.triple_density and p.instrument == "CM"
 
         # Clear modes that would otherwise hijack the seeded printtarg values.
         if self._manual_td_check is not None:
@@ -3920,6 +3945,12 @@ class TabChart(QWidget):
         if self._bit16_radio is not None and self._bit8_radio is not None:
             (self._bit16_radio if p.tiff_16bit
              else self._bit8_radio).setChecked(True)               # -T (16-bit) / 8-bit
+        # Triple density BEFORE the scalar rows: its toggle handler seeds
+        # -a1.3/-m5/-P/-L, so it must run first or it would clobber the recipe's
+        # own -a/-m below (the #45 ordering). Instrument is already CM, so the
+        # TD row is visible/settable here.
+        if triple and self._manual_td_check is not None:
+            self._manual_td_check.setChecked(True)
         self._set_manual_value("printtarg", "-a", p.patch_scale)
         self._set_manual_value("printtarg", "-P", p.no_strip_limit)  # don't limit strips
         self._set_manual_value("printtarg", "-m", p.margin)        # → -m/-M

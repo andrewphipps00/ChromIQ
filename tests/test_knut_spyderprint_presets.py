@@ -72,11 +72,11 @@ def _fmt_scale(v: float) -> str:
 # ---------------------------------------------------------------------------
 
 def test_registry_shape():
-    # 17 TC9.18+Spyderprint presets (shared .ti1) + 4 "Wide-gamut" presets
-    # (#53; each its own .ti1).
-    assert len(KNUT_PRESETS) == 21
-    assert len(KNUT_PRESET_KEYS) == 21  # all keys unique
-    assert sum(1 for p in KNUT_PRESETS if p.slug.startswith("wg_")) == 4
+    # 17 TC9.18+Spyderprint presets (shared .ti1) + 13 "Wide-gamut" presets
+    # (#63, Knut's exported charts; each its own .ti1).
+    assert len(KNUT_PRESETS) == 30
+    assert len(KNUT_PRESET_KEYS) == 30  # all keys unique
+    assert sum(1 for p in KNUT_PRESETS if p.slug.startswith("wg_")) == 13
     assert KNUT_PRESET_KEYS <= BUILTIN_PRESET_KEYS
     assert all(p.combo_label in BUILTIN_PRESET_LABELS for p in KNUT_PRESETS)
     # every preset is reachable from a dropdown/overlay group
@@ -86,6 +86,14 @@ def test_registry_shape():
 
 def test_ti1_asset_present():
     assert resource_path(KNUT_TI1_ASSET).is_file()
+
+
+def test_widegamut_ti1_assets_present():
+    # Every Wide-gamut chart (#63) ships its own .ti1 — guard the bundled files.
+    wg = [p for p in KNUT_PRESETS if p.slug.startswith("wg_")]
+    assert len(wg) == 13
+    for p in wg:
+        assert resource_path(p.ti1_asset).is_file(), f"missing {p.ti1_asset}"
 
 
 def test_keys_are_stable_sentinels():
@@ -107,17 +115,26 @@ def test_seeded_command_matches_recipe(qapp, settings, key):
     args = _printtarg_args(tab)
 
     # Field-driven so it covers both the TC9.18 family and the Wide-gamut one.
-    assert f"-i{p.instrument}" in args
+    triple = p.triple_density and p.instrument == "CM"
+    if triple:
+        # Triple density lays out with the i1Pro geometry and forces -L; it's
+        # mutually exclusive with double density (-h).
+        assert "-ii1" in args
+        assert "-L" in args
+        assert "-h" not in args
+    else:
+        assert f"-i{p.instrument}" in args
+        assert ("-L" in args) == p.suppress_left_clip     # left clip border
+        assert ("-h" in args) == p.double_density         # double density
     assert f"-p{p.paper}" in args
     if p.tiff_16bit:
         assert "-T200" in args and "-t200" not in args   # 16-bit raster at 200 dpi
     else:
         assert "-t200" in args and "-T200" not in args    # 8-bit raster at 200 dpi
     assert ("-P" in args) == p.no_strip_limit             # don't limit strip length
-    assert ("-L" in args) == p.suppress_left_clip         # left clip border
-    assert ("-h" in args) == p.double_density             # double density
     assert f"-M{p.margin}" in args
-    assert f"-a{_fmt_scale(p.patch_scale)}" in args
+    if abs(p.patch_scale - 1.0) > 0.01:                   # -a only when non-default
+        assert f"-a{_fmt_scale(p.patch_scale)}" in args
     assert "-r" not in args           # charts are randomised
     # -m is emitted alongside -M only when the margin differs from the default 6.
     if p.margin != 6:
@@ -138,7 +155,7 @@ def test_seeded_command_matches_recipe(qapp, settings, key):
 def test_widegamut_preset_uses_its_own_ti1_and_count(qapp, settings):
     # #58: a Wide-gamut preset bundles its OWN .ti1 (not the shared TC9.18 set),
     # and its reuse info box reports that preset's patch count, not 1168.
-    key = "__chromiq_knut_wg_cm_a3_2016_4p__"
+    key = "__chromiq_knut_wg_colormunki_a3_2016p_4pages_portrait__"
     p = KNUT_PRESETS_BY_KEY[key]
     assert p.ti1_asset != KNUT_TI1_ASSET
     assert p.patches == 2016

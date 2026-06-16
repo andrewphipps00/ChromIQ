@@ -137,14 +137,14 @@ def test_dropdown_lists_only_presets_with_recipe(qapp, monkeypatch):
 def test_builtin_widegamut_recipes_appear_starred(qapp):
     d = _NewChartDialog(Path("/x"), _FakeSettings())
     starred = [n for n in d._preset_recipes if n.startswith("★")]
-    assert len(starred) == 4
+    assert len(starred) == 11   # Knut's exported charts that carry a recipe (#63)
     assert any("A4-924p" in n for n in starred)
 
 
 def test_custom_identical_to_builtin_is_skipped(qapp, monkeypatch):
     import json, core.preset_store as ps
     from core.resource_path import resource_path
-    name = "A4-924p-2pages-Portrait"
+    name = "i1Pro A4-924p-2pages-Portrait"
     rec = json.loads(resource_path(
         "assets/charts/knut/rgb/widegamut/recipes.json").read_text())[name]
     monkeypatch.setattr(ps, "load_presets", lambda tab, settings=None:
@@ -156,7 +156,7 @@ def test_custom_identical_to_builtin_is_skipped(qapp, monkeypatch):
 
 def test_custom_differing_from_builtin_is_kept(qapp, monkeypatch):
     import core.preset_store as ps
-    name = "A4-924p-2pages-Portrait"
+    name = "i1Pro A4-924p-2pages-Portrait"
     monkeypatch.setattr(ps, "load_presets", lambda tab, settings=None:
                         {name: {"editor_recipe": {"mode": "generate",
                                                   "sp": {"cube_n": 3}}}})
