@@ -284,7 +284,20 @@ class SoftproofDialog(QDialog):
         self._intent_combo.addItem(tr("Absolute colorimetric"), "a")
         grid.addWidget(self._intent_combo, 1, 1)
 
-        grid.addWidget(QLabel(tr("Out-of-gamut ΔE:"), self), 2, 0)
+        # Simulate paper white (absolute colorimetric), directly under Intent:
+        # show the paper's actual off-white instead of mapping it to display
+        # white. Overrides the intent for the preview, so grey the intent while
+        # it's on.
+        self._paper_white_cb = QCheckBox(tr("Simulate paper white"), self)
+        self._paper_white_cb.setToolTip(
+            tr("Render the preview with the paper's actual (often cream) white "
+               "instead of bright display white — a more realistic proof. The "
+               "out-of-gamut figure is unaffected."))
+        self._paper_white_cb.toggled.connect(
+            lambda on: self._intent_combo.setEnabled(not on))
+        grid.addWidget(self._paper_white_cb, 2, 1)
+
+        grid.addWidget(QLabel(tr("Out-of-gamut ΔE:"), self), 3, 0)
         self._threshold_spin = NoScrollDoubleSpinBox(self)
         self._threshold_spin.setRange(0.5, 20.0)
         self._threshold_spin.setSingleStep(0.5)
@@ -295,20 +308,20 @@ class SoftproofDialog(QDialog):
         thr_wrap.setContentsMargins(0, 0, 0, 0)
         thr_wrap.addWidget(self._threshold_spin)
         thr_wrap.addStretch(1)
-        grid.addLayout(thr_wrap, 2, 1)
+        grid.addLayout(thr_wrap, 3, 1)
         grid.addWidget(TooltipButton(
             tr("Out-of-gamut sensitivity"),
             tr("A pixel counts as out of gamut when the printer would shift its colour by "
                "more than this ΔE. Lower = stricter (flags more pixels); 2 is a good "
                "default. The mark colour is what those pixels are painted in the preview."),
-            self, min_width=460, color=_ACCENT), 2, 2)
+            self, min_width=460, color=_ACCENT), 3, 2)
 
-        grid.addWidget(QLabel(tr("Mark colour:"), self), 3, 0)
+        grid.addWidget(QLabel(tr("Mark colour:"), self), 4, 0)
         self._highlight_combo = NoScrollComboBox(self)
         self._highlight_combo.addItem(tr("Grey"), "gray")
         self._highlight_combo.addItem(tr("Magenta"), "magenta")
         self._highlight_combo.addItem(tr("Cyan"), "cyan")
-        grid.addWidget(self._highlight_combo, 3, 1)
+        grid.addWidget(self._highlight_combo, 4, 1)
         self._left.addLayout(grid)
 
         # v4 / advisory banner
@@ -547,6 +560,7 @@ class SoftproofDialog(QDialog):
             intent=self._intent_combo.currentData(),
             threshold=self._threshold_spin.value(),
             highlight=self._highlight_combo.currentData(),
+            paper_white=self._paper_white_cb.isChecked(),
             display_profile=self._display_path,
         )
         self._softproof.run(params)

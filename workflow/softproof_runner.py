@@ -186,6 +186,7 @@ class SoftproofParams:
     threshold: float = 2.0          # ΔE above which a pixel is "out of gamut"
     highlight: str = "gray"
     display_profile: Path | None = None  # monitor profile for a truer on-screen proof
+    paper_white: bool = False       # simulate the paper's white (absolute colorimetric)
 
 
 class SoftproofRunner(QObject):
@@ -223,51 +224,73 @@ class SoftproofRunner(QObject):
                 "Check that the ArgyllCMS 'ref' folder is present next to its 'bin'."))
             return
 
-        # Pass 1: reference Lab (image's own colorimetry).
+        # Pass 1: reference Lab (image's own colorimetry), relative colorimetric.
         self._ref_tif = self._work / "ref_lab.tif"
         self._run_cctiff(
             [str(self._source_profile), str(self._input_tif), str(self._ref_tif)],
-            self._on_ref_done)
+            self._on_ref_done, intent="r")
 
     # ------------------------------------------------------------------
-    def _run_cctiff(self, tail_args: list[str], done: Callable[[int], None]) -> None:
-        # -i before the relevant profile; we apply the same intent to every
-        # profile in the chain for a consistent proof.
-        args: list[str] = []
-        intent = self._params.intent or "r"
-        # tail_args = [prof, (prof, prof,) input, output]; prefix -i to each prof.
+    def _run_cctiff(self, tail_args: list[str], done: Callable[[int], None],
+                    intent: str) -> None:
+        # -i before each profile in the chain (tail_args =
+        # [prof, (prof, prof,) input, output]).
         rebuilt: list[str] = []
         for a in tail_args:
             if a.endswith(".icm") or a.endswith(".icc"):
                 rebuilt += ["-i", intent, a]
             else:
                 rebuilt.append(a)
-        args = rebuilt
-        log.info("cctiff: %s", " ".join(args))
-        self._runner.run("cctiff", args, self._work, on_line=lambda _l: None,
+        log.info("cctiff: %s", " ".join(rebuilt))
+        self._runner.run("cctiff", rebuilt, self._work, on_line=lambda _l: None,
                          on_finish=done)
 
     def _on_ref_done(self, code: int) -> None:
         if code != 0 or not self._ref_tif.exists():
             self.error.emit(tr("cctiff failed while reading the image (code {c}).").format(c=code))
             return
-        # Pass 2 (deferred so QProcess is fully torn down): proof Lab.
-        QTimer.singleShot(0, self._run_proof)
+        # Pass 2 (deferred so QProcess is fully torn down): the out-of-gamut
+        # proof — ALWAYS relative colorimetric, so the % out of gamut measures
+        # gamut clipping regardless of the preview intent / paper-white choice.
+        QTimer.singleShot(0, self._run_oog_proof)
 
-    def _run_proof(self) -> None:
-        self._proof_tif = self._work / "proof_lab.tif"
+    def _run_oog_proof(self) -> None:
+        self._proof_oog_tif = self._work / "proof_oog_lab.tif"
         p = str(self._params.printer_profile)
         self._run_cctiff(
-            [str(self._source_profile), p, p, str(self._input_tif), str(self._proof_tif)],
-            self._on_proof_done)
+            [str(self._source_profile), p, p, str(self._input_tif), str(self._proof_oog_tif)],
+            self._on_oog_done, intent="r")
 
-    def _on_proof_done(self, code: int) -> None:
-        if code != 0 or not self._proof_tif.exists():
+    def _on_oog_done(self, code: int) -> None:
+        if code != 0 or not self._proof_oog_tif.exists():
             self.error.emit(tr("cctiff failed while simulating the print (code {c}). "
                                "Is the printer profile ICC v2?").format(c=code))
             return
-        # Optional truer on-screen proof: render the proof Lab through the
-        # monitor profile (Lab → display RGB) instead of the approximate sRGB.
+        # The preview proof: absolute colorimetric when simulating paper white
+        # (shows the media's actual off-white), else the chosen intent. Reuse the
+        # relative OOG proof when they coincide (no second cctiff pass).
+        self._preview_intent = "a" if self._params.paper_white else (self._params.intent or "r")
+        if self._preview_intent == "r":
+            self._proof_preview_tif = self._proof_oog_tif
+            QTimer.singleShot(0, self._after_preview_proof)
+        else:
+            self._proof_preview_tif = self._work / "proof_preview_lab.tif"
+            p = str(self._params.printer_profile)
+            QTimer.singleShot(0, lambda: self._run_cctiff(
+                [str(self._source_profile), p, p, str(self._input_tif),
+                 str(self._proof_preview_tif)],
+                self._on_preview_proof_done, intent=self._preview_intent))
+
+    def _on_preview_proof_done(self, code: int) -> None:
+        if code != 0 or not self._proof_preview_tif.exists():
+            self.error.emit(tr("cctiff failed while simulating the print (code {c}). "
+                               "Is the printer profile ICC v2?").format(c=code))
+            return
+        self._after_preview_proof()
+
+    def _after_preview_proof(self) -> None:
+        # Optional truer on-screen proof: render the PREVIEW proof Lab through
+        # the monitor profile (Lab → display RGB) instead of the approximate sRGB.
         disp = self._params.display_profile
         if disp is not None and disp.exists():
             from workflow.icc_info import is_v4
@@ -278,8 +301,8 @@ class SoftproofRunner(QObject):
                 self._display_tif = self._work / "proof_display.tif"
                 self._display_note = tr(" (rendered for your monitor profile)")
                 QTimer.singleShot(0, lambda: self._run_cctiff(
-                    [str(disp), str(self._proof_tif), str(self._display_tif)],
-                    self._on_display_done))
+                    [str(disp), str(self._proof_preview_tif), str(self._display_tif)],
+                    self._on_display_done, intent="r"))
         else:
             self._display_note = ""
             self._finish_compute(None)
@@ -300,27 +323,31 @@ class SoftproofRunner(QObject):
 
     # ------------------------------------------------------------------
     def _compute(self, display_rgb: Path | None = None) -> SoftproofResult:
+        # Out of gamut from the relative-colorimetric proof vs the image's own Lab.
         ref = _decode_lab_tiff(self._ref_tif)
-        proof = _decode_lab_tiff(self._proof_tif)
-        h = min(ref.shape[0], proof.shape[0])
-        w = min(ref.shape[1], proof.shape[1])
-        ref, proof = ref[:h, :w], proof[:h, :w]
-
-        de = np.sqrt(((ref - proof) ** 2).sum(-1))
+        oog_proof = _decode_lab_tiff(self._proof_oog_tif)
+        h = min(ref.shape[0], oog_proof.shape[0])
+        w = min(ref.shape[1], oog_proof.shape[1])
+        de = np.sqrt(((ref[:h, :w] - oog_proof[:h, :w]) ** 2).sum(-1))
         mask = de > self._params.threshold
         oog_percent = 100.0 * float(mask.mean())
 
         # Soft-proof preview: rendered through the monitor profile if one was
-        # given (truer proof), otherwise proof Lab → sRGB (approximate proof).
+        # given (truer proof), otherwise the preview proof Lab → sRGB (which is
+        # absolute colorimetric — paper white — when that option is on).
         if display_rgb is not None:
             disp_img = Image.open(display_rgb)
             if disp_img.mode != "RGB":
                 disp_img = disp_img.convert("RGB")
-            srgb = np.asarray(disp_img)[:proof.shape[0], :proof.shape[1]]
-            if srgb.shape[:2] != mask.shape:
-                mask = mask[:srgb.shape[0], :srgb.shape[1]]
+            srgb = np.asarray(disp_img)
         else:
-            srgb = lab_d50_to_srgb_array(proof)
+            srgb = lab_d50_to_srgb_array(_decode_lab_tiff(self._proof_preview_tif))
+        # The preview and the OOG mask can differ by a pixel after separate
+        # cctiff passes — clip both to the common size before compositing.
+        ph = min(srgb.shape[0], mask.shape[0])
+        pw = min(srgb.shape[1], mask.shape[1])
+        srgb = srgb[:ph, :pw]
+        mask = mask[:ph, :pw]
         proof_path = self._work / "proof_preview.tif"
         Image.fromarray(srgb, "RGB").save(proof_path, compression="tiff_lzw")
 
