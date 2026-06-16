@@ -1,5 +1,23 @@
 # Changelog
 
+## v3.10.9
+
+More polish from **Knut (@soul-traveller)**'s testing. 🙏
+
+### 🔧 Changed
+- **Read single patches: one tidy button row.** Start session, Take reading and
+  Clear now sit together on the left of the bottom button row (with Save and
+  Close on the right), instead of a separate row above the table. The results
+  table also gives the Name column more room, keeps the L*a*b*/XYZ value columns
+  compact, and shows a slightly larger, taller colour swatch.
+
+### 🐛 Fixed
+- **Tool windows no longer overlap their own controls when made shorter.** When
+  you dragged the Average measurements, Merge measurements, the TI1 ↔ i1Profiler
+  converters, or the Verify windows to a smaller height, buttons could slide over
+  the fields above them and options squished together. Those windows now stop
+  shrinking at the point where everything still fits.
+
 ## v3.10.8
 
 ### 🔧 Changed
