@@ -154,11 +154,18 @@ class SpotReadDialog(QDialog):
             tr("X"), tr("Y"), tr("Z"), tr("Colour"),
         ])
         self._table.verticalHeader().setVisible(False)
+        # Taller rows so each cell — especially the Colour swatch — has more
+        # breathing room.
+        self._table.verticalHeader().setDefaultSectionSize(34)
         self._table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         hdr = self._table.horizontalHeader()
-        hdr.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        # Name takes a modest fixed-ish width (interactive, so it can be dragged);
+        # the remaining columns stretch to share the rest evenly instead of Name
+        # hogging all the free space.
+        hdr.setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive)
+        self._table.setColumnWidth(0, 150)
         for c in range(1, 8):
-            hdr.setSectionResizeMode(c, QHeaderView.ResizeMode.ResizeToContents)
+            hdr.setSectionResizeMode(c, QHeaderView.ResizeMode.Stretch)
         self._table.itemChanged.connect(self._on_item_changed)
         outer.addWidget(self._table, 1)
 

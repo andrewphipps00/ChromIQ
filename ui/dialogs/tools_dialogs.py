@@ -333,13 +333,21 @@ class _ToolDialogBase(QDialog):
         avail = target_w - margins.left() - margins.right()
         self._body.setMinimumHeight(max(0, self._body.heightForWidth(avail)))
 
+        # Recompute the layout's minimum *after* the body's height is pinned, or
+        # minimumSize() still reflects the un-wrapped (one-line) body height and
+        # the floor comes out too low.
+        layout.activate()
         hint  = layout.sizeHint()
         floor = layout.minimumSize()
         screen = self.screen() or QGuiApplication.primaryScreen()
         cap_h = (int(screen.availableGeometry().height() * 0.9)
                  if screen is not None else hint.height())
-        self.setMinimumHeight(min(floor.height(), cap_h))
-        self.resize(target_w, min(hint.height(), cap_h))
+        # The minimum is the layout's floor (where every widget is at its own
+        # minimum) — never below it, or the user could drag the window short
+        # enough for rows to overlap. Only the *opening* size is capped to the
+        # screen; the floor itself isn't, so it stays overlap-free.
+        self.setMinimumHeight(floor.height())
+        self.resize(target_w, max(floor.height(), min(hint.height(), cap_h)))
 
     # ------------------------------------------------------------------
     def _refit_height(self) -> None:
@@ -358,8 +366,8 @@ class _ToolDialogBase(QDialog):
         screen = self.screen() or QGuiApplication.primaryScreen()
         cap_h = (int(screen.availableGeometry().height() * 0.9)
                  if screen is not None else hint.height())
-        self.setMinimumHeight(min(floor.height(), cap_h))
-        self.resize(self.width(), min(hint.height(), cap_h))
+        self.setMinimumHeight(floor.height())  # never below the no-overlap floor
+        self.resize(self.width(), max(floor.height(), min(hint.height(), cap_h)))
 
     # ------------------------------------------------------------------
     # Subclass hooks
