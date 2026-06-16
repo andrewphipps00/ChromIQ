@@ -29,6 +29,7 @@ def pin_min_height(
     dialog: QDialog,
     *,
     min_width: int = 0,
+    min_height: int = 0,
     wrap_labels: tuple[QLabel, ...] | list[QLabel] = (),
     inner_margins: QMargins | None = None,
     resize_width: bool = False,
@@ -41,6 +42,10 @@ def pin_min_height(
     available width is computed correctly). When ``resize_width`` is True the
     dialog is also widened to its natural width (use on first show); otherwise
     only the height is adjusted (use on dynamic refits).
+
+    ``min_height`` is a platform-independent hard floor: the dialog is never
+    pinned below it even when font metrics make the layout's own floor come out
+    a few pixels shorter (e.g. Windows vs macOS).
 
     Returns the height the dialog was resized to.
     """
@@ -59,6 +64,7 @@ def pin_min_height(
     layout.activate()
     hint = layout.sizeHint()
     floor = layout.minimumSize()
+    floor_h = max(floor.height(), min_height)
 
     screen = dialog.screen() or QGuiApplication.primaryScreen()
     cap_h = (int(screen.availableGeometry().height() * 0.9)
@@ -66,8 +72,8 @@ def pin_min_height(
 
     # Never below the floor (overlap-free); only the opening size is capped to
     # the screen so the floor itself stays overlap-free even on small screens.
-    dialog.setMinimumHeight(floor.height())
-    open_h = max(floor.height(), min(hint.height(), cap_h))
+    dialog.setMinimumHeight(floor_h)
+    open_h = max(floor_h, min(hint.height(), cap_h))
     if resize_width:
         dialog.resize(target_w, open_h)
     else:

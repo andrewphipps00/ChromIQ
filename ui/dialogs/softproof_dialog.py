@@ -429,7 +429,8 @@ class SoftproofDialog(QDialog):
     def showEvent(self, event) -> None:  # noqa: N802
         super().showEvent(event)
         pin_min_height(
-            self, min_width=1180, wrap_labels=(self._body, self._banner, self._status),
+            self, min_width=1180, min_height=600,
+            wrap_labels=(self._body, self._banner, self._status),
             inner_margins=self._inner.contentsMargins(), resize_width=True)
 
     # ------------------------------------------------------------------
