@@ -1772,8 +1772,12 @@ class _NewChartDialog(QDialog):
         self._gen_fill_count.setText(_patches_label(fill_n))
         if self._gen_fill.isChecked():
             total += fill_n
+        # Show the chart's final size (existing patches + the generated
+        # additions), matching the cube and the authoritative built-program
+        # total below. This estimate shows instantly; _do_push_live_preview
+        # then refreshes it from the real built program ~300 ms later (#60).
         self._gen_total.setText(tr("Total: {label}").format(
-            label=_patches_label(total)))
+            label=_patches_label(len(self._existing_patches) + total)))
         # Keep the embedded live cube in step with the colour-set controls.
         self._push_live_preview()
 
@@ -1975,12 +1979,16 @@ class _NewChartDialog(QDialog):
         # reflects reality rather than a stale generated view.
         program = (self._build_generated_program()
                    if self._gen_sets_active() else [])
-        # The total reflects the ACTUAL built program. The per-set count
-        # estimates can drift from it when the chart's existing patches come
-        # from elsewhere (e.g. a preset's .ti1, whose white/black structure the
-        # estimate can't see), so the live total + the cube agree (#60).
+        # The total reflects the ACTUAL built program PLUS the chart's existing
+        # patches — i.e. the chart's final size, exactly what the cube shows
+        # (it draws `program` on top of `existing`). Dropping the existing count
+        # made the Add window read 0 with generate off, and excluded the
+        # white/black + fill the build adds (#60). The built program is used
+        # rather than the per-set estimate, which can't see the white/black
+        # structure of existing patches that came from elsewhere (a preset .ti1).
+        total = len(self._existing_patches) + len(program)
         self._gen_total.setText(tr("Total: {label}").format(
-            label=_patches_label(len(program))))
+            label=_patches_label(total)))
         if getattr(self, "_cube_panel", None) is not None and self._cube_shown:
             self._cube_panel.set_program(program, self._existing_patches)
 
@@ -5001,11 +5009,41 @@ class Ti2RelayoutDialog(QDialog):
         self._clear_undo_history()
         self.accept()
 
+    def _suggest_chart_name(self) -> str:
+        """A descriptive default name from the chart's printtarg settings, e.g.
+        ``i1Pro-A4-480p-2pages-Landscape`` (#62). Used when no target name was
+        carried into the editor. Tokens are kept as fixed ASCII identifiers (not
+        translated) so the suggested name is a stable, filename-safe handle."""
+        if self._spec is None:
+            return "chart"
+        instr = {"i1": "i1Pro", "CM": "ColorMunki", "3p": "i1Pro3Plus",
+                 "SS": "SpectroScan"}.get(self._spec.instrument_flag,
+                                          self._spec.instrument_flag or "chart")
+        paper = self._spec.paper_flag or "paper"
+        parts = [instr, paper, f"{self._grid.count()}p"]
+        pages = len(self._regen.tiffs) if self._regen is not None else 0
+        if pages:
+            parts.append("1page" if pages == 1 else f"{pages}pages")
+        w, h = self._spec.paper_mm
+        if w and h:
+            parts.append("Landscape" if w > h else "Portrait")
+        return "-".join(parts)
+
+    def _default_apply_name(self) -> str:
+        """The pre-filled Save & apply name: the target name carried through the
+        editor when there is one, else a suggestion from the settings (#62)."""
+        base = (self._basename or "").strip()
+        if base and base != "chart":
+            return base
+        return self._suggest_chart_name()
+
     def _prompt_apply_name(self) -> str | None:
         """Friendly explanation + name field for Save & apply.
 
         Returns a file/folder-safe profile name, or None if cancelled. The field
-        is pre-filled with the name carried through the editor.
+        is pre-filled with the target name carried through the editor, or — when
+        the chart was built fresh here — a name suggested from its printtarg
+        settings. A "Suggest name" button refills that suggestion (#62).
         """
         dlg = QDialog(self)
         dlg.setWindowTitle(tr("Save & apply this chart"))
@@ -5042,9 +5080,16 @@ class Ti2RelayoutDialog(QDialog):
 
         name_row = QHBoxLayout()
         name_row.addWidget(QLabel(tr("Profile name:"), dlg))
-        name_edit = QLineEdit(self._basename or "chart", dlg)
+        name_edit = QLineEdit(self._default_apply_name(), dlg)
         name_edit.selectAll()
         name_row.addWidget(name_edit, 1)
+        suggest_btn = QPushButton(tr("Suggest name"), dlg)
+        suggest_btn.setToolTip(tr("Fill in a name based on the instrument, paper, "
+                                  "patch count, pages and orientation."))
+        suggest_btn.clicked.connect(
+            lambda: (name_edit.setText(self._suggest_chart_name()),
+                     name_edit.selectAll()))
+        name_row.addWidget(suggest_btn)
         lay.addLayout(name_row)
 
         bb = QDialogButtonBox(dlg)

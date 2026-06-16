@@ -3533,7 +3533,15 @@ class TabChart(QWidget):
         if self._bit16_radio is not None and self._bit8_radio is not None:
             (self._bit16_radio if opts.tiff_16bit
              else self._bit8_radio).setChecked(True)
-        # Strip-reader / density booleans.
+        # Triple density FIRST: its toggle handler re-applies the canonical
+        # i1Pro-layout preset (-a1.3 / -m5 / -P / -L), so it must run *before* the
+        # margin / patch-scale / spacer / -L / -P rows below — otherwise it would
+        # clobber the editor's real values with the TD defaults. Knut's #45: a
+        # triple-density chart laid out at margin 6 / patch-scale 1.06 came back
+        # as margin 5 / 1.30 because TD ran last and overwrote them.
+        if self._manual_td_check is not None:
+            self._manual_td_check.setChecked(bool(opts.triple_density))
+        # Strip-reader / density booleans (override any TD preset above).
         self._set_manual_value("printtarg", "-L", opts.suppress_left_clip)
         self._set_manual_value("printtarg", "-P", opts.no_strip_limit)
         self._set_manual_value("printtarg", "-h", opts.double_density)
@@ -3545,7 +3553,9 @@ class TabChart(QWidget):
         # fixed-order files verbatim and the chart is never randomised (the
         # randomisation only appeared as a side effect of toggling another knob).
         self._set_manual_value("printtarg", "-r", True)
-        # Scalar expert rows: set+enable only when non-default, else reset.
+        # Scalar expert rows: set+enable only when non-default, else reset. These
+        # run last so the chart's actual patch/spacer scale and margin win over
+        # the triple-density preset applied above.
         if abs(opts.patch_scale - 1.0) > 0.01:
             self._set_manual_value("printtarg", "-a", opts.patch_scale)
         else:
@@ -3558,11 +3568,6 @@ class TabChart(QWidget):
         # enabled even at the default 6 mm. Suppressing it left the Create Chart
         # margin row unticked after Save & apply, reading as "no margin set" (#61).
         self._set_manual_value("printtarg", "-m", opts.margin_mm)
-        # Triple density last: its toggle handler re-applies the canonical
-        # i1Pro-layout preset (-a1.3 / -m5 / -P / -L) matching how the chart was
-        # rendered, and is a no-op when off.
-        if self._manual_td_check is not None:
-            self._manual_td_check.setChecked(bool(opts.triple_density))
 
     def _targen_signature(self) -> list:
         """Snapshot of every targen-affecting control.
