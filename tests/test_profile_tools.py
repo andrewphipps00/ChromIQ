@@ -192,6 +192,26 @@ def test_test_target_button_loads_with_embedded_source():
     dlg.close()
 
 
+def test_paper_white_margin_tinted_only_when_proof_shown(monkeypatch):
+    from ui.dialogs.softproof_dialog import SoftproofDialog
+    from workflow.softproof_runner import SoftproofResult
+    dlg = SoftproofDialog(_runner(), _Settings())
+    # Stub the async image load so the test is deterministic — we only assert the
+    # synchronously-set margin colour.
+    monkeypatch.setattr(dlg._preview, "load_tiff", lambda *a, **k: None)
+    dlg._result = SoftproofResult(
+        proof_path="x", highlight_path="x", original_path="x",
+        oog_percent=1.0, source_note="", paper_white_rgb=(240, 235, 220))
+    dlg._softproof_cb.setChecked(True)
+    dlg._refresh_preview()
+    assert dlg._preview._frame_color.getRgb()[:3] == (240, 235, 220)  # paper tint
+    dlg._softproof_cb.setChecked(False)
+    dlg._refresh_preview()
+    assert dlg._preview._frame_color.getRgb()[:3] == (255, 255, 255)  # original → white
+    dlg._teardown_webengine()
+    dlg.close()
+
+
 def test_softproof_v4_printer_blocks_run(tmp_path: Path):
     from ui.dialogs.softproof_dialog import SoftproofDialog
     p = tmp_path / "v4printer.icc"

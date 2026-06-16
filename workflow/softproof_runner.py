@@ -168,6 +168,7 @@ class SoftproofResult:
     original_path: str       # the loaded image (for the soft-proof on/off toggle)
     oog_percent: float       # % of pixels out of gamut
     source_note: str         # how the source space was determined
+    paper_white_rgb: tuple[int, int, int] | None = None  # simulated paper white (margin tint)
 
 
 _HIGHLIGHTS = {
@@ -289,6 +290,33 @@ class SoftproofRunner(QObject):
         self._after_preview_proof()
 
     def _after_preview_proof(self) -> None:
+        # When simulating paper white, derive the paper's white colour (the
+        # printer's media white, absolute) so the preview margin can be tinted
+        # with it — render a pure-white source patch through the proof chain.
+        if self._params.paper_white:
+            self._white_in = self._work / "white_in.tif"
+            Image.new("RGB", (16, 16), (255, 255, 255)).save(self._white_in)
+            self._white_proof = self._work / "white_proof_lab.tif"
+            p = str(self._params.printer_profile)
+            QTimer.singleShot(0, lambda: self._run_cctiff(
+                [str(self._source_profile), p, p, str(self._white_in),
+                 str(self._white_proof)], self._on_white_done, intent="a"))
+        else:
+            self._paper_white_rgb = None
+            self._render_or_finish()
+
+    def _on_white_done(self, code: int) -> None:
+        self._paper_white_rgb = None
+        if code == 0 and self._white_proof.exists():
+            try:
+                lab = _decode_lab_tiff(self._white_proof).reshape(-1, 3).mean(0)
+                rgb = lab_d50_to_srgb_array(lab.reshape(1, 1, 3))[0, 0]
+                self._paper_white_rgb = tuple(int(v) for v in rgb)
+            except (OSError, ValueError):
+                pass
+        self._render_or_finish()
+
+    def _render_or_finish(self) -> None:
         # Optional truer on-screen proof: render the PREVIEW proof Lab through
         # the monitor profile (Lab → display RGB) instead of the approximate sRGB.
         disp = self._params.display_profile
@@ -366,4 +394,5 @@ class SoftproofRunner(QObject):
             original_path=str(self._input_tif),
             oog_percent=oog_percent,
             source_note=self._source_note + getattr(self, "_display_note", ""),
+            paper_white_rgb=getattr(self, "_paper_white_rgb", None),
         )

@@ -252,6 +252,7 @@ class TiffPreview(QWidget):
         self._bidirectional: bool = False
         self._stripe_rects: list[QRect] = []
         self._pixmap: QPixmap | None = None
+        self._frame_color = QColor(Qt.GlobalColor.white)   # the margin around the image
         self._ink_channels: list[str] | None = None
         self._mode: str = "dark"
         self._refresh_timer = QTimer(self)
@@ -341,6 +342,13 @@ class TiffPreview(QWidget):
         """Set the small ALL-CAPS caption above the preview (e.g. 'PRINT PREVIEW')."""
         self._caption_lbl.setText(text)
         self._caption_lbl.setVisible(bool(text))
+
+    def set_frame_color(self, color: "QColor | None") -> None:
+        """Tint the margin drawn around the image (e.g. to the simulated paper
+        white). ``None`` restores plain white. Repaints if an image is shown."""
+        self._frame_color = QColor(color) if color is not None else QColor(Qt.GlobalColor.white)
+        if self._pixmap:
+            self._repaint_label()
 
     def set_navigation_visible(self, visible: bool) -> None:
         """Hide the page count + Prev/Next bar for single-image use (e.g. the
@@ -628,7 +636,7 @@ class TiffPreview(QWidget):
         canvas = QPixmap(scaled.width() + int(2 * B * dpr),
                          scaled.height() + int(2 * B * dpr))
         canvas.setDevicePixelRatio(dpr)
-        canvas.fill(Qt.GlobalColor.white)
+        canvas.fill(self._frame_color)
 
         # Painter coordinates are logical (canvas has DPR set)
         painter = QPainter(canvas)

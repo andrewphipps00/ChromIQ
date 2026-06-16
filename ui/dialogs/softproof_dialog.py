@@ -590,6 +590,10 @@ class SoftproofDialog(QDialog):
             path = (self._result.highlight_path if self._highlight_cb.isChecked()
                     else self._result.proof_path)
             self._preview.set_caption(tr("APPROXIMATE SOFT-PROOF"))
+        # Tint the margin to the simulated paper white — but only while the
+        # (paper-white) soft-proof is shown; the original image keeps plain white.
+        pw = self._result.paper_white_rgb if show_proof else None
+        self._preview.set_frame_color(QColor(*pw) if pw else None)
         self._preview.load_tiff([Path(path)])
 
     # ------------------------------------------------------------------
