@@ -16,6 +16,7 @@ from PyQt6.QtWidgets import QApplication
 
 from workflow.spot_read_io import (
     SpotReading,
+    average_readings,
     lab_d50_to_srgb,
     write_csv,
     write_ti3,
@@ -176,6 +177,22 @@ def test_write_csv_round_trips(tmp_path: Path):
     assert rows[1].startswith("White,100.0000,0.0000,0.0000,")
     assert rows[1].endswith("#ffffff")
     assert len(rows) == 3
+
+
+def test_average_readings_means_xyz_and_lab():
+    r1 = SpotReading("A", xyz=(30.0, 32.0, 74.0), lab=(60.0, -8.0, -30.0))
+    r2 = SpotReading("B", xyz=(32.0, 34.0, 76.0), lab=(62.0, -6.0, -28.0))
+    avg = average_readings([r1, r2], "Average")
+    assert avg.name == "Average"
+    assert avg.xyz == pytest.approx((31.0, 33.0, 75.0))
+    assert avg.lab == pytest.approx((61.0, -7.0, -29.0))
+    # swatch hex is derived, so an averaged entry shows a colour like any reading
+    assert avg.hex.startswith("#") and len(avg.hex) == 7
+
+
+def test_average_readings_empty_raises():
+    with pytest.raises(ValueError):
+        average_readings([], "Average")
 
 
 def test_write_ti3_is_valid_cgats(tmp_path: Path):

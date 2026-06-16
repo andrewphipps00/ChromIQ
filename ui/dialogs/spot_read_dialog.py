@@ -40,7 +40,7 @@ from ui.dialogs.tools_dialogs import _indicator_color, neutral_controls_qss
 from ui.styles import SPEC_GREEN
 from ui.tab_header import dialog_masthead
 from ui.widgets import NoScrollComboBox, tint_dialog_primary
-from workflow.spot_read_io import SpotReading, write_csv, write_ti3
+from workflow.spot_read_io import SpotReading, average_readings, write_csv, write_ti3
 from workflow.spot_read_manager import SpotReadManager, SpotReadParams
 
 if TYPE_CHECKING:
@@ -155,6 +155,7 @@ class SpotReadDialog(QDialog):
         hdr.setSectionResizeMode(7, QHeaderView.ResizeMode.Interactive)
         self._table.setColumnWidth(7, 128)          # Colour swatch (bigger)
         self._table.itemChanged.connect(self._on_item_changed)
+        self._table.itemSelectionChanged.connect(self._update_average_btn)
         outer.addWidget(self._table, 1)
 
         # --- Bottom buttons ------------------------------------------------
@@ -172,6 +173,14 @@ class SpotReadDialog(QDialog):
         self._read_btn.setEnabled(False)
         self._read_btn.clicked.connect(self._manager.take_reading)
         bottom.addWidget(self._read_btn)
+
+        self._avg_btn = QPushButton(tr("Average selected"), self)
+        self._avg_btn.setEnabled(False)
+        self._avg_btn.setToolTip(
+            tr("Select two or more readings, then average them into a new entry.")
+        )
+        self._avg_btn.clicked.connect(self._on_average_selected)
+        bottom.addWidget(self._avg_btn)
 
         self._clear_btn = QPushButton(tr("Clear"), self)
         self._clear_btn.setEnabled(False)
@@ -288,11 +297,32 @@ class SpotReadDialog(QDialog):
         if 0 <= row < len(self._readings):
             self._readings[row].name = item.text()
 
+    def _selected_rows(self) -> list[int]:
+        return sorted({idx.row() for idx in self._table.selectionModel().selectedRows()})
+
+    def _update_average_btn(self) -> None:
+        self._avg_btn.setEnabled(len(self._selected_rows()) >= 2)
+
+    def _on_average_selected(self) -> None:
+        rows = self._selected_rows()
+        if len(rows) < 2:
+            return
+        averaged = average_readings([self._readings[r] for r in rows], tr("Average"))
+        self._readings.append(averaged)
+        self._append_row(averaged)
+        self._save_btn.setEnabled(True)
+        self._clear_btn.setEnabled(True)
+        self._set_status(
+            tr("Averaged {n} readings: L* {l:.1f}  a* {a:.1f}  b* {b:.1f}").format(
+                n=len(rows), l=averaged.lab[0], a=averaged.lab[1], b=averaged.lab[2])
+        )
+
     def _on_clear(self) -> None:
         self._readings.clear()
         self._table.setRowCount(0)
         self._save_btn.setEnabled(False)
         self._clear_btn.setEnabled(False)
+        self._avg_btn.setEnabled(False)
 
     def _on_save(self) -> None:
         if not self._readings:

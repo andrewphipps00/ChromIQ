@@ -72,6 +72,20 @@ def _lab_to_xyz_d50(L: float, a: float, b: float) -> tuple[float, float, float]:
     return xr * _D50[0], yr * _D50[1], zr * _D50[2]
 
 
+def average_readings(readings: list["SpotReading"], name: str) -> "SpotReading":
+    """Average several readings into one. Both XYZ (used for the .ti3/CSV) and
+    Lab (used for the on-screen swatch) are averaged component-wise — spotread
+    reports both for every reading, so the mean Lab is taken straight from the
+    measured Labs rather than reconstructed from XYZ (whose scale we don't pin).
+    Raises ``ValueError`` if ``readings`` is empty."""
+    if not readings:
+        raise ValueError("no readings to average")
+    n = len(readings)
+    xyz = tuple(sum(r.xyz[i] for r in readings) / n for i in range(3))
+    lab = tuple(sum(r.lab[i] for r in readings) / n for i in range(3))
+    return SpotReading(name=name, xyz=xyz, lab=lab)
+
+
 def _mul(m: tuple, v: tuple[float, float, float]) -> tuple[float, float, float]:
     return tuple(row[0] * v[0] + row[1] * v[1] + row[2] * v[2] for row in m)  # type: ignore[return-value]
 
