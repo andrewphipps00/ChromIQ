@@ -1,5 +1,24 @@
 # Changelog
 
+## v3.10.12
+
+More fixes from **Knut (@soul-traveller)**'s testing. 🙏
+
+### 🐛 Fixed
+- **Add window: the total counts the right thing.** It now shows how many
+  patches the selected colour sets would add (the ticked sets plus Pure white &
+  black and Fill remaining gaps) and shows it even when "Generate colour sets"
+  is off — matching the per-set counts beside each option. (#60)
+- **Saving a preset with an existing name always asks to overwrite.** A name
+  pasted with an invisible character (e.g. a zero-width space) could slip past
+  the check and create a duplicate; names are now normalised before comparing,
+  so look-alike names match. (#59)
+
+### ✨ Added
+- **"Suggest name" in Create Chart.** The Target name field now has a
+  Suggest-name button (instrument · paper · pages), like the one in the layout
+  editor's Save & apply. (#62)
+
 ## v3.10.11
 
 Two new Tools, plus more fixes from **Knut (@soul-traveller)**'s testing. 🙏
