@@ -1,5 +1,38 @@
 # Changelog
 
+## v3.10.11
+
+Two new Tools, plus more fixes from **Knut (@soul-traveller)**'s testing. 🙏
+
+### ✨ Added
+- **New tool — Inspect a profile.** Opens any ICC profile and shows what's
+  inside it in plain language: version, kind of device, colour space, white
+  point, who made it, and (for v2 profiles) its gamut volume. It also explains
+  the **ICC v4** limitation clearly — ArgyllCMS only reads v2 profiles, so a v4
+  profile (common from i1Profiler) can't be shown in the 3D gamut viewer or the
+  soft-proof tool, even though it still works in other colour-managed apps.
+- **New tool — Soft-proof / check an image.** Loads an image and a printer
+  profile and shows how it will print: an approximate on-screen soft-proof with
+  the colours your printer can't reproduce highlighted, a headline **% out of
+  gamut**, and a 3D "Gamut fit" view that overlays the image's colours on the
+  printer's gamut. Your monitor profile is detected automatically for a truer
+  proof, and you can pick the image's colour space (sRGB, Adobe RGB, Display P3,
+  ProPhoto, or its embedded profile).
+
+### 🐛 Fixed
+- **Add window: the total patch count is correct again.** It now reflects the
+  chart's final size — your existing patches plus the generated additions
+  (including Pure white & black and Fill remaining gaps) — matching the 3D
+  cube exactly, instead of reading 0 or leaving sets out. (#60)
+- **Triple-density layouts transfer faithfully from the editor.** A chart laid
+  out in the layout editor at a custom margin / patch size now keeps those
+  values in the Create Chart tab instead of being reset to the triple-density
+  defaults. (#45)
+- **Save & apply suggests a useful name.** It pre-fills the target name when one
+  was carried into the editor, or — for a chart built fresh there — a name
+  describing the instrument, paper, patches, pages and orientation (e.g.
+  `i1Pro-A4-480p-2pages-Landscape`), with a **Suggest name** button. (#62)
+
 ## v3.10.10
 
 ### ✨ Added
