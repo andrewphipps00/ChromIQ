@@ -16,9 +16,12 @@ class GradientOverlay(QWidget):
     Install one on each tab widget after the tab widget is fully built.
     """
 
-    def __init__(self, color: str, parent: QWidget) -> None:
+    def __init__(self, color: str, parent: QWidget,
+                 alpha: int = _ALPHA, height: int = _HEIGHT) -> None:
         super().__init__(parent)
         self._color = QColor(color)
+        self._alpha = alpha
+        self._height = height
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
@@ -31,7 +34,7 @@ class GradientOverlay(QWidget):
     def _fit(self) -> None:
         p = self.parent()
         if p:
-            self.setGeometry(0, 0, p.width(), _HEIGHT)
+            self.setGeometry(0, 0, p.width(), self._height)
 
     def eventFilter(self, obj: QObject, event: QEvent) -> bool:
         if obj is self.parent():
@@ -45,14 +48,14 @@ class GradientOverlay(QWidget):
 
     def paintEvent(self, event) -> None:  # type: ignore[override]
         painter = QPainter(self)
-        grad = QLinearGradient(0, 0, 0, _HEIGHT)
+        grad = QLinearGradient(0, 0, 0, self._height)
         r, g, b = self._color.red(), self._color.green(), self._color.blue()
         # Both stops use the same hue — avoids the black fringe from
         # pre-multiplied alpha interpolation toward QColor(0,0,0,0).
         n = 8
         for i in range(n + 1):
             t = i / n
-            a = round(_ALPHA * (1 - t) ** 2)
+            a = round(self._alpha * (1 - t) ** 2)
             grad.setColorAt(t, QColor(r, g, b, a))
         painter.fillRect(self.rect(), grad)
         painter.end()

@@ -164,5 +164,8 @@ def dialog_masthead(
     stripe = SpectrumStripe(parent)
     if parent is not None:
         from ui.gradient_overlay import GradientOverlay
-        GradientOverlay(accent, parent=parent)
+        # Same peak saturation as the main-window tab wash (alpha 15), but taller
+        # so the subtle gradient still reaches the headline, which sits lower in a
+        # dialog than in a tab pane.
+        GradientOverlay(accent, parent=parent, alpha=15, height=95)
     return head, header, stripe
