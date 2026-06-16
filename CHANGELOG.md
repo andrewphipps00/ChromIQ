@@ -1,5 +1,26 @@
 # Changelog
 
+## v3.10.15
+
+### ✨ Added
+- **Soft-proof: simulate paper white.** A new option (under Intent) renders the
+  preview — and the margin around it — with the paper's actual white from the
+  printer profile (often a cream tint) instead of bright display white, for a
+  more realistic proof. The out-of-gamut figure is unaffected.
+- **Soft-proof: a built-in test target.** "Use built-in test target" loads a
+  bundled Adobe RGB photographic colour target (the PhotoDisc/PDI freeware
+  target), so you can try the tool without finding an image.
+- **Soft-proof: image previews in the file picker**, and the picker opens wider.
+
+### 🐛 Fixed
+- **Saving a preset keeps your name exactly.** Dots, hyphens, underscores and
+  spaces stay distinct and usable in names; the layout editor's Save & apply no
+  longer turns a dot into an underscore, so a name like `Epson-A3-w11.5mm` stays
+  consistent everywhere (and re-saving it correctly prompts to overwrite). (#59,
+  thanks **Knut (@soul-traveller)**)
+- A greyed-out checkbox's tick now greys with its label (e.g. "Highlight
+  out-of-gamut" while the soft-proof is off).
+
 ## v3.10.14
 
 ### 🐛 Fixed
