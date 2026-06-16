@@ -1772,12 +1772,15 @@ class _NewChartDialog(QDialog):
         self._gen_fill_count.setText(_patches_label(fill_n))
         if self._gen_fill.isChecked():
             total += fill_n
-        # Show the chart's final size (existing patches + the generated
-        # additions), matching the cube and the authoritative built-program
-        # total below. This estimate shows instantly; _do_push_live_preview
-        # then refreshes it from the real built program ~300 ms later (#60).
+        # Total = the patches the current set selection produces (the additions:
+        # the ticked sets + white/black + fill) — NOT the existing chart, and
+        # shown even when the master Generate toggle is off, exactly like the
+        # per-set counts beside each option (#60, Knut's clarification). This
+        # estimate shows instantly; _do_push_live_preview refreshes it from the
+        # real built program ~300 ms later (which also catches white/black
+        # de-dup against existing patches the estimate can't see).
         self._gen_total.setText(tr("Total: {label}").format(
-            label=_patches_label(len(self._existing_patches) + total)))
+            label=_patches_label(total)))
         # Keep the embedded live cube in step with the colour-set controls.
         self._push_live_preview()
 
@@ -1974,21 +1977,18 @@ class _NewChartDialog(QDialog):
     def _do_push_live_preview(self) -> None:
         if getattr(self, "_gen_total", None) is None:
             return
-        # In generate mode show the generated set; otherwise just the chart's
-        # existing patches (empty for a brand-new chart) so the panel still
-        # reflects reality rather than a stale generated view.
-        program = (self._build_generated_program()
-                   if self._gen_sets_active() else [])
-        # The total reflects the ACTUAL built program PLUS the chart's existing
-        # patches — i.e. the chart's final size, exactly what the cube shows
-        # (it draws `program` on top of `existing`). Dropping the existing count
-        # made the Add window read 0 with generate off, and excluded the
-        # white/black + fill the build adds (#60). The built program is used
-        # rather than the per-set estimate, which can't see the white/black
-        # structure of existing patches that came from elsewhere (a preset .ti1).
-        total = len(self._existing_patches) + len(program)
+        # The generated additions for the current set selection. Built even when
+        # the master Generate toggle is off, so the Total previews them like the
+        # per-set counts do; using the real built program also catches the
+        # white/black de-dup against existing patches the estimate can't see (the
+        # original 921-vs-924 drift in #60).
+        additions = self._build_generated_program()
+        # Total = the additions only (not the existing chart), shown always (#60).
         self._gen_total.setText(tr("Total: {label}").format(
-            label=_patches_label(total)))
+            label=_patches_label(len(additions))))
+        # The cube shows what's actually being added — nothing when generate is
+        # off (you're adding no sets), the additions otherwise.
+        program = additions if self._gen_sets_active() else []
         if getattr(self, "_cube_panel", None) is not None and self._cube_shown:
             self._cube_panel.set_program(program, self._existing_patches)
 

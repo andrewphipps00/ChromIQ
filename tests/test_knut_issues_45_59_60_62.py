@@ -49,6 +49,28 @@ def test_save_over_custom_preset_asks_overwrite(qapp, settings, monkeypatch):
     assert asked == ["Beta"]            # custom-vs-custom collision is caught
 
 
+def test_save_with_invisible_char_still_matches(qapp, settings, monkeypatch):
+    # #59: a name pasted with a zero-width space looked identical but didn't
+    # match, so no overwrite prompt fired and a duplicate was created. The name
+    # is now normalised (control/format chars dropped) before comparing.
+    from ui.tabs.tab_chart import TabChart, _clean_preset_name
+    assert _clean_preset_name("MyChart​") == "MyChart"
+    t = TabChart(ArgyllRunner(settings), FileManager(settings), settings)
+    t._switch_mode("manual")
+    t._save_presets_to_settings({"MyChart": {"auto_run": True, "attached_ti1": False}})
+    asked = []
+    monkeypatch.setattr(t, "_confirm_overwrite_preset",
+                        lambda n: (asked.append(n), False)[1])
+
+    def fake_exec(self):
+        for le in self.findChildren(QLineEdit):
+            le.setText("MyChart​")     # trailing zero-width space
+        return QDialog.DialogCode.Accepted
+    monkeypatch.setattr(QDialog, "exec", fake_exec)
+    t._on_preset_save()
+    assert asked == ["MyChart"]
+
+
 def test_save_under_new_name_does_not_ask(qapp, settings, monkeypatch):
     from ui.tabs.tab_chart import TabChart
     t = TabChart(ArgyllRunner(settings), FileManager(settings), settings)
@@ -69,39 +91,43 @@ def test_save_under_new_name_does_not_ask(qapp, settings, monkeypatch):
 
 # --- #60: Add-window total = existing + built program -----------------------
 
-def test_add_total_includes_existing_and_whiteblack_fill(qapp, settings):
+def test_add_total_is_additions_shown_always(qapp, settings):
+    # Knut's #60 clarification: the Total is the additions the current set
+    # selection produces (NOT the existing chart), shown even with generate off,
+    # and it includes white/black + fill.
     from ui.dialogs.ti2_relayout_dialog import _AddPatchesDialog
     existing = [(float(i % 101), float((i * 7) % 101), float((i * 13) % 101))
                 for i in range(460)]
     d = _AddPatchesDialog(settings=settings, existing_patches=existing)
-
-    def shown_total() -> int:
-        d._update_gen_counts()
-        d._do_push_live_preview()
-        # "Total: 600 patches" → 600
-        import re
-        m = re.search(r"([\d,]+)", d._gen_total.text())
-        return int(m.group(1).replace(",", ""))
-
-    # Generate off → total is the existing chart (not 0).
-    d._add_mode_single.setChecked(True)
-    assert shown_total() == 460
-
-    # Generate on with a cube → existing + built additions.
-    d._add_mode_gen.setChecked(True)
     for cb in (d._gen_cube, d._gen_skin, d._gen_blues, d._gen_greens,
                d._gen_sunrises, d._gen_greys, d._gen_edges, d._gen_hs,
                d._gen_pastel, d._gen_image, d._gen_whiteblack, d._gen_fill):
         cb.setChecked(False)
     d._gen_cube.setChecked(True)
     d._gen_cube_n.setValue(5)
-    assert shown_total() == 460 + len(d._build_generated_program())
 
-    # White/black + fill must be included (fill tops the whole chart to target).
+    def shown_total() -> int:
+        d._update_gen_counts()
+        d._do_push_live_preview()
+        import re
+        m = re.search(r"([\d,]+)", d._gen_total.text())
+        return int(m.group(1).replace(",", ""))
+
+    # Generate OFF → still shows the additions (not 0, not the existing 460).
+    d._add_mode_single.setChecked(True)
+    off = shown_total()
+    assert off == len(d._build_generated_program())
+    assert off > 0 and off != 460
+
+    # Generate ON → the same additions (no existing patches folded in).
+    d._add_mode_gen.setChecked(True)
+    assert shown_total() == len(d._build_generated_program())
+
+    # White/black + fill are included in the additions total.
     d._gen_whiteblack.setChecked(True)
     d._gen_fill.setChecked(True)
-    d._gen_fill_to.setValue(600)
-    assert shown_total() == 600
+    d._gen_fill_to.setValue(900)
+    assert shown_total() == len(d._build_generated_program())
 
 
 # --- #45: editor TD chart keeps custom margin / patch scale -----------------

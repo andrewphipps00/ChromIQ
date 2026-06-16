@@ -5,6 +5,7 @@ import json
 import re
 import shlex
 import tempfile
+import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -78,6 +79,21 @@ if TYPE_CHECKING:
     from core.settings import AppSettings
 
 log = get_logger(__name__)
+
+
+def _clean_preset_name(name: str) -> str:
+    """Normalise a preset name for storage / comparison (#59).
+
+    NFC-normalises and drops Unicode control & format characters — most
+    importantly the zero-width space (U+200B) and other invisible code points
+    a pasted name can carry, which ``str.strip()`` leaves in place. Without
+    this, two names that look identical but differ by an invisible character
+    don't match, so the overwrite prompt never fires and a duplicate preset is
+    created. Ordinary whitespace is still trimmed at the ends.
+    """
+    name = unicodedata.normalize("NFC", name or "")
+    name = "".join(ch for ch in name if unicodedata.category(ch)[0] != "C")
+    return name.strip()
 
 # Built-in, read-only preset for the Create Chart → Manual presets dropdown.
 # Unlike user presets (one .json file each under presets_dir()), this one is
@@ -1241,6 +1257,11 @@ class TabChart(QWidget):
             self._refresh_manual_command_preview
         )
         name_row.addWidget(self._manual_target_name_edit, stretch=1)
+        suggest_btn = QPushButton(tr("Suggest name"), w)
+        suggest_btn.setToolTip(
+            tr("Fill in a name from the instrument, paper and number of pages."))
+        suggest_btn.clicked.connect(self._on_suggest_target_name)
+        name_row.addWidget(suggest_btn)
         name_row.addWidget(TooltipButton(
             tr("Target Name"),
             tr("A short, descriptive name for this profiling session.\n\n"
@@ -3197,6 +3218,29 @@ class TabChart(QWidget):
                     bool(existing.get("attached_ti1")), bool(target))
         return (name, True, True, bool(target))
 
+    def _suggest_target_name(self) -> str:
+        """A descriptive default name from the manual settings (#62):
+        ``<instrument>-<paper>-<N>pages``. The exact patch count and page
+        orientation aren't known until the chart is generated, so they're left
+        out here (the layout editor's Save & apply, which has a built chart,
+        includes them)."""
+        instr_lbl = {"i1": "i1Pro", "CM": "ColorMunki", "3p": "i1Pro3Plus",
+                     "p3": "i1Pro3", "SS": "SpectroScan"}
+        instr = (self._manual_instr_pw.get_raw_value()
+                 if self._manual_instr_pw is not None else "") or "i1"
+        paper = (self._manual_paper_pw.get_raw_value()
+                 if self._manual_paper_pw is not None else "") or "A4"
+        pages = (int(self._manual_pages_spin.value())
+                 if self._manual_pages_spin is not None else 1)
+        parts = [instr_lbl.get(str(instr), str(instr)), str(paper),
+                 "1page" if pages == 1 else f"{pages}pages"]
+        return "-".join(parts)
+
+    def _on_suggest_target_name(self) -> None:
+        if self._manual_target_name_edit is not None:
+            self._manual_target_name_edit.setText(self._suggest_target_name())
+            self._manual_target_name_edit.selectAll()
+
     def _on_preset_save(self) -> None:
         capture: dict = {}
         # When Triple density is active the four widgets it owns currently
@@ -3350,14 +3394,23 @@ class TabChart(QWidget):
 
         if dlg.exec() != QDialog.DialogCode.Accepted:
             return
-        name = edit.text().strip()
+        # Normalise away invisible characters before saving / comparing: a name
+        # pasted from elsewhere can carry a zero-width space (U+200B), a
+        # non-breaking space, or other format/control characters that .strip()
+        # leaves in place — so "MyChart" and "MyChart​" looked identical but
+        # didn't match, the overwrite prompt never fired, and a duplicate was
+        # created (#59). NFC-normalise and drop control/format chars on both
+        # the typed name and the stored keys before comparing.
+        name = _clean_preset_name(edit.text())
         if not name:
             return
         # Don't silently overwrite (or, on macOS's case-insensitive filesystem,
         # duplicate) an existing preset — ask first (#59). Match case-insensitively
-        # and reuse the existing key so a case-variant name replaces it cleanly.
+        # (after the same cleanup) and reuse the existing key so a case-variant
+        # name replaces it cleanly.
         existing = self._load_presets_from_settings()
-        match = next((k for k in existing if k.casefold() == name.casefold()), None)
+        match = next((k for k in existing
+                      if _clean_preset_name(k).casefold() == name.casefold()), None)
         if match is not None:
             if not self._confirm_overwrite_preset(match):
                 return

@@ -309,12 +309,11 @@ def test_fill_counts_white_black_not_on_top(qapp):
 
 
 def test_total_matches_built_program_with_foreign_existing(qapp):
-    # #60: when the chart's existing patches come from elsewhere (e.g. a preset's
-    # .ti1), the per-set count estimate can drift from the actual build. The live
-    # total must reflect the chart's FINAL size — the built additions PLUS the
-    # existing patches — so it agrees with the 3D cube (which draws the program
-    # on top of the existing patches). Dropping the existing count made the Add
-    # window read 0 with generate off and exclude white/black + fill (#60).
+    # #60: the Total is the patches the current set selection produces (the
+    # additions: ticked sets + white/black + fill), NOT the existing chart. The
+    # built program is used rather than the per-set estimate, so white/black
+    # de-dup against the chart's existing patches (which came from elsewhere —
+    # a preset's .ti1) doesn't drift (the original 921-vs-924).
     import re
     import workflow.patch_generators as G
     existing = G.rgb_cube(9)  # a "foreign" chart, not built by the recipe
@@ -330,4 +329,4 @@ def test_total_matches_built_program_with_foreign_existing(qapp):
     dlg._update_gen_counts()
     dlg._do_push_live_preview()           # the debounced exact rebuild
     shown = int(re.search(r"(\d+)", dlg._gen_total.text()).group(1))
-    assert shown == len(existing) + len(dlg._build_generated_program())
+    assert shown == len(dlg._build_generated_program())   # additions only
