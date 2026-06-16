@@ -1559,6 +1559,15 @@ class _NewChartDialog(QDialog):
         self._gen_total.setStyleSheet("font-weight: bold;")
         gg.addWidget(self._gen_total, 13, 0, 1, 8)
 
+        # In the Add dialog (a chart already has patches), also show the chart's
+        # resulting size — existing patches + the additions — since this is the
+        # Add flow, not a fresh layout (#60, Knut). Hidden when there are no
+        # existing patches (the New-chart dialog), where it would just repeat.
+        self._gen_after_total = QLabel("", self._gen_panel)
+        self._gen_after_total.setStyleSheet("color: #909090;")
+        self._gen_after_total.setVisible(bool(self._existing_patches))
+        gg.addWidget(self._gen_after_total, 14, 0, 1, 8)
+
         for cb in (self._gen_cube, self._gen_skin, self._gen_blues,
                    self._gen_greens, self._gen_sunrises, self._gen_greys,
                    self._gen_edges, self._gen_hs, self._gen_pastel,
@@ -1781,6 +1790,9 @@ class _NewChartDialog(QDialog):
         # de-dup against existing patches the estimate can't see).
         self._gen_total.setText(tr("Total: {label}").format(
             label=_patches_label(total)))
+        if self._existing_patches:
+            self._gen_after_total.setText(tr("Chart after adding: {label}").format(
+                label=_patches_label(len(self._existing_patches) + total)))
         # Keep the embedded live cube in step with the colour-set controls.
         self._push_live_preview()
 
@@ -1986,6 +1998,10 @@ class _NewChartDialog(QDialog):
         # Total = the additions only (not the existing chart), shown always (#60).
         self._gen_total.setText(tr("Total: {label}").format(
             label=_patches_label(len(additions))))
+        # In the Add flow, also the chart's resulting size (existing + additions).
+        if self._existing_patches:
+            self._gen_after_total.setText(tr("Chart after adding: {label}").format(
+                label=_patches_label(len(self._existing_patches) + len(additions))))
         # The cube shows what's actually being added — nothing when generate is
         # off (you're adding no sets), the additions otherwise.
         program = additions if self._gen_sets_active() else []
@@ -5086,6 +5102,7 @@ class Ti2RelayoutDialog(QDialog):
         suggest_btn = QPushButton(tr("Suggest name"), dlg)
         suggest_btn.setToolTip(tr("Fill in a name based on the instrument, paper, "
                                   "patch count, pages and orientation."))
+        suggest_btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         suggest_btn.clicked.connect(
             lambda: (name_edit.setText(self._suggest_chart_name()),
                      name_edit.selectAll()))

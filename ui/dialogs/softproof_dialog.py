@@ -168,6 +168,10 @@ class SoftproofDialog(QDialog):
         self.setStyleSheet(neutral_controls_qss(_ACCENT))
         tint_dialog_primary(self, _ACCENT)
         self._preselect_display_profile()
+        # Pre-fill the last image used, as a convenience across sessions.
+        last_image = str(settings.get("softproof_last_image", "") or "")
+        if last_image and Path(last_image).is_file():
+            self._set_image(Path(last_image))
 
     def _preselect_display_profile(self) -> None:
         """Pre-fill the monitor profile with the OS's currently active display
@@ -437,14 +441,23 @@ class SoftproofDialog(QDialog):
     # File pickers + v4 guard
     # ------------------------------------------------------------------
     def _on_browse_image(self) -> None:
+        # Start where the user last picked an image (the file's folder), for
+        # convenience across sessions.
+        last = str(self._settings.get("softproof_last_image", "") or "")
+        start = str(Path(last).parent) if last and Path(last).parent.is_dir() \
+            else str(Path.home())
         path = open_file_dialog(
             self, tr("Select an image"),
             tr("Images (*.tif *.tiff *.jpg *.jpeg *.png);;All files (*)"),
-            start_dir=str(Path.home()))
+            start_dir=start)
         if path:
-            self._image_path = Path(path)
-            self._image_edit.setText(path)
-            self._update_run_enabled()
+            self._set_image(Path(path))
+
+    def _set_image(self, path: Path) -> None:
+        self._image_path = path
+        self._image_edit.setText(str(path))
+        self._settings.set("softproof_last_image", str(path))
+        self._update_run_enabled()
 
     def _on_browse_profile(self) -> None:
         sidebar = [str(d) for d in icc_system_dirs() if Path(d).exists()]

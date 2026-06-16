@@ -840,6 +840,12 @@ class TabChart(QWidget):
         # Live-update the guided command preview as the user types.
         self._target_name_edit.textChanged.connect(self._update_patch_count)
         name_row.addWidget(self._target_name_edit, stretch=1)
+        guided_suggest = QPushButton(tr("Suggest name"), inner)
+        guided_suggest.setToolTip(
+            tr("Fill in a name from the instrument, paper, patch count and pages."))
+        guided_suggest.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        guided_suggest.clicked.connect(self._on_suggest_target_name)
+        name_row.addWidget(guided_suggest)
         name_row.addWidget(TooltipButton(
             tr("Target Name"),
             tr("A short, descriptive name for this profiling session.\n\n"
@@ -1260,6 +1266,8 @@ class TabChart(QWidget):
         suggest_btn = QPushButton(tr("Suggest name"), w)
         suggest_btn.setToolTip(
             tr("Fill in a name from the instrument, paper and number of pages."))
+        # Size to the (translated) label so the text is never clipped.
+        suggest_btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         suggest_btn.clicked.connect(self._on_suggest_target_name)
         name_row.addWidget(suggest_btn)
         name_row.addWidget(TooltipButton(
@@ -3219,27 +3227,45 @@ class TabChart(QWidget):
         return (name, True, True, bool(target))
 
     def _suggest_target_name(self) -> str:
-        """A descriptive default name from the manual settings (#62):
-        ``<instrument>-<paper>-<N>pages``. The exact patch count and page
-        orientation aren't known until the chart is generated, so they're left
-        out here (the layout editor's Save & apply, which has a built chart,
-        includes them)."""
+        """A descriptive default name from the current settings (#62):
+        ``<instrument>-<paper>[-<N>p]-<pages>pages``. In guided mode the
+        predicted patch count is included (it's shown on screen); in manual mode
+        the count isn't known until the chart is generated, so it's left out.
+        Page orientation is only known once laid out (the editor's Save & apply,
+        which has a built chart, includes it)."""
         instr_lbl = {"i1": "i1Pro", "CM": "ColorMunki", "3p": "i1Pro3Plus",
                      "p3": "i1Pro3", "SS": "SpectroScan"}
-        instr = (self._manual_instr_pw.get_raw_value()
-                 if self._manual_instr_pw is not None else "") or "i1"
-        paper = (self._manual_paper_pw.get_raw_value()
-                 if self._manual_paper_pw is not None else "") or "A4"
-        pages = (int(self._manual_pages_spin.value())
-                 if self._manual_pages_spin is not None else 1)
-        parts = [instr_lbl.get(str(instr), str(instr)), str(paper),
-                 "1page" if pages == 1 else f"{pages}pages"]
+        manual = self._manual_btn is not None and self._manual_btn.isChecked()
+        if manual:
+            instr = (self._manual_instr_pw.get_raw_value()
+                     if self._manual_instr_pw is not None else "") or "i1"
+            paper = (self._manual_paper_pw.get_raw_value()
+                     if self._manual_paper_pw is not None else "") or "A4"
+            pages = (int(self._manual_pages_spin.value())
+                     if self._manual_pages_spin is not None else 1)
+            patches = None
+        else:
+            instr = (self._instr_combo.currentData()
+                     if self._instr_combo is not None else "") or "i1"
+            paper = (self._paper_combo.currentData()
+                     if self._paper_combo is not None else "") or "A4"
+            pages = (int(self._pages_spin.value())
+                     if self._pages_spin is not None else 1)
+            patches = getattr(self, "_predicted_patch_count", None)
+        parts = [instr_lbl.get(str(instr), str(instr)), str(paper)]
+        if patches:
+            parts.append(f"{patches}p")
+        parts.append("1page" if pages == 1 else f"{pages}pages")
         return "-".join(parts)
 
     def _on_suggest_target_name(self) -> None:
-        if self._manual_target_name_edit is not None:
-            self._manual_target_name_edit.setText(self._suggest_target_name())
-            self._manual_target_name_edit.selectAll()
+        """Fill the active mode's target-name field with a suggestion (#62)."""
+        manual = self._manual_btn is not None and self._manual_btn.isChecked()
+        edit = (self._manual_target_name_edit if manual
+                else getattr(self, "_target_name_edit", None))
+        if edit is not None:
+            edit.setText(self._suggest_target_name())
+            edit.selectAll()
 
     def _on_preset_save(self) -> None:
         capture: dict = {}
@@ -3330,7 +3356,19 @@ class TabChart(QWidget):
         edit.setMinimumHeight(28)
         edit.setPlaceholderText(tr("Preset name"))
         edit.selectAll()
-        lay.addWidget(edit)
+        # Suggest a name from the current settings (instrument · paper · patch
+        # count · pages) — most useful here when saving a fresh preset (#62).
+        name_edit_row = QHBoxLayout()
+        name_edit_row.setContentsMargins(0, 0, 0, 0)
+        name_edit_row.addWidget(edit, 1)
+        preset_suggest = QPushButton(tr("Suggest name"), dlg)
+        preset_suggest.setToolTip(
+            tr("Fill in a name from the instrument, paper, patch count and pages."))
+        preset_suggest.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        preset_suggest.clicked.connect(
+            lambda: (edit.setText(self._suggest_target_name()), edit.selectAll()))
+        name_edit_row.addWidget(preset_suggest)
+        lay.addLayout(name_edit_row)
         if prefilled_from_target:
             name_hint = QLabel(
                 tr("Suggested from your current target name — change it to "
@@ -4479,12 +4517,14 @@ class TabChart(QWidget):
                                   triple_density=td, no_strip_limit=nsl_eff)
         if per_sheet is not None:
             total = per_sheet * pages
+            self._predicted_patch_count = total   # for the Suggest-name button (#62)
             self._patch_count_lbl.setText(str(total))
             self._patch_detail_lbl.setText(
                 tr("PATCHES · {pages} PAGES · {paper}").format(
                     pages=pages, paper=paper.upper())
             )
         else:
+            self._predicted_patch_count = None
             self._patch_count_lbl.setText("?")
             self._patch_detail_lbl.setText(tr("CUSTOM LAYOUT"))
 

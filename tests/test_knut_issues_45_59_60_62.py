@@ -129,6 +129,12 @@ def test_add_total_is_additions_shown_always(qapp, settings):
     d._gen_fill_to.setValue(900)
     assert shown_total() == len(d._build_generated_program())
 
+    # The Add dialog also shows the resulting chart size (existing + additions).
+    import re
+    m = re.search(r"([\d,]+)", d._gen_after_total.text())
+    after = int(m.group(1).replace(",", ""))
+    assert after == 460 + len(d._build_generated_program())
+
 
 # --- #45: editor TD chart keeps custom margin / patch scale -----------------
 
