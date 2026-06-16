@@ -158,11 +158,9 @@ class SoftproofDialog(QDialog):
         self._left.addWidget(sep)
 
         self._build_action_group()   # status, toggles, Preview/Gamut, Soft-proof btn
-        viewer = self._build_viewer()  # stack + out-of-gamut metric (right side)
+        viewer = self._build_viewer()  # stack + out-of-gamut metric + Close (right)
         split.addWidget(viewer, 1)
         self._inner.addLayout(split, 1)
-
-        self._build_buttons()
 
         # This window is violet-themed throughout (masthead, primary button,
         # metric), so its checkboxes / focus rings use the violet accent too,
@@ -367,22 +365,22 @@ class SoftproofDialog(QDialog):
         self._stack.addWidget(self._gamut_frame)
         rv.addWidget(self._stack, 1)
 
-        # Out-of-gamut metric sits under the preview.
+        # Out-of-gamut metric sits under the preview, with Close on the same
+        # baseline as the Soft-proof button (so there's no empty strip under
+        # the left column's button).
+        bottom = QHBoxLayout()
         self._oog_label = QLabel(tr("Out of gamut: —"), self)
-        self._oog_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._oog_label.setStyleSheet(
             f"color: {_ACCENT}; font-family: Menlo, Consolas, monospace;"
             " font-size: 13px; font-weight: bold;")
-        rv.addWidget(self._oog_label)
-        return right
-
-    def _build_buttons(self) -> None:
-        row = QHBoxLayout()
-        row.addStretch(1)
+        bottom.addStretch(1)
+        bottom.addWidget(self._oog_label)
+        bottom.addStretch(1)
         close_btn = QPushButton(tr("Close"), self)
         close_btn.clicked.connect(self.reject)
-        row.addWidget(close_btn)
-        self._inner.addLayout(row)
+        bottom.addWidget(close_btn)
+        rv.addLayout(bottom)
+        return right
 
     def _make_web_view(self) -> QWidget:
         bg = "#efebe6" if self._mode == "light" else "#111111"
