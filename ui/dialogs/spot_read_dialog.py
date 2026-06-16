@@ -166,9 +166,9 @@ class SpotReadDialog(QDialog):
         hdr.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         for c in range(1, 7):                       # L* a* b* X Y Z
             hdr.setSectionResizeMode(c, QHeaderView.ResizeMode.Interactive)
-            self._table.setColumnWidth(c, 86)
+            self._table.setColumnWidth(c, 96)
         hdr.setSectionResizeMode(7, QHeaderView.ResizeMode.Interactive)
-        self._table.setColumnWidth(7, 124)          # Colour swatch
+        self._table.setColumnWidth(7, 144)          # Colour swatch
         self._table.itemChanged.connect(self._on_item_changed)
         outer.addWidget(self._table, 1)
 
