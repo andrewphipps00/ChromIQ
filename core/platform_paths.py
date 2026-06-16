@@ -237,10 +237,19 @@ def _detect_display_profile_macos() -> "Path | None":
 def _detect_display_profile_windows() -> "Path | None":
     """Main display's ICC profile path via GDI ``GetICMProfileW``."""
     import ctypes
-    from ctypes import wintypes
+    from ctypes import c_int, wintypes
     gdi32 = ctypes.WinDLL("gdi32")
     user32 = ctypes.WinDLL("user32")
-    hdc = user32.GetDC(0)
+    # Pin restype/argtypes so the HDC handle isn't truncated to a 32-bit int
+    # by ctypes' default (c_int) return type on 64-bit Windows.
+    user32.GetDC.restype = wintypes.HDC
+    user32.GetDC.argtypes = [wintypes.HWND]
+    user32.ReleaseDC.restype = c_int
+    user32.ReleaseDC.argtypes = [wintypes.HWND, wintypes.HDC]
+    gdi32.GetICMProfileW.restype = wintypes.BOOL
+    gdi32.GetICMProfileW.argtypes = [
+        wintypes.HDC, ctypes.POINTER(wintypes.DWORD), wintypes.LPWSTR]
+    hdc = user32.GetDC(None)
     if not hdc:
         return None
     try:
@@ -252,7 +261,7 @@ def _detect_display_profile_windows() -> "Path | None":
         if not gdi32.GetICMProfileW(hdc, ctypes.byref(size), buf):
             return None
     finally:
-        user32.ReleaseDC(0, hdc)
+        user32.ReleaseDC(None, hdc)
     p = Path(buf.value)
     return p if p.exists() else None
 
