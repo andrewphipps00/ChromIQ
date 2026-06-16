@@ -216,6 +216,17 @@ class SoftproofDialog(QDialog):
         self._image_edit = self._path_row(
             tr("Image:"), tr("Browse for an image (TIFF, JPEG, PNG)…"),
             tr("Browse for an image"), self._on_browse_image)
+        # Quick-pick a bundled photographic test target (no file hunting).
+        test_row = QHBoxLayout()
+        test_row.setContentsMargins(0, 0, 0, 0)
+        test_btn = QPushButton(tr("Use built-in test target"), self)
+        test_btn.setToolTip(tr("Load the bundled PhotoDisc colour test target "
+                               "(Adobe RGB) — good for trying the soft-proof."))
+        test_btn.clicked.connect(self._load_test_target)
+        test_row.addWidget(test_btn)
+        test_row.addStretch(1)
+        self._left.addLayout(test_row)
+
         self._profile_edit = self._path_row(
             tr("Printer profile:"), tr("Browse for the printer's ICC profile (v2)…"),
             tr("Browse for the printer ICC profile"), self._on_browse_profile)
@@ -452,6 +463,16 @@ class SoftproofDialog(QDialog):
             start_dir=start, preview=True)
         if path:
             self._set_image(Path(path))
+
+    def _load_test_target(self) -> None:
+        from core.resource_path import resource_path
+        path = resource_path("assets/test_images/photodisc-pdi-target.jpg")
+        if not path.is_file():
+            return
+        # The target embeds an Adobe RGB profile — read the colour space from it.
+        self._source_combo.setCurrentIndex(
+            max(0, self._source_combo.findData("embedded")))
+        self._set_image(path)
 
     def _set_image(self, path: Path) -> None:
         self._image_path = path

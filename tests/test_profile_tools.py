@@ -121,8 +121,14 @@ def _qapp():
 
 
 class _Settings:
+    def __init__(self):
+        self._d = {"appearance": "dark"}
+
     def get(self, key, default=None):
-        return {"appearance": "dark"}.get(key, default)
+        return self._d.get(key, default)
+
+    def set(self, key, value):
+        self._d[key] = value
 
 
 def _runner():
@@ -159,6 +165,30 @@ def test_softproof_dialog_builds_and_floors():
     assert dlg.minimumHeight() >= 600          # no-overlap floor
     assert not dlg._preview._nav.isVisible()    # single-image: nav hidden
     dlg._teardown_webengine()                   # must not raise (issue #38)
+    dlg.close()
+
+
+def test_bundled_test_target_present_and_v2():
+    # The built-in PhotoDisc test target ships with its freeware license and an
+    # embedded Adobe RGB v2 profile the soft-proof "Embedded" source can read.
+    from core.resource_path import resource_path
+    from PIL import Image
+    img = resource_path("assets/test_images/photodisc-pdi-target.jpg")
+    assert img.is_file()
+    icc = Image.open(img).info.get("icc_profile")
+    assert icc and icc[8] == 2, "test target needs an embedded ICC v2 profile"
+    # The freeware license must ship alongside it.
+    assert resource_path("assets/test_images/PhotoDisc-Freeware-License.pdf").is_file()
+
+
+def test_test_target_button_loads_with_embedded_source():
+    from ui.dialogs.softproof_dialog import SoftproofDialog
+    dlg = SoftproofDialog(_runner(), _Settings())
+    dlg.show()
+    dlg._load_test_target()
+    assert dlg._image_path is not None and dlg._image_path.is_file()
+    assert dlg._source_combo.currentData() == "embedded"
+    dlg._teardown_webengine()
     dlg.close()
 
 
