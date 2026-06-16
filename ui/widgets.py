@@ -411,7 +411,11 @@ def _attach_image_preview(dlg: "QFileDialog") -> None:
         return
     holder = QLabel(dlg)
     holder.setObjectName("imagePreview")
-    holder.setMinimumSize(QSize(220, 220))
+    # Fixed width so the preview doesn't eat the extra width — that goes to the
+    # file list, which is what should grow when the dialog is widened.
+    holder.setFixedWidth(300)
+    holder.setMinimumHeight(260)
+    holder.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
     holder.setAlignment(Qt.AlignmentFlag.AlignCenter)
     holder.setText(tr("No preview"))
     holder.setStyleSheet(
@@ -419,10 +423,10 @@ def _attach_image_preview(dlg: "QFileDialog") -> None:
         " background: palette(base); }")
     # Span the file-list rows on the far right.
     layout.addWidget(holder, 1, layout.columnCount(), layout.rowCount() - 1, 1)
-    # The preview column needs room — open the dialog much wider than the
-    # default (the file list keeps its width, the preview takes the extra).
+    # Open much wider than the default so the file list is roomy alongside the
+    # fixed-width preview; the ~720 height is already comfortable.
     dlg.setMinimumWidth(1000)
-    dlg.resize(1200, max(720, dlg.height()))
+    dlg.resize(1280, 720)
 
     def _show(path: str) -> None:
         if path and Path(path).is_file():
