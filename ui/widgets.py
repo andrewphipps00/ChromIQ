@@ -423,10 +423,10 @@ def _attach_image_preview(dlg: "QFileDialog") -> None:
         " background: palette(base); }")
     # Span the file-list rows on the far right.
     layout.addWidget(holder, 1, layout.columnCount(), layout.rowCount() - 1, 1)
-    # Open much wider than the default so the file list is roomy alongside the
-    # fixed-width preview; the ~720 height is already comfortable.
+    # Only widen — the file list is roomy alongside the fixed-width preview;
+    # keep the standard file-dialog height (don't force it taller).
     dlg.setMinimumWidth(1000)
-    dlg.resize(1280, 720)
+    dlg.resize(1280, dlg.height())
 
     def _show(path: str) -> None:
         if path and Path(path).is_file():
