@@ -167,5 +167,5 @@ def dialog_masthead(
         # Same peak saturation as the main-window tab wash (alpha 15), but taller
         # so the subtle gradient still reaches the headline, which sits lower in a
         # dialog than in a tab pane.
-        GradientOverlay(accent, parent=parent, alpha=15, height=95)
+        GradientOverlay(accent, parent=parent, alpha=15, height=95, on_top=False)
     return head, header, stripe

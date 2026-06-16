@@ -622,7 +622,7 @@ class _NewChartDialog(QDialog):
         head.addWidget(TabHeader(
             tr("NEW CHART · SETUP"), tr("Set up your chart"),
             SPEC_MAGENTA, self), 0, Qt.AlignmentFlag.AlignVCenter)
-        GradientOverlay(SPEC_MAGENTA, parent=self, alpha=15, height=95)
+        GradientOverlay(SPEC_MAGENTA, parent=self, alpha=15, height=95, on_top=False)
         head.addStretch(1)
         head.addWidget(_magenta_tip(
             tr("New chart"),
@@ -2313,7 +2313,7 @@ class _AddPatchesDialog(_NewChartDialog):
         head.addWidget(TabHeader(
             tr("EXTEND THE CHART"), tr("Add patches"), SPEC_MAGENTA, self),
             0, Qt.AlignmentFlag.AlignVCenter)
-        GradientOverlay(SPEC_MAGENTA, parent=self, alpha=15, height=95)
+        GradientOverlay(SPEC_MAGENTA, parent=self, alpha=15, height=95, on_top=False)
         head.addStretch(1)
         outer.addLayout(head)
         outer.addWidget(_SpectrumStripe(self))
@@ -2540,7 +2540,7 @@ class Ti2RelayoutDialog(QDialog):
         src.addWidget(TabHeader(
             tr("CHART LAYOUT · EDITOR"), tr("Design your chart"),
             SPEC_MAGENTA, self), 0, Qt.AlignmentFlag.AlignVCenter)
-        GradientOverlay(SPEC_MAGENTA, parent=self, alpha=15, height=95)
+        GradientOverlay(SPEC_MAGENTA, parent=self, alpha=15, height=95, on_top=False)
         src.addSpacing(16)
         load_btn = QPushButton(tr("Load .ti2…"), self)
         load_btn.clicked.connect(self._load_ti2)

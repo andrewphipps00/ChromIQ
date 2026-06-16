@@ -17,19 +17,32 @@ class GradientOverlay(QWidget):
     """
 
     def __init__(self, color: str, parent: QWidget,
-                 alpha: int = _ALPHA, height: int = _HEIGHT) -> None:
+                 alpha: int = _ALPHA, height: int = _HEIGHT,
+                 on_top: bool = True) -> None:
         super().__init__(parent)
         self._color = QColor(color)
         self._alpha = alpha
         self._height = height
+        # When True the wash is raised above the content (subtle tint over it,
+        # as on the main-window tabs). When False it sits just above the parent's
+        # background but below the content, so opaque widgets (e.g. the editor's
+        # New chart / Load .ti2 / undo / redo buttons in the headline row) paint
+        # over it while the transparent headline text still shows it behind.
+        self._on_top = on_top
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         parent.installEventFilter(self)
         self._fit()
-        self.raise_()
+        self._restack()
 
     # ------------------------------------------------------------------
+
+    def _restack(self) -> None:
+        if self._on_top:
+            self.raise_()
+        else:
+            self.lower()
 
     def _fit(self) -> None:
         p = self.parent()
@@ -41,9 +54,9 @@ class GradientOverlay(QWidget):
             t = event.type()
             if t == QEvent.Type.Resize:
                 self._fit()
-                self.raise_()
+                self._restack()
             elif t == QEvent.Type.Show:
-                self.raise_()
+                self._restack()
         return False
 
     def paintEvent(self, event) -> None:  # type: ignore[override]
@@ -61,4 +74,4 @@ class GradientOverlay(QWidget):
         painter.end()
 
     def showEvent(self, event) -> None:  # type: ignore[override]
-        self.raise_()
+        self._restack()
