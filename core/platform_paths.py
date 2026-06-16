@@ -192,6 +192,144 @@ def icc_system_dirs() -> list[Path]:
 
 
 # ---------------------------------------------------------------------------
+# Current display (monitor) ICC profile detection
+# ---------------------------------------------------------------------------
+
+def _detect_display_profile_macos() -> "Path | None":
+    """Main display's ICC profile via CoreGraphics, written to a temp .icc."""
+    import ctypes
+    import ctypes.util
+    import tempfile
+    from ctypes import c_long, c_uint32, c_void_p
+    cg = ctypes.CDLL("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics")
+    cf = ctypes.CDLL(ctypes.util.find_library("CoreFoundation"))
+    cg.CGMainDisplayID.restype = c_uint32
+    cg.CGDisplayCopyColorSpace.restype = c_void_p
+    cg.CGDisplayCopyColorSpace.argtypes = [c_uint32]
+    cg.CGColorSpaceCopyICCData.restype = c_void_p
+    cg.CGColorSpaceCopyICCData.argtypes = [c_void_p]
+    cf.CFDataGetLength.restype = c_long
+    cf.CFDataGetLength.argtypes = [c_void_p]
+    cf.CFDataGetBytePtr.restype = c_void_p
+    cf.CFDataGetBytePtr.argtypes = [c_void_p]
+    cf.CFRelease.argtypes = [c_void_p]
+
+    space = cg.CGDisplayCopyColorSpace(cg.CGMainDisplayID())
+    if not space:
+        return None
+    data = cg.CGColorSpaceCopyICCData(space)
+    cf.CFRelease(space)
+    if not data:
+        return None
+    try:
+        n = cf.CFDataGetLength(data)
+        ptr = cf.CFDataGetBytePtr(data)
+        if not ptr or n <= 0:
+            return None
+        raw = ctypes.string_at(ptr, n)
+    finally:
+        cf.CFRelease(data)
+    out = Path(tempfile.gettempdir()) / "chromiq_current_display.icc"
+    out.write_bytes(raw)
+    return out
+
+
+def _detect_display_profile_windows() -> "Path | None":
+    """Main display's ICC profile path via GDI ``GetICMProfileW``."""
+    import ctypes
+    from ctypes import wintypes
+    gdi32 = ctypes.WinDLL("gdi32")
+    user32 = ctypes.WinDLL("user32")
+    hdc = user32.GetDC(0)
+    if not hdc:
+        return None
+    try:
+        size = wintypes.DWORD(0)
+        gdi32.GetICMProfileW(hdc, ctypes.byref(size), None)
+        if size.value == 0:
+            return None
+        buf = ctypes.create_unicode_buffer(size.value)
+        if not gdi32.GetICMProfileW(hdc, ctypes.byref(size), buf):
+            return None
+    finally:
+        user32.ReleaseDC(0, hdc)
+    p = Path(buf.value)
+    return p if p.exists() else None
+
+
+def _detect_display_profile_linux() -> "Path | None":
+    """Root window's ``_ICC_PROFILE`` atom (X11) written to a temp .icc."""
+    import ctypes
+    import ctypes.util
+    import tempfile
+    from ctypes import c_int, c_long, c_ulong, c_void_p, byref
+    name = ctypes.util.find_library("X11")
+    if not name:
+        return None
+    x = ctypes.CDLL(name)
+    x.XOpenDisplay.restype = c_void_p
+    x.XOpenDisplay.argtypes = [ctypes.c_char_p]
+    dpy = x.XOpenDisplay(None)
+    if not dpy:
+        return None
+    try:
+        x.XDefaultScreen.restype = c_int
+        x.XDefaultScreen.argtypes = [c_void_p]
+        x.XRootWindow.restype = c_ulong
+        x.XRootWindow.argtypes = [c_void_p, c_int]
+        x.XInternAtom.restype = c_ulong
+        x.XInternAtom.argtypes = [c_void_p, ctypes.c_char_p, c_int]
+        root = x.XRootWindow(dpy, x.XDefaultScreen(dpy))
+        atom = x.XInternAtom(dpy, b"_ICC_PROFILE", True)
+        if not atom:
+            return None
+        actual_type = c_ulong(0); actual_format = c_int(0)
+        nitems = c_ulong(0); bytes_after = c_ulong(0)
+        prop = c_void_p(0)
+        x.XGetWindowProperty.argtypes = [
+            c_void_p, c_ulong, c_ulong, c_long, c_long, c_int, c_ulong,
+            ctypes.POINTER(c_ulong), ctypes.POINTER(c_int),
+            ctypes.POINTER(c_ulong), ctypes.POINTER(c_ulong),
+            ctypes.POINTER(c_void_p)]
+        r = x.XGetWindowProperty(dpy, root, atom, 0, 0x7FFFFFFF, False, 0,
+                                 byref(actual_type), byref(actual_format),
+                                 byref(nitems), byref(bytes_after), byref(prop))
+        if r != 0 or not prop or nitems.value <= 0:
+            return None
+        try:
+            raw = ctypes.string_at(prop.value, nitems.value)
+        finally:
+            x.XFree(prop)
+    finally:
+        x.XCloseDisplay(dpy)
+    if len(raw) < 132 or raw[36:40] != b"acsp":
+        return None
+    out = Path(tempfile.gettempdir()) / "chromiq_current_display.icc"
+    out.write_bytes(raw)
+    return out
+
+
+def detect_display_profile() -> "Path | None":
+    """Best-effort path to the *currently active* monitor's ICC profile.
+
+    Used to pre-select the monitor profile for a truer soft-proof. Returns
+    ``None`` on any failure or unsupported setup — the caller then falls back to
+    the approximate sRGB preview, so this never blocks. macOS and Linux write
+    the profile to a temp file; Windows returns the real profile path.
+    """
+    try:
+        if is_macos():
+            return _detect_display_profile_macos()
+        if is_windows():
+            return _detect_display_profile_windows()
+        if is_linux():
+            return _detect_display_profile_linux()
+    except Exception:  # noqa: BLE001 — detection is best-effort, never fatal
+        return None
+    return None
+
+
+# ---------------------------------------------------------------------------
 # Printing
 # ---------------------------------------------------------------------------
 

@@ -1,0 +1,75 @@
+"""Pin a dialog's minimum height to its layout floor so resizing never overlaps.
+
+Word-wrapped ``QLabel``s report a tiny ``minimumSize`` height (they can wrap
+down to a single word), so a layout's own ``minimumSize`` under-reports the
+space its rows actually need at the dialog's real width — which is what lets a
+window be dragged short enough for rows to slide over each other.
+
+:func:`pin_min_height` mirrors the floor logic in
+:class:`ui.dialogs.tools_dialogs._ToolDialogBase` (which keeps its own copy for
+historical reasons) so the *standalone* tool dialogs get the same guarantee:
+
+  1. pin each wrapping label's height to its true ``heightForWidth`` at the
+     content width, then
+  2. ``layout.activate()`` and read ``layout.minimumSize()`` — the floor below
+     which widgets can no longer shrink — and pin the dialog's minimum height to
+     it (never below it, so rows can't overlap), and
+  3. open at the natural fit, clamped to 90 % of the screen height.
+
+Call it once from ``showEvent`` and again after revealing/hiding optional rows.
+"""
+from __future__ import annotations
+
+from PyQt6.QtCore import QMargins
+from PyQt6.QtGui import QGuiApplication
+from PyQt6.QtWidgets import QDialog, QLabel
+
+
+def pin_min_height(
+    dialog: QDialog,
+    *,
+    min_width: int = 0,
+    wrap_labels: tuple[QLabel, ...] | list[QLabel] = (),
+    inner_margins: QMargins | None = None,
+    resize_width: bool = False,
+) -> int:
+    """Pin ``dialog``'s minimum height to its no-overlap layout floor.
+
+    ``wrap_labels`` are word-wrapping labels whose height must be pinned to
+    their ``heightForWidth`` at the content width before the floor is read;
+    ``inner_margins`` is the side inset those labels sit inside (so the
+    available width is computed correctly). When ``resize_width`` is True the
+    dialog is also widened to its natural width (use on first show); otherwise
+    only the height is adjusted (use on dynamic refits).
+
+    Returns the height the dialog was resized to.
+    """
+    layout = dialog.layout()
+    if layout is None:
+        return dialog.height()
+
+    target_w = max(min_width, layout.sizeHint().width())
+    if inner_margins is not None and wrap_labels:
+        avail = target_w - inner_margins.left() - inner_margins.right()
+        for lbl in wrap_labels:
+            lbl.setMinimumHeight(max(0, lbl.heightForWidth(avail)))
+
+    # Recompute the floor *after* the labels' heights are pinned, or
+    # minimumSize() still reflects the un-wrapped (one-line) height.
+    layout.activate()
+    hint = layout.sizeHint()
+    floor = layout.minimumSize()
+
+    screen = dialog.screen() or QGuiApplication.primaryScreen()
+    cap_h = (int(screen.availableGeometry().height() * 0.9)
+             if screen is not None else hint.height())
+
+    # Never below the floor (overlap-free); only the opening size is capped to
+    # the screen so the floor itself stays overlap-free even on small screens.
+    dialog.setMinimumHeight(floor.height())
+    open_h = max(floor.height(), min(hint.height(), cap_h))
+    if resize_width:
+        dialog.resize(target_w, open_h)
+    else:
+        dialog.resize(dialog.width(), open_h)
+    return open_h

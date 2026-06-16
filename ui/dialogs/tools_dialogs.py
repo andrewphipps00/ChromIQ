@@ -1999,6 +1999,12 @@ def open_tool_dialog(
         dlg = VerifyAgainstReferenceDialog(runner, settings, parent)
     elif key == "verify_profile":
         dlg = VerifyProfileDialog(runner, settings, parent)
+    elif key == "profile_info":
+        from ui.dialogs.profile_info_dialog import ProfileInfoDialog
+        dlg = ProfileInfoDialog(runner, settings, parent)
+    elif key == "softproof":
+        from ui.dialogs.softproof_dialog import SoftproofDialog
+        dlg = SoftproofDialog(runner, settings, parent)
     elif key == "translate":
         from ui.dialogs.translation_dialog import TranslationDialog
         dlg = TranslationDialog(settings, parent)

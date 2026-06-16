@@ -342,6 +342,12 @@ class TiffPreview(QWidget):
         self._caption_lbl.setText(text)
         self._caption_lbl.setVisible(bool(text))
 
+    def set_navigation_visible(self, visible: bool) -> None:
+        """Hide the page count + Prev/Next bar for single-image use (e.g. the
+        soft-proof tool, which only ever shows one image at a time)."""
+        self._nav.setVisible(visible)
+        self._image_nav_gap.setVisible(visible)
+
     def set_banner(self, text: str | None) -> None:
         """Show an advisory banner above the image, or hide it (text=None/empty)."""
         if text:
@@ -510,12 +516,13 @@ class TiffPreview(QWidget):
         layout.addWidget(self._img_label, stretch=1)
 
         # Gap between image and nav (replaces the old setSpacing(12))
-        image_nav_gap = QWidget(self)
-        image_nav_gap.setFixedHeight(12)
-        layout.addWidget(image_nav_gap)
+        self._image_nav_gap = QWidget(self)
+        self._image_nav_gap.setFixedHeight(12)
+        layout.addWidget(self._image_nav_gap)
 
         # Navigation bar
-        nav = QWidget(self)
+        self._nav = QWidget(self)
+        nav = self._nav
         nav_layout = QHBoxLayout(nav)
         nav_layout.setContentsMargins(12, 0, 12, 0)
 
