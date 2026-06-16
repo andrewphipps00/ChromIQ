@@ -449,7 +449,7 @@ class SoftproofDialog(QDialog):
         path = open_file_dialog(
             self, tr("Select an image"),
             tr("Images (*.tif *.tiff *.jpg *.jpeg *.png);;All files (*)"),
-            start_dir=start)
+            start_dir=start, preview=True)
         if path:
             self._set_image(Path(path))
 

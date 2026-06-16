@@ -8,6 +8,8 @@ from typing import Any, Callable
 
 from PyQt6.QtCore import QEvent, QModelIndex, QObject, QSize, QSortFilterProxyModel, Qt, QUrl
 from PyQt6.QtGui import QColor, QFont, QIcon, QPainter, QPalette, QPixmap, QTextCursor
+
+from core.i18n import tr
 from PyQt6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -366,10 +368,14 @@ def open_file_dialog(
     start_dir: str = "",
     extra_path: str = "",
     extra_paths: tuple | list = (),
+    preview: bool = False,
 ) -> str:
     """Open a Qt file dialog with sidebar shortcuts and proper file-type filtering.
 
-    Non-matching files are hidden when name_filter is set.
+    Non-matching files are hidden when name_filter is set. When ``preview`` is
+    True, an image thumbnail of the highlighted file is shown beside the list
+    (for picking images).
+
     Returns the selected file path, or an empty string if cancelled.
     """
     dlg = QFileDialog(parent, title, start_dir or str(Path.home()))
@@ -382,10 +388,50 @@ def open_file_dialog(
         if exts:
             dlg.setProxyModel(_ExtensionFilterProxy(exts, dlg))
     dlg.setSidebarUrls(_sidebar_urls(extra_path, extra_paths))
+    if preview:
+        _attach_image_preview(dlg)
     if dlg.exec() == QFileDialog.DialogCode.Accepted:
         files = dlg.selectedFiles()
         return files[0] if files else ""
     return ""
+
+
+def _attach_image_preview(dlg: "QFileDialog") -> None:
+    """Add a live image-thumbnail pane to a non-native QFileDialog.
+
+    QFileDialog's body is a QGridLayout; we drop a preview label into the column
+    to the right of the file list and refresh it on ``currentChanged``. Loading
+    is done lazily off the highlighted path (a QPixmap of the whole file) and
+    scaled down — fine for the modest sizes a user browses one at a time.
+    """
+    from PyQt6.QtGui import QPixmap
+    from PyQt6.QtWidgets import QGridLayout, QLabel
+    layout = dlg.layout()
+    if not isinstance(layout, QGridLayout):
+        return
+    holder = QLabel(dlg)
+    holder.setObjectName("imagePreview")
+    holder.setMinimumSize(QSize(220, 220))
+    holder.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    holder.setText(tr("No preview"))
+    holder.setStyleSheet(
+        "QLabel#imagePreview { border: 1px solid palette(mid); color: palette(mid);"
+        " background: palette(base); }")
+    # Span the file-list rows on the far right.
+    layout.addWidget(holder, 1, layout.columnCount(), layout.rowCount() - 1, 1)
+
+    def _show(path: str) -> None:
+        if path and Path(path).is_file():
+            pm = QPixmap(path)
+            if not pm.isNull():
+                holder.setPixmap(pm.scaled(
+                    holder.size(), Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation))
+                return
+        holder.setPixmap(QPixmap())
+        holder.setText(tr("No preview"))
+
+    dlg.currentChanged.connect(_show)
 
 
 def open_files_dialog(
