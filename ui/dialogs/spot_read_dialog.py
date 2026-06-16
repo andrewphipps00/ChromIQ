@@ -127,21 +127,6 @@ class SpotReadDialog(QDialog):
         controls.addStretch(1)
         outer.addLayout(controls)
 
-        # --- Start / Take reading row -------------------------------------
-        action = QHBoxLayout()
-        action.setSpacing(10)
-        self._start_btn = QPushButton(tr("Start session"), self)
-        self._start_btn.setObjectName("primary")
-        self._start_btn.clicked.connect(self._on_start_stop)
-        action.addWidget(self._start_btn)
-
-        self._read_btn = QPushButton(tr("Take reading"), self)
-        self._read_btn.setEnabled(False)
-        self._read_btn.clicked.connect(self._manager.take_reading)
-        action.addWidget(self._read_btn)
-        action.addStretch(1)
-        outer.addLayout(action)
-
         self._status = QLabel(tr("Idle — click Start session to begin."), self)
         self._status.setWordWrap(True)
         self._status.setStyleSheet("color: #909090;")
@@ -166,23 +151,45 @@ class SpotReadDialog(QDialog):
         hdr.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         for c in range(1, 7):                       # L* a* b* X Y Z — kept small
             hdr.setSectionResizeMode(c, QHeaderView.ResizeMode.Interactive)
-            self._table.setColumnWidth(c, 56)
+            self._table.setColumnWidth(c, 50)
         hdr.setSectionResizeMode(7, QHeaderView.ResizeMode.Interactive)
-        self._table.setColumnWidth(7, 100)          # Colour swatch (a bit bigger)
+        self._table.setColumnWidth(7, 128)          # Colour swatch (bigger)
         self._table.itemChanged.connect(self._on_item_changed)
         outer.addWidget(self._table, 1)
 
         # --- Bottom buttons ------------------------------------------------
-        bb = QDialogButtonBox(self)
-        self._save_btn  = bb.addButton(tr("Save…"),  QDialogButtonBox.ButtonRole.ActionRole)
-        self._clear_btn = bb.addButton(tr("Clear"),  QDialogButtonBox.ButtonRole.ResetRole)
-        close_btn       = bb.addButton(tr("Close"),  QDialogButtonBox.ButtonRole.RejectRole)
-        self._save_btn.setEnabled(False)
+        # Session controls (Start / Take reading) live on the far left next to
+        # Clear; Save / Close sit on the right — one unified action row.
+        bottom = QHBoxLayout()
+        bottom.setSpacing(10)
+
+        self._start_btn = QPushButton(tr("Start session"), self)
+        self._start_btn.setObjectName("primary")
+        self._start_btn.clicked.connect(self._on_start_stop)
+        bottom.addWidget(self._start_btn)
+
+        self._read_btn = QPushButton(tr("Take reading"), self)
+        self._read_btn.setEnabled(False)
+        self._read_btn.clicked.connect(self._manager.take_reading)
+        bottom.addWidget(self._read_btn)
+
+        self._clear_btn = QPushButton(tr("Clear"), self)
         self._clear_btn.setEnabled(False)
-        self._save_btn.clicked.connect(self._on_save)
         self._clear_btn.clicked.connect(self._on_clear)
+        bottom.addWidget(self._clear_btn)
+
+        bottom.addStretch(1)
+
+        self._save_btn = QPushButton(tr("Save…"), self)
+        self._save_btn.setEnabled(False)
+        self._save_btn.clicked.connect(self._on_save)
+        bottom.addWidget(self._save_btn)
+
+        close_btn = QPushButton(tr("Close"), self)
         close_btn.clicked.connect(self.reject)
-        outer.addWidget(bb)
+        bottom.addWidget(close_btn)
+
+        outer.addLayout(bottom)
 
         self.setStyleSheet(neutral_controls_qss(_indicator_color(settings)))
         # Tint the Start button with the Measure tab's green accent — this tool
