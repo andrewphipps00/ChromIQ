@@ -1,5 +1,14 @@
 # Changelog
 
+## v3.10.14
+
+### 🐛 Fixed
+- **Saving a preset over an existing one always prompts now.** Names that
+  differ only by punctuation — e.g. a dot vs the underscore the name cleaning
+  produces (`w11.5mm` vs `w11_5mm`) — are now treated as the same preset, so you
+  get the overwrite prompt instead of a near-identical duplicate. (#59, thanks
+  **Knut (@soul-traveller)**)
+
 ## v3.10.13
 
 More from **Knut (@soul-traveller)**'s testing. 🙏
