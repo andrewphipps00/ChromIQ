@@ -1,5 +1,15 @@
 # Changelog
 
+## v3.10.10
+
+### ✨ Added
+- **Read single patches: average selected readings.** A new **Average selected**
+  button (in the bottom row, between Take reading and Clear) lets you pick two or
+  more readings already in the list and combine them into a new entry — handy for
+  averaging repeat measurements of the same colour. The new entry is named
+  "Average" (you can rename it) and shows its own L*a*b*/XYZ values and colour
+  swatch, just like a measured reading, so it can be saved with the rest.
+
 ## v3.10.9
 
 More polish from **Knut (@soul-traveller)**'s testing. 🙏
