@@ -1,5 +1,23 @@
 # Changelog
 
+## v3.10.7
+
+More fixes and polish from **Knut (@soul-traveller)**'s testing. 🙏
+
+### ✨ Added
+- **The Wide-gamut presets now appear in "Load setup from preset"** (New chart
+  window, marked with ★) — so you can load one of those designs and tweak it,
+  not just build it as-is. If you've saved a custom preset with the same name,
+  an identical one is hidden and a different one is kept alongside. (#55, #58)
+- **The "Report a Bug" form now also fills in your hardware and ArgyllCMS
+  version** automatically, and the Severity question moved up the form so it's
+  harder to miss. (#56)
+
+### 🐛 Fixed
+- **Margin shows as set after Save & apply.** A chart applied from the layout
+  editor left the Create Chart margin row unticked at the default 6 mm, reading
+  as "no margin set"; it now shows enabled. (#61)
+
 ## v3.10.6
 
 ### 🐛 Fixed
