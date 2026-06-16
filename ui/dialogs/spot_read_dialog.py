@@ -164,11 +164,11 @@ class SpotReadDialog(QDialog):
         # their short contents — so they're not cramped while Name stays the
         # biggest column by far.
         hdr.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        for c in range(1, 7):                       # L* a* b* X Y Z
+        for c in range(1, 7):                       # L* a* b* X Y Z — kept small
             hdr.setSectionResizeMode(c, QHeaderView.ResizeMode.Interactive)
-            self._table.setColumnWidth(c, 96)
+            self._table.setColumnWidth(c, 56)
         hdr.setSectionResizeMode(7, QHeaderView.ResizeMode.Interactive)
-        self._table.setColumnWidth(7, 144)          # Colour swatch
+        self._table.setColumnWidth(7, 100)          # Colour swatch (a bit bigger)
         self._table.itemChanged.connect(self._on_item_changed)
         outer.addWidget(self._table, 1)
 
