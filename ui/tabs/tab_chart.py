@@ -3554,10 +3554,10 @@ class TabChart(QWidget):
             self._set_manual_value("printtarg", "-A", opts.spacer_scale)
         else:
             self._reset_manual_value("printtarg", "-A")
-        if opts.margin_mm != 6:
-            self._set_manual_value("printtarg", "-m", opts.margin_mm)
-        else:
-            self._reset_manual_value("printtarg", "-m")
+        # Margin is always a deliberate layout choice in the editor, so show it
+        # enabled even at the default 6 mm. Suppressing it left the Create Chart
+        # margin row unticked after Save & apply, reading as "no margin set" (#61).
+        self._set_manual_value("printtarg", "-m", opts.margin_mm)
         # Triple density last: its toggle handler re-applies the canonical
         # i1Pro-layout preset (-a1.3 / -m5 / -P / -L) matching how the chart was
         # rendered, and is a no-op when off.

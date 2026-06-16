@@ -1196,19 +1196,43 @@ class _NewChartDialog(QDialog):
 
     # -- "Load setup from preset" (#55) -----------------------------------
     def _available_preset_recipes(self) -> dict:
-        """Create Chart presets that carry a populated creation recipe (Set B),
-        as ``{preset_name: recipe_dict}``. Presets with an empty / missing
-        recipe (or no json) are skipped, per the feature spec."""
+        """Presets that carry a populated creation recipe (Set B), as
+        ``{display_name: recipe_dict}``.
+
+        Built-in Wide-gamut presets (bundled recipes, shown with a ★) come first,
+        then the user's Create Chart presets. Name collisions (#55): a custom
+        preset identical to a built-in of the same name is dropped (the built-in
+        already represents it); a custom that differs keeps its own name (the ★
+        distinguishes the built-in)."""
+        import json
         out: dict = {}
+        builtin: dict = {}
+        try:
+            from core.resource_path import resource_path
+            p = resource_path("assets/charts/knut/rgb/widegamut/recipes.json")
+            if p.is_file():
+                raw = json.loads(p.read_text(encoding="utf-8"))
+                builtin = {k: v for k, v in raw.items()
+                           if isinstance(v, dict) and v}
+        except Exception:  # noqa: BLE001 — never block opening the window
+            pass
+        for name, rec in builtin.items():
+            out[f"★ {name}"] = rec
         if self._settings is None:
             return out
         try:
             from core.preset_store import load_presets
             for name, payload in load_presets("create_chart", self._settings).items():
                 rec = payload.get("editor_recipe") if isinstance(payload, dict) else None
-                if isinstance(rec, dict) and rec:
-                    out[name] = rec
-        except Exception:  # noqa: BLE001 — never block opening the window
+                if not (isinstance(rec, dict) and rec):
+                    continue
+                if builtin.get(name) == rec:
+                    continue  # identical to a built-in → already listed
+                disp, n = name, 2
+                while disp in out:        # keep every distinct recipe visible
+                    disp, n = f"{name} ({n})", n + 1
+                out[disp] = rec
+        except Exception:  # noqa: BLE001
             pass
         return out
 

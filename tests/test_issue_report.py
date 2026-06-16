@@ -2,7 +2,8 @@
 from urllib.parse import parse_qs, urlparse
 
 from core.issue_report import (
-    build_bug_report_url, build_feature_request_url, detect_platform_option,
+    build_bug_report_url, build_feature_request_url,
+    detect_argyll_version, detect_hardware, detect_platform_option,
 )
 from core.version import APP_VERSION
 
@@ -28,3 +29,17 @@ def test_feature_url_prefills_platform():
     q = parse_qs(urlparse(build_feature_request_url()).query)
     assert q["template"] == ["feature_request.yml"]
     assert q["platform"][0] in _PLATFORM_OPTIONS
+
+
+def test_detection_helpers_are_safe(tmp_path):
+    # Best-effort detectors must never raise (values may be empty in CI).
+    assert isinstance(detect_hardware(), str)
+    assert detect_argyll_version(None) == ""
+    assert detect_argyll_version(tmp_path) == f"installed at {tmp_path}"
+
+
+def test_argyll_path_threaded_into_bug_url(tmp_path):
+    # When a bin path is given but has no runnable tool, the install path still
+    # pre-fills the argyll field.
+    q = parse_qs(urlparse(build_bug_report_url(tmp_path)).query)
+    assert q["argyll_version"][0] == f"installed at {tmp_path}"

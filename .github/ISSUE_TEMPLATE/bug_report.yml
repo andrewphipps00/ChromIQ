@@ -60,6 +60,18 @@ body:
       label: Spectrophotometer (if relevant)
       placeholder: e.g. X-Rite i1Pro 2
 
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity (your judgement — maintainer may adjust)
+      options:
+        - Critical — app unusable, crash, data loss, no workaround
+        - High — major feature broken, strong workflow impact
+        - Medium — moderate issue, workaround exists
+        - Low — minor / cosmetic
+    validations:
+      required: true
+
   - type: textarea
     id: what_happened
     attributes:
@@ -93,18 +105,6 @@ body:
       label: Logs / error messages
       description: Paste the contents of the in-app log panel and any popup error text. Drag-and-drop screenshots if helpful.
       render: text
-
-  - type: dropdown
-    id: severity
-    attributes:
-      label: Severity (your judgement — maintainer may adjust)
-      options:
-        - Critical — app unusable, crash, data loss, no workaround
-        - High — major feature broken, strong workflow impact
-        - Medium — moderate issue, workaround exists
-        - Low — minor / cosmetic
-    validations:
-      required: true
 
   - type: textarea
     id: additional

@@ -9,6 +9,9 @@ so the reporter fills in fewer fields by hand. Fields we can't know for sure
 from __future__ import annotations
 
 import platform as _pf
+import re
+import subprocess
+from pathlib import Path
 from urllib.parse import urlencode
 
 from core.version import APP_VERSION
@@ -46,14 +49,68 @@ def detect_os_version() -> str:
     return _pf.platform()
 
 
-def build_bug_report_url() -> str:
+def detect_hardware() -> str:
+    """A short hardware string for the `hardware` field, best-effort."""
+    system = _pf.system()
+    try:
+        if system == "Darwin":
+            model = subprocess.run(
+                ["sysctl", "-n", "hw.model"], capture_output=True, text=True,
+                timeout=3).stdout.strip()
+            chip = subprocess.run(
+                ["sysctl", "-n", "machdep.cpu.brand_string"],
+                capture_output=True, text=True, timeout=3).stdout.strip()
+            return ", ".join(p for p in (model, chip) if p)
+        if system == "Windows":
+            return ", ".join(p for p in (_pf.machine(), _pf.processor()) if p)
+        if system == "Linux":
+            return ", ".join(p for p in (_pf.machine(), _pf.processor()) if p)
+    except Exception:  # noqa: BLE001 — detection is best-effort
+        pass
+    return ""
+
+
+def detect_argyll_version(argyll_bin: str | Path | None) -> str:
+    """ArgyllCMS version + install path for the `argyll_version` field.
+
+    Runs a bundled Argyll tool to read its version (printed in the usage banner),
+    and appends the install folder as the "install method"."""
+    if not argyll_bin:
+        return ""
+    bin_dir = Path(argyll_bin)
+    version = ""
+    exe = "targen.exe" if _pf.system() == "Windows" else "targen"
+    tool = bin_dir / exe
+    if tool.is_file():
+        try:
+            out = subprocess.run([str(tool)], capture_output=True, text=True,
+                                 timeout=5)
+            m = re.search(r"[Vv]ersion\s+(\d+\.\d+(?:\.\d+)?)",
+                          (out.stderr or "") + (out.stdout or ""))
+            if m:
+                version = m.group(1)
+        except Exception:  # noqa: BLE001
+            pass
+    if version:
+        return f"{version}, installed at {bin_dir}"
+    return f"installed at {bin_dir}" if bin_dir else ""
+
+
+def build_bug_report_url(argyll_bin: str | Path | None = None) -> str:
     """GitHub bug-report form, pre-filled with the auto-detectable fields."""
-    return _ISSUES_NEW + "?" + urlencode({
+    params = {
         "template": "bug_report.yml",
         "chromiq_version": f"v{APP_VERSION}",
         "platform": detect_platform_option(),
         "os_version": detect_os_version(),
-    })
+    }
+    hw = detect_hardware()
+    if hw:
+        params["hardware"] = hw
+    argyll = detect_argyll_version(argyll_bin)
+    if argyll:
+        params["argyll_version"] = argyll
+    return _ISSUES_NEW + "?" + urlencode(params)
 
 
 def build_feature_request_url() -> str:

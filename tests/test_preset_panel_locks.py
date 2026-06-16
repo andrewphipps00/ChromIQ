@@ -411,16 +411,16 @@ def test_applied_reflects_i1_layout(qapp, settings, monkeypatch, tmp_path):
 
 
 def test_applied_reflects_default_layout_clean(qapp, settings, monkeypatch, tmp_path):
-    """Default knobs read back as defaults — and the expert -m row stays
-    disabled rather than being spuriously enabled (or left on the i1 preset
-    margin the instrument-default handler applies on -i change)."""
+    """Default knobs read back as defaults. The margin -m row is enabled even at
+    the default 6 mm — it's always a deliberate layout choice in the editor, so
+    it shows as set after Save & apply instead of reading as 'no margin' (#61)."""
     from workflow.ti2_relayout import LayoutOptions
     tab = _apply_meta(qapp, settings, monkeypatch, tmp_path, LayoutOptions())
     p = tab._collect_manual()
     assert abs(p.patch_scale - 1.0) < 1e-9
     assert p.margin_mm == 6
     m = next(pw for pw in tab._manual_widgets["printtarg"] if pw.flag == "-m")
-    assert not m.is_enabled_by_user
+    assert m.is_enabled_by_user
 
 
 def test_applied_reflects_cm_double_density(qapp, settings, monkeypatch, tmp_path):

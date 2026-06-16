@@ -129,9 +129,40 @@ def test_dropdown_lists_only_presets_with_recipe(qapp, monkeypatch):
         "no recipe": {"targen_-f": 800},            # skipped
     })
     d = _NewChartDialog(Path("/x"), _FakeSettings())
-    assert list(d._preset_recipes) == ["with recipe"]
-    # None + the one qualifying preset
-    assert d._preset_setup_combo.count() == 2
+    # Custom presets (ignoring the bundled built-ins, which are starred).
+    custom = [n for n in d._preset_recipes if not n.startswith("★")]
+    assert custom == ["with recipe"]
+
+
+def test_builtin_widegamut_recipes_appear_starred(qapp):
+    d = _NewChartDialog(Path("/x"), _FakeSettings())
+    starred = [n for n in d._preset_recipes if n.startswith("★")]
+    assert len(starred) == 4
+    assert any("A4-924p" in n for n in starred)
+
+
+def test_custom_identical_to_builtin_is_skipped(qapp, monkeypatch):
+    import json, core.preset_store as ps
+    from core.resource_path import resource_path
+    name = "A4-924p-2pages-Portrait"
+    rec = json.loads(resource_path(
+        "assets/charts/knut/rgb/widegamut/recipes.json").read_text())[name]
+    monkeypatch.setattr(ps, "load_presets", lambda tab, settings=None:
+                        {name: {"editor_recipe": rec}})
+    d = _NewChartDialog(Path("/x"), _FakeSettings())
+    assert f"★ {name}" in d._preset_recipes   # built-in shown
+    assert name not in d._preset_recipes       # identical custom dropped
+
+
+def test_custom_differing_from_builtin_is_kept(qapp, monkeypatch):
+    import core.preset_store as ps
+    name = "A4-924p-2pages-Portrait"
+    monkeypatch.setattr(ps, "load_presets", lambda tab, settings=None:
+                        {name: {"editor_recipe": {"mode": "generate",
+                                                  "sp": {"cube_n": 3}}}})
+    d = _NewChartDialog(Path("/x"), _FakeSettings())
+    assert f"★ {name}" in d._preset_recipes   # built-in
+    assert name in d._preset_recipes           # custom kept (different recipe)
 
 
 def test_dropdown_select_applies_recipe(qapp, monkeypatch):

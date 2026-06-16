@@ -672,7 +672,8 @@ class SettingsDialog(QDialog):
         bug_btn = QPushButton(tr("Report a Bug…"), self)
         bug_btn.setToolTip(tr("Open the bug-report form on GitHub in your browser."))
         bug_btn.clicked.connect(lambda: QDesktopServices.openUrl(
-            QUrl(build_bug_report_url())))
+            QUrl(build_bug_report_url(
+                self._settings.get("argyll_bin_path", "")))))
         bottom_row.addWidget(bug_btn)
 
         feature_btn = QPushButton(tr("Request a Feature…"), self)
