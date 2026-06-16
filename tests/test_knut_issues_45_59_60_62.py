@@ -71,6 +71,27 @@ def test_save_with_invisible_char_still_matches(qapp, settings, monkeypatch):
     assert asked == ["MyChart"]
 
 
+def test_save_with_punctuation_variant_matches(qapp, settings, monkeypatch):
+    # #59: a name differing only by punctuation (a dot the name cleaning turns
+    # into an underscore in some flows) must still be caught as the same preset.
+    from ui.tabs.tab_chart import TabChart, _preset_match_key
+    assert _preset_match_key("A3-w11.5mm-Portrait") == _preset_match_key("A3-w11_5mm-Portrait")
+    t = TabChart(ArgyllRunner(settings), FileManager(settings), settings)
+    t._switch_mode("manual")
+    t._save_presets_to_settings({"A3-w11.5mm-Portrait": {"auto_run": True, "attached_ti1": False}})
+    asked = []
+    monkeypatch.setattr(t, "_confirm_overwrite_preset",
+                        lambda n: (asked.append(n), False)[1])
+
+    def fake_exec(self):
+        for le in self.findChildren(QLineEdit):
+            le.setText("A3-w11_5mm-Portrait")     # dot saved as underscore
+        return QDialog.DialogCode.Accepted
+    monkeypatch.setattr(QDialog, "exec", fake_exec)
+    t._on_preset_save()
+    assert asked == ["A3-w11.5mm-Portrait"]        # matched the existing dot name
+
+
 def test_save_under_new_name_does_not_ask(qapp, settings, monkeypatch):
     from ui.tabs.tab_chart import TabChart
     t = TabChart(ArgyllRunner(settings), FileManager(settings), settings)

@@ -95,6 +95,20 @@ def _clean_preset_name(name: str) -> str:
     name = "".join(ch for ch in name if unicodedata.category(ch)[0] != "C")
     return name.strip()
 
+
+def _preset_match_key(name: str) -> str:
+    """A normalised key for deciding whether two preset names are "the same"
+    for the overwrite check (#59).
+
+    Beyond stripping invisible characters and case, it treats any run of
+    non-alphanumeric characters as one separator, so names that differ only by
+    punctuation — e.g. ``w11.5mm`` vs ``w11_5mm`` (a dot the app's name cleaning
+    turns into an underscore in some flows) — collide and prompt to overwrite
+    instead of silently creating a near-identical duplicate.
+    """
+    s = _clean_preset_name(name).casefold()
+    return re.sub(r"[^a-z0-9]+", "_", s).strip("_")
+
 # Built-in, read-only preset for the Create Chart → Manual presets dropdown.
 # Unlike user presets (one .json file each under presets_dir()), this one is
 # baked into the app: it can't be deleted, and selecting it loads a fixed
@@ -3466,13 +3480,14 @@ class TabChart(QWidget):
         name = _clean_preset_name(edit.text())
         if not name:
             return
-        # Don't silently overwrite (or, on macOS's case-insensitive filesystem,
-        # duplicate) an existing preset — ask first (#59). Match case-insensitively
-        # (after the same cleanup) and reuse the existing key so a case-variant
-        # name replaces it cleanly.
+        # Don't silently overwrite (or duplicate) an existing preset — ask first
+        # (#59). Match on a separator-insensitive, case-insensitive key so
+        # case-variants AND punctuation-variants (e.g. a dot vs the underscore
+        # the name cleaning produces, "w11.5mm" vs "w11_5mm") are caught; reuse
+        # the existing key so the match replaces it cleanly.
         existing = self._load_presets_from_settings()
-        match = next((k for k in existing
-                      if _clean_preset_name(k).casefold() == name.casefold()), None)
+        nkey = _preset_match_key(name)
+        match = next((k for k in existing if _preset_match_key(k) == nkey), None)
         if match is not None:
             if not self._confirm_overwrite_preset(match):
                 return
