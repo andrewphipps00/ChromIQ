@@ -17,6 +17,7 @@ from PyQt6.QtWidgets import (
     QFileDialog,
     QGroupBox,
     QLabel,
+    QLineEdit,
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
@@ -145,6 +146,107 @@ class NoScrollDoubleSpinBox(QDoubleSpinBox):
             super().wheelEvent(event)
         else:
             event.ignore()
+
+
+class SuffixLockedLineEdit(QLineEdit):
+    """A line edit with a locked, non-editable suffix tail.
+
+    The user edits only the leading *base*; the *suffix* is set by the owner via
+    :meth:`set_suffix` and can't be typed into, deleted, selected away or pasted
+    over — it can only be changed or cleared programmatically (e.g. by an
+    auto-name toggle that recomputes it from the chart settings). With an empty
+    suffix it behaves exactly like a plain ``QLineEdit``.
+
+    Enforcement is behavioural (a normal field can't visually lock part of its
+    text): the suffix region is kept out of selections / the cursor, boundary
+    deletes are swallowed, and a ``textChanged`` net repairs a wholesale replace.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._suffix = ""
+        self._guard = False
+        self.textChanged.connect(self._on_text_changed)
+        self.cursorPositionChanged.connect(self._on_cursor)
+
+    # -- public ---------------------------------------------------------
+    def set_suffix(self, suffix: str) -> None:
+        """Replace the locked tail, preserving the user's base text."""
+        suffix = suffix or ""
+        if suffix == self._suffix:
+            return
+        base = self.base()
+        self._suffix = suffix
+        self._set(base, len(base))
+
+    def base(self) -> str:
+        """The editable leading part (text without the locked suffix)."""
+        t = super().text()
+        if self._suffix and t.endswith(self._suffix):
+            return t[: len(t) - len(self._suffix)]
+        return t
+
+    def set_base(self, base: str) -> None:
+        self._set(base or "", len(base or ""))
+
+    # -- internals ------------------------------------------------------
+    def _set(self, base: str, cursor: int) -> None:
+        self._guard = True
+        super().setText(base + self._suffix)
+        super().setCursorPosition(min(cursor, len(base)))
+        self._guard = False
+
+    def _base_end(self) -> int:
+        t = super().text()
+        if self._suffix and t.endswith(self._suffix):
+            return len(t) - len(self._suffix)
+        return len(t)
+
+    def _clamp_selection(self) -> None:
+        if not self._suffix:
+            return
+        end = self._base_end()
+        self._guard = True
+        if self.selectionStart() >= 0 and self.selectionLength() > 0:
+            s = min(self.selectionStart(), end)
+            e = min(self.selectionStart() + self.selectionLength(), end)
+            self.setSelection(s, max(0, e - s))
+        elif self.cursorPosition() > end:
+            super().setCursorPosition(end)
+        self._guard = False
+
+    def keyPressEvent(self, ev) -> None:  # noqa: N802
+        if self._suffix:
+            end = self._base_end()
+            # A forward-delete sitting at the base/suffix boundary would eat into
+            # the locked tail — swallow it.
+            if (ev.key() == Qt.Key.Key_Delete and self.selectionLength() == 0
+                    and self.cursorPosition() >= end):
+                return
+            self._clamp_selection()
+        super().keyPressEvent(ev)
+
+    def insertFromMimeData(self, source) -> None:  # noqa: N802
+        self._clamp_selection()      # paste lands in the base, never the suffix
+        super().insertFromMimeData(source)
+
+    def _on_cursor(self, _old: int, new: int) -> None:
+        if self._guard or not self._suffix or self.selectionLength() > 0:
+            return
+        end = self._base_end()
+        if new > end:
+            self._guard = True
+            super().setCursorPosition(end)
+            self._guard = False
+
+    def _on_text_changed(self, _t: str) -> None:
+        # Net for a wholesale replace (e.g. select-all then paste/typing that the
+        # clamps didn't catch): if the suffix is gone, treat all text as base and
+        # re-append it.
+        if self._guard or not self._suffix:
+            return
+        if not super().text().endswith(self._suffix):
+            self.set_base(super().text())
 
 
 class ElidingLabel(QLabel):

@@ -29,6 +29,7 @@ def settings(tmp_path):
 
 def test_save_over_custom_preset_asks_overwrite(qapp, settings, monkeypatch):
     from ui.tabs.tab_chart import TabChart
+    settings.set("create_chart_auto_suffix", False)   # test match logic, not suffix
     t = TabChart(ArgyllRunner(settings), FileManager(settings), settings)
     t._switch_mode("manual")
     presets = {"Alpha": {"auto_run": False, "attached_ti1": False},
@@ -55,6 +56,7 @@ def test_save_with_invisible_char_still_matches(qapp, settings, monkeypatch):
     # is now normalised (control/format chars dropped) before comparing.
     from ui.tabs.tab_chart import TabChart, _clean_preset_name
     assert _clean_preset_name("MyChart​") == "MyChart"
+    settings.set("create_chart_auto_suffix", False)  # test the match logic, not the suffix
     t = TabChart(ArgyllRunner(settings), FileManager(settings), settings)
     t._switch_mode("manual")
     t._save_presets_to_settings({"MyChart": {"auto_run": True, "attached_ti1": False}})
@@ -126,6 +128,7 @@ def test_save_over_existing_name_calls_real_confirm(qapp, settings, monkeypatch)
     # existing preset reaches the prompt without crashing.
     from PyQt6.QtWidgets import QMessageBox, QDialog, QLineEdit
     from ui.tabs.tab_chart import TabChart
+    settings.set("create_chart_auto_suffix", False)   # name the preset exactly "test"
     t = TabChart(ArgyllRunner(settings), FileManager(settings), settings)
     t._switch_mode("manual")
     t._save_presets_to_settings({"test": {"auto_run": True, "attached_ti1": False}})
@@ -226,7 +229,33 @@ def test_td_chart_transfers_custom_margin_and_scale(qapp, settings):
     assert abs(float(val("-a")) - 1.06) < 0.001     # not clobbered to TD's 1.3
 
 
-# --- #62: Save & apply suggested / default name -----------------------------
+# --- #62 follow-up: live, locked descriptive suffix -------------------------
+
+def test_auto_descriptive_suffix(qapp, settings):
+    from ui.widgets import SuffixLockedLineEdit
+    from ui.tabs.tab_chart import TabChart
+    settings.set("create_chart_auto_suffix", True)
+    t = TabChart(ArgyllRunner(settings), FileManager(settings), settings)
+
+    # Guided: on by default → the field carries a live, locked suffix.
+    t._switch_mode("guided")
+    f = t._target_name_edit
+    assert isinstance(f, SuffixLockedLineEdit)
+    assert "i1Pro" in f.text()                # the descriptive suffix is present
+    f.set_base("Baryta")                       # user's base name
+    assert f.base() == "Baryta" and f.text().startswith("Baryta-")
+    assert "i1Pro" in f.text()
+
+    # Toggling the option off strips the suffix; both checkboxes stay in sync.
+    t._guided_auto_suffix_cb.setChecked(False)
+    assert f.text() == "Baryta"
+    assert t._manual_auto_suffix_cb.isChecked() is False
+    assert settings.get("create_chart_auto_suffix") is False
+
+    # Back on → suffix returns onto the same base.
+    t._guided_auto_suffix_cb.setChecked(True)
+    assert f.base() == "Baryta" and "i1Pro" in f.text()
+
 
 def test_create_chart_suggest_includes_patches_and_orientation(qapp, settings, tmp_path):
     # #62 (Knut): the Create Chart Suggest-name must include the patch count
