@@ -66,6 +66,29 @@ def test_suggested_name_uses_paper_name_not_mm(qapp, settings):
     assert name.startswith("ColorMunki-A3+-1196p")
 
 
+def test_save_seed_no_doubling_on_sanitised_basename(qapp, settings):
+    # #68 regression: the Save dialogs seeded the carried basename (filesystem-
+    # sanitised, e.g. "A3_") while the prefix is the fresh suggestion ("A3+"), so
+    # the prefix got prepended onto the near-identical name → doubled. ON must
+    # seed the clean suggested name; OFF shows the carried name as free text.
+    import workflow.ti2_relayout as R
+    from ui.dialogs.ti2_relayout_dialog import Ti2RelayoutDialog
+    from ui.widgets import PrefixLockedLineEdit
+    d = Ti2RelayoutDialog(ArgyllRunner(settings), settings)
+    spec = R.ChartSpec.new(instrument_flag="CM", paper_flag="483x329")
+    spec.paper_mm = (483.0, 329.0)
+    d._set_chart(spec, [(50.0, 50.0, 50.0)] * 1196, "x")
+    d._basename = "ColorMunki-A3_-1196p-1page-Landscape-Wide-gamut"  # sanitised stem
+    e = PrefixLockedLineEdit()
+    d._seed_save_name(e, True)
+    assert e.text() == d._dialog_name_prefix()          # clean suggested name
+    assert "A3+" in e.text() and "A3_" not in e.text()  # not the sanitised basename
+    assert e.text().count("ColorMunki") == 1            # not doubled
+    d._seed_save_name(e, False)
+    assert e.text() == d._default_apply_name()          # carried name, free text
+    assert "A3_" in e.text()
+
+
 def test_editor_td_sync_keeps_loaded_scale_margin(qapp, settings):
     # #68 (Knut): loading a triple-density chart must keep its own -a / -m, not
     # clobber them with the TD preset 1.3 / 5.
