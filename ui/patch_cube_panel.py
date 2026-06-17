@@ -51,6 +51,11 @@ class PatchCubePanel(QWidget):
         self._tmp = tempfile.TemporaryDirectory()
         self._program: list[tuple] = []
         self._existing: list[tuple] = []
+        # Optional side-by-side comparison cube (#66): when set, the panel
+        # renders two synced cubes instead of one.
+        self._compare: list[tuple] | None = None
+        self._primary_label = ""
+        self._compare_label = ""
         # Live updates are pushed once the page has finished loading; a request
         # arriving before then is stashed and replayed in _on_load_finished.
         self._loaded = False
@@ -133,14 +138,46 @@ class PatchCubePanel(QWidget):
             return  # WebEngine missing — placeholder label already shown
         plotly_path = resource_path("assets/plotly-gl3d.min.js")
         plotly_url = QUrl.fromLocalFile(str(plotly_path)).toString()
-        html = patch_cube.build_cube_html(
-            self._program, plotly_url, existing_program=self._existing,
-            bg=self._theme["bg"], fg=self._theme["fg"],
-            grid=self._theme["grid"])
+        if self._compare is not None:
+            html = patch_cube.build_dual_cube_html(
+                self._program, self._primary_label,
+                self._compare, self._compare_label, plotly_url,
+                existing_a=self._existing,
+                bg=self._theme["bg"], fg=self._theme["fg"], grid=self._theme["grid"])
+        else:
+            html = patch_cube.build_cube_html(
+                self._program, plotly_url, existing_program=self._existing,
+                bg=self._theme["bg"], fg=self._theme["fg"],
+                grid=self._theme["grid"])
         out = Path(self._tmp.name) / "patch_cube.html"
         out.write_text(html, encoding="utf-8")
         self._loaded = False
         self._web_view.setUrl(QUrl.fromLocalFile(str(out)))
+
+    # ------------------------------------------------------------------
+    # Side-by-side comparison (#66)
+    # ------------------------------------------------------------------
+    def set_compare(self, program_b: list[tuple], label_b: str,
+                    primary_label: str = "") -> None:
+        """Show the current cube next to a second one (``program_b``) with their
+        cameras locked in sync. Full reload (not a live react), since the page
+        layout changes from one cube to two."""
+        self._compare = list(program_b)
+        self._compare_label = label_b
+        if primary_label:
+            self._primary_label = primary_label
+        self._render()
+
+    def clear_compare(self) -> None:
+        """Drop the comparison cube and return to the single-cube view."""
+        if self._compare is None:
+            return
+        self._compare = None
+        self._compare_label = ""
+        self._render()
+
+    def set_primary_label(self, label: str) -> None:
+        self._primary_label = label
 
     # ------------------------------------------------------------------
     # Live update

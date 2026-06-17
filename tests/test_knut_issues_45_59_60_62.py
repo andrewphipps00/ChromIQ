@@ -281,6 +281,20 @@ def test_loaded_ti1_patch_count_for_builtin_presets(qapp, settings):
     assert t._loaded_ti1_patch_count() and t._loaded_ti1_patch_count() > 0
 
 
+def test_comparable_presets_lists_ti1_backed(qapp, settings):
+    # #66: the "Compare with profile" list is built dynamically from presets
+    # that have a .ti1 — built-ins now, and any user preset that bundled one.
+    from pathlib import Path
+    from ui.tabs.tab_chart import TabChart
+    t = TabChart(ArgyllRunner(settings), FileManager(settings), settings)
+    groups = t.comparable_presets()
+    assert groups, "built-in ti1 presets should be listed"
+    for group_label, items in groups:               # grouped by instrument
+        assert group_label and items
+        for label, path in items:
+            assert label and Path(path).is_file() and str(path).endswith(".ti1")
+
+
 def test_suggested_name_from_settings(qapp, settings):
     from ui.dialogs.ti2_relayout_dialog import Ti2RelayoutDialog
     d = Ti2RelayoutDialog(ArgyllRunner(settings), settings)

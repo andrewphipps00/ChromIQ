@@ -72,9 +72,29 @@ def test_build_html_contains_data_and_js_url():
 def test_build_html_has_middle_drag_pan():
     # #64: middle-button (wheel-click) drag pans the cube via Plotly.relayout.
     html = C.build_cube_html([(50.0, 50.0, 50.0)], "file:///tmp/plotly.js")
-    assert "e.button === 1" in html          # middle-button gesture
+    assert "e.button===1" in html             # middle-button gesture
     assert "scene.camera" in html             # pans by moving the camera
     assert "Plotly.relayout" in html
+    assert 'cqInstallPan("plot")' in html
+
+
+def test_build_dual_cube_html():
+    # #66: two cubes, each labelled, with synced cameras + per-cube pan.
+    a = [(100.0, 0.0, 0.0), (0.0, 100.0, 0.0)]
+    b = [(0.0, 0.0, 100.0)]
+    html = C.build_dual_cube_html(a, "My Chart", b, "TC9.18 preset",
+                                  "file:///tmp/plotly.js")
+    assert 'id="plotA"' in html and 'id="plotB"' in html
+    assert "My Chart" in html and "TC9.18 preset" in html
+    assert "cqLinkCameras" in html            # cameras stay in sync
+    assert html.count("cqInstallPan") >= 2    # pan on both cubes
+    # Both newPlot data args parse.
+    for m in re.finditer(r'Plotly\.newPlot\("plot[AB]", (\[.*?\]), CQ_LAYOUT',
+                         html, re.DOTALL):
+        json.loads(m.group(1))
+    # Label HTML-escaping guards against breakage from preset names.
+    evil = C.build_dual_cube_html(a, "a<b&\"c", b, "x", "file:///p.js")
+    assert "a<b&\"c" not in evil and "a&lt;b" in evil
 
 
 def test_build_html_empty_program():

@@ -3870,8 +3870,18 @@ class Ti2RelayoutDialog(QDialog):
             return
         from ui.dialogs.patch_cube_dialog import PatchCubeDialog
         from ui.theme import resolve_mode
+        from ui.tabs.tab_chart import comparable_presets
         mode = resolve_mode(self._settings.get("appearance", "auto"))
-        PatchCubeDialog(program, mode=mode, parent=self).exec()
+        # Same "Compare with profile" dropdown as the Tools 3D viewer (#66);
+        # rebuilt each open so newly saved / deleted presets track automatically.
+        try:
+            presets = comparable_presets(self._settings)
+        except Exception as exc:  # noqa: BLE001 — never block the viewer on this
+            log.warning("comparable_presets failed: %s", exc)
+            presets = []
+        PatchCubeDialog(program, mode=mode,
+                        target_name=(self._basename or tr("Current chart")),
+                        compare_presets=presets, parent=self).exec()
 
     def _randomise_patches(self) -> None:
         """Shuffle the patch order into a random permutation, then re-preview.

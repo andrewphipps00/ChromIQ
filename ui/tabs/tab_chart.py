@@ -440,6 +440,34 @@ BUILTIN_PRESET_GROUPS: list[tuple[str, list[tuple[str, str, str]]]] = [
 ]
 
 
+def comparable_presets(settings) -> list[tuple[str, list[tuple[str, "Path"]]]]:
+    """Presets whose patch set exists on disk, grouped for the #66 "Compare with
+    profile" dropdown: ``[(group, [(label, .ti1 path), …]), …]`` — built-in
+    presets by instrument plus a "Custom presets" group for user presets that
+    bundled a .ti1. Re-read on each call (newly saved / deleted presets appear or
+    disappear by themselves). Shared by the Tools 3D viewer and the TI2 editor."""
+    groups: list[tuple[str, list[tuple[str, Path]]]] = []
+    for instr, entries in BUILTIN_PRESET_GROUPS:
+        items: list[tuple[str, Path]] = []
+        for _combo, overlay_label, key in entries:
+            asset = TabChart._builtin_ti1_asset(key)
+            if asset:
+                p = resource_path(asset)
+                if p.is_file():
+                    items.append((overlay_label, p))
+        if items:
+            groups.append((instr, items))
+    custom: list[tuple[str, Path]] = []
+    for name, data in _load_tab_presets("create_chart", settings).items():
+        if isinstance(data, dict) and data.get("attached_ti1"):
+            sc = _preset_sidecar_path("create_chart", str(name), ".ti1")
+            if sc.is_file():
+                custom.append((str(name), sc))
+    if custom:
+        groups.append((tr("Custom presets"), custom))
+    return groups
+
+
 # --- Override-checkbox copy (preset panels) --------------------------------
 # Shown next to the "Edit patch recipe / page layout" checkboxes that unlock a
 # preset's otherwise-greyed panels. Written for beginners: lead with the plain
@@ -3294,6 +3322,10 @@ class TabChart(QWidget):
             except ValueError:
                 pass
         return str(paper), ""
+
+    def comparable_presets(self) -> list[tuple[str, list[tuple[str, "Path"]]]]:
+        """See the module-level :func:`comparable_presets` (#66)."""
+        return comparable_presets(self._settings)
 
     @staticmethod
     def _builtin_ti1_asset(data: str) -> str | None:

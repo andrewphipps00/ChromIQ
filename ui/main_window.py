@@ -600,7 +600,15 @@ class MainWindow(QMainWindow):
         from ui.dialogs.patch_cube_dialog import PatchCubeDialog
         from ui.theme import resolve_mode
         mode = resolve_mode(self._settings.get("appearance", "auto"))
-        PatchCubeDialog(program, mode=mode, parent=self).exec()
+        # Compare-with-preset list is built fresh each open, so newly saved /
+        # deleted presets (with a .ti1) appear automatically (#66).
+        try:
+            presets = self._tab_chart.comparable_presets()
+        except Exception as exc:  # noqa: BLE001 — never block the viewer on this
+            log.warning("comparable_presets failed: %s", exc)
+            presets = []
+        PatchCubeDialog(program, mode=mode, target_name=chart.stem,
+                        compare_presets=presets, parent=self).exec()
 
     def _open_settings(self) -> None:
         # SettingsDialog tints its own tooltip ⓘ icons to the dialog's neutral

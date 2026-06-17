@@ -202,6 +202,95 @@ def cube_payload(
     }
 
 
+def _cube_layout(bg: str, fg: str, grid: str) -> dict:
+    def _axis(title: str) -> dict:
+        return {"title": title, "range": [0, 100], "color": fg,
+                "gridcolor": grid, "zerolinecolor": grid,
+                "backgroundcolor": bg, "showbackground": True}
+    return {
+        "paper_bgcolor": bg, "plot_bgcolor": bg,
+        "margin": {"l": 0, "r": 0, "t": 0, "b": 0},
+        "showlegend": False,
+        "scene": {
+            "xaxis": _axis("R"), "yaxis": _axis("G"), "zaxis": _axis("B"),
+            "aspectmode": "cube",
+            "camera": {"eye": {"x": 1.5, "y": 1.5, "z": 1.3}},
+        },
+    }
+
+
+# Reusable JS: middle-button (wheel-click) drag → pan a Plotly 3D plot by id
+# (#64), and keep two plots' cameras in sync (#66). Emitted into both the
+# single and dual cube pages.
+_CUBE_JS_HELPERS = """
+function cqInstallPan(plotId) {
+  var gd = document.getElementById(plotId);
+  var panning = false, lx = 0, ly = 0;
+  var sub = function(a,b){return {x:a.x-b.x,y:a.y-b.y,z:a.z-b.z};};
+  var add = function(a,b){return {x:a.x+b.x,y:a.y+b.y,z:a.z+b.z};};
+  var scl = function(a,s){return {x:a.x*s,y:a.y*s,z:a.z*s};};
+  var cross = function(a,b){return {x:a.y*b.z-a.z*b.y,y:a.z*b.x-a.x*b.z,z:a.x*b.y-a.y*b.x};};
+  var len = function(a){return Math.hypot(a.x,a.y,a.z)||1;};
+  var nrm = function(a){return scl(a,1/len(a));};
+  function cam(){
+    var c=(gd.layout&&gd.layout.scene&&gd.layout.scene.camera)||{eye:{x:1.5,y:1.5,z:1.3}};
+    return {eye:c.eye,center:c.center||{x:0,y:0,z:0},up:c.up||{x:0,y:0,z:1}};
+  }
+  gd.addEventListener("mousedown", function(e){
+    if(e.button===1){panning=true;lx=e.clientX;ly=e.clientY;e.preventDefault();}
+  }, true);
+  window.addEventListener("mousemove", function(e){
+    if(!panning)return;
+    var dx=e.clientX-lx, dy=e.clientY-ly; lx=e.clientX; ly=e.clientY;
+    var c=cam(), fwd=nrm(sub(c.center,c.eye)), right=nrm(cross(fwd,c.up)), tup=nrm(cross(right,fwd));
+    var rect=gd.getBoundingClientRect(), k=len(sub(c.eye,c.center))/Math.max(1,rect.height);
+    var t=add(scl(right,-dx*k),scl(tup,dy*k));
+    Plotly.relayout(gd,{"scene.camera":{eye:add(c.eye,t),center:add(c.center,t),up:c.up}});
+  }, true);
+  window.addEventListener("mouseup", function(e){ if(e.button===1) panning=false; }, true);
+}
+function cqLinkCameras(idA, idB) {
+  // Keep both cubes' cameras locked together CONTINUOUSLY while either is being
+  // rotated / zoomed / panned. The live camera during a drag lives on the
+  // scene's internal object (layout.scene.camera only updates on release), and
+  // 'plotly_relayouting' (not 'plotly_relayout') is the event that fires
+  // throughout the gesture — using those two is what makes it move in real time.
+  var a = document.getElementById(idA), b = document.getElementById(idB);
+  // Only the cube the user is actively driving pushes its camera to the other —
+  // the passive one ignores its own (programmatic) updates, so the two never
+  // feed back into each other.
+  var active = null, wheelTimer = null;
+  function liveCam(gd) {
+    try {
+      var s = gd._fullLayout && gd._fullLayout.scene && gd._fullLayout.scene._scene;
+      if (s && s.getCamera) return s.getCamera();
+    } catch (e) {}
+    return gd.layout && gd.layout.scene && gd.layout.scene.camera;
+  }
+  function arm(gd) {                          // wheel has no mouseup — auto-disarm
+    active = gd;
+    if (wheelTimer) clearTimeout(wheelTimer);
+    wheelTimer = setTimeout(function() { active = null; }, 300);
+  }
+  a.addEventListener("mousedown", function() { active = a; }, true);
+  b.addEventListener("mousedown", function() { active = b; }, true);
+  window.addEventListener("mouseup", function() { active = null; }, true);
+  a.addEventListener("wheel", function() { arm(a); }, true);
+  b.addEventListener("wheel", function() { arm(b); }, true);
+  function link(src, dstId) {
+    function sync() {
+      if (active !== src) return;            // only the driven cube leads
+      var c = liveCam(src);
+      if (c) Plotly.relayout(dstId, {"scene.camera": c});
+    }
+    src.on("plotly_relayouting", sync);      // continuous, during the gesture
+    src.on("plotly_relayout", sync);         // and the final committed position
+  }
+  link(a, idB); link(b, idA);
+}
+"""
+
+
 def build_cube_html(
     program: list[tuple[float, ...]],
     plotly_js_url: str,
@@ -226,24 +315,8 @@ def build_cube_html(
     """
     data = cube_traces(program, existing_program, fg=fg, grid=grid)
     stats_text = combined_summary(program, existing_program)
-
-    def _axis(title: str) -> dict:
-        return {"title": title, "range": [0, 100], "color": fg,
-                "gridcolor": grid, "zerolinecolor": grid,
-                "backgroundcolor": bg, "showbackground": True}
-
-    layout = {
-        "paper_bgcolor": bg, "plot_bgcolor": bg,
-        "margin": {"l": 0, "r": 0, "t": 0, "b": 0},
-        "showlegend": False,
-        "scene": {
-            "xaxis": _axis("R"), "yaxis": _axis("G"), "zaxis": _axis("B"),
-            "aspectmode": "cube",
-            "camera": {"eye": {"x": 1.5, "y": 1.5, "z": 1.3}},
-        },
-    }
-    config = {"displaylogo": False, "responsive": True,
-              "scrollZoom": True}
+    layout = _cube_layout(bg, fg, grid)
+    config = {"displaylogo": False, "responsive": True, "scrollZoom": True}
 
     return f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8">
@@ -261,9 +334,11 @@ def build_cube_html(
   <div id="plot"></div>
   <div id="stats">{stats_text}</div>
   <script>
+    {_CUBE_JS_HELPERS}
     var CQ_LAYOUT = {json.dumps(layout)};
     var CQ_CONFIG = {json.dumps(config)};
     Plotly.newPlot("plot", {json.dumps(data)}, CQ_LAYOUT, CQ_CONFIG);
+    cqInstallPan("plot");
     // Live in-place update: the host pushes a {{data, stats}} payload and the
     // cube redraws via Plotly.react without reloading the page or the WebGL
     // context (see workflow.patch_cube.cube_payload).
@@ -272,49 +347,75 @@ def build_cube_html(
       var s = document.getElementById("stats");
       if (s) {{ s.textContent = payload.stats; }}
     }};
+  </script>
+</body></html>
+"""
 
-    // Middle-button (wheel-click) drag → pan, in addition to Plotly's built-in
-    // right-drag pan (#64). Translates the camera eye + centre together along
-    // the screen-aligned axes via the public relayout API, so it's robust
-    // across Plotly versions.
-    (function() {{
-      var gd = document.getElementById("plot");
-      var panning = false, lx = 0, ly = 0;
-      var sub = function(a, b) {{ return {{x:a.x-b.x, y:a.y-b.y, z:a.z-b.z}}; }};
-      var add = function(a, b) {{ return {{x:a.x+b.x, y:a.y+b.y, z:a.z+b.z}}; }};
-      var scl = function(a, s) {{ return {{x:a.x*s, y:a.y*s, z:a.z*s}}; }};
-      var cross = function(a, b) {{ return {{x:a.y*b.z-a.z*b.y, y:a.z*b.x-a.x*b.z,
-                                            z:a.x*b.y-a.y*b.x}}; }};
-      var len = function(a) {{ return Math.hypot(a.x, a.y, a.z) || 1; }};
-      var nrm = function(a) {{ return scl(a, 1/len(a)); }};
-      function curCam() {{
-        var c = (gd.layout && gd.layout.scene && gd.layout.scene.camera)
-                || CQ_LAYOUT.scene.camera;
-        return {{ eye: c.eye, center: c.center || {{x:0,y:0,z:0}},
-                 up: c.up || {{x:0,y:0,z:1}} }};
-      }}
-      gd.addEventListener("mousedown", function(e) {{
-        if (e.button === 1) {{ panning = true; lx = e.clientX; ly = e.clientY;
-                              e.preventDefault(); }}
-      }}, true);
-      window.addEventListener("mousemove", function(e) {{
-        if (!panning) return;
-        var dx = e.clientX - lx, dy = e.clientY - ly;
-        lx = e.clientX; ly = e.clientY;
-        var c = curCam();
-        var fwd = nrm(sub(c.center, c.eye));
-        var right = nrm(cross(fwd, c.up));
-        var tup = nrm(cross(right, fwd));
-        var rect = gd.getBoundingClientRect();
-        var k = len(sub(c.eye, c.center)) / Math.max(1, rect.height);
-        var t = add(scl(right, -dx * k), scl(tup, dy * k));
-        Plotly.relayout(gd, {{"scene.camera":
-          {{ eye: add(c.eye, t), center: add(c.center, t), up: c.up }} }});
-      }}, true);
-      window.addEventListener("mouseup", function(e) {{
-        if (e.button === 1) panning = false;
-      }}, true);
-    }})();
+
+def build_dual_cube_html(
+    program_a: list[tuple[float, ...]],
+    label_a: str,
+    program_b: list[tuple[float, ...]],
+    label_b: str,
+    plotly_js_url: str,
+    *,
+    existing_a: list[tuple[float, ...]] | None = None,
+    bg: str = "#111111",
+    fg: str = "#cccccc",
+    grid: str = "#444444",
+) -> str:
+    """Two side-by-side 3D RGB cubes (current chart vs. a comparison preset),
+    with their cameras locked in sync — rotate/zoom/pan one and the other
+    follows, so they can be compared from any angle (#66). Each cube carries its
+    name above it and its own stats below."""
+    import html as _html
+    data_a = cube_traces(program_a, existing_a, fg=fg, grid=grid)
+    data_b = cube_traces(program_b, None, fg=fg, grid=grid)
+    layout = _cube_layout(bg, fg, grid)
+    config = {"displaylogo": False, "responsive": True, "scrollZoom": True}
+    return f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<script src="{plotly_js_url}"></script>
+<style>
+  html, body {{ margin: 0; padding: 0; height: 100%; width: 100%;
+                overflow: hidden; background: {bg};
+                font-family: Menlo, Consolas, "Courier New", monospace; }}
+  #row {{ display: flex; width: 100%; height: 100%; }}
+  .col {{ flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; }}
+  .col + .col {{ border-left: 1px solid {grid}; }}
+  .title {{ height: 24px; line-height: 24px; color: {fg}; font-size: 12px;
+            font-weight: bold; text-align: center; background: {bg};
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+            padding: 0 8px; }}
+  .cube {{ flex: 1 1 auto; min-height: 0; }}
+  .stats {{ height: 24px; line-height: 24px; color: {fg}; font-size: 11px;
+            padding: 0 10px; background: {bg};
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
+</style></head>
+<body>
+  <div id="row">
+    <div class="col">
+      <div class="title">{_html.escape(label_a)}</div>
+      <div id="plotA" class="cube"></div>
+      <div class="stats">{combined_summary(program_a, existing_a)}</div>
+    </div>
+    <div class="col">
+      <div class="title">{_html.escape(label_b)}</div>
+      <div id="plotB" class="cube"></div>
+      <div class="stats">{combined_summary(program_b, None)}</div>
+    </div>
+  </div>
+  <script>
+    {_CUBE_JS_HELPERS}
+    var CQ_LAYOUT = {json.dumps(layout)};
+    var CQ_CONFIG = {json.dumps(config)};
+    Promise.all([
+      Plotly.newPlot("plotA", {json.dumps(data_a)}, CQ_LAYOUT, CQ_CONFIG),
+      Plotly.newPlot("plotB", {json.dumps(data_b)}, CQ_LAYOUT, CQ_CONFIG)
+    ]).then(function() {{
+      cqInstallPan("plotA"); cqInstallPan("plotB");
+      cqLinkCameras("plotA", "plotB");   // rotate/zoom/pan stay in sync
+    }});
   </script>
 </body></html>
 """
