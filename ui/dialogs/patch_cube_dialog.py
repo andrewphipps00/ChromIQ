@@ -70,11 +70,12 @@ class PatchCubeDialog(QDialog):
         if self._compare_presets:
             bar.addWidget(QLabel(tr("Compare with profile:"), self))
             self._compare_combo = QComboBox(self)
-            # Cap the popup at 15 rows + scroll: combobox-popup:1 forces the
-            # styled scrollable list popup that honours maxVisibleItems (the
-            # native popup ignores it and shows every row).
+            # Cap the popup at 15 rows + scroll. On macOS maxVisibleItems is
+            # honoured ONLY when combobox-popup:0 (which replaces the native menu
+            # with a scrollable list) — :1 keeps the native menu and shows every
+            # row.
             self._compare_combo.setMaxVisibleItems(15)
-            self._compare_combo.setStyleSheet("QComboBox { combobox-popup: 1; }")
+            self._compare_combo.setStyleSheet("QComboBox { combobox-popup: 0; }")
             self._compare_combo.addItem(tr("None"), None)
             for group, items in self._compare_presets:
                 self._compare_combo.insertSeparator(self._compare_combo.count())
