@@ -1485,11 +1485,13 @@ class TabChart(QWidget):
         self._preset_combo.setItemDelegate(
             _ComboSeparatorDelegate(self._preset_combo)
         )
-        # Cap the popup height and make it scroll — the built-in list is long.
-        # combobox-popup:0 is what makes Qt honour maxVisibleItems (a scrollable
-        # list) instead of one giant native menu.
+        # Cap the popup at 15 rows and make it scroll — the built-in list is
+        # long. combobox-popup:1 forces the styled, scrollable list popup (which
+        # honours maxVisibleItems); the macOS native popup ignores it and shows
+        # every row. (Unlike the max-height-22px #compact_input combos, this one
+        # isn't height-clamped, so the popup-clipping that needs :0 doesn't bite.)
         self._preset_combo.setMaxVisibleItems(15)
-        self._preset_combo.setStyleSheet("QComboBox { combobox-popup: 0; }")
+        self._preset_combo.setStyleSheet("QComboBox { combobox-popup: 1; }")
         self._preset_combo.addItem(tr("none"), userData=None)
         presets_row.addWidget(self._preset_combo, stretch=1)
         self._preset_add_btn = QPushButton(w)
