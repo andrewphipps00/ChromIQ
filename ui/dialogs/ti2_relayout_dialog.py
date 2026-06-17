@@ -51,19 +51,11 @@ def _magenta_tip(title: str, body: str, parent: QWidget | None = None,
 
 
 def _toggle_locked_prefix(edit: "PrefixLockedLineEdit", on: bool, prefix: str) -> None:
-    """Flip a name field between locked-prefix and free-text without losing the
-    name (#68): off leaves the whole descriptive name editable (not blank); on
-    re-locks the head without duplicating it when the text already starts with
-    it. Mirrors tab_chart's ``_toggle_name_prefix`` for the editor's dialogs."""
-    full = edit.text()
-    if on:
-        tail = (full[len(prefix):].lstrip("-")
-                if prefix and full.startswith(prefix) else full)
-        edit.set_prefix(prefix)
-        edit.set_tail(tail)
-    else:
-        edit.set_prefix("")
-        edit.setText(full)
+    """Flip a name field between locked-prefix and free-text (#68, Knut's model):
+    ON locks the descriptive head (always shown with its '-') and keeps the
+    user's tail; OFF removes the locked head + separator, leaving only the tail
+    as free text. Mirrors tab_chart's ``_toggle_name_prefix``."""
+    edit.set_prefix(prefix if on else "")
 
 
 # The "Generate colour sets" help, shared verbatim by the New-chart dialog's ⓘ
@@ -281,7 +273,7 @@ _INSTRUMENTS = [
 _STRIP_INSTRUMENTS = frozenset({"i1", "3p"})
 
 # Paper sizes the new-chart dropdown offers — matches the Create Chart tab.
-from data.patch_db import PAPER_LABELS, PAPER_PRINTTARG_ARG
+from data.patch_db import PAPER_LABELS, PAPER_PRINTTARG_ARG, paper_name_token
 from core.i18n import tr
 
 
@@ -5229,9 +5221,7 @@ class Ti2RelayoutDialog(QDialog):
         # code ("483x329"); only a truly custom size falls back to the W×H code
         # (#68, Knut). PAPER_LABELS keys both named sizes and the WxH aliases for
         # named ones, so a known code resolves to its short label here.
-        code = self._spec.paper_flag or "paper"
-        label = PAPER_LABELS.get(code)
-        paper = label.split(" (")[0] if label else code
+        paper = paper_name_token(self._spec.paper_flag or "paper")
         parts = [instr, paper, f"{self._grid.count()}p"]
         pages = len(self._regen.tiffs) if self._regen is not None else 0
         if pages:
@@ -5248,18 +5238,14 @@ class Ti2RelayoutDialog(QDialog):
         return self._suggest_chart_name() if self._spec is not None else ""
 
     def _seed_save_name(self, name_edit: "PrefixLockedLineEdit", on: bool) -> None:
-        """Initial contents of a Save dialog's name field. With the prefix ON we
-        seed the *clean suggested name* (prefix + empty tail) rather than the
-        carried basename — the latter is filesystem-sanitised (e.g. ``A3+`` →
-        ``A3_``), so prepending the ``A3+`` prefix to it doubled the name (#68).
-        With it OFF we show the carried name as free, editable text."""
+        """Initial contents of a Save dialog's name field (#68, locked-prefix
+        model). ON shows the locked suggested name + ``-`` with an empty tail,
+        cursor ready to type; OFF leaves the field empty for fully free input.
+        The field never holds the generated name as free text, so toggling can't
+        duplicate it (and the ``A3+``/``A3_`` sanitisation mismatch can't bite)."""
         pfx = self._dialog_name_prefix()
-        if on and pfx:
-            name_edit.set_prefix(pfx)
-            name_edit.set_tail("")
-        else:
-            name_edit.set_prefix("")
-            name_edit.setText(self._default_apply_name())
+        name_edit.set_tail("")
+        name_edit.set_prefix(pfx if (on and pfx) else "")
 
     def _default_apply_name(self) -> str:
         """The pre-filled Save & apply name: the target name carried through the

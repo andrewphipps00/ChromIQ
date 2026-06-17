@@ -1,5 +1,24 @@
 # Changelog
 
+## v3.10.27
+
+### 💄 Improved
+- **Name fields now show a clearly locked descriptive prefix.** With "Add a
+  descriptive prefix" on, the generated part is shown greyed and locked with its
+  `-` always visible (cursor lands right after it, ready to type); turning the
+  option off clears the generated part and leaves the field free for your own
+  name. Applies consistently to Create Chart's **Save preset** and the layout
+  editor's **Save as…** and **Save & apply** dialogs. (#68, thanks
+  **Knut (@soul-traveller)**)
+- **Special characters in paper names are made filesystem-safe in names.** A
+  paper like A3+ now reads **A3Plus** and inch sizes read **8x10in / 5x7in** in
+  generated names (the `+` and `"` are kept only in the selection lists, never in
+  folder/file names). (#68, thanks **Knut (@soul-traveller)**)
+
+### 🐛 Fixed
+- Forward-Delete from inside a locked name prefix no longer nibbles the first
+  editable character.
+
 ## v3.10.26
 
 ### 🐛 Fixed

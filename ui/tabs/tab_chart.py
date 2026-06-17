@@ -55,6 +55,7 @@ from data.patch_db import (
     PAPER_LABELS,
     PAPER_SIZES,
     i1_defaults_from_preset,
+    paper_name_token,
     query_patches,
 )
 from ui.dialogs.target_change_dialog import TargetChangeAction, TargetChangeDialog
@@ -3402,7 +3403,8 @@ class TabChart(QWidget):
         orientation from their dimensions."""
         label = PAPER_LABELS.get(paper, "")
         if label:
-            base = re.split(r"\s*[(/]", label)[0].strip() or paper
+            # Filesystem-safe readable token (A3+ → A3Plus, 8×10" → 8x10in) (#68).
+            base = paper_name_token(paper)
             orient = ("Landscape" if "Landscape" in label
                       else "Portrait" if "Portrait" in label else "")
             return base, orient
@@ -3581,19 +3583,11 @@ class TabChart(QWidget):
 
     @staticmethod
     def _toggle_name_prefix(edit: "PrefixLockedLineEdit", on: bool, prefix: str) -> None:
-        """Flip a name field between locked-prefix and free-text *without losing
-        the name* (#68). Turning the option off leaves the whole descriptive name
-        as editable text (not an empty field); turning it on re-locks the head
-        without duplicating it when the text already begins with it."""
-        full = edit.text()
-        if on:
-            tail = (full[len(prefix):].lstrip("-")
-                    if prefix and full.startswith(prefix) else full)
-            edit.set_prefix(prefix)
-            edit.set_tail(tail)
-        else:
-            edit.set_prefix("")
-            edit.setText(full)
+        """Flip a name field between locked-prefix and free-text (#68, Knut's
+        model). ON locks the descriptive head (always shown with its '-', cursor
+        after it) and keeps the user's tail; OFF removes the locked head and its
+        separator, leaving only the user's tail as fully free text."""
+        edit.set_prefix(prefix if on else "")
 
     def _on_auto_suffix_toggled(self, on: bool) -> None:
         self._settings.set("create_chart_auto_suffix", bool(on))
