@@ -240,6 +240,23 @@ PAPER_LABELS: dict[str, str] = {
     "4x6":     "4×6\" (102 × 152 mm)",
 }
 
+def paper_name_token(code: str) -> str:
+    """A filesystem-safe, readable paper token for generated chart/profile names
+    (#68, Knut). Named sizes use their short name with special characters made
+    safe — ``+`` → ``Plus`` (A3+ → A3Plus), ``"`` → ``in`` (8×10" → 8x10in),
+    ``×`` → ``x`` — and any " / " alias is dropped (Tabloid / 11 × 17" → Tabloid).
+    A custom ``WxH`` size (not in PAPER_LABELS) is returned unchanged. The ``+``
+    and ``"`` are kept only in the dropdown labels, never in names/folders."""
+    label = PAPER_LABELS.get(code)
+    if not label:
+        return code  # custom WxH or unknown — already safe (digits + 'x')
+    token = label.split(" (")[0].split(" / ")[0].strip()
+    token = (token.replace("×", "x").replace(" ", "")
+                  .replace("+", "Plus")
+                  .replace("”", "in").replace("“", "in").replace('"', "in"))
+    return token or code
+
+
 # printtarg -p argument for each paper key
 PAPER_PRINTTARG_ARG: dict[str, str] = {
     "A2":      "A2",

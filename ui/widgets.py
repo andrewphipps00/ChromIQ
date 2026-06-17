@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
-from PyQt6.QtCore import QEvent, QModelIndex, QObject, QSize, QSortFilterProxyModel, Qt, QUrl
+from PyQt6.QtCore import QEvent, QModelIndex, QObject, QRect, QSize, QSortFilterProxyModel, Qt, QUrl
 from PyQt6.QtGui import QColor, QFont, QIcon, QPainter, QPalette, QPixmap, QTextCursor
 
 from core.i18n import tr
@@ -25,6 +25,7 @@ from PyQt6.QtWidgets import (
     QSizePolicy,
     QSpinBox,
     QStyle,
+    QStyleOptionFrame,
     QToolBar,
     QToolButton,
     QWidget,
@@ -272,8 +273,10 @@ class PrefixLockedLineEdit(QLineEdit):
     # -- public ---------------------------------------------------------
     def set_prefix(self, prefix: str) -> None:
         """Replace the locked head, preserving the user's editable tail. A
-        trailing separator is dropped — it's supplied automatically, and only
-        once the tail is non-empty (so an empty tail shows no dangling '-')."""
+        trailing separator is dropped — the separator is supplied automatically
+        and shown whenever a prefix is set (even with an empty tail), so the
+        locked head is always visibly delimited and the cursor lands after it,
+        ready for input (#68, Knut's locked-prefix model)."""
         prefix = prefix or ""
         if prefix.endswith(self._SEP):
             prefix = prefix[: -len(self._SEP)]
@@ -288,11 +291,10 @@ class PrefixLockedLineEdit(QLineEdit):
         t = super().text()
         if not self._prefix:
             return t
-        if t.startswith(self._prefix + self._SEP):
-            return t[len(self._prefix) + len(self._SEP):]
-        if t == self._prefix:
-            return ""
-        if t.startswith(self._prefix):
+        head = self._prefix + self._SEP
+        if t.startswith(head):
+            return t[len(head):]
+        if t.startswith(self._prefix):   # transient: separator momentarily gone
             return t[len(self._prefix):]
         return t
 
@@ -301,10 +303,11 @@ class PrefixLockedLineEdit(QLineEdit):
 
     # -- internals ------------------------------------------------------
     def _full(self, tail: str) -> str:
-        """Canonical text for a tail: prefix alone when empty, else joined."""
+        """Canonical text: ``prefix + '-' + tail`` whenever a prefix is set (the
+        separator stays even when the tail is empty), else just the tail."""
         if not self._prefix:
             return tail
-        return self._prefix + (self._SEP + tail if tail else "")
+        return self._prefix + self._SEP + tail
 
     def _set(self, tail: str) -> None:
         self._guard = True
@@ -313,14 +316,17 @@ class PrefixLockedLineEdit(QLineEdit):
         self._guard = False
 
     def _locked_len(self) -> int:
-        """Length of the non-editable head in the CURRENT text (includes the
-        separator only when a tail is present)."""
+        """Length of the non-editable head in the CURRENT text (prefix + the
+        always-present separator)."""
         t = super().text()
-        if not self._prefix or not t.startswith(self._prefix):
+        if not self._prefix:
             return 0
-        if t.startswith(self._prefix + self._SEP):
-            return len(self._prefix) + len(self._SEP)
-        return len(self._prefix)
+        head = self._prefix + self._SEP
+        if t.startswith(head):
+            return len(head)
+        if t.startswith(self._prefix):   # transient (separator being re-added)
+            return len(self._prefix)
+        return 0
 
     def _clamp(self) -> None:
         if not self._prefix:
@@ -338,11 +344,16 @@ class PrefixLockedLineEdit(QLineEdit):
     def keyPressEvent(self, ev) -> None:  # noqa: N802
         if self._prefix:
             start = self._locked_len()
-            # A backspace at the prefix/tail boundary would eat the locked head
-            # (or its separator); swallow it.
-            if (ev.key() == Qt.Key.Key_Backspace and self.selectionLength() == 0
-                    and self.cursorPosition() <= start):
-                return
+            if self.selectionLength() == 0:
+                # Backspace at the boundary would eat the locked head/separator;
+                # forward-Delete from inside the locked head would eat a prefix
+                # character. Swallow both.
+                if (ev.key() == Qt.Key.Key_Backspace
+                        and self.cursorPosition() <= start):
+                    return
+                if (ev.key() == Qt.Key.Key_Delete
+                        and self.cursorPosition() < start):
+                    return
             self._clamp()
         super().keyPressEvent(ev)
 
@@ -370,8 +381,8 @@ class PrefixLockedLineEdit(QLineEdit):
     def _on_text_changed(self, _t: str) -> None:
         if self._guard or not self._prefix:
             return
-        # Re-render canonically so the separator appears the moment a tail is
-        # typed and vanishes when it's emptied (the #68 trailing-dash fix).
+        # Re-render canonically so the locked separator is always present while a
+        # prefix is set (it can't be deleted to merge the head into the tail).
         t = super().text()
         canonical = self._full(self.tail())
         if t != canonical:
@@ -379,6 +390,36 @@ class PrefixLockedLineEdit(QLineEdit):
             super().setText(canonical)
             super().setCursorPosition(len(canonical))   # edits happen at the tail end
             self._guard = False
+
+    def paintEvent(self, ev) -> None:  # noqa: N802
+        super().paintEvent(ev)
+        # Grey the locked head so it visibly reads as non-editable (#68, Knut).
+        # Only when the text fits without horizontal scroll: once it scrolls, the
+        # glyphs no longer start at the content's left edge and an overlay would
+        # mis-paint — the always-present '-' still marks the boundary there.
+        if self._prefix == "" or self.hasSelectedText():
+            return
+        locked = self._locked_len()
+        if locked <= 0:
+            return
+        text = super().text()
+        fm = self.fontMetrics()
+        opt = QStyleOptionFrame()
+        self.initStyleOption(opt)
+        content = self.style().subElementRect(
+            QStyle.SubElement.SE_LineEditContents, opt, self)
+        if fm.horizontalAdvance(text) > content.width() - 4:
+            return
+        x0 = content.left() + 2
+        w = fm.horizontalAdvance(text[:locked])
+        rect = QRect(x0, content.top(), w, content.height())
+        p = QPainter(self)
+        p.fillRect(rect, self.palette().color(QPalette.ColorRole.Base))
+        p.setFont(self.font())
+        p.setPen(self.palette().color(QPalette.ColorRole.PlaceholderText))
+        p.drawText(rect, int(Qt.AlignmentFlag.AlignVCenter
+                             | Qt.AlignmentFlag.AlignLeft), text[:locked])
+        p.end()
 
 
 class ElidingLabel(QLabel):
