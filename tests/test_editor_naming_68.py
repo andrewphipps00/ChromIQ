@@ -41,8 +41,8 @@ def test_locked_prefix_hard_dash(qapp):
 
 
 def test_toggle_locked_prefix(qapp):
-    # ON locks the head (+ dash) and keeps the tail; OFF removes the head and its
-    # separator, leaving only the user's tail; back ON doesn't duplicate (#68).
+    # #68 (Knut's model). ON: locked head + '-' + editable tail. OFF: the
+    # generated name shown as a plain, fully editable field (no dash, no lock).
     from ui.widgets import PrefixLockedLineEdit
     from ui.dialogs.ti2_relayout_dialog import _toggle_locked_prefix
     e = PrefixLockedLineEdit()
@@ -51,9 +51,11 @@ def test_toggle_locked_prefix(qapp):
     e.set_tail("v2")
     assert e.text() == pfx + "-v2"
     _toggle_locked_prefix(e, False, pfx)
-    assert e.text() == "v2"                 # only the user's tail remains
+    assert e.text() == pfx and not e.isReadOnly()   # generated name, editable
+    e.setText("MyCustom")                            # OFF allows free naming
+    assert e.text() == "MyCustom"
     _toggle_locked_prefix(e, True, pfx)
-    assert e.text() == pfx + "-v2"          # not doubled
+    assert e.text() == pfx + "-" and not e.isReadOnly()   # fresh empty tail
     assert e.text().count("ColorMunki") == 1
 
 
@@ -83,9 +85,10 @@ def test_paper_name_token_special_chars():
 
 
 def test_save_seed_locked_prefix_and_no_doubling(qapp, settings):
-    # #68: ON seeds the clean locked suggested name + dash (never the sanitised
-    # carried basename, which would double); OFF leaves the field empty for free
-    # input.
+    # #68 (Knut's model): ON seeds the locked suggested name + dash; OFF seeds
+    # the locked suggested name alone (no dash, read-only). Either way it's the
+    # clean generated name — never the sanitised carried basename — so there's
+    # no doubling and the A3+/A3_ mismatch can't bite.
     import workflow.ti2_relayout as R
     from ui.dialogs.ti2_relayout_dialog import Ti2RelayoutDialog
     from ui.widgets import PrefixLockedLineEdit
@@ -100,7 +103,8 @@ def test_save_seed_locked_prefix_and_no_doubling(qapp, settings):
     assert "A3Plus" in e.text() and "A3_" not in e.text()
     assert e.text().count("ColorMunki") == 1            # not doubled
     d._seed_save_name(e, False)
-    assert e.text() == ""                               # empty, free input
+    assert e.text() == d._dialog_name_prefix()          # generated name, no dash
+    assert not e.isReadOnly() and "A3Plus" in e.text()  # fully editable
 
 
 def test_editor_td_sync_keeps_loaded_scale_margin(qapp, settings):
