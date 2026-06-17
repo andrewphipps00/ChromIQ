@@ -202,6 +202,14 @@ def cube_payload(
     }
 
 
+def _controls_hint() -> str:
+    """One-line, visible mouse+keyboard help for the 3D cube (#66). Full detail
+    lives in the dialog's ⓘ tooltip."""
+    from core.i18n import tr
+    return tr("Drag to rotate · scroll to zoom · right- or middle-drag to pan · "
+              "arrow keys rotate, Shift+arrows pan, +/− zoom")
+
+
 def _cube_layout(bg: str, fg: str, grid: str) -> dict:
     def _axis(title: str) -> dict:
         return {"title": title, "range": [0, 100], "color": fg,
@@ -223,31 +231,60 @@ def _cube_layout(bg: str, fg: str, grid: str) -> dict:
 # (#64), and keep two plots' cameras in sync (#66). Emitted into both the
 # single and dual cube pages.
 _CUBE_JS_HELPERS = """
+var cqSub = function(a,b){return {x:a.x-b.x,y:a.y-b.y,z:a.z-b.z};};
+var cqAdd = function(a,b){return {x:a.x+b.x,y:a.y+b.y,z:a.z+b.z};};
+var cqScl = function(a,s){return {x:a.x*s,y:a.y*s,z:a.z*s};};
+var cqCross = function(a,b){return {x:a.y*b.z-a.z*b.y,y:a.z*b.x-a.x*b.z,z:a.x*b.y-a.y*b.x};};
+var cqLen = function(a){return Math.hypot(a.x,a.y,a.z)||1;};
+var cqNrm = function(a){return cqScl(a,1/cqLen(a));};
+// Rodrigues rotation of v around a (normalised) axis by angle ang.
+var cqRot = function(v,a,ang){
+  var c=Math.cos(ang), s=Math.sin(ang), d=v.x*a.x+v.y*a.y+v.z*a.z, cr=cqCross(a,v);
+  return {x:v.x*c+cr.x*s+a.x*d*(1-c), y:v.y*c+cr.y*s+a.y*d*(1-c), z:v.z*c+cr.z*s+a.z*d*(1-c)};
+};
+var cqCam = function(gd){
+  var c=(gd.layout&&gd.layout.scene&&gd.layout.scene.camera)||{eye:{x:1.5,y:1.5,z:1.3}};
+  return {eye:c.eye, center:c.center||{x:0,y:0,z:0}, up:c.up||{x:0,y:0,z:1}};
+};
 function cqInstallPan(plotId) {
   var gd = document.getElementById(plotId);
   var panning = false, lx = 0, ly = 0;
-  var sub = function(a,b){return {x:a.x-b.x,y:a.y-b.y,z:a.z-b.z};};
-  var add = function(a,b){return {x:a.x+b.x,y:a.y+b.y,z:a.z+b.z};};
-  var scl = function(a,s){return {x:a.x*s,y:a.y*s,z:a.z*s};};
-  var cross = function(a,b){return {x:a.y*b.z-a.z*b.y,y:a.z*b.x-a.x*b.z,z:a.x*b.y-a.y*b.x};};
-  var len = function(a){return Math.hypot(a.x,a.y,a.z)||1;};
-  var nrm = function(a){return scl(a,1/len(a));};
-  function cam(){
-    var c=(gd.layout&&gd.layout.scene&&gd.layout.scene.camera)||{eye:{x:1.5,y:1.5,z:1.3}};
-    return {eye:c.eye,center:c.center||{x:0,y:0,z:0},up:c.up||{x:0,y:0,z:1}};
-  }
   gd.addEventListener("mousedown", function(e){
     if(e.button===1){panning=true;lx=e.clientX;ly=e.clientY;e.preventDefault();}
   }, true);
   window.addEventListener("mousemove", function(e){
     if(!panning)return;
     var dx=e.clientX-lx, dy=e.clientY-ly; lx=e.clientX; ly=e.clientY;
-    var c=cam(), fwd=nrm(sub(c.center,c.eye)), right=nrm(cross(fwd,c.up)), tup=nrm(cross(right,fwd));
-    var rect=gd.getBoundingClientRect(), k=len(sub(c.eye,c.center))/Math.max(1,rect.height);
-    var t=add(scl(right,-dx*k),scl(tup,dy*k));
-    Plotly.relayout(gd,{"scene.camera":{eye:add(c.eye,t),center:add(c.center,t),up:c.up}});
+    var c=cqCam(gd), fwd=cqNrm(cqSub(c.center,c.eye)), right=cqNrm(cqCross(fwd,c.up)), tup=cqNrm(cqCross(right,fwd));
+    var rect=gd.getBoundingClientRect(), k=cqLen(cqSub(c.eye,c.center))/Math.max(1,rect.height);
+    var t=cqAdd(cqScl(right,-dx*k),cqScl(tup,dy*k));
+    Plotly.relayout(gd,{"scene.camera":{eye:cqAdd(c.eye,t),center:cqAdd(c.center,t),up:c.up}});
   }, true);
   window.addEventListener("mouseup", function(e){ if(e.button===1) panning=false; }, true);
+}
+// Keyboard: arrows rotate, Shift+arrows pan, +/- zoom (operates on the camera
+// via the public relayout API, so it stays in sync with the mouse).
+function cqInstallKeys(plotId) {
+  var gd = document.getElementById(plotId);
+  document.addEventListener("keydown", function(e){
+    var k=e.key, c=cqCam(gd), v=cqSub(c.eye,c.center);
+    var fwd=cqNrm(cqScl(v,-1)), right=cqNrm(cqCross(fwd,c.up)), tup=cqNrm(cqCross(right,fwd));
+    var ang=0.12, applied=null;
+    if(e.shiftKey && (k==="ArrowLeft"||k==="ArrowRight"||k==="ArrowUp"||k==="ArrowDown")){
+      var step=cqLen(v)*0.06, t={x:0,y:0,z:0};
+      if(k==="ArrowLeft") t=cqScl(right,-step); else if(k==="ArrowRight") t=cqScl(right,step);
+      else if(k==="ArrowUp") t=cqScl(tup,step); else t=cqScl(tup,-step);
+      applied={eye:cqAdd(c.eye,t), center:cqAdd(c.center,t), up:c.up};
+    } else if(k==="ArrowLeft"){ applied={eye:cqAdd(c.center,cqRot(v,c.up,-ang)), center:c.center, up:c.up}; }
+    else if(k==="ArrowRight"){ applied={eye:cqAdd(c.center,cqRot(v,c.up,ang)), center:c.center, up:c.up}; }
+    else if(k==="ArrowUp"){ applied={eye:cqAdd(c.center,cqRot(v,right,ang)), center:c.center, up:c.up}; }
+    else if(k==="ArrowDown"){ applied={eye:cqAdd(c.center,cqRot(v,right,-ang)), center:c.center, up:c.up}; }
+    else if(k==="+"||k==="="){ applied={eye:cqAdd(c.center,cqScl(v,0.9)), center:c.center, up:c.up}; }
+    else if(k==="-"||k==="_"){ applied={eye:cqAdd(c.center,cqScl(v,1.1)), center:c.center, up:c.up}; }
+    if(!applied) return;
+    e.preventDefault();
+    Plotly.relayout(gd, {"scene.camera": applied});
+  });
 }
 function cqLinkCameras(idA, idB) {
   // Keep both cubes' cameras locked together CONTINUOUSLY while either is being
@@ -313,10 +350,12 @@ def build_cube_html(
     so a host can push a new :func:`cube_payload` via ``Plotly.react`` and have
     the cube redraw in place — no reload — as generator settings change.
     """
+    import html as _html
     data = cube_traces(program, existing_program, fg=fg, grid=grid)
     stats_text = combined_summary(program, existing_program)
     layout = _cube_layout(bg, fg, grid)
     config = {"displaylogo": False, "responsive": True, "scrollZoom": True}
+    hint = _html.escape(_controls_hint())
 
     return f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8">
@@ -325,12 +364,16 @@ def build_cube_html(
   html, body {{ margin: 0; padding: 0; height: 100%; width: 100%;
                 overflow: hidden; background: {bg};
                 font-family: Menlo, Consolas, "Courier New", monospace; }}
-  #plot {{ width: 100%; height: calc(100% - 26px); overflow: hidden; }}
+  #help {{ height: 22px; line-height: 22px; color: {fg}; font-size: 10px;
+           opacity: 0.75; padding: 0 10px; background: {bg}; text-align: center;
+           white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
+  #plot {{ width: 100%; height: calc(100% - 26px - 22px); overflow: hidden; }}
   #stats {{ height: 26px; line-height: 26px; color: {fg}; font-size: 11px;
             padding: 0 10px; background: {bg};
             white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
 </style></head>
 <body>
+  <div id="help">{hint}</div>
   <div id="plot"></div>
   <div id="stats">{stats_text}</div>
   <script>
@@ -338,7 +381,7 @@ def build_cube_html(
     var CQ_LAYOUT = {json.dumps(layout)};
     var CQ_CONFIG = {json.dumps(config)};
     Plotly.newPlot("plot", {json.dumps(data)}, CQ_LAYOUT, CQ_CONFIG);
-    cqInstallPan("plot");
+    cqInstallPan("plot"); cqInstallKeys("plot");
     // Live in-place update: the host pushes a {{data, stats}} payload and the
     // cube redraws via Plotly.react without reloading the page or the WebGL
     // context (see workflow.patch_cube.cube_payload).
@@ -380,7 +423,10 @@ def build_dual_cube_html(
   html, body {{ margin: 0; padding: 0; height: 100%; width: 100%;
                 overflow: hidden; background: {bg};
                 font-family: Menlo, Consolas, "Courier New", monospace; }}
-  #row {{ display: flex; width: 100%; height: 100%; }}
+  #help {{ height: 22px; line-height: 22px; color: {fg}; font-size: 10px;
+           opacity: 0.75; padding: 0 10px; background: {bg}; text-align: center;
+           white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
+  #row {{ display: flex; width: 100%; height: calc(100% - 22px); }}
   .col {{ flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; }}
   .col + .col {{ border-left: 1px solid {grid}; }}
   .title {{ height: 24px; line-height: 24px; color: {fg}; font-size: 12px;
@@ -393,6 +439,7 @@ def build_dual_cube_html(
             white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
 </style></head>
 <body>
+  <div id="help">{_html.escape(_controls_hint())}</div>
   <div id="row">
     <div class="col">
       <div class="title">{_html.escape(label_a)}</div>
@@ -414,6 +461,7 @@ def build_dual_cube_html(
       Plotly.newPlot("plotB", {json.dumps(data_b)}, CQ_LAYOUT, CQ_CONFIG)
     ]).then(function() {{
       cqInstallPan("plotA"); cqInstallPan("plotB");
+      cqInstallKeys("plotA"); cqInstallKeys("plotB");   // both move together
       cqLinkCameras("plotA", "plotB");   // rotate/zoom/pan stay in sync
     }});
   </script>

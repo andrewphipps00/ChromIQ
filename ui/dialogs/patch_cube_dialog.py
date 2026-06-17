@@ -55,7 +55,20 @@ class PatchCubeDialog(QDialog):
         # stripe, matching the chart-design windows; the cube sits beneath it.
         head, _header, stripe = dialog_masthead(
             self, tr("PATCH SET · 3D VIEW"), tr("Patch distribution"),
-            top=14, bottom=10)
+            top=14, bottom=10,
+            tooltip_title=tr("Patch distribution (3D)"),
+            tooltip_body=tr(
+                "Shows the chart's patches as points in the RGB cube, so you can "
+                "see how evenly the colours are spread.\n\n"
+                "Move the view to inspect it from any angle:\n"
+                "• Mouse — drag to rotate, scroll to zoom, right-drag or "
+                "middle-drag (wheel-click) to pan.\n"
+                "• Keyboard (click the cube first) — arrow keys rotate, "
+                "Shift+arrow keys pan, + / − zoom.\n\n"
+                "Pick a preset in “Compare with profile” to open a second cube "
+                "beside this one; the two cameras stay locked together, so the "
+                "same rotate/zoom/pan moves both and you can compare coverage "
+                "from any angle."))
         lay.addLayout(head)
         lay.addWidget(stripe)
 

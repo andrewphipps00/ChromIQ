@@ -1,5 +1,14 @@
 # Changelog
 
+## v3.10.20
+
+### 💄 Improved
+- **3D RGB cube: clearer controls.** The patch-distribution and Compare cubes
+  now show a help line (drag to rotate, scroll to zoom, right/middle-drag to
+  pan) and support the **keyboard**: arrow keys rotate, **Shift+arrows** pan,
+  **+ / −** zoom. Full details — including the compare-cube camera sync — are in
+  the window's ⓘ. (#66, thanks **Knut (@soul-traveller)**)
+
 ## v3.10.19
 
 ### ✨ Added

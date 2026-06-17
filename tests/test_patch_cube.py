@@ -78,6 +78,14 @@ def test_build_html_has_middle_drag_pan():
     assert 'cqInstallPan("plot")' in html
 
 
+def test_build_html_has_keyboard_and_help_hint():
+    # #66 follow-up (Knut): keyboard controls + a visible mouse/keyboard help line.
+    html = C.build_cube_html([(50.0, 50.0, 50.0)], "file:///tmp/plotly.js")
+    assert "cqInstallKeys" in html
+    assert "ArrowLeft" in html and "shiftKey" in html      # rotate / pan keys
+    assert 'id="help"' in html                              # visible hint bar
+
+
 def test_build_dual_cube_html():
     # #66: two cubes, each labelled, with synced cameras + per-cube pan.
     a = [(100.0, 0.0, 0.0), (0.0, 100.0, 0.0)]
