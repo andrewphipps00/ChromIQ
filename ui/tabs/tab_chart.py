@@ -587,7 +587,7 @@ class _CappedComboBox(NoScrollComboBox):
     popup container's height directly once it's shown — robust on every platform.
     """
 
-    _MAX_ROWS = 15
+    _MAX_ROWS = 20
 
     def showPopup(self) -> None:  # noqa: N802
         super().showPopup()
@@ -1514,7 +1514,7 @@ class TabChart(QWidget):
         # The popup is capped + scrolled by _CappedComboBox.showPopup (macOS
         # ignores maxVisibleItems for this styled compound combo); keep
         # maxVisibleItems too for platforms that do honour it.
-        self._preset_combo.setMaxVisibleItems(15)
+        self._preset_combo.setMaxVisibleItems(20)
         self._preset_combo.addItem(tr("none"), userData=None)
         presets_row.addWidget(self._preset_combo, stretch=1)
         self._preset_add_btn = QPushButton(w)

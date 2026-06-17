@@ -1,5 +1,13 @@
 # Changelog
 
+## v3.10.18
+
+### 💄 Improved
+- **Long preset dropdowns now scroll.** The Create Chart → Manual presets list
+  and the patch-distribution "Compare with profile" list are capped (20 and 15
+  rows) with a scrollbar instead of an over-long popup, keeping their instrument
+  separators.
+
 ## v3.10.17
 
 Big thanks to **Knut (@soul-traveller)** for the ideas and testing behind most
