@@ -579,6 +579,32 @@ def _extra_args_have_patch_source(extra: str) -> bool:
     return False
 
 
+class _CappedComboBox(NoScrollComboBox):
+    """A combo whose popup is capped at ~15 rows and scrolls.
+
+    On macOS, ``maxVisibleItems`` / the ``combobox-popup`` QSS hint don't
+    reliably cap a styled compound combo's popup (it shows every row), so cap the
+    popup container's height directly once it's shown — robust on every platform.
+    """
+
+    _MAX_ROWS = 15
+
+    def showPopup(self) -> None:  # noqa: N802
+        super().showPopup()
+        view = self.view()
+        if view is None:
+            return
+        row_h = view.sizeHintForRow(0) if self.count() else 0
+        if row_h <= 0:
+            row_h = 22
+        max_h = row_h * self._MAX_ROWS + 4
+        container = view.window()            # the popup frame
+        if container is not None and container.height() > max_h:
+            view.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+            container.setMaximumHeight(max_h)
+            container.resize(container.width(), max_h)
+
+
 class _ComboSeparatorDelegate(QStyledItemDelegate):
     """Paint insertSeparator() rows as a clear horizontal divider line.
 
@@ -1468,7 +1494,7 @@ class TabChart(QWidget):
         presets_row = QHBoxLayout(presets_grp)
         presets_row.setContentsMargins(8, 4, 8, 8)
         presets_row.addWidget(QLabel(tr("Select preset:"), w))
-        self._preset_combo = NoScrollComboBox(w)
+        self._preset_combo = _CappedComboBox(w)
         # Long built-in preset names must not stretch the row and squeeze the
         # +/−/folder buttons: ignore the combo's content width, let it take only
         # the leftover space (stretch=1) and elide the closed text. The full
@@ -1485,14 +1511,10 @@ class TabChart(QWidget):
         self._preset_combo.setItemDelegate(
             _ComboSeparatorDelegate(self._preset_combo)
         )
-        # Cap the popup at 15 rows + scroll. On macOS maxVisibleItems is honoured
-        # only with combobox-popup:0 (a scrollable list instead of the native
-        # menu, which shows every row). MERGE it into the combo's existing
-        # stylesheet (NoScrollComboBox set the input-background one) rather than
-        # replacing — replacing would drop the white field in light mode.
+        # The popup is capped + scrolled by _CappedComboBox.showPopup (macOS
+        # ignores maxVisibleItems for this styled compound combo); keep
+        # maxVisibleItems too for platforms that do honour it.
         self._preset_combo.setMaxVisibleItems(15)
-        self._preset_combo.setStyleSheet(
-            self._preset_combo.styleSheet() + " QComboBox { combobox-popup: 0; }")
         self._preset_combo.addItem(tr("none"), userData=None)
         presets_row.addWidget(self._preset_combo, stretch=1)
         self._preset_add_btn = QPushButton(w)
