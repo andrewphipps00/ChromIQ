@@ -330,3 +330,25 @@ def test_total_matches_built_program_with_foreign_existing(qapp):
     dlg._do_push_live_preview()           # the debounced exact rebuild
     shown = int(re.search(r"(\d+)", dlg._gen_total.text()).group(1))
     assert shown == len(dlg._build_generated_program())   # additions only
+
+
+def test_add_dialog_has_info_button_with_generator_help(qapp):
+    # #66 follow-up (Knut): the Add window must carry an ⓘ, and its body must
+    # include the same generator-sets help the New-chart dialog has.
+    from ui.tooltip_button import TooltipButton
+    from ui.dialogs.ti2_relayout_dialog import _GEN_SETS_HELP
+    dlg = _AddPatchesDialog(_FakeSettings())
+    tips = dlg.findChildren(TooltipButton)
+    assert tips, "Add dialog has no ⓘ button"
+    assert any(_GEN_SETS_HELP in t._body for t in tips), \
+        "no ⓘ carries the generator-sets help"
+
+
+def test_gen_sets_help_matches_new_chart_tooltip():
+    # The shared generator help must stay byte-identical to the matching
+    # paragraphs of the New-chart tooltip, so the two ⓘ can't drift (#66).
+    from scripts.i18n_extract import extract_keys
+    from ui.dialogs.ti2_relayout_dialog import _GEN_SETS_HELP
+    nc = next(k for k in extract_keys()
+              if k.startswith("Let's start a brand-new chart"))
+    assert _GEN_SETS_HELP == "\n\n".join(nc.split("\n\n")[5:19])

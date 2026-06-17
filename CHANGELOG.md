@@ -1,5 +1,21 @@
 # Changelog
 
+## v3.10.24
+
+### 🐛 Fixed
+- **Info popup no longer sends its window behind the main window.** Closing the
+  ⓘ details popup from a dialog that is itself a child of another window (e.g.
+  the layout editor's "3D distribution…" cube, or the New Chart window) used to
+  drop that window behind the main window on macOS. It now stays in front. (#66,
+  thanks **Knut (@soul-traveller)**)
+
+### 💄 Improved
+- **Add-patches window now has an ⓘ with the colour-set help.** The layout
+  editor's "Add…" window gained the same info icon the New Chart window has,
+  explaining each generator set (3D cube, skin tones, blues, greens, greys,
+  saturated edges, highlights/shadows, pastels, from image, fill). (#66, thanks
+  **Knut (@soul-traveller)**)
+
 ## v3.10.23
 
 ### 🐛 Fixed

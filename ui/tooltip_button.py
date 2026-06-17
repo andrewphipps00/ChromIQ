@@ -113,8 +113,16 @@ class TooltipButton(QToolButton):
     # ------------------------------------------------------------------
     def _show_dialog(self) -> None:
         log.debug("Tooltip dialog opened: %s", self._title)
-        dlg = _InfoDialog(self._title, self._body, self.window(), self._min_width)
+        win = self.window()
+        dlg = _InfoDialog(self._title, self._body, win, self._min_width)
         dlg.exec()
+        # macOS: when the ⓘ button lives in a dialog that is itself a child of
+        # another dialog (e.g. the editor's "3D distribution…" cube, or the New
+        # Chart window), closing this modal child can drop the owning window
+        # *behind* the main window. Re-raise it so it stays in front (#66).
+        if win is not None:
+            win.raise_()
+            win.activateWindow()
 
 
 class _BodyScrollArea(QScrollArea):
