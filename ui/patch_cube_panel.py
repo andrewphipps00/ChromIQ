@@ -45,9 +45,12 @@ _THEME = {
 class PatchCubePanel(QWidget):
     """A rotatable 3D RGB cube of a patch set, ready to drop into any layout."""
 
-    def __init__(self, *, mode: str = "dark", parent=None) -> None:
+    def __init__(self, *, mode: str = "dark", numbered: bool = False,
+                 parent=None) -> None:
         super().__init__(parent)
         self._theme = _THEME.get(mode, _THEME["dark"])
+        # Show each patch's number in the hover label (layout editor only, #67).
+        self._numbered = numbered
         self._tmp = tempfile.TemporaryDirectory()
         self._program: list[tuple] = []
         self._existing: list[tuple] = []
@@ -143,12 +146,13 @@ class PatchCubePanel(QWidget):
                 self._program, self._primary_label,
                 self._compare, self._compare_label, plotly_url,
                 existing_a=self._existing,
-                bg=self._theme["bg"], fg=self._theme["fg"], grid=self._theme["grid"])
+                bg=self._theme["bg"], fg=self._theme["fg"], grid=self._theme["grid"],
+                numbered_a=self._numbered)
         else:
             html = patch_cube.build_cube_html(
                 self._program, plotly_url, existing_program=self._existing,
                 bg=self._theme["bg"], fg=self._theme["fg"],
-                grid=self._theme["grid"])
+                grid=self._theme["grid"], numbered=self._numbered)
         out = Path(self._tmp.name) / "patch_cube.html"
         out.write_text(html, encoding="utf-8")
         self._loaded = False

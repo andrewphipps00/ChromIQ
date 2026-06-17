@@ -78,6 +78,19 @@ def test_build_html_has_middle_drag_pan():
     assert 'cqInstallPan("plot")' in html
 
 
+def test_numbered_patch_hover_for_layout_editor():
+    # #67: the layout-editor 3D view labels each patch with its 1-based number
+    # (to locate it in the swatch/preview); other windows stay un-numbered.
+    prog = [(100.0, 0.0, 0.0), (0.0, 100.0, 0.0)]
+    pts = C.cube_traces(prog, numbered=True)[-1]      # the markers trace
+    assert pts["text"][0].startswith("patch #: 1 ") and "RGB 255 0 0" in pts["text"][0]
+    assert pts["text"][1].startswith("patch #: 2 ")
+    plain = C.cube_traces(prog)[-1]
+    assert "#:" not in plain["text"][0] and plain["text"][0].startswith("patch ·")
+    # Surfaces through build_cube_html(numbered=True).
+    assert "patch #: 1 " in C.build_cube_html(prog, "file:///p.js", numbered=True)
+
+
 def test_build_html_has_keyboard_and_help_hint():
     # #66 follow-up (Knut): keyboard controls + a visible mouse/keyboard help line.
     html = C.build_cube_html([(50.0, 50.0, 50.0)], "file:///tmp/plotly.js")

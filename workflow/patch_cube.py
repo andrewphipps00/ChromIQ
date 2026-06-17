@@ -110,13 +110,19 @@ def _edge_lines() -> tuple[list, list, list]:
 
 
 def _points_trace(arr: np.ndarray, *, name: str, size: float, opacity: float,
-                  hover_prefix: str) -> dict:
+                  hover_prefix: str, numbered: bool = False) -> dict:
     """A ``scatter3d`` marker trace placing each patch at its (R,G,B) and
     painting it its own colour. ``size`` / ``opacity`` let the caller dim the
-    already-present patches so the freshly-generated ones read on top."""
+    already-present patches so the freshly-generated ones read on top.
+    ``numbered`` puts each patch's 1-based number in the hover label (the layout
+    editor's 3D view, to locate a patch in the swatch/preview — #67)."""
     rgb255 = np.clip(np.round(arr / 100.0 * 255.0), 0, 255).astype(int)
     colors = [f"rgb({r},{g},{b})" for r, g, b in rgb255.tolist()]
-    hover = [f"{hover_prefix} · RGB {r} {g} {b}" for r, g, b in rgb255.tolist()]
+    if numbered:
+        hover = [f"patch #: {i + 1} · RGB {r} {g} {b}"
+                 for i, (r, g, b) in enumerate(rgb255.tolist())]
+    else:
+        hover = [f"{hover_prefix} · RGB {r} {g} {b}" for r, g, b in rgb255.tolist()]
     return {
         "type": "scatter3d", "mode": "markers", "name": name,
         "x": arr[:, 0].tolist(), "y": arr[:, 1].tolist(),
@@ -133,6 +139,7 @@ def cube_traces(
     *,
     fg: str = "#cccccc",
     grid: str = "#444444",
+    numbered: bool = False,
 ) -> list[dict]:
     """The Plotly ``data`` list: wireframe + neutral axis + patch markers.
 
@@ -164,7 +171,7 @@ def cube_traces(
     data.append(_points_trace(
         new_arr, name="new" if has_existing else "patches",
         size=3.6, opacity=1.0,
-        hover_prefix="new" if has_existing else "patch"))
+        hover_prefix="new" if has_existing else "patch", numbered=numbered))
     return data
 
 
@@ -336,6 +343,7 @@ def build_cube_html(
     bg: str = "#111111",
     fg: str = "#cccccc",
     grid: str = "#444444",
+    numbered: bool = False,
 ) -> str:
     """Return a self-contained HTML page plotting ``program`` as a 3D RGB cube.
 
@@ -351,7 +359,7 @@ def build_cube_html(
     the cube redraw in place — no reload — as generator settings change.
     """
     import html as _html
-    data = cube_traces(program, existing_program, fg=fg, grid=grid)
+    data = cube_traces(program, existing_program, fg=fg, grid=grid, numbered=numbered)
     stats_text = combined_summary(program, existing_program)
     layout = _cube_layout(bg, fg, grid)
     config = {"displaylogo": False, "responsive": True, "scrollZoom": True}
@@ -406,13 +414,14 @@ def build_dual_cube_html(
     bg: str = "#111111",
     fg: str = "#cccccc",
     grid: str = "#444444",
+    numbered_a: bool = False,
 ) -> str:
     """Two side-by-side 3D RGB cubes (current chart vs. a comparison preset),
     with their cameras locked in sync — rotate/zoom/pan one and the other
     follows, so they can be compared from any angle (#66). Each cube carries its
     name above it and its own stats below."""
     import html as _html
-    data_a = cube_traces(program_a, existing_a, fg=fg, grid=grid)
+    data_a = cube_traces(program_a, existing_a, fg=fg, grid=grid, numbered=numbered_a)
     data_b = cube_traces(program_b, None, fg=fg, grid=grid)
     layout = _cube_layout(bg, fg, grid)
     config = {"displaylogo": False, "responsive": True, "scrollZoom": True}

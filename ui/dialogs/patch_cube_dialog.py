@@ -39,8 +39,10 @@ class PatchCubeDialog(QDialog):
     def __init__(self, program: list[tuple], *, mode: str = "dark",
                  target_name: str = "",
                  compare_presets: list[tuple[str, Path]] | None = None,
+                 numbered: bool = False,
                  parent=None) -> None:
         super().__init__(parent)
+        self._numbered = numbered
         self._target_name = target_name or tr("Current chart")
         self._compare_presets = list(compare_presets or [])
         self.setWindowTitle(tr("Patch distribution — 3D RGB cube"))
@@ -105,7 +107,7 @@ class PatchCubeDialog(QDialog):
             bar.addWidget(self._compare_combo)
         lay.addLayout(bar)
 
-        self._panel = PatchCubePanel(mode=mode, parent=self)
+        self._panel = PatchCubePanel(mode=mode, numbered=numbered, parent=self)
         self._panel.set_primary_label(self._target_name)
         lay.addWidget(self._panel, 1)
         self._panel.set_program(program)

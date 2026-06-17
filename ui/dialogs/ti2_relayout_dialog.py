@@ -3881,7 +3881,8 @@ class Ti2RelayoutDialog(QDialog):
             presets = []
         PatchCubeDialog(program, mode=mode,
                         target_name=(self._basename or tr("Current chart")),
-                        compare_presets=presets, parent=self).exec()
+                        compare_presets=presets, numbered=True,  # patch # in hover (#67)
+                        parent=self).exec()
 
     def _randomise_patches(self) -> None:
         """Shuffle the patch order into a random permutation, then re-preview.
