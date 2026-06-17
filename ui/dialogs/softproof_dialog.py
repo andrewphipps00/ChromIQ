@@ -34,6 +34,7 @@ from PyQt6.QtWidgets import (
     QLabel,
     QLineEdit,
     QPushButton,
+    QSlider,
     QStackedWidget,
     QVBoxLayout,
     QWidget,
@@ -69,17 +70,34 @@ log = get_logger(__name__)
 _ACCENT = SPEC_VIOLET
 
 _HELP = tr(
-    "Check how an image will print on a given printer/paper profile before you "
-    "commit ink to it.\n\n"
-    "Pick an image and a printer ICC profile, then click Soft-proof. The Preview "
-    "shows an approximate on-screen rendering of the print; turn on “Highlight "
-    "out-of-gamut” to mark the colours the printer can't reproduce. The Gamut fit "
-    "view shows the image's colours as a 3D shape overlaid on the printer's gamut, "
-    "so you can see exactly where they fall outside.\n\n"
-    "The on-screen preview is approximate (it assumes an sRGB-like display) and is "
-    "not a colour-managed proof. ArgyllCMS reads only ICC v2 profiles, so v4 "
-    "profiles (often from i1Profiler) can't be used here — inspect them with the "
-    "Profile info tool."
+    "This tool gives you a rough on-screen preview of how a photo will look once "
+    "it's printed on a particular printer and paper — a “soft-proof” — so you can "
+    "spot trouble before you commit ink and paper to it.\n\n"
+    "It's simple to use: pick an image and your printer's ICC profile (the same one "
+    "you'd print it with). The preview then appears on its own and refreshes "
+    "automatically whenever you change a setting — there's no button to press.\n\n"
+    "There are two ways to look at it:\n"
+    "• Preview re-renders the image the way the printer would reproduce it. Turn on "
+    "“Highlight out-of-gamut” to mark the colours your printer can't quite hit, and "
+    "read the “Out of gamut” figure for the percentage of the image affected.\n"
+    "• Gamut fit shows your image's colours as a 3D shape sitting inside your "
+    "printer's colour space, so you can see exactly where — and how far — colours "
+    "fall outside it.\n\n"
+    "The settings, in plain terms:\n"
+    "• Colour space — how the numbers in your image should be read. “Embedded” "
+    "trusts the profile saved inside the file (most phone and web images are sRGB); "
+    "pick “Other ICC profile…” to choose your own.\n"
+    "• Intent — how colours the printer can't reproduce are handled. Relative "
+    "colorimetric (the default) keeps everything else accurate and is what the "
+    "out-of-gamut check relies on; Perceptual gently squeezes the whole image to fit.\n"
+    "• Simulate paper white — shows the paper's real, often slightly warm white "
+    "instead of bright screen white, for a more honest preview.\n"
+    "• Monitor profile — set this to your display's own profile for a truer match; "
+    "left empty, the preview assumes a standard sRGB screen.\n\n"
+    "Two honest caveats: the preview is an approximation, not a fully colour-managed "
+    "proof, and it assumes an sRGB-like display unless you set a monitor profile. "
+    "Also, ArgyllCMS reads only ICC v2 profiles, so v4 profiles (often from "
+    "i1Profiler) can't be used here — open those in the Profile info tool instead."
 )
 
 
@@ -98,10 +116,19 @@ class SoftproofDialog(QDialog):
         self._image_path: Path | None = None
         self._profile_path: Path | None = None
         self._display_path: Path | None = None
+        self._custom_source_path: Path | None = None   # "Other ICC profile…"
         self._result: SoftproofResult | None = None
         self._web_view = None
         self._combined_html: str | None = None
         self._gamut_busy = False
+
+        # The proof runs automatically (no button) — option changes are
+        # coalesced through a short debounce so spinning a value doesn't queue
+        # a cctiff run per tick.
+        self._rerun_timer = QTimer(self)
+        self._rerun_timer.setSingleShot(True)
+        self._rerun_timer.setInterval(350)
+        self._rerun_timer.timeout.connect(self._do_rerun)
 
         # 3D pipeline workflow objects (created lazily / reused)
         self._iccgamut = None
@@ -109,6 +136,8 @@ class SoftproofDialog(QDialog):
         self._viewgam = None
         self._printer_gam: str | None = None
         self._image_gam: str | None = None
+        self._printer_html: str | None = None
+        self._image_html: str | None = None
 
         self.setWindowTitle(tr("Soft-proof / check image"))
         self.setMinimumWidth(1180)
@@ -129,14 +158,18 @@ class SoftproofDialog(QDialog):
         root.addWidget(stripe)
 
         self._inner = QVBoxLayout()
-        self._inner.setContentsMargins(22, 14, 22, 16)
+        self._inner.setContentsMargins(22, 14, 22, 22)
         self._inner.setSpacing(12)
         root.addLayout(self._inner)
 
         self._body = QLabel(
-            tr("Pick an image and a printer profile to soft-proof it."), self)
+            tr("See roughly how a photo will look once it's printed on a particular "
+               "printer and paper — so you can catch problems before spending ink and "
+               "paper. Pick an image and your printer's ICC profile; the preview appears "
+               "on its own and updates as you change the options."), self)
         self._body.setWordWrap(True)
         self._inner.addWidget(self._body)
+        self._inner.addSpacing(8)   # breathing room before the Image: row
 
         # Side by side: all the options on the left, the image / 3D preview on
         # the right (so the preview gets the room, not the path fields).
@@ -165,13 +198,39 @@ class SoftproofDialog(QDialog):
         # This window is violet-themed throughout (masthead, primary button,
         # metric), so its checkboxes / focus rings use the violet accent too,
         # rather than the neutral indicator the other tool dialogs use.
-        self.setStyleSheet(neutral_controls_qss(_ACCENT))
+        # Flat-styled Preview / Gamut-fit toggle (the bottom-most control now
+        # the Soft-proof button is gone). Native macOS push buttons clip under a
+        # forced fixed height, so give them an explicit flat look; the active one
+        # wears the accent.
+        if self._mode == "light":
+            t_bg, t_fg, t_bd = "#ffffff", "#1c1b18", "#cfcac3"
+        else:
+            t_bg, t_fg, t_bd = "#2a2a28", "#d0d0d0", "#454340"
+        self.setStyleSheet(
+            neutral_controls_qss(_ACCENT)
+            + (f"QPushButton#view_toggle {{ background: {t_bg}; color: {t_fg};"
+               f" border: 1px solid {t_bd}; border-radius: 4px; padding: 6px 10px; }}"
+               f"QPushButton#view_toggle:checked {{ background: {_ACCENT};"
+               f" color: white; border: 1px solid {_ACCENT}; font-weight: bold; }}"
+               # A disabled QLabel keeps the app-wide QSS text colour (QSS beats
+               # the disabled palette), so grey the option names explicitly.
+               f"QLabel:disabled {{ color: {TEXT_DIM}; }}"
+               # Per-gamut opacity / saturation sliders, in the accent colour.
+               "QSlider::groove:horizontal { height: 4px; background: #555;"
+               " border-radius: 2px; }"
+               f"QSlider::sub-page:horizontal {{ background: {_ACCENT};"
+               " border-radius: 2px; }"
+               f"QSlider::handle:horizontal {{ background: {_ACCENT};"
+               " width: 12px; margin: -5px 0; border-radius: 6px; }"))
         tint_dialog_primary(self, _ACCENT)
         self._preselect_display_profile()
         # Pre-fill the last image used, as a convenience across sessions.
         last_image = str(settings.get("softproof_last_image", "") or "")
         if last_image and Path(last_image).is_file():
             self._set_image(Path(last_image))
+        # Establish the initial enabled/greyed state and status (no image yet
+        # ⇒ every proof option starts greyed out).
+        self._auto_update()
 
     def _preselect_display_profile(self) -> None:
         """Pre-fill the monitor profile with the OS's currently active display
@@ -257,13 +316,18 @@ class SoftproofDialog(QDialog):
         grid.setVerticalSpacing(8)
         grid.setColumnStretch(1, 1)
 
-        grid.addWidget(QLabel(tr("Colour space:"), self), 0, 0)
+        # Option labels are kept so they grey out together with their controls.
+        self._opt_labels: list[QLabel] = []
+        cs_lbl = QLabel(tr("Colour space:"), self)
+        self._opt_labels.append(cs_lbl)
+        grid.addWidget(cs_lbl, 0, 0)
         self._source_combo = NoScrollComboBox(self)
         self._source_combo.addItem(tr("Embedded (else sRGB)"), "embedded")
         self._source_combo.addItem(tr("sRGB"), "srgb")
         self._source_combo.addItem(tr("Adobe RGB (1998)"), "adobergb")
         self._source_combo.addItem(tr("Display P3"), "p3")
         self._source_combo.addItem(tr("ProPhoto RGB"), "prophoto")
+        self._source_combo.addItem(tr("Other ICC profile…"), "custom")
         grid.addWidget(self._source_combo, 0, 1)
         grid.addWidget(TooltipButton(
             tr("Soft-proof options"),
@@ -276,7 +340,9 @@ class SoftproofDialog(QDialog):
                "relies on. Perceptual compresses the whole image to fit."),
             self, min_width=520, color=_ACCENT), 0, 2)
 
-        grid.addWidget(QLabel(tr("Intent:"), self), 1, 0)
+        int_lbl = QLabel(tr("Intent:"), self)
+        self._opt_labels.append(int_lbl)
+        grid.addWidget(int_lbl, 1, 0)
         self._intent_combo = NoScrollComboBox(self)
         self._intent_combo.addItem(tr("Relative colorimetric"), "r")
         self._intent_combo.addItem(tr("Perceptual"), "p")
@@ -293,11 +359,12 @@ class SoftproofDialog(QDialog):
             tr("Render the preview with the paper's actual (often cream) white "
                "instead of bright display white — a more realistic proof. The "
                "out-of-gamut figure is unaffected."))
-        self._paper_white_cb.toggled.connect(
-            lambda on: self._intent_combo.setEnabled(not on))
+        self._paper_white_cb.toggled.connect(self._on_paper_white_toggled)
         grid.addWidget(self._paper_white_cb, 2, 1)
 
-        grid.addWidget(QLabel(tr("Out-of-gamut ΔE:"), self), 3, 0)
+        de_lbl = QLabel(tr("Out-of-gamut ΔE:"), self)
+        self._opt_labels.append(de_lbl)
+        grid.addWidget(de_lbl, 3, 0)
         self._threshold_spin = NoScrollDoubleSpinBox(self)
         self._threshold_spin.setRange(0.5, 20.0)
         self._threshold_spin.setSingleStep(0.5)
@@ -316,7 +383,9 @@ class SoftproofDialog(QDialog):
                "default. The mark colour is what those pixels are painted in the preview."),
             self, min_width=460, color=_ACCENT), 3, 2)
 
-        grid.addWidget(QLabel(tr("Mark colour:"), self), 4, 0)
+        mark_lbl = QLabel(tr("Mark colour:"), self)
+        self._opt_labels.append(mark_lbl)
+        grid.addWidget(mark_lbl, 4, 0)
         self._highlight_combo = NoScrollComboBox(self)
         self._highlight_combo.addItem(tr("Grey"), "gray")
         self._highlight_combo.addItem(tr("Magenta"), "magenta")
@@ -331,15 +400,23 @@ class SoftproofDialog(QDialog):
         self._banner.setVisible(False)
         self._left.addWidget(self._banner)
 
+        # Any option that changes the actual proof maths re-runs it live.
+        # (Connected after the combos are populated so seeding doesn't fire.)
+        self._source_combo.currentIndexChanged.connect(self._on_source_changed)
+        self._intent_combo.currentIndexChanged.connect(self._schedule_rerun)
+        self._threshold_spin.valueChanged.connect(self._schedule_rerun)
+        self._highlight_combo.currentIndexChanged.connect(self._schedule_rerun)
+
     def _build_action_group(self) -> None:
-        """Bottom-of-left group: status, on/off + highlight options, the
-        Preview/Gamut-fit toggle, and the Soft-proof button (last)."""
+        """Bottom-of-left group: status, on/off + highlight display options, and
+        the Preview/Gamut-fit toggle (last — the proof itself runs
+        automatically, so there is no longer a Soft-proof button)."""
         self._status = QLabel(tr("Pick an image and a printer profile to begin."), self)
         self._status.setStyleSheet(f"color: {TEXT_DIM};")
         self._status.setWordWrap(True)
         self._left.addWidget(self._status)
 
-        # Display options (above the toggle and the Soft-proof button).
+        # Display-only toggles (don't re-run the proof, just re-show it).
         self._softproof_cb = QCheckBox(tr("Show soft-proof"), self)
         self._softproof_cb.setChecked(True)
         self._softproof_cb.toggled.connect(self._refresh_preview)
@@ -350,28 +427,30 @@ class SoftproofDialog(QDialog):
         self._highlight_cb.toggled.connect(self._refresh_preview)
         self._left.addWidget(self._highlight_cb)
 
-        # Preview / Gamut-fit view toggle (under the options, above the button).
+        # Out-of-gamut metric, sitting just above the Preview / Gamut-fit toggle.
+        self._oog_label = QLabel(tr("Out of gamut: —"), self)
+        self._oog_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._oog_label.setStyleSheet(
+            f"color: {_ACCENT}; font-family: Menlo, Consolas, monospace;"
+            " font-size: 13px; font-weight: bold;")
+        self._left.addWidget(self._oog_label)
+
+        # Preview / Gamut-fit view toggle — the bottom-most control, where the
+        # Soft-proof button used to be. The active one carries the accent.
         toggle = QHBoxLayout()
         toggle.setSpacing(8)
         self._preview_btn = QPushButton(tr("Preview"), self)
         self._gamut_btn = QPushButton(tr("Gamut fit"), self)
         for b in (self._preview_btn, self._gamut_btn):
             b.setCheckable(True)
-            b.setObjectName("mode_btn")
-            b.setFixedHeight(28)
+            b.setObjectName("view_toggle")
+            b.setMinimumHeight(36)   # min, not fixed — never clips its own label
         self._preview_btn.setChecked(True)
         self._preview_btn.clicked.connect(lambda: self._show_view(0))
         self._gamut_btn.clicked.connect(lambda: self._show_view(1))
         toggle.addWidget(self._preview_btn, 1)
         toggle.addWidget(self._gamut_btn, 1)
         self._left.addLayout(toggle)
-
-        # The Soft-proof button sits last, at the very bottom of the column.
-        self._run_btn = QPushButton(tr("Soft-proof"), self)
-        self._run_btn.setObjectName("primary")
-        self._run_btn.setEnabled(False)
-        self._run_btn.clicked.connect(self._on_run)
-        self._left.addWidget(self._run_btn)
 
     def _build_viewer(self) -> QWidget:
         right = QWidget(self)
@@ -393,22 +472,110 @@ class SoftproofDialog(QDialog):
         self._stack.addWidget(self._gamut_frame)
         rv.addWidget(self._stack, 1)
 
-        # Out-of-gamut metric sits under the preview, with Close on the same
-        # baseline as the Soft-proof button (so there's no empty strip under
-        # the left column's button).
+        # Bottom strip: the per-gamut display controls (separate opacity +
+        # saturation for the image and printer gamut, shown only on the
+        # Gamut-fit view) on the left, Close on the right — where the metric
+        # used to sit. Tweaks apply to the 3D scene live via JavaScript.
+        self._gamut_controls = self._build_gamut_controls()
+        self._gamut_controls.setVisible(False)
         bottom = QHBoxLayout()
-        self._oog_label = QLabel(tr("Out of gamut: —"), self)
-        self._oog_label.setStyleSheet(
-            f"color: {_ACCENT}; font-family: Menlo, Consolas, monospace;"
-            " font-size: 13px; font-weight: bold;")
         bottom.addStretch(1)
-        bottom.addWidget(self._oog_label)
+        bottom.addWidget(self._gamut_controls)
         bottom.addStretch(1)
         close_btn = QPushButton(tr("Close"), self)
         close_btn.clicked.connect(self.reject)
-        bottom.addWidget(close_btn)
+        bottom.addWidget(close_btn, 0, Qt.AlignmentFlag.AlignBottom)
         rv.addLayout(bottom)
         return right
+
+    def _set_oog(self, text: str) -> None:
+        self._oog_label.setText(text)
+
+    def _build_gamut_controls(self) -> QWidget:
+        """Two rows — Image and Printer — each with an opacity and a saturation
+        slider, so the user can dial each gamut's look in the 3D view
+        independently (Knut's request)."""
+        w = QWidget(self)
+        grid = QGridLayout(w)
+        grid.setContentsMargins(2, 2, 2, 0)
+        grid.setHorizontalSpacing(8)
+        grid.setVerticalSpacing(6)
+        grid.setColumnStretch(2, 1)
+        grid.setColumnStretch(5, 1)
+        # Header row.
+        grid.addWidget(QLabel(tr("Opacity"), w), 0, 1, Qt.AlignmentFlag.AlignLeft)
+        grid.addWidget(QLabel(tr("Saturation"), w), 0, 4, Qt.AlignmentFlag.AlignLeft)
+
+        def add_row(row: int, name: str, opacity: int):
+            grid.addWidget(QLabel(name, w), row, 0)
+            op = QSlider(Qt.Orientation.Horizontal, w)
+            op.setRange(0, 100)
+            op.setValue(opacity)
+            op.setFixedWidth(110)
+            op_lbl = QLabel(f"{opacity}%", w)
+            op_lbl.setFixedWidth(38)
+            sat = QSlider(Qt.Orientation.Horizontal, w)
+            sat.setRange(0, 100)
+            sat.setValue(100)
+            sat.setFixedWidth(110)
+            sat_lbl = QLabel("100%", w)
+            sat_lbl.setFixedWidth(38)
+            wire = QCheckBox(tr("Wireframe"), w)
+            grid.addWidget(op, row, 1)
+            grid.addWidget(op_lbl, row, 2)
+            grid.addWidget(sat, row, 4)
+            grid.addWidget(sat_lbl, row, 5)
+            grid.addWidget(wire, row, 6)
+            for s, lbl in ((op, op_lbl), (sat, sat_lbl)):
+                s.valueChanged.connect(
+                    lambda v, l=lbl: l.setText(tr("{value}%").format(value=v)))
+                s.valueChanged.connect(self._push_gamut_settings)
+            # Wireframe changes geometry, so re-merge the (cached) scenes.
+            wire.toggled.connect(self._rebuild_combined_html)
+            return op, sat, wire
+
+        # Image is opaque by default (it keeps its natural colours); the printer
+        # gamut is the semi-transparent shell laid over it. A wireframe gamut is
+        # drawn as a cage that never hides the other one.
+        self._img_opacity, self._img_sat, self._img_wire = add_row(1, tr("Image"), 100)
+        self._prn_opacity, self._prn_sat, self._prn_wire = add_row(2, tr("Printer"), 50)
+        return w
+
+    def _rebuild_combined_html(self, *_args) -> None:
+        """Re-merge the cached image + printer gamut scenes with the current
+        wireframe choices and reload — cheap (no iccgamut/tiffgamut re-run)."""
+        if not (self._image_html and self._printer_html):
+            return
+        from workflow.viewgam_runner import _build_compare_overlay_html
+        # Write next to an existing gamut HTML so the relative x3dom.js / .css
+        # Argyll emitted there resolve — a fresh temp dir would have neither and
+        # the scene would render blank.
+        base = Path(self._combined_html).parent if self._combined_html \
+            else Path(self._image_html).parent
+        out = base / "combined_wire.html"
+        ok = _build_compare_overlay_html(
+            Path(self._image_html), Path(self._printer_html), out,
+            primary_wire=self._img_wire.isChecked(),
+            compare_wire=self._prn_wire.isChecked())
+        if ok:
+            self._combined_html = str(out)
+            self._load_html(self._combined_html)
+
+    def _push_gamut_settings(self, *_args) -> None:
+        """Send the four slider values to the 3D scene (opacity = 100−transparency)."""
+        if self._web_view is None:
+            return
+        img_t = 1.0 - self._img_opacity.value() / 100.0
+        img_s = self._img_sat.value() / 100.0
+        prn_t = 1.0 - self._prn_opacity.value() / 100.0
+        prn_s = self._prn_sat.value() / 100.0
+        self._web_view.page().runJavaScript(
+            f"window._chromiqPrimaryOpacity={img_t:.2f};"
+            f"window._chromiqPrimarySat={img_s:.2f};"
+            f"window._chromiqCompareOpacity={prn_t:.2f};"
+            f"window._chromiqCompareSat={prn_s:.2f};"
+            "if(window._chromiqApplyPrimary)window._chromiqApplyPrimary();"
+            "if(window._chromiqApplyCompare)window._chromiqApplyCompare();")
 
     def _make_web_view(self) -> QWidget:
         bg = "#efebe6" if self._mode == "light" else "#111111"
@@ -431,9 +598,12 @@ class SoftproofDialog(QDialog):
             except (ImportError, AttributeError):
                 pass
             self._web_view = view
+            # When a scene finishes loading, push the current slider values into
+            # it (after X3DOM has initialised) so the gamuts honour them.
+            view.loadFinished.connect(self._on_gamut_loaded)
             lay.addWidget(view)
-            self._set_web_placeholder(tr("Run a soft-proof, then open this tab to build "
-                                         "the 3D image-vs-printer gamut."))
+            self._set_web_placeholder(tr("Select an image and a printer profile, then open "
+                                         "this tab to build the 3D image-vs-printer gamut."))
         except ImportError:
             self._web_view = None
             lbl = QLabel(tr("Install PyQt6-WebEngine to view the 3D gamut."), container)
@@ -441,6 +611,12 @@ class SoftproofDialog(QDialog):
             lbl.setStyleSheet(f"color: {TEXT_DIM};")
             lay.addWidget(lbl)
         return container
+
+    def _on_gamut_loaded(self, ok: bool) -> None:
+        # X3DOM initialises asynchronously after load; give it a beat, then apply
+        # the slider values to the (just-loaded) scene.
+        if ok:
+            QTimer.singleShot(300, self._push_gamut_settings)
 
     def _set_web_placeholder(self, text: str) -> None:
         if self._web_view is None:
@@ -491,7 +667,22 @@ class SoftproofDialog(QDialog):
         self._image_path = path
         self._image_edit.setText(str(path))
         self._settings.set("softproof_last_image", str(path))
-        self._update_run_enabled()
+        # A new image invalidates the previous proof / 3D result; show the raw
+        # image straight away (instant feedback) and let the proof catch up.
+        self._result = None
+        self._combined_html = None
+        self._set_oog(tr("Out of gamut: —"))
+        self._show_original()
+        self._auto_update()
+
+    def _show_original(self) -> None:
+        """Display the picked image as-is (no proof) and switch to the preview."""
+        if self._image_path is None:
+            return
+        self._preview.set_caption(tr("ORIGINAL IMAGE"))
+        self._preview.set_frame_color(None)
+        self._preview.load_tiff([self._image_path])
+        self._show_view(0)
 
     def _on_browse_profile(self) -> None:
         sidebar = [str(d) for d in icc_system_dirs() if Path(d).exists()]
@@ -503,7 +694,7 @@ class SoftproofDialog(QDialog):
             self._profile_path = Path(path)
             self._profile_edit.setText(path)
             self._check_profile_version()
-            self._update_run_enabled()
+            self._auto_update()
 
     def _on_browse_monitor(self) -> None:
         sidebar = [str(d) for d in icc_system_dirs() if Path(d).exists()]
@@ -514,10 +705,37 @@ class SoftproofDialog(QDialog):
         if path:
             self._display_path = Path(path)
             self._monitor_edit.setText(path)
+            self._schedule_rerun()
 
     def _on_clear_monitor(self) -> None:
         self._display_path = None
         self._monitor_edit.clear()
+        self._schedule_rerun()
+
+    def _on_source_changed(self, *_args) -> None:
+        """Colour-space dropdown changed. 'Other ICC profile…' opens a browser so
+        the user can point at their own working-space profile (Knut's request —
+        works even when Argyll's bundled profiles can't be found)."""
+        if self._source_combo.currentData() == "custom":
+            self._browse_custom_source()
+            if self._custom_source_path is None:
+                # Cancelled with nothing chosen — fall back to the first entry.
+                self._source_combo.setCurrentIndex(0)
+                return
+        self._schedule_rerun()
+
+    def _browse_custom_source(self) -> None:
+        sidebar = [str(d) for d in icc_system_dirs() if Path(d).exists()]
+        path = open_file_dialog(
+            self, tr("Select a colour-space ICC profile"),
+            tr("ICC profiles (*.icc *.icm);;All files (*)"),
+            start_dir=(sidebar[0] if sidebar else ""), extra_paths=sidebar)
+        if path:
+            self._custom_source_path = Path(path)
+            idx = self._source_combo.findData("custom")
+            if idx >= 0:
+                self._source_combo.setItemText(
+                    idx, tr("Custom: {name}").format(name=Path(path).name))
 
     def _check_profile_version(self) -> None:
         if self._profile_path and is_v4(self._profile_path):
@@ -532,21 +750,73 @@ class SoftproofDialog(QDialog):
         else:
             self._banner.setVisible(False)
 
-    def _update_run_enabled(self) -> None:
-        ok = bool(self._image_path and self._profile_path
-                  and not (self._profile_path and is_v4(self._profile_path)))
-        self._run_btn.setEnabled(ok)
+    # ------------------------------------------------------------------
+    # Auto-update: show the image immediately, proof as soon as it can
+    # ------------------------------------------------------------------
+    def _update_controls_enabled(self) -> None:
+        """Grey every proof option out until there's an actual proof to show —
+        i.e. both an image and a usable (v2) printer profile are present."""
+        ready = self._can_proof()
+        for w in (self._source_combo, self._threshold_spin,
+                  self._highlight_combo, self._paper_white_cb):
+            w.setEnabled(ready)
+        for lbl in self._opt_labels:           # grey the option names too
+            lbl.setEnabled(ready)
+        # Intent is additionally suppressed while "Simulate paper white" is on.
+        self._intent_combo.setEnabled(ready and not self._paper_white_cb.isChecked())
+        self._softproof_cb.setEnabled(ready)
+        self._highlight_cb.setEnabled(ready and self._softproof_cb.isChecked())
+
+    def _can_proof(self) -> bool:
+        return bool(self._image_path and self._profile_path
+                    and not is_v4(self._profile_path))
+
+    def _on_paper_white_toggled(self, on: bool) -> None:
+        # Paper white overrides the intent for the preview, so grey it; and the
+        # change alters the proof maths, so re-run.
+        self._intent_combo.setEnabled(not on)
+        self._schedule_rerun()
+
+    def _auto_update(self) -> None:
+        """Decide what to show after any input change — original image while a
+        profile is still missing, a live proof once both are present."""
+        self._update_controls_enabled()
+        if self._image_path is None:
+            self._status.setText(tr("Pick an image and a printer profile to begin."))
+            return
+        if self._profile_path is None:
+            self._status.setText(tr(
+                "Showing the original image — pick a printer profile to soft-proof it."))
+            return
+        if is_v4(self._profile_path):
+            # The v4 banner already explains; keep the original on screen.
+            self._status.setText(tr("This printer profile can't be soft-proofed (ICC v4)."))
+            return
+        self._schedule_rerun()
+
+    def _schedule_rerun(self, *_args) -> None:
+        """Coalesce option changes — (re)start the debounce; the timer fires
+        the actual proof once things settle."""
+        if self._can_proof():
+            self._rerun_timer.start()
+
+    def _do_rerun(self) -> None:
+        if not self._can_proof():
+            return
+        if self._runner.is_running:
+            self._rerun_timer.start()   # busy (e.g. building 3D) — try again soon
+            return
+        self._run_softproof()
 
     # ------------------------------------------------------------------
     # Soft-proof run
     # ------------------------------------------------------------------
-    def _on_run(self) -> None:
+    def _run_softproof(self) -> None:
         if not (self._image_path and self._profile_path):
             return
         if self._runner.is_running:
-            self._status.setText(tr("Another process is running — try again in a moment."))
+            self._rerun_timer.start()
             return
-        self._run_btn.setEnabled(False)
         self._status.setText(tr("Soft-proofing…"))
         # Invalidate any previous 3D result (inputs changed).
         self._combined_html = None
@@ -557,6 +827,7 @@ class SoftproofDialog(QDialog):
             image_path=self._image_path,
             printer_profile=self._profile_path,
             source_choice=self._source_combo.currentData(),
+            custom_source=self._custom_source_path,
             intent=self._intent_combo.currentData(),
             threshold=self._threshold_spin.value(),
             highlight=self._highlight_combo.currentData(),
@@ -567,22 +838,26 @@ class SoftproofDialog(QDialog):
 
     def _on_softproof_done(self, result: SoftproofResult) -> None:
         self._result = result
-        self._run_btn.setEnabled(True)
-        self._oog_label.setText(tr("Out of gamut: {pct:.1f}%").format(pct=result.oog_percent))
+        self._set_oog(tr("Out of gamut: {pct:.1f}%").format(pct=result.oog_percent))
         self._status.setText(tr("Done — {note}.").format(note=result.source_note))
         self._refresh_preview()
-        self._show_view(0)
+        # The proof changed, so the (lazy) 3D is stale — rebuild it only if the
+        # user is actually looking at the Gamut-fit view right now.
+        if self._stack.currentIndex() == 1:
+            self._ensure_gamut()
 
     def _on_softproof_error(self, msg: str) -> None:
-        self._run_btn.setEnabled(True)
         self._status.setText(tr("Soft-proof failed."))
         InfoDialog(tr("Soft-proof failed"), msg, self, min_width=480).exec()
 
-    def _refresh_preview(self) -> None:
+    def _refresh_preview(self, *_args) -> None:
+        self._update_controls_enabled()
         if not self._result:
+            # No proof yet — keep the raw image on screen if we have one.
+            if self._image_path is not None:
+                self._show_original()
             return
         show_proof = self._softproof_cb.isChecked()
-        self._highlight_cb.setEnabled(show_proof)
         if not show_proof:
             path = self._result.original_path
             self._preview.set_caption(tr("ORIGINAL IMAGE"))
@@ -603,6 +878,8 @@ class SoftproofDialog(QDialog):
         self._preview_btn.setChecked(index == 0)
         self._gamut_btn.setChecked(index == 1)
         self._stack.setCurrentIndex(index)
+        # The per-gamut opacity/saturation sliders only make sense in 3D.
+        self._gamut_controls.setVisible(index == 1)
         if index == 1:
             self._ensure_gamut()
 
@@ -612,7 +889,8 @@ class SoftproofDialog(QDialog):
             return
         if self._gamut_busy or self._result is None or self._profile_path is None:
             if self._result is None:
-                self._set_web_placeholder(tr("Run a soft-proof first."))
+                self._set_web_placeholder(
+                    tr("Select an image and a printer profile first."))
             return
         if self._runner.is_running:
             self._set_web_placeholder(tr("Another process is running — try again in a moment."))
@@ -649,7 +927,8 @@ class SoftproofDialog(QDialog):
             self._on_gamut_error(str(exc))
             return
         src, _note = resolve_source_profile(
-            self._image_path, self._source_combo.currentData(), self._settings, work)
+            self._image_path, self._source_combo.currentData(), self._settings, work,
+            self._custom_source_path)
         if src is None:
             self._on_gamut_error(tr("No source colour-space profile found."))
             return
@@ -685,10 +964,12 @@ class SoftproofDialog(QDialog):
     def _on_viewgam_done(self, result) -> None:
         self._gamut_busy = False
         self._combined_html = result.html_path
-        if result.html_path:
-            self._load_html(result.html_path)
-        else:
+        if not result.html_path:
             self._set_web_placeholder(tr("Could not build the combined 3D gamut."))
+        elif self._img_wire.isChecked() or self._prn_wire.isChecked():
+            self._rebuild_combined_html()   # honour a pre-set wireframe choice
+        else:
+            self._load_html(result.html_path)
 
     def _on_gamut_error(self, msg: str) -> None:
         self._gamut_busy = False

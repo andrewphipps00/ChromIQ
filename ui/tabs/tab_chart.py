@@ -672,6 +672,11 @@ class TabChart(QWidget):
         # built-in ti1 presets.
         self._preset_ti1_path: Path | None = None
         self._preset_ti1_targen_sig: list | None = None
+        # Bundled .ti1 of the currently-selected built-in preset (TC9.18 /
+        # Knut / prebuilt). Built-ins don't use _preset_ti1_path (that's for
+        # user presets), but their patch count still feeds the Suggest-name
+        # button (#62) — read from this. None for targen-based built-ins.
+        self._builtin_ti1_path: Path | None = None
         # Override-checkbox widgets (created in _make_manual_panel). Shown only
         # while a preset that supplies a fixed patch set / layout is active; ticking
         # one re-enables the otherwise-greyed targen / printtarg panel.
@@ -3059,6 +3064,9 @@ class TabChart(QWidget):
                 self._leave_reflected()
             self._preset_ti1_path = None  # built-ins are not ti1-user-presets
             self._preset_ti1_targen_sig = None
+            # …but a built-in's own bundled .ti1 still feeds Suggest-name (#62).
+            asset = self._builtin_ti1_asset(data)
+            self._builtin_ti1_path = resource_path(asset) if asset else None
             # Start the freshly-picked built-in with its panels locked again.
             self._reset_override_checks()
             self._preset_del_btn.setEnabled(False)
@@ -3127,6 +3135,7 @@ class TabChart(QWidget):
                     pw.set_value(v)
                 pw.set_user_enabled(bool(s.get(f"manual_targen_-D_{idx}_enabled", False)))
             self._rebuild_d_cascade_visibility()
+            self._builtin_ti1_path = None     # Default builds via targen
             if self._bit8_radio is not None and self._bit16_radio is not None:
                 is_16bit = bool(s.get("manual_printtarg_tiff_16bit", False))
                 self._bit16_radio.setChecked(is_16bit)
@@ -3155,6 +3164,7 @@ class TabChart(QWidget):
             presets = self._load_presets_from_settings()
             pdata = presets.get(name, {})
             self._restore_user_preset(pdata)
+            self._builtin_ti1_path = None     # a user preset, not a built-in
             # A user preset that bundled a .ti1 builds from it (skip targen). Point
             # Generate at the sidecar file if it's present; otherwise fall back to
             # the normal targen path.
@@ -3285,17 +3295,33 @@ class TabChart(QWidget):
                 pass
         return str(paper), ""
 
+    @staticmethod
+    def _builtin_ti1_asset(data: str) -> str | None:
+        """Asset path of a built-in preset's bundled .ti1, or None for the
+        targen-based built-ins (ColorMunki Triple-density) that have no .ti1."""
+        if data == TC918_PRESET_KEY:
+            return TC918_TI1_ASSET
+        if data in KNUT_PRESETS_BY_KEY:
+            return KNUT_PRESETS_BY_KEY[data].ti1_asset
+        if data in PREBUILT_PRESETS:
+            return PREBUILT_PRESETS[data][0] + ".ti1"
+        return None
+
     def _loaded_ti1_patch_count(self) -> int | None:
-        """Patch count of the currently loaded preset's bundled .ti1, if any."""
-        p = getattr(self, "_preset_ti1_path", None)
-        if p and Path(p).is_file():
-            try:
-                txt = Path(p).read_text(encoding="latin-1", errors="ignore")
-                m = re.search(r"NUMBER_OF_SETS\s+(\d+)", txt)
-                if m:
-                    return int(m.group(1))
-            except OSError:
-                pass
+        """Patch count of the .ti1 backing the current selection, if any —
+        a user preset's sidecar (_preset_ti1_path), a built-in's bundled .ti1
+        (_builtin_ti1_path, #62), or the chart just generated (_current_ti1_path)."""
+        for p in (getattr(self, "_preset_ti1_path", None),
+                  getattr(self, "_builtin_ti1_path", None),
+                  getattr(self, "_current_ti1_path", None)):
+            if p and Path(p).is_file():
+                try:
+                    txt = Path(p).read_text(encoding="latin-1", errors="ignore")
+                    m = re.search(r"NUMBER_OF_SETS\s+(\d+)", txt)
+                    if m:
+                        return int(m.group(1))
+                except OSError:
+                    pass
         return None
 
     def _suggest_target_name(self) -> str:

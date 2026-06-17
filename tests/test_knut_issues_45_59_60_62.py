@@ -255,6 +255,32 @@ def test_create_chart_suggest_includes_patches_and_orientation(qapp, settings, t
     assert t._suggest_target_name() == "i1Pro-A4-484p-1page-Portrait"
 
 
+def test_loaded_ti1_patch_count_for_builtin_presets(qapp, settings):
+    # #62 follow-up (Knut): a BUILT-IN preset's bundled .ti1 must also feed the
+    # patch count — it doesn't use _preset_ti1_path (that's for user presets), so
+    # _builtin_ti1_path must supply it. Reproduces "manual mode built-in shows no
+    # 960p in the suggested name".
+    import re
+    from core.resource_path import resource_path
+    from ui.tabs.tab_chart import (
+        TabChart, KNUT_PRESETS_BY_KEY, PREBUILT_PRESETS,
+    )
+    t = TabChart(ArgyllRunner(settings), FileManager(settings), settings)
+
+    # A Knut preset (bundled per-preset .ti1).
+    key, preset = next(iter(KNUT_PRESETS_BY_KEY.items()))
+    t._builtin_ti1_path = resource_path(preset.ti1_asset)
+    expect = int(re.search(r"NUMBER_OF_SETS\s+(\d+)",
+                           t._builtin_ti1_path.read_text("latin-1", "ignore")).group(1))
+    assert t._loaded_ti1_patch_count() == expect
+
+    # A prebuilt-files preset (bundled <stem>.ti1).
+    pkey, (stem, _name) = next(iter(PREBUILT_PRESETS.items()))
+    assert t._builtin_ti1_asset(pkey) == stem + ".ti1"
+    t._builtin_ti1_path = resource_path(stem + ".ti1")
+    assert t._loaded_ti1_patch_count() and t._loaded_ti1_patch_count() > 0
+
+
 def test_suggested_name_from_settings(qapp, settings):
     from ui.dialogs.ti2_relayout_dialog import Ti2RelayoutDialog
     d = Ti2RelayoutDialog(ArgyllRunner(settings), settings)

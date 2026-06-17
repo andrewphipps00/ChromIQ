@@ -108,6 +108,95 @@ def test_oog_mask_threshold():
 
 
 # ---------------------------------------------------------------------------
+# Source colour-space resolution (Knut #2: bundled fallback + custom browse)
+# ---------------------------------------------------------------------------
+
+def test_colorspace_profile_bundled_fallback(tmp_path: Path):
+    # When Argyll's ref/ can't be found (e.g. a Homebrew symlink install), the
+    # standard working-space profiles must still resolve from ChromIQ's bundle.
+    from workflow.softproof_runner import find_colorspace_profile, argyll_ref_dir
+
+    class S:
+        def get(self, k, d=None):
+            return str(tmp_path / "nonexistent" / "bin") if k == "argyll_bin_path" else d
+
+    s = S()
+    assert argyll_ref_dir(s) is None              # no ref next to a bogus bin
+    p = find_colorspace_profile("sRGB.icm", s)    # …falls back to bundled
+    assert p is not None and p.is_file()
+
+
+def test_resolve_custom_source_profile(tmp_path: Path):
+    from workflow.softproof_runner import resolve_source_profile
+
+    class S:
+        def get(self, k, d=None):
+            return "/Applications/Argyll/bin" if k == "argyll_bin_path" else d
+
+    img = tmp_path / "x.tif"
+    Image.new("RGB", (4, 4), (10, 20, 30)).save(img)
+    # A real v2 custom profile is used verbatim.
+    custom = tmp_path / "mine.icc"
+    custom.write_bytes(_make_icc(version_major=2, device_class=b"spac", space=b"RGB "))
+    prof, note = resolve_source_profile(img, "custom", S(), tmp_path, custom)
+    assert prof == custom
+    # A v4 custom profile is rejected and we fall back to sRGB, explained in note.
+    v4 = tmp_path / "v4.icc"
+    v4.write_bytes(_make_icc(version_major=4))
+    prof, note = resolve_source_profile(img, "custom", S(), tmp_path, v4)
+    assert prof is not None and prof.name == "sRGB.icm" and "v4" in note
+
+
+# ---------------------------------------------------------------------------
+# Gamut-fit per-gamut controls (separate opacity/saturation for both gamuts)
+# ---------------------------------------------------------------------------
+
+def test_combined_gamut_html_exposes_both_controls(tmp_path: Path):
+    # The combined 3D HTML must expose JS hooks for BOTH gamuts so the soft-proof
+    # dialog can drive the image (primary) and printer (compare) independently.
+    from workflow.viewgam_runner import _build_compare_overlay_html
+    scene = ("<html><head></head><body><X3D><Scene>"
+             "<Shape><Appearance><Material/></Appearance>"
+             "<IndexedFaceSet><Color color='1 0 0 0 1 0'/></IndexedFaceSet>"
+             "</Shape></Scene></X3D></body></html>")
+    primary = tmp_path / "primary.html"
+    compare = tmp_path / "compare.html"
+    primary.write_text(scene)
+    compare.write_text(scene)
+    out = tmp_path / "combined.html"
+    assert _build_compare_overlay_html(primary, compare, out)
+    html = out.read_text()
+    assert "window._chromiqApplyPrimary" in html      # image-gamut hook
+    assert "window._chromiqApplyCompare" in html       # printer-gamut hook
+    assert 'id="chromiq-compare"' in html              # compare is identifiable
+    assert "_chromiqPrimaryOpacity" in html and "_chromiqPrimarySat" in html
+
+
+def test_gamut_wireframe_conversion(tmp_path: Path):
+    # A wireframe gamut must become an IndexedLineSet (this x3dom build has no
+    # FillProperties) so it never occludes the other gamut.
+    from workflow.viewgam_runner import _build_compare_overlay_html, _to_wireframe
+    scene = ("<html><head></head><body><X3D><Scene>"
+             "<Shape><Appearance><Material/></Appearance>"
+             "<IndexedFaceSet coordIndex='0 1 2 -1' solid='true'>"
+             "<Coordinate point='0 0 0 1 0 0 0 1 0'/>"
+             "<Color color='1 0 0 0 1 0 0 0 1'/>"
+             "</IndexedFaceSet></Shape></Scene></X3D></body></html>")
+    # Direct conversion closes the loop and drops solid.
+    wire = _to_wireframe(scene)
+    assert "IndexedLineSet" in wire and "IndexedFaceSet" not in wire
+    assert "solid=" not in wire
+    assert "0 1 2 0 -1" in wire        # polygon closed back to the first vertex
+    # Through the merge: image (primary) wireframe, printer (compare) solid.
+    primary = tmp_path / "p.html"; primary.write_text(scene)
+    compare = tmp_path / "c.html"; compare.write_text(scene)
+    out = tmp_path / "combined.html"
+    assert _build_compare_overlay_html(primary, compare, out, primary_wire=True)
+    html = out.read_text()
+    assert "IndexedLineSet" in html      # the image gamut is now a cage
+
+
+# ---------------------------------------------------------------------------
 # Dialog smoke tests (offscreen)
 # ---------------------------------------------------------------------------
 
@@ -181,13 +270,61 @@ def test_bundled_test_target_present_and_v2():
     assert resource_path("assets/test_images/PhotoDisc-Freeware-License.pdf").is_file()
 
 
-def test_test_target_button_loads_with_embedded_source():
+def test_test_target_button_loads_with_embedded_source(monkeypatch):
     from ui.dialogs.softproof_dialog import SoftproofDialog
     dlg = SoftproofDialog(_runner(), _Settings())
     dlg.show()
+    # Picking an image now shows it immediately (async) — stub the load so the
+    # deferred repaint can't race the dialog teardown.
+    monkeypatch.setattr(dlg._preview, "load_tiff", lambda *a, **k: None)
     dlg._load_test_target()
     assert dlg._image_path is not None and dlg._image_path.is_file()
     assert dlg._source_combo.currentData() == "embedded"
+    dlg._teardown_webengine()
+    dlg.close()
+
+
+def test_gamut_controls_present_and_view_gated():
+    # Separate opacity + saturation sliders for image and printer, shown only on
+    # the Gamut-fit view.
+    from ui.dialogs.softproof_dialog import SoftproofDialog
+    dlg = SoftproofDialog(_runner(), _Settings())
+    dlg.show()
+    # Four sliders with sensible defaults (image opaque, printer semi).
+    assert dlg._img_opacity.value() == 100 and dlg._img_sat.value() == 100
+    assert dlg._prn_opacity.value() == 50 and dlg._prn_sat.value() == 100
+    # Hidden on the Preview view, shown on Gamut fit.
+    dlg._show_view(0)
+    assert not dlg._gamut_controls.isVisible()
+    dlg._show_view(1)
+    assert dlg._gamut_controls.isVisible()
+    dlg._push_gamut_settings()        # must not raise with a live web view
+    dlg._teardown_webengine()
+    dlg.close()
+
+
+def test_custom_source_profile_browse(tmp_path, monkeypatch):
+    # The "Other ICC profile…" colour-space entry opens a browser, remembers the
+    # chosen profile, relabels the entry, and passes it through (Knut's request).
+    import ui.dialogs.softproof_dialog as mod
+    from ui.dialogs.softproof_dialog import SoftproofDialog
+    dlg = SoftproofDialog(_runner(), _Settings())
+    dlg.show()
+    assert dlg._source_combo.findData("custom") >= 0      # the entry exists
+    chosen = tmp_path / "MyWorkingSpace.icc"
+    chosen.write_bytes(_make_icc(version_major=2))
+    monkeypatch.setattr(mod, "open_file_dialog", lambda *a, **k: str(chosen))
+    dlg._source_combo.setCurrentIndex(dlg._source_combo.findData("custom"))
+    assert dlg._custom_source_path == chosen
+    idx = dlg._source_combo.findData("custom")
+    assert "MyWorkingSpace.icc" in dlg._source_combo.itemText(idx)
+    # Cancelling with nothing chosen reverts to the first entry. Switch away
+    # first so re-picking "custom" actually emits the change signal.
+    dlg._source_combo.setCurrentIndex(dlg._source_combo.findData("srgb"))
+    dlg._custom_source_path = None
+    monkeypatch.setattr(mod, "open_file_dialog", lambda *a, **k: "")
+    dlg._source_combo.setCurrentIndex(dlg._source_combo.findData("custom"))
+    assert dlg._source_combo.currentIndex() == 0
     dlg._teardown_webengine()
     dlg.close()
 
@@ -223,8 +360,52 @@ def test_softproof_v4_printer_blocks_run(tmp_path: Path):
     dlg._image_edit.setText(str(dlg._image_path))
     dlg._profile_path = p
     dlg._check_profile_version()
-    dlg._update_run_enabled()
+    dlg._auto_update()
     assert dlg._banner.isVisible()
-    assert not dlg._run_btn.isEnabled()          # v4 printer profile blocks the run
+    assert not dlg._can_proof()                  # v4 printer profile blocks the proof
+    assert not dlg._rerun_timer.isActive()       # …so no auto-proof is scheduled
+    dlg._teardown_webengine()
+    dlg.close()
+
+
+def test_softproof_auto_flow(tmp_path: Path, monkeypatch):
+    """No Soft-proof button: an image shows immediately, a valid profile
+    auto-schedules the proof, options re-run it, and toggles grey out with no
+    image."""
+    from ui.dialogs.softproof_dialog import SoftproofDialog
+    dlg = SoftproofDialog(_runner(), _Settings())
+    dlg.show()
+    # No Soft-proof button any more.
+    assert not hasattr(dlg, "_run_btn")
+    # Nothing loaded → both display toggles greyed out.
+    dlg._auto_update()
+    assert not dlg._softproof_cb.isEnabled()
+    assert not dlg._highlight_cb.isEnabled()
+
+    # Picking an image shows it straight away (original), still no proof scheduled.
+    img = tmp_path / "img.tif"
+    Image.new("RGB", (8, 8), (200, 100, 50)).save(img)
+    loaded: list = []
+    monkeypatch.setattr(dlg._preview, "load_tiff", lambda paths, *a, **k: loaded.append(paths))
+    dlg._set_image(img)
+    assert loaded and Path(loaded[-1][0]) == img  # original shown immediately
+    assert not dlg._softproof_cb.isEnabled()      # no profile yet → toggles greyed
+    assert not dlg._highlight_cb.isEnabled()
+    assert not dlg._rerun_timer.isActive()        # no profile yet → no proof
+
+    # Adding a valid v2 profile auto-schedules the proof and ungreys the toggles.
+    prof = tmp_path / "p.icc"
+    prof.write_bytes(_make_icc(version_major=2))
+    dlg._profile_path = prof
+    dlg._auto_update()
+    assert dlg._can_proof()
+    assert dlg._softproof_cb.isEnabled()          # now there's a proof to show
+    assert dlg._rerun_timer.isActive()            # proof scheduled automatically
+
+    # Changing an option (paper white) re-schedules the proof and greys intent.
+    dlg._rerun_timer.stop()
+    dlg._paper_white_cb.setChecked(True)
+    assert not dlg._intent_combo.isEnabled()
+    assert dlg._rerun_timer.isActive()
     dlg._teardown_webengine()
     dlg.close()

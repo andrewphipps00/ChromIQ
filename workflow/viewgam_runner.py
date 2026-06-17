@@ -132,6 +132,19 @@ _COMPARE_CONTROLS_JS = """\
     var q = l<0.5 ? l*(1+s) : l+s-l*s, p = 2*l-q;
     return [hq(p,q,h+1/3), hq(p,q,h), hq(p,q,h-1/3)];
   }
+  // A semi-transparent surface that still writes the depth buffer hides
+  // whatever is behind it (you'd only see through it at full transparency).
+  // Switch depth-writing off while a gamut is translucent so the other gamut
+  // shows through it, and back on when it's fully opaque (crisp solid).
+  function setDepth(app, transparent) {
+    var dm = app.querySelector('depthmode');
+    if (transparent) {
+      if (!dm) { dm = document.createElement('depthmode'); app.appendChild(dm); }
+      dm.setAttribute('readOnly', 'true');
+    } else if (dm) {
+      dm.setAttribute('readOnly', 'false');
+    }
+  }
   function applyTransparency() {
     var T = String(typeof window._chromiqCompareOpacity !== 'undefined'
                    ? window._chromiqCompareOpacity : 0.5);
@@ -146,6 +159,7 @@ _COMPARE_CONTROLS_JS = """\
         m.setAttribute('transparency', T);
         app.appendChild(m);
       }
+      setDepth(app, parseFloat(T) > 0.01);
     });
   }
   function applySaturation() {
@@ -166,8 +180,46 @@ _COMPARE_CONTROLS_JS = """\
   }
   function applyAll() { applyTransparency(); applySaturation(); }
   window._chromiqApplyCompare = applyAll;
+
+  // --- Primary (the colourful base gamut) — everything NOT in #chromiq-compare.
+  // Lets the two gamuts carry independent opacity / saturation controls.
+  function primaryEls(tag) {
+    return Array.prototype.filter.call(
+      document.querySelectorAll(tag),
+      function (e) { return !e.closest('#chromiq-compare'); });
+  }
+  function applyPrimaryTransparency() {
+    if (typeof window._chromiqPrimaryOpacity === 'undefined') return;
+    var T = String(window._chromiqPrimaryOpacity);
+    primaryEls('material').forEach(function (m) { m.setAttribute('transparency', T); });
+    primaryEls('appearance').forEach(function (app) {
+      if (!app.querySelector('material')) {
+        var m = document.createElement('material');
+        m.setAttribute('transparency', T);
+        app.appendChild(m);
+      }
+      setDepth(app, parseFloat(T) > 0.01);
+    });
+  }
+  function applyPrimarySaturation() {
+    if (typeof window._chromiqPrimarySat === 'undefined') return;
+    var S = window._chromiqPrimarySat;
+    primaryEls('color').forEach(function (c) {
+      if (!c._origColors) c._origColors = c.getAttribute('color') || '';
+      var parts = c._origColors.trim().split(/\\s+/), out = [];
+      for (var i = 0; i + 2 < parts.length; i += 3) {
+        var hsl = rgb2hsl(+parts[i], +parts[i+1], +parts[i+2]);
+        var rgb = hsl2rgb(hsl[0], Math.min(1, hsl[1] * S), hsl[2]);
+        out.push(rgb[0].toFixed(5), rgb[1].toFixed(5), rgb[2].toFixed(5));
+      }
+      c.setAttribute('color', out.join(' '));
+    });
+  }
+  function applyAllPrimary() { applyPrimaryTransparency(); applyPrimarySaturation(); }
+  window._chromiqApplyPrimary = applyAllPrimary;
+
   document.addEventListener('x3dom-initialized', function () {
-    setTimeout(applyAll, 150);
+    setTimeout(function () { applyAll(); applyAllPrimary(); }, 150);
   });
 })();
 """
@@ -209,10 +261,72 @@ def _strip_scene_level_dupes(scene_content: str) -> str:
     return scene_content
 
 
+def _close_polys(coord_index: str) -> str:
+    """Close each polygon in an IndexedFaceSet coordIndex so it draws as a full
+    wireframe loop when reused as IndexedLineSet indices."""
+    groups = []
+    for grp in coord_index.split("-1"):
+        idx = grp.split()
+        if not idx:
+            continue
+        if idx[0] != idx[-1]:
+            idx = idx + [idx[0]]      # close the loop (… → first vertex)
+        groups.append(" ".join(idx))
+    return (" -1 ".join(groups) + " -1") if groups else ""
+
+
+def _to_wireframe(scene: str) -> str:
+    """Turn every IndexedFaceSet in an X3D scene into an IndexedLineSet, so the
+    gamut renders as a non-occluding wireframe cage (this x3dom build has no
+    FillProperties, but does support IndexedLineSet). Filled faces are what
+    hide an overlapping gamut; lines never do."""
+    # Face-only attributes IndexedLineSet doesn't accept — leaving them on makes
+    # x3dom reject the node and the whole scene goes blank.
+    face_attrs = ("solid", "ccw", "convex", "creaseAngle",
+                  "normalPerVertex", "normalIndex")
+
+    def repl(m: "re.Match") -> str:
+        attrs = m.group(1)
+        # coordIndex: single OR double quotes, may span lines (Argyll wraps it).
+        ci = re.search(r"coordIndex\s*=\s*(['\"])(.*?)\1", attrs,
+                       re.IGNORECASE | re.DOTALL)
+        if ci:
+            attrs = (attrs[:ci.start()]
+                     + f'coordIndex="{_close_polys(ci.group(2))}"'
+                     + attrs[ci.end():])
+        for a in face_attrs:
+            attrs = re.sub(rf"\s*{a}\s*=\s*(['\"]).*?\1", "", attrs,
+                           flags=re.IGNORECASE | re.DOTALL)
+        return f"<IndexedLineSet{attrs}>"
+
+    scene = re.sub(r"<IndexedFaceSet\b([^>]*)>", repl, scene,
+                   flags=re.IGNORECASE | re.DOTALL)
+    scene = re.sub(r"</IndexedFaceSet>", "</IndexedLineSet>", scene, flags=re.IGNORECASE)
+
+    # Draw the cage with depth-testing off so it stays visible *through* the
+    # other gamut's surface — otherwise a wireframe nested inside the larger
+    # gamut would be hidden by it. (This x3dom build supports DepthMode.) Scope
+    # it to just the gamut shapes (those now holding an IndexedLineSet), not the
+    # axes/labels, so only the cage floats on top.
+    def _depth_off(shape: "re.Match") -> str:
+        block = shape.group(0)
+        if re.search(r"<IndexedLineSet\b", block, re.IGNORECASE):
+            block = re.sub(r"(<Appearance\b[^>]*>)",
+                           r'\1<DepthMode enableDepthTest="false"></DepthMode>',
+                           block, count=1, flags=re.IGNORECASE)
+        return block
+
+    scene = re.sub(r"<Shape\b.*?</Shape>", _depth_off, scene,
+                   flags=re.IGNORECASE | re.DOTALL)
+    return scene
+
+
 def _build_compare_overlay_html(
     primary_html: Path,
     compare_html: Path,
     output_path: Path,
+    primary_wire: bool = False,
+    compare_wire: bool = False,
 ) -> bool:
     """Merge compare gamut scene into primary's colorful HTML as a transparent overlay.
 
@@ -225,10 +339,15 @@ def _build_compare_overlay_html(
         primary_text = primary_html.read_text(encoding="utf-8")
         compare_text = compare_html.read_text(encoding="utf-8")
 
+        if primary_wire:                       # render the image gamut as a cage
+            primary_text = _to_wireframe(primary_text)
+
         m = re.search(r"<[Ss]cene[^>]*>(.*?)</[Ss]cene>", compare_text, re.DOTALL | re.IGNORECASE)
         if not m:
             return False
         compare_scene = _strip_scene_level_dupes(m.group(1))
+        if compare_wire:                       # render the printer gamut as a cage
+            compare_scene = _to_wireframe(compare_scene)
 
         # Add transparency to every Material element in the compare scene.
         # Shapes that omit Material (relying on per-vertex Color alone) are

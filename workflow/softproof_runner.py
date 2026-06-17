@@ -93,31 +93,68 @@ def _decode_lab_tiff(path: Path) -> np.ndarray:
 # --- Source-space + image preparation ---------------------------------------
 
 def argyll_ref_dir(settings) -> Path | None:
-    """The Argyll ``ref`` directory (sibling of the configured ``bin``)."""
+    """The Argyll ``ref`` directory (sibling of the configured ``bin``).
+
+    Tries both the literal ``bin`` path and its real location after resolving
+    symlinks — a Homebrew install points ``bin`` at ``/opt/homebrew/bin`` (a
+    symlink farm with no ``ref`` beside it), while the real ``ref`` lives next
+    to the actual binaries in the Cellar.
+    """
     bin_path = settings.get("argyll_bin_path", "/Applications/Argyll/bin")
     if not bin_path:
         return None
-    cand = Path(bin_path).parent / "ref"
-    return cand if cand.exists() else None
+    for base in (Path(bin_path), Path(bin_path).resolve()):
+        cand = base.parent / "ref"
+        if cand.exists():
+            return cand
+    return None
+
+
+def _bundled_profiles_dir() -> Path | None:
+    """ChromIQ's own copy of the standard working-space profiles, used when
+    Argyll's ``ref`` folder can't be found (e.g. Homebrew installs)."""
+    from core.resource_path import resource_path
+    d = resource_path("assets/profiles")
+    return d if d.exists() else None
+
+
+def find_colorspace_profile(name: str, settings) -> Path | None:
+    """Locate a named working-space profile (e.g. ``sRGB.icm``): prefer Argyll's
+    ``ref`` directory, then fall back to ChromIQ's bundled copy."""
+    for d in (argyll_ref_dir(settings), _bundled_profiles_dir()):
+        if d is not None and (d / name).exists():
+            return d / name
+    return None
 
 
 def resolve_source_profile(
-    image_path: Path, source_choice: str, settings, work_dir: Path
+    image_path: Path, source_choice: str, settings, work_dir: Path,
+    custom_path: Path | None = None,
 ) -> tuple[Path | None, str]:
     """Return ``(profile_path, note)`` for the image's source colour space.
 
-    ``source_choice`` is "embedded", "srgb" or "adobergb". For "embedded" we
-    pull the image's embedded ICC; if it's absent or ICC v4 (Argyll can't read
-    v4) we fall back to sRGB and say so in ``note``.
+    ``source_choice`` is "embedded", "srgb", "adobergb", "p3", "prophoto" or
+    "custom". For "embedded" we pull the image's embedded ICC; if it's absent or
+    ICC v4 (Argyll can't read v4) we fall back to sRGB and say so in ``note``.
+    For "custom" we use ``custom_path`` (the profile the user browsed to).
+    Named profiles are found in Argyll's ``ref`` folder or, failing that, in
+    ChromIQ's bundled copy — so this works even when Argyll's ``ref`` is missing.
     """
-    ref = argyll_ref_dir(settings)
     named = {
         "srgb":     ("sRGB.icm",        tr("source assumed sRGB")),
         "adobergb": ("ClayRGB1998.icm", tr("source assumed Adobe RGB (1998)")),
         "p3":       ("DisplayP3.icm",   tr("source assumed Display P3")),
         "prophoto": ("ProPhoto.icm",    tr("source assumed ProPhoto RGB")),
     }
-    srgb = (ref / "sRGB.icm") if ref else None
+    srgb = find_colorspace_profile("sRGB.icm", settings)
+
+    if source_choice == "custom" and custom_path is not None:
+        from workflow.icc_info import is_v4
+        if not custom_path.exists():
+            return srgb, tr("the colour-space profile you chose is missing — assumed sRGB")
+        if is_v4(custom_path):
+            return srgb, tr("the colour-space profile you chose is ICC v4 (unreadable) — assumed sRGB")
+        return custom_path, tr("using the colour-space profile you chose")
 
     if source_choice == "embedded":
         try:
@@ -134,9 +171,9 @@ def resolve_source_profile(
         return srgb, tr("no embedded profile — assumed sRGB")
 
     name, note = named.get(source_choice, named["srgb"])
-    prof = (ref / name) if ref else None
-    if prof is None or not prof.exists():
-        return srgb, named["srgb"][1]   # fall back to sRGB if the ref profile is absent
+    prof = find_colorspace_profile(name, settings)
+    if prof is None:
+        return srgb, named["srgb"][1]   # fall back to sRGB if the profile is absent
     return prof, note
 
 
@@ -182,7 +219,8 @@ _HIGHLIGHTS = {
 class SoftproofParams:
     image_path: Path
     printer_profile: Path
-    source_choice: str = "srgb"     # embedded | srgb | adobergb | p3 | prophoto
+    source_choice: str = "srgb"     # embedded | srgb | adobergb | p3 | prophoto | custom
+    custom_source: Path | None = None    # the ICC the user browsed to (source_choice="custom")
     intent: str = "r"               # cctiff -i (r=relative recommended for OOG)
     threshold: float = 2.0          # ΔE above which a pixel is "out of gamut"
     highlight: str = "gray"
@@ -218,7 +256,8 @@ class SoftproofRunner(QObject):
             return
 
         self._source_profile, self._source_note = resolve_source_profile(
-            params.image_path, params.source_choice, self._settings, self._work)
+            params.image_path, params.source_choice, self._settings, self._work,
+            params.custom_source)
         if self._source_profile is None or not self._source_profile.exists():
             self.error.emit(tr(
                 "Could not find a source colour-space profile (sRGB/Adobe RGB). "
