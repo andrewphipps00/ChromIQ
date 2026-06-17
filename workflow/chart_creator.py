@@ -439,6 +439,11 @@ class ChartParams:
     target_name: str = "chart"
     chart_notes: str = ""             # free-text user notes stamped onto the TIFF
     stamp_commands: bool = True       # also stamp the targen + printtarg commands used
+    # When the chart was laid out from an existing patch set (a preset, a loaded
+    # .ti1, a prebuilt chart, or one applied from the editor), targen was NOT run
+    # — so the command stamp shows the chart-LAYOUT name instead of a misleading
+    # targen line, keeping only the printtarg command (#70, Knut's model).
+    chart_layout_name: str | None = None
     # When True (and gating holds: instrument in {i1, p3}, -L off, paper in
     # ALLOWED_LEFT_CLIP_PAPERS), fill the left clip strip with two rotated
     # info columns: chart context + archival form fields + jig-orientation note.
@@ -852,9 +857,14 @@ class ChartCreator:
             # stays full-length; this only rewrites the string that gets
             # rendered onto the TIFF. " ".join (not shlex.join) so the "(…)"
             # marker doesn't trigger shell quoting in the rendered line.
-            cmd_lines.append("targen " + " ".join(
-                _shorten_argv_for_stamp(self._build_targen_args(params, patch_count))
-            ))
+            if params.chart_layout_name:
+                # Built from an existing patch set — targen wasn't run, so name
+                # the chart layout instead of stamping a misleading targen line.
+                cmd_lines.append(f"Chart layout {params.chart_layout_name} |")
+            else:
+                cmd_lines.append("targen " + " ".join(
+                    _shorten_argv_for_stamp(self._build_targen_args(params, patch_count))
+                ))
             cmd_lines.append("printtarg " + " ".join(
                 _shorten_argv_for_stamp(self._build_printtarg_args(params))
             ))

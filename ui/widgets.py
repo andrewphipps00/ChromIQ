@@ -889,6 +889,36 @@ def load_preset_icon(name: str) -> QIcon:
     return QIcon(str(resource_path(f"assets/{stem}.svg")))
 
 
+def load_magenta_folder_icon() -> QIcon:
+    """The standard folder glyph tinted in the app's spectrum magenta — used by
+    the "open an existing profile" button beside the built-in-presets star, so
+    the two read as a matched pair (#70). The magenta reads on both themes, so
+    no light/dark variant is needed."""
+    from core.resource_path import resource_path
+    from PyQt6.QtGui import QGuiApplication, QImage, QPainter
+
+    from ui.styles import SPEC_MAGENTA
+
+    dpr = QGuiApplication.primaryScreen().devicePixelRatio()
+    phys = round(22 * dpr)
+    src_px = QPixmap(str(resource_path("assets/folder/folder.png")))
+    if src_px.isNull():
+        return QApplication.style().standardIcon(QStyle.StandardPixmap.SP_DirIcon)
+    scaled = src_px.scaled(phys, phys,
+                           Qt.AspectRatioMode.KeepAspectRatio,
+                           Qt.TransformationMode.SmoothTransformation)
+    # Repaint every opaque pixel magenta via SourceIn, preserving the icon's
+    # alpha mask (same trick load_folder_icon uses for the light-theme recolour).
+    img = scaled.toImage().convertToFormat(QImage.Format.Format_ARGB32_Premultiplied)
+    painter = QPainter(img)
+    painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
+    painter.fillRect(img.rect(), QColor(SPEC_MAGENTA))
+    painter.end()
+    out = QPixmap.fromImage(img)
+    out.setDevicePixelRatio(dpr)
+    return QIcon(out)
+
+
 def set_folder_icon(btn: QPushButton, name: str) -> None:
     """Set a folder-glyph icon on `btn` and tag it for live theme refresh."""
     btn.setIcon(load_folder_icon(name))

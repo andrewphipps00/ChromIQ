@@ -96,9 +96,10 @@ def test_punctuation_variants_are_distinct_names(qapp, settings, monkeypatch):
     assert asked == []                              # distinct → no overwrite prompt
 
 
-def test_editor_apply_name_keeps_dots(qapp, settings, monkeypatch):
-    # #59: the editor's Save & apply must keep dots (so "w11.5mm" stays dotted
-    # and matches what the user re-types in Create Chart), not force underscores.
+def test_editor_save_as_name_keeps_dots(qapp, settings, monkeypatch):
+    # #59 / #70: the editor's Save As (chart-layout export) must keep dots (so
+    # "w11.5mm" stays dotted), not force underscores. (The profile name is no
+    # longer asked for here — it lives in the Create Chart tab.)
     from ui.dialogs.ti2_relayout_dialog import Ti2RelayoutDialog
     from PyQt6.QtWidgets import QDialog, QLineEdit
     d = Ti2RelayoutDialog(ArgyllRunner(settings), settings)
@@ -108,7 +109,8 @@ def test_editor_apply_name_keeps_dots(qapp, settings, monkeypatch):
             le.setText("Epson-A3-w11.5mm-Portrait")
         return QDialog.DialogCode.Accepted
     monkeypatch.setattr(QDialog, "exec", fake_exec)
-    assert d._prompt_apply_name() == "Epson-A3-w11.5mm-Portrait"   # dot preserved
+    name, _location = d._prompt_save_as_name()
+    assert name == "Epson-A3-w11.5mm-Portrait"   # dot preserved
 
 
 def test_confirm_overwrite_preset_runs(qapp, settings, monkeypatch):
@@ -231,64 +233,52 @@ def test_td_chart_transfers_custom_margin_and_scale(qapp, settings):
 
 # --- #62 follow-up: live, locked descriptive suffix -------------------------
 
-def test_auto_descriptive_prefix(qapp, settings):
-    # #68: the descriptive details now LEAD the name (sortable) as a locked
-    # prefix; the user's text is the editable tail.
+def test_profile_name_field_is_plain(qapp, settings):
+    # #70 (Knut's model): the Create Chart name is a plain *printer-profile* name
+    # — no descriptive prefix is glued onto it. It starts as the manual default
+    # and whatever the user types is taken verbatim.
     from ui.widgets import PrefixLockedLineEdit
     from ui.tabs.tab_chart import TabChart
-    settings.set("create_chart_auto_suffix", True)
     t = TabChart(ArgyllRunner(settings), FileManager(settings), settings)
 
     t._switch_mode("guided")
     f = t._target_name_edit
     assert isinstance(f, PrefixLockedLineEdit)
-    assert f.text().startswith("i1Pro-")       # descriptive details first
-    f.set_tail("Baryta")                        # user's free text follows
-    assert f.tail() == "Baryta"
-    assert f.text().startswith("i1Pro-") and f.text().endswith("-Baryta")
-
-    # Toggle off → plain field; both checkboxes stay in sync.
-    t._guided_auto_suffix_cb.setChecked(False)
-    assert f.text() == "Baryta"
-    assert t._manual_auto_suffix_cb.isChecked() is False
-    assert settings.get("create_chart_auto_suffix") is False
-
-    # Back on → the prefix returns ahead of the same tail.
-    t._guided_auto_suffix_cb.setChecked(True)
-    assert f.tail() == "Baryta" and f.text().startswith("i1Pro-")
+    assert not f.text().startswith("i1Pro-")       # no descriptive prefix
+    f.setText("Canon_Pro1000_Baryta")
+    t._refresh_name_prefix()                        # must not re-glue a prefix
+    assert f.text() == "Canon_Pro1000_Baryta"
 
 
-def test_auto_prefix_not_doubled_when_preset_active(qapp, settings):
-    # #68 bug: applying a preset (whose name is already descriptive) must NOT get
-    # the auto-prefix re-added — that doubled the name.
-    from ui.tabs.tab_chart import TabChart
-    settings.set("create_chart_auto_suffix", True)
-    t = TabChart(ArgyllRunner(settings), FileManager(settings), settings)
-    t._switch_mode("manual")
-    f = t._manual_target_name_edit
-    f.set_prefix("")                              # simulate a preset-loaded name
-    f.setText("ColorMunki-A3-1196p-2pages-w11.5mm-Portrait")
-    t._knut_active = True                          # a preset is active
-    t._refresh_name_prefix()
-    assert f.text() == "ColorMunki-A3-1196p-2pages-w11.5mm-Portrait"   # no doubling
-
-
-def test_knut_preset_seed_does_not_double_name(qapp, settings):
-    # #68 (the exact reported bug): with the live prefix already on the field,
-    # seeding a Knut preset must replace the name with the preset's own — not
-    # glue the prefix in front, producing the doubled "<descr>-<descr>" name.
+def test_preset_does_not_overwrite_typed_profile_name(qapp, settings):
+    # #70 (the conceptual fix): selecting/seeding a preset is a chart-LAYOUT
+    # choice and must never overwrite a profile name the user already typed.
     from ui.tabs.tab_chart import TabChart, KNUT_PRESETS_BY_KEY
-    settings.set("create_chart_auto_suffix", True)
     t = TabChart(ArgyllRunner(settings), FileManager(settings), settings)
     t._switch_mode("manual")
     f = t._manual_target_name_edit
-    assert f.text().startswith("i1Pro-")           # a live prefix is present
+    f.setText("MyCanonProfile")                     # the user's chosen name
     key = next(k for k, p in KNUT_PRESETS_BY_KEY.items()
                if p.slug == "wg_colormunki_a3plus_1196p_1page_landscape")
     t._knut_active, t._knut_active_key = True, key
     t._seed_knut_preset(key, KNUT_PRESETS_BY_KEY[key].default_target_name)
-    assert f.text() == "ColorMunki-A3Plus-1196p-1page-Landscape-Wide-gamut"
-    assert f.text().count("ColorMunki") == 1
+    assert f.text() == "MyCanonProfile"             # untouched by the preset
+
+
+def test_preset_seeds_name_only_when_field_empty(qapp, settings):
+    # #70: when the name field is empty, a seeded preset supplies a sensible
+    # fallback so the folder isn't created nameless.
+    from ui.tabs.tab_chart import TabChart, KNUT_PRESETS_BY_KEY
+    t = TabChart(ArgyllRunner(settings), FileManager(settings), settings)
+    t._switch_mode("manual")
+    f = t._manual_target_name_edit
+    f.setText("")                                   # nothing typed yet
+    key = next(k for k, p in KNUT_PRESETS_BY_KEY.items()
+               if p.slug == "wg_colormunki_a3plus_1196p_1page_landscape")
+    t._knut_active, t._knut_active_key = True, key
+    default = KNUT_PRESETS_BY_KEY[key].default_target_name
+    t._seed_knut_preset(key, default)
+    assert f.text() == default                       # fallback seeded
 
 
 def test_sortable_builtin_name_normalisation():

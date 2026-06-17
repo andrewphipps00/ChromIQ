@@ -839,6 +839,23 @@ class FileManager:
         self._project = proj
         return new_root
 
+    def project_has_built_profile(self, name: str) -> bool:
+        """True if a project ``name`` exists on disk and any run holds a built
+        ICC profile (the deliverable). Used to block renaming a profile once it
+        has been created — at that point the embedded ICC description is baked
+        in, so the user copies it to a new name instead (#70, Knut).
+        """
+        root = self.preview_project_root(name)
+        if root is None or not (root / Project.MANIFEST).exists():
+            return False
+        try:
+            proj = Project.load(root)
+        except Exception as exc:  # noqa: BLE001 — a corrupt manifest isn't fatal here
+            log.warning("Could not inspect project '%s' for a built profile: %s",
+                        name, exc)
+            return False
+        return any(r.built_profile_icc().exists() for r in proj.all_runs())
+
     def delete_project_folder(self, name: str) -> None:
         """Permanently delete a ChromIQ project folder.
 

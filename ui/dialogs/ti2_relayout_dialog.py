@@ -3439,14 +3439,14 @@ class Ti2RelayoutDialog(QDialog):
         bv.addLayout(top_row)
         save_row = QHBoxLayout()
         save_row.setSpacing(6)
-        # "Save & apply" is the headline action: it writes the full chart folder
-        # AND hands it to the Create Chart tab, ready to print and measure.
-        # "Save As" writes the same deliverable to a folder you pick without
-        # leaving the editor.
+        # "Apply / Save" is the headline action (#70, Knut). It opens a small
+        # window offering to *overwrite* the chart currently loaded in the Create
+        # Chart tab with this layout, or to *Save As* (export the full deliverable
+        # to a folder you pick) — folding the old standalone "Save As" button in.
         # ".replace" doubles the ampersand so Qt shows a literal "&" instead of
         # eating it as a mnemonic; the tr() key stays plain (translations carry a
         # single "&"). Styled in the scheme's magenta to mark it the lead action.
-        self._apply_btn = QPushButton(tr("Save & apply…").replace("&", "&&"), bar)
+        self._apply_btn = QPushButton(tr("Apply / Save…").replace("&", "&&"), bar)
         self._apply_btn.setStyleSheet(
             f"QPushButton {{ background: {SPEC_MAGENTA}; color: white; "
             f"border: none; border-radius: 4px; padding: 4px 10px; "
@@ -3455,23 +3455,16 @@ class Ti2RelayoutDialog(QDialog):
             f"QPushButton:disabled {{ background: #4a4a4a; color: #9a9a9a; }}"
         )
         self._apply_btn.setToolTip(
-            tr("Save this chart and open it straight away in the Create Chart "
-            "tab, ready to print and measure. Creates a new profiling project "
-            "folder under the name you choose."))
+            tr("Overwrite the chart currently loaded in the Create Chart tab with "
+            "this layout — or Save As to export the full chart to a folder you "
+            "pick, without leaving the editor."))
         self._apply_btn.clicked.connect(self._save_and_apply)
         save_row.addWidget(self._apply_btn)
-        self._save_btn = QPushButton(tr("Save As…"), bar)
-        self._save_btn.setToolTip(
-            tr("Save the full chart to a folder you pick (.ti1 / .ti2 / TIFF "
-            "pages, i1Profiler files, a colour list and the layout settings) "
-            "without leaving the editor."))
-        self._save_btn.clicked.connect(self._save_as)
-        save_row.addWidget(self._save_btn)
         self._close_btn = QPushButton(tr("Close"), bar)
         self._close_btn.setToolTip(
             tr("Close the editor without saving. If the layout has unsaved "
-            "changes you'll be asked to confirm first; “Save & apply…” and "
-            "“Save As…” keep your work."))
+            "changes you'll be asked to confirm first; “Apply / Save…” "
+            "keeps your work."))
         self._close_btn.clicked.connect(self._on_close_clicked)
         save_row.addWidget(self._close_btn)
         bv.addLayout(save_row)
@@ -5173,12 +5166,13 @@ class Ti2RelayoutDialog(QDialog):
         path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
     def _save_and_apply(self) -> None:
-        """Save the chart and hand it to the Create Chart tab, ready to use.
+        """The "Apply / Save" action (#70, Knut's model).
 
-        Explains what will happen, asks for a profile name (the working-folder
-        name), writes the full deliverable to a staging folder, then calls the
-        host callback that imports it into a fresh run and switches to manual
-        mode. Falls back to a plain Save As when opened without a host.
+        Offers three choices: **Overwrite** the chart currently loaded in the
+        Create Chart tab with this layout (the profile name there is *not*
+        changed); **Save As** to export the full deliverable to a folder you
+        pick; or **Cancel** back to the editor. Falls back to a plain Save As
+        when opened without a host to apply into.
         """
         if self._spec is None or self._grid.count() == 0:
             return
@@ -5186,9 +5180,16 @@ class Ti2RelayoutDialog(QDialog):
             # No host to apply into (e.g. dialog opened standalone) — save only.
             self._save_as()
             return
-        name = self._prompt_apply_name()
-        if not name:
+        action = self._prompt_apply_action()
+        if action == "cancel":
+            return                       # Cancel → back to the editor
+        if action == "saveas":
+            self._save_as()              # export to a folder, editor stays open
             return
+        # Overwrite: the layout's own descriptive name is only the staging file
+        # stem; the host imports it into the *current* Create Chart profile under
+        # that profile's name, leaving the profile name untouched.
+        name = self._default_apply_name()
         import tempfile
         staging = Path(tempfile.mkdtemp(prefix="chromiq_apply_"))
         try:
@@ -5197,15 +5198,15 @@ class Ti2RelayoutDialog(QDialog):
             QMessageBox.warning(self, tr("Could not prepare chart"), str(exc))
             return
         self._status.setText(
-            tr("Applying “{name}” to the Create Chart tab…").format(name=name))
+            tr("Applying this chart to the Create Chart tab…"))
         try:
             applied = self._on_apply(staging, name)
         except Exception as exc:  # noqa: BLE001
             log.exception("apply callback failed")
             QMessageBox.warning(self, tr("Could not apply chart"), str(exc))
             return
-        # The host returns False when the user backed out of a name-collision
-        # prompt — keep the editor open so they can try again with another name.
+        # The host returns False when the user backed out of a prompt — keep the
+        # editor open so they can try again.
         if applied is False:
             self._status.setText(tr("Apply cancelled — the editor is still open."))
             return
@@ -5258,82 +5259,56 @@ class Ti2RelayoutDialog(QDialog):
             return base
         return self._suggest_chart_name()
 
-    def _prompt_apply_name(self) -> str | None:
-        """Friendly explanation + name field for Save & apply.
+    def _prompt_apply_action(self) -> str:
+        """The "Apply / Save" window (#70, Knut's model).
 
-        Returns a file/folder-safe profile name, or None if cancelled. The field
-        is pre-filled with the target name carried through the editor, or — when
-        the chart was built fresh here — a name suggested from its printtarg
-        settings. A "Suggest name" button refills that suggestion (#62).
+        Returns ``"overwrite"`` (replace the chart currently loaded in the Create
+        Chart tab with this layout), ``"saveas"`` (export the full chart to a
+        folder you pick), or ``"cancel"`` (back to the editor). No name is asked
+        for — the profile name lives in the Create Chart tab and is never changed
+        from here.
         """
         dlg = QDialog(self)
-        dlg.setWindowTitle(tr("Save & apply this chart"))
+        dlg.setWindowTitle(tr("Apply or save this chart layout"))
         dlg.setMinimumWidth(580)
         lay = QVBoxLayout(dlg)
         lay.setContentsMargins(24, 20, 24, 16)
         lay.setSpacing(12)
 
         heading = QLabel(
-            tr("Set this chart up as a new profiling project"), dlg)
+            tr("What would you like to do with this chart layout?"), dlg)
         heading.setWordWrap(True)
         heading.setStyleSheet("font-weight: 600; font-size: 14px;")
         lay.addWidget(heading)
 
         body = QLabel(
-            tr("This takes the chart you've designed here and gets it ready to "
-               "print and measure. When you continue:\n\n"
-               "  •  ChromIQ creates a new working folder named after the "
-               "profile name you choose below. Everything for this profile — "
-               "the chart, your measurements and the finished profile — will "
-               "live there.\n"
-               "  •  The chart's files (the patch list, the layout and the "
-               "printable pages) are copied into it.\n"
-               "  •  You're taken to the Create Chart tab with this chart "
-               "loaded and ready. The patch recipe and the layout are locked so "
-               "they can't be changed by accident; if you ever need to adjust "
-               "them, just tick the unlock boxes there.\n"
-               "  •  From there you carry on to Print and Measure as usual.\n\n"
-               "Pick a clear, memorable name — it names the whole project "
-               "folder, so something describing the printer, paper and date "
-               "works well (for example “Pro300-CansonRag-June”)."), dlg)
+            tr("  •  Overwrite — replace the chart currently loaded in the "
+               "Create Chart tab with this layout. The patch recipe and page "
+               "layout there are updated and locked; your printer profile name "
+               "and any measurements you've already taken are kept.\n"
+               "  •  Save As — export the full chart (the patch list, the "
+               "layout and the printable pages, plus the i1Profiler files and a "
+               "colour list) to a folder you pick, without leaving the editor.\n"
+               "  •  Cancel — go back to the editor and change nothing."), dlg)
         body.setWordWrap(True)
         lay.addWidget(body)
 
-        name_row = QHBoxLayout()
-        name_row.addWidget(QLabel(tr("Profile name:"), dlg))
-        name_edit = PrefixLockedLineEdit(dlg)
-        name_row.addWidget(name_edit, 1)
-        lay.addLayout(name_row)
-        # "Add a descriptive prefix" (#68): the instrument · paper · patch · pages
-        # · orientation details lead the name as a locked, sortable prefix, with
-        # your own text after — replacing the old "Suggest name" button.
-        prefix_cb = QCheckBox(tr("Add a descriptive prefix"), dlg)
-        prefix_cb.setChecked(bool(self._settings.get("create_chart_auto_suffix", True)))
-        prefix_cb.toggled.connect(
-            lambda on: _toggle_locked_prefix(name_edit, on, self._dialog_name_prefix()))
-        lay.addWidget(prefix_cb)
-        self._seed_save_name(name_edit, prefix_cb.isChecked())
-
         bb = QDialogButtonBox(dlg)
-        ok_btn = bb.addButton(tr("Create project"), QDialogButtonBox.ButtonRole.AcceptRole)
-        cancel_btn = bb.addButton(tr("Cancel"), QDialogButtonBox.ButtonRole.RejectRole)
-        ok_btn.setDefault(True)
-        ok_btn.clicked.connect(dlg.accept)
-        cancel_btn.clicked.connect(dlg.reject)
+        overwrite_btn = bb.addButton(tr("Overwrite"),
+                                     QDialogButtonBox.ButtonRole.AcceptRole)
+        saveas_btn = bb.addButton(tr("Save As…"),
+                                  QDialogButtonBox.ButtonRole.ActionRole)
+        cancel_btn = bb.addButton(tr("Cancel"),
+                                  QDialogButtonBox.ButtonRole.RejectRole)
+        overwrite_btn.setDefault(True)
         lay.addWidget(bb)
 
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return None
-        import re
-        raw = name_edit.text().strip()
-        # Match FileManager._sanitise so the applied name is consistent
-        # everywhere: spaces → hyphen, and KEEP dots / hyphens (only truly
-        # filesystem-illegal characters become underscores). Forcing dots to
-        # underscores here is what made "w11.5mm" become "w11_5mm" and then
-        # mismatch the dotted name the user re-typed in Create Chart (#59).
-        clean = re.sub(r"\s+", "-", raw)
-        clean = re.sub(r"[^\w\-.]", "_", clean).strip("._-")
-        return clean or "chart"
+        result = {"v": "cancel"}
+        overwrite_btn.clicked.connect(lambda: (result.__setitem__("v", "overwrite"), dlg.accept()))
+        saveas_btn.clicked.connect(lambda: (result.__setitem__("v", "saveas"), dlg.accept()))
+        cancel_btn.clicked.connect(dlg.reject)
+        dlg.exec()
+        return result["v"]
 
     def _maybe_tag_randomised(self, ti2: Path) -> str:
         """Decide how the just-saved .ti2 is tagged as randomised, and do it.
@@ -5453,14 +5428,12 @@ class Ti2RelayoutDialog(QDialog):
     def _set_busy(self, busy: bool) -> None:
         self._preview_btn.setEnabled(not busy)
         self._shuffle_btn.setEnabled(not busy)
-        self._save_btn.setEnabled(not busy)
         self._apply_btn.setEnabled(not busy)
 
     def _refresh_enabled(self) -> None:
         has = self._spec is not None
         self._preview_btn.setEnabled(has)
         self._shuffle_btn.setEnabled(has)
-        self._save_btn.setEnabled(has)
         self._apply_btn.setEnabled(has)
         self._refresh_undo_enabled()
         # Initial pass for the conditional checkboxes — without this the
