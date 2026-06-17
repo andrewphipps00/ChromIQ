@@ -272,6 +272,49 @@ def build_cube_html(
       var s = document.getElementById("stats");
       if (s) {{ s.textContent = payload.stats; }}
     }};
+
+    // Middle-button (wheel-click) drag → pan, in addition to Plotly's built-in
+    // right-drag pan (#64). Translates the camera eye + centre together along
+    // the screen-aligned axes via the public relayout API, so it's robust
+    // across Plotly versions.
+    (function() {{
+      var gd = document.getElementById("plot");
+      var panning = false, lx = 0, ly = 0;
+      var sub = function(a, b) {{ return {{x:a.x-b.x, y:a.y-b.y, z:a.z-b.z}}; }};
+      var add = function(a, b) {{ return {{x:a.x+b.x, y:a.y+b.y, z:a.z+b.z}}; }};
+      var scl = function(a, s) {{ return {{x:a.x*s, y:a.y*s, z:a.z*s}}; }};
+      var cross = function(a, b) {{ return {{x:a.y*b.z-a.z*b.y, y:a.z*b.x-a.x*b.z,
+                                            z:a.x*b.y-a.y*b.x}}; }};
+      var len = function(a) {{ return Math.hypot(a.x, a.y, a.z) || 1; }};
+      var nrm = function(a) {{ return scl(a, 1/len(a)); }};
+      function curCam() {{
+        var c = (gd.layout && gd.layout.scene && gd.layout.scene.camera)
+                || CQ_LAYOUT.scene.camera;
+        return {{ eye: c.eye, center: c.center || {{x:0,y:0,z:0}},
+                 up: c.up || {{x:0,y:0,z:1}} }};
+      }}
+      gd.addEventListener("mousedown", function(e) {{
+        if (e.button === 1) {{ panning = true; lx = e.clientX; ly = e.clientY;
+                              e.preventDefault(); }}
+      }}, true);
+      window.addEventListener("mousemove", function(e) {{
+        if (!panning) return;
+        var dx = e.clientX - lx, dy = e.clientY - ly;
+        lx = e.clientX; ly = e.clientY;
+        var c = curCam();
+        var fwd = nrm(sub(c.center, c.eye));
+        var right = nrm(cross(fwd, c.up));
+        var tup = nrm(cross(right, fwd));
+        var rect = gd.getBoundingClientRect();
+        var k = len(sub(c.eye, c.center)) / Math.max(1, rect.height);
+        var t = add(scl(right, -dx * k), scl(tup, dy * k));
+        Plotly.relayout(gd, {{"scene.camera":
+          {{ eye: add(c.eye, t), center: add(c.center, t), up: c.up }} }});
+      }}, true);
+      window.addEventListener("mouseup", function(e) {{
+        if (e.button === 1) panning = false;
+      }}, true);
+    }})();
   </script>
 </body></html>
 """

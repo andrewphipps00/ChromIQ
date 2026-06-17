@@ -69,6 +69,14 @@ def test_build_html_contains_data_and_js_url():
     assert len(data[-1]["x"]) == 2
 
 
+def test_build_html_has_middle_drag_pan():
+    # #64: middle-button (wheel-click) drag pans the cube via Plotly.relayout.
+    html = C.build_cube_html([(50.0, 50.0, 50.0)], "file:///tmp/plotly.js")
+    assert "e.button === 1" in html          # middle-button gesture
+    assert "scene.camera" in html             # pans by moving the camera
+    assert "Plotly.relayout" in html
+
+
 def test_build_html_empty_program():
     html = C.build_cube_html([], "file:///tmp/plotly.js")
     assert "No patches" in html
