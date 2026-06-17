@@ -273,8 +273,8 @@ class TabCheckRefine(QWidget):
 
         left_layout.addWidget(TabHeader(
             tr("STEP 05 · SANITY CHECK"), tr("Check & refine"), "#9f82ff", left,
-            tooltip_title="Step 5 — Check the profile",
-            tooltip_body=(
+            tooltip_title=tr("Step 5 — Check the profile"),
+            tooltip_body=tr(
                 "On this final screen you sanity-check the profile you just built. "
                 "ChromIQ compares the measurements (.ti3) against the profile "
                 "(.icc) and reports how accurately the profile predicts your "

@@ -618,3 +618,57 @@ def test_import_external_preconditioning_noop_for_local_pick(tmp_path: Path) -> 
     new_args = creator._import_external_preconditioning(in_args, run)
     assert new_args == in_args
     assert run.preconditioning_icc.read_text(encoding="utf-8") == "ALREADY_LOCAL"
+
+
+def test_stamp_uses_chart_layout_line_for_ti1_origin(tmp_path: Path, monkeypatch) -> None:
+    """#70: a chart built from an existing patch set (chart_layout_name set) must
+    stamp "Chart layout <name> |" in place of the (never-run) targen command,
+    while still stamping the printtarg command."""
+    import workflow.tiff_metadata as tm
+    creator, work_dir = _make_creator(tmp_path)
+    run = creator._file_mgr.project().current_run()
+    run.ensure_dir()
+    (run.dir / f"{run.stem}.ti1").write_text("NUMBER_OF_SETS 484\n")
+    tiff = run.dir / f"{run.stem}_01.tif"
+    arr = np.zeros((100, 100, 3), dtype=np.uint8)
+    tifffile.imwrite(str(tiff), arr, resolution=(200, 200), resolutionunit="INCH")
+
+    captured: list[list[str]] = []
+    monkeypatch.setattr(tm, "stamp_chart_metadata",
+                        lambda tiffs, lines: captured.append(list(lines)))
+
+    creator._stamp_tiff_metadata(
+        [tiff],
+        ChartParams(target_name=run.stem, device_type="2",
+                    chart_layout_name="TC9.18", stamp_commands=True),
+    )
+    assert captured, "stamp_chart_metadata should have been called"
+    lines = captured[0]
+    assert any(l == "Chart layout TC9.18 |" for l in lines)
+    assert not any(l.startswith("targen ") for l in lines)
+    assert any(l.startswith("printtarg ") for l in lines)
+
+
+def test_stamp_uses_targen_line_for_fresh_chart(tmp_path: Path, monkeypatch) -> None:
+    """#70: a normal targen-built chart (no chart_layout_name) still stamps the
+    targen command as before."""
+    import workflow.tiff_metadata as tm
+    creator, work_dir = _make_creator(tmp_path)
+    run = creator._file_mgr.project().current_run()
+    run.ensure_dir()
+    (run.dir / f"{run.stem}.ti1").write_text("NUMBER_OF_SETS 484\n")
+    tiff = run.dir / f"{run.stem}_01.tif"
+    arr = np.zeros((100, 100, 3), dtype=np.uint8)
+    tifffile.imwrite(str(tiff), arr, resolution=(200, 200), resolutionunit="INCH")
+
+    captured: list[list[str]] = []
+    monkeypatch.setattr(tm, "stamp_chart_metadata",
+                        lambda tiffs, lines: captured.append(list(lines)))
+
+    creator._stamp_tiff_metadata(
+        [tiff],
+        ChartParams(target_name=run.stem, device_type="2", stamp_commands=True),
+    )
+    lines = captured[0]
+    assert any(l.startswith("targen ") for l in lines)
+    assert not any(l.startswith("Chart layout ") for l in lines)

@@ -32,6 +32,7 @@ from PyQt6.QtWidgets import (
     QSplitter,
     QStackedWidget,
     QStyledItemDelegate,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -66,7 +67,7 @@ from ui.tab_header import TabHeader
 from ui.builtin_preset_popup import BuiltinPresetButton, BuiltinPresetPopup
 from ui.tiff_preview import TiffPreview
 from ui.tooltip_button import InfoDialog, TooltipButton
-from ui.widgets import NoScrollComboBox, NoScrollSpinBox, PrefixLockedLineEdit, icc_profile_paths, make_browse_button, open_file_dialog, set_folder_icon, set_preset_icon
+from ui.widgets import NoScrollComboBox, NoScrollSpinBox, PrefixLockedLineEdit, icc_profile_paths, load_magenta_folder_icon, make_browse_button, open_file_dialog, set_folder_icon, set_preset_icon
 from core.i18n import tr
 from workflow.i1profiler_export import EXTRA_INK, export_from_ti1, parse_ti1
 from workflow.i1profiler_import import import_to_ti1
@@ -805,8 +806,8 @@ class TabChart(QWidget):
 
         left_layout.addWidget(TabHeader(
             tr("STEP 01 · GENERATE TARGET"), tr("Create test chart"), "#ff4573", left,
-            tooltip_title="Step 1 — Make a test chart",
-            tooltip_body=(
+            tooltip_title=tr("Step 1 — Make a test chart"),
+            tooltip_body=tr(
                 "This is where you design the sheet of colour patches your printer "
                 "will print. The patches are how ChromIQ later \"learns\" how your "
                 "printer reproduces colour.\n\n"
@@ -815,19 +816,38 @@ class TabChart(QWidget):
                 "profile will only be accurate for that exact combination.\n"
                 "• Have a rough idea of how careful you want to be. More patches = "
                 "more accuracy, but also more ink and paper.\n\n"
+                "First, name your profile.\n"
+                "The \"Printer profile name\" field at the top is the name of this "
+                "whole job. It becomes the working folder, every file ChromIQ makes "
+                "along the way (chart, measurements, ICC profile) and the name "
+                "written inside the profile itself — so what you see later in, say, "
+                "macOS ColorSync Utility matches the folder exactly. A good name "
+                "describes the printer, the paper and the quality, e.g. "
+                "Canon_Pro1000_PhotoRagBaryta_i1Pro3_High. Change your mind? Just "
+                "edit the name — ChromIQ offers to rename the folder and files to "
+                "match (until the profile has been built, after which you copy it to "
+                "a new name instead). Your work is saved automatically; there's no "
+                "Save button to remember.\n\n"
+                "Coming back to a profile later?\n"
+                "Click the magenta folder button (just left of the star, top right) "
+                "to reopen a profile you started before — its chart, measurements "
+                "and any finished profile are all exactly where you left them. It "
+                "asks for the profile's \"project.json\" file inside your ChromIQ "
+                "folder.\n\n"
                 "You have three ways to make a chart — from quickest to most "
                 "hands-on:\n\n"
                 "★  Built-in presets — the star button at the right end of the "
                 "Guided / Manual switch.\n"
                 "Click it to open a little menu of ready-made, professionally tuned "
                 "charts, grouped by the measuring instrument they're made for "
-                "(i1Pro or ColorMunki). Pick one and ChromIQ simply asks you for a "
-                "name, then drops the finished chart straight in — there are no "
-                "settings to understand and nothing to get wrong. This is the "
-                "fastest way to a known-good target, and a great choice if you just "
-                "want a reliable chart without thinking about the details. (The very "
-                "same presets also live at the bottom of Manual mode's \"Presets\" "
-                "dropdown, in case you'd rather find them there.)\n\n"
+                "(i1Pro or ColorMunki). Pick one and ChromIQ drops the finished "
+                "chart straight into your profile — under the name you chose above, "
+                "without changing it — so there are no settings to understand and "
+                "nothing to get wrong. This is the fastest way to a known-good "
+                "target, and a great choice if you just want a reliable chart "
+                "without thinking about the details. (The very same presets also "
+                "live at the bottom of Manual mode's \"Presets\" dropdown, in case "
+                "you'd rather find them there.)\n\n"
                 "• Guided mode picks sensible patch counts for you based on your "
                 "paper size and instrument. Recommended if you're new but still want "
                 "to choose your own paper, instrument and quality level.\n\n"
@@ -869,6 +889,11 @@ class TabChart(QWidget):
         mode_row.addWidget(self._guided_btn)
         mode_row.addWidget(self._manual_btn)
         mode_row.addStretch()
+        # Folder button (left of the star): reopen a printer profile started
+        # earlier to carry on with it another day (#70, Knut). Saving is
+        # automatic, so there's no matching Save button.
+        self._load_profile_btn = self._make_load_profile_button(self._mode_row_widget)
+        mode_row.addWidget(self._load_profile_btn)
         # Far-right star button: opens the Built-in presets overlay, listing the
         # bundled prebuilt charts grouped by instrument. Picking one runs the
         # exact same flow as choosing it in the Manual presets dropdown.
@@ -969,39 +994,23 @@ class TabChart(QWidget):
         folder_layout = QVBoxLayout(folder_grp)
 
         name_row = QHBoxLayout()
-        _guided_name_lbl = QLabel(tr("Target name:"), inner)
+        _guided_name_lbl = QLabel(tr("Printer profile name:"), inner)
         name_row.addWidget(_guided_name_lbl)
         self._target_name_edit = self._make_lineedit("", inner)
         # Live-update the guided command preview as the user types.
         self._target_name_edit.textChanged.connect(self._update_patch_count)
         name_row.addWidget(self._target_name_edit, stretch=1)
         name_row.addWidget(TooltipButton(
-            tr("Target Name"),
-            tr("A short, descriptive name for this profiling session.\n\n"
-            "This name is used for the output folder and all generated files "
-            "(chart, TIFF, measurements, ICC profile) throughout the entire workflow. "
-            "Choose a name that lets you identify the correct files for your printer "
-            "and paper combination at a glance.\n\n"
-            "Tip: combine your printer model, paper type, and instrument — "
-            "e.g. Canon_Pro1000_Baryta_i1Pro3. Use underscores or dashes instead of spaces.\n\n"
-            "“Add a descriptive prefix” (below): when on, ChromIQ leads the name with the "
-            "chart's details — instrument, paper, patch count, pages and orientation — "
-            "(e.g. i1Pro-A4-484p-1page-Portrait-) and you add your own text after, so "
-            "charts sort neatly together. It updates as you change those settings. Turn "
-            "it off to name the chart entirely yourself."),
+            tr("Printer profile name"),
+            self._profile_name_tooltip(),
             inner,
             min_width=540,
         ))
         folder_layout.addLayout(name_row)
-        # Pin the label to its natural width and indent the checkbox's spacer by
-        # the same amount, so the checkbox lines up exactly under the field (same
-        # trick the manual fixed-width label uses).
+        # Pin the label to its natural width (matches the manual fixed-width
+        # label trick, keeping the two modes' fields aligned).
         _guided_lbl_w = _guided_name_lbl.sizeHint().width()
         _guided_name_lbl.setFixedWidth(_guided_lbl_w)
-        # Spacer == label width so the checkbox lines up exactly under the field.
-        guided_suffix_w, self._guided_auto_suffix_cb = self._make_auto_suffix_row(
-            inner, with_tip=False, indent=_guided_lbl_w)
-        folder_layout.addWidget(guided_suffix_w)
         self._target_name_hint = QLabel("", inner)
         self._target_name_hint.setWordWrap(True)
         self._target_name_hint.setStyleSheet("color: #d08a3a; font-size: 11px;")
@@ -1392,7 +1401,7 @@ class TabChart(QWidget):
         # input fields aligned vertically. Sized to the translated labels so
         # longer locales widen the column (the stretchy edits absorb it).
         name_row = QHBoxLayout()
-        _name_lbl = QLabel(tr("Target name:"), w)
+        _name_lbl = QLabel(tr("Printer profile name:"), w)
         # Label column = the wider label's full sizeHint (the same measure guided
         # uses) — its natural width incl. margins, so the column matches guided's
         # left edge without clipping the label's trailing ":".
@@ -1408,23 +1417,12 @@ class TabChart(QWidget):
         )
         name_row.addWidget(self._manual_target_name_edit, stretch=1)
         name_row.addWidget(TooltipButton(
-            tr("Target Name"),
-            tr("A short, descriptive name for this profiling session.\n\n"
-            "This name is used for the output folder and all generated files "
-            "(chart, TIFF, measurements, ICC profile) throughout the entire workflow. "
-            "Choose a name that lets you identify the correct files for your printer "
-            "and paper combination at a glance.\n\n"
-            "Tip: combine your printer model, paper type, and instrument — "
-            "e.g. Canon_Pro1000_Baryta_i1Pro3. Use underscores or dashes instead of spaces."),
+            tr("Printer profile name"),
+            self._profile_name_tooltip(),
             w,
             min_width=540,
         ))
         output_layout.addLayout(name_row)
-        # Indent by the label-column width so the checkbox lines up under the
-        # field, with the "Stamp targen and printtarg commands" checkbox below.
-        manual_suffix_w, self._manual_auto_suffix_cb = self._make_auto_suffix_row(
-            w, with_tip=True, indent=_OUTPUT_LBL_W)
-        output_layout.addWidget(manual_suffix_w)
         self._manual_target_name_hint = QLabel("", w)
         self._manual_target_name_hint.setWordWrap(True)
         self._manual_target_name_hint.setStyleSheet("color: #d08a3a; font-size: 11px;")
@@ -2163,14 +2161,25 @@ class TabChart(QWidget):
                 + tr("Change a targen setting above to build a fresh chart instead.")
             )
         else:
-            info = (
-                tr("Manual mode — your current configuration ({notes}):").format(
-                    notes=" · ".join(notes))
-                + f"\ntargen {' '.join(targen_args)}"
-                + f"\nprinttarg {' '.join(pt_args)}"
-            )
+            layout = self._targen_skipped_layout_name()
+            if layout is not None:
+                # Built from an existing patch set (user preset .ti1, applied or
+                # reflected chart) — targen is skipped, so name the layout (#70).
+                info = (
+                    tr("Manual mode — chart layout “{layout}” ({notes}):\n"
+                       "Lays out the existing patch set (targen skipped).").format(
+                        layout=layout, notes=" · ".join(notes))
+                    + f"\nprinttarg {' '.join(pt_args)}"
+                )
+            else:
+                info = (
+                    tr("Manual mode — your current configuration ({notes}):").format(
+                        notes=" · ".join(notes))
+                    + f"\ntargen {' '.join(targen_args)}"
+                    + f"\nprinttarg {' '.join(pt_args)}"
+                )
         self._manual_info_lbl.setText(info)
-        self._refresh_name_prefix()     # keep the live descriptive prefix current
+        self._refresh_name_prefix()     # keep the name field plain (no prefix)
 
     # ------------------------------------------------------------------
     # Helpers
@@ -2307,15 +2316,165 @@ class TabChart(QWidget):
         """
         raw     = edit.text().strip()
         cleaned = self._file_mgr.strip_workfile_ext(raw)
-        if cleaned == raw:
+        if cleaned != raw:
+            removed = raw[len(cleaned):]
+            edit.setText(cleaned)
+            hint.setText(
+                tr("Removed “{removed}” — the printer profile name is used for the output folder and every generated file, so it shouldn't include a file extension.").format(removed=removed)
+            )
+            hint.setVisible(True)
+        else:
+            hint.setVisible(False)
+        # A name change after a project already exists is reconciled here, the
+        # moment the field loses focus (#70) — rename the folder/files, keep both,
+        # or (once a profile is built) refuse and offer copy-to-new instead.
+        self._maybe_rename_on_edit(edit, hint)
+
+    def _maybe_rename_on_edit(self, edit: Any, hint: QLabel) -> None:
+        """Reconcile a profile-name change as soon as the field loses focus.
+
+        When a project already exists under the previous name and the user types
+        a different (free) name, offer the rename/keep/delete chooser straight
+        away (#70, itsab1989). Once the profile has been *built*, renaming is
+        refused — the ICC's embedded description is baked in — and the user is
+        told to copy it to a new name instead (Knut). Reverts the field on a
+        cancelled rename so the displayed name always matches what's on disk.
+        """
+        new_name = self._file_mgr.strip_workfile_ext(edit.text().strip())
+        old_name = getattr(self, "_last_target_name", "") or ""
+        if not old_name or not new_name:
+            return
+        old_root = self._file_mgr.root_dir() / old_name
+        if not (old_root / "project.json").exists():
+            return                                   # nothing created under the old name
+        new_root = self._file_mgr.preview_project_root(new_name)
+        if new_root is None or new_root == old_root:
+            return                                   # unchanged / equivalent name
+        # A finished profile can't be renamed — the embedded ICC description was
+        # baked at build time. Refuse, explain, and restore the built name.
+        if self._file_mgr.project_has_built_profile(old_name):
+            self._warn_rename_after_profile(old_name)
+            edit.setText(old_name)
             hint.setVisible(False)
             return
-        removed = raw[len(cleaned):]
-        edit.setText(cleaned)
-        hint.setText(
-            tr("Removed “{removed}” — the target name is used for the output folder and every generated file, so it shouldn't include a file extension.").format(removed=removed)
+        if new_root.exists():
+            return                                   # a different project owns the new name
+        if not self._handle_target_rename(new_name):
+            edit.setText(old_name)                   # cancelled → keep the old name shown
+            return
+        # Rename / keep / delete all "move on" to the new name; point the
+        # FileManager at it so a later Generate lands in the right place and
+        # doesn't prompt a second time.
+        self._file_mgr.set_target_name(new_name)
+        self._last_target_name = new_name
+
+    def _warn_rename_after_profile(self, name: str) -> None:
+        """Tell the user a built profile can't be renamed (#70, Knut)."""
+        InfoDialog(
+            tr("This profile has already been built"),
+            tr("“{name}” already has a finished ICC profile, so its name is now "
+               "fixed — the name is written inside the profile itself (what you "
+               "see in, for example, ColorSync Utility), and renaming the folder "
+               "wouldn't change that.\n\n"
+               "To continue under a different name, copy this project to a new "
+               "name and build a fresh profile there.").format(name=name),
+            self, min_width=540,
+        ).exec()
+
+    # ------------------------------------------------------------------
+    # Load an existing printer profile to continue it later (#70, Knut)
+    # ------------------------------------------------------------------
+    def _make_load_profile_button(self, parent: QWidget) -> QToolButton:
+        """The magenta folder button (left of the built-in-presets star) that
+        reopens an existing profiling project, so a profile started earlier can
+        be picked up another day (#70, Knut). Styled to match the star — same
+        40×40 hit target, the ``#tooltip_btn`` hover background, and the spectrum
+        magenta — so the two read as a pair."""
+        btn = QToolButton(parent)
+        btn.setObjectName("tooltip_btn")
+        btn.setFixedSize(QSize(40, 40))
+        btn.setIcon(load_magenta_folder_icon())
+        btn.setIconSize(QSize(22, 22))
+        btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn.setToolTip(
+            tr("Open a printer profile you started earlier to carry on with it — "
+               "its chart, measurements and any profile are all where you left "
+               "them. Pick the project's “project.json” file under your ChromIQ "
+               "folder."))
+        btn.clicked.connect(self._load_existing_profile)
+        return btn
+
+    def _load_existing_profile(self) -> None:
+        """Reopen an existing project: make it the active profile, fill the name
+        field, and show its current chart (#70, Knut)."""
+        root = self._file_mgr.root_dir()
+        start = str(root) if root.exists() else str(Path.home())
+        picked = open_file_dialog(
+            self,
+            tr("Open a printer profile"),
+            name_filter=tr("ChromIQ profile (project.json)") + " (project.json)",
+            start_dir=start,
         )
-        hint.setVisible(True)
+        if not picked:
+            return
+        manifest = Path(picked)
+        # Accept either the project.json itself or its folder.
+        if manifest.is_dir():
+            manifest = manifest / "project.json"
+        if manifest.name != "project.json" or not manifest.is_file():
+            InfoDialog(
+                tr("Not a ChromIQ profile"),
+                tr("That isn't a ChromIQ project. Choose the “project.json” file "
+                   "inside a profile folder under your ChromIQ folder."),
+                self, min_width=520,
+            ).exec()
+            return
+        name = manifest.parent.name
+        # Make it the active profile and reflect it in both name fields.
+        self._file_mgr.set_target_name(name)
+        self._last_target_name = self._file_mgr.get_target_name()
+        for f in (getattr(self, "_target_name_edit", None),
+                  getattr(self, "_manual_target_name_edit", None)):
+            if f is not None:
+                if isinstance(f, PrefixLockedLineEdit):
+                    f.set_prefix("")
+                f.setText(self._last_target_name)
+        # Loading a saved project is a clean slate for the preset/applied bindings.
+        self._tc918_active = False
+        self._tc918_targen_sig = None
+        self._knut_active = False
+        self._knut_targen_sig = None
+        self._knut_active_key = None
+        self._preset_ti1_path = None
+        self._preset_ti1_targen_sig = None
+        if self._prebuilt_active:
+            self._leave_prebuilt()
+        if self._applied_active:
+            self._leave_applied()
+        if self._reflected_active:
+            self._leave_reflected()
+        # Show the project's current chart, if it has one already.
+        try:
+            run = self._file_mgr.project().current_run()
+            ti2 = run.chart_ti2
+            tiffs = sorted(run.dir.glob(f"{run.stem}_*.tif"))
+            if not tiffs and (run.dir / f"{run.stem}.tif").is_file():
+                tiffs = [run.dir / f"{run.stem}.tif"]
+        except Exception as exc:  # noqa: BLE001 — never block on a malformed run
+            log.warning("Could not read loaded project's current run: %s", exc)
+            ti2, tiffs = None, []
+        self._log.clear()
+        self._log.appendPlainText(
+            tr("Loaded profile “{name}”.").format(name=self._last_target_name))
+        if tiffs:
+            self._preview.load_tiff(tiffs)
+            ti1 = run.dir / f"{run.stem}.ti1"
+            self._current_ti1_path = ti1 if ti1.is_file() else None
+            # Let Print / Measure pick the chart up, as if it had just been built.
+            self.chart_finished.emit(tiffs, ti2, False)
+        else:
+            self._preview.clear()
+            self._current_ti1_path = None
 
     def _load_yaml_params(self) -> dict:
         path = resource_path("data/parameters.yaml")
@@ -3020,60 +3179,6 @@ class TabChart(QWidget):
             "can adjust any printtarg setting and regenerate."
         )
 
-    def _prompt_target_name(self, default_name: str) -> str | None:
-        """Ask for a target name before generating a built-in preset.
-
-        Returns the chosen name, or None if the user cancelled. An empty entry
-        falls back to `default_name`."""
-        dlg = QDialog(self)
-        dlg.setWindowTitle(tr("Name this target"))
-        dlg.setMinimumWidth(540)
-        lay = QVBoxLayout(dlg)
-        lay.setContentsMargins(22, 20, 22, 16)
-        lay.setSpacing(10)
-
-        heading = QLabel(tr("Name this target"), dlg)
-        heading.setStyleSheet("font-weight: bold;")
-        lay.addWidget(heading)
-
-        info = QLabel(
-            tr("ChromIQ creates a folder with this name and reuses it for everything "
-            "that follows — the printed chart, the measurements, and the finished "
-            "ICC profile. Choose a name you'll still recognise weeks from now.\n\n"
-            "A good name usually combines the things that make this profile unique:\n"
-            "  •  the printer (e.g. EpsonP900)\n"
-            "  •  the paper or media (e.g. CansonPlatine)\n"
-            "  •  and the date or quality level (e.g. 2026-05 or HighQ)\n\n"
-            "Example:  EpsonP900-CansonPlatine-2026-05\n\n"
-            "Stick to letters, numbers, spaces and hyphens — avoid slashes and "
-            "other punctuation so the folder name stays valid."),
-            dlg,
-        )
-        info.setWordWrap(True)
-        lay.addWidget(info)
-
-        lay.addSpacing(8)               # breathing room above the field
-        edit = QLineEdit(default_name, dlg)
-        edit.setMinimumHeight(28)
-        edit.selectAll()
-        lay.addWidget(edit)
-        lay.addSpacing(8)               # breathing room below the field
-
-        bb = QDialogButtonBox(dlg)
-        bb.addButton(tr("Cancel"), QDialogButtonBox.ButtonRole.RejectRole)
-        bb.addButton(tr("Generate"), QDialogButtonBox.ButtonRole.AcceptRole)
-        bb.rejected.connect(dlg.reject)
-        bb.accepted.connect(dlg.accept)
-        lay.addWidget(bb)
-
-        edit.returnPressed.connect(dlg.accept)
-        edit.setFocus()
-        dlg.adjustSize()                # size to fit the wrapped content
-
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return None
-        return self._file_mgr.strip_workfile_ext(edit.text().strip()) or default_name
-
     def _revert_preset_combo(self) -> None:
         """Restore the dropdown to the last committed selection (no re-apply)."""
         self._preset_combo.blockSignals(True)
@@ -3125,10 +3230,6 @@ class TabChart(QWidget):
             self._revert_preset_combo()
             return
         data = self._preset_combo.itemData(index)
-        # Whether a preset name was loaded (and thus shown prefix-free). Captured
-        # before the flag-resets below so the Default branch can tell it's coming
-        # back from a preset and restore a clean editable name (#68).
-        was_locked = self._name_locked()
 
         # Temporarily-disabled built-ins are greyed out and unselectable in the
         # UI, but guard anyway so a programmatic selection can never apply one.
@@ -3136,19 +3237,16 @@ class TabChart(QWidget):
             self._revert_preset_combo()
             return
 
-        # Built-in presets generate immediately, so prompt for a target name
-        # first — otherwise the output folder is created under the preset's
-        # default name. Cancel reverts the dropdown to the previous selection
-        # and leaves everything (values, target name) untouched.
+        # Built-in presets generate immediately under the current Printer-profile
+        # name — selecting a preset is a *chart-layout* choice and never changes
+        # the profile name the user typed (#70, Knut's model). The preset's own
+        # default name is only a fallback used when the name field is still empty.
         if data in BUILTIN_PRESET_KEYS:
             if self._runner.is_running:
                 log.warning("Built-in preset: a process is already running")
                 self._revert_preset_combo()
                 return
-            name = self._prompt_target_name(self._builtin_default_name(data))
-            if name is None:
-                self._revert_preset_combo()
-                return
+            name = None
             # Switching from the TC9.18 chart to another built-in clears the
             # expert printtarg overrides it forced on (margins, spacers, etc.).
             if self._tc918_active and data != TC918_PRESET_KEY:
@@ -3220,11 +3318,8 @@ class TabChart(QWidget):
         self._preset_del_btn.setEnabled(self._is_deletable_preset(index))
         s = self._settings
         if index == 0:
-            # Returning to Default builds a fresh chart via targen → restore the
-            # editable default name so the live descriptive prefix re-attaches to
-            # a clean tail rather than gluing onto the previous preset's name.
-            if was_locked:
-                self._set_manual_name_plain(self._default_name_base())
+            # Returning to Default builds a fresh chart via targen. The
+            # Printer-profile name is the user's own and is left untouched (#70).
             for tool, widgets in self._manual_widgets.items():
                 for pw in widgets:
                     if pw in self._d_cascade_widgets:
@@ -3303,20 +3398,15 @@ class TabChart(QWidget):
         # loaded, re-applied to the editable tail back on Default (#68).
         self._refresh_name_prefix()
 
-        # A user preset flagged "generate on select" (▶) prompts for a target
-        # name and then generates — same prompt as the built-ins. The values are
-        # already loaded above, so cancel just leaves the preset selected without
-        # generating (keeping it selectable for delete / re-save).
+        # A user preset flagged "generate on select" (▶) generates straight away
+        # under the current Printer-profile name (#70) — the values are already
+        # loaded above. The preset name is never written into the profile field.
         if data is not None and data not in BUILTIN_PRESET_KEYS:
             presets = self._load_presets_from_settings()
             pdata = presets.get(data, {})
             if isinstance(pdata, dict) and pdata.get("auto_run"):
                 if self._runner.is_running:
                     return
-                tname = self._prompt_target_name(str(data))
-                if tname is None:
-                    return
-                self._set_manual_name_plain(tname)
                 self._on_generate()
 
     def _restore_user_preset(self, data: dict) -> None:
@@ -3504,32 +3594,29 @@ class TabChart(QWidget):
             "you exactly what the chart was — which instrument, paper and how many "
             "patches — without opening anything.")
 
-    def _make_auto_suffix_row(self, parent: QWidget, with_tip: bool = True,
-                              indent: int = 0):
-        """The "Add a descriptive suffix" checkbox. With ``with_tip`` it's wrapped
-        in a ``[spacer?][checkbox]…[ⓘ]`` row mirroring the "Stamp targen and
-        printtarg commands" row (so the manual one lines up under the field with
-        it); without it (guided), just the bare checkbox — the option is
-        explained in the Target-name tooltip there instead. Returns
-        ``(widget, checkbox)``."""
-        cb = QCheckBox(tr("Add a descriptive prefix"), parent)
-        cb.setChecked(bool(self._settings.get("create_chart_auto_suffix", True)))
-        cb.toggled.connect(self._on_auto_suffix_toggled)
-        if not with_tip and not indent:
-            return cb, cb
-        row = QWidget(parent)
-        rl = QHBoxLayout(row)
-        rl.setContentsMargins(0, 0, 0, 2)
-        if indent:
-            spacer = QLabel("", row)
-            spacer.setFixedWidth(indent)
-            rl.addWidget(spacer)
-        rl.addWidget(cb)
-        rl.addStretch()
-        if with_tip:
-            rl.addWidget(TooltipButton(tr("Add a descriptive prefix"),
-                                       self._auto_suffix_tooltip(), row, min_width=520))
-        return row, cb
+    @staticmethod
+    def _profile_name_tooltip() -> str:
+        """Guidance for the Printer-profile name field (#70, Knut's model).
+
+        Speaks only to the *profile's* identity — the working folder, the files
+        and the embedded ICC description (colprof -D) all share this name, so it
+        deliberately says nothing about chart-layout naming (that lives in Save
+        Preset and the editor's Save As)."""
+        return tr(
+            "The name for this printer profile. It names the working folder, "
+            "every file generated along the way (chart, measurements, ICC "
+            "profile) and the profile's own embedded description — so what you "
+            "see later in, for example, macOS ColorSync Utility matches the "
+            "folder and files exactly.\n\n"
+            "Choose a name that identifies this printer and paper at a glance. "
+            "A good name describes the printer (name or abbreviation), the paper "
+            "(type/id and substrate such as glossy or matte), the colour space, "
+            "the measurement instrument and the profile quality — e.g. "
+            "Canon_Pro1000_PhotoRagBaryta_RGB_i1Pro3_High. Use underscores or "
+            "dashes instead of spaces.\n\n"
+            "You can rename it later: change the name here and ChromIQ offers to "
+            "rename the folder and files to match — until the profile has been "
+            "built, after which you copy it to a new name instead.")
 
     def _active_name_field(self):
         manual = self._manual_btn is not None and self._manual_btn.isChecked()
@@ -3542,33 +3629,18 @@ class TabChart(QWidget):
         PrefixLockedLineEdit and only appears once a tail is typed (#68)."""
         return self._suggest_target_name() or ""
 
-    def _name_locked(self) -> bool:
-        """Auto-naming applies only while authoring a *new* name from scratch.
-        Any active preset / applied chart already carries its own (descriptive)
-        name, so re-adding the prefix would double it (#68)."""
-        return (getattr(self, "_applied_active", False)
-                or getattr(self, "_prebuilt_active", False)
-                or getattr(self, "_reflected_active", False)
-                or getattr(self, "_knut_active", False)
-                or getattr(self, "_tc918_active", False)
-                or getattr(self, "_preset_ti1_path", None) is not None
-                or getattr(self, "_builtin_ti1_path", None) is not None)
-
     def _refresh_name_prefix(self) -> None:
-        """Push the current descriptive prefix onto the active target-name field
-        (or clear it when the option is off / a preset name is loaded)."""
+        """Keep the Create Chart name fields plain (#70, Knut's model).
+
+        The descriptive prefix now lives only in Save Preset and the editor's
+        Save As; the Create Chart name is a plain, manual *printer-profile* name.
+        This just clears any stale locked prefix left on the active field."""
         field = self._active_name_field()
-        if not isinstance(field, PrefixLockedLineEdit):
-            return
-        on = (bool(self._settings.get("create_chart_auto_suffix", True))
-              and not self._name_locked())
-        field.set_prefix(self._name_prefix() if on else "")
+        if isinstance(field, PrefixLockedLineEdit):
+            field.set_prefix("")
 
     def _set_manual_name_plain(self, name: str) -> None:
-        """Set the manual target-name field to a preset / loaded name verbatim —
-        no live descriptive prefix. Clearing the locked prefix first stops the
-        prefix being re-glued onto an already-descriptive preset name, which is
-        what doubled the name when applying a preset (#68)."""
+        """Set the manual profile-name field verbatim (no locked prefix)."""
         f = self._manual_target_name_edit
         if f is None:
             return
@@ -3576,10 +3648,17 @@ class TabChart(QWidget):
             f.set_prefix("")
         f.setText(name)
 
-    def _default_name_base(self) -> str:
-        """The startup default chart name (the editable tail of a fresh name)."""
-        return self._file_mgr.strip_workfile_ext(
-            self._settings.get("chart_target_name", "ChromIQ Test Chart"))
+    def _ensure_profile_name(self, default: str) -> str:
+        """Return the current Printer-profile name, seeding the field with
+        ``default`` only when the user hasn't typed one (#70, Knut's model:
+        presets / loaded charts never overwrite a name the user already chose).
+        """
+        f = self._manual_target_name_edit
+        cur = (f.text().strip() if f is not None else "")
+        if cur:
+            return cur
+        self._set_manual_name_plain(default)
+        return default
 
     @staticmethod
     def _toggle_name_prefix(edit: "PrefixLockedLineEdit", on: bool, prefix: str) -> None:
@@ -3595,15 +3674,6 @@ class TabChart(QWidget):
         else:
             edit.set_prefix("")        # remove the lock
             edit.setText(prefix)       # the generated name, fully editable
-
-    def _on_auto_suffix_toggled(self, on: bool) -> None:
-        self._settings.set("create_chart_auto_suffix", bool(on))
-        # Keep the guided + manual checkboxes in lock-step (one shared setting).
-        for cb in (getattr(self, "_guided_auto_suffix_cb", None),
-                   getattr(self, "_manual_auto_suffix_cb", None)):
-            if cb is not None and cb.isChecked() != on:
-                cb.blockSignals(True); cb.setChecked(on); cb.blockSignals(False)
-        self._refresh_name_prefix()
 
     def _on_preset_save(self) -> None:
         capture: dict = {}
@@ -4163,9 +4233,9 @@ class TabChart(QWidget):
         if self._bit8_radio is not None:
             self._bit8_radio.setChecked(True)
 
-        # Output name: the one the user typed in the prompt (falls back to the
-        # default). Stays editable in the Target name field for a regenerate.
-        self._set_manual_name_plain(target_name or TC918_TARGET_NAME)
+        # The chart is built under the current Printer-profile name; the preset
+        # never overwrites it (#70). Only seed a name if the field is still empty.
+        self._ensure_profile_name(target_name or TC918_TARGET_NAME)
 
         self._tc918_active = True
         self._tc918_targen_sig = self._targen_signature()
@@ -4220,9 +4290,9 @@ class TabChart(QWidget):
         if self._manual_td_check is not None:
             self._manual_td_check.setChecked(True)
 
-        # Output name: the one the user typed in the prompt (falls back to the
-        # default). Stays editable in the Target name field for a regenerate.
-        self._set_manual_name_plain(target_name or f"ColorMunki-{patches}")
+        # Built under the current Printer-profile name; the preset never
+        # overwrites it (#70). Seed a name only when the field is still empty.
+        self._ensure_profile_name(target_name or f"ColorMunki-{patches}")
 
         self._refresh_manual_command_preview()
         # Auto-generate immediately, like the TC9.18 preset.
@@ -4295,7 +4365,7 @@ class TabChart(QWidget):
 
         if self._manual_pages_spin is not None:
             self._manual_pages_spin.setValue(p.pages)
-        self._set_manual_name_plain(target_name or p.default_target_name)
+        self._ensure_profile_name(target_name or p.default_target_name)
 
     def _apply_knut_preset(self, key: str, target_name: str | None = None) -> None:
         """Seed a TC9.18+Spyderprint preset and build it from the bundled .ti1."""
@@ -4422,7 +4492,9 @@ class TabChart(QWidget):
             self._set_manual_value("printtarg", "-p", spec.paper_flag)
         except Exception as exc:  # noqa: BLE001 — seeding is best-effort
             log.warning("Could not seed instrument/paper from reflected chart: %s", exc)
-        self._set_manual_name_plain(ti2_path.stem)
+        # A reflected chart is shown for reference only and never overwrites the
+        # user's Printer-profile name (#70); seed it only if the field is empty.
+        self._ensure_profile_name(ti2_path.stem)
         self._update_preset_locks()      # grey both panels
         self._log.clear()
         self._log.appendPlainText(
@@ -4479,33 +4551,19 @@ class TabChart(QWidget):
     def apply_external_chart(self, src_dir: Path, name: str) -> bool:
         """Adopt a chart the TI2 layout editor just wrote into ``src_dir``.
 
-        Called by the main window when the user clicks "Save & apply" in the
-        layout editor. ``src_dir`` is a staging folder holding ``<name>.ti1`` /
-        ``.ti2`` / ``<name>_NN.tif`` / ``meta.json``. Switches to manual mode,
-        copies the files into a run under ``name`` (same folder layout the
-        Create Chart tab produces), and greys both param panels so the applied
-        patches and layout can't be overwritten by accident — the override
-        boxes let the user opt back in, exactly like a prebuilt preset.
+        Called by the main window when the user clicks **Overwrite** in the
+        editor's "Apply / Save" window (#70, Knut's model). ``src_dir`` is a
+        staging folder holding ``<name>.ti1`` / ``.ti2`` / ``<name>_NN.tif`` /
+        ``meta.json`` — ``name`` is only the chart-*layout* file stem, NOT the
+        profile name. The chart is imported into the **current** Create Chart
+        profile (replacing the chart loaded there); the profile name is never
+        changed. Both param panels are greyed so the applied patches and layout
+        can't be overwritten by accident — the override boxes let the user opt
+        back in, exactly like a prebuilt preset.
 
-        Returns True when the chart was applied, False when the user backed out
-        of a name-collision prompt (so the editor knows to stay open).
+        Returns True (applied).
         """
         src_dir = Path(src_dir)
-        # Guard against silently clobbering an existing project of the same name
-        # (it may already hold measurements / a finished profile). Decide up
-        # front whether to add a new run, replace the current chart, or abort.
-        add_new_run = False
-        root = self._file_mgr.preview_project_root(name)
-        if root is not None and (root / "project.json").exists():
-            choice = self._ask_apply_name_collision(name, root)
-            if choice is None:
-                return False
-            add_new_run = (choice == "new_run")
-        # Reconcile a target created earlier this session under another name
-        # (same rename/keep/delete chooser the Generate button uses), so applying
-        # under a new name doesn't silently orphan it. Cancel aborts.
-        if not self._handle_target_rename(name):
-            return False
         # Applied charts always land in the manual module (the override boxes and
         # locked panels only exist there).
         self._switch_mode("manual")
@@ -4540,69 +4598,15 @@ class TabChart(QWidget):
                 self._seed_manual_printtarg_from_layout(meta[0])
         except Exception as exc:  # noqa: BLE001 — seeding is best-effort
             log.warning("Could not seed printtarg layout from applied chart: %s", exc)
-        self._set_manual_name_plain(name)
+        # Never overwrite the user's profile name — only seed it when the field
+        # is empty so a brand-new Create Chart session still gets a sensible name.
+        self._ensure_profile_name(name)
         # Baselines for the Generate-time change detection, taken after seeding.
         self._applied_targen_sig = self._targen_signature()
         self._applied_printtarg_sig = self._printtarg_signature()
         self._update_preset_locks()      # grey both panels
-        self._import_applied_chart(add_new_run=add_new_run)
+        self._import_applied_chart()     # overwrite the current run's chart
         return True
-
-    def _ask_apply_name_collision(self, name: str, root: Path) -> str | None:
-        """Friendly chooser shown when "Save & apply" hits an existing project.
-
-        Returns ``"new_run"`` to add the chart as a fresh run (keeping
-        everything already there), ``"replace"`` to overwrite the project's
-        current chart, or ``None`` to cancel.
-        """
-        dlg = QDialog(self)
-        dlg.setWindowTitle(tr("A project with this name already exists"))
-        dlg.setMinimumWidth(600)
-        lay = QVBoxLayout(dlg)
-        lay.setContentsMargins(24, 20, 24, 16)
-        lay.setSpacing(12)
-
-        heading = QLabel(
-            tr("You already have a profiling project called “{name}”").format(name=name),
-            dlg)
-        heading.setWordWrap(True)
-        heading.setStyleSheet("font-weight: 600; font-size: 14px;")
-        lay.addWidget(heading)
-
-        body = QLabel(
-            tr("It lives at:\n{path}\n\n"
-               "That folder may already hold a printed chart, your measurements "
-               "and even a finished profile from before. ChromIQ won't touch any "
-               "of that unless you ask it to. How would you like to add this new "
-               "chart?\n\n"
-               "  •  Add as a new run (recommended) — keeps everything already "
-               "in “{name}” and files this chart as a new attempt alongside it. "
-               "Nothing you've done before is lost.\n"
-               "  •  Replace the current chart — overwrites only the chart in "
-               "this project's current run with the new one. Earlier runs and "
-               "their measurements stay where they are.\n"
-               "  •  Cancel — change nothing. You can then pick a different name "
-               "back in the editor.").format(name=name, path=root),
-            dlg)
-        body.setWordWrap(True)
-        lay.addWidget(body)
-
-        bb = QDialogButtonBox(dlg)
-        new_btn = bb.addButton(tr("Add as a new run"),
-                               QDialogButtonBox.ButtonRole.AcceptRole)
-        replace_btn = bb.addButton(tr("Replace current chart"),
-                                   QDialogButtonBox.ButtonRole.DestructiveRole)
-        cancel_btn = bb.addButton(tr("Cancel"),
-                                  QDialogButtonBox.ButtonRole.RejectRole)
-        new_btn.setDefault(True)
-        result = {"v": None}
-        new_btn.clicked.connect(lambda: (result.__setitem__("v", "new_run"), dlg.accept()))
-        replace_btn.clicked.connect(lambda: (result.__setitem__("v", "replace"), dlg.accept()))
-        cancel_btn.clicked.connect(dlg.reject)
-        lay.addWidget(bb)
-
-        dlg.exec()
-        return result["v"]
 
     def _import_applied_chart(self, add_new_run: bool = False) -> None:
         """Copy the applied editor chart's files into the current run and load it.
@@ -4689,16 +4693,20 @@ class TabChart(QWidget):
                 log.warning("Could not copy applied-chart meta.json: %s", exc)
         # Carry the i1Profiler hand-off pair (and the colour list) the editor
         # wrote into the run folder too, so the working folder is self-contained
-        # for users who profile in i1Profiler instead of measuring here.
+        # for users who profile in i1Profiler instead of measuring here. The
+        # staged files carry the editor's layout name; rename them to the run
+        # stem (the profile name) so the whole run folder is self-consistent —
+        # the profile name and the chart layout name now differ (#70).
         for extra in sorted(src_dir.glob(f"{stem}-i1profiler.*")) + \
                 sorted(src_dir.glob(f"{stem}-colours.txt")):
+            dest_name = run.stem + extra.name[len(stem):]
             try:
-                shutil.copy(extra, run.dir / extra.name)
+                shutil.copy(extra, run.dir / dest_name)
             except OSError as exc:
                 log.warning("Could not copy applied-chart extra %s: %s",
                             extra.name, exc)
 
-    def _apply_prebuilt_preset(self, key: str, target_name: str) -> None:
+    def _apply_prebuilt_preset(self, key: str, target_name: str | None = None) -> None:
         """Select a prebuilt-files preset: grey the panels and copy the bundle.
 
         Both panels start locked. The instrument and paper the bundle was made
@@ -4712,14 +4720,15 @@ class TabChart(QWidget):
         # the bundled .ti1 only if the user unlocks the layout and edits it.
         self._set_manual_value("printtarg", "-i", self._prebuilt_instrument(key))
         self._set_manual_value("printtarg", "-p", self._prebuilt_paper_code(key))
-        self._set_manual_name_plain(target_name)
+        # Built under the current Printer-profile name; never overwritten (#70).
+        self._ensure_profile_name(target_name or PREBUILT_PRESETS[key][1])
         # Baselines for the Generate-time change detection, taken after seeding.
         self._prebuilt_targen_sig = self._targen_signature()
         self._prebuilt_printtarg_sig = self._printtarg_signature()
         self._update_preset_locks()      # grey both panels
         self._create_prebuilt_target(key, target_name)
 
-    def _create_prebuilt_target(self, key: str, target_name: str) -> None:
+    def _create_prebuilt_target(self, key: str, target_name: str | None = None) -> None:
         """Copy a bundled prebuilt target into the project's current run and load it.
 
         No targen/printtarg is run: the bundled .ti1/.ti2 and TIFF pages are
@@ -4746,7 +4755,8 @@ class TabChart(QWidget):
 
         self.target_started.emit()
         name = (self._manual_target_name_edit.text().strip()
-                if self._manual_target_name_edit is not None else "") or target_name
+                if self._manual_target_name_edit is not None else "") \
+            or target_name or default_name
         self._file_mgr.set_target_name(name)
         run = self._file_mgr.project().current_run()
         # Start from a clean slate so stale pages from a prior copy can't linger.
@@ -4784,6 +4794,50 @@ class TabChart(QWidget):
         self._last_params = None
         self._on_generate_finished(tiffs)
 
+    def _targen_skipped_layout_name(self) -> str | None:
+        """Layout name when Generate will skip targen for a *non-built-in* ti1
+        source (a user preset's .ti1, an applied editor chart, or a reflected
+        chart). Built-in presets have their own preview text above; returns None
+        when a fresh targen will run (#70)."""
+        if getattr(self, "_reflected_active", False) and self._reflected_ti2 is not None:
+            return self._reflected_ti2.stem
+        if getattr(self, "_applied_active", False) and self._applied_stem:
+            if (self._applied_targen_sig is None
+                    or self._targen_signature() == self._applied_targen_sig):
+                return self._applied_stem
+        if getattr(self, "_preset_ti1_path", None) is not None:
+            if (self._preset_ti1_targen_sig is None
+                    or self._targen_signature() == self._preset_ti1_targen_sig):
+                cur = self._preset_combo.currentData()
+                if cur is not None and cur not in BUILTIN_PRESET_KEYS:
+                    return str(cur)
+        return None
+
+    def _active_layout_name(self) -> str | None:
+        """A human label for the chart *layout* currently driving generation —
+        a built-in/user preset, a prebuilt chart, an editor-applied layout, or a
+        loaded .ti1. Stamped onto the TIFF as "Chart layout <name>" in place of
+        the targen command when no targen was run (#70, Knut's model)."""
+        if getattr(self, "_tc918_active", False):
+            return "TC9.18"
+        if getattr(self, "_knut_active", False):
+            p = KNUT_PRESETS_BY_KEY.get(self._knut_active_key or "")
+            return p.default_target_name if p is not None else "TC9.18+Spyderprint"
+        if getattr(self, "_prebuilt_active", False) and self._prebuilt_key:
+            return PREBUILT_PRESETS[self._prebuilt_key][1]
+        if getattr(self, "_applied_active", False) and self._applied_stem:
+            return self._applied_stem
+        if getattr(self, "_reflected_active", False) and self._reflected_ti2 is not None:
+            return self._reflected_ti2.stem
+        if getattr(self, "_preset_ti1_path", None) is not None:
+            cur = self._preset_combo.currentData()
+            if cur is not None and cur not in BUILTIN_PRESET_KEYS:
+                return str(cur)
+        ti1 = getattr(self, "_current_ti1_path", None)
+        if ti1 is not None:
+            return Path(ti1).stem
+        return None
+
     def _generate_from_ti1(self, ti1_path: Path) -> None:
         """Create the target by running printtarg only on an existing .ti1.
 
@@ -4810,6 +4864,9 @@ class TabChart(QWidget):
         params = self._collect_params()
         self._last_params = params  # for _stamp_chart_meta (see _on_generate)
         params.target_name = base_name
+        # Built from an existing patch set (targen not run) → the stamp names the
+        # chart layout instead of a misleading targen command (#70).
+        params.chart_layout_name = self._active_layout_name()
         self._last_target_name = base_name
         self._log.clear()
         self._preview.clear()
