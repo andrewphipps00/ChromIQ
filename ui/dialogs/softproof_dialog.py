@@ -127,6 +127,7 @@ class SoftproofDialog(QDialog):
         # The proof runs automatically (no button) — option changes are
         # coalesced through a short debounce so spinning a value doesn't queue
         # a cctiff run per tick.
+        self._closed = False        # set on teardown → suppress queued/late work
         self._rerun_timer = QTimer(self)
         self._rerun_timer.setSingleShot(True)
         self._rerun_timer.setInterval(350)
@@ -902,6 +903,10 @@ class SoftproofDialog(QDialog):
             self._ensure_gamut()
 
     def _on_softproof_error(self, msg: str) -> None:
+        # A late signal from an in-flight cctiff can arrive after the dialog was
+        # dismissed; don't pop a modal into a dead window.
+        if getattr(self, "_closed", False):
+            return
         self._status.setText(tr("Soft-proof failed."))
         InfoDialog(tr("Soft-proof failed"), msg, self, min_width=480).exec()
 
@@ -1042,6 +1047,12 @@ class SoftproofDialog(QDialog):
     # WebEngine teardown (issue #38) — never leave a live Chromium subtree
     # ------------------------------------------------------------------
     def _teardown_webengine(self) -> None:
+        # Dismissing the dialog must not leave a proof queued: a pending rerun
+        # would fire after we're gone, launch cctiff, and (on failure) pop a
+        # modal into a dead dialog — which wedged the test suite. Stop it.
+        self._closed = True
+        if self._rerun_timer.isActive():
+            self._rerun_timer.stop()
         drain_web_view(self._web_view)
         self._web_view = None
 

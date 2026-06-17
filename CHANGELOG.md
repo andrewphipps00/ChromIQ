@@ -1,5 +1,33 @@
 # Changelog
 
+## v3.10.23
+
+### 🐛 Fixed
+- **Create Chart name generator no longer doubles preset names.** Applying a
+  preset whose name was already descriptive (e.g.
+  `ColorMunki-A3-1196p-2pages-w11.5mm-Portrait`) used to re-append the generated
+  details, producing `…-Portrait-…-Portrait`. A loaded preset / applied /
+  reflected chart now keeps its own name verbatim — the generator only fills in
+  a fresh chart's name. (#68, thanks **Knut (@soul-traveller)**)
+
+### 💄 Improved
+- **Generated chart names now sort cleanly.** The "Add a descriptive prefix"
+  option (was "suffix") now puts the chart's details — instrument, paper, patch
+  count, pages, orientation — at the *start* of the name as a locked prefix,
+  with your own text after it (e.g. `i1Pro-A4-484p-1page-Portrait-Baryta`). That
+  keeps similar charts grouped together in the folder list. Clicking the field
+  drops the cursor right after the prefix, ready to type. (#68, thanks
+  **Knut (@soul-traveller)**)
+- **Built-in preset names follow one standard.** All bundled presets now use
+  `<instrument>-<paper>-<patches>p-<pages>pages-<orientation>-<extras>`; the patch
+  width (`-wXmm`) and colour-set name (e.g. `TC9.18+Spyderprint Grays`) moved to
+  the tail so the sortable part leads. (#68)
+
+### 🧰 Internal
+- Fixed an intermittent test-suite hang (a soft-proof dialog left a proof timer
+  armed past the test, which later popped a blocking dialog) and hardened
+  `scripts/run_tests.sh` with run serialisation and a watchdog timeout.
+
 ## v3.10.22
 
 ### 💄 Improved

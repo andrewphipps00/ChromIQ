@@ -65,7 +65,7 @@ from ui.tab_header import TabHeader
 from ui.builtin_preset_popup import BuiltinPresetButton, BuiltinPresetPopup
 from ui.tiff_preview import TiffPreview
 from ui.tooltip_button import InfoDialog, TooltipButton
-from ui.widgets import NoScrollComboBox, NoScrollSpinBox, SuffixLockedLineEdit, icc_profile_paths, make_browse_button, open_file_dialog, set_folder_icon, set_preset_icon
+from ui.widgets import NoScrollComboBox, NoScrollSpinBox, PrefixLockedLineEdit, icc_profile_paths, make_browse_button, open_file_dialog, set_folder_icon, set_preset_icon
 from core.i18n import tr
 from workflow.i1profiler_export import EXTRA_INK, export_from_ti1, parse_ti1
 from workflow.i1profiler_import import import_to_ti1
@@ -190,15 +190,20 @@ TC918EG_CM_A3_PRESET_LABEL = "★  ColorMunki · A3+-1160p-1page TC9.18 extended
 # key -> (asset stem under assets/charts, default target name). Charts are filed
 # by creator/colorspace/instrument/paper/target; the stem locates <stem>.ti1,
 # <stem>.ti2 and the <stem>_NN.tif page TIFFs inside that leaf folder.
+# The default target name follows the sortable convention (#68):
+# <instrument>-<paper>-<patches>p-<pages>pages-<set name>. Orientation isn't
+# stored for these pre-rendered charts, so it's omitted (the colour-set name is
+# the "additional text" tail). It's only the prompt's suggested default — the
+# user can edit it freely.
 PREBUILT_PRESETS = {
-    TC924_PRESET_KEY:          ("assets/charts/pharmacist/rgb/i1pro/a4/tc924/tc924",            "tc924"),
-    ABW1110_PRESET_KEY:        ("assets/charts/pharmacist/rgb/i1pro/a4/abw1110/abw1110",        "abw1110"),
-    TC918EG_A4_PRESET_KEY:     ("assets/charts/pharmacist/rgb/i1pro/a4/tc918eg/tc918eg",        "tc918eg"),
-    TC918EG_LETTER_PRESET_KEY: ("assets/charts/pharmacist/rgb/i1pro/letter/tc918eg/tc918eg",    "tc918eg-letter"),
-    TC300_PRESET_KEY:          ("assets/charts/pharmacist/rgb/colormunki/a4/tc300/tc300",       "tc300"),
-    ABW702_PRESET_KEY:         ("assets/charts/pharmacist/rgb/colormunki/a4/abw702/abw702",     "abw702"),
-    TC924_CM_A3_PRESET_KEY:    ("assets/charts/pharmacist/rgb/colormunki/a3/tc924/tc924",       "tc924-a3"),
-    TC918EG_CM_A3_PRESET_KEY:  ("assets/charts/pharmacist/rgb/colormunki/a3plus/tc918eg/tc918eg", "tc918eg-cm-a3"),
+    TC924_PRESET_KEY:          ("assets/charts/pharmacist/rgb/i1pro/a4/tc924/tc924",            "i1Pro-A4-924p-2pages-TC9.24 by Pharmacist"),
+    ABW1110_PRESET_KEY:        ("assets/charts/pharmacist/rgb/i1pro/a4/abw1110/abw1110",        "i1Pro-A4-1110p-2pages-ABW-optimized by Pharmacist"),
+    TC918EG_A4_PRESET_KEY:     ("assets/charts/pharmacist/rgb/i1pro/a4/tc918eg/tc918eg",        "i1Pro-A4-1160p-2pages-TC9.18 extended greys by Pharmacist"),
+    TC918EG_LETTER_PRESET_KEY: ("assets/charts/pharmacist/rgb/i1pro/letter/tc918eg/tc918eg",    "i1Pro-Letter-1160p-2pages-TC9.18 extended greys by Pharmacist"),
+    TC300_PRESET_KEY:          ("assets/charts/pharmacist/rgb/colormunki/a4/tc300/tc300",       "ColorMunki-A4-300p-1page-TC3.00 by Pharmacist"),
+    ABW702_PRESET_KEY:         ("assets/charts/pharmacist/rgb/colormunki/a4/abw702/abw702",     "ColorMunki-A4-702p-2pages-ABW-optimized by Pharmacist"),
+    TC924_CM_A3_PRESET_KEY:    ("assets/charts/pharmacist/rgb/colormunki/a3/tc924/tc924",       "ColorMunki-A3-924p-1page-TC9.24 by Pharmacist"),
+    TC918EG_CM_A3_PRESET_KEY:  ("assets/charts/pharmacist/rgb/colormunki/a3plus/tc918eg/tc918eg", "ColorMunki-A3+-1160p-1page-TC9.18 extended greys by Pharmacist"),
 }
 
 
@@ -233,6 +238,37 @@ _KNUT_I1, _KNUT_CM = "i1", "CM"
 # no fixed -R seed).
 KNUT_WG_SUFFIX = " · Wide-gamut"
 _KNUT_WG_DIR = "assets/charts/knut/rgb/widegamut"
+
+
+# Pulls a "-w<number>mm" patch-width token (e.g. "-w11.5mm") out of a name.
+_WIDTH_TOKEN_RE = re.compile(r"-w\d+(?:\.\d+)?mm")
+
+
+def _sortable_builtin_name(instr_label: str, full_name: str, suffix: str) -> str:
+    """Normalise a built-in preset's name to the sortable convention (#68):
+
+        <instrument>-<paper>-<patches>p-<pages>pages-<orientation>-<extras>
+
+    The instrument leads (so sorting groups by device), and the two non-sorting
+    bits — the layout's ``-w<number>mm`` patch width and the colour-set name
+    (e.g. "TC9.18+Spyderprint Grays") — move to the tail as "additional text",
+    exactly where the user's own free text would sit. Earlier the width sat in
+    the middle and the instrument was missing, which broke folder sorting and
+    re-ordered inconsistently.
+    """
+    base = full_name
+    set_name = ""
+    if suffix and base.endswith(suffix):
+        base = base[: -len(suffix)]
+        set_name = suffix.strip(" ·")          # " · Wide-gamut" → "Wide-gamut"
+    width = ""
+    m = _WIDTH_TOKEN_RE.search(base)
+    if m:
+        width = m.group(0)[1:]                  # "-w11.5mm" → "w11.5mm"
+        base = base[: m.start()] + base[m.end():]   # leaves "…-<orientation>"
+    name = f"{instr_label}-{base}"
+    tail = "-".join(t for t in (width, set_name) if t)
+    return f"{name}-{tail}" if tail else name
 
 
 @dataclass(frozen=True)
@@ -276,9 +312,8 @@ class _Ti1Preset:
 
     @property
     def default_target_name(self) -> str:
-        if self.suffix and self.name.endswith(self.suffix):
-            return self.name[: -len(self.suffix)]
-        return self.name
+        instr = "i1Pro" if self.instrument == _KNUT_I1 else "ColorMunki"
+        return _sortable_builtin_name(instr, self.name, self.suffix)
 
 
 # Named printtarg page sizes in mm (only those the presets use); custom sizes are
@@ -948,11 +983,11 @@ class TabChart(QWidget):
             "and paper combination at a glance.\n\n"
             "Tip: combine your printer model, paper type, and instrument — "
             "e.g. Canon_Pro1000_Baryta_i1Pro3. Use underscores or dashes instead of spaces.\n\n"
-            "“Add a descriptive suffix” (below): when on, ChromIQ keeps a tail of the "
+            "“Add a descriptive prefix” (below): when on, ChromIQ leads the name with the "
             "chart's details — instrument, paper, patch count, pages and orientation — "
-            "on the end of the name you type (e.g. Baryta-i1Pro-A4-484p-1page-Portrait), "
-            "updating it as you change those settings. Turn it off to name the chart "
-            "entirely yourself."),
+            "(e.g. i1Pro-A4-484p-1page-Portrait-) and you add your own text after, so "
+            "charts sort neatly together. It updates as you change those settings. Turn "
+            "it off to name the chart entirely yourself."),
             inner,
             min_width=540,
         ))
@@ -2134,7 +2169,7 @@ class TabChart(QWidget):
                 + f"\nprinttarg {' '.join(pt_args)}"
             )
         self._manual_info_lbl.setText(info)
-        self._refresh_name_suffix()     # keep the live descriptive suffix current
+        self._refresh_name_prefix()     # keep the live descriptive prefix current
 
     # ------------------------------------------------------------------
     # Helpers
@@ -2255,9 +2290,9 @@ class TabChart(QWidget):
             self._pre_cal_snapshot = None
 
     def _make_lineedit(self, text: str, parent: QWidget) -> Any:
-        # Target-name fields support a locked, auto-updated descriptive suffix
-        # (the "Add a descriptive suffix" option); an empty suffix = plain field.
-        le = SuffixLockedLineEdit(parent)
+        # Target-name fields support a locked, auto-updated descriptive prefix
+        # (the "Add a descriptive prefix" option); an empty prefix = plain field.
+        le = PrefixLockedLineEdit(parent)
         le.setText(text)
         return le
 
@@ -2302,7 +2337,7 @@ class TabChart(QWidget):
             self._guided_btn.setChecked(False)
             self._manual_btn.setChecked(True)
         self._update_isis_preview_banner()
-        self._refresh_name_suffix()     # apply the suffix to the now-active field
+        self._refresh_name_prefix()     # apply the prefix to the now-active field
 
     def _on_guided_precond_toggled(self, checked: bool) -> None:
         self._guided_precond_path.setEnabled(checked)
@@ -3089,6 +3124,10 @@ class TabChart(QWidget):
             self._revert_preset_combo()
             return
         data = self._preset_combo.itemData(index)
+        # Whether a preset name was loaded (and thus shown prefix-free). Captured
+        # before the flag-resets below so the Default branch can tell it's coming
+        # back from a preset and restore a clean editable name (#68).
+        was_locked = self._name_locked()
 
         # Temporarily-disabled built-ins are greyed out and unselectable in the
         # UI, but guard anyway so a programmatic selection can never apply one.
@@ -3180,6 +3219,11 @@ class TabChart(QWidget):
         self._preset_del_btn.setEnabled(self._is_deletable_preset(index))
         s = self._settings
         if index == 0:
+            # Returning to Default builds a fresh chart via targen → restore the
+            # editable default name so the live descriptive prefix re-attaches to
+            # a clean tail rather than gluing onto the previous preset's name.
+            if was_locked:
+                self._set_manual_name_plain(self._default_name_base())
             for tool, widgets in self._manual_widgets.items():
                 for pw in widgets:
                     if pw in self._d_cascade_widgets:
@@ -3254,6 +3298,9 @@ class TabChart(QWidget):
         self._reset_override_checks()
         self._update_preset_locks()
         self._update_manual_lb_visibility()
+        # Re-establish the descriptive prefix: cleared while a preset name is
+        # loaded, re-applied to the editable tail back on Default (#68).
+        self._refresh_name_prefix()
 
         # A user preset flagged "generate on select" (▶) prompts for a target
         # name and then generates — same prompt as the built-ins. The values are
@@ -3268,8 +3315,7 @@ class TabChart(QWidget):
                 tname = self._prompt_target_name(str(data))
                 if tname is None:
                     return
-                if self._manual_target_name_edit is not None:
-                    self._manual_target_name_edit.setText(tname)
+                self._set_manual_name_plain(tname)
                 self._on_generate()
 
     def _restore_user_preset(self, data: dict) -> None:
@@ -3335,7 +3381,7 @@ class TabChart(QWidget):
         # preset is reused across instruments/papers/pages, so its name
         # shouldn't bake in this chart's specific suffix.
         edit = self._manual_target_name_edit
-        target = ((edit.base() if isinstance(edit, SuffixLockedLineEdit)
+        target = ((edit.tail() if isinstance(edit, PrefixLockedLineEdit)
                    else edit.text()).strip() if edit is not None else "")
         cur_key = self._preset_combo.currentData()
         selected_preset = (str(cur_key)
@@ -3435,21 +3481,23 @@ class TabChart(QWidget):
         return "-".join(parts)
 
     # ------------------------------------------------------------------
-    # Auto descriptive suffix (#62 follow-up): keep a live, locked
-    # "<instrument>-<paper>-<patches>p-<pages>-<orientation>" tail on the
-    # target-name field, toggled by the "Add a descriptive suffix" option.
+    # Auto descriptive prefix (#68): keep a live, locked
+    # "<instrument>-<paper>-<patches>p-<pages>-<orientation>-" head on the
+    # target-name field, toggled by the "Add a descriptive prefix" option.
     # ------------------------------------------------------------------
     @staticmethod
     def _auto_suffix_tooltip() -> str:
         return tr(
-            "Keeps your chart's name self-describing. With this on, ChromIQ adds the "
-            "key details — instrument, paper size, patch count, pages and orientation — "
-            "to the end of the name you type. So if you type “Baryta”, the chart is "
-            "named “Baryta-i1Pro-A4-484p-1page-Portrait”.\n\n"
-            "That added part updates on its own whenever you change one of those "
-            "settings, so the name always matches the chart you're about to make. You "
-            "can't edit it directly — turn this option off if you'd rather name the "
-            "chart entirely yourself.\n\n"
+            "Keeps your chart's name self-describing and tidy to sort. With this on, "
+            "ChromIQ puts the key details — instrument, paper size, patch count, pages "
+            "and orientation — at the START of the name, then your own text after. So "
+            "the name begins “i1Pro-A4-484p-1page-Portrait-” and you just add e.g. "
+            "“Baryta” → “i1Pro-A4-484p-1page-Portrait-Baryta”.\n\n"
+            "Leading with those details means your charts sort neatly together by "
+            "instrument and paper. That part updates on its own as you change the "
+            "settings and can't be edited directly — click the field and your cursor "
+            "lands right after it, ready to type. Turn the option off to name the chart "
+            "entirely yourself.\n\n"
             "Why it helps: months from now, the folder and the ICC file name alone tell "
             "you exactly what the chart was — which instrument, paper and how many "
             "patches — without opening anything.")
@@ -3462,7 +3510,7 @@ class TabChart(QWidget):
         it); without it (guided), just the bare checkbox — the option is
         explained in the Target-name tooltip there instead. Returns
         ``(widget, checkbox)``."""
-        cb = QCheckBox(tr("Add a descriptive suffix"), parent)
+        cb = QCheckBox(tr("Add a descriptive prefix"), parent)
         cb.setChecked(bool(self._settings.get("create_chart_auto_suffix", True)))
         cb.toggled.connect(self._on_auto_suffix_toggled)
         if not with_tip and not indent:
@@ -3477,7 +3525,7 @@ class TabChart(QWidget):
         rl.addWidget(cb)
         rl.addStretch()
         if with_tip:
-            rl.addWidget(TooltipButton(tr("Add a descriptive suffix"),
+            rl.addWidget(TooltipButton(tr("Add a descriptive prefix"),
                                        self._auto_suffix_tooltip(), row, min_width=520))
         return row, cb
 
@@ -3486,23 +3534,50 @@ class TabChart(QWidget):
         return (self._manual_target_name_edit if manual
                 else getattr(self, "_target_name_edit", None))
 
-    def _name_suffix(self) -> str:
+    def _name_prefix(self) -> str:
+        """The locked descriptive head + separator, e.g. ``i1Pro-A4-484p-...-``;
+        the user's free text follows it. Leads with the sortable details (#68)."""
         s = self._suggest_target_name()
-        return ("-" + s) if s else ""
+        return (s + "-") if s else ""
 
-    def _refresh_name_suffix(self) -> None:
-        """Push the current descriptive suffix onto the active target-name field
-        (or clear it when the option is off)."""
+    def _name_locked(self) -> bool:
+        """Auto-naming applies only while authoring a *new* name from scratch.
+        Any active preset / applied chart already carries its own (descriptive)
+        name, so re-adding the prefix would double it (#68)."""
+        return (getattr(self, "_applied_active", False)
+                or getattr(self, "_prebuilt_active", False)
+                or getattr(self, "_reflected_active", False)
+                or getattr(self, "_knut_active", False)
+                or getattr(self, "_tc918_active", False)
+                or getattr(self, "_preset_ti1_path", None) is not None
+                or getattr(self, "_builtin_ti1_path", None) is not None)
+
+    def _refresh_name_prefix(self) -> None:
+        """Push the current descriptive prefix onto the active target-name field
+        (or clear it when the option is off / a preset name is loaded)."""
         field = self._active_name_field()
-        if not isinstance(field, SuffixLockedLineEdit):
+        if not isinstance(field, PrefixLockedLineEdit):
             return
-        # Charts with an externally-fixed name (an applied editor chart, a
-        # prebuilt-files or reflected preset) keep that exact name — no suffix.
-        fixed = (getattr(self, "_applied_active", False)
-                 or getattr(self, "_prebuilt_active", False)
-                 or getattr(self, "_reflected_active", False))
-        on = bool(self._settings.get("create_chart_auto_suffix", True)) and not fixed
-        field.set_suffix(self._name_suffix() if on else "")
+        on = (bool(self._settings.get("create_chart_auto_suffix", True))
+              and not self._name_locked())
+        field.set_prefix(self._name_prefix() if on else "")
+
+    def _set_manual_name_plain(self, name: str) -> None:
+        """Set the manual target-name field to a preset / loaded name verbatim —
+        no live descriptive prefix. Clearing the locked prefix first stops the
+        prefix being re-glued onto an already-descriptive preset name, which is
+        what doubled the name when applying a preset (#68)."""
+        f = self._manual_target_name_edit
+        if f is None:
+            return
+        if isinstance(f, PrefixLockedLineEdit):
+            f.set_prefix("")
+        f.setText(name)
+
+    def _default_name_base(self) -> str:
+        """The startup default chart name (the editable tail of a fresh name)."""
+        return self._file_mgr.strip_workfile_ext(
+            self._settings.get("chart_target_name", "ChromIQ Test Chart"))
 
     def _on_auto_suffix_toggled(self, on: bool) -> None:
         self._settings.set("create_chart_auto_suffix", bool(on))
@@ -3511,7 +3586,7 @@ class TabChart(QWidget):
                    getattr(self, "_manual_auto_suffix_cb", None)):
             if cb is not None and cb.isChecked() != on:
                 cb.blockSignals(True); cb.setChecked(on); cb.blockSignals(False)
-        self._refresh_name_suffix()
+        self._refresh_name_prefix()
 
     def _on_preset_save(self) -> None:
         capture: dict = {}
@@ -3598,29 +3673,28 @@ class TabChart(QWidget):
         # field is pre-filled, so a visible "Preset name:" keeps it clear (#50).
         name_lbl = QLabel(tr("Preset name:"), dlg)
         lay.addWidget(name_lbl)
-        edit = SuffixLockedLineEdit(dlg)
+        edit = PrefixLockedLineEdit(dlg)
         edit.setText(prefill_name)
         edit.setMinimumHeight(28)
         edit.setPlaceholderText(tr("Preset name"))
         lay.addWidget(edit)
-        # "Add a descriptive suffix" — same option as the Create Chart tabs:
-        # when on, append the live instrument · paper · patch · pages · orientation
-        # tail to the preset name. Defaults to the global setting; local to this
-        # dialog (the chart settings don't change while it's open, so no live
-        # update needed). (#62 follow-up)
-        preset_suffix_cb = QCheckBox(tr("Add a descriptive suffix"), dlg)
+        # "Add a descriptive prefix" — same option as the Create Chart tabs:
+        # when on, lead the preset name with the live instrument · paper · patch ·
+        # pages · orientation details (sortable), with your text after. Defaults
+        # to the global setting; local to this dialog. (#68)
+        preset_suffix_cb = QCheckBox(tr("Add a descriptive prefix"), dlg)
         preset_suffix_cb.setChecked(bool(self._settings.get("create_chart_auto_suffix", True)))
         preset_suffix_cb.toggled.connect(
-            lambda on: edit.set_suffix(self._name_suffix() if on else ""))
+            lambda on: edit.set_prefix(self._name_prefix() if on else ""))
         suffix_row = QHBoxLayout()
         suffix_row.setContentsMargins(0, 0, 0, 0)
         suffix_row.addWidget(preset_suffix_cb)
         suffix_row.addStretch()
-        suffix_row.addWidget(TooltipButton(tr("Add a descriptive suffix"),
+        suffix_row.addWidget(TooltipButton(tr("Add a descriptive prefix"),
                                            self._auto_suffix_tooltip(), dlg, min_width=520))
         lay.addLayout(suffix_row)
         if preset_suffix_cb.isChecked():
-            edit.set_suffix(self._name_suffix())
+            edit.set_prefix(self._name_prefix())
         if prefilled_from_target:
             name_hint = QLabel(
                 tr("Suggested from your current target name — change it to "
@@ -4072,8 +4146,7 @@ class TabChart(QWidget):
 
         # Output name: the one the user typed in the prompt (falls back to the
         # default). Stays editable in the Target name field for a regenerate.
-        if self._manual_target_name_edit is not None:
-            self._manual_target_name_edit.setText(target_name or TC918_TARGET_NAME)
+        self._set_manual_name_plain(target_name or TC918_TARGET_NAME)
 
         self._tc918_active = True
         self._tc918_targen_sig = self._targen_signature()
@@ -4130,8 +4203,7 @@ class TabChart(QWidget):
 
         # Output name: the one the user typed in the prompt (falls back to the
         # default). Stays editable in the Target name field for a regenerate.
-        if self._manual_target_name_edit is not None:
-            self._manual_target_name_edit.setText(target_name or f"ColorMunki-{patches}")
+        self._set_manual_name_plain(target_name or f"ColorMunki-{patches}")
 
         self._refresh_manual_command_preview()
         # Auto-generate immediately, like the TC9.18 preset.
@@ -4204,8 +4276,7 @@ class TabChart(QWidget):
 
         if self._manual_pages_spin is not None:
             self._manual_pages_spin.setValue(p.pages)
-        if self._manual_target_name_edit is not None:
-            self._manual_target_name_edit.setText(target_name or p.default_target_name)
+        self._set_manual_name_plain(target_name or p.default_target_name)
 
     def _apply_knut_preset(self, key: str, target_name: str | None = None) -> None:
         """Seed a TC9.18+Spyderprint preset and build it from the bundled .ti1."""
@@ -4332,8 +4403,7 @@ class TabChart(QWidget):
             self._set_manual_value("printtarg", "-p", spec.paper_flag)
         except Exception as exc:  # noqa: BLE001 — seeding is best-effort
             log.warning("Could not seed instrument/paper from reflected chart: %s", exc)
-        if self._manual_target_name_edit is not None:
-            self._manual_target_name_edit.setText(ti2_path.stem)
+        self._set_manual_name_plain(ti2_path.stem)
         self._update_preset_locks()      # grey both panels
         self._log.clear()
         self._log.appendPlainText(
@@ -4451,8 +4521,7 @@ class TabChart(QWidget):
                 self._seed_manual_printtarg_from_layout(meta[0])
         except Exception as exc:  # noqa: BLE001 — seeding is best-effort
             log.warning("Could not seed printtarg layout from applied chart: %s", exc)
-        if self._manual_target_name_edit is not None:
-            self._manual_target_name_edit.setText(name)
+        self._set_manual_name_plain(name)
         # Baselines for the Generate-time change detection, taken after seeding.
         self._applied_targen_sig = self._targen_signature()
         self._applied_printtarg_sig = self._printtarg_signature()
@@ -4624,8 +4693,7 @@ class TabChart(QWidget):
         # the bundled .ti1 only if the user unlocks the layout and edits it.
         self._set_manual_value("printtarg", "-i", self._prebuilt_instrument(key))
         self._set_manual_value("printtarg", "-p", self._prebuilt_paper_code(key))
-        if self._manual_target_name_edit is not None:
-            self._manual_target_name_edit.setText(target_name)
+        self._set_manual_name_plain(target_name)
         # Baselines for the Generate-time change detection, taken after seeding.
         self._prebuilt_targen_sig = self._targen_signature()
         self._prebuilt_printtarg_sig = self._printtarg_signature()
@@ -4844,10 +4912,10 @@ class TabChart(QWidget):
         if hasattr(self, "_guided_info_lbl"):
             self._guided_info_lbl.setText(info)
 
-        # Patch count / options just changed → refresh the live name suffix
+        # Patch count / options just changed → refresh the live name prefix
         # (no-op when it's unchanged, so this can't loop with the field's own
         # textChanged → _update_patch_count).
-        self._refresh_name_suffix()
+        self._refresh_name_prefix()
 
     def _rebuild_paper_combo(self) -> None:
         instr    = self._instr_combo.currentData() or "i1"
