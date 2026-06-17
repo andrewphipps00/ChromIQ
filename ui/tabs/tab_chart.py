@@ -1360,8 +1360,9 @@ class TabChart(QWidget):
         # Label column = the wider label's full sizeHint (the same measure guided
         # uses) — its natural width incl. margins, so the column matches guided's
         # left edge without clipping the label's trailing ":".
+        _notes_probe = QLabel(tr("Chart notes:"))   # no parent → measure only
         _OUTPUT_LBL_W = max(_name_lbl.sizeHint().width(),
-                            QLabel(tr("Chart notes:"), w).sizeHint().width())
+                            _notes_probe.sizeHint().width())
         _name_lbl.setFixedWidth(_OUTPUT_LBL_W)
         name_row.addWidget(_name_lbl)
         self._manual_target_name_edit = self._make_lineedit("", w)
