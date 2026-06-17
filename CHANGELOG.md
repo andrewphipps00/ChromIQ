@@ -1,5 +1,40 @@
 # Changelog
 
+## v3.11.0
+
+### ✨ Changed
+- **The Create Chart name is now a plain "Printer profile name".** It names this
+  whole job — the working folder, every file generated along the way and the
+  description embedded in the ICC itself — so what you see later in, for example,
+  macOS ColorSync Utility matches the folder and files exactly. The descriptive
+  prefix that used to lead this field has moved to where it belongs: **Save
+  preset** and the layout editor's **Save As…** (chart-layout names). Choosing a
+  preset, loading a chart or applying one from the editor **no longer overwrites
+  a name you've typed**. (#70, thanks **Knut (@soul-traveller)**)
+- **Rename a profile just by editing the name.** Change the name and ChromIQ
+  offers to rename the folder and files to match, the moment you leave the field
+  — no need to regenerate. Once a profile has been **built**, the name is fixed
+  (it's baked into the ICC), so ChromIQ tells you to copy it to a new name and
+  build a fresh profile there instead. (#70)
+- **Layout editor: "Apply / Save…".** The old "Save & apply" / "Save As" pair is
+  now one button that opens a small window: **Overwrite** the chart currently
+  loaded in Create Chart with this layout (your profile name and measurements are
+  kept), **Save As** to export the full chart to a folder you pick, or **Cancel**
+  back to the editor. (#70, thanks **Knut (@soul-traveller)**)
+
+### 🚀 New
+- **Reopen a profile to continue another day.** A magenta folder button beside
+  the built-in-presets star opens an existing project (its `project.json`) and
+  loads its chart, measurements and any profile exactly where you left them.
+  Saving stays automatic. (#70, thanks **Knut (@soul-traveller)**)
+
+### 💄 Improved
+- **Charts built from a preset / loaded patch set** now stamp `Chart layout
+  <name> |` on the printable TIFF in place of the (never-run) `targen` line,
+  keeping the `printtarg` command — so the sheet self-documents how it was made.
+- The Create Chart and Check & refine step tooltips were reworded for the new
+  flow and are now fully translated into all supported languages.
+
 ## v3.10.28
 
 ### 🐛 Fixed
