@@ -65,7 +65,7 @@ from ui.tab_header import TabHeader
 from ui.builtin_preset_popup import BuiltinPresetButton, BuiltinPresetPopup
 from ui.tiff_preview import TiffPreview
 from ui.tooltip_button import InfoDialog, TooltipButton
-from ui.widgets import NoScrollComboBox, NoScrollSpinBox, icc_profile_paths, make_browse_button, open_file_dialog, set_folder_icon, set_preset_icon
+from ui.widgets import NoScrollComboBox, NoScrollSpinBox, SuffixLockedLineEdit, icc_profile_paths, make_browse_button, open_file_dialog, set_folder_icon, set_preset_icon
 from core.i18n import tr
 from workflow.i1profiler_export import EXTRA_INK, export_from_ti1, parse_ti1
 from workflow.i1profiler_import import import_to_ti1
@@ -933,17 +933,12 @@ class TabChart(QWidget):
         folder_layout = QVBoxLayout(folder_grp)
 
         name_row = QHBoxLayout()
-        name_row.addWidget(QLabel(tr("Target name:"), inner))
+        _guided_name_lbl = QLabel(tr("Target name:"), inner)
+        name_row.addWidget(_guided_name_lbl)
         self._target_name_edit = self._make_lineedit("", inner)
         # Live-update the guided command preview as the user types.
         self._target_name_edit.textChanged.connect(self._update_patch_count)
         name_row.addWidget(self._target_name_edit, stretch=1)
-        guided_suggest = QPushButton(tr("Suggest name"), inner)
-        guided_suggest.setToolTip(
-            tr("Fill in a name from the instrument, paper, patch count and pages."))
-        guided_suggest.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        guided_suggest.clicked.connect(self._on_suggest_target_name)
-        name_row.addWidget(guided_suggest)
         name_row.addWidget(TooltipButton(
             tr("Target Name"),
             tr("A short, descriptive name for this profiling session.\n\n"
@@ -952,11 +947,25 @@ class TabChart(QWidget):
             "Choose a name that lets you identify the correct files for your printer "
             "and paper combination at a glance.\n\n"
             "Tip: combine your printer model, paper type, and instrument — "
-            "e.g. Canon_Pro1000_Baryta_i1Pro3. Use underscores or dashes instead of spaces."),
+            "e.g. Canon_Pro1000_Baryta_i1Pro3. Use underscores or dashes instead of spaces.\n\n"
+            "“Add a descriptive suffix” (below): when on, ChromIQ keeps a tail of the "
+            "chart's details — instrument, paper, patch count, pages and orientation — "
+            "on the end of the name you type (e.g. Baryta-i1Pro-A4-484p-1page-Portrait), "
+            "updating it as you change those settings. Turn it off to name the chart "
+            "entirely yourself."),
             inner,
             min_width=540,
         ))
         folder_layout.addLayout(name_row)
+        # Pin the label to its natural width and indent the checkbox's spacer by
+        # the same amount, so the checkbox lines up exactly under the field (same
+        # trick the manual fixed-width label uses).
+        _guided_lbl_w = _guided_name_lbl.sizeHint().width()
+        _guided_name_lbl.setFixedWidth(_guided_lbl_w)
+        # Spacer == label width so the checkbox lines up exactly under the field.
+        guided_suffix_w, self._guided_auto_suffix_cb = self._make_auto_suffix_row(
+            inner, with_tip=False, indent=_guided_lbl_w)
+        folder_layout.addWidget(guided_suffix_w)
         self._target_name_hint = QLabel("", inner)
         self._target_name_hint.setWordWrap(True)
         self._target_name_hint.setStyleSheet("color: #d08a3a; font-size: 11px;")
@@ -1361,13 +1370,6 @@ class TabChart(QWidget):
             self._refresh_manual_command_preview
         )
         name_row.addWidget(self._manual_target_name_edit, stretch=1)
-        suggest_btn = QPushButton(tr("Suggest name"), w)
-        suggest_btn.setToolTip(
-            tr("Fill in a name from the instrument, paper and number of pages."))
-        # Size to the (translated) label so the text is never clipped.
-        suggest_btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        suggest_btn.clicked.connect(self._on_suggest_target_name)
-        name_row.addWidget(suggest_btn)
         name_row.addWidget(TooltipButton(
             tr("Target Name"),
             tr("A short, descriptive name for this profiling session.\n\n"
@@ -1381,6 +1383,11 @@ class TabChart(QWidget):
             min_width=540,
         ))
         output_layout.addLayout(name_row)
+        # Indent by the label-column width so the checkbox lines up under the
+        # field, with the "Stamp targen and printtarg commands" checkbox below.
+        manual_suffix_w, self._manual_auto_suffix_cb = self._make_auto_suffix_row(
+            w, with_tip=True, indent=_OUTPUT_LBL_W)
+        output_layout.addWidget(manual_suffix_w)
         self._manual_target_name_hint = QLabel("", w)
         self._manual_target_name_hint.setWordWrap(True)
         self._manual_target_name_hint.setStyleSheet("color: #d08a3a; font-size: 11px;")
@@ -2126,6 +2133,7 @@ class TabChart(QWidget):
                 + f"\nprinttarg {' '.join(pt_args)}"
             )
         self._manual_info_lbl.setText(info)
+        self._refresh_name_suffix()     # keep the live descriptive suffix current
 
     # ------------------------------------------------------------------
     # Helpers
@@ -2246,8 +2254,9 @@ class TabChart(QWidget):
             self._pre_cal_snapshot = None
 
     def _make_lineedit(self, text: str, parent: QWidget) -> Any:
-        from PyQt6.QtWidgets import QLineEdit
-        le = QLineEdit(parent)
+        # Target-name fields support a locked, auto-updated descriptive suffix
+        # (the "Add a descriptive suffix" option); an empty suffix = plain field.
+        le = SuffixLockedLineEdit(parent)
         le.setText(text)
         return le
 
@@ -2292,6 +2301,7 @@ class TabChart(QWidget):
             self._guided_btn.setChecked(False)
             self._manual_btn.setChecked(True)
         self._update_isis_preview_banner()
+        self._refresh_name_suffix()     # apply the suffix to the now-active field
 
     def _on_guided_precond_toggled(self, checked: bool) -> None:
         self._guided_precond_path.setEnabled(checked)
@@ -3320,8 +3330,12 @@ class TabChart(QWidget):
         preset (i.e. you're about to overwrite it) its stored auto_run / attach
         are reused; otherwise it's a new preset and both default on — the common
         case."""
-        target = (self._manual_target_name_edit.text().strip()
-                  if self._manual_target_name_edit is not None else "")
+        # Use the user's *base* name (without the auto descriptive suffix): a
+        # preset is reused across instruments/papers/pages, so its name
+        # shouldn't bake in this chart's specific suffix.
+        edit = self._manual_target_name_edit
+        target = ((edit.base() if isinstance(edit, SuffixLockedLineEdit)
+                   else edit.text()).strip() if edit is not None else "")
         cur_key = self._preset_combo.currentData()
         selected_preset = (str(cur_key)
                            if cur_key is not None and cur_key not in BUILTIN_PRESET_KEYS
@@ -3419,14 +3433,84 @@ class TabChart(QWidget):
             parts.append(orient)
         return "-".join(parts)
 
-    def _on_suggest_target_name(self) -> None:
-        """Fill the active mode's target-name field with a suggestion (#62)."""
+    # ------------------------------------------------------------------
+    # Auto descriptive suffix (#62 follow-up): keep a live, locked
+    # "<instrument>-<paper>-<patches>p-<pages>-<orientation>" tail on the
+    # target-name field, toggled by the "Add a descriptive suffix" option.
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _auto_suffix_tooltip() -> str:
+        return tr(
+            "Keeps your chart's name self-describing. With this on, ChromIQ adds the "
+            "key details — instrument, paper size, patch count, pages and orientation — "
+            "to the end of the name you type. So if you type “Baryta”, the chart is "
+            "named “Baryta-i1Pro-A4-484p-1page-Portrait”.\n\n"
+            "That added part updates on its own whenever you change one of those "
+            "settings, so the name always matches the chart you're about to make. You "
+            "can't edit it directly — turn this option off if you'd rather name the "
+            "chart entirely yourself.\n\n"
+            "Why it helps: months from now, the folder and the ICC file name alone tell "
+            "you exactly what the chart was — which instrument, paper and how many "
+            "patches — without opening anything.")
+
+    def _make_auto_suffix_row(self, parent: QWidget, with_tip: bool = True,
+                              indent: int = 0):
+        """The "Add a descriptive suffix" checkbox. With ``with_tip`` it's wrapped
+        in a ``[spacer?][checkbox]…[ⓘ]`` row mirroring the "Stamp targen and
+        printtarg commands" row (so the manual one lines up under the field with
+        it); without it (guided), just the bare checkbox — the option is
+        explained in the Target-name tooltip there instead. Returns
+        ``(widget, checkbox)``."""
+        cb = QCheckBox(tr("Add a descriptive suffix"), parent)
+        cb.setChecked(bool(self._settings.get("create_chart_auto_suffix", True)))
+        cb.toggled.connect(self._on_auto_suffix_toggled)
+        if not with_tip and not indent:
+            return cb, cb
+        row = QWidget(parent)
+        rl = QHBoxLayout(row)
+        rl.setContentsMargins(0, 0, 0, 2)
+        if indent:
+            spacer = QLabel("", row)
+            spacer.setFixedWidth(indent)
+            rl.addWidget(spacer)
+        rl.addWidget(cb)
+        rl.addStretch()
+        if with_tip:
+            rl.addWidget(TooltipButton(tr("Add a descriptive suffix"),
+                                       self._auto_suffix_tooltip(), row, min_width=520))
+        return row, cb
+
+    def _active_name_field(self):
         manual = self._manual_btn is not None and self._manual_btn.isChecked()
-        edit = (self._manual_target_name_edit if manual
+        return (self._manual_target_name_edit if manual
                 else getattr(self, "_target_name_edit", None))
-        if edit is not None:
-            edit.setText(self._suggest_target_name())
-            edit.selectAll()
+
+    def _name_suffix(self) -> str:
+        s = self._suggest_target_name()
+        return ("-" + s) if s else ""
+
+    def _refresh_name_suffix(self) -> None:
+        """Push the current descriptive suffix onto the active target-name field
+        (or clear it when the option is off)."""
+        field = self._active_name_field()
+        if not isinstance(field, SuffixLockedLineEdit):
+            return
+        # Charts with an externally-fixed name (an applied editor chart, a
+        # prebuilt-files or reflected preset) keep that exact name — no suffix.
+        fixed = (getattr(self, "_applied_active", False)
+                 or getattr(self, "_prebuilt_active", False)
+                 or getattr(self, "_reflected_active", False))
+        on = bool(self._settings.get("create_chart_auto_suffix", True)) and not fixed
+        field.set_suffix(self._name_suffix() if on else "")
+
+    def _on_auto_suffix_toggled(self, on: bool) -> None:
+        self._settings.set("create_chart_auto_suffix", bool(on))
+        # Keep the guided + manual checkboxes in lock-step (one shared setting).
+        for cb in (getattr(self, "_guided_auto_suffix_cb", None),
+                   getattr(self, "_manual_auto_suffix_cb", None)):
+            if cb is not None and cb.isChecked() != on:
+                cb.blockSignals(True); cb.setChecked(on); cb.blockSignals(False)
+        self._refresh_name_suffix()
 
     def _on_preset_save(self) -> None:
         capture: dict = {}
@@ -3513,23 +3597,29 @@ class TabChart(QWidget):
         # field is pre-filled, so a visible "Preset name:" keeps it clear (#50).
         name_lbl = QLabel(tr("Preset name:"), dlg)
         lay.addWidget(name_lbl)
-        edit = QLineEdit(prefill_name, dlg)
+        edit = SuffixLockedLineEdit(dlg)
+        edit.setText(prefill_name)
         edit.setMinimumHeight(28)
         edit.setPlaceholderText(tr("Preset name"))
-        edit.selectAll()
-        # Suggest a name from the current settings (instrument · paper · patch
-        # count · pages) — most useful here when saving a fresh preset (#62).
-        name_edit_row = QHBoxLayout()
-        name_edit_row.setContentsMargins(0, 0, 0, 0)
-        name_edit_row.addWidget(edit, 1)
-        preset_suggest = QPushButton(tr("Suggest name"), dlg)
-        preset_suggest.setToolTip(
-            tr("Fill in a name from the instrument, paper, patch count and pages."))
-        preset_suggest.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        preset_suggest.clicked.connect(
-            lambda: (edit.setText(self._suggest_target_name()), edit.selectAll()))
-        name_edit_row.addWidget(preset_suggest)
-        lay.addLayout(name_edit_row)
+        lay.addWidget(edit)
+        # "Add a descriptive suffix" — same option as the Create Chart tabs:
+        # when on, append the live instrument · paper · patch · pages · orientation
+        # tail to the preset name. Defaults to the global setting; local to this
+        # dialog (the chart settings don't change while it's open, so no live
+        # update needed). (#62 follow-up)
+        preset_suffix_cb = QCheckBox(tr("Add a descriptive suffix"), dlg)
+        preset_suffix_cb.setChecked(bool(self._settings.get("create_chart_auto_suffix", True)))
+        preset_suffix_cb.toggled.connect(
+            lambda on: edit.set_suffix(self._name_suffix() if on else ""))
+        suffix_row = QHBoxLayout()
+        suffix_row.setContentsMargins(0, 0, 0, 0)
+        suffix_row.addWidget(preset_suffix_cb)
+        suffix_row.addStretch()
+        suffix_row.addWidget(TooltipButton(tr("Add a descriptive suffix"),
+                                           self._auto_suffix_tooltip(), dlg, min_width=520))
+        lay.addLayout(suffix_row)
+        if preset_suffix_cb.isChecked():
+            edit.set_suffix(self._name_suffix())
         if prefilled_from_target:
             name_hint = QLabel(
                 tr("Suggested from your current target name — change it to "
@@ -4752,6 +4842,11 @@ class TabChart(QWidget):
         )
         if hasattr(self, "_guided_info_lbl"):
             self._guided_info_lbl.setText(info)
+
+        # Patch count / options just changed → refresh the live name suffix
+        # (no-op when it's unchanged, so this can't loop with the field's own
+        # textChanged → _update_patch_count).
+        self._refresh_name_suffix()
 
     def _rebuild_paper_combo(self) -> None:
         instr    = self._instr_combo.currentData() or "i1"

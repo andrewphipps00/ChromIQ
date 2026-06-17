@@ -146,6 +146,7 @@ def test_default_preset_entry_reverts_changed_value_without_saved_default(qapp, 
 # ---------------------------------------------------------------------------
 
 def test_preset_save_and_restore_roundtrips_enable_state(qapp, settings, monkeypatch):
+    settings.set("create_chart_auto_suffix", False)   # save under the exact name
     tab = _make_tab(qapp, settings)
     _arm(tab, "-A", 0.5)
 
