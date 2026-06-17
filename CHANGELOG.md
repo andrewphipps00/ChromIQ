@@ -1,5 +1,14 @@
 # Changelog
 
+## v3.10.21
+
+### 💄 Improved
+- **Layout editor 3D view: patch numbers on hover.** In the chart-layout
+  editor's "3D distribution…" popup, hovering a patch now shows
+  `patch #: N · RGB r g b`, so you can find that point in the swatch and layout
+  preview. (Only there — the other 3D views keep the plain label.) (#67, thanks
+  **Knut (@soul-traveller)**)
+
 ## v3.10.20
 
 ### 💄 Improved
