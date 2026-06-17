@@ -3583,11 +3583,18 @@ class TabChart(QWidget):
 
     @staticmethod
     def _toggle_name_prefix(edit: "PrefixLockedLineEdit", on: bool, prefix: str) -> None:
-        """Flip a name field between locked-prefix and free-text (#68, Knut's
-        model). ON locks the descriptive head (always shown with its '-', cursor
-        after it) and keeps the user's tail; OFF removes the locked head and its
-        separator, leaving only the user's tail as fully free text."""
-        edit.set_prefix(prefix if on else "")
+        """Flip a name field between the locked-prefix and free modes (#68,
+        Knut's model). ON: the descriptive head is locked + greyed with a
+        trailing '-' and an empty editable tail (ready to type). OFF: the
+        descriptive name is shown as a plain, fully editable field (no dash, no
+        lock) — keep it, edit it, or replace it."""
+        if on:
+            edit.set_prefix("")        # drop any prior lock
+            edit.setText("")
+            edit.set_prefix(prefix)    # → "prefix-" with an empty tail
+        else:
+            edit.set_prefix("")        # remove the lock
+            edit.setText(prefix)       # the generated name, fully editable
 
     def _on_auto_suffix_toggled(self, on: bool) -> None:
         self._settings.set("create_chart_auto_suffix", bool(on))
@@ -3703,8 +3710,10 @@ class TabChart(QWidget):
         suffix_row.addWidget(TooltipButton(tr("Add a descriptive prefix"),
                                            self._auto_suffix_tooltip(), dlg, min_width=520))
         lay.addLayout(suffix_row)
+        # ON: lock the descriptive head, keep the user's suggested suffix after a
+        # '-'. OFF: leave the field plain/editable (set by setText above) (#68).
         if preset_suffix_cb.isChecked():
-            self._toggle_name_prefix(edit, True, self._name_prefix())
+            edit.set_prefix(self._name_prefix())
         if prefilled_from_target:
             name_hint = QLabel(
                 tr("Suggested from your current target name — change it to "

@@ -1,5 +1,14 @@
 # Changelog
 
+## v3.10.28
+
+### 🐛 Fixed
+- **"Add a descriptive prefix" off-state corrected.** Turning the option off now
+  shows the generated descriptive name as a **plain, fully editable** field (no
+  dash) that you can keep, edit, or replace — instead of clearing it. With the
+  option on, the descriptive part stays greyed and locked with a trailing `-`
+  and you type your text after it. (#68, thanks **Knut (@soul-traveller)**)
+
 ## v3.10.27
 
 ### 💄 Improved

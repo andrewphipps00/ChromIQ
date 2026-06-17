@@ -272,11 +272,12 @@ class PrefixLockedLineEdit(QLineEdit):
 
     # -- public ---------------------------------------------------------
     def set_prefix(self, prefix: str) -> None:
-        """Replace the locked head, preserving the user's editable tail. A
-        trailing separator is dropped — the separator is supplied automatically
-        and shown whenever a prefix is set (even with an empty tail), so the
-        locked head is always visibly delimited and the cursor lands after it,
-        ready for input (#68, Knut's locked-prefix model)."""
+        """Set the locked descriptive head (#68, Knut's model). The head is shown
+        greyed and locked with a trailing ``-`` even when the tail is empty
+        (``name-`` → ``name-mytext``); the user only edits the tail after it.
+        Pass ``""`` to remove the lock entirely (a plain, fully editable field).
+        A trailing separator on *prefix* is dropped (it's supplied
+        automatically)."""
         prefix = prefix or ""
         if prefix.endswith(self._SEP):
             prefix = prefix[: -len(self._SEP)]

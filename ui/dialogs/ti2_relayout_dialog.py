@@ -51,11 +51,17 @@ def _magenta_tip(title: str, body: str, parent: QWidget | None = None,
 
 
 def _toggle_locked_prefix(edit: "PrefixLockedLineEdit", on: bool, prefix: str) -> None:
-    """Flip a name field between locked-prefix and free-text (#68, Knut's model):
-    ON locks the descriptive head (always shown with its '-') and keeps the
-    user's tail; OFF removes the locked head + separator, leaving only the tail
-    as free text. Mirrors tab_chart's ``_toggle_name_prefix``."""
-    edit.set_prefix(prefix if on else "")
+    """Flip a name field between locked-prefix and free modes (#68, Knut's
+    model). ON: descriptive head locked + greyed with a trailing '-' and an
+    empty editable tail. OFF: the descriptive name shown as a plain, fully
+    editable field (no dash, no lock). Mirrors tab_chart's ``_toggle_name_prefix``."""
+    if on:
+        edit.set_prefix("")
+        edit.setText("")
+        edit.set_prefix(prefix)
+    else:
+        edit.set_prefix("")
+        edit.setText(prefix)
 
 
 # The "Generate colour sets" help, shared verbatim by the New-chart dialog's ⓘ
@@ -5238,14 +5244,11 @@ class Ti2RelayoutDialog(QDialog):
         return self._suggest_chart_name() if self._spec is not None else ""
 
     def _seed_save_name(self, name_edit: "PrefixLockedLineEdit", on: bool) -> None:
-        """Initial contents of a Save dialog's name field (#68, locked-prefix
-        model). ON shows the locked suggested name + ``-`` with an empty tail,
-        cursor ready to type; OFF leaves the field empty for fully free input.
-        The field never holds the generated name as free text, so toggling can't
-        duplicate it (and the ``A3+``/``A3_`` sanitisation mismatch can't bite)."""
-        pfx = self._dialog_name_prefix()
-        name_edit.set_tail("")
-        name_edit.set_prefix(pfx if (on and pfx) else "")
+        """Initial contents of a Save dialog's name field (#68, Knut's model).
+        ON shows the locked suggested name + ``-`` with an empty editable tail
+        (cursor ready to type); OFF shows the suggested name as a plain, fully
+        editable field (no dash, no lock)."""
+        _toggle_locked_prefix(name_edit, on, self._dialog_name_prefix())
 
     def _default_apply_name(self) -> str:
         """The pre-filled Save & apply name: the target name carried through the
