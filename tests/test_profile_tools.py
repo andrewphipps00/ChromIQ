@@ -284,6 +284,52 @@ def test_test_target_button_loads_with_embedded_source(monkeypatch):
     dlg.close()
 
 
+def test_preview_zoom_pan_and_save(tmp_path, monkeypatch):
+    # #65: the soft-proof preview zooms/pans, and Save exports exactly what's
+    # shown (original / proof / highlighted) — enabled only once a proof exists.
+    import ui.dialogs.softproof_dialog as mod
+    from ui.dialogs.softproof_dialog import SoftproofDialog
+    from workflow.softproof_runner import SoftproofResult
+    dlg = SoftproofDialog(_runner(), _Settings())
+    dlg.show()
+    assert dlg._preview._interactive                      # wheel-zoom/pan on
+    assert not dlg._save_btn.isEnabled()                  # nothing to save yet
+
+    # Zoom in then reset.
+    from PyQt6.QtGui import QPixmap
+    dlg._preview._pixmap = QPixmap(40, 30)
+    dlg._preview._apply_zoom(2.0)
+    assert dlg._preview._zoom > 1.0
+    dlg._preview.reset_view()
+    assert dlg._preview._zoom == 1.0
+
+    # Real proof files so Save can re-encode them.
+    def _mk(name, mode="RGB"):
+        p = tmp_path / name
+        Image.new(mode, (8, 8), (200, 120, 60)).save(p)
+        return str(p)
+    dlg._result = SoftproofResult(
+        proof_path=_mk("proof.tif"), highlight_path=_mk("hl.tif"),
+        original_path=_mk("orig.tif"), oog_percent=1.0, source_note="")
+    dlg._image_path = tmp_path / "in.tif"
+    prof = tmp_path / "p.icc"; prof.write_bytes(_make_icc(version_major=2))
+    dlg._profile_path = prof                  # enables the soft-proof toggle
+    dlg._update_controls_enabled()
+    assert dlg._save_btn.isEnabled()
+
+    # Save target follows the toggles; export re-encodes to the chosen format.
+    dlg._softproof_cb.setChecked(True); dlg._highlight_cb.setChecked(True)
+    assert dlg._current_display_path().name == "hl.tif"
+    dlg._highlight_cb.setChecked(False)
+    assert dlg._current_display_path().name == "proof.tif"
+    out = tmp_path / "shared.png"
+    monkeypatch.setattr(mod, "save_file_dialog", lambda *a, **k: str(out))
+    dlg._on_save_proof()
+    assert out.is_file() and Image.open(out).size == (8, 8)
+    dlg._teardown_webengine()
+    dlg.close()
+
+
 def test_gamut_controls_present_and_view_gated():
     # Separate opacity + saturation sliders for image and printer, shown only on
     # the Gamut-fit view.

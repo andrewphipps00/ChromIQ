@@ -8,7 +8,8 @@ from pathlib import Path
 from typing import Optional
 
 from PIL import Image
-from PyQt6.QtCore import QRect, QSize, Qt, QTimer
+from PyQt6 import sip
+from PyQt6.QtCore import QPoint, QPointF, QRect, QSize, Qt, QTimer
 from PyQt6.QtGui import QColor, QFont, QPainter, QPainterPath, QPixmap
 from PyQt6.QtWidgets import (
     QHBoxLayout,
@@ -253,6 +254,14 @@ class TiffPreview(QWidget):
         self._stripe_rects: list[QRect] = []
         self._pixmap: QPixmap | None = None
         self._frame_color = QColor(Qt.GlobalColor.white)   # the margin around the image
+        # Opt-in zoom/pan (soft-proof tool). Off elsewhere so the measure-tab
+        # stripe overlay is untouched. _zoom 1.0 = fit-to-window; _pan is the
+        # image-centre offset in logical px.
+        self._interactive = False
+        self._zoom = 1.0
+        self._pan = QPointF(0.0, 0.0)
+        self._panning = False
+        self._pan_anchor = QPoint()
         self._ink_channels: list[str] | None = None
         self._mode: str = "dark"
         self._refresh_timer = QTimer(self)
@@ -312,8 +321,14 @@ class TiffPreview(QWidget):
     # Public API
     # ------------------------------------------------------------------
 
-    def load_tiff(self, paths: list[Path], ink_channels: list[str] | None = None) -> None:
-        """Load a list of TIFF pages (one entry per printable page)."""
+    def load_tiff(self, paths: list[Path], ink_channels: list[str] | None = None,
+                  preserve_view: bool = False) -> None:
+        """Load a list of TIFF pages (one entry per printable page).
+
+        ``preserve_view`` keeps the current zoom/pan (interactive mode) — used
+        when only the *content* changes for the same image (e.g. the soft-proof
+        re-rendering as options change), so the user isn't yanked back to fit.
+        """
         self._ink_channels = ink_channels
         self._pages = []
         for p in paths:
@@ -331,6 +346,9 @@ class TiffPreview(QWidget):
         self._current = 0
         self._active_stripe = -1
         self._stripe_rects = []
+        if not preserve_view:       # a fresh image starts fit-to-window
+            self._zoom = 1.0
+            self._pan = QPointF(0.0, 0.0)
         self._update_nav()
         self._update_filename_label(paths)
         from PyQt6.QtCore import QTimer
@@ -355,6 +373,40 @@ class TiffPreview(QWidget):
         soft-proof tool, which only ever shows one image at a time)."""
         self._nav.setVisible(visible)
         self._image_nav_gap.setVisible(visible)
+
+    # ------------------------------------------------------------------
+    # Zoom / pan (opt-in) — wheel zoom, middle-drag pan, keyboard (#65)
+    # ------------------------------------------------------------------
+    def set_interactive(self, on: bool) -> None:
+        """Enable wheel-zoom + drag-pan + keyboard zoom/pan on the image."""
+        self._interactive = on
+        if on:
+            self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+            self._img_label.setMouseTracking(True)
+
+    def reset_view(self) -> None:
+        """Back to fit-to-window, centred."""
+        self._zoom = 1.0
+        self._pan = QPointF(0.0, 0.0)
+        self._repaint_label()
+
+    def _apply_zoom(self, factor: float, focus: QPoint | None = None) -> None:
+        """Multiply the zoom by ``factor``, keeping the image point under
+        ``focus`` (label-viewport coords) fixed; clamp to [1, 8]."""
+        new_zoom = max(1.0, min(8.0, self._zoom * factor))
+        if new_zoom == self._zoom:
+            return
+        if focus is not None:
+            # Keep the point under the cursor stationary while scaling.
+            B = _BORDER
+            cx = (self._img_label.width() - 2 * B) / 2
+            cy = (self._img_label.height() - 2 * B) / 2
+            rel = QPointF(focus.x() - B - cx, focus.y() - B - cy)
+            ratio = new_zoom / self._zoom
+            self._pan = QPointF(rel.x() - (rel.x() - self._pan.x()) * ratio,
+                                rel.y() - (rel.y() - self._pan.y()) * ratio)
+        self._zoom = new_zoom
+        self._repaint_label()
 
     def set_banner(self, text: str | None) -> None:
         """Show an advisory banner above the image, or hide it (text=None/empty)."""
@@ -597,6 +649,10 @@ class TiffPreview(QWidget):
         self._refresh_timer.start()
 
     def _update_display(self) -> None:
+        # A deferred repaint (QTimer.singleShot in load_tiff) can fire after the
+        # widget was torn down — bail rather than touch a deleted C++ object.
+        if self._img_label is None or sip.isdeleted(self._img_label):
+            return
         if not self._pages:
             self._img_label.setText(tr("No preview"))
             self._pixmap = None
@@ -615,6 +671,11 @@ class TiffPreview(QWidget):
 
     def _repaint_label(self) -> None:
         if not self._pixmap:
+            return
+        if self._img_label is None or sip.isdeleted(self._img_label):
+            return                          # torn down before a deferred repaint
+        if self._interactive:
+            self._repaint_interactive()
             return
         B = _BORDER
         dpr = self._img_label.devicePixelRatioF()
@@ -679,6 +740,113 @@ class TiffPreview(QWidget):
 
         painter.end()
         self._img_label.setPixmap(canvas)
+
+    def _repaint_interactive(self) -> None:
+        """Fit-to-window at zoom 1, then scale + pan within the viewport. The
+        canvas fills the whole viewport (so the margin shows around a zoomed
+        image), painting the image scaled and offset, clamped so it can't be
+        dragged fully out of view."""
+        B = _BORDER
+        dpr = self._img_label.devicePixelRatioF()
+        ls = self._img_label.size()
+        W, H = max(1, ls.width()), max(1, ls.height())
+        pw, ph = self._pixmap.width(), self._pixmap.height()
+        # Fit inside a B-wide inset at zoom 1 so the tinted frame + a dark
+        # surround show on all sides (the canvas is the whole viewport so the
+        # image can pan).
+        fit = min(max(1, W - 2 * B) / pw, max(1, H - 2 * B) / ph)
+        scale = fit * self._zoom
+        disp_w, disp_h = pw * scale, ph * scale
+
+        # Clamp pan so the image can't be dragged fully out of view.
+        max_x = max(0.0, (disp_w - W) / 2)
+        max_y = max(0.0, (disp_h - H) / 2)
+        self._pan = QPointF(max(-max_x, min(max_x, self._pan.x())),
+                            max(-max_y, min(max_y, self._pan.y())))
+
+        canvas = QPixmap(int(W * dpr), int(H * dpr))
+        canvas.setDevicePixelRatio(dpr)
+        # Dark/light viewer background fills the surround; only a thin frame
+        # hugging the image is tinted (e.g. simulated paper white).
+        bg = QColor("#efebe6") if self._mode == "light" else QColor("#111111")
+        canvas.fill(bg)
+        painter = QPainter(canvas)
+        scaled = self._pixmap.scaled(
+            max(1, int(disp_w * dpr)), max(1, int(disp_h * dpr)),
+            Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+        scaled.setDevicePixelRatio(dpr)
+        x = (W - disp_w) / 2 + self._pan.x()
+        y = (H - disp_h) / 2 + self._pan.y()
+        painter.fillRect(int(x - B), int(y - B), int(disp_w + 2 * B),
+                         int(disp_h + 2 * B), self._frame_color)   # thin tinted frame
+        painter.drawPixmap(int(x), int(y), scaled)
+        painter.end()
+        self._img_label.setPixmap(canvas)
+
+    def wheelEvent(self, event) -> None:  # type: ignore[override]
+        if not (self._interactive and self._pixmap):
+            super().wheelEvent(event)
+            return
+        delta = event.angleDelta().y() or event.pixelDelta().y()  # trackpad too
+        if delta == 0:
+            return
+        focus = self._img_label.mapFrom(self, event.position().toPoint())
+        self._apply_zoom(1.0015 ** delta, focus)
+        event.accept()
+
+    def mousePressEvent(self, event) -> None:  # type: ignore[override]
+        if self._interactive and self._pixmap and event.button() in (
+                Qt.MouseButton.MiddleButton, Qt.MouseButton.LeftButton):
+            self._panning = True
+            self._pan_anchor = event.position().toPoint()
+            self.setCursor(Qt.CursorShape.ClosedHandCursor)
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event) -> None:  # type: ignore[override]
+        if self._panning:
+            now = event.position().toPoint()
+            d = now - self._pan_anchor
+            self._pan_anchor = now
+            self._pan = QPointF(self._pan.x() + d.x(), self._pan.y() + d.y())
+            self._repaint_label()
+            event.accept()
+            return
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event) -> None:  # type: ignore[override]
+        if self._panning:
+            self._panning = False
+            self.unsetCursor()
+            event.accept()
+            return
+        super().mouseReleaseEvent(event)
+
+    def mouseDoubleClickEvent(self, event) -> None:  # type: ignore[override]
+        if self._interactive and self._pixmap:
+            self.reset_view()       # double-click → back to fit
+            event.accept()
+            return
+        super().mouseDoubleClickEvent(event)
+
+    def keyPressEvent(self, event) -> None:  # type: ignore[override]
+        if self._interactive and self._pixmap:
+            k = event.key()
+            if k in (Qt.Key.Key_Plus, Qt.Key.Key_Equal):
+                self._apply_zoom(1.25); event.accept(); return
+            if k in (Qt.Key.Key_Minus, Qt.Key.Key_Underscore):
+                self._apply_zoom(1 / 1.25); event.accept(); return
+            if k in (Qt.Key.Key_0, Qt.Key.Key_F):
+                self.reset_view(); event.accept(); return
+            step = 40
+            pans = {Qt.Key.Key_Left: (step, 0), Qt.Key.Key_Right: (-step, 0),
+                    Qt.Key.Key_Up: (0, step), Qt.Key.Key_Down: (0, -step)}
+            if k in pans:
+                dx, dy = pans[k]
+                self._pan = QPointF(self._pan.x() + dx, self._pan.y() + dy)
+                self._repaint_label(); event.accept(); return
+        super().keyPressEvent(event)
 
     def resizeEvent(self, event) -> None:  # type: ignore[override]
         super().resizeEvent(event)

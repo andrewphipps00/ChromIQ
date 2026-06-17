@@ -290,19 +290,31 @@ def icc_profile_paths() -> list[str]:
 
 
 def _sidebar_urls(extra_path: str = "", extra_paths: tuple | list = ()) -> list[QUrl]:
-    home = Path.home()
-    candidates = [
-        home / "Desktop",
-        home / "Downloads",
-        home / "Documents",
-        home / "ChromIQ",
-    ]
+    # OS-correct, localized standard folders (Windows known-folders, localized
+    # names on macOS/Linux) — Desktop, Images, Downloads, Documents — rather than
+    # hard-coded English paths under home.
+    from PyQt6.QtCore import QStandardPaths
+    SL = QStandardPaths.StandardLocation
+    candidates: list[Path] = []
+    for loc in (SL.DesktopLocation, SL.PicturesLocation,
+                SL.DownloadLocation, SL.DocumentsLocation):
+        p = QStandardPaths.writableLocation(loc)
+        if p:
+            candidates.append(Path(p))
+    candidates.append(Path.home() / "ChromIQ")    # the app's working folder
     if extra_path:
         candidates.append(Path(extra_path))
     for p in extra_paths:
         if p:
             candidates.append(Path(p))
-    return [QUrl.fromLocalFile(str(p)) for p in candidates if p.exists()]
+    # De-dupe while keeping order, then drop any that don't exist.
+    seen, urls = set(), []
+    for p in candidates:
+        s = str(p)
+        if s not in seen and p.exists():
+            seen.add(s)
+            urls.append(QUrl.fromLocalFile(s))
+    return urls
 
 
 _NAV_BUTTONS = {

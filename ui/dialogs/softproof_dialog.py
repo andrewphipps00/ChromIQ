@@ -23,6 +23,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from PIL import Image
+
 from PyQt6.QtCore import Qt, QTimer, QUrl
 from PyQt6.QtGui import QColor
 from PyQt6.QtWidgets import (
@@ -53,7 +55,7 @@ from ui.tiff_preview import TiffPreview
 from ui.tooltip_button import InfoDialog, TooltipButton
 from ui.widgets import (
     NoScrollComboBox, NoScrollDoubleSpinBox, make_browse_button, open_file_dialog,
-    tint_dialog_primary,
+    save_file_dialog, tint_dialog_primary,
 )
 from workflow.icc_info import is_v4
 from workflow.softproof_runner import (
@@ -464,8 +466,9 @@ class SoftproofDialog(QDialog):
 
         self._preview = TiffPreview(self._stack)
         self._preview.set_appearance(self._mode)
-        self._preview.set_caption(tr("APPROXIMATE SOFT-PROOF"))
+        self._preview.set_caption(self._caption_with_hint(tr("APPROXIMATE SOFT-PROOF")))
         self._preview.set_navigation_visible(False)   # always one image at a time
+        self._preview.set_interactive(True)            # wheel-zoom + drag-pan (#65)
         self._stack.addWidget(self._preview)
 
         self._gamut_frame = self._make_web_view()
@@ -482,14 +485,65 @@ class SoftproofDialog(QDialog):
         bottom.addStretch(1)
         bottom.addWidget(self._gamut_controls)
         bottom.addStretch(1)
+        # Save the proof exactly as shown (PNG / TIFF / JPEG) for sharing (#65).
+        self._save_btn = QPushButton(tr("Save proof as…"), self)
+        self._save_btn.setToolTip(
+            tr("Save the soft-proof preview as an image (PNG, TIFF or JPEG). "
+               "Note: it's an approximate, non-colour-managed rendering — good "
+               "for illustration, not a colour-accurate file."))
+        self._save_btn.setEnabled(False)
+        self._save_btn.clicked.connect(self._on_save_proof)
+        bottom.addWidget(self._save_btn, 0, Qt.AlignmentFlag.AlignBottom)
         close_btn = QPushButton(tr("Close"), self)
         close_btn.clicked.connect(self.reject)
         bottom.addWidget(close_btn, 0, Qt.AlignmentFlag.AlignBottom)
         rv.addLayout(bottom)
         return right
 
+    def _current_display_path(self) -> "Path | None":
+        """The image file currently shown — original, proof, or highlighted —
+        matching the toggles, so Save exports exactly what's on screen."""
+        if not self._result:
+            return None
+        if not (self._softproof_cb.isChecked() and self._softproof_cb.isEnabled()):
+            return self._image_path or Path(self._result.original_path)
+        if self._highlight_cb.isChecked():
+            return Path(self._result.highlight_path)
+        return Path(self._result.proof_path)
+
+    def _on_save_proof(self) -> None:
+        src = self._current_display_path()
+        if src is None or not src.is_file():
+            return
+        base = self._image_path.stem if self._image_path else "softproof"
+        from PyQt6.QtCore import QStandardPaths
+        pics = QStandardPaths.writableLocation(
+            QStandardPaths.StandardLocation.PicturesLocation) or str(Path.home())
+        start = str(Path(pics) / f"{base}-softproof.png")
+        path = save_file_dialog(
+            self, tr("Save proof as"),
+            tr("PNG image (*.png);;TIFF image (*.tif *.tiff);;JPEG image (*.jpg *.jpeg)"),
+            start_path=start)
+        if not path:
+            return
+        try:
+            img = Image.open(src)
+            if Path(path).suffix.lower() in (".jpg", ".jpeg") and img.mode != "RGB":
+                img = img.convert("RGB")
+            img.save(path)
+            self._status.setText(tr("Saved proof to {name}.").format(name=Path(path).name))
+        except (OSError, ValueError) as exc:
+            InfoDialog(tr("Could not save"), str(exc), self, min_width=420).exec()
+
     def _set_oog(self, text: str) -> None:
         self._oog_label.setText(text)
+
+    @staticmethod
+    def _caption_with_hint(base: str) -> str:
+        # The preview is zoomable/pannable — say so right in the caption so the
+        # controls are discoverable (#65).
+        return tr("{base}   ·   scroll to zoom · drag to pan · double-click to fit"
+                  ).format(base=base)
 
     def _build_gamut_controls(self) -> QWidget:
         """Two rows — Image and Printer — each with an opacity and a saturation
@@ -672,16 +726,16 @@ class SoftproofDialog(QDialog):
         self._result = None
         self._combined_html = None
         self._set_oog(tr("Out of gamut: —"))
-        self._show_original()
+        self._show_original(reset_view=True)   # a new image starts fit-to-window
         self._auto_update()
 
-    def _show_original(self) -> None:
+    def _show_original(self, reset_view: bool = False) -> None:
         """Display the picked image as-is (no proof) and switch to the preview."""
         if self._image_path is None:
             return
-        self._preview.set_caption(tr("ORIGINAL IMAGE"))
+        self._preview.set_caption(self._caption_with_hint(tr("ORIGINAL IMAGE")))
         self._preview.set_frame_color(None)
-        self._preview.load_tiff([self._image_path])
+        self._preview.load_tiff([self._image_path], preserve_view=not reset_view)
         self._show_view(0)
 
     def _on_browse_profile(self) -> None:
@@ -766,6 +820,7 @@ class SoftproofDialog(QDialog):
         self._intent_combo.setEnabled(ready and not self._paper_white_cb.isChecked())
         self._softproof_cb.setEnabled(ready)
         self._highlight_cb.setEnabled(ready and self._softproof_cb.isChecked())
+        self._save_btn.setEnabled(self._result is not None)
 
     def _can_proof(self) -> bool:
         return bool(self._image_path and self._profile_path
@@ -859,17 +914,20 @@ class SoftproofDialog(QDialog):
             return
         show_proof = self._softproof_cb.isChecked()
         if not show_proof:
-            path = self._result.original_path
-            self._preview.set_caption(tr("ORIGINAL IMAGE"))
+            # Show the crisp full-resolution original, not the 2400-px copy the
+            # proof was computed from (which looks soft next to the proof).
+            path = self._image_path or Path(self._result.original_path)
+            self._preview.set_caption(self._caption_with_hint(tr("ORIGINAL IMAGE")))
         else:
             path = (self._result.highlight_path if self._highlight_cb.isChecked()
                     else self._result.proof_path)
-            self._preview.set_caption(tr("APPROXIMATE SOFT-PROOF"))
+            self._preview.set_caption(self._caption_with_hint(tr("APPROXIMATE SOFT-PROOF")))
         # Tint the margin to the simulated paper white — but only while the
         # (paper-white) soft-proof is shown; the original image keeps plain white.
         pw = self._result.paper_white_rgb if show_proof else None
         self._preview.set_frame_color(QColor(*pw) if pw else None)
-        self._preview.load_tiff([Path(path)])
+        # Same image, just re-rendered/toggled → keep the user's zoom & pan.
+        self._preview.load_tiff([Path(path)], preserve_view=True)
 
     # ------------------------------------------------------------------
     # View toggle + lazy 3D

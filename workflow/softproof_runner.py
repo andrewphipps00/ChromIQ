@@ -247,10 +247,10 @@ class SoftproofRunner(QObject):
         self._work = Path(tempfile.mkdtemp(prefix="chromiq_softproof_"))
 
         try:
-            # 2400 px keeps the preview crisp on HiDPI/Retina displays (the
-            # preview pane can be ~1100 logical px → ~2200 device px at 2×);
-            # TiffPreview renders at the display's device-pixel ratio.
-            self._input_tif = prepare_input_tiff(params.image_path, self._work, max_dim=2400)
+            # Render the proof at (effectively) full resolution so it stays
+            # sharp when zoomed in, matching the original. Only truly huge files
+            # are capped, to bound cctiff/NumPy time + memory.
+            self._input_tif = prepare_input_tiff(params.image_path, self._work, max_dim=6000)
         except (OSError, ValueError) as exc:
             self.error.emit(tr("Could not read the image: {exc}").format(exc=exc))
             return
