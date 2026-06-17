@@ -1,5 +1,13 @@
 # Changelog
 
+## v3.10.22
+
+### 💄 Improved
+- **Create Chart (manual): tidier Output layout.** The Target-name and
+  Chart-notes fields and the option checkboxes below them now line up with the
+  same left edge as guided mode (the label column was a touch too wide before),
+  and the labels are no longer clipped.
+
 ## v3.10.21
 
 ### 💄 Improved
