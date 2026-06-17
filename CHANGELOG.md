@@ -1,5 +1,33 @@
 # Changelog
 
+## v3.10.25
+
+### 🐛 Fixed
+- **Edit Chart Layout: a triple-density chart's settings are now read back
+  correctly.** Opening a TD preset chart (e.g. patch scale 1.04 / margin 6) in
+  the layout editor showed the i1Pro-emulation defaults (1.30 / 5) instead of the
+  chart's own values, and Save & apply then propagated those wrong values back to
+  Create Chart. Loading a chart no longer clobbers its scale/margin. (#68, thanks
+  **Knut (@soul-traveller)**)
+- **Generated names no longer end with a stray dash.** When you leave the
+  editable part blank, the field now shows just the descriptive part (e.g.
+  `i1Pro-A4-484p-1page-Portrait`) with no trailing `-`; the separator appears the
+  moment you type. (#68)
+- **Suggested names use the paper's name, not its millimetres.** A named size
+  like A3+ now reads `…-A3+-…` in the editor's suggested name instead of
+  `…-483x329-…` (only a truly custom size shows W×H). (#68)
+- **Hardened chart generation from a patch set** so a re-layout can't wipe its
+  own input and silently produce no pages (a cause of "Chart generation
+  failed"); the input is now preserved across the rebuild. (#68)
+
+### 💄 Improved
+- **Consistent naming controls across the Save dialogs.** The "Add a descriptive
+  prefix" option now also appears in the layout editor's **Save as…** and
+  **Save & apply** dialogs, with a suggested name pre-filled (Save as… replaces
+  the old "Suggest name" button with the same locked-prefix field and gained a
+  location picker). Turning the option off now keeps the full name as editable
+  text instead of blanking the field. (#68, thanks **Knut (@soul-traveller)**)
+
 ## v3.10.24
 
 ### 🐛 Fixed

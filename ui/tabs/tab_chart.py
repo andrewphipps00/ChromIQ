@@ -3535,10 +3535,10 @@ class TabChart(QWidget):
                 else getattr(self, "_target_name_edit", None))
 
     def _name_prefix(self) -> str:
-        """The locked descriptive head + separator, e.g. ``i1Pro-A4-484p-...-``;
-        the user's free text follows it. Leads with the sortable details (#68)."""
-        s = self._suggest_target_name()
-        return (s + "-") if s else ""
+        """The locked descriptive head, e.g. ``i1Pro-A4-484p-1page-Portrait``;
+        the user's free text follows it. The separator is supplied by
+        PrefixLockedLineEdit and only appears once a tail is typed (#68)."""
+        return self._suggest_target_name() or ""
 
     def _name_locked(self) -> bool:
         """Auto-naming applies only while authoring a *new* name from scratch.
@@ -3578,6 +3578,22 @@ class TabChart(QWidget):
         """The startup default chart name (the editable tail of a fresh name)."""
         return self._file_mgr.strip_workfile_ext(
             self._settings.get("chart_target_name", "ChromIQ Test Chart"))
+
+    @staticmethod
+    def _toggle_name_prefix(edit: "PrefixLockedLineEdit", on: bool, prefix: str) -> None:
+        """Flip a name field between locked-prefix and free-text *without losing
+        the name* (#68). Turning the option off leaves the whole descriptive name
+        as editable text (not an empty field); turning it on re-locks the head
+        without duplicating it when the text already begins with it."""
+        full = edit.text()
+        if on:
+            tail = (full[len(prefix):].lstrip("-")
+                    if prefix and full.startswith(prefix) else full)
+            edit.set_prefix(prefix)
+            edit.set_tail(tail)
+        else:
+            edit.set_prefix("")
+            edit.setText(full)
 
     def _on_auto_suffix_toggled(self, on: bool) -> None:
         self._settings.set("create_chart_auto_suffix", bool(on))
@@ -3685,7 +3701,7 @@ class TabChart(QWidget):
         preset_suffix_cb = QCheckBox(tr("Add a descriptive prefix"), dlg)
         preset_suffix_cb.setChecked(bool(self._settings.get("create_chart_auto_suffix", True)))
         preset_suffix_cb.toggled.connect(
-            lambda on: edit.set_prefix(self._name_prefix() if on else ""))
+            lambda on: self._toggle_name_prefix(edit, on, self._name_prefix()))
         suffix_row = QHBoxLayout()
         suffix_row.setContentsMargins(0, 0, 0, 0)
         suffix_row.addWidget(preset_suffix_cb)
@@ -3694,7 +3710,7 @@ class TabChart(QWidget):
                                            self._auto_suffix_tooltip(), dlg, min_width=520))
         lay.addLayout(suffix_row)
         if preset_suffix_cb.isChecked():
-            edit.set_prefix(self._name_prefix())
+            self._toggle_name_prefix(edit, True, self._name_prefix())
         if prefilled_from_target:
             name_hint = QLabel(
                 tr("Suggested from your current target name — change it to "

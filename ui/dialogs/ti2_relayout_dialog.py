@@ -40,7 +40,7 @@ from ui.tab_header import SpectrumStripe as _SpectrumStripe, TabHeader
 from ui.tooltip_button import TooltipButton
 from ui.widgets import (
     NoScrollComboBox, NoScrollDoubleSpinBox, NoScrollSpinBox,
-    open_dir_dialog, open_file_dialog, save_file_dialog,
+    PrefixLockedLineEdit, open_dir_dialog, open_file_dialog, save_file_dialog,
 )
 
 
@@ -48,6 +48,22 @@ def _magenta_tip(title: str, body: str, parent: QWidget | None = None,
                  min_width: int = 480) -> TooltipButton:
     """A TooltipButton drawn in the editor's magenta accent."""
     return TooltipButton(title, body, parent, min_width=min_width, color=SPEC_MAGENTA)
+
+
+def _toggle_locked_prefix(edit: "PrefixLockedLineEdit", on: bool, prefix: str) -> None:
+    """Flip a name field between locked-prefix and free-text without losing the
+    name (#68): off leaves the whole descriptive name editable (not blank); on
+    re-locks the head without duplicating it when the text already starts with
+    it. Mirrors tab_chart's ``_toggle_name_prefix`` for the editor's dialogs."""
+    full = edit.text()
+    if on:
+        tail = (full[len(prefix):].lstrip("-")
+                if prefix and full.startswith(prefix) else full)
+        edit.set_prefix(prefix)
+        edit.set_tail(tail)
+    else:
+        edit.set_prefix("")
+        edit.setText(full)
 
 
 # The "Generate colour sets" help, shared verbatim by the New-chart dialog's ⓘ
@@ -4318,6 +4334,13 @@ class Ti2RelayoutDialog(QDialog):
         if on and self._pt_dd.isChecked():
             self._pt_dd.setChecked(False)
         self._pt_dd.setEnabled(not on)
+        # When this fires while syncing a freshly-loaded chart's options, that
+        # chart already carries its own -a / -m — applying the TD preset here
+        # would clobber them with 1.3 / 5 (Knut's #68 "editor shows 1.30/5"
+        # bug, where a 1.04 / 6 triple-density preset came back wrong). Leave
+        # the loaded values untouched; the sync sets the TD checkbox last.
+        if self._pt_syncing:
+            return
         # Block while applying the preset so we coalesce one re-render at
         # the end of this method instead of one per widget edit.
         self._pt_syncing = True
@@ -5005,24 +5028,11 @@ class Ti2RelayoutDialog(QDialog):
     def _save_as(self) -> None:
         if self._spec is None or self._grid.count() == 0:
             return
-        start = (self._settings.get("custom_output_path", "")
-                 or str(Path.home() / "ChromIQ"))
-        default_name = (self._regen.basename if self._regen
-                        else self._basename) or "chart"
-        # Single save dialog (vs the old folder-pick → name-prompt
-        # two-step). The typed filename becomes both the chart folder
-        # name and the basename of the files written into it; any
-        # extension the user types is dropped because the editor saves
-        # a folder, not a single file.
-        path = save_file_dialog(
-            self, "Save chart",
-            start_path=str(Path(start) / default_name),
-        )
-        if not path:
+        res = self._prompt_save_as_name()
+        if res is None:
             return
-        target_path = Path(path)
-        name = target_path.stem or "chart"
-        target = target_path.parent / name
+        name, location = res
+        target = Path(location) / name
         try:
             msg = self._write_chart_into(target, name)
         except Exception as exc:  # noqa: BLE001 — surface any writer failure
@@ -5031,6 +5041,68 @@ class Ti2RelayoutDialog(QDialog):
         QMessageBox.information(self, tr("Saved"), msg)
         self._status.setText(msg.splitlines()[0])
         self._mark_saved()   # Save As clears the unsaved-changes flag (#49)
+
+    def _prompt_save_as_name(self) -> "tuple[str, str] | None":
+        """Custom Save-As prompt: a locked descriptive-prefix name field + the
+        "Add a descriptive prefix" checkbox (same as Save & apply, #68) plus a
+        location row. Returns ``(name, parent_dir)`` or None if cancelled. The
+        chart is written as ``<parent_dir>/<name>/<name>.*``."""
+        dlg = QDialog(self)
+        dlg.setWindowTitle(tr("Save chart as…"))
+        dlg.setMinimumWidth(580)
+        lay = QVBoxLayout(dlg)
+        lay.setContentsMargins(24, 20, 24, 16)
+        lay.setSpacing(10)
+        heading = QLabel(tr("Save this chart to a folder"), dlg)
+        heading.setStyleSheet("font-weight: 600; font-size: 14px;")
+        lay.addWidget(heading)
+        lay.addWidget(QLabel(
+            tr("The name becomes both the folder and the chart's file names."), dlg))
+
+        name_row = QHBoxLayout()
+        name_row.addWidget(QLabel(tr("Chart name:"), dlg))
+        name_edit = PrefixLockedLineEdit(dlg)
+        name_row.addWidget(name_edit, 1)
+        lay.addLayout(name_row)
+        prefix_cb = QCheckBox(tr("Add a descriptive prefix"), dlg)
+        prefix_cb.setChecked(bool(self._settings.get("create_chart_auto_suffix", True)))
+        prefix_cb.toggled.connect(
+            lambda on: _toggle_locked_prefix(name_edit, on, self._dialog_name_prefix()))
+        lay.addWidget(prefix_cb)
+        name_edit.setText(self._default_apply_name())
+        _toggle_locked_prefix(name_edit, prefix_cb.isChecked(), self._dialog_name_prefix())
+
+        loc_row = QHBoxLayout()
+        loc_row.addWidget(QLabel(tr("Location:"), dlg))
+        start = (self._settings.get("custom_output_path", "")
+                 or str(Path.home() / "ChromIQ"))
+        loc_edit = QLineEdit(start, dlg)
+        loc_row.addWidget(loc_edit, 1)
+        browse = QPushButton(tr("Browse…"), dlg)
+        browse.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        browse.clicked.connect(lambda: (
+            (lambda d: loc_edit.setText(d) if d else None)(
+                open_dir_dialog(self, tr("Choose a folder"),
+                                start_dir=loc_edit.text() or start))))
+        loc_row.addWidget(browse)
+        lay.addLayout(loc_row)
+
+        bb = QDialogButtonBox(dlg)
+        ok_btn = bb.addButton(tr("Save"), QDialogButtonBox.ButtonRole.AcceptRole)
+        cancel_btn = bb.addButton(tr("Cancel"), QDialogButtonBox.ButtonRole.RejectRole)
+        ok_btn.setDefault(True)
+        ok_btn.clicked.connect(dlg.accept)
+        cancel_btn.clicked.connect(dlg.reject)
+        lay.addWidget(bb)
+
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return None
+        import re
+        raw = name_edit.text().strip()
+        clean = re.sub(r"\s+", "-", raw)
+        clean = re.sub(r"[^\w\-.]", "_", clean).strip("._-") or "chart"
+        location = loc_edit.text().strip() or start
+        return clean, location
 
     def _write_chart_into(self, target: Path, name: str) -> str:
         """Write the complete chart deliverable into ``target`` and return a note.
@@ -5154,7 +5226,13 @@ class Ti2RelayoutDialog(QDialog):
         instr = {"i1": "i1Pro", "CM": "ColorMunki", "3p": "i1Pro3Plus",
                  "SS": "SpectroScan"}.get(self._spec.instrument_flag,
                                           self._spec.instrument_flag or "chart")
-        paper = self._spec.paper_flag or "paper"
+        # Named papers contribute their NAME (e.g. "A3+"), not their millimetre
+        # code ("483x329"); only a truly custom size falls back to the W×H code
+        # (#68, Knut). PAPER_LABELS keys both named sizes and the WxH aliases for
+        # named ones, so a known code resolves to its short label here.
+        code = self._spec.paper_flag or "paper"
+        label = PAPER_LABELS.get(code)
+        paper = label.split(" (")[0] if label else code
         parts = [instr, paper, f"{self._grid.count()}p"]
         pages = len(self._regen.tiffs) if self._regen is not None else 0
         if pages:
@@ -5163,6 +5241,12 @@ class Ti2RelayoutDialog(QDialog):
         if w and h:
             parts.append("Landscape" if w > h else "Portrait")
         return "-".join(parts)
+
+    def _dialog_name_prefix(self) -> str:
+        """The locked descriptive prefix for the Save dialogs — the suggested
+        name, or empty when no real chart is loaded (so the bare ``chart``
+        placeholder never becomes a prefix)."""
+        return self._suggest_chart_name() if self._spec is not None else ""
 
     def _default_apply_name(self) -> str:
         """The pre-filled Save & apply name: the target name carried through the
@@ -5215,18 +5299,19 @@ class Ti2RelayoutDialog(QDialog):
 
         name_row = QHBoxLayout()
         name_row.addWidget(QLabel(tr("Profile name:"), dlg))
-        name_edit = QLineEdit(self._default_apply_name(), dlg)
-        name_edit.selectAll()
+        name_edit = PrefixLockedLineEdit(dlg)
         name_row.addWidget(name_edit, 1)
-        suggest_btn = QPushButton(tr("Suggest name"), dlg)
-        suggest_btn.setToolTip(tr("Fill in a name based on the instrument, paper, "
-                                  "patch count, pages and orientation."))
-        suggest_btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        suggest_btn.clicked.connect(
-            lambda: (name_edit.setText(self._suggest_chart_name()),
-                     name_edit.selectAll()))
-        name_row.addWidget(suggest_btn)
         lay.addLayout(name_row)
+        # "Add a descriptive prefix" (#68): the instrument · paper · patch · pages
+        # · orientation details lead the name as a locked, sortable prefix, with
+        # your own text after — replacing the old "Suggest name" button.
+        prefix_cb = QCheckBox(tr("Add a descriptive prefix"), dlg)
+        prefix_cb.setChecked(bool(self._settings.get("create_chart_auto_suffix", True)))
+        prefix_cb.toggled.connect(
+            lambda on: _toggle_locked_prefix(name_edit, on, self._dialog_name_prefix()))
+        lay.addWidget(prefix_cb)
+        name_edit.setText(self._default_apply_name())
+        _toggle_locked_prefix(name_edit, prefix_cb.isChecked(), self._dialog_name_prefix())
 
         bb = QDialogButtonBox(dlg)
         ok_btn = bb.addButton(tr("Create project"), QDialogButtonBox.ButtonRole.AcceptRole)
