@@ -1,5 +1,16 @@
 # Changelog
 
+## v3.10.19
+
+### ✨ Added
+- **Self-naming charts: "Add a descriptive suffix".** A new option (on by
+  default) in Create Chart — guided *and* manual — and in the Save Preset
+  dialog keeps a live tail on the name: instrument, paper, patch count, pages
+  and orientation (e.g. `Baryta-i1Pro-A4-484p-1page-Portrait`). You type just
+  the base; the suffix updates by itself as you change those settings and can't
+  be edited directly. Turn it off to name the chart entirely yourself. Replaces
+  the old "Suggest name" button.
+
 ## v3.10.18
 
 ### 💄 Improved
