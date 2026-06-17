@@ -1485,6 +1485,11 @@ class TabChart(QWidget):
         self._preset_combo.setItemDelegate(
             _ComboSeparatorDelegate(self._preset_combo)
         )
+        # Cap the popup height and make it scroll — the built-in list is long.
+        # combobox-popup:0 is what makes Qt honour maxVisibleItems (a scrollable
+        # list) instead of one giant native menu.
+        self._preset_combo.setMaxVisibleItems(15)
+        self._preset_combo.setStyleSheet("QComboBox { combobox-popup: 0; }")
         self._preset_combo.addItem(tr("none"), userData=None)
         presets_row.addWidget(self._preset_combo, stretch=1)
         self._preset_add_btn = QPushButton(w)
