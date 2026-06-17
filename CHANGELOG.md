@@ -1,5 +1,38 @@
 # Changelog
 
+## v3.10.17
+
+Big thanks to **Knut (@soul-traveller)** for the ideas and testing behind most
+of this release (#62, #64, #65, #66 and the soft-proof feedback).
+
+### ✨ Added
+- **Soft-proof is now hands-free and far more capable.** Pick an image and a
+  printer profile and the preview appears and re-renders on its own as you
+  change options — no button to press; options grey out until they're usable.
+  The preview now **zooms and pans** (mouse-wheel zoom, drag to pan,
+  double-click to fit), renders at **full resolution**, and you can **Save the
+  proof** (PNG/TIFF/JPEG) for sharing. (#65)
+- **Soft-proof "Other ICC profile…".** Choose your own working-space profile for
+  the source; and the bundled sRGB/Adobe RGB/P3/ProPhoto profiles now resolve
+  even when ArgyllCMS's own `ref` folder isn't found (e.g. Homebrew installs).
+  (Knut)
+- **3D RGB cube: middle-button drag pans** the view, in every window that shows
+  the cube. (#64)
+- **Patch distribution (3D): compare two charts side by side.** A "Compare with
+  profile" dropdown opens a second cube of any preset's patches next to the
+  current one, with the two cameras locked **continuously in sync** — rotate,
+  zoom or pan one and the other follows. In both the Tools viewer and the chart
+  editor's 3D popup. (#66)
+
+### 💄 Improved
+- **Soft-proof Gamut-fit view** gains separate **opacity / saturation /
+  wireframe** controls for the image and printer gamuts (a wireframe gamut stays
+  visible through the other), and friendlier in-app help.
+- **File dialogs** show OS-correct Desktop / Pictures / Downloads / Documents
+  shortcuts; Save-proof defaults to your Pictures folder.
+- **Built-in presets feed the patch count** into Suggest-name, like custom
+  presets do. (#62)
+
 ## v3.10.16
 
 ### 🐛 Fixed
