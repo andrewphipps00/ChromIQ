@@ -593,19 +593,24 @@ class ChartCreator:
         calibration target). Copies the input .ti1 into ``chart.ti1``, wipes
         prior chart artefacts in that run, then runs printtarg.
         """
-        import shutil
         # _printtarg_done writes the <stem>.channels.json sidecar only when
         # _pending_params is set; otherwise the preview can't identify inks
         # in a future session. Mirror the generate() path so this entry point
         # produces the same artifacts.
         self._pending_params = params
+        # Capture the input patch set BEFORE wiping the run: when ti1_path lives
+        # inside this very run folder (e.g. a re-layout of the run's own chart),
+        # reset_chart_artefacts() would delete it and the copy below would have
+        # nothing to read — printtarg then exits 0 having written no TIFFs
+        # (the "0 TIFFs" generation failure, #68). Reading the bytes first makes
+        # the input survive the reset no matter where it lives.
+        ti1_bytes = Path(ti1_path).read_bytes()
         run = self._file_mgr.project().current_run()
         run.reset_chart_artefacts()
         work_dir = run.ensure_dir()
         stem = run.stem
         dest = run.chart_ti1
-        if ti1_path != dest:
-            shutil.copy(ti1_path, dest)
+        dest.write_bytes(ti1_bytes)
 
         pt_args = self._build_printtarg_args(params)
         log.debug("printtarg args (from ti1): %s", pt_args)
@@ -780,7 +785,9 @@ class ChartCreator:
         })
         log.info("printtarg produced %d TIFF(s) in %s", len(tiffs), work_dir)
         if not tiffs:
-            log.warning("No TIFFs found; searched %s for chart*.tif", work_dir)
+            log.warning("No TIFFs found; searched %s for %s*.tif "
+                        "(printtarg exited 0 but wrote nothing — usually a "
+                        "missing/empty input %s.ti1)", work_dir, stem, stem)
 
         if tiffs and self._pending_params is not None:
             # Triple-density: printtarg saw -ii1 so it wrote TARGET_INSTRUMENT
