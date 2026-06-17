@@ -1357,13 +1357,11 @@ class TabChart(QWidget):
         # longer locales widen the column (the stretchy edits absorb it).
         name_row = QHBoxLayout()
         _name_lbl = QLabel(tr("Target name:"), w)
-        # Label column = the natural width of the wider label (no extra floor or
-        # padding), so the field + checkboxes sit as close to the left as in
-        # guided mode rather than being pushed right.
-        _OUTPUT_LBL_W = max(
-            _name_lbl.fontMetrics().horizontalAdvance(tr("Target name:")),
-            _name_lbl.fontMetrics().horizontalAdvance(tr("Chart notes:")),
-        )
+        # Label column = the wider label's full sizeHint (the same measure guided
+        # uses) — its natural width incl. margins, so the column matches guided's
+        # left edge without clipping the label's trailing ":".
+        _OUTPUT_LBL_W = max(_name_lbl.sizeHint().width(),
+                            QLabel(tr("Chart notes:"), w).sizeHint().width())
         _name_lbl.setFixedWidth(_OUTPUT_LBL_W)
         name_row.addWidget(_name_lbl)
         self._manual_target_name_edit = self._make_lineedit("", w)
