@@ -50,6 +50,108 @@ def _magenta_tip(title: str, body: str, parent: QWidget | None = None,
     return TooltipButton(title, body, parent, min_width=min_width, color=SPEC_MAGENTA)
 
 
+# The "Generate colour sets" help, shared verbatim by the New-chart dialog's ⓘ
+# and the Add-patches dialog's ⓘ (#66 follow-up: the generator info must be in
+# the Add window too). Kept as one constant so the two tips can't drift; a test
+# asserts it equals the matching paragraphs of the New-chart tooltip. The leading
+# string passed to tr() is a module constant, which i18n_extract resolves like a
+# literal — so this is a single catalog key reused in both places.
+_GEN_SETS_HELP = (
+    "About “Generate colour sets”:\n\n"
+    "Tick any combination of these five sets and ChromIQ lays them down "
+    "one after another. Each set shows how many patches it adds, and a "
+    "running total appears underneath, so you always know how big the "
+    "chart will get before you create it:\n\n"
+    "• 3D RGB cube — an even grid of colours across the whole range. You "
+    "pick how many steps each of red, green and blue is split into, and "
+    "the chart then holds every combination (for example 6 steps makes "
+    "6×6×6 = 216 patches). A solid, neutral foundation for almost any "
+    "profile.\n\n"
+    "• Skin tones (Fitzpatrick) — lifelike skin colours running light to "
+    "dark through each of the six Fitzpatrick skin types, now reaching "
+    "from porcelain-pale highlights down to very deep, faintly cool "
+    "shadows. 'Per type' sets how many shades each type gets from light "
+    "to dark; 'Ranges' adds that many parallel ramps, each nudged a "
+    "little in hue, so a single skin type is covered by a small spread of "
+    "tones rather than one straight line — handy because real faces vary. "
+    "Worth adding whenever faces and portraits matter most.\n\n"
+    "• Blues / turquoise — extra colours packed into the green-turquoise "
+    "to deep-blue part of the range, where wide-gamut papers and inks "
+    "reach furthest (it now dips into the greenish turquoise too). "
+    "'Per layer' is how many patches each sheet holds and 'Layers' is how "
+    "many sheets, so the two multiply (24 per layer × 3 layers = 72). The "
+    "sheets are gently angled rather than one flat blanket, so the whole "
+    "turquoise corner is filled in depth. Helpful for skies, water and "
+    "deep blues.\n\n"
+    "• Greens (foliage) — a spread of forest, jungle and leaf greens, for "
+    "landscapes and nature shots where the greens carry the picture. As "
+    "with the blues, 'Per layer' × 'Layers' patches are spread across "
+    "angled sheets so the green part of the range is covered with more "
+    "depth.\n\n"
+    "• Near-neutral greys — a grey ramp from black to white and, at each "
+    "step, a ring of gentle tints just off neutral. This is what helps "
+    "greys print cleanly without an unwanted colour cast — the most "
+    "important region for a clean profile. You set how many grey steps "
+    "there are, how far the tints stray from neutral ('offset'), and how "
+    "many rings to circle each grey with ('rings'): one ring is six "
+    "tints, and each extra ring adds a wider, denser one (12, then 18 "
+    "tints) for fuller near-neutral coverage when you want it.\n\n"
+    "• Saturated edges — the most vivid colours the printer can manage. "
+    "'Per edge' traces the twelve edges of the colour cube — the gamut "
+    "wireframe (black up to each pure colour and on to white, plus the "
+    "colourful edges between); 'per face' goes further and also fills the "
+    "six cube faces — the full gamut surface — with that many patches per "
+    "side, or leave it at 0 for edges only. This outer boundary is exactly "
+    "where profiles tend to go wrong, so it pays to sample it well.\n\n"
+    "• Highlights & shadows — extra detail at the two ends where printers "
+    "struggle most: pale tints just below paper white, and deep tones just "
+    "above black, spread across every hue. These ends often band or block "
+    "up, and the cube alone samples them thinly. 'Per end' is how many "
+    "patches go at each end (so the set adds twice that many), and 'depth' "
+    "is how far in from white and black the tones reach.\n\n"
+    "• Pastels — soft, muted colours all around the hue wheel: dusty blues, "
+    "sages, soft pinks, taupes. This is where a great deal of real "
+    "photography actually lives — the gentle region between the clean greys "
+    "and the vivid sets. Each of the 'layers' is a chroma shell — from "
+    "barely-tinted near-greys out to fuller pastels — of 'per layer' "
+    "patches, so the two multiply.\n\n"
+    "• From image — load one of your own photos and ChromIQ finds its most "
+    "representative colours and adds them to the chart, so the profile is "
+    "tuned to the kind of pictures you really print. Click 'Load image…', "
+    "pick a file, and set how many 'Colours' to pull out. Lovely combined "
+    "with a cube for all-round coverage plus your image's own palette on "
+    "top.\n\n"
+    "• Fill remaining gaps — a tidy-up that comes last. After the sets you "
+    "picked are laid down, it scatters extra patches into the empty parts "
+    "of colour space — evenly and without repeating — until the chart "
+    "reaches the size you ask for. 'Fill to' is that target total, so the "
+    "whole chart lands on a round number with nothing left clumped or "
+    "bare.\n\n"
+    "Mix them freely — say a 3D cube for overall coverage plus "
+    "near-neutral greys for clean neutrals, or skin tones plus greens for "
+    "portraits out in nature.\n\n"
+    "• Ensure unique colours — when this is ticked and your sets happen to "
+    "share a colour (for example a 3D cube and a grey ramp both include "
+    "black and white), ChromIQ keeps one and nudges the duplicates apart "
+    "by a tiny amount, so no colour is printed and measured twice. The "
+    "patch total stays the same. Leave it on unless you have a reason not "
+    "to."
+)
+
+# Short intro for the Add-patches dialog's ⓘ, ahead of the shared generator help.
+_ADD_TIP_INTRO = (
+    "Add more patches to the chart you're editing. Two ways:\n\n"
+    "• Add a single colour — dial in one colour and append it as a single "
+    "patch.\n\n"
+    "• Generate colour sets — lay down one or more of the ready-made colour "
+    "spreads described below; a running total shows how many patches you'll "
+    "add, and “Fill remaining gaps” tops the whole chart up to a target size "
+    "rather than adding that many.\n\n"
+    "The new patches are appended after the chart's existing ones — rearrange "
+    "them however you like back in the editor."
+)
+
+
 class _AutoHideLabel(QLabel):
     """Status line that clears itself a few seconds after its last message, so
     the bottom bar is normally empty instead of holding stale text. Every
@@ -2339,6 +2441,12 @@ class _AddPatchesDialog(_NewChartDialog):
             0, Qt.AlignmentFlag.AlignVCenter)
         GradientOverlay(SPEC_MAGENTA, parent=self, alpha=15, height=95, on_top=False)
         head.addStretch(1)
+        # ⓘ with the same generator-sets help the New-chart dialog carries, so
+        # the Add window explains the colour sets too (#66 follow-up).
+        head.addWidget(_magenta_tip(
+            tr("Add patches"),
+            tr(_ADD_TIP_INTRO) + "\n\n" + tr(_GEN_SETS_HELP),
+            self, min_width=520))
         outer.addLayout(head)
         outer.addWidget(_SpectrumStripe(self))
         outer.addLayout(self._build_body(scroll, hint.width()), 1)
