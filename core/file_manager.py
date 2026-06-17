@@ -51,7 +51,7 @@ if TYPE_CHECKING:
 log = get_logger(__name__)
 
 _ILLEGAL = re.compile(r"[^\w\-.]+", re.UNICODE)
-_TRAIL   = re.compile(r"^[._]+|[._]+$")
+_TRAIL   = re.compile(r"^[._-]+|[._-]+$")   # also a trailing "-" from an empty descriptive-prefix tail
 
 # Extensions ChromIQ itself generates during a session. A user-entered target
 # name (or a loaded file's stem) must never carry one of these: the name is

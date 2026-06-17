@@ -249,6 +249,105 @@ class SuffixLockedLineEdit(QLineEdit):
             self.set_base(super().text())
 
 
+class PrefixLockedLineEdit(QLineEdit):
+    """A line edit with a locked, non-editable *prefix* (the mirror of
+    :class:`SuffixLockedLineEdit`).
+
+    The user edits only the trailing part; the *prefix* is set by the owner via
+    :meth:`set_prefix` and can't be typed into, deleted or pasted over. Used for
+    a leading descriptive name part (sortable), with the user's free text as the
+    editable tail. Focusing the field drops the cursor at the start of that tail
+    and scrolls it into view, so a long prefix never hides where you type.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._prefix = ""
+        self._guard = False
+        self.textChanged.connect(self._on_text_changed)
+        self.cursorPositionChanged.connect(self._on_cursor)
+
+    # -- public ---------------------------------------------------------
+    def set_prefix(self, prefix: str) -> None:
+        """Replace the locked head, preserving the user's editable tail."""
+        prefix = prefix or ""
+        if prefix == self._prefix:
+            return
+        tail = self.tail()
+        self._prefix = prefix
+        self._set(tail)
+
+    def tail(self) -> str:
+        """The editable trailing part (text after the locked prefix)."""
+        t = super().text()
+        if self._prefix and t.startswith(self._prefix):
+            return t[len(self._prefix):]
+        return t
+
+    def set_tail(self, tail: str) -> None:
+        self._set(tail or "")
+
+    # -- internals ------------------------------------------------------
+    def _set(self, tail: str) -> None:
+        self._guard = True
+        super().setText(self._prefix + tail)
+        super().setCursorPosition(len(self._prefix))
+        self._guard = False
+
+    def _prefix_len(self) -> int:
+        return len(self._prefix) if super().text().startswith(self._prefix) else 0
+
+    def _clamp(self) -> None:
+        if not self._prefix:
+            return
+        start = self._prefix_len()
+        self._guard = True
+        if self.selectionStart() >= 0 and self.selectionLength() > 0:
+            s = max(self.selectionStart(), start)
+            e = max(self.selectionStart() + self.selectionLength(), start)
+            self.setSelection(s, max(0, e - s))
+        elif self.cursorPosition() < start:
+            super().setCursorPosition(start)
+        self._guard = False
+
+    def keyPressEvent(self, ev) -> None:  # noqa: N802
+        if self._prefix:
+            start = self._prefix_len()
+            # A backspace at the prefix/tail boundary would eat the locked head.
+            if (ev.key() == Qt.Key.Key_Backspace and self.selectionLength() == 0
+                    and self.cursorPosition() <= start):
+                return
+            self._clamp()
+        super().keyPressEvent(ev)
+
+    def insertFromMimeData(self, source) -> None:  # noqa: N802
+        self._clamp()
+        super().insertFromMimeData(source)
+
+    def focusInEvent(self, ev) -> None:  # noqa: N802
+        super().focusInEvent(ev)
+        if self._prefix:
+            # Land in the editable tail (and let Qt scroll it into view) rather
+            # than selecting the whole — locked — string.
+            self.deselect()
+            self.setCursorPosition(len(super().text()))
+
+    def _on_cursor(self, _old: int, new: int) -> None:
+        if self._guard or not self._prefix or self.selectionLength() > 0:
+            return
+        start = self._prefix_len()
+        if new < start:
+            self._guard = True
+            super().setCursorPosition(start)
+            self._guard = False
+
+    def _on_text_changed(self, _t: str) -> None:
+        if self._guard or not self._prefix:
+            return
+        if not super().text().startswith(self._prefix):
+            self.set_tail(super().text())
+
+
 class ElidingLabel(QLabel):
     """Single-line label that middle-elides overflowing text with ``(...)``.
 

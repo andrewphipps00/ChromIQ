@@ -454,4 +454,5 @@ def test_softproof_auto_flow(tmp_path: Path, monkeypatch):
     assert not dlg._intent_combo.isEnabled()
     assert dlg._rerun_timer.isActive()
     dlg._teardown_webengine()
+    assert not dlg._rerun_timer.isActive()   # teardown cancels the pending proof
     dlg.close()

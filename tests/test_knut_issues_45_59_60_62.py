@@ -231,30 +231,76 @@ def test_td_chart_transfers_custom_margin_and_scale(qapp, settings):
 
 # --- #62 follow-up: live, locked descriptive suffix -------------------------
 
-def test_auto_descriptive_suffix(qapp, settings):
-    from ui.widgets import SuffixLockedLineEdit
+def test_auto_descriptive_prefix(qapp, settings):
+    # #68: the descriptive details now LEAD the name (sortable) as a locked
+    # prefix; the user's text is the editable tail.
+    from ui.widgets import PrefixLockedLineEdit
     from ui.tabs.tab_chart import TabChart
     settings.set("create_chart_auto_suffix", True)
     t = TabChart(ArgyllRunner(settings), FileManager(settings), settings)
 
-    # Guided: on by default → the field carries a live, locked suffix.
     t._switch_mode("guided")
     f = t._target_name_edit
-    assert isinstance(f, SuffixLockedLineEdit)
-    assert "i1Pro" in f.text()                # the descriptive suffix is present
-    f.set_base("Baryta")                       # user's base name
-    assert f.base() == "Baryta" and f.text().startswith("Baryta-")
-    assert "i1Pro" in f.text()
+    assert isinstance(f, PrefixLockedLineEdit)
+    assert f.text().startswith("i1Pro-")       # descriptive details first
+    f.set_tail("Baryta")                        # user's free text follows
+    assert f.tail() == "Baryta"
+    assert f.text().startswith("i1Pro-") and f.text().endswith("-Baryta")
 
-    # Toggling the option off strips the suffix; both checkboxes stay in sync.
+    # Toggle off → plain field; both checkboxes stay in sync.
     t._guided_auto_suffix_cb.setChecked(False)
     assert f.text() == "Baryta"
     assert t._manual_auto_suffix_cb.isChecked() is False
     assert settings.get("create_chart_auto_suffix") is False
 
-    # Back on → suffix returns onto the same base.
+    # Back on → the prefix returns ahead of the same tail.
     t._guided_auto_suffix_cb.setChecked(True)
-    assert f.base() == "Baryta" and "i1Pro" in f.text()
+    assert f.tail() == "Baryta" and f.text().startswith("i1Pro-")
+
+
+def test_auto_prefix_not_doubled_when_preset_active(qapp, settings):
+    # #68 bug: applying a preset (whose name is already descriptive) must NOT get
+    # the auto-prefix re-added — that doubled the name.
+    from ui.tabs.tab_chart import TabChart
+    settings.set("create_chart_auto_suffix", True)
+    t = TabChart(ArgyllRunner(settings), FileManager(settings), settings)
+    t._switch_mode("manual")
+    f = t._manual_target_name_edit
+    f.set_prefix("")                              # simulate a preset-loaded name
+    f.setText("ColorMunki-A3-1196p-2pages-w11.5mm-Portrait")
+    t._knut_active = True                          # a preset is active
+    t._refresh_name_prefix()
+    assert f.text() == "ColorMunki-A3-1196p-2pages-w11.5mm-Portrait"   # no doubling
+
+
+def test_knut_preset_seed_does_not_double_name(qapp, settings):
+    # #68 (the exact reported bug): with the live prefix already on the field,
+    # seeding a Knut preset must replace the name with the preset's own — not
+    # glue the prefix in front, producing the doubled "<descr>-<descr>" name.
+    from ui.tabs.tab_chart import TabChart, KNUT_PRESETS_BY_KEY
+    settings.set("create_chart_auto_suffix", True)
+    t = TabChart(ArgyllRunner(settings), FileManager(settings), settings)
+    t._switch_mode("manual")
+    f = t._manual_target_name_edit
+    assert f.text().startswith("i1Pro-")           # a live prefix is present
+    key = next(k for k, p in KNUT_PRESETS_BY_KEY.items()
+               if p.slug == "wg_colormunki_a3plus_1196p_1page_landscape")
+    t._knut_active, t._knut_active_key = True, key
+    t._seed_knut_preset(key, KNUT_PRESETS_BY_KEY[key].default_target_name)
+    assert f.text() == "ColorMunki-A3Plus-1196p-1page-Landscape-Wide-gamut"
+    assert f.text().count("ColorMunki") == 1
+
+
+def test_sortable_builtin_name_normalisation():
+    # #68 #3: instrument leads; "-wXmm" and the colour-set name move to the tail.
+    from ui.tabs.tab_chart import _sortable_builtin_name, KNUT_SUFFIX
+    assert _sortable_builtin_name(
+        "i1Pro", "A4-1168p-2pages-w7.5mm-Portrait" + KNUT_SUFFIX, KNUT_SUFFIX
+    ) == "i1Pro-A4-1168p-2pages-Portrait-w7.5mm-TC9.18+Spyderprint Grays"
+    # No width token, different family suffix.
+    assert _sortable_builtin_name(
+        "ColorMunki", "A3-1575p-3pages-Portrait · Wide-gamut", " · Wide-gamut"
+    ) == "ColorMunki-A3-1575p-3pages-Portrait-Wide-gamut"
 
 
 def test_create_chart_suggest_includes_patches_and_orientation(qapp, settings, tmp_path):
