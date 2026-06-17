@@ -1,5 +1,15 @@
 # Changelog
 
+## v3.10.26
+
+### 🐛 Fixed
+- **Layout editor Save dialogs no longer double the suggested name.** A
+  regression in v3.10.25: the editor's **Save as…** / **Save & apply** name
+  fields pre-filled the descriptive name twice (e.g.
+  `ColorMunki-A3+-…-ColorMunki-A3_-…`) because the suggested prefix and the
+  filesystem-sanitised stored name differed by one character (`A3+` vs `A3_`).
+  They now seed the clean suggested name. (#68, thanks **Knut (@soul-traveller)**)
+
 ## v3.10.25
 
 ### 🐛 Fixed

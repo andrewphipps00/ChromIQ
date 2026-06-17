@@ -5069,8 +5069,7 @@ class Ti2RelayoutDialog(QDialog):
         prefix_cb.toggled.connect(
             lambda on: _toggle_locked_prefix(name_edit, on, self._dialog_name_prefix()))
         lay.addWidget(prefix_cb)
-        name_edit.setText(self._default_apply_name())
-        _toggle_locked_prefix(name_edit, prefix_cb.isChecked(), self._dialog_name_prefix())
+        self._seed_save_name(name_edit, prefix_cb.isChecked())
 
         loc_row = QHBoxLayout()
         loc_row.addWidget(QLabel(tr("Location:"), dlg))
@@ -5248,6 +5247,20 @@ class Ti2RelayoutDialog(QDialog):
         placeholder never becomes a prefix)."""
         return self._suggest_chart_name() if self._spec is not None else ""
 
+    def _seed_save_name(self, name_edit: "PrefixLockedLineEdit", on: bool) -> None:
+        """Initial contents of a Save dialog's name field. With the prefix ON we
+        seed the *clean suggested name* (prefix + empty tail) rather than the
+        carried basename — the latter is filesystem-sanitised (e.g. ``A3+`` →
+        ``A3_``), so prepending the ``A3+`` prefix to it doubled the name (#68).
+        With it OFF we show the carried name as free, editable text."""
+        pfx = self._dialog_name_prefix()
+        if on and pfx:
+            name_edit.set_prefix(pfx)
+            name_edit.set_tail("")
+        else:
+            name_edit.set_prefix("")
+            name_edit.setText(self._default_apply_name())
+
     def _default_apply_name(self) -> str:
         """The pre-filled Save & apply name: the target name carried through the
         editor when there is one, else a suggestion from the settings (#62)."""
@@ -5310,8 +5323,7 @@ class Ti2RelayoutDialog(QDialog):
         prefix_cb.toggled.connect(
             lambda on: _toggle_locked_prefix(name_edit, on, self._dialog_name_prefix()))
         lay.addWidget(prefix_cb)
-        name_edit.setText(self._default_apply_name())
-        _toggle_locked_prefix(name_edit, prefix_cb.isChecked(), self._dialog_name_prefix())
+        self._seed_save_name(name_edit, prefix_cb.isChecked())
 
         bb = QDialogButtonBox(dlg)
         ok_btn = bb.addButton(tr("Create project"), QDialogButtonBox.ButtonRole.AcceptRole)
