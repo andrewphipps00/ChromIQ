@@ -212,3 +212,19 @@ def test_parse_reference_labs_reads_lab(tmp_path: Path):
     refs = parse_reference_labs(p)
     assert refs["1"] == (50.0, 2.0, -3.0)
     assert refs["2"] == (95.0, -1.0, 4.0)
+
+
+def test_mark_verification_ti3_renames_and_tags(tmp_path: Path):
+    from workflow.ti3_analysis import (mark_verification_ti3, is_verification_ti3,
+                                       parse_ti3)
+    p = tmp_path / "chart.ti3"
+    _write_ti3(p, ["1 100 100 100 86 90 75 ", "2 0 0 0 0.9 1.0 1.1 "])
+    assert not is_verification_ti3(parse_ti3(p))
+    dst = mark_verification_ti3(p)
+    assert dst.name == "chart-verify.ti3"
+    assert not p.exists()                       # original renamed away
+    assert is_verification_ti3(parse_ti3(dst))  # marker present + parseable
+    # idempotent: re-marking an already-verify file keeps the name/marker
+    again = mark_verification_ti3(dst)
+    assert again == dst
+    assert is_verification_ti3(parse_ti3(again))

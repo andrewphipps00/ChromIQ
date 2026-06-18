@@ -39,6 +39,7 @@ from ui.dialogs.tools_dialogs import neutral_controls_qss
 from ui.fade_scroll import FadeScrollArea
 from ui.styles import SPEC_CYAN, TEXT_DIM, TEXT_MAIN
 from ui.tab_header import dialog_masthead
+from ui.tooltip_button import TooltipButton
 from ui.widgets import NoScrollComboBox, make_browse_button, open_file_dialog
 from workflow.ti3_analysis import (
     AccuracyResult,
@@ -47,6 +48,7 @@ from workflow.ti3_analysis import (
     accuracy_from_profcheck,
     accuracy_vs_reference,
     analyse_ti3,
+    is_verification_ti3,
     neutral_residual,
     parse_reference_labs,
     parse_ti3,
@@ -97,7 +99,7 @@ class Ti3InfoDialog(QDialog):
         self._pc_runner = None          # lazily-created ProfcheckRunner
 
         self.setWindowTitle(tr("Measurement info"))
-        self.setMinimumWidth(680)
+        self.setMinimumWidth(720)
         self.setWindowFlags(
             self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint)
 
@@ -165,6 +167,8 @@ class Ti3InfoDialog(QDialog):
             self._mode_group.addButton(rb)
             mode_row.addWidget(rb)
         mode_row.addStretch(1)
+        mode_row.addWidget(TooltipButton(
+            tr("Inspect vs Verify"), mode_tip, self, color=_ACCENT))
         self._rb_inspect.toggled.connect(self._on_mode_changed)
         self._inner.addLayout(mode_row)
 
@@ -216,6 +220,8 @@ class Ti3InfoDialog(QDialog):
         # Always-present trailing stretch keeps the combo left when the path is
         # hidden ("None"); the path's larger stretch still lets it fill when shown.
         cmp_row.addStretch(1)
+        cmp_row.addWidget(TooltipButton(
+            tr("Compare against"), cmp_tip, self, color=_ACCENT))
         vbl.addLayout(cmp_row)
 
         basis_row = QHBoxLayout()
@@ -240,6 +246,8 @@ class Ti3InfoDialog(QDialog):
         self._basis_combo.currentIndexChanged.connect(self._on_basis_changed)
         basis_row.addWidget(self._basis_combo)
         basis_row.addStretch(1)
+        basis_row.addWidget(TooltipButton(
+            tr("Neutral basis"), basis_tip, self, color=_ACCENT))
         vbl.addLayout(basis_row)
 
         self._verify_box.setVisible(False)
@@ -295,7 +303,7 @@ class Ti3InfoDialog(QDialog):
     def showEvent(self, event) -> None:  # noqa: N802
         super().showEvent(event)
         pin_min_height(
-            self, min_width=680, wrap_labels=(self._body, self._banner),
+            self, min_width=720, wrap_labels=(self._body, self._banner),
             inner_margins=self._inner.contentsMargins(), resize_width=True)
 
     # ------------------------------------------------------------------
@@ -321,6 +329,10 @@ class Ti3InfoDialog(QDialog):
         self._banner.setVisible(False)
         self._accuracy = None
         self._accuracy_msg = ""
+        # A file the Measure tab tagged as a colour-managed verification read
+        # → default straight into Verify mode.
+        if is_verification_ti3(data):
+            self._rb_verify.setChecked(True)
         self._recompute_accuracy()   # re-score against any attached comparison
         self._render()
         self._body.setText(
