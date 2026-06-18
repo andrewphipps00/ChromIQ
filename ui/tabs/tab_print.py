@@ -257,12 +257,12 @@ class TabPrint(QWidget):
         # the old bottom-row "Load existing target" button.
         self._load_btn = PatchGridButton(SPEC_AMBER, left)
         self._load_btn.setToolTip(
-            tr("Load existing target — select .ti2 file.\n"
-               "Open a chart you already created and load its .ti2\n"
-               "so you can print it again."))
+            tr("Load test chart.\n"
+               "Open a chart you already created (its .ti2 file) and\n"
+               "load it so you can print it again."))
         self._load_btn.clicked.connect(self._on_load_ti2)
         self._header = TabHeader(
-            tr("STEP 02 · PRINT TARGET"), tr("Print test chart"), "#ffb42d", left,
+            tr("STEP 02 · PRINT CHART"), tr("Print test chart"), "#ffb42d", left,
             tooltip_title=_initial_tt_title,
             tooltip_body=_initial_tt_body,
             trailing_widget=self._load_btn,

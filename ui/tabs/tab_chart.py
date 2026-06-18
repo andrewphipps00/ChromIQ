@@ -812,7 +812,7 @@ class TabChart(QWidget):
         left_layout.setSpacing(8)
 
         left_layout.addWidget(TabHeader(
-            tr("STEP 01 · GENERATE TARGET"), tr("Create test chart"), "#ff4573", left,
+            tr("STEP 01 · GENERATE CHART"), tr("Create test chart"), "#ff4573", left,
             tooltip_title=tr("Step 1 — Make a test chart"),
             tooltip_body=tr(
                 "This is where you design the sheet of colour patches your printer "
@@ -1370,14 +1370,14 @@ class TabChart(QWidget):
         layout.setSpacing(8)
 
         # Calibration target option (hidden until calibration mode is enabled)
-        self._cal_target_grp = QGroupBox(tr("Calibration Target"), w)
+        self._cal_target_grp = QGroupBox(tr("Calibration Chart"), w)
         cal_tgt_layout = QVBoxLayout(self._cal_target_grp)
         cal_tgt_row = QHBoxLayout()
-        self._cal_target_check = QCheckBox(tr("Create target for calibration"), w)
+        self._cal_target_check = QCheckBox(tr("Create chart for calibration"), w)
         cal_tgt_row.addWidget(self._cal_target_check)
         cal_tgt_row.addStretch()
         cal_tgt_row.addWidget(TooltipButton(
-            tr("Create Target for Calibration"),
+            tr("Create Chart for Calibration"),
             tr("Use this before running printcal to create a printer linearisation curve.\n\n"
             "When enabled:\n"
             "  • Output files are prefixed with 'cal_' (e.g. cal_MyChart.ti1)\n"
@@ -3554,6 +3554,16 @@ class TabChart(QWidget):
                     pass
         return None
 
+    def _generated_page_count(self) -> int:
+        """Actual number of pages the currently-previewed chart spans, or 0 when
+        nothing is loaded. Mirrors what the user sees in the preview, so a fixed
+        layout that printtarg split across extra sheets is counted correctly
+        (#73)."""
+        try:
+            return self._preview.page_count()
+        except Exception:  # noqa: BLE001 — name suggestion must never crash
+            return 0
+
     def _suggest_target_name(self) -> str:
         """A descriptive default name from the current settings (#62):
         ``<instrument>-<paper>[-<N>p]-<pages>pages-<orientation>``. The patch
@@ -3567,17 +3577,24 @@ class TabChart(QWidget):
                      if self._manual_instr_pw is not None else "") or "i1"
             paper = (self._manual_paper_pw.get_raw_value()
                      if self._manual_paper_pw is not None else "") or "A4"
-            pages = (int(self._manual_pages_spin.value())
-                     if self._manual_pages_spin is not None else 1)
+            spin = self._manual_pages_spin
             patches = self._loaded_ti1_patch_count()
         else:
             instr = (self._instr_combo.currentData()
                      if self._instr_combo is not None else "") or "i1"
             paper = (self._paper_combo.currentData()
                      if self._paper_combo is not None else "") or "A4"
-            pages = (int(self._pages_spin.value())
-                     if self._pages_spin is not None else 1)
+            spin = self._pages_spin
             patches = getattr(self, "_predicted_patch_count", None)
+        pages = int(spin.value()) if spin is not None else 1
+        # When the Pages control is locked (a preset / .ti1 drives the layout),
+        # its value can't be trusted — printtarg may split the fixed chart across
+        # more sheets than it shows (e.g. a "1page" preset that lays out on 2).
+        # Use the real page count of the generated chart instead (#73, Knut).
+        if spin is not None and not spin.isEnabled():
+            actual = self._generated_page_count()
+            if actual:
+                pages = actual
         base_paper, orient = self._paper_name_and_orientation(str(paper))
         parts = [instr_lbl.get(str(instr), str(instr)), base_paper]
         if patches:
@@ -3812,7 +3829,7 @@ class TabChart(QWidget):
         run_chk.setChecked(prefill_run)
         lay.addWidget(run_chk)
         run_note = QLabel(
-            tr("When on, picking this preset asks for a target name and then creates "
+            tr("When on, picking this preset asks for a profile name and then creates "
             "the chart straight away (it's shown with a ▶ in the list), instead of "
             "only loading the values. This is saved inside the preset file, so it "
             "travels with a shared preset."),

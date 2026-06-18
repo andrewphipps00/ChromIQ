@@ -103,8 +103,9 @@ body:
     id: logs
     attributes:
       label: Logs / error messages
-      description: Paste the contents of the in-app log panel and any popup error text. Drag-and-drop screenshots if helpful.
-      render: text
+      description: |
+        Drag-and-drop your `chromiq.log` file here to attach it (and any screenshots).
+        You can also paste log text or popup error text — wrap long pastes in triple back-ticks (```) to keep them readable.
 
   - type: textarea
     id: additional

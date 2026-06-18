@@ -2688,7 +2688,8 @@ class Ti2RelayoutDialog(QDialog):
             SPEC_MAGENTA, self), 0, Qt.AlignmentFlag.AlignVCenter)
         GradientOverlay(SPEC_MAGENTA, parent=self, alpha=15, height=95, on_top=False)
         src.addSpacing(16)
-        load_btn = QPushButton(tr("Load .ti2…"), self)
+        load_btn = QPushButton(tr("Load chart…"), self)
+        load_btn.setToolTip(tr("Load a chart from a .ti2 file."))
         load_btn.clicked.connect(self._load_ti2)
         new_btn = QPushButton(tr("New chart…"), self)
         new_btn.clicked.connect(self._new_chart)
@@ -3031,7 +3032,7 @@ class Ti2RelayoutDialog(QDialog):
         v.setSpacing(8)
 
         # Target mode
-        mode_box = QGroupBox(tr("Edit target"), panel)
+        mode_box = QGroupBox(tr("Edit chart"), panel)
         mb = QVBoxLayout(mode_box)
         self._mode_patches = QRadioButton(tr("Patches"), mode_box)
         self._mode_spacers = QRadioButton(tr("Spacers"), mode_box)
@@ -3490,7 +3491,7 @@ class Ti2RelayoutDialog(QDialog):
     def _load_ti2(self) -> None:
         start = (self._settings.get("custom_output_path", "")
                  or str(Path.home() / "ChromIQ"))
-        path = open_file_dialog(self, "Load .ti2 chart",
+        path = open_file_dialog(self, "Load chart",
                                 "Argyll chart (*.ti2)", start_dir=start)
         if not path:
             return

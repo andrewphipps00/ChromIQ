@@ -663,7 +663,7 @@ class TabProfile(QWidget):
         self._pc_load_btn = QPushButton(tr("Load cal_*.ti3…"), grp_ti3)
         set_folder_icon(self._pc_load_btn, "folder_build")
         self._pc_load_btn.clicked.connect(self._pc_browse_ti3)
-        self._pc_ti3_lbl = QLabel(tr("No file selected — measure a calibration target first."), grp_ti3)
+        self._pc_ti3_lbl = QLabel(tr("No file selected — measure a calibration chart first."), grp_ti3)
         self._pc_ti3_lbl.setStyleSheet("color: #909090; font-size: 11px;")
         self._pc_ti3_lbl.setWordWrap(True)
         in_row.addWidget(self._pc_load_btn)

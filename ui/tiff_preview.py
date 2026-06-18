@@ -356,6 +356,13 @@ class TiffPreview(QWidget):
         self._schedule_refresh()
         log.debug("TiffPreview: loaded %d page(s)", len(self._pages))
 
+    def page_count(self) -> int:
+        """Number of pages currently shown (one per printed sheet), or 0 when
+        empty. The authoritative count of what the chart actually spans —
+        printtarg may split a fixed layout across more sheets than the Pages
+        control suggests (#73)."""
+        return len(self._pages)
+
     def set_caption(self, text: str) -> None:
         """Set the small ALL-CAPS caption above the preview (e.g. 'PRINT PREVIEW')."""
         self._caption_lbl.setText(text)

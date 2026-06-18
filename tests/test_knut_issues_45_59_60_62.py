@@ -371,3 +371,32 @@ def test_suggested_name_from_settings(qapp, settings):
     assert d._default_apply_name() == "i1Pro-A4-480p-Landscape"
     d._basename = "Canon_Pro300_Baryta"
     assert d._default_apply_name() == "Canon_Pro300_Baryta"
+
+
+# --- #73: name page-count uses the real chart, not a locked Pages control ----
+
+def test_name_uses_real_page_count_when_pages_locked(qapp, settings, monkeypatch):
+    """A preset/.ti1 layout that printtarg split across 2 sheets must produce a
+    "…2pages…" name even though the (greyed) Pages control still reads 1."""
+    from ui.tabs.tab_chart import TabChart
+    t = TabChart(ArgyllRunner(settings), FileManager(settings), settings)
+    t._switch_mode("manual")
+    t._manual_pages_spin.setValue(1)
+    t._manual_pages_spin.setEnabled(False)        # fixed-layout: control locked
+    monkeypatch.setattr(t, "_loaded_ti1_patch_count", lambda: 1224)
+    monkeypatch.setattr(t._preview, "page_count", lambda: 2)   # really 2 sheets
+    assert "2pages" in t._suggest_target_name()
+
+
+def test_name_trusts_editable_pages_control(qapp, settings, monkeypatch):
+    """When the Pages control is editable (plain targen), its value is trusted
+    even if a stale preview reports a different count."""
+    from ui.tabs.tab_chart import TabChart
+    t = TabChart(ArgyllRunner(settings), FileManager(settings), settings)
+    t._switch_mode("manual")
+    t._manual_pages_spin.setValue(1)
+    t._manual_pages_spin.setEnabled(True)
+    monkeypatch.setattr(t, "_loaded_ti1_patch_count", lambda: 480)
+    monkeypatch.setattr(t._preview, "page_count", lambda: 2)
+    name = t._suggest_target_name()
+    assert "1page" in name and "2pages" not in name
