@@ -1,5 +1,18 @@
 # Changelog
 
+## v3.11.7
+
+### 🐛 Fixed
+- **Inspect a measurement / Inspect a profile were unreadable in light mode** —
+  the detail text used a near-white colour that vanished on the light
+  background. Both tools now use the correct text colour for your theme.
+
+### 🚀 New
+- **Save a report.** Both inspector tools gained a **Save report…** button that
+  writes everything shown to a plain-text file — handy for keeping a record or
+  sharing it. It uses ChromIQ's own save dialog with shortcuts to the usual
+  folders (Desktop, Documents…) plus the folder the inspected file lives in.
+
 ## v3.11.6
 
 ### 🚀 New
