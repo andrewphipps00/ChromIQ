@@ -102,7 +102,7 @@ try:
     from ui.main_window import MainWindow
     from ui.styles import WinButtonLayoutStyle
     from ui.theme import apply_appearance
-    from ui.widgets import ButtonFontFilter, GroupBoxSurfaceFilter
+    from ui.widgets import ButtonFontFilter, GroupBoxSurfaceFilter, TooltipWrapFilter
 except BaseException:
     log.exception("Fatal error importing application modules")
     raise
@@ -130,6 +130,10 @@ def main() -> int:
 
     _gb_surface_filter = GroupBoxSurfaceFilter(app)
     app.installEventFilter(_gb_surface_filter)
+
+    # Word-wrap every native tooltip so long ones never run off-screen (#70).
+    _tooltip_wrap_filter = TooltipWrapFilter(app)
+    app.installEventFilter(_tooltip_wrap_filter)
 
     settings = AppSettings()
 

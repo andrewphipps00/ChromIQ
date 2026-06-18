@@ -93,6 +93,69 @@ def test_recipe_absent_returns_none():
 
 
 # ---------------------------------------------------------------------------
+# Generating from a preset that carries a recipe propagates it to the run
+# meta.json, so reopening the chart in the editor seeds New chart / Add (#70).
+# ---------------------------------------------------------------------------
+
+def _chart_tab(tmp_path):
+    from PyQt6.QtCore import QSettings
+    from core.argyll_runner import ArgyllRunner
+    from core.file_manager import FileManager
+    from core.settings import AppSettings
+    from ui.tabs.tab_chart import TabChart
+    s = AppSettings()
+    s._qs = QSettings(str(tmp_path / "s.ini"), QSettings.Format.IniFormat)
+    s.set("custom_output_path", str(tmp_path / "projects"))
+    fm = FileManager(s)
+    tab = TabChart(ArgyllRunner(s), fm, s)
+    tab._switch_mode("manual")
+    return tab, fm
+
+
+def test_preset_recipe_propagates_to_run_meta(qapp, tmp_path, monkeypatch):
+    from workflow.chart_creator import ChartParams
+    tab, fm = _chart_tab(tmp_path)
+    recipe = {"mode": "generate", "cb": {"cube": True}, "sp": {"cube_n": 5},
+              "edges_auto": True}
+    # A user preset that bundles a recipe → tab remembers it as pending (Set B).
+    pdata = {"editor_recipe": recipe, "targen_-f": 800}
+    rec = pdata.get("editor_recipe")
+    tab._pending_editor_recipe = rec if isinstance(rec, dict) and rec else None
+
+    fm.set_target_name("MyProfile")
+    run = fm.project().current_run()
+
+    class _Spec:
+        instrument_flag = "i1"
+        paper_flag = "A4"
+    monkeypatch.setattr(R.ChartSpec, "from_ti2", staticmethod(lambda p: _Spec()))
+    tab._last_params = ChartParams()
+    ti2 = run.dir / f"{run.stem}.ti2"
+    ti2.write_text("x")
+    tab._stamp_chart_meta(ti2)
+    # The recipe rode into meta.json → the editor will seed New chart / Add.
+    assert R.load_editor_recipe(ti2) == recipe
+
+
+def test_plain_targen_chart_gets_no_recipe(qapp, tmp_path, monkeypatch):
+    from workflow.chart_creator import ChartParams
+    tab, fm = _chart_tab(tmp_path)
+    tab._pending_editor_recipe = None          # Default / plain targen
+    fm.set_target_name("Plain")
+    run = fm.project().current_run()
+
+    class _Spec:
+        instrument_flag = "i1"
+        paper_flag = "A4"
+    monkeypatch.setattr(R.ChartSpec, "from_ti2", staticmethod(lambda p: _Spec()))
+    tab._last_params = ChartParams()
+    ti2 = run.dir / f"{run.stem}.ti2"
+    ti2.write_text("x")
+    tab._stamp_chart_meta(ti2)
+    assert R.load_editor_recipe(ti2) is None
+
+
+# ---------------------------------------------------------------------------
 # Dialog: produce a recipe, and reopen pre-loaded with one
 # ---------------------------------------------------------------------------
 

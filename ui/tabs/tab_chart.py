@@ -67,7 +67,7 @@ from ui.tab_header import TabHeader
 from ui.builtin_preset_popup import BuiltinPresetButton, BuiltinPresetPopup
 from ui.tiff_preview import TiffPreview
 from ui.tooltip_button import InfoDialog, TooltipButton
-from ui.widgets import NoScrollComboBox, NoScrollSpinBox, PrefixLockedLineEdit, icc_profile_paths, load_magenta_folder_icon, make_browse_button, open_file_dialog, set_folder_icon, set_preset_icon
+from ui.widgets import NoScrollComboBox, NoScrollSpinBox, PatchGridButton, PrefixLockedLineEdit, icc_profile_paths, load_magenta_folder_icon, make_browse_button, open_file_dialog, set_folder_icon, set_preset_icon
 from core.i18n import tr
 from workflow.i1profiler_export import EXTRA_INK, export_from_ti1, parse_ti1
 from workflow.i1profiler_import import import_to_ti1
@@ -763,6 +763,13 @@ class TabChart(QWidget):
         # built-in ti1 presets.
         self._preset_ti1_path: Path | None = None
         self._preset_ti1_targen_sig: list | None = None
+        # The active chart-defining preset's New-chart/Add recipe (Set B), if it
+        # carries one. Written into the generated run's meta.json so reopening
+        # the chart in the layout editor seeds New chart / Add from this design
+        # rather than the app-wide last-used state — restoring the rule "show
+        # last-used only when the loaded layout has no saved settings" (#70, Knut
+        # follow-up). None for Default / built-ins / plain targen charts.
+        self._pending_editor_recipe: dict | None = None
         # Bundled .ti1 of the currently-selected built-in preset (TC9.18 /
         # Knut / prebuilt). Built-ins don't use _preset_ti1_path (that's for
         # user presets), but their patch count still feeds the Suggest-name
@@ -894,6 +901,20 @@ class TabChart(QWidget):
         # automatic, so there's no matching Save button.
         self._load_profile_btn = self._make_load_profile_button(self._mode_row_widget)
         mode_row.addWidget(self._load_profile_btn)
+        # Grid button (between folder and star): load an existing patch set /
+        # chart layout (.ti1 or i1Profiler) and lay it out, skipping targen. The
+        # 3×3 grid glyph reads as a chart of patches; magenta matches the tab so
+        # folder · grid · star read as a trio (#70, Knut). Replaces the old
+        # bottom-row "Load patch set…" button.
+        self._load_ti1_btn = PatchGridButton(SPEC_MAGENTA, self._mode_row_widget)
+        self._load_ti1_btn.setToolTip(
+            tr("Load patch set.\n"
+               "Open an existing chart layout (its patch set) and lay it\n"
+               "out — targen is skipped. Accepts an Argyll .ti1, or an\n"
+               "i1Profiler RGB set (.pxf or CGATS .txt), which are\n"
+               "converted to .ti1 automatically."))
+        self._load_ti1_btn.clicked.connect(self._on_load_ti1)
+        mode_row.addWidget(self._load_ti1_btn)
         # Far-right star button: opens the Built-in presets overlay, listing the
         # bundled prebuilt charts grouped by instrument. Picking one runs the
         # exact same flow as choosing it in the Manual presets dropdown.
@@ -917,23 +938,11 @@ class TabChart(QWidget):
         self._generate_btn.setFixedHeight(36)
         self._generate_btn.clicked.connect(self._on_generate)
 
-        self._load_ti1_btn = QPushButton(tr("Load patch set…"), self)
-        self._load_ti1_btn.setFixedHeight(36)
-        self._load_ti1_btn.setToolTip(
-            tr("Load an existing patch set and lay it out (targen is skipped).\n"
-            "Accepts an Argyll .ti1, or an i1Profiler RGB patch set "
-            "(.pxf or a CGATS .txt) — i1Profiler files are converted to .ti1 "
-            "automatically.")
-        )
-        set_folder_icon(self._load_ti1_btn, "folder_create")
-        self._load_ti1_btn.clicked.connect(self._on_load_ti1)
-
         self._save_defaults_btn = QPushButton(tr("Save as Defaults"), self)
         self._save_defaults_btn.setFixedHeight(36)
         self._save_defaults_btn.clicked.connect(self._on_save_defaults)
 
         btn_row.addWidget(self._generate_btn)
-        btn_row.addWidget(self._load_ti1_btn)
         btn_row.addStretch()
         btn_row.addWidget(self._save_defaults_btn)
         left_layout.addLayout(btn_row)
@@ -2397,10 +2406,11 @@ class TabChart(QWidget):
         btn.setIconSize(QSize(22, 22))
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
         btn.setToolTip(
-            tr("Open a printer profile you started earlier to carry on with it — "
-               "its chart, measurements and any profile are all where you left "
-               "them. Pick the project's “project.json” file under your ChromIQ "
-               "folder."))
+            tr("Load profile.\n"
+               "Reopen a printer profile you started earlier to carry on\n"
+               "with it — its chart, measurements and any profile are\n"
+               "all where you left them. Pick the project's “project.json”\n"
+               "file under your ChromIQ folder."))
         btn.clicked.connect(self._load_existing_profile)
         return btn
 
@@ -2447,6 +2457,10 @@ class TabChart(QWidget):
         self._knut_active_key = None
         self._preset_ti1_path = None
         self._preset_ti1_targen_sig = None
+        # The reopened run's meta.json already carries its own recipe (if any);
+        # don't let a previously-selected preset's recipe override it on a later
+        # regenerate (#70).
+        self._pending_editor_recipe = None
         if self._prebuilt_active:
             self._leave_prebuilt()
         if self._applied_active:
@@ -3271,6 +3285,8 @@ class TabChart(QWidget):
                 self._leave_reflected()
             self._preset_ti1_path = None  # built-ins are not ti1-user-presets
             self._preset_ti1_targen_sig = None
+            # Built-ins don't carry a user-saved New-chart recipe.
+            self._pending_editor_recipe = None
             # …but a built-in's own bundled .ti1 still feeds Suggest-name (#62).
             asset = self._builtin_ti1_asset(data)
             self._builtin_ti1_path = resource_path(asset) if asset else None
@@ -3345,6 +3361,7 @@ class TabChart(QWidget):
                 pw.set_user_enabled(bool(s.get(f"manual_targen_-D_{idx}_enabled", False)))
             self._rebuild_d_cascade_visibility()
             self._builtin_ti1_path = None     # Default builds via targen
+            self._pending_editor_recipe = None  # Default builds via targen, no recipe
             if self._bit8_radio is not None and self._bit16_radio is not None:
                 is_16bit = bool(s.get("manual_printtarg_tiff_16bit", False))
                 self._bit16_radio.setChecked(is_16bit)
@@ -3373,6 +3390,11 @@ class TabChart(QWidget):
             presets = self._load_presets_from_settings()
             pdata = presets.get(name, {})
             self._restore_user_preset(pdata)
+            # Carry the preset's stored New-chart recipe (Set B), if any, so a
+            # chart generated from it reopens in the editor with this design
+            # pre-loaded into New chart / Add (#70, Knut follow-up).
+            rec = pdata.get("editor_recipe") if isinstance(pdata, dict) else None
+            self._pending_editor_recipe = rec if isinstance(rec, dict) and rec else None
             self._builtin_ti1_path = None     # a user preset, not a built-in
             # A user preset that bundled a .ti1 builds from it (skip targen). Point
             # Generate at the sidecar file if it's present; otherwise fall back to
@@ -4468,6 +4490,7 @@ class TabChart(QWidget):
         self._knut_targen_sig = None
         self._preset_ti1_path = None
         self._preset_ti1_targen_sig = None
+        self._pending_editor_recipe = None   # reflected chart carries its own meta
         if self._prebuilt_active:
             self._leave_prebuilt()
         if self._applied_active:
@@ -4566,6 +4589,9 @@ class TabChart(QWidget):
         self._knut_targen_sig = None
         self._preset_ti1_path = None
         self._preset_ti1_targen_sig = None
+        # The applied chart's recipe rides in the editor meta.json we overlay
+        # below — don't also inject a stale preset recipe here.
+        self._pending_editor_recipe = None
         if self._prebuilt_active:
             self._leave_prebuilt()
         if self._reflected_active:
@@ -5708,7 +5734,11 @@ class TabChart(QWidget):
                     tiff_16bit=params.tiff_16bit,
                     dpi=params.tiff_dpi,
                 )
-                save_editor_meta(ti2, spec, opts, run.stem)
+                # Pass the active preset's recipe (Set B) so a preset-generated
+                # chart carries it into meta.json; None preserves any existing
+                # recipe and never invents one for plain targen charts (#70).
+                save_editor_meta(ti2, spec, opts, run.stem,
+                                 recipe=self._pending_editor_recipe)
             else:
                 meta = run.load_meta()
                 meta.instrument = spec.instrument_flag

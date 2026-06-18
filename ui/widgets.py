@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
-from PyQt6.QtCore import QEvent, QModelIndex, QObject, QRect, QSize, QSortFilterProxyModel, Qt, QUrl
+from PyQt6.QtCore import QEvent, QModelIndex, QObject, QRect, QRectF, QSize, QSortFilterProxyModel, Qt, QUrl
 from PyQt6.QtGui import QColor, QFont, QIcon, QPainter, QPalette, QPixmap, QTextCursor
 
 from core.i18n import tr
@@ -533,6 +533,42 @@ class GroupBoxSurfaceFilter(QObject):
         return False
 
 
+class TooltipWrapFilter(QObject):
+    """Installs on QApplication. Forces every native tooltip (Qt's private
+    ``QTipLabel``) to word-wrap at a sane maximum width, so a long tooltip — in
+    any language — never runs off the right edge of the screen (Knut, #70).
+
+    Qt does not word-wrap plain-text tooltips on every platform (notably
+    Windows, where Knut saw them reach far past the screen edge), so we enable
+    wrapping and cap the width on the transient label as it is polished, before
+    it is shown and sized. The label then re-flows to multiple lines on its own.
+    """
+
+    MAX_W = 460   # px — a comfortable reading measure; text re-flows to fit
+
+    def eventFilter(self, obj: QObject, event: QEvent) -> bool:
+        if (event.type() in (QEvent.Type.Polish, QEvent.Type.Show)
+                and obj.metaObject().className() == "QTipLabel"
+                and isinstance(obj, QLabel)):
+            fm = obj.fontMetrics()
+            # Widest existing line (tooltips may already carry manual newlines).
+            longest = max(
+                (fm.horizontalAdvance(s) for s in obj.text().split("\n")),
+                default=0,
+            )
+            m = obj.contentsMargins()
+            pad = m.left() + m.right() + 2 * obj.margin() + 8
+            if longest + pad > self.MAX_W:
+                obj.setWordWrap(True)
+                # heightForWidth gives the true wrapped height; pin both so
+                # QToolTip's own resize(sizeHint()) can't clip it back to one
+                # line (its sizeHint ignores the wrap on a transient label).
+                h = obj.heightForWidth(self.MAX_W)
+                if h > 0:
+                    obj.setFixedSize(self.MAX_W, h)
+        return False
+
+
 def reapply_groupbox_surface(root: QWidget) -> None:
     """Walk every QGroupBox descendant of `root` and re-apply the surface
     colour. Called from MainWindow.apply_theme on every theme switch
@@ -924,6 +960,62 @@ def load_magenta_folder_icon() -> QIcon:
     the two read as a matched pair (#70)."""
     from ui.styles import SPEC_MAGENTA
     return load_tinted_folder_icon(SPEC_MAGENTA, size=22)
+
+
+class PatchGridButton(QToolButton):
+    """A small grid-of-patches glyph button, painted in a given accent colour.
+
+    Mirrors ``BuiltinPresetButton``'s painted-glyph approach (crisp on Retina,
+    no PNG asset) and its 40×40 / ``#tooltip_btn`` styling, so it sits as a
+    matched sibling beside the folder and star buttons. The 3×3 grid reads as a
+    chart patch set / layout — used for the "load a chart layout" buttons on the
+    Create Chart (magenta) and Print Chart (amber) tabs (#70, Knut)."""
+
+    GRID_FRAC = 0.60   # glyph box as a fraction of the button
+    GRID_N    = 3      # squares per side
+
+    def __init__(self, color: str, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._color = color
+        self.setObjectName("tooltip_btn")
+        self.setFixedSize(QSize(40, 40))
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._hover = False
+
+    def set_appearance(self, mode: str) -> None:
+        pass  # accent colour is theme-independent — nothing to repaint
+
+    def enterEvent(self, event) -> None:  # noqa: N802
+        self._hover = True
+        self.update()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event) -> None:  # noqa: N802
+        self._hover = False
+        self.update()
+        super().leaveEvent(event)
+
+    def paintEvent(self, ev) -> None:  # noqa: N802
+        super().paintEvent(ev)  # QSS background (incl. :hover) under the glyph
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        side = min(self.width(), self.height()) * self.GRID_FRAC
+        gap  = side * 0.16
+        cell = (side - (self.GRID_N - 1) * gap) / self.GRID_N
+        x0   = (self.width()  - side) / 2.0
+        y0   = (self.height() - side) / 2.0
+        color = QColor(self._color)
+        if not self._hover:
+            color.setAlpha(230)
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(color)
+        rad = cell * 0.22
+        for r in range(self.GRID_N):
+            for c in range(self.GRID_N):
+                x = x0 + c * (cell + gap)
+                y = y0 + r * (cell + gap)
+                p.drawRoundedRect(QRectF(x, y, cell, cell), rad, rad)
+        p.end()
 
 
 def set_folder_icon(btn: QPushButton, name: str) -> None:
