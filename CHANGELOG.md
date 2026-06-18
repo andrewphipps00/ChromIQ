@@ -1,5 +1,21 @@
 # Changelog
 
+## v3.11.6
+
+### 🚀 New
+- **Measure a verification chart without risking your profile.** The Measure tab
+  has a new **Profile verification** section (guided and manual): tick
+  **"Verification measurement (colour-managed print)"** when you measure a chart
+  you printed *through* a profile to check it. ChromIQ saves it as a separate
+  `…-verify.ti3`, never offers to build a profile from it, and reminds you to
+  open it in **Tools ▸ Inspect a measurement** — which now switches to Verify
+  mode automatically for these files. The manual setting can be stored in a
+  preset.
+
+### 💄 Improved
+- The verify-mode options in *Inspect a measurement* now have ⓘ info icons with
+  full explanations, and the window is a little wider to fit them.
+
 ## v3.11.5
 
 ### 🚀 New
