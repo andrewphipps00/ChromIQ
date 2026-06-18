@@ -1875,18 +1875,20 @@ class _NewChartDialog(QDialog):
         if self._gen_image.isChecked() and self._gen_image_px is None:
             self._gen_image_count.setText(tr("load an image"))
         # Pure white & black is part of the chart *before* fill, so it's counted
-        # before the fill top-up. It only adds the N of each that the existing
-        # chart and the corner-bearing sets (cube, greys with ≥2 steps, edges)
-        # don't already provide — one of each from those if any are on (collapsed
-        # by de-dup), else one per such set.
-        ew, eb = G.count_white_black(self._existing_patches)
+        # before the fill top-up. These are deliberate anchor patches (e.g. extra
+        # paper-white / max-black readings to average), so they're added on top
+        # of whatever the chart already holds — only the corners the *other
+        # ticked sets* contribute in this same batch count toward N, never the
+        # existing chart's own white/black (#76, Knut). One of each from those
+        # corner-bearing sets (cube, greys with ≥2 steps, edges) if any are on
+        # (collapsed by de-dup), else one per such set.
         corner = ((1 if self._gen_cube.isChecked() else 0)
                   + (1 if self._gen_edges.isChecked() else 0)
                   + (1 if (self._gen_greys.isChecked()
                            and self._gen_greys_n.value() >= 2) else 0))
         sets_have = (1 if corner else 0) if self._gen_unique.isChecked() else corner
         wb_n = G.white_black_count(self._gen_whiteblack_n.value(),
-                                   ew + sets_have, eb + sets_have)
+                                   sets_have, sets_have)
         self._gen_whiteblack_count.setText(_patches_label(wb_n))
         if self._gen_whiteblack.isChecked():
             total += wb_n
@@ -1902,8 +1904,8 @@ class _NewChartDialog(QDialog):
         # shown even when the master Generate toggle is off, exactly like the
         # per-set counts beside each option (#60, Knut's clarification). This
         # estimate shows instantly; _do_push_live_preview refreshes it from the
-        # real built program ~300 ms later (which also catches white/black
-        # de-dup against existing patches the estimate can't see).
+        # real built program ~300 ms later (which catches any cross-set de-dup
+        # the per-set estimate can't see).
         self._gen_total.setText(tr("Total: {label}").format(
             label=_patches_label(total)))
         if self._existing_patches:
@@ -1933,10 +1935,11 @@ class _NewChartDialog(QDialog):
             program = G.deduplicate(program)
         # Pure white & black goes in *after* de-dup (so its deliberate repeats
         # survive) but *before* fill, so it's part of the chart fill tops up to —
-        # not stacked on top of it. It only adds the N of each that the existing
-        # chart and the other sets don't already provide.
+        # not stacked on top of it. These are deliberate anchor patches, so they
+        # add N of each on top of the existing chart; only the corners the other
+        # sets contribute in *this* batch count toward N (#76, Knut).
         if self._gen_whiteblack.isChecked():
-            have_w, have_b = G.count_white_black(self._existing_patches + program)
+            have_w, have_b = G.count_white_black(program)
             program.extend(G.white_black(
                 self._gen_whiteblack_n.value(), have_w, have_b))
         # Fill runs last so it tops the *whole* chart (patches already on it, the

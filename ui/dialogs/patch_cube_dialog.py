@@ -84,9 +84,9 @@ class PatchCubeDialog(QDialog):
         # if ever given, still renders as "Chart: <name>".
         name_text = (tr("Chart: {name}").format(name=target_name) if target_name
                      else self._target_name)
-        name_lbl = QLabel(name_text, self)
-        name_lbl.setStyleSheet("font-weight: bold;")
-        bar.addWidget(name_lbl)
+        self._name_lbl = QLabel(name_text, self)
+        self._name_lbl.setStyleSheet("font-weight: bold;")
+        bar.addWidget(self._name_lbl)
         bar.addStretch(1)
         if self._compare_presets:
             bar.addWidget(QLabel(tr("Compare with profile:"), self))
@@ -130,6 +130,7 @@ class PatchCubeDialog(QDialog):
         path = self._compare_combo.currentData()
         if not path:
             self._panel.clear_compare()
+            self._name_lbl.setVisible(True)
             return
         label = self._compare_combo.currentText().strip()   # drop the indent
         from workflow.ti2_relayout import load_rgb_program
@@ -140,8 +141,12 @@ class PatchCubeDialog(QDialog):
             program_b = []
         if program_b:
             self._panel.set_compare(program_b, label, self._target_name)
+            # Two cubes: each cube now carries its own title, so the bar's
+            # name label would just repeat the left cube's — hide it (#77, Knut).
+            self._name_lbl.setVisible(False)
         else:
             self._panel.clear_compare()
+            self._name_lbl.setVisible(True)
 
     # ------------------------------------------------------------------
     def exec(self) -> int:  # noqa: A003
