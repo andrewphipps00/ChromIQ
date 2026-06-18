@@ -1,5 +1,25 @@
 # Changelog
 
+## v3.11.5
+
+### 🚀 New
+- **Inspect a measurement now verifies, not just inspects.** When you measure a
+  chart you printed *through* a profile, switch the new **Verify** mode on (or
+  just attach a profile/reference and it switches itself). The grey read-out
+  becomes the colour cast left over **after** correction — measured relative to
+  your paper white by default, so the paper's own tint isn't counted against the
+  profile — and a new **Colour accuracy** section scores every patch as a colour
+  difference (ΔE₀₀): the average, the worst patch, and a per-colour breakdown so
+  you can see where the profile is weakest. Compare against the **profile**
+  itself (a round-trip check) or a **reference** target. The original Inspect
+  view is unchanged.
+
+### 💄 Improved
+- Long tooltips no longer jump to the edge of the screen — they now appear next
+  to the mouse and wrap to a comfortable width.
+- The "no file loaded yet" message is centred in the Inspect-a-profile and
+  Inspect-a-measurement windows.
+
 ## v3.11.4
 
 ### 🐛 Fixed
