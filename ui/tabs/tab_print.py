@@ -33,7 +33,7 @@ from ui.fade_scroll import FadeScrollArea
 from ui.tab_header import TabHeader
 from ui.tiff_preview import TiffPreview, _find_sidecar_channels
 from ui.tooltip_button import TooltipButton
-from ui.widgets import NoScrollComboBox, load_refresh_icon, open_file_dialog, set_folder_icon
+from ui.widgets import NoScrollComboBox, PatchGridButton, load_refresh_icon, open_file_dialog
 from workflow.cups_printer import CupsRawPrinter
 from workflow.page_geometry import (
     ORIENTATION_LANDSCAPE,
@@ -251,10 +251,21 @@ class TabPrint(QWidget):
         ll.setSpacing(10)
 
         _initial_tt_title, _initial_tt_body = self._compute_print_tooltip()
+        # Amber grid button at the far right of the title row — loads an existing
+        # target's .ti2 so it can be reprinted. Mirrors the Create Chart tab's
+        # folder/grid/star trio, in this tab's amber accent (#70, Knut). Replaces
+        # the old bottom-row "Load existing target" button.
+        self._load_btn = PatchGridButton(SPEC_AMBER, left)
+        self._load_btn.setToolTip(
+            tr("Load existing target — select .ti2 file.\n"
+               "Open a chart you already created and load its .ti2\n"
+               "so you can print it again."))
+        self._load_btn.clicked.connect(self._on_load_ti2)
         self._header = TabHeader(
             tr("STEP 02 · PRINT TARGET"), tr("Print test chart"), "#ffb42d", left,
             tooltip_title=_initial_tt_title,
             tooltip_body=_initial_tt_body,
+            trailing_widget=self._load_btn,
         )
         ll.addWidget(self._header)
 
@@ -366,12 +377,6 @@ class TabPrint(QWidget):
         beast_bar.addStretch()
         beast_layout.addLayout(beast_bar)
         ll.addWidget(beast_box)
-
-        # Load existing target button
-        self._load_btn = QPushButton(tr("Load existing target — select .ti2 file"), left)
-        set_folder_icon(self._load_btn, "folder_print")
-        self._load_btn.clicked.connect(self._on_load_ti2)
-        ll.addWidget(self._load_btn)
 
         # Print buttons
         btn_row = QHBoxLayout()

@@ -89,7 +89,7 @@ class TargetChangeDialog(QDialog):
         outer.addWidget(heading)
 
         intro = QLabel(
-            tr("Each target is a separate folder on disk. Changing the name points "
+            tr("Each profile is a separate folder on disk. Changing the name points "
             "ChromIQ at a different folder, so the work you already created would "
             "be left behind. What would you like to do?"),
             self,
@@ -116,12 +116,12 @@ class TargetChangeDialog(QDialog):
         # --- the three choices, most-likely / least-destructive first ---
         outer.addWidget(
             self._option_button(
-                tr('Rename the existing target to "{new}"').format(new=new_name),
-                tr('Recommended if you simply picked the wrong name. ChromIQ moves '
-                   'the existing folder to "{new}", keeping everything inside '
-                   'it (calibration, any earlier runs), and then regenerates the '
-                   'chart so the printed sheet and files carry the new name. You end '
-                   'up with one project, correctly named.').format(new=new_name),
+                tr('Rename the existing profile to "{new}"').format(new=new_name),
+                tr('Recommended when you deliberately intended to change the profile '
+                   'name. ChromIQ moves the existing folder to "{new}", keeping '
+                   'everything inside it (calibration, any earlier runs), and then '
+                   'regenerates the chart so the printed sheet and files carry the '
+                   'new name. You end up with one profile, correctly named.').format(new=new_name),
                 TargetChangeAction.RENAME,
                 primary=True,
             )
@@ -130,8 +130,8 @@ class TargetChangeDialog(QDialog):
             self._option_button(
                 tr('Create "{new}" and keep "{old}"').format(new=new_name, old=old_name),
                 tr('Safest option — nothing is deleted. ChromIQ creates a brand-new '
-                   'target for "{new}" and leaves the existing "{old}" '
-                   'folder exactly as it is. You will have two separate targets on '
+                   'profile for "{new}" and leaves the existing "{old}" '
+                   'folder exactly as it is. You will have two separate profiles on '
                    'disk.').format(new=new_name, old=old_name),
                 TargetChangeAction.KEEP,
             )
@@ -139,10 +139,10 @@ class TargetChangeDialog(QDialog):
         outer.addWidget(
             self._option_button(
                 tr('Create "{new}" and delete "{old}"').format(new=new_name, old=old_name),
-                tr('ChromIQ creates the new "{new}" target and permanently '
+                tr('ChromIQ creates the new "{new}" profile and permanently '
                    'deletes the old "{old}" folder and everything inside it '
                    '(charts, measurements, profiles). This cannot be undone — only '
-                   'choose it if you are sure the old target is no longer '
+                   'choose it if you are sure the old profile is no longer '
                    'needed.').format(new=new_name, old=old_name),
                 TargetChangeAction.DELETE,
                 danger=True,

@@ -27,6 +27,7 @@ class TabHeader(QWidget):
         tooltip_title: str | None = None,
         tooltip_body: str | None = None,
         tooltip_color: str | None = None,
+        trailing_widget: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
@@ -87,6 +88,12 @@ class TabHeader(QWidget):
             title_row.addWidget(btn_wrap, 0, Qt.AlignmentFlag.AlignVCenter)
 
         title_row.addStretch()
+        # Optional far-right widget on the title row (e.g. the Print tab's
+        # amber "load existing target" grid button), mirroring the star/folder
+        # trio on the Create Chart tab (#70, Knut).
+        if trailing_widget is not None:
+            trailing_widget.setParent(self)
+            title_row.addWidget(trailing_widget, 0, Qt.AlignmentFlag.AlignVCenter)
         root.addLayout(title_row)
 
     def set_texts(self, step_text: str, title_text: str) -> None:

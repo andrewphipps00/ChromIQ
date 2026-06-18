@@ -3994,8 +3994,10 @@ class Ti2RelayoutDialog(QDialog):
         except Exception as exc:  # noqa: BLE001 — never block the viewer on this
             log.warning("comparable_presets failed: %s", exc)
             presets = []
+        # No target_name: self._basename is the printer-profile name, which post-#70
+        # doesn't describe the layout — show the neutral "Current chart" label
+        # rather than a misleading profile name (Knut, #70 follow-up).
         PatchCubeDialog(program, mode=mode,
-                        target_name=(self._basename or tr("Current chart")),
                         compare_presets=presets, numbered=True,  # patch # in hover (#67)
                         parent=self).exec()
 

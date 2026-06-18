@@ -607,7 +607,10 @@ class MainWindow(QMainWindow):
         except Exception as exc:  # noqa: BLE001 — never block the viewer on this
             log.warning("comparable_presets failed: %s", exc)
             presets = []
-        PatchCubeDialog(program, mode=mode, target_name=chart.stem,
+        # No target_name: the chart's file stem is the printer-profile name, which
+        # post-#70 doesn't describe the layout — show the neutral "Current chart"
+        # label instead of a misleading profile name (Knut, #70 follow-up).
+        PatchCubeDialog(program, mode=mode,
                         compare_presets=presets, parent=self).exec()
 
     def _open_settings(self) -> None:

@@ -78,7 +78,13 @@ class PatchCubeDialog(QDialog):
         bar = QHBoxLayout()
         bar.setContentsMargins(12, 8, 12, 6)
         bar.setSpacing(8)
-        name_lbl = QLabel(tr("Chart: {name}").format(name=self._target_name), self)
+        # Post-#70 the profile name no longer describes the chart layout, so the
+        # caller passes no name and we show a neutral label rather than implying
+        # the profile name is the layout's (Knut, #70 follow-up). A specific name,
+        # if ever given, still renders as "Chart: <name>".
+        name_text = (tr("Chart: {name}").format(name=target_name) if target_name
+                     else self._target_name)
+        name_lbl = QLabel(name_text, self)
         name_lbl.setStyleSheet("font-weight: bold;")
         bar.addWidget(name_lbl)
         bar.addStretch(1)
