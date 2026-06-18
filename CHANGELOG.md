@@ -1,5 +1,30 @@
 # Changelog
 
+## v3.11.2
+
+### 🚀 New
+- **See the contrast between paper white and max black.** *Tools ▸ Inspect a
+  profile* now shows the paper white and the deepest black a profile can reach,
+  plus the contrast expressed three ways — contrast **ratio**, **dynamic range**
+  (optical density) and the **ΔL\*** lightness spread. It also now reports the
+  profile's real paper white, where before this row showed the fixed D50
+  reference rather than the paper itself.
+- **New tool: Inspect a measurement (.ti3).** Open the raw per-patch readings
+  behind a profile to see what your printer and paper actually did — the *true*
+  measured contrast, how neutral your greys really are (the colour cast the
+  profile then corrects), how far the gamut reaches, whether the read looks
+  clean or a strip was misread, and, from the spectral data, how the paper
+  behaves under other lighting (D50, D65, tungsten, fluorescent). Every value
+  has a plain-language explanation on hover.
+
+### 💄 Improved
+- A handful of #70 review follow-ups (thanks **Knut (@soul-traveller)**): the
+  reuse-a-name dialog is now worded around your **printer profile** instead of a
+  "target"; folder/load icons render consistently across windows; long tooltips
+  and help text wrap instead of being clipped; the 3D patch-distribution window
+  has a clearer title; and a chart's remembered **recipe** (New-chart vs Add) is
+  stored and restored correctly.
+
 ## v3.11.1
 
 ### 🐛 Fixed
