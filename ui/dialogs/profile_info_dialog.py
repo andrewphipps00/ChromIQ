@@ -147,7 +147,8 @@ class ProfileInfoDialog(QDialog):
 
         self._placeholder = QLabel(tr("No profile loaded yet."), self._details)
         self._placeholder.setStyleSheet(f"color: {TEXT_DIM};")
-        self._grid.addWidget(self._placeholder, 0, 0, 1, 2)
+        self._grid.addWidget(self._placeholder, 0, 0, 1, 2,
+                             Qt.AlignmentFlag.AlignHCenter)
 
         # --- Bottom buttons -----------------------------------------------
         btn_row = QHBoxLayout()

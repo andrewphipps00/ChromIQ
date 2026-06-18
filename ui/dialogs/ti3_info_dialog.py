@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
+    QButtonGroup,
     QDialog,
     QFrame,
     QGridLayout,
@@ -25,6 +26,8 @@ from PyQt6.QtWidgets import (
     QLabel,
     QLineEdit,
     QPushButton,
+    QRadioButton,
+    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
@@ -32,19 +35,25 @@ from PyQt6.QtWidgets import (
 from core.i18n import tr
 from core.logger import get_logger
 from ui.dialog_sizing import pin_min_height
-from ui.dialogs.tools_dialogs import _indicator_color, neutral_controls_qss
+from ui.dialogs.tools_dialogs import neutral_controls_qss
 from ui.fade_scroll import FadeScrollArea
 from ui.styles import SPEC_CYAN, TEXT_DIM, TEXT_MAIN
 from ui.tab_header import dialog_masthead
-from ui.widgets import make_browse_button, open_file_dialog
+from ui.widgets import NoScrollComboBox, make_browse_button, open_file_dialog
 from workflow.ti3_analysis import (
+    AccuracyResult,
     Ti3Analysis,
     Ti3ParseError,
+    accuracy_from_profcheck,
+    accuracy_vs_reference,
     analyse_ti3,
+    neutral_residual,
+    parse_reference_labs,
     parse_ti3,
 )
 
 if TYPE_CHECKING:
+    from core.argyll_runner import ArgyllRunner
     from core.settings import AppSettings
 
 log = get_logger(__name__)
@@ -70,12 +79,22 @@ _HELP = tr(
 class Ti3InfoDialog(QDialog):
     def __init__(
         self,
+        runner: "ArgyllRunner",
         settings: "AppSettings",
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
+        self._runner = runner
         self._settings = settings
         self._analysis: Ti3Analysis | None = None
+        # verification state
+        self._mode = "inspect"          # "inspect" | "verify"
+        self._compare_kind = "none"     # "none" | "profile" | "reference"
+        self._compare_path: Path | None = None
+        self._basis = "media"           # "media" | "absolute"
+        self._accuracy: AccuracyResult | None = None
+        self._accuracy_msg = ""         # status/error shown in place of accuracy rows
+        self._pc_runner = None          # lazily-created ProfcheckRunner
 
         self.setWindowTitle(tr("Measurement info"))
         self.setMinimumWidth(680)
@@ -120,6 +139,112 @@ class Ti3InfoDialog(QDialog):
         pick.addWidget(browse)
         self._inner.addLayout(pick)
 
+        # --- Mode: Inspect (raw chart) vs Verify (managed print) ----------
+        mode_row = QHBoxLayout()
+        mode_row.setSpacing(10)
+        mode_lbl = QLabel(tr("Mode:"), self)
+        mode_tip = tr(
+            "Choose how to read this measurement — ChromIQ can't tell from the "
+            "file alone, so you decide:\n\n"
+            "• Inspect (raw chart): the chart was printed with colour management "
+            "OFF — the normal profiling chart. The figures describe what your "
+            "paper-and-ink can do and the printer's uncorrected character.\n\n"
+            "• Verify (managed print): the chart was printed THROUGH a profile. "
+            "The greys are re-read as the cast left over AFTER correction, and you "
+            "can attach the profile or a reference to score colour accuracy.\n\n"
+            "What it can't do: it can't judge accuracy in Verify mode without a "
+            "profile or reference attached — it can only show the residual cast.")
+        mode_lbl.setToolTip(mode_tip)
+        mode_row.addWidget(mode_lbl)
+        self._mode_group = QButtonGroup(self)
+        self._rb_inspect = QRadioButton(tr("Inspect (raw chart)"), self)
+        self._rb_verify = QRadioButton(tr("Verify (managed print)"), self)
+        self._rb_inspect.setChecked(True)
+        for rb in (self._rb_inspect, self._rb_verify):
+            rb.setToolTip(mode_tip)
+            self._mode_group.addButton(rb)
+            mode_row.addWidget(rb)
+        mode_row.addStretch(1)
+        self._rb_inspect.toggled.connect(self._on_mode_changed)
+        self._inner.addLayout(mode_row)
+
+        # --- Verify-only controls (hidden in Inspect mode) ----------------
+        self._verify_box = QWidget(self)
+        vbl = QVBoxLayout(self._verify_box)
+        vbl.setContentsMargins(0, 0, 0, 0)
+        vbl.setSpacing(8)
+
+        cmp_row = QHBoxLayout()
+        cmp_row.setSpacing(8)
+        cmp_lbl = QLabel(tr("Compare against:"), self)
+        cmp_tip = tr(
+            "Optional — attach something to score how accurate the managed print "
+            "is, patch by patch:\n\n"
+            "• Profile (.icc): checks the round trip — does the print match what "
+            "this profile predicts those values should look like? Best for "
+            "verifying the profile you just built. (Uses ArgyllCMS; v2 profiles "
+            "only.)\n\n"
+            "• Reference: compares each patch to a target Lab/XYZ table (another "
+            ".ti3 or reference file), matched by patch ID. Best when you have "
+            "known target values to hit.\n\n"
+            "Leave on “None” to just see the residual grey cast without a score.")
+        cmp_lbl.setToolTip(cmp_tip)
+        # Pin the label so it can't absorb the leftover width when the path is
+        # hidden (which would shove the combo to the right edge).
+        cmp_lbl.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
+        cmp_row.addWidget(cmp_lbl)
+        self._cmp_combo = NoScrollComboBox(self)
+        # Don't let the combo grab leftover width when the path field is hidden
+        # (otherwise it stretches to the right edge in the "None" state).
+        self._cmp_combo.setSizePolicy(
+            QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
+        self._cmp_combo.addItem(tr("None"), "none")
+        self._cmp_combo.addItem(tr("Profile (.icc)"), "profile")
+        self._cmp_combo.addItem(tr("Reference (.ti3 / table)"), "reference")
+        self._cmp_combo.setToolTip(cmp_tip)
+        self._cmp_combo.currentIndexChanged.connect(self._on_compare_kind_changed)
+        cmp_row.addWidget(self._cmp_combo)
+        self._cmp_path = QLineEdit(self)
+        self._cmp_path.setReadOnly(True)
+        self._cmp_path.setVisible(False)
+        cmp_row.addWidget(self._cmp_path, 8)
+        self._cmp_browse = make_browse_button(
+            self, tr("Browse for a profile or reference"), "folder_build")
+        self._cmp_browse.setVisible(False)
+        self._cmp_browse.clicked.connect(self._on_compare_browse)
+        cmp_row.addWidget(self._cmp_browse)
+        # Always-present trailing stretch keeps the combo left when the path is
+        # hidden ("None"); the path's larger stretch still lets it fill when shown.
+        cmp_row.addStretch(1)
+        vbl.addLayout(cmp_row)
+
+        basis_row = QHBoxLayout()
+        basis_row.setSpacing(8)
+        basis_lbl = QLabel(tr("Neutral basis:"), self)
+        basis_tip = tr(
+            "Which white the leftover grey cast is measured against — match it to "
+            "the rendering intent the print used:\n\n"
+            "• Relative to paper white (default): treats the paper's own tint as "
+            "neutral, so only the profile's residual error shows. This is right "
+            "for a relative-colorimetric print (what almost every photo print "
+            "uses).\n\n"
+            "• Absolute (D50): measures against the fixed D50 white, so a tinted "
+            "or brightened paper still reads as a cast. Right for an absolute / "
+            "paper-simulating (proofing) print.")
+        basis_lbl.setToolTip(basis_tip)
+        basis_row.addWidget(basis_lbl)
+        self._basis_combo = NoScrollComboBox(self)
+        self._basis_combo.addItem(tr("Relative to paper white"), "media")
+        self._basis_combo.addItem(tr("Absolute (D50)"), "absolute")
+        self._basis_combo.setToolTip(basis_tip)
+        self._basis_combo.currentIndexChanged.connect(self._on_basis_changed)
+        basis_row.addWidget(self._basis_combo)
+        basis_row.addStretch(1)
+        vbl.addLayout(basis_row)
+
+        self._verify_box.setVisible(False)
+        self._inner.addWidget(self._verify_box)
+
         # --- error banner (hidden until needed) ---------------------------
         self._banner = QLabel("", self)
         self._banner.setWordWrap(True)
@@ -151,7 +276,8 @@ class Ti3InfoDialog(QDialog):
 
         self._placeholder = QLabel(tr("No measurement loaded yet."), self._details)
         self._placeholder.setStyleSheet(f"color: {TEXT_DIM};")
-        self._grid.addWidget(self._placeholder, 0, 0, 1, 2)
+        self._grid.addWidget(self._placeholder, 0, 0, 1, 2,
+                             Qt.AlignmentFlag.AlignHCenter)
 
         # --- Bottom buttons -----------------------------------------------
         btn_row = QHBoxLayout()
@@ -193,9 +319,110 @@ class Ti3InfoDialog(QDialog):
             self._show_error(str(exc))
             return
         self._banner.setVisible(False)
-        self._populate(self._analysis)
+        self._accuracy = None
+        self._accuracy_msg = ""
+        self._recompute_accuracy()   # re-score against any attached comparison
+        self._render()
         self._body.setText(
             tr("Showing the measurement “{name}”.").format(name=path.name))
+
+    # ------------------------------------------------------------------
+    # Verification controls
+    # ------------------------------------------------------------------
+    def _render(self) -> None:
+        if self._analysis is not None:
+            self._populate(self._analysis)
+
+    def _on_mode_changed(self, _checked: bool = False) -> None:
+        self._mode = "inspect" if self._rb_inspect.isChecked() else "verify"
+        self._verify_box.setVisible(self._mode == "verify")
+        self._render()
+
+    def _on_basis_changed(self, _i: int = 0) -> None:
+        self._basis = self._basis_combo.currentData()
+        self._render()
+
+    def _on_compare_kind_changed(self, _i: int = 0) -> None:
+        self._compare_kind = self._cmp_combo.currentData()
+        self._compare_path = None
+        self._cmp_path.clear()
+        self._accuracy = None
+        self._accuracy_msg = ""
+        want = self._compare_kind != "none"
+        self._cmp_path.setVisible(want)
+        self._cmp_browse.setVisible(want)
+        self._render()
+
+    def _on_compare_browse(self) -> None:
+        if self._compare_kind == "profile":
+            title, filt = tr("Select a profile (.icc)"), \
+                tr("ICC profiles (*.icc *.icm);;All files (*)")
+        else:
+            title, filt = tr("Select a reference (.ti3 / table)"), \
+                tr("Reference (*.ti3 *.ti1 *.ti2 *.cie *.txt);;All files (*)")
+        start = str(Path.home() / "ChromIQ")
+        if not Path(start).exists():
+            start = str(Path.home())
+        path = open_file_dialog(self, title, filt, start_dir=start)
+        if not path:
+            return
+        self._compare_path = Path(path)
+        self._cmp_path.setText(path)
+        self._recompute_accuracy()
+        self._render()
+
+    def _recompute_accuracy(self) -> None:
+        """Score the measurement against the attached comparison. Reference is
+        pure Python; profile defers to ArgyllCMS profcheck (async)."""
+        self._accuracy = None
+        self._accuracy_msg = ""
+        if (self._analysis is None or self._compare_kind == "none"
+                or self._compare_path is None):
+            return
+        if self._compare_kind == "reference":
+            try:
+                refs = parse_reference_labs(self._compare_path)
+                self._accuracy = accuracy_vs_reference(self._analysis.data, refs)
+                if self._accuracy is None:
+                    self._accuracy_msg = tr(
+                        "No patch IDs in the reference matched this measurement.")
+            except (OSError, Ti3ParseError) as exc:
+                self._accuracy_msg = tr("Couldn't read the reference: {msg}").format(
+                    msg=str(exc))
+        else:  # profile → profcheck
+            self._run_profcheck()
+
+    def _run_profcheck(self) -> None:
+        from workflow.icc_info import is_v4
+        if is_v4(self._compare_path):
+            self._accuracy_msg = tr(
+                "This is an ICC v4 profile — ArgyllCMS can only score v2 profiles.")
+            return
+        if self._runner.is_running:
+            self._accuracy_msg = tr("Another ArgyllCMS process is running — try again.")
+            return
+        from workflow.profcheck_runner import ProfcheckParams, ProfcheckRunner
+        self._accuracy_msg = tr("Scoring against the profile…")
+        # Relative basis ↔ relative intent, so the score matches how the print
+        # was rendered; CIEDE2000 to match the reference path.
+        params = ProfcheckParams(
+            ti3_path=self._analysis.data.path, icc_path=self._compare_path,
+            de_formula="-k", intent="r" if self._basis == "media" else "a")
+        self._pc_runner = ProfcheckRunner(self._runner)
+
+        def _finish(code: int) -> None:
+            res = self._pc_runner.parse_results()
+            if res.patch_errors:
+                self._accuracy = accuracy_from_profcheck(
+                    self._analysis.data, res.patch_errors)
+                self._accuracy_msg = ""
+            else:
+                fail = self._pc_runner.primary_failure()
+                self._accuracy_msg = (fail[1] if fail else
+                                      tr("profcheck returned no per-patch results."))
+            self._render()
+
+        self._pc_runner.run(params, on_line=lambda _l: None, on_finish=_finish)
 
     def _show_error(self, msg: str) -> None:
         self._clear_grid()
@@ -243,6 +470,104 @@ class Ti3InfoDialog(QDialog):
         self._grid.addWidget(k, self._row, 0)
         self._grid.addWidget(v, self._row, 1)
         self._row += 1
+
+    def _grey_raw_section(self, a: Ti3Analysis) -> None:
+        """Inspect mode: the printer's native (uncorrected) grey cast vs D50."""
+        self._section(tr("Grey balance"), tr(
+            "How neutral your greys measured before profiling. A printer's raw "
+            "greys almost always have a colour tint — this is exactly what the "
+            "profile then corrects, so a bigger cast here means the profile is "
+            "working harder, not that your prints will look wrong."))
+        self._row_kv(
+            tr("Neutral patches"), tr("{n}").format(n=a.n_neutral),
+            tr("How many patches had equal amounts of R, G and B (the grey "
+               "ramp). These are what we measure the cast from."))
+        self._row_kv(
+            tr("Average cast"), tr("{c:.1f} C*").format(c=a.mean_cast),
+            tr("On average, how far the greys drifted away from truly neutral "
+               "(their chroma). 0 would be perfectly neutral; a few units is "
+               "normal for an unprofiled printer."))
+        self._row_kv(
+            tr("Largest cast"), tr("{c:.1f} C*  at L* {l:.0f}").format(
+                c=a.max_cast, l=a.max_cast_lstar),
+            tr("The strongest tint found in the grey ramp, and the lightness it "
+               "happened at. Casts often peak in the shadows or highlights."))
+        self._row_kv(
+            tr("Tendency"), _cast_text(a.cast_token),
+            tr("Which way the greys lean overall — for example slightly warm/"
+               "yellow or cool/blue. Tells you the character of your raw output "
+               "that the profile neutralises."))
+
+    def _grey_residual_section(self, a: Ti3Analysis) -> None:
+        """Verify mode: the cast LEFT OVER after the profile corrected the
+        greys, measured against the chosen white."""
+        r = neutral_residual(a, self._basis)
+        basis_word = (tr("relative to paper white") if r.basis == "media"
+                      else tr("absolute (D50)"))
+        self._section(tr("Grey balance — residual"), tr(
+            "How neutral the greys are AFTER correction, now that the chart was "
+            "printed through a profile. This is the cast the profile couldn't "
+            "remove — so here, lower is better (a good profile lands near 0). "
+            "Measured {basis}.").format(basis=basis_word))
+        self._row_kv(
+            tr("Neutral patches"), tr("{n}").format(n=a.n_neutral),
+            tr("How many equal-R-G-B patches were checked for leftover cast."))
+        self._row_kv(
+            tr("Average residual"), tr("{c:.1f} C*").format(c=r.mean_c),
+            tr("Average leftover chroma on the greys after correction, measured "
+               "{basis}. Under ~1 is excellent; lower is better.").format(
+                   basis=basis_word))
+        self._row_kv(
+            tr("Worst residual"), tr("{c:.1f} C*  at L* {l:.0f}").format(
+                c=r.worst_c, l=r.worst_lstar),
+            tr("The greatest leftover cast among the greys and where it sits. "
+               "Residual cast often lingers in the deep shadows."))
+        self._row_kv(
+            tr("Tendency"), _cast_text(r.cast_token),
+            tr("Which way any leftover cast leans. With a good profile this is "
+               "negligible; a clear lean points to a profile or print-setup issue."))
+
+    def _accuracy_section(self) -> None:
+        """Verify mode: per-patch colour accuracy vs the attached profile/reference."""
+        if self._compare_kind == "none":
+            return
+        self._section(tr("Colour accuracy"), tr(
+            "How closely each patch matched its target, patch by patch, as a "
+            "colour difference (ΔE₀₀ — roughly, 1 is a just-noticeable change). "
+            "This needs the attached profile or reference; without one, only the "
+            "residual grey cast above is available."))
+        acc = self._accuracy
+        if acc is None:
+            self._row_kv(tr("Status"), self._accuracy_msg or tr("—"),
+                         self._accuracy_msg)
+            return
+        src = (tr("vs the profile's prediction") if acc.source == "profile"
+               else tr("vs the reference target"))
+        self._row_kv(
+            tr("Compared"), tr("{n} patches  ·  {src}").format(n=acc.n, src=src),
+            tr("How many patches were matched (by patch ID) and what they were "
+               "compared against."))
+        self._row_kv(
+            tr("Average ΔE₀₀"), tr("{de:.2f}").format(de=acc.mean_de),
+            tr("The typical colour error across all matched patches. As a rough "
+               "guide: under 1 is excellent, under 2 very good, under 3 good; "
+               "above ~5 something is off (wrong intent, wrong profile, or a "
+               "misprint)."))
+        self._row_kv(
+            tr("Worst ΔE₀₀"), tr("{de:.2f}  (patch {id}, {hue})").format(
+                de=acc.peak_de, id=acc.worst_id, hue=_bucket_text(acc.worst_hue)),
+            tr("The single largest colour error and which patch it was. One bad "
+               "patch is often a misread or an out-of-gamut colour rather than a "
+               "profile fault."))
+        # Per-hue/neutral breakdown, worst-first.
+        order = sorted(acc.buckets.items(), key=lambda kv: kv[1][0], reverse=True)
+        bd = "  ".join(f"{_bucket_text(name)} {mean:.1f}"
+                       for name, (mean, _pk, _n) in order)
+        self._row_kv(
+            tr("By colour"), bd,
+            tr("Average error split by colour direction (and the neutrals). It "
+               "shows where the profile is weakest — for example a high blue "
+               "number means blues are the hardest for this paper-and-ink."))
 
     def _populate(self, a: Ti3Analysis) -> None:
         self._clear_grid()
@@ -311,31 +636,12 @@ class Ti3InfoDialog(QDialog):
             tr("The plain lightness gap between paper white and max black on the "
                "L* scale — a quick, perceptual feel for the contrast."))
 
-        # --- Grey balance -------------------------------------------------
-        self._section(tr("Grey balance"), tr(
-            "How neutral your greys measured before profiling. A printer's raw "
-            "greys almost always have a colour tint — this is exactly what the "
-            "profile then corrects, so a bigger cast here means the profile is "
-            "working harder, not that your prints will look wrong."))
-        self._row_kv(
-            tr("Neutral patches"), tr("{n}").format(n=a.n_neutral),
-            tr("How many patches had equal amounts of R, G and B (the grey "
-               "ramp). These are what we measure the cast from."))
-        self._row_kv(
-            tr("Average cast"), tr("{c:.1f} C*").format(c=a.mean_cast),
-            tr("On average, how far the greys drifted away from truly neutral "
-               "(their chroma). 0 would be perfectly neutral; a few units is "
-               "normal for an unprofiled printer."))
-        self._row_kv(
-            tr("Largest cast"), tr("{c:.1f} C*  at L* {l:.0f}").format(
-                c=a.max_cast, l=a.max_cast_lstar),
-            tr("The strongest tint found in the grey ramp, and the lightness it "
-               "happened at. Casts often peak in the shadows or highlights."))
-        self._row_kv(
-            tr("Tendency"), _cast_text(a.cast_token),
-            tr("Which way the greys lean overall — for example slightly warm/"
-               "yellow or cool/blue. Tells you the character of your raw output "
-               "that the profile neutralises."))
+        # --- Grey balance (wording + maths depend on mode) ---------------
+        if self._mode == "verify":
+            self._grey_residual_section(a)
+            self._accuracy_section()
+        else:
+            self._grey_raw_section(a)
 
         # --- Gamut --------------------------------------------------------
         self._section(tr("Gamut reach"), tr(
@@ -420,6 +726,14 @@ class Ti3InfoDialog(QDialog):
                        "paper looks consistent across lighting; a large one "
                        "means it's strongly brightened (lots of optical "
                        "brightener) and will change noticeably."))
+
+
+def _bucket_text(name: str) -> str:
+    return {
+        "neutral": tr("neutral"), "red": tr("red"), "yellow": tr("yellow"),
+        "green": tr("green"), "cyan": tr("cyan"), "blue": tr("blue"),
+        "magenta": tr("magenta"),
+    }.get(name, name)
 
 
 def _cast_text(token: str) -> str:

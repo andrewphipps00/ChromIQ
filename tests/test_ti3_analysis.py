@@ -11,8 +11,14 @@ from workflow import cie_data
 from workflow.ti3_analysis import (
     Ti3ParseError,
     _Integrator,
+    accuracy_from_profcheck,
+    accuracy_vs_reference,
     analyse_ti3,
+    ciede2000,
+    neutral_residual,
+    parse_reference_labs,
     parse_ti3,
+    xyz_to_lab,
 )
 
 
@@ -125,3 +131,84 @@ def test_spectral_section_present(tmp_path: Path):
     names = [pt.name for pt in a.illuminant_points]
     assert "D50" in names and "D65" in names
     assert a.paper_shift_d50_d65 is not None
+
+
+# ---------------------------------------------------------------------------
+# Verification mode: residual cast, reference / profcheck accuracy
+# ---------------------------------------------------------------------------
+
+def _write_cgats(path: Path, fmt: str, rows: list[str], extra_kw: str = "") -> None:
+    body = (f"CTI3\n\nDEVICE_CLASS \"OUTPUT\"\nCOLOR_REP \"iRGB_XYZ\"\n{extra_kw}\n"
+            f"NUMBER_OF_FIELDS {len(fmt.split())}\nBEGIN_DATA_FORMAT\n{fmt}\n"
+            f"END_DATA_FORMAT\n\nNUMBER_OF_SETS {len(rows)}\nBEGIN_DATA\n"
+            + "\n".join(rows) + "\nEND_DATA\n")
+    path.write_text(body)
+
+
+def test_ciede2000_self_is_zero():
+    assert ciede2000((50, 2, -3), (50, 2, -3)) == pytest.approx(0.0, abs=1e-9)
+
+
+def test_residual_media_divides_out_paper_tint(tmp_path: Path):
+    # white + greys all share one warm chromaticity (low Z). Relative to the
+    # paper white they are neutral; relative to D50 they read warm.
+    rows = [
+        "1 100 100 100 85 84 68 ",
+        "2 50 50 50 18.0 17.79 14.40 ",
+        "3 0 0 0 0.85 0.84 0.68 ",
+    ]
+    p = tmp_path / "warm.ti3"
+    _write_ti3(p, rows)
+    a = analyse_ti3(parse_ti3(p))
+    media = neutral_residual(a, "media")
+    absolute = neutral_residual(a, "absolute")
+    assert media.mean_c < absolute.mean_c          # paper tint removed
+    assert media.mean_c < 1.0                       # greys read ~neutral on paper
+    assert absolute.mean_c > 2.0                     # warm cast vs D50
+
+
+def test_accuracy_vs_reference_matches_and_buckets(tmp_path: Path):
+    rows = [
+        "1 100 0 0 41 21 2 ",       # red-ish
+        "2 0 0 100 18 12 60 ",      # blue-ish
+        "3 50 50 50 19 20 17 ",     # neutral
+    ]
+    p = tmp_path / "m.ti3"
+    _write_ti3(p, rows)
+    data = parse_ti3(p)
+    meas = {sid: xyz_to_lab((x / 100, y / 100, z / 100))
+            for sid, (x, y, z) in zip(data.sample_ids, data.xyz)}
+    ref = dict(meas)
+    ref["1"] = (meas["1"][0], meas["1"][1], meas["1"][2] + 6.0)  # offset patch 1
+    acc = accuracy_vs_reference(data, ref)
+    assert acc.n == 3
+    assert acc.mean_de > 0
+    assert acc.worst_id == "1"                       # the perturbed patch
+    assert "neutral" in acc.buckets                  # patch 3 bucketed as neutral
+
+
+def test_accuracy_profcheck_matches_on_sample_loc(tmp_path: Path):
+    fmt = "SAMPLE_ID SAMPLE_LOC RGB_R RGB_G RGB_B XYZ_X XYZ_Y XYZ_Z"
+    rows = ["1 A1 100 0 0 41 21 2 ", "2 B2 0 0 100 18 12 60 ",
+            "3 C3 50 50 50 19 20 17 "]
+    p = tmp_path / "loc.ti3"
+    _write_cgats(p, fmt, rows)
+    data = parse_ti3(p)
+    assert data.sample_locs == ["A1", "B2", "C3"]
+    # profcheck reports SAMPLE_LOC ids
+    acc = accuracy_from_profcheck(data, [("A1", 1.0), ("B2", 4.0), ("C3", 0.5)])
+    assert acc is not None and acc.n == 3
+    assert acc.peak_de == pytest.approx(4.0)
+    # fallback: ids that only match SAMPLE_ID still work
+    acc2 = accuracy_from_profcheck(data, [("1", 2.0), ("2", 2.0), ("3", 2.0)])
+    assert acc2 is not None and acc2.n == 3
+
+
+def test_parse_reference_labs_reads_lab(tmp_path: Path):
+    fmt = "SAMPLE_ID LAB_L LAB_A LAB_B"
+    rows = ["1 50 2 -3 ", "2 95 -1 4 "]
+    p = tmp_path / "ref.ti3"
+    _write_cgats(p, fmt, rows)
+    refs = parse_reference_labs(p)
+    assert refs["1"] == (50.0, 2.0, -3.0)
+    assert refs["2"] == (95.0, -1.0, 4.0)

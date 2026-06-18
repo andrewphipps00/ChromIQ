@@ -63,6 +63,8 @@ class Ti3Data:
     xyz: np.ndarray                # (N, 3), measured XYZ 0–100 (D50)
     spectral: np.ndarray | None    # (N, B) reflectance %, or None
     wavelengths: np.ndarray | None  # (B,) nm, or None
+    sample_ids: list[str] = field(default_factory=list)  # CGATS SAMPLE_ID per row
+    sample_locs: list[str] = field(default_factory=list)  # CGATS SAMPLE_LOC (profcheck's id)
 
     @property
     def n_patches(self) -> int:
@@ -146,7 +148,15 @@ def parse_ti3(path: str | Path) -> Ti3Data:
         except (ValueError, KeyError):
             spectral = wavelengths = None
 
-    return Ti3Data(p, keywords, fields, rows, rgb, xyz, spectral, wavelengths)
+    sid_i = col("SAMPLE_ID")
+    sample_ids = ([r[sid_i] for r in rows] if sid_i is not None
+                  else [str(i + 1) for i in range(len(rows))])
+    loc_i = col("SAMPLE_LOC")
+    sample_locs = ([r[loc_i].strip('"') for r in rows] if loc_i is not None
+                   else list(sample_ids))
+
+    return Ti3Data(p, keywords, fields, rows, rgb, xyz, spectral, wavelengths,
+                   sample_ids=sample_ids, sample_locs=sample_locs)
 
 
 def _f_inv(t: float) -> float:
@@ -236,6 +246,9 @@ class Ti3Analysis:
     # spectral
     illuminant_points: list[IlluminantPoint] = field(default_factory=list)
     paper_shift_d50_d65: float | None = None   # ΔEab of paper tint D50→D65
+    # verification support (used when the chart was printed through a profile)
+    media_white_xyz: tuple[float, float, float] = (0.0, 0.0, 0.0)  # lightest patch, 0–100
+    neutral_xyz: np.ndarray | None = None       # (n_neutral, 3) XYZ 0–100 of R=G=B patches
 
 
 def analyse_ti3(data: Ti3Data) -> Ti3Analysis:
@@ -291,6 +304,8 @@ def analyse_ti3(data: Ti3Data) -> Ti3Analysis:
         cast_token=cast_token, max_chroma=max_chroma,
         max_chroma_hue=hue, primary_chroma=prim, has_rolloff=rolloff,
         neutral_non_monotonic=nm, duplicate_max_de=dup_de, duplicate_count=dup_n,
+        media_white_xyz=tuple(float(v) for v in xyz[wi]),
+        neutral_xyz=(xyz[neutral].copy() if neutral.any() else None),
     )
 
     # --- spectral: under other light --------------------------------------
@@ -389,3 +404,222 @@ def _add_spectral(res: Ti3Analysis, data: Ti3Data, wi: int, bi: int) -> None:
     if "D50" in lab_by_name and "D65" in lab_by_name:
         d50, d65 = np.array(lab_by_name["D50"]), np.array(lab_by_name["D65"])
         res.paper_shift_d50_d65 = float(np.linalg.norm(d50 - d65))
+
+
+# ===========================================================================
+# Verification support — used when the .ti3 was printed *through* a profile
+# (colour-managed). Inspect mode never touches any of this.
+# ===========================================================================
+
+# Hue sectors for the per-direction ΔE breakdown (Lab hue angle, degrees).
+_HUE_SECTORS = {"red": (330, 30), "yellow": (30, 90), "green": (90, 165),
+                "cyan": (165, 220), "blue": (220, 290), "magenta": (290, 330)}
+
+
+def ciede2000(lab1: tuple[float, float, float],
+              lab2: tuple[float, float, float]) -> float:
+    """CIEDE2000 colour difference ΔE₀₀ between two L*a*b* triples (kL=kC=kH=1).
+
+    The modern perceptual metric ArgyllCMS also uses by default; implemented in
+    pure Python so the reference-comparison path needs no Argyll call."""
+    L1, a1, b1 = lab1
+    L2, a2, b2 = lab2
+    C1 = math.hypot(a1, b1)
+    C2 = math.hypot(a2, b2)
+    Cbar = (C1 + C2) / 2.0
+    G = 0.5 * (1.0 - math.sqrt(Cbar ** 7 / (Cbar ** 7 + 25.0 ** 7))) if Cbar > 0 else 0.5
+    a1p, a2p = (1 + G) * a1, (1 + G) * a2
+    C1p, C2p = math.hypot(a1p, b1), math.hypot(a2p, b2)
+    h1p = math.degrees(math.atan2(b1, a1p)) % 360.0 if (a1p or b1) else 0.0
+    h2p = math.degrees(math.atan2(b2, a2p)) % 360.0 if (a2p or b2) else 0.0
+
+    dLp = L2 - L1
+    dCp = C2p - C1p
+    if C1p * C2p == 0:
+        dhp = 0.0
+    elif abs(h2p - h1p) <= 180:
+        dhp = h2p - h1p
+    elif h2p - h1p > 180:
+        dhp = h2p - h1p - 360
+    else:
+        dhp = h2p - h1p + 360
+    dHp = 2.0 * math.sqrt(C1p * C2p) * math.sin(math.radians(dhp) / 2.0)
+
+    Lbar = (L1 + L2) / 2.0
+    Cbarp = (C1p + C2p) / 2.0
+    if C1p * C2p == 0:
+        hbarp = h1p + h2p
+    elif abs(h1p - h2p) <= 180:
+        hbarp = (h1p + h2p) / 2.0
+    elif h1p + h2p < 360:
+        hbarp = (h1p + h2p + 360) / 2.0
+    else:
+        hbarp = (h1p + h2p - 360) / 2.0
+
+    T = (1 - 0.17 * math.cos(math.radians(hbarp - 30))
+         + 0.24 * math.cos(math.radians(2 * hbarp))
+         + 0.32 * math.cos(math.radians(3 * hbarp + 6))
+         - 0.20 * math.cos(math.radians(4 * hbarp - 63)))
+    SL = 1 + (0.015 * (Lbar - 50) ** 2) / math.sqrt(20 + (Lbar - 50) ** 2)
+    SC = 1 + 0.045 * Cbarp
+    SH = 1 + 0.015 * Cbarp * T
+    dTheta = 30 * math.exp(-(((hbarp - 275) / 25) ** 2))
+    RC = 2 * math.sqrt(Cbarp ** 7 / (Cbarp ** 7 + 25.0 ** 7)) if Cbarp > 0 else 0.0
+    RT = -RC * math.sin(math.radians(2 * dTheta))
+    return math.sqrt((dLp / SL) ** 2 + (dCp / SC) ** 2 + (dHp / SH) ** 2
+                     + RT * (dCp / SC) * (dHp / SH))
+
+
+@dataclass
+class NeutralResidual:
+    """How neutral the greys measured, relative to a chosen white."""
+    mean_c: float          # mean residual chroma C* (0 = perfectly neutral)
+    worst_c: float
+    worst_lstar: float
+    cast_token: str        # warm/cool/green/magenta/neutral/none
+    basis: str             # "media" | "absolute"
+
+
+def neutral_residual(res: Ti3Analysis, basis: str = "media") -> NeutralResidual:
+    """Residual cast of the neutral patches for *verification* mode.
+
+    ``basis="media"`` measures a*/b* relative to the **paper white** (the right
+    reference for a relative-colorimetric print — the paper's own tint is divided
+    out, so only the profile's residual error remains). ``basis="absolute"``
+    measures relative to D50, the reference for an absolute / paper-simulating
+    print. Returns zeros if the file has no neutral patches."""
+    if res.neutral_xyz is None or len(res.neutral_xyz) == 0:
+        return NeutralResidual(0.0, 0.0, 0.0, "none", basis)
+    if basis == "media" and res.media_white_xyz[1] > 0:
+        rw = tuple(c / 100.0 for c in res.media_white_xyz)
+    else:
+        rw = _D50_REF
+    labs = np.array([xyz_to_lab((x / 100.0, y / 100.0, z / 100.0), rw)
+                     for x, y, z in res.neutral_xyz])
+    chroma = np.hypot(labs[:, 1], labs[:, 2])
+    wi = int(np.argmax(chroma))
+    return NeutralResidual(
+        mean_c=float(chroma.mean()), worst_c=float(chroma[wi]),
+        worst_lstar=float(labs[wi, 0]),
+        cast_token=_cast_token(float(labs[:, 1].mean()), float(labs[:, 2].mean())),
+        basis=basis)
+
+
+@dataclass
+class AccuracyResult:
+    """Per-patch colour accuracy of a colour-managed print, vs a profile's
+    prediction or a reference target."""
+    source: str                                  # "profile" | "reference"
+    n: int
+    mean_de: float
+    peak_de: float
+    worst_id: str
+    worst_hue: str                               # hue-sector name of worst patch
+    buckets: dict[str, tuple[float, float, int]]  # name -> (mean, peak, count)
+
+
+def _hue_sector(a: float, b: float) -> str:
+    h = math.degrees(math.atan2(b, a)) % 360.0
+    for name, (lo, hi) in _HUE_SECTORS.items():
+        if (lo > hi and (h >= lo or h < hi)) or (lo <= hi and lo <= h < hi):
+            return name
+    return "red"
+
+
+def _build_accuracy(data: Ti3Data, de_by_id: dict[str, float], source: str,
+                    ids: list[str]) -> AccuracyResult | None:
+    """Aggregate per-patch ΔE (keyed by ``ids``) into mean/peak/worst plus a
+    neutral + 6-hue breakdown, using each patch's measured hue / neutrality."""
+    if not de_by_id:
+        return None
+    lab = np.array([xyz_to_lab((x / 100.0, y / 100.0, z / 100.0))
+                    for x, y, z in data.xyz])
+    spread = data.rgb.max(axis=1) - data.rgb.min(axis=1)
+    by_bucket: dict[str, list[float]] = {k: [] for k in ("neutral", *_HUE_SECTORS)}
+    des: list[tuple[float, int]] = []
+    for i, pid in enumerate(ids):
+        de = de_by_id.get(pid)
+        if de is None:
+            continue
+        des.append((de, i))
+        bucket = "neutral" if spread[i] <= 0.5 else _hue_sector(lab[i, 1], lab[i, 2])
+        by_bucket[bucket].append(de)
+    if not des:
+        return None
+    worst_de, wi = max(des, key=lambda t: t[0])
+    buckets = {name: (float(np.mean(v)), float(np.max(v)), len(v))
+               for name, v in by_bucket.items() if v}
+    vals = [d for d, _ in des]
+    return AccuracyResult(
+        source=source, n=len(des), mean_de=float(np.mean(vals)),
+        peak_de=float(worst_de), worst_id=ids[wi],
+        worst_hue=("neutral" if spread[wi] <= 0.5
+                   else _hue_sector(lab[wi, 1], lab[wi, 2])),
+        buckets=buckets)
+
+
+def accuracy_vs_reference(data: Ti3Data,
+                          ref_labs: dict[str, tuple[float, float, float]],
+                          ) -> AccuracyResult | None:
+    """ΔE₀₀ of each measured patch against a reference target Lab (matched by
+    SAMPLE_ID). Pure Python — no Argyll."""
+    lab = [xyz_to_lab((x / 100.0, y / 100.0, z / 100.0)) for x, y, z in data.xyz]
+    de_by_sid: dict[str, float] = {}
+    for i, sid in enumerate(data.sample_ids):
+        ref = ref_labs.get(sid)
+        if ref is not None:
+            de_by_sid[sid] = ciede2000(tuple(lab[i]), ref)
+    return _build_accuracy(data, de_by_sid, "reference", data.sample_ids)
+
+
+def accuracy_from_profcheck(data: Ti3Data,
+                            patch_errors: list[tuple[str, float]],
+                            ) -> AccuracyResult | None:
+    """Bucket profcheck's per-patch (id, ΔE) errors by measured hue.
+
+    profcheck already ran the device values through the profile and compared to
+    the measurement; we only re-organise its numbers into the neutral/6-hue view.
+    profcheck identifies patches by SAMPLE_LOC, so match on that first and fall
+    back to SAMPLE_ID for files without locations."""
+    des = {pid: de for pid, de in patch_errors}
+    res = _build_accuracy(data, des, "profile", data.sample_locs)
+    if res is None:
+        res = _build_accuracy(data, des, "profile", data.sample_ids)
+    return res
+
+
+def parse_reference_labs(path: str | Path) -> dict[str, tuple[float, float, float]]:
+    """Read a reference target's expected Lab from a CGATS file (.ti1/.ti2/.ti3
+    or any CGATS table), keyed by SAMPLE_ID. Uses LAB_* directly or converts
+    XYZ_* (D50). Raises :class:`Ti3ParseError` if no usable colour columns."""
+    p = Path(path)
+    try:
+        lines = p.read_text(errors="replace").splitlines()
+    except OSError as exc:
+        raise Ti3ParseError(str(exc)) from exc
+    try:
+        fi = next(i for i, ln in enumerate(lines) if ln.strip() == "BEGIN_DATA_FORMAT")
+        fields = lines[fi + 1].split()
+        ds = next(i for i, ln in enumerate(lines) if ln.strip() == "BEGIN_DATA")
+        de = next(i for i, ln in enumerate(lines) if ln.strip() == "END_DATA")
+    except (StopIteration, IndexError) as exc:
+        raise Ti3ParseError("Not a CGATS file (missing DATA_FORMAT / DATA).") from exc
+    rows = [ln.split() for ln in lines[ds + 1:de] if ln.strip()]
+
+    def col(name: str) -> int | None:
+        return fields.index(name) if name in fields else None
+
+    sid_i = col("SAMPLE_ID")
+    lab_i = [col(f"LAB_{c}") for c in ("L", "A", "B")]
+    xyz_i = [col(f"XYZ_{c}") for c in "XYZ"]
+    out: dict[str, tuple[float, float, float]] = {}
+    for n, r in enumerate(rows):
+        sid = r[sid_i] if sid_i is not None else str(n + 1)
+        if all(i is not None for i in lab_i):
+            out[sid] = tuple(float(r[i]) for i in lab_i)
+        elif all(i is not None for i in xyz_i):
+            x, y, z = (float(r[i]) for i in xyz_i)
+            out[sid] = xyz_to_lab((x / 100.0, y / 100.0, z / 100.0))
+        else:
+            raise Ti3ParseError("Reference has no LAB or XYZ columns.")
+    return out
