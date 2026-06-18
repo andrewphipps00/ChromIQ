@@ -1,5 +1,25 @@
 # Changelog
 
+## v3.11.3
+
+### 💄 Improved
+- **Clearer wording: “chart” instead of “target.”** Following feedback from
+  @soul-traveller, the printable patch sheet is now called a **chart**
+  everywhere in the UI. The Print tab's load icon is **“Load test chart,”** the
+  layout editor's load button is **“Load chart…,”** the step headers read
+  **Generate / Print / Measure Chart**, and the calibration-chart controls and
+  measure dialogs follow suit. (The word “target” is kept only where it means
+  printcal's colorimetric aim values.) Updated across all twelve languages.
+
+### 🐛 Fixed
+- **Correct page count in generated names.** A fixed-layout preset that
+  ArgyllCMS split across two sheets is no longer mis-named “1page” — the name now
+  reflects the chart's real page count, even when the Pages control is locked
+  (#73, thanks @soul-traveller).
+- **Attach log files to bug reports.** The “Logs / error messages” field in the
+  GitHub bug-report form now accepts drag-and-dropped files, so `chromiq.log` can
+  go straight where it belongs (#74, thanks @soul-traveller).
+
 ## v3.11.2
 
 ### 🚀 New
