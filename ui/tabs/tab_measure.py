@@ -53,6 +53,7 @@ _TAB_COLOR = "#56d6a5"  # Measure tab accent
 from ui.styles import SPEC_GREEN, TAB_COLORS
 from workflow.average_runner import AverageParams, AverageRunner
 from workflow.measure_manager import MeasureManager, MeasureParams
+from workflow.ti3_analysis import mark_verification_ti3
 from ui.tiff_preview import TiffPreview
 from core.i18n import tr
 
@@ -404,6 +405,25 @@ _PRECOND_TIP_BODY = (
     "Settings and saved pre-conditioning data is present."
 )
 
+_VERIFY_TIP_TITLE = "Verification measurement (colour-managed print)"
+_VERIFY_TIP_BODY = (
+    "Tick this ONLY when you are measuring a chart you printed *through* a "
+    "profile (with colour management ON) to check how good that profile is — "
+    "NOT the normal profiling chart.\n\n"
+    "Normally you print the chart with colour management OFF so ChromIQ can "
+    "learn your printer's raw behaviour and build a profile from it. A chart "
+    "printed THROUGH a profile is the opposite: it shows the corrected result, "
+    "so a profile built from it would be wrong.\n\n"
+    "When this is ticked, ChromIQ:\n"
+    "  • saves the reading as a separate '…-verify.ti3' file (your real "
+    "measurement is never overwritten),\n"
+    "  • marks it so it can't be turned into a profile by accident, and\n"
+    "  • afterwards reminds you to open it in Tools ▸ Inspect a measurement, "
+    "where it checks the colours against the profile.\n\n"
+    "Leave it OFF for normal profiling. To verify, reprint your chart through "
+    "the finished profile, then measure it with this ticked."
+)
+
 
 @dataclass
 class _ChartreadOption:
@@ -494,6 +514,9 @@ class TabMeasure(QWidget):
         self._resume_active: bool = False
         self._auto_proceed: bool = False
         self._all_done_shown: bool = False
+        # True for the current read when the "Verification measurement" box was
+        # ticked at start — the result is saved as a verify-only file, never a profile.
+        self._verify_run: bool = False
         # "Read again & average": True once the user opts to re-read the chart,
         # so each subsequent successful read is moved into reads/readN.ti3.
         self._averaging_active: bool = False
@@ -581,6 +604,11 @@ class TabMeasure(QWidget):
 
     def _current_mode(self) -> str:
         return "guided" if self._stack.currentIndex() == 0 else "manual"
+
+    def _is_verify_checked(self) -> bool:
+        """True if the active module's 'Verification measurement' box is ticked."""
+        cb = self._verify_cb if self._current_mode() == "guided" else self._m_verify_cb
+        return cb.isChecked()
 
     def set_calibration_mode(self, enabled: bool) -> None:
         """Hide guided mode toggle and lock to manual when calibration mode is active."""
@@ -1024,6 +1052,19 @@ class TabMeasure(QWidget):
                     opt.row_widget.setVisible(False)
 
         ll.addWidget(adv_grp)
+
+        verify_grp = QGroupBox(tr("Profile verification"), left)
+        vg = QVBoxLayout(verify_grp)
+        vg.setContentsMargins(8, 14, 8, 8)
+        verify_row = QHBoxLayout()
+        self._verify_cb = QCheckBox(
+            tr("Verification measurement (colour-managed print)"), left)
+        verify_row.addWidget(self._verify_cb)
+        verify_row.addStretch()
+        verify_row.addWidget(
+            TooltipButton(tr(_VERIFY_TIP_TITLE), tr(_VERIFY_TIP_BODY), left))
+        vg.addLayout(verify_row)
+        ll.addWidget(verify_grp)
         ll.addStretch(1)
 
         scroll.setWidget(left)
@@ -1275,6 +1316,19 @@ class TabMeasure(QWidget):
             mag.addLayout(row)
 
         ll.addWidget(m_adv_grp)
+
+        m_verify_grp = QGroupBox(tr("Profile verification"), left)
+        mvg = QVBoxLayout(m_verify_grp)
+        mvg.setContentsMargins(8, 14, 8, 8)
+        m_verify_row = QHBoxLayout()
+        self._m_verify_cb = QCheckBox(
+            tr("Verification measurement (colour-managed print)"), left)
+        m_verify_row.addWidget(self._m_verify_cb)
+        m_verify_row.addStretch()
+        m_verify_row.addWidget(
+            TooltipButton(tr(_VERIFY_TIP_TITLE), tr(_VERIFY_TIP_BODY), left))
+        mvg.addLayout(m_verify_row)
+        ll.addWidget(m_verify_grp)
         ll.addStretch(1)
 
         scroll.setWidget(left)
@@ -1312,6 +1366,7 @@ class TabMeasure(QWidget):
             "suppress":   self._m_suppress_cb.isChecked(),
             "nocal":      self._m_nocal_cb.isChecked(),
             "pbp":        self._m_pbp_cb.isChecked(),
+            "verify":     self._m_verify_cb.isChecked(),
         }
         for opt in self._m_chartread_opts:
             if opt.checkbox:
@@ -1334,6 +1389,7 @@ class TabMeasure(QWidget):
         self._m_suppress_cb.setChecked(bool(data.get("suppress", True)))
         self._m_nocal_cb.setChecked(bool(data.get("nocal", False)))
         self._m_pbp_cb.setChecked(bool(data.get("pbp", False)))
+        self._m_verify_cb.setChecked(bool(data.get("verify", False)))
         for opt in self._m_chartread_opts:
             if opt.checkbox:
                 opt.checkbox.setChecked(bool(data.get(f"{opt.key}_enabled", False)))
@@ -2300,6 +2356,9 @@ class TabMeasure(QWidget):
         self._log.clear()
         self._auto_proceed = False
         self._all_done_shown = False
+        # Capture the verification-measurement choice now, so toggling the box
+        # mid-read can't change how the finished .ti3 is handled.
+        self._verify_run = self._is_verify_checked()
         self._instrument_disconnected = False
         self._device_busy = False
         self._no_instrument = False
@@ -3305,6 +3364,47 @@ class TabMeasure(QWidget):
         # to chartread as spurious keystrokes.
         QApplication.instance().removeEventFilter(self)
 
+        # Verification read of a colour-managed print: a dedicated dialog that
+        # never offers "Build Profile" and warns this file is verification-only.
+        if self._verify_run and not is_cal and not self._guided_refinement_active:
+            from PyQt6.QtWidgets import QHBoxLayout, QPushButton
+            dlg = QDialog(self)
+            dlg.setWindowTitle(tr("Verification Measurement — All Stripes Read"))
+            dlg.setMinimumWidth(560)
+            lay = QVBoxLayout(dlg)
+            lay.setSpacing(16)
+            lay.setContentsMargins(24, 20, 24, 20)
+            msg = QLabel(tr(
+                "<b>All stripes have been read.</b><br><br>This is a "
+                "<b>verification measurement</b> of a colour-managed print, so it "
+                "will be saved as a separate <b>verify</b> file and is <b>not</b> "
+                "for building a profile.<br><br>Click <b>Finish</b> to save it, "
+                "then open it in <b>Tools ▸ Inspect a measurement</b> to check how "
+                "the profile performed. Or click <b>Re-read Stripes</b> to scan a "
+                "stripe again (<b>f</b>&nbsp;/&nbsp;<b>b</b> to move, <b>n</b> for "
+                "the next unread, <b>d</b> when done)."), dlg)
+            msg.setWordWrap(True)
+            lay.addWidget(msg)
+            row = QHBoxLayout()
+            row.addStretch(1)
+            reread = QPushButton(tr("Re-read Stripes"), dlg)
+            reread.clicked.connect(dlg.reject)
+            finish = QPushButton(tr("Finish"), dlg)
+            finish.setObjectName("primary")
+            finish.setDefault(True)
+            finish.setAutoDefault(True)
+            finish.clicked.connect(dlg.accept)
+            row.addWidget(reread)
+            row.addWidget(finish)
+            lay.addLayout(row)
+            tint_dialog_primary(dlg, _TAB_COLOR)
+            if dlg.exec() == QDialog.DialogCode.Accepted:
+                self._manager.send_key("d")
+                self._arm_key_watchdog()
+            else:
+                QApplication.instance().installEventFilter(self)
+            return
+
         # Measurement averaging (docs/dev_averaging.md): for a normal read (not a
         # calibration or guided-refinement re-read) fold the averaging choice into
         # this dialog so there is no redundant second popup afterwards.
@@ -3540,6 +3640,55 @@ class TabMeasure(QWidget):
         self._manager.send_key("d")
         self._arm_key_watchdog()
         # Event filter stays off — chartread will finish momentarily.
+
+    def _finalize_verification(self, ti3: Path) -> None:
+        """Tag a verification read as verify-only ('<name>-verify.ti3' + marker),
+        and offer to open it in the measurement inspector — never build a profile."""
+        try:
+            dst = mark_verification_ti3(ti3)
+        except OSError as exc:
+            self._log.appendPlainText(f"\n[ERROR] Could not save verification file: {exc}")
+            return
+        self._log.appendPlainText(
+            "\n" + tr("[OK] Verification measurement saved.")
+            + f"\nSaved: {dst}\n\n"
+            + tr("→ This file is for verification only — do not build a profile "
+                 "from it. Open it in Tools ▸ Inspect a measurement to check the "
+                 "profile."))
+
+        from PyQt6.QtWidgets import QDialog, QHBoxLayout, QLabel, QPushButton, QVBoxLayout
+        dlg = QDialog(self)
+        dlg.setWindowTitle(tr("Verification Measurement Saved"))
+        dlg.setMinimumWidth(560)
+        lay = QVBoxLayout(dlg)
+        lay.setSpacing(16)
+        lay.setContentsMargins(24, 20, 24, 20)
+        msg = QLabel(tr(
+            "<b>Your verification measurement has been saved</b> as "
+            "<code>{name}</code>.<br><br>This file checks a colour-managed print "
+            "against a profile — <b>don't build a profile from it</b>. Open it in "
+            "<b>Tools ▸ Inspect a measurement</b> (it opens in Verify mode "
+            "automatically) to see the residual cast and colour accuracy.").format(
+                name=dst.name), dlg)
+        msg.setWordWrap(True)
+        lay.addWidget(msg)
+        row = QHBoxLayout()
+        row.addStretch(1)
+        close_btn = QPushButton(tr("Close"), dlg)
+        close_btn.clicked.connect(dlg.reject)
+        open_btn = QPushButton(tr("Open in measurement inspector"), dlg)
+        open_btn.setObjectName("primary")
+        open_btn.setDefault(True)
+        open_btn.clicked.connect(dlg.accept)
+        row.addWidget(close_btn)
+        row.addWidget(open_btn)
+        lay.addLayout(row)
+        tint_dialog_primary(dlg, _TAB_COLOR)
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            from ui.dialogs.ti3_info_dialog import Ti3InfoDialog
+            insp = Ti3InfoDialog(self._runner, self._settings, self)
+            insp.load_measurement(dst)
+            insp.exec()
 
     def _on_measure_done(self, code: int) -> None:
         self._preview.highlight_stripe(-1)
@@ -3787,6 +3936,12 @@ class TabMeasure(QWidget):
             and ti3.parent.name == "cal"
             and bool(self._settings.get("calibration_mode", False))
         )
+        # Verification read: rename + tag the file as verify-only and stop —
+        # never emit measure_finished or advance to Build Profile.
+        if self._verify_run and ti3_exists and not failed and not is_cal:
+            self._verify_run = False
+            self._finalize_verification(ti3)
+            return
         if failed:
             self._log.appendPlainText("\n[ERROR] Measurement failed — see output above.")
         elif ti3_exists and not self._all_done_shown:

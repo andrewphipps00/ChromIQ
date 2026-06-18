@@ -49,6 +49,41 @@ class Ti3ParseError(ValueError):
     """Raised when a file is not a usable CGATS ``.ti3`` measurement."""
 
 
+# CGATS keyword that marks a measurement as a colour-managed *verification*
+# read (printed through a profile) — not raw profiling data. The Measure tab
+# writes it; the inspector reads it to default into Verify mode.
+VERIFICATION_KEYWORD = "CHROMIQ_VERIFICATION"
+
+
+def mark_verification_ti3(src: str | Path) -> Path:
+    """Rename a freshly-measured ``.ti3`` to ``<stem>-verify.ti3`` and tag it
+    with the :data:`VERIFICATION_KEYWORD`, marking it as a colour-managed
+    verification measurement that must **not** be used to build a profile.
+
+    Returns the new path. If the source is already so named/tagged it is left in
+    place. The keyword is declared with a ``KEYWORD`` line so ArgyllCMS tools
+    still parse the file."""
+    src = Path(src)
+    dst = (src if src.stem.endswith("-verify")
+           else src.with_name(f"{src.stem}-verify{src.suffix}"))
+    text = src.read_text(errors="replace")
+    if VERIFICATION_KEYWORD not in text:
+        lines = text.splitlines()
+        at = 1 if lines and lines[0].strip().startswith("CTI3") else 0
+        lines[at:at] = [f'KEYWORD "{VERIFICATION_KEYWORD}"',
+                        f'{VERIFICATION_KEYWORD} "true"']
+        text = "\n".join(lines) + "\n"
+    dst.write_text(text)
+    if dst != src and src.exists():
+        src.unlink()
+    return dst
+
+
+def is_verification_ti3(data: "Ti3Data") -> bool:
+    """True if a parsed measurement carries the verification marker."""
+    return str(data.keywords.get(VERIFICATION_KEYWORD, "")).lower() == "true"
+
+
 # ---------------------------------------------------------------------------
 # Parsing
 # ---------------------------------------------------------------------------
