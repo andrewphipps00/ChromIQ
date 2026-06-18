@@ -131,8 +131,10 @@ class ProfileInfoDialog(QDialog):
         self._scroll.setFrameShape(QFrame.Shape.NoFrame)
         # The details are the point of this window, so give the scroll a tall
         # floor — otherwise the no-overlap minimum collapses it to a sliver and
-        # a loaded profile's rows are barely visible.
-        self._scroll.setMinimumHeight(320)
+        # a loaded profile's rows are barely visible. Tall enough that the full
+        # row set (incl. the paper-white/max-black contrast block) fits without
+        # scrolling.
+        self._scroll.setMinimumHeight(430)
 
         self._details = QWidget()
         self._grid = QGridLayout(self._details)
@@ -227,7 +229,7 @@ class ProfileInfoDialog(QDialog):
                 w.setParent(None)   # remove from view immediately, not on the
                 w.deleteLater()     # next event loop (else it paints over rows)
 
-    def _add_row(self, row: int, key: str, value: str) -> None:
+    def _add_row(self, row: int, key: str, value: str, tooltip: str = "") -> None:
         k = QLabel(key, self._details)
         k.setStyleSheet(
             f"color: {TEXT_DIM}; font-family: Menlo, Consolas, monospace; font-size: 11px;")
@@ -237,30 +239,89 @@ class ProfileInfoDialog(QDialog):
         v.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         v.setStyleSheet(
             f"color: {TEXT_MAIN}; font-family: Menlo, Consolas, monospace; font-size: 12px;")
+        if tooltip:
+            k.setToolTip(tooltip)
+            v.setToolTip(tooltip)
         self._grid.addWidget(k, row, 0)
         self._grid.addWidget(v, row, 1)
 
     def _populate(self, info: IccInfo) -> None:
         self._clear_grid()
-        wp = "  ".join(f"{c:.4f}" for c in info.white_point)
         rows = [
-            (tr("Description"),     info.description),
-            (tr("ICC version"),     tr("v{ver}").format(ver=info.version)),
-            (tr("Profile type"),    info.device_class_label),
-            (tr("Colour space"),    info.color_space_label),
-            (tr("Connection space"),info.pcs_label),
-            (tr("Rendering intent"),info.rendering_intent_label),
-            (tr("White point (XYZ)"), wp),
-            (tr("Created by"),      info.creator_label),
-            (tr("Created"),         info.created),
-            (tr("Embedded"),        tr("Yes") if info.is_embedded else tr("No")),
-            (tr("File size"),       tr("{kb:,.0f} KB").format(kb=info.size / 1024.0)),
+            (tr("Description"),     info.description, ""),
+            (tr("ICC version"),     tr("v{ver}").format(ver=info.version), ""),
+            (tr("Profile type"),    info.device_class_label, ""),
+            (tr("Colour space"),    info.color_space_label, ""),
+            (tr("Connection space"),info.pcs_label, ""),
+            (tr("Rendering intent"),info.rendering_intent_label, ""),
         ]
-        for i, (k, v) in enumerate(rows):
-            self._add_row(i, k, v)
+        rows += self._contrast_rows(info)
+        rows += [
+            (tr("Created by"),      info.creator_label, ""),
+            (tr("Created"),         info.created, ""),
+            (tr("Embedded"),        tr("Yes") if info.is_embedded else tr("No"), ""),
+            (tr("File size"),       tr("{kb:,.0f} KB").format(kb=info.size / 1024.0), ""),
+        ]
+        for i, (k, v, tip) in enumerate(rows):
+            self._add_row(i, k, v, tip)
         self._gamut_row = len(rows)
         self._body.setText(
             tr("Showing details for “{name}”.").format(name=info.path.name))
+
+    def _contrast_rows(self, info: IccInfo) -> list[tuple[str, str, str]]:
+        """Paper-white / max-black rows: white point, the two L* values and the
+        three contrast figures (ratio, dynamic range, ΔL*). Falls back to the
+        header illuminant if the profile has no media white-point tag."""
+        if info.media_white is not None:
+            wp = "  ".join(f"{c:.4f}" for c in info.media_white)
+            wp_label = tr("Paper white (XYZ)")
+            wp_tip = tr(
+                "The colour of the blank paper as the profile records it — the "
+                "lightest the print can be. Read from the profile's media "
+                "white-point tag (not the fixed D50 reference).")
+        else:
+            wp = "  ".join(f"{c:.4f}" for c in info.white_point)
+            wp_label = tr("White point (XYZ)")
+            wp_tip = tr(
+                "The profile's reference white. This profile has no media "
+                "white-point tag, so this is the connection-space illuminant "
+                "(D50), not the paper itself.")
+        rows: list[tuple[str, str, str]] = [(wp_label, wp, wp_tip)]
+
+        wlab, blab = info.white_lab, info.black_lab
+        if wlab is not None:
+            rows.append((
+                tr("Paper white L*"), tr("{l:.1f}").format(l=wlab[0]),
+                tr("Lightness of the paper white on the 0–100 L* scale. Higher "
+                   "means a brighter, whiter paper.")))
+        if blab is not None:
+            rows.append((
+                tr("Max black L*"), tr("{l:.1f}").format(l=blab[0]),
+                tr("Lightness of the darkest black this paper-and-ink "
+                   "combination can print. Lower means a deeper black.")))
+
+        ratio = info.contrast_ratio
+        if ratio is not None:
+            rows.append((
+                tr("Contrast ratio"), tr("{r:,.0f} : 1").format(r=ratio),
+                tr("How many times brighter the paper white is than the "
+                   "deepest black (their luminance ratio). A bigger number "
+                   "means more contrast — punchier prints.")))
+        drange = info.dynamic_range
+        if drange is not None:
+            rows.append((
+                tr("Dynamic range"), tr("{d:.2f} D").format(d=drange),
+                tr("The same contrast expressed as optical density, the way "
+                   "print and photo people measure it: the span from the "
+                   "lightest to the darkest tone. Each whole step is a "
+                   "ten-fold change in reflected light.")))
+        dl = info.delta_lstar
+        if dl is not None:
+            rows.append((
+                tr("Lightness range ΔL*"), tr("{d:.1f}").format(d=dl),
+                tr("The gap in lightness between paper white and max black on "
+                   "the L* scale — a quick, perceptual measure of contrast.")))
+        return rows
 
     def _populate_error(self, msg: str) -> None:
         self._clear_grid()

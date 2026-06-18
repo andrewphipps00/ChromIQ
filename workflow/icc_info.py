@@ -16,9 +16,26 @@ No third-party dependency and no Argyll call — just ``struct`` on the bytes.
 """
 from __future__ import annotations
 
+import math
 import struct
 from dataclasses import dataclass
 from pathlib import Path
+
+# ICC PCS reference white (D50), used to turn the absolute wtpt/bkpt XYZ tags
+# into L*a*b*. These match the values ArgyllCMS reports for media-absolute Lab.
+_D50 = (0.96422, 1.0, 0.82521)
+
+
+def _f_lab(t: float) -> float:
+    """CIE L*a*b* nonlinearity."""
+    return t ** (1.0 / 3.0) if t > 216.0 / 24389.0 else (24389.0 / 27.0 * t + 16.0) / 116.0
+
+
+def xyz_to_lab(xyz: tuple[float, float, float],
+               ref: tuple[float, float, float] = _D50) -> tuple[float, float, float]:
+    """Convert an XYZ triple to L*a*b* against reference white ``ref`` (D50)."""
+    fx, fy, fz = (_f_lab(c / r) for c, r in zip(xyz, ref))
+    return (116.0 * fy - 16.0, 500.0 * (fx - fy), 200.0 * (fy - fz))
 
 # --- signature → friendly label maps (ICC.1:2010 tables) --------------------
 
@@ -81,14 +98,47 @@ class IccInfo:
     creator: str               # raw 4-char signature
     platform: str              # raw 4-char signature
     is_embedded: bool
-    white_point: tuple[float, float, float]
+    white_point: tuple[float, float, float]   # header PCS illuminant (always D50)
     created: str               # "YYYY-MM-DD HH:MM:SS" or ""
     description: str           # from 'desc' tag, best-effort
+    # Media white / black point tags (absolute XYZ). 'wtpt' is required by the
+    # spec; 'bkpt' is optional and deprecated in v4, so it may be None.
+    media_white: tuple[float, float, float] | None = None
+    media_black: tuple[float, float, float] | None = None
 
     # -- friendly accessors -------------------------------------------------
     @property
     def version(self) -> str:
         return f"{self.version_major}.{self.version_minor}"
+
+    # -- paper-white / max-black contrast ----------------------------------
+    @property
+    def white_lab(self) -> tuple[float, float, float] | None:
+        return xyz_to_lab(self.media_white) if self.media_white else None
+
+    @property
+    def black_lab(self) -> tuple[float, float, float] | None:
+        return xyz_to_lab(self.media_black) if self.media_black else None
+
+    @property
+    def contrast_ratio(self) -> float | None:
+        """Luminance contrast ratio Y_white : Y_black (e.g. 193.0 → "193:1")."""
+        if not (self.media_white and self.media_black):
+            return None
+        yw, yb = self.media_white[1], self.media_black[1]
+        return yw / yb if yb > 0 else None
+
+    @property
+    def dynamic_range(self) -> float | None:
+        """Dynamic range as an optical-density span, log10(Y_white / Y_black)."""
+        r = self.contrast_ratio
+        return math.log10(r) if r and r > 0 else None
+
+    @property
+    def delta_lstar(self) -> float | None:
+        """Lightness spread between paper white and max black, L*_w − L*_b."""
+        w, b = self.white_lab, self.black_lab
+        return (w[0] - b[0]) if (w and b) else None
 
     @property
     def is_v4(self) -> bool:
@@ -166,6 +216,30 @@ def _read_desc(data: bytes, header_size: int) -> str:
     return ""
 
 
+def _read_xyz_tag(data: bytes, want: bytes) -> tuple[float, float, float] | None:
+    """Best-effort read of an XYZType tag (e.g. ``b'wtpt'``, ``b'bkpt'``).
+
+    Returns the first XYZNumber as a float triple, or ``None`` if the tag is
+    absent or unparseable. XYZType layout: type(4) 'XYZ ' · reserved(4) · then
+    one or more XYZNumber, each three s15Fixed16 (big-endian /65536)."""
+    try:
+        count = struct.unpack_from(">I", data, 128)[0]
+        for i in range(count):
+            base = 132 + i * 12
+            if base + 12 > len(data):
+                break
+            if data[base:base + 4] != want:
+                continue
+            offset, _size = struct.unpack_from(">II", data, base + 4)
+            if offset + 20 > len(data) or data[offset:offset + 4] != b"XYZ ":
+                return None
+            x, y, z = struct.unpack_from(">3i", data, offset + 8)
+            return (x / 65536.0, y / 65536.0, z / 65536.0)
+    except (struct.error, IndexError):
+        return None
+    return None
+
+
 def read_icc(path: str | Path) -> IccInfo:
     """Parse the ICC header (and 'desc' tag) of ``path``.
 
@@ -201,6 +275,8 @@ def read_icc(path: str | Path) -> IccInfo:
 
     creator = _sig(data[80:84])
     description = _read_desc(data, size)
+    media_white = _read_xyz_tag(data, b"wtpt")
+    media_black = _read_xyz_tag(data, b"bkpt")
 
     return IccInfo(
         path=p,
@@ -217,6 +293,8 @@ def read_icc(path: str | Path) -> IccInfo:
         white_point=white_point,
         created=created,
         description=description,
+        media_white=media_white,
+        media_black=media_black,
     )
 
 

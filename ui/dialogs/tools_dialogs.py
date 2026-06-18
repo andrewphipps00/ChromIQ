@@ -2009,6 +2009,9 @@ def open_tool_dialog(
     elif key == "profile_info":
         from ui.dialogs.profile_info_dialog import ProfileInfoDialog
         dlg = ProfileInfoDialog(runner, settings, parent)
+    elif key == "ti3_info":
+        from ui.dialogs.ti3_info_dialog import Ti3InfoDialog
+        dlg = Ti3InfoDialog(settings, parent)
     elif key == "softproof":
         from ui.dialogs.softproof_dialog import SoftproofDialog
         dlg = SoftproofDialog(runner, settings, parent)
