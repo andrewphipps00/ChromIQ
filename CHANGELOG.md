@@ -1,5 +1,15 @@
 # Changelog
 
+## v3.11.1
+
+### 🐛 Fixed
+- **Save preset suggests the chart-layout name, not the profile name.** The
+  Save Preset window now pre-fills the descriptive **chart-layout** name
+  (instrument-paper-patches-pages-orientation) — a preset names a layout, so the
+  printer-profile name from the Output frame no longer leaks in. Its info text
+  now suggests a *layout*-distinguishing detail (a variant, build or date)
+  instead of a paper type. (#70, thanks **Knut (@soul-traveller)**)
+
 ## v3.11.0
 
 ### ✨ Changed

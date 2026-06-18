@@ -3454,36 +3454,29 @@ class TabChart(QWidget):
             self._manual_td_check.setChecked(bool(data.get("triple_density", False)))
 
     def _preset_save_prefill(self) -> tuple[str, bool, bool, bool]:
-        """Initial (name, auto_run, attach, suggested_from_target) for the Save
-        Preset dialog.
+        """Initial (name, auto_run, attach, from_generator) for the Save Preset
+        dialog.
 
-        The name is based on the **target name** in the output frame — that's
-        the chart's actual identity. A stale preset still selected in the combo
-        is *not* a reliable basis: you may have started a completely different
-        layout since (Knut's #50 follow-up). A selected user preset's name is
-        used only as a fallback when no target name is set, so re-opening the
-        dialog to overwrite that preset still works.
+        A preset names a **chart layout**, so the default is the descriptive
+        generator name (instrument-paper-patches-pages-orientation) — *not* the
+        printer-profile name in the Output frame, which describes the job, not
+        the layout (#70, Knut). A non-built-in preset selected in the combo is
+        the fallback when there's no generator name yet.
 
-        Options follow the *name*, not the combo: if it matches an existing user
-        preset (i.e. you're about to overwrite it) its stored auto_run / attach
-        are reused; otherwise it's a new preset and both default on — the common
-        case."""
-        # Use the user's *base* name (without the auto descriptive suffix): a
-        # preset is reused across instruments/papers/pages, so its name
-        # shouldn't bake in this chart's specific suffix.
-        edit = self._manual_target_name_edit
-        target = ((edit.tail() if isinstance(edit, PrefixLockedLineEdit)
-                   else edit.text()).strip() if edit is not None else "")
+        Options follow the *name*: if it matches an existing user preset (i.e.
+        you're about to overwrite it) its stored auto_run / attach are reused;
+        otherwise it's a new preset and both default on — the common case."""
+        generated = self._suggest_target_name().strip()
         cur_key = self._preset_combo.currentData()
         selected_preset = (str(cur_key)
                            if cur_key is not None and cur_key not in BUILTIN_PRESET_KEYS
                            else "")
-        name = target or selected_preset
+        name = generated or selected_preset
         existing = self._load_presets_from_settings().get(name)
         if isinstance(existing, dict):
             return (name, bool(existing.get("auto_run")),
-                    bool(existing.get("attached_ti1")), bool(target))
-        return (name, True, True, bool(target))
+                    bool(existing.get("attached_ti1")), bool(generated))
+        return (name, True, True, bool(generated))
 
     @staticmethod
     def _paper_name_and_orientation(paper: str) -> tuple[str, str]:
@@ -3580,19 +3573,19 @@ class TabChart(QWidget):
     @staticmethod
     def _auto_suffix_tooltip() -> str:
         return tr(
-            "Keeps your chart's name self-describing and tidy to sort. With this on, "
-            "ChromIQ puts the key details — instrument, paper size, patch count, pages "
-            "and orientation — at the START of the name, then your own text after. So "
-            "the name begins “i1Pro-A4-484p-1page-Portrait-” and you just add e.g. "
-            "“Baryta” → “i1Pro-A4-484p-1page-Portrait-Baryta”.\n\n"
-            "Leading with those details means your charts sort neatly together by "
-            "instrument and paper. That part updates on its own as you change the "
-            "settings and can't be edited directly — click the field and your cursor "
-            "lands right after it, ready to type. Turn the option off to name the chart "
-            "entirely yourself.\n\n"
-            "Why it helps: months from now, the folder and the ICC file name alone tell "
-            "you exactly what the chart was — which instrument, paper and how many "
-            "patches — without opening anything.")
+            "Names this preset after its chart layout, so layout presets sort and read "
+            "clearly together. With this on, ChromIQ leads the name with the layout's "
+            "key details — instrument, paper size, patch count, pages and orientation — "
+            "as a locked prefix, then you add your own detail after. So the name begins "
+            "“i1Pro-A4-484p-1page-Portrait-” and you just add what tells this layout "
+            "apart from your others.\n\n"
+            "Add a detail about the layout itself — for example a variant or revision "
+            "(“v2”), how it was built (“denser”, “no-greys”), or a date. There's no need "
+            "to repeat printer or paper here: those name the finished profile, not the "
+            "chart layout.\n\n"
+            "The prefix updates on its own as you change the settings and can't be "
+            "edited directly — click the field and your cursor lands right after it, "
+            "ready to type. Turn the option off to name the preset entirely yourself.")
 
     @staticmethod
     def _profile_name_tooltip() -> str:
@@ -3730,7 +3723,7 @@ class TabChart(QWidget):
         capture["triple_density"] = bool(
             self._manual_td_check is not None and self._manual_td_check.isChecked()
         )
-        (prefill_name, prefill_run, prefill_attach,
+        (_prefill_name, prefill_run, prefill_attach,
          prefilled_from_target) = self._preset_save_prefill()
         # A patch set can only be attached if one is currently loaded.
         have_ti1 = (self._current_ti1_path is not None
@@ -3761,14 +3754,14 @@ class TabChart(QWidget):
         name_lbl = QLabel(tr("Preset name:"), dlg)
         lay.addWidget(name_lbl)
         edit = PrefixLockedLineEdit(dlg)
-        edit.setText(prefill_name)
         edit.setMinimumHeight(28)
         edit.setPlaceholderText(tr("Preset name"))
         lay.addWidget(edit)
-        # "Add a descriptive prefix" — same option as the Create Chart tabs:
-        # when on, lead the preset name with the live instrument · paper · patch ·
-        # pages · orientation details (sortable), with your text after. Defaults
-        # to the global setting; local to this dialog. (#68)
+        # "Add a descriptive prefix": a preset names a CHART LAYOUT, so the
+        # default comes from the layout generator (instrument · paper · patch ·
+        # pages · orientation), never the printer-profile name. ON locks that as
+        # a greyed prefix with a trailing '-' for a distinguishing detail; OFF
+        # shows it as a plain editable name. (#70, Knut)
         preset_suffix_cb = QCheckBox(tr("Add a descriptive prefix"), dlg)
         preset_suffix_cb.setChecked(bool(self._settings.get("create_chart_auto_suffix", True)))
         preset_suffix_cb.toggled.connect(
@@ -3780,14 +3773,13 @@ class TabChart(QWidget):
         suffix_row.addWidget(TooltipButton(tr("Add a descriptive prefix"),
                                            self._auto_suffix_tooltip(), dlg, min_width=520))
         lay.addLayout(suffix_row)
-        # ON: lock the descriptive head, keep the user's suggested suffix after a
-        # '-'. OFF: leave the field plain/editable (set by setText above) (#68).
-        if preset_suffix_cb.isChecked():
-            edit.set_prefix(self._name_prefix())
+        # Seed the field from the chart-layout generator (not the profile name):
+        # ON → "<generated>-", OFF → "<generated>" editable.
+        self._toggle_name_prefix(edit, preset_suffix_cb.isChecked(), self._name_prefix())
         if prefilled_from_target:
             name_hint = QLabel(
-                tr("Suggested from your current target name — change it to "
-                "something you'll recognise in the preset list."),
+                tr("Suggested from this chart's layout — add a detail to tell it "
+                "apart from your other layout presets."),
                 dlg)
             name_hint.setWordWrap(True)
             name_hint.setObjectName("info")
