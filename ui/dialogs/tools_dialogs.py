@@ -1028,7 +1028,7 @@ class Ti1ToI1ProfilerDialog(_ToolDialogBase):
         if not is_rgb and not no_file:
             self._wf_check.setChecked(False)
             self._wf_note.setText(
-                tr("Workflow files are RGB-only — this target is "
+                tr("Workflow files are RGB-only — this chart is "
                    "{kind}, so only the patch set will be written."
                    ).format(kind=self._ti1_kind)
             )

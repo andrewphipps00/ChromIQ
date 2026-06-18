@@ -281,8 +281,8 @@ class SoftproofDialog(QDialog):
         # Quick-pick a bundled photographic test target (no file hunting).
         test_row = QHBoxLayout()
         test_row.setContentsMargins(0, 0, 0, 0)
-        test_btn = QPushButton(tr("Use built-in test target"), self)
-        test_btn.setToolTip(tr("Load the bundled PhotoDisc colour test target "
+        test_btn = QPushButton(tr("Use built-in test image"), self)
+        test_btn.setToolTip(tr("Load the bundled PhotoDisc colour test image "
                                "(Adobe RGB) — good for trying the soft-proof."))
         test_btn.clicked.connect(self._load_test_target)
         test_row.addWidget(test_btn)

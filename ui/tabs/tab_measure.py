@@ -640,7 +640,7 @@ class TabMeasure(QWidget):
         top_layout.setContentsMargins(16, 12, 16, 6)
         top_layout.setSpacing(8)
         top_layout.addWidget(TabHeader(
-            tr("STEP 03 · MEASURE TARGET"), tr("Measure printed chart"), "#56d6a5", top_widget,
+            tr("STEP 03 · MEASURE CHART"), tr("Measure printed chart"), "#56d6a5", top_widget,
             tooltip_title=tr("Step 3 — Measure the print"),
             tooltip_body=(
                 tr("On this screen, your spectrophotometer reads every colour patch "
@@ -695,7 +695,7 @@ class TabMeasure(QWidget):
         fo_layout = QVBoxLayout(file_outer)
         fo_layout.setContentsMargins(16, 4, 16, 0)
         fo_layout.setSpacing(0)
-        self._file_grp = file_grp = QGroupBox(tr("Target File (.ti2)"), file_outer)
+        self._file_grp = file_grp = QGroupBox(tr("Chart File (.ti2)"), file_outer)
         file_grp.setFlat(True)
         fg = QVBoxLayout(file_grp)
         fg.setContentsMargins(8, 6, 8, 8)
@@ -3327,13 +3327,13 @@ class TabMeasure(QWidget):
             n = len(self._strip_list)
             dlg.setWindowTitle(tr("Re-measurement Complete"))
             msg = QLabel(
-                tr("<b>All {n} target strip(s) have been re-measured successfully.</b><br><br>What would you like to do next?<br><br>&nbsp;&nbsp;•&nbsp; <b>Build Profile</b> — saves the measurement and takes you straight to the Build Profile tab to create your updated ICC profile.<br><br>&nbsp;&nbsp;•&nbsp; <b>Continue Measuring Manually</b> — keeps chartread running so you can scan additional strips yourself. You will have <b>full manual control</b>: use <b>f</b>&nbsp;/&nbsp;<b>b</b> to move between strips, <b>n</b> to jump to the next unread one, and <b>d</b> when you are done. The automatic strip navigation is switched off for the rest of this session.").format(n=n),
+                tr("<b>All {n} chart strip(s) have been re-measured successfully.</b><br><br>What would you like to do next?<br><br>&nbsp;&nbsp;•&nbsp; <b>Build Profile</b> — saves the measurement and takes you straight to the Build Profile tab to create your updated ICC profile.<br><br>&nbsp;&nbsp;•&nbsp; <b>Continue Measuring Manually</b> — keeps chartread running so you can scan additional strips yourself. You will have <b>full manual control</b>: use <b>f</b>&nbsp;/&nbsp;<b>b</b> to move between strips, <b>n</b> to jump to the next unread one, and <b>d</b> when you are done. The automatic strip navigation is switched off for the rest of this session.").format(n=n),
                 dlg,
             )
         elif is_cal:
             dlg.setWindowTitle(tr("Calibration Measurement Complete"))
             msg = QLabel(
-                tr("<b>All stripes of your calibration target have been read successfully.</b><br><br>"
+                tr("<b>All stripes of your calibration chart have been read successfully.</b><br><br>"
                 "The measurement data has been saved. The next step is to turn it into a "
                 "<b>calibration file (.cal)</b> — click <b>Create Calibration File</b> to go "
                 "directly to the <b>4. Calibration &amp; Profiling</b> tab, where the file "
