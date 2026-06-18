@@ -55,7 +55,7 @@ class TargetChangeDialog(QDialog):
     ) -> None:
         super().__init__(parent)
         self._action = TargetChangeAction.CANCEL
-        self.setWindowTitle(tr("This target already exists under a different name"))
+        self.setWindowTitle(tr("Rename Printer Profile"))
         self.setMinimumWidth(580)
         # Cap generously: the option titles embed the (variable-length) target
         # names, so the dialog must be able to grow wide enough to show them in
@@ -79,7 +79,7 @@ class TargetChangeDialog(QDialog):
         outer.setSpacing(14)
 
         heading = QLabel(
-            tr("You already created the target \"{old_name}\", and now asked to generate one called \"{new_name}\".").format(old_name=old_name, new_name=new_name),
+            tr("You already created the profile \"{old_name}\", and now asked to generate one called \"{new_name}\".").format(old_name=old_name, new_name=new_name),
             self,
         )
         heading.setWordWrap(True)
