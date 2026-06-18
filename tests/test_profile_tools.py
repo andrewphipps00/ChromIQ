@@ -246,6 +246,43 @@ def test_profile_info_min_height_floor():
     dlg.close()
 
 
+def test_ti3_dialog_inspect_then_verify_reference(tmp_path: Path):
+    """Inspect mode renders today's report; flipping to Verify + attaching a
+    reference adds the residual + accuracy sections (pure-Python path, no Argyll)."""
+    from ui.dialogs.ti3_info_dialog import Ti3InfoDialog
+    meas = tmp_path / "m.ti3"
+    meas.write_text(
+        "CTI3\n\nCOLOR_REP \"iRGB_XYZ\"\nNUMBER_OF_FIELDS 7\nBEGIN_DATA_FORMAT\n"
+        "SAMPLE_ID RGB_R RGB_G RGB_B XYZ_X XYZ_Y XYZ_Z\nEND_DATA_FORMAT\n\n"
+        "NUMBER_OF_SETS 3\nBEGIN_DATA\n"
+        "1 100 100 100 86 90 75 \n2 50 50 50 18 19 16 \n3 0 0 0 0.9 1.0 1.1 \n"
+        "END_DATA\n")
+    ref = tmp_path / "ref.ti3"
+    ref.write_text(
+        "CTI3\n\nNUMBER_OF_FIELDS 4\nBEGIN_DATA_FORMAT\n"
+        "SAMPLE_ID LAB_L LAB_A LAB_B\nEND_DATA_FORMAT\n\nNUMBER_OF_SETS 3\n"
+        "BEGIN_DATA\n1 96 0 0 \n2 51 1 -1 \n3 9 0 0 \nEND_DATA\n")
+
+    dlg = Ti3InfoDialog(_runner(), _Settings())
+    dlg.show()
+    dlg.load_measurement(meas)
+    assert dlg._mode == "inspect"
+    assert not dlg._verify_box.isVisible()
+
+    dlg._rb_verify.setChecked(True)            # manual toggle
+    assert dlg._mode == "verify"
+    assert dlg._verify_box.isVisible()
+
+    dlg._cmp_combo.setCurrentIndex(2)          # Reference
+    dlg._compare_path = ref
+    dlg._recompute_accuracy()
+    dlg._render()
+    assert dlg._accuracy is not None
+    assert dlg._accuracy.n == 3
+    assert dlg._accuracy.source == "reference"
+    dlg.close()
+
+
 def test_softproof_dialog_builds_and_floors():
     from ui.dialogs.softproof_dialog import SoftproofDialog
     dlg = SoftproofDialog(_runner(), _Settings())

@@ -566,7 +566,30 @@ class TooltipWrapFilter(QObject):
                 h = obj.heightForWidth(self.MAX_W)
                 if h > 0:
                     obj.setFixedSize(self.MAX_W, h)
+                    # QToolTip already positioned the label using its huge
+                    # pre-wrap width, so a very wide tooltip got shoved to the
+                    # screen's left edge. Re-anchor the now-narrow box near the
+                    # cursor, clamped on-screen, so it appears where the mouse is.
+                    self._reanchor(obj, self.MAX_W, h)
         return False
+
+    @staticmethod
+    def _reanchor(obj: QLabel, w: int, h: int) -> None:
+        from PyQt6.QtGui import QCursor, QGuiApplication
+        cpos = QCursor.pos()
+        screen = QGuiApplication.screenAt(cpos) or QGuiApplication.primaryScreen()
+        if screen is None:
+            return
+        geo = screen.availableGeometry()
+        x = cpos.x() + 14
+        y = cpos.y() + 20
+        if x + w > geo.right():
+            x = cpos.x() - w - 4
+        if y + h > geo.bottom():
+            y = cpos.y() - h - 6
+        x = min(max(x, geo.left()), geo.right() - w)
+        y = min(max(y, geo.top()), geo.bottom() - h)
+        obj.move(x, y)
 
 
 def reapply_groupbox_surface(root: QWidget) -> None:
