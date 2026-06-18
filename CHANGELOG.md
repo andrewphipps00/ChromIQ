@@ -1,5 +1,19 @@
 # Changelog
 
+## v3.11.4
+
+### 🐛 Fixed
+- **Pure white & black patches are added again.** In the layout editor's *Add
+  patches* window, the “Pure white & black” set with *each: 2* added nothing
+  when the chart already held white and black — it now adds the requested
+  anchors on top of the existing chart (they're deliberate repeats, e.g. for
+  averaging paper-white reads), and the count/total reflect them (#76, thanks
+  @soul-traveller).
+- **No more duplicate label on the 3D cube.** When comparing two patch
+  distributions, each cube already carries its own title, so the redundant
+  “Current chart” label in the top bar is now hidden in compare mode and shown
+  only for the single-cube view (#77, thanks @soul-traveller).
+
 ## v3.11.3
 
 ### 💄 Improved
