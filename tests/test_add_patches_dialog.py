@@ -352,3 +352,23 @@ def test_gen_sets_help_matches_new_chart_tooltip():
     nc = next(k for k in extract_keys()
               if k.startswith("Let's start a brand-new chart"))
     assert _GEN_SETS_HELP == "\n\n".join(nc.split("\n\n")[5:19])
+
+
+def test_white_black_added_over_existing_chart(qapp):
+    """#76: pure white & black are deliberate anchors — with each=2 they add
+    2 white + 2 black even when the existing chart already holds white/black,
+    instead of de-duping to 0."""
+    existing = [(100.0, 100.0, 100.0), (100.0, 100.0, 100.0),
+                (0.0, 0.0, 0.0), (0.0, 0.0, 0.0), (50.0, 50.0, 50.0)]
+    dlg = _AddPatchesDialog(_FakeSettings(), existing_patches=existing)
+    for cb in (dlg._gen_cube, dlg._gen_skin, dlg._gen_blues, dlg._gen_greens,
+               dlg._gen_sunrises, dlg._gen_greys, dlg._gen_edges, dlg._gen_hs,
+               dlg._gen_pastel, dlg._gen_image, dlg._gen_fill):
+        cb.setChecked(False)
+    dlg._gen_whiteblack.setChecked(True)
+    dlg._gen_whiteblack_n.setValue(2)
+    dlg._update_gen_counts()
+    assert "4" in dlg._gen_whiteblack_count.text()
+    prog = dlg._build_generated_program()
+    assert prog.count((100.0, 100.0, 100.0)) == 2
+    assert prog.count((0.0, 0.0, 0.0)) == 2
