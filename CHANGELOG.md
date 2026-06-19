@@ -1,5 +1,20 @@
 # Changelog
 
+## v3.11.8
+
+### 💄 Improved
+- **Near-neutral greys generator: a true black-and-white wedge.** In the chart
+  layout editor's **Generate colour sets** mode (behind *New chart…* and
+  *Add…*), the **Near-neutral greys** set now lets you set **rings to 0** — a
+  plain neutral grey ramp with no hue tints at all, exactly what you want for
+  black-and-white work and linearization. The **rings** and **offset** controls
+  swapped places (now *steps · rings · offset*), and **offset** greys out when
+  rings is 0, since it has no effect there. The patch count stays correct (0
+  rings = just the grey steps). Tooltips and the in-app help explain it.
+
+### 🌍 Translations
+- Updated the Near-neutral greys help and tooltip in all twelve languages.
+
 ## v3.11.7
 
 ### 🐛 Fixed

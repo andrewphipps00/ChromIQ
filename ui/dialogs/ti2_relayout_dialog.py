@@ -109,7 +109,9 @@ _GEN_SETS_HELP = (
     "there are, how far the tints stray from neutral ('offset'), and how "
     "many rings to circle each grey with ('rings'): one ring is six "
     "tints, and each extra ring adds a wider, denser one (12, then 18 "
-    "tints) for fuller near-neutral coverage when you want it.\n\n"
+    "tints) for fuller near-neutral coverage when you want it. Set rings "
+    "to 0 for a plain neutral ramp with no tints at all — a "
+    "black-and-white wedge — in which case 'offset' has no effect.\n\n"
     "• Saturated edges — the most vivid colours the printer can manage. "
     "'Per edge' traces the twelve edges of the colour cube — the gamut "
     "wireframe (black up to each pure colour and on to white, plus the "
@@ -800,7 +802,9 @@ class _NewChartDialog(QDialog):
             "there are, how far the tints stray from neutral ('offset'), and how "
             "many rings to circle each grey with ('rings'): one ring is six "
             "tints, and each extra ring adds a wider, denser one (12, then 18 "
-            "tints) for fuller near-neutral coverage when you want it.\n\n"
+            "tints) for fuller near-neutral coverage when you want it. Set rings "
+            "to 0 for a plain neutral ramp with no tints at all — a "
+            "black-and-white wedge — in which case 'offset' has no effect.\n\n"
             "• Saturated edges — the most vivid colours the printer can manage. "
             "'Per edge' traces the twelve edges of the colour cube — the gamut "
             "wireframe (black up to each pure colour and on to white, plus the "
@@ -1494,20 +1498,27 @@ class _NewChartDialog(QDialog):
         self._gen_greys.setChecked(True)
         self._gen_greys.setToolTip(tr("A neutral grey ramp plus, at each step, "
                                    "rings of small hue tints around the neutral "
-                                   "axis. 'Offset' sets the first ring's "
-                                   "distance; 'rings' adds wider rings (6, 12, "
-                                   "18 tints) for a denser near-neutral cluster."))
+                                   "axis. 'Rings' is how many rings circle each "
+                                   "grey (6, 12, 18 tints) for a denser "
+                                   "near-neutral cluster — set it to 0 for a "
+                                   "plain neutral ramp with no tints (a "
+                                   "black-and-white wedge). 'Offset' sets the "
+                                   "first ring's distance, and has no effect when "
+                                   "rings is 0."))
         self._gen_greys_n = _spin(1, 64, 16)
+        self._gen_greys_rings = _spin(0, 3, 1)
         self._gen_greys_off = _spin(1, 50, 4)
-        self._gen_greys_rings = _spin(1, 3, 1)
         self._gen_greys_count = _count_label()
+        # Kept as a field so it can be greyed out alongside the offset spin when
+        # rings is 0 (offset then has no effect).
+        self._gen_greys_off_label = QLabel(tr("offset:"))
         gg.addWidget(self._gen_greys, 5, 0)
         gg.addWidget(QLabel(tr("steps:")), 5, 1)
         gg.addWidget(self._gen_greys_n, 5, 2)
-        gg.addWidget(QLabel(tr("offset:")), 5, 3)
-        gg.addWidget(self._gen_greys_off, 5, 4)
-        gg.addWidget(QLabel(tr("rings:")), 5, 5)
-        gg.addWidget(self._gen_greys_rings, 5, 6)
+        gg.addWidget(QLabel(tr("rings:")), 5, 3)
+        gg.addWidget(self._gen_greys_rings, 5, 4)
+        gg.addWidget(self._gen_greys_off_label, 5, 5)
+        gg.addWidget(self._gen_greys_off, 5, 6)
         gg.addWidget(self._gen_greys_count, 5, 7)
 
         # Saturated edges — the gamut-boundary wireframe of the RGB cube.
@@ -1655,7 +1666,7 @@ class _NewChartDialog(QDialog):
                 row, 8, Qt.AlignmentFlag.AlignCenter)
 
         # The counts all live in one column (7), so they stay left-aligned in a
-        # tidy column for every set. Greys' extra "rings:" control sits in cols
+        # tidy column for every set. Greys' extra "offset:" control sits in cols
         # 5/6 *before* the count (those columns are empty — but reserved at full
         # width by the grid — for the other rows, so every count lines up). Per-set
         # ⓘ icons sit in col 8; a stretchy trailing column (9) soaks up spare width.
@@ -1865,6 +1876,11 @@ class _NewChartDialog(QDialog):
         ):
             for s in spins:
                 s.setEnabled(cb.isChecked())
+        # Near-neutral greys: offset has no effect with 0 rings, so grey out the
+        # offset spin + its label when rings is 0 (or the set itself is off).
+        off_on = self._gen_greys.isChecked() and self._gen_greys_rings.value() > 0
+        self._gen_greys_off.setEnabled(off_on)
+        self._gen_greys_off_label.setEnabled(off_on)
         total = 0
         for cb, _build, count, label in self._gen_specs():
             n = count()

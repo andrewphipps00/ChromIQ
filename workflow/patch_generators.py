@@ -309,17 +309,22 @@ def near_neutral_greys(steps: int, offset: float,
     interleave with its neighbours). Every tint is a *balanced* shift — the mean
     of R/G/B stays at ``g`` — a true hue excursion, not a lightness change.
 
-    With ``rings == 1`` this is the original 6-tint hexagon, identical to before.
+    With ``rings == 0`` it is a *pure* neutral ramp — just the ``steps`` greys,
+    no hue tints — so ``offset`` has no effect. With ``rings == 1`` it is the
+    original 6-tint hexagon, identical to before.
     Total = ``steps * (1 + 6 + 12 + … )`` = ``steps * (1 + 3 * rings * (rings+1))``.
 
     ``offset`` is in device units on the 0..100 scale (e.g. 6.25 ≈ 16/256).
     """
     steps = max(1, int(steps))
-    rings = max(1, int(rings))
+    rings = max(0, int(rings))
     out: list[tuple[float, float, float]] = []
     for i in range(steps):
         g = (i / (steps - 1) if steps > 1 else 0.5) * 100.0
         out.append((g, g, g))
+        if rings == 0:
+            # Pure neutral ramp — no tint rings, so offset is unused.
+            continue
         if rings == 1:
             # Preserve the exact original R/Y/G/C/B/M hexagon (and its values).
             for mask in _HUE_MASKS:
@@ -338,7 +343,7 @@ def near_neutral_greys(steps: int, offset: float,
 
 
 def near_neutral_greys_count(steps: int, rings: int = 1) -> int:
-    rings = max(1, int(rings))
+    rings = max(0, int(rings))
     tints = 3 * rings * (rings + 1)               # 6 + 12 + … = sum(6r)
     return max(1, int(steps)) * (1 + tints)
 

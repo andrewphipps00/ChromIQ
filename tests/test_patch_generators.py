@@ -203,6 +203,17 @@ def test_near_neutral_shift_is_balanced():
         assert (r, gg, b) != (g, g, g)  # actually shifted
 
 
+@pytest.mark.parametrize("steps", [1, 8, 21])
+def test_near_neutral_zero_rings_is_pure_ramp(steps):
+    # rings=0 ⇒ just the neutral ramp, no tints; offset has no effect.
+    patches = G.near_neutral_greys(steps, 6.0, 0)
+    assert len(patches) == steps == G.near_neutral_greys_count(steps, 0)
+    for r, g, b in patches:
+        assert r == g == b                      # every patch is neutral
+    # The offset value is irrelevant when there are no rings.
+    assert G.near_neutral_greys(steps, 99.0, 0) == patches
+
+
 @pytest.mark.parametrize("rings,per_step", [(1, 7), (2, 19), (3, 37)])
 def test_near_neutral_rings_count(rings, per_step):
     # Ring n adds 6n tints: 1 + 6 (+12) (+18) per step.

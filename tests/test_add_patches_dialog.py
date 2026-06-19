@@ -53,6 +53,33 @@ def test_generate_mode_returns_generated_program(qapp):
     assert len(dlg.result_program) == 64
 
 
+def test_greys_zero_rings_greys_out_offset_and_counts_steps(qapp):
+    dlg = _AddPatchesDialog(_FakeSettings())
+    dlg._add_mode_gen.setChecked(True)
+    dlg._refresh_add_mode()
+    for n in dlg._GEN_CHECKS:
+        getattr(dlg, f"_gen_{n}").setChecked(False)
+    dlg._gen_greys.setChecked(True)
+    dlg._gen_greys_n.setValue(12)
+
+    # rings > 0: offset is live, count includes the tint rings.
+    dlg._gen_greys_rings.setValue(1)
+    dlg._update_gen_counts()
+    assert dlg._gen_greys_off.isEnabled()
+    assert dlg._gen_greys_off_label.isEnabled()
+
+    # rings == 0: pure neutral ramp, offset disabled, count == steps.
+    dlg._gen_greys_rings.setValue(0)
+    dlg._update_gen_counts()
+    assert not dlg._gen_greys_off.isEnabled()
+    assert not dlg._gen_greys_off_label.isEnabled()
+    dlg._on_add()
+    assert dlg.result_program is not None
+    assert len(dlg.result_program) == 12
+    for r, g, b in dlg.result_program:
+        assert r == g == b
+
+
 def test_generate_choices_persist_to_settings(qapp):
     s = _FakeSettings()
     dlg = _AddPatchesDialog(s)
