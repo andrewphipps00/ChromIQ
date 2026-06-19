@@ -448,9 +448,9 @@ def test_flamingos_persists_and_restores_to_default(qapp):
     assert dlg._gen_flamingos_n.value() == 64
 
 
-def test_gamut_corners_spirals_in_program_and_persist(qapp):
-    """Corner emphasis adds 8×per_end spiral patches (plus the 8 tips when nothing
-    else supplies them), and its 'per end'/'depth' values save and restore."""
+def test_corner_edges_in_program_and_persist(qapp):
+    """Gamut-corner emphasis (edge patches): 24×edge patches (+ the 8 tips when
+    nothing else supplies them), and its 'edge' value saves and restores."""
     dlg = _AddPatchesDialog(_FakeSettings())
     dlg._add_mode_gen.setChecked(True)
     dlg._refresh_add_mode()
@@ -458,23 +458,50 @@ def test_gamut_corners_spirals_in_program_and_persist(qapp):
         getattr(dlg, f"_gen_{n}").setChecked(False)
     dlg._gen_unique.setChecked(False)
     dlg._gen_corners.setChecked(True)
-    dlg._gen_corners_end.setValue(5)       # 8 × 5 spiral patches
-    dlg._gen_corners_depth.setValue(12)
+    dlg._gen_corners_edge.setValue(2)      # 24 × 2 = 48 edge patches
     dlg._update_gen_counts()
-    # Cube + edges both off, so the corner set also restores the 8 tips: 40 + 8.
+    # Cube + edges both off → also restores the 8 tips: 48 + 8.
+    assert "56" in dlg._gen_corners_count.text()
+    assert len(dlg._build_generated_program()) == 56
+    dlg._gen_cube.setChecked(True)         # cube supplies the tips now → 48
+    dlg._update_gen_counts()
     assert "48" in dlg._gen_corners_count.text()
-    assert len(dlg._build_generated_program()) == 48
-    # Turn the cube on and the tips are no longer added here (it supplies them).
-    dlg._gen_cube.setChecked(True)
-    dlg._update_gen_counts()
-    assert "40" in dlg._gen_corners_count.text()
 
     st = dlg._collect_gen_sets()
-    assert st["cb"]["corners"] is True
-    assert st["sp"]["corners_end"] == 5 and st["sp"]["corners_depth"] == 12
-    # Factory baseline: off, per-end 8, depth 16.
+    assert st["cb"]["corners"] is True and st["sp"]["corners_edge"] == 2
     dlg._apply_gen_sets({"cb": dlg._GEN_FACTORY["cb"],
                          "sp": dlg._GEN_FACTORY["sp"]})
     assert dlg._gen_corners.isChecked() is False
-    assert dlg._gen_corners_end.value() == 8
-    assert dlg._gen_corners_depth.value() == 16
+    assert dlg._gen_corners_edge.value() == 2
+
+
+def test_corner_spirals_in_program_and_persist(qapp):
+    """Corner spirals: 8×per_end spiral patches, with 'per end'/'reach' saved and
+    restored, and the tip-ownership chain (only owns tips when nothing above does)."""
+    dlg = _AddPatchesDialog(_FakeSettings())
+    dlg._add_mode_gen.setChecked(True)
+    dlg._refresh_add_mode()
+    for n in dlg._GEN_CHECKS:
+        getattr(dlg, f"_gen_{n}").setChecked(False)
+    dlg._gen_unique.setChecked(False)
+    dlg._gen_spirals.setChecked(True)
+    dlg._gen_spirals_end.setValue(5)       # 8 × 5 = 40 spiral patches
+    dlg._gen_spirals_reach.setValue(12)
+    dlg._update_gen_counts()
+    # Nothing else on → spirals owns the 8 tips: 40 + 8.
+    assert "48" in dlg._gen_spirals_count.text()
+    assert len(dlg._build_generated_program()) == 48
+    # The corner-edges set ranks above spirals for the tips: enable it and the
+    # spiral no longer adds them.
+    dlg._gen_corners.setChecked(True)
+    dlg._gen_corners_edge.setValue(1)
+    dlg._update_gen_counts()
+    assert "40" in dlg._gen_spirals_count.text()   # spirals back to 8×5, no tips
+
+    st = dlg._collect_gen_sets()
+    assert st["cb"]["spirals"] is True
+    assert st["sp"]["spirals_end"] == 5 and st["sp"]["spirals_reach"] == 12
+    dlg._apply_gen_sets({"cb": dlg._GEN_FACTORY["cb"],
+                         "sp": dlg._GEN_FACTORY["sp"]})
+    assert dlg._gen_spirals.isChecked() is False
+    assert dlg._gen_spirals_end.value() == 8 and dlg._gen_spirals_reach.value() == 16

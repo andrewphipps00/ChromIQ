@@ -420,6 +420,33 @@ def test_gamut_edges_between_includes_tips_without_the_cube():
     assert G.gamut_edges_between_count(8, 1) == 84
 
 
+# --- Corner edges: extra patches on the edge lines near each tip (#78) -------
+@pytest.mark.parametrize("per_branch", [1, 2, 5])
+def test_gamut_corner_edges_count_range_and_on_the_lines(per_branch):
+    pts = G.gamut_corner_edges(per_branch)
+    assert len(pts) == 24 * per_branch == G.gamut_corner_edges_count(per_branch)
+    assert _all_in_range(pts)
+    for p in pts:
+        # On a cube edge line (two coords pinned at 0 or 100) and near a tip.
+        assert sum(1 for v in p if v in (0.0, 100.0)) >= 2
+        assert min(math.dist(p, c) for c in G._CORNER_PTS) <= G._CORNER_EDGE_NEAR + 1e-6
+
+
+def test_gamut_corner_edges_interleave_avoids_existing():
+    # Given a dense cube on the edges, the corner-edge patches sit in the gaps,
+    # never landing on a cube point.
+    cube = G.rgb_cube(8)
+    pts = G.gamut_corner_edges(2, existing=cube)
+    assert all(min(math.dist(p, c) for c in cube) > 1.0 for p in pts)
+
+
+def test_gamut_corner_edges_include_corners_and_zero():
+    assert G.gamut_corner_edges(0) == []
+    full = G.gamut_corner_edges(2, include_corners=True)
+    assert len(full) == 24 * 2 + 8 == G.gamut_corner_edges_count(2, include_corners=True)
+    assert all(t in full for t in G._CORNER_PTS)
+
+
 # --- Flamingos — the pink / magenta / indigo band (Knut, #78) --------------
 @pytest.mark.parametrize("count", [1, 30, 192])
 def test_flamingos_count_and_range(count):

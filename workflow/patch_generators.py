@@ -696,21 +696,21 @@ def _perp_basis(d):
     return u, v
 
 
-def gamut_corners(per_end: int, depth: float,
+def gamut_corners(per_end: int, reach: float,
                   include_corners: bool = False) -> list[tuple[float, float, float]]:
     """A phyllotaxis spiral *cone* just inside each of the 8 cube corners —
     Highlights & shadows generalised from the white/black corners to all eight.
 
     Each corner gets ``per_end`` patches (``8 * per_end`` in all) spiralling in
     along the corner's diagonal toward the cube centre: successive points step
-    deeper (up to ``depth`` device units) and rotate by the golden angle, with the
+    deeper (up to ``reach`` device units) and rotate by the golden angle, with the
     cone widening as it goes, so the cluster is dense at the saturated tip and
     fans out inward without spokes. The exact corner tip is **not** included (it's
-    owned by the cube or the edges set) unless ``include_corners=True`` — used
-    only when neither of those is on, so the tips are never missing.
+    owned by the cube, the edges or the corner-edges set) unless
+    ``include_corners=True`` — used only when none of those is on.
     """
     per_end = max(1, int(per_end))
-    depth = 2.0 if depth < 2.0 else 60.0 if depth > 60.0 else float(depth)
+    reach = 2.0 if reach < 2.0 else 60.0 if reach > 60.0 else float(reach)
     out: list[tuple[float, float, float]] = []
     if include_corners:
         out.extend(_CORNER_PTS)
@@ -722,7 +722,7 @@ def gamut_corners(per_end: int, depth: float,
         u, v = _perp_basis(d)
         for k in range(per_end):
             t = (k + 0.5) / per_end           # 0..1: tip → deepest
-            dd = depth * t                    # distance in along the diagonal
+            dd = reach * t                    # distance in along the diagonal
             rr = _CORNER_CONE_SLOPE * dd      # cone radius at this depth
             ang = math.radians(k * _GOLDEN_DEG)
             ca, sa = math.cos(ang), math.sin(ang)
@@ -734,6 +734,56 @@ def gamut_corners(per_end: int, depth: float,
 
 def gamut_corners_count(per_end: int, include_corners: bool = False) -> int:
     return 8 * max(1, int(per_end)) + (8 if include_corners else 0)
+
+
+# ---------------------------------------------------------------------------
+# 6d. Corner edges — extra patches on the wireframe just inside each corner tip.
+# ---------------------------------------------------------------------------
+# The TC9.18 / TC9.24 trick: a few extra samples on the gamut edge lines right by
+# each corner (the most saturated edge). They sit *on* the 12 cube edges, near the
+# tips, slotted into the gaps between whatever the 3D cube / Saturated edges
+# already placed there, so they add density without colliding (Nelson via Knut,
+# #78). Each corner has three edge branches; with both ends of every cube edge
+# sampled that's 8 × 3 = 24 branch-ends.
+_CORNER_EDGE_NEAR = 20.0      # device units from the tip the extra patches fill
+
+
+def gamut_corner_edges(per_branch: int, existing=None,
+                       include_corners: bool = False,
+                       tol: float = 1.5) -> list[tuple[float, float, float]]:
+    """``per_branch`` patches on each of the three edge branches at every corner,
+    clustered near the tip and slotted into the gaps left by ``existing`` patches
+    on that branch (so they interleave with the cube / edges samples instead of
+    landing on them). ``8 * 3 * per_branch`` in all; with ``include_corners`` the
+    eight exact tips are added too (used when nothing else supplies them)."""
+    per_branch = max(0, int(per_branch))
+    out: list[tuple[float, float, float]] = []
+    if include_corners:
+        out.extend(_CORNER_PTS)
+    if per_branch == 0:
+        return out
+    existing = list(existing or [])
+    near_t = _CORNER_EDGE_NEAR / 100.0
+    for corner in _CORNER_PTS:
+        for j in range(3):                       # three branches: flip one axis
+            span = (100.0 - corner[j]) - corner[j]    # +100 or -100
+            # Existing points lying on this branch (other two coords pinned),
+            # within the near-tip region, as a fraction t of the edge.
+            anchors = [0.0, near_t]
+            for p in existing:
+                if all(abs(p[k] - corner[k]) <= tol for k in range(3) if k != j):
+                    t = (p[j] - corner[j]) / span
+                    if tol / 100.0 < t <= near_t:
+                        anchors.append(t)
+            for t in _fill_line_midpoints(sorted(anchors), per_branch):
+                pos = [corner[0], corner[1], corner[2]]
+                pos[j] = _clamp(corner[j] + span * t)
+                out.append((pos[0], pos[1], pos[2]))
+    return out
+
+
+def gamut_corner_edges_count(per_branch: int, include_corners: bool = False) -> int:
+    return 24 * max(0, int(per_branch)) + (8 if include_corners else 0)
 
 
 # ---------------------------------------------------------------------------
