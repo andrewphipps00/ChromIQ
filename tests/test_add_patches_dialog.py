@@ -426,10 +426,10 @@ def test_flamingos_and_edges_between_in_program(qapp):
     assert len(dlg._build_generated_program()) == 64 + 72 + 10
 
     # Edges keys to the cube: turn the cube off and it falls back to 2 steps
-    # (one gap per edge), so between=2 → 12·2·1 = 24.
+    # (one gap per edge) and now restores the 8 corner tips → 12·2·1 + 8 = 32.
     dlg._gen_cube.setChecked(False)
     dlg._update_gen_counts()
-    assert "24" in dlg._gen_edges_count.text()
+    assert "32" in dlg._gen_edges_count.text()
 
 
 def test_flamingos_persists_and_restores_to_default(qapp):
@@ -448,9 +448,9 @@ def test_flamingos_persists_and_restores_to_default(qapp):
     assert dlg._gen_flamingos_n.value() == 64
 
 
-def test_gamut_corners_in_program_and_persists(qapp):
-    """Gamut-corner emphasis adds 8×per_corner patches, and its values save and
-    restore (incl. its spread) like every other set."""
+def test_gamut_corners_spirals_in_program_and_persist(qapp):
+    """Corner emphasis adds 8×per_end spiral patches (plus the 8 tips when nothing
+    else supplies them), and its 'per end'/'depth' values save and restore."""
     dlg = _AddPatchesDialog(_FakeSettings())
     dlg._add_mode_gen.setChecked(True)
     dlg._refresh_add_mode()
@@ -458,18 +458,23 @@ def test_gamut_corners_in_program_and_persists(qapp):
         getattr(dlg, f"_gen_{n}").setChecked(False)
     dlg._gen_unique.setChecked(False)
     dlg._gen_corners.setChecked(True)
-    dlg._gen_corners_n.setValue(5)        # 8 × 5 = 40
-    dlg._gen_corners_spread.setValue(12)
+    dlg._gen_corners_end.setValue(5)       # 8 × 5 spiral patches
+    dlg._gen_corners_depth.setValue(12)
+    dlg._update_gen_counts()
+    # Cube + edges both off, so the corner set also restores the 8 tips: 40 + 8.
+    assert "48" in dlg._gen_corners_count.text()
+    assert len(dlg._build_generated_program()) == 48
+    # Turn the cube on and the tips are no longer added here (it supplies them).
+    dlg._gen_cube.setChecked(True)
     dlg._update_gen_counts()
     assert "40" in dlg._gen_corners_count.text()
-    assert len(dlg._build_generated_program()) == 40
 
     st = dlg._collect_gen_sets()
     assert st["cb"]["corners"] is True
-    assert st["sp"]["corners_n"] == 5 and st["sp"]["corners_spread"] == 12
-    # Factory baseline: off, per-corner 6, spread 15.
+    assert st["sp"]["corners_end"] == 5 and st["sp"]["corners_depth"] == 12
+    # Factory baseline: off, per-end 8, depth 16.
     dlg._apply_gen_sets({"cb": dlg._GEN_FACTORY["cb"],
                          "sp": dlg._GEN_FACTORY["sp"]})
     assert dlg._gen_corners.isChecked() is False
-    assert dlg._gen_corners_n.value() == 6
-    assert dlg._gen_corners_spread.value() == 15
+    assert dlg._gen_corners_end.value() == 8
+    assert dlg._gen_corners_depth.value() == 16

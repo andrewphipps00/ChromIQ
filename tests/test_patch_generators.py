@@ -375,37 +375,49 @@ def test_gamut_faces_between_zero_empty():
     assert G.gamut_faces_between_count(8, 0) == 0
 
 
-# --- Gamut-corner emphasis (#78 wishlist) ----------------------------------
-@pytest.mark.parametrize("per_corner,spread", [(1, 15), (5, 15), (10, 20)])
-def test_gamut_corners_count_and_range(per_corner, spread):
-    pts = G.gamut_corners(per_corner, spread)
-    assert len(pts) == 8 * per_corner == G.gamut_corners_count(per_corner)
+# --- Gamut-corner emphasis: spiral cones at the 8 corners (#78) -------------
+@pytest.mark.parametrize("per_end,depth", [(1, 16), (5, 16), (10, 24)])
+def test_gamut_corners_count_and_range(per_end, depth):
+    pts = G.gamut_corners(per_end, depth)
+    assert len(pts) == 8 * per_end == G.gamut_corners_count(per_end)
     assert _all_in_range(pts)
 
 
-def test_gamut_corners_cluster_just_inside_each_corner():
-    spread = 15.0
-    pts = G.gamut_corners(6, spread)
-    # Every point sits within `spread` of one corner on every axis (so within
-    # spread*sqrt(3) Euclidean), and well away from the cube centre.
+def test_gamut_corners_spiral_in_each_corner_not_on_the_tip():
+    depth = 16.0
+    pts = G.gamut_corners(8, depth)
     for p in pts:
-        near = min(max(abs(p[j] - c[j]) for j in range(3))
-                   for c in G._CORNER_PTS)
-        assert near <= spread + 1e-6
-        assert math.dist(p, (50.0, 50.0, 50.0)) > 30.0   # nowhere near centre
-    # All eight corners get a cluster (each is the closest corner to some point).
+        # Strictly inside the cube near a corner — never the exact tip (Q2), and
+        # well away from the centre.
+        assert p not in G._CORNER_PTS
+        assert math.dist(p, (50.0, 50.0, 50.0)) > 25.0
+    # Every corner gets its own cone.
     closest = {min(range(8), key=lambda i: math.dist(p, G._CORNER_PTS[i]))
                for p in pts}
     assert len(closest) == 8
 
 
-def test_gamut_corners_spread_controls_reach_and_zero_pins_corners():
-    tight = max(math.dist(p, min(G._CORNER_PTS, key=lambda c: math.dist(p, c)))
-                for p in G.gamut_corners(8, 5))
-    wide = max(math.dist(p, min(G._CORNER_PTS, key=lambda c: math.dist(p, c)))
-               for p in G.gamut_corners(8, 30))
-    assert wide > tight                                   # bigger spread reaches further
-    assert all(p in G._CORNER_PTS for p in G.gamut_corners(4, 0))  # spread 0 → on corners
+def test_gamut_corners_depth_controls_reach():
+    reach = lambda d: max(math.dist(p, min(G._CORNER_PTS,
+                                           key=lambda c: math.dist(p, c)))
+                          for p in G.gamut_corners(12, d))
+    assert reach(30) > reach(8)                           # bigger depth reaches further
+
+
+def test_gamut_corners_include_corners_adds_the_eight_tips():
+    pts = G.gamut_corners(3, 16, include_corners=True)
+    assert len(pts) == 8 * 3 + 8 == G.gamut_corners_count(3, include_corners=True)
+    assert all(t in pts for t in G._CORNER_PTS)           # the exact tips are present
+
+
+def test_gamut_edges_between_includes_tips_without_the_cube():
+    # Cube off → Saturated edges must restore the 8 corner tips (Nelson/Knut).
+    e = G.gamut_edges_between(2, 3, include_corners=True)
+    assert len(e) == 12 * 3 + 8 == G.gamut_edges_between_count(2, 3, True)
+    assert all(t in e for t in G._CORNER_PTS)
+    # Cube on → unchanged, no tips injected (the cube supplies them).
+    assert G.gamut_edges_between(8, 1) == G.gamut_edges_between(8, 1, False)
+    assert G.gamut_edges_between_count(8, 1) == 84
 
 
 # --- Flamingos — the pink / magenta / indigo band (Knut, #78) --------------
