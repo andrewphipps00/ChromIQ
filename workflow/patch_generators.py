@@ -1076,6 +1076,60 @@ def enforce_min_distance(patches, min_dist: float = 2.0, existing=None):
     return out
 
 
+def _crowding_grid(points, cell: float) -> dict:
+    """A spatial hash of ``points`` bucketed on a ``cell``-unit grid, for fast
+    "is anything within ``cell``?" tests (the neighbour always lands in one of
+    the 27 cells around a query)."""
+    g: dict = {}
+    for p in points:
+        b = (int(_clamp(p[0]) // cell), int(_clamp(p[1]) // cell),
+             int(_clamp(p[2]) // cell))
+        g.setdefault(b, []).append((_clamp(p[0]), _clamp(p[1]), _clamp(p[2])))
+    return g
+
+
+def _has_within(q, grid: dict, cell: float, md2: float) -> bool:
+    bx, by, bz = int(q[0] // cell), int(q[1] // cell), int(q[2] // cell)
+    for dx in (-1, 0, 1):
+        for dy in (-1, 0, 1):
+            for dz in (-1, 0, 1):
+                for k in grid.get((bx + dx, by + dy, bz + dz), ()):
+                    if ((q[0] - k[0]) ** 2 + (q[1] - k[1]) ** 2
+                            + (q[2] - k[2]) ** 2) < md2:
+                        return True
+    return False
+
+
+def count_too_close(existing, new, min_dist: float = 2.0) -> int:
+    """How many of ``new`` sit **within ``min_dist``** (Euclidean device units)
+    of any ``existing`` point — i.e. would duplicate *or crowd* a colour already
+    there, not just land on the exact same grid cell. Exact duplicates are the
+    ``min_dist = 0`` limiting case, so this never flags fewer than an exact-match
+    check would (Knut, #78)."""
+    if min_dist <= 0:
+        return 0
+    cell = float(min_dist)
+    md2 = min_dist * min_dist
+    grid = _crowding_grid(existing, cell)
+    return sum(1 for p in new
+               if _has_within((_clamp(p[0]), _clamp(p[1]), _clamp(p[2])),
+                              grid, cell, md2))
+
+
+def drop_too_close(existing, new, min_dist: float = 2.0):
+    """Return only the ``new`` points that are **clear** of ``existing`` — at
+    least ``min_dist`` from every one of them. The ones that would duplicate or
+    crowd an existing colour are dropped (the "add only the new ones" path)."""
+    if min_dist <= 0:
+        return list(new)
+    cell = float(min_dist)
+    md2 = min_dist * min_dist
+    grid = _crowding_grid(existing, cell)
+    return [p for p in new
+            if not _has_within((_clamp(p[0]), _clamp(p[1]), _clamp(p[2])),
+                               grid, cell, md2)]
+
+
 # ---------------------------------------------------------------------------
 # Cross-set de-duplication — keep every patch unique when sets are combined.
 # ---------------------------------------------------------------------------

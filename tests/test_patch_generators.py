@@ -704,6 +704,27 @@ def test_enforce_min_distance_zero_is_passthrough():
     assert G.enforce_min_distance(src, 0.0) == src
 
 
+def test_count_and_drop_too_close_flag_crowding_not_just_exact():
+    existing = [(50.0, 50.0, 50.0), (10.0, 10.0, 10.0)]
+    new = [
+        (50.0, 50.0, 50.0),    # exact duplicate    -> too close
+        (51.0, 50.0, 50.0),    # 1.0 away (< 2)     -> too close (crowds)
+        (10.0, 11.5, 10.0),    # 1.5 away (< 2)     -> too close (crowds)
+        (80.0, 80.0, 80.0),    # far                -> clear
+        (50.0, 53.0, 50.0),    # 3.0 away (> 2)     -> clear
+    ]
+    assert G.count_too_close(existing, new, 2.0) == 3
+    assert G.drop_too_close(existing, new, 2.0) == [
+        (80.0, 80.0, 80.0), (50.0, 53.0, 50.0)]
+    # Detection is a strict superset of exact duplicates (overlap_count, 0.5
+    # grid): with crowding it flags more than the old exact-match check did.
+    assert (G.count_too_close(existing, new, 2.0)
+            > G.overlap_count(existing, new))
+    # min_dist = 0 disables it (nothing flagged / dropped).
+    assert G.count_too_close(existing, new, 0.0) == 0
+    assert G.drop_too_close(existing, new, 0.0) == new
+
+
 def test_only_new_drops_existing_and_keeps_the_rest():
     existing = [(50.0, 50.0, 50.0), (0.0, 0.0, 0.0)]
     new = [(50.0, 50.0, 50.0), (0.0, 0.0, 0.0), (80.0, 10.0, 20.0)]
