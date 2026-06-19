@@ -1752,7 +1752,5 @@
  "between:": "间隔:",
  "faces:": "面数:",
  "Gamut-corner emphasis": "色域角强调",
- "Adds extra patches right around the eight extreme corners of the printer's colour range — the deepest, most saturated colours, which are the trickiest to reproduce accurately. A quick way to tighten the profile where it strays most. 'Per corner' is how many at each; 'spread' how far in they reach.": "在打印机色域最外侧的八个角周围就近添加额外色块——也就是最深、最饱和、最难准确再现的颜色。这是在配置文件偏差最大处快速收紧它的方法。「每角」是每个角放多少个；「扩散」是它们向内延伸多远。",
- "per corner:": "每角:",
- "spread:": "扩散:"
+ "Adds detail just inside the eight extreme corners of the printer's colour range — the deepest, most saturated colours, which are the trickiest to reproduce. It works like Highlights & shadows, but spiralling in from each corner instead of from white and black, so the densest patches sit right at the saturated tips. 'Per end' is how many patches at each corner; 'depth' how far in they reach. The exact corner tips come from the 3D cube or Saturated edges when those are on, and from this set when they aren't, so a tip is never missing.": "在打印机色域最外侧八个角的内侧就近添加细节——也就是最深、最饱和、最难再现的颜色。它的原理与「高光与阴影」相同，但从每个角而非从白和黑向内螺旋，因此最密集的色块就落在饱和的尖端附近。「每端」是每个角放多少色块；「深度」是它们向内延伸多远。角的精确尖端在「3D RGB 立方体」或「饱和边」开启时由它们提供，未开启时由本集提供，因此尖端绝不会缺失。"
 }

@@ -1,5 +1,22 @@
 # Changelog
 
+## v3.11.14
+
+### 🐛 Fixed
+- **Saturated edges now keeps the corners when used without the 3D cube.** The
+  v3.11.9 rework filled the edges *between* the cube's steps, which dropped the
+  corner tips when the cube wasn't also on. Edges now restores the eight corner
+  tips whenever the cube isn't there to supply them.
+
+### 💄 Improved
+- **Gamut-corner emphasis reworked into corner spirals.** The set now works like
+  **Highlights & shadows**, but spiralling in from each of the eight corners
+  instead of from white and black, so the densest patches sit right at the
+  saturated tips. Its controls are now **per end** (patches per corner) and
+  **depth** (how far in they reach), matching Highlights & shadows. It also
+  supplies the exact corner tips itself when neither the 3D cube nor Saturated
+  edges is on, so a tip is never missing — and never duplicated.
+
 ## v3.11.13
 
 ### ✨ New

@@ -1752,7 +1752,5 @@
  "between:": "間:",
  "faces:": "面:",
  "Gamut-corner emphasis": "ガマット隅の強調",
- "Adds extra patches right around the eight extreme corners of the printer's colour range — the deepest, most saturated colours, which are the trickiest to reproduce accurately. A quick way to tighten the profile where it strays most. 'Per corner' is how many at each; 'spread' how far in they reach.": "プリンターの色域の最も外側にある 8 つの隅のすぐ周りに追加のパッチを配置します — 最も深く、最も彩度の高い、正確に再現するのが最も難しい色です。プロファイルが最もずれる場所を手早く引き締められます。「隅あたり」は各隅にいくつ置くか、「広がり」はどこまで内側へ届くかです。",
- "per corner:": "隅あたり:",
- "spread:": "広がり:"
+ "Adds detail just inside the eight extreme corners of the printer's colour range — the deepest, most saturated colours, which are the trickiest to reproduce. It works like Highlights & shadows, but spiralling in from each corner instead of from white and black, so the densest patches sit right at the saturated tips. 'Per end' is how many patches at each corner; 'depth' how far in they reach. The exact corner tips come from the 3D cube or Saturated edges when those are on, and from this set when they aren't, so a tip is never missing.": "プリンターの色域の最も外側にある 8 つの隅のすぐ内側に細部を追加します — 最も深く、最も彩度の高い、再現が最も難しい色です。「ハイライトとシャドウ」と同じ仕組みですが、白と黒からではなく各隅から内側へらせん状に入るので、最も密な色は彩度の高い先端のすぐそばに置かれます。「端あたり」は各隅にいくつ置くか、「深さ」はどこまで内側へ届くかです。隅の正確な先端は、「3D RGB キューブ」や「彩度の高いエッジ」がオンのときはそれらから、オフのときはこのセットから来るので、先端が欠けることはありません。"
 }

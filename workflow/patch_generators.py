@@ -573,7 +573,8 @@ def _interior_fracs(per_gap: int) -> list[float]:
     return [(j + 1) / (per_gap + 1) for j in range(per_gap)]
 
 
-def gamut_edges_between(cube_n: int, per_gap: int) -> list[tuple[float, float, float]]:
+def gamut_edges_between(cube_n: int, per_gap: int,
+                        include_corners: bool = False) -> list[tuple[float, float, float]]:
     """``per_gap`` evenly spaced patches in **every interval between adjacent
     cube steps**, along all 12 edges of the RGB cube.
 
@@ -583,13 +584,21 @@ def gamut_edges_between(cube_n: int, per_gap: int) -> list[tuple[float, float, f
     all evenly spaced. This is the even gamut-wireframe infill the cube leaves
     between its own edge samples (``per_gap = 1`` drops one patch midway between
     each pair of cube dots — the layout Knut found looks right).
+
+    With ``include_corners=True`` the eight cube corners are added too — used
+    when Saturated edges runs **without** the 3D cube, so the corner tips (the
+    most saturated colours) aren't dropped the way the between-only fill leaves
+    them out (Nelson via Knut, #78). When the cube is on it supplies the corners,
+    so this stays off.
     """
     cube_n = max(2, int(cube_n))
     per_gap = max(0, int(per_gap))
-    if per_gap == 0:
-        return []
-    fr = _interior_fracs(per_gap)
     out: list[tuple[float, float, float]] = []
+    if include_corners:
+        out.extend(_CORNER_PTS)
+    if per_gap == 0:
+        return out
+    fr = _interior_fracs(per_gap)
     for a, b in _CUBE_EDGES:
         ca, cb = _CUBE_CORNERS[a], _CUBE_CORNERS[b]
         for i in range(cube_n - 1):
@@ -601,8 +610,10 @@ def gamut_edges_between(cube_n: int, per_gap: int) -> list[tuple[float, float, f
     return out
 
 
-def gamut_edges_between_count(cube_n: int, per_gap: int) -> int:
-    return 12 * max(0, int(per_gap)) * (max(2, int(cube_n)) - 1)
+def gamut_edges_between_count(cube_n: int, per_gap: int,
+                              include_corners: bool = False) -> int:
+    return (12 * max(0, int(per_gap)) * (max(2, int(cube_n)) - 1)
+            + (8 if include_corners else 0))
 
 
 def gamut_faces_between(cube_n: int, per_gap: int) -> list[tuple[float, float, float]]:
@@ -653,59 +664,76 @@ def gamut_faces_between_count(cube_n: int, per_gap: int) -> int:
 
 
 # ---------------------------------------------------------------------------
-# 6c. Gamut-corner emphasis — extra density just inside the 8 cube corners.
+# 6c. Gamut-corner emphasis — Highlights-&-shadows-style spirals at the 8 corners.
 # ---------------------------------------------------------------------------
 # The eight extreme corners of the device cube (K/R/G/B/C/M/Y/W) are the most
 # saturated, hardest-to-map colours — where profiles carry the most error. This
-# set drops a small cluster of patches *just inside* each corner to add volume
-# density there, complementing the edges/faces boundary sampling (#78 wishlist).
+# set fills a phyllotaxis spiral *cone* just inside each corner (the same idea as
+# Highlights & shadows, which does it at the white/black corners, generalised to
+# all eight). Two controls mirror H&S: 'per end' patches per corner, reaching
+# 'depth' device units in toward the cube centre (Knut/Nelson, #78).
 _CORNER_PTS = (
     (0.0, 0.0, 0.0), (100.0, 0.0, 0.0), (0.0, 100.0, 0.0), (0.0, 0.0, 100.0),
     (0.0, 100.0, 100.0), (100.0, 0.0, 100.0), (100.0, 100.0, 0.0),
     (100.0, 100.0, 100.0),
 )
 
-
-def _radical_inverse(n: int, base: int) -> float:
-    """The van der Corput radical inverse of ``n`` in ``base`` — the building
-    block of the Halton low-discrepancy sequence, so successive points spread
-    evenly through the unit interval without clumping."""
-    f, r = 1.0, 0.0
-    while n > 0:
-        f /= base
-        r += f * (n % base)
-        n //= base
-    return r
+# Cone half-spread: the spiral's radius as a fraction of its depth (≈ 31°).
+_CORNER_CONE_SLOPE = 0.6
 
 
-def gamut_corners(per_corner: int, spread: float) -> list[tuple[float, float, float]]:
-    """``per_corner`` patches clustered *just inside* each of the 8 cube corners
-    (``8 * per_corner`` in all).
+def _perp_basis(d):
+    """Two orthonormal vectors spanning the plane perpendicular to unit vector
+    ``d`` (Gram-Schmidt from whichever axis is least parallel to ``d``)."""
+    seed = (1.0, 0.0, 0.0) if abs(d[0]) < 0.9 else (0.0, 1.0, 0.0)
+    dot = sum(seed[j] * d[j] for j in range(3))
+    u = [seed[j] - dot * d[j] for j in range(3)]
+    un = math.sqrt(sum(x * x for x in u)) or 1.0
+    u = [x / un for x in u]
+    v = [d[1] * u[2] - d[2] * u[1],          # v = d × u
+         d[2] * u[0] - d[0] * u[2],
+         d[0] * u[1] - d[1] * u[0]]
+    return u, v
 
-    Each corner gets ``per_corner`` points stepped inward from the corner along
-    the three axes that lead into the gamut, placed on a 3-D Halton sequence so
-    they spread evenly through the little corner region rather than clumping.
-    ``spread`` (device units on the 0..100 scale) is how far in they reach: every
-    point sits within ``spread`` of its corner. The exact corner itself is left
-    to the cube / edges sets — these are the *just inside* fill that adds volume
-    density where saturated colours are hardest to reproduce.
+
+def gamut_corners(per_end: int, depth: float,
+                  include_corners: bool = False) -> list[tuple[float, float, float]]:
+    """A phyllotaxis spiral *cone* just inside each of the 8 cube corners —
+    Highlights & shadows generalised from the white/black corners to all eight.
+
+    Each corner gets ``per_end`` patches (``8 * per_end`` in all) spiralling in
+    along the corner's diagonal toward the cube centre: successive points step
+    deeper (up to ``depth`` device units) and rotate by the golden angle, with the
+    cone widening as it goes, so the cluster is dense at the saturated tip and
+    fans out inward without spokes. The exact corner tip is **not** included (it's
+    owned by the cube or the edges set) unless ``include_corners=True`` — used
+    only when neither of those is on, so the tips are never missing.
     """
-    per_corner = max(1, int(per_corner))
-    spread = 0.0 if spread < 0.0 else 50.0 if spread > 50.0 else float(spread)
+    per_end = max(1, int(per_end))
+    depth = 2.0 if depth < 2.0 else 60.0 if depth > 60.0 else float(depth)
     out: list[tuple[float, float, float]] = []
+    if include_corners:
+        out.extend(_CORNER_PTS)
     for corner in _CORNER_PTS:
-        # Inward sign per axis: corners at 100 step down, corners at 0 step up.
-        signs = tuple(-1.0 if c >= 100.0 else 1.0 for c in corner)
-        for k in range(1, per_corner + 1):
-            off = (_radical_inverse(k, 2), _radical_inverse(k, 3),
-                   _radical_inverse(k, 5))
+        # Unit direction from the corner toward the cube centre (the diagonal).
+        dvec = [50.0 - corner[j] for j in range(3)]
+        dn = math.sqrt(sum(x * x for x in dvec)) or 1.0
+        d = [x / dn for x in dvec]
+        u, v = _perp_basis(d)
+        for k in range(per_end):
+            t = (k + 0.5) / per_end           # 0..1: tip → deepest
+            dd = depth * t                    # distance in along the diagonal
+            rr = _CORNER_CONE_SLOPE * dd      # cone radius at this depth
+            ang = math.radians(k * _GOLDEN_DEG)
+            ca, sa = math.cos(ang), math.sin(ang)
             out.append(tuple(
-                _clamp(corner[j] + signs[j] * off[j] * spread) for j in range(3)))
+                _clamp(corner[j] + d[j] * dd + (u[j] * ca + v[j] * sa) * rr)
+                for j in range(3)))
     return out
 
 
-def gamut_corners_count(per_corner: int) -> int:
-    return 8 * max(1, int(per_corner))
+def gamut_corners_count(per_end: int, include_corners: bool = False) -> int:
+    return 8 * max(1, int(per_end)) + (8 if include_corners else 0)
 
 
 # ---------------------------------------------------------------------------

@@ -1147,7 +1147,7 @@ class _NewChartDialog(QDialog):
     _GEN_CHECKS = ("cube", "corners", "skin", "blues", "greens", "sunrises",
                    "flamingos", "greys", "edges", "hs", "pastel", "image",
                    "whiteblack", "fill", "unique")
-    _GEN_SPINS = ("cube_n", "corners_n", "corners_spread",
+    _GEN_SPINS = ("cube_n", "corners_end", "corners_depth",
                   "skin_n", "skin_ranges", "blues_n", "blues_layers",
                   "greens_n", "greens_layers", "sunrises_n", "sunrises_layers",
                   "flamingos_n", "flamingos_layers",
@@ -1175,7 +1175,7 @@ class _NewChartDialog(QDialog):
                "greys": True, "edges": False, "hs": False,
                "pastel": False, "image": False, "whiteblack": False,
                "fill": False, "unique": True},
-        "sp": {"cube_n": 8, "corners_n": 6, "corners_spread": 15,
+        "sp": {"cube_n": 8, "corners_end": 8, "corners_depth": 16,
                "skin_n": 8, "skin_ranges": 3, "blues_n": 64,
                "blues_layers": 3, "greens_n": 64, "greens_layers": 3,
                "sunrises_n": 64, "sunrises_layers": 3,
@@ -1422,25 +1422,31 @@ class _NewChartDialog(QDialog):
         gg.addWidget(self._gen_cube_n, 0, 2)
         gg.addWidget(self._gen_cube_count, 0, 7)
 
-        # Gamut-corner emphasis — extra density just inside the 8 cube corners.
-        # Placed third (grid row 2), right after the cube and edges, since it
-        # complements that boundary sampling (#78 wishlist).
+        # Gamut-corner emphasis — Highlights-&-shadows-style spirals at the 8
+        # corners. Placed third (grid row 2), right after the cube and edges,
+        # since it complements that boundary sampling (#78). 'per end' / 'depth'
+        # mirror Highlights & shadows (and reuse those translated labels).
         self._gen_corners = QCheckBox(tr("Gamut-corner emphasis"), self._gen_panel)
-        self._gen_corners.setToolTip(tr("Adds extra patches right around the eight "
-                                     "extreme corners of the printer's colour range "
-                                     "— the deepest, most saturated colours, which "
-                                     "are the trickiest to reproduce accurately. A "
-                                     "quick way to tighten the profile where it "
-                                     "strays most. 'Per corner' is how many at each; "
-                                     "'spread' how far in they reach."))
-        self._gen_corners_n = _spin(1, 60, 6)
-        self._gen_corners_spread = _spin(2, 50, 15)
+        self._gen_corners.setToolTip(tr("Adds detail just inside the eight extreme "
+                                     "corners of the printer's colour range — the "
+                                     "deepest, most saturated colours, which are the "
+                                     "trickiest to reproduce. It works like "
+                                     "Highlights & shadows, but spiralling in from "
+                                     "each corner instead of from white and black, so "
+                                     "the densest patches sit right at the saturated "
+                                     "tips. 'Per end' is how many patches at each "
+                                     "corner; 'depth' how far in they reach. The exact "
+                                     "corner tips come from the 3D cube or Saturated "
+                                     "edges when those are on, and from this set when "
+                                     "they aren't, so a tip is never missing."))
+        self._gen_corners_end = _spin(1, 100, 8)
+        self._gen_corners_depth = _spin(2, 45, 16)
         self._gen_corners_count = _count_label()
         gg.addWidget(self._gen_corners, 2, 0)
-        gg.addWidget(QLabel(tr("per corner:")), 2, 1)
-        gg.addWidget(self._gen_corners_n, 2, 2)
-        gg.addWidget(QLabel(tr("spread:")), 2, 3)
-        gg.addWidget(self._gen_corners_spread, 2, 4)
+        gg.addWidget(QLabel(tr("per end:")), 2, 1)
+        gg.addWidget(self._gen_corners_end, 2, 2)
+        gg.addWidget(QLabel(tr("depth:")), 2, 3)
+        gg.addWidget(self._gen_corners_depth, 2, 4)
         gg.addWidget(self._gen_corners_count, 2, 7)
 
         # Fitzpatrick skin tones — per-type ramp × parallel hue ranges.
@@ -1765,6 +1771,18 @@ class _NewChartDialog(QDialog):
         so edges/faces stay even and locked to the cube it sits with (Knut, #78)."""
         return self._gen_cube_n.value() if self._gen_cube.isChecked() else 2
 
+    def _edges_need_corners(self) -> bool:
+        """Saturated edges should include the 8 corner tips when the 3D cube
+        isn't on to supply them — restoring the old behaviour Nelson relied on
+        (the between-only fill drops the tips otherwise) (#78)."""
+        return not self._gen_cube.isChecked()
+
+    def _corners_need_tips(self) -> bool:
+        """The corner-emphasis set adds the exact corner tips only when neither
+        the 3D cube nor Saturated edges is on to provide them, so a tip is never
+        missing yet never duplicated (Knut Q1, #78)."""
+        return not self._gen_cube.isChecked() and not self._gen_edges.isChecked()
+
     # The generators in fixed concatenation order: (checkbox, builder, counter).
     def _gen_specs(self):
         return (
@@ -1778,20 +1796,24 @@ class _NewChartDialog(QDialog):
             # the order the user sees them.
             (self._gen_edges,
              lambda: (G.gamut_edges_between(self._edges_cube_n(),
-                                            self._gen_edges_n.value())
+                                            self._gen_edges_n.value(),
+                                            self._edges_need_corners())
                       + G.gamut_faces_between(self._edges_cube_n(),
                                               self._gen_edges_faces.value())),
              lambda: (G.gamut_edges_between_count(self._edges_cube_n(),
-                                                  self._gen_edges_n.value())
+                                                  self._gen_edges_n.value(),
+                                                  self._edges_need_corners())
                       + G.gamut_faces_between_count(self._edges_cube_n(),
                                                     self._gen_edges_faces.value())),
              self._gen_edges_count),
             # Gamut-corner emphasis sits third (after the cube + edges), matching
             # its panel row, so the de-dup spaces it against those boundary sets.
             (self._gen_corners,
-             lambda: G.gamut_corners(self._gen_corners_n.value(),
-                                     float(self._gen_corners_spread.value())),
-             lambda: G.gamut_corners_count(self._gen_corners_n.value()),
+             lambda: G.gamut_corners(self._gen_corners_end.value(),
+                                     float(self._gen_corners_depth.value()),
+                                     self._corners_need_tips()),
+             lambda: G.gamut_corners_count(self._gen_corners_end.value(),
+                                           self._corners_need_tips()),
              self._gen_corners_count),
             (self._gen_skin,
              lambda: G.skin_tones(self._gen_skin_n.value(),
@@ -1917,7 +1939,7 @@ class _NewChartDialog(QDialog):
         # Grey each row's size control(s) when its set is unticked.
         for cb, spins in (
             (self._gen_cube, (self._gen_cube_n,)),
-            (self._gen_corners, (self._gen_corners_n, self._gen_corners_spread)),
+            (self._gen_corners, (self._gen_corners_end, self._gen_corners_depth)),
             (self._gen_skin, (self._gen_skin_n, self._gen_skin_ranges)),
             (self._gen_blues, (self._gen_blues_n, self._gen_blues_layers)),
             (self._gen_greens, (self._gen_greens_n, self._gen_greens_layers)),
