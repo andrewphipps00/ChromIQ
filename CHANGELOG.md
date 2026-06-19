@@ -1,5 +1,17 @@
 # Changelog
 
+## v3.11.16
+
+### 💄 Improved
+- **Corner spirals renamed "Colour extremes" and limited to the colour corners.**
+  It now spirals into the six saturated colour corners (red, green, blue, cyan,
+  magenta, yellow) only — white and black are left to Highlights & shadows, which
+  already covers them, so the two no longer overlap.
+- **Old charts and presets load the new corner sets off.** A recipe, preset or
+  saved layout written before these generators existed now loads them switched
+  off (rather than leaving whatever was last ticked), and the New-chart / Add
+  total counts both new sets correctly.
+
 ## v3.11.15
 
 ### ✨ New
