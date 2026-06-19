@@ -653,6 +653,62 @@ def gamut_faces_between_count(cube_n: int, per_gap: int) -> int:
 
 
 # ---------------------------------------------------------------------------
+# 6c. Gamut-corner emphasis — extra density just inside the 8 cube corners.
+# ---------------------------------------------------------------------------
+# The eight extreme corners of the device cube (K/R/G/B/C/M/Y/W) are the most
+# saturated, hardest-to-map colours — where profiles carry the most error. This
+# set drops a small cluster of patches *just inside* each corner to add volume
+# density there, complementing the edges/faces boundary sampling (#78 wishlist).
+_CORNER_PTS = (
+    (0.0, 0.0, 0.0), (100.0, 0.0, 0.0), (0.0, 100.0, 0.0), (0.0, 0.0, 100.0),
+    (0.0, 100.0, 100.0), (100.0, 0.0, 100.0), (100.0, 100.0, 0.0),
+    (100.0, 100.0, 100.0),
+)
+
+
+def _radical_inverse(n: int, base: int) -> float:
+    """The van der Corput radical inverse of ``n`` in ``base`` — the building
+    block of the Halton low-discrepancy sequence, so successive points spread
+    evenly through the unit interval without clumping."""
+    f, r = 1.0, 0.0
+    while n > 0:
+        f /= base
+        r += f * (n % base)
+        n //= base
+    return r
+
+
+def gamut_corners(per_corner: int, spread: float) -> list[tuple[float, float, float]]:
+    """``per_corner`` patches clustered *just inside* each of the 8 cube corners
+    (``8 * per_corner`` in all).
+
+    Each corner gets ``per_corner`` points stepped inward from the corner along
+    the three axes that lead into the gamut, placed on a 3-D Halton sequence so
+    they spread evenly through the little corner region rather than clumping.
+    ``spread`` (device units on the 0..100 scale) is how far in they reach: every
+    point sits within ``spread`` of its corner. The exact corner itself is left
+    to the cube / edges sets — these are the *just inside* fill that adds volume
+    density where saturated colours are hardest to reproduce.
+    """
+    per_corner = max(1, int(per_corner))
+    spread = 0.0 if spread < 0.0 else 50.0 if spread > 50.0 else float(spread)
+    out: list[tuple[float, float, float]] = []
+    for corner in _CORNER_PTS:
+        # Inward sign per axis: corners at 100 step down, corners at 0 step up.
+        signs = tuple(-1.0 if c >= 100.0 else 1.0 for c in corner)
+        for k in range(1, per_corner + 1):
+            off = (_radical_inverse(k, 2), _radical_inverse(k, 3),
+                   _radical_inverse(k, 5))
+            out.append(tuple(
+                _clamp(corner[j] + signs[j] * off[j] * spread) for j in range(3)))
+    return out
+
+
+def gamut_corners_count(per_corner: int) -> int:
+    return 8 * max(1, int(per_corner))
+
+
+# ---------------------------------------------------------------------------
 # 7. Highlight & shadow detail — the two tonal ends, across the hue wheel.
 # ---------------------------------------------------------------------------
 # Golden angle — successive points spiral to fill a disk evenly (phyllotaxis),

@@ -1750,5 +1750,9 @@
  "Flamingos (pinks)": "Fenicotteri (rosa)",
  "Pinks, magentas and indigos — the band between where Oceans (blues) ends and Sunrises begins, the big gap the other colour-band sets leave in the middle. Great for flowers, fabrics, sunsets and skin. Each of the 'layers' is a non-parallel sheet of 'per layer' patches, so the two multiply.": "Rosa, magenta e indaco — la banda tra dove finiscono i «Oceani (blu)» e iniziano le «Albe (caldi)», il grande vuoto che gli altri set a banda di colore lasciano nel mezzo. Ottimo per fiori, tessuti, tramonti e pelle. Ciascuno dei «livelli» è un foglio non parallelo di «per livello» campioni, così i due si moltiplicano.",
  "between:": "tra:",
- "faces:": "facce:"
+ "faces:": "facce:",
+ "Gamut-corner emphasis": "Enfasi sugli angoli del gamut",
+ "Adds extra patches right around the eight extreme corners of the printer's colour range — the deepest, most saturated colours, which are the trickiest to reproduce accurately. A quick way to tighten the profile where it strays most. 'Per corner' is how many at each; 'spread' how far in they reach.": "Aggiunge campioni extra proprio attorno agli otto angoli estremi della gamma di colori della stampante — i colori più profondi e saturi, i più difficili da riprodurre con precisione. Un modo rapido per affinare il profilo dove sbaglia di più. «Per angolo» è quanti a ciascuno; «diffusione», quanto si spingono verso l'interno.",
+ "per corner:": "per angolo:",
+ "spread:": "diffusione:"
 }

@@ -1,5 +1,17 @@
 # Changelog
 
+## v3.11.13
+
+### ✨ New
+- **New "Gamut-corner emphasis" colour set.** In the chart layout editor's
+  **Generate colour sets** mode, a new set (third in the list, next to the 3D cube
+  and Saturated edges) drops extra patches just inside the eight extreme corners
+  of the printer's colour range — the deepest, most saturated colours, which are
+  the hardest to reproduce and where profiles carry the most error. It's a quick
+  way to tighten the profile right where it strays most. **Per corner** sets how
+  many patches at each corner; **spread** how far in they reach. Off by default;
+  its settings save and restore with every preset and chart like the other sets.
+
 ## v3.11.12
 
 ### 🐛 Fixed
