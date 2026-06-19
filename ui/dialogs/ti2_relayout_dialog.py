@@ -89,7 +89,7 @@ _GEN_SETS_HELP = (
     "little in hue, so a single skin type is covered by a small spread of "
     "tones rather than one straight line — handy because real faces vary. "
     "Worth adding whenever faces and portraits matter most.\n\n"
-    "• Blues / turquoise — extra colours packed into the green-turquoise "
+    "• Oceans (blues) — extra colours packed into the green-turquoise "
     "to deep-blue part of the range, where wide-gamut papers and inks "
     "reach furthest (it now dips into the greenish turquoise too). "
     "'Per layer' is how many patches each sheet holds and 'Layers' is how "
@@ -97,7 +97,7 @@ _GEN_SETS_HELP = (
     "sheets are gently angled rather than one flat blanket, so the whole "
     "turquoise corner is filled in depth. Helpful for skies, water and "
     "deep blues.\n\n"
-    "• Greens (foliage) — a spread of forest, jungle and leaf greens, for "
+    "• Foliage (greens) — a spread of forest, jungle and leaf greens, for "
     "landscapes and nature shots where the greens carry the picture. As "
     "with the blues, 'Per layer' × 'Layers' patches are spread across "
     "angled sheets so the green part of the range is covered with more "
@@ -788,7 +788,7 @@ class _NewChartDialog(QDialog):
             "little in hue, so a single skin type is covered by a small spread of "
             "tones rather than one straight line — handy because real faces vary. "
             "Worth adding whenever faces and portraits matter most.\n\n"
-            "• Blues / turquoise — extra colours packed into the green-turquoise "
+            "• Oceans (blues) — extra colours packed into the green-turquoise "
             "to deep-blue part of the range, where wide-gamut papers and inks "
             "reach furthest (it now dips into the greenish turquoise too). "
             "'Per layer' is how many patches each sheet holds and 'Layers' is how "
@@ -796,7 +796,7 @@ class _NewChartDialog(QDialog):
             "sheets are gently angled rather than one flat blanket, so the whole "
             "turquoise corner is filled in depth. Helpful for skies, water and "
             "deep blues.\n\n"
-            "• Greens (foliage) — a spread of forest, jungle and leaf greens, for "
+            "• Foliage (greens) — a spread of forest, jungle and leaf greens, for "
             "landscapes and nature shots where the greens carry the picture. As "
             "with the blues, 'Per layer' × 'Layers' patches are spread across "
             "angled sheets so the green part of the range is covered with more "
@@ -1430,15 +1430,15 @@ class _NewChartDialog(QDialog):
         self._gen_skin_n = _spin(1, 36, 8)
         self._gen_skin_ranges = _spin(1, 5, 3)
         self._gen_skin_count = _count_label()
-        gg.addWidget(self._gen_skin, 1, 0)
-        gg.addWidget(QLabel(tr("per type:")), 1, 1)
-        gg.addWidget(self._gen_skin_n, 1, 2)
-        gg.addWidget(QLabel(tr("ranges:")), 1, 3)
-        gg.addWidget(self._gen_skin_ranges, 1, 4)
-        gg.addWidget(self._gen_skin_count, 1, 7)
+        gg.addWidget(self._gen_skin, 2, 0)
+        gg.addWidget(QLabel(tr("per type:")), 2, 1)
+        gg.addWidget(self._gen_skin_n, 2, 2)
+        gg.addWidget(QLabel(tr("ranges:")), 2, 3)
+        gg.addWidget(self._gen_skin_ranges, 2, 4)
+        gg.addWidget(self._gen_skin_count, 2, 7)
 
         # Enhanced blues / turquoise.
-        self._gen_blues = QCheckBox(tr("Blues / turquoise"), self._gen_panel)
+        self._gen_blues = QCheckBox(tr("Oceans (blues)"), self._gen_panel)
         self._gen_blues.setChecked(True)
         self._gen_blues.setToolTip(tr("Denser sampling of the green-turquoise→blue "
                                    "band wide-gamut spaces stretch furthest. "
@@ -1447,15 +1447,15 @@ class _NewChartDialog(QDialog):
         self._gen_blues_n = _spin(1, 200, 64)
         self._gen_blues_layers = _spin(1, 10, 3)
         self._gen_blues_count = _count_label()
-        gg.addWidget(self._gen_blues, 2, 0)
-        gg.addWidget(QLabel(tr("per layer:")), 2, 1)
-        gg.addWidget(self._gen_blues_n, 2, 2)
-        gg.addWidget(QLabel(tr("layers:")), 2, 3)
-        gg.addWidget(self._gen_blues_layers, 2, 4)
-        gg.addWidget(self._gen_blues_count, 2, 7)
+        gg.addWidget(self._gen_blues, 3, 0)
+        gg.addWidget(QLabel(tr("per layer:")), 3, 1)
+        gg.addWidget(self._gen_blues_n, 3, 2)
+        gg.addWidget(QLabel(tr("layers:")), 3, 3)
+        gg.addWidget(self._gen_blues_layers, 3, 4)
+        gg.addWidget(self._gen_blues_count, 3, 7)
 
         # Enhanced greens (foliage).
-        self._gen_greens = QCheckBox(tr("Greens (foliage)"), self._gen_panel)
+        self._gen_greens = QCheckBox(tr("Foliage (greens)"), self._gen_panel)
         self._gen_greens.setChecked(True)
         self._gen_greens.setToolTip(tr("Forest, jungle and foliage greens for "
                                     "nature images. Each of the 'layers' is a "
@@ -1464,12 +1464,12 @@ class _NewChartDialog(QDialog):
         self._gen_greens_n = _spin(1, 200, 64)
         self._gen_greens_layers = _spin(1, 10, 3)
         self._gen_greens_count = _count_label()
-        gg.addWidget(self._gen_greens, 3, 0)
-        gg.addWidget(QLabel(tr("per layer:")), 3, 1)
-        gg.addWidget(self._gen_greens_n, 3, 2)
-        gg.addWidget(QLabel(tr("layers:")), 3, 3)
-        gg.addWidget(self._gen_greens_layers, 3, 4)
-        gg.addWidget(self._gen_greens_count, 3, 7)
+        gg.addWidget(self._gen_greens, 4, 0)
+        gg.addWidget(QLabel(tr("per layer:")), 4, 1)
+        gg.addWidget(self._gen_greens_n, 4, 2)
+        gg.addWidget(QLabel(tr("layers:")), 4, 3)
+        gg.addWidget(self._gen_greens_layers, 4, 4)
+        gg.addWidget(self._gen_greens_count, 4, 7)
 
         # Sunrises — the warm band (yellows, oranges, reds, pinks).
         self._gen_sunrises = QCheckBox(tr("Sunrises (warm)"), self._gen_panel)
@@ -1483,18 +1483,18 @@ class _NewChartDialog(QDialog):
         self._gen_sunrises_n = _spin(1, 200, 64)
         self._gen_sunrises_layers = _spin(1, 10, 3)
         self._gen_sunrises_count = _count_label()
-        gg.addWidget(self._gen_sunrises, 4, 0)
-        gg.addWidget(QLabel(tr("per layer:")), 4, 1)
-        gg.addWidget(self._gen_sunrises_n, 4, 2)
-        gg.addWidget(QLabel(tr("layers:")), 4, 3)
-        gg.addWidget(self._gen_sunrises_layers, 4, 4)
-        gg.addWidget(self._gen_sunrises_count, 4, 7)
+        gg.addWidget(self._gen_sunrises, 5, 0)
+        gg.addWidget(QLabel(tr("per layer:")), 5, 1)
+        gg.addWidget(self._gen_sunrises_n, 5, 2)
+        gg.addWidget(QLabel(tr("layers:")), 5, 3)
+        gg.addWidget(self._gen_sunrises_layers, 5, 4)
+        gg.addWidget(self._gen_sunrises_count, 5, 7)
 
         # Flamingos — the pink / magenta / indigo band the other bands leave out.
         self._gen_flamingos = QCheckBox(tr("Flamingos (pinks)"), self._gen_panel)
         self._gen_flamingos.setChecked(True)
         self._gen_flamingos.setToolTip(tr("Pinks, magentas and indigos — the band "
-                                       "between where Blues / turquoise ends and "
+                                       "between where Oceans (blues) ends and "
                                        "Sunrises begins, the big gap the other "
                                        "colour-band sets leave in the middle. Great "
                                        "for flowers, fabrics, sunsets and skin. Each "
@@ -1503,12 +1503,12 @@ class _NewChartDialog(QDialog):
         self._gen_flamingos_n = _spin(1, 200, 64)
         self._gen_flamingos_layers = _spin(1, 10, 3)
         self._gen_flamingos_count = _count_label()
-        gg.addWidget(self._gen_flamingos, 5, 0)
-        gg.addWidget(QLabel(tr("per layer:")), 5, 1)
-        gg.addWidget(self._gen_flamingos_n, 5, 2)
-        gg.addWidget(QLabel(tr("layers:")), 5, 3)
-        gg.addWidget(self._gen_flamingos_layers, 5, 4)
-        gg.addWidget(self._gen_flamingos_count, 5, 7)
+        gg.addWidget(self._gen_flamingos, 6, 0)
+        gg.addWidget(QLabel(tr("per layer:")), 6, 1)
+        gg.addWidget(self._gen_flamingos_n, 6, 2)
+        gg.addWidget(QLabel(tr("layers:")), 6, 3)
+        gg.addWidget(self._gen_flamingos_layers, 6, 4)
+        gg.addWidget(self._gen_flamingos_count, 6, 7)
 
         # Near-neutral greys — neutral ramp + 6 hue rings per step.
         self._gen_greys = QCheckBox(tr("Near-neutral greys"), self._gen_panel)
@@ -1529,17 +1529,19 @@ class _NewChartDialog(QDialog):
         # Kept as a field so it can be greyed out alongside the offset spin when
         # rings is 0 (offset then has no effect).
         self._gen_greys_off_label = QLabel(tr("offset:"))
-        gg.addWidget(self._gen_greys, 6, 0)
-        gg.addWidget(QLabel(tr("steps:")), 6, 1)
-        gg.addWidget(self._gen_greys_n, 6, 2)
-        gg.addWidget(QLabel(tr("rings:")), 6, 3)
-        gg.addWidget(self._gen_greys_rings, 6, 4)
-        gg.addWidget(self._gen_greys_off_label, 6, 5)
-        gg.addWidget(self._gen_greys_off, 6, 6)
-        gg.addWidget(self._gen_greys_count, 6, 7)
+        gg.addWidget(self._gen_greys, 7, 0)
+        gg.addWidget(QLabel(tr("steps:")), 7, 1)
+        gg.addWidget(self._gen_greys_n, 7, 2)
+        gg.addWidget(QLabel(tr("rings:")), 7, 3)
+        gg.addWidget(self._gen_greys_rings, 7, 4)
+        gg.addWidget(self._gen_greys_off_label, 7, 5)
+        gg.addWidget(self._gen_greys_off, 7, 6)
+        gg.addWidget(self._gen_greys_count, 7, 7)
 
         # Saturated edges — the gamut boundary, locked to the 3D cube's grid so
-        # the infill stays even at any density (Knut, #78).
+        # the infill stays even at any density (Knut, #78). Placed directly under
+        # the 3D cube (grid row 1) since the two are interdependent — the widgets
+        # are built here but the grid row puts the controls right below the cube.
         self._gen_edges = QCheckBox(tr("Saturated edges"), self._gen_panel)
         self._gen_edges.setToolTip(tr("The most saturated colours the printer can "
                                    "reach — the boundary of the RGB cube, where "
@@ -1555,12 +1557,12 @@ class _NewChartDialog(QDialog):
         self._gen_edges_n = _spin(0, 5, 1)
         self._gen_edges_faces = _spin(0, 5, 0)
         self._gen_edges_count = _count_label()
-        gg.addWidget(self._gen_edges, 7, 0)
-        gg.addWidget(QLabel(tr("between:")), 7, 1)
-        gg.addWidget(self._gen_edges_n, 7, 2)
-        gg.addWidget(QLabel(tr("faces:")), 7, 3)
-        gg.addWidget(self._gen_edges_faces, 7, 4)
-        gg.addWidget(self._gen_edges_count, 7, 7)
+        gg.addWidget(self._gen_edges, 1, 0)
+        gg.addWidget(QLabel(tr("between:")), 1, 1)
+        gg.addWidget(self._gen_edges_n, 1, 2)
+        gg.addWidget(QLabel(tr("faces:")), 1, 3)
+        gg.addWidget(self._gen_edges_faces, 1, 4)
+        gg.addWidget(self._gen_edges_count, 1, 7)
 
         # Highlights & shadows — detail at the two tonal ends. The label's "&"
         # is doubled so Qt shows it literally instead of eating it as a mnemonic;
@@ -1670,13 +1672,13 @@ class _NewChartDialog(QDialog):
         # in "Highlights & shadows" is fine here — the icon has no mnemonic).
         row_tips = (
             (0, self._gen_cube,   tr("3D RGB cube")),
-            (1, self._gen_skin,   tr("Skin tones (Fitzpatrick)")),
-            (2, self._gen_blues,  tr("Blues / turquoise")),
-            (3, self._gen_greens, tr("Greens (foliage)")),
-            (4, self._gen_sunrises, tr("Sunrises (warm)")),
-            (5, self._gen_flamingos, tr("Flamingos (pinks)")),
-            (6, self._gen_greys,  tr("Near-neutral greys")),
-            (7, self._gen_edges,  tr("Saturated edges")),
+            (1, self._gen_edges,  tr("Saturated edges")),
+            (2, self._gen_skin,   tr("Skin tones (Fitzpatrick)")),
+            (3, self._gen_blues,  tr("Oceans (blues)")),
+            (4, self._gen_greens, tr("Foliage (greens)")),
+            (5, self._gen_sunrises, tr("Sunrises (warm)")),
+            (6, self._gen_flamingos, tr("Flamingos (pinks)")),
+            (7, self._gen_greys,  tr("Near-neutral greys")),
             (8, self._gen_hs,     tr("Highlights & shadows")),
             (9, self._gen_pastel, tr("Pastels")),
             (10, self._gen_image,  tr("From image")),
@@ -1746,6 +1748,20 @@ class _NewChartDialog(QDialog):
              lambda: G.rgb_cube(self._gen_cube_n.value()),
              lambda: G.rgb_cube_count(self._gen_cube_n.value()),
              self._gen_cube_count),
+            # Saturated edges sits right after the cube — matching its panel row
+            # (#78) — so the de-dup, which walks this list top-to-bottom keeping
+            # earlier patches and nudging later ones clear, processes the sets in
+            # the order the user sees them.
+            (self._gen_edges,
+             lambda: (G.gamut_edges_between(self._edges_cube_n(),
+                                            self._gen_edges_n.value())
+                      + G.gamut_faces_between(self._edges_cube_n(),
+                                              self._gen_edges_faces.value())),
+             lambda: (G.gamut_edges_between_count(self._edges_cube_n(),
+                                                  self._gen_edges_n.value())
+                      + G.gamut_faces_between_count(self._edges_cube_n(),
+                                                    self._gen_edges_faces.value())),
+             self._gen_edges_count),
             (self._gen_skin,
              lambda: G.skin_tones(self._gen_skin_n.value(),
                                   self._gen_skin_ranges.value()),
@@ -1787,16 +1803,6 @@ class _NewChartDialog(QDialog):
              lambda: G.near_neutral_greys_count(self._gen_greys_n.value(),
                                                 self._gen_greys_rings.value()),
              self._gen_greys_count),
-            (self._gen_edges,
-             lambda: (G.gamut_edges_between(self._edges_cube_n(),
-                                            self._gen_edges_n.value())
-                      + G.gamut_faces_between(self._edges_cube_n(),
-                                              self._gen_edges_faces.value())),
-             lambda: (G.gamut_edges_between_count(self._edges_cube_n(),
-                                                  self._gen_edges_n.value())
-                      + G.gamut_faces_between_count(self._edges_cube_n(),
-                                                    self._gen_edges_faces.value())),
-             self._gen_edges_count),
             (self._gen_hs,
              # Highlights & shadows interlocks with Near-neutral greys: when that
              # set is on, H&S stays just outside its rings (no colour printed
@@ -1965,7 +1971,10 @@ class _NewChartDialog(QDialog):
             # patches already placed — its build() is the same as every other set.
             program.extend(build())
         if self._gen_unique.isChecked():
-            program = G.deduplicate(program, _GEN_MIN_DIST, _GEN_MIN_DIST)
+            # Assure a real minimum spacing, walking the sets top-to-bottom (the
+            # order above) so each set's patches are spaced against the ones above
+            # — not just landed on distinct grid cells (Knut, #78).
+            program = G.enforce_min_distance(program, _GEN_MIN_DIST)
         # Pure white & black goes in *after* de-dup (so its deliberate repeats
         # survive) but *before* fill, so it's part of the chart fill tops up to —
         # not stacked on top of it. These are deliberate anchor patches, so they
@@ -3922,7 +3931,7 @@ class Ti2RelayoutDialog(QDialog):
         box.exec()
         clicked = box.clickedButton()
         if clicked is unique_btn:
-            return G.dedupe_against(existing, extra, _GEN_MIN_DIST, _GEN_MIN_DIST)
+            return G.enforce_min_distance(extra, _GEN_MIN_DIST, existing=existing)
         if clicked is onlynew_btn:
             return G.only_new(existing, extra)
         if clicked is anyway_btn:
