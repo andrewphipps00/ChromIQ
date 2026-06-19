@@ -446,3 +446,30 @@ def test_flamingos_persists_and_restores_to_default(qapp):
                          "sp": dlg._GEN_FACTORY["sp"]})
     assert dlg._gen_flamingos.isChecked() is True
     assert dlg._gen_flamingos_n.value() == 64
+
+
+def test_gamut_corners_in_program_and_persists(qapp):
+    """Gamut-corner emphasis adds 8×per_corner patches, and its values save and
+    restore (incl. its spread) like every other set."""
+    dlg = _AddPatchesDialog(_FakeSettings())
+    dlg._add_mode_gen.setChecked(True)
+    dlg._refresh_add_mode()
+    for n in dlg._GEN_CHECKS:
+        getattr(dlg, f"_gen_{n}").setChecked(False)
+    dlg._gen_unique.setChecked(False)
+    dlg._gen_corners.setChecked(True)
+    dlg._gen_corners_n.setValue(5)        # 8 × 5 = 40
+    dlg._gen_corners_spread.setValue(12)
+    dlg._update_gen_counts()
+    assert "40" in dlg._gen_corners_count.text()
+    assert len(dlg._build_generated_program()) == 40
+
+    st = dlg._collect_gen_sets()
+    assert st["cb"]["corners"] is True
+    assert st["sp"]["corners_n"] == 5 and st["sp"]["corners_spread"] == 12
+    # Factory baseline: off, per-corner 6, spread 15.
+    dlg._apply_gen_sets({"cb": dlg._GEN_FACTORY["cb"],
+                         "sp": dlg._GEN_FACTORY["sp"]})
+    assert dlg._gen_corners.isChecked() is False
+    assert dlg._gen_corners_n.value() == 6
+    assert dlg._gen_corners_spread.value() == 15

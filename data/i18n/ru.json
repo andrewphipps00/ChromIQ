@@ -1750,5 +1750,9 @@
  "Flamingos (pinks)": "Фламинго (розовые)",
  "Pinks, magentas and indigos — the band between where Oceans (blues) ends and Sunrises begins, the big gap the other colour-band sets leave in the middle. Great for flowers, fabrics, sunsets and skin. Each of the 'layers' is a non-parallel sheet of 'per layer' patches, so the two multiply.": "Розовые, пурпурные и индиго — полоса между тем, где заканчиваются «Океаны (синие)» и начинаются «Рассветы (тёплые)», большой промежуток, который остальные цветовые наборы оставляют посередине. Отлично для цветов, тканей, закатов и кожи. Каждый из «слоёв» — это непараллельный лист из «на слой» полей, так что они перемножаются.",
  "between:": "между:",
- "faces:": "грани:"
+ "faces:": "грани:",
+ "Gamut-corner emphasis": "Акцент на углах охвата",
+ "Adds extra patches right around the eight extreme corners of the printer's colour range — the deepest, most saturated colours, which are the trickiest to reproduce accurately. A quick way to tighten the profile where it strays most. 'Per corner' is how many at each; 'spread' how far in they reach.": "Добавляет дополнительные патчи прямо вокруг восьми крайних углов цветового охвата принтера — самых глубоких и насыщенных цветов, которые труднее всего воспроизвести точно. Быстрый способ подтянуть профиль там, где он сильнее всего отклоняется. «На угол» — сколько у каждого; «разброс» — насколько далеко внутрь они заходят.",
+ "per corner:": "на угол:",
+ "spread:": "разброс:"
 }

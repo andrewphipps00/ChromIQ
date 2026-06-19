@@ -1750,5 +1750,9 @@
  "Flamingos (pinks)": "火烈鸟（粉色）",
  "Pinks, magentas and indigos — the band between where Oceans (blues) ends and Sunrises begins, the big gap the other colour-band sets leave in the middle. Great for flowers, fabrics, sunsets and skin. Each of the 'layers' is a non-parallel sheet of 'per layer' patches, so the two multiply.": "粉色、品红和靛蓝——位于「海洋（蓝色）」结束与「暖色（日出）」开始之间的色带，也是其他色带集在中间留下的大空缺。非常适合花卉、织物、日落和肤色。每个「层」都是一张非平行的色片，含「每层」个色块，两者相乘。",
  "between:": "间隔:",
- "faces:": "面数:"
+ "faces:": "面数:",
+ "Gamut-corner emphasis": "色域角强调",
+ "Adds extra patches right around the eight extreme corners of the printer's colour range — the deepest, most saturated colours, which are the trickiest to reproduce accurately. A quick way to tighten the profile where it strays most. 'Per corner' is how many at each; 'spread' how far in they reach.": "在打印机色域最外侧的八个角周围就近添加额外色块——也就是最深、最饱和、最难准确再现的颜色。这是在配置文件偏差最大处快速收紧它的方法。「每角」是每个角放多少个；「扩散」是它们向内延伸多远。",
+ "per corner:": "每角:",
+ "spread:": "扩散:"
 }

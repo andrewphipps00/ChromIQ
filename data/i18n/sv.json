@@ -1750,5 +1750,9 @@
  "Flamingos (pinks)": "Flamingos (rosa)",
  "Pinks, magentas and indigos — the band between where Oceans (blues) ends and Sunrises begins, the big gap the other colour-band sets leave in the middle. Great for flowers, fabrics, sunsets and skin. Each of the 'layers' is a non-parallel sheet of 'per layer' patches, so the two multiply.": "Rosa, magenta och indigo — bandet mellan där ”Hav (blått)” slutar och ”Soluppgångar (varma)” börjar, den stora luckan som de andra färgbandsuppsättningarna lämnar i mitten. Perfekt för blommor, tyger, solnedgångar och hud. Var och en av ”lagren” är ett icke-parallellt ark med ”per lager” rutor, så de två multipliceras.",
  "between:": "emellan:",
- "faces:": "ytor:"
+ "faces:": "ytor:",
+ "Gamut-corner emphasis": "Betoning av gamuthörn",
+ "Adds extra patches right around the eight extreme corners of the printer's colour range — the deepest, most saturated colours, which are the trickiest to reproduce accurately. A quick way to tighten the profile where it strays most. 'Per corner' is how many at each; 'spread' how far in they reach.": "Lägger till extra rutor precis runt de åtta yttersta hörnen av skrivarens färgomfång — de djupaste, mest mättade färgerna, som är svårast att återge exakt. Ett snabbt sätt att skärpa profilen där den avviker mest. ”Per hörn” är hur många vid varje; ”spridning” hur långt in de når.",
+ "per corner:": "per hörn:",
+ "spread:": "spridning:"
 }
