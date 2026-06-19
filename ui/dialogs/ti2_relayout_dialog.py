@@ -1748,6 +1748,20 @@ class _NewChartDialog(QDialog):
              lambda: G.rgb_cube(self._gen_cube_n.value()),
              lambda: G.rgb_cube_count(self._gen_cube_n.value()),
              self._gen_cube_count),
+            # Saturated edges sits right after the cube — matching its panel row
+            # (#78) — so the de-dup, which walks this list top-to-bottom keeping
+            # earlier patches and nudging later ones clear, processes the sets in
+            # the order the user sees them.
+            (self._gen_edges,
+             lambda: (G.gamut_edges_between(self._edges_cube_n(),
+                                            self._gen_edges_n.value())
+                      + G.gamut_faces_between(self._edges_cube_n(),
+                                              self._gen_edges_faces.value())),
+             lambda: (G.gamut_edges_between_count(self._edges_cube_n(),
+                                                  self._gen_edges_n.value())
+                      + G.gamut_faces_between_count(self._edges_cube_n(),
+                                                    self._gen_edges_faces.value())),
+             self._gen_edges_count),
             (self._gen_skin,
              lambda: G.skin_tones(self._gen_skin_n.value(),
                                   self._gen_skin_ranges.value()),
@@ -1789,16 +1803,6 @@ class _NewChartDialog(QDialog):
              lambda: G.near_neutral_greys_count(self._gen_greys_n.value(),
                                                 self._gen_greys_rings.value()),
              self._gen_greys_count),
-            (self._gen_edges,
-             lambda: (G.gamut_edges_between(self._edges_cube_n(),
-                                            self._gen_edges_n.value())
-                      + G.gamut_faces_between(self._edges_cube_n(),
-                                              self._gen_edges_faces.value())),
-             lambda: (G.gamut_edges_between_count(self._edges_cube_n(),
-                                                  self._gen_edges_n.value())
-                      + G.gamut_faces_between_count(self._edges_cube_n(),
-                                                    self._gen_edges_faces.value())),
-             self._gen_edges_count),
             (self._gen_hs,
              # Highlights & shadows interlocks with Near-neutral greys: when that
              # set is on, H&S stays just outside its rings (no colour printed
@@ -1967,7 +1971,10 @@ class _NewChartDialog(QDialog):
             # patches already placed — its build() is the same as every other set.
             program.extend(build())
         if self._gen_unique.isChecked():
-            program = G.deduplicate(program, _GEN_MIN_DIST, _GEN_MIN_DIST)
+            # Assure a real minimum spacing, walking the sets top-to-bottom (the
+            # order above) so each set's patches are spaced against the ones above
+            # — not just landed on distinct grid cells (Knut, #78).
+            program = G.enforce_min_distance(program, _GEN_MIN_DIST)
         # Pure white & black goes in *after* de-dup (so its deliberate repeats
         # survive) but *before* fill, so it's part of the chart fill tops up to —
         # not stacked on top of it. These are deliberate anchor patches, so they
@@ -3924,7 +3931,7 @@ class Ti2RelayoutDialog(QDialog):
         box.exec()
         clicked = box.clickedButton()
         if clicked is unique_btn:
-            return G.dedupe_against(existing, extra, _GEN_MIN_DIST, _GEN_MIN_DIST)
+            return G.enforce_min_distance(extra, _GEN_MIN_DIST, existing=existing)
         if clicked is onlynew_btn:
             return G.only_new(existing, extra)
         if clicked is anyway_btn:

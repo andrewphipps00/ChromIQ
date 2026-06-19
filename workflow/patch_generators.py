@@ -606,41 +606,50 @@ def gamut_edges_between_count(cube_n: int, per_gap: int) -> int:
 
 
 def gamut_faces_between(cube_n: int, per_gap: int) -> list[tuple[float, float, float]]:
-    """A ``per_gap`` × ``per_gap`` infill **inside each cube cell** on all 6
-    faces — the even 2-D analogue of :func:`gamut_edges_between`.
+    """An even ``per_gap`` infill across each face's **interior lattice** — the
+    2-D analogue of :func:`gamut_edges_between`.
 
-    Each face is a ``cube_n`` × ``cube_n`` grid of cube points, i.e.
-    ``(cube_n - 1)**2`` cells; this drops a ``per_gap`` × ``per_gap`` block of
-    patches in the interior of every cell. The points sit strictly inside the
-    cells (never on a cube grid line), so they neither double the cube nor the
-    edge fills, and a face gets ``(cube_n - 1)**2 * per_gap**2`` patches.
+    Refine the face into one uniform grid that subdivides every cube interval
+    into ``per_gap + 1`` parts on **both** axes, then keep the points that are
+    neither a cube point nor on the face's perimeter. Crucially this *includes*
+    the points that sit on the cube grid lines **between** adjacent cube dots, so
+    the fill is an even lattice with no empty channels — an earlier
+    inside-each-cell-only version left a cross-shaped gap along those lines
+    (Knut, #78). The perimeter (the face's four cube edges) is left to
+    :func:`gamut_edges_between`, so the two don't fight over the boundary.
+
+    The cube supplies the lattice's cube points and the edges set its border, so
+    cube + edges + faces together read as one even grid. A face gets
+    ``((cube_n - 1)*(per_gap + 1) - 1)**2 - (cube_n - 2)**2`` patches.
     """
     cube_n = max(2, int(cube_n))
     per_gap = max(0, int(per_gap))
     if per_gap == 0:
         return []
-    fr = _interior_fracs(per_gap)
+    step = per_gap + 1
+    last = (cube_n - 1) * step                     # max grid index (perimeter)
     out: list[tuple[float, float, float]] = []
     for fixed, val in _CUBE_FACES:
         free = [k for k in range(3) if k != fixed]
-        for ci in range(cube_n - 1):
-            u0, u1 = ci / (cube_n - 1), (ci + 1) / (cube_n - 1)
-            for cj in range(cube_n - 1):
-                v0, v1 = cj / (cube_n - 1), (cj + 1) / (cube_n - 1)
-                for fu in fr:
-                    for fv in fr:
-                        p = [0.0, 0.0, 0.0]
-                        p[fixed] = val
-                        p[free[0]] = _clamp((u0 + (u1 - u0) * fu) * 100.0)
-                        p[free[1]] = _clamp((v0 + (v1 - v0) * fv) * 100.0)
-                        out.append((p[0], p[1], p[2]))
+        for iu in range(1, last):                  # interior only (drop perimeter)
+            for iv in range(1, last):
+                if iu % step == 0 and iv % step == 0:
+                    continue                       # a cube point — already placed
+                p = [0.0, 0.0, 0.0]
+                p[fixed] = val
+                p[free[0]] = _clamp(iu / last * 100.0)
+                p[free[1]] = _clamp(iv / last * 100.0)
+                out.append((p[0], p[1], p[2]))
     return out
 
 
 def gamut_faces_between_count(cube_n: int, per_gap: int) -> int:
     cn = max(2, int(cube_n))
     pg = max(0, int(per_gap))
-    return 6 * (cn - 1) * (cn - 1) * pg * pg
+    if pg == 0:
+        return 0
+    interior = (cn - 1) * (pg + 1) - 1
+    return 6 * (interior * interior - (cn - 2) * (cn - 2))
 
 
 # ---------------------------------------------------------------------------
@@ -979,6 +988,92 @@ def fill_gaps(existing, total: int, candidates: int = 12,
 
 def fill_gaps_count(existing_count: int, total: int) -> int:
     return max(0, int(total) - int(existing_count))
+
+
+# ---------------------------------------------------------------------------
+# Minimum-distance enforcement — assure real spacing when sets are combined.
+# ---------------------------------------------------------------------------
+# Unit-ish directions (the 26 neighbours of a cell) used to search for a free
+# spot around a patch that's too close to the ones already placed.
+_NUDGE_DIRS = tuple((dx, dy, dz)
+                    for dx in (-1, 0, 1) for dy in (-1, 0, 1) for dz in (-1, 0, 1)
+                    if (dx, dy, dz) != (0, 0, 0))
+
+
+def enforce_min_distance(patches, min_dist: float = 2.0, existing=None):
+    """Return ``patches`` (order preserved, count unchanged) with each point
+    moved as needed so it sits **at least ``min_dist``** device units (Euclidean,
+    on the 0..100 scale) from every point kept before it.
+
+    This is the real "ensure distance" the grid de-duplicator only approximates:
+    :func:`deduplicate` guarantees patches land on *distinct cells*, but two
+    patches in adjacent cells can still be almost touching. Here points are
+    processed strictly in order — any ``existing`` points first (kept fixed,
+    never moved), then each patch in turn — and a patch that lands within
+    ``min_dist`` of anything already kept is pushed to the nearest free spot
+    around it (a small dart-search over the 26 directions at growing radius),
+    staying in 0..100. Because earlier points are never disturbed, enabling the
+    sets one at a time from the top and spacing each against the ones above gives
+    exactly this result (Knut, #78).
+
+    A spatial hash keyed on ``min_dist`` keeps the neighbour test local, so this
+    stays fast for the few-thousand-patch programs the generator panel builds.
+    """
+    if min_dist <= 0:
+        return [(_clamp(p[0]), _clamp(p[1]), _clamp(p[2])) for p in patches]
+    cell = float(min_dist)
+    md2 = min_dist * min_dist
+    grid: dict = {}
+
+    def buck(q):
+        return (int(q[0] // cell), int(q[1] // cell), int(q[2] // cell))
+
+    def add(q):
+        grid.setdefault(buck(q), []).append(q)
+
+    def min_d2(q):
+        bx, by, bz = buck(q)
+        best = 1e18
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                for dz in (-1, 0, 1):
+                    for k in grid.get((bx + dx, by + dy, bz + dz), ()):
+                        d2 = ((q[0] - k[0]) ** 2 + (q[1] - k[1]) ** 2
+                              + (q[2] - k[2]) ** 2)
+                        if d2 < best:
+                            best = d2
+        return best
+
+    for q in (existing or []):
+        add((_clamp(q[0]), _clamp(q[1]), _clamp(q[2])))
+
+    out: list[tuple[float, float, float]] = []
+    for p in patches:
+        q = (_clamp(p[0]), _clamp(p[1]), _clamp(p[2]))
+        if min_d2(q) >= md2:
+            add(q)
+            out.append(q)
+            continue
+        best_q, best_d2, found = q, min_d2(q), None
+        for rmul in (1.0, 1.5, 2.0, 2.6):
+            radius = min_dist * rmul
+            for dx, dy, dz in _NUDGE_DIRS:
+                ln = math.sqrt(dx * dx + dy * dy + dz * dz)
+                cand = (_clamp(q[0] + dx / ln * radius),
+                        _clamp(q[1] + dy / ln * radius),
+                        _clamp(q[2] + dz / ln * radius))
+                d2 = min_d2(cand)
+                if d2 >= md2:
+                    found = cand
+                    break
+                if d2 > best_d2:
+                    best_d2, best_q = d2, cand
+            if found:
+                break
+        qf = found if found is not None else best_q
+        add(qf)
+        out.append(qf)
+    return out
 
 
 # ---------------------------------------------------------------------------

@@ -342,24 +342,37 @@ def test_gamut_edges_between_zero_and_cube_off():
     assert len(G.gamut_edges_between(2, 3)) == 12 * 3
 
 
-@pytest.mark.parametrize("cube_n,per_gap", [(4, 1), (4, 2), (6, 1)])
-def test_gamut_faces_between_count_and_interior(cube_n, per_gap):
+@pytest.mark.parametrize("cube_n,per_gap", [(4, 1), (4, 2), (6, 3)])
+def test_gamut_faces_between_even_lattice(cube_n, per_gap):
     pts = G.gamut_faces_between(cube_n, per_gap)
-    assert len(pts) == 6 * (cube_n - 1) ** 2 * per_gap ** 2
+    interior = (cube_n - 1) * (per_gap + 1) - 1
+    assert len(pts) == 6 * (interior ** 2 - (cube_n - 2) ** 2)
     assert len(pts) == G.gamut_faces_between_count(cube_n, per_gap)
     assert _all_in_range(pts)
     cube_levels = [round(i / (cube_n - 1) * 100.0, 6) for i in range(cube_n)]
     for p in pts:
-        # Exactly one coordinate sits on a cube grid plane (the face value); the
-        # two free ones are strictly inside a cell, so faces never double the
-        # cube or the edge fills.
-        on = sum(1 for c in p
-                 if min(abs(c - cl) for cl in cube_levels) < 1e-6)
-        assert on == 1
+        # No face point is a cube point (both free coords on cube levels) and none
+        # sits on the face perimeter (that's the edges set's job) — but points DO
+        # land on the cube grid lines between cube dots, filling the old cross gap.
+        on_face = sum(1 for c in p if c in (0.0, 100.0))
+        assert on_face == 1                              # exactly the face value
+        u, v = [c for c in p if c not in (0.0, 100.0)]
+        assert 0.0 < u < 100.0 and 0.0 < v < 100.0       # interior, not perimeter
+        both_cube = (min(abs(u - cl) for cl in cube_levels) < 1e-6
+                     and min(abs(v - cl) for cl in cube_levels) < 1e-6)
+        assert not both_cube                             # not a cube point
+    # The fill + the cube's interior points form one uniform grid (no cross gap):
+    # the free coordinate takes every interior lattice position, evenly spaced.
+    last = (cube_n - 1) * (per_gap + 1)
+    expected = [iu / last * 100.0 for iu in range(1, last)]
+    actual = sorted({r for r, g, b in pts if b == 0.0})
+    assert len(actual) == len(expected)
+    assert all(abs(a - e) < 1e-9 for a, e in zip(actual, expected))
 
 
 def test_gamut_faces_between_zero_empty():
     assert G.gamut_faces_between(8, 0) == []
+    assert G.gamut_faces_between_count(8, 0) == 0
 
 
 # --- Flamingos — the pink / magenta / indigo band (Knut, #78) --------------
@@ -631,6 +644,64 @@ def test_dedupe_against_relocates_only_the_new_and_keeps_count():
     # … nor with each other, and the already-unique one is untouched.
     assert (80.0, 10.0, 20.0) in out
     assert _all_in_range(out)
+
+
+def _min_nn(pts):
+    import math
+    best = 1e18
+    for i, a in enumerate(pts):
+        for b in pts[i + 1:]:
+            best = min(best, math.dist(a, b))
+    return best
+
+
+def test_enforce_min_distance_assures_real_spacing():
+    # A realistic combine — overlapping cube + grey ramp + saturated edges — ends
+    # up with every patch at least min_dist apart (the grid de-duplicator only
+    # guaranteed distinct cells, which left near-touching pairs). Count preserved.
+    md = 2.0
+    pts = (G.rgb_cube(6) + G.near_neutral_greys(16, 4.0, 1)
+           + G.gamut_edges_between(6, 2) + G.flamingos(120, 3))
+    out = G.enforce_min_distance(pts, md)
+    assert len(out) == len(pts)
+    assert _all_in_range(out)
+    assert _min_nn(out) >= md - 1e-6
+    # A handful of coincident points get spread apart too (room to place them).
+    spread = G.enforce_min_distance([(50.0, 50.0, 50.0)] * 8, md)
+    assert _min_nn(spread) >= md - 1e-6
+
+
+def test_enforce_min_distance_respects_and_keeps_existing_fixed():
+    md = 3.0
+    existing = [(10.0, 10.0, 10.0), (90.0, 90.0, 90.0)]
+    new = [(10.0, 10.0, 10.0), (11.0, 10.0, 10.0), (40.0, 40.0, 40.0)]
+    out = G.enforce_min_distance(new, md, existing=existing)
+    assert len(out) == len(new)
+    # every returned point clears the (untouched) existing points …
+    for q in out:
+        for e in existing:
+            import math
+            assert math.dist(q, e) >= md - 1e-6
+    # … and each other.
+    assert _min_nn(out) >= md - 1e-6
+
+
+def test_enforce_min_distance_incremental_equals_one_shot():
+    # Spacing the whole concatenation at once == spacing set-by-set top to bottom
+    # (the property that lets the panel process generators in display order).
+    a = G.rgb_cube(4)
+    b = G.near_neutral_greys(6, 6.0, 1)
+    c = G.gamut_edges_between(4, 2)
+    one = G.enforce_min_distance(a + b + c, 2.0)
+    inc = []
+    for chunk in (a, b, c):
+        inc = G.enforce_min_distance(inc + chunk, 2.0)
+    assert inc == one
+
+
+def test_enforce_min_distance_zero_is_passthrough():
+    src = [(50.0, 50.0, 50.0)] * 3
+    assert G.enforce_min_distance(src, 0.0) == src
 
 
 def test_only_new_drops_existing_and_keeps_the_rest():

@@ -1,5 +1,30 @@
 # Changelog
 
+## v3.11.10
+
+More **Generate colour sets** polish from Knut's testing (thank you, Knut!).
+
+### 💄 Improved
+- **Clearer, standardised colour-set names.** The four hue-band sets now share one
+  evocative style: **Oceans (blues)**, **Foliage (greens)**, **Sunrises (warm)**
+  and **Flamingos (pinks)**.
+- **Saturated edges moved directly under the 3D cube**, since the two work as a
+  pair (the edges/faces fill is keyed to the cube's grid).
+- **Saturated edges – faces: even fill, no more cross gap.** The faces option used
+  to drop patches only *inside* each cube square, leaving empty cross-shaped
+  channels along the grid lines between them. It now fills the whole face as one
+  even lattice (the lines between the cube dots included), so cube + edges + faces
+  read as a single uniform grid at any density.
+- **"Ensure unique colours" now keeps a real minimum distance.** Previously it only
+  guaranteed patches landed on separate cells, which could still leave two patches
+  almost touching. It now genuinely spaces every patch at least a small distance
+  from the ones already placed, working through the sets top-to-bottom (each set
+  spaced against the ones above it), so generated patches no longer crowd the 3D
+  cube's dots or each other.
+
+### 🌍 Translations
+- Updated the renamed sets and affected help across all twelve languages.
+
 ## v3.11.9
 
 Improvements to the chart layout editor's **Generate colour sets** mode, all
