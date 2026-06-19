@@ -1,5 +1,16 @@
 # Changelog
 
+## v3.11.12
+
+### 🐛 Fixed
+- **Built-in wide-gamut chart presets rebuild to their intended size again.** The
+  generator rework in v3.11.9–v3.11.10 (the new "between" saturated-edges control
+  and the Flamingos set) changed how the eleven bundled wide-gamut presets read,
+  so they were building ~1.5–1.9× too many patches and no longer fitting their
+  named page layouts. Each preset's recipe is updated to the new edges control and
+  pins Flamingos off, so all eleven once more build to exactly the patch count in
+  their name (e.g. "480p" → 480 patches). Thanks, Knut, for catching this.
+
 ## v3.11.11
 
 ### 💄 Improved
