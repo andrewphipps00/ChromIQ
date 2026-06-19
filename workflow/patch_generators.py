@@ -696,25 +696,33 @@ def _perp_basis(d):
     return u, v
 
 
+# The six *chromatic* corners (R/G/B/C/M/Y) — the white and black corners are
+# omitted because Highlights & shadows already builds cones there (Knut, #78).
+_CHROMATIC_CORNERS = tuple(c for c in _CORNER_PTS
+                           if c not in ((0.0, 0.0, 0.0), (100.0, 100.0, 100.0)))
+
+
 def gamut_corners(per_end: int, reach: float,
                   include_corners: bool = False) -> list[tuple[float, float, float]]:
-    """A phyllotaxis spiral *cone* just inside each of the 8 cube corners —
-    Highlights & shadows generalised from the white/black corners to all eight.
+    """A phyllotaxis spiral *cone* just inside each of the 6 **chromatic** cube
+    corners (R/G/B/C/M/Y) — Highlights & shadows generalised from the white/black
+    corners to the colour ones (it already covers white and black).
 
-    Each corner gets ``per_end`` patches (``8 * per_end`` in all) spiralling in
+    Each corner gets ``per_end`` patches (``6 * per_end`` in all) spiralling in
     along the corner's diagonal toward the cube centre: successive points step
     deeper (up to ``reach`` device units) and rotate by the golden angle, with the
     cone widening as it goes, so the cluster is dense at the saturated tip and
     fans out inward without spokes. The exact corner tip is **not** included (it's
     owned by the cube, the edges or the corner-edges set) unless
-    ``include_corners=True`` — used only when none of those is on.
+    ``include_corners=True`` — then the six chromatic tips are added (white/black
+    stay with Highlights & shadows).
     """
     per_end = max(1, int(per_end))
     reach = 2.0 if reach < 2.0 else 60.0 if reach > 60.0 else float(reach)
     out: list[tuple[float, float, float]] = []
     if include_corners:
-        out.extend(_CORNER_PTS)
-    for corner in _CORNER_PTS:
+        out.extend(_CHROMATIC_CORNERS)
+    for corner in _CHROMATIC_CORNERS:
         # Unit direction from the corner toward the cube centre (the diagonal).
         dvec = [50.0 - corner[j] for j in range(3)]
         dn = math.sqrt(sum(x * x for x in dvec)) or 1.0
@@ -733,7 +741,7 @@ def gamut_corners(per_end: int, reach: float,
 
 
 def gamut_corners_count(per_end: int, include_corners: bool = False) -> int:
-    return 8 * max(1, int(per_end)) + (8 if include_corners else 0)
+    return 6 * max(1, int(per_end)) + (6 if include_corners else 0)
 
 
 # ---------------------------------------------------------------------------

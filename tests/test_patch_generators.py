@@ -375,39 +375,40 @@ def test_gamut_faces_between_zero_empty():
     assert G.gamut_faces_between_count(8, 0) == 0
 
 
-# --- Gamut-corner emphasis: spiral cones at the 8 corners (#78) -------------
-@pytest.mark.parametrize("per_end,depth", [(1, 16), (5, 16), (10, 24)])
-def test_gamut_corners_count_and_range(per_end, depth):
-    pts = G.gamut_corners(per_end, depth)
-    assert len(pts) == 8 * per_end == G.gamut_corners_count(per_end)
+# --- Colour extremes: spiral cones at the 6 chromatic corners (#78) ---------
+@pytest.mark.parametrize("per_end,reach", [(1, 16), (5, 16), (10, 24)])
+def test_gamut_corners_count_and_range(per_end, reach):
+    pts = G.gamut_corners(per_end, reach)
+    assert len(pts) == 6 * per_end == G.gamut_corners_count(per_end)
     assert _all_in_range(pts)
 
 
-def test_gamut_corners_spiral_in_each_corner_not_on_the_tip():
-    depth = 16.0
-    pts = G.gamut_corners(8, depth)
+def test_gamut_corners_spiral_in_each_colour_corner_not_white_black():
+    pts = G.gamut_corners(8, 16.0)
     for p in pts:
-        # Strictly inside the cube near a corner — never the exact tip (Q2), and
-        # well away from the centre.
-        assert p not in G._CORNER_PTS
-        assert math.dist(p, (50.0, 50.0, 50.0)) > 25.0
-    # Every corner gets its own cone.
-    closest = {min(range(8), key=lambda i: math.dist(p, G._CORNER_PTS[i]))
+        assert p not in G._CORNER_PTS                       # never the exact tip (Q2)
+        assert math.dist(p, (50.0, 50.0, 50.0)) > 25.0      # away from the centre
+        # Nowhere near the white or black corner (those are H&S's job).
+        assert math.dist(p, (0.0, 0.0, 0.0)) > 15.0
+        assert math.dist(p, (100.0, 100.0, 100.0)) > 15.0
+    # Each of the six chromatic corners gets its own cone.
+    closest = {min(range(6), key=lambda i: math.dist(p, G._CHROMATIC_CORNERS[i]))
                for p in pts}
-    assert len(closest) == 8
+    assert len(closest) == 6
 
 
-def test_gamut_corners_depth_controls_reach():
-    reach = lambda d: max(math.dist(p, min(G._CORNER_PTS,
-                                           key=lambda c: math.dist(p, c)))
-                          for p in G.gamut_corners(12, d))
-    assert reach(30) > reach(8)                           # bigger depth reaches further
+def test_gamut_corners_reach_controls_depth():
+    far = lambda d: max(math.dist(p, min(G._CHROMATIC_CORNERS,
+                                         key=lambda c: math.dist(p, c)))
+                        for p in G.gamut_corners(12, d))
+    assert far(30) > far(8)                               # bigger reach goes further
 
 
-def test_gamut_corners_include_corners_adds_the_eight_tips():
+def test_gamut_corners_include_corners_adds_the_six_colour_tips():
     pts = G.gamut_corners(3, 16, include_corners=True)
-    assert len(pts) == 8 * 3 + 8 == G.gamut_corners_count(3, include_corners=True)
-    assert all(t in pts for t in G._CORNER_PTS)           # the exact tips are present
+    assert len(pts) == 6 * 3 + 6 == G.gamut_corners_count(3, include_corners=True)
+    assert all(t in pts for t in G._CHROMATIC_CORNERS)     # the six colour tips
+    assert (0.0, 0.0, 0.0) not in pts and (100.0, 100.0, 100.0) not in pts
 
 
 def test_gamut_edges_between_includes_tips_without_the_cube():

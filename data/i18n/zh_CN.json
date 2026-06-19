@@ -1753,8 +1753,8 @@
  "faces:": "面数:",
  "Gamut-corner emphasis": "色域角强调",
  "Adds a few extra patches right on the gamut edge lines next to each of the eight corners — the most saturated edges, where the deepest colours live and profiles err most. 'Edge' is how many to add per edge near each corner; they're slotted into the gaps so they never land on the patches the 3D cube or Saturated edges already place there. The exact corner tips come from the cube or Saturated edges when those are on, and from this set when they aren't, so a tip is never missing.": "在色域的边线上、八个角中每个角的紧邻处，添加几个额外色块——也就是最饱和的边，最深的颜色所在、配置文件最容易出错之处。「边」是每条边在每个角附近添加多少个；它们会被塞进空隙，因此绝不会落在「3D RGB 立方体」或「饱和边」已在那里放置的色块上。角的精确尖端在「3D RGB 立方体」或「饱和边」开启时由它们提供，未开启时由本集提供，因此尖端绝不会缺失。",
- "Adds detail just inside the eight extreme corners of the printer's colour range — the deepest, most saturated colours, which are the trickiest to reproduce. It works like Highlights & shadows, but spiralling in from each corner instead of from white and black, so the densest patches sit right at the saturated tips. 'Per end' is how many patches at each corner; 'reach' how far in they spiral.": "在打印机色域最外侧八个角的内侧就近添加细节——也就是最深、最饱和、最难再现的颜色。它的原理与「高光与阴影」相同，但从每个角而非从白和黑向内螺旋，因此最密集的色块就落在饱和的尖端附近。「每端」是每个角放多少色块；「范围」是螺旋向内延伸多远。",
- "Corner spirals": "角螺旋",
  "edge:": "边:",
- "reach:": "范围:"
+ "reach:": "范围:",
+ "Colour extremes": "色彩极值",
+ "Adds detail just inside the six most saturated colour corners of the printer's range — red, green, blue, cyan, magenta and yellow at their most vivid, which are the trickiest to reproduce. It works like Highlights & shadows, but spiralling in from each colour corner; white and black are left to Highlights & shadows, which already covers them. 'Per end' is how many patches at each corner; 'reach' how far in they spiral.": "在打印机范围中最饱和的六个颜色角的内侧就近添加细节——也就是最鲜艳的红、绿、蓝、青、品红和黄，它们最难再现。它的原理与「高光与阴影」相同，但从每个颜色角向内螺旋；白和黑交给已经覆盖它们的「高光与阴影」。「每端」是每个角放多少色块；「范围」是螺旋向内延伸多远。"
 }

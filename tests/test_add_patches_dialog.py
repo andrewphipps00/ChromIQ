@@ -475,9 +475,9 @@ def test_corner_edges_in_program_and_persist(qapp):
     assert dlg._gen_corners_edge.value() == 2
 
 
-def test_corner_spirals_in_program_and_persist(qapp):
-    """Corner spirals: 8×per_end spiral patches, with 'per end'/'reach' saved and
-    restored, and the tip-ownership chain (only owns tips when nothing above does)."""
+def test_colour_extremes_in_program_and_persist(qapp):
+    """Colour extremes: 6×per_end spiral patches at the chromatic corners, with
+    'per end'/'reach' saved and restored, and the tip-ownership chain."""
     dlg = _AddPatchesDialog(_FakeSettings())
     dlg._add_mode_gen.setChecked(True)
     dlg._refresh_add_mode()
@@ -485,18 +485,18 @@ def test_corner_spirals_in_program_and_persist(qapp):
         getattr(dlg, f"_gen_{n}").setChecked(False)
     dlg._gen_unique.setChecked(False)
     dlg._gen_spirals.setChecked(True)
-    dlg._gen_spirals_end.setValue(5)       # 8 × 5 = 40 spiral patches
+    dlg._gen_spirals_end.setValue(5)       # 6 × 5 = 30 spiral patches
     dlg._gen_spirals_reach.setValue(12)
     dlg._update_gen_counts()
-    # Nothing else on → spirals owns the 8 tips: 40 + 8.
-    assert "48" in dlg._gen_spirals_count.text()
-    assert len(dlg._build_generated_program()) == 48
-    # The corner-edges set ranks above spirals for the tips: enable it and the
-    # spiral no longer adds them.
+    # Nothing else on → it owns the 6 colour tips: 30 + 6.
+    assert "36" in dlg._gen_spirals_count.text()
+    assert len(dlg._build_generated_program()) == 36
+    # Gamut-corner emphasis ranks above it for the tips: enable it and the spiral
+    # no longer adds them.
     dlg._gen_corners.setChecked(True)
     dlg._gen_corners_edge.setValue(1)
     dlg._update_gen_counts()
-    assert "40" in dlg._gen_spirals_count.text()   # spirals back to 8×5, no tips
+    assert "30" in dlg._gen_spirals_count.text()   # back to 6×5, no tips
 
     st = dlg._collect_gen_sets()
     assert st["cb"]["spirals"] is True

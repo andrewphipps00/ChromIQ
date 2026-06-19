@@ -1206,24 +1206,31 @@ class _NewChartDialog(QDialog):
         }
 
     def _apply_gen_sets(self, st: dict) -> None:
-        """Set the colour-set checkboxes + size spins from a {"cb":…, "sp":…}
-        dict (missing/unknown keys skipped). Does not touch the source mode or
-        any chart/layout widget, so subclasses without those can reuse it.
+        """Set every colour-set checkbox + size spin from a {"cb":…, "sp":…} dict.
 
-        Older saved states may carry an ``edges_auto`` flag from the retired
-        edges↔cube auto-coupling; it is simply ignored now (the 'between' control
-        keys off the cube directly)."""
-        for n, val in (st.get("sp") or {}).items():
+        Keys **absent** from the dict fall back to the factory default, not the
+        widget's current state — so a recipe / preset / saved state written before
+        a generator existed (e.g. an old file with no Gamut-corner emphasis or
+        Colour extremes) loads that generator **off**, rather than leaving whatever
+        was last ticked (Knut, #78). Unknown keys are ignored; the retired
+        ``edges_auto`` flag from old states is harmless.
+
+        Does not touch the source mode or any chart/layout widget, so subclasses
+        without those can reuse it."""
+        sp = st.get("sp") or {}
+        for n in self._GEN_SPINS:
             w = getattr(self, f"_gen_{n}", None)
-            if w is not None:
+            val = sp.get(n, self._GEN_FACTORY["sp"].get(n))
+            if w is not None and val is not None:
                 try:
                     w.setValue(int(val))
                 except (TypeError, ValueError):
                     pass
-        for n, val in (st.get("cb") or {}).items():
+        cb = st.get("cb") or {}
+        for n in self._GEN_CHECKS:
             w = getattr(self, f"_gen_{n}", None)
             if w is not None:
-                w.setChecked(bool(val))
+                w.setChecked(bool(cb.get(n, self._GEN_FACTORY["cb"].get(n, False))))
 
     def _collect_gen_state(self) -> dict:
         mode = ("generate" if self._mode_generate.isChecked() else
@@ -1445,19 +1452,20 @@ class _NewChartDialog(QDialog):
         gg.addWidget(self._gen_corners_edge, 2, 2)
         gg.addWidget(self._gen_corners_count, 2, 7)
 
-        # Corner spirals — Highlights-&-shadows-style spiral cones just inside each
-        # of the 8 corners (grid row 3). 'per end' / 'reach' mirror H&S; reuses the
-        # 'per end:' label, 'reach:' is its own.
-        self._gen_spirals = QCheckBox(tr("Corner spirals"), self._gen_panel)
-        self._gen_spirals.setToolTip(tr("Adds detail just inside the eight extreme "
-                                     "corners of the printer's colour range — the "
-                                     "deepest, most saturated colours, which are the "
-                                     "trickiest to reproduce. It works like Highlights "
-                                     "& shadows, but spiralling in from each corner "
-                                     "instead of from white and black, so the densest "
-                                     "patches sit right at the saturated tips. 'Per "
-                                     "end' is how many patches at each corner; 'reach' "
-                                     "how far in they spiral."))
+        # Colour extremes — Highlights-&-shadows-style spiral cones just inside the
+        # six chromatic corners (grid row 3). White/black are left to Highlights &
+        # shadows. 'per end' / 'reach' mirror H&S (reuses the 'per end:' label).
+        self._gen_spirals = QCheckBox(tr("Colour extremes"), self._gen_panel)
+        self._gen_spirals.setToolTip(tr("Adds detail just inside the six most "
+                                     "saturated colour corners of the printer's range "
+                                     "— red, green, blue, cyan, magenta and yellow at "
+                                     "their most vivid, which are the trickiest to "
+                                     "reproduce. It works like Highlights & shadows, "
+                                     "but spiralling in from each colour corner; white "
+                                     "and black are left to Highlights & shadows, which "
+                                     "already covers them. 'Per end' is how many "
+                                     "patches at each corner; 'reach' how far in they "
+                                     "spiral."))
         self._gen_spirals_end = _spin(1, 100, 8)
         self._gen_spirals_reach = _spin(2, 45, 16)
         self._gen_spirals_count = _count_label()
@@ -1722,7 +1730,7 @@ class _NewChartDialog(QDialog):
             (0, self._gen_cube,   tr("3D RGB cube")),
             (1, self._gen_edges,  tr("Saturated edges")),
             (2, self._gen_corners, tr("Gamut-corner emphasis")),
-            (3, self._gen_spirals, tr("Corner spirals")),
+            (3, self._gen_spirals, tr("Colour extremes")),
             (4, self._gen_skin,   tr("Skin tones (Fitzpatrick)")),
             (5, self._gen_blues,  tr("Oceans (blues)")),
             (6, self._gen_greens, tr("Foliage (greens)")),
@@ -2017,12 +2025,13 @@ class _NewChartDialog(QDialog):
         # paper-white / max-black readings to average), so they're added on top
         # of whatever the chart already holds — only the corners the *other
         # ticked sets* contribute in this same batch count toward N, never the
-        # existing chart's own white/black (#76, Knut). One of each from those
-        # corner-bearing sets (the 3D cube, and greys with ≥2 steps) if any are on
-        # (collapsed by de-dup), else one per such set. Saturated edges no longer
-        # counts here: its 'between' fill sits strictly between the cube steps, so
-        # it never lands on the black or white corner (Knut, #78).
-        corner = ((1 if self._gen_cube.isChecked() else 0)
+        # existing chart's own white/black (#76, Knut). The white/black tips come
+        # from the boundary tip-owner chain (3D cube → Saturated edges → Gamut-
+        # corner emphasis — whichever is on supplies them, incl. white/black), and
+        # from greys with ≥2 steps. Colour extremes never lands on white/black
+        # (six chromatic corners only), so it doesn't count here (Knut, #78).
+        corner = ((1 if (self._gen_cube.isChecked() or self._gen_edges.isChecked()
+                         or self._gen_corners.isChecked()) else 0)
                   + (1 if (self._gen_greys.isChecked()
                            and self._gen_greys_n.value() >= 2) else 0))
         sets_have = (1 if corner else 0) if self._gen_unique.isChecked() else corner
