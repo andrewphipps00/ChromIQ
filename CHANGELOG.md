@@ -1,5 +1,38 @@
 # Changelog
 
+## v3.11.9
+
+Improvements to the chart layout editor's **Generate colour sets** mode, all
+from Knut's testing (thank you, Knut!).
+
+### ✨ New
+- **Flamingos (pinks) colour set.** A new hue-band generator covering the pinks,
+  magentas and indigos between where *Blues / turquoise* ends and *Sunrises*
+  begins — the big gap that was left in the middle of colour space when the other
+  bands were all on. Works just like the other bands (per layer × layers), and is
+  on by default. Great for flowers, fabrics, sunsets and skin.
+
+### 💄 Improved
+- **Saturated edges now stay even at any density.** The control changed from a
+  raw patch count to **between** — how many patches to drop *evenly between each
+  pair of neighbouring 3D-cube dots* — along the 12 cube edges, with **faces**
+  doing the same inside each square of the cube's faces. Because the spacing is
+  tied to the cube, the boundary fill is evenly spaced at every setting, not just
+  when it happened to match the cube (the lumpiness above one patch per gap is
+  gone). 1 puts one patch midway between each cube dot.
+- **The warm bands reach into the dark tones.** *Sunrises* (and the new
+  *Flamingos*) now start near the dark corner like *Greens*, instead of at mid
+  lightness — closing the bright opening that sat between the warm and cool sides
+  around the black corner.
+- **Ensure unique colours keeps a little more breathing room.** Combined sets now
+  keep a small minimum distance between patches, so a generated patch that lands
+  right next to a 3D-cube dot is nudged clear of it rather than printed almost on
+  top of it.
+
+### 🌍 Translations
+- Updated the affected strings (new Flamingos set, edges controls, white/black
+  note) in all twelve languages.
+
 ## v3.11.8
 
 ### 💄 Improved

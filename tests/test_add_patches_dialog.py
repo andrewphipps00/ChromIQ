@@ -389,8 +389,9 @@ def test_white_black_added_over_existing_chart(qapp):
                 (0.0, 0.0, 0.0), (0.0, 0.0, 0.0), (50.0, 50.0, 50.0)]
     dlg = _AddPatchesDialog(_FakeSettings(), existing_patches=existing)
     for cb in (dlg._gen_cube, dlg._gen_skin, dlg._gen_blues, dlg._gen_greens,
-               dlg._gen_sunrises, dlg._gen_greys, dlg._gen_edges, dlg._gen_hs,
-               dlg._gen_pastel, dlg._gen_image, dlg._gen_fill):
+               dlg._gen_sunrises, dlg._gen_flamingos, dlg._gen_greys,
+               dlg._gen_edges, dlg._gen_hs, dlg._gen_pastel, dlg._gen_image,
+               dlg._gen_fill):
         cb.setChecked(False)
     dlg._gen_whiteblack.setChecked(True)
     dlg._gen_whiteblack_n.setValue(2)
@@ -399,3 +400,49 @@ def test_white_black_added_over_existing_chart(qapp):
     prog = dlg._build_generated_program()
     assert prog.count((100.0, 100.0, 100.0)) == 2
     assert prog.count((0.0, 0.0, 0.0)) == 2
+
+
+def test_flamingos_and_edges_between_in_program(qapp):
+    """Flamingos is a real set in the program, and Saturated edges' 'between'
+    control fills evenly relative to the cube's steps (Knut, #78)."""
+    dlg = _AddPatchesDialog(_FakeSettings())
+    dlg._add_mode_gen.setChecked(True)
+    dlg._refresh_add_mode()
+    for n in dlg._GEN_CHECKS:
+        getattr(dlg, f"_gen_{n}").setChecked(False)
+    dlg._gen_unique.setChecked(False)                  # isolate raw counts
+    # cube 4 → 64; edges between=2 with cube_n=4 → 12·2·3 = 72; flamingos 10×1.
+    dlg._gen_cube.setChecked(True)
+    dlg._gen_cube_n.setValue(4)
+    dlg._gen_edges.setChecked(True)
+    dlg._gen_edges_n.setValue(2)
+    dlg._gen_edges_faces.setValue(0)
+    dlg._gen_flamingos.setChecked(True)
+    dlg._gen_flamingos_n.setValue(10)
+    dlg._gen_flamingos_layers.setValue(1)
+    dlg._update_gen_counts()
+    assert "72" in dlg._gen_edges_count.text()
+    assert "10" in dlg._gen_flamingos_count.text()
+    assert len(dlg._build_generated_program()) == 64 + 72 + 10
+
+    # Edges keys to the cube: turn the cube off and it falls back to 2 steps
+    # (one gap per edge), so between=2 → 12·2·1 = 24.
+    dlg._gen_cube.setChecked(False)
+    dlg._update_gen_counts()
+    assert "24" in dlg._gen_edges_count.text()
+
+
+def test_flamingos_persists_and_restores_to_default(qapp):
+    """New generator values save on commit and 'Restore defaults' brings them
+    back (the persistence rule for every new set)."""
+    dlg = _AddPatchesDialog(_FakeSettings())
+    dlg._gen_flamingos.setChecked(False)
+    dlg._gen_flamingos_n.setValue(33)
+    st = dlg._collect_gen_sets()
+    assert st["cb"]["flamingos"] is False
+    assert st["sp"]["flamingos_n"] == 33
+    # Restoring the factory baseline re-ticks it and resets the value.
+    dlg._apply_gen_sets({"cb": dlg._GEN_FACTORY["cb"],
+                         "sp": dlg._GEN_FACTORY["sp"]})
+    assert dlg._gen_flamingos.isChecked() is True
+    assert dlg._gen_flamingos_n.value() == 64

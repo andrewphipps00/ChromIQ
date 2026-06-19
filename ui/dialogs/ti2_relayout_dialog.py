@@ -258,6 +258,12 @@ def _patches_label(n: int) -> str:
 
 _SWATCH = 46  # grid swatch px
 
+# Minimum spacing (device units, 0..100) that "Ensure unique colours" keeps
+# between any two patches when sets are combined. A touch above the old 0.5 grid
+# so generators that land near a 3D-cube dot are nudged a little clearer of it,
+# not just de-duplicated when they coincide exactly (Knut, #78).
+_GEN_MIN_DIST = 2.0
+
 # On-screen preview render resolution (#44). The preview never needs print DPI;
 # rendering it low-res makes printtarg far faster and shrinks every image
 # read / diff / segmentation. The saved chart still uses the user's full DPI.
@@ -1138,11 +1144,12 @@ class _NewChartDialog(QDialog):
     # -- last-used settings persistence -----------------------------------
     # The widget suffixes whose checked/value state is remembered between
     # New-chart sessions (attribute = "_gen_<name>").
-    _GEN_CHECKS = ("cube", "skin", "blues", "greens", "sunrises", "greys",
-                   "edges", "hs", "pastel", "image", "whiteblack", "fill",
-                   "unique")
+    _GEN_CHECKS = ("cube", "skin", "blues", "greens", "sunrises", "flamingos",
+                   "greys", "edges", "hs", "pastel", "image", "whiteblack",
+                   "fill", "unique")
     _GEN_SPINS = ("cube_n", "skin_n", "skin_ranges", "blues_n", "blues_layers",
                   "greens_n", "greens_layers", "sunrises_n", "sunrises_layers",
+                  "flamingos_n", "flamingos_layers",
                   "greys_n", "greys_off",
                   "greys_rings", "edges_n", "edges_faces", "hs_n", "hs_reach",
                   "pastel_n", "pastel_layers", "image_n", "whiteblack_n",
@@ -1163,13 +1170,15 @@ class _NewChartDialog(QDialog):
                    "bit16": False, "L": False, "P": False, "h": False,
                    "td": False},
         "cb": {"cube": True, "skin": True, "blues": True, "greens": True,
-               "sunrises": True, "greys": True, "edges": False, "hs": False,
+               "sunrises": True, "flamingos": True, "greys": True,
+               "edges": False, "hs": False,
                "pastel": False, "image": False, "whiteblack": False,
                "fill": False, "unique": True},
         "sp": {"cube_n": 8, "skin_n": 8, "skin_ranges": 3, "blues_n": 64,
                "blues_layers": 3, "greens_n": 64, "greens_layers": 3,
                "sunrises_n": 64, "sunrises_layers": 3,
-               "greys_n": 16, "greys_off": 4, "greys_rings": 1, "edges_n": 7,
+               "flamingos_n": 64, "flamingos_layers": 3,
+               "greys_n": 16, "greys_off": 4, "greys_rings": 1, "edges_n": 1,
                "edges_faces": 0, "hs_n": 24, "hs_reach": 16, "pastel_n": 24,
                "pastel_layers": 2, "image_n": 24, "whiteblack_n": 1,
                "fill_to": 1000},
@@ -1191,39 +1200,27 @@ class _NewChartDialog(QDialog):
                    for n in self._GEN_CHECKS},
             "sp": {n: getattr(self, f"_gen_{n}").value()
                    for n in self._GEN_SPINS},
-            # Whether saturated-edges still auto-follows the cube (see
-            # _sync_edges_to_cube); persisted so an override survives reopen.
-            "edges_auto": getattr(self, "_edges_auto", True),
         }
 
     def _apply_gen_sets(self, st: dict) -> None:
         """Set the colour-set checkboxes + size spins from a {"cb":…, "sp":…}
         dict (missing/unknown keys skipped). Does not touch the source mode or
-        any chart/layout widget, so subclasses without those can reuse it."""
-        # Suppress the edges↔cube coupling while we bulk-apply, so setting the
-        # cube can't clobber the edges value we're about to restore (and vice
-        # versa).
-        self._syncing_edges = True
-        try:
-            for n, val in (st.get("sp") or {}).items():
-                w = getattr(self, f"_gen_{n}", None)
-                if w is not None:
-                    try:
-                        w.setValue(int(val))
-                    except (TypeError, ValueError):
-                        pass
-            for n, val in (st.get("cb") or {}).items():
-                w = getattr(self, f"_gen_{n}", None)
-                if w is not None:
-                    w.setChecked(bool(val))
-        finally:
-            self._syncing_edges = False
-        # Restore the auto-follow flag — default ON so factory defaults and any
-        # pre-existing saved state (which predates this feature) both get the
-        # cube→edges coupling — then re-sync so a stale saved edges value snaps
-        # to cube − 1 straight away.
-        self._edges_auto = bool(st.get("edges_auto", True))
-        self._sync_edges_to_cube()
+        any chart/layout widget, so subclasses without those can reuse it.
+
+        Older saved states may carry an ``edges_auto`` flag from the retired
+        edges↔cube auto-coupling; it is simply ignored now (the 'between' control
+        keys off the cube directly)."""
+        for n, val in (st.get("sp") or {}).items():
+            w = getattr(self, f"_gen_{n}", None)
+            if w is not None:
+                try:
+                    w.setValue(int(val))
+                except (TypeError, ValueError):
+                    pass
+        for n, val in (st.get("cb") or {}).items():
+            w = getattr(self, f"_gen_{n}", None)
+            if w is not None:
+                w.setChecked(bool(val))
 
     def _collect_gen_state(self) -> dict:
         mode = ("generate" if self._mode_generate.isChecked() else
@@ -1493,6 +1490,26 @@ class _NewChartDialog(QDialog):
         gg.addWidget(self._gen_sunrises_layers, 4, 4)
         gg.addWidget(self._gen_sunrises_count, 4, 7)
 
+        # Flamingos — the pink / magenta / indigo band the other bands leave out.
+        self._gen_flamingos = QCheckBox(tr("Flamingos (pinks)"), self._gen_panel)
+        self._gen_flamingos.setChecked(True)
+        self._gen_flamingos.setToolTip(tr("Pinks, magentas and indigos — the band "
+                                       "between where Blues / turquoise ends and "
+                                       "Sunrises begins, the big gap the other "
+                                       "colour-band sets leave in the middle. Great "
+                                       "for flowers, fabrics, sunsets and skin. Each "
+                                       "of the 'layers' is a non-parallel sheet of "
+                                       "'per layer' patches, so the two multiply."))
+        self._gen_flamingos_n = _spin(1, 200, 64)
+        self._gen_flamingos_layers = _spin(1, 10, 3)
+        self._gen_flamingos_count = _count_label()
+        gg.addWidget(self._gen_flamingos, 5, 0)
+        gg.addWidget(QLabel(tr("per layer:")), 5, 1)
+        gg.addWidget(self._gen_flamingos_n, 5, 2)
+        gg.addWidget(QLabel(tr("layers:")), 5, 3)
+        gg.addWidget(self._gen_flamingos_layers, 5, 4)
+        gg.addWidget(self._gen_flamingos_count, 5, 7)
+
         # Near-neutral greys — neutral ramp + 6 hue rings per step.
         self._gen_greys = QCheckBox(tr("Near-neutral greys"), self._gen_panel)
         self._gen_greys.setChecked(True)
@@ -1512,33 +1529,38 @@ class _NewChartDialog(QDialog):
         # Kept as a field so it can be greyed out alongside the offset spin when
         # rings is 0 (offset then has no effect).
         self._gen_greys_off_label = QLabel(tr("offset:"))
-        gg.addWidget(self._gen_greys, 5, 0)
-        gg.addWidget(QLabel(tr("steps:")), 5, 1)
-        gg.addWidget(self._gen_greys_n, 5, 2)
-        gg.addWidget(QLabel(tr("rings:")), 5, 3)
-        gg.addWidget(self._gen_greys_rings, 5, 4)
-        gg.addWidget(self._gen_greys_off_label, 5, 5)
-        gg.addWidget(self._gen_greys_off, 5, 6)
-        gg.addWidget(self._gen_greys_count, 5, 7)
+        gg.addWidget(self._gen_greys, 6, 0)
+        gg.addWidget(QLabel(tr("steps:")), 6, 1)
+        gg.addWidget(self._gen_greys_n, 6, 2)
+        gg.addWidget(QLabel(tr("rings:")), 6, 3)
+        gg.addWidget(self._gen_greys_rings, 6, 4)
+        gg.addWidget(self._gen_greys_off_label, 6, 5)
+        gg.addWidget(self._gen_greys_off, 6, 6)
+        gg.addWidget(self._gen_greys_count, 6, 7)
 
-        # Saturated edges — the gamut-boundary wireframe of the RGB cube.
+        # Saturated edges — the gamut boundary, locked to the 3D cube's grid so
+        # the infill stays even at any density (Knut, #78).
         self._gen_edges = QCheckBox(tr("Saturated edges"), self._gen_panel)
         self._gen_edges.setToolTip(tr("The most saturated colours the printer can "
-                                   "reach. 'Per edge' samples the 12 edges of the "
-                                   "RGB cube — the gamut wireframe; 'per face' "
-                                   "also fills the 6 cube faces (the full gamut "
-                                   "surface) with that many patches per side, or "
-                                   "0 for edges only. This boundary is where "
-                                   "profiles err most."))
-        self._gen_edges_n = _spin(1, 60, 7)
-        self._gen_edges_faces = _spin(0, 20, 0)
+                                   "reach — the boundary of the RGB cube, where "
+                                   "profiles err most. This set works hand in hand "
+                                   "with the 3D cube: 'between' drops that many "
+                                   "patches evenly between each pair of neighbouring "
+                                   "cube dots along the 12 cube edges (the gamut "
+                                   "wireframe), and 'faces' does the same inside each "
+                                   "square of the cube's 6 faces (the gamut surface), "
+                                   "or 0 for edges only. Because the spacing is tied "
+                                   "to the cube, the fill stays even at any setting "
+                                   "(1 is one patch midway between each cube dot)."))
+        self._gen_edges_n = _spin(0, 5, 1)
+        self._gen_edges_faces = _spin(0, 5, 0)
         self._gen_edges_count = _count_label()
-        gg.addWidget(self._gen_edges, 6, 0)
-        gg.addWidget(QLabel(tr("per edge:")), 6, 1)
-        gg.addWidget(self._gen_edges_n, 6, 2)
-        gg.addWidget(QLabel(tr("per face:")), 6, 3)
-        gg.addWidget(self._gen_edges_faces, 6, 4)
-        gg.addWidget(self._gen_edges_count, 6, 7)
+        gg.addWidget(self._gen_edges, 7, 0)
+        gg.addWidget(QLabel(tr("between:")), 7, 1)
+        gg.addWidget(self._gen_edges_n, 7, 2)
+        gg.addWidget(QLabel(tr("faces:")), 7, 3)
+        gg.addWidget(self._gen_edges_faces, 7, 4)
+        gg.addWidget(self._gen_edges_count, 7, 7)
 
         # Highlights & shadows — detail at the two tonal ends. The label's "&"
         # is doubled so Qt shows it literally instead of eating it as a mnemonic;
@@ -1561,12 +1583,12 @@ class _NewChartDialog(QDialog):
         self._gen_hs_n = _spin(1, 200, 24)
         self._gen_hs_reach = _spin(2, 45, 16)
         self._gen_hs_count = _count_label()
-        gg.addWidget(self._gen_hs, 7, 0)
-        gg.addWidget(QLabel(tr("per end:")), 7, 1)
-        gg.addWidget(self._gen_hs_n, 7, 2)
-        gg.addWidget(QLabel(tr("depth:")), 7, 3)
-        gg.addWidget(self._gen_hs_reach, 7, 4)
-        gg.addWidget(self._gen_hs_count, 7, 7)
+        gg.addWidget(self._gen_hs, 8, 0)
+        gg.addWidget(QLabel(tr("per end:")), 8, 1)
+        gg.addWidget(self._gen_hs_n, 8, 2)
+        gg.addWidget(QLabel(tr("depth:")), 8, 3)
+        gg.addWidget(self._gen_hs_reach, 8, 4)
+        gg.addWidget(self._gen_hs_count, 8, 7)
 
         # Pastels — low-chroma midtones.
         self._gen_pastel = QCheckBox(tr("Pastels"), self._gen_panel)
@@ -1579,12 +1601,12 @@ class _NewChartDialog(QDialog):
         self._gen_pastel_n = _spin(1, 200, 24)
         self._gen_pastel_layers = _spin(1, 4, 2)
         self._gen_pastel_count = _count_label()
-        gg.addWidget(self._gen_pastel, 8, 0)
-        gg.addWidget(QLabel(tr("per layer:")), 8, 1)
-        gg.addWidget(self._gen_pastel_n, 8, 2)
-        gg.addWidget(QLabel(tr("layers:")), 8, 3)
-        gg.addWidget(self._gen_pastel_layers, 8, 4)
-        gg.addWidget(self._gen_pastel_count, 8, 7)
+        gg.addWidget(self._gen_pastel, 9, 0)
+        gg.addWidget(QLabel(tr("per layer:")), 9, 1)
+        gg.addWidget(self._gen_pastel_n, 9, 2)
+        gg.addWidget(QLabel(tr("layers:")), 9, 3)
+        gg.addWidget(self._gen_pastel_layers, 9, 4)
+        gg.addWidget(self._gen_pastel_count, 9, 7)
 
         # From image — the most representative colours of a chosen photo.
         self._gen_image = QCheckBox(tr("From image"), self._gen_panel)
@@ -1600,11 +1622,11 @@ class _NewChartDialog(QDialog):
         self._gen_image_btn.clicked.connect(self._load_gen_image)
         self._gen_image_n = _spin(1, 500, 24)
         self._gen_image_count = _count_label()
-        gg.addWidget(self._gen_image, 9, 0)
-        gg.addWidget(self._gen_image_btn, 9, 1, 1, 2)
-        gg.addWidget(QLabel(tr("colours:")), 9, 3)
-        gg.addWidget(self._gen_image_n, 9, 4)
-        gg.addWidget(self._gen_image_count, 9, 7)
+        gg.addWidget(self._gen_image, 10, 0)
+        gg.addWidget(self._gen_image_btn, 10, 1, 1, 2)
+        gg.addWidget(QLabel(tr("colours:")), 10, 3)
+        gg.addWidget(self._gen_image_n, 10, 4)
+        gg.addWidget(self._gen_image_count, 10, 7)
 
         # Pure white & black — the two tonal anchors, N of each, kept verbatim.
         self._gen_whiteblack = QCheckBox(
@@ -1615,16 +1637,16 @@ class _NewChartDialog(QDialog):
                                         "'Each' is how many of white and of black "
                                         "to include; they're kept even when "
                                         "'Ensure unique colours' is on, which is "
-                                        "handy for averaging repeats. The 3D cube, "
-                                        "near-neutral greys and saturated edges "
-                                        "already include one of each, and any they "
-                                        "provide counts toward your number."))
+                                        "handy for averaging repeats. The 3D cube "
+                                        "and near-neutral greys already include one "
+                                        "of each, and any they provide counts "
+                                        "toward your number."))
         self._gen_whiteblack_n = _spin(1, 50, 1)
         self._gen_whiteblack_count = _count_label()
-        gg.addWidget(self._gen_whiteblack, 10, 0)
-        gg.addWidget(QLabel(tr("each:")), 10, 1)
-        gg.addWidget(self._gen_whiteblack_n, 10, 2)
-        gg.addWidget(self._gen_whiteblack_count, 10, 7)
+        gg.addWidget(self._gen_whiteblack, 11, 0)
+        gg.addWidget(QLabel(tr("each:")), 11, 1)
+        gg.addWidget(self._gen_whiteblack_n, 11, 2)
+        gg.addWidget(self._gen_whiteblack_count, 11, 7)
 
         # Fill remaining gaps — blue-noise top-up of whatever's left sparse.
         # Special: its count depends on the combined total of the sets above.
@@ -1636,10 +1658,10 @@ class _NewChartDialog(QDialog):
                                   "total patch count."))
         self._gen_fill_to = _spin(1, 30000, 1000)
         self._gen_fill_count = _count_label()
-        gg.addWidget(self._gen_fill, 11, 0)
-        gg.addWidget(QLabel(tr("fill to:")), 11, 1)
-        gg.addWidget(self._gen_fill_to, 11, 2)
-        gg.addWidget(self._gen_fill_count, 11, 7)
+        gg.addWidget(self._gen_fill, 12, 0)
+        gg.addWidget(QLabel(tr("fill to:")), 12, 1)
+        gg.addWidget(self._gen_fill_to, 12, 2)
+        gg.addWidget(self._gen_fill_count, 12, 7)
 
         # A per-set ⓘ icon (col 8) opens the set's explanation in its own little
         # window — more discoverable than a hover tooltip. The body reuses each
@@ -1652,13 +1674,14 @@ class _NewChartDialog(QDialog):
             (2, self._gen_blues,  tr("Blues / turquoise")),
             (3, self._gen_greens, tr("Greens (foliage)")),
             (4, self._gen_sunrises, tr("Sunrises (warm)")),
-            (5, self._gen_greys,  tr("Near-neutral greys")),
-            (6, self._gen_edges,  tr("Saturated edges")),
-            (7, self._gen_hs,     tr("Highlights & shadows")),
-            (8, self._gen_pastel, tr("Pastels")),
-            (9, self._gen_image,  tr("From image")),
-            (10, self._gen_whiteblack, tr("Pure white & black")),
-            (11, self._gen_fill,  tr("Fill remaining gaps")),
+            (5, self._gen_flamingos, tr("Flamingos (pinks)")),
+            (6, self._gen_greys,  tr("Near-neutral greys")),
+            (7, self._gen_edges,  tr("Saturated edges")),
+            (8, self._gen_hs,     tr("Highlights & shadows")),
+            (9, self._gen_pastel, tr("Pastels")),
+            (10, self._gen_image,  tr("From image")),
+            (11, self._gen_whiteblack, tr("Pure white & black")),
+            (12, self._gen_fill,  tr("Fill remaining gaps")),
         )
         for row, cb, title in row_tips:
             gg.addWidget(
@@ -1680,11 +1703,11 @@ class _NewChartDialog(QDialog):
                                     "repeated colours apart by a small offset "
                                     "so no patch is printed twice."))
         self._gen_unique.toggled.connect(self._update_gen_counts)
-        gg.addWidget(self._gen_unique, 12, 0, 1, 8)
+        gg.addWidget(self._gen_unique, 13, 0, 1, 8)
 
         self._gen_total = QLabel("", self._gen_panel)
         self._gen_total.setStyleSheet("font-weight: bold;")
-        gg.addWidget(self._gen_total, 13, 0, 1, 8)
+        gg.addWidget(self._gen_total, 14, 0, 1, 8)
 
         # In the Add dialog (a chart already has patches), also show the chart's
         # resulting size — existing patches + the additions — since this is the
@@ -1693,42 +1716,28 @@ class _NewChartDialog(QDialog):
         self._gen_after_total = QLabel("", self._gen_panel)
         self._gen_after_total.setStyleSheet("color: #909090;")
         self._gen_after_total.setVisible(bool(self._existing_patches))
-        gg.addWidget(self._gen_after_total, 14, 0, 1, 8)
+        gg.addWidget(self._gen_after_total, 15, 0, 1, 8)
 
         for cb in (self._gen_cube, self._gen_skin, self._gen_blues,
-                   self._gen_greens, self._gen_sunrises, self._gen_greys,
-                   self._gen_edges, self._gen_hs, self._gen_pastel,
-                   self._gen_image, self._gen_whiteblack, self._gen_fill):
+                   self._gen_greens, self._gen_sunrises, self._gen_flamingos,
+                   self._gen_greys, self._gen_edges, self._gen_hs,
+                   self._gen_pastel, self._gen_image, self._gen_whiteblack,
+                   self._gen_fill):
             cb.toggled.connect(self._update_gen_counts)
 
-        # Saturated edges defaults to "cube per-axis − 1" so it fills the 3D
-        # cube's frame gaps exactly once (Knut's rule: cube 8 → edges 7). It
-        # tracks the cube live until the user edits the edges value themselves,
-        # after which their choice is left alone.
-        self._edges_auto = True
-        self._syncing_edges = False
-        self._gen_cube_n.valueChanged.connect(self._sync_edges_to_cube)
-        self._gen_edges_n.valueChanged.connect(self._on_edges_user_edited)
-
+        # Saturated edges no longer needs to track the cube via a coupled value:
+        # its 'between' control places patches *between* the cube's own steps, so
+        # it reads the cube's steps-per-axis directly at build time and stays even
+        # at any setting (Knut, #78). The old edges↔cube auto-sync is gone (the
+        # cube spin already refreshes the counts, which now drive the edges total).
         indent.addWidget(self._gen_panel)
         return indent
 
-    # -- saturated-edges ↔ cube auto-coupling -----------------------------
-    def _sync_edges_to_cube(self) -> None:
-        """Keep saturated-edges per-edge at cube per-axis − 1 while auto."""
-        if self._syncing_edges or not self._edges_auto:
-            return
-        target = max(self._gen_edges_n.minimum(), self._gen_cube_n.value() - 1)
-        if target != self._gen_edges_n.value():
-            self._syncing_edges = True
-            self._gen_edges_n.setValue(target)
-            self._syncing_edges = False
-
-    def _on_edges_user_edited(self) -> None:
-        """A real (non-programmatic) edit to the edges spin unlatches auto."""
-        if self._syncing_edges:
-            return
-        self._edges_auto = False
+    def _edges_cube_n(self) -> int:
+        """Steps-per-axis the saturated-edges 'between' fill is keyed to: the 3D
+        cube's value when that set is on, else 2 (fill between the corners only),
+        so edges/faces stay even and locked to the cube it sits with (Knut, #78)."""
+        return self._gen_cube_n.value() if self._gen_cube.isChecked() else 2
 
     # The generators in fixed concatenation order: (checkbox, builder, counter).
     def _gen_specs(self):
@@ -1764,6 +1773,13 @@ class _NewChartDialog(QDialog):
              lambda: G.sunrises_count(self._gen_sunrises_n.value()
                                       * self._gen_sunrises_layers.value()),
              self._gen_sunrises_count),
+            (self._gen_flamingos,
+             lambda: G.flamingos(self._gen_flamingos_n.value()
+                                 * self._gen_flamingos_layers.value(),
+                                 self._gen_flamingos_layers.value()),
+             lambda: G.flamingos_count(self._gen_flamingos_n.value()
+                                       * self._gen_flamingos_layers.value()),
+             self._gen_flamingos_count),
             (self._gen_greys,
              lambda: G.near_neutral_greys(self._gen_greys_n.value(),
                                           float(self._gen_greys_off.value()),
@@ -1772,10 +1788,14 @@ class _NewChartDialog(QDialog):
                                                 self._gen_greys_rings.value()),
              self._gen_greys_count),
             (self._gen_edges,
-             lambda: (G.gamut_edges(self._gen_edges_n.value())
-                      + G.gamut_faces(self._gen_edges_faces.value())),
-             lambda: (G.gamut_edges_count(self._gen_edges_n.value())
-                      + G.gamut_faces_count(self._gen_edges_faces.value())),
+             lambda: (G.gamut_edges_between(self._edges_cube_n(),
+                                            self._gen_edges_n.value())
+                      + G.gamut_faces_between(self._edges_cube_n(),
+                                              self._gen_edges_faces.value())),
+             lambda: (G.gamut_edges_between_count(self._edges_cube_n(),
+                                                  self._gen_edges_n.value())
+                      + G.gamut_faces_between_count(self._edges_cube_n(),
+                                                    self._gen_edges_faces.value())),
              self._gen_edges_count),
             (self._gen_hs,
              # Highlights & shadows interlocks with Near-neutral greys: when that
@@ -1865,6 +1885,8 @@ class _NewChartDialog(QDialog):
             (self._gen_greens, (self._gen_greens_n, self._gen_greens_layers)),
             (self._gen_sunrises, (self._gen_sunrises_n,
                                   self._gen_sunrises_layers)),
+            (self._gen_flamingos, (self._gen_flamingos_n,
+                                   self._gen_flamingos_layers)),
             (self._gen_greys, (self._gen_greys_n, self._gen_greys_off,
                                self._gen_greys_rings)),
             (self._gen_edges, (self._gen_edges_n, self._gen_edges_faces)),
@@ -1896,10 +1918,11 @@ class _NewChartDialog(QDialog):
         # of whatever the chart already holds — only the corners the *other
         # ticked sets* contribute in this same batch count toward N, never the
         # existing chart's own white/black (#76, Knut). One of each from those
-        # corner-bearing sets (cube, greys with ≥2 steps, edges) if any are on
-        # (collapsed by de-dup), else one per such set.
+        # corner-bearing sets (the 3D cube, and greys with ≥2 steps) if any are on
+        # (collapsed by de-dup), else one per such set. Saturated edges no longer
+        # counts here: its 'between' fill sits strictly between the cube steps, so
+        # it never lands on the black or white corner (Knut, #78).
         corner = ((1 if self._gen_cube.isChecked() else 0)
-                  + (1 if self._gen_edges.isChecked() else 0)
                   + (1 if (self._gen_greys.isChecked()
                            and self._gen_greys_n.value() >= 2) else 0))
         sets_have = (1 if corner else 0) if self._gen_unique.isChecked() else corner
@@ -1937,18 +1960,12 @@ class _NewChartDialog(QDialog):
         for cb, build, _count, _label in self._gen_specs():
             if not cb.isChecked():
                 continue
-            if cb is self._gen_edges:
-                # Saturated edges fills the boundary gaps the other sets (the 3D
-                # cube above all) already left, so its patches land at the
-                # midpoints between what's there rather than re-sampling it (#53).
-                seed = self._existing_patches + program
-                program.extend(
-                    G.gamut_edges(self._gen_edges_n.value(), seed)
-                    + G.gamut_faces(self._gen_edges_faces.value(), seed))
-            else:
-                program.extend(build())
+            # Saturated edges keys its even infill straight to the 3D cube's grid
+            # (see _edges_cube_n / gamut_edges_between), so it needs no seed of the
+            # patches already placed — its build() is the same as every other set.
+            program.extend(build())
         if self._gen_unique.isChecked():
-            program = G.deduplicate(program)
+            program = G.deduplicate(program, _GEN_MIN_DIST, _GEN_MIN_DIST)
         # Pure white & black goes in *after* de-dup (so its deliberate repeats
         # survive) but *before* fill, so it's part of the chart fill tops up to —
         # not stacked on top of it. These are deliberate anchor patches, so they
@@ -3905,7 +3922,7 @@ class Ti2RelayoutDialog(QDialog):
         box.exec()
         clicked = box.clickedButton()
         if clicked is unique_btn:
-            return G.dedupe_against(existing, extra)
+            return G.dedupe_against(existing, extra, _GEN_MIN_DIST, _GEN_MIN_DIST)
         if clicked is onlynew_btn:
             return G.only_new(existing, extra)
         if clicked is anyway_btn:

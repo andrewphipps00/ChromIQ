@@ -252,11 +252,39 @@ def sunrises(count: int, layers: int = 3) -> list[tuple[float, float, float]]:
     saturation shells fill the wedge in depth rather than as one flat sheet, so
     the soft pinks at the low-saturation core and the vivid reds / oranges on the
     outer shell are both sampled, across mid-to-light brightness.
+
+    The band now reaches further into the **dark** warm tones (value floor 0.30,
+    matching the greens set) so it starts near the neutral axis instead of mid
+    lightness — closing the bright opening that used to sit between the warm and
+    cool bands around the dark corner (Knut, #78).
     """
-    return _hue_region_layered(count, -25.0, 60.0, 0.45, 0.98, 0.55, 1.0, layers)
+    return _hue_region_layered(count, -25.0, 60.0, 0.45, 0.98, 0.30, 1.0, layers)
 
 
 def sunrises_count(count: int) -> int:
+    return max(1, int(count))
+
+
+# ---------------------------------------------------------------------------
+# 4c. Flamingos — the pink / magenta / indigo band the others leave out.
+# ---------------------------------------------------------------------------
+def flamingos(count: int, layers: int = 3) -> list[tuple[float, float, float]]:
+    """``count`` patches across the pink → magenta → indigo band (hue ≈
+    262°–335°) — the wedge between where :func:`blues` ends (≈ 262°) and
+    :func:`sunrises` begins (≈ 335°), which nothing else covered (Knut, #78).
+
+    This is the big pink/magenta gap visible in the 3-D cube when blues, greens
+    and sunrises are all on. Built exactly like the other hue-band sets:
+    ``layers`` non-parallel saturation shells fill the wedge in depth — soft
+    pinks and lilacs at the low-saturation core, vivid magentas and violets on
+    the outer shell — and it reaches from the dark tones (value floor 0.30, like
+    sunrises) up to fully saturated, so the band joins the warm and cool sides
+    cleanly without overlapping either.
+    """
+    return _hue_region_layered(count, 262.0, 335.0, 0.50, 0.98, 0.30, 1.0, layers)
+
+
+def flamingos_count(count: int) -> int:
     return max(1, int(count))
 
 
@@ -525,6 +553,94 @@ def gamut_faces(per_face: int, existing=None,
 def gamut_faces_count(per_face: int) -> int:
     pf = max(0, int(per_face))
     return 6 * pf * pf
+
+
+# ---------------------------------------------------------------------------
+# 6b. Even stepwise edges / faces — keyed to the 3D cube's own grid.
+# ---------------------------------------------------------------------------
+# The gap-filling variants above place a *count* of patches per edge/face and
+# bisect the largest gaps — which is even only when there is roughly one patch
+# per cube interval; ask for more and the spacing goes lumpy (Knut, #78). These
+# variants instead place a fixed number of patches *between each pair of adjacent
+# cube steps*, so the infill is exactly even at any density. They derive the
+# grid straight from the cube's steps-per-axis (``cube_n``) rather than from the
+# patches already placed, so the cube and its boundary fill stay locked together
+# by construction. Pass ``cube_n = 2`` when the cube is off (fill between the two
+# corners only).
+def _interior_fracs(per_gap: int) -> list[float]:
+    """``per_gap`` evenly spaced fractions strictly inside the unit interval
+    (excluding both ends): 1 → [0.5]; 2 → [1/3, 2/3]; 3 → [0.25, 0.5, 0.75]…"""
+    return [(j + 1) / (per_gap + 1) for j in range(per_gap)]
+
+
+def gamut_edges_between(cube_n: int, per_gap: int) -> list[tuple[float, float, float]]:
+    """``per_gap`` evenly spaced patches in **every interval between adjacent
+    cube steps**, along all 12 edges of the RGB cube.
+
+    With the cube at ``cube_n`` steps per axis each edge carries ``cube_n`` cube
+    points and ``cube_n - 1`` intervals, so each edge gets exactly
+    ``per_gap * (cube_n - 1)`` new patches — none coinciding with a cube point,
+    all evenly spaced. This is the even gamut-wireframe infill the cube leaves
+    between its own edge samples (``per_gap = 1`` drops one patch midway between
+    each pair of cube dots — the layout Knut found looks right).
+    """
+    cube_n = max(2, int(cube_n))
+    per_gap = max(0, int(per_gap))
+    if per_gap == 0:
+        return []
+    fr = _interior_fracs(per_gap)
+    out: list[tuple[float, float, float]] = []
+    for a, b in _CUBE_EDGES:
+        ca, cb = _CUBE_CORNERS[a], _CUBE_CORNERS[b]
+        for i in range(cube_n - 1):
+            t0, t1 = i / (cube_n - 1), (i + 1) / (cube_n - 1)
+            for f in fr:
+                t = t0 + (t1 - t0) * f
+                out.append(tuple(_clamp(ca[j] + (cb[j] - ca[j]) * t)
+                                 for j in range(3)))
+    return out
+
+
+def gamut_edges_between_count(cube_n: int, per_gap: int) -> int:
+    return 12 * max(0, int(per_gap)) * (max(2, int(cube_n)) - 1)
+
+
+def gamut_faces_between(cube_n: int, per_gap: int) -> list[tuple[float, float, float]]:
+    """A ``per_gap`` × ``per_gap`` infill **inside each cube cell** on all 6
+    faces — the even 2-D analogue of :func:`gamut_edges_between`.
+
+    Each face is a ``cube_n`` × ``cube_n`` grid of cube points, i.e.
+    ``(cube_n - 1)**2`` cells; this drops a ``per_gap`` × ``per_gap`` block of
+    patches in the interior of every cell. The points sit strictly inside the
+    cells (never on a cube grid line), so they neither double the cube nor the
+    edge fills, and a face gets ``(cube_n - 1)**2 * per_gap**2`` patches.
+    """
+    cube_n = max(2, int(cube_n))
+    per_gap = max(0, int(per_gap))
+    if per_gap == 0:
+        return []
+    fr = _interior_fracs(per_gap)
+    out: list[tuple[float, float, float]] = []
+    for fixed, val in _CUBE_FACES:
+        free = [k for k in range(3) if k != fixed]
+        for ci in range(cube_n - 1):
+            u0, u1 = ci / (cube_n - 1), (ci + 1) / (cube_n - 1)
+            for cj in range(cube_n - 1):
+                v0, v1 = cj / (cube_n - 1), (cj + 1) / (cube_n - 1)
+                for fu in fr:
+                    for fv in fr:
+                        p = [0.0, 0.0, 0.0]
+                        p[fixed] = val
+                        p[free[0]] = _clamp((u0 + (u1 - u0) * fu) * 100.0)
+                        p[free[1]] = _clamp((v0 + (v1 - v0) * fv) * 100.0)
+                        out.append((p[0], p[1], p[2]))
+    return out
+
+
+def gamut_faces_between_count(cube_n: int, per_gap: int) -> int:
+    cn = max(2, int(cube_n))
+    pg = max(0, int(per_gap))
+    return 6 * (cn - 1) * (cn - 1) * pg * pg
 
 
 # ---------------------------------------------------------------------------
