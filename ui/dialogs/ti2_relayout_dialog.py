@@ -3875,8 +3875,8 @@ class Ti2RelayoutDialog(QDialog):
             return
         if not extra:
             self._status.setText(
-                tr("Those colours are all already in the chart — nothing new "
-                   "to add."))
+                tr("Those colours are all already in the chart, or too close to "
+                   "ones in it — nothing new to add."))
             return
         self._place_patches_into_grid(
             extra, tr("{n} colours are ready to add.").format(n=len(extra)))
@@ -3888,32 +3888,36 @@ class Ti2RelayoutDialog(QDialog):
         (possibly relocated or filtered), or ``None`` to cancel. No overlap ⇒
         returns ``extra`` unchanged."""
         existing = self._program_from_grid()
-        dup = G.overlap_count(existing, extra)
+        dup = G.count_too_close(existing, extra, _GEN_MIN_DIST)
         if dup == 0:
             return extra
         box = QMessageBox(self)
-        box.setWindowTitle(tr("Some of these colours are already in your chart"))
+        box.setWindowTitle(tr("Some of these colours are too close to ones "
+                              "already in your chart"))
         box.setIcon(QMessageBox.Icon.NoIcon)
         box.setText(
-            tr("1 of the {total} colours you're about to add is already in "
-               "this chart.").format(total=len(extra)) if dup == 1
-            else tr("{dup} of the {total} colours you're about to add are "
-                    "already in this chart.").format(dup=dup, total=len(extra)))
+            tr("1 of the {total} colours you're about to add lands on — or right "
+               "next to — a colour already in this chart.").format(
+                   total=len(extra)) if dup == 1
+            else tr("{dup} of the {total} colours you're about to add land on — "
+                    "or right next to — colours already in this chart.").format(
+                        dup=dup, total=len(extra)))
         box.setInformativeText(tr(
-            "Printing the same colour twice doesn't make your profile any more "
-            "accurate — the second patch just measures the same thing again — "
-            "so it mostly wastes paper, ink and measuring time.\n\n"
+            "Two patches that are almost the same colour measure almost the same "
+            "thing, so the second one mostly wastes paper, ink and measuring "
+            "time without making your profile any more accurate.\n\n"
             "Here's what each choice does:\n\n"
             "• Make them unique (recommended) — keeps every colour you're "
-            "adding, but gently shifts each repeat to the nearest unused colour "
-            "right beside it. You still get the full number of patches, just "
-            "with no exact duplicates.\n\n"
-            "• Add only the new ones — adds just the colours that aren't in the "
-            "chart yet and quietly drops the repeats, so nothing is printed "
-            "twice.\n\n"
-            "• Add anyway — adds them exactly as generated, repeats and all. "
-            "Pick this only if you deliberately want the same colour more than "
-            "once, for example to average several readings of it.\n\n"
+            "adding, but gently nudges each crowded one to the nearest free spot "
+            "so it keeps a small gap from the colours already in your chart. You "
+            "still get the full number of patches, just none sitting on top of an "
+            "existing one.\n\n"
+            "• Add only the new ones — adds just the colours that are clear of "
+            "the chart and drops the ones that would land on or crowd a colour "
+            "already in it, so nothing is printed almost twice.\n\n"
+            "• Add anyway — adds them exactly as generated, crowding and all. "
+            "Pick this only if you deliberately want near-identical colours, for "
+            "example to average several readings of the same patch.\n\n"
             "• Cancel — go back without adding anything, so you can adjust the "
             "generator options first."))
         unique_btn = box.addButton(tr("Make them unique"),
@@ -3933,7 +3937,7 @@ class Ti2RelayoutDialog(QDialog):
         if clicked is unique_btn:
             return G.enforce_min_distance(extra, _GEN_MIN_DIST, existing=existing)
         if clicked is onlynew_btn:
-            return G.only_new(existing, extra)
+            return G.drop_too_close(existing, extra, _GEN_MIN_DIST)
         if clicked is anyway_btn:
             return extra
         return None
