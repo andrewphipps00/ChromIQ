@@ -1,5 +1,21 @@
 # Changelog
 
+## v3.11.11
+
+### 💄 Improved
+- **Adding patches now warns when colours would *crowd* your chart, not just when
+  they're exact duplicates.** When you Add generated patches and some land right
+  next to colours already in the chart (close enough to measure almost the same),
+  you now get the same "make them unique / add only the new ones / add anyway"
+  choice you previously only got for exact repeats. **Make them unique** keeps the
+  full count and gently spaces each crowded patch a small gap clear of the
+  existing ones; **Add only the new ones** drops the ones that would crowd. The
+  wording was refreshed to match. (Builds on the v3.11.10 minimum-distance work —
+  thanks again, Knut.)
+
+### 🌍 Translations
+- Updated the reworded dialog across all twelve languages.
+
 ## v3.11.10
 
 More **Generate colour sets** polish from Knut's testing (thank you, Knut!).
