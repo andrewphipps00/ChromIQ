@@ -1,5 +1,20 @@
 # Changelog
 
+## v3.11.15
+
+### ✨ New
+- **Two corner sets, split for clarity.** The corner work is now two generators:
+  - **Gamut-corner emphasis** adds extra patches **on the gamut edge lines** right
+    next to each corner tip (the TC9.18/TC9.24 trick), slotted into the gaps so
+    they never land on the patches the 3D cube or Saturated edges already place
+    there. One control: **edge** (how many per edge near each corner).
+  - **Corner spirals** adds detail **just inside** each corner in a Highlights-&-
+    shadows-style spiral cone (H&S generalised from white/black to all eight
+    corners). Controls: **per end** + **reach**.
+  - The exact corner tips have a single source — 3D cube → Saturated edges →
+    Gamut-corner emphasis → Corner spirals — so a tip is never missing and never
+    duplicated, whichever sets are on.
+
 ## v3.11.14
 
 ### 🐛 Fixed
