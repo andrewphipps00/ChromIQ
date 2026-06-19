@@ -140,7 +140,7 @@
  "Additional Options": "附加选项",
  "Additional measurements (.ti3) — their patches are appended:": "附加测量（.ti3）— 其色块将被追加:",
  "Adds extra cLUT grid points in shadow areas for better shadow gradation.\n1.0 = uniform grid (default).\nTry 1.5–2.0 for printers with complex shadow behaviour.": "在阴影区域增加额外的cLUT网格点，改善暗部层次。\n1.0 = 均匀网格（默认）。\n阴影表现复杂的打印机可试1.5〜2.0。",
- "Adds pure paper white and the deepest black the printer can lay — two anchors that matter for a good profile. 'Each' is how many of white and of black to include; they're kept even when 'Ensure unique colours' is on, which is handy for averaging repeats. The 3D cube, near-neutral greys and saturated edges already include one of each, and any they provide counts toward your number.": "添加纯净的纸白和打印机能呈现的最深的黑——两个对良好配置文件很重要的锚点。「每种」是白和黑各包含多少个；即使启用「确保颜色唯一」它们也会保留，便于对重复项取平均。3D RGB 立方体、近中性灰和饱和边已各包含一个，它们提供的会计入你的数量。",
+ "Adds pure paper white and the deepest black the printer can lay — two anchors that matter for a good profile. 'Each' is how many of white and of black to include; they're kept even when 'Ensure unique colours' is on, which is handy for averaging repeats. The 3D cube and near-neutral greys already include one of each, and any they provide counts toward your number.": "添加纯净的纸白和打印机能呈现的最深的黑——两个对良好配置文件很重要的锚点。「每种」是白和黑各包含多少个；即使启用「确保颜色唯一」它们也会保留，便于对重复项取平均。3D RGB 立方体、近中性灰已各包含一个，它们提供的会计入你的数量。",
  "Add…": "添加…",
  "Adobe RGB (1998)": "Adobe RGB (1998)",
  "Advanced": "高级",
@@ -1416,7 +1416,7 @@
  "The instrument is being used by another program. Close it and try again.": "仪器正被另一个程序使用。请关闭后重试。",
  "The maker of your printer — or simply whoever built this profile. It's saved inside the ICC profile as a plain text label, so later on you (or anyone you share the profile with) can see at a glance where it came from.\n\nThis is purely a note for humans: it has no effect on colour accuracy, and you can safely leave it switched off.\n\nExamples: \"Epson\", \"Canon\", or your own name or studio.": "打印机的制造商 — 或者干脆就是这个配置文件的制作者。它作为纯文本标签保存在ICC配置文件中，方便日后你（或拿到配置文件的人）一眼看出它的出处。\n\n这纯粹是给人看的备注: 对色彩准确性没有影响，放心不启用也行。\n\n示例: \"Epson\"、\"Canon\"，或你自己的名字或工作室。",
  "The measuring device that read the chart. Different instruments can disagree slightly, so it's good to know which one produced these numbers.": "读取该色卡的测量设备。不同仪器之间可能略有差异，因此最好知道这些数值出自哪台仪器。",
- "The most saturated colours the printer can reach. 'Per edge' samples the 12 edges of the RGB cube — the gamut wireframe; 'per face' also fills the 6 cube faces (the full gamut surface) with that many patches per side, or 0 for edges only. This boundary is where profiles err most.": "打印机能达到的最饱和颜色。「每条边」采样 RGB 立方体的 12 条边 —— 色域线框；「每个面」还会填充 6 个立方体面（整个色域表面），每面按该数量布点，仅边则填 0。配置文件最容易在这条边界出错。",
+ "The most saturated colours the printer can reach — the boundary of the RGB cube, where profiles err most. This set works hand in hand with the 3D cube: 'between' drops that many patches evenly between each pair of neighbouring cube dots along the 12 cube edges (the gamut wireframe), and 'faces' does the same inside each square of the cube's 6 faces (the gamut surface), or 0 for edges only. Because the spacing is tied to the cube, the fill stays even at any setting (1 is one patch midway between each cube dot).": "打印机能呈现的最饱和颜色——RGB 立方体的边界，也是配置文件最容易出错的地方。此集与 3D 立方体协同工作：「间隔」沿 12 条立方体棱（色域线框）在每对相邻立方体点之间均匀放置相应数量的色块，「面数」在立方体 6 个面（色域表面）的每个方格内做同样的事，设为 0 则只用棱。由于间距与立方体绑定，任何设置下填充都保持均匀（1 表示每两个立方体点正中放一个）。",
  "The most saturated colours your paper-and-ink managed to print. A wider reach means more vivid colours are possible.": "你的纸张与墨水所能打印的最饱和颜色。范围越广，可呈现的颜色越鲜艳。",
  "The name becomes both the folder and the chart's file names.": "该名称同时用作文件夹名和色卡的文件名。",
  "The name embedded in the ICC profile — shown in colour management\nmenus in apps like Photoshop, Lightroom, and Preview.\n\nUse a consistent format: Printer · Paper · Ink type · Date\ne.g. \"Epson P900 · Canson Baryta · Chromatic · 2026-04\"\n\nThe output file is named after your .ti3 file — keep that name\nconsistent using underscores: EpsonP900_CansonBaryta_2026-04.icc": "嵌入ICC配置文件的名称 — 显示在Photoshop、Lightroom和\n预览等应用的色彩管理菜单中。\n\n用一致的格式: 打印机 · 纸张 · 墨水类型 · 日期\n例如 \"Epson P900 · Canson Baryta · Chromatic · 2026-04\"\n\n输出文件按 .ti3 文件命名 — 用下划线保持名称一致:\nEpsonP900_CansonBaryta_2026-04.icc",
@@ -1642,9 +1642,7 @@
  "offset:": "偏移:",
  "orange": "橙",
  "per axis:": "每轴:",
- "per edge:": "每条边:",
  "per end:": "每端:",
- "per face:": "每个面:",
  "per layer:": "每层:",
  "per type:": "每类型:",
  "printcal output will appear here…": "printcal的输出将显示在这里…",
@@ -1748,5 +1746,9 @@
  "⚠  You are printing via the Windows printer dialog. You must disable colour management in your printer driver before printing — otherwise the printer applies its own corrections and the chart will be unusable for accurate ICC profiling.\n\nHow to disable colour management: after clicking Print, open the printer's Properties / Preferences and look for a colour-management section:\n  • Epson:  \"Epson Color Controls\" → Off (No Color Adjustment)\n  • Canon:  \"Color Options\" → Manual → None\n  • HP:     \"Color Options\" → Application Managed Colors\n  • Others: look for \"No Color Management\", \"Off\", or \"Application Controlled\"\n\nAllow pigment inks to dry fully before measuring (at least 1 h; 24 h for best accuracy).": "⚠  你正通过Windows打印对话框打印。打印前必须在打印机驱动中禁用色彩管理 — 否则打印机会应用自己的校正，色卡将无法用于准确的ICC配置文件制作。\n\n禁用色彩管理的方法: 点击打印后，打开打印机的属性/首选项，找到色彩管理部分:\n  • Epson:  「EPSON色彩调整」→ 关（无色彩调整）\n  • Canon:  「色彩选项」→ 手动 → 无\n  • HP:     「颜色选项」→ 应用程序管理的颜色\n  • 其他: 找「无色彩管理」「关闭」或「应用程序控制」\n\n测量前让颜料墨充分干燥（至少1小时；求最佳精度则24小时）。",
  "⚠  You are printing via the macOS printer dialog. Verify that the paper, media type, and quality you pick match the media you are printing on — wrong settings cause incorrect ink laydown and invalid colour measurements.\n\nColour management is disabled automatically. ChromIQ declares the chart as already being in the printer's own colour space (so no colour transform is applied) and sets the driver's \"no colour correction\" option — the same technique dedicated tools like Print-Tool use. The dialog's \"Color Matching\" pane will be greyed out; that is expected.\n\nYou don't need to change any colour setting. Just don't switch an ICC profile or rendering intent back on, and pick the correct paper / media type and print quality.\n\nIMPORTANT: never click Cancel (or Abort) in any of the dialog's panes or sub-windows — always close them with OK. Cancel reverts the colour-off setting ChromIQ applied; OK keeps it. When in doubt, OK is always the safe button.\n\nPrefer no dialog at all? Untick \"Use the native print dialog\" in Settings to send the chart straight to the queue via lp (colour management is forced off there too).\n\nAllow pigment inks to dry fully before measuring (at least 1 h; 24 h for best accuracy).": "⚠  你正通过macOS打印对话框打印。确认所选的纸张、介质类型和质量与实际打印介质一致 — 错误的设置导致不正确的墨量和无效的颜色测量。\n\n色彩管理会被自动禁用。ChromIQ声明色卡已处于打印机自己的色彩空间（因此不应用颜色变换），并设置驱动的「无色彩校正」选项 — 与Print-Tool等专用工具的手法相同。对话框的「颜色匹配」面板会呈灰显；这是预期的。\n\n不需要改任何颜色设置。只是别把ICC配置文件或渲染意图重新打开，并选对纸张/介质类型和打印质量。\n\n重要: 在对话框的任何面板或子窗口中都绝不要点取消（或中止）— 一律用「确定」关闭。取消会撤销ChromIQ施加的关闭颜色设置；确定会保留它。拿不准时，「确定」永远是安全的按钮。\n\n完全不想要对话框？在设置中取消勾选「使用macOS默认打印对话框」，让色卡经 lp 直接进队列（那里同样强制关闭色彩管理）。\n\n测量前让颜料墨充分干燥（至少1小时；求最佳精度则24小时）。",
  "⚠  {w}": "⚠  {w}",
- "⚠ see tooltip": "⚠ 见提示"
+ "⚠ see tooltip": "⚠ 见提示",
+ "Flamingos (pinks)": "火烈鸟（粉色）",
+ "Pinks, magentas and indigos — the band between where Blues / turquoise ends and Sunrises begins, the big gap the other colour-band sets leave in the middle. Great for flowers, fabrics, sunsets and skin. Each of the 'layers' is a non-parallel sheet of 'per layer' patches, so the two multiply.": "粉色、品红和靛蓝——位于「蓝色 / 青绿色」结束与「暖色（日出）」开始之间的色带，也是其他色带集在中间留下的大空缺。非常适合花卉、织物、日落和肤色。每个「层」都是一张非平行的色片，含「每层」个色块，两者相乘。",
+ "between:": "间隔:",
+ "faces:": "面数:"
 }

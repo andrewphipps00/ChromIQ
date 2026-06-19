@@ -311,6 +311,80 @@ def test_gamut_boundary_aware_stays_on_the_boundary():
     assert _all_in_range(aware)
 
 
+# --- even stepwise edges / faces between the cube steps (Knut, #78) ---------
+@pytest.mark.parametrize("cube_n,per_gap", [(2, 3), (5, 1), (6, 2), (8, 4)])
+def test_gamut_edges_between_count_and_range(cube_n, per_gap):
+    pts = G.gamut_edges_between(cube_n, per_gap)
+    assert len(pts) == 12 * per_gap * (cube_n - 1)
+    assert len(pts) == G.gamut_edges_between_count(cube_n, per_gap)
+    assert _all_in_range(pts)
+
+
+def test_gamut_edges_between_is_evenly_spaced():
+    # On any edge, the fill points unioned with the cube's own edge points must
+    # be exactly evenly spaced — the whole point of the stepwise control.
+    cube_n, per_gap = 5, 2
+    pts = G.gamut_edges_between(cube_n, per_gap)
+    cube_levels = [i / (cube_n - 1) * 100.0 for i in range(cube_n)]
+    fill = [p[0] for p in pts if p[1] == 0 and p[2] == 0]        # K→R edge
+    assert len(fill) == per_gap * (cube_n - 1)
+    # No fill point lands on a cube point …
+    assert all(min(abs(x - cl) for cl in cube_levels) > 1e-6 for x in fill)
+    # … and cube + fill together are uniformly spaced.
+    allpos = sorted(cube_levels + fill)
+    diffs = [b - a for a, b in zip(allpos, allpos[1:])]
+    assert max(diffs) - min(diffs) < 1e-6
+
+
+def test_gamut_edges_between_zero_and_cube_off():
+    assert G.gamut_edges_between(8, 0) == []
+    # Cube off ⇒ cube_n = 2: a single gap per edge, so per_gap patches per edge.
+    assert len(G.gamut_edges_between(2, 3)) == 12 * 3
+
+
+@pytest.mark.parametrize("cube_n,per_gap", [(4, 1), (4, 2), (6, 1)])
+def test_gamut_faces_between_count_and_interior(cube_n, per_gap):
+    pts = G.gamut_faces_between(cube_n, per_gap)
+    assert len(pts) == 6 * (cube_n - 1) ** 2 * per_gap ** 2
+    assert len(pts) == G.gamut_faces_between_count(cube_n, per_gap)
+    assert _all_in_range(pts)
+    cube_levels = [round(i / (cube_n - 1) * 100.0, 6) for i in range(cube_n)]
+    for p in pts:
+        # Exactly one coordinate sits on a cube grid plane (the face value); the
+        # two free ones are strictly inside a cell, so faces never double the
+        # cube or the edge fills.
+        on = sum(1 for c in p
+                 if min(abs(c - cl) for cl in cube_levels) < 1e-6)
+        assert on == 1
+
+
+def test_gamut_faces_between_zero_empty():
+    assert G.gamut_faces_between(8, 0) == []
+
+
+# --- Flamingos — the pink / magenta / indigo band (Knut, #78) --------------
+@pytest.mark.parametrize("count", [1, 30, 192])
+def test_flamingos_count_and_range(count):
+    f = G.flamingos(count, 3)
+    assert len(f) == count == G.flamingos_count(count)
+    assert _all_in_range(f)
+
+
+def test_flamingos_lives_in_the_pink_magenta_wedge():
+    # The band fills the gap between blues and sunrises: green is the weakest
+    # channel for the great majority of its patches (pinks / magentas / indigos).
+    f = G.flamingos(150, 3)
+    pinkish = sum(1 for r, g, b in f if g <= r and g <= b)
+    assert pinkish > 0.8 * len(f)
+
+
+def test_sunrises_reaches_dark_tones():
+    # Sunrises' value floor was lowered so the warm band starts near the dark
+    # corner like greens, not at mid lightness (Knut, #78).
+    s = G.sunrises(192, 3)
+    assert min(max(p) for p in s) <= 35.0
+
+
 # --- highlight & shadow detail ---------------------------------------------
 @pytest.mark.parametrize("per_end", [1, 6, 12, 40])
 def test_highlight_shadow_count_and_range(per_end):
