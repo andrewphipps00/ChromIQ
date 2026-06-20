@@ -798,6 +798,22 @@ def test_count_and_drop_too_close_flag_crowding_not_just_exact():
     assert G.drop_too_close(existing, new, 0.0) == new
 
 
+def test_drop_then_refill_preserves_count_without_overlaps():
+    # The overlap dialog's "Add new ones and fill the gaps" = drop the crowders,
+    # then fill back up to the original count with fresh non-overlapping patches.
+    md = 2.0
+    existing = G.rgb_cube(6)
+    extra = [(r + 1.0, g, b) for r, g, b in G.rgb_cube(6)[:30]] \
+        + [(83.0, 17.0, 51.0), (11.0, 47.0, 93.0)]
+    keep = G.drop_too_close(existing, extra, md)
+    fresh = G.fill_gaps(existing + keep, len(existing) + len(extra))
+    result = keep + fresh
+    assert len(result) == len(extra)                      # total preserved
+    assert _all_in_range(result)
+    for q in result:                                      # nothing crowds the chart
+        assert min(math.dist(q, e) for e in existing) >= md - 1e-6
+
+
 def test_only_new_drops_existing_and_keeps_the_rest():
     existing = [(50.0, 50.0, 50.0), (0.0, 0.0, 0.0)]
     new = [(50.0, 50.0, 50.0), (0.0, 0.0, 0.0), (80.0, 10.0, 20.0)]

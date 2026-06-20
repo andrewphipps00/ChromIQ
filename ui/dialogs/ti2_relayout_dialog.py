@@ -21,7 +21,8 @@ from pathlib import Path
 
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSize, QPoint, QRect, QTimer
 from PyQt6.QtGui import (
-    QColor, QFont, QIcon, QKeySequence, QPainter, QPen, QPixmap, QShortcut,
+    QColor, QFont, QFontMetrics, QIcon, QKeySequence, QPainter, QPen, QPixmap,
+    QShortcut,
 )
 from PyQt6.QtWidgets import (
     QAbstractItemView, QApplication, QButtonGroup, QCheckBox, QColorDialog,
@@ -4001,6 +4002,8 @@ class Ti2RelayoutDialog(QDialog):
         dup = G.count_too_close(existing, extra, _GEN_MIN_DIST)
         if dup == 0:
             return extra
+        total = len(extra)
+        kept = total - dup                       # how many "Add only the new ones" keeps
         box = QMessageBox(self)
         box.setWindowTitle(tr("Some of these colours are too close to ones "
                               "already in your chart"))
@@ -4008,39 +4011,61 @@ class Ti2RelayoutDialog(QDialog):
         box.setText(
             tr("1 of the {total} colours you're about to add lands on — or right "
                "next to — a colour already in this chart.").format(
-                   total=len(extra)) if dup == 1
+                   total=total) if dup == 1
             else tr("{dup} of the {total} colours you're about to add land on — "
                     "or right next to — colours already in this chart.").format(
-                        dup=dup, total=len(extra)))
+                        dup=dup, total=total))
+        # Each choice now states its count impact (#78, Knut): how many it adds,
+        # so the running total you saw is clearly affected by what you pick.
         box.setInformativeText(tr(
             "Two patches that are almost the same colour measure almost the same "
-            "thing, so the second one mostly wastes paper, ink and measuring "
-            "time without making your profile any more accurate.\n\n"
+            "thing, so a duplicate mostly wastes paper, ink and measuring time "
+            "without making your profile any more accurate.\n\n"
             "Here's what each choice does:\n\n"
-            "• Make them unique (recommended) — keeps every colour you're "
-            "adding, but gently nudges each crowded one to the nearest free spot "
-            "so it keeps a small gap from the colours already in your chart. You "
-            "still get the full number of patches, just none sitting on top of an "
-            "existing one.\n\n"
-            "• Add only the new ones — adds just the colours that are clear of "
-            "the chart and drops the ones that would land on or crowd a colour "
-            "already in it, so nothing is printed almost twice.\n\n"
-            "• Add anyway — adds them exactly as generated, crowding and all. "
-            "Pick this only if you deliberately want near-identical colours, for "
-            "example to average several readings of the same patch.\n\n"
+            "• Make them unique (recommended) — keeps every colour you're adding "
+            "(all {total}), but gently nudges each crowded one to the nearest free "
+            "spot so it keeps a small gap from the colours already in your chart. "
+            "None end up sitting on top of an existing one.\n\n"
+            "• Add only the new ones — adds just the {kept} colours that are clear "
+            "of the chart and drops the {dup} that would crowd one, so you add "
+            "fewer than the {total} you planned.\n\n"
+            "• Add new ones and fill the gaps — drops those {dup} too, then fills "
+            "their place with {dup} fresh, non-overlapping colours, so you still "
+            "add the full {total} with nothing printed almost twice.\n\n"
+            "• Add anyway — adds all {total} exactly as generated, the {dup} "
+            "overlaps included. Pick this only if you deliberately want "
+            "near-identical colours, for example to average several readings of "
+            "the same patch.\n\n"
             "• Cancel — go back without adding anything, so you can adjust the "
-            "generator options first."))
+            "generator options first.").format(total=total, dup=dup, kept=kept))
         unique_btn = box.addButton(tr("Make them unique"),
                                    QMessageBox.ButtonRole.AcceptRole)
         onlynew_btn = box.addButton(tr("Add only the new ones"),
                                     QMessageBox.ButtonRole.AcceptRole)
+        newfill_btn = box.addButton(tr("Add new ones and fill the gaps"),
+                                    QMessageBox.ButtonRole.AcceptRole)
         anyway_btn = box.addButton(tr("Add anyway"),
                                    QMessageBox.ButtonRole.AcceptRole)
         cancel_btn = box.addButton(tr("Cancel"), QMessageBox.ButtonRole.RejectRole)
-        # The app's button stylesheet keeps buttons short, so longer labels clip
-        # at the default width — give each room for its full label plus padding.
-        for b in (unique_btn, onlynew_btn, anyway_btn, cancel_btn):
-            b.setMinimumWidth(b.fontMetrics().horizontalAdvance(b.text()) + 64)
+        # Buttons render in the app's Menlo (monospace, uppercase) font, which is
+        # wider than the default — measure with THAT font so a long label like
+        # "Add new ones and fill the gaps" gets enough width and never overflows
+        # onto its neighbour (Knut: an offscreen check missed this). Monospace, so
+        # case doesn't change the width.
+        mono = QFont(self.font())
+        mono.setFamilies(["Menlo", "Consolas", "Courier New", "monospace"])
+        fm = QFontMetrics(mono)
+        widest = 0
+        for b in (unique_btn, onlynew_btn, newfill_btn, anyway_btn, cancel_btn):
+            w = fm.horizontalAdvance(b.text()) + 40
+            b.setMinimumWidth(w)
+            widest += w
+        # Widen the box so the whole five-button row fits without overlap.
+        from PyQt6.QtWidgets import QSpacerItem
+        grid = box.layout()
+        grid.addItem(QSpacerItem(widest + 80, 0, QSizePolicy.Policy.Minimum,
+                                 QSizePolicy.Policy.Expanding),
+                     grid.rowCount(), 0, 1, grid.columnCount())
         box.setDefaultButton(unique_btn)
         box.exec()
         clicked = box.clickedButton()
@@ -4048,6 +4073,13 @@ class Ti2RelayoutDialog(QDialog):
             return G.enforce_min_distance(extra, _GEN_MIN_DIST, existing=existing)
         if clicked is onlynew_btn:
             return G.drop_too_close(existing, extra, _GEN_MIN_DIST)
+        if clicked is newfill_btn:
+            # Drop the crowding ones, then top back up to the original count with
+            # fresh patches that avoid the existing chart and the kept ones, so the
+            # total stays as first calculated but nothing is printed almost twice.
+            keep = G.drop_too_close(existing, extra, _GEN_MIN_DIST)
+            fresh = G.fill_gaps(existing + keep, len(existing) + total)
+            return keep + fresh
         if clicked is anyway_btn:
             return extra
         return None
