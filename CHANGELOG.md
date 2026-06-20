@@ -1,6 +1,20 @@
 # Changelog
 
-## v3.11.16
+## v3.11.17
+
+### ✨ New
+- **Adding patches that clash: clearer choices, and a new "fill the gaps" option.**
+  When some of the colours you're adding land on (or right next to) ones already
+  in the chart, the dialog now **spells out the count impact of each choice** —
+  how many it adds, how many it drops — so you can see the total won't be what
+  was first shown. It also has a new button, **"Add new ones and fill the gaps"**
+  (between "Add only the new ones" and "Add anyway"): it drops the clashing
+  patches and refills their slots with fresh, non-overlapping colours, so you
+  still add the full count you asked for with nothing printed almost twice.
+
+### 🐛 Fixed
+- The overlap dialog's buttons no longer clip or overlap — they're sized for the
+  app's monospace button font so every label fits.
 
 ### 💄 Improved
 - **Corner spirals renamed "Colour extremes" and limited to the colour corners.**
