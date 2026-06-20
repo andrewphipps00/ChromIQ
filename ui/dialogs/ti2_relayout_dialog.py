@@ -4055,17 +4055,19 @@ class Ti2RelayoutDialog(QDialog):
         mono = QFont(self.font())
         mono.setFamilies(["Menlo", "Consolas", "Courier New", "monospace"])
         fm = QFontMetrics(mono)
-        widest = 0
         for b in (unique_btn, onlynew_btn, newfill_btn, anyway_btn, cancel_btn):
-            w = fm.horizontalAdvance(b.text()) + 40
-            b.setMinimumWidth(w)
-            widest += w
-        # Widen the box so the whole five-button row fits without overlap.
-        from PyQt6.QtWidgets import QSpacerItem
-        grid = box.layout()
-        grid.addItem(QSpacerItem(widest + 80, 0, QSizePolicy.Policy.Minimum,
-                                 QSizePolicy.Policy.Expanding),
-                     grid.rowCount(), 0, 1, grid.columnCount())
+            b.setMinimumWidth(fm.horizontalAdvance(b.text()) + 40)
+        # Correct min-widths make the button row wide enough on its own (no clip),
+        # and the long informative text keeps the box full-width. Just centre the
+        # row and give it generous breathing room below the text — no grid-column
+        # surgery (that shoved the text into half the window) (Knut).
+        from PyQt6.QtWidgets import QDialogButtonBox
+        bbox = box.findChild(QDialogButtonBox)
+        if bbox is not None:
+            bbox.setCenterButtons(True)
+            cm = bbox.contentsMargins()
+            bbox.setContentsMargins(cm.left(), cm.top() + 28, cm.right(),
+                                    cm.bottom())
         box.setDefaultButton(unique_btn)
         box.exec()
         clicked = box.clickedButton()

@@ -1,5 +1,12 @@
 # Changelog
 
+## v3.11.18
+
+### 🐛 Fixed
+- **"Patches that clash" dialog: tidier button row.** The five choices are now
+  centred under the explanation with a clear gap above them, and the long
+  "Add new ones and fill the gaps" button no longer overlaps its neighbour.
+
 ## v3.11.17
 
 ### ✨ New
