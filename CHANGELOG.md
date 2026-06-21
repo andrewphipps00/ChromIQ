@@ -1,5 +1,22 @@
 # Changelog
 
+## v3.11.19
+
+### ✨ New
+- **Two new built-in charts, with thanks to the Pharmacist.** The Create Chart
+  presets (both the ★ overlay and the Manual dropdown) gain a high-density
+  1944-patch i1Pro target — *"extended target by Pharmacist"* — in A4 and
+  US-Letter page sizes.
+
+### 🐛 Fixed
+- **Well-shuffled charts are now measured in both directions automatically.**
+  When a chart is laid out in fixed order (the "Preserve Patch Order" option, or
+  a layout designed in the TI2 editor) but its colours are in fact well mixed,
+  ChromIQ now tags it as randomised on generation — so chartread can read its
+  strips in either direction, exactly as it already does for charts saved from
+  the layout editor. Structured charts (deliberate ramps, calibration targets)
+  are left untouched.
+
 ## v3.11.18
 
 ### 🐛 Fixed

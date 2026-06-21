@@ -188,6 +188,13 @@ TC924_CM_A3_PRESET_LABEL = "★  ColorMunki · A3-924p-1page TC9.24 by Pharmacis
 # TC9.18 extended greys laid out for the ColorMunki on A3+ (single page, 1160 patches).
 TC918EG_CM_A3_PRESET_KEY = "__chromiq_tc918eg_cm_a3_builtin__"
 TC918EG_CM_A3_PRESET_LABEL = "★  ColorMunki · A3+-1160p-1page TC9.18 extended greys by Pharmacist  ·  built-in"
+# Extended 1944-patch RGB target (shuffled patch set), in A4 and US-Letter
+# layouts. Same patch set, two page sizes — paper carried in the label so the
+# pair is distinguishable in the dropdown and the overlay.
+EXT1944_A4_PRESET_KEY = "__chromiq_ext1944_a4_builtin__"
+EXT1944_A4_PRESET_LABEL = "★  i1Pro · A4-1944p-3pages extended target by Pharmacist  ·  built-in"
+EXT1944_LETTER_PRESET_KEY = "__chromiq_ext1944_letter_builtin__"
+EXT1944_LETTER_PRESET_LABEL = "★  i1Pro · Letter-1944p-3pages extended target by Pharmacist  ·  built-in"
 
 # key -> (asset stem under assets/charts, default target name). Charts are filed
 # by creator/colorspace/instrument/paper/target; the stem locates <stem>.ti1,
@@ -206,6 +213,8 @@ PREBUILT_PRESETS = {
     ABW702_PRESET_KEY:         ("assets/charts/pharmacist/rgb/colormunki/a4/abw702/abw702",     "ColorMunki-A4-702p-2pages-ABW-optimized by Pharmacist"),
     TC924_CM_A3_PRESET_KEY:    ("assets/charts/pharmacist/rgb/colormunki/a3/tc924/tc924",       "ColorMunki-A3-924p-1page-TC9.24 by Pharmacist"),
     TC918EG_CM_A3_PRESET_KEY:  ("assets/charts/pharmacist/rgb/colormunki/a3plus/tc918eg/tc918eg", "ColorMunki-A3+-1160p-1page-TC9.18 extended greys by Pharmacist"),
+    EXT1944_A4_PRESET_KEY:     ("assets/charts/pharmacist/rgb/i1pro/a4/extended1944/extended1944",     "i1Pro-A4-1944p-3pages-extended target by Pharmacist"),
+    EXT1944_LETTER_PRESET_KEY: ("assets/charts/pharmacist/rgb/i1pro/letter/extended1944/extended1944", "i1Pro-Letter-1944p-3pages-extended target by Pharmacist"),
 }
 
 
@@ -440,6 +449,7 @@ BUILTIN_PRESET_LABELS = frozenset({
     TC918EG_A4_PRESET_LABEL, TC918EG_LETTER_PRESET_LABEL,
     TC300_PRESET_LABEL, ABW702_PRESET_LABEL,
     TC924_CM_A3_PRESET_LABEL, TC918EG_CM_A3_PRESET_LABEL,
+    EXT1944_A4_PRESET_LABEL, EXT1944_LETTER_PRESET_LABEL,
 }) | {p.combo_label for p in KNUT_PRESETS}
 
 # Built-in presets grouped by the instrument they target — the single source of
@@ -468,10 +478,13 @@ BUILTIN_PRESET_GROUPS: list[tuple[str, list[tuple[str, str, str]]]] = [
         *_KNUT_GROUP_ENTRIES["ColorMunki"],
     ]),
     ("i1Pro", [
+        # A4 first (ascending patch count), then US-Letter — keep paper grouped.
         (TC924_PRESET_LABEL,   "A4-924p-2pages TC9.24 by Pharmacist",          TC924_PRESET_KEY),
         (ABW1110_PRESET_LABEL, "A4-1110p-2pages ABW-optimized by Pharmacist",  ABW1110_PRESET_KEY),
         (TC918EG_A4_PRESET_LABEL,     "A4-1160p-2pages TC9.18 extended greys by Pharmacist",     TC918EG_A4_PRESET_KEY),
+        (EXT1944_A4_PRESET_LABEL,     "A4-1944p-3pages extended target by Pharmacist",     EXT1944_A4_PRESET_KEY),
         (TC918EG_LETTER_PRESET_LABEL, "Letter-1160p-2pages TC9.18 extended greys by Pharmacist", TC918EG_LETTER_PRESET_KEY),
+        (EXT1944_LETTER_PRESET_LABEL, "Letter-1944p-3pages extended target by Pharmacist", EXT1944_LETTER_PRESET_KEY),
         *_KNUT_GROUP_ENTRIES["i1Pro"],
     ]),
 ]
@@ -5689,6 +5702,13 @@ class TabChart(QWidget):
             # self-describing. Read straight from the just-written .ti2 so it's
             # correct for every creation path (normal / prebuilt / from-.ti1).
             self._stamp_chart_meta(ti2)
+            # If this chart was laid out in fixed order (-r "Preserve Patch
+            # Order", e.g. a pre-shuffled generate-colour-sets / editor-recipe
+            # layout) but its colours are actually well mixed, upgrade the tag so
+            # chartread can read it bidirectionally — the same auto-tag the TI2
+            # layout editor does on save. No-op for the common case (printtarg
+            # randomises by default → already RANDOM_START).
+            self._maybe_autotag_randomised(ti2)
             # Remember the .ti1 backing this chart so the Save Preset dialog can
             # offer to attach it.
             ti1 = tiffs[0].parent / f"{stem}.ti1"
@@ -5711,6 +5731,38 @@ class TabChart(QWidget):
                         else "Chart Layout Failed (printtarg)"
                     )
                     InfoDialog(title, friendly, self, min_width=520).exec()
+
+    def _maybe_autotag_randomised(self, ti2: Path) -> None:
+        """Upgrade a fixed-order (CHART_ID) chart to RANDOM_START when its layout
+        is well mixed, so chartread gets auto strip-ID + bidirectional reading.
+
+        Mirrors the TI2 layout editor's auto-tag-on-save
+        (:meth:`TI2RelayoutDialog._maybe_tag_randomised`): a one-directional,
+        gate-checked upgrade that can only ever help. printtarg randomises by
+        default (already RANDOM_START → skipped here); a chart carries CHART_ID
+        only when "Preserve Patch Order" (-r) is in effect — e.g. when a
+        pre-shuffled generate-colour-sets / editor-recipe layout is generated.
+        A structured chart (a deliberate ramp, a calibration ramp) fails the
+        gate and is left untouched. Best-effort: never blocks chart creation.
+        """
+        try:
+            if not ti2.is_file():
+                return
+            # Cheap guard: only fixed-order charts need upgrading. The default
+            # printtarg output is already RANDOM_START, so skip the heavier
+            # analysis for it.
+            text = ti2.read_text(encoding="utf-8", errors="ignore")
+            if "CHART_ID" not in text or "RANDOM_START" in text:
+                return
+            from workflow.ti2_relayout import (
+                analyze_randomisation, tag_ti2_randomised,
+            )
+            if analyze_randomisation(ti2).safe and tag_ti2_randomised(ti2):
+                log.info("Auto-tagged %s as randomised (layout is well mixed).",
+                         ti2.name)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("auto-tag randomised check failed for %s: %s",
+                        ti2.name, exc)
 
     def _stamp_chart_meta(self, ti2: Path) -> None:
         """Record instrument / paper AND the printtarg layout knobs in the run's

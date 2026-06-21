@@ -15,7 +15,7 @@ mechanism works end-to-end and how to add, rename, or re-file one.
 
 Built-ins now come in **two kinds**:
 
-1. **prebuilt-files** (the eight "by Pharmacist" charts) — a complete, ready-made
+1. **prebuilt-files** (the ten "by Pharmacist" charts) — a complete, ready-made
    target is bundled and just copied into the run; **no targen/printtarg**.
 2. **ti1 → printtarg** (the 17 "TC9.18+Spyderprint Grays" charts, see the
    dedicated section below) — one shared `.ti1` is bundled and **printtarg is run
@@ -36,7 +36,7 @@ Selecting one prompts for a name, copies the bundled files into a fresh
 loads the TIFFs — **no `targen` or `printtarg` runs**, so the parameter panels
 are greyed out while the preset is active.
 
-The eight shipped presets (all RGB). Labels follow the same
+The ten shipped presets (all RGB). Labels follow the same
 `Instrument · Paper-NNNNp-Mpages Name by Pharmacist` convention as the
 ti1→printtarg presets below (patch width / orientation omitted — not stored for
 these pre-rendered charts):
@@ -51,6 +51,8 @@ these pre-rendered charts):
 | ★ ColorMunki · A4-702p-2pages ABW-optimized by Pharmacist     | ColorMunki | `colormunki/a4/abw702` |
 | ★ ColorMunki · A3-924p-1page TC9.24 by Pharmacist             | ColorMunki | `colormunki/a3/tc924` |
 | ★ ColorMunki · A3+-1160p-1page TC9.18 extended greys by Pharmacist | ColorMunki | `colormunki/a3plus/tc918eg` |
+| ★ i1Pro · A4-1944p-3pages extended target by Pharmacist          | i1Pro      | `i1pro/a4/extended1944` |
+| ★ i1Pro · Letter-1944p-3pages extended target by Pharmacist      | i1Pro      | `i1pro/letter/extended1944` |
 
 The `tc918eg` pair is the same patch set in two page sizes; the page size lives
 in the label (and is read back from the asset path by `_prebuilt_paper` for the
