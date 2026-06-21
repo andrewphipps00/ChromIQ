@@ -1230,25 +1230,37 @@ class _NewChartDialog(QDialog):
         so it is dropped."""
         cb = st.get("cb") or {}
         sp = st.get("sp") or {}
-        if "greys" not in cb and "greys_n" not in sp:
-            return st                       # already new format (or no greys)
+        legacy_greys = "greys" in cb or "greys_n" in sp
+        # Old Saturated-edges format carried an 'edges_auto' flag and used
+        # 'edges_n' as a per-edge density (5, 7, …). The set was reworked (#78)
+        # so 'edges_n' now means 'between' (1 = one patch midway), so an old
+        # number over-generates massively — detect the old flag and reset.
+        legacy_edges = "edges_auto" in cb or "edges_auto" in sp
+        if not legacy_greys and not legacy_edges:
+            return st                       # already new format
         cb = dict(cb)
         sp = dict(sp)
-        steps = int(sp.get("greys_n", 16))
-        rings = int(sp.get("greys_rings", 1))
-        offset = int(sp.get("greys_off", 4))
-        greys_on = bool(cb.get("greys", False))
-        cb.setdefault("neutral", greys_on)
-        cb.setdefault("nearneutral", greys_on and rings >= 1)
-        sp.setdefault("neutral_n", steps)
-        sp.setdefault("nearneutral_n", steps)
-        sp.setdefault("nearneutral_rings", max(1, rings))
-        sp.setdefault("nearneutral_off", offset)
-        cb.pop("greys", None)
-        cb.pop("greysmid", None)
-        for k in ("greys_n", "greys_off", "greys_rings",
-                  "greysmid_n", "greysmid_rings", "greysmid_off"):
-            sp.pop(k, None)
+        if legacy_greys:
+            steps = int(sp.get("greys_n", 16))
+            rings = int(sp.get("greys_rings", 1))
+            offset = int(sp.get("greys_off", 4))
+            greys_on = bool(cb.get("greys", False))
+            cb.setdefault("neutral", greys_on)
+            cb.setdefault("nearneutral", greys_on and rings >= 1)
+            sp.setdefault("neutral_n", steps)
+            sp.setdefault("nearneutral_n", steps)
+            sp.setdefault("nearneutral_rings", max(1, rings))
+            sp.setdefault("nearneutral_off", offset)
+            cb.pop("greys", None)
+            cb.pop("greysmid", None)
+            for k in ("greys_n", "greys_off", "greys_rings",
+                      "greysmid_n", "greysmid_rings", "greysmid_off"):
+                sp.pop(k, None)
+        if legacy_edges:
+            sp["edges_n"] = 1               # Knut: the new field should read 1
+            sp.setdefault("edges_faces", 0)
+            cb.pop("edges_auto", None)
+            sp.pop("edges_auto", None)
         out = dict(st)
         out["cb"], out["sp"] = cb, sp
         return out
@@ -1256,13 +1268,14 @@ class _NewChartDialog(QDialog):
     def _apply_gen_sets(self, st: dict) -> None:
         """Set every colour-set checkbox + size spin from a {"cb":…, "sp":…} dict.
 
-        Keys **absent** from the dict fall back to the factory default, not the
-        widget's current state — so a recipe / preset / saved state written before
-        a generator existed (e.g. an old file with no Gamut-corner emphasis or
-        Colour extremes) loads that generator **off**, rather than leaving whatever
-        was last ticked (Knut, #78). Unknown keys are ignored; the retired
-        ``edges_auto`` flag from old states is harmless. Pre-split states are
-        migrated first (old combined greys → ramp + near-neutrals).
+        An absent **checkbox** loads **off** (a preset is a complete spec, so a
+        set the author didn't include must come up unticked — not enabled from
+        the factory default, which is *on* for several sets). Absent **spin**
+        values fall back to the factory baseline (a sensible number for an off
+        control). Old states are migrated first: pre-split greys → ramp +
+        near-neutrals, and the old per-edge 'edges_auto' format → the new
+        'between' default (Knut). The factory-reset path passes a complete dict,
+        so it is unaffected.
 
         Does not touch the source mode or any chart/layout widget, so subclasses
         without those can reuse it."""
@@ -1280,7 +1293,11 @@ class _NewChartDialog(QDialog):
         for n in self._GEN_CHECKS:
             w = getattr(self, f"_gen_{n}", None)
             if w is not None:
-                w.setChecked(bool(cb.get(n, self._GEN_FACTORY["cb"].get(n, False))))
+                # Absent → OFF. A preset is a complete spec, so a set the author
+                # didn't include (e.g. saved before Flamingos existed) must load
+                # unticked — never enabled from the factory default, which is *on*
+                # for several sets (Knut). Factory-reset passes a full dict.
+                w.setChecked(bool(cb.get(n, False)))
 
     def _collect_gen_state(self) -> dict:
         mode = ("generate" if self._mode_generate.isChecked() else
@@ -1383,16 +1400,15 @@ class _NewChartDialog(QDialog):
         preset identical to a built-in of the same name is dropped (the built-in
         already represents it); a custom that differs keeps its own name (the ★
         distinguishes the built-in)."""
-        import json
         out: dict = {}
         builtin: dict = {}
         try:
-            from core.resource_path import resource_path
-            p = resource_path("assets/charts/knut/rgb/widegamut/recipes.json")
-            if p.is_file():
-                raw = json.loads(p.read_text(encoding="utf-8"))
-                builtin = {k: v for k, v in raw.items()
-                           if isinstance(v, dict) and v}
+            # Registry-driven: every built-in preset that carries a recipe, not a
+            # single hardcoded file — so any preset holding settings shows up,
+            # built-in or local (Knut).
+            from ui.tabs.tab_chart import builtin_recipe_choices
+            builtin = {k: v for k, v in builtin_recipe_choices().items()
+                       if isinstance(v, dict) and v}
         except Exception:  # noqa: BLE001 — never block opening the window
             pass
         for name, rec in builtin.items():
@@ -1633,7 +1649,7 @@ class _NewChartDialog(QDialog):
                                      "off-neutral tints; the two are independent, "
                                      "so you can have more pure greys than tinted "
                                      "ones, or either on its own."))
-        self._gen_neutral_n = _spin(1, 64, 16)
+        self._gen_neutral_n = _spin(1, 256, 16)   # up to a full 8-bit ramp (Knut)
         self._gen_neutral_count = _count_label()
         gg.addWidget(self._gen_neutral, 8, 0)
         gg.addWidget(QLabel(tr("steps:")), 8, 1)

@@ -495,6 +495,19 @@ def test_gamut_corner_edges_include_corners_and_zero():
     assert all(t in full for t in G._CORNER_PTS)
 
 
+def test_gamut_corner_edges_hug_the_corner():
+    # Tip-first fill: with a dense cube sampling the near-tip band, edge=1 lands
+    # the dot in the gap adjacent to the corner (closest), not a larger gap
+    # further out (Knut). cube_n=21 samples every 5 units → tip gap [0,5] → 2.5.
+    corners = G._CORNER_PTS
+    dots = G.gamut_corner_edges(1, existing=G.rgb_cube(21))
+    worst = max(min(math.dist(p, c) for c in corners) for p in dots)
+    assert worst < 5.0
+    # Extra patches cluster toward the corner: edge=3's nearest ≤ edge=1's.
+    near = lambda pts: min(min(math.dist(p, c) for c in corners) for p in pts)
+    assert near(G.gamut_corner_edges(3)) <= near(G.gamut_corner_edges(1))
+
+
 # --- Flamingos — the pink / magenta / indigo band (Knut, #78) --------------
 @pytest.mark.parametrize("count", [1, 30, 192])
 def test_flamingos_count_and_range(count):
