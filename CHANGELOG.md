@@ -1,5 +1,28 @@
 # Changelog
 
+## v3.11.22
+
+### 🐛 Fixed
+- **Built-in presets now carry their settings into the New Chart window, with
+  thanks to the Pharmacist.** Loading a built-in preset that ships a design
+  (colour sets, instrument, paper, layout) now seeds New Chart from it — just
+  like a locally-saved preset — instead of falling back to your last-used
+  settings. The "Load setup from preset" list is now registry-driven, so any
+  preset that carries settings shows up, not only the wide-gamut family.
+- **Presets load the right settings.** A preset that was saved before a
+  generator existed no longer comes up with it wrongly enabled (e.g. Flamingos);
+  a set the preset didn't include now loads off. And a Saturated-edges setting
+  saved under the old meaning is migrated so its "between" field reads 1 rather
+  than an old number that over-generated patches. Existing presets are fixed on
+  load — no need to re-create them.
+- **Gamut-corner emphasis hugs the corner.** With "edge" at 1 the single patch
+  now lands closest to the gamut corner (the tip-adjacent gap) instead of
+  further out, and extra patches cluster toward the corner.
+
+### ✨ New
+- **Neutral grey ramp now goes up to 256 steps** (a full 8-bit ramp), up from
+  64. Near-neutral greys keeps its 64 cap.
+
 ## v3.11.21
 
 ### ✨ New

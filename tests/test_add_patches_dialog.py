@@ -586,3 +586,51 @@ def test_legacy_greys_off_with_zero_rings_migrates_cleanly(qapp):
                          "sp": {"greys_n": 10, "greys_rings": 0}})
     assert dlg._gen_neutral.isChecked() and dlg._gen_neutral_n.value() == 10
     assert dlg._gen_nearneutral.isChecked() is False     # no rings → no set
+
+
+def test_absent_checkbox_loads_off_not_factory(qapp):
+    """A preset that omits a generator key loads it OFF, even though several
+    sets are factory-ON — so a preset made before Flamingos existed doesn't come
+    up with Flamingos enabled (Knut)."""
+    dlg = _AddPatchesDialog(_FakeSettings())
+    # A partial recipe: only the cube is specified.
+    dlg._apply_gen_sets({"cb": {"cube": True}, "sp": {"cube_n": 6}})
+    assert dlg._gen_cube.isChecked() is True
+    # Factory-ON sets that the recipe didn't mention must be off, not on.
+    assert dlg._gen_flamingos.isChecked() is False
+    assert dlg._gen_skin.isChecked() is False
+    assert dlg._gen_neutral.isChecked() is False
+
+
+def test_legacy_edges_auto_migrates_to_between_one(qapp):
+    """A pre-rework Saturated-edges state (the 'edges_auto' flag + 'edges_n' as a
+    per-edge density) loads with 'between' reset to 1, not the old number that
+    would over-generate (Knut)."""
+    dlg = _AddPatchesDialog(_FakeSettings())
+    dlg._apply_gen_sets({"cb": {"edges": True, "edges_auto": False},
+                         "sp": {"edges_n": 5}})
+    assert dlg._gen_edges.isChecked() is True
+    assert dlg._gen_edges_n.value() == 1                  # reset from old 5
+    assert dlg._gen_edges_faces.value() == 0
+
+
+def test_neutral_ramp_allows_up_to_256_steps(qapp):
+    """The Neutral grey ramp goes up to a full 8-bit ramp (256), not 64 (Knut).
+    Near-neutral greys keeps the lower 64 cap."""
+    dlg = _AddPatchesDialog(_FakeSettings())
+    dlg._gen_neutral_n.setValue(256)
+    assert dlg._gen_neutral_n.value() == 256
+    dlg._gen_nearneutral_n.setValue(999)
+    assert dlg._gen_nearneutral_n.value() == 64       # still capped
+
+
+def test_builtin_recipes_listed_in_load_setup_pulldown(qapp):
+    """The 'Load setup from preset' pulldown lists the built-in presets that
+    carry a recipe (★), registry-driven — not just local presets (Knut)."""
+    from pathlib import Path
+    d = _NewChartDialog(Path("/x"), _FakeSettings())
+    recipes = d._available_preset_recipes()
+    starred = [k for k in recipes if k.startswith("★")]
+    assert starred, "no built-in recipes surfaced in the pulldown"
+    # Each carries a real recipe dict.
+    assert all(isinstance(recipes[k], dict) and recipes[k] for k in starred)

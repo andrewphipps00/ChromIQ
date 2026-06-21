@@ -436,6 +436,65 @@ KNUT_PRESETS_BY_KEY: dict[str, _Ti1Preset] = {p.key: p for p in KNUT_PRESETS}
 KNUT_PRESET_KEYS = frozenset(KNUT_PRESETS_BY_KEY)
 
 
+# --- built-in preset recipes (Set B: a preset's New-chart / Add design) -------
+# Built-in presets can carry a creation recipe — the same colour-set + layout
+# settings a user preset stores in its own .json — so loading the preset seeds
+# the New-chart window, exactly like a locally-saved preset (Knut). A preset's
+# recipe is looked up two ways, in order: a per-preset ``recipe.json`` sitting
+# beside its bundled ``chart.ti1`` (the general convention — any built-in, any
+# folder, can carry one), then the shared wide-gamut ``recipes.json`` matched by
+# the preset's display name (where the exported wide-gamut family stores theirs).
+def _recipe_display_key(p: "_Ti1Preset") -> str:
+    """The name a wide-gamut preset's recipe is filed under in recipes.json —
+    instrument label + the preset's name without its family suffix."""
+    instr = "i1Pro" if p.instrument == _KNUT_I1 else "ColorMunki"
+    return f"{instr} {p.name.replace(KNUT_WG_SUFFIX, '').strip()}"
+
+
+def _load_shared_wg_recipes() -> dict:
+    try:
+        path = resource_path(f"{_KNUT_WG_DIR}/recipes.json")
+        if path.is_file():
+            raw = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(raw, dict):
+                return raw
+    except Exception:  # noqa: BLE001 — never block preset loading
+        pass
+    return {}
+
+
+def builtin_preset_recipe(preset_key: str) -> dict | None:
+    """The creation recipe a built-in preset carries, or None. Tries a
+    per-preset ``recipe.json`` next to its ``chart.ti1`` first, then the shared
+    wide-gamut store keyed by display name."""
+    p = KNUT_PRESETS_BY_KEY.get(preset_key)
+    if p is None:
+        return None
+    if p.ti1_asset:
+        try:
+            side = resource_path(p.ti1_asset).parent / "recipe.json"
+            if side.is_file():
+                rec = json.loads(side.read_text(encoding="utf-8"))
+                if isinstance(rec, dict) and rec:
+                    return rec
+        except Exception:  # noqa: BLE001
+            pass
+    rec = _load_shared_wg_recipes().get(_recipe_display_key(p))
+    return rec if isinstance(rec, dict) and rec else None
+
+
+def builtin_recipe_choices() -> dict[str, dict]:
+    """``{display_name: recipe}`` for every built-in preset that carries a
+    recipe — registry-driven, so it's not tied to one hardcoded file and any
+    future built-in with a recipe shows up automatically (Knut)."""
+    out: dict[str, dict] = {}
+    for p in KNUT_PRESETS:
+        rec = builtin_preset_recipe(p.key)
+        if rec:
+            out[_recipe_display_key(p)] = rec
+    return out
+
+
 # Built-in presets can be parked here (shown greyed-out, non-selectable) pending
 # a fix from their author; none are parked at the moment.
 DISABLED_BUILTIN_PRESET_KEYS = frozenset()
@@ -3298,8 +3357,11 @@ class TabChart(QWidget):
                 self._leave_reflected()
             self._preset_ti1_path = None  # built-ins are not ti1-user-presets
             self._preset_ti1_targen_sig = None
-            # Built-ins don't carry a user-saved New-chart recipe.
-            self._pending_editor_recipe = None
+            # A built-in that ships a creation recipe (Set B) seeds the New-chart
+            # window just like a user preset — so loading it carries its colour
+            # sets / layout into New chart, not the app-wide last-used state
+            # (Knut). None for built-ins that are fixed .ti1 charts with no recipe.
+            self._pending_editor_recipe = builtin_preset_recipe(data)
             # …but a built-in's own bundled .ti1 still feeds Suggest-name (#62).
             asset = self._builtin_ti1_asset(data)
             self._builtin_ti1_path = resource_path(asset) if asset else None

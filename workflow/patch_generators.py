@@ -466,16 +466,26 @@ def _edge_param(p, fixed_idx, fixed_vals, var_idx, tol):
     return None
 
 
-def _fill_line_midpoints(anchors, k: int) -> list[float]:
-    """``k`` new positions in 0..1 that bisect the largest gaps between the
-    sorted ``anchors`` (fixed points already on the line), re-splitting after
-    each insertion — a 1-D version of the gap-fill, so new points land at the
-    midpoints between the closest surrounding patches."""
+def _fill_line_midpoints(anchors, k: int, tip_first: bool = False) -> list[float]:
+    """``k`` new positions in 0..1 that bisect gaps between the sorted ``anchors``
+    (fixed points already on the line), re-splitting after each insertion — a 1-D
+    gap-fill, so new points land at the midpoints between the closest surrounding
+    patches.
+
+    By default the **largest** gap is bisected each time (even spread). With
+    ``tip_first`` the gap nearest the start of the line (t = 0) is bisected
+    instead, so points cluster toward that end — used by the corner-emphasis set
+    so the first/closest patch hugs the gamut corner rather than landing in a
+    bigger gap further out (Knut)."""
     occupied = sorted(anchors)
     added: list[float] = []
     for _ in range(k):
         merged = sorted(occupied + added)
-        gi = max(range(len(merged) - 1), key=lambda i: merged[i + 1] - merged[i])
+        if tip_first:
+            gi = min(range(len(merged) - 1), key=lambda i: merged[i])
+        else:
+            gi = max(range(len(merged) - 1),
+                     key=lambda i: merged[i + 1] - merged[i])
         added.append((merged[gi] + merged[gi + 1]) / 2.0)
     return added
 
@@ -843,7 +853,8 @@ def gamut_corner_edges(per_branch: int, existing=None,
                     t = (p[j] - corner[j]) / span
                     if tol / 100.0 < t <= near_t:
                         anchors.append(t)
-            for t in _fill_line_midpoints(sorted(anchors), per_branch):
+            for t in _fill_line_midpoints(sorted(anchors), per_branch,
+                                          tip_first=True):
                 pos = [corner[0], corner[1], corner[2]]
                 pos[j] = _clamp(corner[j] + span * t)
                 out.append((pos[0], pos[1], pos[2]))
