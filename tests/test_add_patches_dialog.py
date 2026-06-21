@@ -378,7 +378,7 @@ def test_gen_sets_help_matches_new_chart_tooltip():
     from ui.dialogs.ti2_relayout_dialog import _GEN_SETS_HELP
     nc = next(k for k in extract_keys()
               if k.startswith("Let's start a brand-new chart"))
-    assert _GEN_SETS_HELP == "\n\n".join(nc.split("\n\n")[5:19])
+    assert _GEN_SETS_HELP == "\n\n".join(nc.split("\n\n")[5:20])
 
 
 def test_white_black_added_over_existing_chart(qapp):
@@ -505,3 +505,60 @@ def test_colour_extremes_in_program_and_persist(qapp):
                          "sp": dlg._GEN_FACTORY["sp"]})
     assert dlg._gen_spirals.isChecked() is False
     assert dlg._gen_spirals_end.value() == 8 and dlg._gen_spirals_reach.value() == 16
+
+
+def test_greys_between_rides_on_parent_and_persists(qapp):
+    """More greys in between: (steps-1)*between greys inserted between the parent
+    ramp, gated on Near-neutral greys, with its values saved and restored."""
+    dlg = _AddPatchesDialog(_FakeSettings())
+    dlg._add_mode_gen.setChecked(True)
+    dlg._refresh_add_mode()
+    for n in dlg._GEN_CHECKS:
+        getattr(dlg, f"_gen_{n}").setChecked(False)
+    dlg._gen_unique.setChecked(False)
+    # Parent ramp on at 16 pure steps; in-between adds 15 midpoints (rings 0).
+    dlg._gen_greys.setChecked(True)
+    dlg._gen_greys_n.setValue(16)
+    dlg._gen_greys_rings.setValue(0)
+    dlg._gen_greysmid.setChecked(True)
+    dlg._gen_greysmid_n.setValue(1)
+    dlg._gen_greysmid_rings.setValue(0)
+    dlg._update_gen_counts()
+    assert "15" in dlg._gen_greysmid_count.text()        # 16-1 midpoints
+    assert dlg._gen_greysmid.isEnabled() is True
+    prog = dlg._build_generated_program()
+    assert len(prog) == 16 + 15                          # parent + in-between
+
+    # Two per gap → 30.
+    dlg._gen_greysmid_n.setValue(2)
+    dlg._update_gen_counts()
+    assert "30" in dlg._gen_greysmid_count.text()
+
+    # Turn the parent off: the child disables, drops to 0, and adds nothing —
+    # even though its own checkbox is still ticked (state preserved).
+    dlg._gen_greys.setChecked(False)
+    dlg._update_gen_counts()
+    assert dlg._gen_greysmid.isEnabled() is False
+    assert dlg._gen_greysmid.isChecked() is True
+    assert "0" in dlg._gen_greysmid_count.text()
+    assert dlg._build_generated_program() == []
+
+    # Persistence: values save, and restoring factory turns it back off.
+    st = dlg._collect_gen_sets()
+    assert st["cb"]["greysmid"] is True
+    assert st["sp"]["greysmid_n"] == 2 and st["sp"]["greysmid_rings"] == 0
+    dlg._apply_gen_sets({"cb": dlg._GEN_FACTORY["cb"],
+                         "sp": dlg._GEN_FACTORY["sp"]})
+    assert dlg._gen_greysmid.isChecked() is False
+    assert dlg._gen_greysmid_n.value() == 1
+
+
+def test_greys_between_defaults_off_for_old_recipe(qapp):
+    """An old recipe/state written before this set existed (key absent) loads it
+    OFF, not whatever was last ticked — the _GEN_FACTORY fallback."""
+    dlg = _AddPatchesDialog(_FakeSettings())
+    dlg._gen_greysmid.setChecked(True)
+    # A dict with no 'greysmid' key at all (an older saved state).
+    dlg._apply_gen_sets({"cb": {"cube": True}, "sp": {"cube_n": 6}})
+    assert dlg._gen_greysmid.isChecked() is False
+    assert dlg._gen_greysmid_n.value() == 1               # factory baseline

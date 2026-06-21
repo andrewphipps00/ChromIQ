@@ -350,23 +350,35 @@ def near_neutral_greys(steps: int, offset: float,
     for i in range(steps):
         g = (i / (steps - 1) if steps > 1 else 0.5) * 100.0
         out.append((g, g, g))
-        if rings == 0:
-            # Pure neutral ramp — no tint rings, so offset is unused.
-            continue
-        if rings == 1:
-            # Preserve the exact original R/Y/G/C/B/M hexagon (and its values).
-            for mask in _HUE_MASKS:
-                m = sum(mask) / 3.0
-                out.append(tuple(_clamp(g + offset * (c - m)) for c in mask))
-            continue
-        # Hexagon vertices sit sqrt(6)/3 · offset from neutral in RGB space;
-        # match that for ring 1 so the offset control feels the same in both
-        # modes, then space outer rings at integer multiples.
-        base_radius = math.sqrt(6) / 3.0 * offset
-        for r in range(1, rings + 1):
-            n = 6 * r
-            phase = (r - 1) * (360.0 / n) / 2.0   # interleave with inner ring
-            out.extend(_ring_tints(g, r * base_radius, n, phase))
+        out.extend(_grey_tints(g, offset, rings))
+    return out
+
+
+def _grey_tints(g: float, offset: float,
+                rings: int) -> list[tuple[float, float, float]]:
+    """The hue-tint rings circling a single neutral grey ``g`` (not the grey
+    itself). Shared by ``near_neutral_greys`` and ``near_neutral_greys_between``
+    so the two sets place identical rings. ``rings == 0`` → no tints, so
+    ``offset`` is unused (a pure neutral point)."""
+    rings = max(0, int(rings))
+    if rings == 0:
+        return []
+    if rings == 1:
+        # Preserve the exact original R/Y/G/C/B/M hexagon (and its values).
+        out: list[tuple[float, float, float]] = []
+        for mask in _HUE_MASKS:
+            m = sum(mask) / 3.0
+            out.append(tuple(_clamp(g + offset * (c - m)) for c in mask))
+        return out
+    # Hexagon vertices sit sqrt(6)/3 · offset from neutral in RGB space;
+    # match that for ring 1 so the offset control feels the same in both
+    # modes, then space outer rings at integer multiples.
+    base_radius = math.sqrt(6) / 3.0 * offset
+    out = []
+    for r in range(1, rings + 1):
+        n = 6 * r
+        phase = (r - 1) * (360.0 / n) / 2.0   # interleave with inner ring
+        out.extend(_ring_tints(g, r * base_radius, n, phase))
     return out
 
 
@@ -374,6 +386,45 @@ def near_neutral_greys_count(steps: int, rings: int = 1) -> int:
     rings = max(0, int(rings))
     tints = 3 * rings * (rings + 1)               # 6 + 12 + … = sum(6r)
     return max(1, int(steps)) * (1 + tints)
+
+
+def near_neutral_greys_between(steps: int, between: int, offset: float,
+                               rings: int = 0
+                               ) -> list[tuple[float, float, float]]:
+    """Extra neutral greys *between* the levels ``near_neutral_greys`` places.
+
+    ``steps`` is the **parent** ramp's step count (so the in-between greys line
+    up with it). Between each pair of neighbouring parent greys this drops
+    ``between`` greys at evenly-spaced fractions — ``between == 1`` is the
+    midpoint, ``between == 2`` the ⅓ and ⅔ points, and so on — giving
+    ``(steps - 1) * between`` new greys. Each gets the same ``rings`` of hue
+    tints as the parent set (``rings == 0`` → a pure, denser neutral ramp, the
+    common case). The parent's pure black (0) and white (100) endpoints are
+    never reproduced, so nothing is printed twice.
+    """
+    steps = max(1, int(steps))
+    between = max(0, int(between))
+    if steps < 2 or between < 1:
+        return []
+    out: list[tuple[float, float, float]] = []
+    for i in range(steps - 1):
+        g0 = i / (steps - 1) * 100.0
+        g1 = (i + 1) / (steps - 1) * 100.0
+        for k in range(1, between + 1):
+            g = g0 + (k / (between + 1)) * (g1 - g0)
+            out.append((g, g, g))
+            out.extend(_grey_tints(g, offset, rings))
+    return out
+
+
+def near_neutral_greys_between_count(steps: int, between: int,
+                                     rings: int = 0) -> int:
+    steps = max(1, int(steps))
+    between = max(0, int(between))
+    if steps < 2 or between < 1:
+        return 0
+    tints = 3 * max(0, int(rings)) * (max(0, int(rings)) + 1)
+    return (steps - 1) * between * (1 + tints)
 
 
 # ---------------------------------------------------------------------------
