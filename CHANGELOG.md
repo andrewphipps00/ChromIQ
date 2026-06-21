@@ -1,5 +1,19 @@
 # Changelog
 
+## v3.11.20
+
+### ✨ New
+- **More greys in between, with thanks to the Pharmacist.** A new colour set in
+  Generate colour sets, sitting right under **Near-neutral greys**: it drops
+  extra grey steps **between** that set's steps, to make the all-important
+  neutral ramp denser where it shows most. **Between** sets how many greys go in
+  each gap (1 = the midpoints, 2 = two evenly spaced, …); leave **rings** at 0,
+  the usual choice, for a plain, denser black-and-white ramp, or raise it to
+  circle each with the same gentle tints as the set above. It rides on
+  Near-neutral greys — it follows that set's step count and is only available
+  while it is on — and, like every set, it saves and restores with the chart and
+  is fully translated.
+
 ## v3.11.19
 
 ### ✨ New

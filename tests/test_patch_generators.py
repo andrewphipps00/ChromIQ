@@ -246,6 +246,59 @@ def test_near_neutral_outer_ring_is_farther_and_balanced():
     assert r1 < r2 < r3
 
 
+# --- near-neutral greys "in between" --------------------------------------
+@pytest.mark.parametrize("steps,between", [(2, 1), (16, 1), (16, 3), (8, 2)])
+def test_greys_between_count_and_range(steps, between):
+    # rings=0 ⇒ (steps-1)*between pure greys, lining up between the parent ramp.
+    patches = G.near_neutral_greys_between(steps, between, 4.0, 0)
+    assert len(patches) == (steps - 1) * between
+    assert len(patches) == G.near_neutral_greys_between_count(steps, between, 0)
+    for r, g, b in patches:
+        assert r == g == b                      # every patch is neutral
+    assert _all_in_range(patches)
+
+
+def test_greys_between_sits_at_gap_midpoints_and_avoids_endpoints():
+    # between=1 ⇒ the midpoint of every parent gap; never the 0/100 endpoints.
+    steps = 5                                    # parent at 0,25,50,75,100
+    patches = G.near_neutral_greys_between(steps, 1, 4.0, 0)
+    ls = sorted(p[0] for p in patches)
+    assert ls == pytest.approx([12.5, 37.5, 62.5, 87.5])
+    assert all(0.0 < l < 100.0 for l in ls)
+
+
+def test_greys_between_two_per_gap_evenly_spaced():
+    # between=2 ⇒ the 1/3 and 2/3 points of each gap.
+    patches = G.near_neutral_greys_between(2, 2, 4.0, 0)   # one gap 0..100
+    ls = sorted(p[0] for p in patches)
+    assert ls == pytest.approx([100 / 3.0, 200 / 3.0])
+
+
+@pytest.mark.parametrize("rings,per", [(1, 7), (2, 19), (3, 37)])
+def test_greys_between_rings_match_parent(rings, per):
+    # Each inserted grey carries the same ring count as the parent set.
+    steps, between = 16, 1
+    patches = G.near_neutral_greys_between(steps, between, 6.0, rings)
+    assert len(patches) == (steps - 1) * between * per
+    assert len(patches) == G.near_neutral_greys_between_count(steps, between, rings)
+    assert _all_in_range(patches)
+
+
+def test_greys_between_degenerate_cases_are_empty():
+    assert G.near_neutral_greys_between(1, 5, 4.0, 0) == []   # no parent gaps
+    assert G.near_neutral_greys_between(16, 0, 4.0, 0) == []  # nothing per gap
+    assert G.near_neutral_greys_between_count(1, 5, 0) == 0
+    assert G.near_neutral_greys_between_count(16, 0, 0) == 0
+
+
+def test_greys_between_interleaves_parent_without_duplicates():
+    # The combined ramp (parent + in-between, both pure) has no repeated greys.
+    parent = G.near_neutral_greys(16, 4.0, 0)
+    mid = G.near_neutral_greys_between(16, 1, 4.0, 0)
+    combined = sorted(p[0] for p in parent + mid)
+    assert len(combined) == len(set(round(l, 6) for l in combined))
+
+
 # --- gamut edges -----------------------------------------------------------
 @pytest.mark.parametrize("per_edge", [1, 2, 5, 20])
 def test_gamut_edges_count_and_range(per_edge):

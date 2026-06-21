@@ -113,6 +113,14 @@ _GEN_SETS_HELP = (
     "tints) for fuller near-neutral coverage when you want it. Set rings "
     "to 0 for a plain neutral ramp with no tints at all — a "
     "black-and-white wedge — in which case 'offset' has no effect.\n\n"
+    "• More greys in between — extra grey steps dropped between the "
+    "near-neutral greys above, to make that all-important neutral ramp "
+    "denser where it shows most. It rides on 'Near-neutral greys', so it's "
+    "only available while that set is on, and follows its step count. "
+    "'Between' is how many greys to add in each gap (1 for the midpoints, 2 "
+    "for two evenly spaced, and so on), and 'rings' can circle each with the "
+    "same gentle tints as the set above — leave rings at 0, the usual "
+    "choice, for a plain, denser black-and-white ramp.\n\n"
     "• Saturated edges — the most vivid colours the printer can manage. "
     "'Per edge' traces the twelve edges of the colour cube — the gamut "
     "wireframe (black up to each pure colour and on to white, plus the "
@@ -812,6 +820,14 @@ class _NewChartDialog(QDialog):
             "tints) for fuller near-neutral coverage when you want it. Set rings "
             "to 0 for a plain neutral ramp with no tints at all — a "
             "black-and-white wedge — in which case 'offset' has no effect.\n\n"
+            "• More greys in between — extra grey steps dropped between the "
+            "near-neutral greys above, to make that all-important neutral ramp "
+            "denser where it shows most. It rides on 'Near-neutral greys', so it's "
+            "only available while that set is on, and follows its step count. "
+            "'Between' is how many greys to add in each gap (1 for the midpoints, 2 "
+            "for two evenly spaced, and so on), and 'rings' can circle each with the "
+            "same gentle tints as the set above — leave rings at 0, the usual "
+            "choice, for a plain, denser black-and-white ramp.\n\n"
             "• Saturated edges — the most vivid colours the printer can manage. "
             "'Per edge' traces the twelve edges of the colour cube — the gamut "
             "wireframe (black up to each pure colour and on to white, plus the "
@@ -1146,14 +1162,15 @@ class _NewChartDialog(QDialog):
     # The widget suffixes whose checked/value state is remembered between
     # New-chart sessions (attribute = "_gen_<name>").
     _GEN_CHECKS = ("cube", "corners", "spirals", "skin", "blues", "greens",
-                   "sunrises", "flamingos", "greys", "edges", "hs", "pastel",
-                   "image", "whiteblack", "fill", "unique")
+                   "sunrises", "flamingos", "greys", "greysmid", "edges", "hs",
+                   "pastel", "image", "whiteblack", "fill", "unique")
     _GEN_SPINS = ("cube_n", "corners_edge", "spirals_end", "spirals_reach",
                   "skin_n", "skin_ranges", "blues_n", "blues_layers",
                   "greens_n", "greens_layers", "sunrises_n", "sunrises_layers",
                   "flamingos_n", "flamingos_layers",
                   "greys_n", "greys_off",
-                  "greys_rings", "edges_n", "edges_faces", "hs_n", "hs_reach",
+                  "greys_rings", "greysmid_n", "greysmid_rings", "greysmid_off",
+                  "edges_n", "edges_faces", "hs_n", "hs_reach",
                   "pastel_n", "pastel_layers", "image_n", "whiteblack_n",
                   "fill_to")
     # Factory defaults — what "Restore defaults" resets the whole window to
@@ -1173,7 +1190,8 @@ class _NewChartDialog(QDialog):
                    "td": False},
         "cb": {"cube": True, "corners": False, "spirals": False, "skin": True,
                "blues": True, "greens": True, "sunrises": True,
-               "flamingos": True, "greys": True, "edges": False, "hs": False,
+               "flamingos": True, "greys": True, "greysmid": False,
+               "edges": False, "hs": False,
                "pastel": False, "image": False, "whiteblack": False,
                "fill": False, "unique": True},
         "sp": {"cube_n": 8, "corners_edge": 2, "spirals_end": 8,
@@ -1182,7 +1200,9 @@ class _NewChartDialog(QDialog):
                "blues_layers": 3, "greens_n": 64, "greens_layers": 3,
                "sunrises_n": 64, "sunrises_layers": 3,
                "flamingos_n": 64, "flamingos_layers": 3,
-               "greys_n": 16, "greys_off": 4, "greys_rings": 1, "edges_n": 1,
+               "greys_n": 16, "greys_off": 4, "greys_rings": 1,
+               "greysmid_n": 1, "greysmid_rings": 0, "greysmid_off": 4,
+               "edges_n": 1,
                "edges_faces": 0, "hs_n": 24, "hs_reach": 16, "pastel_n": 24,
                "pastel_layers": 2, "image_n": 24, "whiteblack_n": 1,
                "fill_to": 1000},
@@ -1595,6 +1615,41 @@ class _NewChartDialog(QDialog):
         gg.addWidget(self._gen_greys_off, 9, 6)
         gg.addWidget(self._gen_greys_count, 9, 7)
 
+        # More greys in between — extra neutral steps placed between the
+        # Near-neutral greys above, to densify the most visible part of the
+        # ramp. It rides on that set: it follows its 'steps' count and is only
+        # available while it is on. 'between' is how many greys go in each gap.
+        self._gen_greysmid = QCheckBox(tr("More greys in between"),
+                                       self._gen_panel)
+        self._gen_greysmid.setToolTip(tr("Extra neutral greys placed evenly "
+                                      "between the Near-neutral greys steps "
+                                      "above, to make the ramp denser where it "
+                                      "shows most. It follows that set's 'steps' "
+                                      "count and is only available while it is "
+                                      "on. 'Between' is how many greys to insert "
+                                      "in each gap (1 = the midpoint, 2 = two "
+                                      "evenly-spaced, …). 'Rings' adds hue tints "
+                                      "around each, exactly like the set above — "
+                                      "leave it at 0 for a plain, denser "
+                                      "black-and-white ramp. 'Offset' sets the "
+                                      "first ring's distance and has no effect "
+                                      "when rings is 0."))
+        self._gen_greysmid_n = _spin(1, 8, 1)
+        self._gen_greysmid_rings = _spin(0, 3, 0)
+        self._gen_greysmid_off = _spin(1, 50, 4)
+        self._gen_greysmid_count = _count_label()
+        # Kept as a field so it can be greyed out alongside the offset spin when
+        # rings is 0 (offset then has no effect).
+        self._gen_greysmid_off_label = QLabel(tr("offset:"))
+        gg.addWidget(self._gen_greysmid, 10, 0)
+        gg.addWidget(QLabel(tr("between:")), 10, 1)
+        gg.addWidget(self._gen_greysmid_n, 10, 2)
+        gg.addWidget(QLabel(tr("rings:")), 10, 3)
+        gg.addWidget(self._gen_greysmid_rings, 10, 4)
+        gg.addWidget(self._gen_greysmid_off_label, 10, 5)
+        gg.addWidget(self._gen_greysmid_off, 10, 6)
+        gg.addWidget(self._gen_greysmid_count, 10, 7)
+
         # Saturated edges — the gamut boundary, locked to the 3D cube's grid so
         # the infill stays even at any density (Knut, #78). Placed directly under
         # the 3D cube (grid row 1) since the two are interdependent — the widgets
@@ -1642,12 +1697,12 @@ class _NewChartDialog(QDialog):
         self._gen_hs_n = _spin(1, 200, 24)
         self._gen_hs_reach = _spin(2, 45, 16)
         self._gen_hs_count = _count_label()
-        gg.addWidget(self._gen_hs, 10, 0)
-        gg.addWidget(QLabel(tr("per end:")), 10, 1)
-        gg.addWidget(self._gen_hs_n, 10, 2)
-        gg.addWidget(QLabel(tr("depth:")), 10, 3)
-        gg.addWidget(self._gen_hs_reach, 10, 4)
-        gg.addWidget(self._gen_hs_count, 10, 7)
+        gg.addWidget(self._gen_hs, 11, 0)
+        gg.addWidget(QLabel(tr("per end:")), 11, 1)
+        gg.addWidget(self._gen_hs_n, 11, 2)
+        gg.addWidget(QLabel(tr("depth:")), 11, 3)
+        gg.addWidget(self._gen_hs_reach, 11, 4)
+        gg.addWidget(self._gen_hs_count, 11, 7)
 
         # Pastels — low-chroma midtones.
         self._gen_pastel = QCheckBox(tr("Pastels"), self._gen_panel)
@@ -1660,12 +1715,12 @@ class _NewChartDialog(QDialog):
         self._gen_pastel_n = _spin(1, 200, 24)
         self._gen_pastel_layers = _spin(1, 4, 2)
         self._gen_pastel_count = _count_label()
-        gg.addWidget(self._gen_pastel, 11, 0)
-        gg.addWidget(QLabel(tr("per layer:")), 11, 1)
-        gg.addWidget(self._gen_pastel_n, 11, 2)
-        gg.addWidget(QLabel(tr("layers:")), 11, 3)
-        gg.addWidget(self._gen_pastel_layers, 11, 4)
-        gg.addWidget(self._gen_pastel_count, 11, 7)
+        gg.addWidget(self._gen_pastel, 12, 0)
+        gg.addWidget(QLabel(tr("per layer:")), 12, 1)
+        gg.addWidget(self._gen_pastel_n, 12, 2)
+        gg.addWidget(QLabel(tr("layers:")), 12, 3)
+        gg.addWidget(self._gen_pastel_layers, 12, 4)
+        gg.addWidget(self._gen_pastel_count, 12, 7)
 
         # From image — the most representative colours of a chosen photo.
         self._gen_image = QCheckBox(tr("From image"), self._gen_panel)
@@ -1681,11 +1736,11 @@ class _NewChartDialog(QDialog):
         self._gen_image_btn.clicked.connect(self._load_gen_image)
         self._gen_image_n = _spin(1, 500, 24)
         self._gen_image_count = _count_label()
-        gg.addWidget(self._gen_image, 12, 0)
-        gg.addWidget(self._gen_image_btn, 12, 1, 1, 2)
-        gg.addWidget(QLabel(tr("colours:")), 12, 3)
-        gg.addWidget(self._gen_image_n, 12, 4)
-        gg.addWidget(self._gen_image_count, 12, 7)
+        gg.addWidget(self._gen_image, 13, 0)
+        gg.addWidget(self._gen_image_btn, 13, 1, 1, 2)
+        gg.addWidget(QLabel(tr("colours:")), 13, 3)
+        gg.addWidget(self._gen_image_n, 13, 4)
+        gg.addWidget(self._gen_image_count, 13, 7)
 
         # Pure white & black — the two tonal anchors, N of each, kept verbatim.
         self._gen_whiteblack = QCheckBox(
@@ -1702,10 +1757,10 @@ class _NewChartDialog(QDialog):
                                         "toward your number."))
         self._gen_whiteblack_n = _spin(1, 50, 1)
         self._gen_whiteblack_count = _count_label()
-        gg.addWidget(self._gen_whiteblack, 13, 0)
-        gg.addWidget(QLabel(tr("each:")), 13, 1)
-        gg.addWidget(self._gen_whiteblack_n, 13, 2)
-        gg.addWidget(self._gen_whiteblack_count, 13, 7)
+        gg.addWidget(self._gen_whiteblack, 14, 0)
+        gg.addWidget(QLabel(tr("each:")), 14, 1)
+        gg.addWidget(self._gen_whiteblack_n, 14, 2)
+        gg.addWidget(self._gen_whiteblack_count, 14, 7)
 
         # Fill remaining gaps — blue-noise top-up of whatever's left sparse.
         # Special: its count depends on the combined total of the sets above.
@@ -1717,10 +1772,10 @@ class _NewChartDialog(QDialog):
                                   "total patch count."))
         self._gen_fill_to = _spin(1, 30000, 1000)
         self._gen_fill_count = _count_label()
-        gg.addWidget(self._gen_fill, 14, 0)
-        gg.addWidget(QLabel(tr("fill to:")), 14, 1)
-        gg.addWidget(self._gen_fill_to, 14, 2)
-        gg.addWidget(self._gen_fill_count, 14, 7)
+        gg.addWidget(self._gen_fill, 15, 0)
+        gg.addWidget(QLabel(tr("fill to:")), 15, 1)
+        gg.addWidget(self._gen_fill_to, 15, 2)
+        gg.addWidget(self._gen_fill_count, 15, 7)
 
         # A per-set ⓘ icon (col 8) opens the set's explanation in its own little
         # window — more discoverable than a hover tooltip. The body reuses each
@@ -1738,11 +1793,12 @@ class _NewChartDialog(QDialog):
             (7, self._gen_sunrises, tr("Sunrises (warm)")),
             (8, self._gen_flamingos, tr("Flamingos (pinks)")),
             (9, self._gen_greys,  tr("Near-neutral greys")),
-            (10, self._gen_hs,     tr("Highlights & shadows")),
-            (11, self._gen_pastel, tr("Pastels")),
-            (12, self._gen_image,  tr("From image")),
-            (13, self._gen_whiteblack, tr("Pure white & black")),
-            (14, self._gen_fill,  tr("Fill remaining gaps")),
+            (10, self._gen_greysmid, tr("More greys in between")),
+            (11, self._gen_hs,     tr("Highlights & shadows")),
+            (12, self._gen_pastel, tr("Pastels")),
+            (13, self._gen_image,  tr("From image")),
+            (14, self._gen_whiteblack, tr("Pure white & black")),
+            (15, self._gen_fill,  tr("Fill remaining gaps")),
         )
         for row, cb, title in row_tips:
             gg.addWidget(
@@ -1764,11 +1820,11 @@ class _NewChartDialog(QDialog):
                                     "repeated colours apart by a small offset "
                                     "so no patch is printed twice."))
         self._gen_unique.toggled.connect(self._update_gen_counts)
-        gg.addWidget(self._gen_unique, 15, 0, 1, 8)
+        gg.addWidget(self._gen_unique, 16, 0, 1, 8)
 
         self._gen_total = QLabel("", self._gen_panel)
         self._gen_total.setStyleSheet("font-weight: bold;")
-        gg.addWidget(self._gen_total, 16, 0, 1, 8)
+        gg.addWidget(self._gen_total, 17, 0, 1, 8)
 
         # In the Add dialog (a chart already has patches), also show the chart's
         # resulting size — existing patches + the additions — since this is the
@@ -1777,13 +1833,14 @@ class _NewChartDialog(QDialog):
         self._gen_after_total = QLabel("", self._gen_panel)
         self._gen_after_total.setStyleSheet("color: #909090;")
         self._gen_after_total.setVisible(bool(self._existing_patches))
-        gg.addWidget(self._gen_after_total, 17, 0, 1, 8)
+        gg.addWidget(self._gen_after_total, 18, 0, 1, 8)
 
         for cb in (self._gen_cube, self._gen_corners, self._gen_spirals,
                    self._gen_skin, self._gen_blues, self._gen_greens,
                    self._gen_sunrises, self._gen_flamingos, self._gen_greys,
-                   self._gen_edges, self._gen_hs, self._gen_pastel,
-                   self._gen_image, self._gen_whiteblack, self._gen_fill):
+                   self._gen_greysmid, self._gen_edges, self._gen_hs,
+                   self._gen_pastel, self._gen_image, self._gen_whiteblack,
+                   self._gen_fill):
             cb.toggled.connect(self._update_gen_counts)
 
         # Saturated edges no longer needs to track the cube via a coupled value:
@@ -1904,6 +1961,23 @@ class _NewChartDialog(QDialog):
              lambda: G.near_neutral_greys_count(self._gen_greys_n.value(),
                                                 self._gen_greys_rings.value()),
              self._gen_greys_count),
+            # More greys in between — rides on Near-neutral greys directly above:
+            # it reads that set's 'steps' for its grid and contributes nothing
+            # while that set is off (the checkbox is disabled then too), so it can
+            # never place greys with no parent ramp to sit between (Knut, #78).
+            (self._gen_greysmid,
+             lambda: (G.near_neutral_greys_between(
+                 self._gen_greys_n.value(),
+                 self._gen_greysmid_n.value(),
+                 float(self._gen_greysmid_off.value()),
+                 self._gen_greysmid_rings.value())
+                 if self._gen_greys.isChecked() else []),
+             lambda: (G.near_neutral_greys_between_count(
+                 self._gen_greys_n.value(),
+                 self._gen_greysmid_n.value(),
+                 self._gen_greysmid_rings.value())
+                 if self._gen_greys.isChecked() else 0),
+             self._gen_greysmid_count),
             (self._gen_hs,
              # Highlights & shadows interlocks with Near-neutral greys: when that
              # set is on, H&S stays just outside its rings (no colour printed
@@ -2012,6 +2086,19 @@ class _NewChartDialog(QDialog):
         off_on = self._gen_greys.isChecked() and self._gen_greys_rings.value() > 0
         self._gen_greys_off.setEnabled(off_on)
         self._gen_greys_off_label.setEnabled(off_on)
+        # More greys in between rides on Near-neutral greys: the whole row is
+        # only usable while that set is on (it has no ramp to sit between
+        # otherwise). Its checked state is kept — a ticked-but-disabled box reads
+        # as off (the :checked:disabled QSS) and its tick returns when the parent
+        # comes back. Its own offset follows the same 0-rings rule as above.
+        greys_on = self._gen_greys.isChecked()
+        self._gen_greysmid.setEnabled(greys_on)
+        gm_on = greys_on and self._gen_greysmid.isChecked()
+        self._gen_greysmid_n.setEnabled(gm_on)
+        self._gen_greysmid_rings.setEnabled(gm_on)
+        gm_off_on = gm_on and self._gen_greysmid_rings.value() > 0
+        self._gen_greysmid_off.setEnabled(gm_off_on)
+        self._gen_greysmid_off_label.setEnabled(gm_off_on)
         total = 0
         for cb, _build, count, label in self._gen_specs():
             n = count()
