@@ -1,5 +1,11 @@
 # Changelog
 
+## v3.11.23
+
+### ♻️ Changed
+- **Neutral grey ramp is back to a maximum of 64 steps** (reverting the 256 cap
+  from the previous release).
+
 ## v3.11.22
 
 ### 🐛 Fixed

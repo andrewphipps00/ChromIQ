@@ -614,14 +614,13 @@ def test_legacy_edges_auto_migrates_to_between_one(qapp):
     assert dlg._gen_edges_faces.value() == 0
 
 
-def test_neutral_ramp_allows_up_to_256_steps(qapp):
-    """The Neutral grey ramp goes up to a full 8-bit ramp (256), not 64 (Knut).
-    Near-neutral greys keeps the lower 64 cap."""
+def test_neutral_ramp_steps_capped_at_64(qapp):
+    """Both neutral generators cap their step count at 64."""
     dlg = _AddPatchesDialog(_FakeSettings())
-    dlg._gen_neutral_n.setValue(256)
-    assert dlg._gen_neutral_n.value() == 256
+    dlg._gen_neutral_n.setValue(999)
+    assert dlg._gen_neutral_n.value() == 64
     dlg._gen_nearneutral_n.setValue(999)
-    assert dlg._gen_nearneutral_n.value() == 64       # still capped
+    assert dlg._gen_nearneutral_n.value() == 64
 
 
 def test_builtin_recipes_listed_in_load_setup_pulldown(qapp):

@@ -1649,7 +1649,7 @@ class _NewChartDialog(QDialog):
                                      "off-neutral tints; the two are independent, "
                                      "so you can have more pure greys than tinted "
                                      "ones, or either on its own."))
-        self._gen_neutral_n = _spin(1, 256, 16)   # up to a full 8-bit ramp (Knut)
+        self._gen_neutral_n = _spin(1, 64, 16)
         self._gen_neutral_count = _count_label()
         gg.addWidget(self._gen_neutral, 8, 0)
         gg.addWidget(QLabel(tr("steps:")), 8, 1)
