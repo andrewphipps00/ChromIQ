@@ -103,24 +103,19 @@ _GEN_SETS_HELP = (
     "with the blues, 'Per layer' × 'Layers' patches are spread across "
     "angled sheets so the green part of the range is covered with more "
     "depth.\n\n"
-    "• Near-neutral greys — a grey ramp from black to white and, at each "
-    "step, a ring of gentle tints just off neutral. This is what helps "
-    "greys print cleanly without an unwanted colour cast — the most "
-    "important region for a clean profile. You set how many grey steps "
-    "there are, how far the tints stray from neutral ('offset'), and how "
-    "many rings to circle each grey with ('rings'): one ring is six "
-    "tints, and each extra ring adds a wider, denser one (12, then 18 "
-    "tints) for fuller near-neutral coverage when you want it. Set rings "
-    "to 0 for a plain neutral ramp with no tints at all — a "
-    "black-and-white wedge — in which case 'offset' has no effect.\n\n"
-    "• More greys in between — extra grey steps dropped between the "
-    "near-neutral greys above, to make that all-important neutral ramp "
-    "denser where it shows most. It rides on 'Near-neutral greys', so it's "
-    "only available while that set is on, and follows its step count. "
-    "'Between' is how many greys to add in each gap (1 for the midpoints, 2 "
-    "for two evenly spaced, and so on), and 'rings' can circle each with the "
-    "same gentle tints as the set above — leave rings at 0, the usual "
-    "choice, for a plain, denser black-and-white ramp.\n\n"
+    "• Neutral grey ramp — a plain ramp of pure greys from black to white, "
+    "with no tints at all (a black-and-white wedge). This is the most "
+    "important region for a clean profile. 'Steps' is how many greys span "
+    "black to white. It is independent of Near-neutral greys below, so you "
+    "can choose the number of pure neutrals separately from the tinted "
+    "ones — more pure greys than tinted, or either on its own.\n\n"
+    "• Near-neutral greys — rings of gentle tints just off the neutral axis "
+    "at each grey level, which is what helps greys print cleanly without an "
+    "unwanted colour cast. This adds only the tints; the pure grey centres "
+    "come from Neutral grey ramp above. 'Steps' is how many levels get "
+    "rings, 'rings' is how many rings circle each grey (one ring is six "
+    "tints, each extra ring a wider, denser one — 12, then 18), and "
+    "'offset' is how far the tints stray from neutral.\n\n"
     "• Saturated edges — the most vivid colours the printer can manage. "
     "'Per edge' traces the twelve edges of the colour cube — the gamut "
     "wireframe (black up to each pure colour and on to white, plus the "
@@ -153,7 +148,7 @@ _GEN_SETS_HELP = (
     "whole chart lands on a round number with nothing left clumped or "
     "bare.\n\n"
     "Mix them freely — say a 3D cube for overall coverage plus "
-    "near-neutral greys for clean neutrals, or skin tones plus greens for "
+    "a neutral grey ramp for clean neutrals, or skin tones plus greens for "
     "portraits out in nature.\n\n"
     "• Ensure unique colours — when this is ticked and your sets happen to "
     "share a colour (for example a 3D cube and a grey ramp both include "
@@ -810,24 +805,19 @@ class _NewChartDialog(QDialog):
             "with the blues, 'Per layer' × 'Layers' patches are spread across "
             "angled sheets so the green part of the range is covered with more "
             "depth.\n\n"
-            "• Near-neutral greys — a grey ramp from black to white and, at each "
-            "step, a ring of gentle tints just off neutral. This is what helps "
-            "greys print cleanly without an unwanted colour cast — the most "
-            "important region for a clean profile. You set how many grey steps "
-            "there are, how far the tints stray from neutral ('offset'), and how "
-            "many rings to circle each grey with ('rings'): one ring is six "
-            "tints, and each extra ring adds a wider, denser one (12, then 18 "
-            "tints) for fuller near-neutral coverage when you want it. Set rings "
-            "to 0 for a plain neutral ramp with no tints at all — a "
-            "black-and-white wedge — in which case 'offset' has no effect.\n\n"
-            "• More greys in between — extra grey steps dropped between the "
-            "near-neutral greys above, to make that all-important neutral ramp "
-            "denser where it shows most. It rides on 'Near-neutral greys', so it's "
-            "only available while that set is on, and follows its step count. "
-            "'Between' is how many greys to add in each gap (1 for the midpoints, 2 "
-            "for two evenly spaced, and so on), and 'rings' can circle each with the "
-            "same gentle tints as the set above — leave rings at 0, the usual "
-            "choice, for a plain, denser black-and-white ramp.\n\n"
+            "• Neutral grey ramp — a plain ramp of pure greys from black to white, "
+            "with no tints at all (a black-and-white wedge). This is the most "
+            "important region for a clean profile. 'Steps' is how many greys span "
+            "black to white. It is independent of Near-neutral greys below, so you "
+            "can choose the number of pure neutrals separately from the tinted "
+            "ones — more pure greys than tinted, or either on its own.\n\n"
+            "• Near-neutral greys — rings of gentle tints just off the neutral axis "
+            "at each grey level, which is what helps greys print cleanly without an "
+            "unwanted colour cast. This adds only the tints; the pure grey centres "
+            "come from Neutral grey ramp above. 'Steps' is how many levels get "
+            "rings, 'rings' is how many rings circle each grey (one ring is six "
+            "tints, each extra ring a wider, denser one — 12, then 18), and "
+            "'offset' is how far the tints stray from neutral.\n\n"
             "• Saturated edges — the most vivid colours the printer can manage. "
             "'Per edge' traces the twelve edges of the colour cube — the gamut "
             "wireframe (black up to each pure colour and on to white, plus the "
@@ -860,7 +850,7 @@ class _NewChartDialog(QDialog):
             "whole chart lands on a round number with nothing left clumped or "
             "bare.\n\n"
             "Mix them freely — say a 3D cube for overall coverage plus "
-            "near-neutral greys for clean neutrals, or skin tones plus greens for "
+            "a neutral grey ramp for clean neutrals, or skin tones plus greens for "
             "portraits out in nature.\n\n"
             "• Ensure unique colours — when this is ticked and your sets happen to "
             "share a colour (for example a 3D cube and a grey ramp both include "
@@ -1162,14 +1152,14 @@ class _NewChartDialog(QDialog):
     # The widget suffixes whose checked/value state is remembered between
     # New-chart sessions (attribute = "_gen_<name>").
     _GEN_CHECKS = ("cube", "corners", "spirals", "skin", "blues", "greens",
-                   "sunrises", "flamingos", "greys", "greysmid", "edges", "hs",
-                   "pastel", "image", "whiteblack", "fill", "unique")
+                   "sunrises", "flamingos", "neutral", "nearneutral", "edges",
+                   "hs", "pastel", "image", "whiteblack", "fill", "unique")
     _GEN_SPINS = ("cube_n", "corners_edge", "spirals_end", "spirals_reach",
                   "skin_n", "skin_ranges", "blues_n", "blues_layers",
                   "greens_n", "greens_layers", "sunrises_n", "sunrises_layers",
                   "flamingos_n", "flamingos_layers",
-                  "greys_n", "greys_off",
-                  "greys_rings", "greysmid_n", "greysmid_rings", "greysmid_off",
+                  "neutral_n", "nearneutral_n", "nearneutral_rings",
+                  "nearneutral_off",
                   "edges_n", "edges_faces", "hs_n", "hs_reach",
                   "pastel_n", "pastel_layers", "image_n", "whiteblack_n",
                   "fill_to")
@@ -1190,7 +1180,7 @@ class _NewChartDialog(QDialog):
                    "td": False},
         "cb": {"cube": True, "corners": False, "spirals": False, "skin": True,
                "blues": True, "greens": True, "sunrises": True,
-               "flamingos": True, "greys": True, "greysmid": False,
+               "flamingos": True, "neutral": True, "nearneutral": True,
                "edges": False, "hs": False,
                "pastel": False, "image": False, "whiteblack": False,
                "fill": False, "unique": True},
@@ -1200,8 +1190,8 @@ class _NewChartDialog(QDialog):
                "blues_layers": 3, "greens_n": 64, "greens_layers": 3,
                "sunrises_n": 64, "sunrises_layers": 3,
                "flamingos_n": 64, "flamingos_layers": 3,
-               "greys_n": 16, "greys_off": 4, "greys_rings": 1,
-               "greysmid_n": 1, "greysmid_rings": 0, "greysmid_off": 4,
+               "neutral_n": 16, "nearneutral_n": 16, "nearneutral_rings": 1,
+               "nearneutral_off": 4,
                "edges_n": 1,
                "edges_faces": 0, "hs_n": 24, "hs_reach": 16, "pastel_n": 24,
                "pastel_layers": 2, "image_n": 24, "whiteblack_n": 1,
@@ -1226,6 +1216,43 @@ class _NewChartDialog(QDialog):
                    for n in self._GEN_SPINS},
         }
 
+    @staticmethod
+    def _migrate_legacy_gen_sets(st: dict) -> dict:
+        """Translate a pre-split saved state into the new neutral generators.
+
+        Before the split there was one combined **Near-neutral greys** (steps,
+        rings, offset) plus the short-lived **More greys in between**. Map the
+        combined set to **Neutral grey ramp** + **Near-neutral greys** by Knut's
+        rule (same steps for both; near-neutrals carries the rings/offset, and is
+        off when the old set had no rings), so old charts/recipes load forward
+        with their settings intact instead of resetting to defaults. A no-op for
+        states already in the new format. 'More greys in between' was transient,
+        so it is dropped."""
+        cb = st.get("cb") or {}
+        sp = st.get("sp") or {}
+        if "greys" not in cb and "greys_n" not in sp:
+            return st                       # already new format (or no greys)
+        cb = dict(cb)
+        sp = dict(sp)
+        steps = int(sp.get("greys_n", 16))
+        rings = int(sp.get("greys_rings", 1))
+        offset = int(sp.get("greys_off", 4))
+        greys_on = bool(cb.get("greys", False))
+        cb.setdefault("neutral", greys_on)
+        cb.setdefault("nearneutral", greys_on and rings >= 1)
+        sp.setdefault("neutral_n", steps)
+        sp.setdefault("nearneutral_n", steps)
+        sp.setdefault("nearneutral_rings", max(1, rings))
+        sp.setdefault("nearneutral_off", offset)
+        cb.pop("greys", None)
+        cb.pop("greysmid", None)
+        for k in ("greys_n", "greys_off", "greys_rings",
+                  "greysmid_n", "greysmid_rings", "greysmid_off"):
+            sp.pop(k, None)
+        out = dict(st)
+        out["cb"], out["sp"] = cb, sp
+        return out
+
     def _apply_gen_sets(self, st: dict) -> None:
         """Set every colour-set checkbox + size spin from a {"cb":…, "sp":…} dict.
 
@@ -1234,10 +1261,12 @@ class _NewChartDialog(QDialog):
         a generator existed (e.g. an old file with no Gamut-corner emphasis or
         Colour extremes) loads that generator **off**, rather than leaving whatever
         was last ticked (Knut, #78). Unknown keys are ignored; the retired
-        ``edges_auto`` flag from old states is harmless.
+        ``edges_auto`` flag from old states is harmless. Pre-split states are
+        migrated first (old combined greys → ramp + near-neutrals).
 
         Does not touch the source mode or any chart/layout widget, so subclasses
         without those can reuse it."""
+        st = self._migrate_legacy_gen_sets(st)
         sp = st.get("sp") or {}
         for n in self._GEN_SPINS:
             w = getattr(self, f"_gen_{n}", None)
@@ -1474,8 +1503,10 @@ class _NewChartDialog(QDialog):
         gg.addWidget(self._gen_corners_count, 2, 7)
 
         # Colour extremes — Highlights-&-shadows-style spiral cones just inside the
-        # six chromatic corners (grid row 3). White/black are left to Highlights &
-        # shadows. 'per end' / 'reach' mirror H&S (reuses the 'per end:' label).
+        # six chromatic corners. Placed directly above Highlights & shadows (grid
+        # row 10): the two are the tonal/chromatic "extremes" pair, and the de-dup
+        # then spaces this set against everything above it. White/black are left to
+        # Highlights & shadows. 'per end' / 'reach' mirror H&S (reuses 'per end:').
         self._gen_spirals = QCheckBox(tr("Colour extremes"), self._gen_panel)
         self._gen_spirals.setToolTip(tr("Adds detail just inside the six most "
                                      "saturated colour corners of the printer's range "
@@ -1490,12 +1521,12 @@ class _NewChartDialog(QDialog):
         self._gen_spirals_end = _spin(1, 100, 8)
         self._gen_spirals_reach = _spin(2, 45, 16)
         self._gen_spirals_count = _count_label()
-        gg.addWidget(self._gen_spirals, 3, 0)
-        gg.addWidget(QLabel(tr("per end:")), 3, 1)
-        gg.addWidget(self._gen_spirals_end, 3, 2)
-        gg.addWidget(QLabel(tr("reach:")), 3, 3)
-        gg.addWidget(self._gen_spirals_reach, 3, 4)
-        gg.addWidget(self._gen_spirals_count, 3, 7)
+        gg.addWidget(self._gen_spirals, 10, 0)
+        gg.addWidget(QLabel(tr("per end:")), 10, 1)
+        gg.addWidget(self._gen_spirals_end, 10, 2)
+        gg.addWidget(QLabel(tr("reach:")), 10, 3)
+        gg.addWidget(self._gen_spirals_reach, 10, 4)
+        gg.addWidget(self._gen_spirals_count, 10, 7)
 
         # Fitzpatrick skin tones — per-type ramp × parallel hue ranges.
         self._gen_skin = QCheckBox(tr("Skin tones (Fitzpatrick)"), self._gen_panel)
@@ -1507,12 +1538,12 @@ class _NewChartDialog(QDialog):
         self._gen_skin_n = _spin(1, 36, 8)
         self._gen_skin_ranges = _spin(1, 5, 3)
         self._gen_skin_count = _count_label()
-        gg.addWidget(self._gen_skin, 4, 0)
-        gg.addWidget(QLabel(tr("per type:")), 4, 1)
-        gg.addWidget(self._gen_skin_n, 4, 2)
-        gg.addWidget(QLabel(tr("ranges:")), 4, 3)
-        gg.addWidget(self._gen_skin_ranges, 4, 4)
-        gg.addWidget(self._gen_skin_count, 4, 7)
+        gg.addWidget(self._gen_skin, 3, 0)
+        gg.addWidget(QLabel(tr("per type:")), 3, 1)
+        gg.addWidget(self._gen_skin_n, 3, 2)
+        gg.addWidget(QLabel(tr("ranges:")), 3, 3)
+        gg.addWidget(self._gen_skin_ranges, 3, 4)
+        gg.addWidget(self._gen_skin_count, 3, 7)
 
         # Enhanced blues / turquoise.
         self._gen_blues = QCheckBox(tr("Oceans (blues)"), self._gen_panel)
@@ -1524,12 +1555,12 @@ class _NewChartDialog(QDialog):
         self._gen_blues_n = _spin(1, 200, 64)
         self._gen_blues_layers = _spin(1, 10, 3)
         self._gen_blues_count = _count_label()
-        gg.addWidget(self._gen_blues, 5, 0)
-        gg.addWidget(QLabel(tr("per layer:")), 5, 1)
-        gg.addWidget(self._gen_blues_n, 5, 2)
-        gg.addWidget(QLabel(tr("layers:")), 5, 3)
-        gg.addWidget(self._gen_blues_layers, 5, 4)
-        gg.addWidget(self._gen_blues_count, 5, 7)
+        gg.addWidget(self._gen_blues, 4, 0)
+        gg.addWidget(QLabel(tr("per layer:")), 4, 1)
+        gg.addWidget(self._gen_blues_n, 4, 2)
+        gg.addWidget(QLabel(tr("layers:")), 4, 3)
+        gg.addWidget(self._gen_blues_layers, 4, 4)
+        gg.addWidget(self._gen_blues_count, 4, 7)
 
         # Enhanced greens (foliage).
         self._gen_greens = QCheckBox(tr("Foliage (greens)"), self._gen_panel)
@@ -1541,12 +1572,12 @@ class _NewChartDialog(QDialog):
         self._gen_greens_n = _spin(1, 200, 64)
         self._gen_greens_layers = _spin(1, 10, 3)
         self._gen_greens_count = _count_label()
-        gg.addWidget(self._gen_greens, 6, 0)
-        gg.addWidget(QLabel(tr("per layer:")), 6, 1)
-        gg.addWidget(self._gen_greens_n, 6, 2)
-        gg.addWidget(QLabel(tr("layers:")), 6, 3)
-        gg.addWidget(self._gen_greens_layers, 6, 4)
-        gg.addWidget(self._gen_greens_count, 6, 7)
+        gg.addWidget(self._gen_greens, 5, 0)
+        gg.addWidget(QLabel(tr("per layer:")), 5, 1)
+        gg.addWidget(self._gen_greens_n, 5, 2)
+        gg.addWidget(QLabel(tr("layers:")), 5, 3)
+        gg.addWidget(self._gen_greens_layers, 5, 4)
+        gg.addWidget(self._gen_greens_count, 5, 7)
 
         # Sunrises — the warm band (yellows, oranges, reds, pinks).
         self._gen_sunrises = QCheckBox(tr("Sunrises (warm)"), self._gen_panel)
@@ -1560,12 +1591,12 @@ class _NewChartDialog(QDialog):
         self._gen_sunrises_n = _spin(1, 200, 64)
         self._gen_sunrises_layers = _spin(1, 10, 3)
         self._gen_sunrises_count = _count_label()
-        gg.addWidget(self._gen_sunrises, 7, 0)
-        gg.addWidget(QLabel(tr("per layer:")), 7, 1)
-        gg.addWidget(self._gen_sunrises_n, 7, 2)
-        gg.addWidget(QLabel(tr("layers:")), 7, 3)
-        gg.addWidget(self._gen_sunrises_layers, 7, 4)
-        gg.addWidget(self._gen_sunrises_count, 7, 7)
+        gg.addWidget(self._gen_sunrises, 6, 0)
+        gg.addWidget(QLabel(tr("per layer:")), 6, 1)
+        gg.addWidget(self._gen_sunrises_n, 6, 2)
+        gg.addWidget(QLabel(tr("layers:")), 6, 3)
+        gg.addWidget(self._gen_sunrises_layers, 6, 4)
+        gg.addWidget(self._gen_sunrises_count, 6, 7)
 
         # Flamingos — the pink / magenta / indigo band the other bands leave out.
         self._gen_flamingos = QCheckBox(tr("Flamingos (pinks)"), self._gen_panel)
@@ -1580,75 +1611,64 @@ class _NewChartDialog(QDialog):
         self._gen_flamingos_n = _spin(1, 200, 64)
         self._gen_flamingos_layers = _spin(1, 10, 3)
         self._gen_flamingos_count = _count_label()
-        gg.addWidget(self._gen_flamingos, 8, 0)
-        gg.addWidget(QLabel(tr("per layer:")), 8, 1)
-        gg.addWidget(self._gen_flamingos_n, 8, 2)
-        gg.addWidget(QLabel(tr("layers:")), 8, 3)
-        gg.addWidget(self._gen_flamingos_layers, 8, 4)
-        gg.addWidget(self._gen_flamingos_count, 8, 7)
+        gg.addWidget(self._gen_flamingos, 7, 0)
+        gg.addWidget(QLabel(tr("per layer:")), 7, 1)
+        gg.addWidget(self._gen_flamingos_n, 7, 2)
+        gg.addWidget(QLabel(tr("layers:")), 7, 3)
+        gg.addWidget(self._gen_flamingos_layers, 7, 4)
+        gg.addWidget(self._gen_flamingos_count, 7, 7)
 
-        # Near-neutral greys — neutral ramp + 6 hue rings per step.
-        self._gen_greys = QCheckBox(tr("Near-neutral greys"), self._gen_panel)
-        self._gen_greys.setChecked(True)
-        self._gen_greys.setToolTip(tr("A neutral grey ramp plus, at each step, "
-                                   "rings of small hue tints around the neutral "
-                                   "axis. 'Rings' is how many rings circle each "
-                                   "grey (6, 12, 18 tints) for a denser "
-                                   "near-neutral cluster — set it to 0 for a "
-                                   "plain neutral ramp with no tints (a "
-                                   "black-and-white wedge). 'Offset' sets the "
-                                   "first ring's distance, and has no effect when "
-                                   "rings is 0."))
-        self._gen_greys_n = _spin(1, 64, 16)
-        self._gen_greys_rings = _spin(0, 3, 1)
-        self._gen_greys_off = _spin(1, 50, 4)
-        self._gen_greys_count = _count_label()
-        # Kept as a field so it can be greyed out alongside the offset spin when
-        # rings is 0 (offset then has no effect).
-        self._gen_greys_off_label = QLabel(tr("offset:"))
-        gg.addWidget(self._gen_greys, 9, 0)
+        # Neutral grey ramp — pure greys black→white, no tints (a B&W wedge).
+        # Independent of Near-neutral greys below, so the count of pure neutrals
+        # is chosen separately from the near-neutral hue coverage.
+        self._gen_neutral = QCheckBox(tr("Neutral grey ramp"), self._gen_panel)
+        self._gen_neutral.setChecked(True)
+        self._gen_neutral.setToolTip(tr("A plain neutral grey ramp from black to "
+                                     "white — pure greys with no hue tints (a "
+                                     "black-and-white wedge). This is the most "
+                                     "important region for a clean profile. "
+                                     "'Steps' is how many greys span black to "
+                                     "white. Pair it with 'Near-neutral greys' "
+                                     "below when you also want the gentle "
+                                     "off-neutral tints; the two are independent, "
+                                     "so you can have more pure greys than tinted "
+                                     "ones, or either on its own."))
+        self._gen_neutral_n = _spin(1, 64, 16)
+        self._gen_neutral_count = _count_label()
+        gg.addWidget(self._gen_neutral, 8, 0)
+        gg.addWidget(QLabel(tr("steps:")), 8, 1)
+        gg.addWidget(self._gen_neutral_n, 8, 2)
+        gg.addWidget(self._gen_neutral_count, 8, 7)
+
+        # Near-neutral greys — ONLY the rings of gentle hue tints around each
+        # neutral level (no pure centre — that's the ramp's job above).
+        self._gen_nearneutral = QCheckBox(tr("Near-neutral greys"),
+                                          self._gen_panel)
+        self._gen_nearneutral.setChecked(True)
+        self._gen_nearneutral.setToolTip(tr("Rings of small hue tints just off the "
+                                         "neutral axis at each grey level — what "
+                                         "helps greys print cleanly without an "
+                                         "unwanted colour cast. This adds only the "
+                                         "tints (the pure grey centres come from "
+                                         "'Neutral grey ramp' above). 'Steps' is "
+                                         "how many levels from black to white get "
+                                         "rings, 'rings' is how many rings circle "
+                                         "each (6, 12, 18 tints) for a denser "
+                                         "near-neutral cluster, and 'offset' sets "
+                                         "the first ring's distance from neutral."))
+        self._gen_nearneutral_n = _spin(1, 64, 16)
+        self._gen_nearneutral_rings = _spin(1, 3, 1)
+        self._gen_nearneutral_off = _spin(1, 50, 4)
+        self._gen_nearneutral_count = _count_label()
+        self._gen_nearneutral_off_label = QLabel(tr("offset:"))
+        gg.addWidget(self._gen_nearneutral, 9, 0)
         gg.addWidget(QLabel(tr("steps:")), 9, 1)
-        gg.addWidget(self._gen_greys_n, 9, 2)
+        gg.addWidget(self._gen_nearneutral_n, 9, 2)
         gg.addWidget(QLabel(tr("rings:")), 9, 3)
-        gg.addWidget(self._gen_greys_rings, 9, 4)
-        gg.addWidget(self._gen_greys_off_label, 9, 5)
-        gg.addWidget(self._gen_greys_off, 9, 6)
-        gg.addWidget(self._gen_greys_count, 9, 7)
-
-        # More greys in between — extra neutral steps placed between the
-        # Near-neutral greys above, to densify the most visible part of the
-        # ramp. It rides on that set: it follows its 'steps' count and is only
-        # available while it is on. 'between' is how many greys go in each gap.
-        self._gen_greysmid = QCheckBox(tr("More greys in between"),
-                                       self._gen_panel)
-        self._gen_greysmid.setToolTip(tr("Extra neutral greys placed evenly "
-                                      "between the Near-neutral greys steps "
-                                      "above, to make the ramp denser where it "
-                                      "shows most. It follows that set's 'steps' "
-                                      "count and is only available while it is "
-                                      "on. 'Between' is how many greys to insert "
-                                      "in each gap (1 = the midpoint, 2 = two "
-                                      "evenly-spaced, …). 'Rings' adds hue tints "
-                                      "around each, exactly like the set above — "
-                                      "leave it at 0 for a plain, denser "
-                                      "black-and-white ramp. 'Offset' sets the "
-                                      "first ring's distance and has no effect "
-                                      "when rings is 0."))
-        self._gen_greysmid_n = _spin(1, 8, 1)
-        self._gen_greysmid_rings = _spin(0, 3, 0)
-        self._gen_greysmid_off = _spin(1, 50, 4)
-        self._gen_greysmid_count = _count_label()
-        # Kept as a field so it can be greyed out alongside the offset spin when
-        # rings is 0 (offset then has no effect).
-        self._gen_greysmid_off_label = QLabel(tr("offset:"))
-        gg.addWidget(self._gen_greysmid, 10, 0)
-        gg.addWidget(QLabel(tr("between:")), 10, 1)
-        gg.addWidget(self._gen_greysmid_n, 10, 2)
-        gg.addWidget(QLabel(tr("rings:")), 10, 3)
-        gg.addWidget(self._gen_greysmid_rings, 10, 4)
-        gg.addWidget(self._gen_greysmid_off_label, 10, 5)
-        gg.addWidget(self._gen_greysmid_off, 10, 6)
-        gg.addWidget(self._gen_greysmid_count, 10, 7)
+        gg.addWidget(self._gen_nearneutral_rings, 9, 4)
+        gg.addWidget(self._gen_nearneutral_off_label, 9, 5)
+        gg.addWidget(self._gen_nearneutral_off, 9, 6)
+        gg.addWidget(self._gen_nearneutral_count, 9, 7)
 
         # Saturated edges — the gamut boundary, locked to the 3D cube's grid so
         # the infill stays even at any density (Knut, #78). Placed directly under
@@ -1752,8 +1772,8 @@ class _NewChartDialog(QDialog):
                                         "to include; they're kept even when "
                                         "'Ensure unique colours' is on, which is "
                                         "handy for averaging repeats. The 3D cube "
-                                        "and near-neutral greys already include one "
-                                        "of each, and any they provide counts "
+                                        "and the neutral grey ramp already include "
+                                        "one of each, and any they provide counts "
                                         "toward your number."))
         self._gen_whiteblack_n = _spin(1, 50, 1)
         self._gen_whiteblack_count = _count_label()
@@ -1786,14 +1806,14 @@ class _NewChartDialog(QDialog):
             (0, self._gen_cube,   tr("3D RGB cube")),
             (1, self._gen_edges,  tr("Saturated edges")),
             (2, self._gen_corners, tr("Gamut-corner emphasis")),
-            (3, self._gen_spirals, tr("Colour extremes")),
-            (4, self._gen_skin,   tr("Skin tones (Fitzpatrick)")),
-            (5, self._gen_blues,  tr("Oceans (blues)")),
-            (6, self._gen_greens, tr("Foliage (greens)")),
-            (7, self._gen_sunrises, tr("Sunrises (warm)")),
-            (8, self._gen_flamingos, tr("Flamingos (pinks)")),
-            (9, self._gen_greys,  tr("Near-neutral greys")),
-            (10, self._gen_greysmid, tr("More greys in between")),
+            (3, self._gen_skin,   tr("Skin tones (Fitzpatrick)")),
+            (4, self._gen_blues,  tr("Oceans (blues)")),
+            (5, self._gen_greens, tr("Foliage (greens)")),
+            (6, self._gen_sunrises, tr("Sunrises (warm)")),
+            (7, self._gen_flamingos, tr("Flamingos (pinks)")),
+            (8, self._gen_neutral, tr("Neutral grey ramp")),
+            (9, self._gen_nearneutral, tr("Near-neutral greys")),
+            (10, self._gen_spirals, tr("Colour extremes")),
             (11, self._gen_hs,     tr("Highlights & shadows")),
             (12, self._gen_pastel, tr("Pastels")),
             (13, self._gen_image,  tr("From image")),
@@ -1837,8 +1857,8 @@ class _NewChartDialog(QDialog):
 
         for cb in (self._gen_cube, self._gen_corners, self._gen_spirals,
                    self._gen_skin, self._gen_blues, self._gen_greens,
-                   self._gen_sunrises, self._gen_flamingos, self._gen_greys,
-                   self._gen_greysmid, self._gen_edges, self._gen_hs,
+                   self._gen_sunrises, self._gen_flamingos, self._gen_neutral,
+                   self._gen_nearneutral, self._gen_edges, self._gen_hs,
                    self._gen_pastel, self._gen_image, self._gen_whiteblack,
                    self._gen_fill):
             cb.toggled.connect(self._update_gen_counts)
@@ -1901,25 +1921,18 @@ class _NewChartDialog(QDialog):
                       + G.gamut_faces_between_count(self._edges_cube_n(),
                                                     self._gen_edges_faces.value())),
              self._gen_edges_count),
-            # Gamut-corner emphasis (edge patches) sits third, then Corner spirals
-            # fourth — matching their panel rows, so the de-dup spaces them against
-            # the cube/edges boundary above. Corner edges are slotted into the gaps
-            # on the edge lines, so they need the patches placed so far (cube +
-            # edges) — _build_generated_program special-cases that; this builder is
-            # the no-existing fallback.
+            # Gamut-corner emphasis (edge patches) sits third — matching its panel
+            # row — so the de-dup spaces it against the cube/edges boundary above.
+            # Corner edges are slotted into the gaps on the edge lines, so they need
+            # the patches placed so far (cube + edges) — _build_generated_program
+            # special-cases that; this builder is the no-existing fallback. (Colour
+            # extremes now sits lower, just above Highlights & shadows.)
             (self._gen_corners,
              lambda: G.gamut_corner_edges(self._gen_corners_edge.value(),
                                           None, self._corners_need_tips()),
              lambda: G.gamut_corner_edges_count(self._gen_corners_edge.value(),
                                                 self._corners_need_tips()),
              self._gen_corners_count),
-            (self._gen_spirals,
-             lambda: G.gamut_corners(self._gen_spirals_end.value(),
-                                     float(self._gen_spirals_reach.value()),
-                                     self._spirals_need_tips()),
-             lambda: G.gamut_corners_count(self._gen_spirals_end.value(),
-                                           self._spirals_need_tips()),
-             self._gen_spirals_count),
             (self._gen_skin,
              lambda: G.skin_tones(self._gen_skin_n.value(),
                                   self._gen_skin_ranges.value()),
@@ -1954,41 +1967,44 @@ class _NewChartDialog(QDialog):
              lambda: G.flamingos_count(self._gen_flamingos_n.value()
                                        * self._gen_flamingos_layers.value()),
              self._gen_flamingos_count),
-            (self._gen_greys,
-             lambda: G.near_neutral_greys(self._gen_greys_n.value(),
-                                          float(self._gen_greys_off.value()),
-                                          self._gen_greys_rings.value()),
-             lambda: G.near_neutral_greys_count(self._gen_greys_n.value(),
-                                                self._gen_greys_rings.value()),
-             self._gen_greys_count),
-            # More greys in between — rides on Near-neutral greys directly above:
-            # it reads that set's 'steps' for its grid and contributes nothing
-            # while that set is off (the checkbox is disabled then too), so it can
-            # never place greys with no parent ramp to sit between (Knut, #78).
-            (self._gen_greysmid,
-             lambda: (G.near_neutral_greys_between(
-                 self._gen_greys_n.value(),
-                 self._gen_greysmid_n.value(),
-                 float(self._gen_greysmid_off.value()),
-                 self._gen_greysmid_rings.value())
-                 if self._gen_greys.isChecked() else []),
-             lambda: (G.near_neutral_greys_between_count(
-                 self._gen_greys_n.value(),
-                 self._gen_greysmid_n.value(),
-                 self._gen_greysmid_rings.value())
-                 if self._gen_greys.isChecked() else 0),
-             self._gen_greysmid_count),
+            # Neutral grey ramp (pure greys) then Near-neutral greys (the rings),
+            # adjacent and independent. Together they reproduce the old combined
+            # near-neutral set; split so their densities are chosen separately.
+            (self._gen_neutral,
+             lambda: G.neutral_ramp(self._gen_neutral_n.value()),
+             lambda: G.neutral_ramp_count(self._gen_neutral_n.value()),
+             self._gen_neutral_count),
+            (self._gen_nearneutral,
+             lambda: G.near_neutrals(self._gen_nearneutral_n.value(),
+                                     float(self._gen_nearneutral_off.value()),
+                                     self._gen_nearneutral_rings.value()),
+             lambda: G.near_neutrals_count(self._gen_nearneutral_n.value(),
+                                           self._gen_nearneutral_rings.value()),
+             self._gen_nearneutral_count),
+            # Colour extremes sits just above Highlights & shadows (its panel row):
+            # the chromatic-corner counterpart to H&S's tonal ends. By now the cube,
+            # edges and Gamut-corner emphasis are already placed, so the tip-owner
+            # chain (checkbox-based) is unaffected and the de-dup spaces these spiral
+            # patches against everything above — one generator at a time, top-down.
+            (self._gen_spirals,
+             lambda: G.gamut_corners(self._gen_spirals_end.value(),
+                                     float(self._gen_spirals_reach.value()),
+                                     self._spirals_need_tips()),
+             lambda: G.gamut_corners_count(self._gen_spirals_end.value(),
+                                           self._spirals_need_tips()),
+             self._gen_spirals_count),
             (self._gen_hs,
-             # Highlights & shadows interlocks with Near-neutral greys: when that
-             # set is on, H&S stays just outside its rings (no colour printed
-             # twice); when off, H&S also fills the near-neutral light/dark tones.
+             # Highlights & shadows interlocks with Near-neutral greys (the rings):
+             # when that set is on, H&S stays just outside its rings (no colour
+             # printed twice); when off, H&S also fills the near-neutral light/dark
+             # tones. It keys off the near-neutral rings, not the pure ramp.
              lambda: G.highlight_shadow_detail(
                  self._gen_hs_n.value(),
                  float(self._gen_hs_reach.value()),
-                 greys_enabled=self._gen_greys.isChecked(),
-                 greys_steps=self._gen_greys_n.value(),
-                 greys_offset=float(self._gen_greys_off.value()),
-                 greys_rings=self._gen_greys_rings.value()),
+                 greys_enabled=self._gen_nearneutral.isChecked(),
+                 greys_steps=self._gen_nearneutral_n.value(),
+                 greys_offset=float(self._gen_nearneutral_off.value()),
+                 greys_rings=self._gen_nearneutral_rings.value()),
              lambda: G.highlight_shadow_detail_count(self._gen_hs_n.value()),
              self._gen_hs_count),
             (self._gen_pastel,
@@ -2070,8 +2086,10 @@ class _NewChartDialog(QDialog):
                                   self._gen_sunrises_layers)),
             (self._gen_flamingos, (self._gen_flamingos_n,
                                    self._gen_flamingos_layers)),
-            (self._gen_greys, (self._gen_greys_n, self._gen_greys_off,
-                               self._gen_greys_rings)),
+            (self._gen_neutral, (self._gen_neutral_n,)),
+            (self._gen_nearneutral, (self._gen_nearneutral_n,
+                                     self._gen_nearneutral_off,
+                                     self._gen_nearneutral_rings)),
             (self._gen_edges, (self._gen_edges_n, self._gen_edges_faces)),
             (self._gen_hs, (self._gen_hs_n, self._gen_hs_reach)),
             (self._gen_pastel, (self._gen_pastel_n, self._gen_pastel_layers)),
@@ -2081,24 +2099,9 @@ class _NewChartDialog(QDialog):
         ):
             for s in spins:
                 s.setEnabled(cb.isChecked())
-        # Near-neutral greys: offset has no effect with 0 rings, so grey out the
-        # offset spin + its label when rings is 0 (or the set itself is off).
-        off_on = self._gen_greys.isChecked() and self._gen_greys_rings.value() > 0
-        self._gen_greys_off.setEnabled(off_on)
-        self._gen_greys_off_label.setEnabled(off_on)
-        # More greys in between rides on Near-neutral greys: the whole row is
-        # only usable while that set is on (it has no ramp to sit between
-        # otherwise). Its checked state is kept — a ticked-but-disabled box reads
-        # as off (the :checked:disabled QSS) and its tick returns when the parent
-        # comes back. Its own offset follows the same 0-rings rule as above.
-        greys_on = self._gen_greys.isChecked()
-        self._gen_greysmid.setEnabled(greys_on)
-        gm_on = greys_on and self._gen_greysmid.isChecked()
-        self._gen_greysmid_n.setEnabled(gm_on)
-        self._gen_greysmid_rings.setEnabled(gm_on)
-        gm_off_on = gm_on and self._gen_greysmid_rings.value() > 0
-        self._gen_greysmid_off.setEnabled(gm_off_on)
-        self._gen_greysmid_off_label.setEnabled(gm_off_on)
+        # Near-neutral greys always has at least one ring, so its offset is always
+        # meaningful — grey the offset label alongside the spin (set on/off only).
+        self._gen_nearneutral_off_label.setEnabled(self._gen_nearneutral.isChecked())
         total = 0
         for cb, _build, count, label in self._gen_specs():
             n = count()
@@ -2116,12 +2119,14 @@ class _NewChartDialog(QDialog):
         # existing chart's own white/black (#76, Knut). The white/black tips come
         # from the boundary tip-owner chain (3D cube → Saturated edges → Gamut-
         # corner emphasis — whichever is on supplies them, incl. white/black), and
-        # from greys with ≥2 steps. Colour extremes never lands on white/black
-        # (six chromatic corners only), so it doesn't count here (Knut, #78).
+        # from the Neutral grey ramp with ≥2 steps (its endpoints are pure black
+        # and white). Near-neutral greys is only off-axis tints, never pure
+        # white/black; Colour extremes never lands on white/black either (six
+        # chromatic corners only), so neither counts here (Knut, #78).
         corner = ((1 if (self._gen_cube.isChecked() or self._gen_edges.isChecked()
                          or self._gen_corners.isChecked()) else 0)
-                  + (1 if (self._gen_greys.isChecked()
-                           and self._gen_greys_n.value() >= 2) else 0))
+                  + (1 if (self._gen_neutral.isChecked()
+                           and self._gen_neutral_n.value() >= 2) else 0))
         sets_have = (1 if corner else 0) if self._gen_unique.isChecked() else corner
         wb_n = G.white_black_count(self._gen_whiteblack_n.value(),
                                    sets_have, sets_have)

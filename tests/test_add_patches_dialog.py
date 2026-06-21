@@ -53,31 +53,43 @@ def test_generate_mode_returns_generated_program(qapp):
     assert len(dlg.result_program) == 64
 
 
-def test_greys_zero_rings_greys_out_offset_and_counts_steps(qapp):
+def test_neutral_ramp_alone_is_pure_greys(qapp):
+    # The Neutral grey ramp on its own produces only pure greys (no tints).
     dlg = _AddPatchesDialog(_FakeSettings())
     dlg._add_mode_gen.setChecked(True)
     dlg._refresh_add_mode()
     for n in dlg._GEN_CHECKS:
         getattr(dlg, f"_gen_{n}").setChecked(False)
-    dlg._gen_greys.setChecked(True)
-    dlg._gen_greys_n.setValue(12)
-
-    # rings > 0: offset is live, count includes the tint rings.
-    dlg._gen_greys_rings.setValue(1)
+    dlg._gen_neutral.setChecked(True)
+    dlg._gen_neutral_n.setValue(12)
     dlg._update_gen_counts()
-    assert dlg._gen_greys_off.isEnabled()
-    assert dlg._gen_greys_off_label.isEnabled()
-
-    # rings == 0: pure neutral ramp, offset disabled, count == steps.
-    dlg._gen_greys_rings.setValue(0)
-    dlg._update_gen_counts()
-    assert not dlg._gen_greys_off.isEnabled()
-    assert not dlg._gen_greys_off_label.isEnabled()
+    assert "12" in dlg._gen_neutral_count.text()
     dlg._on_add()
     assert dlg.result_program is not None
     assert len(dlg.result_program) == 12
     for r, g, b in dlg.result_program:
         assert r == g == b
+
+
+def test_neutral_and_near_neutrals_split_reproduces_old_total(qapp):
+    # ramp(16) + near-neutrals(16, rings 1) = 16 + 16·6 = 112, the old combined
+    # near-neutral greys total; near-neutrals adds only the off-axis tints.
+    dlg = _AddPatchesDialog(_FakeSettings())
+    dlg._add_mode_gen.setChecked(True)
+    dlg._refresh_add_mode()
+    for n in dlg._GEN_CHECKS:
+        getattr(dlg, f"_gen_{n}").setChecked(False)
+    dlg._gen_unique.setChecked(False)
+    dlg._gen_neutral.setChecked(True)
+    dlg._gen_neutral_n.setValue(16)
+    dlg._gen_nearneutral.setChecked(True)
+    dlg._gen_nearneutral_n.setValue(16)
+    dlg._gen_nearneutral_rings.setValue(1)
+    dlg._update_gen_counts()
+    assert "16" in dlg._gen_neutral_count.text()
+    assert "96" in dlg._gen_nearneutral_count.text()       # 16·6
+    assert dlg._gen_nearneutral_off.isEnabled()            # offset always live
+    assert len(dlg._build_generated_program()) == 16 + 96
 
 
 def test_generate_choices_persist_to_settings(qapp):
@@ -389,9 +401,9 @@ def test_white_black_added_over_existing_chart(qapp):
                 (0.0, 0.0, 0.0), (0.0, 0.0, 0.0), (50.0, 50.0, 50.0)]
     dlg = _AddPatchesDialog(_FakeSettings(), existing_patches=existing)
     for cb in (dlg._gen_cube, dlg._gen_skin, dlg._gen_blues, dlg._gen_greens,
-               dlg._gen_sunrises, dlg._gen_flamingos, dlg._gen_greys,
-               dlg._gen_edges, dlg._gen_hs, dlg._gen_pastel, dlg._gen_image,
-               dlg._gen_fill):
+               dlg._gen_sunrises, dlg._gen_flamingos, dlg._gen_neutral,
+               dlg._gen_nearneutral, dlg._gen_edges, dlg._gen_hs,
+               dlg._gen_pastel, dlg._gen_image, dlg._gen_fill):
         cb.setChecked(False)
     dlg._gen_whiteblack.setChecked(True)
     dlg._gen_whiteblack_n.setValue(2)
@@ -507,58 +519,70 @@ def test_colour_extremes_in_program_and_persist(qapp):
     assert dlg._gen_spirals_end.value() == 8 and dlg._gen_spirals_reach.value() == 16
 
 
-def test_greys_between_rides_on_parent_and_persists(qapp):
-    """More greys in between: (steps-1)*between greys inserted between the parent
-    ramp, gated on Near-neutral greys, with its values saved and restored."""
+def test_neutral_generators_persist_and_restore(qapp):
+    """The two split generators save their state and 'Restore defaults' brings
+    them back to the baseline derived from the old near-neutral greys."""
+    dlg = _AddPatchesDialog(_FakeSettings())
+    dlg._add_mode_gen.setChecked(True)
+    dlg._refresh_add_mode()
+    dlg._gen_neutral.setChecked(False)
+    dlg._gen_neutral_n.setValue(24)
+    dlg._gen_nearneutral.setChecked(True)
+    dlg._gen_nearneutral_n.setValue(20)
+    dlg._gen_nearneutral_rings.setValue(3)
+    dlg._gen_nearneutral_off.setValue(6)
+    st = dlg._collect_gen_sets()
+    assert st["cb"]["neutral"] is False and st["cb"]["nearneutral"] is True
+    assert st["sp"]["neutral_n"] == 24
+    assert st["sp"]["nearneutral_n"] == 20
+    assert st["sp"]["nearneutral_rings"] == 3 and st["sp"]["nearneutral_off"] == 6
+    # Restore factory → both back on at the old-greys-derived defaults.
+    dlg._apply_gen_sets({"cb": dlg._GEN_FACTORY["cb"],
+                         "sp": dlg._GEN_FACTORY["sp"]})
+    assert dlg._gen_neutral.isChecked() and dlg._gen_nearneutral.isChecked()
+    assert dlg._gen_neutral_n.value() == 16
+    assert dlg._gen_nearneutral_n.value() == 16
+    assert dlg._gen_nearneutral_rings.value() == 1
+    assert dlg._gen_nearneutral_off.value() == 4
+
+
+def test_legacy_greys_state_migrates_to_split(qapp):
+    """A pre-split saved state (combined 'greys' + 'greysmid') loads forward
+    into the two new generators, preserving the user's settings and total."""
     dlg = _AddPatchesDialog(_FakeSettings())
     dlg._add_mode_gen.setChecked(True)
     dlg._refresh_add_mode()
     for n in dlg._GEN_CHECKS:
         getattr(dlg, f"_gen_{n}").setChecked(False)
     dlg._gen_unique.setChecked(False)
-    # Parent ramp on at 16 pure steps; in-between adds 15 midpoints (rings 0).
-    dlg._gen_greys.setChecked(True)
-    dlg._gen_greys_n.setValue(16)
-    dlg._gen_greys_rings.setValue(0)
-    dlg._gen_greysmid.setChecked(True)
-    dlg._gen_greysmid_n.setValue(1)
-    dlg._gen_greysmid_rings.setValue(0)
+    # Old combined near-neutral greys: 20 steps, 2 rings, offset 4 (+ greysmid).
+    # Spell out the other (old-format) sets as off so _apply_gen_sets doesn't
+    # fall them back to the factory ON state — isolating the migrated total.
+    legacy_cb = {n: False for n in
+                 ("cube", "corners", "spirals", "skin", "blues", "greens",
+                  "sunrises", "flamingos", "edges", "hs", "pastel", "image",
+                  "whiteblack", "fill", "unique")}
+    legacy_cb.update({"greys": True, "greysmid": True})
+    legacy = {"cb": legacy_cb,
+              "sp": {"greys_n": 20, "greys_rings": 2, "greys_off": 4,
+                     "greysmid_n": 3}}
+    dlg._apply_gen_sets(legacy)
+    # greys → ramp(20) on + near-neutrals(20, rings 2) on; greysmid dropped.
+    assert dlg._gen_neutral.isChecked() and dlg._gen_neutral_n.value() == 20
+    assert dlg._gen_nearneutral.isChecked()
+    assert dlg._gen_nearneutral_n.value() == 20
+    assert dlg._gen_nearneutral_rings.value() == 2
+    assert dlg._gen_nearneutral_off.value() == 4
     dlg._update_gen_counts()
-    assert "15" in dlg._gen_greysmid_count.text()        # 16-1 midpoints
-    assert dlg._gen_greysmid.isEnabled() is True
-    prog = dlg._build_generated_program()
-    assert len(prog) == 16 + 15                          # parent + in-between
-
-    # Two per gap → 30.
-    dlg._gen_greysmid_n.setValue(2)
-    dlg._update_gen_counts()
-    assert "30" in dlg._gen_greysmid_count.text()
-
-    # Turn the parent off: the child disables, drops to 0, and adds nothing —
-    # even though its own checkbox is still ticked (state preserved).
-    dlg._gen_greys.setChecked(False)
-    dlg._update_gen_counts()
-    assert dlg._gen_greysmid.isEnabled() is False
-    assert dlg._gen_greysmid.isChecked() is True
-    assert "0" in dlg._gen_greysmid_count.text()
-    assert dlg._build_generated_program() == []
-
-    # Persistence: values save, and restoring factory turns it back off.
-    st = dlg._collect_gen_sets()
-    assert st["cb"]["greysmid"] is True
-    assert st["sp"]["greysmid_n"] == 2 and st["sp"]["greysmid_rings"] == 0
-    dlg._apply_gen_sets({"cb": dlg._GEN_FACTORY["cb"],
-                         "sp": dlg._GEN_FACTORY["sp"]})
-    assert dlg._gen_greysmid.isChecked() is False
-    assert dlg._gen_greysmid_n.value() == 1
+    # Total matches the old combined: 20 + 20·(6+12) = 20 + 360 = 380.
+    assert len(dlg._build_generated_program()) == 380
 
 
-def test_greys_between_defaults_off_for_old_recipe(qapp):
-    """An old recipe/state written before this set existed (key absent) loads it
-    OFF, not whatever was last ticked — the _GEN_FACTORY fallback."""
+def test_legacy_greys_off_with_zero_rings_migrates_cleanly(qapp):
+    """Old pure-ramp greys (rings 0) → Neutral grey ramp on, Near-neutral greys
+    off; and an absent-key state loads the new generators at factory."""
     dlg = _AddPatchesDialog(_FakeSettings())
-    dlg._gen_greysmid.setChecked(True)
-    # A dict with no 'greysmid' key at all (an older saved state).
-    dlg._apply_gen_sets({"cb": {"cube": True}, "sp": {"cube_n": 6}})
-    assert dlg._gen_greysmid.isChecked() is False
-    assert dlg._gen_greysmid_n.value() == 1               # factory baseline
+    dlg._apply_gen_sets({"cb": {"greys": True},
+                         "sp": {"greys_n": 10, "greys_rings": 0}})
+    assert dlg._gen_neutral.isChecked() and dlg._gen_neutral_n.value() == 10
+    assert dlg._gen_nearneutral.isChecked() is False     # no rings → no set

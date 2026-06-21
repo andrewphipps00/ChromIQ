@@ -173,8 +173,9 @@ def test_add_total_is_additions_shown_always(qapp, settings):
                 for i in range(460)]
     d = _AddPatchesDialog(settings=settings, existing_patches=existing)
     for cb in (d._gen_cube, d._gen_skin, d._gen_blues, d._gen_greens,
-               d._gen_sunrises, d._gen_greys, d._gen_edges, d._gen_hs,
-               d._gen_pastel, d._gen_image, d._gen_whiteblack, d._gen_fill):
+               d._gen_sunrises, d._gen_neutral, d._gen_nearneutral,
+               d._gen_edges, d._gen_hs, d._gen_pastel, d._gen_image,
+               d._gen_whiteblack, d._gen_fill):
         cb.setChecked(False)
     d._gen_cube.setChecked(True)
     d._gen_cube_n.setValue(5)
