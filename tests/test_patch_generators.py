@@ -246,57 +246,51 @@ def test_near_neutral_outer_ring_is_farther_and_balanced():
     assert r1 < r2 < r3
 
 
-# --- near-neutral greys "in between" --------------------------------------
-@pytest.mark.parametrize("steps,between", [(2, 1), (16, 1), (16, 3), (8, 2)])
-def test_greys_between_count_and_range(steps, between):
-    # rings=0 ⇒ (steps-1)*between pure greys, lining up between the parent ramp.
-    patches = G.near_neutral_greys_between(steps, between, 4.0, 0)
-    assert len(patches) == (steps - 1) * between
-    assert len(patches) == G.near_neutral_greys_between_count(steps, between, 0)
+# --- split neutral generators: ramp + near-neutrals -----------------------
+@pytest.mark.parametrize("steps", [1, 2, 16, 32])
+def test_neutral_ramp_is_pure_greys(steps):
+    patches = G.neutral_ramp(steps)
+    assert len(patches) == steps == G.neutral_ramp_count(steps)
     for r, g, b in patches:
-        assert r == g == b                      # every patch is neutral
+        assert r == g == b                          # every patch is neutral
     assert _all_in_range(patches)
+    if steps >= 2:                                  # endpoints are black + white
+        ls = sorted(p[0] for p in patches)
+        assert ls[0] == 0.0 and ls[-1] == 100.0
 
 
-def test_greys_between_sits_at_gap_midpoints_and_avoids_endpoints():
-    # between=1 ⇒ the midpoint of every parent gap; never the 0/100 endpoints.
-    steps = 5                                    # parent at 0,25,50,75,100
-    patches = G.near_neutral_greys_between(steps, 1, 4.0, 0)
-    ls = sorted(p[0] for p in patches)
-    assert ls == pytest.approx([12.5, 37.5, 62.5, 87.5])
-    assert all(0.0 < l < 100.0 for l in ls)
-
-
-def test_greys_between_two_per_gap_evenly_spaced():
-    # between=2 ⇒ the 1/3 and 2/3 points of each gap.
-    patches = G.near_neutral_greys_between(2, 2, 4.0, 0)   # one gap 0..100
-    ls = sorted(p[0] for p in patches)
-    assert ls == pytest.approx([100 / 3.0, 200 / 3.0])
-
-
-@pytest.mark.parametrize("rings,per", [(1, 7), (2, 19), (3, 37)])
-def test_greys_between_rings_match_parent(rings, per):
-    # Each inserted grey carries the same ring count as the parent set.
-    steps, between = 16, 1
-    patches = G.near_neutral_greys_between(steps, between, 6.0, rings)
-    assert len(patches) == (steps - 1) * between * per
-    assert len(patches) == G.near_neutral_greys_between_count(steps, between, rings)
+@pytest.mark.parametrize("rings,per", [(1, 6), (2, 18), (3, 36)])
+def test_near_neutrals_is_rings_only_no_centre(rings, per):
+    # 6 + 12 + … tints per level, and NOT the pure centre (that's the ramp's).
+    steps = 16
+    patches = G.near_neutrals(steps, 6.0, rings)
+    assert len(patches) == steps * per == G.near_neutrals_count(steps, rings)
     assert _all_in_range(patches)
+    # The pure neutral centres are NOT included (that's the ramp's job). Interior
+    # step levels never clamp, so none of their centres appear.
+    for i in range(steps):
+        g = i / (steps - 1) * 100.0
+        if 0.0 < g < 100.0:
+            assert (g, g, g) not in patches
 
 
-def test_greys_between_degenerate_cases_are_empty():
-    assert G.near_neutral_greys_between(1, 5, 4.0, 0) == []   # no parent gaps
-    assert G.near_neutral_greys_between(16, 0, 4.0, 0) == []  # nothing per gap
-    assert G.near_neutral_greys_between_count(1, 5, 0) == 0
-    assert G.near_neutral_greys_between_count(16, 0, 0) == 0
+def test_near_neutrals_rings_floor_to_one():
+    # rings is at least 1 — there is no "no rings" near-neutrals set.
+    assert G.near_neutrals_count(16, 0) == G.near_neutrals_count(16, 1)
+    assert len(G.near_neutrals(16, 4.0, 0)) == G.near_neutrals_count(16, 1)
 
 
-def test_greys_between_interleaves_parent_without_duplicates():
-    # The combined ramp (parent + in-between, both pure) has no repeated greys.
-    parent = G.near_neutral_greys(16, 4.0, 0)
-    mid = G.near_neutral_greys_between(16, 1, 4.0, 0)
-    combined = sorted(p[0] for p in parent + mid)
-    assert len(combined) == len(set(round(l, 6) for l in combined))
+@pytest.mark.parametrize("steps,offset,rings",
+                         [(16, 4.0, 1), (20, 5.0, 2), (8, 6.25, 3)])
+def test_ramp_plus_near_neutrals_equals_old_combined(steps, offset, rings):
+    # The whole point of the split: ramp + near-neutrals reproduces the old
+    # combined near-neutral greys exactly — same patches, same count.
+    split = G.neutral_ramp(steps) + G.near_neutrals(steps, offset, rings)
+    combined = G.near_neutral_greys(steps, offset, rings)
+    assert len(split) == len(combined) == G.near_neutral_greys_count(steps, rings)
+    assert sorted(split) == sorted(combined)
+    assert (G.neutral_ramp_count(steps) + G.near_neutrals_count(steps, rings)
+            == G.near_neutral_greys_count(steps, rings))
 
 
 # --- gamut edges -----------------------------------------------------------
@@ -814,13 +808,20 @@ def test_enforce_min_distance_respects_and_keeps_existing_fixed():
 
 def test_enforce_min_distance_incremental_equals_one_shot():
     # Spacing the whole concatenation at once == spacing set-by-set top to bottom
-    # (the property that lets the panel process generators in display order).
-    a = G.rgb_cube(4)
-    b = G.near_neutral_greys(6, 6.0, 1)
-    c = G.gamut_edges_between(4, 2)
-    one = G.enforce_min_distance(a + b + c, 2.0)
+    # (the property that lets the panel process generators in display order, one
+    # generator added at a time then repositioned — so adding/reordering a set
+    # cannot disturb the result; Knut). Covers the split neutral generators and
+    # Colour extremes in roughly the panel's order.
+    chunks = [
+        G.rgb_cube(4),
+        G.gamut_edges_between(4, 2),
+        G.neutral_ramp(8),
+        G.near_neutrals(8, 4.0, 1),
+        G.gamut_corners(6, 16.0, True),         # Colour extremes
+    ]
+    one = G.enforce_min_distance(sum(chunks, []), 2.0)
     inc = []
-    for chunk in (a, b, c):
+    for chunk in chunks:
         inc = G.enforce_min_distance(inc + chunk, 2.0)
     assert inc == one
 

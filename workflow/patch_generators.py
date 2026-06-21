@@ -357,9 +357,9 @@ def near_neutral_greys(steps: int, offset: float,
 def _grey_tints(g: float, offset: float,
                 rings: int) -> list[tuple[float, float, float]]:
     """The hue-tint rings circling a single neutral grey ``g`` (not the grey
-    itself). Shared by ``near_neutral_greys`` and ``near_neutral_greys_between``
-    so the two sets place identical rings. ``rings == 0`` → no tints, so
-    ``offset`` is unused (a pure neutral point)."""
+    itself). Shared by ``near_neutral_greys`` (the combined primitive) and the
+    standalone ``near_neutrals`` set so they place identical rings. ``rings == 0``
+    → no tints, so ``offset`` is unused (a pure neutral point)."""
     rings = max(0, int(rings))
     if rings == 0:
         return []
@@ -388,43 +388,52 @@ def near_neutral_greys_count(steps: int, rings: int = 1) -> int:
     return max(1, int(steps)) * (1 + tints)
 
 
-def near_neutral_greys_between(steps: int, between: int, offset: float,
-                               rings: int = 0
-                               ) -> list[tuple[float, float, float]]:
-    """Extra neutral greys *between* the levels ``near_neutral_greys`` places.
+def neutral_ramp(steps: int) -> list[tuple[float, float, float]]:
+    """A pure neutral grey ramp from black to white — ``steps`` greys, no tints
+    (a plain black-and-white wedge).
 
-    ``steps`` is the **parent** ramp's step count (so the in-between greys line
-    up with it). Between each pair of neighbouring parent greys this drops
-    ``between`` greys at evenly-spaced fractions — ``between == 1`` is the
-    midpoint, ``between == 2`` the ⅓ and ⅔ points, and so on — giving
-    ``(steps - 1) * between`` new greys. Each gets the same ``rings`` of hue
-    tints as the parent set (``rings == 0`` → a pure, denser neutral ramp, the
-    common case). The parent's pure black (0) and white (100) endpoints are
-    never reproduced, so nothing is printed twice.
+    The most important region for a clean profile. Independent of ``near_neutrals``
+    (the off-axis tint rings), so the number of pure neutrals can be chosen
+    separately from the near-neutral hue coverage.
     """
     steps = max(1, int(steps))
-    between = max(0, int(between))
-    if steps < 2 or between < 1:
-        return []
     out: list[tuple[float, float, float]] = []
-    for i in range(steps - 1):
-        g0 = i / (steps - 1) * 100.0
-        g1 = (i + 1) / (steps - 1) * 100.0
-        for k in range(1, between + 1):
-            g = g0 + (k / (between + 1)) * (g1 - g0)
-            out.append((g, g, g))
-            out.extend(_grey_tints(g, offset, rings))
+    for i in range(steps):
+        g = (i / (steps - 1) if steps > 1 else 0.5) * 100.0
+        out.append((g, g, g))
     return out
 
 
-def near_neutral_greys_between_count(steps: int, between: int,
-                                     rings: int = 0) -> int:
+def neutral_ramp_count(steps: int) -> int:
+    return max(1, int(steps))
+
+
+def near_neutrals(steps: int, offset: float,
+                  rings: int = 1) -> list[tuple[float, float, float]]:
+    """The off-axis hue tints circling ``steps`` neutral levels — **without** the
+    pure neutral centre at each level (that is ``neutral_ramp``'s job).
+
+    At each of ``steps`` levels from black to white, ``rings`` concentric rings of
+    balanced hue tints (6, 12, 18 …) sit at chroma radius driven by ``offset`` —
+    exactly the rings ``near_neutral_greys`` produced, just without the centre.
+    ``rings`` is at least 1 (with no rings there is nothing to place; use
+    ``neutral_ramp`` alone for pure neutrals). By construction,
+    ``neutral_ramp(S) + near_neutrals(S, O, R)`` reproduces the old combined
+    ``near_neutral_greys(S, O, R)`` exactly — same patches, same count.
+    """
     steps = max(1, int(steps))
-    between = max(0, int(between))
-    if steps < 2 or between < 1:
-        return 0
-    tints = 3 * max(0, int(rings)) * (max(0, int(rings)) + 1)
-    return (steps - 1) * between * (1 + tints)
+    rings = max(1, int(rings))
+    out: list[tuple[float, float, float]] = []
+    for i in range(steps):
+        g = (i / (steps - 1) if steps > 1 else 0.5) * 100.0
+        out.extend(_grey_tints(g, offset, rings))
+    return out
+
+
+def near_neutrals_count(steps: int, rings: int = 1) -> int:
+    rings = max(1, int(rings))
+    tints = 3 * rings * (rings + 1)               # 6 + 12 + … = sum(6r)
+    return max(1, int(steps)) * tints
 
 
 # ---------------------------------------------------------------------------

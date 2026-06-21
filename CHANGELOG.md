@@ -1,5 +1,22 @@
 # Changelog
 
+## v3.11.21
+
+### ✨ New
+- **Neutral greys split into two clean generators, with thanks to the
+  Pharmacist.** The old combined "Near-neutral greys" is now two independent
+  sets in Generate colour sets: **Neutral grey ramp** (the pure black-to-white
+  greys, no tints) and **Near-neutral greys** (only the gentle off-neutral hue
+  rings). You can now choose how many pure neutrals to lay down separately from
+  the near-neutral tints — more flexible and clearer. The defaults reproduce the
+  old set exactly, existing charts and presets migrate automatically, and the
+  more fiddly "More greys in between" option is retired in favour of this.
+
+### ♻️ Changed
+- **"Colour extremes" now sits just above "Highlights & shadows"** in the
+  colour-set list — the chromatic-corner counterpart to the tonal-end set,
+  grouped together.
+
 ## v3.11.20
 
 ### ✨ New
