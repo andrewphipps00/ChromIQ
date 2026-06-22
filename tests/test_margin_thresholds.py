@@ -20,10 +20,19 @@ def test_combo_key_format():
     assert margin_combo_key("i1Pro", "A2", "") == "i1Pro|A2"
 
 
-def test_seed_table_has_i1pro_combos():
+def test_seed_table_puts_runup_on_scan_edges():
     seeds = default_margin_thresholds()
-    assert "i1Pro|A4 Landscape" in seeds
-    assert seeds["i1Pro|A3 Portrait"]["L"] == 11
+    # Portrait → scan-direction edges are Top/Bottom (not the cross-scan sides,
+    # so a shipped i1Pro chart's small left/right margin can't false-alarm).
+    assert seeds["i1Pro|A3 Portrait"]["T"] == 11
+    assert seeds["i1Pro|A3 Portrait"]["B"] == 11
+    assert "L" not in seeds["i1Pro|A3 Portrait"]
+    # Landscape → scan-direction edges are Left/Right.
+    assert seeds["i1Pro|A4 Landscape"]["L"] == 11
+    assert "T" not in seeds["i1Pro|A4 Landscape"]
+    # ColorMunki seeds are derived from the presets (Top label side bigger).
+    assert seeds["ColorMunki|A4 Portrait"]["T"] == 20
+    assert seeds["ColorMunki|A4 Portrait"]["B"] == 10
     # A fresh call returns an independent copy (no shared mutation).
     seeds["i1Pro|A4 Landscape"]["L"] = 999
     assert default_margin_thresholds()["i1Pro|A4 Landscape"]["L"] == 11

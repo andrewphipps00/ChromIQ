@@ -107,6 +107,83 @@ def test_landscape_orientation_measured_in_tiff_frame(tmp_path):
     assert r.top_mm + r.bottom_mm < r.page_h_mm
 
 
+def _preset_args(p) -> list[str]:
+    """printtarg flags for a ti1 preset (mirrors tab_chart's render path)."""
+    triple = p.triple_density and p.instrument == "CM"
+    instr = "i1" if triple else ("3p" if p.instrument == "p3" else p.instrument)
+    args = [f"-i{instr}", f"-p{p.paper}", "-t300"]
+    if not triple and p.double_density and p.instrument in {"CM", "SS"}:
+        args.append("-h")
+    if p.suppress_left_clip or triple:
+        args.append("-L")
+    if abs(p.patch_scale - 1.0) > 0.01:
+        args.append(f"-a{p.patch_scale:.2f}")
+    if p.margin != 6:
+        args.append(f"-m{p.margin}")
+    args.append(f"-M{p.margin}")
+    if p.no_strip_limit:
+        args.append("-P")
+    return args
+
+
+def _measure_preset(tmp_path, slug):
+    from core.resource_path import resource_path
+    from ui.tabs.tab_chart import KNUT_PRESETS
+    preset = next(p for p in KNUT_PRESETS if p.slug == slug)
+    shutil.copy(resource_path(preset.ti1_asset), tmp_path / "chart.ti1")
+    subprocess.run([PRINTTARG, *_preset_args(preset), "chart"],
+                   cwd=tmp_path, check=True,
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    reports = [measure_margins(t, dpi=300, ti2_path=tmp_path / "chart.ti2")
+               for t in sorted(tmp_path.glob("chart*.tif"))]
+    return preset, [r for r in reports if r is not None]
+
+
+@requires_argyll
+@pytest.mark.parametrize("slug", [
+    "fls_i1pro_a4_484p_1page_portrait",
+    "fls_i1pro_a4_495p_1page_landscape",
+    "fls_colormunki_a4_484p_1page_portrait",
+])
+def test_seed_thresholds_only_ever_touch_scan_edges(tmp_path, slug):
+    """The default seeds put the run-up on the scan-direction edges only, so a
+    shipped preset's small *cross-scan* margin can never trigger a violation
+    (the bug fixed in the seed table). A scan-edge near-miss is allowed — that's
+    the feature legitimately flagging a marginal chart, not a false alarm."""
+    from core.settings import default_margin_thresholds, margin_combo_key
+    from ui.tabs.tab_chart import _MARGIN_INSTR_LABEL, _canonical_paper_name
+    from workflow.margin_inspector import check_violations
+
+    preset, reports = _measure_preset(tmp_path, slug)
+    assert reports
+    seeds = default_margin_thresholds()
+    for r in reports:
+        instr = _MARGIN_INSTR_LABEL[preset.instrument]
+        paper = _canonical_paper_name(r.page_w_mm, r.page_h_mm)
+        orient = "Landscape" if r.page_w_mm > r.page_h_mm else "Portrait"
+        thr = seeds.get(margin_combo_key(instr, paper, orient))
+        violated = {v.edge for v in check_violations(r, thr)}
+        cross = {"Left", "Right"} if orient == "Portrait" else {"Top", "Bottom"}
+        assert not (cross & violated), (
+            f"{slug}: cross-scan edge wrongly flagged: {cross & violated}")
+
+
+@requires_argyll
+def test_portrait_i1pro_preset_reads_ok(tmp_path):
+    """The common i1Pro A4 *portrait* preset (8 mm cross-scan, ~29/14 mm scan)
+    reads clean against the default seeds — no warning out of the box."""
+    from core.settings import default_margin_thresholds, margin_combo_key
+    from ui.tabs.tab_chart import _canonical_paper_name
+    from workflow.margin_inspector import check_violations
+
+    _, reports = _measure_preset(tmp_path, "fls_i1pro_a4_484p_1page_portrait")
+    seeds = default_margin_thresholds()
+    for r in reports:
+        paper = _canonical_paper_name(r.page_w_mm, r.page_h_mm)
+        thr = seeds.get(margin_combo_key("i1Pro", paper, "Portrait"))
+        assert check_violations(r, thr) == []
+
+
 def test_blank_page_returns_none(tmp_path):
     """A bare white sheet has no patch area → None (caller shows a placeholder),
     not bogus numbers. Runs without Argyll."""

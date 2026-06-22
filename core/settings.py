@@ -175,11 +175,32 @@ DEFAULTS: dict[str, Any] = {
 # run-up on the narrow side, the label side ending up larger). ColorMunki seeds
 # are derived empirically from the shipped, practically-tested presets
 # (scripts/derive_margin_seeds.py).
+#
+# The white run-up the i1Pro/ColorMunki needs is along the **scan direction**
+# (the strip length). printtarg lays strips down the page, so for a *portrait*
+# sheet the scan-direction edges are Top and Bottom; for *landscape*, Left and
+# Right. Cross-scan side margins (the other pair) aren't the binding constraint,
+# so they're left at 0 (unchecked) — which also stops shipped presets (e.g. the
+# i1Pro A4 chart's 8 mm cross-scan margin) from false-alarming. ColorMunki values
+# are derived empirically from the shipped, practically-tested presets
+# (scripts/derive_margin_seeds.py: Top ≈ 24 mm, Bottom ≈ 11 mm) and rounded just
+# below the smallest known-good margin so those presets read OK out of the box.
+_I1_DESC = "i1Pro ruler / jig (11 mm scan run-up)"
+_CM_DESC = "ColorMunki ruler (derived from shipped presets)"
 _MARGIN_SEED: dict[str, dict[str, Any]] = {
-    "i1Pro|A4 Landscape":     {"L": 11, "R": 11, "T": 11, "B": 11, "desc": "X-Rite i1Pro ruler / jig"},
-    "i1Pro|Letter Landscape": {"L": 11, "R": 11, "T": 11, "B": 11, "desc": "X-Rite i1Pro ruler / jig"},
-    "i1Pro|A3 Portrait":      {"L": 11, "R": 11, "T": 11, "B": 11, "desc": "X-Rite i1Pro ruler / jig"},
-    "i1Pro|Tabloid Portrait": {"L": 11, "R": 11, "T": 11, "B": 11, "desc": "X-Rite i1Pro ruler / jig"},
+    # i1Pro — 11 mm on the two scan-direction edges.
+    "i1Pro|A4 Portrait":       {"T": 11, "B": 11, "desc": _I1_DESC},
+    "i1Pro|A4 Landscape":      {"L": 11, "R": 11, "desc": _I1_DESC},
+    "i1Pro|Letter Portrait":   {"T": 11, "B": 11, "desc": _I1_DESC},
+    "i1Pro|Letter Landscape":  {"L": 11, "R": 11, "desc": _I1_DESC},
+    "i1Pro|A3 Portrait":       {"T": 11, "B": 11, "desc": _I1_DESC},
+    "i1Pro|A3 Landscape":      {"L": 11, "R": 11, "desc": _I1_DESC},
+    "i1Pro|Tabloid Portrait":  {"T": 11, "B": 11, "desc": _I1_DESC},
+    # ColorMunki — Top (label side) ≈20, Bottom ≈10, from preset measurements.
+    "ColorMunki|A4 Portrait":      {"T": 20, "B": 10, "desc": _CM_DESC},
+    "ColorMunki|Letter Portrait":  {"T": 20, "B": 10, "desc": _CM_DESC},
+    "ColorMunki|A3 Portrait":      {"T": 20, "B": 10, "desc": _CM_DESC},
+    "ColorMunki|Tabloid Portrait": {"T": 20, "B": 10, "desc": _CM_DESC},
 }
 
 
