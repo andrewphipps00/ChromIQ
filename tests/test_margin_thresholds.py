@@ -1,0 +1,83 @@
+"""Settings round-trip + violation logic for the margin inspector."""
+from __future__ import annotations
+
+import pytest
+
+from core.settings import AppSettings, default_margin_thresholds, margin_combo_key
+from workflow.margin_inspector import MarginReport, Violation, check_violations
+
+
+def _report(L=20.0, R=20.0, T=20.0, B=20.0) -> MarginReport:
+    return MarginReport(left_mm=L, right_mm=R, top_mm=T, bottom_mm=B,
+                        strip_width_mm=11.0, page_w_mm=210.0, page_h_mm=297.0)
+
+
+# --- combo key + seeds -----------------------------------------------------
+
+def test_combo_key_format():
+    assert margin_combo_key("i1Pro", "A4", "landscape") == "i1Pro|A4 Landscape"
+    assert margin_combo_key("ColorMunki", "A3", "Portrait") == "ColorMunki|A3 Portrait"
+    assert margin_combo_key("i1Pro", "A2", "") == "i1Pro|A2"
+
+
+def test_seed_table_has_i1pro_combos():
+    seeds = default_margin_thresholds()
+    assert "i1Pro|A4 Landscape" in seeds
+    assert seeds["i1Pro|A3 Portrait"]["L"] == 11
+    # A fresh call returns an independent copy (no shared mutation).
+    seeds["i1Pro|A4 Landscape"]["L"] = 999
+    assert default_margin_thresholds()["i1Pro|A4 Landscape"]["L"] == 11
+
+
+# --- settings round-trip ---------------------------------------------------
+
+def test_thresholds_round_trip(monkeypatch, tmp_path):
+    # Isolate QSettings to a throwaway store.
+    from PyQt6.QtCore import QSettings
+    QSettings.setPath(QSettings.Format.IniFormat, QSettings.Scope.UserScope,
+                      str(tmp_path))
+    s = AppSettings()
+    # Empty store → seed defaults.
+    assert s.get_margin_thresholds()["i1Pro|A4 Landscape"]["L"] == 11
+    table = {"i1Pro|A4 Landscape": {"L": 12.5, "R": 30, "T": 11, "B": 11,
+                                    "desc": "my rig"}}
+    s.set_margin_thresholds(table)
+    got = s.get_margin_thresholds()
+    assert got["i1Pro|A4 Landscape"]["R"] == 30
+    assert got["i1Pro|A4 Landscape"]["desc"] == "my rig"
+
+
+def test_corrupt_blob_falls_back_to_seeds(monkeypatch, tmp_path):
+    from PyQt6.QtCore import QSettings
+    QSettings.setPath(QSettings.Format.IniFormat, QSettings.Scope.UserScope,
+                      str(tmp_path))
+    s = AppSettings()
+    s.set("margin_thresholds", "{not json")
+    assert s.get_margin_thresholds() == default_margin_thresholds()
+
+
+# --- violation logic -------------------------------------------------------
+
+def test_no_thresholds_no_violations():
+    assert check_violations(_report(), None) == []
+    assert check_violations(_report(), {}) == []
+
+
+def test_below_threshold_flags_edge():
+    v = check_violations(_report(L=8.0), {"L": 11, "R": 11, "T": 11, "B": 11})
+    assert v == [Violation("Left", 8.0, 11.0)]
+
+
+def test_equal_threshold_is_ok():
+    assert check_violations(_report(L=11.0), {"L": 11}) == []
+
+
+def test_multiple_edges_and_missing_keys():
+    v = check_violations(_report(L=5.0, T=2.0),
+                         {"L": 11, "T": 11})   # R/B unset → unchecked
+    edges = {x.edge for x in v}
+    assert edges == {"Left", "Top"}
+
+
+def test_blank_string_threshold_ignored():
+    assert check_violations(_report(L=1.0), {"L": "", "R": 11}) == []

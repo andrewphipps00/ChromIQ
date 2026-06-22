@@ -68,6 +68,52 @@ class MarginReport:
         }
 
 
+@dataclass(frozen=True)
+class Violation:
+    """One margin that fell below its configured minimum threshold."""
+
+    edge: str           # "Left" | "Right" | "Top" | "Bottom"
+    measured_mm: float
+    threshold_mm: float
+
+
+# edge label → MarginReport attribute + threshold-dict key
+_EDGES = (
+    ("Left", "left_mm", "L"),
+    ("Right", "right_mm", "R"),
+    ("Top", "top_mm", "T"),
+    ("Bottom", "bottom_mm", "B"),
+)
+
+
+def check_violations(
+    report: MarginReport, thresholds: dict | None,
+) -> list[Violation]:
+    """Edges whose measured margin is below the per-edge minimum threshold.
+
+    ``thresholds`` is a ``{"L":mm, "R":mm, "T":mm, "B":mm, "desc":…}`` mapping
+    (the entry for this chart's instrument+paper+orientation combo), or ``None``
+    when no thresholds are defined for the combo — in which case nothing is
+    checked (the inspector still shows the measured values). Thresholds are
+    minimums to meet-or-exceed; there is no upper bound.
+    """
+    if not thresholds:
+        return []
+    out: list[Violation] = []
+    for label, attr, key in _EDGES:
+        raw = thresholds.get(key)
+        if raw in (None, ""):
+            continue
+        try:
+            thr = float(raw)
+        except (TypeError, ValueError):
+            continue
+        measured = float(getattr(report, attr))
+        if measured + 1e-6 < thr:
+            out.append(Violation(label, measured, thr))
+    return out
+
+
 def _tiff_dpi(path: Path, fallback: float) -> float:
     """Resolution printtarg baked into the TIFF, or ``fallback`` when absent."""
     try:

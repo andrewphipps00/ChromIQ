@@ -155,7 +155,47 @@ DEFAULTS: dict[str, Any] = {
     # math (id, global_idx, page, local_idx) to chromiq.log for investigating
     # detection drift.
     "debug_highlighter":         False,
+    # Margin inspector (Create Chart) — measure the realised page margins of the
+    # generated preview, compare to per-(instrument, paper+orientation) minimum
+    # thresholds, and flag violations for jig/rig users.
+    "margin_inspector_show":     True,    # show the "Measured from Preview" frame
+    "margin_violation_notify":   True,    # warn when a measured margin < threshold
+    "margin_guides_show":        False,   # dotted threshold guide lines on preview
+    "margin_thresholds":         "",      # JSON blob; "" → default_margin_thresholds()
 }
+
+
+# ---------------------------------------------------------------------------
+# Margin-threshold seed defaults
+# ---------------------------------------------------------------------------
+# Per-(instrument, paper+orientation) minimum margins (mm) the inspector warns
+# below. Keyed "<instrument>|<paper> <Orientation>". These are *editable seed
+# values* (a starting point users adjust to their own rig), NOT physical minima.
+# The i1Pro values come from the X-Rite/enlarged-ruler analysis (≈11 mm white
+# run-up on the narrow side, the label side ending up larger). ColorMunki seeds
+# are derived empirically from the shipped, practically-tested presets
+# (scripts/derive_margin_seeds.py).
+_MARGIN_SEED: dict[str, dict[str, Any]] = {
+    "i1Pro|A4 Landscape":     {"L": 11, "R": 11, "T": 11, "B": 11, "desc": "X-Rite i1Pro ruler / jig"},
+    "i1Pro|Letter Landscape": {"L": 11, "R": 11, "T": 11, "B": 11, "desc": "X-Rite i1Pro ruler / jig"},
+    "i1Pro|A3 Portrait":      {"L": 11, "R": 11, "T": 11, "B": 11, "desc": "X-Rite i1Pro ruler / jig"},
+    "i1Pro|Tabloid Portrait": {"L": 11, "R": 11, "T": 11, "B": 11, "desc": "X-Rite i1Pro ruler / jig"},
+}
+
+
+def default_margin_thresholds() -> dict[str, dict[str, Any]]:
+    """A fresh copy of the seed threshold table (see :data:`_MARGIN_SEED`)."""
+    import copy
+
+    return copy.deepcopy(_MARGIN_SEED)
+
+
+def margin_combo_key(instrument: str, paper: str, orientation: str) -> str:
+    """Canonical "<instrument>|<paper> <Orientation>" threshold key."""
+    paper = (paper or "").strip()
+    orientation = (orientation or "").strip().capitalize()
+    suffix = f" {orientation}" if orientation else ""
+    return f"{instrument}|{paper}{suffix}"
 
 
 class AppSettings:
@@ -203,3 +243,30 @@ class AppSettings:
         """Save a dict of key→value under a given prefix."""
         for k, v in values.items():
             self.set(f"{prefix}_{k}", v)
+
+    # ------------------------------------------------------------------
+    # Margin thresholds (JSON blob; see default_margin_thresholds)
+    # ------------------------------------------------------------------
+    def get_margin_thresholds(self) -> dict[str, dict[str, Any]]:
+        """The per-combo margin-threshold table, falling back to the seeds.
+
+        Stored as a JSON string under ``margin_thresholds`` so the whole
+        editable matrix round-trips through QSettings as one value.
+        """
+        import json
+
+        raw = self.get("margin_thresholds", "")
+        if not raw:
+            return default_margin_thresholds()
+        try:
+            doc = json.loads(raw)
+            if isinstance(doc, dict):
+                return doc
+        except (ValueError, TypeError):
+            log.warning("Corrupt margin_thresholds blob — using seed defaults")
+        return default_margin_thresholds()
+
+    def set_margin_thresholds(self, table: dict[str, dict[str, Any]]) -> None:
+        import json
+
+        self.set("margin_thresholds", json.dumps(table, ensure_ascii=False))
