@@ -410,6 +410,14 @@ class ChartParams:
     # refinement / pre-conditioning profile (-c) is supplied; -n requires it.
     neutral_axis_from_profile: bool = False
     extra_targen_args: str = ""
+    # When True, build the full-spread patches with targen's perceptual
+    # quasi-random sampler (-Q) instead of the default Optimised Farthest
+    # Point Sampling (OFPS). OFPS gives the best spread but degenerates into
+    # an effective hang for certain preconditioning profiles at high patch
+    # counts; -Q keeps the perceptual distribution but is always fast. Set by
+    # the "rebuild faster" escape hatch when the slow-chart watchdog fires.
+    # See docs / the targen OFPS-cliff investigation.
+    fast_sampler: bool = False
 
     # printtarg params
     tiff_dpi: int = 300
@@ -478,6 +486,15 @@ class ChartCreator:
 
         self._pending_on_finish: Callable[[list[Path]], None] | None = None
         self._pending_params: ChartParams | None = None
+        # State for the slow-chart watchdog escape hatch (see generate /
+        # restart_with_fast_sampler / cancel). The on_line callback, work dir
+        # and patch count are stashed so a running targen can be killed and
+        # re-launched with the fast sampler without re-deriving anything.
+        self._pending_on_line: Callable[[str], None] | None = None
+        self._pending_work_dir: Path | None = None
+        self._pending_patch_count: int = 0
+        self._restart_fast = False   # next targen-finish should relaunch with -Q
+        self._cancelling = False     # next targen-finish is a deliberate cancel
         # Captured structured errors/warnings from the most-recent run.
         # Tagged with the tool name so the dispatcher knows which dialog to show.
         self._matched_errors: list[tuple[str, str, str]] = []   # (tool, key, friendly)
@@ -508,6 +525,9 @@ class ChartCreator:
         """
         self._pending_on_finish = on_finish
         self._pending_params = params
+        self._pending_on_line = on_line
+        self._restart_fast = False
+        self._cancelling = False
 
         proj = self._file_mgr.project()
         if params.cal_target:
@@ -531,10 +551,29 @@ class ChartCreator:
         log.info("Chart generation: %d patches, instrument=%s paper=%s disable_lb=%s",
                  patch_count, params.instrument, params.paper, params.disable_left_border)
 
-        targen_args = self._build_targen_args(params, patch_count)
-        log.info("targen args: %s", targen_args)
+        self._pending_work_dir = work_dir
+        self._pending_patch_count = patch_count
         self._matched_errors = []
         self._matched_warnings = []
+        self._start_targen(params, patch_count, on_line, work_dir)
+
+    def _start_targen(
+        self,
+        params: ChartParams,
+        patch_count: int,
+        on_line: Callable[[str], None],
+        work_dir: Path,
+    ) -> None:
+        """Launch targen for the given params. Shared by the first run and the
+        fast-sampler relaunch so both stream progress and share the finish
+        handler."""
+        # -v makes targen stream its "Added N/M" progress so the UI can show
+        # it's working (and the slow-chart watchdog has something to watch).
+        # It's prepended only to the live argv; the stamped command rebuilt in
+        # _stamp_tiff_metadata uses _build_targen_args directly, so the TIFF
+        # metadata stays clean.
+        targen_args = ["-v"] + self._build_targen_args(params, patch_count)
+        log.info("targen args: %s", targen_args)
 
         def _targen_scan(line: str) -> None:
             self._scan_line("targen", line)
@@ -547,6 +586,31 @@ class ChartCreator:
             on_line=_targen_scan,
             on_finish=lambda code: self._targen_done(code, params, on_line, work_dir),
         )
+
+    def restart_with_fast_sampler(self) -> bool:
+        """Kill the running targen and relaunch the same chart with the fast
+        (-Q) sampler. Returns False if there's nothing to restart.
+
+        The kill triggers the normal targen-finished path; ``_restart_fast``
+        diverts it into the relaunch instead of reporting failure."""
+        if (self._pending_params is None or self._pending_work_dir is None
+                or not self._runner.is_running):
+            return False
+        log.info("Slow-chart: restarting targen with fast sampler (-Q)")
+        self._restart_fast = True
+        self._runner.abort()
+        return True
+
+    def cancel(self) -> None:
+        """Kill a running targen/printtarg as a deliberate user cancel.
+
+        Sets ``_cancelling`` so the finish handler reports an empty result
+        (re-enabling the UI) without logging a scary targen error line."""
+        if not self._runner.is_running:
+            return
+        log.info("Slow-chart: user cancelled chart generation")
+        self._cancelling = True
+        self._runner.abort()
 
     def estimate_patches(
         self,
@@ -742,6 +806,20 @@ class ChartCreator:
         on_line: Callable[[str], None],
         work_dir: Path,
     ) -> None:
+        # Watchdog escape hatch: the previous targen was killed so we could
+        # relaunch the identical chart with the fast (-Q) sampler.
+        if self._restart_fast:
+            self._restart_fast = False
+            params.fast_sampler = True
+            self._start_targen(params, self._pending_patch_count, on_line, work_dir)
+            return
+        # Deliberate user cancel: report an empty result without the error line.
+        if self._cancelling:
+            self._cancelling = False
+            log.info("targen cancelled by user (exit code %d)", exit_code)
+            if self._pending_on_finish:
+                self._pending_on_finish([])
+            return
         if exit_code != 0:
             log.error("targen failed with code %d", exit_code)
             on_line(f"[ERROR] targen exited with code {exit_code}")
@@ -954,7 +1032,12 @@ class ChartCreator:
         args += [f"-f{patches}"]
         args += [f"-e{p.white_patches}"]
         args += [f"-B{p.black_patches}"]
-        if p.good_mode:
+        if p.fast_sampler:
+            # Perceptual quasi-random full-spread: keeps the preconditioning
+            # distribution but skips OFPS (which can hang on some profiles).
+            # -G only tunes OFPS, so it's mutually exclusive with -Q here.
+            args.append("-Q")
+        elif p.good_mode:
             args.append("-G")
         if p.grey_steps > 0:
             # -n samples the profile-defined neutral axis; only valid with -c,

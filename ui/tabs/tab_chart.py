@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import yaml
-from PyQt6.QtCore import QSize, Qt, pyqtSignal
+from PyQt6.QtCore import QSize, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QColor, QFont, QIcon, QPalette
 from PyQt6.QtWidgets import (
     QButtonGroup,
@@ -82,6 +82,19 @@ if TYPE_CHECKING:
     from core.settings import AppSettings
 
 log = get_logger(__name__)
+
+# How long a chart generate may run before the slow-chart watchdog offers the
+# user a way out. A healthy targen finishes in ~1-2 s; the OFPS-cliff case
+# never finishes. 30 s comfortably clears legitimately large charts (even on
+# slow machines) while still rescuing the pathological ones quickly.
+_SLOW_CHART_WATCHDOG_MS = 30_000
+
+# targen -v reports its (slow) patch-placement seeding as "Added N/M". We
+# collapse those into a single in-place percentage line so the log shows
+# meaningful progress instead of a wall of numbers. Take the LAST match in a
+# chunk — targen emits these with carriage returns, so several can arrive at
+# once.
+_TARGEN_ADDED_RE = re.compile(r"Added (\d+)/(\d+)")
 
 
 def _clean_preset_name(name: str) -> str:
@@ -789,6 +802,19 @@ class TabChart(QWidget):
         self._file_mgr = file_mgr
         self._settings = settings
         self._creator  = ChartCreator(runner, file_mgr, settings)
+        # Slow-chart watchdog: targen's default patch sampler (OFPS) can hang
+        # for many minutes on certain pre-conditioning profiles at high patch
+        # counts. If a generate runs longer than the threshold we offer the
+        # user a way out (wait / rebuild faster / cancel). The trigger is
+        # purely wall-clock — a healthy chart finishes in ~1-2 s regardless of
+        # paper size or patch count, so elapsed time cleanly separates the
+        # pathological case without us having to guess at patch totals.
+        self._slow_watchdog = QTimer(self)
+        self._slow_watchdog.setSingleShot(True)
+        self._slow_watchdog.timeout.connect(self._on_slow_watchdog)
+        self._slow_dialog = None        # the live SlowChartDialog, if any
+        self._cancelled_by_user = False  # set when a slow-chart cancel is in flight
+        self._progress_line_active = False  # last log line is a % progress line
         self._params   = self._load_yaml_params()
         # Sanitised target name of the most recent generate. Lets _on_generate
         # detect a name change (rename) away from an already-created target.
@@ -5541,11 +5567,57 @@ class TabChart(QWidget):
             self._generate_btn.setEnabled(True)
             return
 
+        # Arm the slow-chart watchdog: only this path runs targen (the tool
+        # that can hit the OFPS hang). printtarg-only paths (load .ti1,
+        # re-layout, prebuilt copy) are always fast and don't arm it.
+        self._cancelled_by_user = False
+        self._progress_line_active = False
+        self._slow_watchdog.start(_SLOW_CHART_WATCHDOG_MS)
         self._creator.generate(
             params,
             on_line=self._on_log_line,
             on_finish=self._on_generate_finished,
         )
+
+    # ------------------------------------------------------------------
+    # Slow-chart watchdog (targen OFPS-cliff escape hatch)
+    # ------------------------------------------------------------------
+
+    def _on_slow_watchdog(self) -> None:
+        """Fired when a chart generate has run past the watchdog threshold.
+
+        Offers the user wait / rebuild-faster / cancel. The user must decide
+        again on every slow generate — the choice is never remembered."""
+        if not self._runner.is_running:
+            return  # finished in the gap before the timer fired
+        from ui.dialogs.slow_chart_dialog import SlowChartDialog
+
+        dlg = SlowChartDialog(self.window())
+        self._slow_dialog = dlg
+        choice = dlg.exec()       # nested loop; targen keeps running behind it
+        self._slow_dialog = None
+
+        # targen may have finished (or been swapped out) while the dialog was
+        # open — _on_generate_finished closes the dialog in that case, so bail.
+        if not self._runner.is_running:
+            return
+
+        if choice == SlowChartDialog.FAST:
+            self._log.appendPlainText(
+                tr("Switching to the faster patch layout and rebuilding the chart…")
+            )
+            self._log.ensureCursorVisible()
+            if not self._creator.restart_with_fast_sampler():
+                self._cancel_generation()
+        elif choice == SlowChartDialog.CANCEL:
+            self._cancel_generation()
+        else:
+            # Keep waiting: re-arm so the user can change their mind later.
+            self._slow_watchdog.start(_SLOW_CHART_WATCHDOG_MS)
+
+    def _cancel_generation(self) -> None:
+        self._cancelled_by_user = True
+        self._creator.cancel()
 
     def _on_load_ti1(self) -> None:
         path = open_file_dialog(
@@ -5615,7 +5687,35 @@ class TabChart(QWidget):
         )
 
     def _on_log_line(self, line: str) -> None:
+        # Collapse targen's "Added N/M" seeding spam into one live percentage.
+        matches = _TARGEN_ADDED_RE.findall(line)
+        if matches:
+            done, total = int(matches[-1][0]), int(matches[-1][1])
+            pct = int(done * 100 / total) if total else 0
+            self._set_progress_line(
+                tr("Arranging colour patches: {pct}%").format(pct=pct)
+            )
+            return
+        self._progress_line_active = False
         self._log.appendPlainText(line)
+        self._log.ensureCursorVisible()
+
+    def _set_progress_line(self, text: str) -> None:
+        """Show ``text`` as the log's last line, replacing it in place if the
+        previous line was already a progress line (so the percentage ticks up
+        without scrolling hundreds of lines past)."""
+        from PyQt6.QtGui import QTextCursor
+
+        if self._progress_line_active:
+            cur = self._log.textCursor()
+            cur.movePosition(QTextCursor.MoveOperation.End)
+            cur.select(QTextCursor.SelectionType.LineUnderCursor)
+            cur.removeSelectedText()
+            cur.insertText(text)
+            self._log.setTextCursor(cur)
+        else:
+            self._log.appendPlainText(text)
+            self._progress_line_active = True
         self._log.ensureCursorVisible()
 
     def _is_isis_selected(self) -> bool:
@@ -5759,10 +5859,24 @@ class TabChart(QWidget):
         return True
 
     def _on_generate_finished(self, tiffs: list[Path]) -> None:
+        # Disarm the slow-chart watchdog and dismiss its dialog if it's still
+        # open (targen finished/was swapped while the user was deciding).
+        self._slow_watchdog.stop()
+        if self._slow_dialog is not None:
+            from ui.dialogs.slow_chart_dialog import SlowChartDialog
+            self._slow_dialog.done(SlowChartDialog.WAIT)
         self._generate_btn.setEnabled(True)
         # One-shot flag: consumed by this run, don't carry over to the next.
         self._preconditioning_from_dialog = False
         self._precond_parent_run_id = None
+
+        # Deliberate user cancel via the watchdog: report it plainly and skip
+        # the generic "generation failed" error path below.
+        if not tiffs and self._cancelled_by_user:
+            self._cancelled_by_user = False
+            self._log.appendPlainText(tr("Chart generation cancelled."))
+            self._log.ensureCursorVisible()
+            return
         is_isis = self._is_isis_selected()
         # File stem is fixed by the folder layout ("chart" / "calibration").
         # Derive it from the actual page bitmaps so it's correct regardless of
