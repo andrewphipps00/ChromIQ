@@ -197,19 +197,19 @@ def test_dropdown_lists_only_presets_with_recipe(qapp, monkeypatch):
     assert custom == ["with recipe"]
 
 
-def test_builtin_widegamut_recipes_appear_starred(qapp):
+def test_builtin_fulllayout_recipes_appear_starred(qapp):
     d = _NewChartDialog(Path("/x"), _FakeSettings())
     starred = [n for n in d._preset_recipes if n.startswith("★")]
-    assert len(starred) == 11   # Knut's exported charts that carry a recipe (#63)
+    # Every Full-layout-setup chart (#63) carries a sidecar recipe.json.
+    assert len(starred) == 16
     assert any("A4-924p" in n for n in starred)
 
 
 def test_custom_identical_to_builtin_is_skipped(qapp, monkeypatch):
-    import json, core.preset_store as ps
-    from core.resource_path import resource_path
+    import core.preset_store as ps
+    from ui.tabs.tab_chart import builtin_recipe_choices
     name = "i1Pro A4-924p-2pages-Portrait"
-    rec = json.loads(resource_path(
-        "assets/charts/knut/rgb/widegamut/recipes.json").read_text())[name]
+    rec = builtin_recipe_choices()[name]   # the preset's bundled sidecar recipe
     monkeypatch.setattr(ps, "load_presets", lambda tab, settings=None:
                         {name: {"editor_recipe": rec}})
     d = _NewChartDialog(Path("/x"), _FakeSettings())

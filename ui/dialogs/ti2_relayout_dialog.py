@@ -1395,7 +1395,7 @@ class _NewChartDialog(QDialog):
         """Presets that carry a populated creation recipe (Set B), as
         ``{display_name: recipe_dict}``.
 
-        Built-in Wide-gamut presets (bundled recipes, shown with a ★) come first,
+        Built-in Full-layout-setup presets (bundled recipes, shown with a ★) come first,
         then the user's Create Chart presets. Name collisions (#55): a custom
         preset identical to a built-in of the same name is dropped (the built-in
         already represents it); a custom that differs keeps its own name (the ★
@@ -4341,6 +4341,46 @@ class Ti2RelayoutDialog(QDialog):
         return [self._grid.item(i).data(Qt.ItemDataRole.UserRole)
                 for i in range(self._grid.count())]
 
+    def _reconcile_recipe_with_chart(self) -> None:
+        """Refresh the stored creation recipe (Set B) from the chart that was
+        actually built (Set A), so saving can't persist a stale recipe.
+
+        Edits made in the editor's own printtarg panel *after* New chart —
+        patch scale, margin, density, DPI, … — update ``self._options`` but
+        never ``self._chart_recipe`` (only New chart / Add / Load set that).
+        Without this, a chart whose -a the user dialled back from 1.15 to 1.0
+        to fit the page would still carry 1.15 in its recipe, so reloading the
+        preset as a basis (or exporting it) resurrects the wrong scale (Knut).
+        Layout knobs come from the live options; ``fill_to`` is refreshed to
+        the realised patch count so a regenerate reproduces this chart's size.
+        """
+        rec = self._chart_recipe
+        if not isinstance(rec, dict) or self._options is None:
+            return
+        o = self._options
+        rec["layout"] = {
+            "spacer_mode": o.spacer_mode,
+            "patch_scale": o.patch_scale,
+            "spacer_scale": o.spacer_scale,
+            "margin": o.margin_mm,
+            "dpi": o.dpi,
+            "bit16": o.tiff_16bit,
+            "L": o.suppress_left_clip,
+            "P": o.no_strip_limit,
+            "h": o.double_density,
+            "td": o.triple_density,
+        }
+        if self._spec is not None:
+            rec["instr"] = self._spec.instrument_flag
+            rec["paper"] = self._spec.paper_flag
+        if rec.get("mode") == "generate" and isinstance(rec.get("sp"), dict):
+            try:
+                n = len(self._program_from_grid())
+            except Exception:  # noqa: BLE001 — count is best-effort
+                n = 0
+            if n > 0:
+                rec["sp"]["fill_to"] = n
+
     def _export_patch_colours(self) -> None:
         """Save the current patch program as a text file (hex or 0..255 RGB).
 
@@ -5417,6 +5457,9 @@ class Ti2RelayoutDialog(QDialog):
                            basename=name, options=self._options)
         pad = R.assert_data_integrity(self._program_from_grid(), res.ti2)
         self._bake_paint_into_saved(res)
+        # Keep the stored creation recipe (Set B) in step with the chart we just
+        # built (Set A) before persisting it — see _reconcile_recipe_with_chart.
+        self._reconcile_recipe_with_chart()
         # Write meta.json (the same RunMeta the main app uses) into the chart
         # folder so reopening restores the printtarg knobs exactly as saved, and
         # the folder reads like a main-app chart.

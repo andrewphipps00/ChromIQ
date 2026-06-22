@@ -1,5 +1,29 @@
 # Changelog
 
+## v3.11.24
+
+### ✨ New
+- **Updated "Full layout setup" built-in charts from Knut** (i1Pro + ColorMunki,
+  A4 / A3 / A3+, 480 – 2016 patches, incl. *Nature Focus* and *General Plus
+  Skintones* variants). Each one bundles its **complete** Create-Chart setup —
+  the colour-set recipe *and* the page layout — so you can pick one as a basis,
+  open it in New Chart, tweak it and build your own. This family replaces the
+  earlier "Wide-gamut" presets (the old name didn't describe what they're for).
+
+### 🐛 Fixed
+- **Save-Preset name suggestion no longer shows a stale patch count.** After
+  loading a built-in preset and then applying a chart from the layout editor,
+  the suggested name kept the built-in's patch count (e.g. `1168p`) instead of
+  the chart you actually applied (`1575p`). Thanks to the Pharmacist for the
+  report.
+- **The layout editor's saved recipe now matches the chart you built.** Editing
+  the printtarg panel (patch scale, margin, …) after New Chart left the stored
+  recipe on the old values, so reusing the preset as a basis regenerated the
+  wrong layout (e.g. a patch scale you'd dialled back to fit the page).
+- **Built-in presets that use a standard paper size now show it by name.**
+  Several presets whose size is exactly A3, A2 or Tabloid (11×17) showed
+  "Custom" with raw millimetres instead of the named paper size.
+
 ## v3.11.23
 
 ### ♻️ Changed

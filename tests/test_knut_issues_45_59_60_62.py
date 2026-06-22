@@ -260,7 +260,7 @@ def test_preset_does_not_overwrite_typed_profile_name(qapp, settings):
     f = t._manual_target_name_edit
     f.setText("MyCanonProfile")                     # the user's chosen name
     key = next(k for k, p in KNUT_PRESETS_BY_KEY.items()
-               if p.slug == "wg_colormunki_a3plus_1196p_1page_landscape")
+               if p.slug == "fls_colormunki_a3plus_1196p_1page_landscape")
     t._knut_active, t._knut_active_key = True, key
     t._seed_knut_preset(key, KNUT_PRESETS_BY_KEY[key].default_target_name)
     assert f.text() == "MyCanonProfile"             # untouched by the preset
@@ -275,7 +275,7 @@ def test_preset_seeds_name_only_when_field_empty(qapp, settings):
     f = t._manual_target_name_edit
     f.setText("")                                   # nothing typed yet
     key = next(k for k, p in KNUT_PRESETS_BY_KEY.items()
-               if p.slug == "wg_colormunki_a3plus_1196p_1page_landscape")
+               if p.slug == "fls_colormunki_a3plus_1196p_1page_landscape")
     t._knut_active, t._knut_active_key = True, key
     default = KNUT_PRESETS_BY_KEY[key].default_target_name
     t._seed_knut_preset(key, default)
@@ -290,8 +290,8 @@ def test_sortable_builtin_name_normalisation():
     ) == "i1Pro-A4-1168p-2pages-Portrait-w7.5mm-TC9.18+Spyderprint Grays"
     # No width token, different family suffix.
     assert _sortable_builtin_name(
-        "ColorMunki", "A3-1575p-3pages-Portrait · Wide-gamut", " · Wide-gamut"
-    ) == "ColorMunki-A3-1575p-3pages-Portrait-Wide-gamut"
+        "ColorMunki", "A3-1575p-3pages-Portrait · Full layout setup", " · Full layout setup"
+    ) == "ColorMunki-A3-1575p-3pages-Portrait-Full layout setup"
 
 
 def test_create_chart_suggest_includes_patches_and_orientation(qapp, settings, tmp_path):

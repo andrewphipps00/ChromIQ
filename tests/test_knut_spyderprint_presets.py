@@ -72,11 +72,11 @@ def _fmt_scale(v: float) -> str:
 # ---------------------------------------------------------------------------
 
 def test_registry_shape():
-    # 17 TC9.18+Spyderprint presets (shared .ti1) + 13 "Wide-gamut" presets
-    # (#63, Knut's exported charts; each its own .ti1).
-    assert len(KNUT_PRESETS) == 30
-    assert len(KNUT_PRESET_KEYS) == 30  # all keys unique
-    assert sum(1 for p in KNUT_PRESETS if p.slug.startswith("wg_")) == 13
+    # 17 TC9.18+Spyderprint presets (shared .ti1) + 16 "Full layout setup"
+    # presets (#63, Knut's exported charts; each its own .ti1 + recipe).
+    assert len(KNUT_PRESETS) == 33
+    assert len(KNUT_PRESET_KEYS) == 33  # all keys unique
+    assert sum(1 for p in KNUT_PRESETS if p.slug.startswith("fls_")) == 16
     assert KNUT_PRESET_KEYS <= BUILTIN_PRESET_KEYS
     assert all(p.combo_label in BUILTIN_PRESET_LABELS for p in KNUT_PRESETS)
     # every preset is reachable from a dropdown/overlay group
@@ -88,12 +88,15 @@ def test_ti1_asset_present():
     assert resource_path(KNUT_TI1_ASSET).is_file()
 
 
-def test_widegamut_ti1_assets_present():
-    # Every Wide-gamut chart (#63) ships its own .ti1 — guard the bundled files.
-    wg = [p for p in KNUT_PRESETS if p.slug.startswith("wg_")]
-    assert len(wg) == 13
-    for p in wg:
+def test_fulllayout_ti1_assets_present():
+    # Every Full-layout-setup chart (#63) ships its own .ti1 + recipe.json —
+    # guard the bundled files.
+    fls = [p for p in KNUT_PRESETS if p.slug.startswith("fls_")]
+    assert len(fls) == 16
+    for p in fls:
         assert resource_path(p.ti1_asset).is_file(), f"missing {p.ti1_asset}"
+        recipe = resource_path(p.ti1_asset).parent / "recipe.json"
+        assert recipe.is_file(), f"missing {recipe}"
 
 
 def test_keys_are_stable_sentinels():
@@ -114,7 +117,7 @@ def test_seeded_command_matches_recipe(qapp, settings, key):
     tab._seed_knut_preset(key)
     args = _printtarg_args(tab)
 
-    # Field-driven so it covers both the TC9.18 family and the Wide-gamut one.
+    # Field-driven so it covers both the TC9.18 family and the Full-layout-setup one.
     triple = p.triple_density and p.instrument == "CM"
     if triple:
         # Triple density lays out with the i1Pro geometry and forces -L; it's
@@ -152,10 +155,10 @@ def test_seeded_command_matches_recipe(qapp, settings, key):
         assert not any(a.startswith("-R") for a in args)
 
 
-def test_widegamut_preset_uses_its_own_ti1_and_count(qapp, settings):
-    # #58: a Wide-gamut preset bundles its OWN .ti1 (not the shared TC9.18 set),
-    # and its reuse info box reports that preset's patch count, not 1168.
-    key = "__chromiq_knut_wg_colormunki_a3_2016p_4pages_portrait__"
+def test_fulllayout_preset_uses_its_own_ti1_and_count(qapp, settings):
+    # #58: a Full-layout-setup preset bundles its OWN .ti1 (not the shared TC9.18
+    # set), and its reuse info box reports that preset's patch count, not 1168.
+    key = "__chromiq_knut_fls_colormunki_a3_2016p_4pages_portrait__"
     p = KNUT_PRESETS_BY_KEY[key]
     assert p.ti1_asset != KNUT_TI1_ASSET
     assert p.patches == 2016
@@ -167,7 +170,7 @@ def test_widegamut_preset_uses_its_own_ti1_and_count(qapp, settings):
     tab._refresh_manual_command_preview()
     info = tab._manual_info_lbl.text()
     assert "2016" in info and "1168" not in info
-    assert "Wide-gamut" in tab._knut_tooltip(key)
+    assert "Full layout setup" in tab._knut_tooltip(key)
 
 
 def test_three_decimal_scale_survives(qapp, settings):

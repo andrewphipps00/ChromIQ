@@ -221,32 +221,40 @@ spacer scale, `-R` seed). Selecting one:
   Leaving a preset reverts its forced printtarg flags (`_reset_knut_overrides`),
   unticks the override box, and clears the flags.
 
-### Wide-gamut family (#63) — per-preset `.ti1`
+### Full-layout-setup family (#63) — per-preset `.ti1` + recipe
 
-**13** `_Ti1Preset` rows (slugs `wg_*`, label suffix `KNUT_WG_SUFFIX = " · Wide-gamut"`)
-are Knut's exported Create-Chart charts (#63 superseded the original four #53
-ones — the 924/1196/1575/2016 charts). They use the **same** ti1→printtarg
-machinery but each carries its **own** bundled `.ti1` (varied patch sets:
-480 … 2016) under `assets/charts/knut/rgb/widegamut/<leaf>/chart.ti1`. The
-`_Ti1Preset` dataclass grew optional fields whose **defaults reproduce the shared
-TC9.18 presets byte-for-byte**, so only this family sets them: `ti1_asset`
-(per-preset `.ti1`), `patches`/`white`/`black` (descriptive targen display),
-`no_strip_limit` (`-P`), `suppress_left_clip` (`-L`), `tiff_16bit` (8- vs 16-bit
-`-T`/`-t`), `triple_density` (the i1Pro-layout + ColorMunki-tag trick — set on
-the manual TD checkbox in `_seed_knut_preset` **before** `-a`/`-m` so the recipe's
-own scale/margin win over the TD `-a1.3/-m5` preset), and `suffix` (so
+**16** `_Ti1Preset` rows (slugs `fls_*`, label suffix
+`KNUT_FLS_SUFFIX = " · Full layout setup"`) are Knut's exported Create-Chart
+charts. The name highlights what sets them apart: each ships the **complete**
+Create-Chart setup (colour-set recipe + layout), so they're meant as a basis for
+new charts. (This family replaced the earlier "Wide-gamut" set — the label was a
+misnomer.) They use the **same** ti1→printtarg machinery but each carries its
+**own** bundled `.ti1` (varied patch sets: 480 … 2016) under
+`assets/charts/knut/rgb/fulllayout/<slug>/chart.ti1`. The `_Ti1Preset` dataclass
+grew optional fields whose **defaults reproduce the shared TC9.18 presets
+byte-for-byte**, so only this family sets them: `ti1_asset` (per-preset `.ti1`),
+`patches`/`white`/`black` (descriptive targen display), `no_strip_limit` (`-P`),
+`suppress_left_clip` (`-L`), `tiff_16bit` (8- vs 16-bit `-T`/`-t`),
+`triple_density` (the i1Pro-layout + ColorMunki-tag trick — set on the manual TD
+checkbox in `_seed_knut_preset` **before** `-a`/`-m` so the recipe's own
+scale/margin win over the TD `-a1.3/-m5` preset), and `suffix` (so
 `default_target_name` strips the right tail). `_seed_knut_preset` reads those
 fields instead of the old hard-coded constants, and `_apply_knut_preset` resolves
 `p.ti1_asset`. To add another, append a row — no other wiring changes.
 `test_knut_spyderprint_presets.py` is field-driven, so it pins both families.
 
-**"Load setup from preset" (New chart):** each chart that was saved with an
-`editor_recipe` also has that recipe in
-`assets/charts/knut/rgb/widegamut/recipes.json` (keyed `"<instrument> <name>"`,
-e.g. `"i1Pro A4-924p-2pages-Portrait"`, since i1Pro and ColorMunki variants can
-share a chart name). `_NewChartDialog._available_preset_recipes` lists those with
-a ★. Two of the 13 (the 1196-2pages and 1224 ColorMunki charts) were saved without
-a recipe, so they're selectable built-in charts but don't appear there.
+The rows + bundled assets are generated from Knut's JSON+`.ti1` exports: the
+build step normalises each preset's stored recipe (Set B) to the chart actually
+built (Set A) — layout copied from `data.printtarg_*`, `fill_to` set to the
+`.ti1` patch count — then writes `chart.ti1` + `recipe.json` under each slug.
+
+**"Load setup from preset" (New chart):** every chart carries its recipe in a
+per-folder `recipe.json` **sidecar** beside its `chart.ti1` (the general
+built-in convention — `builtin_preset_recipe` reads the sidecar first; the old
+shared `widegamut/recipes.json` store is gone). The recipe is keyed for display
+as `"<instrument> <name>"`, e.g. `"i1Pro A4-924p-2pages-Portrait"`, since i1Pro
+and ColorMunki variants can share a chart name.
+`_NewChartDialog._available_preset_recipes` lists those with a ★.
 
 `_Ti1Preset.key` is `__chromiq_knut_<slug>__`; the **slug**, not the display
 name, is the stable identity — renaming a `name` must not change a slug.
