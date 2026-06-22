@@ -31,12 +31,15 @@ def test_seed_table_has_i1pro_combos():
 
 # --- settings round-trip ---------------------------------------------------
 
-def test_thresholds_round_trip(monkeypatch, tmp_path):
-    # Isolate QSettings to a throwaway store.
+def _isolated_settings(tmp_path) -> AppSettings:
     from PyQt6.QtCore import QSettings
-    QSettings.setPath(QSettings.Format.IniFormat, QSettings.Scope.UserScope,
-                      str(tmp_path))
     s = AppSettings()
+    s._qs = QSettings(str(tmp_path / "s.ini"), QSettings.Format.IniFormat)
+    return s
+
+
+def test_thresholds_round_trip(tmp_path):
+    s = _isolated_settings(tmp_path)
     # Empty store → seed defaults.
     assert s.get_margin_thresholds()["i1Pro|A4 Landscape"]["L"] == 11
     table = {"i1Pro|A4 Landscape": {"L": 12.5, "R": 30, "T": 11, "B": 11,
@@ -47,11 +50,8 @@ def test_thresholds_round_trip(monkeypatch, tmp_path):
     assert got["i1Pro|A4 Landscape"]["desc"] == "my rig"
 
 
-def test_corrupt_blob_falls_back_to_seeds(monkeypatch, tmp_path):
-    from PyQt6.QtCore import QSettings
-    QSettings.setPath(QSettings.Format.IniFormat, QSettings.Scope.UserScope,
-                      str(tmp_path))
-    s = AppSettings()
+def test_corrupt_blob_falls_back_to_seeds(tmp_path):
+    s = _isolated_settings(tmp_path)
     s.set("margin_thresholds", "{not json")
     assert s.get_margin_thresholds() == default_margin_thresholds()
 
