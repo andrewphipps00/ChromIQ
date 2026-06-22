@@ -190,6 +190,27 @@ def default_margin_thresholds() -> dict[str, dict[str, Any]]:
     return copy.deepcopy(_MARGIN_SEED)
 
 
+def parse_margin_thresholds(raw: str) -> dict[str, dict[str, Any]]:
+    """Decode the stored margin-threshold JSON blob (``""`` → seed defaults)."""
+    import json
+
+    if not raw:
+        return default_margin_thresholds()
+    try:
+        doc = json.loads(raw)
+        if isinstance(doc, dict):
+            return doc
+    except (ValueError, TypeError):
+        log.warning("Corrupt margin_thresholds blob — using seed defaults")
+    return default_margin_thresholds()
+
+
+def serialize_margin_thresholds(table: dict[str, dict[str, Any]]) -> str:
+    import json
+
+    return json.dumps(table, ensure_ascii=False)
+
+
 def margin_combo_key(instrument: str, paper: str, orientation: str) -> str:
     """Canonical "<instrument>|<paper> <Orientation>" threshold key."""
     paper = (paper or "").strip()
@@ -253,20 +274,7 @@ class AppSettings:
         Stored as a JSON string under ``margin_thresholds`` so the whole
         editable matrix round-trips through QSettings as one value.
         """
-        import json
-
-        raw = self.get("margin_thresholds", "")
-        if not raw:
-            return default_margin_thresholds()
-        try:
-            doc = json.loads(raw)
-            if isinstance(doc, dict):
-                return doc
-        except (ValueError, TypeError):
-            log.warning("Corrupt margin_thresholds blob — using seed defaults")
-        return default_margin_thresholds()
+        return parse_margin_thresholds(self.get("margin_thresholds", ""))
 
     def set_margin_thresholds(self, table: dict[str, dict[str, Any]]) -> None:
-        import json
-
-        self.set("margin_thresholds", json.dumps(table, ensure_ascii=False))
+        self.set("margin_thresholds", serialize_margin_thresholds(table))

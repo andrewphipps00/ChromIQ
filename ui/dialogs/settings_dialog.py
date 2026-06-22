@@ -758,8 +758,12 @@ class SettingsDialog(QDialog):
         intro.setStyleSheet("color: #909090; font-size: 11px;")
         v.addWidget(intro)
 
-        # In-memory working copy; committed to settings on Save.
-        self._margin_table = self._settings.get_margin_thresholds()
+        # In-memory working copy; committed to settings on Save. Read via the
+        # generic get + module parser so any settings object (incl. test doubles
+        # with only get/set) works.
+        from core.settings import parse_margin_thresholds
+        self._margin_table = parse_margin_thresholds(
+            self._settings.get("margin_thresholds", ""))
 
         # ---- behaviour checkboxes ----
         self._margin_show_check = QCheckBox(
@@ -1012,7 +1016,8 @@ class SettingsDialog(QDialog):
         self._commit_margin_combo()   # flush the currently-shown combo's edits
         s.set("margin_inspector_show",     self._margin_show_check.isChecked())
         s.set("margin_violation_notify",   self._margin_notify_check.isChecked())
-        s.set_margin_thresholds(self._margin_table)
+        from core.settings import serialize_margin_thresholds
+        s.set("margin_thresholds", serialize_margin_thresholds(self._margin_table))
         log.info("Settings saved")
         self.accept()
 
