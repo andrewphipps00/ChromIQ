@@ -263,6 +263,10 @@ class TiffPreview(QWidget):
         self._panning = False
         self._pan_anchor = QPoint()
         self._ink_channels: list[str] | None = None
+        # Margin-threshold guide lines: list of (axis, frac, violated) where
+        # axis is "v"/"h" and frac is 0..1 of the image width/height. Drawn on
+        # top of the preview only (never baked into the TIFF). Empty = none.
+        self._margin_guides: list[tuple[str, float, bool]] = []
         self._mode: str = "dark"
         self._refresh_timer = QTimer(self)
         self._refresh_timer.setSingleShot(True)
@@ -372,6 +376,21 @@ class TiffPreview(QWidget):
         """Tint the margin drawn around the image (e.g. to the simulated paper
         white). ``None`` restores plain white. Repaints if an image is shown."""
         self._frame_color = QColor(color) if color is not None else QColor(Qt.GlobalColor.white)
+        if self._pixmap:
+            self._repaint_label()
+
+    def set_margin_guides(
+        self, guides: "list[tuple[str, float, bool]] | None"
+    ) -> None:
+        """Set dotted margin-threshold guide lines drawn over the preview.
+
+        Each guide is ``(axis, frac, violated)``: ``axis`` "v" draws a vertical
+        line at ``frac`` of the image width, "h" a horizontal line at ``frac``
+        of the height; ``violated`` paints it red instead of the neutral
+        black/white dash. Drawn on the display only — never into the TIFF.
+        Pass ``None`` or an empty list to clear.
+        """
+        self._margin_guides = list(guides or [])
         if self._pixmap:
             self._repaint_label()
 
@@ -745,8 +764,45 @@ class TiffPreview(QWidget):
                     bot.closeSubpath()
                     painter.fillPath(bot, QColor("#56d6a5"))
 
+        if self._margin_guides:
+            self._draw_margin_guides(
+                painter, B, scaled.width() / dpr, scaled.height() / dpr)
+
         painter.end()
         self._img_label.setPixmap(canvas)
+
+    def _draw_margin_guides(
+        self, painter: QPainter, border: float, disp_w: float, disp_h: float
+    ) -> None:
+        """Paint the margin-threshold guide lines over the displayed image.
+
+        Each non-violated line is a black dash over a white halo so it stays
+        visible on any patch colour in either theme; a violated line is red over
+        the same halo so the eye goes straight to the offending edge.
+        """
+        from PyQt6.QtGui import QPen
+
+        for axis, frac, violated in self._margin_guides:
+            frac = max(0.0, min(1.0, frac))
+            if axis == "v":
+                x = border + frac * disp_w
+                p1 = (x, border); p2 = (x, border + disp_h)
+            else:
+                y = border + frac * disp_h
+                p1 = (border, y); p2 = (border + disp_w, y)
+            # White halo underlay (solid, slightly wider) for contrast.
+            halo = QPen(QColor(255, 255, 255, 200))
+            halo.setWidthF(2.6)
+            painter.setPen(halo)
+            painter.drawLine(int(p1[0]), int(p1[1]), int(p2[0]), int(p2[1]))
+            # Dashed top line: red when violated, else near-black.
+            top = QPen(QColor("#e0564b") if violated else QColor(20, 20, 20))
+            top.setWidthF(1.2)
+            top.setStyle(Qt.PenStyle.CustomDashPattern)
+            top.setDashPattern([4, 4])
+            painter.setPen(top)
+            painter.drawLine(int(p1[0]), int(p1[1]), int(p2[0]), int(p2[1]))
+        painter.setPen(Qt.PenStyle.SolidLine)
 
     def _repaint_interactive(self) -> None:
         """Fit-to-window at zoom 1, then scale + pan within the viewport. The

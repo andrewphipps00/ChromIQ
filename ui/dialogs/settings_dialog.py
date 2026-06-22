@@ -731,8 +731,8 @@ class SettingsDialog(QDialog):
     # Instruments and paper+orientation choices the per-combo thresholds can be
     # defined for. The instrument labels match what the Create Chart inspector
     # derives from the chart (see core.settings.margin_combo_key).
-    _MARGIN_INSTRUMENTS = ("i1Pro", "i1Pro 3", "i1Pro 3+", "ColorMunki", "SpyderPrint")
-    _MARGIN_PAPERS = ("A4", "Letter", "A3", "A3+", "A2", "Tabloid", "Ledger")
+    _MARGIN_INSTRUMENTS = ("i1Pro", "i1Pro 3+", "ColorMunki", "SpectroScan")
+    _MARGIN_PAPERS = ("A4", "Letter", "A3", "A3+", "A2", "Tabloid")
     _MARGIN_ORIENTS = ("Portrait", "Landscape")
 
     def _build_margin_thresholds_tab(self) -> QWidget:

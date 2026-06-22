@@ -371,6 +371,39 @@ def _paper_area_mm2(paper: str) -> float:
     return 0.0
 
 
+# Instrument flag → margin-threshold label (must match settings_dialog
+# _MARGIN_INSTRUMENTS and core.settings seed keys).
+_MARGIN_INSTR_LABEL = {
+    "i1": "i1Pro", "p3": "i1Pro 3+", "CM": "ColorMunki",
+    "SS": "SpectroScan", "isis": "i1iSis",
+}
+
+# Canonical sheet name keyed by sorted (short, long) mm, rounded — so any paper
+# code (named, "WxH", or rotated) resolves to one threshold-combo paper name.
+# Orientation is carried separately, so Tabloid/Ledger (same sheet) share "Tabloid".
+_CANON_PAPER_BY_DIMS = {
+    (210.0, 297.0): "A4",
+    (215.9, 279.4): "Letter",
+    (215.9, 355.6): "Legal",
+    (297.0, 420.0): "A3",
+    (329.0, 483.0): "A3+",
+    (420.0, 594.0): "A2",
+    (279.4, 431.8): "Tabloid",
+}
+
+
+def _canonical_paper_name(w_mm: float, h_mm: float) -> str | None:
+    """Best-effort canonical sheet name from page dimensions (mm), or None.
+
+    Tolerant to ~2 mm so a measured TIFF page (px → mm) still matches the named
+    size. Returns None for unknown sizes (→ no thresholds for that combo)."""
+    lo, hi = sorted((w_mm, h_mm))
+    for (clo, chi), name in _CANON_PAPER_BY_DIMS.items():
+        if abs(lo - clo) <= 2.5 and abs(hi - chi) <= 2.5:
+            return name
+    return None
+
+
 def _paper_sort_key(paper: str) -> float:
     """Ordering key for "smallest sheet first".
 
@@ -1092,6 +1125,21 @@ class TabChart(QWidget):
         self._preview = TiffPreview(right)
         self._preview.set_caption(tr("CHART PREVIEW"))
         right_layout.addWidget(self._preview, stretch=1)
+
+        # Margin inspector — measures the realised page margins of the generated
+        # preview and flags ruler/jig threshold violations (Knut). Hidden when
+        # the user disables it in Settings → Margin Thresholds.
+        from ui.margin_inspector_panel import MarginInspectorPanel
+        self._margin_panel = MarginInspectorPanel(right)
+        self._margin_panel.guides_toggled.connect(self._on_margin_guides_toggled)
+        right_layout.addWidget(self._margin_panel)
+        self._margin_panel.set_guides_checked(
+            bool(self._settings.get("margin_guides_show", False)))
+        self._margin_panel.setVisible(
+            bool(self._settings.get("margin_inspector_show", True)))
+        # Page TIFFs + ti2 of the chart currently in the preview (for measuring).
+        self._margin_tiffs: list[Path] = []
+        self._margin_ti2: Path | None = None
 
         splitter.addWidget(right)
         splitter.setStretchFactor(0, 1)
@@ -4662,8 +4710,10 @@ class TabChart(QWidget):
         )
         if tiffs:
             self._preview.load_tiff(list(tiffs))
+            self._set_margin_chart(list(tiffs), ti2_path)
         else:
             self._preview.clear()
+            self._set_margin_chart([], None)
         self._maybe_warn_reflected_backfill(ti2_path)
 
     def _maybe_warn_reflected_backfill(self, ti2_path: Path) -> None:
@@ -5920,8 +5970,10 @@ class TabChart(QWidget):
             # offer to attach it.
             ti1 = tiffs[0].parent / f"{stem}.ti1"
             self._current_ti1_path = ti1 if ti1.is_file() else None
+            self._set_margin_chart(tiffs, ti2)
             self.chart_finished.emit(tiffs, ti2, is_isis)
         else:
+            self._set_margin_chart([], None)
             self._log.appendPlainText("[ERROR] Chart generation failed.")
             self._log.ensureCursorVisible()
             # When the i1iSis hand-off already succeeded the user doesn't need
@@ -5938,6 +5990,124 @@ class TabChart(QWidget):
                         else "Chart Layout Failed (printtarg)"
                     )
                     InfoDialog(title, friendly, self, min_width=520).exec()
+
+    # ------------------------------------------------------------------
+    # Margin inspector
+    # ------------------------------------------------------------------
+    def _set_margin_chart(self, tiffs: "list[Path]", ti2: "Path | None") -> None:
+        """Record the chart now in the preview and refresh the margin inspector."""
+        self._margin_tiffs = list(tiffs or [])
+        self._margin_ti2 = ti2 if (ti2 and Path(ti2).is_file()) else None
+        self._update_margin_inspector()
+
+    def _paper_dims_mm(self) -> "tuple[float, float] | None":
+        """True sheet size (mm) of the selected paper, for cropped-TIFF fix-up."""
+        code = self._paper_combo.currentData() if self._paper_combo else None
+        if not code:
+            return None
+        dims = _PAPER_MM.get(code)
+        if dims:
+            return dims
+        if "x" in str(code):
+            try:
+                w, h = str(code).split("x", 1)
+                return (float(w), float(h))
+            except ValueError:
+                return None
+        return None
+
+    def _update_margin_inspector(self) -> None:
+        panel = getattr(self, "_margin_panel", None)
+        if panel is None:
+            return
+        show = bool(self._settings.get("margin_inspector_show", True))
+        panel.setVisible(show)
+        if not show or not self._margin_tiffs:
+            panel.show_placeholder()
+            self._preview.set_margin_guides(None)
+            return
+
+        from workflow.margin_inspector import measure_margins, check_violations
+        from core.settings import margin_combo_key
+
+        dims = self._paper_dims_mm()
+        pw, ph = (dims if dims else (None, None))
+        dpi = float(self._settings.get("printtarg_dpi", 300) or 300)
+        reports = []
+        for tif in self._margin_tiffs:
+            r = measure_margins(tif, dpi=dpi, ti2_path=self._margin_ti2,
+                                paper_w_mm=pw, paper_h_mm=ph)
+            if r is not None:
+                reports.append(r)
+        if not reports:
+            panel.show_placeholder()
+            self._preview.set_margin_guides(None)
+            return
+
+        instr_flag = (self._instr_combo.currentData()
+                      if self._instr_combo is not None else "i1") or "i1"
+        instr_label = _MARGIN_INSTR_LABEL.get(instr_flag, instr_flag)
+        r0 = reports[0]
+        paper_name = _canonical_paper_name(r0.page_w_mm, r0.page_h_mm)
+        orient = "Landscape" if r0.page_w_mm > r0.page_h_mm else "Portrait"
+        thresholds = None
+        if paper_name:
+            key = margin_combo_key(instr_label, paper_name, orient)
+            thresholds = self._settings.get_margin_thresholds().get(key)
+
+        # Surface the worst (most-violated) page so a bad page is never missed.
+        best_r, best_v = reports[0], check_violations(reports[0], thresholds)
+        for r in reports[1:]:
+            v = check_violations(r, thresholds)
+            if len(v) > len(best_v):
+                best_r, best_v = r, v
+
+        panel.update_report(
+            best_r, best_v,
+            thresholds_defined=bool(thresholds),
+            notify=bool(self._settings.get("margin_violation_notify", True)),
+        )
+        self._refresh_margin_guides(best_r, thresholds, best_v)
+
+    def _refresh_margin_guides(self, report, thresholds, violations) -> None:
+        """Push dotted threshold guide lines to the preview (or clear them)."""
+        panel = getattr(self, "_margin_panel", None)
+        if panel is None or not panel.guides_enabled() or not thresholds:
+            self._preview.set_margin_guides(None)
+            return
+        violated = {v.edge for v in violations}
+        guides: list[tuple[str, float, bool]] = []
+        # (key, edge, axis, page-extent, measured-from-start)
+        specs = (
+            ("L", "Left", "v", report.page_w_mm, True),
+            ("R", "Right", "v", report.page_w_mm, False),
+            ("T", "Top", "h", report.page_h_mm, True),
+            ("B", "Bottom", "h", report.page_h_mm, False),
+        )
+        for key, edge, axis, extent, from_start in specs:
+            raw = thresholds.get(key)
+            if raw in (None, "") or not extent:
+                continue
+            try:
+                thr = float(raw)
+            except (TypeError, ValueError):
+                continue
+            frac = (thr / extent) if from_start else (1.0 - thr / extent)
+            guides.append((axis, frac, edge in violated))
+        self._preview.set_margin_guides(guides or None)
+
+    def _on_margin_guides_toggled(self, on: bool) -> None:
+        self._settings.set("margin_guides_show", bool(on))
+        self._update_margin_inspector()
+
+    def refresh_margin_inspector_settings(self) -> None:
+        """Re-read margin-inspector settings after the Preferences dialog closes
+        (visibility, notify, thresholds may have changed)."""
+        panel = getattr(self, "_margin_panel", None)
+        if panel is not None:
+            panel.set_guides_checked(
+                bool(self._settings.get("margin_guides_show", False)))
+        self._update_margin_inspector()
 
     def _maybe_autotag_randomised(self, ti2: Path) -> None:
         """Upgrade a fixed-order (CHART_ID) chart to RANDOM_START when its layout

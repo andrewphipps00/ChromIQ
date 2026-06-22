@@ -636,6 +636,9 @@ class MainWindow(QMainWindow):
         # immediately on the Create Chart tab.
         if hasattr(self._tab_chart, "refresh_chromiq_clip_visibility"):
             self._tab_chart.refresh_chromiq_clip_visibility()
+        # Margin-inspector visibility / thresholds / guide toggle may have changed.
+        if hasattr(self._tab_chart, "refresh_margin_inspector_settings"):
+            self._tab_chart.refresh_margin_inspector_settings()
 
     def _apply_calibration_mode(self) -> None:
         enabled = bool(self._settings.get("calibration_mode", False))
