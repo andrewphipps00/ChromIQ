@@ -1,5 +1,20 @@
 # Changelog
 
+## v3.11.25
+
+### ✨ New
+- **A way out when a refinement chart takes too long.** With certain
+  pre-conditioning profiles, Argyll's default patch-arrangement method can slow
+  down dramatically on larger (multi-page) charts — the app looked frozen while
+  it was actually still working. ChromIQ now watches for this and, if a chart
+  build runs unusually long, offers a clear choice: keep waiting, **rebuild the
+  same chart with a faster patch layout** (same profile and patch count — for a
+  refinement chart the quality is effectively identical, and it finishes almost
+  instantly), or cancel. You're asked again on every slow build. Big thanks to
+  @Hackensacker for the detailed report and test files that made this possible.
+- **Live chart-building progress.** Patch placement now shows a running
+  percentage in the log, so it's obvious the build is working and not stuck.
+
 ## v3.11.24
 
 ### ✨ New
