@@ -1,5 +1,13 @@
 # Changelog
 
+## v3.12.0-beta.12
+
+### 🔧 Changed
+- **i1Pro 3+ now has default margin thresholds too** — 28 / 9 / 40 / 9 mm on the
+  primary reading orientations (slightly more than the i1Pro on the clip and
+  label edges; provisional), 9 mm all round elsewhere. Use "Restore default
+  thresholds" to pick them up. (#82)
+
 ## v3.12.0-beta.11
 
 ### ✨ New
