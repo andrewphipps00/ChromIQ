@@ -1129,17 +1129,21 @@ class TabChart(QWidget):
         # Margin inspector — measures the realised page margins of the generated
         # preview and flags ruler/jig threshold violations (Knut). Hidden when
         # the user disables it in Settings → Margin Thresholds.
+        # Page TIFFs + ti2 of the chart currently in the preview (for measuring).
+        # Set BEFORE the panel is wired so restoring the saved guide-checkbox
+        # state (which can emit guides_toggled) never finds these unset.
+        self._margin_tiffs: list[Path] = []
+        self._margin_ti2: Path | None = None
         from ui.margin_inspector_panel import MarginInspectorPanel
         self._margin_panel = MarginInspectorPanel(right)
-        self._margin_panel.guides_toggled.connect(self._on_margin_guides_toggled)
         right_layout.addWidget(self._margin_panel)
         self._margin_panel.set_guides_checked(
             bool(self._settings.get("margin_guides_show", False)))
         self._margin_panel.setVisible(
             bool(self._settings.get("margin_inspector_show", True)))
-        # Page TIFFs + ti2 of the chart currently in the preview (for measuring).
-        self._margin_tiffs: list[Path] = []
-        self._margin_ti2: Path | None = None
+        # Connect only after the initial state is restored, so building the UI
+        # can't trigger a measure pass.
+        self._margin_panel.guides_toggled.connect(self._on_margin_guides_toggled)
 
         splitter.addWidget(right)
         splitter.setStretchFactor(0, 1)
@@ -6020,9 +6024,10 @@ class TabChart(QWidget):
         panel = getattr(self, "_margin_panel", None)
         if panel is None:
             return
+        tiffs = getattr(self, "_margin_tiffs", None)
         show = bool(self._settings.get("margin_inspector_show", True))
         panel.setVisible(show)
-        if not show or not self._margin_tiffs:
+        if not show or not tiffs:
             panel.show_placeholder()
             self._preview.set_margin_guides(None)
             return
