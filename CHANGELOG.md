@@ -1,5 +1,21 @@
 # Changelog
 
+## v3.12.0-beta.11
+
+### ✨ New
+- **"Restore default thresholds" button** in Preferences → Margin Thresholds —
+  pulls in updated built-in defaults (changing the defaults in a new version
+  doesn't overwrite thresholds you've already saved). (#82)
+
+### 🔧 Changed
+- The margin-inspector **ⓘ help button moved to the bottom corner** so it no
+  longer takes space at the top, and its text now also explains the dotted guide
+  lines and the page-edge marker. The Preferences → Margin Thresholds help was
+  rewritten in the same friendly, plain-language style. (#86)
+- Preferences → Margin Thresholds now **preselects the instrument and paper you
+  currently have selected** in Create Chart (in either mode), even before a
+  chart is generated. (#81)
+
 ## v3.12.0-beta.10
 
 ### ✨ New
