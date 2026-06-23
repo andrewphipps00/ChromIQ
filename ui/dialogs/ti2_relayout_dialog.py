@@ -2192,8 +2192,12 @@ class _NewChartDialog(QDialog):
         if self._gen_unique.isChecked():
             # Assure a real minimum spacing, walking the sets top-to-bottom (the
             # order above) so each set's patches are spaced against the ones above
-            # — not just landed on distinct grid cells (Knut, #78).
-            program = G.enforce_min_distance(program, _GEN_MIN_DIST)
+            # — not just landed on distinct grid cells (Knut, #78). Seed the
+            # chart's EXISTING patches first so even the topmost generator avoids
+            # overlapping them, not just the other generators (Knut, #89). In the
+            # New Chart flow there are none, so this is unchanged there.
+            program = G.enforce_min_distance(
+                program, _GEN_MIN_DIST, existing=self._existing_patches)
         # Pure white & black goes in *after* de-dup (so its deliberate repeats
         # survive) but *before* fill, so it's part of the chart fill tops up to —
         # not stacked on top of it. These are deliberate anchor patches, so they

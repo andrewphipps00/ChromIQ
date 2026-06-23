@@ -185,6 +185,34 @@ def test_fill_counts_existing_chart_patches(qapp):
     assert len(dlg._build_generated_program()) == 40        # 60 there + 40 = 100
 
 
+def test_generators_avoid_existing_patches(qapp):
+    """#89: 'Ensure unique colours' must keep even the topmost generator clear of
+    the chart's EXISTING patches, not just clear of the other generators."""
+    from ui.dialogs.ti2_relayout_dialog import _GEN_MIN_DIST
+    # Existing patches sitting exactly on the 4³ RGB-cube grid the generator
+    # would otherwise place onto.
+    grid = [0.0, 100.0 / 3, 200.0 / 3, 100.0]
+    existing = [(r, g, b) for r in grid for g in grid for b in grid]
+    dlg = _AddPatchesDialog(_FakeSettings(), existing_patches=existing)
+    dlg._add_mode_gen.setChecked(True)
+    dlg._refresh_add_mode()
+    for n in dlg._GEN_CHECKS:
+        getattr(dlg, f"_gen_{n}").setChecked(False)
+    dlg._gen_cube.setChecked(True)
+    dlg._gen_cube_n.setValue(4)
+    dlg._gen_unique.setChecked(True)
+    dlg._update_gen_counts()
+
+    program = dlg._build_generated_program()
+    assert program
+    # Every generated patch must be at least the minimum distance from every
+    # existing patch (it can't sit on top of one any more).
+    for p in program:
+        nearest = min((p[0] - e[0]) ** 2 + (p[1] - e[1]) ** 2 + (p[2] - e[2]) ** 2
+                      for e in existing) ** 0.5
+        assert nearest >= _GEN_MIN_DIST - 1e-6, f"{p} only {nearest:.2f} from an existing patch"
+
+
 def test_fill_over_target_adds_nothing(qapp):
     existing = [(float(i % 100), 1.0, 2.0) for i in range(150)]
     dlg = _AddPatchesDialog(_FakeSettings(), existing_patches=existing)
