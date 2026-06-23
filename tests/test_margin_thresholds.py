@@ -22,16 +22,19 @@ def test_combo_key_format():
 
 def test_seed_table_matches_knut_values():
     seeds = default_margin_thresholds()
-    # i1Pro: 10 mm sides/bottom, 24 mm on the Top (label) edge (#82).
-    assert seeds["i1Pro|A4 Portrait"] == {"L": 10, "R": 10, "T": 24, "B": 10,
+    # i1Pro primary combos: 26 / 9 / 38 / 9 (L/R/T/B), confirmed (#82).
+    assert seeds["i1Pro|A4 Portrait"] == {"L": 26, "R": 9, "T": 38, "B": 9,
                                           "desc": "i1Pro ruler / jig"}
-    assert seeds["i1Pro|A3 Landscape"]["T"] == 24
+    assert seeds["i1Pro|A3 Landscape"]["T"] == 38
+    # Other i1Pro paper/orientations: plain 9 mm all round.
+    assert seeds["i1Pro|A3 Portrait"] == {"L": 9, "R": 9, "T": 9, "B": 9,
+                                          "desc": "i1Pro ruler / jig"}
     # ColorMunki: 6 mm sides/bottom, 24 mm on Top.
     assert seeds["ColorMunki|A4 Portrait"]["L"] == 6
     assert seeds["ColorMunki|Tabloid Landscape"]["T"] == 24
     # A fresh call returns an independent copy (no shared mutation).
     seeds["i1Pro|A4 Portrait"]["L"] = 999
-    assert default_margin_thresholds()["i1Pro|A4 Portrait"]["L"] == 10
+    assert default_margin_thresholds()["i1Pro|A4 Portrait"]["L"] == 26
 
 
 # --- settings round-trip ---------------------------------------------------
@@ -46,7 +49,7 @@ def _isolated_settings(tmp_path) -> AppSettings:
 def test_thresholds_round_trip(tmp_path):
     s = _isolated_settings(tmp_path)
     # Empty store → seed defaults.
-    assert s.get_margin_thresholds()["i1Pro|A4 Portrait"]["L"] == 10
+    assert s.get_margin_thresholds()["i1Pro|A4 Portrait"]["L"] == 26
     table = {"i1Pro|A4 Portrait": {"L": 12.5, "R": 30, "T": 11, "B": 11,
                                    "desc": "my rig"}}
     s.set_margin_thresholds(table)

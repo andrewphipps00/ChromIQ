@@ -47,9 +47,10 @@ class MarginReport:
     """Realised margins of one rendered page, in millimetres (printtarg frame).
 
     ``left/right/top/bottom`` are the white gaps from each paper edge to the
-    patch area. ``strip_width_mm`` is the estimated per-patch extent along the
-    instrument's reading (scan) direction, or ``None`` when it can't be derived.
-    ``page_w_mm`` / ``page_h_mm`` are the full sheet size as rendered.
+    patch area. ``strip_width_mm`` is the patch width across a strip. ``strip_
+    length_mm`` is the patch-block extent along the reading direction (page
+    height − top − bottom on a portrait page) — useful for the i1Pro jig's
+    240 mm max strip length. ``page_w_mm`` / ``page_h_mm`` are the full sheet.
     """
 
     left_mm: float
@@ -59,12 +60,13 @@ class MarginReport:
     strip_width_mm: Optional[float]
     page_w_mm: float
     page_h_mm: float
+    strip_length_mm: Optional[float] = None
 
     def as_dict(self) -> dict[str, float | None]:
         return {
             "L": self.left_mm, "R": self.right_mm,
             "T": self.top_mm, "B": self.bottom_mm,
-            "strip": self.strip_width_mm,
+            "strip": self.strip_width_mm, "strip_len": self.strip_length_mm,
         }
 
 
@@ -210,6 +212,12 @@ def measure_margins(
     top_mm = y0 * px2mm + off_y
     bottom_mm = (h_px - 1 - y1) * px2mm + off_y
 
+    # Strip length = patch-block extent along the reading direction (the strip
+    # length the instrument scans): block height on a portrait page (= page
+    # height − top − bottom), block width on a landscape page (#87).
+    portrait = page_h_mm >= page_w_mm
+    strip_length_mm = ((y1 - y0 + 1) if portrait else (x1 - x0 + 1)) * px2mm
+
     strip_width_mm: Optional[float] = None
     if ti2_path is not None:
         try:
@@ -230,6 +238,7 @@ def measure_margins(
         top_mm=max(0.0, top_mm), bottom_mm=max(0.0, bottom_mm),
         strip_width_mm=strip_width_mm,
         page_w_mm=page_w_mm, page_h_mm=page_h_mm,
+        strip_length_mm=strip_length_mm,
     )
 
 

@@ -167,6 +167,19 @@ def test_wrong_paper_size_would_inflate_but_default_does_not(tmp_path):
 
 
 @requires_argyll
+def test_strip_length_is_page_minus_top_bottom(tmp_path):
+    """#87: strip length = patch-block extent in the reading direction =
+    page height − top − bottom on a portrait chart."""
+    _, reports = _measure_preset(tmp_path, "fls_colormunki_a4_480p_2pages_portrait")
+    assert reports
+    for r in reports:
+        assert r.strip_length_mm is not None
+        assert r.strip_length_mm == pytest.approx(
+            r.page_h_mm - r.top_mm - r.bottom_mm, abs=0.2)
+        assert 150 < r.strip_length_mm < 260
+
+
+@requires_argyll
 def test_patch_width_is_cross_strip_pitch(tmp_path):
     """#83: the patch-width readout is the strip pitch across the strips
     (block_w/passes on a portrait page) — a ruler measurement across a strip,

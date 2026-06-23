@@ -95,6 +95,18 @@ class MarginInspectorPanel(QGroupBox):
         grid.addWidget(strip_name, row, 0)
         grid.addWidget(self._strip_mm, row, 1)
         grid.addWidget(self._strip_in, row, 2)
+        row += 1
+
+        len_name = QLabel(tr("Strip length"), self)
+        self._striplen_mm = QLabel("—", self)
+        self._striplen_in = QLabel("—", self)
+        self._striplen_mm.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self._striplen_in.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self._striplen_mm.setStyleSheet("font-family: Menlo; font-size: 11px;")
+        self._striplen_in.setStyleSheet("font-family: Menlo; font-size: 11px;")
+        grid.addWidget(len_name, row, 0)
+        grid.addWidget(self._striplen_mm, row, 1)
+        grid.addWidget(self._striplen_in, row, 2)
         grid.setColumnStretch(0, 1)
         v.addWidget(self._table)
 
@@ -177,6 +189,13 @@ class MarginInspectorPanel(QGroupBox):
         else:
             self._strip_mm.setText("—")
             self._strip_in.setText("—")
+
+        if report.strip_length_mm is not None:
+            self._striplen_mm.setText(f"{report.strip_length_mm:.1f}")
+            self._striplen_in.setText(f"{report.strip_length_mm / _MM_PER_INCH:.3f}")
+        else:
+            self._striplen_mm.setText("—")
+            self._striplen_in.setText("—")
 
         self._update_status(violations, thresholds_defined=thresholds_defined,
                             notify=notify)

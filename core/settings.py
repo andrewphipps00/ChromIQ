@@ -203,16 +203,19 @@ def _seed_rows(instr, desc, side, top, combos):
     }
 
 
+# i1Pro confirmed values (#82): the primary reading orientation of each common
+# paper needs the 26 mm left clip border, 38 mm label-edge top, 9 mm elsewhere;
+# every other i1Pro paper/orientation gets a plain 9 mm all round.
+_I1_PRIMARY = {"L": 26, "R": 9, "T": 38, "B": 9, "desc": _I1_DESC}
+_ALL_COMBOS = [(p, o) for p in _MARGIN_PAPERS_ALL
+               for o in ("Portrait", "Landscape")]
 _MARGIN_SEED: dict[str, dict[str, Any]] = {
-    **_seed_rows("i1Pro", _I1_DESC, 10, 24, [
-        ("A4", "Portrait"), ("Letter", "Portrait"),
-        ("A3", "Landscape"), ("Tabloid", "Landscape"),
-    ]),
-    **_seed_rows("ColorMunki", _CM_DESC, 6, 24, [
-        (paper, orient)
-        for paper in _MARGIN_PAPERS_ALL
-        for orient in ("Portrait", "Landscape")
-    ]),
+    **_seed_rows("i1Pro", _I1_DESC, 9, 9, _ALL_COMBOS),
+    "i1Pro|A4 Portrait":       dict(_I1_PRIMARY),
+    "i1Pro|Letter Portrait":   dict(_I1_PRIMARY),
+    "i1Pro|A3 Landscape":      dict(_I1_PRIMARY),
+    "i1Pro|Tabloid Landscape": dict(_I1_PRIMARY),
+    **_seed_rows("ColorMunki", _CM_DESC, 6, 24, _ALL_COMBOS),
 }
 
 
