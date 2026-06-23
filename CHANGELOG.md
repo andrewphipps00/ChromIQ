@@ -1,5 +1,10 @@
 # Changelog
 
+## v3.12.0-beta.15
+
+### 🔧 Changed
+- Updated the ColorMunki A4-484p built-in patch set to Knut's latest version; the four single-page ColorMunki presets are now internally consistent. (#89)
+
 ## v3.12.0-beta.14
 
 ### ✨ New
