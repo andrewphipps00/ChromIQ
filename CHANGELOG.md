@@ -1,5 +1,15 @@
 # Changelog
 
+## v3.12.0-beta.6
+
+### 🐛 Fixed
+- **Editing a margin threshold now always updates the preview guides**, even
+  when the Manual-mode paper differs from the chart on screen. Preferences now
+  opens on the exact instrument/paper the inspector is using for the previewed
+  chart. (#81)
+- Default **Top** margin threshold lowered from 30 to **24 mm** (still
+  provisional; editable per combo). (#82)
+
 ## v3.12.0-beta.5
 
 ### 🐛 Fixed
