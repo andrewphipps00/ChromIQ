@@ -37,7 +37,13 @@ from core.platform_paths import (
 from core.updater import UpdateChecker, _RELEASES_PAGE
 from core.version import APP_VERSION
 from ui.tooltip_button import TooltipButton
-from ui.widgets import NoScrollComboBox, NoScrollSpinBox, make_browse_button, open_dir_dialog
+from ui.widgets import (
+    NoScrollComboBox,
+    NoScrollDoubleSpinBox,
+    NoScrollSpinBox,
+    make_browse_button,
+    open_dir_dialog,
+)
 
 if TYPE_CHECKING:
     from core.settings import AppSettings
@@ -822,15 +828,17 @@ class SettingsDialog(QDialog):
         desc_row.addWidget(self._margin_desc, stretch=1)
         v.addLayout(desc_row)
 
-        # ---- L/R/T/B value table ----
+        # ---- L/R/T/B value table (1-decimal mm, #85) ----
         grid = QGridLayout()
-        self._margin_fields: dict[str, NoScrollSpinBox] = {}
+        self._margin_fields: dict[str, NoScrollDoubleSpinBox] = {}
         for col, (key, label) in enumerate(
                 (("L", tr("Left")), ("R", tr("Right")),
                  ("T", tr("Top")), ("B", tr("Bottom")))):
             grid.addWidget(QLabel(label, self), 0, col, Qt.AlignmentFlag.AlignHCenter)
-            sb = NoScrollSpinBox(self)
+            sb = NoScrollDoubleSpinBox(self)
             sb.setRange(0, 100)
+            sb.setDecimals(1)
+            sb.setSingleStep(0.5)
             sb.setSuffix(" mm")
             sb.valueChanged.connect(self._on_margin_field_changed)
             self._margin_fields[key] = sb
@@ -874,9 +882,9 @@ class SettingsDialog(QDialog):
         self._margin_desc.setText(str(entry.get("desc", "")))
         for key, sb in self._margin_fields.items():
             try:
-                sb.setValue(int(round(float(entry.get(key, 0)))))
+                sb.setValue(round(float(entry.get(key, 0)), 1))
             except (TypeError, ValueError):
-                sb.setValue(0)
+                sb.setValue(0.0)
         self._loading_margin_combo = False
 
     def _on_margin_field_changed(self) -> None:

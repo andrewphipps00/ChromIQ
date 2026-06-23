@@ -58,24 +58,31 @@ class MarginInspectorPanel(QGroupBox):
         grid.setVerticalSpacing(3)
         hdr_mm = QLabel(tr("mm"), self)
         hdr_in = QLabel(tr("inch"), self)
-        for w in (hdr_mm, hdr_in):
+        hdr_thr = QLabel(tr("min"), self)
+        for w in (hdr_mm, hdr_in, hdr_thr):
             w.setAlignment(Qt.AlignmentFlag.AlignRight)
             w.setStyleSheet("color: #909090; font-size: 10px;")
         grid.addWidget(hdr_mm, 0, 1)
         grid.addWidget(hdr_in, 0, 2)
+        grid.addWidget(hdr_thr, 0, 3)
+        self._thr_labels: dict[str, QLabel] = {}
         row = 1
         for key, label in _EDGES:
             name = QLabel(tr(label), self)
             mm = QLabel("—", self)
             inch = QLabel("—", self)
-            mm.setAlignment(Qt.AlignmentFlag.AlignRight)
-            inch.setAlignment(Qt.AlignmentFlag.AlignRight)
+            thr = QLabel("—", self)
+            for lbl in (mm, inch, thr):
+                lbl.setAlignment(Qt.AlignmentFlag.AlignRight)
             mm.setStyleSheet("font-family: Menlo; font-size: 11px;")
             inch.setStyleSheet("font-family: Menlo; font-size: 11px;")
+            thr.setStyleSheet("font-family: Menlo; font-size: 11px; color: #909090;")
             grid.addWidget(name, row, 0)
             grid.addWidget(mm, row, 1)
             grid.addWidget(inch, row, 2)
+            grid.addWidget(thr, row, 3)
             self._value_labels[key] = (mm, inch)
+            self._thr_labels[key] = thr
             row += 1
 
         strip_name = QLabel(tr("Patch width (in strip reading direction)"), self)
@@ -127,6 +134,7 @@ class MarginInspectorPanel(QGroupBox):
         *,
         thresholds_defined: bool,
         notify: bool,
+        thresholds: dict | None = None,
     ) -> None:
         """Show ``report``'s margins and the pass/fail status.
 
@@ -155,6 +163,13 @@ class MarginInspectorPanel(QGroupBox):
             for lbl in (mm_lbl, in_lbl):
                 lbl.setStyleSheet(
                     f"font-family: Menlo; font-size: 11px; color: {colour}; font-weight: {weight};")
+            # Threshold (minimum) for this edge — the "Margin Thresholds Set"
+            # readout, shown beside the measured value for easy comparison (#86).
+            raw = (thresholds or {}).get(key)
+            try:
+                self._thr_labels[key].setText("—" if raw in (None, "") else f"{float(raw):.1f}")
+            except (TypeError, ValueError):
+                self._thr_labels[key].setText("—")
 
         if report.strip_width_mm is not None:
             self._strip_mm.setText(f"{report.strip_width_mm:.1f}")

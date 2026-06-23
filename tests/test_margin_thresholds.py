@@ -77,6 +77,20 @@ def test_equal_threshold_is_ok():
     assert check_violations(_report(L=11.0), {"L": 11}) == []
 
 
+def test_value_that_displays_equal_is_ok():
+    """#85: a margin that rounds to the threshold at 1 decimal (e.g. 5.997 →
+    '6.0') must not be flagged below a 6 mm threshold."""
+    assert check_violations(_report(L=5.997), {"L": 6}) == []
+    assert check_violations(_report(L=6.04), {"L": 6}) == []
+    # But a value that displays below it still warns.
+    assert check_violations(_report(L=5.94), {"L": 6}) != []
+
+
+def test_decimal_threshold_supported():
+    assert check_violations(_report(L=6.0), {"L": 6.5}) != []
+    assert check_violations(_report(L=6.5), {"L": 6.5}) == []
+
+
 def test_multiple_edges_and_missing_keys():
     v = check_violations(_report(L=5.0, T=2.0),
                          {"L": 11, "T": 11})   # R/B unset → unchecked

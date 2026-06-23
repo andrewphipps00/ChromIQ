@@ -790,8 +790,17 @@ class TiffPreview(QWidget):
         Each non-violated line is a black dash over a white halo so it stays
         visible on any patch colour in either theme; a violated line is red over
         the same halo so the eye goes straight to the offending edge.
+
+        A solid page-edge rectangle is drawn at the image boundary first, so the
+        white display border around the page can't be mistaken for page margin —
+        a 0 mm threshold guide then visibly sits on the paper edge (#83).
         """
         from PyQt6.QtGui import QPen
+
+        edge = QPen(QColor(120, 120, 120))
+        edge.setWidthF(1.0)
+        painter.setPen(edge)
+        painter.drawRect(int(border), int(border), int(disp_w), int(disp_h))
 
         for axis, frac, violated in self._margin_guides:
             frac = max(0.0, min(1.0, frac))

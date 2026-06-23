@@ -110,9 +110,13 @@ def test_current_margin_combo_follows_the_chart(qapp, tmp_path):
     assert tab.current_margin_combo() == ("i1Pro", "A4", "Portrait")
 
 
-def test_current_margin_combo_none_without_chart(qapp, tmp_path):
+def test_current_margin_combo_follows_selection_without_chart(qapp, tmp_path):
+    """#81 follow-up: with no chart generated yet, the combo follows the current
+    instrument + paper *selection* so Preferences still preselects it."""
     tab = _tab(tmp_path)
-    assert tab.current_margin_combo() is None
+    tab._instr_combo.setCurrentIndex(tab._instr_combo.findData("CM"))
+    tab._paper_combo.setCurrentIndex(tab._paper_combo.findData("A4"))
+    assert tab.current_margin_combo() == ("ColorMunki", "A4", "Portrait")
 
 
 def test_settings_dialog_preselects_margin_combo(qapp, tmp_path):

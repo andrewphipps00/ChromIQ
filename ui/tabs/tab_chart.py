@@ -6121,6 +6121,7 @@ class TabChart(QWidget):
             report, violations,
             thresholds_defined=bool(thresholds),
             notify=bool(self._settings.get("margin_violation_notify", True)),
+            thresholds=thresholds,
         )
         self._refresh_margin_guides(report, thresholds, violations)
 
@@ -6166,12 +6167,43 @@ class TabChart(QWidget):
         combo = getattr(self, "_instr_combo", None)
         return (combo.currentData() if combo is not None else "i1") or "i1"
 
+    def _active_paper_code(self) -> str:
+        """The paper code currently selected (manual -p in Manual mode, else the
+        Guided paper combo)."""
+        if self._manual_btn is not None and self._manual_btn.isChecked():
+            for pw in self._manual_widgets.get("printtarg", []):
+                if pw.flag == "-p":
+                    return str(pw.get_raw_value() or "A4")
+        combo = getattr(self, "_paper_combo", None)
+        return (combo.currentData() if combo is not None else "A4") or "A4"
+
     def current_margin_combo(self) -> "tuple[str, str, str] | None":
         """The (instrument label, paper name, orientation) the Margin Thresholds
-        tab should preselect (#80). Returns the combo the inspector is actually
-        using for the chart in the preview, so editing the preselected row moves
-        that chart's guides (#81); None when there's no measured chart."""
-        return getattr(self, "_margin_combo", None)
+        tab should preselect (#80). Prefers the combo the inspector is using for
+        the previewed chart (so editing it moves that chart's guides, #81); falls
+        back to the current instrument + paper *selection* when nothing has been
+        generated yet, so Preferences still opens on the chosen combo."""
+        cached = getattr(self, "_margin_combo", None)
+        if cached:
+            return cached
+        instr_label = _MARGIN_INSTR_LABEL.get(self._active_instrument_flag())
+        code = self._active_paper_code()
+        if not instr_label or not code:
+            return None
+        dims = _PAPER_MM.get(code)
+        if dims is None and "x" in str(code):
+            try:
+                w, h = str(code).split("x", 1)
+                dims = (float(w), float(h))
+            except ValueError:
+                dims = None
+        if dims is None:
+            return None
+        paper_name = _canonical_paper_name(dims[0], dims[1])
+        if not paper_name:
+            return None
+        orient = "Landscape" if dims[0] > dims[1] else "Portrait"
+        return (instr_label, paper_name, orient)
 
     def refresh_margin_inspector_settings(self) -> None:
         """Re-read margin-inspector settings after the Preferences dialog closes

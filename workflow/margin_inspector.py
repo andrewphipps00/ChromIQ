@@ -109,7 +109,10 @@ def check_violations(
         except (TypeError, ValueError):
             continue
         measured = float(getattr(report, attr))
-        if measured + 1e-6 < thr:
+        # Compare the value as DISPLAYED (1 decimal): a margin shown as "6.0 mm"
+        # must not be flagged below a 6 mm threshold just because the raw float
+        # is 5.997 (#85).
+        if round(measured, 1) < round(thr, 1) - 1e-9:
             out.append(Violation(label, measured, thr))
     return out
 
