@@ -180,6 +180,27 @@ def test_strip_length_is_page_minus_top_bottom(tmp_path):
 
 
 @requires_argyll
+def test_landscape_strips_still_vertical(tmp_path):
+    """#87: printtarg lays strips vertically even on a landscape page, so strip
+    length is the vertical extent (page height − top − bottom) and patch width
+    is block width ÷ strip count — both measured in the preview frame, not
+    swapped by orientation."""
+    work = tmp_path / "chart.ti1"
+    src = (Path(__file__).resolve().parent.parent
+           / "assets/charts/knut/rgb/fulllayout/fls_colormunki_a3_1224p_2pages_landscape/chart.ti1")
+    shutil.copy(src, work)
+    subprocess.run([PRINTTARG, "-iCM", "-p420x297", "-t200", "-h", "-a0.9",
+                    "-M6", "-P", "chart"], cwd=tmp_path, check=True,
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    tif = sorted(tmp_path.glob("chart_*.tif"))[0]
+    r = measure_margins(tif, dpi=200, ti2_path=tmp_path / "chart.ti2")
+    assert r.page_w_mm > r.page_h_mm                      # landscape sheet
+    assert r.strip_length_mm == pytest.approx(
+        r.page_h_mm - r.top_mm - r.bottom_mm, abs=0.2)    # vertical extent
+    assert 10 < r.strip_width_mm < 15                     # ~12.5 mm, not ~swapped
+
+
+@requires_argyll
 def test_patch_width_is_cross_strip_pitch(tmp_path):
     """#83: the patch-width readout is the strip pitch across the strips
     (block_w/passes on a portrait page) — a ruler measurement across a strip,

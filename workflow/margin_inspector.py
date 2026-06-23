@@ -133,24 +133,18 @@ def _tiff_dpi(path: Path, fallback: float) -> float:
     return float(fallback)
 
 
-def _estimate_patch_width_mm(
-    block_w_mm: float, block_h_mm: float,
-    n_strips: int, *, portrait: bool,
-) -> Optional[float]:
+def _estimate_patch_width_mm(block_w_mm: float, n_strips: int) -> Optional[float]:
     """Patch width in mm — the strip pitch across the strips.
 
-    printtarg lays a page out as ``n_strips`` strips, each read along its length.
-    On a portrait page the strips run vertically (so they tile across the width);
-    on a landscape page they run horizontally (tiling down the height). The patch
-    width is therefore the block extent *perpendicular* to the strips divided by
-    the strip count — which is what a ruler measures across a strip, and matches
-    the ``.cht`` XLIST pitch (verified against ColorMunki double- and triple-
-    density charts, ~12.7 mm and ~10.7 mm respectively).
+    printtarg **always** lays strips out vertically (labels at top), regardless
+    of the page's portrait/landscape orientation, so the strips tile across the
+    page *width* and the patch width is the block width ÷ strip count. This is
+    what a ruler measures across a strip and matches the ``.cht`` XLIST pitch
+    (verified against ColorMunki double-/triple-density and landscape charts).
     """
     if n_strips < 1:
         return None
-    cross = block_w_mm if portrait else block_h_mm
-    return cross / n_strips
+    return block_w_mm / n_strips
 
 
 def measure_margins(
@@ -212,11 +206,10 @@ def measure_margins(
     top_mm = y0 * px2mm + off_y
     bottom_mm = (h_px - 1 - y1) * px2mm + off_y
 
-    # Strip length = patch-block extent along the reading direction (the strip
-    # length the instrument scans): block height on a portrait page (= page
-    # height − top − bottom), block width on a landscape page (#87).
-    portrait = page_h_mm >= page_w_mm
-    strip_length_mm = ((y1 - y0 + 1) if portrait else (x1 - x0 + 1)) * px2mm
+    # printtarg always lays strips vertically (labels at top), even on a
+    # landscape page, so the strip length the instrument scans is always the
+    # *vertical* patch-block extent = page height − top − bottom (#87).
+    strip_length_mm = (y1 - y0 + 1) * px2mm
 
     strip_width_mm: Optional[float] = None
     if ti2_path is not None:
@@ -225,11 +218,7 @@ def measure_margins(
             page_ix = _page_index_of(tif_path)
             if passes and 0 <= page_ix < len(passes):
                 block_w_mm = (x1 - x0 + 1) * px2mm
-                block_h_mm = (y1 - y0 + 1) * px2mm
-                strip_width_mm = _estimate_patch_width_mm(
-                    block_w_mm, block_h_mm, passes[page_ix],
-                    portrait=page_h_mm >= page_w_mm,
-                )
+                strip_width_mm = _estimate_patch_width_mm(block_w_mm, passes[page_ix])
         except Exception as exc:  # pragma: no cover - defensive
             log.debug("Margin inspector: patch width skipped: %s", exc)
 
