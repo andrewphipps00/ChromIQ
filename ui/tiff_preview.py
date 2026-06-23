@@ -798,7 +798,7 @@ class TiffPreview(QWidget):
             # Dashed top line: red when violated, else near-black.
             top = QPen(QColor("#e0564b") if violated else QColor(20, 20, 20))
             top.setWidthF(1.2)
-            top.setStyle(Qt.PenStyle.CustomDashPattern)
+            top.setStyle(Qt.PenStyle.CustomDashLine)
             top.setDashPattern([4, 4])
             painter.setPen(top)
             painter.drawLine(int(p1[0]), int(p1[1]), int(p2[0]), int(p2[1]))
