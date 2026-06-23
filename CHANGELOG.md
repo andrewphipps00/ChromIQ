@@ -1,5 +1,13 @@
 # Changelog
 
+## v3.12.0-beta.9
+
+### 🔧 Changed
+- **Reworked the i1Pro A4 portrait built-in charts** (Full layout setup) so they
+  meet the i1Pro jig margin minimums — they now keep the clip border and respect
+  the maximum strip length, with the patch width shown in each name (w7.5 / 8.5
+  mm). The "A4-960p Landscape (General + Skintones)" preset was retired. (#88)
+
 ## v3.12.0-beta.8
 
 ### ✨ New
