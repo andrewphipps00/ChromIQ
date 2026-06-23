@@ -1,5 +1,21 @@
 # Changelog
 
+## v3.12.0-beta.7
+
+### ✨ New
+- **Thresholds shown next to measurements.** The "Measured from Preview" panel
+  now has a **min** column listing each edge's threshold beside the measured
+  margin, so set values and actual values compare at a glance. (#86)
+
+### 🐛 Fixed
+- **No more false warning when a margin equals its threshold** (e.g. 6.0 mm vs a
+  6 mm minimum). Threshold fields now also accept **one decimal place**. (#85)
+- **The page edge is now drawn in the preview**, so the thin white frame around
+  the page can't be mistaken for margin — a 0 mm guide sits exactly on the paper
+  edge. (#83)
+- **Margin Thresholds (Preferences) preselects the chosen instrument and paper**
+  even before a chart is generated. (#81)
+
 ## v3.12.0-beta.6
 
 ### 🐛 Fixed
