@@ -166,6 +166,18 @@ def test_wrong_paper_size_would_inflate_but_default_does_not(tmp_path):
     assert inflated.left_mm == pytest.approx(good.left_mm + (297 - 210) / 2, abs=1.0)
 
 
+@requires_argyll
+def test_patch_width_is_cross_strip_pitch(tmp_path):
+    """#83: the patch-width readout is the strip pitch across the strips
+    (block_w/passes on a portrait page) — a ruler measurement across a strip,
+    ~12.7 mm for the ColorMunki A4 double-density chart, not the ~14 mm
+    reading-direction pitch the old squareness heuristic returned."""
+    _, reports = _measure_preset(tmp_path, "fls_colormunki_a4_480p_2pages_portrait")
+    assert reports
+    for r in reports:
+        assert r.strip_width_mm == pytest.approx(12.7, abs=0.6)
+
+
 def test_blank_page_returns_none(tmp_path):
     """A bare white sheet has no patch area → None (caller shows a placeholder),
     not bogus numbers. Runs without Argyll."""

@@ -1144,6 +1144,9 @@ class TabChart(QWidget):
         # Connect only after the initial state is restored, so building the UI
         # can't trigger a measure pass.
         self._margin_panel.guides_toggled.connect(self._on_margin_guides_toggled)
+        # Re-measure when the user pages through a multi-page chart so the
+        # inspector + guides always describe the page on screen (#83).
+        self._preview.page_changed.connect(lambda _i: self._update_margin_inspector())
 
         splitter.addWidget(right)
         splitter.setStretchFactor(0, 1)
@@ -6084,12 +6087,17 @@ class TabChart(QWidget):
         # after loading a preset), and a wrong paper size would inflate every
         # measured margin by the bogus (paper − tiff)/2 offset (#83).
         dpi = float(self._settings.get("printtarg_dpi", 300) or 300)
-        reports = []
-        for tif in self._margin_tiffs:
-            r = measure_margins(tif, dpi=dpi, ti2_path=self._margin_ti2)
-            if r is not None:
-                reports.append(r)
-        if not reports:
+        # Measure the page CURRENTLY SHOWN in the preview, so the numbers, the
+        # threshold guides and the visible patches all describe the same page.
+        # Multi-page charts have different per-page margins, so measuring a
+        # different page than the one on screen made the guides land away from
+        # the patches (#83). Re-runs when the user pages through (page_changed).
+        idx = self._preview.current_page()
+        if not (0 <= idx < len(self._margin_tiffs)):
+            idx = 0
+        report = measure_margins(self._margin_tiffs[idx], dpi=dpi,
+                                 ti2_path=self._margin_ti2)
+        if report is None:
             panel.show_placeholder()
             self._preview.set_margin_guides(None)
             return
@@ -6097,27 +6105,20 @@ class TabChart(QWidget):
         instr_flag = (self._instr_combo.currentData()
                       if self._instr_combo is not None else "i1") or "i1"
         instr_label = _MARGIN_INSTR_LABEL.get(instr_flag, instr_flag)
-        r0 = reports[0]
-        paper_name = _canonical_paper_name(r0.page_w_mm, r0.page_h_mm)
-        orient = "Landscape" if r0.page_w_mm > r0.page_h_mm else "Portrait"
+        paper_name = _canonical_paper_name(report.page_w_mm, report.page_h_mm)
+        orient = "Landscape" if report.page_w_mm > report.page_h_mm else "Portrait"
         thresholds = None
         if paper_name:
             key = margin_combo_key(instr_label, paper_name, orient)
             thresholds = self._settings.get_margin_thresholds().get(key)
 
-        # Surface the worst (most-violated) page so a bad page is never missed.
-        best_r, best_v = reports[0], check_violations(reports[0], thresholds)
-        for r in reports[1:]:
-            v = check_violations(r, thresholds)
-            if len(v) > len(best_v):
-                best_r, best_v = r, v
-
+        violations = check_violations(report, thresholds)
         panel.update_report(
-            best_r, best_v,
+            report, violations,
             thresholds_defined=bool(thresholds),
             notify=bool(self._settings.get("margin_violation_notify", True)),
         )
-        self._refresh_margin_guides(best_r, thresholds, best_v)
+        self._refresh_margin_guides(report, thresholds, violations)
 
     def _refresh_margin_guides(self, report, thresholds, violations) -> None:
         """Push dotted threshold guide lines to the preview (or clear them)."""

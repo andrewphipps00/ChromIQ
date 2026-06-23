@@ -1777,7 +1777,6 @@
  "Measured from Preview": "Medido desde la vista previa",
  "No margin thresholds set for this instrument and paper size.": "No hay umbrales de margen definidos para este instrumento y tamaño de papel.",
  "Notify when a measured margin is below its threshold": "Avisar cuando un margen medido esté por debajo de su umbral",
- "Patch size (reading dir.)": "Tamaño de parche (dir. lectura)",
  "Right": "Derecha",
  "Show margin threshold guide lines on preview (dotted lines)": "Mostrar líneas guía de umbral de margen en la vista previa (punteadas)",
  "Show the “Measured from Preview” frame in Create Chart": "Mostrar el panel «Medido desde la vista previa» en Crear gráfico",
@@ -1789,5 +1788,6 @@
  "⚠ {edge} margin {measured:.1f} mm is below the {threshold:.0f} mm minimum": "⚠ El margen {edge} de {measured:.1f} mm está por debajo del mínimo de {threshold:.0f} mm",
  "About i1Pro jig margins": "Márgenes para soporte i1Pro",
  "When you read a chart in an X-Rite i1Pro ruler / jig, the scanner head slides along each strip and needs a run of bare white paper before the first patch and after the last one — otherwise it hits the rail or starts reading mid-patch.\n\nImportant: the jig orientation is rotated 90° from the printed page. A sheet you place landscape in the jig is laid out portrait by printtarg, and vice-versa. The scan runs along the strips, so the run-up margins are the TOP and BOTTOM of a portrait page (or LEFT and RIGHT of a landscape page) — that is where the seeded thresholds sit.\n\nCommon guidance (enlarged X-Rite / Ugra-style ruler): about 11 mm of white run-up on each scan-direction edge for the i1Pro. Rulers vary, so treat these as starting points and adjust to yours; use the Description field to note which ruler a row is for.": "Cuando lees un gráfico en una regla / soporte X-Rite i1Pro, el cabezal del escáner se desliza a lo largo de cada tira y necesita un tramo de papel blanco antes del primer parche y después del último; de lo contrario choca con el riel o empieza a leer a mitad de un parche.\n\nImportante: la orientación en el soporte está girada 90° respecto a la página impresa. Una hoja que colocas apaisada en el soporte la dispone printtarg en vertical, y viceversa. El escaneo recorre las tiras, así que los márgenes de arranque son la parte superior e inferior de una página vertical (o izquierda y derecha de una apaisada); ahí es donde se sitúan los umbrales iniciales.\n\nGuía habitual (regla X-Rite / Ugra ampliada): unos 11 mm de papel blanco de arranque en cada borde en la dirección de escaneo para el i1Pro. Las reglas varían, así que tómalos como puntos de partida y ajústalos a la tuya; usa el campo Descripción para anotar a qué regla corresponde cada fila.",
- "Guided settings copied to Manual mode — edit and regenerate as needed.": "Ajustes del modo guiado copiados al modo manual: edítalos y regenera si es necesario."
+ "Guided settings copied to Manual mode — edit and regenerate as needed.": "Ajustes del modo guiado copiados al modo manual: edítalos y regenera si es necesario.",
+ "Patch width (in strip reading direction)": "Anchura de parche (en dirección de lectura de tira)"
 }

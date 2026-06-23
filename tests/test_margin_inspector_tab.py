@@ -53,6 +53,31 @@ def test_tab_builds_with_guides_enabled(qapp, tmp_path):
     assert tab._margin_panel.guides_enabled() is True
 
 
+@requires_argyll
+def test_inspector_follows_the_displayed_page(qapp, tmp_path):
+    """#83: a 2-page chart has different per-page margins, so paging the preview
+    must re-measure — the inspector describes the page on screen, not a fixed
+    'worst' page."""
+    cm = (Path(__file__).resolve().parent.parent
+          / "assets/charts/knut/rgb/fulllayout/fls_colormunki_a4_480p_2pages_portrait/chart.ti1")
+    shutil.copy(cm, tmp_path / "chart.ti1")
+    subprocess.run([_PT, "-iCM", "-pA4", "-t200", "-h", "-a0.93", "-M6", "-P", "chart"],
+                   cwd=tmp_path, check=True,
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    tiffs = sorted(tmp_path.glob("chart_*.tif"))
+    assert len(tiffs) == 2
+
+    tab = _tab(tmp_path)
+    tab._preview.load_tiff(tiffs)
+    tab._set_margin_chart(tiffs, tmp_path / "chart.ti2")
+    bottom_p0 = tab._margin_panel._value_labels["B"][0].text()
+
+    tab._preview.show_page(1)            # emits page_changed → re-measure
+    bottom_p1 = tab._margin_panel._value_labels["B"][0].text()
+
+    assert bottom_p0 != bottom_p1, "inspector did not follow the page change"
+
+
 def test_toggling_guides_with_no_chart_is_safe(qapp, tmp_path):
     """Toggling the guide checkbox before any chart is generated is a no-op,
     not an AttributeError."""

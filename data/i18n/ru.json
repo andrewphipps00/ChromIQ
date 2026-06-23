@@ -1777,7 +1777,6 @@
  "Measured from Preview": "Измерено по предпросмотру",
  "No margin thresholds set for this instrument and paper size.": "Для этого прибора и размера бумаги пороги полей не заданы.",
  "Notify when a measured margin is below its threshold": "Уведомлять, когда измеренное поле меньше порога",
- "Patch size (reading dir.)": "Размер поля (напр. считыв.)",
  "Right": "Справа",
  "Show margin threshold guide lines on preview (dotted lines)": "Показывать направляющие порогов полей на предпросмотре (пунктир)",
  "Show the “Measured from Preview” frame in Create Chart": "Показывать панель «Измерено по предпросмотру» во вкладке «Создать карту»",
@@ -1789,5 +1788,6 @@
  "⚠ {edge} margin {measured:.1f} mm is below the {threshold:.0f} mm minimum": "⚠ Поле {edge} {measured:.1f} мм меньше минимума {threshold:.0f} мм",
  "About i1Pro jig margins": "О полях для каретки i1Pro",
  "When you read a chart in an X-Rite i1Pro ruler / jig, the scanner head slides along each strip and needs a run of bare white paper before the first patch and after the last one — otherwise it hits the rail or starts reading mid-patch.\n\nImportant: the jig orientation is rotated 90° from the printed page. A sheet you place landscape in the jig is laid out portrait by printtarg, and vice-versa. The scan runs along the strips, so the run-up margins are the TOP and BOTTOM of a portrait page (or LEFT and RIGHT of a landscape page) — that is where the seeded thresholds sit.\n\nCommon guidance (enlarged X-Rite / Ugra-style ruler): about 11 mm of white run-up on each scan-direction edge for the i1Pro. Rulers vary, so treat these as starting points and adjust to yours; use the Description field to note which ruler a row is for.": "Когда вы считываете карту в линейке / каретке X-Rite i1Pro, головка сканера скользит вдоль каждой полосы, и ей нужен участок чистой белой бумаги перед первым полем и после последнего — иначе она упрётся в рейку или начнёт считывать с середины поля.\n\nВажно: ориентация в каретке повёрнута на 90° относительно напечатанной страницы. Лист, который вы кладёте в каретку горизонтально, printtarg размещает вертикально, и наоборот. Сканирование идёт вдоль полос, поэтому поля разгона — это верх и низ вертикальной страницы (или левый и правый край горизонтальной); именно там заданы пороги.\n\nОбычная рекомендация (увеличенная линейка X-Rite / Ugra): около 11 мм белого разгона на каждом крае в направлении сканирования для i1Pro. Линейки различаются, поэтому считайте это отправной точкой и подстройте под свою; в поле «Описание» можно отметить, для какой линейки строка.",
- "Guided settings copied to Manual mode — edit and regenerate as needed.": "Настройки направляемого режима скопированы в ручной режим — при необходимости измените и создайте заново."
+ "Guided settings copied to Manual mode — edit and regenerate as needed.": "Настройки направляемого режима скопированы в ручной режим — при необходимости измените и создайте заново.",
+ "Patch width (in strip reading direction)": "Ширина поля (в направлении считывания полосы)"
 }

@@ -78,8 +78,7 @@ class MarginInspectorPanel(QGroupBox):
             self._value_labels[key] = (mm, inch)
             row += 1
 
-        strip_name = QLabel(tr("Patch size (reading dir.)"), self)
-        strip_name.setStyleSheet("color: #b0b0b0;")
+        strip_name = QLabel(tr("Patch width (in strip reading direction)"), self)
         self._strip_mm = QLabel("—", self)
         self._strip_in = QLabel("—", self)
         self._strip_mm.setAlignment(Qt.AlignmentFlag.AlignRight)

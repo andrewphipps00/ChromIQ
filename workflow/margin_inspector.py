@@ -128,35 +128,24 @@ def _tiff_dpi(path: Path, fallback: float) -> float:
     return float(fallback)
 
 
-def _estimate_strip_width_mm(
+def _estimate_patch_width_mm(
     block_w_mm: float, block_h_mm: float,
-    n_strips: int, steps: int,
+    n_strips: int, *, portrait: bool,
 ) -> Optional[float]:
-    """Per-patch extent along the reading (scan) direction, in mm.
+    """Patch width in mm — the strip pitch across the strips.
 
-    The patch block is ``n_strips`` strips × ``steps`` patches-per-strip, but
-    which pixel axis carries which count depends on orientation. printtarg lays
-    patches out roughly square, so we pick the axis assignment whose resulting
-    cell is closest to square, then report the cell dimension along the *steps*
-    (reading) axis — that is the size the instrument must resolve per patch.
+    printtarg lays a page out as ``n_strips`` strips, each read along its length.
+    On a portrait page the strips run vertically (so they tile across the width);
+    on a landscape page they run horizontally (tiling down the height). The patch
+    width is therefore the block extent *perpendicular* to the strips divided by
+    the strip count — which is what a ruler measures across a strip, and matches
+    the ``.cht`` XLIST pitch (verified against ColorMunki double- and triple-
+    density charts, ~12.7 mm and ~10.7 mm respectively).
     """
-    if n_strips < 1 or steps < 1:
+    if n_strips < 1:
         return None
-    # Assignment A: strips tile across width, steps run down height.
-    cell_a_cross = block_w_mm / n_strips   # cross-scan pitch
-    cell_a_read = block_h_mm / steps       # reading-direction patch length
-    # Assignment B: strips tile across height, steps run across width.
-    cell_b_cross = block_h_mm / n_strips
-    cell_b_read = block_w_mm / steps
-
-    def _squareness(a: float, b: float) -> float:
-        if a <= 0 or b <= 0:
-            return float("inf")
-        return abs((a / b) - 1.0)
-
-    skew_a = _squareness(cell_a_cross, cell_a_read)
-    skew_b = _squareness(cell_b_cross, cell_b_read)
-    return cell_a_read if skew_a <= skew_b else cell_b_read
+    cross = block_w_mm if portrait else block_h_mm
+    return cross / n_strips
 
 
 def measure_margins(
@@ -222,16 +211,16 @@ def measure_margins(
     if ti2_path is not None:
         try:
             passes = parse_passes_per_page(ti2_path)
-            steps = _steps_in_pass(ti2_path)
             page_ix = _page_index_of(tif_path)
-            if passes and steps and 0 <= page_ix < len(passes):
+            if passes and 0 <= page_ix < len(passes):
                 block_w_mm = (x1 - x0 + 1) * px2mm
                 block_h_mm = (y1 - y0 + 1) * px2mm
-                strip_width_mm = _estimate_strip_width_mm(
-                    block_w_mm, block_h_mm, passes[page_ix], steps,
+                strip_width_mm = _estimate_patch_width_mm(
+                    block_w_mm, block_h_mm, passes[page_ix],
+                    portrait=page_h_mm >= page_w_mm,
                 )
         except Exception as exc:  # pragma: no cover - defensive
-            log.debug("Margin inspector: strip width skipped: %s", exc)
+            log.debug("Margin inspector: patch width skipped: %s", exc)
 
     return MarginReport(
         left_mm=max(0.0, left_mm), right_mm=max(0.0, right_mm),

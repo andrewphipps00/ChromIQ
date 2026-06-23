@@ -187,17 +187,31 @@ DEFAULTS: dict[str, Any] = {
 # below the smallest known-good margin so those presets read OK out of the box.
 _I1_DESC = "i1Pro ruler / jig"
 _CM_DESC = "ColorMunki ruler / jig"
+# Knut #82: thresholds are 10 mm sides/bottom + 30 mm Top (label edge) for the
+# i1Pro, and 6 mm sides/bottom + 30 mm Top for the ColorMunki. ColorMunki uses
+# the same values for *every* paper size, so its seeds cover all papers × both
+# orientations; the i1Pro table lists the orientations its presets actually use.
+_MARGIN_PAPERS_ALL = ("A4", "Letter", "A3", "A3+", "A2", "Tabloid", "Legal")
+
+
+def _seed_rows(instr, desc, side, top, combos):
+    return {
+        f"{instr}|{paper} {orient}":
+            {"L": side, "R": side, "T": top, "B": side, "desc": desc}
+        for paper, orient in combos
+    }
+
+
 _MARGIN_SEED: dict[str, dict[str, Any]] = {
-    # i1Pro (Knut #82): 10 mm sides/bottom, 30 mm on the label (Top) edge.
-    "i1Pro|A4 Portrait":       {"L": 10, "R": 10, "T": 30, "B": 10, "desc": _I1_DESC},
-    "i1Pro|Letter Portrait":   {"L": 10, "R": 10, "T": 30, "B": 10, "desc": _I1_DESC},
-    "i1Pro|A3 Landscape":      {"L": 10, "R": 10, "T": 30, "B": 10, "desc": _I1_DESC},
-    "i1Pro|Tabloid Landscape": {"L": 10, "R": 10, "T": 30, "B": 10, "desc": _I1_DESC},
-    # ColorMunki (Knut #82): 6 mm sides/bottom, 30 mm on the label (Top) edge.
-    "ColorMunki|A4 Portrait":       {"L": 6, "R": 6, "T": 30, "B": 6, "desc": _CM_DESC},
-    "ColorMunki|Letter Portrait":   {"L": 6, "R": 6, "T": 30, "B": 6, "desc": _CM_DESC},
-    "ColorMunki|A3 Landscape":      {"L": 6, "R": 6, "T": 30, "B": 6, "desc": _CM_DESC},
-    "ColorMunki|Tabloid Landscape": {"L": 6, "R": 6, "T": 30, "B": 6, "desc": _CM_DESC},
+    **_seed_rows("i1Pro", _I1_DESC, 10, 30, [
+        ("A4", "Portrait"), ("Letter", "Portrait"),
+        ("A3", "Landscape"), ("Tabloid", "Landscape"),
+    ]),
+    **_seed_rows("ColorMunki", _CM_DESC, 6, 30, [
+        (paper, orient)
+        for paper in _MARGIN_PAPERS_ALL
+        for orient in ("Portrait", "Landscape")
+    ]),
 }
 
 

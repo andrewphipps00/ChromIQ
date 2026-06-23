@@ -9,7 +9,7 @@ from typing import Optional
 
 from PIL import Image
 from PyQt6 import sip
-from PyQt6.QtCore import QPoint, QPointF, QRect, QSize, Qt, QTimer
+from PyQt6.QtCore import QPoint, QPointF, QRect, QSize, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QColor, QFont, QPainter, QPainterPath, QPixmap
 from PyQt6.QtWidgets import (
     QHBoxLayout,
@@ -244,6 +244,10 @@ def load_tiff_as_rgb(
 
 class TiffPreview(QWidget):
     """Displays multi-page TIFF files with optional stripe highlight overlay."""
+
+    # Emitted (with the new 0-based page index) when the shown page changes, so
+    # observers like the margin inspector can re-measure the visible page.
+    page_changed = pyqtSignal(int)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -507,6 +511,7 @@ class TiffPreview(QWidget):
             self._active_stripe = -1
             self._update_nav()
             self._schedule_refresh()
+            self.page_changed.emit(self._current)
 
     def clear(self) -> None:
         self._pages = []
@@ -639,12 +644,17 @@ class TiffPreview(QWidget):
     # Navigation
     # ------------------------------------------------------------------
 
+    def current_page(self) -> int:
+        """0-based index of the page currently shown."""
+        return self._current
+
     def _go_prev(self) -> None:
         if self._current > 0:
             self._current -= 1
             self._active_stripe = -1
             self._update_nav()
             self._schedule_refresh()
+            self.page_changed.emit(self._current)
 
     def _go_next(self) -> None:
         if self._current < len(self._pages) - 1:
@@ -652,6 +662,7 @@ class TiffPreview(QWidget):
             self._active_stripe = -1
             self._update_nav()
             self._schedule_refresh()
+            self.page_changed.emit(self._current)
 
     def _update_nav(self) -> None:
         n = len(self._pages)

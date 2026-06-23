@@ -1777,7 +1777,6 @@
  "Measured from Preview": "Gemeten uit voorbeeld",
  "No margin thresholds set for this instrument and paper size.": "Geen margedrempels ingesteld voor dit instrument en papierformaat.",
  "Notify when a measured margin is below its threshold": "Waarschuwen wanneer een gemeten marge onder de drempel ligt",
- "Patch size (reading dir.)": "Meetveldgrootte (leesrichting)",
  "Right": "Rechts",
  "Show margin threshold guide lines on preview (dotted lines)": "Drempel-hulplijnen tonen in voorbeeld (stippellijnen)",
  "Show the “Measured from Preview” frame in Create Chart": "Het kader ‘Gemeten uit voorbeeld’ tonen in Kaart maken",
@@ -1789,5 +1788,6 @@
  "⚠ {edge} margin {measured:.1f} mm is below the {threshold:.0f} mm minimum": "⚠ Marge {edge} {measured:.1f} mm ligt onder het minimum van {threshold:.0f} mm",
  "About i1Pro jig margins": "Over i1Pro-mal marges",
  "When you read a chart in an X-Rite i1Pro ruler / jig, the scanner head slides along each strip and needs a run of bare white paper before the first patch and after the last one — otherwise it hits the rail or starts reading mid-patch.\n\nImportant: the jig orientation is rotated 90° from the printed page. A sheet you place landscape in the jig is laid out portrait by printtarg, and vice-versa. The scan runs along the strips, so the run-up margins are the TOP and BOTTOM of a portrait page (or LEFT and RIGHT of a landscape page) — that is where the seeded thresholds sit.\n\nCommon guidance (enlarged X-Rite / Ugra-style ruler): about 11 mm of white run-up on each scan-direction edge for the i1Pro. Rulers vary, so treat these as starting points and adjust to yours; use the Description field to note which ruler a row is for.": "Wanneer je een kaart leest in een X-Rite i1Pro-liniaal / -mal, glijdt de scankop langs elke strip en heeft hij een stuk kaal wit papier nodig vóór het eerste meetveld en na het laatste — anders raakt hij de rail of begint hij midden in een meetveld te lezen.\n\nBelangrijk: de stand in de mal is 90° gedraaid ten opzichte van de afgedrukte pagina. Een vel dat je liggend in de mal legt, wordt door printtarg staand opgemaakt, en omgekeerd. Het scannen loopt langs de strips, dus de aanloopmarges zijn boven en onder bij een staande pagina (of links en rechts bij een liggende) — daar liggen de voorinstelde drempels.\n\nGangbare richtlijn (vergrote X-Rite / Ugra-achtige liniaal): ongeveer 11 mm witte aanloop aan elke rand in de scanrichting voor de i1Pro. Linialen verschillen, dus beschouw dit als startpunten en pas ze aan de jouwe aan; gebruik het veld Omschrijving om te noteren voor welke liniaal een rij geldt.",
- "Guided settings copied to Manual mode — edit and regenerate as needed.": "Geleide instellingen gekopieerd naar handmatige modus — bewerk en genereer opnieuw indien nodig."
+ "Guided settings copied to Manual mode — edit and regenerate as needed.": "Geleide instellingen gekopieerd naar handmatige modus — bewerk en genereer opnieuw indien nodig.",
+ "Patch width (in strip reading direction)": "Meetveldbreedte (in strip-leesrichting)"
 }
