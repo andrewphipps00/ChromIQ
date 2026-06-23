@@ -18,11 +18,18 @@ from workflow.margin_inspector import measure_margins, _patch_area_bbox
 
 
 def _find_printtarg() -> str | None:
+    # 1. On PATH (covers any OS where Argyll's bin dir is exported).
     p = shutil.which("printtarg")
     if p:
         return p
-    cand = Path("/Applications/Argyll/bin/printtarg")
-    return str(cand) if cand.is_file() else None
+    # 2. The standard install locations the app itself probes, per-OS.
+    from core.platform_paths import argyll_candidate_dirs
+    for d in argyll_candidate_dirs():
+        for name in ("printtarg", "printtarg.exe"):
+            cand = d / name
+            if cand.is_file():
+                return str(cand)
+    return None
 
 
 PRINTTARG = _find_printtarg()
@@ -153,6 +160,7 @@ def test_colormunki_a4_preset_margins_not_inflated(tmp_path):
         assert r.top_mm < 55 and r.bottom_mm < 55     # not the 102/94 mm bug
 
 
+@requires_argyll
 def test_wrong_paper_size_would_inflate_but_default_does_not(tmp_path):
     """Documents the #83 fix: measuring with no paper size (trusting the -M
     full-page TIFF) gives the true margins; feeding a too-large paper size adds
