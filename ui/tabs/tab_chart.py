@@ -2684,6 +2684,61 @@ class TabChart(QWidget):
             self._manual_btn.setChecked(True)
         self._update_isis_preview_banner()
         self._refresh_name_prefix()     # apply the prefix to the now-active field
+        # #79: when a chart was just generated in Guided mode and the user opens
+        # Manual, seed the Manual panel with the exact recipe that produced it,
+        # so they can edit the settings used. One-shot (consumed here) so later
+        # manual edits aren't clobbered by toggling modes back and forth.
+        if mode == "manual" and getattr(self, "_guided_transfer_pending", False):
+            self._guided_transfer_pending = False
+            self._transfer_guided_to_manual()
+
+    def _transfer_guided_to_manual(self) -> None:
+        """Seed the Manual panel from the Guided settings that produced the
+        chart now in the preview (#79). Best-effort: never blocks a mode switch."""
+        try:
+            p = self._collect_guided()
+        except Exception:
+            log.warning("Guided→Manual transfer skipped (could not read guided "
+                        "settings)", exc_info=True)
+            return
+        # Instrument + paper first: changing the instrument can cascade (reset
+        # -a/-m to the instrument default), so scale/margin are set afterwards.
+        self._set_manual_value("printtarg", "-i", p.instrument)
+        self._set_manual_value("printtarg", "-p", p.paper)
+        if self._manual_pages_spin is not None:
+            self._manual_pages_spin.setValue(int(p.pages))
+        # targen inputs. Patch count mirrors Guided's Auto (which also drives the
+        # neutral counts), so the Manual recipe reproduces the same chart.
+        self._set_manual_value("targen", "-d", str(p.device_type))
+        self._set_manual_value("targen", "-G", bool(p.good_mode))
+        if self._manual_auto_patches_check is not None:
+            self._manual_auto_patches_check.setChecked(True)
+        # printtarg layout — after -i so the instrument-default cascade can't
+        # overwrite these.
+        self._set_manual_value("printtarg", "-a", round(float(p.patch_scale), 3))
+        self._set_manual_value("printtarg", "-m", int(p.margin_mm))
+        self._set_manual_value("printtarg", "-h", bool(p.double_density))
+        self._set_manual_value("printtarg", "-P", bool(p.no_strip_limit))
+        self._set_manual_value("printtarg", "-L", bool(p.disable_left_border))
+        if self._manual_td_check is not None:
+            self._manual_td_check.setChecked(bool(p.triple_density))
+        # Pre-conditioning profile (-c), if the guided chart used one.
+        try:
+            toks = shlex.split(p.extra_targen_args or "")
+            if "-c" in toks:
+                i = toks.index("-c")
+                if i + 1 < len(toks) and toks[i + 1]:
+                    self._set_manual_value("targen", "-c", toks[i + 1])
+        except ValueError:
+            pass
+        # Printer profile name.
+        name_edit = getattr(self, "_target_name_edit", None)
+        name = name_edit.text().strip() if name_edit is not None else ""
+        if name:
+            self._set_manual_name_plain(name)
+        self._refresh_manual_command_preview()
+        self._log.appendPlainText(
+            tr("Guided settings copied to Manual mode — edit and regenerate as needed."))
 
     def _on_guided_precond_toggled(self, checked: bool) -> None:
         self._guided_precond_path.setEnabled(checked)
@@ -5975,6 +6030,9 @@ class TabChart(QWidget):
             ti1 = tiffs[0].parent / f"{stem}.ti1"
             self._current_ti1_path = ti1 if ti1.is_file() else None
             self._set_margin_chart(tiffs, ti2)
+            # #79: arm the one-shot Guided→Manual transfer when this chart was
+            # built in Guided mode, so opening Manual seeds the recipe used.
+            self._guided_transfer_pending = (self._current_mode() == "guided")
             self.chart_finished.emit(tiffs, ti2, is_isis)
         else:
             self._set_margin_chart([], None)
