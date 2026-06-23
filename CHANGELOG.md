@@ -1,5 +1,18 @@
 # Changelog
 
+## v3.12.0-beta.10
+
+### ✨ New
+- **An ⓘ help button on the "Measured from Preview" panel** with a friendly,
+  plain-language explanation of what each value means, what the "min" column is,
+  and where to set the thresholds. (#86)
+
+### 🐛 Fixed
+- **Strip length and patch width are now correct on landscape charts.** printtarg
+  always lays strips vertically (labels at top), so the strip length is always
+  page height − top − bottom and the patch width is measured across the strips,
+  regardless of page orientation. (#87)
+
 ## v3.12.0-beta.9
 
 ### 🔧 Changed
