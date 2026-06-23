@@ -1,5 +1,11 @@
 # Changelog
 
+## v3.12.0-beta.13
+
+### 🔧 Changed
+- **Updated all ColorMunki "Full layout setup" presets** to Knut's reworked
+  versions, with the patch width shown in each name. (#89)
+
 ## v3.12.0-beta.12
 
 ### 🔧 Changed
