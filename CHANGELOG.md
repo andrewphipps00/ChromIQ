@@ -1,5 +1,15 @@
 # Changelog
 
+## v3.12.0-beta.17
+
+### 🐛 Fixed
+- Margin guide lines now sit correctly on the **top and bottom** of ColorMunki
+  **zig-zag (double-density, `-h`)** charts. The outermost strip row carries only
+  ~half the patches, so the patch-area detector used to include or drop it
+  depending on the page — guides drifted by page and missed the top/bottom edge.
+  The detector now anchors on the dense block and extends through the half-rows
+  up to the white gap, so every page reads the same, correct margins. (#91)
+
 ## v3.12.0-beta.16
 
 ### 🐛 Fixed

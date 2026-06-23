@@ -39,7 +39,9 @@ log = get_logger(__name__)
 _MM_PER_INCH = 25.4
 _DEFAULT_DPI = 300.0
 _WHITE = 240            # luminance ≥ this = bare paper (matches _patch_grid_bbox)
-_PATCH_ROW_FILL = 0.5   # a patch row is ≥50% inked across the patch x-band
+_PATCH_ROW_FILL = 0.5   # a dense patch row is ≥50% inked across the patch x-band
+_PATCH_EDGE_FILL = 0.2  # a zig-zag half-row (≈half the strips) still counts as
+                        # patch area when contiguous with the dense block (#91)
 
 
 @dataclass(frozen=True)
@@ -256,6 +258,17 @@ def _patch_area_bbox(arr: np.ndarray) -> Optional[tuple[int, int, int, int]]:
     if rows.size == 0:
         return None
     y0, y1 = int(rows[0]), int(rows[-1])
+    # Double-density (-h) charts lay strips out in a zig-zag: alternate strips
+    # are shifted half a patch, so the very top/bottom row of the block has only
+    # ~half the strips inked (fill ≈ 0.5, right on the threshold — it flips in or
+    # out between pages by parity, #91). Extend the block outward through those
+    # adjacent half-rows, stopping at the first near-white row — the white gap
+    # before the strip-label band — so the labels are never swallowed.
+    n = row_fill.shape[0]
+    while y0 > 0 and row_fill[y0 - 1] > _PATCH_EDGE_FILL:
+        y0 -= 1
+    while y1 < n - 1 and row_fill[y1 + 1] > _PATCH_EDGE_FILL:
+        y1 += 1
     return (y0, y1, x0, x1)
 
 

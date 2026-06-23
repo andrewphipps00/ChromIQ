@@ -220,6 +220,20 @@ def test_patch_width_is_cross_strip_pitch(tmp_path):
         assert r.strip_width_mm == pytest.approx(12.7, abs=0.6)
 
 
+@requires_argyll
+def test_zigzag_top_bottom_consistent_across_pages(tmp_path):
+    """#91: a ColorMunki double-density (-h) chart lays strips in a zig-zag, so the
+    outermost row has ~half the strips (fill ≈ 0.5). The patch-area top/bottom must
+    still include those half-rows and read the same on every page, instead of
+    flipping by parity (page 2 used to read a too-large top/bottom)."""
+    _, reports = _measure_preset(tmp_path, "fls_colormunki_a3_1575p_3pages_portrait")
+    assert len(reports) >= 2
+    tops = [r.top_mm for r in reports]
+    bottoms = [r.bottom_mm for r in reports]
+    assert max(tops) - min(tops) < 1.5, f"top varies across pages: {tops}"
+    assert max(bottoms) - min(bottoms) < 1.5, f"bottom varies across pages: {bottoms}"
+
+
 def test_blank_page_returns_none(tmp_path):
     """A bare white sheet has no patch area → None (caller shows a placeholder),
     not bogus numbers. Runs without Argyll."""
