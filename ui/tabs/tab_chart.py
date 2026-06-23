@@ -1124,11 +1124,15 @@ class TabChart(QWidget):
         right_layout.addWidget(self._margin_panel)
         self._margin_panel.set_guides_checked(
             bool(self._settings.get("margin_guides_show", False)))
+        self._margin_panel.set_measured_guides_checked(
+            bool(self._settings.get("margin_measured_guides_show", False)))
         self._margin_panel.setVisible(
             bool(self._settings.get("margin_inspector_show", True)))
         # Connect only after the initial state is restored, so building the UI
         # can't trigger a measure pass.
         self._margin_panel.guides_toggled.connect(self._on_margin_guides_toggled)
+        self._margin_panel.measured_guides_toggled.connect(
+            self._on_margin_measured_guides_toggled)
         # Re-measure when the user pages through a multi-page chart so the
         # inspector + guides always describe the page on screen (#83).
         self._preview.page_changed.connect(lambda _i: self._update_margin_inspector())
@@ -6067,6 +6071,7 @@ class TabChart(QWidget):
         if not show or not tiffs:
             panel.show_placeholder()
             self._preview.set_margin_guides(None)
+            self._preview.set_measured_guides(None)
             return
 
         from workflow.margin_inspector import measure_margins, check_violations
@@ -6092,6 +6097,7 @@ class TabChart(QWidget):
         if report is None:
             panel.show_placeholder()
             self._preview.set_margin_guides(None)
+            self._preview.set_measured_guides(None)
             return
 
         instr_label = _MARGIN_INSTR_LABEL.get(
@@ -6111,6 +6117,24 @@ class TabChart(QWidget):
             thresholds=thresholds,
         )
         self._refresh_margin_guides(report, thresholds, violations)
+        self._refresh_measured_guides(report)
+
+    def _refresh_measured_guides(self, report) -> None:
+        """Push long purple/blue lines at the measured margins (patch-area edges)
+        to the preview, when the second checkbox is on (#89)."""
+        panel = getattr(self, "_margin_panel", None)
+        if panel is None or not panel.measured_guides_enabled() or report is None:
+            self._preview.set_measured_guides(None)
+            return
+        pw, ph = report.page_w_mm, report.page_h_mm
+        guides: list[tuple[str, float]] = []
+        if pw > 0:
+            guides.append(("v", report.left_mm / pw))
+            guides.append(("v", 1.0 - report.right_mm / pw))
+        if ph > 0:
+            guides.append(("h", report.top_mm / ph))
+            guides.append(("h", 1.0 - report.bottom_mm / ph))
+        self._preview.set_measured_guides(guides or None)
 
     def _refresh_margin_guides(self, report, thresholds, violations) -> None:
         """Push dotted threshold guide lines to the preview (or clear them)."""
@@ -6141,6 +6165,10 @@ class TabChart(QWidget):
 
     def _on_margin_guides_toggled(self, on: bool) -> None:
         self._settings.set("margin_guides_show", bool(on))
+        self._update_margin_inspector()
+
+    def _on_margin_measured_guides_toggled(self, on: bool) -> None:
+        self._settings.set("margin_measured_guides_show", bool(on))
         self._update_margin_inspector()
 
     def _active_instrument_flag(self) -> str:
@@ -6196,6 +6224,8 @@ class TabChart(QWidget):
         if panel is not None:
             panel.set_guides_checked(
                 bool(self._settings.get("margin_guides_show", False)))
+            panel.set_measured_guides_checked(
+                bool(self._settings.get("margin_measured_guides_show", False)))
         self._update_margin_inspector()
 
     def _maybe_autotag_randomised(self, ti2: Path) -> None:

@@ -271,6 +271,9 @@ class TiffPreview(QWidget):
         # axis is "v"/"h" and frac is 0..1 of the image width/height. Drawn on
         # top of the preview only (never baked into the TIFF). Empty = none.
         self._margin_guides: list[tuple[str, float, bool]] = []
+        # Measured-margin guide lines: (axis, frac) at the actual patch-area
+        # edges, drawn as long purple/blue dots (a separate toggle).
+        self._measured_guides: list[tuple[str, float]] = []
         self._mode: str = "dark"
         self._refresh_timer = QTimer(self)
         self._refresh_timer.setSingleShot(True)
@@ -395,6 +398,13 @@ class TiffPreview(QWidget):
         Pass ``None`` or an empty list to clear.
         """
         self._margin_guides = list(guides or [])
+        if self._pixmap:
+            self._repaint_label()
+
+    def set_measured_guides(self, guides: "list[tuple[str, float]] | None") -> None:
+        """Long purple/blue dotted lines at the measured margins (patch-area
+        edges). Each guide is ``(axis, frac)``. Pass None/empty to clear."""
+        self._measured_guides = list(guides or [])
         if self._pixmap:
             self._repaint_label()
 
@@ -775,7 +785,7 @@ class TiffPreview(QWidget):
                     bot.closeSubpath()
                     painter.fillPath(bot, QColor("#56d6a5"))
 
-        if self._margin_guides:
+        if self._margin_guides or self._measured_guides:
             self._draw_margin_guides(
                 painter, B, scaled.width() / dpr, scaled.height() / dpr)
 
@@ -822,6 +832,28 @@ class TiffPreview(QWidget):
             top.setDashPattern([4, 4])
             painter.setPen(top)
             painter.drawLine(int(p1[0]), int(p1[1]), int(p2[0]), int(p2[1]))
+
+        # Measured-margin lines: long purple/blue dots at the patch-area edges,
+        # over a white halo, distinct from the (shorter) threshold dashes.
+        for axis, frac in self._measured_guides:
+            frac = max(0.0, min(1.0, frac))
+            if axis == "v":
+                x = border + frac * disp_w
+                p1 = (x, border); p2 = (x, border + disp_h)
+            else:
+                y = border + frac * disp_h
+                p1 = (border, y); p2 = (border + disp_w, y)
+            halo = QPen(QColor(255, 255, 255, 200))
+            halo.setWidthF(2.6)
+            painter.setPen(halo)
+            painter.drawLine(int(p1[0]), int(p1[1]), int(p2[0]), int(p2[1]))
+            line = QPen(QColor("#7b3ff2"))   # blue-violet
+            line.setWidthF(1.3)
+            line.setStyle(Qt.PenStyle.CustomDashLine)
+            line.setDashPattern([10, 5])      # long dots
+            painter.setPen(line)
+            painter.drawLine(int(p1[0]), int(p1[1]), int(p2[0]), int(p2[1]))
+
         painter.setPen(Qt.PenStyle.SolidLine)
 
     def _repaint_interactive(self) -> None:

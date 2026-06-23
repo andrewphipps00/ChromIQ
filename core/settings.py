@@ -161,6 +161,7 @@ DEFAULTS: dict[str, Any] = {
     "margin_inspector_show":     True,    # show the "Measured from Preview" frame
     "margin_violation_notify":   True,    # warn when a measured margin < threshold
     "margin_guides_show":        False,   # dotted threshold guide lines on preview
+    "margin_measured_guides_show": False,  # long dotted lines at the measured margins
     "margin_thresholds":         "",      # JSON blob; "" → default_margin_thresholds()
 }
 

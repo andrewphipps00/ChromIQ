@@ -31,6 +31,7 @@ class MarginInspectorPanel(QGroupBox):
     """Read-only margin readout + violation status + guide-line checkbox."""
 
     guides_toggled = pyqtSignal(bool)
+    measured_guides_toggled = pyqtSignal(bool)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(tr("Measured from Preview"), parent)
@@ -121,10 +122,17 @@ class MarginInspectorPanel(QGroupBox):
         from PyQt6.QtWidgets import QHBoxLayout
         from ui.tooltip_button import TooltipButton
         bottom = QHBoxLayout()
+        checks = QVBoxLayout()
+        checks.setSpacing(2)
         self._guide_check = QCheckBox(
             tr("Show margin threshold guide lines on preview (dotted lines)"), self)
         self._guide_check.toggled.connect(self.guides_toggled.emit)
-        bottom.addWidget(self._guide_check)
+        checks.addWidget(self._guide_check)
+        self._measured_check = QCheckBox(
+            tr("Show margin guide lines on preview (long dotted lines)"), self)
+        self._measured_check.toggled.connect(self.measured_guides_toggled.emit)
+        checks.addWidget(self._measured_check)
+        bottom.addLayout(checks)
         bottom.addStretch()
         bottom.addWidget(TooltipButton(
             tr("About the margin inspector"),
@@ -161,7 +169,14 @@ class MarginInspectorPanel(QGroupBox):
                "You'll also see a thin solid rectangle marking the actual edge "
                "of the paper (the page is drawn slightly inside the preview's "
                "white border, so this line shows exactly where the sheet ends — "
-               "a 0 mm margin would sit right on it)."),
+               "a 0 mm margin would sit right on it).\n\n"
+               "The second checkbox, 'Show margin guide lines on preview (long "
+               "dotted lines)', is a different helper: instead of the thresholds, "
+               "it draws a long purple/blue dotted line at each of the four "
+               "measured margins — right where the patch area meets the white "
+               "paper. It's an easy way to double-check that the numbers above "
+               "really sit where the patches end. You can turn both sets of "
+               "lines on together if you like."),
             self))
         v.addLayout(bottom)
 
@@ -176,6 +191,12 @@ class MarginInspectorPanel(QGroupBox):
 
     def set_guides_checked(self, on: bool) -> None:
         self._guide_check.setChecked(bool(on))
+
+    def measured_guides_enabled(self) -> bool:
+        return self._measured_check.isChecked()
+
+    def set_measured_guides_checked(self, on: bool) -> None:
+        self._measured_check.setChecked(bool(on))
 
     def show_placeholder(self) -> None:
         """No preview yet (or measurement failed) — hide the numbers."""
