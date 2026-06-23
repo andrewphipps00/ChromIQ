@@ -207,14 +207,19 @@ def _seed_rows(instr, desc, side, top, combos):
 # paper needs the 26 mm left clip border, 38 mm label-edge top, 9 mm elsewhere;
 # every other i1Pro paper/orientation gets a plain 9 mm all round.
 _I1_PRIMARY = {"L": 26, "R": 9, "T": 38, "B": 9, "desc": _I1_DESC}
+# i1Pro 3+ (#82): the larger body needs a touch more on the clip + label edges
+# (28 / 40 instead of 26 / 38); provisional until confirmed.
+_I1P3_DESC = "i1Pro 3+ ruler / jig"
+_I1P3_PRIMARY = {"L": 28, "R": 9, "T": 40, "B": 9, "desc": _I1P3_DESC}
+_PRIMARY_COMBOS = (
+    "A4 Portrait", "Letter Portrait", "A3 Landscape", "Tabloid Landscape")
 _ALL_COMBOS = [(p, o) for p in _MARGIN_PAPERS_ALL
                for o in ("Portrait", "Landscape")]
 _MARGIN_SEED: dict[str, dict[str, Any]] = {
     **_seed_rows("i1Pro", _I1_DESC, 9, 9, _ALL_COMBOS),
-    "i1Pro|A4 Portrait":       dict(_I1_PRIMARY),
-    "i1Pro|Letter Portrait":   dict(_I1_PRIMARY),
-    "i1Pro|A3 Landscape":      dict(_I1_PRIMARY),
-    "i1Pro|Tabloid Landscape": dict(_I1_PRIMARY),
+    **{f"i1Pro|{c}": dict(_I1_PRIMARY) for c in _PRIMARY_COMBOS},
+    **_seed_rows("i1Pro 3+", _I1P3_DESC, 9, 9, _ALL_COMBOS),
+    **{f"i1Pro 3+|{c}": dict(_I1P3_PRIMARY) for c in _PRIMARY_COMBOS},
     **_seed_rows("ColorMunki", _CM_DESC, 6, 24, _ALL_COMBOS),
 }
 
