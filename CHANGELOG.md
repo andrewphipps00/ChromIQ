@@ -1,5 +1,27 @@
 # Changelog
 
+## v3.12.0-beta.1
+
+### ✨ New
+- **Margin inspector & jig-margin warnings (beta).** When you generate a chart,
+  a new **“Measured from Preview”** panel under the Create Chart preview reports
+  the chart's realised page margins (Left / Right / Top / Bottom) and the
+  estimated patch size in the reading direction, in millimetres and inches.
+  printtarg only gives you one overall margin, yet the actual margins shift with
+  patch scale, spacers, paper and orientation — so the only reliable way to know
+  them is to measure the printed page, which is what this does.
+- **Editable margin thresholds per instrument & paper.** A new **Settings →
+  Margin Thresholds** tab lets you set the minimum margin each edge needs for
+  your measuring ruler / jig, per instrument and paper size (with a description
+  field for which rig a row is for). If a generated chart's measured margin
+  falls below the minimum, the panel shows a clear warning naming the edge and
+  the threshold; otherwise it shows a green **“Margins: OK.”** Optional dotted
+  guide lines on the preview mark each threshold position (red on a violated
+  edge). Seeds ship for the i1Pro (11 mm scan run-up) and ColorMunki (derived
+  from the tested presets) — all editable starting points, adjustable to your
+  own ruler. Thanks to the Pharmacist for the report that motivated this, and to
+  Knut for the detailed design.
+
 ## v3.11.25
 
 ### ✨ New
