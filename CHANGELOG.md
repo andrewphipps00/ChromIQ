@@ -1,5 +1,20 @@
 # Changelog
 
+## v3.12.0-beta.4
+
+### ✨ New
+- **Guided settings now carry over to Manual mode.** When you build a chart in
+  Guided mode and then switch to Manual, the Manual panel is seeded with the
+  same recipe — instrument, paper, pages, patch count (Auto), patch scale,
+  margin, density, strip-limit, border and the printer-profile name — so you can
+  fine-tune the exact settings that produced the chart. (#79)
+
+### 🐛 Fixed
+- **No more bogus “paper mismatch” warning** when printing a correctly-sized
+  full-page chart. The check compared against the printer's printable area
+  rather than the sheet, so a 210×297 mm chart on A4 warned while showing two
+  identical sizes. (#84)
+
 ## v3.12.0-beta.3
 
 ### 🐛 Fixed
