@@ -616,7 +616,12 @@ class MainWindow(QMainWindow):
     def _open_settings(self) -> None:
         # SettingsDialog tints its own tooltip ⓘ icons to the dialog's neutral
         # indicator colour (see SettingsDialog.__init__).
-        dlg = SettingsDialog(self._settings, self)
+        # Preselect the Margin Thresholds combo to the current Create Chart
+        # instrument + paper (#80).
+        margin_combo = None
+        if hasattr(self._tab_chart, "current_margin_combo"):
+            margin_combo = self._tab_chart.current_margin_combo()
+        dlg = SettingsDialog(self._settings, self, margin_combo=margin_combo)
         dlg.exec()
         self._check_argyll_binaries()
         self._apply_calibration_mode()

@@ -140,48 +140,30 @@ def _measure_preset(tmp_path, slug):
 
 
 @requires_argyll
-@pytest.mark.parametrize("slug", [
-    "fls_i1pro_a4_484p_1page_portrait",
-    "fls_i1pro_a4_495p_1page_landscape",
-    "fls_colormunki_a4_484p_1page_portrait",
-])
-def test_seed_thresholds_only_ever_touch_scan_edges(tmp_path, slug):
-    """The default seeds put the run-up on the scan-direction edges only, so a
-    shipped preset's small *cross-scan* margin can never trigger a violation
-    (the bug fixed in the seed table). A scan-edge near-miss is allowed — that's
-    the feature legitimately flagging a marginal chart, not a false alarm."""
-    from core.settings import default_margin_thresholds, margin_combo_key
-    from ui.tabs.tab_chart import _MARGIN_INSTR_LABEL, _canonical_paper_name
-    from workflow.margin_inspector import check_violations
-
-    preset, reports = _measure_preset(tmp_path, slug)
+def test_colormunki_a4_preset_margins_not_inflated(tmp_path):
+    """#83: a ColorMunki A4 2-page preset must measure small, sane margins from
+    its full-page (-M) TIFF — NOT the inflated values seen when a wrong paper
+    size was fed in (the bug was passing a stale A3 paper combo → +43/+61 mm)."""
+    _, reports = _measure_preset(tmp_path, "fls_colormunki_a4_480p_2pages_portrait")
     assert reports
-    seeds = default_margin_thresholds()
     for r in reports:
-        instr = _MARGIN_INSTR_LABEL[preset.instrument]
-        paper = _canonical_paper_name(r.page_w_mm, r.page_h_mm)
-        orient = "Landscape" if r.page_w_mm > r.page_h_mm else "Portrait"
-        thr = seeds.get(margin_combo_key(instr, paper, orient))
-        violated = {v.edge for v in check_violations(r, thr)}
-        cross = {"Left", "Right"} if orient == "Portrait" else {"Top", "Bottom"}
-        assert not (cross & violated), (
-            f"{slug}: cross-scan edge wrongly flagged: {cross & violated}")
+        assert r.page_w_mm == pytest.approx(210, abs=1.5)
+        assert r.page_h_mm == pytest.approx(297, abs=1.5)
+        assert r.left_mm < 15 and r.right_mm < 25     # not the 49/56 mm bug
+        assert r.top_mm < 55 and r.bottom_mm < 55     # not the 102/94 mm bug
 
 
-@requires_argyll
-def test_portrait_i1pro_preset_reads_ok(tmp_path):
-    """The common i1Pro A4 *portrait* preset (8 mm cross-scan, ~29/14 mm scan)
-    reads clean against the default seeds — no warning out of the box."""
-    from core.settings import default_margin_thresholds, margin_combo_key
-    from ui.tabs.tab_chart import _canonical_paper_name
-    from workflow.margin_inspector import check_violations
-
-    _, reports = _measure_preset(tmp_path, "fls_i1pro_a4_484p_1page_portrait")
-    seeds = default_margin_thresholds()
-    for r in reports:
-        paper = _canonical_paper_name(r.page_w_mm, r.page_h_mm)
-        thr = seeds.get(margin_combo_key("i1Pro", paper, "Portrait"))
-        assert check_violations(r, thr) == []
+def test_wrong_paper_size_would_inflate_but_default_does_not(tmp_path):
+    """Documents the #83 fix: measuring with no paper size (trusting the -M
+    full-page TIFF) gives the true margins; feeding a too-large paper size adds
+    a bogus (paper − tiff)/2 offset. The tab must therefore not pass a paper
+    size that may be stale."""
+    preset, _ = _measure_preset(tmp_path, "fls_colormunki_a4_480p_2pages_portrait")
+    tif = sorted(tmp_path.glob("chart*.tif"))[0]
+    good = measure_margins(tif, dpi=300)
+    inflated = measure_margins(tif, dpi=300, paper_w_mm=297, paper_h_mm=420)
+    assert good.left_mm < 15
+    assert inflated.left_mm == pytest.approx(good.left_mm + (297 - 210) / 2, abs=1.0)
 
 
 def test_blank_page_returns_none(tmp_path):

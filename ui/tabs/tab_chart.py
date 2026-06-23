@@ -6004,22 +6004,6 @@ class TabChart(QWidget):
         self._margin_ti2 = ti2 if (ti2 and Path(ti2).is_file()) else None
         self._update_margin_inspector()
 
-    def _paper_dims_mm(self) -> "tuple[float, float] | None":
-        """True sheet size (mm) of the selected paper, for cropped-TIFF fix-up."""
-        code = self._paper_combo.currentData() if self._paper_combo else None
-        if not code:
-            return None
-        dims = _PAPER_MM.get(code)
-        if dims:
-            return dims
-        if "x" in str(code):
-            try:
-                w, h = str(code).split("x", 1)
-                return (float(w), float(h))
-            except ValueError:
-                return None
-        return None
-
     def _update_margin_inspector(self) -> None:
         panel = getattr(self, "_margin_panel", None)
         if panel is None:
@@ -6035,13 +6019,16 @@ class TabChart(QWidget):
         from workflow.margin_inspector import measure_margins, check_violations
         from core.settings import margin_combo_key
 
-        dims = self._paper_dims_mm()
-        pw, ph = (dims if dims else (None, None))
+        # ChromIQ always renders with printtarg -M (the margin is kept inside the
+        # TIFF), so the page TIFF already spans the full sheet — the TIFF's own
+        # size is the page. Do NOT pass a paper size here: the Create Chart paper
+        # combo can be stale relative to the chart actually in the preview (e.g.
+        # after loading a preset), and a wrong paper size would inflate every
+        # measured margin by the bogus (paper − tiff)/2 offset (#83).
         dpi = float(self._settings.get("printtarg_dpi", 300) or 300)
         reports = []
         for tif in self._margin_tiffs:
-            r = measure_margins(tif, dpi=dpi, ti2_path=self._margin_ti2,
-                                paper_w_mm=pw, paper_h_mm=ph)
+            r = measure_margins(tif, dpi=dpi, ti2_path=self._margin_ti2)
             if r is not None:
                 reports.append(r)
         if not reports:
@@ -6104,6 +6091,34 @@ class TabChart(QWidget):
     def _on_margin_guides_toggled(self, on: bool) -> None:
         self._settings.set("margin_guides_show", bool(on))
         self._update_margin_inspector()
+
+    def current_margin_combo(self) -> "tuple[str, str, str] | None":
+        """The (instrument label, paper name, orientation) the margin thresholds
+        tab should preselect — from the current Create Chart instrument + paper
+        (#80). Returns None when either can't be resolved (dialog falls back to
+        its first pulldown entries)."""
+        instr_combo = getattr(self, "_instr_combo", None)
+        paper_combo = getattr(self, "_paper_combo", None)
+        if instr_combo is None or paper_combo is None:
+            return None
+        instr_label = _MARGIN_INSTR_LABEL.get(instr_combo.currentData() or "")
+        code = paper_combo.currentData()
+        if not instr_label or not code:
+            return None
+        dims = _PAPER_MM.get(code)
+        if dims is None and "x" in str(code):
+            try:
+                w, h = str(code).split("x", 1)
+                dims = (float(w), float(h))
+            except ValueError:
+                dims = None
+        if dims is None:
+            return None
+        paper_name = _canonical_paper_name(dims[0], dims[1])
+        if not paper_name:
+            return None
+        orient = "Landscape" if dims[0] > dims[1] else "Portrait"
+        return (instr_label, paper_name, orient)
 
     def refresh_margin_inspector_settings(self) -> None:
         """Re-read margin-inspector settings after the Preferences dialog closes

@@ -20,22 +20,18 @@ def test_combo_key_format():
     assert margin_combo_key("i1Pro", "A2", "") == "i1Pro|A2"
 
 
-def test_seed_table_puts_runup_on_scan_edges():
+def test_seed_table_matches_knut_values():
     seeds = default_margin_thresholds()
-    # Portrait → scan-direction edges are Top/Bottom (not the cross-scan sides,
-    # so a shipped i1Pro chart's small left/right margin can't false-alarm).
-    assert seeds["i1Pro|A3 Portrait"]["T"] == 11
-    assert seeds["i1Pro|A3 Portrait"]["B"] == 11
-    assert "L" not in seeds["i1Pro|A3 Portrait"]
-    # Landscape → scan-direction edges are Left/Right.
-    assert seeds["i1Pro|A4 Landscape"]["L"] == 11
-    assert "T" not in seeds["i1Pro|A4 Landscape"]
-    # ColorMunki seeds are derived from the presets (Top label side bigger).
-    assert seeds["ColorMunki|A4 Portrait"]["T"] == 20
-    assert seeds["ColorMunki|A4 Portrait"]["B"] == 10
+    # i1Pro: 10 mm sides/bottom, 30 mm on the Top (label) edge (#82).
+    assert seeds["i1Pro|A4 Portrait"] == {"L": 10, "R": 10, "T": 30, "B": 10,
+                                          "desc": "i1Pro ruler / jig"}
+    assert seeds["i1Pro|A3 Landscape"]["T"] == 30
+    # ColorMunki: 6 mm sides/bottom, 30 mm on Top.
+    assert seeds["ColorMunki|A4 Portrait"]["L"] == 6
+    assert seeds["ColorMunki|Tabloid Landscape"]["T"] == 30
     # A fresh call returns an independent copy (no shared mutation).
-    seeds["i1Pro|A4 Landscape"]["L"] = 999
-    assert default_margin_thresholds()["i1Pro|A4 Landscape"]["L"] == 11
+    seeds["i1Pro|A4 Portrait"]["L"] = 999
+    assert default_margin_thresholds()["i1Pro|A4 Portrait"]["L"] == 10
 
 
 # --- settings round-trip ---------------------------------------------------
@@ -50,13 +46,13 @@ def _isolated_settings(tmp_path) -> AppSettings:
 def test_thresholds_round_trip(tmp_path):
     s = _isolated_settings(tmp_path)
     # Empty store → seed defaults.
-    assert s.get_margin_thresholds()["i1Pro|A4 Landscape"]["L"] == 11
-    table = {"i1Pro|A4 Landscape": {"L": 12.5, "R": 30, "T": 11, "B": 11,
-                                    "desc": "my rig"}}
+    assert s.get_margin_thresholds()["i1Pro|A4 Portrait"]["L"] == 10
+    table = {"i1Pro|A4 Portrait": {"L": 12.5, "R": 30, "T": 11, "B": 11,
+                                   "desc": "my rig"}}
     s.set_margin_thresholds(table)
     got = s.get_margin_thresholds()
-    assert got["i1Pro|A4 Landscape"]["R"] == 30
-    assert got["i1Pro|A4 Landscape"]["desc"] == "my rig"
+    assert got["i1Pro|A4 Portrait"]["R"] == 30
+    assert got["i1Pro|A4 Portrait"]["desc"] == "my rig"
 
 
 def test_corrupt_blob_falls_back_to_seeds(tmp_path):

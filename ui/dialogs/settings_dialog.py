@@ -49,9 +49,13 @@ from core.i18n import tr
 
 
 class SettingsDialog(QDialog):
-    def __init__(self, settings: "AppSettings", parent: QWidget | None = None) -> None:
+    def __init__(self, settings: "AppSettings", parent: QWidget | None = None,
+                 *, margin_combo: "tuple[str, str, str] | None" = None) -> None:
         super().__init__(parent)
         self._settings = settings
+        # (instrument label, paper name, orientation) to preselect on the
+        # Margin Thresholds tab (#80); None → the pulldowns' first entries.
+        self._initial_margin_combo = margin_combo
         self._update_checker: UpdateChecker | None = None
         self.setWindowTitle(tr("ChromIQ Preferences"))
         self.setWindowFlags(
@@ -838,8 +842,17 @@ class SettingsDialog(QDialog):
         self._margin_instr.currentIndexChanged.connect(self._load_margin_combo)
         self._margin_paper.currentIndexChanged.connect(self._load_margin_combo)
         self._margin_desc.textChanged.connect(self._on_margin_desc_changed)
-        # Default selection → i1Pro A4 Landscape if present.
-        self._margin_paper.setCurrentText("A4 Landscape")
+        # Preselect the combo active in Create Chart (#80), else the first
+        # pulldown entries.
+        combo = self._initial_margin_combo
+        if combo:
+            instr_label, paper_name, orient = combo
+            i = self._margin_instr.findText(instr_label)
+            if i >= 0:
+                self._margin_instr.setCurrentIndex(i)
+            j = self._margin_paper.findText(f"{paper_name} {orient}")
+            if j >= 0:
+                self._margin_paper.setCurrentIndex(j)
         self._loading_margin_combo = False
         self._load_margin_combo()
         return page
