@@ -1,6 +1,10 @@
 # Changelog
 
-## v3.12.0-beta.1
+## v3.12.0-beta.2
+
+### 🐛 Fixed
+- Fixed a crash when turning on **“Show margin threshold guide lines on preview”**
+  before generating a chart (an uninitialised state on first use).
 
 ### ✨ New
 - **Margin inspector & jig-margin warnings (beta).** When you generate a chart,
