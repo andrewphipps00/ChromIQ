@@ -1,5 +1,19 @@
 # Changelog
 
+## v3.12.0-beta.5
+
+### 🐛 Fixed
+- **Margin inspector now follows the page you're looking at.** On multi-page
+  charts the readout and the dotted guide lines could describe a different page
+  than the one shown, so the guides landed away from the patches. The inspector
+  now measures the page currently in the preview and updates as you page
+  through. (#83)
+- **"Patch size" readout corrected and renamed.** It now reports the patch width
+  across a strip (matching a ruler measurement) instead of over-reporting, and
+  is labelled **"Patch width (in strip reading direction)"** in solid text. (#83)
+- **ColorMunki margin thresholds** are now seeded for every paper size, not just
+  the examples. (#82)
+
 ## v3.12.0-beta.4
 
 ### ✨ New
