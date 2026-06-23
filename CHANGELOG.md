@@ -1,5 +1,21 @@
 # Changelog
 
+## v3.12.0-beta.3
+
+### 🐛 Fixed
+- **Margin measurements were wildly wrong for some charts** (e.g. a ColorMunki
+  A4 preset reading 49/56/102/94 mm). The inspector was using the Create Chart
+  paper-size dropdown, which could be stale relative to the chart actually in
+  the preview, and inflated every margin. It now measures the rendered page
+  directly. (#83)
+- **Editing a margin threshold now moves the guide lines** in the preview
+  immediately. (#81)
+- **Opening Preferences → Margin Thresholds now preselects** the instrument and
+  paper size currently active in Create Chart. (#80)
+- **Corrected the default margin thresholds** — i1Pro 10 / 10 / 30 / 10 mm and
+  ColorMunki 6 / 6 / 30 / 6 mm (Left / Right / Top / Bottom) for the common
+  paper sizes. (#82)
+
 ## v3.12.0-beta.2
 
 ### 🐛 Fixed
