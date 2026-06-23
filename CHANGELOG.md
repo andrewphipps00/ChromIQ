@@ -1,5 +1,18 @@
 # Changelog
 
+## v3.12.0-beta.8
+
+### ✨ New
+- **Strip length** is now shown in the "Measured from Preview" panel (page
+  height − top − bottom), making it easy to keep targets under the i1Pro jig's
+  240 mm maximum strip length. (#87)
+
+### 🔧 Changed
+- **Default i1Pro margin thresholds finalised** (#82): the primary reading
+  orientation of each common paper (A4/Letter Portrait, A3/Tabloid Landscape)
+  uses 26 / 9 / 38 / 9 mm (Left/Right/Top/Bottom); every other i1Pro paper and
+  orientation uses 9 mm all round. All still editable per combo.
+
 ## v3.12.0-beta.7
 
 ### ✨ New
