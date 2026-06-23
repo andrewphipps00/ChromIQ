@@ -1,5 +1,22 @@
 # Changelog
 
+## v3.12.0-beta.14
+
+### ✨ New
+- **"Show margin guide lines on preview (long dotted lines)"** — a second toggle
+  in the Measured-from-Preview panel that draws a long purple/blue dotted line at
+  each of the four *measured* margins (where the patches meet the white paper), so
+  you can confirm the readout visually. (#89)
+
+### 🔧 Changed
+- **Removed the older "TC9.18+Spyderprint Grays" built-in presets** — only the
+  Full layout setup family and the "by Pharmacist" targets remain. (#89)
+
+### 🐛 Fixed
+- **Triple-density presets keep their patch scale on reload** instead of snapping
+  back to the default — a saved preset now round-trips its real scale/margin. (#89)
+- Updated the ColorMunki A4-495p built-in scale (1.06) so it fills the page. (#89)
+
 ## v3.12.0-beta.13
 
 ### 🔧 Changed
