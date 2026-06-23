@@ -422,27 +422,8 @@ def _paper_sort_key(paper: str) -> float:
 # ChromIQ emits -m<m> -M<m> together (functionally == Knut's lone -M, since
 # printtarg's -m/-M write the same margin) and keeps the left clip border (no -L).
 KNUT_PRESETS: list[_Ti1Preset] = [
-    # i1Pro group — margin 8, spacer scale 0.6, seeded randomisation.
-    _Ti1Preset("i1_a3_land_1p",  "A3-1168p-1page-w8.0mm-Landscape"     + KNUT_SUFFIX, _KNUT_I1, "420x297", 0.98,  8, 1, spacer_scale=0.6, seed=161),
-    _Ti1Preset("i1_a4_2p",       "A4-1168p-2pages-w7.5mm-Portrait"     + KNUT_SUFFIX, _KNUT_I1, "A4",      0.929, 8, 2, spacer_scale=0.6, seed=161),
-    _Ti1Preset("i1_a4_3p",       "A4-1168p-3pages-w8.5mm-Portrait"     + KNUT_SUFFIX, _KNUT_I1, "A4",      1.125, 8, 3, spacer_scale=0.6, seed=367),
-    _Ti1Preset("i1_letter_2p",   "Letter-1168p-2pages-w7.0mm-Portrait" + KNUT_SUFFIX, _KNUT_I1, "Letter",  0.92,  8, 2, spacer_scale=0.6, seed=161),
-    _Ti1Preset("i1_letter_3p",   "Letter-1168p-3pages-w8.5mm-Portrait" + KNUT_SUFFIX, _KNUT_I1, "Letter",  1.105, 8, 3, spacer_scale=0.6, seed=367),
-    # ColorMunki Photo group — margin 6, double density (-h), default randomise.
-    _Ti1Preset("cm_a4_5p",       "A4-1168p-5pages-w12.5mm-Portrait"      + KNUT_SUFFIX, _KNUT_CM, "A4",      0.93,  6, 5, double_density=True),
-    _Ti1Preset("cm_letter_5p",   "Letter-1168p-5pages-w12.0mm-Portrait"  + KNUT_SUFFIX, _KNUT_CM, "Letter",  0.9,   6, 5, double_density=True),
-    _Ti1Preset("cm_a3_port_2p",  "A3-1168p-2pages-w11.5mm-Portrait"      + KNUT_SUFFIX, _KNUT_CM, "A3",      0.88,  6, 2, double_density=True),
-    _Ti1Preset("cm_a3_land_2p",  "A3-1168p-2pages-w11.5mm-Landscape"     + KNUT_SUFFIX, _KNUT_CM, "420x297", 0.85,  6, 2, double_density=True),
-    _Ti1Preset("cm_a3_port_3p",  "A3-1168p-3pages-w14.0mm-Portrait"      + KNUT_SUFFIX, _KNUT_CM, "A3",      1.07,  6, 3, double_density=True),
-    _Ti1Preset("cm_a3_land_3p",  "A3-1168p-3pages-w14.0mm-Landscape"     + KNUT_SUFFIX, _KNUT_CM, "420x297", 1.05,  6, 3, double_density=True),
-    _Ti1Preset("cm_ledger_3p",   "Ledger-1168p-3pages-w13.5mm-Landscape" + KNUT_SUFFIX, _KNUT_CM, "432x279", 1.013, 6, 3, double_density=True),
-    # -a1.06 (Knut's corrected value; the 1.076 he first sent overflowed to 4 pages).
-    _Ti1Preset("cm_tabloid_3p",  "Tabloid-1168p-3pages-w14.0mm-Portrait" + KNUT_SUFFIX, _KNUT_CM, "11x17",   1.06,  6, 3, double_density=True),
-    _Ti1Preset("cm_a2_port_1p",  "A2-1168p-1page-w12.5mm-Portrait"       + KNUT_SUFFIX, _KNUT_CM, "A2",      0.92,  6, 1, double_density=True),
-    _Ti1Preset("cm_a2_land_1p",  "A2-1168p-1page-w12.5mm-Landscape"      + KNUT_SUFFIX, _KNUT_CM, "594x420", 0.90,  6, 1, double_density=True),
-    # -a1.29 (Knut's corrected value; the 1.4 he first sent overflowed to 3 pages).
-    _Ti1Preset("cm_a2_port_2p",  "A2-1168p-2pages-w17.0mm-Portrait"      + KNUT_SUFFIX, _KNUT_CM, "A2",      1.29,  6, 2, double_density=True),
-    _Ti1Preset("cm_a2_land_2p",  "A2-1168p-2pages-w17.0mm-Landscape"     + KNUT_SUFFIX, _KNUT_CM, "594x420", 1.27,  6, 2, double_density=True),
+    # (The 17 "TC9.18+Spyderprint Grays" shared-.ti1 presets were removed in #89 —
+    # only the Full layout setup and "by Pharmacist" built-ins remain.)
 
     # Full-layout-setup family (#63) — Knut's exported Create Chart charts, each
     # with its own bundled .ti1 (per-preset patch set + layout) AND a sidecar
