@@ -55,13 +55,13 @@
   "count": 200,
   "layout": {
     "spacer_mode": "colored",
-    "patch_scale": 1.15,
+    "patch_scale": 1.05,
     "spacer_scale": 1.0,
     "margin": 10,
     "dpi": 200,
     "bit16": false,
-    "L": true,
-    "P": true,
+    "L": false,
+    "P": false,
     "h": false,
     "td": false
   }

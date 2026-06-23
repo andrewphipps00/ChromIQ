@@ -72,11 +72,11 @@ def _fmt_scale(v: float) -> str:
 # ---------------------------------------------------------------------------
 
 def test_registry_shape():
-    # 17 TC9.18+Spyderprint presets (shared .ti1) + 16 "Full layout setup"
+    # 17 TC9.18+Spyderprint presets (shared .ti1) + 15 "Full layout setup"
     # presets (#63, Knut's exported charts; each its own .ti1 + recipe).
-    assert len(KNUT_PRESETS) == 33
-    assert len(KNUT_PRESET_KEYS) == 33  # all keys unique
-    assert sum(1 for p in KNUT_PRESETS if p.slug.startswith("fls_")) == 16
+    assert len(KNUT_PRESETS) == 32
+    assert len(KNUT_PRESET_KEYS) == 32  # all keys unique
+    assert sum(1 for p in KNUT_PRESETS if p.slug.startswith("fls_")) == 15
     assert KNUT_PRESET_KEYS <= BUILTIN_PRESET_KEYS
     assert all(p.combo_label in BUILTIN_PRESET_LABELS for p in KNUT_PRESETS)
     # every preset is reachable from a dropdown/overlay group
@@ -92,7 +92,7 @@ def test_fulllayout_ti1_assets_present():
     # Every Full-layout-setup chart (#63) ships its own .ti1 + recipe.json —
     # guard the bundled files.
     fls = [p for p in KNUT_PRESETS if p.slug.startswith("fls_")]
-    assert len(fls) == 16
+    assert len(fls) == 15
     for p in fls:
         assert resource_path(p.ti1_asset).is_file(), f"missing {p.ti1_asset}"
         recipe = resource_path(p.ti1_asset).parent / "recipe.json"
