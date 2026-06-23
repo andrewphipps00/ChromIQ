@@ -6066,6 +6066,7 @@ class TabChart(QWidget):
         self._update_margin_inspector()
 
     def _update_margin_inspector(self) -> None:
+        self._margin_combo = None   # recomputed below once a page is measured
         panel = getattr(self, "_margin_panel", None)
         if panel is None:
             return
@@ -6102,11 +6103,14 @@ class TabChart(QWidget):
             self._preview.set_margin_guides(None)
             return
 
-        instr_flag = (self._instr_combo.currentData()
-                      if self._instr_combo is not None else "i1") or "i1"
-        instr_label = _MARGIN_INSTR_LABEL.get(instr_flag, instr_flag)
+        instr_label = _MARGIN_INSTR_LABEL.get(
+            self._active_instrument_flag(), "i1Pro")
         paper_name = _canonical_paper_name(report.page_w_mm, report.page_h_mm)
         orient = "Landscape" if report.page_w_mm > report.page_h_mm else "Portrait"
+        # Cache the combo the inspector is using so Preferences → Margin
+        # Thresholds preselects the SAME row (#81): otherwise editing a different
+        # row left the guides untouched.
+        self._margin_combo = (instr_label, paper_name, orient) if paper_name else None
         thresholds = None
         if paper_name:
             key = margin_combo_key(instr_label, paper_name, orient)
@@ -6151,33 +6155,23 @@ class TabChart(QWidget):
         self._settings.set("margin_guides_show", bool(on))
         self._update_margin_inspector()
 
+    def _active_instrument_flag(self) -> str:
+        """The instrument the chart in the preview was built with. In Manual mode
+        that is the manual -i widget; otherwise the Guided instrument combo. Used
+        so the margin combo follows the chart, not a stale mode's control (#81)."""
+        if self._manual_btn is not None and self._manual_btn.isChecked():
+            for pw in self._manual_widgets.get("printtarg", []):
+                if pw.flag == "-i":
+                    return str(pw.get_raw_value() or "i1")
+        combo = getattr(self, "_instr_combo", None)
+        return (combo.currentData() if combo is not None else "i1") or "i1"
+
     def current_margin_combo(self) -> "tuple[str, str, str] | None":
-        """The (instrument label, paper name, orientation) the margin thresholds
-        tab should preselect — from the current Create Chart instrument + paper
-        (#80). Returns None when either can't be resolved (dialog falls back to
-        its first pulldown entries)."""
-        instr_combo = getattr(self, "_instr_combo", None)
-        paper_combo = getattr(self, "_paper_combo", None)
-        if instr_combo is None or paper_combo is None:
-            return None
-        instr_label = _MARGIN_INSTR_LABEL.get(instr_combo.currentData() or "")
-        code = paper_combo.currentData()
-        if not instr_label or not code:
-            return None
-        dims = _PAPER_MM.get(code)
-        if dims is None and "x" in str(code):
-            try:
-                w, h = str(code).split("x", 1)
-                dims = (float(w), float(h))
-            except ValueError:
-                dims = None
-        if dims is None:
-            return None
-        paper_name = _canonical_paper_name(dims[0], dims[1])
-        if not paper_name:
-            return None
-        orient = "Landscape" if dims[0] > dims[1] else "Portrait"
-        return (instr_label, paper_name, orient)
+        """The (instrument label, paper name, orientation) the Margin Thresholds
+        tab should preselect (#80). Returns the combo the inspector is actually
+        using for the chart in the preview, so editing the preselected row moves
+        that chart's guides (#81); None when there's no measured chart."""
+        return getattr(self, "_margin_combo", None)
 
     def refresh_margin_inspector_settings(self) -> None:
         """Re-read margin-inspector settings after the Preferences dialog closes

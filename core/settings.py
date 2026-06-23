@@ -187,10 +187,11 @@ DEFAULTS: dict[str, Any] = {
 # below the smallest known-good margin so those presets read OK out of the box.
 _I1_DESC = "i1Pro ruler / jig"
 _CM_DESC = "ColorMunki ruler / jig"
-# Knut #82: thresholds are 10 mm sides/bottom + 30 mm Top (label edge) for the
-# i1Pro, and 6 mm sides/bottom + 30 mm Top for the ColorMunki. ColorMunki uses
+# Knut #82: thresholds are 10 mm sides/bottom + 24 mm Top (label edge) for the
+# i1Pro, and 6 mm sides/bottom + 24 mm Top for the ColorMunki. ColorMunki uses
 # the same values for *every* paper size, so its seeds cover all papers × both
 # orientations; the i1Pro table lists the orientations its presets actually use.
+# (Top is still tentative — editable per combo.)
 _MARGIN_PAPERS_ALL = ("A4", "Letter", "A3", "A3+", "A2", "Tabloid", "Legal")
 
 
@@ -203,11 +204,11 @@ def _seed_rows(instr, desc, side, top, combos):
 
 
 _MARGIN_SEED: dict[str, dict[str, Any]] = {
-    **_seed_rows("i1Pro", _I1_DESC, 10, 30, [
+    **_seed_rows("i1Pro", _I1_DESC, 10, 24, [
         ("A4", "Portrait"), ("Letter", "Portrait"),
         ("A3", "Landscape"), ("Tabloid", "Landscape"),
     ]),
-    **_seed_rows("ColorMunki", _CM_DESC, 6, 30, [
+    **_seed_rows("ColorMunki", _CM_DESC, 6, 24, [
         (paper, orient)
         for paper in _MARGIN_PAPERS_ALL
         for orient in ("Portrait", "Landscape")

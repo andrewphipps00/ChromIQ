@@ -94,13 +94,25 @@ def test_refresh_settings_before_generate_is_safe(qapp, tmp_path):
     assert tab._margin_tiffs == []
 
 
-def test_current_margin_combo_reports_selection(qapp, tmp_path):
-    """#80: the tab reports its instrument + paper + orientation so Preferences
-    can preselect the matching Margin Thresholds row."""
-    tab = _tab(tmp_path, chart_instrument="i1", chart_paper="A4")
+@requires_argyll
+def test_current_margin_combo_follows_the_chart(qapp, tmp_path):
+    """#80/#81: the reported combo is the one the inspector is using for the
+    chart in the preview, so Preferences preselects exactly that row."""
+    shutil.copy(_I1_TI1, tmp_path / "chart.ti1")
+    subprocess.run([_PT, "-ii1", "-pA4", "-t300", "-P", "-L", "-M8", "chart"],
+                   cwd=tmp_path, check=True,
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    tif = tmp_path / "chart.tif"
+    tab = _tab(tmp_path)
     tab._instr_combo.setCurrentIndex(tab._instr_combo.findData("i1"))
-    tab._paper_combo.setCurrentIndex(tab._paper_combo.findData("A4"))
+    tab._preview.load_tiff([tif])
+    tab._set_margin_chart([tif], tmp_path / "chart.ti2")
     assert tab.current_margin_combo() == ("i1Pro", "A4", "Portrait")
+
+
+def test_current_margin_combo_none_without_chart(qapp, tmp_path):
+    tab = _tab(tmp_path)
+    assert tab.current_margin_combo() is None
 
 
 def test_settings_dialog_preselects_margin_combo(qapp, tmp_path):
