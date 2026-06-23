@@ -1786,5 +1786,7 @@
  "e.g. which ruler / jig these margins are for": "例：これらの余白がどのルーラー／治具向けか",
  "inch": "インチ",
  "mm": "mm",
- "⚠ {edge} margin {measured:.1f} mm is below the {threshold:.0f} mm minimum": "⚠ {edge}の余白 {measured:.1f} mm が最小値 {threshold:.0f} mm を下回っています"
+ "⚠ {edge} margin {measured:.1f} mm is below the {threshold:.0f} mm minimum": "⚠ {edge}の余白 {measured:.1f} mm が最小値 {threshold:.0f} mm を下回っています",
+ "About i1Pro jig margins": "i1Pro 治具の余白について",
+ "When you read a chart in an X-Rite i1Pro ruler / jig, the scanner head slides along each strip and needs a run of bare white paper before the first patch and after the last one — otherwise it hits the rail or starts reading mid-patch.\n\nImportant: the jig orientation is rotated 90° from the printed page. A sheet you place landscape in the jig is laid out portrait by printtarg, and vice-versa. The scan runs along the strips, so the run-up margins are the TOP and BOTTOM of a portrait page (or LEFT and RIGHT of a landscape page) — that is where the seeded thresholds sit.\n\nCommon guidance (enlarged X-Rite / Ugra-style ruler): about 11 mm of white run-up on each scan-direction edge for the i1Pro. Rulers vary, so treat these as starting points and adjust to yours; use the Description field to note which ruler a row is for.": "X-Rite i1Pro のルーラー／治具でチャートを読み取るとき、スキャナーヘッドは各ストリップに沿って滑り、最初のパッチの前と最後のパッチの後に余白の白い紙が必要です。そうでないとレールに当たったり、パッチの途中から読み始めたりします。\n\n重要：治具での向きは印刷ページから 90° 回転しています。治具に横向きに置く用紙は、printtarg では縦向きにレイアウトされます（逆も同様）。スキャンはストリップに沿って進むため、助走の余白は縦ページでは上と下（横ページでは左と右）になります。初期しきい値はそこに設定されています。\n\n一般的な目安（拡大された X-Rite／Ugra 系ルーラー）：i1Pro ではスキャン方向の各端に約 11 mm の白い助走。ルーラーは様々なので、これらは出発点として自分のものに合わせて調整してください。説明欄に、その行がどのルーラー用かを記録できます。"
 }

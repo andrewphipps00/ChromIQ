@@ -748,6 +748,7 @@ class SettingsDialog(QDialog):
         v.setSpacing(10)
         v.setContentsMargins(12, 12, 12, 12)
 
+        intro_row = QHBoxLayout()
         intro = QLabel(tr(
             "Warn when a generated chart's measured page margins fall below the "
             "minimum needed for your measuring ruler / jig. Values are minimums "
@@ -756,7 +757,26 @@ class SettingsDialog(QDialog):
             "your own rig."), self)
         intro.setWordWrap(True)
         intro.setStyleSheet("color: #909090; font-size: 11px;")
-        v.addWidget(intro)
+        intro_row.addWidget(intro, stretch=1)
+        intro_row.addWidget(TooltipButton(
+            tr("About i1Pro jig margins"),
+            tr("When you read a chart in an X-Rite i1Pro ruler / jig, the scanner "
+               "head slides along each strip and needs a run of bare white paper "
+               "before the first patch and after the last one — otherwise it "
+               "hits the rail or starts reading mid-patch.\n\n"
+               "Important: the jig orientation is rotated 90° from the printed "
+               "page. A sheet you place landscape in the jig is laid out portrait "
+               "by printtarg, and vice-versa. The scan runs along the strips, so "
+               "the run-up margins are the TOP and BOTTOM of a portrait page (or "
+               "LEFT and RIGHT of a landscape page) — that is where the seeded "
+               "thresholds sit.\n\n"
+               "Common guidance (enlarged X-Rite / Ugra-style ruler): about "
+               "11 mm of white run-up on each scan-direction edge for the i1Pro. "
+               "Rulers vary, so treat these as starting points and adjust to "
+               "yours; use the Description field to note which ruler a row is for."),
+            self,
+        ))
+        v.addLayout(intro_row)
 
         # In-memory working copy; committed to settings on Save. Read via the
         # generic get + module parser so any settings object (incl. test doubles
