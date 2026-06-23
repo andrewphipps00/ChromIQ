@@ -1,5 +1,12 @@
 # Changelog
 
+## v3.12.0-beta.16
+
+### 🐛 Fixed
+- In the editor's **Add…** window, "Ensure unique colours" now keeps generated
+  patches clear of the chart's **existing** patches too (not just clear of each
+  other), so a generator can't land on top of patches already on the chart. (#89)
+
 ## v3.12.0-beta.15
 
 ### 🔧 Changed
