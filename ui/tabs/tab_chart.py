@@ -463,7 +463,7 @@ KNUT_PRESETS: list[_Ti1Preset] = [
                _KNUT_CM, "A4", 1.08, 6, 1,
                triple_density=True, ti1_asset=f"{_KNUT_FLS_DIR}/fls_colormunki_a4_484p_1page_portrait/chart.ti1", patches=484, white=9, black=8, no_strip_limit=True, suppress_left_clip=True, tiff_16bit=False, suffix=KNUT_FLS_SUFFIX),
     _Ti1Preset("fls_colormunki_a4_495p_1page_landscape", "A4-495p-1page-Landscape-w8.0mm" + KNUT_FLS_SUFFIX,
-               _KNUT_CM, "A4R", 1.0, 6, 1,
+               _KNUT_CM, "A4R", 1.06, 6, 1,
                triple_density=True, ti1_asset=f"{_KNUT_FLS_DIR}/fls_colormunki_a4_495p_1page_landscape/chart.ti1", patches=495, white=9, black=8, no_strip_limit=True, suppress_left_clip=True, tiff_16bit=False, suffix=KNUT_FLS_SUFFIX),
     # i1Pro A4 portrait family — reworked by Knut (#88) to keep the i1Pro clip
     # border (no -L) and honour the strip-length limit (no -P), with patch
@@ -2979,20 +2979,29 @@ class TabChart(QWidget):
             self._manual_dd_pw.setEnabled(not checked)
 
         if checked:
-            stash: dict = {}
-            if self._manual_a_pw is not None:
-                stash["-a"] = self._manual_a_pw.get_raw_value()
-                self._manual_a_pw.set_value(1.3)
-            if self._manual_m_pw is not None:
-                stash["-m"] = self._manual_m_pw.get_raw_value()
-                self._manual_m_pw.set_value(5)
-            if self._manual_P_pw is not None:
-                stash["-P"] = self._manual_P_pw.get_raw_value()
-                self._manual_P_pw.set_value(True)
-            if self._manual_lb_pw is not None:
-                stash["-L"] = self._manual_lb_pw.get_raw_value()
-                self._manual_lb_pw.set_value(True)
-            self._td_saved_layout = stash
+            if getattr(self, "_suppress_td_override", False):
+                # Restoring a saved triple-density chart: the -a / -m / -P / -L
+                # widgets already hold the *effective* TD layout (the values that
+                # were saved), so DON'T overwrite them with the TD defaults — that
+                # was the round-trip bug (#89) where a custom TD scale snapped back
+                # to 1.3. Stash clean non-TD defaults so unticking later reverts
+                # sensibly.
+                self._td_saved_layout = {"-a": 1.0, "-m": 6, "-P": False, "-L": False}
+            else:
+                stash: dict = {}
+                if self._manual_a_pw is not None:
+                    stash["-a"] = self._manual_a_pw.get_raw_value()
+                    self._manual_a_pw.set_value(1.3)
+                if self._manual_m_pw is not None:
+                    stash["-m"] = self._manual_m_pw.get_raw_value()
+                    self._manual_m_pw.set_value(5)
+                if self._manual_P_pw is not None:
+                    stash["-P"] = self._manual_P_pw.get_raw_value()
+                    self._manual_P_pw.set_value(True)
+                if self._manual_lb_pw is not None:
+                    stash["-L"] = self._manual_lb_pw.get_raw_value()
+                    self._manual_lb_pw.set_value(True)
+                self._td_saved_layout = stash
         else:
             stash = self._td_saved_layout or {}
             if self._manual_a_pw is not None and "-a" in stash:
@@ -3688,10 +3697,16 @@ class TabChart(QWidget):
             black = bool(data.get("auto_black", False)),
         )
         self._manual_left_clip_check.setChecked(bool(data.get("left_clip_info", False)))
-        # Apply triple-density last so its toggle handler sees the restored
-        # -a / -m / -P values and stashes them correctly.
+        # Apply triple-density last. The saved values already ARE the effective
+        # TD layout, so suppress the override so re-enabling the checkbox keeps
+        # the restored -a / -m / -P / -L instead of snapping them to 1.3 / 5 (#89).
         if self._manual_td_check is not None:
-            self._manual_td_check.setChecked(bool(data.get("triple_density", False)))
+            td_on = bool(data.get("triple_density", False))
+            self._suppress_td_override = td_on
+            try:
+                self._manual_td_check.setChecked(td_on)
+            finally:
+                self._suppress_td_override = False
 
     def _preset_save_prefill(self) -> tuple[str, bool, bool, bool]:
         """Initial (name, auto_run, attach, from_generator) for the Save Preset
@@ -3927,23 +3942,15 @@ class TabChart(QWidget):
 
     def _on_preset_save(self) -> None:
         capture: dict = {}
-        # When Triple density is active the four widgets it owns currently
-        # show the i1Pro-emulation overrides; persisting those into the
-        # preset would corrupt the stash on load and trap the preset in
-        # TD-shaped values. Use the stashed pre-TD values for those flags.
-        td_stash = (self._td_saved_layout
-                    if (self._manual_td_check is not None
-                        and self._manual_td_check.isChecked()
-                        and self._td_saved_layout)
-                    else None)
+        # Store the EFFECTIVE widget values, including the triple-density layout
+        # (-a / -m / -P / -L) when TD is on — so the preset round-trips with the
+        # right scale/margin (#89). On restore the TD checkbox is re-enabled in
+        # suppressed mode so it won't clobber these back to the TD defaults.
         for tool, widgets in self._manual_widgets.items():
             for pw in widgets:
                 if pw in self._d_cascade_widgets:
                     continue
-                if td_stash is not None and tool == "printtarg" and pw.flag in td_stash:
-                    v = td_stash[pw.flag]
-                else:
-                    v = pw.get_raw_value()
+                v = pw.get_raw_value()
                 if v is not None:
                     capture[f"{tool}_{pw.flag}"] = v
                 # Persist the enable-checkbox state for expert non-boolean rows
