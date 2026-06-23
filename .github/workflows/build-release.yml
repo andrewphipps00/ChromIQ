@@ -265,20 +265,39 @@ jobs:
           ln -sf /Applications "$MOUNT/Applications"
           sync
 
-          # Step 4: detach (retry — the volume is sometimes still busy
-          # right after sync, giving "Resource busy"/exit 16 on the runner)
-          for i in 1 2 3 4 5; do
-            if hdiutil detach "$MOUNT" -force; then
+          # Step 4: detach. A force-detach often ejects the volume while still
+          # returning a non-zero "Resource busy" status, after which retries hit
+          # "No such file or directory". So also treat an already-unmounted
+          # volume as success, otherwise the loop burns all attempts on a volume
+          # that's actually gone and convert then races the still-settling device.
+          for i in 1 2 3 4 5 6; do
+            if hdiutil detach "$MOUNT" -force 2>/dev/null; then
+              break
+            fi
+            if ! hdiutil info | grep -q "$MOUNT"; then
+              echo "volume already detached"
               break
             fi
             echo "detach attempt $i failed (volume busy); retrying in 3s…"
             sleep 3
           done
 
-          # Step 5: convert to compressed read-only (UDZO = zlib)
-          hdiutil convert /tmp/rw.dmg \
-            -format UDZO -imagekey zlib-level=9 \
-            -o "${{ matrix.artifact }}"
+          sleep 2   # let the device fully release before converting
+
+          # Step 5: convert to compressed read-only (UDZO = zlib). Retry — the
+          # device can still report "Resource temporarily unavailable" right
+          # after detach on the runner.
+          for i in 1 2 3; do
+            rm -f "${{ matrix.artifact }}"
+            if hdiutil convert /tmp/rw.dmg \
+                 -format UDZO -imagekey zlib-level=9 \
+                 -o "${{ matrix.artifact }}"; then
+              break
+            fi
+            echo "convert attempt $i failed; retrying in 5s…"
+            sleep 5
+          done
+          [ -f "${{ matrix.artifact }}" ] || { echo "DMG convert failed"; exit 1; }
 
           rm -f /tmp/rw.dmg
 
@@ -384,7 +403,13 @@ jobs:
           ditto "$THIN_APP" "$MOUNT/ChromIQ.app"
           ln -sf /Applications "$MOUNT/Applications"
           sync
-          hdiutil detach "$MOUNT" -force
+          # Same detach-then-convert race guard as the universal DMG above.
+          for i in 1 2 3 4 5 6; do
+            hdiutil detach "$MOUNT" -force 2>/dev/null && break
+            hdiutil info | grep -q "$MOUNT" || { echo "already detached"; break; }
+            echo "detach attempt $i failed; retrying in 3s…"; sleep 3
+          done
+          sleep 2
           hdiutil convert /tmp/rw_x86.dmg \
             -format UDZO -imagekey zlib-level=9 \
             -o "$X86_DMG"
