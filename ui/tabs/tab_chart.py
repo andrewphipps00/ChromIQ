@@ -6066,7 +6066,6 @@ class TabChart(QWidget):
         self._update_margin_inspector()
 
     def _update_margin_inspector(self) -> None:
-        self._margin_combo = None   # recomputed below once a page is measured
         panel = getattr(self, "_margin_panel", None)
         if panel is None:
             return
@@ -6107,10 +6106,6 @@ class TabChart(QWidget):
             self._active_instrument_flag(), "i1Pro")
         paper_name = _canonical_paper_name(report.page_w_mm, report.page_h_mm)
         orient = "Landscape" if report.page_w_mm > report.page_h_mm else "Portrait"
-        # Cache the combo the inspector is using so Preferences → Margin
-        # Thresholds preselects the SAME row (#81): otherwise editing a different
-        # row left the guides untouched.
-        self._margin_combo = (instr_label, paper_name, orient) if paper_name else None
         thresholds = None
         if paper_name:
             key = margin_combo_key(instr_label, paper_name, orient)
@@ -6179,13 +6174,10 @@ class TabChart(QWidget):
 
     def current_margin_combo(self) -> "tuple[str, str, str] | None":
         """The (instrument label, paper name, orientation) the Margin Thresholds
-        tab should preselect (#80). Prefers the combo the inspector is using for
-        the previewed chart (so editing it moves that chart's guides, #81); falls
-        back to the current instrument + paper *selection* when nothing has been
-        generated yet, so Preferences still opens on the chosen combo."""
-        cached = getattr(self, "_margin_combo", None)
-        if cached:
-            return cached
+        tab should preselect (#80/#81). Always follows the active mode's current
+        instrument + paper *selection* — what the user is looking at in the
+        dropdowns — so Preferences opens on it immediately, even before a chart
+        is generated and regardless of any chart still in the preview."""
         instr_label = _MARGIN_INSTR_LABEL.get(self._active_instrument_flag())
         code = self._active_paper_code()
         if not instr_label or not code:

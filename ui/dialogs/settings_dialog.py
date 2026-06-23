@@ -769,21 +769,31 @@ class SettingsDialog(QDialog):
         intro.setStyleSheet("color: #909090; font-size: 11px;")
         intro_row.addWidget(intro, stretch=1)
         intro_row.addWidget(TooltipButton(
-            tr("About i1Pro jig margins"),
-            tr("When you read a chart in an X-Rite i1Pro ruler / jig, the scanner "
-               "head slides along each strip and needs a run of bare white paper "
-               "before the first patch and after the last one — otherwise it "
-               "hits the rail or starts reading mid-patch.\n\n"
-               "Important: the jig orientation is rotated 90° from the printed "
-               "page. A sheet you place landscape in the jig is laid out portrait "
-               "by printtarg, and vice-versa. The scan runs along the strips, so "
-               "the run-up margins are the TOP and BOTTOM of a portrait page (or "
-               "LEFT and RIGHT of a landscape page) — that is where the seeded "
-               "thresholds sit.\n\n"
-               "Common guidance (enlarged X-Rite / Ugra-style ruler): about "
-               "11 mm of white run-up on each scan-direction edge for the i1Pro. "
-               "Rulers vary, so treat these as starting points and adjust to "
-               "yours; use the Description field to note which ruler a row is for."),
+            tr("About margin thresholds"),
+            tr("Here you decide how much blank white paper a chart should have "
+               "around its patches, so it's comfortable to measure.\n\n"
+               "Why it matters: many spectrophotometers (i1Pro, ColorMunki…) are "
+               "slid by hand along the chart, usually in a ruler or holder (a "
+               "'jig' or 'rig'). If the patches sit too close to the edge of the "
+               "page, the instrument can slip off the paper or bump the rail and "
+               "the reading fails — so each edge needs a minimum margin.\n\n"
+               "How to use this tab:\n"
+               "• Pick an Instrument and a Paper size (with orientation) at the "
+               "top — each combination has its own set of minimums.\n"
+               "• Optionally type a Description, e.g. which ruler the values are "
+               "for.\n"
+               "• Set the smallest acceptable Left, Right, Top and Bottom margin "
+               "(in mm) in the table. These ship with sensible starting values "
+               "you can change to suit your own ruler.\n\n"
+               "When you generate a chart, the Create Chart preview measures its "
+               "actual margins and compares them to the values here: anything "
+               "below the minimum is flagged. It's only a friendly heads-up — you "
+               "can always print anyway.\n\n"
+               "Tip about orientation: a sheet you place sideways in the jig is "
+               "laid out the other way round on paper, so the margins are always "
+               "in the orientation shown in the preview (which is what these "
+               "values refer to). The two checkboxes above let you hide the whole "
+               "feature, or keep it visible but turn the warning off."),
             self,
         ))
         v.addLayout(intro_row)
@@ -844,6 +854,20 @@ class SettingsDialog(QDialog):
             self._margin_fields[key] = sb
             grid.addWidget(sb, 1, col)
         v.addLayout(grid)
+
+        # Restore-defaults button: re-seed the whole table to the shipped
+        # defaults. Needed because changing the built-in defaults between
+        # versions does NOT touch thresholds you've already saved (#82).
+        reset_row = QHBoxLayout()
+        reset_row.addStretch()
+        reset_btn = QPushButton(tr("Restore default thresholds"), self)
+        reset_btn.setToolTip(tr(
+            "Reset every instrument/paper combination back to ChromIQ's "
+            "built-in default margins. Use this to pick up new defaults from an "
+            "update — your saved thresholds are otherwise kept as they were."))
+        reset_btn.clicked.connect(self._restore_default_margin_thresholds)
+        reset_row.addWidget(reset_btn)
+        v.addLayout(reset_row)
         v.addStretch()
 
         # React to combo changes (load that combo's values).
@@ -886,6 +910,12 @@ class SettingsDialog(QDialog):
             except (TypeError, ValueError):
                 sb.setValue(0.0)
         self._loading_margin_combo = False
+
+    def _restore_default_margin_thresholds(self) -> None:
+        """Re-seed the whole threshold table to the shipped defaults (#82)."""
+        from core.settings import default_margin_thresholds
+        self._margin_table = default_margin_thresholds()
+        self._load_margin_combo()   # refresh the visible combo from the new table
 
     def _on_margin_field_changed(self) -> None:
         if getattr(self, "_loading_margin_combo", False):

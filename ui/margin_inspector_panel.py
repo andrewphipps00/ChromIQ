@@ -45,46 +45,6 @@ class MarginInspectorPanel(QGroupBox):
         v.setSpacing(6)
         v.setContentsMargins(12, 8, 12, 10)
 
-        # Info button explaining the panel, the 'min' column and where the
-        # thresholds are set (#86).
-        from PyQt6.QtWidgets import QHBoxLayout
-        from ui.tooltip_button import TooltipButton
-        info_row = QHBoxLayout()
-        info_row.addStretch()
-        info_row.addWidget(TooltipButton(
-            tr("About the margin inspector"),
-            tr("This little panel checks that the chart you just made will be "
-               "easy to measure.\n\n"
-               "Many spectrophotometers (like the i1Pro or ColorMunki) are slid "
-               "along the printed chart by hand, often in a ruler or holder "
-               "(sometimes called a jig or rig). For that to work, the coloured "
-               "patches need a bit of blank white paper around them — if a patch "
-               "sits too close to the edge of the page, the instrument can run "
-               "off the paper or bump the ruler, and the reading fails. This "
-               "panel helps you catch that before you print.\n\n"
-               "What the numbers mean:\n"
-               "• Left, Right, Top, Bottom — how much white space there is "
-               "between each edge of the paper and the patches, shown in both "
-               "millimetres and inches.\n"
-               "• Patch width — how wide one patch is across a strip.\n"
-               "• Strip length — how long each strip of patches is (handy because "
-               "some jigs have a maximum, e.g. 240 mm for the i1Pro).\n\n"
-               "The 'min' column is the smallest each margin should be for your "
-               "ruler or jig. If a margin is below its minimum, that row turns "
-               "red and a short warning appears; when everything is fine you'll "
-               "see a friendly green 'Margins: OK'.\n\n"
-               "You decide those minimums yourself: open Preferences → Margin "
-               "Thresholds and set them for each instrument and paper size (the "
-               "starting values are sensible defaults you can adjust to your own "
-               "ruler). They’re only a helpful warning — you can always go ahead "
-               "and print anyway.\n\n"
-               "Tip: tick 'Show margin threshold guide lines on preview' below "
-               "to draw the minimums right onto the chart preview as dotted "
-               "lines (red on any edge that’s too tight), so you can see at a "
-               "glance whether your patches stay safely inside them."),
-            self))
-        v.addLayout(info_row)
-
         self._placeholder = QLabel(
             tr("Generate a preview to measure its margins."), self)
         self._placeholder.setWordWrap(True)
@@ -156,10 +116,54 @@ class MarginInspectorPanel(QGroupBox):
         self._status.setAlignment(Qt.AlignmentFlag.AlignHCenter)
         v.addWidget(self._status)
 
+        # Bottom row: the guide-lines checkbox, with the ⓘ help button tucked in
+        # the corner so it doesn't take space at the top (#86).
+        from PyQt6.QtWidgets import QHBoxLayout
+        from ui.tooltip_button import TooltipButton
+        bottom = QHBoxLayout()
         self._guide_check = QCheckBox(
             tr("Show margin threshold guide lines on preview (dotted lines)"), self)
         self._guide_check.toggled.connect(self.guides_toggled.emit)
-        v.addWidget(self._guide_check)
+        bottom.addWidget(self._guide_check)
+        bottom.addStretch()
+        bottom.addWidget(TooltipButton(
+            tr("About the margin inspector"),
+            tr("This little panel checks that the chart you just made will be "
+               "easy to measure.\n\n"
+               "Many spectrophotometers (like the i1Pro or ColorMunki) are slid "
+               "along the printed chart by hand, often in a ruler or holder "
+               "(sometimes called a jig or rig). For that to work, the coloured "
+               "patches need a bit of blank white paper around them — if a patch "
+               "sits too close to the edge of the page, the instrument can run "
+               "off the paper or bump the ruler, and the reading fails. This "
+               "panel helps you catch that before you print.\n\n"
+               "What the numbers mean:\n"
+               "• Left, Right, Top, Bottom — how much white space there is "
+               "between each edge of the paper and the patches, shown in both "
+               "millimetres and inches.\n"
+               "• Patch width — how wide one patch is across a strip.\n"
+               "• Strip length — how long each strip of patches is (handy because "
+               "some jigs have a maximum, e.g. 240 mm for the i1Pro).\n\n"
+               "The 'min' column is the smallest each margin should be for your "
+               "ruler or jig. If a margin is below its minimum, that row turns "
+               "red and a short warning appears; when everything is fine you'll "
+               "see a friendly green 'Margins: OK'.\n\n"
+               "You decide those minimums yourself: open Preferences → Margin "
+               "Thresholds and set them for each instrument and paper size (the "
+               "starting values are sensible defaults you can adjust to your own "
+               "ruler). They’re only a helpful warning — you can always go ahead "
+               "and print anyway.\n\n"
+               "Seeing it on the preview: tick 'Show margin threshold guide "
+               "lines on preview' to draw each minimum as a dotted line right on "
+               "the chart — black where the margin is fine, red on any edge "
+               "that's too tight. A patch area that stays inside all four dotted "
+               "lines is good to go.\n\n"
+               "You'll also see a thin solid rectangle marking the actual edge "
+               "of the paper (the page is drawn slightly inside the preview's "
+               "white border, so this line shows exactly where the sheet ends — "
+               "a 0 mm margin would sit right on it)."),
+            self))
+        v.addLayout(bottom)
 
     # ------------------------------------------------------------------
     # Public API
