@@ -1,5 +1,19 @@
 # Changelog
 
+## v3.12.1-beta.1
+
+### 🔧 Changed
+- **A chart's layout is now kept consistent across its two records.** A chart
+  carries its printtarg layout both as the Create Chart manual settings (Set A)
+  and inside its creation recipe (Set B, used to reload the New chart / Add
+  windows). These could drift — e.g. a triple-density preset whose recipe said
+  one scale while its printtarg block said another. Now, whenever a chart is
+  generated or saved as a preset, Set B's layout block (scale, margin, spacers,
+  `-L`/`-P`, double/triple density, DPI, bit depth) is re-synced from the layout
+  the chart was actually built with, so the two can't disagree. The generators,
+  colour-set settings, source mode and patch count stay frozen as "what was used
+  at creation". (#92)
+
 ## v3.12.0
 
 The **margin inspector** release: ChromIQ now measures every chart you generate

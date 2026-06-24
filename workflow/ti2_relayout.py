@@ -362,6 +362,27 @@ def _layout_from_dict(raw: dict | None) -> "LayoutOptions":
     return LayoutOptions(**{k: v for k, v in raw.items() if k in valid})
 
 
+def recipe_layout_from_options(options: "LayoutOptions") -> dict:
+    """The Set-B ``layout`` block that corresponds to a Set-A ``LayoutOptions``.
+
+    Single source of truth for keeping a chart's creation recipe (Set B) in step
+    with the printtarg layout it was actually built with (Set A), so the two
+    records can never disagree on scale / margin / density / etc. (#92). Mirrors
+    the block ``_collect_gen_state`` writes in the editor."""
+    return {
+        "spacer_mode": options.spacer_mode,
+        "patch_scale": options.patch_scale,
+        "spacer_scale": options.spacer_scale,
+        "margin": options.margin_mm,
+        "dpi": options.dpi,
+        "bit16": options.tiff_16bit,
+        "L": options.suppress_left_clip,
+        "P": options.no_strip_limit,
+        "h": options.double_density,
+        "td": options.triple_density,
+    }
+
+
 def save_editor_meta(ti2_path: Path, spec: "ChartSpec",
                      options: "LayoutOptions", basename: str,
                      recipe: dict | None = None) -> None:
@@ -386,7 +407,16 @@ def save_editor_meta(ti2_path: Path, spec: "ChartSpec",
         meta.editor_layout = asdict(options)
         meta.editor_basename = basename
         if recipe is not None:
-            meta.editor_recipe = recipe
+            # Keep the creation recipe's layout (Set B) in step with the layout
+            # the chart was actually built with (Set A = options), so a chart's
+            # two records never disagree (#92). Generators / colour-set params /
+            # mode / patch count stay frozen — only the layout block (+ the
+            # instrument / paper identity) syncs.
+            synced = dict(recipe)
+            synced["layout"] = recipe_layout_from_options(options)
+            synced["instr"] = spec.instrument_flag
+            synced["paper"] = spec.paper_flag
+            meta.editor_recipe = synced
         run.save_meta(meta)
     except Exception:  # noqa: BLE001 — sidecar write must never be fatal
         log.exception("could not write editor meta.json")

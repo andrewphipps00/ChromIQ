@@ -296,6 +296,10 @@ def test_exec_builds_cube_view_before_going_modal(qapp, monkeypatch, show_cube):
         def isVisible(self): return self._v
         def setVisible(self, v): self._v = v
         def minimumWidth(self): return 360
+        # No-op so a queued signal (e.g. a live-count refresh) firing on this
+        # stub after the test — once another test spins an event loop — can't
+        # crash with AttributeError; the real panel renders the program here.
+        def set_program(self, *a, **k): pass
     dlg._cube_panel = _Panel()
 
     # Replace the real show / event pump / modal loop so the test neither opens
