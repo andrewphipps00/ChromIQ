@@ -2152,6 +2152,32 @@ class TabChart(QWidget):
         # Cal-target prefix changes the displayed name — refresh the preview too.
         self._cal_target_check.toggled.connect(self._refresh_manual_command_preview)
 
+        # Layout-engine preset bar (issue #93): shown only when the ChromIQ
+        # layout engine is active. Summarises the active preset (instrument ×
+        # paper × mode), flags when the current settings differ from it, and
+        # lets the user reset to / update that preset, or edit the defaults.
+        self._manual_preset_bar = QWidget(inner)
+        _pbar = QHBoxLayout(self._manual_preset_bar)
+        _pbar.setContentsMargins(0, 0, 0, 0)
+        self._manual_preset_lbl = QLabel("", self._manual_preset_bar)
+        self._manual_preset_lbl.setObjectName("info")
+        self._manual_preset_lbl.setWordWrap(True)
+        _pbar.addWidget(self._manual_preset_lbl, stretch=1)
+        self._manual_preset_reset_btn = QPushButton(
+            tr("Reset to preset"), self._manual_preset_bar)
+        self._manual_preset_reset_btn.clicked.connect(self._reset_manual_to_preset)
+        self._manual_preset_update_btn = QPushButton(
+            tr("Update preset"), self._manual_preset_bar)
+        self._manual_preset_update_btn.clicked.connect(self._update_manual_preset)
+        self._manual_preset_edit_btn = QPushButton(
+            tr("Edit defaults…"), self._manual_preset_bar)
+        self._manual_preset_edit_btn.clicked.connect(self._edit_layout_defaults)
+        for _b in (self._manual_preset_reset_btn, self._manual_preset_update_btn,
+                   self._manual_preset_edit_btn):
+            _pbar.addWidget(_b)
+        inner_layout.addWidget(self._manual_preset_bar)
+        self._manual_preset_bar.setVisible(False)
+
         # Live command preview — mirrors the guided info box but reflects the
         # actual targen / printtarg args the workflow will build from the
         # current ParameterWidget state.  Sits at the bottom of the scrollable
@@ -2391,7 +2417,119 @@ class TabChart(QWidget):
                     + f"\n{_layout_cmd()}"
                 )
         self._manual_info_lbl.setText(info)
+        self._refresh_manual_preset_bar(use_engine)
         self._refresh_name_prefix()     # keep the name field plain (no prefix)
+
+    # ------------------------------------------------------------------
+    # Layout-engine per-chart preset bar (issue #93)
+    # ------------------------------------------------------------------
+    def _layout_store(self):
+        from core.preset_store import load_presets
+        from workflow.layout_engine.presets import PresetStore
+        return PresetStore.from_named_dict(load_presets("chart_layout", self._settings))
+
+    def _current_layout_recipe(self):
+        """A LayoutRecipe reflecting the current Manual controls."""
+        from workflow.chart_creator import _effective_suppress_lb
+        from workflow.layout_engine.presets import LayoutRecipe
+        p = self._collect_manual()
+        triple = p.triple_density and p.instrument == "CM"
+        r = LayoutRecipe(
+            instrument=p.instrument, paper=p.paper, dpi=int(p.tiff_dpi or 300),
+            spacer_on=not p.no_spacers, pscale=float(p.patch_scale or 1.0),
+            sscale=float(p.spacer_scale or 1.0), border=float(p.margin_mm),
+            nolimit=bool(p.no_strip_limit))
+        if p.instrument in ("i1", "p3"):
+            r.clip_border = not _effective_suppress_lb(p)
+        elif p.instrument == "CM":
+            r.cm_density = 3 if triple else (2 if p.double_density else 1)
+        elif p.instrument == "SS":
+            r.hflag = bool(p.double_density)
+        return r
+
+    def _apply_layout_recipe_to_manual(self, r) -> None:
+        """Set the Manual controls from a LayoutRecipe (Reset to preset)."""
+        self._set_manual_value("printtarg", "-i", r.instrument)
+        self._set_manual_value("printtarg", "-p", r.paper)
+        self._set_manual_value("printtarg", "-a", round(float(r.pscale), 3))
+        self._set_manual_value("printtarg", "-m", int(round(r.border)))
+        self._set_manual_value("printtarg", "-A", round(float(r.sscale), 3))
+        self._set_manual_value("printtarg", "-n", not r.spacer_on)
+        self._set_manual_value("printtarg", "-P", bool(r.nolimit))
+        if r.instrument in ("i1", "p3"):
+            self._set_manual_value("printtarg", "-L", not r.clip_border)
+        elif r.instrument == "CM":
+            if self._manual_td_check is not None:
+                self._manual_td_check.setChecked(r.cm_density >= 3)
+            self._set_manual_value("printtarg", "-h", r.cm_density == 2)
+        elif r.instrument == "SS":
+            self._set_manual_value("printtarg", "-h", bool(r.hflag))
+        self._refresh_manual_command_preview()
+
+    @staticmethod
+    def _layout_recipe_values(r) -> dict:
+        """The comparable value fields of a recipe (ignores seed / chart text)."""
+        d = r.to_dict()
+        d.pop("seed", None)
+        d.pop("chart_text", None)
+        return d
+
+    def _refresh_manual_preset_bar(self, use_engine: bool) -> None:
+        bar = getattr(self, "_manual_preset_bar", None)
+        if bar is None:
+            return
+        if not use_engine:
+            bar.setVisible(False)
+            return
+        bar.setVisible(True)
+        try:
+            cur = self._current_layout_recipe()
+            preset = self._layout_store().get(cur.instrument, cur.paper, cur.mode())
+            modified = (self._layout_recipe_values(cur)
+                        != self._layout_recipe_values(preset))
+        except Exception:
+            self._manual_preset_lbl.setText(tr("Layout preset: —"))
+            return
+        summary = tr("Layout preset: {i} · {p} · {m}").format(
+            i=cur.instrument, p=cur.paper, m=cur.mode())
+        if modified:
+            summary += "   " + tr("● modified")
+        self._manual_preset_lbl.setText(summary)
+        self._manual_preset_reset_btn.setEnabled(modified)
+        self._manual_preset_update_btn.setEnabled(modified)
+
+    def _reset_manual_to_preset(self) -> None:
+        try:
+            cur = self._current_layout_recipe()
+            preset = self._layout_store().get(cur.instrument, cur.paper, cur.mode())
+        except Exception as exc:
+            log.warning("reset-to-preset failed: %s", exc)
+            return
+        self._apply_layout_recipe_to_manual(preset)
+
+    def _update_manual_preset(self) -> None:
+        from core.preset_store import save_presets
+        try:
+            store = self._layout_store()
+            store.set(self._current_layout_recipe())
+            save_presets("chart_layout", store.as_named_dict())
+        except Exception as exc:
+            log.warning("update-preset failed: %s", exc)
+            return
+        self._refresh_manual_command_preview()
+
+    def _edit_layout_defaults(self) -> None:
+        """Open Settings on the Chart Layout tab."""
+        from ui.dialogs.settings_dialog import SettingsDialog
+        dlg = SettingsDialog(self._settings, self)
+        tabs = getattr(dlg, "_tabs", None)
+        if tabs is not None:
+            for i in range(tabs.count()):
+                if tabs.tabText(i) == tr("Chart Layout"):
+                    tabs.setCurrentIndex(i)
+                    break
+        dlg.exec()
+        self._refresh_manual_command_preview()
 
     # ------------------------------------------------------------------
     # Helpers

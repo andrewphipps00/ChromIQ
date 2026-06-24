@@ -1840,5 +1840,11 @@
  "high density": "high density",
  "margin {mm:g} mm": "margin {mm:g} mm",
  "no strip-length cap": "no strip-length cap",
- "patch ×{s:.2f}": "patch ×{s:.2f}"
+ "patch ×{s:.2f}": "patch ×{s:.2f}",
+ "Edit defaults…": "Edit defaults…",
+ "Layout preset: {i} · {p} · {m}": "Layout preset: {i} · {p} · {m}",
+ "Layout preset: —": "Layout preset: —",
+ "Reset to preset": "Reset to preset",
+ "Update preset": "Update preset",
+ "● modified": "● modified"
 }
