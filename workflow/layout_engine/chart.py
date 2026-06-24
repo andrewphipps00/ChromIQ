@@ -147,3 +147,16 @@ def build_chart(
         tiff_paths=tiff_paths, strip_rects=rects,
         low_contrast_passes=render.low_contrast_passes,
     )
+
+
+def build_from_recipe(ti1_path: str | Path, out_base: str | Path, recipe
+                      ) -> tuple[ChartResult, "object"]:
+    """Build a chart from a :class:`~workflow.layout_engine.presets.LayoutRecipe`.
+
+    Returns ``(result, recipe_used)`` where *recipe_used* has the actual seed
+    filled in, ready to persist with the chart for the Create Chart ⇄ editor
+    round-trip.
+    """
+    from dataclasses import replace
+    result = build_chart(ti1_path, out_base, **recipe.build_kwargs())
+    return result, replace(recipe, seed=result.seed)
