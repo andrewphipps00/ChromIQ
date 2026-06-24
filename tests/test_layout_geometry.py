@@ -54,3 +54,16 @@ def test_tiny_paper_raises():
 def test_delegated_instrument_rejected():
     with pytest.raises(ValueError):
         instruments.build("isis")
+
+
+def test_colormunki_density_levels_increase_capacity():
+    # ColorMunki: normal < high (rig, printtarg -h) < extra-high (ChromIQ ext).
+    cap = []
+    for d in (1, 2, 3):
+        geom = instruments.build("CM", density=d)
+        cap.append(geometry.patches_per_sheet(geom, *A4))
+    assert cap[0] < cap[1] < cap[2]
+    # level 2 reproduces printtarg's rig row spacing (13.7 mm) exactly
+    assert instruments.build("CM", density=2).rrsp == 13.7
+    # hflag back-compat still maps to the rig (density 2)
+    assert instruments.build("CM", hflag=True).rrsp == 13.7

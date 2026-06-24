@@ -31,7 +31,8 @@ class LayoutRecipe:
     dpi: int = 300
     randomize: bool = True
     seed: int | None = None
-    hflag: bool = False            # CM high-density / SS hex / (n/a elsewhere)
+    hflag: bool = False            # SpectroScan hex (n/a elsewhere)
+    cm_density: int = 1            # ColorMunki rows: 1 normal, 2 rig, 3 extra-high
     spacer_on: bool = True
     pscale: float = 1.0
     sscale: float = 1.0
@@ -43,11 +44,13 @@ class LayoutRecipe:
     chart_text: str = ""           # custom on-sheet text (per chart, Phase 5)
 
     # ---- mode / preset identity ----------------------------------------
+    CM_MODES = {1: "freehand", 2: "high", 3: "extrahigh"}
+
     def mode(self) -> str:
         if self.instrument in ("i1", "p3"):
             return "clip" if self.clip_border else "noclip"
         if self.instrument == "CM":
-            return "rig" if self.hflag else "freehand"
+            return self.CM_MODES.get(self.cm_density, "freehand")
         if self.instrument == "SS":
             return "hex" if self.hflag else "flat"
         return "default"
@@ -74,6 +77,7 @@ class LayoutRecipe:
             "randomize": self.randomize,
             "dpi": self.dpi,
             "hflag": self.hflag,
+            "density": self.cm_density,
             "spacer_on": self.spacer_on,
             "pscale": self.pscale,
             "sscale": self.sscale,
@@ -93,7 +97,7 @@ def default_recipe(instrument: str = "i1", paper: str = "A4", *, mode: str | Non
         if instrument in ("i1", "p3"):
             r.clip_border = (mode == "clip")
         elif instrument == "CM":
-            r.hflag = (mode == "rig")
+            r.cm_density = {"freehand": 1, "high": 2, "extrahigh": 3}.get(mode, 1)
         elif instrument == "SS":
             r.hflag = (mode == "hex")
     return r
@@ -151,7 +155,7 @@ class PresetStore:
         presets: dict[str, LayoutRecipe] = {}
         for inst in SUPPORTED_INSTRUMENTS:
             modes = (["clip", "noclip"] if inst in ("i1", "p3")
-                     else ["freehand", "rig"] if inst == "CM"
+                     else ["freehand", "high", "extrahigh"] if inst == "CM"
                      else ["flat", "hex"] if inst == "SS"
                      else ["default"])
             for m in modes:

@@ -83,6 +83,7 @@ def build(
     pscale: float = 1.0,
     sscale: float = 1.0,
     hflag: bool = False,
+    density: int = 1,
     spacer_on: bool = True,
     border: float = 6.0,
     nolpcbord: bool = False,
@@ -91,9 +92,16 @@ def build(
     """Resolve :class:`Geom` for *key* with the given options.
 
     *pscale* = printtarg ``-a`` (patch+spacer scale), *sscale* = ``-A`` (spacer
-    scale), *hflag* = ``-h`` (hex/high-density), *spacer_on* False = ``-n``,
+    scale), *hflag* = ``-h`` (SpectroScan hex), *spacer_on* False = ``-n``,
     *border* = ``-m`` margin, *nolpcbord* True = ``-L``, *nolimit* True = ``-P``.
+
+    *density* (ColorMunki only) is the row-density level: 1 = normal hand-held,
+    2 = high (the rig — printtarg ``-h``, exact), 3 = extra-high (a ChromIQ
+    extension beyond printtarg's single level; tighter rows pending hardware
+    validation, guarded by the 6 mm reliability floor).
     """
+    if key == "CM" and hflag and density < 2:
+        density = 2   # back-compat: hflag meant "rig" (double density)
     if key in DELEGATED:
         raise ValueError(f"instrument {key!r} is delegated to i1Profiler, not laid out here")
     if key not in TARGET_INSTRUMENT_NAME:
@@ -128,10 +136,13 @@ def build(
     # ---- X-Rite ColorMunki ---------------------------------------------
     if key == "CM":
         plen = pscale * 14.0
-        if hflag:                             # high density (rig) — staggered
-            pwid = rrsp = pscale * 13.7
+        if density >= 2:                      # high density — staggered rows (rig)
+            # Level 2 = printtarg's exact rig spacing (13.7 mm). Higher levels
+            # tighten rows further (ChromIQ extension): 28/density.
+            span = 13.7 if density == 2 else 28.0 / density
+            pwid = rrsp = pscale * span
             hxeh = 0.25 * plen
-        else:
+        else:                                 # normal hand-held
             pwid = rrsp = pscale * 28.0
             hxeh = 0.0
         txhisl, lcar = 7.0, 20.0

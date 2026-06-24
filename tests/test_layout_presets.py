@@ -7,8 +7,10 @@ from workflow.layout_engine.presets import (
 def test_mode_and_preset_key():
     assert LayoutRecipe(instrument="i1", clip_border=True).mode() == "clip"
     assert LayoutRecipe(instrument="i1", clip_border=False).mode() == "noclip"
-    assert LayoutRecipe(instrument="CM", hflag=True).mode() == "rig"
-    assert LayoutRecipe(instrument="CM", hflag=False).mode() == "freehand"
+    # ColorMunki: normal + two high-density levels
+    assert LayoutRecipe(instrument="CM", cm_density=1).mode() == "freehand"
+    assert LayoutRecipe(instrument="CM", cm_density=2).mode() == "high"
+    assert LayoutRecipe(instrument="CM", cm_density=3).mode() == "extrahigh"
     assert LayoutRecipe(instrument="SS", hflag=True).mode() == "hex"
     assert LayoutRecipe(instrument="41").mode() == "default"
     assert LayoutRecipe(instrument="i1", paper="A4", clip_border=True).preset_key() == "i1|A4|clip"
@@ -49,7 +51,7 @@ def test_store_save_load(tmp_path):
     loaded = PresetStore.load(p)
     assert loaded.keys() == store.keys()
     assert "i1|A4|clip" in loaded.keys()
-    assert "CM|A4|rig" in loaded.keys()
+    assert "CM|A4|high" in loaded.keys()
 
 
 def test_factory_defaults_have_modes():
@@ -57,8 +59,13 @@ def test_factory_defaults_have_modes():
     keys = f.keys()
     assert "i1|A4|noclip" in keys
     assert "SS|A4|hex" in keys
+    # ColorMunki gets normal + two high-density presets per paper
+    assert "CM|A4|freehand" in keys
+    assert "CM|A4|high" in keys
+    assert "CM|A4|extrahigh" in keys
 
 
 def test_default_recipe_mode_application():
     assert default_recipe("i1", "A4", mode="noclip").clip_border is False
-    assert default_recipe("CM", "A4", mode="rig").hflag is True
+    assert default_recipe("CM", "A4", mode="high").cm_density == 2
+    assert default_recipe("CM", "A4", mode="extrahigh").cm_density == 3

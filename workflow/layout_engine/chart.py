@@ -36,6 +36,7 @@ def build_ti2_from_ti1(
     seed: int | None = None,
     randomize: bool = True,
     hflag: bool = False,
+    density: int = 1,
     spacer_on: bool = True,
     pscale: float = 1.0,
     sscale: float = 1.0,
@@ -53,7 +54,7 @@ def build_ti2_from_ti1(
     """
     target = ti1_reader.read_ti1(ti1_path)
     geom = instruments.build(
-        instrument, hflag=hflag, spacer_on=spacer_on, pscale=pscale,
+        instrument, hflag=hflag, density=density, spacer_on=spacer_on, pscale=pscale,
         sscale=sscale, border=border, nolpcbord=nolpcbord, nolimit=nolimit,
     )
     w_mm, h_mm = papers.dimensions_mm(paper)
@@ -87,6 +88,7 @@ def build_chart(
     randomize: bool = True,
     dpi: int = 300,
     hflag: bool = False,
+    density: int = 1,
     spacer_on: bool = True,
     pscale: float = 1.0,
     sscale: float = 1.0,
@@ -117,7 +119,7 @@ def build_chart(
         if apply_cal:
             target = calibration.apply_to_target(target, cal)
     geom = instruments.build(
-        instrument, hflag=hflag, spacer_on=spacer_on, pscale=pscale,
+        instrument, hflag=hflag, density=density, spacer_on=spacer_on, pscale=pscale,
         sscale=sscale, border=border, nolpcbord=nolpcbord, nolimit=nolimit,
     )
     w_mm, h_mm = papers.dimensions_mm(paper)
