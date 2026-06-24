@@ -226,6 +226,39 @@ def _detect_stripe_rects(tiff_path: Path) -> list[QRect]:
         return []
 
 
+def engine_strip_rects_from_sidecar(sidecar: Path, n_pages: int):
+    """Per-page strip rects from a ChromIQ-engine chart's ``channels.json``.
+
+    Returns ``(per_page_rects, counts)`` (rects in TIFF-pixel space, the same
+    space the image detectors use), or ``None`` when there's no usable engine
+    ``layout`` block or it doesn't cover every loaded page (issue #93).
+    """
+    import json
+    if n_pages < 1 or not sidecar.is_file():
+        return None
+    try:
+        layout = json.loads(sidecar.read_text()).get("layout")
+    except Exception:
+        return None
+    if not isinstance(layout, dict):
+        return None
+    strips = layout.get("strips") or []
+    if not strips:
+        return None
+    per_page: list[list[QRect]] = [[] for _ in range(n_pages)]
+    try:
+        for s in strips:
+            pg = int(s["page"])
+            if 0 <= pg < n_pages:
+                per_page[pg].append(
+                    QRect(int(s["x"]), int(s["y"]), int(s["w"]), int(s["h"])))
+    except (KeyError, TypeError, ValueError):
+        return None
+    if any(not p for p in per_page):
+        return None
+    return per_page, [len(p) for p in per_page]
+
+
 def _detect_uniform_stripe_rects(tiff_path: Path, n_strips: int) -> list[QRect]:
     """Locate strip columns when the page's strip count is already known.
 
@@ -2302,6 +2335,17 @@ class TabMeasure(QWidget):
         if not self._tiff_pages:
             return
 
+        # ChromIQ layout engine (issue #93): if the chart carries exact strip
+        # geometry in its channels.json, use it directly — guess-free, no image
+        # detection. This is the solid path for engine-generated charts.
+        engine = self._engine_stripe_rects()
+        if engine is not None:
+            per_page, counts = engine
+            self._page_stripe_rects = per_page
+            self._strips_per_page = counts
+            self._preview.set_stripe_rects(per_page[0])
+            return
+
         # PASSES_IN_STRIPS2 lives only in the .ti2, but _ti1_path can hold either
         # a .ti2 (most load paths) or a real .ti1 (reopening a saved run passes
         # run.chart_ti1). Resolve the sibling .ti2 so the authoritative uniform
@@ -2335,6 +2379,14 @@ class TabMeasure(QWidget):
         if rects:
             self._page_stripe_rects = [rects]
             self._preview.set_stripe_rects(rects)
+
+    def _engine_stripe_rects(self):
+        """Exact per-page strip rects from a ChromIQ-engine chart's channels.json,
+        or None if this isn't an engine chart / the geometry doesn't line up."""
+        if self._ti1_path is None:
+            return None
+        return engine_strip_rects_from_sidecar(
+            self._ti1_path.with_suffix(".channels.json"), len(self._tiff_pages))
 
     def _set_settings_enabled(self, enabled: bool) -> None:
         self._stack.setEnabled(enabled)
