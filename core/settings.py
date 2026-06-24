@@ -46,6 +46,9 @@ DEFAULTS: dict[str, Any] = {
     # Default OFF — the printtarg path stays the fallback until the engine is
     # hardware-verified. Affects chart *generation* only, never measurement.
     "use_chromiq_layout_engine": False,
+    # Layout-engine presets (issue #93) are stored as user-browsable .json files
+    # under presets_dir()/"Chart Layout" via core.preset_store — like the manual
+    # tab presets — not in QSettings, so they can be shared/backed up externally.
     # When True, on i1Pro / i1Pro 3+ charts at paper >= A4/Letter:
     #   • Force printtarg -L (no native clip strip).
     #   • Post-process the TIFF to shift patches right by ~28 mm, creating a

@@ -666,6 +666,7 @@ class SettingsDialog(QDialog):
 
         self._tabs.addTab(general_page, tr("General"))
         self._tabs.addTab(self._build_margin_thresholds_tab(), tr("Margin Thresholds"))
+        self._tabs.addTab(self._build_chart_layout_tab(), tr("Chart Layout"))
 
         # ---- About / Updates (below the tabs) ----
         credit1 = QLabel(tr("ChromIQ v{APP_VERSION} · Created by Sebastian Reiprich").format(APP_VERSION=APP_VERSION), self)
@@ -1064,6 +1065,335 @@ class SettingsDialog(QDialog):
                 apply_appearance(app, self.parent(), original)
         super().reject()
 
+    # ------------------------------------------------------------------
+    # Chart Layout tab (ChromIQ layout engine, issue #93)
+    # ------------------------------------------------------------------
+    _LAYOUT_INSTRUMENTS = [
+        ("i1", "i1Pro"), ("p3", "i1Pro 3+"), ("CM", "ColorMunki"),
+        ("SS", "SpectroScan"), ("41", "DTP41"), ("51", "DTP51"),
+    ]
+
+    @staticmethod
+    def _layout_modes(inst: str) -> list[tuple[str, str]]:
+        if inst in ("i1", "p3"):
+            return [("clip", tr("Clip border on")),
+                    ("noclip", tr("Clip border off — more patches"))]
+        if inst == "CM":
+            return [("freehand", tr("Hand-held")),
+                    ("high", tr("High density (rig)")),
+                    ("extrahigh", tr("Extra-high density"))]
+        if inst == "SS":
+            return [("flat", tr("Rectangular")), ("hex", tr("Hexagonal — denser"))]
+        return [("default", tr("Default"))]
+
+    def _build_chart_layout_tab(self) -> QWidget:
+        from core.preset_store import load_presets
+        from workflow.layout_engine.presets import PresetStore
+
+        page = QWidget()
+        v = QVBoxLayout(page)
+        v.setSpacing(10)
+        v.setContentsMargins(12, 12, 12, 12)
+
+        engine_row = QHBoxLayout()
+        self._layout_engine_check = QCheckBox(
+            tr("Use the ChromIQ layout engine instead of printtarg"), self)
+        self._layout_engine_check.setChecked(
+            bool(self._settings.get("use_chromiq_layout_engine", False)))
+        engine_row.addWidget(self._layout_engine_check)
+        engine_row.addWidget(TooltipButton(
+            tr("ChromIQ layout engine"),
+            tr("When ON, ChromIQ builds your test charts itself instead of "
+               "calling ArgyllCMS printtarg. The engine packs the colour patches "
+               "more efficiently, can put useful information where printtarg "
+               "leaves blank space, and lets you fully customise the layout per "
+               "instrument and paper right here.\n\n"
+               "When OFF (the default) nothing changes — charts are made by "
+               "printtarg exactly as before. This switch only affects how charts "
+               "are CREATED; printing and measuring existing charts always work "
+               "the same way, so it is safe to switch back at any time.\n\n"
+               "Leave it OFF unless you want to try the new engine."),
+            self))
+        engine_row.addStretch()
+        v.addLayout(engine_row)
+
+        intro_row = QHBoxLayout()
+        intro = QLabel(tr(
+            "Default chart layout per instrument and paper. Pick a combination "
+            "above; its values below are the starting point Create Chart uses, "
+            "which you can still tweak per chart. Presets are saved as files you "
+            "can back up or share."), self)
+        intro.setWordWrap(True)
+        intro.setStyleSheet("color: #909090; font-size: 11px;")
+        intro_row.addWidget(intro, stretch=1)
+        intro_row.addWidget(TooltipButton(
+            tr("About chart layout"),
+            tr("This tab holds your DEFAULT chart layouts. Every combination of "
+               "Instrument + Paper + Mode has its own saved set of values — so "
+               "your i1Pro on A4 can differ from your ColorMunki on A3, and each "
+               "remembers what you set.\n\n"
+               "How to use it:\n"
+               "• Pick an Instrument, a Paper size and a Mode at the top.\n"
+               "• Adjust the patch and page settings below. The green line shows "
+               "roughly how many patches fit on one sheet with those settings.\n"
+               "• These are starting points: when you make a chart in Create "
+               "Chart, it begins from these values and you can still tweak that "
+               "one chart without changing the defaults here.\n\n"
+               "What “Mode” means depends on the instrument — for the i1Pro it is "
+               "whether a left clip border is printed; for the ColorMunki it is "
+               "the reading density (hand-held vs the measuring rig); for the "
+               "SpectroScan it is rectangular vs hexagonal patches. Each mode "
+               "keeps its own preset.\n\n"
+               "Your presets are saved as ordinary files (one per combination), "
+               "so you can back them up, copy them between computers, or share "
+               "them: use “Open presets folder”, or “Export…” / “Import…”. "
+               "“Restore factory defaults” returns every combination to the "
+               "values ChromIQ shipped with."),
+            self))
+        v.addLayout(intro_row)
+
+        # working preset store (file-backed, like the manual-tab presets)
+        self._layout_store = PresetStore.from_named_dict(
+            load_presets("chart_layout", self._settings))
+        self._loading_layout = False
+
+        # ---- selectors ----
+        sel = QGridLayout()
+        sel.addWidget(QLabel(tr("Instrument:"), self), 0, 0)
+        self._layout_instr = NoScrollComboBox(self)
+        for key, label in self._LAYOUT_INSTRUMENTS:
+            self._layout_instr.addItem(label, key)
+        sel.addWidget(self._layout_instr, 0, 1)
+        sel.addWidget(QLabel(tr("Paper:"), self), 0, 2)
+        self._layout_paper = NoScrollComboBox(self)
+        sel.addWidget(self._layout_paper, 0, 3)
+        sel.addWidget(QLabel(tr("Mode:"), self), 1, 0)
+        self._layout_mode = NoScrollComboBox(self)
+        sel.addWidget(self._layout_mode, 1, 1)
+        sel.addWidget(TooltipButton(
+            tr("Layout mode"),
+            tr("A per-instrument choice that has its own saved preset, so you can "
+               "keep separate defaults for each:\n\n"
+               "• i1Pro / i1Pro 3+ — whether a left CLIP BORDER is printed. The "
+               "clip border is the white strip the measuring rail grips; turning "
+               "it off frees that space for more patches, but only do so if your "
+               "rig does not need it.\n\n"
+               "• ColorMunki — the reading DENSITY. “Hand-held” reads one patch "
+               "at a time. “High density (rig)” needs the measuring-rig accessory "
+               "and packs more patches per sheet. “Extra-high density” packs even "
+               "more (a ChromIQ extension) — only use it if your patches stay "
+               "large enough to read reliably (watch the warning).\n\n"
+               "• SpectroScan — rectangular or hexagonal patches; hexagons "
+               "tessellate tighter, fitting a few more per sheet."),
+            self), 1, 2)
+        sel.setColumnStretch(1, 1)
+        sel.setColumnStretch(3, 1)
+        v.addLayout(sel)
+
+        # ---- patches & spacers ----
+        ps = QGroupBox(tr("Patches && spacers"), self)
+        psg = QGridLayout(ps)
+        psg.addWidget(QLabel(tr("Patch scale:"), self), 0, 0)
+        self._layout_pscale = NoScrollDoubleSpinBox(self)
+        self._layout_pscale.setRange(0.5, 3.0)
+        self._layout_pscale.setDecimals(3)
+        self._layout_pscale.setSingleStep(0.05)
+        psg.addWidget(self._layout_pscale, 0, 1)
+        psg.addWidget(QLabel(tr("Spacer scale:"), self), 0, 2)
+        self._layout_sscale = NoScrollDoubleSpinBox(self)
+        self._layout_sscale.setRange(0.5, 3.0)
+        self._layout_sscale.setDecimals(3)
+        self._layout_sscale.setSingleStep(0.05)
+        psg.addWidget(self._layout_sscale, 0, 3)
+        self._layout_spacer = QCheckBox(tr("Spacers between patches"), self)
+        psg.addWidget(self._layout_spacer, 1, 0, 1, 4)
+        v.addWidget(ps)
+
+        # ---- page geometry ----
+        pg = QGroupBox(tr("Page geometry"), self)
+        pgg = QGridLayout(pg)
+        pgg.addWidget(QLabel(tr("Margin:"), self), 0, 0)
+        self._layout_border = NoScrollDoubleSpinBox(self)
+        self._layout_border.setRange(0, 60)
+        self._layout_border.setDecimals(1)
+        self._layout_border.setSingleStep(0.5)
+        self._layout_border.setSuffix(" mm")
+        pgg.addWidget(self._layout_border, 0, 1)
+        pgg.addWidget(QLabel(tr("Resolution:"), self), 0, 2)
+        self._layout_dpi = NoScrollSpinBox(self)
+        self._layout_dpi.setRange(72, 1200)
+        self._layout_dpi.setSuffix(" dpi")
+        pgg.addWidget(self._layout_dpi, 0, 3)
+        self._layout_nolimit = QCheckBox(tr("Don't cap strip length"), self)
+        pgg.addWidget(self._layout_nolimit, 1, 0, 1, 4)
+        pgg.addWidget(QLabel(tr("Strip pattern:"), self), 2, 0)
+        self._layout_strip_pat = QLineEdit(self)
+        pgg.addWidget(self._layout_strip_pat, 2, 1)
+        pgg.addWidget(QLabel(tr("Patch pattern:"), self), 2, 2)
+        self._layout_patch_pat = QLineEdit(self)
+        pgg.addWidget(self._layout_patch_pat, 2, 3)
+        pgg.addWidget(TooltipButton(
+            tr("Strip && patch labels"),
+            tr("These control the LABELS printed on the chart and read back to you "
+               "while measuring — e.g. strip “A” then patch “1”, giving location "
+               "“A1”.\n\n"
+               "• Strip pattern — how columns are named. The default counts "
+               "A, B, … Z, then AA, AB, … like spreadsheet columns.\n"
+               "• Patch pattern — how patches within a column are named; the "
+               "default counts 1, 2, 3, …\n\n"
+               "Leave these at the defaults unless you have a specific reason to "
+               "change them. ChromIQ keeps the printed labels, the measurement "
+               "file and what the reader announces perfectly in step, so a custom "
+               "pattern still reads correctly."),
+            self), 2, 4)
+        v.addWidget(pg)
+
+        self._layout_calc = QLabel("", self)
+        self._layout_calc.setStyleSheet("color: #1a8f3c; font-weight: 600;")
+        v.addWidget(self._layout_calc)
+
+        # ---- buttons ----
+        btns = QHBoxLayout()
+        reset_btn = QPushButton(tr("Restore factory defaults"), self)
+        reset_btn.clicked.connect(self._restore_layout_defaults)
+        folder_btn = QPushButton(tr("Open presets folder"), self)
+        folder_btn.clicked.connect(self._open_layout_presets_folder)
+        export_btn = QPushButton(tr("Export…"), self)
+        export_btn.clicked.connect(self._export_layout_presets)
+        import_btn = QPushButton(tr("Import…"), self)
+        import_btn.clicked.connect(self._import_layout_presets)
+        for b in (reset_btn, folder_btn, export_btn, import_btn):
+            btns.addWidget(b)
+        btns.addStretch()
+        v.addLayout(btns)
+        v.addStretch()
+
+        # ---- wiring ----
+        self._layout_instr.currentIndexChanged.connect(self._on_layout_instr_changed)
+        self._layout_paper.currentIndexChanged.connect(self._load_layout_combo)
+        self._layout_mode.currentIndexChanged.connect(self._load_layout_combo)
+        for w in (self._layout_pscale, self._layout_sscale, self._layout_border):
+            w.valueChanged.connect(self._on_layout_field_changed)
+        self._layout_dpi.valueChanged.connect(self._on_layout_field_changed)
+        self._layout_spacer.toggled.connect(self._on_layout_field_changed)
+        self._layout_nolimit.toggled.connect(self._on_layout_field_changed)
+        self._layout_strip_pat.textChanged.connect(self._on_layout_field_changed)
+        self._layout_patch_pat.textChanged.connect(self._on_layout_field_changed)
+
+        self._on_layout_instr_changed()   # populate paper+mode, then load
+        return page
+
+    def _on_layout_instr_changed(self) -> None:
+        from workflow.layout_engine import papers
+        self._loading_layout = True
+        inst = self._layout_instr.currentData() or "i1"
+        prev_paper = self._layout_paper.currentData()
+        self._layout_paper.clear()
+        for code, label, _ in papers.list_papers(inst):
+            self._layout_paper.addItem(label, code)
+        i = self._layout_paper.findData(prev_paper)
+        self._layout_paper.setCurrentIndex(i if i >= 0 else 0)
+        self._layout_mode.clear()
+        for key, label in self._layout_modes(inst):
+            self._layout_mode.addItem(label, key)
+        self._loading_layout = False
+        self._load_layout_combo()
+
+    def _layout_selection(self) -> tuple[str, str, str]:
+        return (self._layout_instr.currentData() or "i1",
+                self._layout_paper.currentData() or "A4",
+                self._layout_mode.currentData() or "default")
+
+    def _load_layout_combo(self) -> None:
+        inst, paper, mode = self._layout_selection()
+        recipe = self._layout_store.get(inst, paper, mode)
+        self._loading_layout = True
+        self._layout_pscale.setValue(recipe.pscale)
+        self._layout_sscale.setValue(recipe.sscale)
+        self._layout_spacer.setChecked(recipe.spacer_on)
+        self._layout_border.setValue(recipe.border)
+        self._layout_dpi.setValue(recipe.dpi)
+        self._layout_nolimit.setChecked(recipe.nolimit)
+        self._layout_strip_pat.setText(recipe.strip_pattern)
+        self._layout_patch_pat.setText(recipe.patch_pattern)
+        self._loading_layout = False
+        self._update_layout_calc()
+
+    def _recipe_from_fields(self):
+        from workflow.layout_engine.presets import default_recipe
+        inst, paper, mode = self._layout_selection()
+        r = default_recipe(inst, paper, mode=mode)   # sets mode flags
+        r.pscale = self._layout_pscale.value()
+        r.sscale = self._layout_sscale.value()
+        r.spacer_on = self._layout_spacer.isChecked()
+        r.border = self._layout_border.value()
+        r.dpi = int(self._layout_dpi.value())
+        r.nolimit = self._layout_nolimit.isChecked()
+        r.strip_pattern = self._layout_strip_pat.text() or r.strip_pattern
+        r.patch_pattern = self._layout_patch_pat.text() or r.patch_pattern
+        return r
+
+    def _on_layout_field_changed(self, *_a) -> None:
+        if self._loading_layout:
+            return
+        self._layout_store.set(self._recipe_from_fields())
+        self._update_layout_calc()
+
+    def _update_layout_calc(self) -> None:
+        from workflow.layout_engine import geometry, instruments, papers
+        try:
+            r = self._recipe_from_fields()
+            bk = r.build_kwargs()
+            geom = instruments.build(
+                bk["instrument"], hflag=bk["hflag"], density=bk["density"],
+                spacer_on=bk["spacer_on"], pscale=bk["pscale"], sscale=bk["sscale"],
+                border=bk["border"], nolpcbord=bk["nolpcbord"], nolimit=bk["nolimit"])
+            w_mm, h_mm = papers.dimensions_mm(r.paper)
+            n = geometry.patches_per_sheet(geom, w_mm, h_mm)
+            self._layout_calc.setText(tr("≈ {n} patches per sheet").format(n=n))
+        except Exception:
+            self._layout_calc.setText("—")
+
+    def _restore_layout_defaults(self) -> None:
+        from workflow.layout_engine.presets import PresetStore
+        self._layout_store = PresetStore()   # empty → get() returns shipped defaults
+        self._load_layout_combo()
+
+    def _open_layout_presets_folder(self) -> None:
+        from core.preset_store import reveal_in_file_manager, tab_dir
+        reveal_in_file_manager(tab_dir("chart_layout"))
+
+    def _export_layout_presets(self) -> None:
+        import json
+        path, _ = QFileDialog.getSaveFileName(
+            self, tr("Export layout presets"),
+            str(Path.home() / "chromiq-layout-presets.json"),
+            tr("JSON files (*.json)"))
+        if not path:
+            return
+        Path(path).write_text(
+            json.dumps(self._layout_store.as_named_dict(), indent=2),
+            encoding="utf-8")
+
+    def _import_layout_presets(self) -> None:
+        import json
+        path, _ = QFileDialog.getOpenFileName(
+            self, tr("Import layout presets"), str(Path.home()),
+            tr("JSON files (*.json)"))
+        if not path:
+            return
+        try:
+            data = json.loads(Path(path).read_text(encoding="utf-8"))
+        except Exception as exc:
+            log.warning("layout preset import failed: %s", exc)
+            return
+        if isinstance(data, dict):
+            from workflow.layout_engine.presets import LayoutRecipe
+            for k, vdict in data.items():
+                if isinstance(vdict, dict):
+                    self._layout_store.set(LayoutRecipe.from_dict(vdict))
+            self._load_layout_combo()
+
     def _save_and_close(self) -> None:
         s = self._settings
         s.set("argyll_bin_path",       self._argyll_edit.text().strip())
@@ -1089,6 +1419,10 @@ class SettingsDialog(QDialog):
         s.set("margin_violation_notify",   self._margin_notify_check.isChecked())
         from core.settings import serialize_margin_thresholds
         s.set("margin_thresholds", serialize_margin_thresholds(self._margin_table))
+        # ChromIQ layout engine (issue #93): toggle + file-backed presets.
+        s.set("use_chromiq_layout_engine", self._layout_engine_check.isChecked())
+        from core.preset_store import save_presets
+        save_presets("chart_layout", self._layout_store.as_named_dict())
         log.info("Settings saved")
         self.accept()
 

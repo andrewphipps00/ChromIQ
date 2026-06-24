@@ -138,6 +138,15 @@ class PresetStore:
         raw = d.get("presets", {}) if isinstance(d, dict) else {}
         return cls({k: LayoutRecipe.from_dict(v) for k, v in raw.items()})
 
+    # ---- bridge to core.preset_store's {name: data} file layout -------
+    def as_named_dict(self) -> dict[str, dict]:
+        """``{preset_key: recipe_dict}`` — one entry per user-browsable file."""
+        return {k: v.to_dict() for k, v in self._presets.items()}
+
+    @classmethod
+    def from_named_dict(cls, d: dict[str, dict]) -> "PresetStore":
+        return cls({k: LayoutRecipe.from_dict(v) for k, v in d.items()})
+
     def save(self, path: str | Path) -> None:
         Path(path).write_text(json.dumps(self.to_dict(), indent=2), encoding="utf-8")
 
