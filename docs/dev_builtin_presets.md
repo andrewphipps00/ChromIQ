@@ -195,13 +195,19 @@ without extension, so `_create_prebuilt_target` can find every file by globbing
 
 ---
 
-## The ti1 → printtarg kind (TC9.18 + Spyderprint-greys)
+## The ti1 → printtarg kind
 
-These 17 presets (`_Ti1Preset` dataclass + `KNUT_PRESETS` registry in
-`ui/tabs/tab_chart.py`) all share **one** bundled `.ti1`
-(`assets/charts/knut/rgb/tc918-spyderprint-1168p/1168p.ti1`, 1168 patches) and
-differ only in their printtarg layout (instrument, page size, `-a`, margin, `-A`
-spacer scale, `-R` seed). Selecting one:
+> **Note (#89):** the 17 "TC9.18+Spyderprint Grays" presets that shared one
+> bundled `.ti1` were **removed**; only the **Full layout setup** family (each
+> with its own `.ti1` + `recipe.json`) and the "by Pharmacist" built-ins remain.
+> The description below documents the now-retired shared-`.ti1` mechanism for
+> reference — the dataclass defaults (`KNUT_TI1_ASSET`, `KNUT_SUFFIX`, …) are
+> kept but no preset uses them.
+
+These presets (`_Ti1Preset` dataclass + `KNUT_PRESETS` registry in
+`ui/tabs/tab_chart.py`) all shared **one** bundled `.ti1`
+(1168 patches) and differed only in their printtarg layout (instrument, page
+size, `-a`, margin, `-A` spacer scale, `-R` seed). Selecting one:
 
 - `_apply_knut_preset(key, name)` → `_seed_knut_preset(key)` seeds every
   printtarg control the recipe touches (and **resets** the optional `-A`/`-R`

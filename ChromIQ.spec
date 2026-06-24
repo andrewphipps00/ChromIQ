@@ -27,6 +27,10 @@ with open(os.path.join(os.path.dirname(os.path.abspath(SPEC)), 'core', 'version.
           'r', encoding='utf-8') as _vf:
     exec(_vf.read(), _version_ns)
 _APP_VERSION = _version_ns['APP_VERSION']
+# CFBundleShortVersionString must be a dotted *numeric* string — a pre-release
+# suffix like "-beta.1" is rejected by codesign/notarisation. Keep the numeric
+# core for the bundle plist; the full string still shows in the in-app About.
+_CF_VERSION = _APP_VERSION.split('-')[0]
 
 # Collect all imagecodecs binaries/data: its LZW and other codecs live in
 # compiled C extensions that PyInstaller won't find via static analysis alone.
@@ -157,8 +161,8 @@ app = BUNDLE(
     info_plist={
         'CFBundleName':              'ChromIQ',
         'CFBundleDisplayName':       'ChromIQ',
-        'CFBundleShortVersionString': _APP_VERSION,
-        'CFBundleVersion':           _APP_VERSION,
+        'CFBundleShortVersionString': _CF_VERSION,
+        'CFBundleVersion':           _CF_VERSION,
         'NSHighResolutionCapable':   True,
         'NSPrincipalClass':          'NSApplication',
         'NSRequiresAquaSystemAppearance': False,

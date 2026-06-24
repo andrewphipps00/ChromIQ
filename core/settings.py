@@ -155,7 +155,110 @@ DEFAULTS: dict[str, Any] = {
     # math (id, global_idx, page, local_idx) to chromiq.log for investigating
     # detection drift.
     "debug_highlighter":         False,
+    # Margin inspector (Create Chart) — measure the realised page margins of the
+    # generated preview, compare to per-(instrument, paper+orientation) minimum
+    # thresholds, and flag violations for jig/rig users.
+    "margin_inspector_show":     True,    # show the "Measured from Preview" frame
+    "margin_violation_notify":   True,    # warn when a measured margin < threshold
+    "margin_guides_show":        False,   # dotted threshold guide lines on preview
+    "margin_measured_guides_show": False,  # long dotted lines at the measured margins
+    "margin_thresholds":         "",      # JSON blob; "" → default_margin_thresholds()
 }
+
+
+# ---------------------------------------------------------------------------
+# Margin-threshold seed defaults
+# ---------------------------------------------------------------------------
+# Per-(instrument, paper+orientation) minimum margins (mm) the inspector warns
+# below. Keyed "<instrument>|<paper> <Orientation>". These are *editable seed
+# values* (a starting point users adjust to their own rig), NOT physical minima.
+# The i1Pro values come from the X-Rite/enlarged-ruler analysis (≈11 mm white
+# run-up on the narrow side, the label side ending up larger). ColorMunki seeds
+# are derived empirically from the shipped, practically-tested presets
+# (scripts/derive_margin_seeds.py).
+#
+# The white run-up the i1Pro/ColorMunki needs is along the **scan direction**
+# (the strip length). printtarg lays strips down the page, so for a *portrait*
+# sheet the scan-direction edges are Top and Bottom; for *landscape*, Left and
+# Right. Cross-scan side margins (the other pair) aren't the binding constraint,
+# so they're left at 0 (unchecked) — which also stops shipped presets (e.g. the
+# i1Pro A4 chart's 8 mm cross-scan margin) from false-alarming. ColorMunki values
+# are derived empirically from the shipped, practically-tested presets
+# (scripts/derive_margin_seeds.py: Top ≈ 24 mm, Bottom ≈ 11 mm) and rounded just
+# below the smallest known-good margin so those presets read OK out of the box.
+_I1_DESC = "i1Pro ruler / jig"
+_CM_DESC = "ColorMunki ruler / jig"
+# Knut #82: thresholds are 10 mm sides/bottom + 24 mm Top (label edge) for the
+# i1Pro, and 6 mm sides/bottom + 24 mm Top for the ColorMunki. ColorMunki uses
+# the same values for *every* paper size, so its seeds cover all papers × both
+# orientations; the i1Pro table lists the orientations its presets actually use.
+# (Top is still tentative — editable per combo.)
+_MARGIN_PAPERS_ALL = ("A4", "Letter", "A3", "A3+", "A2", "Tabloid", "Legal")
+
+
+def _seed_rows(instr, desc, side, top, combos):
+    return {
+        f"{instr}|{paper} {orient}":
+            {"L": side, "R": side, "T": top, "B": side, "desc": desc}
+        for paper, orient in combos
+    }
+
+
+# i1Pro confirmed values (#82): the primary reading orientation of each common
+# paper needs the 26 mm left clip border, 38 mm label-edge top, 9 mm elsewhere;
+# every other i1Pro paper/orientation gets a plain 9 mm all round.
+_I1_PRIMARY = {"L": 26, "R": 9, "T": 38, "B": 9, "desc": _I1_DESC}
+# i1Pro 3+ (#82): the larger body needs a touch more on the clip + label edges
+# (28 / 40 instead of 26 / 38); provisional until confirmed.
+_I1P3_DESC = "i1Pro 3+ ruler / jig"
+_I1P3_PRIMARY = {"L": 28, "R": 9, "T": 40, "B": 9, "desc": _I1P3_DESC}
+_PRIMARY_COMBOS = (
+    "A4 Portrait", "Letter Portrait", "A3 Landscape", "Tabloid Landscape")
+_ALL_COMBOS = [(p, o) for p in _MARGIN_PAPERS_ALL
+               for o in ("Portrait", "Landscape")]
+_MARGIN_SEED: dict[str, dict[str, Any]] = {
+    **_seed_rows("i1Pro", _I1_DESC, 9, 9, _ALL_COMBOS),
+    **{f"i1Pro|{c}": dict(_I1_PRIMARY) for c in _PRIMARY_COMBOS},
+    **_seed_rows("i1Pro 3+", _I1P3_DESC, 9, 9, _ALL_COMBOS),
+    **{f"i1Pro 3+|{c}": dict(_I1P3_PRIMARY) for c in _PRIMARY_COMBOS},
+    **_seed_rows("ColorMunki", _CM_DESC, 6, 24, _ALL_COMBOS),
+}
+
+
+def default_margin_thresholds() -> dict[str, dict[str, Any]]:
+    """A fresh copy of the seed threshold table (see :data:`_MARGIN_SEED`)."""
+    import copy
+
+    return copy.deepcopy(_MARGIN_SEED)
+
+
+def parse_margin_thresholds(raw: str) -> dict[str, dict[str, Any]]:
+    """Decode the stored margin-threshold JSON blob (``""`` → seed defaults)."""
+    import json
+
+    if not raw:
+        return default_margin_thresholds()
+    try:
+        doc = json.loads(raw)
+        if isinstance(doc, dict):
+            return doc
+    except (ValueError, TypeError):
+        log.warning("Corrupt margin_thresholds blob — using seed defaults")
+    return default_margin_thresholds()
+
+
+def serialize_margin_thresholds(table: dict[str, dict[str, Any]]) -> str:
+    import json
+
+    return json.dumps(table, ensure_ascii=False)
+
+
+def margin_combo_key(instrument: str, paper: str, orientation: str) -> str:
+    """Canonical "<instrument>|<paper> <Orientation>" threshold key."""
+    paper = (paper or "").strip()
+    orientation = (orientation or "").strip().capitalize()
+    suffix = f" {orientation}" if orientation else ""
+    return f"{instrument}|{paper}{suffix}"
 
 
 class AppSettings:
@@ -203,3 +306,17 @@ class AppSettings:
         """Save a dict of key→value under a given prefix."""
         for k, v in values.items():
             self.set(f"{prefix}_{k}", v)
+
+    # ------------------------------------------------------------------
+    # Margin thresholds (JSON blob; see default_margin_thresholds)
+    # ------------------------------------------------------------------
+    def get_margin_thresholds(self) -> dict[str, dict[str, Any]]:
+        """The per-combo margin-threshold table, falling back to the seeds.
+
+        Stored as a JSON string under ``margin_thresholds`` so the whole
+        editable matrix round-trips through QSettings as one value.
+        """
+        return parse_margin_thresholds(self.get("margin_thresholds", ""))
+
+    def set_margin_thresholds(self, table: dict[str, dict[str, Any]]) -> None:
+        self.set("margin_thresholds", serialize_margin_thresholds(table))

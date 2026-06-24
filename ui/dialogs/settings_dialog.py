@@ -20,6 +20,7 @@ from PyQt6.QtWidgets import (
     QLabel,
     QLineEdit,
     QPushButton,
+    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -36,7 +37,13 @@ from core.platform_paths import (
 from core.updater import UpdateChecker, _RELEASES_PAGE
 from core.version import APP_VERSION
 from ui.tooltip_button import TooltipButton
-from ui.widgets import NoScrollComboBox, NoScrollSpinBox, make_browse_button, open_dir_dialog
+from ui.widgets import (
+    NoScrollComboBox,
+    NoScrollDoubleSpinBox,
+    NoScrollSpinBox,
+    make_browse_button,
+    open_dir_dialog,
+)
 
 if TYPE_CHECKING:
     from core.settings import AppSettings
@@ -48,9 +55,13 @@ from core.i18n import tr
 
 
 class SettingsDialog(QDialog):
-    def __init__(self, settings: "AppSettings", parent: QWidget | None = None) -> None:
+    def __init__(self, settings: "AppSettings", parent: QWidget | None = None,
+                 *, margin_combo: "tuple[str, str, str] | None" = None) -> None:
         super().__init__(parent)
         self._settings = settings
+        # (instrument label, paper name, orientation) to preselect on the
+        # Margin Thresholds tab (#80); None → the pulldowns' first entries.
+        self._initial_margin_combo = margin_combo
         self._update_checker: UpdateChecker | None = None
         self.setWindowTitle(tr("ChromIQ Preferences"))
         self.setWindowFlags(
@@ -69,9 +80,20 @@ class SettingsDialog(QDialog):
     # ------------------------------------------------------------------
 
     def _build_ui(self) -> None:
-        layout = QVBoxLayout(self)
+        outer = QVBoxLayout(self)
+        outer.setSpacing(12)
+        outer.setContentsMargins(20, 16, 20, 16)
+
+        # The preferences are split across tabs; the per-combo Margin Thresholds
+        # editor lives on its own tab (Knut's request). The credits + button row
+        # stay below the tabs so they're shared. All existing group boxes are
+        # added to the General page via the local ``layout`` below, unchanged.
+        self._tabs = QTabWidget(self)
+        outer.addWidget(self._tabs)
+        general_page = QWidget()
+        layout = QVBoxLayout(general_page)
         layout.setSpacing(12)
-        layout.setContentsMargins(20, 16, 20, 16)
+        layout.setContentsMargins(12, 12, 12, 12)
 
         # ---- ArgyllCMS ----
         argyll_grp = QGroupBox(tr("ArgyllCMS Binaries"), self)
@@ -640,12 +662,16 @@ class SettingsDialog(QDialog):
         ap.addWidget(self._language_restart_hint, 1, 0, 1, 2)
 
         layout.addWidget(appearance_grp)
+        layout.addStretch()
 
-        # ---- About / Updates ----
+        self._tabs.addTab(general_page, tr("General"))
+        self._tabs.addTab(self._build_margin_thresholds_tab(), tr("Margin Thresholds"))
+
+        # ---- About / Updates (below the tabs) ----
         credit1 = QLabel(tr("ChromIQ v{APP_VERSION} · Created by Sebastian Reiprich").format(APP_VERSION=APP_VERSION), self)
         credit1.setAlignment(Qt.AlignmentFlag.AlignCenter)
         credit1.setStyleSheet("color: #606060; font-size: 11px;")
-        layout.addWidget(credit1)
+        outer.addWidget(credit1)
 
         credit2 = QLabel(
             tr("Built on ArgyllCMS by Graeme Gill · Made possible by Knut Georg Larsson · "
@@ -653,13 +679,13 @@ class SettingsDialog(QDialog):
         )
         credit2.setAlignment(Qt.AlignmentFlag.AlignCenter)
         credit2.setStyleSheet("color: #606060; font-size: 11px;")
-        layout.addWidget(credit2)
+        outer.addWidget(credit2)
 
         self._update_status = QLabel("", self)
         self._update_status.setStyleSheet("font-size: 11px;")
         self._update_status.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._update_status.setFixedHeight(QFontMetrics(self._update_status.font()).height())
-        layout.addWidget(self._update_status)
+        outer.addWidget(self._update_status)
 
         # ---- Bottom row: Restore Defaults | Report a Bug | Check for Updates  ...  Cancel / OK ----
         bottom_row = QHBoxLayout()
@@ -702,12 +728,224 @@ class SettingsDialog(QDialog):
         bb_layout = bb.layout()
         bottom_row.setSpacing(bb_layout.spacing() if bb_layout else 6)
 
-        layout.addLayout(bottom_row)
+        outer.addLayout(bottom_row)
 
         from ui.theme import resolve_mode
         self._apply_indicator_theme(resolve_mode(self._settings.get("appearance", "auto")))
 
     # ------------------------------------------------------------------
+
+    # ------------------------------------------------------------------
+    # Margin Thresholds tab
+    # ------------------------------------------------------------------
+    # Instruments and paper+orientation choices the per-combo thresholds can be
+    # defined for. The instrument labels match what the Create Chart inspector
+    # derives from the chart (see core.settings.margin_combo_key).
+    _MARGIN_INSTRUMENTS = ("i1Pro", "i1Pro 3+", "ColorMunki", "SpectroScan")
+    _MARGIN_PAPERS = ("A4", "Letter", "Legal", "A3", "A3+", "A2", "Tabloid")
+    _MARGIN_ORIENTS = ("Portrait", "Landscape")
+
+    def _build_margin_thresholds_tab(self) -> QWidget:
+        """Per-(instrument, paper+orientation) minimum-margin editor.
+
+        Instrument + paper pulldowns pick the active combo; below them a
+        free-text description and a small L/R/T/B table hold that combo's
+        editable minimums. The two behaviour checkboxes gate the Create Chart
+        inspector; "Notify…" is greyed out while the frame is hidden.
+        """
+        page = QWidget()
+        v = QVBoxLayout(page)
+        v.setSpacing(10)
+        v.setContentsMargins(12, 12, 12, 12)
+
+        intro_row = QHBoxLayout()
+        intro = QLabel(tr(
+            "Warn when a generated chart's measured page margins fall below the "
+            "minimum needed for your measuring ruler / jig. Values are minimums "
+            "in millimetres (paper edge → patch area), in the printed (preview) "
+            "orientation. These are editable starting points — adjust them to "
+            "your own rig."), self)
+        intro.setWordWrap(True)
+        intro.setStyleSheet("color: #909090; font-size: 11px;")
+        intro_row.addWidget(intro, stretch=1)
+        intro_row.addWidget(TooltipButton(
+            tr("About margin thresholds"),
+            tr("Here you decide how much blank white paper a chart should have "
+               "around its patches, so it's comfortable to measure.\n\n"
+               "Why it matters: many spectrophotometers (i1Pro, ColorMunki…) are "
+               "slid by hand along the chart, usually in a ruler or holder (a "
+               "'jig' or 'rig'). If the patches sit too close to the edge of the "
+               "page, the instrument can slip off the paper or bump the rail and "
+               "the reading fails — so each edge needs a minimum margin.\n\n"
+               "How to use this tab:\n"
+               "• Pick an Instrument and a Paper size (with orientation) at the "
+               "top — each combination has its own set of minimums.\n"
+               "• Optionally type a Description, e.g. which ruler the values are "
+               "for.\n"
+               "• Set the smallest acceptable Left, Right, Top and Bottom margin "
+               "(in mm) in the table. These ship with sensible starting values "
+               "you can change to suit your own ruler.\n\n"
+               "When you generate a chart, the Create Chart preview measures its "
+               "actual margins and compares them to the values here: anything "
+               "below the minimum is flagged. It's only a friendly heads-up — you "
+               "can always print anyway.\n\n"
+               "Tip about orientation: a sheet you place sideways in the jig is "
+               "laid out the other way round on paper, so the margins are always "
+               "in the orientation shown in the preview (which is what these "
+               "values refer to). The two checkboxes above let you hide the whole "
+               "feature, or keep it visible but turn the warning off."),
+            self,
+        ))
+        v.addLayout(intro_row)
+
+        # In-memory working copy; committed to settings on Save. Read via the
+        # generic get + module parser so any settings object (incl. test doubles
+        # with only get/set) works.
+        from core.settings import parse_margin_thresholds
+        self._margin_table = parse_margin_thresholds(
+            self._settings.get("margin_thresholds", ""))
+
+        # ---- behaviour checkboxes ----
+        self._margin_show_check = QCheckBox(
+            tr("Show the “Measured from Preview” frame in Create Chart"), self)
+        self._margin_notify_check = QCheckBox(
+            tr("Notify when a measured margin is below its threshold"), self)
+        self._margin_show_check.toggled.connect(self._sync_margin_notify_enabled)
+        v.addWidget(self._margin_show_check)
+        v.addWidget(self._margin_notify_check)
+
+        # ---- combo selectors ----
+        sel = QGridLayout()
+        sel.addWidget(QLabel(tr("Instrument:"), self), 0, 0)
+        self._margin_instr = NoScrollComboBox(self)
+        self._margin_instr.addItems(list(self._MARGIN_INSTRUMENTS))
+        sel.addWidget(self._margin_instr, 0, 1)
+        sel.addWidget(QLabel(tr("Paper size:"), self), 0, 2)
+        self._margin_paper = NoScrollComboBox(self)
+        self._margin_paper.addItems(
+            [f"{p} {o}" for p in self._MARGIN_PAPERS for o in self._MARGIN_ORIENTS])
+        sel.addWidget(self._margin_paper, 0, 3)
+        sel.setColumnStretch(1, 1)
+        sel.setColumnStretch(3, 1)
+        v.addLayout(sel)
+
+        # ---- description ----
+        desc_row = QHBoxLayout()
+        desc_row.addWidget(QLabel(tr("Description:"), self))
+        self._margin_desc = QLineEdit(self)
+        self._margin_desc.setPlaceholderText(
+            tr("e.g. which ruler / jig these margins are for"))
+        desc_row.addWidget(self._margin_desc, stretch=1)
+        v.addLayout(desc_row)
+
+        # ---- L/R/T/B value table (1-decimal mm, #85) ----
+        grid = QGridLayout()
+        self._margin_fields: dict[str, NoScrollDoubleSpinBox] = {}
+        for col, (key, label) in enumerate(
+                (("L", tr("Left")), ("R", tr("Right")),
+                 ("T", tr("Top")), ("B", tr("Bottom")))):
+            grid.addWidget(QLabel(label, self), 0, col, Qt.AlignmentFlag.AlignHCenter)
+            sb = NoScrollDoubleSpinBox(self)
+            sb.setRange(0, 100)
+            sb.setDecimals(1)
+            sb.setSingleStep(0.5)
+            sb.setSuffix(" mm")
+            sb.valueChanged.connect(self._on_margin_field_changed)
+            self._margin_fields[key] = sb
+            grid.addWidget(sb, 1, col)
+        v.addLayout(grid)
+
+        # Restore-defaults button: re-seed the whole table to the shipped
+        # defaults. Needed because changing the built-in defaults between
+        # versions does NOT touch thresholds you've already saved (#82).
+        reset_row = QHBoxLayout()
+        reset_row.addStretch()
+        reset_btn = QPushButton(tr("Restore default thresholds"), self)
+        reset_btn.setToolTip(tr(
+            "Reset every instrument/paper combination back to ChromIQ's "
+            "built-in default margins. Use this to pick up new defaults from an "
+            "update — your saved thresholds are otherwise kept as they were."))
+        reset_btn.clicked.connect(self._restore_default_margin_thresholds)
+        reset_row.addWidget(reset_btn)
+        v.addLayout(reset_row)
+        v.addStretch()
+
+        # React to combo changes (load that combo's values).
+        self._margin_instr.currentIndexChanged.connect(self._load_margin_combo)
+        self._margin_paper.currentIndexChanged.connect(self._load_margin_combo)
+        self._margin_desc.textChanged.connect(self._on_margin_desc_changed)
+        # Preselect the combo active in Create Chart (#80), else the first
+        # pulldown entries.
+        combo = self._initial_margin_combo
+        if combo:
+            instr_label, paper_name, orient = combo
+            i = self._margin_instr.findText(instr_label)
+            if i >= 0:
+                self._margin_instr.setCurrentIndex(i)
+            j = self._margin_paper.findText(f"{paper_name} {orient}")
+            if j >= 0:
+                self._margin_paper.setCurrentIndex(j)
+        self._loading_margin_combo = False
+        self._load_margin_combo()
+        return page
+
+    def _current_margin_key(self) -> str:
+        from core.settings import margin_combo_key
+
+        instr = self._margin_instr.currentText()
+        paper_orient = self._margin_paper.currentText()
+        # paper_orient is "A4 Landscape" → split into paper + orientation
+        parts = paper_orient.rsplit(" ", 1)
+        paper, orient = (parts[0], parts[1]) if len(parts) == 2 else (paper_orient, "")
+        return margin_combo_key(instr, paper, orient)
+
+    def _load_margin_combo(self) -> None:
+        """Populate the description + L/R/T/B fields from the selected combo."""
+        self._loading_margin_combo = True
+        entry = self._margin_table.get(self._current_margin_key(), {})
+        self._margin_desc.setText(str(entry.get("desc", "")))
+        for key, sb in self._margin_fields.items():
+            try:
+                sb.setValue(round(float(entry.get(key, 0)), 1))
+            except (TypeError, ValueError):
+                sb.setValue(0.0)
+        self._loading_margin_combo = False
+
+    def _restore_default_margin_thresholds(self) -> None:
+        """Re-seed the whole threshold table to the shipped defaults (#82)."""
+        from core.settings import default_margin_thresholds
+        self._margin_table = default_margin_thresholds()
+        self._load_margin_combo()   # refresh the visible combo from the new table
+
+    def _on_margin_field_changed(self) -> None:
+        if getattr(self, "_loading_margin_combo", False):
+            return
+        self._commit_margin_combo()
+
+    def _on_margin_desc_changed(self) -> None:
+        if getattr(self, "_loading_margin_combo", False):
+            return
+        self._commit_margin_combo()
+
+    def _commit_margin_combo(self) -> None:
+        """Write the visible fields back into the in-memory table.
+
+        A combo with all-zero margins and no description is dropped (treated as
+        "no thresholds defined") so the inspector skips it cleanly.
+        """
+        key = self._current_margin_key()
+        vals = {k: sb.value() for k, sb in self._margin_fields.items()}
+        desc = self._margin_desc.text().strip()
+        if not any(vals.values()) and not desc:
+            self._margin_table.pop(key, None)
+            return
+        entry = {k: v for k, v in vals.items()}
+        entry["desc"] = desc
+        self._margin_table[key] = entry
+
+    def _sync_margin_notify_enabled(self) -> None:
+        """Notify-on-violation is meaningless when the frame is hidden."""
+        self._margin_notify_check.setEnabled(self._margin_show_check.isChecked())
 
     def _sync_print_path_options(self) -> None:
         """Grey out the options that only apply to ChromIQ's own lp pipeline
@@ -756,6 +994,11 @@ class SettingsDialog(QDialog):
         self._language_combo.setCurrentIndex(lang_idx if lang_idx >= 0 else 0)
         self._language_combo.blockSignals(False)
         self._language_restart_hint.setVisible(False)
+        # Margin inspector behaviour checkboxes (the per-combo table is loaded
+        # into the tab's own working copy in _build_margin_thresholds_tab).
+        self._margin_show_check.setChecked(bool(s.get("margin_inspector_show", True)))
+        self._margin_notify_check.setChecked(bool(s.get("margin_violation_notify", True)))
+        self._sync_margin_notify_enabled()
 
     def _apply_indicator_theme(self, mode: str) -> None:
         """Apply the neutral indicator colour to checkboxes, line-edit focus and
@@ -840,6 +1083,12 @@ class SettingsDialog(QDialog):
         s.set("i1pro_default_preset",      str(self._i1pro_preset_combo.currentData()))
         s.set("i1pro_chromiq_clip_style",  self._chromiq_clip_check.isChecked())
         s.set("grey_ramp_reference",       int(self._grey_ref_spin.value()))
+        # Margin inspector: behaviour flags + the per-combo threshold table.
+        self._commit_margin_combo()   # flush the currently-shown combo's edits
+        s.set("margin_inspector_show",     self._margin_show_check.isChecked())
+        s.set("margin_violation_notify",   self._margin_notify_check.isChecked())
+        from core.settings import serialize_margin_thresholds
+        s.set("margin_thresholds", serialize_margin_thresholds(self._margin_table))
         log.info("Settings saved")
         self.accept()
 

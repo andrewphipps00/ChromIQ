@@ -201,14 +201,14 @@ def test_builtin_fulllayout_recipes_appear_starred(qapp):
     d = _NewChartDialog(Path("/x"), _FakeSettings())
     starred = [n for n in d._preset_recipes if n.startswith("★")]
     # Every Full-layout-setup chart (#63) carries a sidecar recipe.json.
-    assert len(starred) == 16
+    assert len(starred) == 15
     assert any("A4-924p" in n for n in starred)
 
 
 def test_custom_identical_to_builtin_is_skipped(qapp, monkeypatch):
     import core.preset_store as ps
     from ui.tabs.tab_chart import builtin_recipe_choices
-    name = "i1Pro A4-924p-2pages-Portrait"
+    name = "i1Pro A4-924p-2pages-Portrait-w7.5mm"
     rec = builtin_recipe_choices()[name]   # the preset's bundled sidecar recipe
     monkeypatch.setattr(ps, "load_presets", lambda tab, settings=None:
                         {name: {"editor_recipe": rec}})
@@ -219,7 +219,7 @@ def test_custom_identical_to_builtin_is_skipped(qapp, monkeypatch):
 
 def test_custom_differing_from_builtin_is_kept(qapp, monkeypatch):
     import core.preset_store as ps
-    name = "i1Pro A4-924p-2pages-Portrait"
+    name = "i1Pro A4-924p-2pages-Portrait-w7.5mm"
     monkeypatch.setattr(ps, "load_presets", lambda tab, settings=None:
                         {name: {"editor_recipe": {"mode": "generate",
                                                   "sp": {"cube_n": 3}}}})

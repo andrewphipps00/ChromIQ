@@ -198,17 +198,24 @@ def check_size_mismatch(
     if tiff_w_pt <= 0 or tiff_h_pt <= 0 or page_w_pt <= 0 or page_h_pt <= 0:
         return None
 
-    if imageable_pt and imageable_pt[0] > 0 and imageable_pt[1] > 0:
-        ref_w, ref_h = imageable_pt
-        tol = _FIT_TOL_IMAGEABLE
-    else:
-        ref_w, ref_h = page_w_pt, page_h_pt
-        tol = _FIT_TOL_PAPER
+    def _fits_ref(ref_w: float, ref_h: float, tol: float) -> bool:
+        if ref_w <= 0 or ref_h <= 0:
+            return False
 
-    def _fits(w: float, h: float) -> bool:
-        return abs(w - ref_w) / ref_w <= tol and abs(h - ref_h) / ref_h <= tol
+        def ok(w: float, h: float) -> bool:
+            return abs(w - ref_w) / ref_w <= tol and abs(h - ref_h) / ref_h <= tol
 
-    if _fits(tiff_w_pt, tiff_h_pt) or _fits(tiff_h_pt, tiff_w_pt):
+        return ok(tiff_w_pt, tiff_h_pt) or ok(tiff_h_pt, tiff_w_pt)
+
+    # The chart is the right paper if it matches EITHER the full sheet (a
+    # full-bleed printtarg -M render — ChromIQ's default, so a 210×297 chart on
+    # A4 paper must not warn even though it exceeds the printable area, #84) OR
+    # the printer's imageable area (an -m render cropped to the printable box).
+    # Only when it matches neither has it likely been generated for a different
+    # paper size.
+    if _fits_ref(page_w_pt, page_h_pt, _FIT_TOL_PAPER):
+        return None
+    if imageable_pt and _fits_ref(imageable_pt[0], imageable_pt[1], _FIT_TOL_IMAGEABLE):
         return None
 
     tiff_mm = (tiff_w_pt * 25.4 / _PT_PER_INCH, tiff_h_pt * 25.4 / _PT_PER_INCH)

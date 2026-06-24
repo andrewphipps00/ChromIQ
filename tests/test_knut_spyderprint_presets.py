@@ -72,11 +72,11 @@ def _fmt_scale(v: float) -> str:
 # ---------------------------------------------------------------------------
 
 def test_registry_shape():
-    # 17 TC9.18+Spyderprint presets (shared .ti1) + 16 "Full layout setup"
-    # presets (#63, Knut's exported charts; each its own .ti1 + recipe).
-    assert len(KNUT_PRESETS) == 33
-    assert len(KNUT_PRESET_KEYS) == 33  # all keys unique
-    assert sum(1 for p in KNUT_PRESETS if p.slug.startswith("fls_")) == 16
+    # Only the 15 "Full layout setup" presets remain — the 17 shared-.ti1
+    # "TC9.18+Spyderprint Grays" presets were removed in #89.
+    assert len(KNUT_PRESETS) == 15
+    assert len(KNUT_PRESET_KEYS) == 15  # all keys unique
+    assert sum(1 for p in KNUT_PRESETS if p.slug.startswith("fls_")) == 15
     assert KNUT_PRESET_KEYS <= BUILTIN_PRESET_KEYS
     assert all(p.combo_label in BUILTIN_PRESET_LABELS for p in KNUT_PRESETS)
     # every preset is reachable from a dropdown/overlay group
@@ -84,15 +84,11 @@ def test_registry_shape():
     assert KNUT_PRESET_KEYS <= grouped
 
 
-def test_ti1_asset_present():
-    assert resource_path(KNUT_TI1_ASSET).is_file()
-
-
 def test_fulllayout_ti1_assets_present():
     # Every Full-layout-setup chart (#63) ships its own .ti1 + recipe.json —
     # guard the bundled files.
     fls = [p for p in KNUT_PRESETS if p.slug.startswith("fls_")]
-    assert len(fls) == 16
+    assert len(fls) == 15
     for p in fls:
         assert resource_path(p.ti1_asset).is_file(), f"missing {p.ti1_asset}"
         recipe = resource_path(p.ti1_asset).parent / "recipe.json"
@@ -173,22 +169,8 @@ def test_fulllayout_preset_uses_its_own_ti1_and_count(qapp, settings):
     assert "Full layout setup" in tab._knut_tooltip(key)
 
 
-def test_three_decimal_scale_survives(qapp, settings):
-    # 0.929 must not be rounded to 0.93 (the whole reason for decimals: 3).
-    tab = _make_tab(qapp, settings)
-    key = "__chromiq_knut_i1_a4_2p__"
-    tab._seed_knut_preset(key)
-    assert "-a0.929" in _printtarg_args(tab)
-
-
-def test_switching_presets_clears_stale_spacer_and_seed(qapp, settings):
-    # i1 → CM must drop the i1-only -A / -R rows.
-    tab = _make_tab(qapp, settings)
-    tab._seed_knut_preset("__chromiq_knut_i1_a3_land_1p__")   # sets -A0.6 -R161
-    tab._seed_knut_preset("__chromiq_knut_cm_a4_5p__")        # CM has neither
-    args = _printtarg_args(tab)
-    assert not any(a.startswith("-A") for a in args)
-    assert not any(a.startswith("-R") for a in args)
+# A surviving Full-layout-setup preset used across the generic tests below.
+_FLS_KEY = "__chromiq_knut_fls_colormunki_a4_480p_2pages_portrait__"
 
 
 def test_targen_signature_ignores_printtarg_changes(qapp, settings):
@@ -196,7 +178,7 @@ def test_targen_signature_ignores_printtarg_changes(qapp, settings):
     # bundled .ti1 as the source (signature unchanged); a targen change opts into
     # a fresh targen chart (signature differs).
     tab = _make_tab(qapp, settings)
-    tab._seed_knut_preset("__chromiq_knut_i1_a4_2p__")
+    tab._seed_knut_preset(_FLS_KEY)
     sig0 = tab._targen_signature()
     tab._set_manual_value("printtarg", "-a", 1.05)      # printtarg-only edit
     assert tab._targen_signature() == sig0
@@ -206,12 +188,13 @@ def test_targen_signature_ignores_printtarg_changes(qapp, settings):
 
 def test_info_box_announces_ti1_reuse(qapp, settings):
     tab = _make_tab(qapp, settings)
-    tab._seed_knut_preset("__chromiq_knut_cm_a4_5p__")
+    tab._seed_knut_preset(_FLS_KEY)
     tab._knut_active = True
+    tab._knut_active_key = _FLS_KEY
     tab._knut_targen_sig = tab._targen_signature()
     tab._refresh_manual_command_preview()
     txt = tab._manual_info_lbl.text()
-    assert "targen skipped" in txt and "1168" in txt
+    assert "targen skipped" in txt and "480" in txt   # this preset's own count
     # A targen change flips the note back to the normal targen+printtarg view.
     tab._set_manual_value("targen", "-f", 500)
     tab._refresh_manual_command_preview()
@@ -222,11 +205,9 @@ def test_leaving_preset_reverts_overrides(qapp, settings):
     # Leaving a preset (for Default / a user preset) must not leak its forced
     # printtarg flags into the next chart — _reset_knut_overrides handles it.
     tab = _make_tab(qapp, settings)
-    tab._seed_knut_preset("__chromiq_knut_i1_a3_land_1p__")   # -A0.6 -R161 -P -a0.98 -m8
+    tab._seed_knut_preset(_FLS_KEY)            # forces -P -h -a0.93
     tab._knut_active = True
     tab._reset_knut_overrides()
     args = _printtarg_args(tab)
     assert "-P" not in args
-    assert not any(a.startswith("-A") for a in args)
-    assert not any(a.startswith("-R") for a in args)
-    assert "-a0.98" not in args        # back to the default scale (1.0 → no -a)
+    assert "-a0.93" not in args        # back to the default scale (1.0 → no -a)

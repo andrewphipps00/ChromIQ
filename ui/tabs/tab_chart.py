@@ -371,6 +371,39 @@ def _paper_area_mm2(paper: str) -> float:
     return 0.0
 
 
+# Instrument flag → margin-threshold label (must match settings_dialog
+# _MARGIN_INSTRUMENTS and core.settings seed keys).
+_MARGIN_INSTR_LABEL = {
+    "i1": "i1Pro", "p3": "i1Pro 3+", "CM": "ColorMunki",
+    "SS": "SpectroScan", "isis": "i1iSis",
+}
+
+# Canonical sheet name keyed by sorted (short, long) mm, rounded — so any paper
+# code (named, "WxH", or rotated) resolves to one threshold-combo paper name.
+# Orientation is carried separately, so Tabloid/Ledger (same sheet) share "Tabloid".
+_CANON_PAPER_BY_DIMS = {
+    (210.0, 297.0): "A4",
+    (215.9, 279.4): "Letter",
+    (215.9, 355.6): "Legal",
+    (297.0, 420.0): "A3",
+    (329.0, 483.0): "A3+",
+    (420.0, 594.0): "A2",
+    (279.4, 431.8): "Tabloid",
+}
+
+
+def _canonical_paper_name(w_mm: float, h_mm: float) -> str | None:
+    """Best-effort canonical sheet name from page dimensions (mm), or None.
+
+    Tolerant to ~2 mm so a measured TIFF page (px → mm) still matches the named
+    size. Returns None for unknown sizes (→ no thresholds for that combo)."""
+    lo, hi = sorted((w_mm, h_mm))
+    for (clo, chi), name in _CANON_PAPER_BY_DIMS.items():
+        if abs(lo - clo) <= 2.5 and abs(hi - chi) <= 2.5:
+            return name
+    return None
+
+
 def _paper_sort_key(paper: str) -> float:
     """Ordering key for "smallest sheet first".
 
@@ -389,27 +422,8 @@ def _paper_sort_key(paper: str) -> float:
 # ChromIQ emits -m<m> -M<m> together (functionally == Knut's lone -M, since
 # printtarg's -m/-M write the same margin) and keeps the left clip border (no -L).
 KNUT_PRESETS: list[_Ti1Preset] = [
-    # i1Pro group — margin 8, spacer scale 0.6, seeded randomisation.
-    _Ti1Preset("i1_a3_land_1p",  "A3-1168p-1page-w8.0mm-Landscape"     + KNUT_SUFFIX, _KNUT_I1, "420x297", 0.98,  8, 1, spacer_scale=0.6, seed=161),
-    _Ti1Preset("i1_a4_2p",       "A4-1168p-2pages-w7.5mm-Portrait"     + KNUT_SUFFIX, _KNUT_I1, "A4",      0.929, 8, 2, spacer_scale=0.6, seed=161),
-    _Ti1Preset("i1_a4_3p",       "A4-1168p-3pages-w8.5mm-Portrait"     + KNUT_SUFFIX, _KNUT_I1, "A4",      1.125, 8, 3, spacer_scale=0.6, seed=367),
-    _Ti1Preset("i1_letter_2p",   "Letter-1168p-2pages-w7.0mm-Portrait" + KNUT_SUFFIX, _KNUT_I1, "Letter",  0.92,  8, 2, spacer_scale=0.6, seed=161),
-    _Ti1Preset("i1_letter_3p",   "Letter-1168p-3pages-w8.5mm-Portrait" + KNUT_SUFFIX, _KNUT_I1, "Letter",  1.105, 8, 3, spacer_scale=0.6, seed=367),
-    # ColorMunki Photo group — margin 6, double density (-h), default randomise.
-    _Ti1Preset("cm_a4_5p",       "A4-1168p-5pages-w12.5mm-Portrait"      + KNUT_SUFFIX, _KNUT_CM, "A4",      0.93,  6, 5, double_density=True),
-    _Ti1Preset("cm_letter_5p",   "Letter-1168p-5pages-w12.0mm-Portrait"  + KNUT_SUFFIX, _KNUT_CM, "Letter",  0.9,   6, 5, double_density=True),
-    _Ti1Preset("cm_a3_port_2p",  "A3-1168p-2pages-w11.5mm-Portrait"      + KNUT_SUFFIX, _KNUT_CM, "A3",      0.88,  6, 2, double_density=True),
-    _Ti1Preset("cm_a3_land_2p",  "A3-1168p-2pages-w11.5mm-Landscape"     + KNUT_SUFFIX, _KNUT_CM, "420x297", 0.85,  6, 2, double_density=True),
-    _Ti1Preset("cm_a3_port_3p",  "A3-1168p-3pages-w14.0mm-Portrait"      + KNUT_SUFFIX, _KNUT_CM, "A3",      1.07,  6, 3, double_density=True),
-    _Ti1Preset("cm_a3_land_3p",  "A3-1168p-3pages-w14.0mm-Landscape"     + KNUT_SUFFIX, _KNUT_CM, "420x297", 1.05,  6, 3, double_density=True),
-    _Ti1Preset("cm_ledger_3p",   "Ledger-1168p-3pages-w13.5mm-Landscape" + KNUT_SUFFIX, _KNUT_CM, "432x279", 1.013, 6, 3, double_density=True),
-    # -a1.06 (Knut's corrected value; the 1.076 he first sent overflowed to 4 pages).
-    _Ti1Preset("cm_tabloid_3p",  "Tabloid-1168p-3pages-w14.0mm-Portrait" + KNUT_SUFFIX, _KNUT_CM, "11x17",   1.06,  6, 3, double_density=True),
-    _Ti1Preset("cm_a2_port_1p",  "A2-1168p-1page-w12.5mm-Portrait"       + KNUT_SUFFIX, _KNUT_CM, "A2",      0.92,  6, 1, double_density=True),
-    _Ti1Preset("cm_a2_land_1p",  "A2-1168p-1page-w12.5mm-Landscape"      + KNUT_SUFFIX, _KNUT_CM, "594x420", 0.90,  6, 1, double_density=True),
-    # -a1.29 (Knut's corrected value; the 1.4 he first sent overflowed to 3 pages).
-    _Ti1Preset("cm_a2_port_2p",  "A2-1168p-2pages-w17.0mm-Portrait"      + KNUT_SUFFIX, _KNUT_CM, "A2",      1.29,  6, 2, double_density=True),
-    _Ti1Preset("cm_a2_land_2p",  "A2-1168p-2pages-w17.0mm-Landscape"     + KNUT_SUFFIX, _KNUT_CM, "594x420", 1.27,  6, 2, double_density=True),
+    # (The 17 "TC9.18+Spyderprint Grays" shared-.ti1 presets were removed in #89 —
+    # only the Full layout setup and "by Pharmacist" built-ins remain.)
 
     # Full-layout-setup family (#63) — Knut's exported Create Chart charts, each
     # with its own bundled .ti1 (per-preset patch set + layout) AND a sidecar
@@ -417,54 +431,58 @@ KNUT_PRESETS: list[_Ti1Preset] = [
     # chart. Several ColorMunki ones are triple density (i1Pro layout + ColorMunki
     # tag); the i1Pro ones keep the left clip + strip limit (-L/-P). All 8-bit.
     # Rows + assets generated from his JSON exports (see scripts).
-    _Ti1Preset("fls_colormunki_a3_1196p_2pages_portrait", "A3-1196p-2pages-Portrait" + KNUT_FLS_SUFFIX,
+    # ColorMunki Full-layout-setup family — reworked by Knut (#89). The multi-
+    # page charts are double density; the dense single-page charts stay triple
+    # density (the export's printtarg block diverges from its editor_recipe for
+    # those — the recipe's td/scale is authoritative). Patch width is in each name.
+    _Ti1Preset("fls_colormunki_a3_1196p_2pages_portrait", "A3-1196p-2pages-Portrait-w12.0mm" + KNUT_FLS_SUFFIX,
                _KNUT_CM, "A3", 0.88, 6, 2,
-               double_density=True, ti1_asset=f"{_KNUT_FLS_DIR}/fls_colormunki_a3_1196p_2pages_portrait/chart.ti1", patches=1196, no_strip_limit=True, tiff_16bit=False, suffix=KNUT_FLS_SUFFIX),
-    _Ti1Preset("fls_colormunki_a3_1224p_2pages_landscape", "A3-1224p-2pages-Landscape" + KNUT_FLS_SUFFIX,
+               double_density=True, ti1_asset=f"{_KNUT_FLS_DIR}/fls_colormunki_a3_1196p_2pages_portrait/chart.ti1", patches=1196, white=9, black=8, no_strip_limit=True, tiff_16bit=False, suffix=KNUT_FLS_SUFFIX),
+    _Ti1Preset("fls_colormunki_a3_1224p_2pages_landscape", "A3-1224p-2pages-Landscape-w12.0mm" + KNUT_FLS_SUFFIX,
                _KNUT_CM, "420x297", 0.85, 6, 2,
-               double_density=True, ti1_asset=f"{_KNUT_FLS_DIR}/fls_colormunki_a3_1224p_2pages_landscape/chart.ti1", patches=1224, no_strip_limit=True, tiff_16bit=False, suffix=KNUT_FLS_SUFFIX),
-    _Ti1Preset("fls_colormunki_a3_1575p_3pages_portrait", "A3-1575p-3pages-Portrait" + KNUT_FLS_SUFFIX,
+               double_density=True, ti1_asset=f"{_KNUT_FLS_DIR}/fls_colormunki_a3_1224p_2pages_landscape/chart.ti1", patches=1224, white=9, black=8, no_strip_limit=True, tiff_16bit=False, suffix=KNUT_FLS_SUFFIX),
+    _Ti1Preset("fls_colormunki_a3_1575p_3pages_portrait", "A3-1575p-3pages-Portrait-w13.0mm" + KNUT_FLS_SUFFIX,
                _KNUT_CM, "A3", 0.94, 6, 3,
-               double_density=True, ti1_asset=f"{_KNUT_FLS_DIR}/fls_colormunki_a3_1575p_3pages_portrait/chart.ti1", patches=1575, no_strip_limit=True, tiff_16bit=False, suffix=KNUT_FLS_SUFFIX),
-    _Ti1Preset("fls_colormunki_a3_2016p_4pages_portrait", "A3-2016p-4pages-Portrait" + KNUT_FLS_SUFFIX,
+               double_density=True, ti1_asset=f"{_KNUT_FLS_DIR}/fls_colormunki_a3_1575p_3pages_portrait/chart.ti1", patches=1575, white=9, black=8, no_strip_limit=True, tiff_16bit=False, suffix=KNUT_FLS_SUFFIX),
+    _Ti1Preset("fls_colormunki_a3_2016p_4pages_portrait", "A3-2016p-4pages-Portrait-w13.0mm" + KNUT_FLS_SUFFIX,
                _KNUT_CM, "A3", 0.96, 6, 4,
-               double_density=True, ti1_asset=f"{_KNUT_FLS_DIR}/fls_colormunki_a3_2016p_4pages_portrait/chart.ti1", patches=2016, no_strip_limit=True, tiff_16bit=False, suffix=KNUT_FLS_SUFFIX),
-    _Ti1Preset("fls_colormunki_a3_2016p_4pages_portrait_nature_focus", "A3-2016p-4pages-Portrait-Nature Focus" + KNUT_FLS_SUFFIX,
+               double_density=True, ti1_asset=f"{_KNUT_FLS_DIR}/fls_colormunki_a3_2016p_4pages_portrait/chart.ti1", patches=2016, white=9, black=8, no_strip_limit=True, tiff_16bit=False, suffix=KNUT_FLS_SUFFIX),
+    _Ti1Preset("fls_colormunki_a3_2016p_4pages_portrait_nature_focus", "A3-2016p-4pages-Portrait-w13.0mm-Nature Focus" + KNUT_FLS_SUFFIX,
                _KNUT_CM, "A3", 0.96, 6, 4,
-               double_density=True, ti1_asset=f"{_KNUT_FLS_DIR}/fls_colormunki_a3_2016p_4pages_portrait_nature_focus/chart.ti1", patches=2016, no_strip_limit=True, tiff_16bit=False, suffix=KNUT_FLS_SUFFIX),
-    _Ti1Preset("fls_colormunki_a3plus_1190p_1page_portrait", "A3Plus-1190p-1page-Portrait" + KNUT_FLS_SUFFIX,
-               _KNUT_CM, "329x483", 1.0, 6, 1,
-               triple_density=True, ti1_asset=f"{_KNUT_FLS_DIR}/fls_colormunki_a3plus_1190p_1page_portrait/chart.ti1", patches=1190, no_strip_limit=True, suppress_left_clip=True, tiff_16bit=False, suffix=KNUT_FLS_SUFFIX),
-    _Ti1Preset("fls_colormunki_a3plus_1196p_1page_landscape", "A3Plus-1196p-1page-Landscape" + KNUT_FLS_SUFFIX,
-               _KNUT_CM, "483x329", 1.0, 6, 1,
-               triple_density=True, ti1_asset=f"{_KNUT_FLS_DIR}/fls_colormunki_a3plus_1196p_1page_landscape/chart.ti1", patches=1196, no_strip_limit=True, suppress_left_clip=True, tiff_16bit=False, suffix=KNUT_FLS_SUFFIX),
-    _Ti1Preset("fls_colormunki_a4_480p_2pages_portrait", "A4-480p-2pages-Portrait" + KNUT_FLS_SUFFIX,
+               double_density=True, ti1_asset=f"{_KNUT_FLS_DIR}/fls_colormunki_a3_2016p_4pages_portrait_nature_focus/chart.ti1", patches=2016, white=9, black=8, no_strip_limit=True, tiff_16bit=False, suffix=KNUT_FLS_SUFFIX),
+    _Ti1Preset("fls_colormunki_a3plus_1190p_1page_portrait", "A3Plus-1190p-1page-Portrait-w9.0mm" + KNUT_FLS_SUFFIX,
+               _KNUT_CM, "329x483", 1.14, 6, 1,
+               triple_density=True, ti1_asset=f"{_KNUT_FLS_DIR}/fls_colormunki_a3plus_1190p_1page_portrait/chart.ti1", patches=1190, white=9, black=8, no_strip_limit=True, suppress_left_clip=True, tiff_16bit=False, suffix=KNUT_FLS_SUFFIX),
+    _Ti1Preset("fls_colormunki_a3plus_1196p_1page_landscape", "A3Plus-1196p-1page-Landscape-w9.0mm" + KNUT_FLS_SUFFIX,
+               _KNUT_CM, "483x329", 1.12, 6, 1,
+               triple_density=True, ti1_asset=f"{_KNUT_FLS_DIR}/fls_colormunki_a3plus_1196p_1page_landscape/chart.ti1", patches=1196, white=9, black=8, no_strip_limit=True, suppress_left_clip=True, tiff_16bit=False, suffix=KNUT_FLS_SUFFIX),
+    _Ti1Preset("fls_colormunki_a4_480p_2pages_portrait", "A4-480p-2pages-Portrait-w13.0mm" + KNUT_FLS_SUFFIX,
                _KNUT_CM, "A4", 0.93, 6, 2,
-               double_density=True, ti1_asset=f"{_KNUT_FLS_DIR}/fls_colormunki_a4_480p_2pages_portrait/chart.ti1", patches=480, no_strip_limit=True, tiff_16bit=False, suffix=KNUT_FLS_SUFFIX),
-    _Ti1Preset("fls_colormunki_a4_484p_1page_portrait", "A4-484p-1page-Portrait" + KNUT_FLS_SUFFIX,
+               double_density=True, ti1_asset=f"{_KNUT_FLS_DIR}/fls_colormunki_a4_480p_2pages_portrait/chart.ti1", patches=480, white=9, black=8, no_strip_limit=True, tiff_16bit=False, suffix=KNUT_FLS_SUFFIX),
+    _Ti1Preset("fls_colormunki_a4_484p_1page_portrait", "A4-484p-1page-Portrait-w8.5mm" + KNUT_FLS_SUFFIX,
                _KNUT_CM, "A4", 1.08, 6, 1,
-               triple_density=True, ti1_asset=f"{_KNUT_FLS_DIR}/fls_colormunki_a4_484p_1page_portrait/chart.ti1", patches=484, no_strip_limit=True, suppress_left_clip=True, tiff_16bit=False, suffix=KNUT_FLS_SUFFIX),
-    _Ti1Preset("fls_colormunki_a4_495p_1page_landscape", "A4-495p-1page-Landscape" + KNUT_FLS_SUFFIX,
-               _KNUT_CM, "A4R", 1.0, 6, 1,
-               triple_density=True, ti1_asset=f"{_KNUT_FLS_DIR}/fls_colormunki_a4_495p_1page_landscape/chart.ti1", patches=495, no_strip_limit=True, suppress_left_clip=True, tiff_16bit=False, suffix=KNUT_FLS_SUFFIX),
-    _Ti1Preset("fls_i1pro_a4_1200p_3pages_portrait", "A4-1200p-3pages-Portrait" + KNUT_FLS_SUFFIX,
-               _KNUT_I1, "A4", 1.15, 10, 3,
-               ti1_asset=f"{_KNUT_FLS_DIR}/fls_i1pro_a4_1200p_3pages_portrait/chart.ti1", patches=1200, no_strip_limit=True, suppress_left_clip=True, tiff_16bit=False, suffix=KNUT_FLS_SUFFIX),
-    _Ti1Preset("fls_i1pro_a4_484p_1page_portrait", "A4-484p-1page-Portrait" + KNUT_FLS_SUFFIX,
-               _KNUT_I1, "A4", 1.05, 10, 1,
-               ti1_asset=f"{_KNUT_FLS_DIR}/fls_i1pro_a4_484p_1page_portrait/chart.ti1", patches=484, no_strip_limit=True, suppress_left_clip=True, tiff_16bit=False, suffix=KNUT_FLS_SUFFIX),
+               triple_density=True, ti1_asset=f"{_KNUT_FLS_DIR}/fls_colormunki_a4_484p_1page_portrait/chart.ti1", patches=484, white=9, black=8, no_strip_limit=True, suppress_left_clip=True, tiff_16bit=False, suffix=KNUT_FLS_SUFFIX),
+    _Ti1Preset("fls_colormunki_a4_495p_1page_landscape", "A4-495p-1page-Landscape-w8.0mm" + KNUT_FLS_SUFFIX,
+               _KNUT_CM, "A4R", 1.06, 6, 1,
+               triple_density=True, ti1_asset=f"{_KNUT_FLS_DIR}/fls_colormunki_a4_495p_1page_landscape/chart.ti1", patches=495, white=9, black=8, no_strip_limit=True, suppress_left_clip=True, tiff_16bit=False, suffix=KNUT_FLS_SUFFIX),
+    # i1Pro A4 portrait family — reworked by Knut (#88) to keep the i1Pro clip
+    # border (no -L) and honour the strip-length limit (no -P), with patch
+    # widths baked into the names. The 960p landscape preset was retired.
+    _Ti1Preset("fls_i1pro_a4_1200p_3pages_portrait", "A4-1200p-3pages-Portrait-w8.5mm" + KNUT_FLS_SUFFIX,
+               _KNUT_I1, "A4", 1.05, 10, 3,
+               ti1_asset=f"{_KNUT_FLS_DIR}/fls_i1pro_a4_1200p_3pages_portrait/chart.ti1", patches=1200, white=9, black=8, no_strip_limit=False, suppress_left_clip=False, tiff_16bit=False, suffix=KNUT_FLS_SUFFIX),
+    _Ti1Preset("fls_i1pro_a4_484p_1page_portrait", "A4-484p-1page-Portrait-w7.5mm" + KNUT_FLS_SUFFIX,
+               _KNUT_I1, "A4", 0.96, 10, 1,
+               ti1_asset=f"{_KNUT_FLS_DIR}/fls_i1pro_a4_484p_1page_portrait/chart.ti1", patches=484, white=9, black=8, no_strip_limit=False, suppress_left_clip=False, tiff_16bit=False, suffix=KNUT_FLS_SUFFIX),
     _Ti1Preset("fls_i1pro_a4_495p_1page_landscape", "A4-495p-1page-Landscape" + KNUT_FLS_SUFFIX,
                _KNUT_I1, "A4R", 1.03, 10, 1,
                ti1_asset=f"{_KNUT_FLS_DIR}/fls_i1pro_a4_495p_1page_landscape/chart.ti1", patches=495, no_strip_limit=True, suppress_left_clip=True, tiff_16bit=False, suffix=KNUT_FLS_SUFFIX),
-    _Ti1Preset("fls_i1pro_a4_924p_2pages_portrait", "A4-924p-2pages-Portrait" + KNUT_FLS_SUFFIX,
-               _KNUT_I1, "A4", 1.06, 10, 2,
-               ti1_asset=f"{_KNUT_FLS_DIR}/fls_i1pro_a4_924p_2pages_portrait/chart.ti1", patches=924, no_strip_limit=True, suppress_left_clip=True, tiff_16bit=False, suffix=KNUT_FLS_SUFFIX),
-    _Ti1Preset("fls_i1pro_a4_924p_2pages_portrait_nature_focus", "A4-924p-2pages-Portrait-Nature Focus" + KNUT_FLS_SUFFIX,
-               _KNUT_I1, "A4", 1.06, 10, 2,
-               ti1_asset=f"{_KNUT_FLS_DIR}/fls_i1pro_a4_924p_2pages_portrait_nature_focus/chart.ti1", patches=924, no_strip_limit=True, suppress_left_clip=True, tiff_16bit=False, suffix=KNUT_FLS_SUFFIX),
-    _Ti1Preset("fls_i1pro_a4_960p_2pages_landscape_general_plus_skintones", "A4-960p-2pages-Landscape-General Plus Skintones" + KNUT_FLS_SUFFIX,
-               _KNUT_I1, "A4R", 1.04, 10, 2,
-               ti1_asset=f"{_KNUT_FLS_DIR}/fls_i1pro_a4_960p_2pages_landscape_general_plus_skintones/chart.ti1", patches=960, no_strip_limit=True, suppress_left_clip=True, tiff_16bit=False, suffix=KNUT_FLS_SUFFIX),
+    _Ti1Preset("fls_i1pro_a4_924p_2pages_portrait", "A4-924p-2pages-Portrait-w7.5mm" + KNUT_FLS_SUFFIX,
+               _KNUT_I1, "A4", 0.98, 10, 2,
+               ti1_asset=f"{_KNUT_FLS_DIR}/fls_i1pro_a4_924p_2pages_portrait/chart.ti1", patches=924, white=9, black=8, no_strip_limit=False, suppress_left_clip=False, tiff_16bit=False, suffix=KNUT_FLS_SUFFIX),
+    _Ti1Preset("fls_i1pro_a4_924p_2pages_portrait_nature_focus", "A4-924p-2pages-Portrait-w7.5mm-Nature Focus" + KNUT_FLS_SUFFIX,
+               _KNUT_I1, "A4", 0.98, 10, 2,
+               ti1_asset=f"{_KNUT_FLS_DIR}/fls_i1pro_a4_924p_2pages_portrait_nature_focus/chart.ti1", patches=924, white=9, black=8, no_strip_limit=False, suppress_left_clip=False, tiff_16bit=False, suffix=KNUT_FLS_SUFFIX),
 ]
 KNUT_PRESETS_BY_KEY: dict[str, _Ti1Preset] = {p.key: p for p in KNUT_PRESETS}
 KNUT_PRESET_KEYS = frozenset(KNUT_PRESETS_BY_KEY)
@@ -1092,6 +1110,32 @@ class TabChart(QWidget):
         self._preview = TiffPreview(right)
         self._preview.set_caption(tr("CHART PREVIEW"))
         right_layout.addWidget(self._preview, stretch=1)
+
+        # Margin inspector — measures the realised page margins of the generated
+        # preview and flags ruler/jig threshold violations (Knut). Hidden when
+        # the user disables it in Settings → Margin Thresholds.
+        # Page TIFFs + ti2 of the chart currently in the preview (for measuring).
+        # Set BEFORE the panel is wired so restoring the saved guide-checkbox
+        # state (which can emit guides_toggled) never finds these unset.
+        self._margin_tiffs: list[Path] = []
+        self._margin_ti2: Path | None = None
+        from ui.margin_inspector_panel import MarginInspectorPanel
+        self._margin_panel = MarginInspectorPanel(right)
+        right_layout.addWidget(self._margin_panel)
+        self._margin_panel.set_guides_checked(
+            bool(self._settings.get("margin_guides_show", False)))
+        self._margin_panel.set_measured_guides_checked(
+            bool(self._settings.get("margin_measured_guides_show", False)))
+        self._margin_panel.setVisible(
+            bool(self._settings.get("margin_inspector_show", True)))
+        # Connect only after the initial state is restored, so building the UI
+        # can't trigger a measure pass.
+        self._margin_panel.guides_toggled.connect(self._on_margin_guides_toggled)
+        self._margin_panel.measured_guides_toggled.connect(
+            self._on_margin_measured_guides_toggled)
+        # Re-measure when the user pages through a multi-page chart so the
+        # inspector + guides always describe the page on screen (#83).
+        self._preview.page_changed.connect(lambda _i: self._update_margin_inspector())
 
         splitter.addWidget(right)
         splitter.setStretchFactor(0, 1)
@@ -2632,6 +2676,61 @@ class TabChart(QWidget):
             self._manual_btn.setChecked(True)
         self._update_isis_preview_banner()
         self._refresh_name_prefix()     # apply the prefix to the now-active field
+        # #79: when a chart was just generated in Guided mode and the user opens
+        # Manual, seed the Manual panel with the exact recipe that produced it,
+        # so they can edit the settings used. One-shot (consumed here) so later
+        # manual edits aren't clobbered by toggling modes back and forth.
+        if mode == "manual" and getattr(self, "_guided_transfer_pending", False):
+            self._guided_transfer_pending = False
+            self._transfer_guided_to_manual()
+
+    def _transfer_guided_to_manual(self) -> None:
+        """Seed the Manual panel from the Guided settings that produced the
+        chart now in the preview (#79). Best-effort: never blocks a mode switch."""
+        try:
+            p = self._collect_guided()
+        except Exception:
+            log.warning("Guided→Manual transfer skipped (could not read guided "
+                        "settings)", exc_info=True)
+            return
+        # Instrument + paper first: changing the instrument can cascade (reset
+        # -a/-m to the instrument default), so scale/margin are set afterwards.
+        self._set_manual_value("printtarg", "-i", p.instrument)
+        self._set_manual_value("printtarg", "-p", p.paper)
+        if self._manual_pages_spin is not None:
+            self._manual_pages_spin.setValue(int(p.pages))
+        # targen inputs. Patch count mirrors Guided's Auto (which also drives the
+        # neutral counts), so the Manual recipe reproduces the same chart.
+        self._set_manual_value("targen", "-d", str(p.device_type))
+        self._set_manual_value("targen", "-G", bool(p.good_mode))
+        if self._manual_auto_patches_check is not None:
+            self._manual_auto_patches_check.setChecked(True)
+        # printtarg layout — after -i so the instrument-default cascade can't
+        # overwrite these.
+        self._set_manual_value("printtarg", "-a", round(float(p.patch_scale), 3))
+        self._set_manual_value("printtarg", "-m", int(p.margin_mm))
+        self._set_manual_value("printtarg", "-h", bool(p.double_density))
+        self._set_manual_value("printtarg", "-P", bool(p.no_strip_limit))
+        self._set_manual_value("printtarg", "-L", bool(p.disable_left_border))
+        if self._manual_td_check is not None:
+            self._manual_td_check.setChecked(bool(p.triple_density))
+        # Pre-conditioning profile (-c), if the guided chart used one.
+        try:
+            toks = shlex.split(p.extra_targen_args or "")
+            if "-c" in toks:
+                i = toks.index("-c")
+                if i + 1 < len(toks) and toks[i + 1]:
+                    self._set_manual_value("targen", "-c", toks[i + 1])
+        except ValueError:
+            pass
+        # Printer profile name.
+        name_edit = getattr(self, "_target_name_edit", None)
+        name = name_edit.text().strip() if name_edit is not None else ""
+        if name:
+            self._set_manual_name_plain(name)
+        self._refresh_manual_command_preview()
+        self._log.appendPlainText(
+            tr("Guided settings copied to Manual mode — edit and regenerate as needed."))
 
     def _on_guided_precond_toggled(self, checked: bool) -> None:
         self._guided_precond_path.setEnabled(checked)
@@ -2884,20 +2983,29 @@ class TabChart(QWidget):
             self._manual_dd_pw.setEnabled(not checked)
 
         if checked:
-            stash: dict = {}
-            if self._manual_a_pw is not None:
-                stash["-a"] = self._manual_a_pw.get_raw_value()
-                self._manual_a_pw.set_value(1.3)
-            if self._manual_m_pw is not None:
-                stash["-m"] = self._manual_m_pw.get_raw_value()
-                self._manual_m_pw.set_value(5)
-            if self._manual_P_pw is not None:
-                stash["-P"] = self._manual_P_pw.get_raw_value()
-                self._manual_P_pw.set_value(True)
-            if self._manual_lb_pw is not None:
-                stash["-L"] = self._manual_lb_pw.get_raw_value()
-                self._manual_lb_pw.set_value(True)
-            self._td_saved_layout = stash
+            if getattr(self, "_suppress_td_override", False):
+                # Restoring a saved triple-density chart: the -a / -m / -P / -L
+                # widgets already hold the *effective* TD layout (the values that
+                # were saved), so DON'T overwrite them with the TD defaults — that
+                # was the round-trip bug (#89) where a custom TD scale snapped back
+                # to 1.3. Stash clean non-TD defaults so unticking later reverts
+                # sensibly.
+                self._td_saved_layout = {"-a": 1.0, "-m": 6, "-P": False, "-L": False}
+            else:
+                stash: dict = {}
+                if self._manual_a_pw is not None:
+                    stash["-a"] = self._manual_a_pw.get_raw_value()
+                    self._manual_a_pw.set_value(1.3)
+                if self._manual_m_pw is not None:
+                    stash["-m"] = self._manual_m_pw.get_raw_value()
+                    self._manual_m_pw.set_value(5)
+                if self._manual_P_pw is not None:
+                    stash["-P"] = self._manual_P_pw.get_raw_value()
+                    self._manual_P_pw.set_value(True)
+                if self._manual_lb_pw is not None:
+                    stash["-L"] = self._manual_lb_pw.get_raw_value()
+                    self._manual_lb_pw.set_value(True)
+                self._td_saved_layout = stash
         else:
             stash = self._td_saved_layout or {}
             if self._manual_a_pw is not None and "-a" in stash:
@@ -3593,10 +3701,16 @@ class TabChart(QWidget):
             black = bool(data.get("auto_black", False)),
         )
         self._manual_left_clip_check.setChecked(bool(data.get("left_clip_info", False)))
-        # Apply triple-density last so its toggle handler sees the restored
-        # -a / -m / -P values and stashes them correctly.
+        # Apply triple-density last. The saved values already ARE the effective
+        # TD layout, so suppress the override so re-enabling the checkbox keeps
+        # the restored -a / -m / -P / -L instead of snapping them to 1.3 / 5 (#89).
         if self._manual_td_check is not None:
-            self._manual_td_check.setChecked(bool(data.get("triple_density", False)))
+            td_on = bool(data.get("triple_density", False))
+            self._suppress_td_override = td_on
+            try:
+                self._manual_td_check.setChecked(td_on)
+            finally:
+                self._suppress_td_override = False
 
     def _preset_save_prefill(self) -> tuple[str, bool, bool, bool]:
         """Initial (name, auto_run, attach, from_generator) for the Save Preset
@@ -3832,23 +3946,15 @@ class TabChart(QWidget):
 
     def _on_preset_save(self) -> None:
         capture: dict = {}
-        # When Triple density is active the four widgets it owns currently
-        # show the i1Pro-emulation overrides; persisting those into the
-        # preset would corrupt the stash on load and trap the preset in
-        # TD-shaped values. Use the stashed pre-TD values for those flags.
-        td_stash = (self._td_saved_layout
-                    if (self._manual_td_check is not None
-                        and self._manual_td_check.isChecked()
-                        and self._td_saved_layout)
-                    else None)
+        # Store the EFFECTIVE widget values, including the triple-density layout
+        # (-a / -m / -P / -L) when TD is on — so the preset round-trips with the
+        # right scale/margin (#89). On restore the TD checkbox is re-enabled in
+        # suppressed mode so it won't clobber these back to the TD defaults.
         for tool, widgets in self._manual_widgets.items():
             for pw in widgets:
                 if pw in self._d_cascade_widgets:
                     continue
-                if td_stash is not None and tool == "printtarg" and pw.flag in td_stash:
-                    v = td_stash[pw.flag]
-                else:
-                    v = pw.get_raw_value()
+                v = pw.get_raw_value()
                 if v is not None:
                     capture[f"{tool}_{pw.flag}"] = v
                 # Persist the enable-checkbox state for expert non-boolean rows
@@ -4662,8 +4768,10 @@ class TabChart(QWidget):
         )
         if tiffs:
             self._preview.load_tiff(list(tiffs))
+            self._set_margin_chart(list(tiffs), ti2_path)
         else:
             self._preview.clear()
+            self._set_margin_chart([], None)
         self._maybe_warn_reflected_backfill(ti2_path)
 
     def _maybe_warn_reflected_backfill(self, ti2_path: Path) -> None:
@@ -5920,8 +6028,13 @@ class TabChart(QWidget):
             # offer to attach it.
             ti1 = tiffs[0].parent / f"{stem}.ti1"
             self._current_ti1_path = ti1 if ti1.is_file() else None
+            self._set_margin_chart(tiffs, ti2)
+            # #79: arm the one-shot Guided→Manual transfer when this chart was
+            # built in Guided mode, so opening Manual seeds the recipe used.
+            self._guided_transfer_pending = (self._current_mode() == "guided")
             self.chart_finished.emit(tiffs, ti2, is_isis)
         else:
+            self._set_margin_chart([], None)
             self._log.appendPlainText("[ERROR] Chart generation failed.")
             self._log.ensureCursorVisible()
             # When the i1iSis hand-off already succeeded the user doesn't need
@@ -5938,6 +6051,182 @@ class TabChart(QWidget):
                         else "Chart Layout Failed (printtarg)"
                     )
                     InfoDialog(title, friendly, self, min_width=520).exec()
+
+    # ------------------------------------------------------------------
+    # Margin inspector
+    # ------------------------------------------------------------------
+    def _set_margin_chart(self, tiffs: "list[Path]", ti2: "Path | None") -> None:
+        """Record the chart now in the preview and refresh the margin inspector."""
+        self._margin_tiffs = list(tiffs or [])
+        self._margin_ti2 = ti2 if (ti2 and Path(ti2).is_file()) else None
+        self._update_margin_inspector()
+
+    def _update_margin_inspector(self) -> None:
+        panel = getattr(self, "_margin_panel", None)
+        if panel is None:
+            return
+        tiffs = getattr(self, "_margin_tiffs", None)
+        show = bool(self._settings.get("margin_inspector_show", True))
+        panel.setVisible(show)
+        if not show or not tiffs:
+            panel.show_placeholder()
+            self._preview.set_margin_guides(None)
+            self._preview.set_measured_guides(None)
+            return
+
+        from workflow.margin_inspector import measure_margins, check_violations
+        from core.settings import margin_combo_key
+
+        # ChromIQ always renders with printtarg -M (the margin is kept inside the
+        # TIFF), so the page TIFF already spans the full sheet — the TIFF's own
+        # size is the page. Do NOT pass a paper size here: the Create Chart paper
+        # combo can be stale relative to the chart actually in the preview (e.g.
+        # after loading a preset), and a wrong paper size would inflate every
+        # measured margin by the bogus (paper − tiff)/2 offset (#83).
+        dpi = float(self._settings.get("printtarg_dpi", 300) or 300)
+        # Measure the page CURRENTLY SHOWN in the preview, so the numbers, the
+        # threshold guides and the visible patches all describe the same page.
+        # Multi-page charts have different per-page margins, so measuring a
+        # different page than the one on screen made the guides land away from
+        # the patches (#83). Re-runs when the user pages through (page_changed).
+        idx = self._preview.current_page()
+        if not (0 <= idx < len(self._margin_tiffs)):
+            idx = 0
+        report = measure_margins(self._margin_tiffs[idx], dpi=dpi,
+                                 ti2_path=self._margin_ti2)
+        if report is None:
+            panel.show_placeholder()
+            self._preview.set_margin_guides(None)
+            self._preview.set_measured_guides(None)
+            return
+
+        instr_label = _MARGIN_INSTR_LABEL.get(
+            self._active_instrument_flag(), "i1Pro")
+        paper_name = _canonical_paper_name(report.page_w_mm, report.page_h_mm)
+        orient = "Landscape" if report.page_w_mm > report.page_h_mm else "Portrait"
+        thresholds = None
+        if paper_name:
+            key = margin_combo_key(instr_label, paper_name, orient)
+            thresholds = self._settings.get_margin_thresholds().get(key)
+
+        violations = check_violations(report, thresholds)
+        panel.update_report(
+            report, violations,
+            thresholds_defined=bool(thresholds),
+            notify=bool(self._settings.get("margin_violation_notify", True)),
+            thresholds=thresholds,
+        )
+        self._refresh_margin_guides(report, thresholds, violations)
+        self._refresh_measured_guides(report)
+
+    def _refresh_measured_guides(self, report) -> None:
+        """Push long purple/blue lines at the measured margins (patch-area edges)
+        to the preview, when the second checkbox is on (#89)."""
+        panel = getattr(self, "_margin_panel", None)
+        if panel is None or not panel.measured_guides_enabled() or report is None:
+            self._preview.set_measured_guides(None)
+            return
+        pw, ph = report.page_w_mm, report.page_h_mm
+        guides: list[tuple[str, float]] = []
+        if pw > 0:
+            guides.append(("v", report.left_mm / pw))
+            guides.append(("v", 1.0 - report.right_mm / pw))
+        if ph > 0:
+            guides.append(("h", report.top_mm / ph))
+            guides.append(("h", 1.0 - report.bottom_mm / ph))
+        self._preview.set_measured_guides(guides or None)
+
+    def _refresh_margin_guides(self, report, thresholds, violations) -> None:
+        """Push dotted threshold guide lines to the preview (or clear them)."""
+        panel = getattr(self, "_margin_panel", None)
+        if panel is None or not panel.guides_enabled() or not thresholds:
+            self._preview.set_margin_guides(None)
+            return
+        violated = {v.edge for v in violations}
+        guides: list[tuple[str, float, bool]] = []
+        # (key, edge, axis, page-extent, measured-from-start)
+        specs = (
+            ("L", "Left", "v", report.page_w_mm, True),
+            ("R", "Right", "v", report.page_w_mm, False),
+            ("T", "Top", "h", report.page_h_mm, True),
+            ("B", "Bottom", "h", report.page_h_mm, False),
+        )
+        for key, edge, axis, extent, from_start in specs:
+            raw = thresholds.get(key)
+            if raw in (None, "") or not extent:
+                continue
+            try:
+                thr = float(raw)
+            except (TypeError, ValueError):
+                continue
+            frac = (thr / extent) if from_start else (1.0 - thr / extent)
+            guides.append((axis, frac, edge in violated))
+        self._preview.set_margin_guides(guides or None)
+
+    def _on_margin_guides_toggled(self, on: bool) -> None:
+        self._settings.set("margin_guides_show", bool(on))
+        self._update_margin_inspector()
+
+    def _on_margin_measured_guides_toggled(self, on: bool) -> None:
+        self._settings.set("margin_measured_guides_show", bool(on))
+        self._update_margin_inspector()
+
+    def _active_instrument_flag(self) -> str:
+        """The instrument the chart in the preview was built with. In Manual mode
+        that is the manual -i widget; otherwise the Guided instrument combo. Used
+        so the margin combo follows the chart, not a stale mode's control (#81)."""
+        if self._manual_btn is not None and self._manual_btn.isChecked():
+            for pw in self._manual_widgets.get("printtarg", []):
+                if pw.flag == "-i":
+                    return str(pw.get_raw_value() or "i1")
+        combo = getattr(self, "_instr_combo", None)
+        return (combo.currentData() if combo is not None else "i1") or "i1"
+
+    def _active_paper_code(self) -> str:
+        """The paper code currently selected (manual -p in Manual mode, else the
+        Guided paper combo)."""
+        if self._manual_btn is not None and self._manual_btn.isChecked():
+            for pw in self._manual_widgets.get("printtarg", []):
+                if pw.flag == "-p":
+                    return str(pw.get_raw_value() or "A4")
+        combo = getattr(self, "_paper_combo", None)
+        return (combo.currentData() if combo is not None else "A4") or "A4"
+
+    def current_margin_combo(self) -> "tuple[str, str, str] | None":
+        """The (instrument label, paper name, orientation) the Margin Thresholds
+        tab should preselect (#80/#81). Always follows the active mode's current
+        instrument + paper *selection* — what the user is looking at in the
+        dropdowns — so Preferences opens on it immediately, even before a chart
+        is generated and regardless of any chart still in the preview."""
+        instr_label = _MARGIN_INSTR_LABEL.get(self._active_instrument_flag())
+        code = self._active_paper_code()
+        if not instr_label or not code:
+            return None
+        dims = _PAPER_MM.get(code)
+        if dims is None and "x" in str(code):
+            try:
+                w, h = str(code).split("x", 1)
+                dims = (float(w), float(h))
+            except ValueError:
+                dims = None
+        if dims is None:
+            return None
+        paper_name = _canonical_paper_name(dims[0], dims[1])
+        if not paper_name:
+            return None
+        orient = "Landscape" if dims[0] > dims[1] else "Portrait"
+        return (instr_label, paper_name, orient)
+
+    def refresh_margin_inspector_settings(self) -> None:
+        """Re-read margin-inspector settings after the Preferences dialog closes
+        (visibility, notify, thresholds may have changed)."""
+        panel = getattr(self, "_margin_panel", None)
+        if panel is not None:
+            panel.set_guides_checked(
+                bool(self._settings.get("margin_guides_show", False)))
+            panel.set_measured_guides_checked(
+                bool(self._settings.get("margin_measured_guides_show", False)))
+        self._update_margin_inspector()
 
     def _maybe_autotag_randomised(self, ti2: Path) -> None:
         """Upgrade a fixed-order (CHART_ID) chart to RANDOM_START when its layout
