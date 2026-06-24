@@ -1,0 +1,52 @@
+"""Inter-patch contrast: spacer colour choice + a readability guard.
+
+A strip reader finds patch boundaries by the contrast between a patch and the
+spacer beside it (printtarg runs a whole anneal for this).  ChromIQ owns the
+order, so at minimum it picks each spacer's colour to maximise the *minimum*
+contrast to its two neighbouring patches, and can flag passes whose neighbours
+are too similar.
+"""
+from __future__ import annotations
+
+from .colorants import luminance
+
+# Below this min patch↔spacer luminance gap a boundary may be hard to detect.
+LOW_CONTRAST_THRESHOLD = 32.0
+
+
+def spacer_rgb(above: tuple[int, int, int] | None,
+               below: tuple[int, int, int] | None) -> tuple[int, int, int]:
+    """Black or white spacer maximising the minimum contrast to its neighbours."""
+    neigh = [n for n in (above, below) if n is not None]
+    if not neigh:
+        return (0, 0, 0)
+    lums = [luminance(n) for n in neigh]
+    # contrast to black = lum; to white = 255 - lum. Maximise the worst case.
+    worst_black = min(lums)
+    worst_white = min(255.0 - l for l in lums)
+    return (0, 0, 0) if worst_black >= worst_white else (255, 255, 255)
+
+
+def min_boundary_contrast(patch_rgbs: list[tuple[int, int, int]]) -> float:
+    """Worst patch↔spacer luminance gap across a pass (spacers chosen optimally)."""
+    if len(patch_rgbs) < 2:
+        return 255.0
+    worst = 255.0
+    for a, b in zip(patch_rgbs, patch_rgbs[1:]):
+        sp = spacer_rgb(a, b)
+        ls = luminance(sp)
+        gap = min(abs(luminance(a) - ls), abs(luminance(b) - ls))
+        worst = min(worst, gap)
+    return worst
+
+
+def low_contrast_passes(slot_rgbs: list[tuple[int, int, int]], steps_in_pass: int
+                        ) -> list[int]:
+    """Indices of passes whose worst boundary contrast is below the threshold."""
+    flagged: list[int] = []
+    n_passes = (len(slot_rgbs) + steps_in_pass - 1) // steps_in_pass
+    for p in range(n_passes):
+        col = slot_rgbs[p * steps_in_pass:(p + 1) * steps_in_pass]
+        if min_boundary_contrast(col) < LOW_CONTRAST_THRESHOLD:
+            flagged.append(p)
+    return flagged
