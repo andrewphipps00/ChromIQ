@@ -95,14 +95,27 @@ def build_chart(
     nolimit: bool = False,
     strip_pattern: str = permutation.DEFAULT_STRIP_PATTERN,
     patch_pattern: str = permutation.DEFAULT_PATCH_PATTERN,
+    cal_path: str | Path | None = None,
+    apply_cal: bool = False,
 ) -> ChartResult:
     """Full chart build: write ``out_base.ti2`` + page TIFF(s) + strip geometry.
 
     ``out_base`` is a path stem; outputs are ``<stem>.ti2``, ``<stem>.tif``
     (or ``<stem>_NN.tif`` for multi-page) and ``<stem>.strips.json`` (exact
     per-strip pixel rects for the measure-tab highlighter).
+
+    *cal_path* attaches a printer calibration: with *apply_cal* True (``-K``) the
+    curves are applied to the patch values (TIFF + ``.ti2`` together) **and**
+    embedded; with it False (``-I``) the calibration is only embedded.
     """
     target = ti1_reader.read_ti1(ti1_path)
+
+    cal = None
+    if cal_path is not None:
+        from . import calibration
+        cal = calibration.read_cal(cal_path)
+        if apply_cal:
+            target = calibration.apply_to_target(target, cal)
     geom = instruments.build(
         instrument, hflag=hflag, spacer_on=spacer_on, pscale=pscale,
         sscale=sscale, border=border, nolpcbord=nolpcbord, nolimit=nolimit,
@@ -124,6 +137,10 @@ def build_chart(
         strip_pattern=strip_pattern, patch_pattern=patch_pattern,
         paper_w_mm=w_mm, paper_h_mm=h_mm, media=media, white_point=white_point,
     )
+    if cal is not None:  # embed the calibration table (-K and -I both embed)
+        from . import calibration
+        with open(ti2_path, "a", encoding="utf-8") as fh:
+            fh.write("\n" + calibration.cal_table_text(cal))
 
     render = raster.render_pages(
         target, layout, geom, seed=seed, randomize=randomize,
