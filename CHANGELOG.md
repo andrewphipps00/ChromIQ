@@ -1,5 +1,17 @@
 # Changelog
 
+## v3.12.0-beta.18
+
+### 🐛 Fixed
+- The **right** margin guide on ColorMunki double-density (`-h`) charts now sits
+  on the real patch edge. printtarg prints the rotated strip-label column just
+  past a strip of bare paper on the right; the patch-area detector was reaching
+  across that gap and treating the labels as patches, so the right margin read
+  ~4 mm short and the guide line landed out in the label area. The detector now
+  trims each side to the dense patch block (keeping the zig-zag half-cells,
+  stopping at the white gap), so the right margin and its guide are measured to
+  the patch edge on every page. (#91)
+
 ## v3.12.0-beta.17
 
 ### 🐛 Fixed

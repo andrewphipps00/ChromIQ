@@ -233,42 +233,67 @@ def measure_margins(
     )
 
 
+def _dense_run(fill: np.ndarray) -> Optional[tuple[int, int]]:
+    """First/last index of the patch block along one axis, given its fill
+    profile (fraction inked per row/column).
+
+    Anchor on the densely-inked core (a full patch row/column is ≥
+    ``_PATCH_ROW_FILL`` inked) then extend outward through adjacent **half**
+    rows/columns (≥ ``_PATCH_EDGE_FILL``), stopping at the first near-white
+    cell. The half-cell tolerance catches the zig-zag edge of a double-density
+    (-h) chart, where the outermost strip row carries only ~half its patches
+    (#91); the white-gap stop keeps the sparse, rotated strip-label / title
+    band — always separated from the patches by bare paper — out of the box
+    (#91 right-margin follow-up).
+    """
+    idx = np.where(fill > _PATCH_ROW_FILL)[0]
+    if idx.size == 0:
+        return None
+    a, b = int(idx[0]), int(idx[-1])
+    n = fill.shape[0]
+    while a > 0 and fill[a - 1] > _PATCH_EDGE_FILL:
+        a -= 1
+    while b < n - 1 and fill[b + 1] > _PATCH_EDGE_FILL:
+        b += 1
+    return a, b
+
+
 def _patch_area_bbox(arr: np.ndarray) -> Optional[tuple[int, int, int, int]]:
     """Inclusive ``(y0, y1, x0, x1)`` pixel box of the patches+spacers block.
 
-    ``_patch_grid_bbox`` gives a reliable **horizontal** extent (it drops the
-    rotated right-margin title), but its vertical extent is contaminated by that
-    same title (the editor only ever uses its x-range). So we take x from it and
-    derive y ourselves: inside the patch x-band a patch row is almost fully
-    inked (patches/spacers tile edge-to-edge), whereas the strip-label band, the
-    bottom page label and any stray text are sparse. The contiguous run of
-    well-filled rows is the patch block — which is exactly the patch-area edge
-    "where paper white meets a patch or spacer", with text excluded.
+    ``_patch_grid_bbox`` gives a usable starting **horizontal** extent (the
+    editor only ever uses its x-range), but it still leaves the rotated
+    strip-label / title column on the right edge, and its vertical extent is
+    contaminated by that same text. So we use its x-range only as a search
+    window and derive both axes ourselves: inside the patch band a patch
+    row/column is almost fully inked (patches/spacers tile edge-to-edge),
+    whereas the strip-label band, the bottom page label and any stray text are
+    sparse and sit past a strip of bare paper. The dense run on each axis — with
+    half-cell tolerance for the zig-zag (-h) edge — is the patch block, "where
+    paper white meets a patch or spacer", with text excluded on every side.
     """
     grid = _patch_grid_bbox(arr)
     if grid is None:
         return None
-    _, _, x0, x1 = grid
-    if x1 <= x0:
+    _, _, gx0, gx1 = grid
+    if gx1 <= gx0:
         return None
     gray = arr.mean(axis=2)
-    band = gray[:, x0:x1 + 1]
-    row_fill = (band < _WHITE).mean(axis=1)
-    rows = np.where(row_fill > _PATCH_ROW_FILL)[0]
-    if rows.size == 0:
+    # Vertical extent from rows within the grid x-window.
+    row_fill = (gray[:, gx0:gx1 + 1] < _WHITE).mean(axis=1)
+    yr = _dense_run(row_fill)
+    if yr is None:
         return None
-    y0, y1 = int(rows[0]), int(rows[-1])
-    # Double-density (-h) charts lay strips out in a zig-zag: alternate strips
-    # are shifted half a patch, so the very top/bottom row of the block has only
-    # ~half the strips inked (fill ≈ 0.5, right on the threshold — it flips in or
-    # out between pages by parity, #91). Extend the block outward through those
-    # adjacent half-rows, stopping at the first near-white row — the white gap
-    # before the strip-label band — so the labels are never swallowed.
-    n = row_fill.shape[0]
-    while y0 > 0 and row_fill[y0 - 1] > _PATCH_EDGE_FILL:
-        y0 -= 1
-    while y1 < n - 1 and row_fill[y1 + 1] > _PATCH_EDGE_FILL:
-        y1 += 1
+    y0, y1 = yr
+    # Horizontal extent from columns within the patch y-band — this trims the
+    # sparse rotated strip-label column that the grid leaves on the right edge,
+    # so the right margin is measured to the real patch edge, not into the label
+    # gap (#91 right-margin follow-up).
+    col_fill = (gray[y0:y1 + 1, gx0:gx1 + 1] < _WHITE).mean(axis=0)
+    xr = _dense_run(col_fill)
+    if xr is None:
+        return None
+    x0, x1 = gx0 + xr[0], gx0 + xr[1]
     return (y0, y1, x0, x1)
 
 

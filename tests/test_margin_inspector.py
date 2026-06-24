@@ -234,6 +234,21 @@ def test_zigzag_top_bottom_consistent_across_pages(tmp_path):
     assert max(bottoms) - min(bottoms) < 1.5, f"bottom varies across pages: {bottoms}"
 
 
+def test_dense_run_stops_at_white_gap_before_label():
+    """#91 follow-up: the rotated strip-label / title column sits past a strip of
+    bare paper on the edge. ``_dense_run`` must stop at the real patch edge, not
+    reach across the white gap into that sparse band (which inflated the right
+    margin / mis-placed the guide line). Runs without Argyll."""
+    from workflow.margin_inspector import _dense_run
+    fill = np.zeros(100)
+    fill[10:60] = 0.95          # dense patch block
+    fill[60] = 0.45             # one zig-zag half-cell at the edge (kept)
+    # 61..69 stay white (the bare-paper gap), then a sparse label band:
+    fill[70:90] = 0.15
+    a, b = _dense_run(fill)
+    assert (a, b) == (10, 60)   # patch edge incl. the half-cell, label excluded
+
+
 def test_blank_page_returns_none(tmp_path):
     """A bare white sheet has no patch area → None (caller shows a placeholder),
     not bogus numbers. Runs without Argyll."""
