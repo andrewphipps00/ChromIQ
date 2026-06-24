@@ -1,216 +1,63 @@
 # Changelog
 
-## v3.12.0-beta.18
+## v3.12.0
 
-### 🐛 Fixed
-- The **right** margin guide on ColorMunki double-density (`-h`) charts now sits
-  on the real patch edge. printtarg prints the rotated strip-label column just
-  past a strip of bare paper on the right; the patch-area detector was reaching
-  across that gap and treating the labels as patches, so the right margin read
-  ~4 mm short and the guide line landed out in the label area. The detector now
-  trims each side to the dense patch block (keeping the zig-zag half-cells,
-  stopping at the white gap), so the right margin and its guide are measured to
-  the patch edge on every page. (#91)
-
-## v3.12.0-beta.17
-
-### 🐛 Fixed
-- Margin guide lines now sit correctly on the **top and bottom** of ColorMunki
-  **zig-zag (double-density, `-h`)** charts. The outermost strip row carries only
-  ~half the patches, so the patch-area detector used to include or drop it
-  depending on the page — guides drifted by page and missed the top/bottom edge.
-  The detector now anchors on the dense block and extends through the half-rows
-  up to the white gap, so every page reads the same, correct margins. (#91)
-
-## v3.12.0-beta.16
-
-### 🐛 Fixed
-- In the editor's **Add…** window, "Ensure unique colours" now keeps generated
-  patches clear of the chart's **existing** patches too (not just clear of each
-  other), so a generator can't land on top of patches already on the chart. (#89)
-
-## v3.12.0-beta.15
-
-### 🔧 Changed
-- Updated the ColorMunki A4-484p built-in patch set to Knut's latest version; the four single-page ColorMunki presets are now internally consistent. (#89)
-
-## v3.12.0-beta.14
+The **margin inspector** release: ChromIQ now measures every chart you generate
+and warns you before you print one your measuring rig can't read.
 
 ### ✨ New
-- **"Show margin guide lines on preview (long dotted lines)"** — a second toggle
-  in the Measured-from-Preview panel that draws a long purple/blue dotted line at
-  each of the four *measured* margins (where the patches meet the white paper), so
-  you can confirm the readout visually. (#89)
+- **Margin inspector — "Measured from Preview" panel.** Under the Create Chart
+  preview, a new panel reports the chart's *realised* page margins (Left / Right
+  / Top / Bottom), the **patch width** across a strip, and the **strip length**,
+  in millimetres and inches with a **min** column showing each edge's threshold
+  beside the measured value. printtarg only gives you one overall margin, yet the
+  real margins shift with patch scale, spacers, paper and orientation — so the
+  only reliable way to know them is to measure the rendered page, which is what
+  this does. It measures the page you're looking at and updates as you page
+  through a multi-page chart, and gives a green **"Margins: OK"** or a clear
+  warning naming the offending edge and threshold.
+- **Editable margin thresholds per instrument & paper** (Preferences → Margin
+  Thresholds). Set the minimum each edge needs for your ruler / jig, per
+  instrument and paper size, with a description field for which rig a row is for.
+  Default seeds ship for the **i1Pro**, **i1Pro 3+** and **ColorMunki** (editable
+  starting points, not gospel), and a **"Restore default thresholds"** button
+  pulls in updated built-in defaults without overwriting values you've saved.
+- **Margin guide lines on the preview.** Two independent toggles: dotted lines at
+  each *threshold* position (red on a violated edge) and long dotted lines at each
+  *measured* margin (where the patches meet the paper), plus a drawn **page-edge
+  marker** so the thin white frame can't be mistaken for margin. The guides track
+  the page on screen and the thresholds you edit.
+- **Guided settings carry over to Manual mode.** Switching from Guided to Manual
+  after a build seeds the Manual panel with the same recipe — instrument, paper,
+  pages, patch count (Auto), patch scale, margin, density, strip-limit, border and
+  profile name — so you can fine-tune the exact settings that produced the chart.
+  (#79)
 
 ### 🔧 Changed
-- **Removed the older "TC9.18+Spyderprint Grays" built-in presets** — only the
-  Full layout setup family and the "by Pharmacist" targets remain. (#89)
+- **Reworked the built-in "Full layout setup" presets** for both i1Pro and
+  ColorMunki so they meet each instrument's jig margins and strip-length limits,
+  with the patch width shown in every name. Retired the "A4-960p Landscape"
+  preset and removed the older "TC9.18+Spyderprint Grays" built-ins; the Full
+  layout setup family and the "by Pharmacist" targets remain. (#88, #89)
 
 ### 🐛 Fixed
-- **Triple-density presets keep their patch scale on reload** instead of snapping
-  back to the default — a saved preset now round-trips its real scale/margin. (#89)
-- Updated the ColorMunki A4-495p built-in scale (1.06) so it fills the page. (#89)
+- **Margin measurement and guide placement are now accurate on every chart and
+  page**, including ColorMunki double-density (`-h`) zig-zag layouts where the
+  outermost strip row is half-populated and the rotated strip-label column sits
+  past a strip of bare paper — both used to throw the top/bottom and right
+  margins off and drift the guides between pages. (#83, #91)
+- **No false warning when a margin equals its threshold** (6.0 mm vs a 6 mm
+  minimum); threshold fields accept one decimal place. (#85)
+- **Strip length and patch width are correct on landscape charts** — printtarg
+  always lays strips vertically, so strip length is page height − top − bottom and
+  patch width is measured across the strips regardless of orientation. (#87)
+- **No bogus "paper mismatch" warning** when printing a correctly-sized full-page
+  chart (the check compared against the printable area, not the sheet). (#84)
+- In the editor's **Add…** window, **"Ensure unique colours"** now keeps generated
+  patches clear of the chart's existing patches too, not just of each other. (#89)
 
-## v3.12.0-beta.13
-
-### 🔧 Changed
-- **Updated all ColorMunki "Full layout setup" presets** to Knut's reworked
-  versions, with the patch width shown in each name. (#89)
-
-## v3.12.0-beta.12
-
-### 🔧 Changed
-- **i1Pro 3+ now has default margin thresholds too** — 28 / 9 / 40 / 9 mm on the
-  primary reading orientations (slightly more than the i1Pro on the clip and
-  label edges; provisional), 9 mm all round elsewhere. Use "Restore default
-  thresholds" to pick them up. (#82)
-
-## v3.12.0-beta.11
-
-### ✨ New
-- **"Restore default thresholds" button** in Preferences → Margin Thresholds —
-  pulls in updated built-in defaults (changing the defaults in a new version
-  doesn't overwrite thresholds you've already saved). (#82)
-
-### 🔧 Changed
-- The margin-inspector **ⓘ help button moved to the bottom corner** so it no
-  longer takes space at the top, and its text now also explains the dotted guide
-  lines and the page-edge marker. The Preferences → Margin Thresholds help was
-  rewritten in the same friendly, plain-language style. (#86)
-- Preferences → Margin Thresholds now **preselects the instrument and paper you
-  currently have selected** in Create Chart (in either mode), even before a
-  chart is generated. (#81)
-
-## v3.12.0-beta.10
-
-### ✨ New
-- **An ⓘ help button on the "Measured from Preview" panel** with a friendly,
-  plain-language explanation of what each value means, what the "min" column is,
-  and where to set the thresholds. (#86)
-
-### 🐛 Fixed
-- **Strip length and patch width are now correct on landscape charts.** printtarg
-  always lays strips vertically (labels at top), so the strip length is always
-  page height − top − bottom and the patch width is measured across the strips,
-  regardless of page orientation. (#87)
-
-## v3.12.0-beta.9
-
-### 🔧 Changed
-- **Reworked the i1Pro A4 portrait built-in charts** (Full layout setup) so they
-  meet the i1Pro jig margin minimums — they now keep the clip border and respect
-  the maximum strip length, with the patch width shown in each name (w7.5 / 8.5
-  mm). The "A4-960p Landscape (General + Skintones)" preset was retired. (#88)
-
-## v3.12.0-beta.8
-
-### ✨ New
-- **Strip length** is now shown in the "Measured from Preview" panel (page
-  height − top − bottom), making it easy to keep targets under the i1Pro jig's
-  240 mm maximum strip length. (#87)
-
-### 🔧 Changed
-- **Default i1Pro margin thresholds finalised** (#82): the primary reading
-  orientation of each common paper (A4/Letter Portrait, A3/Tabloid Landscape)
-  uses 26 / 9 / 38 / 9 mm (Left/Right/Top/Bottom); every other i1Pro paper and
-  orientation uses 9 mm all round. All still editable per combo.
-
-## v3.12.0-beta.7
-
-### ✨ New
-- **Thresholds shown next to measurements.** The "Measured from Preview" panel
-  now has a **min** column listing each edge's threshold beside the measured
-  margin, so set values and actual values compare at a glance. (#86)
-
-### 🐛 Fixed
-- **No more false warning when a margin equals its threshold** (e.g. 6.0 mm vs a
-  6 mm minimum). Threshold fields now also accept **one decimal place**. (#85)
-- **The page edge is now drawn in the preview**, so the thin white frame around
-  the page can't be mistaken for margin — a 0 mm guide sits exactly on the paper
-  edge. (#83)
-- **Margin Thresholds (Preferences) preselects the chosen instrument and paper**
-  even before a chart is generated. (#81)
-
-## v3.12.0-beta.6
-
-### 🐛 Fixed
-- **Editing a margin threshold now always updates the preview guides**, even
-  when the Manual-mode paper differs from the chart on screen. Preferences now
-  opens on the exact instrument/paper the inspector is using for the previewed
-  chart. (#81)
-- Default **Top** margin threshold lowered from 30 to **24 mm** (still
-  provisional; editable per combo). (#82)
-
-## v3.12.0-beta.5
-
-### 🐛 Fixed
-- **Margin inspector now follows the page you're looking at.** On multi-page
-  charts the readout and the dotted guide lines could describe a different page
-  than the one shown, so the guides landed away from the patches. The inspector
-  now measures the page currently in the preview and updates as you page
-  through. (#83)
-- **"Patch size" readout corrected and renamed.** It now reports the patch width
-  across a strip (matching a ruler measurement) instead of over-reporting, and
-  is labelled **"Patch width (in strip reading direction)"** in solid text. (#83)
-- **ColorMunki margin thresholds** are now seeded for every paper size, not just
-  the examples. (#82)
-
-## v3.12.0-beta.4
-
-### ✨ New
-- **Guided settings now carry over to Manual mode.** When you build a chart in
-  Guided mode and then switch to Manual, the Manual panel is seeded with the
-  same recipe — instrument, paper, pages, patch count (Auto), patch scale,
-  margin, density, strip-limit, border and the printer-profile name — so you can
-  fine-tune the exact settings that produced the chart. (#79)
-
-### 🐛 Fixed
-- **No more bogus “paper mismatch” warning** when printing a correctly-sized
-  full-page chart. The check compared against the printer's printable area
-  rather than the sheet, so a 210×297 mm chart on A4 warned while showing two
-  identical sizes. (#84)
-
-## v3.12.0-beta.3
-
-### 🐛 Fixed
-- **Margin measurements were wildly wrong for some charts** (e.g. a ColorMunki
-  A4 preset reading 49/56/102/94 mm). The inspector was using the Create Chart
-  paper-size dropdown, which could be stale relative to the chart actually in
-  the preview, and inflated every margin. It now measures the rendered page
-  directly. (#83)
-- **Editing a margin threshold now moves the guide lines** in the preview
-  immediately. (#81)
-- **Opening Preferences → Margin Thresholds now preselects** the instrument and
-  paper size currently active in Create Chart. (#80)
-- **Corrected the default margin thresholds** — i1Pro 10 / 10 / 30 / 10 mm and
-  ColorMunki 6 / 6 / 30 / 6 mm (Left / Right / Top / Bottom) for the common
-  paper sizes. (#82)
-
-## v3.12.0-beta.2
-
-### 🐛 Fixed
-- Fixed a crash when turning on **“Show margin threshold guide lines on preview”**
-  before generating a chart (an uninitialised state on first use).
-
-### ✨ New
-- **Margin inspector & jig-margin warnings (beta).** When you generate a chart,
-  a new **“Measured from Preview”** panel under the Create Chart preview reports
-  the chart's realised page margins (Left / Right / Top / Bottom) and the
-  estimated patch size in the reading direction, in millimetres and inches.
-  printtarg only gives you one overall margin, yet the actual margins shift with
-  patch scale, spacers, paper and orientation — so the only reliable way to know
-  them is to measure the printed page, which is what this does.
-- **Editable margin thresholds per instrument & paper.** A new **Settings →
-  Margin Thresholds** tab lets you set the minimum margin each edge needs for
-  your measuring ruler / jig, per instrument and paper size (with a description
-  field for which rig a row is for). If a generated chart's measured margin
-  falls below the minimum, the panel shows a clear warning naming the edge and
-  the threshold; otherwise it shows a green **“Margins: OK.”** Optional dotted
-  guide lines on the preview mark each threshold position (red on a violated
-  edge). Seeds ship for the i1Pro (11 mm scan run-up) and ColorMunki (derived
-  from the tested presets) — all editable starting points, adjustable to your
-  own ruler. Thanks to the Pharmacist for the report that motivated this, and to
-  Knut for the detailed design.
+Thanks to **Knut** for the detailed design and relentless testing across the beta
+series, and to the **Pharmacist** for the report that started it.
 
 ## v3.11.25
 
