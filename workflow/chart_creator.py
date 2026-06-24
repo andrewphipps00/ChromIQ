@@ -106,6 +106,10 @@ _PRINTTARG_ERROR_PATTERNS: list[tuple[re.Pattern[str], str, str]] = [
 ]
 
 
+# Instruments the ChromIQ layout engine can lay out itself (issue #93).
+ENGINE_INSTRUMENTS = {"i1", "p3", "CM", "SS"}
+
+
 def _chromiq_clip_active(p: "ChartParams") -> bool:
     """True when ChromIQ-style clipping border applies to this chart.
 
@@ -827,6 +831,13 @@ class ChartCreator:
                 self._pending_on_finish([])
             return
 
+        # ChromIQ layout engine (issue #93): when enabled (and the chart isn't
+        # using a printtarg-only clip-content feature), build the chart in-process
+        # instead of running printtarg. targen has already produced the .ti1.
+        if self._should_use_engine(params):
+            self._run_engine(params, work_dir, on_line)
+            return
+
         pt_args = self._build_printtarg_args(params)
         log.info("printtarg args: %s", pt_args)
 
@@ -844,6 +855,102 @@ class ChartCreator:
                 self._file_mgr.chart_stem(cal_target=params.cal_target),
             ),
         )
+
+    # ------------------------------------------------------------------
+    # ChromIQ layout engine path (issue #93)
+    # ------------------------------------------------------------------
+    def _should_use_engine(self, params: "ChartParams") -> bool:
+        if not bool(self._settings.get("use_chromiq_layout_engine", False)):
+            return False
+        if params.instrument not in ENGINE_INSTRUMENTS:
+            return False
+        # Clip-border *content* (ChromIQ clip style / left-clip info) is a later
+        # engine phase — fall back to the printtarg path for those charts.
+        if params.chromiq_clip_style or params.left_clip_info:
+            return False
+        return True
+
+    def _engine_build_kwargs(self, params: "ChartParams") -> dict:
+        kw: dict = dict(
+            instrument=params.instrument,
+            paper=params.paper,
+            dpi=int(params.tiff_dpi or 300),
+            randomize=not params.no_randomise,
+            spacer_on=not params.no_spacers,
+            pscale=float(params.patch_scale or 1.0),
+            sscale=float(params.spacer_scale or 1.0),
+            border=float(params.margin_mm),
+            nolimit=bool(params.no_strip_limit),
+        )
+        if params.instrument in ("i1", "p3"):
+            kw["nolpcbord"] = _effective_suppress_lb(params)
+        elif params.instrument == "CM":
+            kw["density"] = 3 if params.triple_density else (
+                2 if params.double_density else 1)
+        elif params.instrument == "SS":
+            kw["hflag"] = bool(params.double_density)   # hexagon patches
+        return kw
+
+    def _run_engine(
+        self,
+        params: "ChartParams",
+        work_dir: Path,
+        on_line: Callable[[str], None],
+    ) -> None:
+        from workflow.layout_engine import chart as le_chart
+
+        stem = self._file_mgr.chart_stem(cal_target=params.cal_target)
+        ti1 = work_dir / f"{stem}.ti1"
+        on_line("[ChromIQ layout engine] building chart from the targen .ti1…")
+        try:
+            result = le_chart.build_chart(
+                ti1, work_dir / stem, **self._engine_build_kwargs(params))
+        except Exception as exc:  # noqa: BLE001 — surface any engine failure
+            log.exception("ChromIQ layout engine failed")
+            on_line(f"[ERROR] ChromIQ layout engine: {exc}")
+            if self._pending_on_finish:
+                self._pending_on_finish([])
+            return
+
+        on_line(
+            f"[ChromIQ layout engine] {result.layout.total_patches} patches "
+            f"({result.layout.steps_in_pass}×{result.layout.passes}), "
+            f"{result.layout.pages} page(s), random start {result.seed}")
+        if result.low_contrast_passes:
+            on_line(f"[ChromIQ layout engine] note: low patch/spacer contrast in "
+                    f"{len(result.low_contrast_passes)} strip(s)")
+
+        tiffs = sorted(result.tiff_paths or [])
+        if tiffs and self._pending_params is not None:
+            self._write_channel_sidecar(work_dir, stem, self._pending_params)
+            self._embed_layout_geometry(work_dir, stem, result, params)
+            self._stamp_tiff_metadata(tiffs, self._pending_params)
+
+        if self._pending_on_finish:
+            self._pending_on_finish(tiffs)
+
+    def _embed_layout_geometry(self, work_dir: Path, stem: str, result,
+                               params: "ChartParams") -> None:
+        """Fold the engine's strip/patch geometry + recipe into channels.json.
+
+        The Measure-tab highlighter reads this for exact, guess-free strip
+        recognition; the recipe enables the Create Chart ⇄ editor round-trip.
+        """
+        import json
+        sidecar = work_dir / f"{stem}.channels.json"
+        strips = work_dir / f"{stem}.strips.json"
+        try:
+            doc = json.loads(sidecar.read_text()) if sidecar.exists() else {}
+            layout = json.loads(strips.read_text()) if strips.exists() else {}
+            layout["seed"] = result.seed
+            layout["color_rep"] = result.color_rep
+            layout["recipe"] = self._engine_build_kwargs(params)
+            doc["layout"] = layout
+            sidecar.write_text(json.dumps(doc))
+            if strips.exists():
+                strips.unlink()   # geometry now lives in channels.json
+        except Exception as exc:  # noqa: BLE001
+            log.warning("Could not embed layout geometry: %s", exc)
 
     def _printtarg_done(
         self,

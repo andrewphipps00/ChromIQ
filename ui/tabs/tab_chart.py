@@ -2271,6 +2271,22 @@ class TabChart(QWidget):
             pt_args += shlex.split(p.extra_printtarg_args)
         pt_args.append(self._preview_target_name("manual"))
 
+        # When the ChromIQ layout engine is active it replaces printtarg for the
+        # generate path, so the preview shows what the engine will build.
+        from workflow.chart_creator import ENGINE_INSTRUMENTS
+        use_engine = (
+            bool(self._settings.get("use_chromiq_layout_engine", False))
+            and p.instrument in ENGINE_INSTRUMENTS
+            and not (p.chromiq_clip_style or p.left_clip_info))
+
+        def _layout_cmd() -> str:
+            if use_engine:
+                return self._engine_info_line(
+                    p.instrument, p.paper, p.tiff_dpi, dd=p.double_density,
+                    td=triple, eff_lb=(p.disable_left_border or force_l),
+                    nsl=p.no_strip_limit, pscale=p.patch_scale, margin=p.margin_mm)
+            return f"printtarg {' '.join(pt_args)}"
+
         pages = (
             self._manual_pages_spin.value()
             if self._manual_pages_spin is not None else 1
@@ -2319,7 +2335,7 @@ class TabChart(QWidget):
                        "Builds a fresh chart from your settings — the patches "
                        "will NOT match the preset.").format(notes=" · ".join(notes))
                     + f"\ntargen {' '.join(targen_args)}"
-                    + f"\nprinttarg {' '.join(pt_args)}"
+                    + f"\n{_layout_cmd()}"
                 )
             elif printtarg_changed:
                 info = (
@@ -2372,7 +2388,7 @@ class TabChart(QWidget):
                     tr("Manual mode — your current configuration ({notes}):").format(
                         notes=" · ".join(notes))
                     + f"\ntargen {' '.join(targen_args)}"
-                    + f"\nprinttarg {' '.join(pt_args)}"
+                    + f"\n{_layout_cmd()}"
                 )
         self._manual_info_lbl.setText(info)
         self._refresh_name_prefix()     # keep the name field plain (no prefix)
@@ -5198,6 +5214,51 @@ class TabChart(QWidget):
     # Patch count display
     # ------------------------------------------------------------------
 
+    def _engine_geom(self, instr: str, *, dd: bool, td: bool, eff_lb: bool,
+                     nsl: bool, pscale: float, margin: float):
+        """Build a layout-engine Geom from the guided/manual effective values."""
+        from workflow.layout_engine import instruments
+        kw: dict = dict(spacer_on=True, pscale=float(pscale),
+                        border=float(margin), nolimit=bool(nsl))
+        if instr in ("i1", "p3"):
+            kw["nolpcbord"] = bool(eff_lb)
+        elif instr == "CM":
+            kw["density"] = 3 if td else (2 if dd else 1)
+        elif instr == "SS":
+            kw["hflag"] = bool(dd)
+        return instruments.build(instr, **kw)
+
+    def _engine_capacity(self, instr: str, paper: str, *, dd: bool, td: bool,
+                         eff_lb: bool, nsl: bool, pscale: float, margin: float):
+        """Patches per sheet from the ChromIQ engine (None if it can't lay out)."""
+        try:
+            from workflow.layout_engine import geometry, papers
+            geom = self._engine_geom(instr, dd=dd, td=td, eff_lb=eff_lb, nsl=nsl,
+                                     pscale=pscale, margin=margin)
+            w_mm, h_mm = papers.dimensions_mm(paper)
+            return geometry.patches_per_sheet(geom, w_mm, h_mm)
+        except Exception:
+            return None
+
+    def _engine_info_line(self, instr: str, paper: str, dpi: int, *, dd: bool,
+                          td: bool, eff_lb: bool, nsl: bool, pscale: float,
+                          margin: float) -> str:
+        """One-line description of what the ChromIQ engine will build."""
+        bits = [tr("ChromIQ layout engine"), instr, paper, f"{dpi} dpi",
+                tr("margin {mm:g} mm").format(mm=margin)]
+        if abs(pscale - 1.0) > 0.01:
+            bits.append(tr("patch ×{s:.2f}").format(s=pscale))
+        if instr in ("i1", "p3"):
+            bits.append(tr("clip border off") if eff_lb else tr("clip border on"))
+        if instr == "CM":
+            bits.append({3: tr("extra-high density"), 2: tr("high density")}.get(
+                3 if td else (2 if dd else 1), tr("hand-held")))
+        if instr == "SS" and dd:
+            bits.append(tr("hexagonal"))
+        if nsl:
+            bits.append(tr("no strip-length cap"))
+        return " · ".join(bits)
+
     def _update_patch_count(self) -> None:
         instr  = self._instr_combo.currentData() or "i1"
         paper  = self._paper_combo.currentData() or "A4"
@@ -5233,9 +5294,15 @@ class TabChart(QWidget):
             eff_margin = INSTRUMENT_DEFAULT_MARGIN.get(instr, 6)
             eff_scale = 1.0
 
-        per_sheet = query_patches(instr, paper, dd, suppress_lb=eff_lb,
-                                  margin_mm=eff_margin, patch_scale=eff_scale,
-                                  triple_density=td, no_strip_limit=nsl_eff)
+        engine_on = bool(self._settings.get("use_chromiq_layout_engine", False))
+        if engine_on:
+            per_sheet = self._engine_capacity(
+                instr, paper, dd=dd, td=td, eff_lb=eff_lb, nsl=nsl_eff,
+                pscale=eff_scale, margin=eff_margin)
+        else:
+            per_sheet = query_patches(instr, paper, dd, suppress_lb=eff_lb,
+                                      margin_mm=eff_margin, patch_scale=eff_scale,
+                                      triple_density=td, no_strip_limit=nsl_eff)
         if per_sheet is not None:
             total = per_sheet * pages
             self._predicted_patch_count = total   # for the Suggest-name button (#62)
@@ -5296,12 +5363,21 @@ class TabChart(QWidget):
         grey_flag = "-n" if (precond_active and precond_path) else "-g"
 
         target_name = self._preview_target_name("guided")
-        info = (
-            tr("Guided mode applies these fixed settings:")
-            + f"\ntargen -d2 -G -e{wp} -B{bp} {grey_flag}{grey_steps}{precond_line} {target_name}\n"
-            f"printtarg -i{preview_instr} -p{paper} -t{dpi} {scale_flag}{lb_flag}{dd_flag}{margin_flag}{strip_flag}{target_name}"
-            f"{recommendation}"
-        )
+        targen_line = (f"targen -d2 -G -e{wp} -B{bp} "
+                       f"{grey_flag}{grey_steps}{precond_line} {target_name}")
+        if engine_on:
+            layout_line = self._engine_info_line(
+                instr, paper, dpi, dd=dd, td=td, eff_lb=eff_lb, nsl=nsl_eff,
+                pscale=eff_scale, margin=eff_margin)
+            info = (tr("Guided mode applies these fixed settings:")
+                    + f"\n{targen_line}\n{layout_line}{recommendation}")
+        else:
+            info = (
+                tr("Guided mode applies these fixed settings:")
+                + f"\n{targen_line}\n"
+                f"printtarg -i{preview_instr} -p{paper} -t{dpi} {scale_flag}{lb_flag}{dd_flag}{margin_flag}{strip_flag}{target_name}"
+                f"{recommendation}"
+            )
         if hasattr(self, "_guided_info_lbl"):
             self._guided_info_lbl.setText(info)
 
