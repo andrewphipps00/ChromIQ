@@ -622,6 +622,15 @@ class ChartCreator:
         progress_cb: Callable[[str], None] | None = None,
     ) -> int:
         """Return max patches for the given params (fast lookup or binary search)."""
+        # ChromIQ layout engine: when active it owns the packing, so the auto
+        # count is its own capacity × pages (not the printtarg DB / binary search).
+        eng = self._engine_total_patches(params)
+        if eng is not None:
+            if progress_cb:
+                progress_cb(f"ChromIQ layout engine: {eng} patches "
+                            f"({params.pages} page(s))")
+            return eng
+
         triple = params.triple_density and params.instrument == "CM"
         # The patch_db only covers the headline layout knobs (-a, -m, -L, -P,
         # -h). Anything else that influences capacity (-A spacer scale, -n
@@ -890,6 +899,30 @@ class ChartCreator:
         elif params.instrument == "SS":
             kw["hflag"] = bool(params.double_density)   # hexagon patches
         return kw
+
+    _ENGINE_GEOM_KEYS = {"hflag", "density", "spacer_on", "pscale", "sscale",
+                         "border", "nolpcbord", "nolimit"}
+
+    def _engine_total_patches(self, params: "ChartParams") -> int | None:
+        """Patches the engine fits across all pages (capacity × pages), or None.
+
+        Used to drive the targen ``-f`` count in Guided and Manual-auto so the
+        chart fills the page(s) under the engine's own packing.
+        """
+        if not self._should_use_engine(params):
+            return None
+        try:
+            from workflow.layout_engine import geometry, instruments, papers
+            kw = self._engine_build_kwargs(params)
+            geom = instruments.build(
+                kw["instrument"],
+                **{k: v for k, v in kw.items() if k in self._ENGINE_GEOM_KEYS})
+            w_mm, h_mm = papers.dimensions_mm(kw["paper"])
+            per_sheet = geometry.patches_per_sheet(geom, w_mm, h_mm)
+            return per_sheet * max(1, int(params.pages))
+        except Exception as exc:  # noqa: BLE001
+            log.warning("engine patch estimate failed: %s", exc)
+            return None
 
     def _run_engine(
         self,
@@ -1226,6 +1259,9 @@ class ChartCreator:
     # ------------------------------------------------------------------
 
     def _lookup_patches(self, p: ChartParams) -> int:
+        eng = self._engine_total_patches(p)
+        if eng is not None:
+            return eng
         eff_lb = _effective_suppress_lb(p)
         triple = p.triple_density and p.instrument == "CM"
         layout_extras = _extra_printtarg_affects_layout(p.extra_printtarg_args)

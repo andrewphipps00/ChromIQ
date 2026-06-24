@@ -104,6 +104,27 @@ def test_generate_uses_engine(tmp_path: Path) -> None:
     assert not (run_dir / f"{stem}.strips.json").exists()
 
 
+def test_auto_count_uses_engine_capacity(tmp_path: Path) -> None:
+    """Guided (_lookup_patches) and Manual-auto (estimate_patches) request the
+    engine's own capacity × pages so the chart fills the page."""
+    from workflow.layout_engine import geometry, instruments, papers
+    creator = ChartCreator(_EngineRunner(), _MockFileManager(tmp_path / "p"),
+                           _EngineSettings())
+    p = ChartParams(instrument="i1", paper="A4", pages=1)
+    kw = creator._engine_build_kwargs(p)
+    geom = instruments.build(
+        kw["instrument"],
+        **{k: v for k, v in kw.items() if k in creator._ENGINE_GEOM_KEYS})
+    cap = geometry.patches_per_sheet(geom, *papers.dimensions_mm(p.paper))
+    assert cap > 0
+    assert creator._engine_total_patches(p) == cap
+    assert creator._lookup_patches(p) == cap          # guided generation count
+    assert creator.estimate_patches(p) == cap         # manual-auto count
+    # pages multiply the requested count
+    p2 = ChartParams(instrument="i1", paper="A4", pages=3)
+    assert creator._lookup_patches(p2) == cap * 3
+
+
 def test_engine_build_kwargs_mapping(tmp_path: Path) -> None:
     creator = ChartCreator(_EngineRunner(), _MockFileManager(tmp_path / "p"),
                            _EngineSettings())
