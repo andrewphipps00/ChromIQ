@@ -1978,5 +1978,6 @@
   "By default the engine separates patches with spacers drawn from the five ChromIQ accent colours, automatically picking the one with the most contrast at each gap so the instrument can always find the patch edges. Turn this on to choose your own set of spacer colours instead — click a swatch to change it. The engine still auto-picks the highest-contrast one from your set per gap, so keep them varied (and watch the low-contrast warning).": "By default the engine separates patches with spacers drawn from the five ChromIQ accent colours, automatically picking the one with the most contrast at each gap so the instrument can always find the patch edges. Turn this on to choose your own set of spacer colours instead — click a swatch to change it. The engine still auto-picks the highest-contrast one from your set per gap, so keep them varied (and watch the low-contrast warning).",
   "Line distance:": "Line distance:",
   "Line thickness:": "Line thickness:",
-  "The ChromIQ layout engine is on — set the page layout in the editor after creating the chart.": "The ChromIQ layout engine is on — set the page layout in the editor after creating the chart."
+  "The ChromIQ layout engine is on — set the page layout in the editor after creating the chart.": "The ChromIQ layout engine is on — set the page layout in the editor after creating the chart.",
+  "≈ {n} fit one page": "≈ {n} fit one page"
 }

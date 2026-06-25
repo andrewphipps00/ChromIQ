@@ -972,6 +972,12 @@ class _NewChartDialog(QDialog):
         self._count.setValue(200)
         self._count.setObjectName("compact_input")
         seed_row.addWidget(self._count)
+        # Engine-on hint: how many patches fit one page with the current
+        # instrument/paper/mode, so the user can pick a count that fills pages
+        # (the engine paginates as many pages as the count needs) (#93).
+        self._engine_cap_hint = QLabel("", src_box)
+        self._engine_cap_hint.setStyleSheet("color: palette(mid); font-size: 11px;")
+        seed_row.addWidget(self._engine_cap_hint)
         seed_row.addStretch(1)
         sl.addLayout(seed_row)
         sl.addWidget(self._mode_blank)
@@ -1101,6 +1107,7 @@ class _NewChartDialog(QDialog):
         # Triple ↔ Double mutual exclusion + triple-density preset apply
         self._cb_td.toggled.connect(self._on_td_toggled)
         self._cb_h.toggled.connect(self._on_dd_toggled)
+        self._cb_L.toggled.connect(self._update_engine_cap_hint)  # clip affects capacity
         # Initial visibility for the conditional rows
         self._instr.currentIndexChanged.connect(self._refresh_instr_widgets)
         self._refresh_instr_widgets()
@@ -2474,6 +2481,37 @@ class _NewChartDialog(QDialog):
         """Show the custom W/H row only when "Custom" is the selection."""
         self._paper_custom_row.setVisible(
             self._paper.currentData() == "custom")
+        self._update_engine_cap_hint()
+
+    def _update_engine_cap_hint(self, *_a) -> None:
+        """Show how many patches fit one page (engine, default layout) for the
+        current instrument/paper/mode — only when the engine is active (#93)."""
+        hint = getattr(self, "_engine_cap_hint", None)
+        if hint is None:
+            return
+        if not (self._settings is not None
+                and bool(self._settings.get("use_chromiq_layout_engine", False))):
+            hint.setText("")
+            return
+        try:
+            from workflow.layout_engine import geometry, instruments, papers
+            code = self._instr.currentData()
+            eng = {"i1": "i1", "3p": "p3", "CM": "CM"}.get(code)
+            paper = self._paper.currentData()
+            if eng is None or paper in (None, "custom"):
+                hint.setText("")
+                return
+            if eng == "CM":
+                density = 3 if self._cb_td.isChecked() else (
+                    2 if self._cb_h.isChecked() else 1)
+                geom = instruments.build(eng, density=density)
+            else:
+                geom = instruments.build(eng, nolpcbord=self._cb_L.isChecked())
+            w_mm, h_mm = papers.dimensions_mm(paper)
+            cap = geometry.patches_per_sheet(geom, w_mm, h_mm)
+            hint.setText(tr("≈ {n} fit one page").format(n=cap))
+        except Exception:  # noqa: BLE001 — hint is best-effort
+            hint.setText("")
 
     def _refresh_instr_widgets(self) -> None:
         """Show/hide instrument-conditional options.
@@ -2498,11 +2536,13 @@ class _NewChartDialog(QDialog):
         if not is_cm:
             self._cb_h.setChecked(False)
             self._cb_td.setChecked(False)
+        self._update_engine_cap_hint()
 
     def _on_dd_toggled(self, on: bool) -> None:
         """Toggling double density off triple density (mutual exclusion)."""
         if on and self._cb_td.isChecked():
             self._cb_td.setChecked(False)
+        self._update_engine_cap_hint()
 
     def _on_td_toggled(self, on: bool) -> None:
         """Apply / undo the triple-density preset on the layout widgets.
@@ -2538,6 +2578,7 @@ class _NewChartDialog(QDialog):
             if "P" in stash:
                 self._cb_P.setChecked(bool(stash["P"]))
             self._td_stash = None
+        self._update_engine_cap_hint()
 
     def _update_paste_count(self) -> None:
         parsed = R.parse_color_values(self._paste_edit.toPlainText())
