@@ -26,14 +26,52 @@ class LayoutOptionsPanel(QWidget):
 
     changed = pyqtSignal()
 
+    INSTRUMENTS = [("i1", "i1Pro"), ("p3", "i1Pro 3+"),
+                   ("CM", "ColorMunki"), ("SS", "SpectroScan")]
+
+    @staticmethod
+    def modes_for(inst: str) -> list[tuple[str, str]]:
+        if inst in ("i1", "p3"):
+            return [("clip", tr("Clip border on")),
+                    ("noclip", tr("Clip border off — more patches"))]
+        if inst == "CM":
+            return [("freehand", tr("Hand-held")), ("high", tr("High density (rig)")),
+                    ("extrahigh", tr("Extra-high density"))]
+        if inst == "SS":
+            return [("flat", tr("Rectangular")), ("hex", tr("Hexagonal — denser"))]
+        return [("default", tr("Default"))]
+
     def __init__(self, parent: QWidget | None = None, *,
-                 with_calibration: bool = False) -> None:
+                 with_calibration: bool = False, with_selectors: bool = False) -> None:
         super().__init__(parent)
         self._loading = False
         self._with_calibration = with_calibration
+        self._with_selectors = with_selectors
         v = QVBoxLayout(self)
         v.setContentsMargins(0, 0, 0, 0)
         v.setSpacing(10)
+
+        self.instr = self.paper = self.mode = None
+        if with_selectors:
+            sel = QGridLayout()
+            sel.addWidget(QLabel(tr("Instrument:"), self), 0, 0)
+            self.instr = NoScrollComboBox(self)
+            for k, lbl in self.INSTRUMENTS:
+                self.instr.addItem(lbl, k)
+            sel.addWidget(self.instr, 0, 1)
+            sel.addWidget(QLabel(tr("Paper:"), self), 0, 2)
+            self.paper = NoScrollComboBox(self)
+            sel.addWidget(self.paper, 0, 3)
+            sel.addWidget(QLabel(tr("Mode:"), self), 1, 0)
+            self.mode = NoScrollComboBox(self)
+            sel.addWidget(self.mode, 1, 1)
+            sel.setColumnStretch(1, 1)
+            sel.setColumnStretch(3, 1)
+            v.addLayout(sel)
+            self.instr.currentIndexChanged.connect(self._on_instr_changed)
+            self.paper.currentIndexChanged.connect(self._emit)
+            self.mode.currentIndexChanged.connect(self._emit)
+            self._on_instr_changed()
 
         def mm(special_auto: bool = False, top: float = 300.0) -> NoScrollDoubleSpinBox:
             sb = NoScrollDoubleSpinBox(self)
@@ -195,12 +233,62 @@ class LayoutOptionsPanel(QWidget):
             self.cal_path_edit.setText(path or "")
 
     # ------------------------------------------------------------------
+    def _on_instr_changed(self, *_a) -> None:
+        from workflow.layout_engine import papers
+        if self.instr is None:
+            return
+        self._loading = True
+        inst = self.instr.currentData() or "i1"
+        prev_paper = self.paper.currentData()
+        self.paper.clear()
+        for code, label, _dims in papers.list_papers(inst):
+            self.paper.addItem(label, code)
+        i = self.paper.findData(prev_paper)
+        self.paper.setCurrentIndex(i if i >= 0 else 0)
+        prev_mode = self.mode.currentData()
+        self.mode.clear()
+        for k, lbl in self.modes_for(inst):
+            self.mode.addItem(lbl, k)
+        j = self.mode.findData(prev_mode)
+        self.mode.setCurrentIndex(j if j >= 0 else 0)
+        self._loading = False
+        self._emit()
+
+    def selection(self) -> tuple[str, str, str]:
+        """(instrument, paper, mode) from the selectors (when present)."""
+        if self.instr is None:
+            return "i1", "A4", "default"
+        return (self.instr.currentData() or "i1",
+                self.paper.currentData() or "A4",
+                self.mode.currentData() or "default")
+
+    def get_recipe(self, base: LayoutRecipe | None = None) -> LayoutRecipe:
+        """Build a complete recipe from the selectors (if any) + the controls."""
+        from workflow.layout_engine.presets import default_recipe
+        if self.instr is not None:
+            inst, paper, mode = self.selection()
+            r = default_recipe(inst, paper, mode=mode)
+        else:
+            r = base if base is not None else LayoutRecipe()
+        return self.apply_to_recipe(r)
+
     def _emit(self, *_a) -> None:
         if not self._loading:
             self.changed.emit()
 
     def set_recipe(self, r: LayoutRecipe) -> None:
         self._loading = True
+        if self.instr is not None:
+            ii = self.instr.findData(r.instrument)
+            self.instr.setCurrentIndex(ii if ii >= 0 else 0)
+            self._on_instr_changed()
+            self._loading = True
+            pi = self.paper.findData(r.paper)
+            if pi >= 0:
+                self.paper.setCurrentIndex(pi)
+            mi = self.mode.findData(r.mode())
+            if mi >= 0:
+                self.mode.setCurrentIndex(mi)
         self.pscale.setValue(r.pscale)
         self.sscale.setValue(r.sscale)
         i = self.spacer_mode.findData(r.spacer_mode)

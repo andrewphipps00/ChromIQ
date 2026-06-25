@@ -2152,6 +2152,16 @@ class TabChart(QWidget):
         # Cal-target prefix changes the displayed name — refresh the preview too.
         self._cal_target_check.toggled.connect(self._refresh_manual_command_preview)
 
+        # ChromIQ layout panel (engine on): the full per-chart layout mirror,
+        # replacing the printtarg controls. Hidden when the engine is off.
+        from ui.dialogs.layout_options_panel import LayoutOptionsPanel
+        self._manual_layout_panel = LayoutOptionsPanel(
+            inner, with_selectors=True, with_calibration=True)
+        self._manual_layout_panel.changed.connect(self._refresh_manual_command_preview)
+        inner_layout.addWidget(self._manual_layout_panel)
+        self._manual_layout_panel.setVisible(False)
+        self._manual_panel_inited = False
+
         # Layout-engine preset bar (issue #93): shown only when the ChromIQ
         # layout engine is active. Summarises the active preset (instrument ×
         # paper × mode), flags when the current settings differ from it, and
@@ -2418,12 +2428,13 @@ class TabChart(QWidget):
                     + f"\ntargen {' '.join(targen_args)}"
                     + f"\n{_layout_cmd()}"
                 )
-        # Relabel the layout section and fold the active-preset status into the
-        # single info box (no second info box) when the engine is active.
+        # Engine on: the printtarg layout group is replaced by the layout panel.
+        if getattr(self, "_manual_layout_panel", None) is not None:
+            if use_engine and not self._manual_panel_inited:
+                self._init_manual_layout_panel()
+            self._manual_layout_panel.setVisible(use_engine)
         if getattr(self, "_manual_printtarg_grp", None) is not None:
-            self._manual_printtarg_grp.setTitle(
-                tr("ChromIQ chart layout") if use_engine
-                else tr("{tool} parameters").format(tool="printtarg"))
+            self._manual_printtarg_grp.setVisible(not use_engine)
         status = self._layout_preset_status() if use_engine else None
         if status is not None:
             summary, modified = status
@@ -2440,43 +2451,16 @@ class TabChart(QWidget):
         from workflow.layout_engine.presets import PresetStore
         return PresetStore.from_named_dict(load_presets("chart_layout", self._settings))
 
-    def _current_layout_recipe(self):
-        """A LayoutRecipe reflecting the current Manual controls."""
-        from workflow.chart_creator import _effective_suppress_lb
-        from workflow.layout_engine.presets import LayoutRecipe
-        p = self._collect_manual()
-        triple = p.triple_density and p.instrument == "CM"
-        r = LayoutRecipe(
-            instrument=p.instrument, paper=p.paper, dpi=int(p.tiff_dpi or 300),
-            spacer_on=not p.no_spacers, pscale=float(p.patch_scale or 1.0),
-            sscale=float(p.spacer_scale or 1.0), border=float(p.margin_mm),
-            nolimit=bool(p.no_strip_limit))
-        if p.instrument in ("i1", "p3"):
-            r.clip_border = not _effective_suppress_lb(p)
-        elif p.instrument == "CM":
-            r.cm_density = 3 if triple else (2 if p.double_density else 1)
-        elif p.instrument == "SS":
-            r.hflag = bool(p.double_density)
-        return r
+    def _init_manual_layout_panel(self) -> None:
+        """Seed the layout panel from the active preset for its current
+        selection (first time the engine is shown in Manual)."""
+        self._manual_panel_inited = True
+        inst, paper, mode = self._manual_layout_panel.selection()
+        self._manual_layout_panel.set_recipe(self._layout_store().get(inst, paper, mode))
 
-    def _apply_layout_recipe_to_manual(self, r) -> None:
-        """Set the Manual controls from a LayoutRecipe (Reset to preset)."""
-        self._set_manual_value("printtarg", "-i", r.instrument)
-        self._set_manual_value("printtarg", "-p", r.paper)
-        self._set_manual_value("printtarg", "-a", round(float(r.pscale), 3))
-        self._set_manual_value("printtarg", "-m", int(round(r.border)))
-        self._set_manual_value("printtarg", "-A", round(float(r.sscale), 3))
-        self._set_manual_value("printtarg", "-n", not r.spacer_on)
-        self._set_manual_value("printtarg", "-P", bool(r.nolimit))
-        if r.instrument in ("i1", "p3"):
-            self._set_manual_value("printtarg", "-L", not r.clip_border)
-        elif r.instrument == "CM":
-            if self._manual_td_check is not None:
-                self._manual_td_check.setChecked(r.cm_density >= 3)
-            self._set_manual_value("printtarg", "-h", r.cm_density == 2)
-        elif r.instrument == "SS":
-            self._set_manual_value("printtarg", "-h", bool(r.hflag))
-        self._refresh_manual_command_preview()
+    def _current_layout_recipe(self):
+        """The LayoutRecipe from the engine layout panel."""
+        return self._manual_layout_panel.get_recipe()
 
     @staticmethod
     def _layout_recipe_values(r) -> dict:
@@ -2517,7 +2501,8 @@ class TabChart(QWidget):
         except Exception as exc:
             log.warning("reset-to-preset failed: %s", exc)
             return
-        self._apply_layout_recipe_to_manual(preset)
+        self._manual_layout_panel.set_recipe(preset)
+        self._refresh_manual_command_preview()
 
     def _update_manual_preset(self) -> None:
         from core.preset_store import save_presets
@@ -6813,6 +6798,21 @@ class TabChart(QWidget):
         p.left_clip_info       = self._manual_left_clip_check.isChecked()
         p.chromiq_clip_style   = bool(self._settings.get("i1pro_chromiq_clip_style", False))
         p.is_manual            = True
+
+        # ChromIQ layout engine on: the layout panel is the source of truth for
+        # the chart layout. Take instrument/paper + the full recipe + calibration
+        # from it (the printtarg layout widgets are hidden), so every panel option
+        # takes effect.
+        if (getattr(self, "_manual_layout_panel", None) is not None
+                and bool(self._settings.get("use_chromiq_layout_engine", False))):
+            recipe = self._manual_layout_panel.get_recipe()
+            p.instrument = recipe.instrument
+            p.paper = recipe.paper
+            p.tiff_dpi = recipe.dpi
+            p.layout_recipe = recipe
+            cal_path, apply_cal = self._manual_layout_panel.cal_settings()
+            p.engine_cal_path = cal_path
+            p.engine_apply_cal = apply_cal
 
         # Auto -e / -B / -g substitution. For the live preview we use a
         # cheap patch_db estimate when -f itself is auto; the real
