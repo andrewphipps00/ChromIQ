@@ -1246,7 +1246,17 @@ class SettingsDialog(QDialog):
         _sync_layout_enabled(self._layout_engine_check.isChecked())
 
         self._on_layout_instr_changed()   # populate paper+mode, then load
-        return page
+
+        # The full layout panel is tall — wrap it so the tab scrolls vertically
+        # instead of forcing the Settings window past the screen height.
+        from PyQt6.QtCore import Qt
+        from PyQt6.QtWidgets import QScrollArea
+        scroll = QScrollArea(self)
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setWidget(page)
+        return scroll
 
     def _on_layout_instr_changed(self) -> None:
         from workflow.layout_engine import papers

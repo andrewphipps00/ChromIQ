@@ -304,7 +304,7 @@ class LayoutOptionsPanel(QWidget):
         self.dpi.setSuffix(" dpi"); self.dpi.valueChanged.connect(self._emit)
         self.nolimit = QCheckBox(tr("Don't cap strip length"), self)
         self.nolimit.toggled.connect(self._emit)
-        self.max_strip = mm(special_auto=True)
+        self.max_strip = mm(special_auto=True, top=2000.0)  # large paper / roll media
         self.offx = small_mm(top=300.0)
         self.offy = small_mm(top=300.0)
         self.strip_pat = QLineEdit(self); self.strip_pat.textChanged.connect(self._emit)
