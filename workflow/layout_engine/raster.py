@@ -257,20 +257,10 @@ def render_pages(
                 except Exception:             # default bitmap font: no anchor
                     _tw = int(draw.textlength(_lbl, font=font))
                     draw.text((_cx - _tw // 2, _y), _lbl, font=font, fill=(0, 0, 0))
-                if underline_on:              # rule under the label
+                if underline_on and underline_mode == "cycle":   # one accent / strip
                     _ly = _y + ind_px + ul_gap
-                    _yb = _ly + ul_th - 1
-                    if underline_mode == "black":
-                        draw.rectangle([x0, _ly, x0 + pw_px - 1, _yb], fill=(0, 0, 0))
-                    elif underline_mode == "cycle":   # one accent per strip
-                        draw.rectangle([x0, _ly, x0 + pw_px - 1, _yb],
-                                       fill=ACCENT_RGB[global_strip % len(ACCENT_RGB)])
-                    else:                              # 5 equal accent segments
-                        _n = len(ACCENT_RGB)
-                        for _k in range(_n):
-                            _sx0 = x0 + round(pw_px * _k / _n)
-                            _sx1 = x0 + round(pw_px * (_k + 1) / _n) - 1
-                            draw.rectangle([_sx0, _ly, _sx1, _yb], fill=ACCENT_RGB[_k])
+                    draw.rectangle([x0, _ly, x0 + pw_px - 1, _ly + ul_th - 1],
+                                   fill=ACCENT_RGB[global_strip % len(ACCENT_RGB)])
             for j, gslot in enumerate(col_slots):
                 y0 = px(place.y_of(j))
                 rgb = rgb_by_slot[gslot]
@@ -281,6 +271,25 @@ def render_pages(
                         [x0, y0 + pl_px, x0 + pw_px - 1, y0 + pl_px + sp_px - 1],
                         fill=contrast.spacer_for_mode(spacer_mode, rgb, nxt),
                     )
+        # Full-width rule under the whole label row (one continuous line):
+        # "segments" splits it into the five accents across the entire width;
+        # "black" is a single plain line. ("cycle" is drawn per strip above.)
+        if (draw_indicators and underline_mode in ("segments", "black")
+                and n_passes > 0):
+            _ly = px(place.leader_top) + ind_px + ul_gap
+            _yb = _ly + ul_th - 1
+            x_left = px(place.x_of(0))
+            x_right = px(place.x_of(n_passes - 1)) + pw_px - 1
+            if underline_mode == "black":
+                draw.rectangle([x_left, _ly, x_right, _yb], fill=(0, 0, 0))
+            else:                                     # 5 equal segments full-width
+                _span = x_right - x_left + 1
+                _n = len(ACCENT_RGB)
+                for _k in range(_n):
+                    _sx0 = x_left + round(_span * _k / _n)
+                    _sx1 = x_left + round(_span * (_k + 1) / _n) - 1
+                    draw.rectangle([_sx0, _ly, _sx1, _yb], fill=ACCENT_RGB[_k])
+
         # Bottom-of-sheet text: custom chart text + optional command stamp,
         # drawn in the bottom margin (clear of the patches).
         _btxt = [t for t in (chart_text, stamp_text) if t]
