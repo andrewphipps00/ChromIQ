@@ -50,6 +50,29 @@ def test_named_preset_restores_engine_recipe(qapp):
         assert getattr(out, f) == getattr(rec, f), f
 
 
+def test_editor_carry_back_engine_recipe(qapp, tmp_path):
+    """A chart adopted from the editor with an engine channels.json turns the
+    engine on and seeds the Manual panel; a non-engine one turns it off (#93)."""
+    import json
+    t = _tab(qapp)
+    t._settings.set("use_chromiq_layout_engine", False)
+    rec = LayoutRecipe(instrument="i1", paper="A4", clip_border=True,
+                       underline_mode="segments", clip_content_mode="branding")
+    ch = tmp_path / "EditedChart.channels.json"
+    ch.write_text(json.dumps({"layout": {"engine": "chromiq", "seed": 7,
+                                         "recipe": replace(rec, seed=None).to_dict()}}))
+    t._carry_engine_recipe_from(ch)
+    assert t._settings.get("use_chromiq_layout_engine", False) is True
+    assert not t._manual_layout_grp.isHidden()
+    out = t._manual_layout_panel.get_recipe()
+    assert out.underline_mode == "segments"
+    assert out.clip_content_mode == "branding"
+    # a chart without an engine recipe turns the engine back off
+    t._carry_engine_recipe_from(tmp_path / "missing.channels.json")
+    assert t._settings.get("use_chromiq_layout_engine", False) is False
+    assert not t._manual_printtarg_grp.isHidden()
+
+
 def test_preset_auto_toggles_engine(qapp):
     # Engine off; loading a preset WITH a layout_recipe turns it on.
     t = _tab(qapp)

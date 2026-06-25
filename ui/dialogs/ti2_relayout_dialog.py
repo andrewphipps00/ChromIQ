@@ -5534,6 +5534,13 @@ class Ti2RelayoutDialog(QDialog):
         best-effort and never abort the save.
         """
         target.mkdir(parents=True, exist_ok=True)
+        # Engine charts: render the deliverable with the ChromIQ engine using the
+        # current panel recipe, so the saved chart matches the engine layout and
+        # carries its recipe (in channels.json) for the carry-back to Create
+        # Chart. Grid patch edits aren't re-fed to the engine — engine charts are
+        # laid out from their .ti1 (#93).
+        if self._engine_active():
+            return self._write_engine_chart_into(target, name)
         # regenerate straight into the target, then bake per-spacer paint into pages
         res = R.regenerate(self._spec, self._program_from_grid(), target,
                            self._bin_dir,
@@ -5581,6 +5588,32 @@ class Ti2RelayoutDialog(QDialog):
         if tag_note:
             msg += "\n" + tag_note
         return msg
+
+    def _write_engine_chart_into(self, target: Path, name: str) -> str:
+        """Render the deliverable via the ChromIQ engine into *target* and embed
+        the recipe in channels.json (so Create Chart can adopt it) (#93)."""
+        import json
+        from workflow.layout_engine import chart as le_chart
+        recipe = self._engine_panel.get_recipe()
+        result = le_chart.build_chart(str(self._engine_ti1), target / name,
+                                      **recipe.build_kwargs())
+        # Fold the strip geometry + recipe into channels.json, mirroring the
+        # Create Chart build (workflow.chart_creator._embed_layout_geometry).
+        sidecar = target / f"{name}.channels.json"
+        strips = target / f"{name}.strips.json"
+        layout = json.loads(strips.read_text()) if strips.exists() else {}
+        layout["engine"] = "chromiq"
+        layout["engine_version"] = 1
+        layout["seed"] = result.seed
+        layout["color_rep"] = result.color_rep
+        layout["recipe"] = recipe.to_dict()
+        sidecar.write_text(json.dumps({"layout": layout}))
+        if strips.exists():
+            strips.unlink()
+        pages = len(result.tiff_paths or [])
+        return (f"Saved engine chart {name}.ti2 + {pages} page(s) to {target}\n"
+                f"ChromIQ layout engine · {recipe.instrument} · {recipe.paper} · "
+                f"seed {result.seed}")
 
     def _write_colour_values_file(self, path: Path, as_hex: bool = True) -> None:
         """Write the current patch program as a colour list (hex by default).

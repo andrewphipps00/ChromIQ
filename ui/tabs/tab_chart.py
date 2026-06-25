@@ -5107,6 +5107,7 @@ class TabChart(QWidget):
                 self._seed_manual_printtarg_from_layout(meta[0])
         except Exception as exc:  # noqa: BLE001 — seeding is best-effort
             log.warning("Could not seed printtarg layout from applied chart: %s", exc)
+        self._carry_engine_recipe_from(src_dir / f"{name}.channels.json")
         # Never overwrite the user's profile name — only seed it when the field
         # is empty so a brand-new Create Chart session still gets a sensible name.
         self._ensure_profile_name(name)
@@ -5116,6 +5117,24 @@ class TabChart(QWidget):
         self._update_preset_locks()      # grey both panels
         self._import_applied_chart()     # overwrite the current run's chart
         return True
+
+    def _carry_engine_recipe_from(self, channels_json) -> None:
+        """Carry an adopted chart's engine recipe back into Create Chart (#93).
+
+        If *channels_json* holds a ChromIQ-engine recipe, turn the engine on and
+        seed the Manual engine panel so the options chosen in the editor come
+        back here; otherwise make sure the engine is off so the printtarg seeding
+        shows. Best-effort — never blocks adopting the chart.
+        """
+        try:
+            from workflow.layout_engine.presets import LayoutRecipe
+            eng = LayoutRecipe.from_channels_json(channels_json)
+            self._settings.set("use_chromiq_layout_engine", eng is not None)
+            self._refresh_manual_command_preview()
+            if eng is not None and getattr(self, "_manual_layout_panel", None) is not None:
+                self._manual_layout_panel.set_recipe(eng)
+        except Exception as exc:  # noqa: BLE001 — carry-back is best-effort
+            log.warning("Could not carry engine recipe back from editor: %s", exc)
 
     def _import_applied_chart(self, add_new_run: bool = False) -> None:
         """Copy the applied editor chart's files into the current run and load it.
@@ -5168,6 +5187,11 @@ class TabChart(QWidget):
             shutil.copy(src_ti1, run.chart_ti1)
             if src_ti2.is_file():
                 shutil.copy(src_ti2, run.chart_ti2)
+            # Engine charts carry a channels.json (engine marker + recipe + strip
+            # geometry); copy it so the run reads as an engine chart (#93).
+            _src_ch = src_ti1.with_suffix(".channels.json")
+            if _src_ch.is_file():
+                shutil.copy(_src_ch, run.chart_channels_json)
             tiffs: list[Path] = []
             for i, src_tif in enumerate(src_tiffs, start=1):
                 dest = work_dir / f"{run.stem}_{i:02d}.tif"
@@ -5278,6 +5302,11 @@ class TabChart(QWidget):
             shutil.copy(src_ti1, run.chart_ti1)
             if src_ti2.is_file():
                 shutil.copy(src_ti2, run.chart_ti2)
+            # Engine charts carry a channels.json (engine marker + recipe + strip
+            # geometry); copy it so the run reads as an engine chart (#93).
+            _src_ch = src_ti1.with_suffix(".channels.json")
+            if _src_ch.is_file():
+                shutil.copy(_src_ch, run.chart_channels_json)
             tiffs: list[Path] = []
             for i, src_tif in enumerate(src_tiffs, start=1):
                 dest = work_dir / f"{run.stem}_{i:02d}.tif"
