@@ -3900,6 +3900,12 @@ class TabChart(QWidget):
                 self._manual_td_check.setChecked(td_on)
             finally:
                 self._suppress_td_override = False
+        # Restore the engine layout recipe if the preset carries one (#93).
+        lr = data.get("layout_recipe")
+        if (isinstance(lr, dict) and lr
+                and getattr(self, "_manual_layout_panel", None) is not None):
+            from workflow.layout_engine.presets import LayoutRecipe
+            self._manual_layout_panel.set_recipe(LayoutRecipe.from_dict(lr))
 
     def _preset_save_prefill(self) -> tuple[str, bool, bool, bool]:
         """Initial (name, auto_run, attach, from_generator) for the Save Preset
@@ -4180,6 +4186,14 @@ class TabChart(QWidget):
         capture["triple_density"] = bool(
             self._manual_td_check is not None and self._manual_td_check.isChecked()
         )
+        # ChromIQ layout engine: store the full layout recipe (minus the per-chart
+        # seed) so a named preset carries the engine options too, exactly like it
+        # carries the printtarg ones (#93). Only when the engine is active.
+        if (getattr(self, "_manual_layout_panel", None) is not None
+                and bool(self._settings.get("use_chromiq_layout_engine", False))):
+            from dataclasses import replace
+            capture["layout_recipe"] = replace(
+                self._manual_layout_panel.get_recipe(), seed=None).to_dict()
         (_prefill_name, prefill_run, prefill_attach,
          prefilled_from_target) = self._preset_save_prefill()
         # A patch set can only be attached if one is currently loaded.
