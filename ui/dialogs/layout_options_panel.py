@@ -147,7 +147,8 @@ class LayoutOptionsPanel(QWidget):
         def small_mm(top: float = 60.0) -> NoScrollDoubleSpinBox:
             sb = NoScrollDoubleSpinBox(self)
             sb.setRange(0, top); sb.setDecimals(1); sb.setSingleStep(0.5)
-            sb.setMaximumWidth(58)            # compact (suffix lives in the label)
+            sb.setMinimumWidth(84)            # room for "300,0" / "auto" + buttons
+            sb.setMaximumWidth(96)            # (suffix lives in the row label)
             sb.valueChanged.connect(self._emit)
             return sb
 
@@ -166,11 +167,7 @@ class LayoutOptionsPanel(QWidget):
         self.patch_y = small_mm(); self.patch_y.setSpecialValueText(tr("auto"))
         self.inter_patch = mm()
         self.sig = mm()
-        add_row(g, 0, tr("Patch scale:"), self.pscale)
-        add_row(g, 1, tr("Spacer scale:"), self.sscale)
-        add_row(g, 2, tr("Spacers:"), self.spacer_mode)
-        add_row(g, 3, tr("Spacer width:"), self.spacer_width)
-        add_row(g, 4, tr("Patch size (mm):"),
+        add_row(g, 0, tr("Patch size (mm):"),
                 cell(self.patch_x, QLabel("×", self), self.patch_y),
                 tip=TooltipButton(
                     tr("Patch size"),
@@ -178,6 +175,10 @@ class LayoutOptionsPanel(QWidget):
                        "“auto” (0) to use the instrument's recommended size "
                        "(scaled by Patch scale). A value below ~6 mm can make the "
                        "chart hard to read."), self))
+        add_row(g, 1, tr("Patch scale:"), self.pscale)
+        add_row(g, 2, tr("Spacers:"), self.spacer_mode)
+        add_row(g, 3, tr("Spacer width:"), self.spacer_width)
+        add_row(g, 4, tr("Spacer scale:"), self.sscale)
         add_row(g, 5, tr("Inter-patch gap:"), self.inter_patch)
         add_row(g, 6, tr("Strip-indicator gap:"), self.sig)
         v.addWidget(ps)
@@ -185,12 +186,18 @@ class LayoutOptionsPanel(QWidget):
         # ---- Page geometry ----
         pg = QGroupBox(tr("Page geometry"), self)
         gg = QGridLayout(pg)
-        self.margins: dict[str, NoScrollDoubleSpinBox] = {}
-        mwidgets = []
-        for k, lbl in (("t", tr("T")), ("r", tr("R")), ("b", tr("B")), ("l", tr("L"))):
-            mwidgets.append(QLabel(lbl, self))
-            self.margins[k] = small_mm(top=60.0)
-            mwidgets.append(self.margins[k])
+        self.margins = {k: small_mm(top=60.0) for k in ("t", "r", "b", "l")}
+        _mlabels = {"t": tr("T"), "r": tr("R"), "b": tr("B"), "l": tr("L")}
+        _mbox = QVBoxLayout(); _mbox.setContentsMargins(0, 0, 0, 0); _mbox.setSpacing(4)
+        for _pair in (("t", "r"), ("b", "l")):
+            _hb = QHBoxLayout(); _hb.setContentsMargins(0, 0, 0, 0); _hb.setSpacing(6)
+            for _k in _pair:
+                _hb.addWidget(QLabel(_mlabels[_k], self))
+                _hb.addWidget(self.margins[_k])
+            _hb.addStretch()
+            _rw = QWidget(self); _rw.setLayout(_hb)
+            _mbox.addWidget(_rw)
+        _margins_w = QWidget(self); _margins_w.setLayout(_mbox)
         self.dpi = NoScrollSpinBox(self); self.dpi.setRange(72, 1200)
         self.dpi.setSuffix(" dpi"); self.dpi.valueChanged.connect(self._emit)
         self.nolimit = QCheckBox(tr("Don't cap strip length"), self)
@@ -200,7 +207,7 @@ class LayoutOptionsPanel(QWidget):
         self.offy = small_mm(top=300.0)
         self.strip_pat = QLineEdit(self); self.strip_pat.textChanged.connect(self._emit)
         self.patch_pat = QLineEdit(self); self.patch_pat.textChanged.connect(self._emit)
-        add_row(gg, 0, tr("Margins (mm):"), cell(*mwidgets))
+        add_row(gg, 0, tr("Margins (mm):"), _margins_w)
         add_row(gg, 1, tr("Resolution:"), self.dpi)
         add_row(gg, 2, tr("Max strip length:"), self.max_strip)
         add_row(gg, 3, tr("Chart offset (mm):"),
@@ -213,13 +220,15 @@ class LayoutOptionsPanel(QWidget):
         # ---- Output ----
         og = QGroupBox(tr("Output"), self)
         ogg = QGridLayout(og)
-        self.bit16 = QCheckBox(tr("16-bit TIFF"), self)
-        self.bit16.toggled.connect(self._emit)
+        self.bit_depth = NoScrollComboBox(self)
+        self.bit_depth.addItem(tr("8-bit"), 8)
+        self.bit_depth.addItem(tr("16-bit"), 16)
+        self.bit_depth.currentIndexChanged.connect(self._emit)
         self.compression = NoScrollComboBox(self)
         for k, lbl in (("lzw", "LZW"), ("zlib", "Zlib"), ("none", tr("None"))):
             self.compression.addItem(lbl, k)
         self.compression.currentIndexChanged.connect(self._emit)
-        ogg.addWidget(self.bit16, 0, 1)
+        add_row(ogg, 0, tr("Bit depth:"), self.bit_depth)
         add_row(ogg, 1, tr("Compression:"), self.compression)
         v.addWidget(og)
 
@@ -391,7 +400,7 @@ class LayoutOptionsPanel(QWidget):
         self.offy.setValue(r.offset_y_mm)
         self.strip_pat.setText(r.strip_pattern)
         self.patch_pat.setText(r.patch_pattern)
-        self.bit16.setChecked(r.bit16)
+        self.bit_depth.setCurrentIndex(1 if r.bit16 else 0)
         ci = self.compression.findData(r.compression)
         self.compression.setCurrentIndex(ci if ci >= 0 else 0)
         self._loading = False
@@ -419,6 +428,6 @@ class LayoutOptionsPanel(QWidget):
         r.offset_y_mm = self.offy.value()
         r.strip_pattern = self.strip_pat.text() or r.strip_pattern
         r.patch_pattern = self.patch_pat.text() or r.patch_pattern
-        r.bit16 = self.bit16.isChecked()
+        r.bit16 = (self.bit_depth.currentData() == 16)
         r.compression = self.compression.currentData() or "lzw"
         return r
