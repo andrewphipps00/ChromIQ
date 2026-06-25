@@ -914,7 +914,7 @@ class LayoutOptionsPanel(QWidget):
         btn.setStyleSheet(
             f"QPushButton {{ background: {hexc}; border: 1px solid #888; "
             "border-radius: 3px; min-width: 22px; max-width: 26px; "
-            "min-height: 18px; max-height: 22px; padding: 0; margin: 0; }}")
+            "min-height: 18px; max-height: 22px; padding: 0; margin: 0; }")
 
     def _pick_spacer_colour(self, btn) -> None:
         from PyQt6.QtGui import QColor
