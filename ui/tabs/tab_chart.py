@@ -2159,10 +2159,7 @@ class TabChart(QWidget):
         self._manual_preset_bar = QWidget(inner)
         _pbar = QHBoxLayout(self._manual_preset_bar)
         _pbar.setContentsMargins(0, 0, 0, 0)
-        self._manual_preset_lbl = QLabel("", self._manual_preset_bar)
-        self._manual_preset_lbl.setObjectName("info")
-        self._manual_preset_lbl.setWordWrap(True)
-        _pbar.addWidget(self._manual_preset_lbl, stretch=1)
+        _pbar.setSpacing(6)
         self._manual_preset_reset_btn = QPushButton(
             tr("Reset to preset"), self._manual_preset_bar)
         self._manual_preset_reset_btn.clicked.connect(self._reset_manual_to_preset)
@@ -2172,9 +2169,12 @@ class TabChart(QWidget):
         self._manual_preset_edit_btn = QPushButton(
             tr("Edit defaults…"), self._manual_preset_bar)
         self._manual_preset_edit_btn.clicked.connect(self._edit_layout_defaults)
+        # Buttons fill the panel width equally (full labels fit), reduced height.
         for _b in (self._manual_preset_reset_btn, self._manual_preset_update_btn,
                    self._manual_preset_edit_btn):
-            _pbar.addWidget(_b)
+            _b.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+            _b.setFixedHeight(24)
+            _pbar.addWidget(_b, 1)
         inner_layout.addWidget(self._manual_preset_bar)
         self._manual_preset_bar.setVisible(False)
 
@@ -2416,8 +2416,18 @@ class TabChart(QWidget):
                     + f"\ntargen {' '.join(targen_args)}"
                     + f"\n{_layout_cmd()}"
                 )
+        # Relabel the layout section and fold the active-preset status into the
+        # single info box (no second info box) when the engine is active.
+        if getattr(self, "_manual_printtarg_grp", None) is not None:
+            self._manual_printtarg_grp.setTitle(
+                tr("ChromIQ chart layout") if use_engine
+                else tr("{tool} parameters").format(tool="printtarg"))
+        status = self._layout_preset_status() if use_engine else None
+        if status is not None:
+            summary, modified = status
+            info += "\n" + summary + ("   " + tr("● modified") if modified else "")
         self._manual_info_lbl.setText(info)
-        self._refresh_manual_preset_bar(use_engine)
+        self._refresh_manual_preset_bar(use_engine, status)
         self._refresh_name_prefix()     # keep the name field plain (no prefix)
 
     # ------------------------------------------------------------------
@@ -2474,27 +2484,27 @@ class TabChart(QWidget):
         d.pop("chart_text", None)
         return d
 
-    def _refresh_manual_preset_bar(self, use_engine: bool) -> None:
-        bar = getattr(self, "_manual_preset_bar", None)
-        if bar is None:
-            return
-        if not use_engine:
-            bar.setVisible(False)
-            return
-        bar.setVisible(True)
+    def _layout_preset_status(self):
+        """``(summary, modified)`` for the active layout preset, or None."""
         try:
             cur = self._current_layout_recipe()
             preset = self._layout_store().get(cur.instrument, cur.paper, cur.mode())
-            modified = (self._layout_recipe_values(cur)
-                        != self._layout_recipe_values(preset))
         except Exception:
-            self._manual_preset_lbl.setText(tr("Layout preset: —"))
-            return
+            return None
+        modified = (self._layout_recipe_values(cur)
+                    != self._layout_recipe_values(preset))
         summary = tr("Layout preset: {i} · {p} · {m}").format(
             i=cur.instrument, p=cur.paper, m=cur.mode())
-        if modified:
-            summary += "   " + tr("● modified")
-        self._manual_preset_lbl.setText(summary)
+        return summary, modified
+
+    def _refresh_manual_preset_bar(self, use_engine: bool, status=None) -> None:
+        bar = getattr(self, "_manual_preset_bar", None)
+        if bar is None:
+            return
+        bar.setVisible(use_engine)
+        if not use_engine:
+            return
+        modified = bool(status[1]) if status else False
         self._manual_preset_reset_btn.setEnabled(modified)
         self._manual_preset_update_btn.setEnabled(modified)
 

@@ -1117,6 +1117,14 @@ class SettingsDialog(QDialog):
         engine_row.addStretch()
         v.addLayout(engine_row)
 
+        # Everything below the master toggle lives in a body widget that is
+        # greyed out (controls AND their labels) when the engine is off.
+        self._layout_body = QWidget(self)
+        v.addWidget(self._layout_body)
+        v = QVBoxLayout(self._layout_body)
+        v.setSpacing(10)
+        v.setContentsMargins(0, 0, 0, 0)
+
         intro_row = QHBoxLayout()
         intro = QLabel(tr(
             "Default chart layout per instrument and paper. Pick a combination "
@@ -1279,6 +1287,19 @@ class SettingsDialog(QDialog):
         self._layout_nolimit.toggled.connect(self._on_layout_field_changed)
         self._layout_strip_pat.textChanged.connect(self._on_layout_field_changed)
         self._layout_patch_pat.textChanged.connect(self._on_layout_field_changed)
+
+        # Grey the whole body (controls + labels) unless the engine is enabled —
+        # disable for interaction + dim for an unmistakable visual cue.
+        from PyQt6.QtWidgets import QGraphicsOpacityEffect
+        self._layout_body_dim = QGraphicsOpacityEffect(self._layout_body)
+        self._layout_body.setGraphicsEffect(self._layout_body_dim)
+
+        def _sync_layout_enabled(on: bool) -> None:
+            self._layout_body.setEnabled(on)
+            self._layout_body_dim.setOpacity(1.0 if on else 0.4)
+
+        self._layout_engine_check.toggled.connect(_sync_layout_enabled)
+        _sync_layout_enabled(self._layout_engine_check.isChecked())
 
         self._on_layout_instr_changed()   # populate paper+mode, then load
         return page

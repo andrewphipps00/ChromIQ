@@ -1843,8 +1843,8 @@
  "patch ×{s:.2f}": "patch ×{s:.2f}",
  "Edit defaults…": "Edit defaults…",
  "Layout preset: {i} · {p} · {m}": "Layout preset: {i} · {p} · {m}",
- "Layout preset: —": "Layout preset: —",
  "Reset to preset": "Reset to preset",
  "Update preset": "Update preset",
- "● modified": "● modified"
+ "● modified": "● modified",
+ "ChromIQ chart layout": "ChromIQ chart layout"
 }
