@@ -90,6 +90,7 @@ def build_chart(
     hflag: bool = False,
     density: int = 1,
     spacer_on: bool = True,
+    spacer_mode: str = "colored",
     pscale: float = 1.0,
     sscale: float = 1.0,
     border: float = 6.0,
@@ -118,6 +119,7 @@ def build_chart(
         cal = calibration.read_cal(cal_path)
         if apply_cal:
             target = calibration.apply_to_target(target, cal)
+    spacer_on = spacer_on and spacer_mode != "none"   # "none" ⇒ no gap
     geom = instruments.build(
         instrument, hflag=hflag, density=density, spacer_on=spacer_on, pscale=pscale,
         sscale=sscale, border=border, nolpcbord=nolpcbord, nolimit=nolimit,
@@ -147,6 +149,7 @@ def build_chart(
     render = raster.render_pages(
         target, layout, geom, seed=seed, randomize=randomize,
         paper_w_mm=w_mm, paper_h_mm=h_mm, dpi=dpi, strip_pattern=strip_pattern,
+        spacer_mode=spacer_mode,
     )
     tiff_paths = raster.save_tiffs(render.images, stem.with_suffix(".tif"), dpi=dpi)
 

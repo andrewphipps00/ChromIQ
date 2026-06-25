@@ -92,3 +92,13 @@ def test_patch_rects_known_for_every_slot():
 def test_contrast_spacer_choice():
     assert contrast.spacer_rgb((255, 255, 255), (240, 240, 240)) == (0, 0, 0)
     assert contrast.spacer_rgb((0, 0, 0), (10, 10, 10)) == (255, 255, 255)
+
+
+def test_colored_spacer_is_in_palette_and_contrasts():
+    sp = contrast.colored_spacer_rgb((128, 128, 128), (130, 130, 130))
+    assert sp in contrast._COLOURED_PALETTE
+    # a coloured spacer between two mid-greys should be far from grey
+    assert contrast._rgb_dist(sp, (128, 128, 128)) > 100
+    # spacer_for_mode routes correctly
+    assert contrast.spacer_for_mode("bw", (255, 255, 255), (240, 240, 240)) == (0, 0, 0)
+    assert contrast.spacer_for_mode("colored", (128, 128, 128), (130, 130, 130)) == sp

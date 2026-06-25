@@ -1213,8 +1213,13 @@ class SettingsDialog(QDialog):
         self._layout_sscale.setDecimals(3)
         self._layout_sscale.setSingleStep(0.05)
         psg.addWidget(self._layout_sscale, 0, 3)
-        self._layout_spacer = QCheckBox(tr("Spacers between patches"), self)
-        psg.addWidget(self._layout_spacer, 1, 0, 1, 4)
+        psg.addWidget(QLabel(tr("Spacers:"), self), 1, 0)
+        self._layout_spacer_mode = NoScrollComboBox(self)
+        for _key, _lbl in (("colored", tr("Coloured")),
+                           ("bw", tr("Black & white")),
+                           ("none", tr("None"))):
+            self._layout_spacer_mode.addItem(_lbl, _key)
+        psg.addWidget(self._layout_spacer_mode, 1, 1)
         v.addWidget(ps)
 
         # ---- page geometry ----
@@ -1283,7 +1288,7 @@ class SettingsDialog(QDialog):
         for w in (self._layout_pscale, self._layout_sscale, self._layout_border):
             w.valueChanged.connect(self._on_layout_field_changed)
         self._layout_dpi.valueChanged.connect(self._on_layout_field_changed)
-        self._layout_spacer.toggled.connect(self._on_layout_field_changed)
+        self._layout_spacer_mode.currentIndexChanged.connect(self._on_layout_field_changed)
         self._layout_nolimit.toggled.connect(self._on_layout_field_changed)
         self._layout_strip_pat.textChanged.connect(self._on_layout_field_changed)
         self._layout_patch_pat.textChanged.connect(self._on_layout_field_changed)
@@ -1331,7 +1336,8 @@ class SettingsDialog(QDialog):
         self._loading_layout = True
         self._layout_pscale.setValue(recipe.pscale)
         self._layout_sscale.setValue(recipe.sscale)
-        self._layout_spacer.setChecked(recipe.spacer_on)
+        _smi = self._layout_spacer_mode.findData(recipe.spacer_mode)
+        self._layout_spacer_mode.setCurrentIndex(_smi if _smi >= 0 else 0)
         self._layout_border.setValue(recipe.border)
         self._layout_dpi.setValue(recipe.dpi)
         self._layout_nolimit.setChecked(recipe.nolimit)
@@ -1346,7 +1352,8 @@ class SettingsDialog(QDialog):
         r = default_recipe(inst, paper, mode=mode)   # sets mode flags
         r.pscale = self._layout_pscale.value()
         r.sscale = self._layout_sscale.value()
-        r.spacer_on = self._layout_spacer.isChecked()
+        r.spacer_mode = self._layout_spacer_mode.currentData() or "colored"
+        r.spacer_on = r.spacer_mode != "none"
         r.border = self._layout_border.value()
         r.dpi = int(self._layout_dpi.value())
         r.nolimit = self._layout_nolimit.isChecked()

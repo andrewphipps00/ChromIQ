@@ -880,12 +880,15 @@ class ChartCreator:
         return True
 
     def _engine_build_kwargs(self, params: "ChartParams") -> dict:
+        spacer_mode = ("none" if params.no_spacers
+                       else "bw" if params.bw_spacers else "colored")
         kw: dict = dict(
             instrument=params.instrument,
             paper=params.paper,
             dpi=int(params.tiff_dpi or 300),
             randomize=not params.no_randomise,
             spacer_on=not params.no_spacers,
+            spacer_mode=spacer_mode,
             pscale=float(params.patch_scale or 1.0),
             sscale=float(params.spacer_scale or 1.0),
             border=float(params.margin_mm),

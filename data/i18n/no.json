@@ -1824,7 +1824,6 @@
  "Resolution:": "Resolution:",
  "Restore factory defaults": "Restore factory defaults",
  "Spacer scale:": "Spacer scale:",
- "Spacers between patches": "Spacers between patches",
  "Strip && patch labels": "Strip && patch labels",
  "Strip pattern:": "Strip pattern:",
  "These control the LABELS printed on the chart and read back to you while measuring — e.g. strip “A” then patch “1”, giving location “A1”.\n\n• Strip pattern — how columns are named. The default counts A, B, … Z, then AA, AB, … like spreadsheet columns.\n• Patch pattern — how patches within a column are named; the default counts 1, 2, 3, …\n\nLeave these at the defaults unless you have a specific reason to change them. ChromIQ keeps the printed labels, the measurement file and what the reader announces perfectly in step, so a custom pattern still reads correctly.": "These control the LABELS printed on the chart and read back to you while measuring — e.g. strip “A” then patch “1”, giving location “A1”.\n\n• Strip pattern — how columns are named. The default counts A, B, … Z, then AA, AB, … like spreadsheet columns.\n• Patch pattern — how patches within a column are named; the default counts 1, 2, 3, …\n\nLeave these at the defaults unless you have a specific reason to change them. ChromIQ keeps the printed labels, the measurement file and what the reader announces perfectly in step, so a custom pattern still reads correctly.",
@@ -1846,5 +1845,6 @@
  "Reset to preset": "Reset to preset",
  "Update preset": "Update preset",
  "● modified": "● modified",
- "ChromIQ chart layout": "ChromIQ chart layout"
+ "ChromIQ chart layout": "ChromIQ chart layout",
+ "Black & white": "Black & white"
 }

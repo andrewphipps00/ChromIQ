@@ -50,9 +50,15 @@ def render_pages(
     paper_h_mm: float,
     dpi: int = 300,
     strip_pattern: str = permutation.DEFAULT_STRIP_PATTERN,
+    spacer_mode: str = "colored",
     draw_indicators: bool = True,
 ) -> RenderResult:
-    """Render one :class:`PIL.Image` per page for *target*."""
+    """Render one :class:`PIL.Image` per page for *target*.
+
+    *spacer_mode* picks the inter-patch spacer colour: ``"colored"`` (default,
+    like printtarg) or ``"bw"``.  No spacers are drawn when the geometry has no
+    gap (``spacer_mode`` ``"none"`` ⇒ build with ``spacer_on=False``).
+    """
     mm2px = dpi / 25.4
     W = max(1, round(paper_w_mm * mm2px))
     H = max(1, round(paper_h_mm * mm2px))
@@ -103,7 +109,7 @@ def render_pages(
                     nxt = rgb_by_slot[col_slots[j + 1]]
                     draw.rectangle(
                         [x0, y0 + pl_px, x0 + pw_px - 1, y0 + pl_px + sp_px - 1],
-                        fill=contrast.spacer_rgb(rgb, nxt),
+                        fill=contrast.spacer_for_mode(spacer_mode, rgb, nxt),
                     )
         images.append(img)
 

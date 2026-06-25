@@ -27,6 +27,45 @@ def spacer_rgb(above: tuple[int, int, int] | None,
     return (0, 0, 0) if worst_black >= worst_white else (255, 255, 255)
 
 
+# Candidate spacer colours for "coloured" mode: black/white plus saturated
+# primaries/secondaries — printtarg uses coloured spacers so the patch↔spacer
+# density contrast is guaranteed even between two ~50%-density patches.
+_COLOURED_PALETTE = [
+    (0, 0, 0), (255, 255, 255),
+    (255, 0, 0), (0, 255, 0), (0, 0, 255),
+    (0, 255, 255), (255, 0, 255), (255, 255, 0),
+]
+
+
+def _rgb_dist(a: tuple[int, int, int], b: tuple[int, int, int]) -> float:
+    return ((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2) ** 0.5
+
+
+def colored_spacer_rgb(above: tuple[int, int, int] | None,
+                       below: tuple[int, int, int] | None) -> tuple[int, int, int]:
+    """A coloured spacer maximising the minimum RGB distance to both neighbours.
+
+    Picks from a fixed black/white/primary/secondary palette the colour whose
+    *worst-case* distance to the two neighbouring patches is largest, so the
+    boundary is always detectable (printtarg's coloured-spacer guarantee).
+    """
+    neigh = [n for n in (above, below) if n is not None]
+    if not neigh:
+        return (0, 0, 0)
+    best, best_score = _COLOURED_PALETTE[0], -1.0
+    for cand in _COLOURED_PALETTE:
+        score = min(_rgb_dist(cand, n) for n in neigh)
+        if score > best_score:
+            best, best_score = cand, score
+    return best
+
+
+def spacer_for_mode(mode: str, above, below) -> tuple[int, int, int]:
+    """Spacer colour for *mode* ("colored" | "bw")."""
+    return colored_spacer_rgb(above, below) if mode == "colored" \
+        else spacer_rgb(above, below)
+
+
 def min_boundary_contrast(patch_rgbs: list[tuple[int, int, int]]) -> float:
     """Worst patch↔spacer luminance gap across a pass (spacers chosen optimally)."""
     if len(patch_rgbs) < 2:
