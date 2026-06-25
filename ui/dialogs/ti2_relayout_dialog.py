@@ -2875,6 +2875,12 @@ class Ti2RelayoutDialog(QDialog):
         self._engine_recipe = None
         self._engine_panel = None
         self._engine_panel_grp = None
+        self._engine_ti1: "Path | None" = None     # patch data for engine preview
+        # Debounced engine preview: re-render via the engine after the last edit.
+        self._engine_preview_timer = QTimer(self)
+        self._engine_preview_timer.setSingleShot(True)
+        self._engine_preview_timer.setInterval(450)
+        self._engine_preview_timer.timeout.connect(self._do_engine_preview)
         # Snapshot of the chart's content (patches + spacers + layout knobs) as
         # last saved / loaded-from-disk. Compared against the live signature to
         # tell whether there are unsaved edits to warn about on Close (#49). A
@@ -3637,6 +3643,7 @@ class Ti2RelayoutDialog(QDialog):
         from ui.dialogs.layout_options_panel import LayoutOptionsPanel
         self._engine_panel = LayoutOptionsPanel(
             panel, with_selectors=True, with_calibration=True)
+        self._engine_panel.changed.connect(self._engine_preview_timer.start)
         self._engine_panel_grp = QGroupBox(tr("ChromIQ layout"), panel)
         _eg = QVBoxLayout(self._engine_panel_grp)
         _eg.setContentsMargins(8, 8, 8, 8)
@@ -3836,6 +3843,8 @@ class Ti2RelayoutDialog(QDialog):
         from workflow.layout_engine.presets import LayoutRecipe
         self._engine_recipe = LayoutRecipe.from_channels_json(
             path.with_suffix(".channels.json"))
+        _t1 = path.with_suffix(".ti1")
+        self._engine_ti1 = _t1 if _t1.is_file() else None
         if self._engine_recipe is not None and self._engine_panel is not None:
             self._engine_panel.set_recipe(self._engine_recipe)
         self._refresh_engine_panel_visible()
@@ -4933,6 +4942,11 @@ class Ti2RelayoutDialog(QDialog):
             self._status.setText(tr("Render failed."))
             return
         self._regen = result
+        # Engine charts: the printtarg regen seeds page nav / save, but the
+        # accurate picture is the engine's own render — show that instead (#93).
+        if self._engine_active():
+            self._do_engine_preview()
+            return
         # New render → previous per-page spacer segmentations + patch geometry
         # are stale. Both are now recomputed lazily for the visited page (#44).
         self._spacer_cache.clear()
@@ -5046,6 +5060,32 @@ class Ti2RelayoutDialog(QDialog):
                 src = painted
             show_path = painted
         self._show_image(show_path)
+
+    def _engine_active(self) -> bool:
+        return (self._engine_panel_grp is not None
+                and not self._engine_panel_grp.isHidden()
+                and self._engine_ti1 is not None)
+
+    def _do_engine_preview(self) -> None:
+        """Render the current engine recipe to a temp page and show it as the
+        preview — the live, engine-accurate picture for an engine chart (#93)."""
+        if not self._engine_active():
+            return
+        try:
+            from workflow.layout_engine import chart as le_chart
+            recipe = self._engine_panel.get_recipe()
+            kw = recipe.build_kwargs()
+            kw["dpi"] = min(int(kw.get("dpi") or 150), 150)   # fast preview
+            stem = Path(self._preview_tmp.name) / "_engine_preview"
+            result = le_chart.build_chart(str(self._engine_ti1), stem, **kw)
+            tiffs = result.tiff_paths or []
+            if tiffs:
+                self._show_image(tiffs[min(self._page, len(tiffs) - 1)])
+                self._status.setText(tr("Engine preview · {n} patches · seed {s}")
+                                     .format(n=result.layout.total_patches,
+                                             s=result.seed))
+        except Exception as exc:  # noqa: BLE001 — preview is best-effort
+            log.warning("engine preview failed: %s", exc)
 
     def _show_image(self, path: Path) -> None:
         pm = QPixmap(str(path))
