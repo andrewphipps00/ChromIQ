@@ -2875,6 +2875,10 @@ class Ti2RelayoutDialog(QDialog):
         self._engine_recipe = None
         self._engine_panel = None
         self._engine_panel_grp = None
+        # True only when a chart was LOADED from disk without an engine recipe
+        # (a printtarg chart) — then the editor stays printtarg even if the
+        # engine setting is on. A new/from-scratch chart follows the setting.
+        self._loaded_printtarg_chart = False
         self._engine_ti1: "Path | None" = None     # patch data for engine preview
         self._engine_spacer_rects: list = []        # spacer hit-boxes (preview dpi)
         self._engine_patch_rects: dict = {}         # (page,slot) -> rect dict
@@ -3800,11 +3804,13 @@ class Ti2RelayoutDialog(QDialog):
         """
         if self._engine_panel_grp is None:
             return
-        # Drive engine vs printtarg off the LOADED CHART (does it carry an engine
-        # recipe?), not the global setting — the editor edits a specific chart. A
-        # printtarg chart shows the printtarg knobs (and its true -L/no-clip)
-        # even while the engine setting is on; an engine chart shows the panel.
-        use_engine = self._engine_recipe is not None
+        # Engine when: the loaded chart carries an engine recipe, OR the engine
+        # setting is on and we're not editing a loaded printtarg chart (i.e. a
+        # new/from-scratch chart follows the setting). A loaded printtarg chart
+        # keeps the printtarg knobs + its true -L/no-clip.
+        use_engine = (self._engine_recipe is not None
+                      or (bool(self._settings.get("use_chromiq_layout_engine", False))
+                          and not self._loaded_printtarg_chart))
         self._engine_panel_grp.setVisible(use_engine)
         if getattr(self, "_pt_box", None) is not None:
             self._pt_box.setVisible(not use_engine)
@@ -3859,6 +3865,9 @@ class Ti2RelayoutDialog(QDialog):
             path.with_suffix(".channels.json"))
         _t1 = path.with_suffix(".ti1")
         self._engine_ti1 = _t1 if _t1.is_file() else None
+        # A loaded chart with no engine recipe is a printtarg chart → stay
+        # printtarg even if the engine setting is on (preserve its real layout).
+        self._loaded_printtarg_chart = self._engine_recipe is None
         if self._engine_recipe is not None and self._engine_panel is not None:
             self._engine_panel.set_recipe(self._engine_recipe)
         self._refresh_engine_panel_visible()
@@ -3876,7 +3885,22 @@ class Ti2RelayoutDialog(QDialog):
             self._options = dlg.result_options
         self._basename = dlg.result_basename or "chart"
         self._chart_recipe = dlg.result_recipe
-        self._set_chart(dlg.result_spec, dlg.result_program or [], "New chart")
+        # A new from-scratch chart follows the engine setting (not a loaded
+        # printtarg chart). Seed the engine panel's instrument/paper from it.
+        self._engine_recipe = None
+        self._engine_ti1 = None
+        self._loaded_printtarg_chart = False
+        spec = dlg.result_spec
+        if (bool(self._settings.get("use_chromiq_layout_engine", False))
+                and self._engine_panel is not None):
+            from workflow.layout_engine.presets import default_recipe
+            inst = "i1" if spec.instrument_flag in ("i1", "3p") else spec.instrument_flag
+            try:
+                self._engine_panel.set_recipe(default_recipe(inst, spec.paper_flag))
+            except Exception as exc:  # noqa: BLE001
+                log.warning("seed engine panel for new chart failed: %s", exc)
+        self._refresh_engine_panel_visible()
+        self._set_chart(spec, dlg.result_program or [], "New chart")
 
     def _set_chart(self, spec: R.ChartSpec, program: list[tuple], note: str,
                    *, is_saved: bool = False) -> None:
@@ -5081,12 +5105,14 @@ class Ti2RelayoutDialog(QDialog):
         self._show_image(show_path)
 
     def _engine_active(self) -> bool:
-        # Only when the loaded chart is genuinely an engine chart (carries a
-        # recipe) — never for a printtarg chart, so its real layout (incl.
-        # no-clip) is shown, not a defaulted engine render with a clip border.
-        return (self._engine_recipe is not None
-                and self._engine_ti1 is not None
-                and self._engine_panel_grp is not None)
+        # Active when the engine panel is showing (engine chart loaded, or the
+        # engine setting is on for a new/from-scratch chart) and there's a chart
+        # to render. The .ti1 is derived from the grid, so _engine_ti1 isn't
+        # required. A loaded printtarg chart keeps printtarg (handled in
+        # _refresh_engine_panel_visible) so its real no-clip layout shows.
+        return (self._engine_panel_grp is not None
+                and not self._engine_panel_grp.isHidden()
+                and self._spec is not None)
 
     def _engine_grid_ti1(self, out_path: Path) -> Path:
         """Write the current grid program as a .ti1 at *out_path* for the engine.
