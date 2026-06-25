@@ -76,6 +76,27 @@ def test_all_fields_persist_through_named_dict():
         assert getattr(got, f.name) == getattr(full, f.name), f.name
 
 
+def test_from_channels_json(tmp_path):
+    import json
+    rec = LayoutRecipe(instrument="i1", paper="A4", clip_border=True,
+                       clip_content_mode="branding", underline_mode="cycle",
+                       indicator_bold=True)
+    ch = tmp_path / "c.channels.json"
+    ch.write_text(json.dumps({"layout": {"engine": "chromiq", "seed": 42,
+                                         "recipe": rec.to_dict()}}))
+    got = LayoutRecipe.from_channels_json(ch)
+    assert got is not None
+    assert got.clip_content_mode == "branding"
+    assert got.underline_mode == "cycle"
+    assert got.indicator_bold is True
+    assert got.seed == 42                    # build seed carried for reproduction
+    # not an engine chart → None
+    nb = tmp_path / "nb.channels.json"
+    nb.write_text(json.dumps({"layout": {"strips": []}}))
+    assert LayoutRecipe.from_channels_json(nb) is None
+    assert LayoutRecipe.from_channels_json(tmp_path / "missing.json") is None
+
+
 def test_store_save_load(tmp_path):
     store = PresetStore.factory_defaults()
     p = tmp_path / "presets.json"

@@ -101,6 +101,30 @@ class LayoutRecipe:
         known = {f.name for f in fields(cls)}
         return cls(**{k: v for k, v in d.items() if k in known})
 
+    @classmethod
+    def from_channels_json(cls, path) -> "LayoutRecipe | None":
+        """Load the engine recipe stored in a chart's ``channels.json`` layout
+        block, or ``None`` if the chart wasn't built by the ChromIQ engine.
+
+        Lets the Edit/create-chart editor seed its panel with exactly the layout
+        a chart was created with (issue #93). The build seed (if recorded) is
+        carried so the layout reproduces.
+        """
+        try:
+            data = json.loads(Path(path).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+        lay = data.get("layout") if isinstance(data, dict) else None
+        if not isinstance(lay, dict) or lay.get("engine") != "chromiq":
+            return None
+        rec = lay.get("recipe")
+        if not isinstance(rec, dict):
+            return None
+        r = cls.from_dict(rec)
+        if isinstance(lay.get("seed"), int):
+            r.seed = lay["seed"]
+        return r
+
     # ---- mapping to the engine build kwargs ----------------------------
     def build_kwargs(self) -> dict:
         """Kwargs for :func:`workflow.layout_engine.chart.build_chart`."""
