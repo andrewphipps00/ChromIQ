@@ -321,7 +321,12 @@ class LayoutOptionsPanel(QWidget):
         self.seed_spin.valueChanged.connect(self._emit)
         self.new_seed_btn = QPushButton(tr("New seed"), self)
         self.new_seed_btn.setObjectName("compact_input")
-        self.new_seed_btn.setFixedHeight(self.seed_spin.sizeHint().height())
+        # Height in the button's OWN stylesheet so the editor's controls QSS
+        # (QPushButton { min-height: 26px }) can't inflate it; match the compact
+        # browse buttons (#93).
+        self.new_seed_btn.setStyleSheet(
+            "QPushButton { min-height: 22px; max-height: 22px; "
+            "padding-top: 0px; padding-bottom: 0px; }")
         self.new_seed_btn.clicked.connect(self._on_new_seed)
         rgg.addWidget(self.randomize_cb, 0, 1)
         rgg.addWidget(self.fixed_seed_cb, 1, 1)

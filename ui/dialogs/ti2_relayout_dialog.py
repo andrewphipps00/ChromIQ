@@ -3949,7 +3949,9 @@ class Ti2RelayoutDialog(QDialog):
             from workflow.layout_engine.presets import default_recipe
             inst = "i1" if spec.instrument_flag in ("i1", "3p") else spec.instrument_flag
             try:
-                self._engine_panel.set_recipe(default_recipe(inst, spec.paper_flag))
+                rec = default_recipe(inst, spec.paper_flag)
+                rec.randomize = False   # editor charts start un-randomised; Shuffle randomises
+                self._engine_panel.set_recipe(rec)
             except Exception as exc:  # noqa: BLE001
                 log.warning("seed engine panel for new chart failed: %s", exc)
         self._refresh_engine_panel_visible()
@@ -4468,6 +4470,20 @@ class Ti2RelayoutDialog(QDialog):
         stays, only its position moves. Useful for breaking up a structured
         set so each strip reads distinctly (see the "tag as randomised" gate).
         """
+        # Engine chart: keep the same patches (.ti1) and randomise via the engine
+        # seed — turn randomisation on, draw a fresh fixed seed (so it's shown and
+        # reproducible), and re-render. No grid reorder (#93).
+        if self._engine_active():
+            from workflow.layout_engine.permutation import pick_seed
+            seed = pick_seed()
+            p = self._engine_panel
+            p.randomize_cb.setChecked(True)
+            p.fixed_seed_cb.setChecked(True)
+            p.seed_spin.setValue(seed)        # emits changed → engine re-renders
+            self._status.setText(
+                tr("Shuffled with seed {s}.").format(s=seed))
+            self._note_edit()
+            return
         import random
         program = self._program_from_grid()
         if len(program) < 2:

@@ -155,6 +155,9 @@ _UPPER = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 # Tiny gap inserted between letters of a multi-letter strip label (e.g. "AB"),
 # as a fraction of the font size, so the two letters stay distinguishable.
 INDICATOR_LETTER_SPACING = 0.12
+# Auto-sized multi-letter labels fill only this fraction of the strip width, so
+# the inter-indicator gap exceeds the intra-letter gap (#93).
+INDICATOR_FIT_FRAC = 0.80
 
 
 def _draw_indicator(draw, cx: int, top: int, text: str, font, spacing_px: int) -> None:
@@ -214,7 +217,11 @@ def effective_indicator_size_mm(geom, dpi: int, font: str, size_mm: float) -> fl
                    + INDICATOR_LETTER_SPACING * target)   # + one inter-letter gap
     except Exception:
         return target
-    return target if widest2 <= geom.pwid else target * geom.pwid / widest2
+    # Fit the label into a FRACTION of the strip width, not the whole width, so
+    # the gap BETWEEN indicators stays larger than the gap between the two
+    # letters of one indicator (otherwise "AA AB" reads as "A AA B"). (#93)
+    avail = geom.pwid * INDICATOR_FIT_FRAC
+    return target if widest2 <= avail else target * avail / widest2
 
 
 def render_clip_strip(mode: str, *, width_px: int, height_px: int, dpi: int,

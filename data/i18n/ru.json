@@ -1979,5 +1979,6 @@
   "Line distance:": "Line distance:",
   "Line thickness:": "Line thickness:",
   "The ChromIQ layout engine is on — set the page layout in the editor after creating the chart.": "The ChromIQ layout engine is on — set the page layout in the editor after creating the chart.",
-  "≈ {n} fit one page": "≈ {n} fit one page"
+  "≈ {n} fit one page": "≈ {n} fit one page",
+  "Shuffled with seed {s}.": "Shuffled with seed {s}."
 }

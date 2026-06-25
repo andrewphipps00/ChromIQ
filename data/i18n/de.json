@@ -1979,5 +1979,6 @@
   "Line distance:": "Linienabstand:",
   "Line thickness:": "Liniendicke:",
   "The ChromIQ layout engine is on — set the page layout in the editor after creating the chart.": "Die ChromIQ-Layout-Engine ist an — lege das Seitenlayout nach dem Erstellen der Testkarte im Editor fest.",
-  "≈ {n} fit one page": "≈ {n} passen auf eine Seite"
+  "≈ {n} fit one page": "≈ {n} passen auf eine Seite",
+  "Shuffled with seed {s}.": "Mit Startwert {s} gemischt."
 }
