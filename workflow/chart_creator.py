@@ -471,6 +471,14 @@ class ChartParams:
     # with stem ``calibration``). When False, writes to the project's current
     # run folder with stem ``chart``. See ``FileManager.cwd_for_chart``.
     cal_target: bool = False
+
+    # ChromIQ layout engine (issue #93): the full per-chart layout recipe from
+    # the Manual/editor LayoutOptionsPanel. When set (engine on), the engine
+    # builds from this (instrument/paper taken from the fields above) instead of
+    # the ChartParams-derived basics. engine_cal_* attach a printer .cal (-K/-I).
+    layout_recipe: "object | None" = None
+    engine_cal_path: str | None = None
+    engine_apply_cal: bool = False
     # When True, the .icc/.ti3 from a prior session in the same working folder
     # are renamed to pre_*.icc/pre_*.ti3 instead of being overwritten on the
     # following measure / colprof runs. Set by the guided tab when the user
@@ -905,7 +913,9 @@ class ChartCreator:
         return kw
 
     _ENGINE_GEOM_KEYS = {"hflag", "density", "spacer_on", "pscale", "sscale",
-                         "border", "nolpcbord", "nolimit"}
+                         "border", "nolpcbord", "nolimit", "margins", "patch_w",
+                         "patch_h", "spacer_width", "inter_patch", "max_strip",
+                         "strip_indicator_gap", "offset_x", "offset_y"}
 
     def _engine_total_patches(self, params: "ChartParams") -> int | None:
         """Patches the engine fits across all pages (capacity × pages), or None.
@@ -917,7 +927,7 @@ class ChartCreator:
             return None
         try:
             from workflow.layout_engine import geometry, instruments, papers
-            kw = self._engine_build_kwargs(params)
+            kw = self._engine_kwargs(params)
             geom = instruments.build(
                 kw["instrument"],
                 **{k: v for k, v in kw.items() if k in self._ENGINE_GEOM_KEYS})
@@ -927,6 +937,23 @@ class ChartCreator:
         except Exception as exc:  # noqa: BLE001
             log.warning("engine patch estimate failed: %s", exc)
             return None
+
+    def _engine_kwargs(self, params: "ChartParams") -> dict:
+        """build_chart kwargs: the full layout recipe when set, else the basics.
+
+        With a recipe (Manual/editor LayoutOptionsPanel) every layout option
+        takes effect; instrument/paper come from the ChartParams, and a printer
+        calibration (-K/-I) is attached when chosen.
+        """
+        if params.layout_recipe is not None and hasattr(params.layout_recipe, "build_kwargs"):
+            kw = params.layout_recipe.build_kwargs()
+            kw["instrument"] = params.instrument
+            kw["paper"] = params.paper
+            if params.engine_cal_path:
+                kw["cal_path"] = params.engine_cal_path
+                kw["apply_cal"] = bool(params.engine_apply_cal)
+            return kw
+        return self._engine_build_kwargs(params)
 
     def _run_engine(
         self,
@@ -941,7 +968,7 @@ class ChartCreator:
         on_line("[ChromIQ layout engine] building chart from the targen .ti1…")
         try:
             result = le_chart.build_chart(
-                ti1, work_dir / stem, **self._engine_build_kwargs(params))
+                ti1, work_dir / stem, **self._engine_kwargs(params))
         except Exception as exc:  # noqa: BLE001 — surface any engine failure
             log.exception("ChromIQ layout engine failed")
             on_line(f"[ERROR] ChromIQ layout engine: {exc}")
@@ -979,9 +1006,16 @@ class ChartCreator:
         try:
             doc = json.loads(sidecar.read_text()) if sidecar.exists() else {}
             layout = json.loads(strips.read_text()) if strips.exists() else {}
+            layout["engine"] = "chromiq"      # explicit marker: a ChromIQ-engine chart
+            layout["engine_version"] = 1
             layout["seed"] = result.seed
             layout["color_rep"] = result.color_rep
-            layout["recipe"] = self._engine_build_kwargs(params)
+            # Persist the FULL recipe so loading / preset-creation / built-in
+            # presets can reconstruct the exact engine layout (round-trip).
+            if params.layout_recipe is not None and hasattr(params.layout_recipe, "to_dict"):
+                layout["recipe"] = params.layout_recipe.to_dict()
+            else:
+                layout["recipe"] = self._engine_build_kwargs(params)
             doc["layout"] = layout
             sidecar.write_text(json.dumps(doc))
             if strips.exists():

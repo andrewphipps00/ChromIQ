@@ -128,10 +128,48 @@ def test_auto_count_uses_engine_capacity(tmp_path: Path) -> None:
 def test_engine_build_kwargs_mapping(tmp_path: Path) -> None:
     creator = ChartCreator(_EngineRunner(), _MockFileManager(tmp_path / "p"),
                            _EngineSettings())
+    # Guided/Manual ColorMunki triple density → engine extra-high density (3)
     kw = creator._engine_build_kwargs(
         ChartParams(instrument="CM", paper="A3", triple_density=True,
                     no_spacers=True, patch_scale=0.9, tiff_dpi=600))
     assert kw["instrument"] == "CM" and kw["paper"] == "A3"
-    assert kw["density"] == 3            # triple density
+    assert kw["density"] == 3            # triple density → extra-high
     assert kw["spacer_on"] is False
     assert kw["pscale"] == 0.9 and kw["dpi"] == 600
+    assert ChartParams(instrument="CM", double_density=True) and \
+        creator._engine_build_kwargs(ChartParams(instrument="CM", double_density=True))["density"] == 2
+
+
+def test_engine_kwargs_uses_full_recipe(tmp_path: Path) -> None:
+    from workflow.layout_engine.presets import LayoutRecipe
+    creator = ChartCreator(_EngineRunner(), _MockFileManager(tmp_path / "p"),
+                           _EngineSettings())
+    recipe = LayoutRecipe(instrument="i1", paper="A4", margin_top=10,
+                          patch_w_mm=9.0, offset_x_mm=4.0, spacer_mode="bw")
+    params = ChartParams(instrument="i1", paper="Letter",
+                         layout_recipe=recipe, engine_cal_path="/tmp/c.cal",
+                         engine_apply_cal=True)
+    kw = creator._engine_kwargs(params)
+    # recipe drives the layout; instrument/paper come from ChartParams
+    assert kw["margins"][0] == 10 and kw["patch_w"] == 9.0 and kw["offset_x"] == 4.0
+    assert kw["spacer_mode"] == "bw"
+    assert kw["paper"] == "Letter"          # ChartParams wins for paper
+    assert kw["cal_path"] == "/tmp/c.cal" and kw["apply_cal"] is True
+
+
+def test_full_recipe_chart_builds(tmp_path: Path) -> None:
+    work_dir = tmp_path / "rp"
+    creator = ChartCreator(_EngineRunner(), _MockFileManager(work_dir), _EngineSettings())
+    from workflow.layout_engine.presets import LayoutRecipe
+    finished: list[list[Path]] = []
+    creator.generate(
+        ChartParams(instrument="i1", paper="A4", device_type="2", tiff_dpi=120,
+                    layout_recipe=LayoutRecipe(instrument="i1", paper="A4",
+                                               margin_top=12, patch_h_mm=11.0,
+                                               bit16=True, compression="zlib")),
+        on_line=lambda _l: None, on_finish=lambda t: finished.append(t))
+    assert finished and finished[0] and finished[0][0].exists()
+    sidecar = json.loads(
+        (work_dir / "runs" / "run1" / "rp.channels.json").read_text())
+    assert sidecar["layout"]["engine"] == "chromiq"
+    assert sidecar["layout"]["recipe"]["margin_top"] == 12
