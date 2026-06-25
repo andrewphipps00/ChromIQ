@@ -638,11 +638,16 @@ class LayoutOptionsPanel(QWidget):
         # horizontal space instead of a thin vertical ribbon.
         img = img.rotate(-90, expand=True)
         pix = self._pil_to_pixmap(img)
+        # Render at the screen's device-pixel ratio so it stays crisp on Retina
+        # (a logical-size pixmap would be upscaled ×2 and look blurry).
+        dpr = self.clip_preview.devicePixelRatioF() or 1.0
         avail = self.clip_preview.width()
         avail = min(max(avail if avail > 60 else 300, 120), 360)
-        scaled = pix.scaledToWidth(avail, Qt.TransformationMode.SmoothTransformation)
+        scaled = pix.scaledToWidth(round(avail * dpr),
+                                   Qt.TransformationMode.SmoothTransformation)
+        scaled.setDevicePixelRatio(dpr)
         self.clip_preview.setPixmap(scaled)
-        self.clip_preview.setFixedHeight(max(30, scaled.height()) + 2)
+        self.clip_preview.setFixedHeight(round(scaled.height() / dpr) + 2)
 
     def _export_clip_template(self) -> None:
         from PyQt6.QtWidgets import QFileDialog, QMessageBox

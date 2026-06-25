@@ -44,6 +44,38 @@ def test_store_get_set_default_fallback():
     assert got.seed is None
 
 
+def test_all_fields_persist_through_named_dict():
+    """Every engine option must survive the file-backed preset path
+    (store.set → as_named_dict → from_named_dict → get) so it saves as a default
+    / preset like the printtarg options. Presets drop only the per-chart seed."""
+    from dataclasses import fields, replace
+    full = LayoutRecipe(
+        instrument="i1", paper="A4", clip_border=True, dpi=150, randomize=True,
+        cm_density=1, spacer_on=True, spacer_mode="bw", pscale=0.9, sscale=1.1,
+        border=8.0, margin_top=10.0, margin_right=8.0, margin_bottom=12.0,
+        margin_left=9.0, patch_w_mm=9.0, patch_h_mm=11.0, spacer_width_mm=2.0,
+        inter_patch_mm=1.0, max_strip_mm=200.0, strip_indicator_gap_mm=3.0,
+        offset_x_mm=4.0, offset_y_mm=5.0, bit16=True, compression="zlib",
+        show_strip_indicators=True, indicator_font="Inter", indicator_size_mm=4.0,
+        indicator_bold=True, indicator_italic=True, underline_mode="cycle",
+        underline_thickness_mm=0.8, underline_gap_mm=1.2, chart_text="{project}",
+        chart_text_font="Inter", chart_text_size_mm=3.5, chart_text_bold=True,
+        chart_text_italic=True, stamp_command=True, clip_border_width_mm=30.0,
+        clip_content_mode="text", clip_text="ID", clip_text_font="Inter",
+        clip_image_path="/tmp/logo.png", nolimit=True, strip_pattern="A-Z",
+        patch_pattern="1-99")
+    store = PresetStore()
+    store.set(full)
+    reloaded = PresetStore.from_named_dict(store.as_named_dict())
+    got = reloaded.get("i1", "A4", "clip")
+    # every field except the deliberately-dropped per-chart seed must match
+    for f in fields(LayoutRecipe):
+        if f.name == "seed":
+            assert got.seed is None
+            continue
+        assert getattr(got, f.name) == getattr(full, f.name), f.name
+
+
 def test_store_save_load(tmp_path):
     store = PresetStore.factory_defaults()
     p = tmp_path / "presets.json"
