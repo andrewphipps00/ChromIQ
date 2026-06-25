@@ -1,5 +1,56 @@
 # Changelog
 
+## v3.13.0-beta.1
+
+The first beta of the **ChromIQ layout engine** — an optional, built-in
+replacement for ArgyllCMS printtarg that lays out your charts itself. It's
+**off by default** (Settings → Chart Layout); printing and measuring existing
+charts are unaffected, so it's safe to try and switch back at any time.
+
+### ✨ New
+- **ChromIQ layout engine (opt-in).** When enabled, ChromIQ builds the chart
+  TIFF and `.ti2` itself for the i1Pro / i1Pro 3 / ColorMunki / SpectroScan,
+  packing patches efficiently and putting useful content where printtarg leaves
+  blank space. Full per-instrument × paper × mode defaults live in
+  Settings → Chart Layout, and every option is mirrored in the Create Chart
+  Manual module.
+- **Per-chart layout control.** Patch size & scale, spacer colour/width/scale,
+  inter-patch and strip-indicator gaps, independent page margins, resolution,
+  max strip length, chart offset, strip/patch label patterns, 8/16-bit and
+  compression — each with a friendly tooltip.
+- **Strip indicators.** Choose the label font (bundled + every system font),
+  size (auto-fit), bold/italic; an optional rule under the labels (one
+  continuous 5-segment ChromIQ-accent bar, a per-strip accent cycle, or black)
+  with adjustable thickness and distance.
+- **Randomisation.** Randomise patch order (default), enter or generate a fixed
+  seed for a reproducible layout, or turn randomisation off.
+- **Sheet text.** Print custom text in the bottom margin with
+  `{project}/{date}/{paper}/{instrument}/{patchcount}/{pages}/{seed}/{dpi}`
+  placeholders (an "Insert ▾" menu and a live preview), plus an optional
+  one-line layout-summary stamp.
+- **Clip-border content editor (i1/p3).** Fill the reserved left clip strip with
+  custom text, the ChromIQ branding wordmark, a hand-writing notes box, or an
+  imported logo — with an adjustable clip width, a live rotated preview, and an
+  "Export template (PNG + PDF)" at the exact clip size to design a graphic
+  elsewhere.
+- **Reproducible & self-documenting.** The randomisation seed is stored with the
+  chart; the command stamp records `targen` + the engine (not a misleading
+  printtarg line).
+- **Saveable like printtarg.** Every engine option saves as a default and inside
+  the Create Chart named presets, with the same workflow as the printtarg
+  options.
+
+### ⏭️ Coming next
+- **Layout-engine support in the Edit / create chart layout editor:** opening an
+  engine chart will show all its settings, update the preview live as you edit,
+  and carry your changes back to Create Chart. Tracked in #93.
+
+### 📝 Notes
+- The engine is **beta** and **off by default** — printtarg remains the default
+  and the fallback.
+- Non-German UI translations for the new Chart-Layout strings are pending and
+  will land before a final release.
+
 ## v3.12.1-beta.1
 
 ### 🔧 Changed
