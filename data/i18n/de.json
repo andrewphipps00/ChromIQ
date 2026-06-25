@@ -1980,5 +1980,13 @@
   "Line thickness:": "Liniendicke:",
   "The ChromIQ layout engine is on — set the page layout in the editor after creating the chart.": "Die ChromIQ-Layout-Engine ist an — lege das Seitenlayout nach dem Erstellen der Testkarte im Editor fest.",
   "≈ {n} fit one page": "≈ {n} passen auf eine Seite",
-  "Shuffled with seed {s}.": "Mit Startwert {s} gemischt."
+  "Shuffled with seed {s}.": "Mit Startwert {s} gemischt.",
+  "Clip border": "Klemmrand",
+  "Density:": "Dichte:",
+  "Freehand": "Freihand",
+  "Rig (high density)": "Schiene (hohe Dichte)",
+  "Highest density": "Höchste Dichte",
+  "i1Pro / 3+ only. Reserve the left edge of each strip for the clip-on border the instrument needs to find the strip. Turn off to free that space for patches.": "Nur i1Pro / 3+. Reserviert den linken Rand jedes Streifens für den Klemmrand, den das Gerät zum Finden des Streifens braucht. Ausschalten, um diesen Platz für Messfelder freizugeben.",
+  "i1Pro / 3+ only. Let a strip run the full height of the page instead of being limited to one instrument pass.": "Nur i1Pro / 3+. Lässt einen Streifen über die volle Seitenhöhe laufen, statt ihn auf einen Messdurchgang zu begrenzen.",
+  "ColorMunki only. Freehand spaces strips for hand-held reading; the higher densities pack more strips per page for use with a guide rig.": "Nur ColorMunki. Freihand verteilt die Streifen für die Messung aus der Hand; die höheren Dichten packen mehr Streifen pro Seite für die Nutzung mit einer Führungsschiene."
 }

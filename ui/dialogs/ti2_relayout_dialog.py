@@ -730,6 +730,12 @@ class _NewChartDialog(QDialog):
         self.result_program: list[tuple] | None = None
         self.result_options: R.LayoutOptions | None = None
         self.result_basename: str = "chart"
+        # Engine layout-mode the user picked in the Chart section (only
+        # meaningful when the engine is on); the editor applies these to the
+        # new chart's recipe (#93).
+        self.result_engine_clip: bool = True
+        self.result_engine_nocap: bool = False
+        self.result_engine_density: int = 1
         # Magenta accents on checked / focused state — same scoped rules
         # as the parent dialog so the New-chart dialog matches it instead
         # of falling back to the app-wide cyan.
@@ -954,6 +960,58 @@ class _NewChartDialog(QDialog):
         cg.setColumnStretch(1, 1)
         cg.setColumnStretch(3, 1)
         self._paper.currentIndexChanged.connect(self._on_paper_changed)
+
+        # --- Engine layout mode (Chart section) -----------------------------
+        # When the ChromIQ engine is on, a few layout choices that change how
+        # many patches fit a page belong here in the Chart section (the
+        # printtarg "Layout options" group below is hidden). Strip readers get
+        # clip-border on/off + uncapped strip length; the ColorMunki gets the
+        # density dropdown (freehand / rig / highest) (#93).
+        self._engine_on = bool(
+            self._settings is not None
+            and self._settings.get("use_chromiq_layout_engine", False))
+        self._engine_mode_row = QWidget(chart_box)
+        em = QHBoxLayout(self._engine_mode_row)
+        em.setContentsMargins(0, 0, 0, 0)
+        em.setSpacing(12)
+        self._eng_clip = QCheckBox(tr("Clip border"), self._engine_mode_row)
+        self._eng_clip.setChecked(True)
+        self._eng_clip.setToolTip(tr("i1Pro / 3+ only. Reserve the left edge of "
+                                     "each strip for the clip-on border the "
+                                     "instrument needs to find the strip. Turn "
+                                     "off to free that space for patches."))
+        self._eng_nocap = QCheckBox(tr("Don't cap strip length"), self._engine_mode_row)
+        self._eng_nocap.setToolTip(tr("i1Pro / 3+ only. Let a strip run the full "
+                                      "height of the page instead of being "
+                                      "limited to one instrument pass."))
+        self._eng_density_lbl = QLabel(tr("Density:"), self._engine_mode_row)
+        self._eng_density = NoScrollComboBox(self._engine_mode_row)
+        self._eng_density.addItem(tr("Freehand"), 1)
+        self._eng_density.addItem(tr("Rig (high density)"), 2)
+        self._eng_density.addItem(tr("Highest density"), 3)
+        self._eng_density.setToolTip(tr("ColorMunki only. Freehand spaces strips "
+                                        "for hand-held reading; the higher "
+                                        "densities pack more strips per page for "
+                                        "use with a guide rig."))
+        _as_compact(self._eng_density)
+        em.addWidget(self._eng_clip)
+        em.addWidget(self._eng_nocap)
+        em.addWidget(self._eng_density_lbl)
+        em.addWidget(self._eng_density)
+        em.addStretch(1)
+        cg.addWidget(self._engine_mode_row, 2, 0, 1, 4)
+        # How many patches fit one page with the current instrument / paper /
+        # mode. Lives in the Chart section and uses a theme-aware colour so it
+        # reads in both light and dark mode.
+        self._engine_cap_hint = QLabel("", chart_box)
+        self._engine_cap_hint.setStyleSheet(
+            "color: palette(text); font-size: 11px; font-style: italic;")
+        cg.addWidget(self._engine_cap_hint, 3, 0, 1, 4)
+        self._engine_mode_row.setVisible(self._engine_on)
+        self._engine_cap_hint.setVisible(self._engine_on)
+        self._eng_clip.toggled.connect(self._update_engine_cap_hint)
+        self._eng_nocap.toggled.connect(self._update_engine_cap_hint)
+        self._eng_density.currentIndexChanged.connect(self._update_engine_cap_hint)
         lay.addWidget(chart_box)
 
         # --- Source ---------------------------------------------------------
@@ -972,12 +1030,6 @@ class _NewChartDialog(QDialog):
         self._count.setValue(200)
         self._count.setObjectName("compact_input")
         seed_row.addWidget(self._count)
-        # Engine-on hint: how many patches fit one page with the current
-        # instrument/paper/mode, so the user can pick a count that fills pages
-        # (the engine paginates as many pages as the count needs) (#93).
-        self._engine_cap_hint = QLabel("", src_box)
-        self._engine_cap_hint.setStyleSheet("color: palette(mid); font-size: 11px;")
-        seed_row.addWidget(self._engine_cap_hint)
         seed_row.addStretch(1)
         sl.addLayout(seed_row)
         sl.addWidget(self._mode_blank)
@@ -2502,11 +2554,14 @@ class _NewChartDialog(QDialog):
                 hint.setText("")
                 return
             if eng == "CM":
-                density = 3 if self._cb_td.isChecked() else (
-                    2 if self._cb_h.isChecked() else 1)
+                density = self._eng_density.currentData() or 1
                 geom = instruments.build(eng, density=density)
             else:
-                geom = instruments.build(eng, nolpcbord=self._cb_L.isChecked())
+                # nolpcbord = suppress clip = clip border OFF;
+                # nolimit = don't cap strip length (lets strips run longer).
+                geom = instruments.build(
+                    eng, nolpcbord=not self._eng_clip.isChecked(),
+                    nolimit=self._eng_nocap.isChecked())
             w_mm, h_mm = papers.dimensions_mm(paper)
             cap = geometry.patches_per_sheet(geom, w_mm, h_mm)
             hint.setText(tr("≈ {n} fit one page").format(n=cap))
@@ -2536,6 +2591,13 @@ class _NewChartDialog(QDialog):
         if not is_cm:
             self._cb_h.setChecked(False)
             self._cb_td.setChecked(False)
+        # Engine layout-mode controls (Chart section): clip / no-cap for strip
+        # readers, density dropdown for the ColorMunki.
+        if getattr(self, "_engine_on", False):
+            self._eng_clip.setVisible(is_strip)
+            self._eng_nocap.setVisible(is_strip)
+            self._eng_density_lbl.setVisible(is_cm)
+            self._eng_density.setVisible(is_cm)
         self._update_engine_cap_hint()
 
     def _on_dd_toggled(self, on: bool) -> None:
@@ -2660,6 +2722,9 @@ class _NewChartDialog(QDialog):
         # No name is asked for here any more — the real name is chosen at
         # Save & apply time. Keep the neutral "chart" placeholder basename.
         self.result_basename = "chart"
+        self.result_engine_clip = self._eng_clip.isChecked()
+        self.result_engine_nocap = self._eng_nocap.isChecked()
+        self.result_engine_density = int(self._eng_density.currentData() or 1)
         self._save_gen_state()   # remember these choices for next time
         self.accept()
 
@@ -2948,6 +3013,7 @@ class Ti2RelayoutDialog(QDialog):
         self._saved_sig: object = object()
         self._palette: list[tuple] | None = None       # native spacer palette
         self._regen: R.RegenResult | None = None
+        self._engine_tiffs: list = []                   # engine-rendered pages
         self._page = 0                                  # previewed page index
         self._spacers: list = []                        # current-page Spacer list
         # Per-page spacer segmentation cache (page -> Spacer list). Filled
@@ -3951,6 +4017,13 @@ class Ti2RelayoutDialog(QDialog):
             try:
                 rec = default_recipe(inst, spec.paper_flag)
                 rec.randomize = False   # editor charts start un-randomised; Shuffle randomises
+                # Carry the layout mode chosen in the New chart window's Chart
+                # section into the recipe so the editor opens with it (#93).
+                if inst == "CM":
+                    rec.cm_density = int(getattr(dlg, "result_engine_density", 1))
+                else:
+                    rec.clip_border = bool(getattr(dlg, "result_engine_clip", True))
+                    rec.nolimit = bool(getattr(dlg, "result_engine_nocap", False))
                 self._engine_panel.set_recipe(rec)
             except Exception as exc:  # noqa: BLE001
                 log.warning("seed engine panel for new chart failed: %s", exc)
@@ -5085,6 +5158,19 @@ class Ti2RelayoutDialog(QDialog):
 
     def _show_page(self, page: int) -> None:
         """Switch the preview to ``page``: detect its spacers (cached), redraw."""
+        # Engine chart: flip between the rendered engine pages. The patch
+        # highlight overlay is already keyed by (page, slot), so re-showing the
+        # page's TIFF and refreshing redraws the right outlines (#93).
+        if self._engine_active():
+            tiffs = getattr(self, "_engine_tiffs", [])
+            n = len(tiffs)
+            if n == 0:
+                return
+            self._page = max(0, min(page, n - 1))
+            self._sel_spacers.clear()
+            self._update_page_nav()
+            self._show_image(tiffs[self._page])
+            return
         if self._regen is None:
             return
         n = len(self._regen.tiffs)
@@ -5144,7 +5230,10 @@ class Ti2RelayoutDialog(QDialog):
         return [int(x0 + i * col_w) for i in range(1, n)]
 
     def _update_page_nav(self) -> None:
-        n = len(self._regen.tiffs) if self._regen else 0
+        if self._engine_active():
+            n = len(getattr(self, "_engine_tiffs", []))
+        else:
+            n = len(self._regen.tiffs) if self._regen else 0
         self._page_bar.setVisible(n > 1)
         if n > 1:
             self._page_label.setText(
@@ -5233,7 +5322,13 @@ class Ti2RelayoutDialog(QDialog):
             result = le_chart.build_chart(str(ti1), stem, **kw)
             tiffs = result.tiff_paths or []
             if tiffs:
-                self._show_image(tiffs[min(self._page, len(tiffs) - 1)])
+                # Keep the rendered pages so Page ◀ ▶ can flip between them, the
+                # same as the printtarg preview does (#93).
+                self._engine_tiffs = list(tiffs)
+                if self._page >= len(tiffs):
+                    self._page = 0
+                self._show_image(tiffs[self._page])
+                self._update_page_nav()
                 # Cache spacer rects at the preview DPI so a preview click maps
                 # to the spacer the engine will recolour (#93).
                 from workflow.layout_engine import geometry, permutation

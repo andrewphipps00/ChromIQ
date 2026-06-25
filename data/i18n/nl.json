@@ -1980,5 +1980,13 @@
   "Line thickness:": "Line thickness:",
   "The ChromIQ layout engine is on — set the page layout in the editor after creating the chart.": "The ChromIQ layout engine is on — set the page layout in the editor after creating the chart.",
   "≈ {n} fit one page": "≈ {n} fit one page",
-  "Shuffled with seed {s}.": "Shuffled with seed {s}."
+  "Shuffled with seed {s}.": "Shuffled with seed {s}.",
+  "Clip border": "Clip border",
+  "Density:": "Density:",
+  "Freehand": "Freehand",
+  "Rig (high density)": "Rig (high density)",
+  "Highest density": "Highest density",
+  "i1Pro / 3+ only. Reserve the left edge of each strip for the clip-on border the instrument needs to find the strip. Turn off to free that space for patches.": "i1Pro / 3+ only. Reserve the left edge of each strip for the clip-on border the instrument needs to find the strip. Turn off to free that space for patches.",
+  "i1Pro / 3+ only. Let a strip run the full height of the page instead of being limited to one instrument pass.": "i1Pro / 3+ only. Let a strip run the full height of the page instead of being limited to one instrument pass.",
+  "ColorMunki only. Freehand spaces strips for hand-held reading; the higher densities pack more strips per page for use with a guide rig.": "ColorMunki only. Freehand spaces strips for hand-held reading; the higher densities pack more strips per page for use with a guide rig."
 }
