@@ -29,6 +29,12 @@ FONTS = {
     "Inter": "assets/fonts/Inter-VariableFont_opsz,wght.ttf",
     "Instrument Serif": "assets/fonts/InstrumentSerif-Regular.ttf",
 }
+# Static (non-variable) bundled families that ship separate style faces. The
+# masthead's Instrument Serif has a real Italic file — using it (not a sheared
+# regular) is what makes the "IQ" glyphs, e.g. the Q's tail, match the header.
+FONT_STYLE_FILES = {
+    "Instrument Serif": {"italic": "assets/fonts/InstrumentSerif-Italic.ttf"},
+}
 DEFAULT_INDICATOR_FONT = "JetBrains Mono"
 
 # Masthead wordmark styling (ui.masthead_header): Instrument Serif, "Chrom" in
@@ -97,6 +103,9 @@ def _system_font_map() -> dict[str, dict[str, str]]:
 
 
 def _font_path(family: str, style: str = "regular") -> str | None:
+    sf = FONT_STYLE_FILES.get(family)
+    if sf and style in sf:
+        return resource_path(sf[style])
     if family in FONTS:
         return resource_path(FONTS[family])
     faces = _system_font_map().get(family)
@@ -113,6 +122,12 @@ def font_supports(family: str) -> tuple[bool, bool]:
     truth shared by the renderer and the UI's bold/italic enable logic.
     """
     if family in FONTS:
+        # Static bundled family with separate style faces (e.g. Instrument Serif
+        # ships a real Italic but no Bold).
+        sf = FONT_STYLE_FILES.get(family)
+        if sf is not None:
+            return ("bold" in sf or "bolditalic" in sf,
+                    "italic" in sf or "bolditalic" in sf)
         try:
             f = ImageFont.truetype(resource_path(FONTS[family]), 12)
             low = [(_n.decode() if isinstance(_n, bytes) else _n).replace(" ", "").lower()
@@ -296,6 +311,9 @@ def _italic_tile(text: str, font, fill: tuple, stroke_w: int = 0,
     tile = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     ImageDraw.Draw(tile).text((pad, base_y), text, font=font, fill=fill,
                               stroke_width=stroke_w, stroke_fill=fill, anchor="ls")
+    if not shear:                       # real italic face → no faux slant/resample
+        bbox = tile.getbbox()
+        return tile, base_y, (bbox[0] if bbox else 0)
     # AFFINE maps output→input: input_x = x + shear*(H - y) leans the top right.
     sheared = tile.transform((W + int(H * shear), H), Image.AFFINE,
                              (1, shear, -shear * H, 0, 1, 0), resample=Image.BICUBIC)
@@ -325,7 +343,13 @@ def _vwordmark(extra_lines: list[str], width_px: int, height_px: int) -> Image.I
     asc, desc = f.getmetrics()
     line_h = size * 1.25
     cy = (width_px - line_h * n) / 2
-    iq_tile, iq_base, iq_left = _italic_tile("IQ", f, iq_fill)  # same face, italic
+    # "IQ" is the masthead's real Instrument Serif *Italic* face (the masthead
+    # asks for bold too, but Instrument Serif has no bold face and Qt doesn't
+    # synthesise one — so the header renders plain italic). Use the genuine
+    # italic glyphs (no faux shear, no faux bold) so the "IQ" — notably the Q's
+    # tail — matches the header exactly instead of a sheared regular face.
+    f_iq = _font(size, WORDMARK_FONT, italic=True)
+    iq_tile, iq_base, iq_left = _italic_tile("IQ", f_iq, iq_fill, shear=0.0)
     chrom_w = d.textlength("Chrom", font=f)
     kern = size * 0.02
     wm_w = chrom_w + kern + (iq_tile.width - iq_left)

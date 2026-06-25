@@ -109,10 +109,20 @@ def test_font_supports_bundled():
     has_bold, has_italic = raster.font_supports("JetBrains Mono")
     assert has_bold is True
     assert has_italic is False
-    # Instrument Serif ships as a single Regular static face — neither style.
-    assert raster.font_supports("Instrument Serif") == (False, False)
+    # Instrument Serif ships a real Italic face (used by the masthead "IQ"), but
+    # no Bold face — so italic yes, bold no.
+    assert raster.font_supports("Instrument Serif") == (False, True)
     # An unknown family supports nothing (renderer would fall back to default).
     assert raster.font_supports("No Such Font 123") == (False, False)
+
+
+def test_instrument_serif_italic_face_resolves():
+    """The masthead "IQ" needs the real Instrument Serif Italic face, not a
+    sheared Regular — so italic must resolve to a different file (#93)."""
+    reg = raster._font_path("Instrument Serif", "regular")
+    ital = raster._font_path("Instrument Serif", "italic")
+    assert reg and ital and reg != ital
+    assert str(ital).endswith("Italic.ttf")
 
 
 def test_underline_modes():
