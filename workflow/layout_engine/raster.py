@@ -152,18 +152,45 @@ def _font(px: int, family: str = DEFAULT_INDICATOR_FONT,
 
 _UPPER = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
+# Tiny gap inserted between letters of a multi-letter strip label (e.g. "AB"),
+# as a fraction of the font size, so the two letters stay distinguishable.
+INDICATOR_LETTER_SPACING = 0.12
+
+
+def _draw_indicator(draw, cx: int, top: int, text: str, font, spacing_px: int) -> None:
+    """Draw a strip label centred at *cx*, with a small gap between letters so a
+    two-letter label (e.g. "AB") stays legible."""
+    if len(text) <= 1 or spacing_px <= 0:
+        try:
+            draw.text((cx, top), text, font=font, fill=(0, 0, 0), anchor="ma")
+        except Exception:             # default bitmap font: no anchor support
+            tw = int(draw.textlength(text, font=font))
+            draw.text((cx - tw // 2, top), text, font=font, fill=(0, 0, 0))
+        return
+    widths = [draw.textlength(ch, font=font) for ch in text]
+    total = sum(widths) + spacing_px * (len(text) - 1)
+    x = cx - total / 2
+    for ch, w in zip(text, widths):
+        try:
+            draw.text((x, top), ch, font=font, fill=(0, 0, 0), anchor="la")
+        except Exception:             # default bitmap font: top-left default
+            draw.text((x, top), ch, font=font, fill=(0, 0, 0))
+        x += w + spacing_px
+
 
 def effective_indicator_size_mm(geom, dpi: int, font: str, size_mm: float) -> float:
     """The indicator font size to use. An explicit *size_mm* is returned as-is;
     *size_mm* 0 = auto, where the size is chosen so the widest two-letter label
-    fits the strip width (capped at the instrument text height)."""
+    (plus the inter-letter gap) fits the strip width (capped at the instrument
+    text height)."""
     if size_mm:
         return float(size_mm)
     mm2px = dpi / 25.4
     target = geom.txhisl
     f = _font(max(6, round(target * mm2px)), font)
     try:
-        widest2 = 2.0 * max(f.getlength(c) for c in _UPPER) / mm2px
+        widest2 = (2.0 * max(f.getlength(c) for c in _UPPER) / mm2px
+                   + INDICATOR_LETTER_SPACING * target)   # + one inter-letter gap
     except Exception:
         return target
     return target if widest2 <= geom.pwid else target * geom.pwid / widest2
@@ -409,11 +436,8 @@ def render_pages(
                 _lbl = label_strip(global_strip + 1)
                 _cx = x0 + pw_px // 2          # centre over the strip
                 _y = px(place.leader_top)
-                try:
-                    draw.text((_cx, _y), _lbl, font=font, fill=(0, 0, 0), anchor="ma")
-                except Exception:             # default bitmap font: no anchor
-                    _tw = int(draw.textlength(_lbl, font=font))
-                    draw.text((_cx - _tw // 2, _y), _lbl, font=font, fill=(0, 0, 0))
+                _draw_indicator(draw, _cx, _y, _lbl, font,
+                                max(1, round(ind_px * INDICATOR_LETTER_SPACING)))
                 if underline_on and underline_mode == "cycle":   # one accent / strip
                     _ly = _y + ind_px + ul_gap
                     draw.rectangle([x0, _ly, x0 + pw_px - 1, _ly + ul_th - 1],
