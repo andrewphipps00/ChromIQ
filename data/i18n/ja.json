@@ -1893,5 +1893,11 @@
   "Project / target name": "Project / target name",
   "Randomisation seed": "Randomisation seed",
   "Resolution": "Resolution",
-  "Total patch count": "Total patch count"
+  "Total patch count": "Total patch count",
+  "New seed": "New seed",
+  "Patches are shuffled across the sheet so a streak of similar colours can't bias a strip — leave this on. The seed is the number that drives the shuffle: with a fixed seed the exact same layout is reproduced every build (handy for re-printing an identical chart), otherwise a fresh seed is drawn each time. Press New seed to draw one now; it's saved with the chart so you can always recreate it.": "Patches are shuffled across the sheet so a streak of similar colours can't bias a strip — leave this on. The seed is the number that drives the shuffle: with a fixed seed the exact same layout is reproduced every build (handy for re-printing an identical chart), otherwise a fresh seed is drawn each time. Press New seed to draw one now; it's saved with the chart so you can always recreate it.",
+  "Randomisation": "Randomisation",
+  "Randomise patch order": "Randomise patch order",
+  "Seed:": "Seed:",
+  "Use a fixed seed (reproducible)": "Use a fixed seed (reproducible)"
 }

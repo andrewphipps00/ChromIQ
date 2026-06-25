@@ -172,7 +172,7 @@ class LayoutOptionsPanel(QWidget):
             wrap = QWidget(self); wrap.setLayout(box)
             return wrap
 
-        from PyQt6.QtWidgets import QLineEdit
+        from PyQt6.QtWidgets import QLineEdit, QPushButton
 
         def small_mm(top: float = 60.0) -> NoScrollDoubleSpinBox:
             sb = NoScrollDoubleSpinBox(self)
@@ -212,6 +212,37 @@ class LayoutOptionsPanel(QWidget):
         add_row(g, 5, tr("Inter-patch gap:"), self.inter_patch)
         add_row(g, 6, tr("Strip-indicator gap:"), self.sig)
         v.addWidget(ps)
+
+        # ---- Randomisation ----
+        rg = QGroupBox(tr("Randomisation"), self)
+        rgg = QGridLayout(rg)
+        self.randomize_cb = QCheckBox(tr("Randomise patch order"), self)
+        self.randomize_cb.setChecked(True)
+        self.randomize_cb.toggled.connect(self._on_randomize_toggled)
+        self.fixed_seed_cb = QCheckBox(tr("Use a fixed seed (reproducible)"), self)
+        self.fixed_seed_cb.toggled.connect(self._on_fixed_seed_toggled)
+        self.seed_spin = NoScrollSpinBox(self)
+        self.seed_spin.setRange(0, 2_147_483_647)
+        self.seed_spin.setObjectName("compact_input")
+        self.seed_spin.valueChanged.connect(self._emit)
+        self.new_seed_btn = QPushButton(tr("New seed"), self)
+        self.new_seed_btn.setObjectName("compact_input")
+        self.new_seed_btn.clicked.connect(self._on_new_seed)
+        rgg.addWidget(self.randomize_cb, 0, 1)
+        rgg.addWidget(self.fixed_seed_cb, 1, 1)
+        rgg.addWidget(QLabel(tr("Seed:"), self), 2, 0, _Qt.AlignmentFlag.AlignRight)
+        rgg.addWidget(cell_fill(self.seed_spin, self.new_seed_btn), 2, 1)
+        rgg.addWidget(TooltipButton(
+            tr("Randomisation"),
+            tr("Patches are shuffled across the sheet so a streak of similar "
+               "colours can't bias a strip — leave this on. The seed is the "
+               "number that drives the shuffle: with a fixed seed the exact same "
+               "layout is reproduced every build (handy for re-printing an "
+               "identical chart), otherwise a fresh seed is drawn each time. "
+               "Press New seed to draw one now; it's saved with the chart so you "
+               "can always recreate it."), self), 2, 2)
+        v.addWidget(rg)
+        self._on_randomize_toggled(True)
 
         # ---- Strip indicators ----
         si = QGroupBox(tr("Strip indicators"), self)
@@ -445,6 +476,25 @@ class LayoutOptionsPanel(QWidget):
         for w in (self.clip_width_label, self.clip_width, self.clip_width_tip):
             w.setVisible(clip)
 
+    def _sync_seed_enabled(self) -> None:
+        on = self.randomize_cb.isChecked()
+        self.fixed_seed_cb.setEnabled(on)
+        self.new_seed_btn.setEnabled(on)
+        self.seed_spin.setEnabled(on and self.fixed_seed_cb.isChecked())
+
+    def _on_randomize_toggled(self, *_a) -> None:
+        self._sync_seed_enabled()
+        self._emit()
+
+    def _on_fixed_seed_toggled(self, *_a) -> None:
+        self._sync_seed_enabled()
+        self._emit()
+
+    def _on_new_seed(self) -> None:
+        from workflow.layout_engine.permutation import pick_seed
+        self.fixed_seed_cb.setChecked(True)   # a drawn seed is a reproducible one
+        self.seed_spin.setValue(pick_seed())
+
     def _insert_token(self, token: str) -> None:
         """Drop ``{token}`` into the sheet-text field at the cursor."""
         self.chart_text.insert("{%s}" % token)
@@ -628,6 +678,12 @@ class LayoutOptionsPanel(QWidget):
         ci = self.compression.findData(r.compression)
         self.compression.setCurrentIndex(ci if ci >= 0 else 0)
         self.clip_width.setValue(r.clip_border_width_mm or 26.0)
+        self.randomize_cb.setChecked(r.randomize)
+        _fixed = r.seed is not None
+        self.fixed_seed_cb.setChecked(_fixed)
+        if _fixed:
+            self.seed_spin.setValue(int(r.seed))
+        self._sync_seed_enabled()
         self._inst, self._clip = r.instrument, r.clip_border
         self._update_clip_visibility()
         self._loading = False
@@ -669,4 +725,7 @@ class LayoutOptionsPanel(QWidget):
         r.stamp_command = self.stamp_command.isChecked()
         r.compression = self.compression.currentData() or "lzw"
         r.clip_border_width_mm = self.clip_width.value()
+        r.randomize = self.randomize_cb.isChecked()
+        r.seed = (int(self.seed_spin.value())
+                  if r.randomize and self.fixed_seed_cb.isChecked() else None)
         return r
