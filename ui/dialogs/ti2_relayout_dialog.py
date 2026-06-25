@@ -3249,7 +3249,11 @@ class Ti2RelayoutDialog(QDialog):
         # pinned so they're always reachable on short windows.
         right = QWidget(self)
         # Match the panel's fixed width (+ scrollbar gutter) so the column
-        # sits flush at the window edge without overflow.
+        # sits flush at the window edge without overflow. Stored so the engine
+        # panel (wider than the printtarg knobs) can widen the whole column,
+        # not just the inner panel — otherwise the scroll area stays narrow and
+        # the engine panel scrolls horizontally (#93).
+        self._right_pane = right
         right.setFixedWidth(controls.width() + 14)
         rv = QVBoxLayout(right)
         rv.setContentsMargins(0, 0, 0, 0)
@@ -3793,15 +3797,22 @@ class Ti2RelayoutDialog(QDialog):
         """
         if self._engine_panel_grp is None:
             return
-        use_engine = (self._engine_recipe is not None
-                      or bool(self._settings.get("use_chromiq_layout_engine", False)))
+        # Drive engine vs printtarg off the LOADED CHART (does it carry an engine
+        # recipe?), not the global setting — the editor edits a specific chart. A
+        # printtarg chart shows the printtarg knobs (and its true -L/no-clip)
+        # even while the engine setting is on; an engine chart shows the panel.
+        use_engine = self._engine_recipe is not None
         self._engine_panel_grp.setVisible(use_engine)
         if getattr(self, "_pt_box", None) is not None:
             self._pt_box.setVisible(not use_engine)
         # The engine panel needs more width than the printtarg knobs; widen the
-        # controls column when it's shown so it doesn't clip.
+        # controls column AND its containing pane when shown, or the scroll area
+        # stays narrow and the panel scrolls horizontally.
+        _w = 480 if use_engine else 360
         if getattr(self, "_controls_panel", None) is not None:
-            self._controls_panel.setFixedWidth(470 if use_engine else 360)
+            self._controls_panel.setFixedWidth(_w)
+        if getattr(self, "_right_pane", None) is not None:
+            self._right_pane.setFixedWidth(_w + 26)   # + scrollbar/frame gutter
 
     def _load_ti2(self) -> None:
         start = (self._settings.get("custom_output_path", "")
@@ -5062,9 +5073,12 @@ class Ti2RelayoutDialog(QDialog):
         self._show_image(show_path)
 
     def _engine_active(self) -> bool:
-        return (self._engine_panel_grp is not None
-                and not self._engine_panel_grp.isHidden()
-                and self._engine_ti1 is not None)
+        # Only when the loaded chart is genuinely an engine chart (carries a
+        # recipe) — never for a printtarg chart, so its real layout (incl.
+        # no-clip) is shown, not a defaulted engine render with a clip border.
+        return (self._engine_recipe is not None
+                and self._engine_ti1 is not None
+                and self._engine_panel_grp is not None)
 
     def _do_engine_preview(self) -> None:
         """Render the current engine recipe to a temp page and show it as the
