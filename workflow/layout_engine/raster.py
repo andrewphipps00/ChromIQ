@@ -405,6 +405,7 @@ def render_pages(
     indicator_bold: bool = False,
     indicator_italic: bool = False,
     indicator_rotation: int = 0,
+    indicator_align: str = "left",
     underline_mode: str = "off",
     underline_thickness_mm: float = 0.5,
     underline_gap_mm: float = 0.5,
@@ -457,6 +458,21 @@ def render_pages(
     ul_th = max(1, px(underline_thickness_mm or 0.5))
     ul_gap = px(underline_gap_mm)
 
+    # Inter-letter gap (constant for the whole chart) and the vertical height the
+    # label band reserves. For side-rotated labels (90°/270°) the band is sized
+    # to the LONGEST label on the chart so every strip's reading-start letter can
+    # be anchored on the same line (the patch-side line stays fixed regardless of
+    # how many letters a label has) and the underline clears the tallest label.
+    _spc = max(1, round(ind_px * INDICATOR_LETTER_SPACING))
+    _rot = indicator_rotation % 360
+    _is_side = _rot in (90, 270)
+    if draw_indicators and _is_side:
+        _n_total_strips = max(1, (total + steps - 1) // steps)
+        _longest = label_strip(_n_total_strips)
+        label_band_h = _indicator_tile(_longest, font, _spc, _rot).height
+    else:
+        label_band_h = ind_px
+
     images: list[Image.Image] = []
     for page in range(layout.pages):
         img = Image.new("RGB", (W, H), (255, 255, 255))
@@ -482,14 +498,26 @@ def render_pages(
                 _lbl = label_strip(global_strip + 1)
                 _cx = x0 + strip_w // 2          # centre over the strip
                 _y = px(place.leader_top)
-                _spc = max(1, round(ind_px * INDICATOR_LETTER_SPACING))
-                if indicator_rotation % 360 == 0:
+                if _rot == 0:
                     _draw_indicator(draw, _cx, _y, _lbl, font, _spc)
                 else:                            # rotated label → tile + paste
                     _tile = _indicator_tile(_lbl, font, _spc, indicator_rotation)
-                    img.paste(_tile, (_cx - _tile.width // 2, _y), _tile)
+                    # Justify within the label band along the reading axis. The
+                    # patch-side line (band bottom) is fixed for every strip, so a
+                    # label gaining a second letter grows AWAY from the patches
+                    # instead of creeping toward them (#93).
+                    _extra = max(0, label_band_h - _tile.height)
+                    if not _is_side:             # 180°: top-aligned like before
+                        _off = 0
+                    elif indicator_align == "center":
+                        _off = _extra // 2
+                    elif indicator_align == "left":   # reading-start anchored
+                        _off = _extra if _rot == 90 else 0
+                    else:                             # right: reading-end anchored
+                        _off = 0 if _rot == 90 else _extra
+                    img.paste(_tile, (_cx - _tile.width // 2, _y + _off), _tile)
                 if underline_on and underline_mode == "cycle":   # one accent / strip
-                    _ly = _y + ind_px + ul_gap
+                    _ly = _y + label_band_h + ul_gap
                     draw.rectangle([x0, _ly, xR - 1, _ly + ul_th - 1],
                                    fill=ACCENT_RGB[global_strip % len(ACCENT_RGB)])
             for j, gslot in enumerate(col_slots):
@@ -511,7 +539,7 @@ def render_pages(
         # "black" is a single plain line. ("cycle" is drawn per strip above.)
         if (draw_indicators and underline_mode in ("segments", "black")
                 and n_passes > 0):
-            _ly = px(place.leader_top) + ind_px + ul_gap
+            _ly = px(place.leader_top) + label_band_h + ul_gap
             _yb = _ly + ul_th - 1
             x_left = px(place.x_of(0))
             x_right = px(place.x_of(n_passes - 1) + place.pwid) - 1

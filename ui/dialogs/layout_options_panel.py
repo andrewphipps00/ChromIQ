@@ -12,8 +12,8 @@ from __future__ import annotations
 
 from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import (
-    QCheckBox, QGridLayout, QGroupBox, QHBoxLayout, QLabel, QMenu, QToolButton,
-    QVBoxLayout, QWidget,
+    QButtonGroup, QCheckBox, QGridLayout, QGroupBox, QHBoxLayout, QLabel, QMenu,
+    QToolButton, QVBoxLayout, QWidget,
 )
 
 from core.i18n import tr
@@ -412,8 +412,26 @@ class LayoutOptionsPanel(QWidget):
         self.indicator_rotation = NoScrollComboBox(self)
         for _deg in (0, 90, 180, 270):
             self.indicator_rotation.addItem(f"{_deg}°", _deg)
-        self.indicator_rotation.currentIndexChanged.connect(self._emit)
-        add_row(sig2, 6, tr("Rotation:"), self.indicator_rotation,
+        # Compact, but wide enough for "270°" + the dropdown arrow; the freed
+        # space goes to the alignment checkboxes alongside it.
+        self.indicator_rotation.setMinimumContentsLength(3)
+        self.indicator_rotation.setMaximumWidth(88)
+        self.indicator_rotation.currentIndexChanged.connect(self._on_rotation_changed)
+        # Reading-axis alignment for side-rotated (90°/270°) multi-letter labels.
+        # A mutually-exclusive checkbox set (Left / Centered / Right); only active
+        # when the rotation lays the label on its side, greyed out otherwise.
+        self.ind_align_left = QCheckBox(tr("Left"), self)
+        self.ind_align_center = QCheckBox(tr("Centered"), self)
+        self.ind_align_right = QCheckBox(tr("Right"), self)
+        self._align_group = QButtonGroup(self)
+        self._align_group.setExclusive(True)
+        for _cb in (self.ind_align_left, self.ind_align_center, self.ind_align_right):
+            self._align_group.addButton(_cb)
+            _cb.toggled.connect(self._emit)
+        self.ind_align_left.setChecked(True)
+        add_row(sig2, 6, tr("Rotation:"),
+                cell(self.indicator_rotation, self.ind_align_left,
+                     self.ind_align_center, self.ind_align_right),
                 tip=TooltipButton(
                     tr("Indicator rotation"),
                     tr("Turns the little letter printed above each strip so it "
@@ -423,8 +441,14 @@ class LayoutOptionsPanel(QWidget):
                        "than the strip) or so the labels face you the way you "
                        "actually hold the sheet while measuring. 180° prints it "
                        "upside-down, for when you feed the page in from the other "
-                       "end. If you're not sure, leave it at 0°."), self))
+                       "end. If you're not sure, leave it at 0°.\n\n"
+                       "Left / Centered / Right (only available at 90° / 270°) "
+                       "set how a two-letter label lines up: Left keeps the first "
+                       "letter on a fixed line nearest the patches so the label "
+                       "grows away from them, Right anchors the last letter, and "
+                       "Centered splits the difference."), self))
         v.addWidget(si)
+        self._on_rotation_changed()
 
         # ---- Page geometry ----
         pg = QGroupBox(tr("Page geometry"), self)
@@ -1075,6 +1099,15 @@ class LayoutOptionsPanel(QWidget):
         self._sync_underline_enabled()
         self._emit()
 
+    def _on_rotation_changed(self, *_a) -> None:
+        """Reading-axis alignment only matters for the side rotations (90°/270°);
+        grey out the Left/Centered/Right checkboxes (and their labels) otherwise."""
+        rot = int(self.indicator_rotation.currentData() or 0)
+        active = rot in (90, 270)
+        for cb in (self.ind_align_left, self.ind_align_center, self.ind_align_right):
+            cb.setEnabled(active)
+        self._emit()
+
     def _on_paper_changed(self, *_a) -> None:
         if self.paper is not None:
             self._custom_paper_w.setVisible(self.paper.currentData() == "__custom__")
@@ -1173,6 +1206,11 @@ class LayoutOptionsPanel(QWidget):
         self.ind_italic.setChecked(r.indicator_italic)
         _rot = self.indicator_rotation.findData(int(r.indicator_rotation))
         self.indicator_rotation.setCurrentIndex(_rot if _rot >= 0 else 0)
+        _align = {"left": self.ind_align_left, "center": self.ind_align_center,
+                  "right": self.ind_align_right}.get(r.indicator_align,
+                                                     self.ind_align_left)
+        _align.setChecked(True)
+        self._on_rotation_changed()      # grey out align unless 90°/270°
         _umkey = "segments" if r.underline_mode == "colored" else r.underline_mode
         _um = self.underline_mode.findData(_umkey)
         self.underline_mode.setCurrentIndex(_um if _um >= 0 else 0)
@@ -1244,6 +1282,9 @@ class LayoutOptionsPanel(QWidget):
         r.indicator_bold = self.ind_bold.isChecked()
         r.indicator_italic = self.ind_italic.isChecked()
         r.indicator_rotation = int(self.indicator_rotation.currentData() or 0)
+        r.indicator_align = ("center" if self.ind_align_center.isChecked()
+                             else "right" if self.ind_align_right.isChecked()
+                             else "left")
         r.underline_mode = self.underline_mode.currentData() or "off"
         r.underline_thickness_mm = self.underline_thickness.value()
         r.underline_gap_mm = self.underline_gap.value()

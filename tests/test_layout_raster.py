@@ -217,6 +217,45 @@ def test_indicator_rotation_renders():
         assert (band < 60).all(axis=2).any(), f"no label ink at {deg}°"
 
 
+def test_indicator_align_rotated_multiletter():
+    """For side-rotated labels, Left vs Right alignment must change the render
+    once two-letter labels (AA…) appear — Left grows the label away from the
+    patches, Right toward them (#93)."""
+    import numpy as np
+    n = 700                                   # >26 strips → AA, AB, … exist
+    target = _rgb_target(n)
+    geom = instruments.build("i1")
+    lay = geometry.compute(geom, 210.0, 297.0, n)
+
+    def render(align):
+        return raster.render_pages(
+            target, lay, geom, seed=1, paper_w_mm=210.0, paper_h_mm=297.0,
+            dpi=150, indicator_rotation=90, indicator_align=align)
+
+    left, right = render("left"), render("right")
+    assert any(not np.array_equal(np.asarray(l), np.asarray(r))
+               for l, r in zip(left.images, right.images)), \
+        "Left and Right alignment rendered identically"
+
+
+def test_indicator_align_noop_without_multiletter():
+    """Alignment is a no-op when every label is a single letter (no band to
+    justify within) — Left / Center / Right then render identically."""
+    import numpy as np
+    n = 120                                   # well under 26 strips → A…single
+    target = _rgb_target(n)
+    geom = instruments.build("i1")
+    lay = geometry.compute(geom, 210.0, 297.0, n)
+
+    def page0(align):
+        return np.asarray(raster.render_pages(
+            target, lay, geom, seed=1, paper_w_mm=210.0, paper_h_mm=297.0,
+            dpi=150, indicator_rotation=90, indicator_align=align).images[0])
+
+    assert np.array_equal(page0("left"), page0("right"))
+    assert np.array_equal(page0("left"), page0("center"))
+
+
 def test_custom_spacer_palette():
     """Coloured spacers are drawn only from a supplied custom palette."""
     import numpy as np
