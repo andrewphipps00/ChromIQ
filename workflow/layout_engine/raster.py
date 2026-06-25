@@ -390,6 +390,7 @@ def render_pages(
     dpi: int = 300,
     strip_pattern: str = permutation.DEFAULT_STRIP_PATTERN,
     spacer_mode: str = "colored",
+    spacer_palette: "list[tuple[int, int, int]] | None" = None,
     draw_indicators: bool = True,
     indicator_font: str = DEFAULT_INDICATOR_FONT,
     indicator_size_mm: float = 0.0,
@@ -491,7 +492,8 @@ def render_pages(
                     nxt = rgb_by_slot[col_slots[j + 1]]
                     draw.rectangle(
                         [x0, y0 + pl_px, xR - 1, y0 + pl_px + sp_px - 1],
-                        fill=contrast.spacer_for_mode(spacer_mode, rgb, nxt),
+                        fill=contrast.spacer_for_mode(spacer_mode, rgb, nxt,
+                                                      spacer_palette),
                     )
         # Full-width rule under the whole label row (one continuous line):
         # "segments" splits it into the five accents across the entire width;

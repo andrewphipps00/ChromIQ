@@ -212,6 +212,7 @@ class LayoutOptionsPanel(QWidget):
                        ("none", tr("None"))):
             self.spacer_mode.addItem(lbl, k)
         self.spacer_mode.currentIndexChanged.connect(self._emit)
+        self.spacer_mode.currentIndexChanged.connect(self._sync_spacer_swatches)
         self.spacer_width = mm(special_auto=True)
         self.patch_x = small_mm(); self.patch_x.setSpecialValueText(tr("auto"))
         self.patch_y = small_mm(); self.patch_y.setSpecialValueText(tr("auto"))
@@ -267,6 +268,35 @@ class LayoutOptionsPanel(QWidget):
                     tr("The gap, in mm, between a strip's letter label at the top "
                        "and the first patch below it. Larger values push the "
                        "patches down to leave more room for the label."), self))
+        # Custom spacer palette (colored mode): the engine draws each gap's
+        # spacer from this set instead of the built-in accents.
+        self.custom_spacer_cb = QCheckBox(tr("Custom spacer colours"), self)
+        self.custom_spacer_cb.toggled.connect(self._on_custom_spacer_toggled)
+        self._spacer_swatches = []
+        _swrow = QHBoxLayout(); _swrow.setContentsMargins(0, 0, 0, 0); _swrow.setSpacing(4)
+        for _hex in ("#ff4573", "#ffb42d", "#56d6a5", "#37bcd6", "#9f82ff"):
+            _b = QPushButton(self)
+            _b.setObjectName("compact_input")
+            _b.setFixedSize(26, 22)
+            _b.setProperty("hexcol", _hex)
+            self._style_swatch(_b)
+            _b.clicked.connect(lambda _c=False, bb=_b: self._pick_spacer_colour(bb))
+            self._spacer_swatches.append(_b)
+            _swrow.addWidget(_b)
+        _swrow.addStretch()
+        _sww = QWidget(self); _sww.setLayout(_swrow)
+        g.addWidget(self.custom_spacer_cb, 7, 1)
+        g.addWidget(TooltipButton(
+            tr("Custom spacer colours"),
+            tr("By default the engine separates patches with spacers drawn from "
+               "the five ChromIQ accent colours, automatically picking the one "
+               "with the most contrast at each gap so the instrument can always "
+               "find the patch edges. Turn this on to choose your own set of "
+               "spacer colours instead — click a swatch to change it. The engine "
+               "still auto-picks the highest-contrast one from your set per gap, "
+               "so keep them varied (and watch the low-contrast warning)."), self),
+            7, 2)
+        add_row(g, 8, tr("Spacer colours:"), _sww)
         v.addWidget(ps)
 
         # ---- Randomisation ----
@@ -644,6 +674,7 @@ class LayoutOptionsPanel(QWidget):
             w.setObjectName("compact_input")
 
         self._sync_clip_content_enabled()
+        self._sync_spacer_swatches()
         self._update_clip_visibility()
 
     def _browse_cal(self) -> None:
@@ -865,6 +896,34 @@ class LayoutOptionsPanel(QWidget):
         btn.setMenu(menu)
         return btn
 
+    @staticmethod
+    def _style_swatch(btn) -> None:
+        hexc = btn.property("hexcol") or "#ffffff"
+        btn.setStyleSheet(
+            f"background: {hexc}; border: 1px solid #888; border-radius: 3px;")
+
+    def _pick_spacer_colour(self, btn) -> None:
+        from PyQt6.QtGui import QColor
+        from PyQt6.QtWidgets import QColorDialog
+        cur = QColor(btn.property("hexcol") or "#ffffff")
+        col = QColorDialog.getColor(cur, self, tr("Spacer colour"))
+        if col.isValid():
+            btn.setProperty("hexcol", col.name())
+            self._style_swatch(btn)
+            self._emit()
+
+    def _on_custom_spacer_toggled(self, *_a) -> None:
+        self._sync_spacer_swatches()
+        self._emit()
+
+    def _sync_spacer_swatches(self, *_a) -> None:
+        if not hasattr(self, "custom_spacer_cb"):
+            return
+        on = (self.custom_spacer_cb.isChecked()
+              and (self.spacer_mode.currentData() or "colored") == "colored")
+        for b in self._spacer_swatches:
+            b.setEnabled(on)
+
     def _compact_browse(self, tooltip: str):
         """A magenta folder browse button sized like the targen -c browse
         (objectName browse_compact, 14px icon, 22px tall)."""
@@ -1046,6 +1105,13 @@ class LayoutOptionsPanel(QWidget):
         i = self.spacer_mode.findData(r.spacer_mode)
         self.spacer_mode.setCurrentIndex(i if i >= 0 else 0)
         self.spacer_width.setValue(r.spacer_width_mm)
+        _pal = list(r.spacer_palette or [])
+        self.custom_spacer_cb.setChecked(bool(_pal))
+        for _i, _b in enumerate(self._spacer_swatches):
+            if _i < len(_pal):
+                _b.setProperty("hexcol", _pal[_i])
+                self._style_swatch(_b)
+        self._sync_spacer_swatches()
         self.patch_x.setValue(r.patch_w_mm)
         self.patch_y.setValue(r.patch_h_mm)
         self.inter_patch.setValue(r.inter_patch_mm)
@@ -1108,6 +1174,8 @@ class LayoutOptionsPanel(QWidget):
         r.pscale = self.pscale.value()
         r.sscale = self.sscale.value()
         r.spacer_mode = self.spacer_mode.currentData() or "colored"
+        r.spacer_palette = ([b.property("hexcol") for b in self._spacer_swatches]
+                            if self.custom_spacer_cb.isChecked() else [])
         r.spacer_on = r.spacer_mode != "none"
         r.spacer_width_mm = self.spacer_width.value()
         r.patch_w_mm = self.patch_x.value()

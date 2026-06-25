@@ -215,3 +215,19 @@ def test_indicator_rotation_renders():
         # the top leader band should contain black label ink
         band = a[: int(a.shape[0] * 0.12)]
         assert (band < 60).all(axis=2).any(), f"no label ink at {deg}°"
+
+
+def test_custom_spacer_palette():
+    """Coloured spacers are drawn only from a supplied custom palette."""
+    import numpy as np
+    patches = [((50.0, 50.0, 50.0), (40.0, 45.0, 50.0)) for _ in range(60)]
+    target = ColorTarget(color_rep="iRGB", device_fields=["RGB_R", "RGB_G", "RGB_B"],
+                         patches=patches)
+    geom = instruments.build("i1")
+    lay = geometry.compute(geom, 210.0, 297.0, 60)
+    res = raster.render_pages(target, lay, geom, seed=1, paper_w_mm=210.0,
+                              paper_h_mm=297.0, dpi=150, spacer_mode="colored",
+                              spacer_palette=[(255, 0, 0), (255, 255, 0)])
+    a = np.asarray(res.images[0])
+    assert (a == [255, 0, 0]).all(2).any()          # a palette colour is used
+    assert not (a == [0, 255, 0]).all(2).any()      # a non-palette colour isn't

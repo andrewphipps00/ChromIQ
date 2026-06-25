@@ -42,27 +42,33 @@ def _rgb_dist(a: tuple[int, int, int], b: tuple[int, int, int]) -> float:
 
 
 def colored_spacer_rgb(above: tuple[int, int, int] | None,
-                       below: tuple[int, int, int] | None) -> tuple[int, int, int]:
+                       below: tuple[int, int, int] | None,
+                       palette: "list[tuple[int, int, int]] | None" = None
+                       ) -> tuple[int, int, int]:
     """A coloured spacer maximising the minimum RGB distance to both neighbours.
 
-    Picks from a fixed black/white/primary/secondary palette the colour whose
-    *worst-case* distance to the two neighbouring patches is largest, so the
-    boundary is always detectable (printtarg's coloured-spacer guarantee).
+    Picks from *palette* (default: black/white/primary/secondary) the colour
+    whose *worst-case* distance to the two neighbouring patches is largest, so
+    the boundary is always detectable (printtarg's coloured-spacer guarantee).
+    Pass a custom *palette* to draw spacers from a user-chosen colour set.
     """
+    pal = palette or _COLOURED_PALETTE
     neigh = [n for n in (above, below) if n is not None]
     if not neigh:
-        return (0, 0, 0)
-    best, best_score = _COLOURED_PALETTE[0], -1.0
-    for cand in _COLOURED_PALETTE:
+        return pal[0]
+    best, best_score = pal[0], -1.0
+    for cand in pal:
         score = min(_rgb_dist(cand, n) for n in neigh)
         if score > best_score:
             best, best_score = cand, score
     return best
 
 
-def spacer_for_mode(mode: str, above, below) -> tuple[int, int, int]:
-    """Spacer colour for *mode* ("colored" | "bw")."""
-    return colored_spacer_rgb(above, below) if mode == "colored" \
+def spacer_for_mode(mode: str, above, below,
+                    palette: "list[tuple[int, int, int]] | None" = None
+                    ) -> tuple[int, int, int]:
+    """Spacer colour for *mode* ("colored" | "bw"); *palette* customises colored."""
+    return colored_spacer_rgb(above, below, palette) if mode == "colored" \
         else spacer_rgb(above, below)
 
 

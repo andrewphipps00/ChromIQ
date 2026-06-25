@@ -91,6 +91,7 @@ def build_chart(
     density: int = 1,
     spacer_on: bool = True,
     spacer_mode: str = "colored",
+    spacer_palette: list | None = None,
     pscale: float = 1.0,
     sscale: float = 1.0,
     border: float = 6.0,
@@ -199,10 +200,17 @@ def build_chart(
     stamp_text = (f"ChromIQ engine · {instrument} · {paper} · {dpi} dpi · "
                   f"{layout.total_patches} patches · seed {seed}"
                   if stamp_command else "")
+    def _to_rgb(c):
+        if isinstance(c, str):
+            h = c.lstrip("#")
+            return (int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16))
+        return tuple(int(v) for v in c)
+    _palette = [_to_rgb(c) for c in spacer_palette] if spacer_palette else None
     render = raster.render_pages(
         target, layout, geom, seed=seed, randomize=randomize,
         paper_w_mm=w_mm, paper_h_mm=h_mm, dpi=dpi, strip_pattern=strip_pattern,
-        spacer_mode=spacer_mode, draw_indicators=draw_indicators,
+        spacer_mode=spacer_mode, spacer_palette=_palette,
+        draw_indicators=draw_indicators,
         indicator_font=indicator_font, indicator_size_mm=indicator_size_mm,
         indicator_bold=indicator_bold, indicator_italic=indicator_italic,
         indicator_rotation=indicator_rotation,

@@ -51,7 +51,8 @@ def test_all_fields_persist_through_named_dict():
     from dataclasses import fields, replace
     full = LayoutRecipe(
         instrument="i1", paper="A4", clip_border=True, dpi=150, randomize=True,
-        cm_density=1, spacer_on=True, spacer_mode="bw", pscale=0.9, sscale=1.1,
+        cm_density=1, spacer_on=True, spacer_mode="bw",
+        spacer_palette=["#112233", "#445566"], pscale=0.9, sscale=1.1,
         border=8.0, margin_top=10.0, margin_right=8.0, margin_bottom=12.0,
         margin_left=9.0, patch_w_mm=9.0, patch_h_mm=11.0, spacer_width_mm=2.0,
         inter_patch_mm=1.0, max_strip_mm=200.0, strip_indicator_gap_mm=3.0,

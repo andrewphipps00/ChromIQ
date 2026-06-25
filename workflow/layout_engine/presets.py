@@ -35,6 +35,7 @@ class LayoutRecipe:
     cm_density: int = 1            # ColorMunki rows: 1 normal, 2 rig, 3 extra-high
     spacer_on: bool = True
     spacer_mode: str = "colored"   # "colored" | "bw" | "none"
+    spacer_palette: list = field(default_factory=list)  # custom colored-spacer hexes
     pscale: float = 1.0
     sscale: float = 1.0
     border: float = 6.0            # base margin (drives leader/clip-holder)
@@ -139,6 +140,7 @@ class LayoutRecipe:
             "density": self.cm_density,
             "spacer_on": self.spacer_mode != "none",
             "spacer_mode": self.spacer_mode,
+            "spacer_palette": list(self.spacer_palette) or None,
             "pscale": self.pscale,
             "sscale": self.sscale,
             "border": self.border,
