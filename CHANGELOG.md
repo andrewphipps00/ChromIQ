@@ -1,6 +1,6 @@
 # Changelog
 
-## v3.12.1-beta.1
+## v3.12.1
 
 ### 🔧 Changed
 - **A chart's layout is now kept consistent across its two records.** A chart
