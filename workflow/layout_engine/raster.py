@@ -31,6 +31,12 @@ FONTS = {
 }
 DEFAULT_INDICATOR_FONT = "JetBrains Mono"
 
+# Masthead wordmark styling (ui.masthead_header): Instrument Serif, "Chrom" in
+# near-black, "IQ" bold-italic in the magenta accent.
+WORDMARK_FONT = "Instrument Serif"
+WORDMARK_RGB = (28, 27, 24)     # #1c1b18 — light-mode "Chrom" colour
+WORDMARK_IQ_RGB = (255, 69, 115)  # #ff4573 — magenta accent for "IQ"
+
 # ChromIQ accent palette (ui.styles TAB_COLORS) as RGB, for the coloured
 # under-indicator rule; cycled per strip so adjacent strips read distinctly.
 ACCENT_RGB = (
@@ -202,16 +208,78 @@ def render_clip_strip(mode: str, *, width_px: int, height_px: int, dpi: int,
         strip.paste(cap, (0, 0), cap)
         return strip
 
-    # text / branding → rotated text up the strip
-    lines = [ln for ln in (text or "").splitlines() if ln.strip()]
     if mode == "branding":
-        lines = ["ChromIQ"] + lines
+        extra = [ln for ln in (text or "").splitlines() if ln.strip()]
+        overlay = _vwordmark(extra, width_px, height_px)
+        strip.paste(overlay, (0, 0), overlay)
+        return strip
+
+    # plain text → rotated text up the strip
+    lines = [ln for ln in (text or "").splitlines() if ln.strip()]
     if not lines:
         return strip
-    overlay = _vtext("\n".join(lines), font_family, width_px, height_px,
-                     bold=(mode == "branding"))
+    overlay = _vtext("\n".join(lines), font_family, width_px, height_px)
     strip.paste(overlay, (0, 0), overlay)
     return strip
+
+
+def _italic_tile(text: str, font, fill: tuple, stroke_w: int,
+                 shear: float = 0.22) -> Image.Image:
+    """Render *text* (faux-bold via stroke) and shear it right for faux-italic."""
+    probe = ImageDraw.Draw(Image.new("RGBA", (4, 4)))
+    bbox = probe.textbbox((0, 0), text, font=font, stroke_width=stroke_w)
+    tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+    pad = stroke_w + 2
+    tile = Image.new("RGBA", (tw + pad * 2, th + pad * 2), (0, 0, 0, 0))
+    ImageDraw.Draw(tile).text((pad - bbox[0], pad - bbox[1]), text, font=font,
+                              fill=fill, stroke_width=stroke_w, stroke_fill=fill)
+    H = tile.height
+    # AFFINE maps output→input: input_x = x + shear*(H - y) leans the top right.
+    return tile.transform(
+        (tile.width + int(H * shear), H), Image.AFFINE,
+        (1, shear, -shear * H, 0, 1, 0), resample=Image.BICUBIC)
+
+
+def _vwordmark(extra_lines: list[str], width_px: int, height_px: int) -> Image.Image:
+    """The masthead "ChromIQ" wordmark — Instrument Serif, "Chrom" near-black,
+    "IQ" bold-italic in magenta — plus optional lines, read up the strip."""
+    canvas = Image.new("RGBA", (max(1, height_px), max(1, width_px)), (0, 0, 0, 0))
+    d = ImageDraw.Draw(canvas)
+    n = 1 + len(extra_lines)
+    chrom_fill = WORDMARK_RGB + (255,)
+    iq_fill = WORDMARK_IQ_RGB + (255,)
+    size = max(10, int(width_px * 0.55))
+    for _ in range(40):
+        f = _font(size, WORDMARK_FONT)
+        wm_w = d.textlength("Chrom", font=f) + d.textlength("IQ", font=f) * 1.25
+        widest = max([wm_w] + [d.textlength(l, font=f) for l in extra_lines])
+        if size * 1.25 * n <= width_px * 0.92 and widest <= height_px * 0.95:
+            break
+        size = int(size * 0.9)
+        if size <= 10:
+            break
+    f = _font(size, WORDMARK_FONT)
+    line_h = size * 1.25
+    cy = (width_px - line_h * n) / 2
+    iq_tile = _italic_tile("IQ", f, iq_fill, 0)   # same face as "Chrom", just italic
+    _b = iq_tile.getbbox()                 # trim transparent padding for tight kern
+    if _b:
+        iq_tile = iq_tile.crop(_b)
+    chrom_w = d.textlength("Chrom", font=f)
+    kern = size * 0.04
+    wm_w = chrom_w + kern + iq_tile.width
+    x = (height_px - wm_w) / 2
+    y = cy + line_h * 0.5
+    try:
+        d.text((x, y), "Chrom", font=f, fill=chrom_fill, anchor="lm")
+        canvas.paste(iq_tile, (int(x + chrom_w + kern), int(y - iq_tile.height / 2)),
+                     iq_tile)
+        for i, ln in enumerate(extra_lines, start=1):
+            d.text((height_px / 2, cy + line_h * (i + 0.5)), ln, font=f,
+                   fill=chrom_fill, anchor="mm")
+    except Exception:  # pragma: no cover - default font without anchor
+        d.text((x, y), "ChromIQ", font=f, fill=chrom_fill)
+    return canvas.rotate(90, expand=True)
 
 
 def _vtext(text: str, font_family: str, width_px: int, height_px: int,

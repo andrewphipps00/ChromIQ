@@ -356,15 +356,7 @@ class LayoutOptionsPanel(QWidget):
         self.chart_text = QLineEdit(self)
         self.chart_text.setPlaceholderText(tr("e.g. {project} — {date}"))
         self.chart_text.textChanged.connect(self._emit)
-        self.insert_token_btn = QToolButton(self)
-        self.insert_token_btn.setText(tr("Insert ▾"))
-        self.insert_token_btn.setObjectName("compact_input")
-        self.insert_token_btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
-        _tmenu = QMenu(self.insert_token_btn)
-        for _tok, _desc in SHEET_TOKENS:
-            _act = _tmenu.addAction(f"{{{_tok}}} — {_desc}")
-            _act.triggered.connect(lambda _checked=False, t=_tok: self._insert_token(t))
-        self.insert_token_btn.setMenu(_tmenu)
+        self.insert_token_btn = self._make_insert_button(self.chart_text)
         self.text_preview = QLabel(self)
         self.text_preview.setWordWrap(True)
         self.text_preview.setStyleSheet("color: palette(mid);")
@@ -408,23 +400,32 @@ class LayoutOptionsPanel(QWidget):
         self.clip_text = QLineEdit(self)
         self.clip_text.setPlaceholderText(tr("e.g. {project} — {date}"))
         self.clip_text.textChanged.connect(self._emit)
+        self.clip_insert_btn = self._make_insert_button(self.clip_text)
         self.clip_text_font = NoScrollComboBox(self)
         self._populate_font_combo(self.clip_text_font)
         self.clip_text_font.currentIndexChanged.connect(self._emit)
         self.clip_image_path = QLineEdit(self)
         self.clip_image_path.setPlaceholderText(tr("no image selected"))
         self.clip_image_path.textChanged.connect(self._emit)
-        self.clip_image_browse = QPushButton(self)
+        from ui.widgets import make_browse_button
+        self.clip_image_browse = make_browse_button(self, tr("Browse for an image"))
         self.clip_image_browse.setIcon(load_magenta_folder_icon())
-        self.clip_image_browse.setToolTip(tr("Browse for an image"))
-        self.clip_image_browse.setFlat(True)
-        self.clip_image_browse.setFixedSize(30, 26)
+        self.clip_image_browse.setFixedHeight(26)
         self.clip_image_browse.clicked.connect(self._browse_clip_image)
+        from PyQt6.QtWidgets import QSizePolicy
         self.clip_dims_label = QLabel("", self)
         self.clip_dims_label.setStyleSheet("color: palette(mid);")
+        self.clip_dims_label.setWordWrap(True)
         self.clip_preview = QLabel(self)
-        self.clip_preview.setFixedHeight(220)
+        self.clip_preview.setMinimumHeight(30)
+        self.clip_preview.setAlignment(_Qt.AlignmentFlag.AlignCenter)
         self.clip_preview.setStyleSheet("border: 1px solid palette(mid);")
+        # Don't let the preview pixmap or dims text dictate the panel's min width
+        # (it lives in a horizontal-scroll-free column).
+        self.clip_preview.setSizePolicy(QSizePolicy.Policy.Ignored,
+                                        QSizePolicy.Policy.Fixed)
+        self.clip_dims_label.setSizePolicy(QSizePolicy.Policy.Ignored,
+                                           QSizePolicy.Policy.Preferred)
         self.clip_export_btn = QPushButton(tr("Export template (PNG + PDF)…"), self)
         self.clip_export_btn.setObjectName("compact_input")
         self.clip_export_btn.clicked.connect(self._export_clip_template)
@@ -437,7 +438,7 @@ class LayoutOptionsPanel(QWidget):
                        "branding stamps the wordmark; Imported image places a "
                        "logo. Export template gives you an exact-size PNG and PDF "
                        "to design a graphic in another tool."), self))
-        add_row(ccg, 1, tr("Text:"), self.clip_text)
+        add_row(ccg, 1, tr("Text:"), cell_fill(self.clip_text, self.clip_insert_btn))
         add_row(ccg, 2, tr("Font:"), self.clip_text_font)
         add_row(ccg, 3, tr("Image:"), cell_fill(self.clip_image_path,
                                                  self.clip_image_browse))
@@ -464,12 +465,10 @@ class LayoutOptionsPanel(QWidget):
             self.cal_path_edit.setPlaceholderText(tr("no .cal file selected"))
             self.cal_path_edit.textChanged.connect(self._emit)
             cgg.addWidget(self.cal_path_edit, 1, 0, 1, 3)
-            from ui.widgets import load_magenta_folder_icon
-            browse = QPushButton(self)
+            from ui.widgets import load_magenta_folder_icon, make_browse_button
+            browse = make_browse_button(self, tr("Browse for a .cal file"))
             browse.setIcon(load_magenta_folder_icon())
-            browse.setToolTip(tr("Browse for a .cal file"))
-            browse.setFlat(True)
-            browse.setFixedSize(30, 26)        # compact, icon-only
+            browse.setFixedHeight(26)
             browse.clicked.connect(self._browse_cal)
             cgg.addWidget(browse, 1, 3)
             cgg.addWidget(TooltipButton(
@@ -560,6 +559,7 @@ class LayoutOptionsPanel(QWidget):
         mode = self.clip_content_mode.currentData()
         text_modes = mode in ("text", "branding", "notes")
         self.clip_text.setEnabled(text_modes)
+        self.clip_insert_btn.setEnabled(text_modes)
         self.clip_text_font.setEnabled(text_modes)
         self.clip_image_path.setEnabled(mode == "image")
         self.clip_image_browse.setEnabled(mode == "image")
@@ -626,7 +626,7 @@ class LayoutOptionsPanel(QWidget):
         if mode == "off":
             self.clip_preview.clear()
             return
-        pdpi = 96
+        pdpi = 220                  # render crisp, then scale down for display
         pw = max(1, round(w_mm * pdpi / 25.4))
         ph = max(1, round(h_mm * pdpi / 25.4))
         img = raster.render_clip_strip(
@@ -634,8 +634,15 @@ class LayoutOptionsPanel(QWidget):
             text=self._resolve_sample(self.clip_text.text()),
             font_family=self.clip_text_font.currentData() or "Inter",
             image_path=self.clip_image_path.text().strip())
-        self.clip_preview.setPixmap(
-            self._pil_to_pixmap(img).scaledToHeight(216, Qt.TransformationMode.SmoothTransformation))
+        # Show it lying down (rotated 90°) so the long strip uses the panel's
+        # horizontal space instead of a thin vertical ribbon.
+        img = img.rotate(-90, expand=True)
+        pix = self._pil_to_pixmap(img)
+        avail = self.clip_preview.width()
+        avail = min(max(avail if avail > 60 else 300, 120), 360)
+        scaled = pix.scaledToWidth(avail, Qt.TransformationMode.SmoothTransformation)
+        self.clip_preview.setPixmap(scaled)
+        self.clip_preview.setFixedHeight(max(30, scaled.height()) + 2)
 
     def _export_clip_template(self) -> None:
         from PyQt6.QtWidgets import QFileDialog, QMessageBox
@@ -677,10 +684,29 @@ class LayoutOptionsPanel(QWidget):
         self.fixed_seed_cb.setChecked(True)   # a drawn seed is a reproducible one
         self.seed_spin.setValue(pick_seed())
 
-    def _insert_token(self, token: str) -> None:
-        """Drop ``{token}`` into the sheet-text field at the cursor."""
-        self.chart_text.insert("{%s}" % token)
-        self.chart_text.setFocus()
+    def _make_insert_button(self, target):
+        """A compact "Insert ▾" token menu that inserts into *target* line edit.
+
+        Qt's own menu-indicator arrow is hidden so the single "▾" in the label
+        is the only arrow (and stays aligned with the text).
+        """
+        btn = QToolButton(self)
+        btn.setText(tr("Insert ▾"))
+        btn.setObjectName("compact_input")
+        btn.setStyleSheet("QToolButton::menu-indicator { image: none; width: 0; }")
+        btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        menu = QMenu(btn)
+        for tok, desc in SHEET_TOKENS:
+            act = menu.addAction(f"{{{tok}}} — {desc}")
+            act.triggered.connect(
+                lambda _c=False, t=tok, tgt=target: self._insert_token_into(tgt, t))
+        btn.setMenu(menu)
+        return btn
+
+    def _insert_token_into(self, target, token: str) -> None:
+        """Drop ``{token}`` into *target* at the cursor."""
+        target.insert("{%s}" % token)
+        target.setFocus()
 
     def _resolve_sample(self, text: str) -> str:
         """Fill *text*'s placeholders with representative values for preview."""
