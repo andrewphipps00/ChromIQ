@@ -12,13 +12,26 @@ from __future__ import annotations
 
 from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import (
-    QCheckBox, QGridLayout, QGroupBox, QHBoxLayout, QLabel, QVBoxLayout, QWidget,
+    QCheckBox, QGridLayout, QGroupBox, QHBoxLayout, QLabel, QMenu, QToolButton,
+    QVBoxLayout, QWidget,
 )
 
 from core.i18n import tr
 from ui.tooltip_button import TooltipButton
 from ui.widgets import NoScrollComboBox, NoScrollDoubleSpinBox, NoScrollSpinBox
 from workflow.layout_engine.presets import LayoutRecipe
+
+# Sheet-text placeholders, filled in at build time by chart.build_chart.
+SHEET_TOKENS = (
+    ("project", tr("Project / target name")),
+    ("date", tr("Build date")),
+    ("paper", tr("Paper size code")),
+    ("instrument", tr("Instrument")),
+    ("patchcount", tr("Total patch count")),
+    ("pages", tr("Number of pages")),
+    ("seed", tr("Randomisation seed")),
+    ("dpi", tr("Resolution")),
+)
 
 
 class LayoutOptionsPanel(QWidget):
@@ -147,6 +160,15 @@ class LayoutOptionsPanel(QWidget):
             for w in widgets:
                 box.addWidget(w)
             box.addStretch()
+            wrap = QWidget(self); wrap.setLayout(box)
+            return wrap
+
+        def cell_fill(grow, *fixed):
+            """First widget fills the cell; trailing widgets keep their size."""
+            box = QHBoxLayout(); box.setContentsMargins(0, 0, 0, 0); box.setSpacing(6)
+            box.addWidget(grow, 1)
+            for w in fixed:
+                box.addWidget(w)
             wrap = QWidget(self); wrap.setLayout(box)
             return wrap
 
@@ -282,6 +304,18 @@ class LayoutOptionsPanel(QWidget):
         self.chart_text = QLineEdit(self)
         self.chart_text.setPlaceholderText(tr("e.g. {project} — {date}"))
         self.chart_text.textChanged.connect(self._emit)
+        self.insert_token_btn = QToolButton(self)
+        self.insert_token_btn.setText(tr("Insert ▾"))
+        self.insert_token_btn.setObjectName("compact_input")
+        self.insert_token_btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        _tmenu = QMenu(self.insert_token_btn)
+        for _tok, _desc in SHEET_TOKENS:
+            _act = _tmenu.addAction(f"{{{_tok}}} — {_desc}")
+            _act.triggered.connect(lambda _checked=False, t=_tok: self._insert_token(t))
+        self.insert_token_btn.setMenu(_tmenu)
+        self.text_preview = QLabel(self)
+        self.text_preview.setWordWrap(True)
+        self.text_preview.setStyleSheet("color: palette(mid);")
         self.chart_text_font = NoScrollComboBox(self)
         self._populate_font_combo(self.chart_text_font)
         self.chart_text_font.currentIndexChanged.connect(self._emit)
@@ -293,17 +327,21 @@ class LayoutOptionsPanel(QWidget):
         self.ct_italic.toggled.connect(self._emit)
         self.stamp_command = QCheckBox(tr("Stamp layout summary on the sheet"), self)
         self.stamp_command.toggled.connect(self._emit)
-        add_row(stg, 0, tr("Custom text:"), self.chart_text,
+        add_row(stg, 0, tr("Custom text:"),
+                cell_fill(self.chart_text, self.insert_token_btn),
                 tip=TooltipButton(
                     tr("Sheet text"),
                     tr("Optional text printed in the bottom margin of every sheet. "
-                       "Placeholders are filled in when the chart is built: "
-                       "{project}, {date}, {paper}, {instrument}, {patchcount}, "
-                       "{pages}, {seed}."), self))
-        self._add_font_rows(stg, 1, tr("Font:"), self.chart_text_font,
+                       "Use Insert ▾ to drop in a placeholder — it's replaced with "
+                       "the real value when the chart is built: {project}, {date}, "
+                       "{paper}, {instrument}, {patchcount}, {pages}, {seed}, "
+                       "{dpi}. The Preview line shows how it will read."), self))
+        add_row(stg, 1, tr("Preview:"), self.text_preview)
+        self._add_font_rows(stg, 2, tr("Font:"), self.chart_text_font,
                             self.chart_text_size, self.ct_bold, self.ct_italic)
-        stg.addWidget(self.stamp_command, 3, 1)
+        stg.addWidget(self.stamp_command, 4, 1)
         v.addWidget(st)
+        self._update_text_preview()
 
         # ---- Calibration (per-chart; engine -K/-I) ----
         self.cal_mode = self.cal_path_edit = None
@@ -407,6 +445,35 @@ class LayoutOptionsPanel(QWidget):
         for w in (self.clip_width_label, self.clip_width, self.clip_width_tip):
             w.setVisible(clip)
 
+    def _insert_token(self, token: str) -> None:
+        """Drop ``{token}`` into the sheet-text field at the cursor."""
+        self.chart_text.insert("{%s}" % token)
+        self.chart_text.setFocus()
+
+    def _resolve_sample(self, text: str) -> str:
+        """Fill *text*'s placeholders with representative values for preview."""
+        import time
+        inst, paper = "i1", "A4"
+        if self.instr is not None:
+            inst, paper, _ = self.selection()
+        ctx = {
+            "project": "MyChart", "date": time.strftime("%Y-%m-%d"),
+            "paper": paper, "instrument": inst, "patchcount": "600",
+            "pages": str(self.get_pages()), "seed": "12345",
+            "dpi": str(int(self.dpi.value())),
+        }
+        try:
+            return text.format(**ctx)
+        except (KeyError, IndexError, ValueError):
+            return text       # unknown token — leave literal, as the builder does
+
+    def _update_text_preview(self) -> None:
+        if not hasattr(self, "text_preview"):
+            return
+        text = self.chart_text.text()
+        self.text_preview.setText(self._resolve_sample(text) if text
+                                  else tr("(no sheet text)"))
+
     def _add_font_rows(self, grid, r, label, combo, size, bold, italic) -> None:
         """Font on row *r*; Size + Bold + Italic on row *r+1*."""
         from PyQt6.QtCore import Qt
@@ -498,6 +565,7 @@ class LayoutOptionsPanel(QWidget):
         return self.apply_to_recipe(r)
 
     def _emit(self, *_a) -> None:
+        self._update_text_preview()
         if not self._loading:
             self.changed.emit()
 

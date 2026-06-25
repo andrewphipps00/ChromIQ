@@ -1875,7 +1875,6 @@
   "Size:": "Size:",
   "Strip indicators": "Strip indicators",
   "Custom text:": "Custom text:",
-  "Optional text printed in the bottom margin of every sheet. Placeholders are filled in when the chart is built: {project}, {date}, {paper}, {instrument}, {patchcount}, {pages}, {seed}.": "Optional text printed in the bottom margin of every sheet. Placeholders are filled in when the chart is built: {project}, {date}, {paper}, {instrument}, {patchcount}, {pages}, {seed}.",
   "Sheet text": "Sheet text",
   "Stamp layout summary on the sheet": "Stamp layout summary on the sheet",
   "e.g. {project} — {date}": "e.g. {project} — {date}",
@@ -1883,5 +1882,16 @@
   "Italic": "斜体",
   "Clip border width": "Clip border width",
   "Clip border width:": "Clip border width:",
-  "Width of the blank zone reserved down the left edge for the clip that holds the sheet against the scanner bed. Make it wider if your clip covers more of the page; the patches start to its right. Only applies to the i1Pro / i1Pro 3 in clip-border mode (printtarg fixes this at 26 mm).": "Width of the blank zone reserved down the left edge for the clip that holds the sheet against the scanner bed. Make it wider if your clip covers more of the page; the patches start to its right. Only applies to the i1Pro / i1Pro 3 in clip-border mode (printtarg fixes this at 26 mm)."
+  "Width of the blank zone reserved down the left edge for the clip that holds the sheet against the scanner bed. Make it wider if your clip covers more of the page; the patches start to its right. Only applies to the i1Pro / i1Pro 3 in clip-border mode (printtarg fixes this at 26 mm).": "Width of the blank zone reserved down the left edge for the clip that holds the sheet against the scanner bed. Make it wider if your clip covers more of the page; the patches start to its right. Only applies to the i1Pro / i1Pro 3 in clip-border mode (printtarg fixes this at 26 mm).",
+  "(no sheet text)": "(no sheet text)",
+  "Build date": "Build date",
+  "Insert ▾": "Insert ▾",
+  "Number of pages": "Number of pages",
+  "Optional text printed in the bottom margin of every sheet. Use Insert ▾ to drop in a placeholder — it's replaced with the real value when the chart is built: {project}, {date}, {paper}, {instrument}, {patchcount}, {pages}, {seed}, {dpi}. The Preview line shows how it will read.": "Optional text printed in the bottom margin of every sheet. Use Insert ▾ to drop in a placeholder — it's replaced with the real value when the chart is built: {project}, {date}, {paper}, {instrument}, {patchcount}, {pages}, {seed}, {dpi}. The Preview line shows how it will read.",
+  "Paper size code": "Paper size code",
+  "Preview:": "Preview:",
+  "Project / target name": "Project / target name",
+  "Randomisation seed": "Randomisation seed",
+  "Resolution": "Resolution",
+  "Total patch count": "Total patch count"
 }
