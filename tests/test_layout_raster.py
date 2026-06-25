@@ -165,3 +165,16 @@ def test_clip_content_modes():
     assert clip_ink("text", clip_text="Sample 12") > 0
     assert clip_ink("branding") > 0
     assert clip_ink("notes") > 0
+
+
+def test_export_clip_template(tmp_path):
+    from PIL import Image
+    paths = raster.export_clip_template(
+        tmp_path / "tpl", width_px=160, height_px=2240,
+        width_mm=20.0, height_mm=285.0, dpi=200)
+    names = {p.suffix for p in paths}
+    assert names == {".png", ".pdf"}
+    for p in paths:
+        assert p.exists() and p.stat().st_size > 0
+    with Image.open(str(tmp_path / "tpl.png")) as im:
+        assert im.size == (160, 2240)          # exact clip pixel size

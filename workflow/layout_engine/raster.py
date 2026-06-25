@@ -408,6 +408,40 @@ def render_pages(
     return RenderResult(images=images, low_contrast_passes=flagged)
 
 
+def export_clip_template(out_base: str | Path, *, width_px: int, height_px: int,
+                         width_mm: float, height_mm: float, dpi: int) -> list[Path]:
+    """Write blank clip-strip design templates at the exact clip size.
+
+    Produces ``<out_base>.png`` (pixels at *dpi*) and ``<out_base>.pdf`` (sized
+    in mm) so a user can design a graphic in another tool and import it back at a
+    perfect fit.  A faint border + corner ticks + a dimension caption mark the
+    bounds and orientation; they sit on a separate guide layer so the user can
+    delete them.  Returns the written paths.
+    """
+    base = Path(out_base).with_suffix("")
+    mm2px = dpi / 25.4
+    img = Image.new("RGB", (max(1, width_px), max(1, height_px)), (255, 255, 255))
+    d = ImageDraw.Draw(img)
+    guide = (200, 200, 200)
+    d.rectangle([0, 0, width_px - 1, height_px - 1], outline=guide, width=1)
+    tick = max(3, round(3 * mm2px))               # corner crop ticks
+    for cx, cy in ((0, 0), (width_px - 1, 0), (0, height_px - 1),
+                   (width_px - 1, height_px - 1)):
+        d.line([(cx, cy), (cx + (tick if cx == 0 else -tick), cy)], fill=guide, width=2)
+        d.line([(cx, cy), (cx, cy + (tick if cy == 0 else -tick))], fill=guide, width=2)
+    cap = f"{width_mm:.0f} × {height_mm:.0f} mm @ {dpi} dpi"
+    overlay = _vtext(cap, "Inter", width_px, height_px, valign="top")
+    img.paste(overlay, (0, 0), overlay)
+    out: list[Path] = []
+    png = base.with_suffix(".png")
+    img.save(str(png), dpi=(dpi, dpi))
+    out.append(png)
+    pdf = base.with_suffix(".pdf")
+    img.save(str(pdf), "PDF", resolution=float(dpi))  # px/dpi → exact physical mm
+    out.append(pdf)
+    return out
+
+
 def save_tiffs(images: list[Image.Image], base_path: str | Path, dpi: int = 300,
                *, bit16: bool = False, compression: str = "lzw") -> list[Path]:
     """Write *images* as TIFF(s) in px/cm (ResolutionUnit=3); return paths.
