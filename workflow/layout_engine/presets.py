@@ -55,8 +55,13 @@ class LayoutRecipe:
     show_strip_indicators: bool = True   # draw the per-strip letter labels
     indicator_font: str = "JetBrains Mono"
     indicator_size_mm: float = 0.0       # 0 = auto (instrument text height)
+    indicator_bold: bool = False
+    indicator_italic: bool = False
     chart_text: str = ""                 # custom on-sheet text (placeholders ok)
     chart_text_font: str = "Inter"
+    chart_text_size_mm: float = 0.0      # 0 = default (~3.2 mm)
+    chart_text_bold: bool = False
+    chart_text_italic: bool = False
     stamp_command: bool = False          # stamp the layout summary on the sheet
     clip_border: bool = True       # i1/p3 only — left paper clip border present
     nolimit: bool = False
@@ -118,8 +123,13 @@ class LayoutRecipe:
             "draw_indicators": self.show_strip_indicators,
             "indicator_font": self.indicator_font,
             "indicator_size_mm": self.indicator_size_mm,
+            "indicator_bold": self.indicator_bold,
+            "indicator_italic": self.indicator_italic,
             "chart_text": self.chart_text,
             "chart_text_font": self.chart_text_font,
+            "chart_text_size_mm": self.chart_text_size_mm,
+            "chart_text_bold": self.chart_text_bold,
+            "chart_text_italic": self.chart_text_italic,
             "stamp_command": self.stamp_command,
             "nolpcbord": (not self.clip_border) if self.instrument in ("i1", "p3") else False,
             "nolimit": self.nolimit,

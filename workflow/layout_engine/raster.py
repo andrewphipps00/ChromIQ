@@ -31,7 +31,7 @@ FONTS = {
 }
 DEFAULT_INDICATOR_FONT = "JetBrains Mono"
 
-_SYSTEM_FONT_MAP: dict[str, str] | None = None
+_SYSTEM_FONT_MAP: dict[str, dict[str, str]] | None = None
 
 
 def _system_font_dirs() -> list[Path]:
@@ -47,12 +47,24 @@ def _system_font_dirs() -> list[Path]:
             home / ".fonts", home / ".local/share/fonts"]
 
 
-def _system_font_map() -> dict[str, str]:
-    """Lazy family→file map for installed fonts (so any system font can render)."""
+def _style_key(subfamily: str) -> str:
+    s = (subfamily or "").lower()
+    b = "bold" in s
+    i = "italic" in s or "oblique" in s
+    return ("bolditalic" if b and i else "bold" if b else "italic" if i else "regular")
+
+
+def _system_font_map() -> dict[str, dict[str, str]]:
+    """Lazy family→{style: file} map for installed fonts.
+
+    Per family we record which style faces exist (regular/bold/italic/
+    bolditalic) so we can both render the right face *and* report truthfully
+    which styles a font actually supports.
+    """
     global _SYSTEM_FONT_MAP
     if _SYSTEM_FONT_MAP is not None:
         return _SYSTEM_FONT_MAP
-    out: dict[str, str] = {}
+    out: dict[str, dict[str, str]] = {}
     for d in _system_font_dirs():
         if not d.is_dir():
             continue
@@ -60,27 +72,66 @@ def _system_font_map() -> dict[str, str]:
             if f.suffix.lower() not in (".ttf", ".otf", ".ttc"):
                 continue
             try:
-                fam = ImageFont.truetype(str(f), 12).getname()[0]
+                fam, sub = ImageFont.truetype(str(f), 12).getname()
             except Exception:
                 continue
-            out.setdefault(fam, str(f))
+            out.setdefault(fam, {}).setdefault(_style_key(sub or ""), str(f))
     _SYSTEM_FONT_MAP = out
     return out
 
 
-def _font_path(family: str) -> str | None:
+def _font_path(family: str, style: str = "regular") -> str | None:
     if family in FONTS:
         return resource_path(FONTS[family])
-    return _system_font_map().get(family)
+    faces = _system_font_map().get(family)
+    if not faces:
+        return None
+    return faces.get(style) or faces.get("regular") or next(iter(faces.values()))
 
 
-def _font(px: int, family: str = DEFAULT_INDICATOR_FONT
+def font_supports(family: str) -> tuple[bool, bool]:
+    """``(has_bold, has_italic)`` as the engine can actually render *family*.
+
+    Bundled variable fonts are probed via their named instances; system fonts
+    by which separate style faces are installed.  This is the single source of
+    truth shared by the renderer and the UI's bold/italic enable logic.
+    """
+    if family in FONTS:
+        try:
+            f = ImageFont.truetype(resource_path(FONTS[family]), 12)
+            low = [(_n.decode() if isinstance(_n, bytes) else _n).replace(" ", "").lower()
+                   for _n in f.get_variation_names()]
+        except Exception:
+            return (False, False)
+        return (any("bold" in n for n in low),
+                any(("italic" in n or "oblique" in n) for n in low))
+    faces = _system_font_map().get(family, {})
+    return ("bold" in faces or "bolditalic" in faces,
+            "italic" in faces or "bolditalic" in faces)
+
+
+def _font(px: int, family: str = DEFAULT_INDICATOR_FONT,
+          bold: bool = False, italic: bool = False
           ) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
-    path = _font_path(family) or resource_path(FONTS[DEFAULT_INDICATOR_FONT])
+    style = ("bolditalic" if bold and italic else "bold" if bold
+             else "italic" if italic else "regular")
+    path = _font_path(family, style) or resource_path(FONTS[DEFAULT_INDICATOR_FONT])
     try:
-        return ImageFont.truetype(path, max(6, px))
+        f = ImageFont.truetype(path, max(6, px))
     except Exception:  # pragma: no cover - font load fallback
         return ImageFont.load_default()
+    if bold or italic:
+        want = ("Bold Italic" if bold and italic else "Bold" if bold else "Italic")
+        want_key = want.replace(" ", "").lower()
+        try:    # variable fonts (our bundled ones) expose named instances
+            for n in f.get_variation_names():
+                name = n.decode() if isinstance(n, bytes) else n
+                if name.replace(" ", "").lower() == want_key:
+                    f.set_variation_by_name(n)
+                    break
+        except Exception:
+            pass    # static font without that instance — render regular
+    return f
 
 
 _UPPER = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -123,8 +174,13 @@ def render_pages(
     draw_indicators: bool = True,
     indicator_font: str = DEFAULT_INDICATOR_FONT,
     indicator_size_mm: float = 0.0,
+    indicator_bold: bool = False,
+    indicator_italic: bool = False,
     chart_text: str = "",
     chart_text_font: str = "Inter",
+    chart_text_size_mm: float = 0.0,
+    chart_text_bold: bool = False,
+    chart_text_italic: bool = False,
     stamp_text: str = "",
 ) -> RenderResult:
     """Render one :class:`PIL.Image` per page for *target*.
@@ -157,7 +213,8 @@ def render_pages(
     pw_px, pl_px = px(place.pwid), px(place.plen)
     sp_px = px(place.pspa)
     font = _font(px(effective_indicator_size_mm(
-        geom, dpi, indicator_font, indicator_size_mm)), indicator_font)
+        geom, dpi, indicator_font, indicator_size_mm)), indicator_font,
+        indicator_bold, indicator_italic)
 
     images: list[Image.Image] = []
     for page in range(layout.pages):
@@ -196,7 +253,8 @@ def render_pages(
         # drawn in the bottom margin (clear of the patches).
         _btxt = [t for t in (chart_text, stamp_text) if t]
         if _btxt:
-            sfont = _font(px(3.2), chart_text_font)
+            sfont = _font(px(chart_text_size_mm or 3.2), chart_text_font,
+                          chart_text_bold, chart_text_italic)
             line_h = px(4.2)
             yy = H - px(1.5) - line_h * len(_btxt)
             for ln in _btxt:

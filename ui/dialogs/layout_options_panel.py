@@ -200,12 +200,12 @@ class LayoutOptionsPanel(QWidget):
         self.indicator_font.currentIndexChanged.connect(self._emit)
         self.indicator_size = small_mm(top=20.0)
         self.indicator_size.setSpecialValueText(tr("auto"))
-        _fs = QHBoxLayout(); _fs.setContentsMargins(0, 0, 0, 0); _fs.setSpacing(6)
-        _fs.addWidget(self.indicator_font, 1)
-        _fs.addWidget(QLabel(tr("Size:"), self))
-        _fs.addWidget(self.indicator_size)
-        _fsw = QWidget(self); _fsw.setLayout(_fs)
-        add_row(sig2, 1, tr("Font:"), _fsw)
+        self.ind_bold = QCheckBox(tr("Bold"), self)
+        self.ind_bold.toggled.connect(self._emit)
+        self.ind_italic = QCheckBox(tr("Italic"), self)
+        self.ind_italic.toggled.connect(self._emit)
+        self._add_font_rows(sig2, 1, tr("Font:"), self.indicator_font,
+                            self.indicator_size, self.ind_bold, self.ind_italic)
         v.addWidget(si)
 
         # ---- Page geometry ----
@@ -266,6 +266,12 @@ class LayoutOptionsPanel(QWidget):
         self.chart_text_font = NoScrollComboBox(self)
         self._populate_font_combo(self.chart_text_font)
         self.chart_text_font.currentIndexChanged.connect(self._emit)
+        self.chart_text_size = small_mm(top=20.0)
+        self.chart_text_size.setSpecialValueText(tr("auto"))
+        self.ct_bold = QCheckBox(tr("Bold"), self)
+        self.ct_bold.toggled.connect(self._emit)
+        self.ct_italic = QCheckBox(tr("Italic"), self)
+        self.ct_italic.toggled.connect(self._emit)
         self.stamp_command = QCheckBox(tr("Stamp layout summary on the sheet"), self)
         self.stamp_command.toggled.connect(self._emit)
         add_row(stg, 0, tr("Custom text:"), self.chart_text,
@@ -275,8 +281,9 @@ class LayoutOptionsPanel(QWidget):
                        "Placeholders are filled in when the chart is built: "
                        "{project}, {date}, {paper}, {instrument}, {patchcount}, "
                        "{pages}, {seed}."), self))
-        add_row(stg, 1, tr("Font:"), self.chart_text_font)
-        stg.addWidget(self.stamp_command, 2, 1)
+        self._add_font_rows(stg, 1, tr("Font:"), self.chart_text_font,
+                            self.chart_text_size, self.ct_bold, self.ct_italic)
+        stg.addWidget(self.stamp_command, 3, 1)
         v.addWidget(st)
 
         # ---- Calibration (per-chart; engine -K/-I) ----
@@ -369,6 +376,36 @@ class LayoutOptionsPanel(QWidget):
         self._loading = False
         self._on_paper_changed()
 
+    def _add_font_rows(self, grid, r, label, combo, size, bold, italic) -> None:
+        """Font on row *r*; Size + Bold + Italic on row *r+1*."""
+        from PyQt6.QtCore import Qt
+        grid.addWidget(QLabel(label, self), r, 0, Qt.AlignmentFlag.AlignRight)
+        grid.addWidget(combo, r, 1)
+        grid.addWidget(QLabel(tr("Size:"), self), r + 1, 0, Qt.AlignmentFlag.AlignRight)
+        wrap = QWidget(self)
+        box = QHBoxLayout(wrap); box.setContentsMargins(0, 0, 0, 0); box.setSpacing(8)
+        box.addWidget(size); box.addWidget(bold); box.addWidget(italic); box.addStretch()
+        grid.addWidget(wrap, r + 1, 1)
+        grid.setColumnStretch(1, 1)
+        combo.currentIndexChanged.connect(
+            lambda: self._update_style_enabled(combo, bold, italic))
+        self._update_style_enabled(combo, bold, italic)
+
+    def _update_style_enabled(self, combo, bold, italic) -> None:
+        """Grey Bold/Italic (box + label) when the chosen font lacks the style.
+
+        Uses the engine's own capability probe so the checkbox can't promise a
+        style the renderer won't actually apply.
+        """
+        from workflow.layout_engine.raster import font_supports
+        has_bold, has_italic = font_supports(combo.currentData() or "")
+        bold.setEnabled(has_bold)
+        italic.setEnabled(has_italic)
+        if not has_bold:
+            bold.setChecked(False)
+        if not has_italic:
+            italic.setChecked(False)
+
     @staticmethod
     def _populate_font_combo(combo) -> None:
         """Bundled fonts on top, then a separator, then all installed families."""
@@ -389,6 +426,12 @@ class LayoutOptionsPanel(QWidget):
     def _on_show_indicators(self, on: bool) -> None:
         self.indicator_font.setEnabled(on)
         self.indicator_size.setEnabled(on)
+        if on:
+            self._update_style_enabled(self.indicator_font,
+                                       self.ind_bold, self.ind_italic)
+        else:
+            self.ind_bold.setEnabled(False)
+            self.ind_italic.setEnabled(False)
         self._emit()
 
     def _on_paper_changed(self, *_a) -> None:
@@ -474,9 +517,14 @@ class LayoutOptionsPanel(QWidget):
         _fi = self.indicator_font.findData(r.indicator_font)
         self.indicator_font.setCurrentIndex(_fi if _fi >= 0 else 0)
         self.indicator_size.setValue(r.indicator_size_mm)
+        self.ind_bold.setChecked(r.indicator_bold)
+        self.ind_italic.setChecked(r.indicator_italic)
         self.chart_text.setText(r.chart_text)
         _ctf = self.chart_text_font.findData(r.chart_text_font)
         self.chart_text_font.setCurrentIndex(_ctf if _ctf >= 0 else 0)
+        self.chart_text_size.setValue(r.chart_text_size_mm)
+        self.ct_bold.setChecked(r.chart_text_bold)
+        self.ct_italic.setChecked(r.chart_text_italic)
         self.stamp_command.setChecked(r.stamp_command)
         ci = self.compression.findData(r.compression)
         self.compression.setCurrentIndex(ci if ci >= 0 else 0)
@@ -509,8 +557,13 @@ class LayoutOptionsPanel(QWidget):
         r.show_strip_indicators = self.show_indicators.isChecked()
         r.indicator_font = self.indicator_font.currentData() or "JetBrains Mono"
         r.indicator_size_mm = self.indicator_size.value()
+        r.indicator_bold = self.ind_bold.isChecked()
+        r.indicator_italic = self.ind_italic.isChecked()
         r.chart_text = self.chart_text.text()
         r.chart_text_font = self.chart_text_font.currentData() or "Inter"
+        r.chart_text_size_mm = self.chart_text_size.value()
+        r.chart_text_bold = self.ct_bold.isChecked()
+        r.chart_text_italic = self.ct_italic.isChecked()
         r.stamp_command = self.stamp_command.isChecked()
         r.compression = self.compression.currentData() or "lzw"
         return r

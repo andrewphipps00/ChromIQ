@@ -102,3 +102,14 @@ def test_colored_spacer_is_in_palette_and_contrasts():
     # spacer_for_mode routes correctly
     assert contrast.spacer_for_mode("bw", (255, 255, 255), (240, 240, 240)) == (0, 0, 0)
     assert contrast.spacer_for_mode("colored", (128, 128, 128), (130, 130, 130)) == sp
+
+
+def test_font_supports_bundled():
+    # JetBrains Mono is a weight-axis variable font (bold yes, italic no in-file).
+    has_bold, has_italic = raster.font_supports("JetBrains Mono")
+    assert has_bold is True
+    assert has_italic is False
+    # Instrument Serif ships as a single Regular static face — neither style.
+    assert raster.font_supports("Instrument Serif") == (False, False)
+    # An unknown family supports nothing (renderer would fall back to default).
+    assert raster.font_supports("No Such Font 123") == (False, False)
