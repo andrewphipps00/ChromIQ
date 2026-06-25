@@ -1977,5 +1977,6 @@
   "Spacer colours:": "Trennlinienfarben:",
   "By default the engine separates patches with spacers drawn from the five ChromIQ accent colours, automatically picking the one with the most contrast at each gap so the instrument can always find the patch edges. Turn this on to choose your own set of spacer colours instead — click a swatch to change it. The engine still auto-picks the highest-contrast one from your set per gap, so keep them varied (and watch the low-contrast warning).": "Standardmäßig trennt die Engine die Felder mit Trennlinien aus den fünf ChromIQ-Akzentfarben und wählt an jeder Lücke automatisch die kontrastreichste, damit das Gerät die Feldkanten immer findet. Aktiviere dies, um stattdessen deine eigenen Trennlinienfarben zu wählen — klick auf ein Farbfeld, um es zu ändern. Die Engine wählt weiterhin pro Lücke die kontrastreichste aus deinem Satz, halte sie also abwechslungsreich (und beachte die Kontrastwarnung).",
   "Line distance:": "Linienabstand:",
-  "Line thickness:": "Liniendicke:"
+  "Line thickness:": "Liniendicke:",
+  "The ChromIQ layout engine is on — set the page layout in the editor after creating the chart.": "Die ChromIQ-Layout-Engine ist an — lege das Seitenlayout nach dem Erstellen der Testkarte im Editor fest."
 }

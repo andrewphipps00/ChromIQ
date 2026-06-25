@@ -1105,6 +1105,18 @@ class _NewChartDialog(QDialog):
         self._instr.currentIndexChanged.connect(self._refresh_instr_widgets)
         self._refresh_instr_widgets()
         lay.addWidget(opt_box)
+        # With the ChromIQ layout engine active, the chart's layout is governed
+        # by the editor's engine panel after this window — the printtarg knobs
+        # here don't apply, so hide them and say so (#93).
+        if (self._settings is not None
+                and bool(self._settings.get("use_chromiq_layout_engine", False))):
+            opt_box.setVisible(False)
+            _eng_note = QLabel(tr("The ChromIQ layout engine is on — set the page "
+                                  "layout in the editor after creating the chart."),
+                               self)
+            _eng_note.setWordWrap(True)
+            _eng_note.setStyleSheet("color: palette(mid); font-size: 11px;")
+            lay.addWidget(_eng_note)
 
         btns = QHBoxLayout()
         restore = QPushButton(tr("Restore defaults"), self)
