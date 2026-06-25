@@ -415,7 +415,7 @@ def render_pages(
     def px(mm: float) -> int:
         return round(mm * mm2px)
 
-    pw_px, pl_px = px(place.pwid), px(place.plen)
+    pl_px = px(place.plen)
     sp_px = px(place.pspa)
     ind_px = px(effective_indicator_size_mm(
         geom, dpi, indicator_font, indicator_size_mm))
@@ -437,27 +437,34 @@ def render_pages(
 
         for p in range(n_passes):
             x0 = px(place.x_of(p))
+            # Right edge from the patch's true mm position, not x0 + a fixed
+            # rounded width: when strips touch (pwid == rrsp) the 8 mm pitch
+            # rounds alternately to 94/95 px, so a fixed 94 px width left a 1 px
+            # gap after every other strip. Deriving xR here tiles them seamlessly
+            # while still leaving any intended gap when pwid < rrsp.
+            xR = px(place.x_of(p) + place.pwid)
+            strip_w = xR - x0
             global_strip = (first // steps) + p
             col_slots = list(range(first + p * steps,
                                    min(last, first + (p + 1) * steps)))
             if draw_indicators:
                 _lbl = label_strip(global_strip + 1)
-                _cx = x0 + pw_px // 2          # centre over the strip
+                _cx = x0 + strip_w // 2          # centre over the strip
                 _y = px(place.leader_top)
                 _draw_indicator(draw, _cx, _y, _lbl, font,
                                 max(1, round(ind_px * INDICATOR_LETTER_SPACING)))
                 if underline_on and underline_mode == "cycle":   # one accent / strip
                     _ly = _y + ind_px + ul_gap
-                    draw.rectangle([x0, _ly, x0 + pw_px - 1, _ly + ul_th - 1],
+                    draw.rectangle([x0, _ly, xR - 1, _ly + ul_th - 1],
                                    fill=ACCENT_RGB[global_strip % len(ACCENT_RGB)])
             for j, gslot in enumerate(col_slots):
                 y0 = px(place.y_of(j))
                 rgb = rgb_by_slot[gslot]
-                draw.rectangle([x0, y0, x0 + pw_px - 1, y0 + pl_px - 1], fill=rgb)
+                draw.rectangle([x0, y0, xR - 1, y0 + pl_px - 1], fill=rgb)
                 if sp_px > 0 and j + 1 < len(col_slots):
                     nxt = rgb_by_slot[col_slots[j + 1]]
                     draw.rectangle(
-                        [x0, y0 + pl_px, x0 + pw_px - 1, y0 + pl_px + sp_px - 1],
+                        [x0, y0 + pl_px, xR - 1, y0 + pl_px + sp_px - 1],
                         fill=contrast.spacer_for_mode(spacer_mode, rgb, nxt),
                     )
         # Full-width rule under the whole label row (one continuous line):
@@ -468,7 +475,7 @@ def render_pages(
             _ly = px(place.leader_top) + ind_px + ul_gap
             _yb = _ly + ul_th - 1
             x_left = px(place.x_of(0))
-            x_right = px(place.x_of(n_passes - 1)) + pw_px - 1
+            x_right = px(place.x_of(n_passes - 1) + place.pwid) - 1
             if underline_mode == "black":
                 draw.rectangle([x_left, _ly, x_right, _yb], fill=(0, 0, 0))
             else:                                     # 5 equal segments full-width

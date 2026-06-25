@@ -178,3 +178,25 @@ def test_export_clip_template(tmp_path):
         assert p.exists() and p.stat().st_size > 0
     with Image.open(str(tmp_path / "tpl.png")) as im:
         assert im.size == (160, 2240)          # exact clip pixel size
+
+
+def test_no_interstrip_gaps_from_rounding():
+    """Touching strips must tile with no 1px white gap from px rounding (the
+    8mm pitch rounds 94/95 while a fixed width stayed 94, gapping every other
+    strip)."""
+    import numpy as np
+    # all patches the same non-white colour → strips form one solid block
+    patches = [((50.0, 60.0, 70.0), (40.0, 45.0, 50.0)) for _ in range(441)]
+    target = ColorTarget(color_rep="iRGB", device_fields=["RGB_R", "RGB_G", "RGB_B"],
+                         patches=patches)
+    geom = instruments.build("i1")
+    lay = geometry.compute(geom, 210.0, 297.0, 441)
+    res = raster.render_pages(target, lay, geom, seed=1, randomize=False,
+                              paper_w_mm=210.0, paper_h_mm=297.0, dpi=300)
+    a = np.asarray(res.images[0])
+    # within the patch band, no fully-white column between the first and last patch
+    band = a[(a < 250).any(2).mean(1) > 0.3]
+    colwhite = (band >= 250).all(2).mean(0)
+    inked = np.where(colwhite <= 0.85)[0]
+    interior = colwhite[inked.min():inked.max() + 1]
+    assert not (interior > 0.85).any(), "found a white gap column between strips"
