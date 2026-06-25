@@ -1339,6 +1339,7 @@ class SettingsDialog(QDialog):
         v.addWidget(adv)
 
         self._layout_calc = QLabel("", self)
+        self._layout_calc.setWordWrap(True)
         self._layout_calc.setStyleSheet("color: #1a8f3c; font-weight: 600;")
         v.addWidget(self._layout_calc)
 
@@ -1478,18 +1479,37 @@ class SettingsDialog(QDialog):
         self._layout_store.set(self._recipe_from_fields())
         self._update_layout_calc()
 
+    _LAYOUT_GEOM_KEYS = {
+        "hflag", "density", "spacer_on", "pscale", "sscale", "border", "nolpcbord",
+        "nolimit", "margins", "patch_w", "patch_h", "spacer_width", "inter_patch",
+        "max_strip", "strip_indicator_gap", "offset_x", "offset_y"}
+
     def _update_layout_calc(self) -> None:
-        from workflow.layout_engine import geometry, instruments, papers
+        from workflow.layout_engine import geometry, instruments, papers, preflight
         try:
             r = self._recipe_from_fields()
             bk = r.build_kwargs()
             geom = instruments.build(
-                bk["instrument"], hflag=bk["hflag"], density=bk["density"],
-                spacer_on=bk["spacer_on"], pscale=bk["pscale"], sscale=bk["sscale"],
-                border=bk["border"], nolpcbord=bk["nolpcbord"], nolimit=bk["nolimit"])
+                bk["instrument"],
+                **{k: v for k, v in bk.items() if k in self._LAYOUT_GEOM_KEYS})
             w_mm, h_mm = papers.dimensions_mm(r.paper)
-            n = geometry.patches_per_sheet(geom, w_mm, h_mm)
-            self._layout_calc.setText(tr("≈ {n} patches per sheet").format(n=n))
+            cap = geometry.patches_per_sheet(geom, w_mm, h_mm)
+            layout = geometry.compute(geom, w_mm, h_mm, cap)
+            rep = preflight.check(geom, layout)
+            msgs = [(e, True) for e in rep.errors] + [(w, False) for w in rep.warnings]
+            usable = h_mm - geom.margin_t - geom.margin_b
+            if r.max_strip_mm and r.max_strip_mm > usable:
+                msgs.append((tr("max strip length exceeds the usable page "
+                                "length (~{u:.0f} mm)").format(u=usable), False))
+            html = ("<span style='color:#1a8f3c;font-weight:600'>"
+                    + tr("≈ {n} patches per sheet").format(n=cap) + "</span>")
+            for txt, is_err in msgs:
+                colour = "#e05252" if is_err else "#c47f17"
+                html += f"<br><span style='color:{colour}'>⚠ {txt}</span>"
+            self._layout_calc.setText(html)
+        except geometry.LayoutError as exc:
+            self._layout_calc.setText(
+                f"<span style='color:#e05252'>⚠ {exc}</span>")
         except Exception:
             self._layout_calc.setText("—")
 

@@ -1870,5 +1870,6 @@
  "Printer calibration": "Printer calibration",
  "Select printer calibration": "Select printer calibration",
  "Width × height of each patch in millimetres. Leave at “auto” (0) to use the instrument's recommended size (scaled by Patch scale). A value below ~6 mm can make the chart hard to read.": "Width × height of each patch in millimetres. Leave at “auto” (0) to use the instrument's recommended size (scaled by Patch scale). A value below ~6 mm can make the chart hard to read.",
- "no .cal file selected": "no .cal file selected"
+ "no .cal file selected": "no .cal file selected",
+ "max strip length exceeds the usable page length (~{u:.0f} mm)": "max strip length exceeds the usable page length (~{u:.0f} mm)"
 }
