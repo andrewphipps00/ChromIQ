@@ -2876,6 +2876,9 @@ class Ti2RelayoutDialog(QDialog):
         self._engine_panel = None
         self._engine_panel_grp = None
         self._engine_ti1: "Path | None" = None     # patch data for engine preview
+        self._engine_spacer_rects: list = []        # spacer hit-boxes (preview dpi)
+        self._engine_patch_rects: dict = {}         # (page,slot) -> rect dict
+        self._engine_slots: list = []               # grid index -> slot
         # Debounced engine preview: re-render via the engine after the last edit.
         self._engine_preview_timer = QTimer(self)
         self._engine_preview_timer.setSingleShot(True)
@@ -4077,7 +4080,12 @@ class Ti2RelayoutDialog(QDialog):
     def _schedule_auto_refresh(self) -> None:
         """Restart the debounced preview timer (called from user edit hooks)."""
         if self._spec is not None and self._grid.count() > 0:
-            self._auto_timer.start()
+            # Engine charts re-render via the engine (from the edited grid),
+            # not printtarg — so grid edits update the engine preview (#93).
+            if self._engine_active():
+                self._engine_preview_timer.start()
+            else:
+                self._auto_timer.start()
         # Nearly every edit funnels through here (reorder/remove via _after_drag,
         # add/recolour/options/paper/palette directly), so it's the natural place
         # to note an undo step. Spacer paint and palette-reset bypass it and call
@@ -5080,6 +5088,39 @@ class Ti2RelayoutDialog(QDialog):
                 and self._engine_ti1 is not None
                 and self._engine_panel_grp is not None)
 
+    def _engine_grid_ti1(self, out_path: Path) -> Path:
+        """Write the current grid program as a .ti1 at *out_path* for the engine.
+
+        Falls back to the loaded chart's .ti1 if the grid isn't usable. Lets the
+        engine render/save reflect patch edits made in the grid (#93)."""
+        try:
+            if self._spec is not None and self._grid.count() > 0:
+                R.write_ti1(self._spec, self._program_from_grid(), out_path)
+                return out_path
+        except Exception as exc:  # noqa: BLE001 — fall back to the original .ti1
+            log.warning("engine grid .ti1 synth failed: %s", exc)
+        import shutil
+        if self._engine_ti1 is not None and Path(self._engine_ti1).is_file():
+            shutil.copy(self._engine_ti1, out_path)
+        return out_path
+
+    @staticmethod
+    def _engine_geom_from_recipe(recipe):
+        """Build the engine Geom + paper mm for *recipe* (for spacer geometry)."""
+        from workflow.layout_engine import instruments, papers
+        kw = recipe.build_kwargs()
+        geom = instruments.build(
+            kw["instrument"], hflag=kw["hflag"], density=kw["density"],
+            spacer_on=kw["spacer_on"], pscale=kw["pscale"], sscale=kw["sscale"],
+            border=kw["border"], margins=kw["margins"], patch_w=kw["patch_w"],
+            patch_h=kw["patch_h"], spacer_width=kw["spacer_width"],
+            inter_patch=kw["inter_patch"], max_strip=kw["max_strip"],
+            strip_indicator_gap=kw["strip_indicator_gap"], offset_x=kw["offset_x"],
+            offset_y=kw["offset_y"], nolpcbord=kw["nolpcbord"], nolimit=kw["nolimit"],
+            clip_border_width=kw["clip_border_width"])
+        w_mm, h_mm = papers.dimensions_mm(recipe.paper)
+        return geom, w_mm, h_mm
+
     def _do_engine_preview(self) -> None:
         """Render the current engine recipe to a temp page and show it as the
         preview — the live, engine-accurate picture for an engine chart (#93)."""
@@ -5091,10 +5132,27 @@ class Ti2RelayoutDialog(QDialog):
             kw = recipe.build_kwargs()
             kw["dpi"] = min(int(kw.get("dpi") or 150), 150)   # fast preview
             stem = Path(self._preview_tmp.name) / "_engine_preview"
-            result = le_chart.build_chart(str(self._engine_ti1), stem, **kw)
+            # Render from a .ti1 derived from the CURRENT grid, so reordering /
+            # recolouring / adding patches updates the engine preview live (#93).
+            ti1 = self._engine_grid_ti1(stem.with_suffix(".ti1"))
+            result = le_chart.build_chart(str(ti1), stem, **kw)
             tiffs = result.tiff_paths or []
             if tiffs:
                 self._show_image(tiffs[min(self._page, len(tiffs) - 1)])
+                # Cache spacer rects at the preview DPI so a preview click maps
+                # to the spacer the engine will recolour (#93).
+                from workflow.layout_engine import geometry, permutation
+                geom, w_mm, h_mm = self._engine_geom_from_recipe(recipe)
+                self._engine_spacer_rects = geometry.spacer_rects_px(
+                    geom, w_mm, h_mm, result.layout, kw["dpi"])
+                # Patch rects (per slot) + the grid-index→slot permutation, so
+                # the "Highlight selected" overlay can outline the right patches.
+                pr = geometry.patch_rects_px(geom, w_mm, h_mm, result.layout,
+                                             kw["dpi"], recipe.strip_pattern,
+                                             recipe.patch_pattern)
+                self._engine_patch_rects = {(d["page"], d["slot"]): d for d in pr}
+                self._engine_slots = permutation.location_permutation(
+                    result.layout.total_patches, result.seed, recipe.randomize)
                 self._status.setText(tr("Engine preview · {n} patches · seed {s}")
                                      .format(n=result.layout.total_patches,
                                              s=result.seed))
@@ -5185,6 +5243,25 @@ class Ti2RelayoutDialog(QDialog):
                                int((x1 - x0 + 1) * s) + 2,
                                int((y1 - y0 + 1) * s) + 2)
             p.end()
+        elif (self._mode_patches.isChecked() and self._hl_patches.isChecked()
+                and self._engine_active()):
+            # Engine chart: outline selected grid patches using the engine's own
+            # patch rects, mapping grid index → slot via the seeded permutation.
+            sel = [self._grid.row(it) for it in self._grid.selectedItems()]
+            p = QPainter(pm)
+            p.setRenderHint(QPainter.RenderHint.Antialiasing, False)
+            p.setBrush(QColor(255, 69, 115, 120))
+            p.setPen(QPen(QColor(SPEC_MAGENTA), 2))
+            s = self._preview_scale
+            for i in sel:
+                if i < 0 or i >= len(self._engine_slots):
+                    continue
+                d = self._engine_patch_rects.get((self._page, self._engine_slots[i]))
+                if d is None:
+                    continue
+                p.drawRect(int(d["x"] * s) + B - 1, int(d["y"] * s) + B - 1,
+                           int(d["w"] * s) + 2, int(d["h"] * s) + 2)
+            p.end()
         elif (self._mode_patches.isChecked()
                 and self._hl_patches.isChecked()
                 and self._regen is not None):
@@ -5208,6 +5285,10 @@ class Ti2RelayoutDialog(QDialog):
         self._preview.set_base_pixmap(pm)
 
     def _on_patch_highlight_toggled(self, on: bool) -> None:
+        # Engine charts have exact patch geometry already — just redraw.
+        if self._engine_active():
+            self._refresh_preview()
+            return
         # Turning highlight on needs the B&W twin for patch geometry, which the
         # fast Patches-mode preview skips (#44); render it now if it's missing.
         # Otherwise just redraw to show / clear the overlay.
@@ -5219,9 +5300,8 @@ class Ti2RelayoutDialog(QDialog):
     def _on_grid_selection_changed(self) -> None:
         # Cheap no-op unless we're showing the patch overlay; otherwise just
         # repaint with the new selection.
-        if (self._mode_patches.isChecked()
-                and self._hl_patches.isChecked()
-                and self._regen is not None):
+        if (self._mode_patches.isChecked() and self._hl_patches.isChecked()
+                and (self._regen is not None or self._engine_active())):
             self._refresh_preview()
 
     def _patch_geom_for_page(self, page: int) -> dict:
@@ -5264,6 +5344,24 @@ class Ti2RelayoutDialog(QDialog):
             row = sid - 1
             if 0 <= row < self._grid.count():
                 self._grid.item(row).setSelected(not remove)
+
+    def _engine_spacer_click(self, ix: float, iy: float, mods) -> None:
+        """Recolour (or, with Alt, reset) the engine spacer under the click."""
+        hit = None
+        for r in self._engine_spacer_rects:
+            if (r["page"] == self._page and r["x"] <= ix <= r["x"] + r["w"]
+                    and r["y"] <= iy <= r["y"] + r["h"]):
+                hit = r
+                break
+        if hit is None:
+            return
+        if mods & Qt.KeyboardModifier.AltModifier:        # Alt-click clears it
+            self._engine_panel.set_spacer_override(hit["flat"], None)
+            return
+        from PyQt6.QtWidgets import QColorDialog
+        col = QColorDialog.getColor(QColor("#000000"), self, tr("Spacer colour"))
+        if col.isValid():
+            self._engine_panel.set_spacer_override(hit["flat"], col.name())
 
     def _label_to_image(self, p: QPoint) -> tuple[float, float] | None:
         """Map a label-coord click to deliverable image pixels (or None).
@@ -5376,6 +5474,10 @@ class Ti2RelayoutDialog(QDialog):
         if mapped is None:
             return
         ix, iy = mapped
+        # Engine chart + Spacers mode: click a spacer to recolour it (#93).
+        if self._engine_active() and self._mode_spacers.isChecked():
+            self._engine_spacer_click(ix, iy, mods)
+            return
         is_alt   = bool(mods & Qt.KeyboardModifier.AltModifier)
         is_shift = bool(mods & (Qt.KeyboardModifier.ShiftModifier
                                 | Qt.KeyboardModifier.ControlModifier
@@ -5609,7 +5711,11 @@ class Ti2RelayoutDialog(QDialog):
         import json
         from workflow.layout_engine import chart as le_chart
         recipe = self._engine_panel.get_recipe()
-        result = le_chart.build_chart(str(self._engine_ti1), target / name,
+        # Write the (possibly edited) grid as the chart's .ti1 into the target,
+        # so the saved chart reflects edits AND _import_applied_chart finds a
+        # .ti1 to adopt (#93).
+        self._engine_grid_ti1(target / f"{name}.ti1")
+        result = le_chart.build_chart(str(target / f"{name}.ti1"), target / name,
                                       **recipe.build_kwargs())
         # Fold the strip geometry + recipe into channels.json, mirroring the
         # Create Chart build (workflow.chart_creator._embed_layout_geometry).

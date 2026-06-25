@@ -113,3 +113,24 @@ def test_clip_area_only_when_clip_border():
     # no clip border → no area.
     assert geometry.clip_area_mm(instruments.build("i1", nolpcbord=True), 297.0) is None
     assert geometry.clip_area_mm(instruments.build("CM"), 297.0) is None
+
+
+def test_spacer_rects_match_render_flat_index():
+    """spacer_rects_px flat indices + positions match what the renderer paints,
+    so an editor click maps to the spacer the engine recolours (#93)."""
+    import numpy as np
+    from workflow.layout_engine import raster
+    from workflow.layout_engine.ti1_reader import ColorTarget
+    target = ColorTarget(color_rep="iRGB", device_fields=["RGB_R", "RGB_G", "RGB_B"],
+                         patches=[((50.0, 50.0, 50.0), (40.0, 45.0, 50.0))
+                                  for _ in range(60)])
+    geom = instruments.build("i1")
+    lay = geometry.compute(geom, 210.0, 297.0, 60)
+    rects = geometry.spacer_rects_px(geom, 210.0, 297.0, lay, 150)
+    assert rects and rects[0]["flat"] == 0
+    res = raster.render_pages(target, lay, geom, seed=1, randomize=False,
+                              paper_w_mm=210.0, paper_h_mm=297.0, dpi=150,
+                              spacer_overrides={rects[0]["flat"]: (255, 0, 255)})
+    a = np.asarray(res.images[0])
+    r0 = rects[0]
+    assert tuple(a[r0["y"] + r0["h"] // 2, r0["x"] + r0["w"] // 2]) == (255, 0, 255)

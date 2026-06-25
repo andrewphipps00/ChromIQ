@@ -272,6 +272,45 @@ def patch_rects_px(geom: Geom, paper_w_mm: float, paper_h_mm: float,
     return out
 
 
+def spacer_rects_px(geom: Geom, paper_w_mm: float, paper_h_mm: float,
+                    layout: Layout, dpi: int) -> list[dict]:
+    """Exact pixel rectangle of every inter-patch spacer, with its flat index.
+
+    The flat index matches the one the renderer uses for per-spacer overrides
+    (``global_strip * steps_in_pass + position``), so the editor can map a click
+    to the spacer the engine will recolour. One entry per spacer:
+    ``{"page","flat","x","y","w","h"}``.
+    """
+    mm2px = dpi / 25.4
+    place = placement(geom, paper_w_mm, paper_h_mm, layout)
+    steps = layout.steps_in_pass
+    pppage = layout.patches_per_page
+    total = layout.total_patches
+    ppp = pppage // steps if steps else 0
+
+    def px(mm: float) -> int:
+        return round(mm * mm2px)
+
+    if px(place.pspa) <= 0 or ppp == 0:
+        return []
+    out: list[dict] = []
+    for page in range(layout.pages):
+        first = page * pppage
+        last = min(total, first + pppage)
+        n_on_page = last - first
+        n_passes = (n_on_page + steps - 1) // steps
+        for p in range(n_passes):
+            global_strip = page * ppp + p
+            ncol = min(last, first + (p + 1) * steps) - (first + p * steps)
+            x = px(place.x_of(p))
+            w = px(place.x_of(p) + place.pwid) - x
+            for j in range(ncol - 1):     # a spacer below each patch but the last
+                y = px(place.y_of(j)) + px(place.plen)
+                out.append({"page": page, "flat": global_strip * steps + j,
+                            "x": x, "y": y, "w": w, "h": px(place.pspa)})
+    return out
+
+
 def patches_per_sheet(geom: Geom, paper_w_mm: float, paper_h_mm: float,
                       *, scanc: int = 0) -> int:
     """Max **test** patches that fit on one sheet for *geom* (the calculator).

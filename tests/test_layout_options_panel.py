@@ -19,6 +19,7 @@ def test_recipe_roundtrip(app):
     r = LayoutRecipe(
         instrument="i1", paper="A4", spacer_mode="bw", pscale=0.9, sscale=1.1,
         spacer_palette=["#112233", "#445566", "#778899", "#aabbcc", "#ddeeff"],
+        spacer_overrides={"0": "#ff00ff", "7": "#00ffff"},
         spacer_width_mm=2.0, patch_w_mm=9.0, patch_h_mm=11.0, inter_patch_mm=1.0,
         strip_indicator_gap_mm=3.0, margin_top=10, margin_right=8, margin_bottom=12,
         margin_left=15, dpi=150, nolimit=True, max_strip_mm=200, offset_x_mm=4,
@@ -57,7 +58,7 @@ def test_all_engine_options_roundtrip(app):
     panel.set_recipe(r)
     out = panel.get_recipe()
     for f in ("instrument", "paper", "pscale", "sscale", "spacer_mode",
-              "spacer_palette",
+              "spacer_palette", "spacer_overrides",
               "spacer_width_mm", "patch_w_mm", "patch_h_mm", "inter_patch_mm",
               "strip_indicator_gap_mm", "margin_top", "margin_right",
               "margin_bottom", "margin_left", "dpi", "nolimit", "max_strip_mm",

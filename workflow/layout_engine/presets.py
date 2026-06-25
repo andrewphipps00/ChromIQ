@@ -36,6 +36,7 @@ class LayoutRecipe:
     spacer_on: bool = True
     spacer_mode: str = "colored"   # "colored" | "bw" | "none"
     spacer_palette: list = field(default_factory=list)  # custom colored-spacer hexes
+    spacer_overrides: dict = field(default_factory=dict)  # {str(flat_idx): "#hex"}
     pscale: float = 1.0
     sscale: float = 1.0
     border: float = 6.0            # base margin (drives leader/clip-holder)
@@ -100,8 +101,67 @@ class LayoutRecipe:
 
     @classmethod
     def from_dict(cls, d: dict) -> "LayoutRecipe":
+        # build_kwargs uses different keys (nolpcbord, density, margins-tuple…);
+        # if those are present this is a build-kwargs dict, not a recipe dict —
+        # map it back so e.g. clip_border isn't silently lost (#93).
+        if isinstance(d, dict) and ("nolpcbord" in d or "draw_indicators" in d):
+            return cls.from_build_kwargs(d)
         known = {f.name for f in fields(cls)}
         return cls(**{k: v for k, v in d.items() if k in known})
+
+    @classmethod
+    def from_build_kwargs(cls, d: dict) -> "LayoutRecipe":
+        """Inverse of :meth:`build_kwargs` — reconstruct a recipe from the engine
+        build kwargs (so a chart whose channels.json stored kwargs, not a recipe,
+        still reloads faithfully)."""
+        m = d.get("margins") or (6.0, 6.0, 6.0, 6.0)
+        inst = d.get("instrument", "i1")
+        r = cls(
+            instrument=inst, paper=d.get("paper", "A4"), dpi=int(d.get("dpi", 300)),
+            randomize=bool(d.get("randomize", True)), seed=d.get("seed"),
+            hflag=bool(d.get("hflag", False)), cm_density=int(d.get("density", 1)),
+            spacer_mode=d.get("spacer_mode", "colored"),
+            spacer_palette=list(d.get("spacer_palette") or []),
+            spacer_overrides=dict(d.get("spacer_overrides") or {}),
+            pscale=float(d.get("pscale", 1.0)), sscale=float(d.get("sscale", 1.0)),
+            border=float(d.get("border", 6.0)),
+            margin_top=m[0], margin_right=m[1], margin_bottom=m[2], margin_left=m[3],
+            patch_w_mm=float(d.get("patch_w") or 0.0),
+            patch_h_mm=float(d.get("patch_h") or 0.0),
+            spacer_width_mm=float(d.get("spacer_width") or 0.0),
+            inter_patch_mm=float(d.get("inter_patch") or 0.0),
+            max_strip_mm=float(d.get("max_strip") or 0.0),
+            strip_indicator_gap_mm=float(d.get("strip_indicator_gap") or 0.0),
+            offset_x_mm=float(d.get("offset_x", 0.0)),
+            offset_y_mm=float(d.get("offset_y", 0.0)),
+            bit16=bool(d.get("bit16", False)), compression=d.get("compression", "lzw"),
+            show_strip_indicators=bool(d.get("draw_indicators", True)),
+            indicator_font=d.get("indicator_font", "JetBrains Mono"),
+            indicator_size_mm=float(d.get("indicator_size_mm") or 0.0),
+            indicator_bold=bool(d.get("indicator_bold", False)),
+            indicator_italic=bool(d.get("indicator_italic", False)),
+            indicator_rotation=int(d.get("indicator_rotation", 0)),
+            underline_mode=d.get("underline_mode", "off"),
+            underline_thickness_mm=float(d.get("underline_thickness_mm") or 0.5),
+            underline_gap_mm=float(d.get("underline_gap_mm") or 0.5),
+            chart_text=d.get("chart_text", ""),
+            chart_text_font=d.get("chart_text_font", "Inter"),
+            chart_text_size_mm=float(d.get("chart_text_size_mm") or 0.0),
+            chart_text_bold=bool(d.get("chart_text_bold", False)),
+            chart_text_italic=bool(d.get("chart_text_italic", False)),
+            stamp_command=bool(d.get("stamp_command", False)),
+            clip_border=(not bool(d.get("nolpcbord", False)))
+            if inst in ("i1", "p3") else True,
+            clip_border_width_mm=float(d.get("clip_border_width") or 26.0),
+            clip_content_mode=d.get("clip_content_mode", "off"),
+            clip_text=d.get("clip_text", ""),
+            clip_text_font=d.get("clip_text_font", "Inter"),
+            clip_image_path=d.get("clip_image_path", ""),
+            nolimit=bool(d.get("nolimit", False)),
+            strip_pattern=d.get("strip_pattern") or permutation.DEFAULT_STRIP_PATTERN,
+            patch_pattern=d.get("patch_pattern") or permutation.DEFAULT_PATCH_PATTERN,
+        )
+        return r
 
     @classmethod
     def from_channels_json(cls, path) -> "LayoutRecipe | None":
@@ -141,6 +201,7 @@ class LayoutRecipe:
             "spacer_on": self.spacer_mode != "none",
             "spacer_mode": self.spacer_mode,
             "spacer_palette": list(self.spacer_palette) or None,
+            "spacer_overrides": dict(self.spacer_overrides) or None,
             "pscale": self.pscale,
             "sscale": self.sscale,
             "border": self.border,

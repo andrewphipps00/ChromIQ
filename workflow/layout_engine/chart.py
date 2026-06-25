@@ -92,6 +92,7 @@ def build_chart(
     spacer_on: bool = True,
     spacer_mode: str = "colored",
     spacer_palette: list | None = None,
+    spacer_overrides: dict | None = None,
     pscale: float = 1.0,
     sscale: float = 1.0,
     border: float = 6.0,
@@ -206,11 +207,13 @@ def build_chart(
             return (int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16))
         return tuple(int(v) for v in c)
     _palette = [_to_rgb(c) for c in spacer_palette] if spacer_palette else None
+    _overrides = ({int(k): _to_rgb(v) for k, v in spacer_overrides.items()}
+                  if spacer_overrides else None)
     render = raster.render_pages(
         target, layout, geom, seed=seed, randomize=randomize,
         paper_w_mm=w_mm, paper_h_mm=h_mm, dpi=dpi, strip_pattern=strip_pattern,
         spacer_mode=spacer_mode, spacer_palette=_palette,
-        draw_indicators=draw_indicators,
+        spacer_overrides=_overrides, draw_indicators=draw_indicators,
         indicator_font=indicator_font, indicator_size_mm=indicator_size_mm,
         indicator_bold=indicator_bold, indicator_italic=indicator_italic,
         indicator_rotation=indicator_rotation,

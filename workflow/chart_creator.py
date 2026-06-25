@@ -1015,7 +1015,12 @@ class ChartCreator:
             if params.layout_recipe is not None and hasattr(params.layout_recipe, "to_dict"):
                 layout["recipe"] = params.layout_recipe.to_dict()
             else:
-                layout["recipe"] = self._engine_build_kwargs(params)
+                # Store a real recipe (not raw build kwargs) so reloading doesn't
+                # lose fields like clip_border (which kwargs spell as nolpcbord)
+                # and the editor reproduces the exact layout (#93).
+                from workflow.layout_engine.presets import LayoutRecipe
+                layout["recipe"] = LayoutRecipe.from_build_kwargs(
+                    self._engine_build_kwargs(params)).to_dict()
             doc["layout"] = layout
             sidecar.write_text(json.dumps(doc))
             if strips.exists():

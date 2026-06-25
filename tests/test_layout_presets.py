@@ -123,3 +123,22 @@ def test_default_recipe_mode_application():
     assert default_recipe("i1", "A4", mode="noclip").clip_border is False
     assert default_recipe("CM", "A4", mode="high").cm_density == 2
     assert default_recipe("CM", "A4", mode="extrahigh").cm_density == 3
+
+
+def test_from_build_kwargs_roundtrip_and_detection():
+    """A chart whose channels.json stored build-kwargs (not a recipe) must
+    reload faithfully — esp. clip_border (kwargs spell it nolpcbord) (#93)."""
+    r = LayoutRecipe(instrument="i1", paper="A4", clip_border=False, border=10.0,
+                     pscale=0.95, underline_mode="cycle", cm_density=1,
+                     indicator_rotation=90)
+    kw = r.build_kwargs()
+    assert kw["nolpcbord"] is True              # no-clip → nolpcbord True
+    # from_dict auto-detects the kwargs shape and maps it back
+    back = LayoutRecipe.from_dict(kw)
+    assert back.clip_border is False            # not silently defaulted to True
+    assert back.border == 10.0
+    assert back.pscale == 0.95
+    assert back.underline_mode == "cycle"
+    assert back.indicator_rotation == 90
+    # a real recipe dict still loads as before (not misdetected)
+    assert LayoutRecipe.from_dict(r.to_dict()).clip_border is False

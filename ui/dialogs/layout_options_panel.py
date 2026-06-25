@@ -60,6 +60,10 @@ class LayoutOptionsPanel(QWidget):
         self._loading = False
         self._with_calibration = with_calibration
         self._with_selectors = with_selectors
+        # Per-spacer manual colour overrides {str(flat_idx): "#hex"} — set by
+        # clicking spacers in the editor preview; carried in the recipe (#93).
+        self._spacer_overrides: dict = {}
+        self._border: float = 6.0      # base margin (-m); preserved, no control
         self._inst = "i1"           # last-known instrument / clip state, for
         self._clip = True           # clip-border-width row visibility
         v = QVBoxLayout(self)
@@ -313,6 +317,7 @@ class LayoutOptionsPanel(QWidget):
         self.seed_spin.valueChanged.connect(self._emit)
         self.new_seed_btn = QPushButton(tr("New seed"), self)
         self.new_seed_btn.setObjectName("compact_input")
+        self.new_seed_btn.setFixedHeight(self.seed_spin.sizeHint().height())
         self.new_seed_btn.clicked.connect(self._on_new_seed)
         rgg.addWidget(self.randomize_cb, 0, 1)
         rgg.addWidget(self.fixed_seed_cb, 1, 1)
@@ -912,6 +917,16 @@ class LayoutOptionsPanel(QWidget):
             self._style_swatch(btn)
             self._emit()
 
+    def set_spacer_override(self, flat: int, hexcol: "str | None") -> None:
+        """Set (or clear, if *hexcol* is None) one spacer's manual colour and
+        emit changed — used by the editor's click-to-recolour (#93)."""
+        key = str(int(flat))
+        if hexcol is None:
+            self._spacer_overrides.pop(key, None)
+        else:
+            self._spacer_overrides[key] = hexcol
+        self._emit()
+
     def _on_custom_spacer_toggled(self, *_a) -> None:
         self._sync_spacer_swatches()
         self._emit()
@@ -1105,6 +1120,7 @@ class LayoutOptionsPanel(QWidget):
         i = self.spacer_mode.findData(r.spacer_mode)
         self.spacer_mode.setCurrentIndex(i if i >= 0 else 0)
         self.spacer_width.setValue(r.spacer_width_mm)
+        self._spacer_overrides = {str(k): v for k, v in (r.spacer_overrides or {}).items()}
         _pal = list(r.spacer_palette or [])
         self.custom_spacer_cb.setChecked(bool(_pal))
         for _i, _b in enumerate(self._spacer_swatches):
@@ -1120,6 +1136,7 @@ class LayoutOptionsPanel(QWidget):
         self.margins["r"].setValue(r.margin_right)
         self.margins["b"].setValue(r.margin_bottom)
         self.margins["l"].setValue(r.margin_left)
+        self._border = r.border        # preserve base margin across the round-trip
         self.dpi.setValue(r.dpi)
         self.nolimit.setChecked(r.nolimit)
         self.max_strip.setValue(r.max_strip_mm)
@@ -1176,6 +1193,7 @@ class LayoutOptionsPanel(QWidget):
         r.spacer_mode = self.spacer_mode.currentData() or "colored"
         r.spacer_palette = ([b.property("hexcol") for b in self._spacer_swatches]
                             if self.custom_spacer_cb.isChecked() else [])
+        r.spacer_overrides = dict(self._spacer_overrides)
         r.spacer_on = r.spacer_mode != "none"
         r.spacer_width_mm = self.spacer_width.value()
         r.patch_w_mm = self.patch_x.value()
@@ -1186,7 +1204,12 @@ class LayoutOptionsPanel(QWidget):
         r.margin_right = self.margins["r"].value()
         r.margin_bottom = self.margins["b"].value()
         r.margin_left = self.margins["l"].value()
-        r.border = min(r.margin_top, r.margin_right, r.margin_bottom, r.margin_left)
+        # Preserve the chart's base margin (printtarg -m; drives the clip-holder
+        # width lbord = clip_width − border). The panel has no separate control
+        # for it, so re-deriving it from min(margins) silently changed it on a
+        # round-trip (e.g. 10→6), shifting the layout right and dropping strips
+        # in the editor. Keep the loaded value; new recipes default it to 6. (#93)
+        r.border = self._border
         r.dpi = int(self.dpi.value())
         r.nolimit = self.nolimit.isChecked()
         r.max_strip_mm = self.max_strip.value()

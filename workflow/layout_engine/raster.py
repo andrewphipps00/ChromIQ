@@ -391,6 +391,7 @@ def render_pages(
     strip_pattern: str = permutation.DEFAULT_STRIP_PATTERN,
     spacer_mode: str = "colored",
     spacer_palette: "list[tuple[int, int, int]] | None" = None,
+    spacer_overrides: "dict[int, tuple[int, int, int]] | None" = None,
     draw_indicators: bool = True,
     indicator_font: str = DEFAULT_INDICATOR_FONT,
     indicator_size_mm: float = 0.0,
@@ -490,11 +491,14 @@ def render_pages(
                 draw.rectangle([x0, y0, xR - 1, y0 + pl_px - 1], fill=rgb)
                 if sp_px > 0 and j + 1 < len(col_slots):
                     nxt = rgb_by_slot[col_slots[j + 1]]
+                    # A per-spacer manual override (keyed by flat geometric index)
+                    # wins over the auto/contrast colour.
+                    _flat = global_strip * steps + j
+                    _ov = spacer_overrides.get(_flat) if spacer_overrides else None
+                    _fill = _ov if _ov is not None else contrast.spacer_for_mode(
+                        spacer_mode, rgb, nxt, spacer_palette)
                     draw.rectangle(
-                        [x0, y0 + pl_px, xR - 1, y0 + pl_px + sp_px - 1],
-                        fill=contrast.spacer_for_mode(spacer_mode, rgb, nxt,
-                                                      spacer_palette),
-                    )
+                        [x0, y0 + pl_px, xR - 1, y0 + pl_px + sp_px - 1], fill=_fill)
         # Full-width rule under the whole label row (one continuous line):
         # "segments" splits it into the five accents across the entire width;
         # "black" is a single plain line. ("cycle" is drawn per strip above.)
