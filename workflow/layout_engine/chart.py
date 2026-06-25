@@ -105,6 +105,9 @@ def build_chart(
     offset_y: float = 0.0,
     bit16: bool = False,
     compression: str = "lzw",
+    draw_indicators: bool = True,
+    indicator_font: str = "JetBrains Mono",
+    indicator_size_mm: float = 0.0,
     nolpcbord: bool = False,
     nolimit: bool = False,
     strip_pattern: str = permutation.DEFAULT_STRIP_PATTERN,
@@ -163,7 +166,8 @@ def build_chart(
     render = raster.render_pages(
         target, layout, geom, seed=seed, randomize=randomize,
         paper_w_mm=w_mm, paper_h_mm=h_mm, dpi=dpi, strip_pattern=strip_pattern,
-        spacer_mode=spacer_mode,
+        spacer_mode=spacer_mode, draw_indicators=draw_indicators,
+        indicator_font=indicator_font, indicator_size_mm=indicator_size_mm,
     )
     tiff_paths = raster.save_tiffs(render.images, stem.with_suffix(".tif"), dpi=dpi,
                                    bit16=bit16, compression=compression)

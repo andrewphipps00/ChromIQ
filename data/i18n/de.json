@@ -1869,5 +1869,9 @@
  "Custom size (mm):": "Custom size (mm):",
  "Custom…": "Custom…",
  "Margins (mm):": "Margins (mm):",
- "Patch size (mm):": "Patch size (mm):"
+ "Patch size (mm):": "Patch size (mm):",
+ "Font:": "Font:",
+ "Show strip indicators": "Show strip indicators",
+ "Size:": "Size:",
+ "Strip indicators": "Strip indicators"
 }

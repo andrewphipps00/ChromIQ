@@ -23,12 +23,20 @@ from .geometry import Layout
 from .instruments import Geom
 from .ti1_reader import ColorTarget
 
-_FONT_REL = "assets/fonts/JetBrainsMono-VariableFont_wght.ttf"
+# Bundled free fonts available for on-chart text (OFL).
+FONTS = {
+    "JetBrains Mono": "assets/fonts/JetBrainsMono-VariableFont_wght.ttf",
+    "Inter": "assets/fonts/Inter-VariableFont_opsz,wght.ttf",
+    "Instrument Serif": "assets/fonts/InstrumentSerif-Regular.ttf",
+}
+DEFAULT_INDICATOR_FONT = "JetBrains Mono"
 
 
-def _font(px: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+def _font(px: int, family: str = DEFAULT_INDICATOR_FONT
+          ) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+    rel = FONTS.get(family, FONTS[DEFAULT_INDICATOR_FONT])
     try:
-        return ImageFont.truetype(resource_path(_FONT_REL), max(6, px))
+        return ImageFont.truetype(resource_path(rel), max(6, px))
     except Exception:  # pragma: no cover - font load fallback
         return ImageFont.load_default()
 
@@ -52,6 +60,8 @@ def render_pages(
     strip_pattern: str = permutation.DEFAULT_STRIP_PATTERN,
     spacer_mode: str = "colored",
     draw_indicators: bool = True,
+    indicator_font: str = DEFAULT_INDICATOR_FONT,
+    indicator_size_mm: float = 0.0,
 ) -> RenderResult:
     """Render one :class:`PIL.Image` per page for *target*.
 
@@ -82,7 +92,7 @@ def render_pages(
 
     pw_px, pl_px = px(place.pwid), px(place.plen)
     sp_px = px(place.pspa)
-    font = _font(px(geom.txhisl))
+    font = _font(px(indicator_size_mm or geom.txhisl), indicator_font)
 
     images: list[Image.Image] = []
     for page in range(layout.pages):

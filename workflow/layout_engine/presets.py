@@ -52,6 +52,9 @@ class LayoutRecipe:
     offset_y_mm: float = 0.0
     bit16: bool = False            # 16-bit TIFF output
     compression: str = "lzw"       # "lzw" | "zlib" | "none"
+    show_strip_indicators: bool = True   # draw the per-strip letter labels
+    indicator_font: str = "JetBrains Mono"
+    indicator_size_mm: float = 0.0       # 0 = auto (instrument text height)
     clip_border: bool = True       # i1/p3 only — left paper clip border present
     nolimit: bool = False
     strip_pattern: str = permutation.DEFAULT_STRIP_PATTERN
@@ -110,6 +113,9 @@ class LayoutRecipe:
             "offset_y": self.offset_y_mm,
             "bit16": self.bit16,
             "compression": self.compression,
+            "draw_indicators": self.show_strip_indicators,
+            "indicator_font": self.indicator_font,
+            "indicator_size_mm": self.indicator_size_mm,
             "nolpcbord": (not self.clip_border) if self.instrument in ("i1", "p3") else False,
             "nolimit": self.nolimit,
             "strip_pattern": self.strip_pattern,

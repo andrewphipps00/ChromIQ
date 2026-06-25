@@ -188,6 +188,23 @@ class LayoutOptionsPanel(QWidget):
         add_row(g, 6, tr("Strip-indicator gap:"), self.sig)
         v.addWidget(ps)
 
+        # ---- Strip indicators ----
+        si = QGroupBox(tr("Strip indicators"), self)
+        sig2 = QGridLayout(si)
+        self.show_indicators = QCheckBox(tr("Show strip indicators"), self)
+        self.show_indicators.setChecked(True)
+        self.show_indicators.toggled.connect(self._on_show_indicators)
+        sig2.addWidget(self.show_indicators, 0, 1)
+        self.indicator_font = NoScrollComboBox(self)
+        for _fam in ("JetBrains Mono", "Inter", "Instrument Serif"):
+            self.indicator_font.addItem(_fam, _fam)
+        self.indicator_font.currentIndexChanged.connect(self._emit)
+        self.indicator_size = small_mm(top=20.0)
+        self.indicator_size.setSpecialValueText(tr("auto"))
+        add_row(sig2, 1, tr("Font:"), self.indicator_font)
+        add_row(sig2, 2, tr("Size:"), self.indicator_size)
+        v.addWidget(si)
+
         # ---- Page geometry ----
         pg = QGroupBox(tr("Page geometry"), self)
         gg = QGridLayout(pg)
@@ -327,6 +344,11 @@ class LayoutOptionsPanel(QWidget):
         self._loading = False
         self._on_paper_changed()
 
+    def _on_show_indicators(self, on: bool) -> None:
+        self.indicator_font.setEnabled(on)
+        self.indicator_size.setEnabled(on)
+        self._emit()
+
     def _on_paper_changed(self, *_a) -> None:
         if self.paper is not None:
             self._custom_paper_w.setVisible(self.paper.currentData() == "__custom__")
@@ -406,6 +428,10 @@ class LayoutOptionsPanel(QWidget):
         self.strip_pat.setText(r.strip_pattern)
         self.patch_pat.setText(r.patch_pattern)
         self.bit_depth.setCurrentIndex(1 if r.bit16 else 0)
+        self.show_indicators.setChecked(r.show_strip_indicators)
+        _fi = self.indicator_font.findData(r.indicator_font)
+        self.indicator_font.setCurrentIndex(_fi if _fi >= 0 else 0)
+        self.indicator_size.setValue(r.indicator_size_mm)
         ci = self.compression.findData(r.compression)
         self.compression.setCurrentIndex(ci if ci >= 0 else 0)
         self._loading = False
@@ -434,5 +460,8 @@ class LayoutOptionsPanel(QWidget):
         r.strip_pattern = self.strip_pat.text() or r.strip_pattern
         r.patch_pattern = self.patch_pat.text() or r.patch_pattern
         r.bit16 = (self.bit_depth.currentData() == 16)
+        r.show_strip_indicators = self.show_indicators.isChecked()
+        r.indicator_font = self.indicator_font.currentData() or "JetBrains Mono"
+        r.indicator_size_mm = self.indicator_size.value()
         r.compression = self.compression.currentData() or "lzw"
         return r
