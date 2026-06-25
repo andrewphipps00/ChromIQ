@@ -263,7 +263,9 @@ class LayoutOptionsPanel(QWidget):
         self._add_font_rows(sig2, 1, tr("Font:"), self.indicator_font,
                             self.indicator_size, self.ind_bold, self.ind_italic)
         self.underline_mode = NoScrollComboBox(self)
-        for k, lbl in (("off", tr("Off")), ("colored", tr("Coloured")),
+        for k, lbl in (("off", tr("Off")),
+                       ("segments", tr("Coloured (5 segments)")),
+                       ("cycle", tr("Coloured (per strip)")),
                        ("black", tr("Black"))):
             self.underline_mode.addItem(lbl, k)
         self.underline_mode.currentIndexChanged.connect(self._on_underline_changed)
@@ -273,9 +275,11 @@ class LayoutOptionsPanel(QWidget):
                 tip=TooltipButton(
                     tr("Underline"),
                     tr("Draws a thin rule under each strip's letter label. "
-                       "Coloured cycles the five ChromIQ accent colours so "
-                       "neighbouring strips read apart at a glance; Black is a "
-                       "plain rule. Use the thickness and distance to taste."),
+                       "Coloured (5 segments) splits the rule into the five "
+                       "ChromIQ accent colours side by side under every strip; "
+                       "Coloured (per strip) instead cycles one accent colour "
+                       "per strip so neighbours read apart; Black is a plain "
+                       "rule. Use the thickness and distance to taste."),
                     self))
         add_row(sig2, 4, tr("Underline thickness:"), self.underline_thickness)
         add_row(sig2, 5, tr("Underline distance:"), self.underline_gap)
@@ -697,7 +701,8 @@ class LayoutOptionsPanel(QWidget):
         self.indicator_size.setValue(r.indicator_size_mm)
         self.ind_bold.setChecked(r.indicator_bold)
         self.ind_italic.setChecked(r.indicator_italic)
-        _um = self.underline_mode.findData(r.underline_mode)
+        _umkey = "segments" if r.underline_mode == "colored" else r.underline_mode
+        _um = self.underline_mode.findData(_umkey)
         self.underline_mode.setCurrentIndex(_um if _um >= 0 else 0)
         self.underline_thickness.setValue(r.underline_thickness_mm)
         self.underline_gap.setValue(r.underline_gap_mm)

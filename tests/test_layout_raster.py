@@ -127,10 +127,21 @@ def test_underline_modes():
         arr = np.asarray(res.images[0])
         return any((arr == np.array(c)).all(axis=2).any() for c in accents)
 
-    # off → no accent rule pixels; coloured → at least one accent present.
+    def accents_present(res):
+        arr = np.asarray(res.images[0])
+        return {c for c in accents if (arr == np.array(c)).all(axis=2).any()}
+
+    # off → no accent rule pixels.
     assert not has_accent(raster.render_pages(target, lay, geom, underline_mode="off", **kw))
+    # segments → all five accents appear (5-part bar under each strip).
+    assert accents_present(raster.render_pages(
+        target, lay, geom, underline_mode="segments", **kw)) == accents
+    # legacy "colored" aliases to the 5-segment bar.
+    assert accents_present(raster.render_pages(
+        target, lay, geom, underline_mode="colored", **kw)) == accents
+    # per-strip cycle → at least one accent present.
     assert has_accent(raster.render_pages(target, lay, geom,
-                                          underline_mode="colored", **kw))
+                                          underline_mode="cycle", **kw))
     # hiding indicators suppresses the rule even if a mode is set.
     assert not has_accent(raster.render_pages(
-        target, lay, geom, underline_mode="colored", draw_indicators=False, **kw))
+        target, lay, geom, underline_mode="segments", draw_indicators=False, **kw))

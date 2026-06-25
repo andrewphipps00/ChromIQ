@@ -228,7 +228,9 @@ def render_pages(
     ind_px = px(effective_indicator_size_mm(
         geom, dpi, indicator_font, indicator_size_mm))
     font = _font(ind_px, indicator_font, indicator_bold, indicator_italic)
-    underline_on = draw_indicators and underline_mode in ("colored", "black")
+    if underline_mode == "colored":          # legacy alias → 5-segment bar
+        underline_mode = "segments"
+    underline_on = draw_indicators and underline_mode in ("segments", "cycle", "black")
     ul_th = max(1, px(underline_thickness_mm or 0.5))
     ul_gap = px(underline_gap_mm)
 
@@ -255,11 +257,20 @@ def render_pages(
                 except Exception:             # default bitmap font: no anchor
                     _tw = int(draw.textlength(_lbl, font=font))
                     draw.text((_cx - _tw // 2, _y), _lbl, font=font, fill=(0, 0, 0))
-                if underline_on:              # rule under the label, per strip
+                if underline_on:              # rule under the label
                     _ly = _y + ind_px + ul_gap
-                    _col = ((0, 0, 0) if underline_mode == "black"
-                            else ACCENT_RGB[global_strip % len(ACCENT_RGB)])
-                    draw.rectangle([x0, _ly, x0 + pw_px - 1, _ly + ul_th - 1], fill=_col)
+                    _yb = _ly + ul_th - 1
+                    if underline_mode == "black":
+                        draw.rectangle([x0, _ly, x0 + pw_px - 1, _yb], fill=(0, 0, 0))
+                    elif underline_mode == "cycle":   # one accent per strip
+                        draw.rectangle([x0, _ly, x0 + pw_px - 1, _yb],
+                                       fill=ACCENT_RGB[global_strip % len(ACCENT_RGB)])
+                    else:                              # 5 equal accent segments
+                        _n = len(ACCENT_RGB)
+                        for _k in range(_n):
+                            _sx0 = x0 + round(pw_px * _k / _n)
+                            _sx1 = x0 + round(pw_px * (_k + 1) / _n) - 1
+                            draw.rectangle([_sx0, _ly, _sx1, _yb], fill=ACCENT_RGB[_k])
             for j, gslot in enumerate(col_slots):
                 y0 = px(place.y_of(j))
                 rgb = rgb_by_slot[gslot]
