@@ -136,7 +136,7 @@ class LayoutOptionsPanel(QWidget):
             from PyQt6.QtWidgets import QComboBox
             self.paper.setSizeAdjustPolicy(
                 QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
-            self.paper.setMinimumContentsLength(18)
+            self.paper.setMinimumContentsLength(11)   # elides long labels; full text in popup
             for _c in (self.instr, self.mode):
                 _c.setSizeAdjustPolicy(
                     QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
@@ -280,7 +280,9 @@ class LayoutOptionsPanel(QWidget):
         _swrow = QHBoxLayout(); _swrow.setContentsMargins(0, 0, 0, 0); _swrow.setSpacing(4)
         for _hex in ("#ff4573", "#ffb42d", "#56d6a5", "#37bcd6", "#9f82ff"):
             _b = QPushButton(self)
-            _b.setObjectName("compact_input")
+            # NOT objectName "compact_input": that QSS imposes an input min-width
+            # which overrides setFixedSize, blowing the 5 swatches up to ~446px
+            # and scrolling the panel (feedback_qt_button_sizing).
             _b.setFixedSize(26, 22)
             _b.setProperty("hexcol", _hex)
             self._style_swatch(_b)
@@ -313,6 +315,8 @@ class LayoutOptionsPanel(QWidget):
         self.fixed_seed_cb.toggled.connect(self._on_fixed_seed_toggled)
         self.seed_spin = NoScrollSpinBox(self)
         self.seed_spin.setRange(0, 2_147_483_647)
+        self.seed_spin.setMinimumWidth(70)        # don't force the row wide for 10 digits
+        self.seed_spin.setMaximumWidth(150)
         self.seed_spin.setObjectName("compact_input")
         self.seed_spin.valueChanged.connect(self._emit)
         self.new_seed_btn = QPushButton(tr("New seed"), self)
@@ -386,7 +390,7 @@ class LayoutOptionsPanel(QWidget):
                        "per strip so neighbours read apart; Black is a plain "
                        "rule. Use the thickness and distance to taste."),
                     self))
-        add_row(sig2, 4, tr("Underline thickness:"), self.underline_thickness,
+        add_row(sig2, 4, tr("Line thickness:"), self.underline_thickness,
                 tip=TooltipButton(
                     tr("Underline thickness"),
                     tr("How thick the rule under the strip labels is drawn, in "
@@ -394,7 +398,7 @@ class LayoutOptionsPanel(QWidget):
                        "a thinner one is more subtle. Only matters when the "
                        "Underline above is set to something other than Off."),
                     self))
-        add_row(sig2, 5, tr("Underline distance:"), self.underline_gap,
+        add_row(sig2, 5, tr("Line distance:"), self.underline_gap,
                 tip=TooltipButton(
                     tr("Underline distance"),
                     tr("How far below the strip label the rule sits, in "
@@ -903,9 +907,14 @@ class LayoutOptionsPanel(QWidget):
 
     @staticmethod
     def _style_swatch(btn) -> None:
+        # min/max-width in the button's OWN stylesheet — the app QSS min-width
+        # (for QPushButton / #compact_input) otherwise overrides setFixedSize and
+        # blows the swatch row wide (feedback_qt_button_sizing).
         hexc = btn.property("hexcol") or "#ffffff"
         btn.setStyleSheet(
-            f"background: {hexc}; border: 1px solid #888; border-radius: 3px;")
+            f"QPushButton {{ background: {hexc}; border: 1px solid #888; "
+            "border-radius: 3px; min-width: 22px; max-width: 26px; "
+            "min-height: 18px; max-height: 22px; padding: 0; margin: 0; }}")
 
     def _pick_spacer_colour(self, btn) -> None:
         from PyQt6.QtGui import QColor

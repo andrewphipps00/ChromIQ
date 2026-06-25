@@ -1900,8 +1900,6 @@
   "Black": "Black",
   "Off": "Off",
   "Underline": "Underline",
-  "Underline distance:": "Underline distance:",
-  "Underline thickness:": "Underline thickness:",
   "Underline:": "Underline:",
   "Stamp targen and layout-engine info on the chart": "Stamp targen and layout-engine info on the chart",
   "Coloured (5 segments)": "Coloured (5 segments)",
@@ -1977,5 +1975,7 @@
   "Custom spacer colours": "Custom spacer colours",
   "Spacer colour": "Spacer colour",
   "Spacer colours:": "Spacer colours:",
-  "By default the engine separates patches with spacers drawn from the five ChromIQ accent colours, automatically picking the one with the most contrast at each gap so the instrument can always find the patch edges. Turn this on to choose your own set of spacer colours instead — click a swatch to change it. The engine still auto-picks the highest-contrast one from your set per gap, so keep them varied (and watch the low-contrast warning).": "By default the engine separates patches with spacers drawn from the five ChromIQ accent colours, automatically picking the one with the most contrast at each gap so the instrument can always find the patch edges. Turn this on to choose your own set of spacer colours instead — click a swatch to change it. The engine still auto-picks the highest-contrast one from your set per gap, so keep them varied (and watch the low-contrast warning)."
+  "By default the engine separates patches with spacers drawn from the five ChromIQ accent colours, automatically picking the one with the most contrast at each gap so the instrument can always find the patch edges. Turn this on to choose your own set of spacer colours instead — click a swatch to change it. The engine still auto-picks the highest-contrast one from your set per gap, so keep them varied (and watch the low-contrast warning).": "By default the engine separates patches with spacers drawn from the five ChromIQ accent colours, automatically picking the one with the most contrast at each gap so the instrument can always find the patch edges. Turn this on to choose your own set of spacer colours instead — click a swatch to change it. The engine still auto-picks the highest-contrast one from your set per gap, so keep them varied (and watch the low-contrast warning).",
+  "Line distance:": "Line distance:",
+  "Line thickness:": "Line thickness:"
 }
