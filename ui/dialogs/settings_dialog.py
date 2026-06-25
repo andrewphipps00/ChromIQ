@@ -1198,145 +1198,12 @@ class SettingsDialog(QDialog):
         sel.setColumnStretch(3, 1)
         v.addLayout(sel)
 
-        # ---- patches & spacers ----
-        ps = QGroupBox(tr("Patches && spacers"), self)
-        psg = QGridLayout(ps)
-        psg.addWidget(QLabel(tr("Patch scale:"), self), 0, 0)
-        self._layout_pscale = NoScrollDoubleSpinBox(self)
-        self._layout_pscale.setRange(0.5, 3.0)
-        self._layout_pscale.setDecimals(3)
-        self._layout_pscale.setSingleStep(0.05)
-        psg.addWidget(self._layout_pscale, 0, 1)
-        psg.addWidget(QLabel(tr("Spacer scale:"), self), 0, 2)
-        self._layout_sscale = NoScrollDoubleSpinBox(self)
-        self._layout_sscale.setRange(0.5, 3.0)
-        self._layout_sscale.setDecimals(3)
-        self._layout_sscale.setSingleStep(0.05)
-        psg.addWidget(self._layout_sscale, 0, 3)
-        psg.addWidget(QLabel(tr("Spacers:"), self), 1, 0)
-        self._layout_spacer_mode = NoScrollComboBox(self)
-        for _key, _lbl in (("colored", tr("Coloured")),
-                           ("bw", tr("Black & white")),
-                           ("none", tr("None"))):
-            self._layout_spacer_mode.addItem(_lbl, _key)
-        psg.addWidget(self._layout_spacer_mode, 1, 1)
-        psg.addWidget(QLabel(tr("Patch size:"), self), 2, 0)
-        self._layout_patch_x = NoScrollDoubleSpinBox(self)
-        self._layout_patch_x.setRange(0, 60)
-        self._layout_patch_x.setDecimals(1)
-        self._layout_patch_x.setSingleStep(0.5)
-        self._layout_patch_x.setSuffix(" mm")
-        self._layout_patch_x.setSpecialValueText(tr("auto"))   # 0 → "auto"
-        psg.addWidget(self._layout_patch_x, 2, 1)
-        psg.addWidget(QLabel(tr("× height:"), self), 2, 2)
-        self._layout_patch_y = NoScrollDoubleSpinBox(self)
-        self._layout_patch_y.setRange(0, 60)
-        self._layout_patch_y.setDecimals(1)
-        self._layout_patch_y.setSingleStep(0.5)
-        self._layout_patch_y.setSuffix(" mm")
-        self._layout_patch_y.setSpecialValueText(tr("auto"))
-        psg.addWidget(self._layout_patch_y, 2, 3)
-        psg.addWidget(TooltipButton(
-            tr("Patch size"),
-            tr("Width × height of each patch in millimetres. Leave at “auto” (0) "
-               "to use the instrument's recommended size (scaled by Patch scale). "
-               "A value below ~6 mm can make the chart hard to read — watch for "
-               "the pre-flight warning."),
-            self), 2, 4)
-        v.addWidget(ps)
-
-        # ---- page geometry ----
-        pg = QGroupBox(tr("Page geometry"), self)
-        pgg = QGridLayout(pg)
-        pgg.addWidget(QLabel(tr("Margins:"), self), 0, 0)
-        _mrow = QHBoxLayout()
-        self._layout_margins: dict[str, NoScrollDoubleSpinBox] = {}
-        for _k, _lbl in (("t", tr("T")), ("r", tr("R")), ("b", tr("B")), ("l", tr("L"))):
-            _mrow.addWidget(QLabel(_lbl, self))
-            _sb = NoScrollDoubleSpinBox(self)
-            _sb.setRange(0, 60)
-            _sb.setDecimals(1)
-            _sb.setSingleStep(0.5)
-            _sb.setSuffix(" mm")
-            _sb.setFixedWidth(78)
-            self._layout_margins[_k] = _sb
-            _mrow.addWidget(_sb)
-        _mrow.addStretch()
-        _mw = QWidget(self)
-        _mw.setLayout(_mrow)
-        pgg.addWidget(_mw, 0, 1, 1, 4)
-        pgg.addWidget(QLabel(tr("Resolution:"), self), 1, 0)
-        self._layout_dpi = NoScrollSpinBox(self)
-        self._layout_dpi.setRange(72, 1200)
-        self._layout_dpi.setSuffix(" dpi")
-        pgg.addWidget(self._layout_dpi, 1, 1)
-        self._layout_nolimit = QCheckBox(tr("Don't cap strip length"), self)
-        pgg.addWidget(self._layout_nolimit, 1, 2, 1, 2)
-        pgg.addWidget(QLabel(tr("Strip pattern:"), self), 2, 0)
-        self._layout_strip_pat = QLineEdit(self)
-        pgg.addWidget(self._layout_strip_pat, 2, 1)
-        pgg.addWidget(QLabel(tr("Patch pattern:"), self), 2, 2)
-        self._layout_patch_pat = QLineEdit(self)
-        pgg.addWidget(self._layout_patch_pat, 2, 3)
-        pgg.addWidget(TooltipButton(
-            tr("Strip && patch labels"),
-            tr("These control the LABELS printed on the chart and read back to you "
-               "while measuring — e.g. strip “A” then patch “1”, giving location "
-               "“A1”.\n\n"
-               "• Strip pattern — how columns are named. The default counts "
-               "A, B, … Z, then AA, AB, … like spreadsheet columns.\n"
-               "• Patch pattern — how patches within a column are named; the "
-               "default counts 1, 2, 3, …\n\n"
-               "Leave these at the defaults unless you have a specific reason to "
-               "change them. ChromIQ keeps the printed labels, the measurement "
-               "file and what the reader announces perfectly in step, so a custom "
-               "pattern still reads correctly."),
-            self), 2, 4)
-        v.addWidget(pg)
-
-        # ---- advanced (the remaining agreed options) ----
-        adv = QGroupBox(tr("Advanced"), self)
-        ag = QGridLayout(adv)
-
-        def _mm_spin(special_auto: bool = False) -> NoScrollDoubleSpinBox:
-            sb = NoScrollDoubleSpinBox(self)
-            sb.setRange(0, 300)
-            sb.setDecimals(1)
-            sb.setSingleStep(0.5)
-            sb.setSuffix(" mm")
-            if special_auto:
-                sb.setSpecialValueText(tr("auto"))
-            return sb
-
-        ag.addWidget(QLabel(tr("Spacer width:"), self), 0, 0)
-        self._layout_spacer_width = _mm_spin(special_auto=True)
-        ag.addWidget(self._layout_spacer_width, 0, 1)
-        ag.addWidget(QLabel(tr("Inter-patch gap:"), self), 0, 2)
-        self._layout_inter_patch = _mm_spin()
-        ag.addWidget(self._layout_inter_patch, 0, 3)
-
-        ag.addWidget(QLabel(tr("Strip-indicator gap:"), self), 1, 0)
-        self._layout_sig = _mm_spin()
-        ag.addWidget(self._layout_sig, 1, 1)
-        ag.addWidget(QLabel(tr("Max strip length:"), self), 1, 2)
-        self._layout_max_strip = _mm_spin(special_auto=True)
-        ag.addWidget(self._layout_max_strip, 1, 3)
-
-        ag.addWidget(QLabel(tr("Chart offset:"), self), 2, 0)
-        self._layout_offx = _mm_spin()
-        ag.addWidget(self._layout_offx, 2, 1)
-        ag.addWidget(QLabel(tr("× vertical:"), self), 2, 2)
-        self._layout_offy = _mm_spin()
-        ag.addWidget(self._layout_offy, 2, 3)
-
-        self._layout_bit16 = QCheckBox(tr("16-bit TIFF"), self)
-        ag.addWidget(self._layout_bit16, 3, 0, 1, 2)
-        ag.addWidget(QLabel(tr("Compression:"), self), 3, 2)
-        self._layout_compression = NoScrollComboBox(self)
-        for _ck, _cl in (("lzw", "LZW"), ("zlib", "Zlib"), ("none", tr("None"))):
-            self._layout_compression.addItem(_cl, _ck)
-        ag.addWidget(self._layout_compression, 3, 3)
-        v.addWidget(adv)
+        # ---- layout options (the SAME shared panel as Create Chart Manual,
+        # so Settings defaults and per-chart edits can't drift) ----
+        from ui.dialogs.layout_options_panel import LayoutOptionsPanel
+        self._layout_panel = LayoutOptionsPanel(self)
+        self._layout_panel.changed.connect(self._on_layout_field_changed)
+        v.addWidget(self._layout_panel)
 
         self._layout_calc = QLabel("", self)
         self._layout_calc.setWordWrap(True)
@@ -1363,19 +1230,7 @@ class SettingsDialog(QDialog):
         self._layout_instr.currentIndexChanged.connect(self._on_layout_instr_changed)
         self._layout_paper.currentIndexChanged.connect(self._load_layout_combo)
         self._layout_mode.currentIndexChanged.connect(self._load_layout_combo)
-        for w in (self._layout_pscale, self._layout_sscale, self._layout_patch_x,
-                  self._layout_patch_y, self._layout_spacer_width,
-                  self._layout_inter_patch, self._layout_sig, self._layout_max_strip,
-                  self._layout_offx, self._layout_offy,
-                  *self._layout_margins.values()):
-            w.valueChanged.connect(self._on_layout_field_changed)
-        self._layout_bit16.toggled.connect(self._on_layout_field_changed)
-        self._layout_compression.currentIndexChanged.connect(self._on_layout_field_changed)
-        self._layout_dpi.valueChanged.connect(self._on_layout_field_changed)
-        self._layout_spacer_mode.currentIndexChanged.connect(self._on_layout_field_changed)
-        self._layout_nolimit.toggled.connect(self._on_layout_field_changed)
-        self._layout_strip_pat.textChanged.connect(self._on_layout_field_changed)
-        self._layout_patch_pat.textChanged.connect(self._on_layout_field_changed)
+        # panel.changed (wired above) drives _on_layout_field_changed
 
         # Grey the whole body (controls + labels) unless the engine is enabled —
         # disable for interaction + dim for an unmistakable visual cue.
@@ -1418,60 +1273,15 @@ class SettingsDialog(QDialog):
         inst, paper, mode = self._layout_selection()
         recipe = self._layout_store.get(inst, paper, mode)
         self._loading_layout = True
-        self._layout_pscale.setValue(recipe.pscale)
-        self._layout_sscale.setValue(recipe.sscale)
-        _smi = self._layout_spacer_mode.findData(recipe.spacer_mode)
-        self._layout_spacer_mode.setCurrentIndex(_smi if _smi >= 0 else 0)
-        self._layout_margins["t"].setValue(recipe.margin_top)
-        self._layout_margins["r"].setValue(recipe.margin_right)
-        self._layout_margins["b"].setValue(recipe.margin_bottom)
-        self._layout_margins["l"].setValue(recipe.margin_left)
-        self._layout_patch_x.setValue(recipe.patch_w_mm)
-        self._layout_patch_y.setValue(recipe.patch_h_mm)
-        self._layout_spacer_width.setValue(recipe.spacer_width_mm)
-        self._layout_inter_patch.setValue(recipe.inter_patch_mm)
-        self._layout_sig.setValue(recipe.strip_indicator_gap_mm)
-        self._layout_max_strip.setValue(recipe.max_strip_mm)
-        self._layout_offx.setValue(recipe.offset_x_mm)
-        self._layout_offy.setValue(recipe.offset_y_mm)
-        self._layout_bit16.setChecked(recipe.bit16)
-        _ci = self._layout_compression.findData(recipe.compression)
-        self._layout_compression.setCurrentIndex(_ci if _ci >= 0 else 0)
-        self._layout_dpi.setValue(recipe.dpi)
-        self._layout_nolimit.setChecked(recipe.nolimit)
-        self._layout_strip_pat.setText(recipe.strip_pattern)
-        self._layout_patch_pat.setText(recipe.patch_pattern)
+        self._layout_panel.set_recipe(recipe)
         self._loading_layout = False
         self._update_layout_calc()
 
     def _recipe_from_fields(self):
         from workflow.layout_engine.presets import default_recipe
         inst, paper, mode = self._layout_selection()
-        r = default_recipe(inst, paper, mode=mode)   # sets mode flags
-        r.pscale = self._layout_pscale.value()
-        r.sscale = self._layout_sscale.value()
-        r.spacer_mode = self._layout_spacer_mode.currentData() or "colored"
-        r.spacer_on = r.spacer_mode != "none"
-        r.margin_top = self._layout_margins["t"].value()
-        r.margin_right = self._layout_margins["r"].value()
-        r.margin_bottom = self._layout_margins["b"].value()
-        r.margin_left = self._layout_margins["l"].value()
-        r.border = min(r.margin_top, r.margin_right, r.margin_bottom, r.margin_left)
-        r.patch_w_mm = self._layout_patch_x.value()
-        r.patch_h_mm = self._layout_patch_y.value()
-        r.spacer_width_mm = self._layout_spacer_width.value()
-        r.inter_patch_mm = self._layout_inter_patch.value()
-        r.strip_indicator_gap_mm = self._layout_sig.value()
-        r.max_strip_mm = self._layout_max_strip.value()
-        r.offset_x_mm = self._layout_offx.value()
-        r.offset_y_mm = self._layout_offy.value()
-        r.bit16 = self._layout_bit16.isChecked()
-        r.compression = self._layout_compression.currentData() or "lzw"
-        r.dpi = int(self._layout_dpi.value())
-        r.nolimit = self._layout_nolimit.isChecked()
-        r.strip_pattern = self._layout_strip_pat.text() or r.strip_pattern
-        r.patch_pattern = self._layout_patch_pat.text() or r.patch_pattern
-        return r
+        r = default_recipe(inst, paper, mode=mode)   # sets mode flags from selectors
+        return self._layout_panel.apply_to_recipe(r)
 
     def _on_layout_field_changed(self, *_a) -> None:
         if self._loading_layout:

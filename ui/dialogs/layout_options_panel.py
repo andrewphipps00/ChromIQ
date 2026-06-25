@@ -68,6 +68,13 @@ class LayoutOptionsPanel(QWidget):
             sel.setColumnStretch(1, 1)
             sel.setColumnStretch(3, 1)
             v.addLayout(sel)
+            # Don't let long paper labels force a wide panel (the Manual left
+            # panel is narrow); the dropdown still shows the full text.
+            from PyQt6.QtWidgets import QComboBox
+            for _c in (self.instr, self.paper, self.mode):
+                _c.setSizeAdjustPolicy(
+                    QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+                _c.setMinimumContentsLength(10)
             self.instr.currentIndexChanged.connect(self._on_instr_changed)
             self.paper.currentIndexChanged.connect(self._emit)
             self.mode.currentIndexChanged.connect(self._emit)
@@ -79,6 +86,7 @@ class LayoutOptionsPanel(QWidget):
             sb.setDecimals(1)
             sb.setSingleStep(0.5)
             sb.setSuffix(" mm")
+            sb.setMaximumWidth(96)
             if special_auto:
                 sb.setSpecialValueText(tr("auto"))
             sb.valueChanged.connect(self._emit)
@@ -89,6 +97,7 @@ class LayoutOptionsPanel(QWidget):
             sb.setRange(0.5, 3.0)
             sb.setDecimals(3)
             sb.setSingleStep(0.05)
+            sb.setMaximumWidth(96)
             sb.valueChanged.connect(self._emit)
             return sb
 
@@ -133,7 +142,7 @@ class LayoutOptionsPanel(QWidget):
             mrow.addWidget(QLabel(lbl, self))
             sb = NoScrollDoubleSpinBox(self)
             sb.setRange(0, 60); sb.setDecimals(1); sb.setSingleStep(0.5)
-            sb.setSuffix(" mm"); sb.setFixedWidth(78)
+            sb.setSuffix(" mm"); sb.setMaximumWidth(64)
             sb.valueChanged.connect(self._emit)
             self.margins[k] = sb
             mrow.addWidget(sb)
