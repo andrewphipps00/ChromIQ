@@ -2933,6 +2933,7 @@ class Ti2RelayoutDialog(QDialog):
 
         self._build_ui()
         self._refresh_enabled()
+        self._refresh_engine_panel_visible()   # initial engine-vs-printtarg state
 
         # Pre-load the Create Chart tab's current chart, ready to edit (#45).
         # Deferred to the event loop so the window is shown first and the
@@ -3259,6 +3260,7 @@ class Ti2RelayoutDialog(QDialog):
         # open. Bump beyond 320 also gives custom-paper W/H spinboxes
         # room to breathe.
         panel.setFixedWidth(360)
+        self._controls_panel = panel
         # Container stylesheet — the only reliable way to shrink button
         # height ([[feedback_qt_button_sizing]]: setMinimumHeight on the
         # button itself is overridden by Qt's compound-widget CSS). Magenta
@@ -3629,6 +3631,19 @@ class Ti2RelayoutDialog(QDialog):
         # of the "Patches / Spacers" target mode above).
         v.addWidget(self._pt_box)
 
+        # ChromIQ layout engine: the full engine layout panel, shown in place of
+        # the printtarg knobs when the chart was built by the engine (or the
+        # engine is active). Seeded from the chart's recipe on load (#93).
+        from ui.dialogs.layout_options_panel import LayoutOptionsPanel
+        self._engine_panel = LayoutOptionsPanel(
+            panel, with_selectors=True, with_calibration=True)
+        self._engine_panel_grp = QGroupBox(tr("ChromIQ layout"), panel)
+        _eg = QVBoxLayout(self._engine_panel_grp)
+        _eg.setContentsMargins(8, 8, 8, 8)
+        _eg.addWidget(self._engine_panel)
+        v.addWidget(self._engine_panel_grp)
+        self._engine_panel_grp.setVisible(False)
+
         # Actions
         v.addStretch(1)
 
@@ -3776,6 +3791,10 @@ class Ti2RelayoutDialog(QDialog):
         self._engine_panel_grp.setVisible(use_engine)
         if getattr(self, "_pt_box", None) is not None:
             self._pt_box.setVisible(not use_engine)
+        # The engine panel needs more width than the printtarg knobs; widen the
+        # controls column when it's shown so it doesn't clip.
+        if getattr(self, "_controls_panel", None) is not None:
+            self._controls_panel.setFixedWidth(470 if use_engine else 360)
 
     def _load_ti2(self) -> None:
         start = (self._settings.get("custom_output_path", "")
