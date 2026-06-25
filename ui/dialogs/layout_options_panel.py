@@ -54,24 +54,26 @@ class LayoutOptionsPanel(QWidget):
         self.instr = self.paper = self.mode = None
         if with_selectors:
             sel = QGridLayout()
-            sel.addWidget(QLabel(tr("Instrument:"), self), 0, 0)
+            # Instrument and Mode each get a full-width row.
             self.instr = NoScrollComboBox(self)
             for k, lbl in self.INSTRUMENTS:
                 self.instr.addItem(lbl, k)
-            sel.addWidget(self.instr, 0, 1)
-            sel.addWidget(QLabel(tr("Paper:"), self), 0, 2)
-            self.paper = NoScrollComboBox(self)
-            sel.addWidget(self.paper, 0, 3)
-            sel.addWidget(QLabel(tr("Mode:"), self), 1, 0)
+            sel.addWidget(QLabel(tr("Instrument:"), self), 0, 0)
+            sel.addWidget(self.instr, 0, 1, 1, 3)
             self.mode = NoScrollComboBox(self)
-            sel.addWidget(self.mode, 1, 1)
-            sel.addWidget(QLabel(tr("Pages:"), self), 1, 2)
+            sel.addWidget(QLabel(tr("Mode:"), self), 1, 0)
+            sel.addWidget(self.mode, 1, 1, 1, 3)
+            # Paper + Pages share a row; paper gets the stretch (wider).
+            self.paper = NoScrollComboBox(self)
+            sel.addWidget(QLabel(tr("Paper:"), self), 2, 0)
+            sel.addWidget(self.paper, 2, 1)
+            sel.addWidget(QLabel(tr("Pages:"), self), 2, 2)
             self.pages = NoScrollSpinBox(self)
             self.pages.setRange(1, 20)
             self.pages.setValue(1)
             self.pages.setMaximumWidth(70)
             self.pages.valueChanged.connect(self._emit)
-            sel.addWidget(self.pages, 1, 3)
+            sel.addWidget(self.pages, 2, 3)
             # Custom paper W×H (shown only when Paper = "Custom…").
             self._custom_paper_w = QWidget(self)
             _cpl = QHBoxLayout(self._custom_paper_w)
@@ -85,15 +87,18 @@ class LayoutOptionsPanel(QWidget):
             self.custom_w.setValue(210); self.custom_h.setValue(297)
             _cpl.addWidget(self.custom_w); _cpl.addWidget(QLabel("×", self))
             _cpl.addWidget(self.custom_h); _cpl.addStretch()
-            sel.addWidget(self._custom_paper_w, 2, 0, 1, 4)
+            sel.addWidget(self._custom_paper_w, 3, 0, 1, 4)
             self._custom_paper_w.setVisible(False)
-            sel.setColumnStretch(1, 1)
-            sel.setColumnStretch(3, 1)
+            sel.setColumnStretch(1, 1)        # paper / instrument / mode expand
             v.addLayout(sel)
-            # Don't let long paper labels force a wide panel (the Manual left
-            # panel is narrow); the dropdown still shows the full text.
+            # Long paper labels shouldn't force the panel wide; the paper combo
+            # gets a roomier minimum (it shares its row only with Pages) while
+            # instrument/mode stay capped. The dropdown always shows full text.
             from PyQt6.QtWidgets import QComboBox
-            for _c in (self.instr, self.paper, self.mode):
+            self.paper.setSizeAdjustPolicy(
+                QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+            self.paper.setMinimumContentsLength(18)
+            for _c in (self.instr, self.mode):
                 _c.setSizeAdjustPolicy(
                     QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
                 _c.setMinimumContentsLength(10)
