@@ -75,9 +75,23 @@ class LayoutOptionsPanel(QWidget):
                 self.instr.addItem(lbl, k)
             sel.addWidget(QLabel(tr("Instrument:"), self), 0, 0)
             sel.addWidget(self.instr, 0, 1, 1, 3)
+            sel.addWidget(TooltipButton(
+                tr("Instrument"),
+                tr("The measuring device you'll read the printed chart with. It "
+                   "sets the patch size, strip length and overall layout the chart "
+                   "is built for, so pick the one you actually own — a chart laid "
+                   "out for one instrument may not read correctly on another."),
+                self), 0, 4)
             self.mode = NoScrollComboBox(self)
             sel.addWidget(QLabel(tr("Mode:"), self), 1, 0)
             sel.addWidget(self.mode, 1, 1, 1, 3)
+            sel.addWidget(TooltipButton(
+                tr("Layout mode"),
+                tr("A per-instrument choice that keeps its own saved preset: for "
+                   "the i1Pro it's whether a left clip border is printed; for the "
+                   "ColorMunki it's the reading density (hand-held vs rig vs "
+                   "extra-high); for the SpectroScan it's rectangular vs hexagonal "
+                   "patches."), self), 1, 4)
             # Paper + Pages share a row; paper gets the stretch (wider).
             self.paper = NoScrollComboBox(self)
             sel.addWidget(QLabel(tr("Paper:"), self), 2, 0)
@@ -89,6 +103,12 @@ class LayoutOptionsPanel(QWidget):
             self.pages.setMaximumWidth(70)
             self.pages.valueChanged.connect(self._emit)
             sel.addWidget(self.pages, 2, 3)
+            sel.addWidget(TooltipButton(
+                tr("Paper and pages"),
+                tr("Paper is the sheet size you'll print on — the profile is only "
+                   "valid for the paper you actually use. Pages is how many sheets "
+                   "to spread the patches across: more pages = more patches total "
+                   "(and more ink and paper)."), self), 2, 4)
             # Custom paper W×H (shown only when Paper = "Custom…").
             self._custom_paper_w = QWidget(self)
             _cpl = QHBoxLayout(self._custom_paper_w)
@@ -205,12 +225,48 @@ class LayoutOptionsPanel(QWidget):
                        "“auto” (0) to use the instrument's recommended size "
                        "(scaled by Patch scale). A value below ~6 mm can make the "
                        "chart hard to read."), self))
-        add_row(g, 1, tr("Patch scale:"), self.pscale)
-        add_row(g, 2, tr("Spacers:"), self.spacer_mode)
-        add_row(g, 3, tr("Spacer width:"), self.spacer_width)
-        add_row(g, 4, tr("Spacer scale:"), self.sscale)
-        add_row(g, 5, tr("Inter-patch gap:"), self.inter_patch)
-        add_row(g, 6, tr("Strip-indicator gap:"), self.sig)
+        add_row(g, 1, tr("Patch scale:"), self.pscale,
+                tip=TooltipButton(
+                    tr("Patch scale"),
+                    tr("Grows or shrinks every patch (and its spacer) together. "
+                       "1.0 is the instrument's standard size. Below 1.0 fits more "
+                       "patches per sheet but each is harder for the instrument to "
+                       "read reliably — watch the warning if patches get too "
+                       "small."), self))
+        add_row(g, 2, tr("Spacers:"), self.spacer_mode,
+                tip=TooltipButton(
+                    tr("Spacers"),
+                    tr("The thin separator drawn between patches in a strip so the "
+                       "instrument can tell where one patch ends and the next "
+                       "begins. “Coloured” picks a high-contrast colour per gap "
+                       "(default, most reliable); “Black & white” uses plain "
+                       "black/white; “None” removes them — only if your instrument "
+                       "doesn't need gaps."), self))
+        add_row(g, 3, tr("Spacer width:"), self.spacer_width,
+                tip=TooltipButton(
+                    tr("Spacer width"),
+                    tr("How thick the separator between patches is, in mm. Leave "
+                       "at “auto” (0) for the instrument default; increase it only "
+                       "if your scanner has trouble finding the patch edges."),
+                    self))
+        add_row(g, 4, tr("Spacer scale:"), self.sscale,
+                tip=TooltipButton(
+                    tr("Spacer scale"),
+                    tr("Scales only the spacer thickness, leaving patch size "
+                       "alone. 1.0 is standard; raise it for fatter gaps without "
+                       "making the patches bigger."), self))
+        add_row(g, 5, tr("Inter-patch gap:"), self.inter_patch,
+                tip=TooltipButton(
+                    tr("Inter-patch gap"),
+                    tr("Extra blank space added between patches on top of the "
+                       "spacer, in mm. Usually 0 — raise it only if patches bleed "
+                       "into each other on your printer/paper."), self))
+        add_row(g, 6, tr("Strip-indicator gap:"), self.sig,
+                tip=TooltipButton(
+                    tr("Strip-indicator gap"),
+                    tr("The gap, in mm, between a strip's letter label at the top "
+                       "and the first patch below it. Larger values push the "
+                       "patches down to leave more room for the label."), self))
         v.addWidget(ps)
 
         # ---- Randomisation ----
@@ -251,6 +307,12 @@ class LayoutOptionsPanel(QWidget):
         self.show_indicators.setChecked(True)
         self.show_indicators.toggled.connect(self._on_show_indicators)
         sig2.addWidget(self.show_indicators, 0, 1)
+        sig2.addWidget(TooltipButton(
+            tr("Strip indicators"),
+            tr("The small letter label printed above each strip (A, B, C…) so you "
+               "always know which strip you're measuring and in what order. Turn "
+               "off only if you have another way to keep the strips straight."),
+            self), 0, 2)
         self.indicator_font = NoScrollComboBox(self)
         self._populate_font_combo(self.indicator_font)
         self.indicator_font.currentIndexChanged.connect(self._emit)
@@ -261,7 +323,15 @@ class LayoutOptionsPanel(QWidget):
         self.ind_italic = QCheckBox(tr("Italic"), self)
         self.ind_italic.toggled.connect(self._emit)
         self._add_font_rows(sig2, 1, tr("Font:"), self.indicator_font,
-                            self.indicator_size, self.ind_bold, self.ind_italic)
+                            self.indicator_size, self.ind_bold, self.ind_italic,
+                            tip=TooltipButton(
+                                tr("Indicator font"),
+                                tr("Typeface, size and style of the strip letter "
+                                   "labels. Bundled fonts are listed first, then "
+                                   "every font installed on your system. Size "
+                                   "“auto” fits the label to the strip width; Bold "
+                                   "/ Italic grey out for fonts that don't offer "
+                                   "them."), self))
         self.underline_mode = NoScrollComboBox(self)
         for k, lbl in (("off", tr("Off")),
                        ("segments", tr("Coloured (5 segments)")),
@@ -281,8 +351,20 @@ class LayoutOptionsPanel(QWidget):
                        "per strip so neighbours read apart; Black is a plain "
                        "rule. Use the thickness and distance to taste."),
                     self))
-        add_row(sig2, 4, tr("Underline thickness:"), self.underline_thickness)
-        add_row(sig2, 5, tr("Underline distance:"), self.underline_gap)
+        add_row(sig2, 4, tr("Underline thickness:"), self.underline_thickness,
+                tip=TooltipButton(
+                    tr("Underline thickness"),
+                    tr("How thick the rule under the strip labels is drawn, in "
+                       "millimetres. A thicker line is easier to spot at a glance; "
+                       "a thinner one is more subtle. Only matters when the "
+                       "Underline above is set to something other than Off."),
+                    self))
+        add_row(sig2, 5, tr("Underline distance:"), self.underline_gap,
+                tip=TooltipButton(
+                    tr("Underline distance"),
+                    tr("How far below the strip label the rule sits, in "
+                       "millimetres. Increase it to give the label a little "
+                       "breathing room above the line."), self))
         v.addWidget(si)
 
         # ---- Page geometry ----
@@ -321,17 +403,56 @@ class LayoutOptionsPanel(QWidget):
                "if your clip covers more of the page; the patches start to its "
                "right. Only applies to the i1Pro / i1Pro 3 in clip-border mode "
                "(printtarg fixes this at 26 mm)."), self)
-        add_row(gg, 0, tr("Margins (mm):"), _margins_w)
+        add_row(gg, 0, tr("Margins (mm):"), _margins_w,
+                tip=TooltipButton(
+                    tr("Margins"),
+                    tr("Blank borders kept clear of patches on each edge — Top, "
+                       "Right, Bottom, Left, in mm. Most printers can't print to "
+                       "the very edge, so keep a few mm here; the smallest of the "
+                       "four also sets the instrument's leader/clip base."), self))
         gg.addWidget(self.clip_width_label, 1, 0, _Qt.AlignmentFlag.AlignRight)
         gg.addWidget(self.clip_width, 1, 1)
         gg.addWidget(self.clip_width_tip, 1, 2)
-        add_row(gg, 2, tr("Resolution:"), self.dpi)
-        add_row(gg, 3, tr("Max strip length:"), self.max_strip)
+        add_row(gg, 2, tr("Resolution:"), self.dpi,
+                tip=TooltipButton(
+                    tr("Resolution"),
+                    tr("Pixel density of the printed chart TIFF, in dots per inch. "
+                       "300 dpi is a good default; higher makes a larger file with "
+                       "no real benefit for solid colour patches."), self))
+        add_row(gg, 3, tr("Max strip length:"), self.max_strip,
+                tip=TooltipButton(
+                    tr("Max strip length"),
+                    tr("Caps how long a single strip (column of patches) may get, "
+                       "in mm. Leave at “auto” to use the instrument's limit. Some "
+                       "scanners can't read a strip past a certain length; lower "
+                       "this if long strips misread."), self))
         add_row(gg, 4, tr("Chart offset (mm):"),
-                cell(self.offx, QLabel("×", self), self.offy))
-        add_row(gg, 5, tr("Strip pattern:"), self.strip_pat)
-        add_row(gg, 6, tr("Patch pattern:"), self.patch_pat)
+                cell(self.offx, QLabel("×", self), self.offy),
+                tip=TooltipButton(
+                    tr("Chart offset"),
+                    tr("Shifts the whole patch block right (X) and down (Y) on the "
+                       "sheet, in mm. Usually 0 — use it to nudge the layout away "
+                       "from a printer's unprintable area or to line up with a "
+                       "pre-printed sheet."), self))
+        add_row(gg, 5, tr("Strip pattern:"), self.strip_pat,
+                tip=TooltipButton(
+                    tr("Strip pattern"),
+                    tr("How strips (columns) are labelled — the letter part of a "
+                       "patch's location, e.g. A, B, C. Leave the default unless "
+                       "you have a specific labelling scheme to match."), self))
+        add_row(gg, 6, tr("Patch pattern:"), self.patch_pat,
+                tip=TooltipButton(
+                    tr("Patch pattern"),
+                    tr("How patches within a strip are numbered — the number part "
+                       "of a location, e.g. A1, A2, A3. Leave the default unless "
+                       "matching a specific scheme."), self))
         gg.addWidget(self.nolimit, 7, 1)
+        gg.addWidget(TooltipButton(
+            tr("Don't cap strip length"),
+            tr("Removes the strip-length limit entirely (printtarg -P), letting a "
+               "strip run the full usable height. Only enable if your instrument "
+               "can read an unlimited-length strip; otherwise leave it off."),
+            self), 7, 2)
         v.addWidget(pg)
         self._update_clip_visibility()
 
@@ -346,8 +467,21 @@ class LayoutOptionsPanel(QWidget):
         for k, lbl in (("lzw", "LZW"), ("zlib", "Zlib"), ("none", tr("None"))):
             self.compression.addItem(lbl, k)
         self.compression.currentIndexChanged.connect(self._emit)
-        add_row(ogg, 0, tr("Bit depth:"), self.bit_depth)
-        add_row(ogg, 1, tr("Compression:"), self.compression)
+        add_row(ogg, 0, tr("Bit depth:"), self.bit_depth,
+                tip=TooltipButton(
+                    tr("Bit depth"),
+                    tr("Colour precision of the chart TIFF. 8-bit is standard and "
+                       "right for almost everyone. 16-bit doubles the file size "
+                       "and only helps if your whole print path is genuinely "
+                       "16-bit — otherwise it makes no visible difference."),
+                    self))
+        add_row(ogg, 1, tr("Compression:"), self.compression,
+                tip=TooltipButton(
+                    tr("Compression"),
+                    tr("How the chart TIFF is compressed. LZW (default) and Zlib "
+                       "are lossless and shrink the file; “None” writes it "
+                       "uncompressed (largest, most compatible). All keep the "
+                       "exact colours."), self))
         v.addWidget(og)
 
         # ---- Sheet text ----
@@ -382,13 +516,24 @@ class LayoutOptionsPanel(QWidget):
                        "{dpi}. The Preview line shows how it will read."), self))
         add_row(stg, 1, tr("Preview:"), self.text_preview)
         self._add_font_rows(stg, 2, tr("Font:"), self.chart_text_font,
-                            self.chart_text_size, self.ct_bold, self.ct_italic)
+                            self.chart_text_size, self.ct_bold, self.ct_italic,
+                            tip=TooltipButton(
+                                tr("Sheet-text font"),
+                                tr("Typeface, size and style of the custom sheet "
+                                   "text in the bottom margin. Size “auto” uses a "
+                                   "sensible default; Bold / Italic grey out for "
+                                   "fonts that don't offer them."), self))
         stg.addWidget(self.stamp_command, 4, 1)
+        stg.addWidget(TooltipButton(
+            tr("Stamp layout summary"),
+            tr("Prints a one-line summary of how the chart was made (engine, "
+               "instrument, paper, dpi, patch count, seed) in the bottom margin. "
+               "Handy for re-creating an identical chart later from the printed "
+               "sheet alone."), self), 4, 2)
         v.addWidget(st)
         self._update_text_preview()
 
         # ---- Clip-border content (i1/p3 clip mode) ----
-        from ui.widgets import load_magenta_folder_icon
         self._clip_content_grp = QGroupBox(tr("Clip-border content"), self)
         ccg = QGridLayout(self._clip_content_grp)
         self.clip_content_mode = NoScrollComboBox(self)
@@ -407,10 +552,7 @@ class LayoutOptionsPanel(QWidget):
         self.clip_image_path = QLineEdit(self)
         self.clip_image_path.setPlaceholderText(tr("no image selected"))
         self.clip_image_path.textChanged.connect(self._emit)
-        from ui.widgets import make_browse_button
-        self.clip_image_browse = make_browse_button(self, tr("Browse for an image"))
-        self.clip_image_browse.setIcon(load_magenta_folder_icon())
-        self.clip_image_browse.setFixedHeight(26)
+        self.clip_image_browse = self._compact_browse(tr("Browse for an image"))
         self.clip_image_browse.clicked.connect(self._browse_clip_image)
         from PyQt6.QtWidgets import QSizePolicy
         self.clip_dims_label = QLabel("", self)
@@ -456,7 +598,7 @@ class LayoutOptionsPanel(QWidget):
             cgg.addWidget(QLabel(tr("Mode:"), self), 0, 0)
             self.cal_mode = NoScrollComboBox(self)
             for k, lbl in (("off", tr("None")),
-                           ("apply", tr("Apply && embed (-K)")),
+                           ("apply", tr("Apply & embed (-K)")),
                            ("embed", tr("Embed only (-I)"))):
                 self.cal_mode.addItem(lbl, k)
             self.cal_mode.currentIndexChanged.connect(self._emit)
@@ -465,19 +607,19 @@ class LayoutOptionsPanel(QWidget):
             self.cal_path_edit.setPlaceholderText(tr("no .cal file selected"))
             self.cal_path_edit.textChanged.connect(self._emit)
             cgg.addWidget(self.cal_path_edit, 1, 0, 1, 3)
-            from ui.widgets import load_magenta_folder_icon, make_browse_button
-            browse = make_browse_button(self, tr("Browse for a .cal file"))
-            browse.setIcon(load_magenta_folder_icon())
-            browse.setFixedHeight(26)
+            browse = self._compact_browse(tr("Browse for a .cal file"))
             browse.clicked.connect(self._browse_cal)
             cgg.addWidget(browse, 1, 3)
             cgg.addWidget(TooltipButton(
                 tr("Printer calibration"),
-                tr("Attach an ArgyllCMS .cal linearisation. “Apply && embed (-K)” "
-                   "bakes the calibration into the printed patch values and stores "
-                   "it in the .ti2; “Embed only (-I)” stores it without changing "
-                   "the patches (use this if your printer/RIP already linearises). "
-                   "Leave “None” if you don't calibrate."), self), 0, 2)
+                tr("Attach an ArgyllCMS calibration (.cal) that linearises your "
+                   "printer so the chart's tones come out evenly spaced. "
+                   "“Apply & embed (-K)” bakes the calibration into the printed "
+                   "patch values and also records it in the chart file — pick this "
+                   "if you have a .cal and want it used. “Embed only (-I)” just "
+                   "records it without changing the patches; use this when your "
+                   "printer or RIP already linearises on its own. Leave it on "
+                   "“None” if you don't use a calibration."), self), 0, 2)
             v.addWidget(cg)
 
         # Match the compact input styling used throughout the Manual module
@@ -708,6 +850,20 @@ class LayoutOptionsPanel(QWidget):
         btn.setMenu(menu)
         return btn
 
+    def _compact_browse(self, tooltip: str):
+        """A magenta folder browse button sized like the targen -c browse
+        (objectName browse_compact, 14px icon, 22px tall)."""
+        from PyQt6.QtCore import QSize
+        from ui.widgets import load_magenta_folder_icon, make_browse_button
+        b = make_browse_button(self, tooltip)
+        b.setIcon(load_magenta_folder_icon())
+        b.setObjectName("browse_compact")
+        b.style().unpolish(b)
+        b.style().polish(b)
+        b.setIconSize(QSize(14, 14))
+        b.setFixedHeight(22)
+        return b
+
     def _insert_token_into(self, target, token: str) -> None:
         """Drop ``{token}`` into *target* at the cursor."""
         target.insert("{%s}" % token)
@@ -737,11 +893,14 @@ class LayoutOptionsPanel(QWidget):
         self.text_preview.setText(self._resolve_sample(text) if text
                                   else tr("(no sheet text)"))
 
-    def _add_font_rows(self, grid, r, label, combo, size, bold, italic) -> None:
+    def _add_font_rows(self, grid, r, label, combo, size, bold, italic,
+                       tip=None) -> None:
         """Font on row *r*; Size + Bold + Italic on row *r+1*."""
         from PyQt6.QtCore import Qt
         grid.addWidget(QLabel(label, self), r, 0, Qt.AlignmentFlag.AlignRight)
         grid.addWidget(combo, r, 1)
+        if tip is not None:
+            grid.addWidget(tip, r, 2)
         grid.addWidget(QLabel(tr("Size:"), self), r + 1, 0, Qt.AlignmentFlag.AlignRight)
         wrap = QWidget(self)
         box = QHBoxLayout(wrap); box.setContentsMargins(0, 0, 0, 0); box.setSpacing(8)
