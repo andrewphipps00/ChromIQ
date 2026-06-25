@@ -123,6 +123,9 @@ def render_pages(
     draw_indicators: bool = True,
     indicator_font: str = DEFAULT_INDICATOR_FONT,
     indicator_size_mm: float = 0.0,
+    chart_text: str = "",
+    chart_text_font: str = "Inter",
+    stamp_text: str = "",
 ) -> RenderResult:
     """Render one :class:`PIL.Image` per page for *target*.
 
@@ -189,6 +192,16 @@ def render_pages(
                         [x0, y0 + pl_px, x0 + pw_px - 1, y0 + pl_px + sp_px - 1],
                         fill=contrast.spacer_for_mode(spacer_mode, rgb, nxt),
                     )
+        # Bottom-of-sheet text: custom chart text + optional command stamp,
+        # drawn in the bottom margin (clear of the patches).
+        _btxt = [t for t in (chart_text, stamp_text) if t]
+        if _btxt:
+            sfont = _font(px(3.2), chart_text_font)
+            line_h = px(4.2)
+            yy = H - px(1.5) - line_h * len(_btxt)
+            for ln in _btxt:
+                draw.text((px(geom.margin_l), yy), ln, font=sfont, fill=(0, 0, 0))
+                yy += line_h
         images.append(img)
 
     flagged = contrast.low_contrast_passes(rgb_by_slot, steps)

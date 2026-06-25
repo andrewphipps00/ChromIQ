@@ -257,6 +257,28 @@ class LayoutOptionsPanel(QWidget):
         add_row(ogg, 1, tr("Compression:"), self.compression)
         v.addWidget(og)
 
+        # ---- Sheet text ----
+        st = QGroupBox(tr("Sheet text"), self)
+        stg = QGridLayout(st)
+        self.chart_text = QLineEdit(self)
+        self.chart_text.setPlaceholderText(tr("e.g. {project} — {date}"))
+        self.chart_text.textChanged.connect(self._emit)
+        self.chart_text_font = NoScrollComboBox(self)
+        self._populate_font_combo(self.chart_text_font)
+        self.chart_text_font.currentIndexChanged.connect(self._emit)
+        self.stamp_command = QCheckBox(tr("Stamp layout summary on the sheet"), self)
+        self.stamp_command.toggled.connect(self._emit)
+        add_row(stg, 0, tr("Custom text:"), self.chart_text,
+                tip=TooltipButton(
+                    tr("Sheet text"),
+                    tr("Optional text printed in the bottom margin of every sheet. "
+                       "Placeholders are filled in when the chart is built: "
+                       "{project}, {date}, {paper}, {instrument}, {patchcount}, "
+                       "{pages}, {seed}."), self))
+        add_row(stg, 1, tr("Font:"), self.chart_text_font)
+        stg.addWidget(self.stamp_command, 2, 1)
+        v.addWidget(st)
+
         # ---- Calibration (per-chart; engine -K/-I) ----
         self.cal_mode = self.cal_path_edit = None
         if with_calibration:
@@ -452,6 +474,10 @@ class LayoutOptionsPanel(QWidget):
         _fi = self.indicator_font.findData(r.indicator_font)
         self.indicator_font.setCurrentIndex(_fi if _fi >= 0 else 0)
         self.indicator_size.setValue(r.indicator_size_mm)
+        self.chart_text.setText(r.chart_text)
+        _ctf = self.chart_text_font.findData(r.chart_text_font)
+        self.chart_text_font.setCurrentIndex(_ctf if _ctf >= 0 else 0)
+        self.stamp_command.setChecked(r.stamp_command)
         ci = self.compression.findData(r.compression)
         self.compression.setCurrentIndex(ci if ci >= 0 else 0)
         self._loading = False
@@ -483,5 +509,8 @@ class LayoutOptionsPanel(QWidget):
         r.show_strip_indicators = self.show_indicators.isChecked()
         r.indicator_font = self.indicator_font.currentData() or "JetBrains Mono"
         r.indicator_size_mm = self.indicator_size.value()
+        r.chart_text = self.chart_text.text()
+        r.chart_text_font = self.chart_text_font.currentData() or "Inter"
+        r.stamp_command = self.stamp_command.isChecked()
         r.compression = self.compression.currentData() or "lzw"
         return r

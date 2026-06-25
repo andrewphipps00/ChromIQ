@@ -108,6 +108,10 @@ def build_chart(
     draw_indicators: bool = True,
     indicator_font: str = "JetBrains Mono",
     indicator_size_mm: float = 0.0,
+    chart_text: str = "",
+    chart_text_font: str = "Inter",
+    stamp_command: bool = False,
+    project: str = "",
     nolpcbord: bool = False,
     nolimit: bool = False,
     strip_pattern: str = permutation.DEFAULT_STRIP_PATTERN,
@@ -163,11 +167,27 @@ def build_chart(
         with open(ti2_path, "a", encoding="utf-8") as fh:
             fh.write("\n" + calibration.cal_table_text(cal))
 
+    import time as _time
+    _ctx = {
+        "project": project or Path(out_base).name,
+        "instrument": instrument, "paper": paper, "dpi": str(dpi),
+        "patchcount": str(layout.total_patches), "pages": str(layout.pages),
+        "date": _time.strftime("%Y-%m-%d"), "seed": str(seed),
+    }
+    try:
+        resolved_text = chart_text.format(**_ctx) if chart_text else ""
+    except (KeyError, IndexError, ValueError):
+        resolved_text = chart_text       # leave unknown placeholders literal
+    stamp_text = (f"ChromIQ engine · {instrument} · {paper} · {dpi} dpi · "
+                  f"{layout.total_patches} patches · seed {seed}"
+                  if stamp_command else "")
     render = raster.render_pages(
         target, layout, geom, seed=seed, randomize=randomize,
         paper_w_mm=w_mm, paper_h_mm=h_mm, dpi=dpi, strip_pattern=strip_pattern,
         spacer_mode=spacer_mode, draw_indicators=draw_indicators,
         indicator_font=indicator_font, indicator_size_mm=indicator_size_mm,
+        chart_text=resolved_text, chart_text_font=chart_text_font,
+        stamp_text=stamp_text,
     )
     tiff_paths = raster.save_tiffs(render.images, stem.with_suffix(".tif"), dpi=dpi,
                                    bit16=bit16, compression=compression)

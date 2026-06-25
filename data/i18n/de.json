@@ -1873,5 +1873,10 @@
  "Font:": "Font:",
  "Show strip indicators": "Show strip indicators",
  "Size:": "Size:",
- "Strip indicators": "Strip indicators"
+ "Strip indicators": "Strip indicators",
+ "Custom text:": "Custom text:",
+ "Optional text printed in the bottom margin of every sheet. Placeholders are filled in when the chart is built: {project}, {date}, {paper}, {instrument}, {patchcount}, {pages}, {seed}.": "Optional text printed in the bottom margin of every sheet. Placeholders are filled in when the chart is built: {project}, {date}, {paper}, {instrument}, {patchcount}, {pages}, {seed}.",
+ "Sheet text": "Sheet text",
+ "Stamp layout summary on the sheet": "Stamp layout summary on the sheet",
+ "e.g. {project} — {date}": "e.g. {project} — {date}"
 }

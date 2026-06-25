@@ -55,11 +55,13 @@ class LayoutRecipe:
     show_strip_indicators: bool = True   # draw the per-strip letter labels
     indicator_font: str = "JetBrains Mono"
     indicator_size_mm: float = 0.0       # 0 = auto (instrument text height)
+    chart_text: str = ""                 # custom on-sheet text (placeholders ok)
+    chart_text_font: str = "Inter"
+    stamp_command: bool = False          # stamp the layout summary on the sheet
     clip_border: bool = True       # i1/p3 only — left paper clip border present
     nolimit: bool = False
     strip_pattern: str = permutation.DEFAULT_STRIP_PATTERN
     patch_pattern: str = permutation.DEFAULT_PATCH_PATTERN
-    chart_text: str = ""           # custom on-sheet text (per chart, Phase 5)
 
     # ---- mode / preset identity ----------------------------------------
     CM_MODES = {1: "freehand", 2: "high", 3: "extrahigh"}
@@ -116,6 +118,9 @@ class LayoutRecipe:
             "draw_indicators": self.show_strip_indicators,
             "indicator_font": self.indicator_font,
             "indicator_size_mm": self.indicator_size_mm,
+            "chart_text": self.chart_text,
+            "chart_text_font": self.chart_text_font,
+            "stamp_command": self.stamp_command,
             "nolpcbord": (not self.clip_border) if self.instrument in ("i1", "p3") else False,
             "nolimit": self.nolimit,
             "strip_pattern": self.strip_pattern,
