@@ -94,6 +94,9 @@ def build_chart(
     pscale: float = 1.0,
     sscale: float = 1.0,
     border: float = 6.0,
+    margins: tuple[float, float, float, float] | None = None,
+    patch_w: float | None = None,
+    patch_h: float | None = None,
     nolpcbord: bool = False,
     nolimit: bool = False,
     strip_pattern: str = permutation.DEFAULT_STRIP_PATTERN,
@@ -122,7 +125,8 @@ def build_chart(
     spacer_on = spacer_on and spacer_mode != "none"   # "none" ⇒ no gap
     geom = instruments.build(
         instrument, hflag=hflag, density=density, spacer_on=spacer_on, pscale=pscale,
-        sscale=sscale, border=border, nolpcbord=nolpcbord, nolimit=nolimit,
+        sscale=sscale, border=border, margins=margins, patch_w=patch_w,
+        patch_h=patch_h, nolpcbord=nolpcbord, nolimit=nolimit,
     )
     w_mm, h_mm = papers.dimensions_mm(paper)
     layout = geometry.compute(geom, w_mm, h_mm, len(target.patches))

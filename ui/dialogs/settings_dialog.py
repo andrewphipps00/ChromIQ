@@ -1220,25 +1220,58 @@ class SettingsDialog(QDialog):
                            ("none", tr("None"))):
             self._layout_spacer_mode.addItem(_lbl, _key)
         psg.addWidget(self._layout_spacer_mode, 1, 1)
+        psg.addWidget(QLabel(tr("Patch size:"), self), 2, 0)
+        self._layout_patch_x = NoScrollDoubleSpinBox(self)
+        self._layout_patch_x.setRange(0, 60)
+        self._layout_patch_x.setDecimals(1)
+        self._layout_patch_x.setSingleStep(0.5)
+        self._layout_patch_x.setSuffix(" mm")
+        self._layout_patch_x.setSpecialValueText(tr("auto"))   # 0 → "auto"
+        psg.addWidget(self._layout_patch_x, 2, 1)
+        psg.addWidget(QLabel(tr("× height:"), self), 2, 2)
+        self._layout_patch_y = NoScrollDoubleSpinBox(self)
+        self._layout_patch_y.setRange(0, 60)
+        self._layout_patch_y.setDecimals(1)
+        self._layout_patch_y.setSingleStep(0.5)
+        self._layout_patch_y.setSuffix(" mm")
+        self._layout_patch_y.setSpecialValueText(tr("auto"))
+        psg.addWidget(self._layout_patch_y, 2, 3)
+        psg.addWidget(TooltipButton(
+            tr("Patch size"),
+            tr("Width × height of each patch in millimetres. Leave at “auto” (0) "
+               "to use the instrument's recommended size (scaled by Patch scale). "
+               "A value below ~6 mm can make the chart hard to read — watch for "
+               "the pre-flight warning."),
+            self), 2, 4)
         v.addWidget(ps)
 
         # ---- page geometry ----
         pg = QGroupBox(tr("Page geometry"), self)
         pgg = QGridLayout(pg)
-        pgg.addWidget(QLabel(tr("Margin:"), self), 0, 0)
-        self._layout_border = NoScrollDoubleSpinBox(self)
-        self._layout_border.setRange(0, 60)
-        self._layout_border.setDecimals(1)
-        self._layout_border.setSingleStep(0.5)
-        self._layout_border.setSuffix(" mm")
-        pgg.addWidget(self._layout_border, 0, 1)
-        pgg.addWidget(QLabel(tr("Resolution:"), self), 0, 2)
+        pgg.addWidget(QLabel(tr("Margins:"), self), 0, 0)
+        _mrow = QHBoxLayout()
+        self._layout_margins: dict[str, NoScrollDoubleSpinBox] = {}
+        for _k, _lbl in (("t", tr("T")), ("r", tr("R")), ("b", tr("B")), ("l", tr("L"))):
+            _mrow.addWidget(QLabel(_lbl, self))
+            _sb = NoScrollDoubleSpinBox(self)
+            _sb.setRange(0, 60)
+            _sb.setDecimals(1)
+            _sb.setSingleStep(0.5)
+            _sb.setSuffix(" mm")
+            _sb.setFixedWidth(78)
+            self._layout_margins[_k] = _sb
+            _mrow.addWidget(_sb)
+        _mrow.addStretch()
+        _mw = QWidget(self)
+        _mw.setLayout(_mrow)
+        pgg.addWidget(_mw, 0, 1, 1, 4)
+        pgg.addWidget(QLabel(tr("Resolution:"), self), 1, 0)
         self._layout_dpi = NoScrollSpinBox(self)
         self._layout_dpi.setRange(72, 1200)
         self._layout_dpi.setSuffix(" dpi")
-        pgg.addWidget(self._layout_dpi, 0, 3)
+        pgg.addWidget(self._layout_dpi, 1, 1)
         self._layout_nolimit = QCheckBox(tr("Don't cap strip length"), self)
-        pgg.addWidget(self._layout_nolimit, 1, 0, 1, 4)
+        pgg.addWidget(self._layout_nolimit, 1, 2, 1, 2)
         pgg.addWidget(QLabel(tr("Strip pattern:"), self), 2, 0)
         self._layout_strip_pat = QLineEdit(self)
         pgg.addWidget(self._layout_strip_pat, 2, 1)
@@ -1285,7 +1318,8 @@ class SettingsDialog(QDialog):
         self._layout_instr.currentIndexChanged.connect(self._on_layout_instr_changed)
         self._layout_paper.currentIndexChanged.connect(self._load_layout_combo)
         self._layout_mode.currentIndexChanged.connect(self._load_layout_combo)
-        for w in (self._layout_pscale, self._layout_sscale, self._layout_border):
+        for w in (self._layout_pscale, self._layout_sscale, self._layout_patch_x,
+                  self._layout_patch_y, *self._layout_margins.values()):
             w.valueChanged.connect(self._on_layout_field_changed)
         self._layout_dpi.valueChanged.connect(self._on_layout_field_changed)
         self._layout_spacer_mode.currentIndexChanged.connect(self._on_layout_field_changed)
@@ -1338,7 +1372,12 @@ class SettingsDialog(QDialog):
         self._layout_sscale.setValue(recipe.sscale)
         _smi = self._layout_spacer_mode.findData(recipe.spacer_mode)
         self._layout_spacer_mode.setCurrentIndex(_smi if _smi >= 0 else 0)
-        self._layout_border.setValue(recipe.border)
+        self._layout_margins["t"].setValue(recipe.margin_top)
+        self._layout_margins["r"].setValue(recipe.margin_right)
+        self._layout_margins["b"].setValue(recipe.margin_bottom)
+        self._layout_margins["l"].setValue(recipe.margin_left)
+        self._layout_patch_x.setValue(recipe.patch_w_mm)
+        self._layout_patch_y.setValue(recipe.patch_h_mm)
         self._layout_dpi.setValue(recipe.dpi)
         self._layout_nolimit.setChecked(recipe.nolimit)
         self._layout_strip_pat.setText(recipe.strip_pattern)
@@ -1354,7 +1393,13 @@ class SettingsDialog(QDialog):
         r.sscale = self._layout_sscale.value()
         r.spacer_mode = self._layout_spacer_mode.currentData() or "colored"
         r.spacer_on = r.spacer_mode != "none"
-        r.border = self._layout_border.value()
+        r.margin_top = self._layout_margins["t"].value()
+        r.margin_right = self._layout_margins["r"].value()
+        r.margin_bottom = self._layout_margins["b"].value()
+        r.margin_left = self._layout_margins["l"].value()
+        r.border = min(r.margin_top, r.margin_right, r.margin_bottom, r.margin_left)
+        r.patch_w_mm = self._layout_patch_x.value()
+        r.patch_h_mm = self._layout_patch_y.value()
         r.dpi = int(self._layout_dpi.value())
         r.nolimit = self._layout_nolimit.isChecked()
         r.strip_pattern = self._layout_strip_pat.text() or r.strip_pattern

@@ -2169,11 +2169,13 @@ class TabChart(QWidget):
         self._manual_preset_edit_btn = QPushButton(
             tr("Edit defaults…"), self._manual_preset_bar)
         self._manual_preset_edit_btn.clicked.connect(self._edit_layout_defaults)
-        # Buttons fill the panel width equally (full labels fit), reduced height.
+        # Buttons fill the panel width equally (full labels fit) with reduced
+        # height. A stylesheet sets the height because a global QSS min-height
+        # overrides setFixedHeight/setMinimumHeight (see Qt-button-sizing note).
         for _b in (self._manual_preset_reset_btn, self._manual_preset_update_btn,
                    self._manual_preset_edit_btn):
             _b.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-            _b.setFixedHeight(24)
+            _b.setStyleSheet("QPushButton { min-height: 16px; padding: 3px 10px; }")
             _pbar.addWidget(_b, 1)
         inner_layout.addWidget(self._manual_preset_bar)
         self._manual_preset_bar.setVisible(False)

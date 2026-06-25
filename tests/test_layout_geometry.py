@@ -56,6 +56,25 @@ def test_delegated_instrument_rejected():
         instruments.build("isis")
 
 
+def test_independent_margins_reduce_capacity():
+    base = instruments.build("i1")
+    wide = instruments.build("i1", margins=(20.0, 20.0, 20.0, 20.0))
+    assert wide.margin_t == 20.0 and wide.margin_l == 20.0
+    assert (geometry.patches_per_sheet(wide, *A4)
+            < geometry.patches_per_sheet(base, *A4))
+    # default margins (None) leave geometry identical to the uniform border
+    assert (geometry.patches_per_sheet(instruments.build("i1"), *A4)
+            == geometry.patches_per_sheet(instruments.build("i1", margins=(6.0,)*4), *A4))
+
+
+def test_patch_size_override():
+    g = instruments.build("i1", patch_w=12.0, patch_h=12.0)
+    assert g.plen == 12.0 and g.pwid == 12.0
+    # bigger patches → fewer fit per sheet
+    assert (geometry.patches_per_sheet(g, *A4)
+            < geometry.patches_per_sheet(instruments.build("i1"), *A4))
+
+
 def test_colormunki_density_levels_increase_capacity():
     # ColorMunki: normal < high (rig, printtarg -h) < extra-high (ChromIQ ext).
     cap = []

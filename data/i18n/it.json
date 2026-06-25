@@ -1814,7 +1814,6 @@
  "Import layout presets": "Import layout presets",
  "JSON files (*.json)": "JSON files (*.json)",
  "Layout mode": "Layout mode",
- "Margin:": "Margin:",
  "Open presets folder": "Open presets folder",
  "Page geometry": "Page geometry",
  "Patch pattern:": "Patch pattern:",
@@ -1846,5 +1845,15 @@
  "Update preset": "Update preset",
  "● modified": "● modified",
  "ChromIQ chart layout": "ChromIQ chart layout",
- "Black & white": "Black & white"
+ "Black & white": "Black & white",
+ "B": "B",
+ "L": "L",
+ "Margins:": "Margins:",
+ "Patch size": "Patch size",
+ "Patch size:": "Patch size:",
+ "R": "R",
+ "T": "T",
+ "Width × height of each patch in millimetres. Leave at “auto” (0) to use the instrument's recommended size (scaled by Patch scale). A value below ~6 mm can make the chart hard to read — watch for the pre-flight warning.": "Width × height of each patch in millimetres. Leave at “auto” (0) to use the instrument's recommended size (scaled by Patch scale). A value below ~6 mm can make the chart hard to read — watch for the pre-flight warning.",
+ "auto": "auto",
+ "× height:": "× height:"
 }

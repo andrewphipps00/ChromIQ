@@ -17,7 +17,7 @@ All lengths are millimetres.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 MAXPPROW = 500          # printtarg.c: absolute max patches per pass/row
 MAXROWLEN = 5000.0      # printtarg.c MAXROWLEN — large enough to never bind for sheet sizes
@@ -53,7 +53,7 @@ class Geom:
     lcar: float          # leading clear area (mm)
     txhisl: float        # strip/column label text height (mm)
     pglth: float         # page-label text height (mm)
-    border: float        # page margin (-m), mm
+    border: float        # base page margin (-m), mm — drives leader/clip-holder
     lbord: float         # extra left clip border (mm); 0 if suppressed (-L) / N/A
     hxeh: float          # hex/stagger extra height (mm)
     hxew: float          # hex extra width (mm)
@@ -72,12 +72,56 @@ class Geom:
     # Instrument-specific extra .ti2 keywords (e.g. DTP41 lengths, SS hex flag).
     extra_keywords: tuple[tuple[str, str], ...] = ()
 
+    # Independent page-edge margins (ChromIQ extension); default to `border`
+    # via build(); the 6.0 fallback only applies to bare _build_base() Geoms.
+    margin_t: float = 6.0
+    margin_r: float = 6.0
+    margin_b: float = 6.0
+    margin_l: float = 6.0
+
 
 def supported() -> list[str]:
     return ["i1", "p3", "CM", "41", "51", "SS"]
 
 
 def build(
+    key: str,
+    *,
+    pscale: float = 1.0,
+    sscale: float = 1.0,
+    hflag: bool = False,
+    density: int = 1,
+    spacer_on: bool = True,
+    border: float = 6.0,
+    margins: tuple[float, float, float, float] | None = None,
+    patch_w: float | None = None,
+    patch_h: float | None = None,
+    nolpcbord: bool = False,
+    nolimit: bool = False,
+) -> Geom:
+    """Resolve :class:`Geom`, applying ChromIQ extensions over the base geometry.
+
+    *margins* = independent ``(top, right, bottom, left)`` page margins in mm
+    (default: all = *border*).  *patch_w* / *patch_h* override the patch width /
+    height in mm (default: the instrument's size × *pscale*).  ``border`` still
+    drives the instrument leader and clip-holder base.
+    """
+    geom = _build_base(
+        key, pscale=pscale, sscale=sscale, hflag=hflag, density=density,
+        spacer_on=spacer_on, border=border, nolpcbord=nolpcbord, nolimit=nolimit)
+    mt, mr, mb, ml = margins if margins else (geom.border,) * 4
+    plen, pwid, rrsp = geom.plen, geom.pwid, geom.rrsp
+    if patch_h:
+        plen = float(patch_h)
+    if patch_w:
+        ratio = (geom.rrsp / geom.pwid) if geom.pwid else 1.0
+        pwid = float(patch_w)
+        rrsp = pwid * ratio
+    return replace(geom, margin_t=mt, margin_r=mr, margin_b=mb, margin_l=ml,
+                   plen=plen, pwid=pwid, rrsp=rrsp)
+
+
+def _build_base(
     key: str,
     *,
     pscale: float = 1.0,

@@ -37,7 +37,13 @@ class LayoutRecipe:
     spacer_mode: str = "colored"   # "colored" | "bw" | "none"
     pscale: float = 1.0
     sscale: float = 1.0
-    border: float = 6.0
+    border: float = 6.0            # base margin (drives leader/clip-holder)
+    margin_top: float = 6.0        # independent page-edge margins (mm)
+    margin_right: float = 6.0
+    margin_bottom: float = 6.0
+    margin_left: float = 6.0
+    patch_w_mm: float = 0.0        # explicit patch width / height (mm); 0 = auto
+    patch_h_mm: float = 0.0
     clip_border: bool = True       # i1/p3 only — left paper clip border present
     nolimit: bool = False
     strip_pattern: str = permutation.DEFAULT_STRIP_PATTERN
@@ -84,6 +90,10 @@ class LayoutRecipe:
             "pscale": self.pscale,
             "sscale": self.sscale,
             "border": self.border,
+            "margins": (self.margin_top, self.margin_right,
+                        self.margin_bottom, self.margin_left),
+            "patch_w": self.patch_w_mm or None,
+            "patch_h": self.patch_h_mm or None,
             "nolpcbord": (not self.clip_border) if self.instrument in ("i1", "p3") else False,
             "nolimit": self.nolimit,
             "strip_pattern": self.strip_pattern,

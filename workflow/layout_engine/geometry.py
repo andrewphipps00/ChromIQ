@@ -51,14 +51,16 @@ def compute(geom: Geom, paper_w_mm: float, paper_h_mm: float, npat: int,
 
     sxwi = g.pwid / 2.0 if (scanc & 2) else 0.0
 
-    # Imageable width (left clip border eats into it). printtarg: x1=bord+lbord, x2=pw-bord
-    iw = pw - 2.0 * g.border - g.lbord
+    # Imageable width: left margin + clip border on the left, right margin on the
+    # right (independent margins; default to the uniform border).
+    iw = pw - g.margin_l - g.lbord - g.margin_r
 
-    # Available pass length down the sheet.
-    mints = g.border + g.txhisl + g.lcar
+    # Available pass length down the sheet (top/bottom margins, floored by the
+    # instrument's own leader/trailer requirements).
+    mints = g.margin_t + g.txhisl + g.lcar
     if mints < g.lspa:
         mints = g.lspa
-    minbs = g.border
+    minbs = g.margin_b
     if minbs < g.tspa:
         minbs = g.tspa
     arowl = ph - mints - minbs - 2.0 * g.hxeh
@@ -166,11 +168,11 @@ def placement(geom: Geom, paper_w_mm: float, paper_h_mm: float, layout: Layout) 
     slack = ph - mints - g.pspa - layout.pprow * (g.plen + g.pspa)
     amints = mints + 0.5 * (slack - minbs)
     return Placement(
-        x0=g.border + g.lbord,
+        x0=g.margin_l + g.lbord,
         y0_first=amints + g.pspa,
         plen=g.plen, pwid=g.pwid, pspa=g.pspa, rrsp=g.rrsp,
         steps_in_pass=layout.steps_in_pass,
-        leader_top=g.border + g.txhisl,
+        leader_top=g.margin_t + g.txhisl,
     )
 
 
