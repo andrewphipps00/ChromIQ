@@ -395,6 +395,57 @@ class LayoutOptionsPanel(QWidget):
         v.addWidget(st)
         self._update_text_preview()
 
+        # ---- Clip-border content (i1/p3 clip mode) ----
+        from ui.widgets import load_magenta_folder_icon
+        self._clip_content_grp = QGroupBox(tr("Clip-border content"), self)
+        ccg = QGridLayout(self._clip_content_grp)
+        self.clip_content_mode = NoScrollComboBox(self)
+        for k, lbl in (("off", tr("Off")), ("text", tr("Custom text")),
+                       ("branding", tr("ChromIQ branding")),
+                       ("notes", tr("Notes box")), ("image", tr("Imported image"))):
+            self.clip_content_mode.addItem(lbl, k)
+        self.clip_content_mode.currentIndexChanged.connect(self._on_clip_content_changed)
+        self.clip_text = QLineEdit(self)
+        self.clip_text.setPlaceholderText(tr("e.g. {project} — {date}"))
+        self.clip_text.textChanged.connect(self._emit)
+        self.clip_text_font = NoScrollComboBox(self)
+        self._populate_font_combo(self.clip_text_font)
+        self.clip_text_font.currentIndexChanged.connect(self._emit)
+        self.clip_image_path = QLineEdit(self)
+        self.clip_image_path.setPlaceholderText(tr("no image selected"))
+        self.clip_image_path.textChanged.connect(self._emit)
+        self.clip_image_browse = QPushButton(self)
+        self.clip_image_browse.setIcon(load_magenta_folder_icon())
+        self.clip_image_browse.setToolTip(tr("Browse for an image"))
+        self.clip_image_browse.setFlat(True)
+        self.clip_image_browse.setFixedSize(30, 26)
+        self.clip_image_browse.clicked.connect(self._browse_clip_image)
+        self.clip_dims_label = QLabel("", self)
+        self.clip_dims_label.setStyleSheet("color: palette(mid);")
+        self.clip_preview = QLabel(self)
+        self.clip_preview.setFixedHeight(220)
+        self.clip_preview.setStyleSheet("border: 1px solid palette(mid);")
+        self.clip_export_btn = QPushButton(tr("Export template (PNG + PDF)…"), self)
+        self.clip_export_btn.setObjectName("compact_input")
+        self.clip_export_btn.clicked.connect(self._export_clip_template)
+        add_row(ccg, 0, tr("Content:"), self.clip_content_mode,
+                tip=TooltipButton(
+                    tr("Clip-border content"),
+                    tr("Fills the blank strip down the left edge that the scanner "
+                       "clip reserves. Custom text and Notes box accept the same "
+                       "{project}/{date}/… tokens as the sheet text; ChromIQ "
+                       "branding stamps the wordmark; Imported image places a "
+                       "logo. Export template gives you an exact-size PNG and PDF "
+                       "to design a graphic in another tool."), self))
+        add_row(ccg, 1, tr("Text:"), self.clip_text)
+        add_row(ccg, 2, tr("Font:"), self.clip_text_font)
+        add_row(ccg, 3, tr("Image:"), cell_fill(self.clip_image_path,
+                                                 self.clip_image_browse))
+        add_row(ccg, 4, tr("Clip area:"), self.clip_dims_label)
+        add_row(ccg, 5, tr("Preview:"), self.clip_preview)
+        ccg.addWidget(self.clip_export_btn, 6, 1)
+        v.addWidget(self._clip_content_grp)
+
         # ---- Calibration (per-chart; engine -K/-I) ----
         self.cal_mode = self.cal_path_edit = None
         if with_calibration:
@@ -435,6 +486,9 @@ class LayoutOptionsPanel(QWidget):
         from PyQt6.QtWidgets import QAbstractSpinBox, QComboBox, QLineEdit
         for w in self.findChildren((QAbstractSpinBox, QComboBox, QLineEdit)):
             w.setObjectName("compact_input")
+
+        self._sync_clip_content_enabled()
+        self._update_clip_visibility()
 
     def _browse_cal(self) -> None:
         from PyQt6.QtWidgets import QFileDialog
@@ -496,6 +550,113 @@ class LayoutOptionsPanel(QWidget):
             clip = self._clip and self._inst in ("i1", "p3")
         for w in (self.clip_width_label, self.clip_width, self.clip_width_tip):
             w.setVisible(clip)
+        if hasattr(self, "_clip_content_grp"):
+            self._clip_content_grp.setVisible(clip)
+            if clip:
+                self._refresh_clip_preview()
+
+    # ---- Clip-border content -------------------------------------------
+    def _sync_clip_content_enabled(self) -> None:
+        mode = self.clip_content_mode.currentData()
+        text_modes = mode in ("text", "branding", "notes")
+        self.clip_text.setEnabled(text_modes)
+        self.clip_text_font.setEnabled(text_modes)
+        self.clip_image_path.setEnabled(mode == "image")
+        self.clip_image_browse.setEnabled(mode == "image")
+
+    def _on_clip_content_changed(self, *_a) -> None:
+        self._sync_clip_content_enabled()
+        self._emit()
+
+    def _browse_clip_image(self) -> None:
+        from PyQt6.QtWidgets import QFileDialog
+        path, _ = QFileDialog.getOpenFileName(
+            self, tr("Select clip-strip image"), "",
+            tr("Images (*.png *.jpg *.jpeg *.tif *.tiff *.bmp)"))
+        if path:
+            self.clip_image_path.setText(path)
+
+    def _clip_geom_and_height(self):
+        """Build the current i1/p3 Geom + paper height for the clip preview."""
+        from workflow.layout_engine import instruments, papers
+        if self.instr is not None:
+            inst, paper, mode = self.selection()
+        else:
+            inst, paper, mode = self._inst, "A4", ("clip" if self._clip else "noclip")
+        if inst not in ("i1", "p3"):
+            return None
+        try:
+            geom = instruments.build(
+                inst, border=min(self.margins[k].value() for k in ("t", "r", "b", "l")),
+                margins=tuple(self.margins[k].value() for k in ("t", "r", "b", "l")),
+                clip_border_width=self.clip_width.value(),
+                nolpcbord=(mode != "clip"))
+            _w, h_mm = papers.dimensions_mm(paper)
+        except Exception:
+            return None
+        return geom, h_mm
+
+    @staticmethod
+    def _pil_to_pixmap(img):
+        from PyQt6.QtGui import QImage, QPixmap
+        rgb = img.convert("RGB")
+        data = rgb.tobytes("raw", "RGB")
+        qimg = QImage(data, rgb.width, rgb.height, rgb.width * 3,
+                      QImage.Format.Format_RGB888)
+        return QPixmap.fromImage(qimg.copy())
+
+    def _refresh_clip_preview(self) -> None:
+        if not hasattr(self, "clip_preview"):
+            return
+        from PyQt6.QtCore import Qt
+        from workflow.layout_engine import geometry, raster
+        gh = self._clip_geom_and_height()
+        area = geometry.clip_area_mm(gh[0], gh[1]) if gh else None
+        if area is None:
+            self.clip_dims_label.setText(tr("—"))
+            self.clip_preview.clear()
+            return
+        _x, _y, w_mm, h_mm = area
+        dpi = int(self.dpi.value())
+        wp, hp = round(w_mm * dpi / 25.4), round(h_mm * dpi / 25.4)
+        self.clip_dims_label.setText(
+            tr("{w:.0f} × {h:.0f} mm  ({wp} × {hp} px @ {dpi} dpi)").format(
+                w=w_mm, h=h_mm, wp=wp, hp=hp, dpi=dpi))
+        mode = self.clip_content_mode.currentData()
+        if mode == "off":
+            self.clip_preview.clear()
+            return
+        pdpi = 96
+        pw = max(1, round(w_mm * pdpi / 25.4))
+        ph = max(1, round(h_mm * pdpi / 25.4))
+        img = raster.render_clip_strip(
+            mode, width_px=pw, height_px=ph, dpi=pdpi,
+            text=self._resolve_sample(self.clip_text.text()),
+            font_family=self.clip_text_font.currentData() or "Inter",
+            image_path=self.clip_image_path.text().strip())
+        self.clip_preview.setPixmap(
+            self._pil_to_pixmap(img).scaledToHeight(216, Qt.TransformationMode.SmoothTransformation))
+
+    def _export_clip_template(self) -> None:
+        from PyQt6.QtWidgets import QFileDialog, QMessageBox
+        from workflow.layout_engine import geometry, raster
+        gh = self._clip_geom_and_height()
+        area = geometry.clip_area_mm(gh[0], gh[1]) if gh else None
+        if area is None:
+            return
+        _x, _y, w_mm, h_mm = area
+        dpi = int(self.dpi.value())
+        base, _ = QFileDialog.getSaveFileName(
+            self, tr("Export clip template"), "clip-template",
+            tr("Template base name"))
+        if not base:
+            return
+        paths = raster.export_clip_template(
+            base, width_px=round(w_mm * dpi / 25.4), height_px=round(h_mm * dpi / 25.4),
+            width_mm=w_mm, height_mm=h_mm, dpi=dpi)
+        QMessageBox.information(
+            self, tr("Clip template exported"),
+            tr("Wrote:\n{files}").format(files="\n".join(str(p) for p in paths)))
 
     def _sync_seed_enabled(self) -> None:
         on = self.randomize_cb.isChecked()
@@ -649,6 +810,7 @@ class LayoutOptionsPanel(QWidget):
 
     def _emit(self, *_a) -> None:
         self._update_text_preview()
+        self._refresh_clip_preview()
         if not self._loading:
             self.changed.emit()
 
@@ -717,6 +879,13 @@ class LayoutOptionsPanel(QWidget):
         ci = self.compression.findData(r.compression)
         self.compression.setCurrentIndex(ci if ci >= 0 else 0)
         self.clip_width.setValue(r.clip_border_width_mm or 26.0)
+        _cc = self.clip_content_mode.findData(r.clip_content_mode)
+        self.clip_content_mode.setCurrentIndex(_cc if _cc >= 0 else 0)
+        self.clip_text.setText(r.clip_text)
+        _cf = self.clip_text_font.findData(r.clip_text_font)
+        self.clip_text_font.setCurrentIndex(_cf if _cf >= 0 else 0)
+        self.clip_image_path.setText(r.clip_image_path)
+        self._sync_clip_content_enabled()
         self.randomize_cb.setChecked(r.randomize)
         _fixed = r.seed is not None
         self.fixed_seed_cb.setChecked(_fixed)
@@ -767,6 +936,10 @@ class LayoutOptionsPanel(QWidget):
         r.stamp_command = self.stamp_command.isChecked()
         r.compression = self.compression.currentData() or "lzw"
         r.clip_border_width_mm = self.clip_width.value()
+        r.clip_content_mode = self.clip_content_mode.currentData() or "off"
+        r.clip_text = self.clip_text.text()
+        r.clip_text_font = self.clip_text_font.currentData() or "Inter"
+        r.clip_image_path = self.clip_image_path.text().strip()
         r.randomize = self.randomize_cb.isChecked()
         r.seed = (int(self.seed_spin.value())
                   if r.randomize and self.fixed_seed_cb.isChecked() else None)
