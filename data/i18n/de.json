@@ -1899,5 +1899,12 @@
   "Randomisation": "Randomisierung",
   "Randomise patch order": "Feldreihenfolge randomisieren",
   "Seed:": "Startwert:",
-  "Use a fixed seed (reproducible)": "Festen Startwert verwenden (reproduzierbar)"
+  "Use a fixed seed (reproducible)": "Festen Startwert verwenden (reproduzierbar)",
+  "Black": "Schwarz",
+  "Draws a thin rule under each strip's letter label. Coloured cycles the five ChromIQ accent colours so neighbouring strips read apart at a glance; Black is a plain rule. Use the thickness and distance to taste.": "Zeichnet eine dünne Linie unter die Buchstabenbeschriftung jedes Streifens. Farbig durchläuft die fünf ChromIQ-Akzentfarben, sodass sich benachbarte Streifen auf einen Blick unterscheiden; Schwarz ist eine einfache Linie. Dicke und Abstand kannst du nach Geschmack einstellen.",
+  "Off": "Aus",
+  "Underline": "Unterstreichung",
+  "Underline distance:": "Abstand der Unterstreichung:",
+  "Underline thickness:": "Dicke der Unterstreichung:",
+  "Underline:": "Unterstreichung:"
 }

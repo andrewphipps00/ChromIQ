@@ -31,6 +31,16 @@ FONTS = {
 }
 DEFAULT_INDICATOR_FONT = "JetBrains Mono"
 
+# ChromIQ accent palette (ui.styles TAB_COLORS) as RGB, for the coloured
+# under-indicator rule; cycled per strip so adjacent strips read distinctly.
+ACCENT_RGB = (
+    (255, 69, 115),    # magenta
+    (255, 180, 45),    # amber
+    (86, 214, 165),    # green
+    (55, 188, 214),    # cyan
+    (159, 130, 255),   # violet
+)
+
 _SYSTEM_FONT_MAP: dict[str, dict[str, str]] | None = None
 
 
@@ -176,6 +186,9 @@ def render_pages(
     indicator_size_mm: float = 0.0,
     indicator_bold: bool = False,
     indicator_italic: bool = False,
+    underline_mode: str = "off",
+    underline_thickness_mm: float = 0.5,
+    underline_gap_mm: float = 0.5,
     chart_text: str = "",
     chart_text_font: str = "Inter",
     chart_text_size_mm: float = 0.0,
@@ -212,9 +225,12 @@ def render_pages(
 
     pw_px, pl_px = px(place.pwid), px(place.plen)
     sp_px = px(place.pspa)
-    font = _font(px(effective_indicator_size_mm(
-        geom, dpi, indicator_font, indicator_size_mm)), indicator_font,
-        indicator_bold, indicator_italic)
+    ind_px = px(effective_indicator_size_mm(
+        geom, dpi, indicator_font, indicator_size_mm))
+    font = _font(ind_px, indicator_font, indicator_bold, indicator_italic)
+    underline_on = draw_indicators and underline_mode in ("colored", "black")
+    ul_th = max(1, px(underline_thickness_mm or 0.5))
+    ul_gap = px(underline_gap_mm)
 
     images: list[Image.Image] = []
     for page in range(layout.pages):
@@ -239,6 +255,11 @@ def render_pages(
                 except Exception:             # default bitmap font: no anchor
                     _tw = int(draw.textlength(_lbl, font=font))
                     draw.text((_cx - _tw // 2, _y), _lbl, font=font, fill=(0, 0, 0))
+                if underline_on:              # rule under the label, per strip
+                    _ly = _y + ind_px + ul_gap
+                    _col = ((0, 0, 0) if underline_mode == "black"
+                            else ACCENT_RGB[global_strip % len(ACCENT_RGB)])
+                    draw.rectangle([x0, _ly, x0 + pw_px - 1, _ly + ul_th - 1], fill=_col)
             for j, gslot in enumerate(col_slots):
                 y0 = px(place.y_of(j))
                 rgb = rgb_by_slot[gslot]

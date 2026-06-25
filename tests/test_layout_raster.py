@@ -113,3 +113,24 @@ def test_font_supports_bundled():
     assert raster.font_supports("Instrument Serif") == (False, False)
     # An unknown family supports nothing (renderer would fall back to default).
     assert raster.font_supports("No Such Font 123") == (False, False)
+
+
+def test_underline_modes():
+    import numpy as np
+    target = _rgb_target(120)
+    geom = instruments.build("i1")
+    lay = geometry.compute(geom, 210.0, 297.0, 120)
+    kw = dict(seed=7, paper_w_mm=210.0, paper_h_mm=297.0, dpi=150)
+    accents = set(raster.ACCENT_RGB)
+
+    def has_accent(res):
+        arr = np.asarray(res.images[0])
+        return any((arr == np.array(c)).all(axis=2).any() for c in accents)
+
+    # off → no accent rule pixels; coloured → at least one accent present.
+    assert not has_accent(raster.render_pages(target, lay, geom, underline_mode="off", **kw))
+    assert has_accent(raster.render_pages(target, lay, geom,
+                                          underline_mode="colored", **kw))
+    # hiding indicators suppresses the rule even if a mode is set.
+    assert not has_accent(raster.render_pages(
+        target, lay, geom, underline_mode="colored", draw_indicators=False, **kw))

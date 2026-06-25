@@ -1899,5 +1899,12 @@
   "Randomisation": "Randomisation",
   "Randomise patch order": "Randomise patch order",
   "Seed:": "Seed:",
-  "Use a fixed seed (reproducible)": "Use a fixed seed (reproducible)"
+  "Use a fixed seed (reproducible)": "Use a fixed seed (reproducible)",
+  "Black": "Black",
+  "Draws a thin rule under each strip's letter label. Coloured cycles the five ChromIQ accent colours so neighbouring strips read apart at a glance; Black is a plain rule. Use the thickness and distance to taste.": "Draws a thin rule under each strip's letter label. Coloured cycles the five ChromIQ accent colours so neighbouring strips read apart at a glance; Black is a plain rule. Use the thickness and distance to taste.",
+  "Off": "Off",
+  "Underline": "Underline",
+  "Underline distance:": "Underline distance:",
+  "Underline thickness:": "Underline thickness:",
+  "Underline:": "Underline:"
 }

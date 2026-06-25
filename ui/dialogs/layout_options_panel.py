@@ -262,6 +262,23 @@ class LayoutOptionsPanel(QWidget):
         self.ind_italic.toggled.connect(self._emit)
         self._add_font_rows(sig2, 1, tr("Font:"), self.indicator_font,
                             self.indicator_size, self.ind_bold, self.ind_italic)
+        self.underline_mode = NoScrollComboBox(self)
+        for k, lbl in (("off", tr("Off")), ("colored", tr("Coloured")),
+                       ("black", tr("Black"))):
+            self.underline_mode.addItem(lbl, k)
+        self.underline_mode.currentIndexChanged.connect(self._on_underline_changed)
+        self.underline_thickness = small_mm(top=5.0)
+        self.underline_gap = small_mm(top=20.0)
+        add_row(sig2, 3, tr("Underline:"), self.underline_mode,
+                tip=TooltipButton(
+                    tr("Underline"),
+                    tr("Draws a thin rule under each strip's letter label. "
+                       "Coloured cycles the five ChromIQ accent colours so "
+                       "neighbouring strips read apart at a glance; Black is a "
+                       "plain rule. Use the thickness and distance to taste."),
+                    self))
+        add_row(sig2, 4, tr("Underline thickness:"), self.underline_thickness)
+        add_row(sig2, 5, tr("Underline distance:"), self.underline_gap)
         v.addWidget(si)
 
         # ---- Page geometry ----
@@ -580,6 +597,18 @@ class LayoutOptionsPanel(QWidget):
         else:
             self.ind_bold.setEnabled(False)
             self.ind_italic.setEnabled(False)
+        self._sync_underline_enabled()
+        self._emit()
+
+    def _sync_underline_enabled(self) -> None:
+        on = self.show_indicators.isChecked()
+        self.underline_mode.setEnabled(on)
+        active = on and self.underline_mode.currentData() != "off"
+        self.underline_thickness.setEnabled(active)
+        self.underline_gap.setEnabled(active)
+
+    def _on_underline_changed(self, *_a) -> None:
+        self._sync_underline_enabled()
         self._emit()
 
     def _on_paper_changed(self, *_a) -> None:
@@ -668,6 +697,11 @@ class LayoutOptionsPanel(QWidget):
         self.indicator_size.setValue(r.indicator_size_mm)
         self.ind_bold.setChecked(r.indicator_bold)
         self.ind_italic.setChecked(r.indicator_italic)
+        _um = self.underline_mode.findData(r.underline_mode)
+        self.underline_mode.setCurrentIndex(_um if _um >= 0 else 0)
+        self.underline_thickness.setValue(r.underline_thickness_mm)
+        self.underline_gap.setValue(r.underline_gap_mm)
+        self._sync_underline_enabled()
         self.chart_text.setText(r.chart_text)
         _ctf = self.chart_text_font.findData(r.chart_text_font)
         self.chart_text_font.setCurrentIndex(_ctf if _ctf >= 0 else 0)
@@ -717,6 +751,9 @@ class LayoutOptionsPanel(QWidget):
         r.indicator_size_mm = self.indicator_size.value()
         r.indicator_bold = self.ind_bold.isChecked()
         r.indicator_italic = self.ind_italic.isChecked()
+        r.underline_mode = self.underline_mode.currentData() or "off"
+        r.underline_thickness_mm = self.underline_thickness.value()
+        r.underline_gap_mm = self.underline_gap.value()
         r.chart_text = self.chart_text.text()
         r.chart_text_font = self.chart_text_font.currentData() or "Inter"
         r.chart_text_size_mm = self.chart_text_size.value()

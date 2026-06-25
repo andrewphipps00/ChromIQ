@@ -57,6 +57,9 @@ class LayoutRecipe:
     indicator_size_mm: float = 0.0       # 0 = auto (instrument text height)
     indicator_bold: bool = False
     indicator_italic: bool = False
+    underline_mode: str = "off"          # "off" | "colored" | "black" rule
+    underline_thickness_mm: float = 0.5  # under-indicator rule thickness
+    underline_gap_mm: float = 0.5        # gap between the label and the rule
     chart_text: str = ""                 # custom on-sheet text (placeholders ok)
     chart_text_font: str = "Inter"
     chart_text_size_mm: float = 0.0      # 0 = default (~3.2 mm)
@@ -126,6 +129,9 @@ class LayoutRecipe:
             "indicator_size_mm": self.indicator_size_mm,
             "indicator_bold": self.indicator_bold,
             "indicator_italic": self.indicator_italic,
+            "underline_mode": self.underline_mode,
+            "underline_thickness_mm": self.underline_thickness_mm,
+            "underline_gap_mm": self.underline_gap_mm,
             "chart_text": self.chart_text,
             "chart_text_font": self.chart_text_font,
             "chart_text_size_mm": self.chart_text_size_mm,
