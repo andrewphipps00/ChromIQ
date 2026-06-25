@@ -73,6 +73,33 @@ def check(geom: Geom, layout: Layout, *,
     return rep
 
 
+def indicator_width_warning(geom, dpi: int, *, font: str = "JetBrains Mono",
+                            size_mm: float = 0.0, show: bool = True) -> str | None:
+    """Warn if a strip indicator could be wider than its strip.
+
+    Measures the widest realistic two-uppercase-letter label (e.g. "WW") in the
+    chosen font/size and compares it to the strip (patch) width.  A label wider
+    than the strip would overlap neighbouring strips.
+    """
+    if not show:
+        return None
+    from . import raster
+    mm2px = dpi / 25.4
+    eff_mm = raster.effective_indicator_size_mm(geom, dpi, font, size_mm)
+    f = raster._font(max(6, round(eff_mm * mm2px)), font)
+    try:
+        widest_char = max(f.getlength(c) for c in
+                          "ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+    except Exception:
+        return None
+    pair_mm = (widest_char * 2) / mm2px
+    if pair_mm > geom.pwid + 0.1:
+        return (f"strip indicator may be wider than the strip "
+                f"(~{pair_mm:.1f} mm vs {geom.pwid:.1f} mm strip) — a two-letter "
+                f"label could overlap the next strip; reduce the indicator size")
+    return None
+
+
 # --------------------------------------------------------------------------
 # Optional Argyll-backed round-trip (CI / dev)
 # --------------------------------------------------------------------------

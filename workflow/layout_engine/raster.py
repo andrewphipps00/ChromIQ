@@ -31,14 +31,75 @@ FONTS = {
 }
 DEFAULT_INDICATOR_FONT = "JetBrains Mono"
 
+_SYSTEM_FONT_MAP: dict[str, str] | None = None
+
+
+def _system_font_dirs() -> list[Path]:
+    import sys
+    home = Path.home()
+    if sys.platform == "darwin":
+        return [Path("/System/Library/Fonts"), Path("/Library/Fonts"),
+                home / "Library/Fonts"]
+    if sys.platform.startswith("win"):
+        import os
+        return [Path(os.environ.get("WINDIR", "C:/Windows")) / "Fonts"]
+    return [Path("/usr/share/fonts"), Path("/usr/local/share/fonts"),
+            home / ".fonts", home / ".local/share/fonts"]
+
+
+def _system_font_map() -> dict[str, str]:
+    """Lazy family→file map for installed fonts (so any system font can render)."""
+    global _SYSTEM_FONT_MAP
+    if _SYSTEM_FONT_MAP is not None:
+        return _SYSTEM_FONT_MAP
+    out: dict[str, str] = {}
+    for d in _system_font_dirs():
+        if not d.is_dir():
+            continue
+        for f in d.rglob("*"):
+            if f.suffix.lower() not in (".ttf", ".otf", ".ttc"):
+                continue
+            try:
+                fam = ImageFont.truetype(str(f), 12).getname()[0]
+            except Exception:
+                continue
+            out.setdefault(fam, str(f))
+    _SYSTEM_FONT_MAP = out
+    return out
+
+
+def _font_path(family: str) -> str | None:
+    if family in FONTS:
+        return resource_path(FONTS[family])
+    return _system_font_map().get(family)
+
 
 def _font(px: int, family: str = DEFAULT_INDICATOR_FONT
           ) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
-    rel = FONTS.get(family, FONTS[DEFAULT_INDICATOR_FONT])
+    path = _font_path(family) or resource_path(FONTS[DEFAULT_INDICATOR_FONT])
     try:
-        return ImageFont.truetype(resource_path(rel), max(6, px))
+        return ImageFont.truetype(path, max(6, px))
     except Exception:  # pragma: no cover - font load fallback
         return ImageFont.load_default()
+
+
+_UPPER = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+
+def effective_indicator_size_mm(geom, dpi: int, font: str, size_mm: float) -> float:
+    """The indicator font size to use. An explicit *size_mm* is returned as-is;
+    *size_mm* 0 = auto, where the size is chosen so the widest two-letter label
+    fits the strip width (capped at the instrument text height)."""
+    if size_mm:
+        return float(size_mm)
+    mm2px = dpi / 25.4
+    target = geom.txhisl
+    f = _font(max(6, round(target * mm2px)), font)
+    try:
+        widest2 = 2.0 * max(f.getlength(c) for c in _UPPER) / mm2px
+    except Exception:
+        return target
+    return target if widest2 <= geom.pwid else target * geom.pwid / widest2
 
 
 @dataclass(frozen=True)
@@ -92,7 +153,8 @@ def render_pages(
 
     pw_px, pl_px = px(place.pwid), px(place.plen)
     sp_px = px(place.pspa)
-    font = _font(px(indicator_size_mm or geom.txhisl), indicator_font)
+    font = _font(px(effective_indicator_size_mm(
+        geom, dpi, indicator_font, indicator_size_mm)), indicator_font)
 
     images: list[Image.Image] = []
     for page in range(layout.pages):
@@ -109,8 +171,14 @@ def render_pages(
             col_slots = list(range(first + p * steps,
                                    min(last, first + (p + 1) * steps)))
             if draw_indicators:
-                draw.text((x0, px(place.leader_top)),
-                          label_strip(global_strip + 1), font=font, fill=(0, 0, 0))
+                _lbl = label_strip(global_strip + 1)
+                _cx = x0 + pw_px // 2          # centre over the strip
+                _y = px(place.leader_top)
+                try:
+                    draw.text((_cx, _y), _lbl, font=font, fill=(0, 0, 0), anchor="ma")
+                except Exception:             # default bitmap font: no anchor
+                    _tw = int(draw.textlength(_lbl, font=font))
+                    draw.text((_cx - _tw // 2, _y), _lbl, font=font, fill=(0, 0, 0))
             for j, gslot in enumerate(col_slots):
                 y0 = px(place.y_of(j))
                 rgb = rgb_by_slot[gslot]

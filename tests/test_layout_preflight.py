@@ -20,6 +20,16 @@ def test_low_contrast_warns_but_ok():
     assert "2 strip" in rep.warnings[0]
 
 
+def test_indicator_width_warning():
+    geom = instruments.build("i1")
+    # auto size fits the strip → no warning
+    assert preflight.indicator_width_warning(geom, 300, size_mm=0.0) is None
+    # an explicit oversized indicator overflows the strip → warning
+    assert preflight.indicator_width_warning(geom, 300, size_mm=12.0) is not None
+    # hidden indicators never warn
+    assert preflight.indicator_width_warning(geom, 300, size_mm=12.0, show=False) is None
+
+
 def test_sub_minimum_patch_errors():
     # heavy down-scale pushes i1 patches below the 6 mm floor (plen 10*0.5=5)
     geom = instruments.build("i1", pscale=0.5)

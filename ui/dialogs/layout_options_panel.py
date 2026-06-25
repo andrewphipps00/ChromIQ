@@ -196,13 +196,16 @@ class LayoutOptionsPanel(QWidget):
         self.show_indicators.toggled.connect(self._on_show_indicators)
         sig2.addWidget(self.show_indicators, 0, 1)
         self.indicator_font = NoScrollComboBox(self)
-        for _fam in ("JetBrains Mono", "Inter", "Instrument Serif"):
-            self.indicator_font.addItem(_fam, _fam)
+        self._populate_font_combo(self.indicator_font)
         self.indicator_font.currentIndexChanged.connect(self._emit)
         self.indicator_size = small_mm(top=20.0)
         self.indicator_size.setSpecialValueText(tr("auto"))
-        add_row(sig2, 1, tr("Font:"), self.indicator_font)
-        add_row(sig2, 2, tr("Size:"), self.indicator_size)
+        _fs = QHBoxLayout(); _fs.setContentsMargins(0, 0, 0, 0); _fs.setSpacing(6)
+        _fs.addWidget(self.indicator_font, 1)
+        _fs.addWidget(QLabel(tr("Size:"), self))
+        _fs.addWidget(self.indicator_size)
+        _fsw = QWidget(self); _fsw.setLayout(_fs)
+        add_row(sig2, 1, tr("Font:"), _fsw)
         v.addWidget(si)
 
         # ---- Page geometry ----
@@ -343,6 +346,23 @@ class LayoutOptionsPanel(QWidget):
         self.mode.setCurrentIndex(j if j >= 0 else 0)
         self._loading = False
         self._on_paper_changed()
+
+    @staticmethod
+    def _populate_font_combo(combo) -> None:
+        """Bundled fonts on top, then a separator, then all installed families."""
+        for fam in ("JetBrains Mono", "Inter", "Instrument Serif"):
+            combo.addItem(fam, fam)
+        combo.insertSeparator(combo.count())
+        try:
+            from PyQt6.QtGui import QFontDatabase
+            for fam in QFontDatabase.families():
+                combo.addItem(fam, fam)
+        except Exception:
+            pass
+        from PyQt6.QtWidgets import QComboBox
+        combo.setSizeAdjustPolicy(
+            QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        combo.setMinimumContentsLength(12)
 
     def _on_show_indicators(self, on: bool) -> None:
         self.indicator_font.setEnabled(on)

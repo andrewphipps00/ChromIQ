@@ -1311,6 +1311,11 @@ class SettingsDialog(QDialog):
             if r.max_strip_mm and r.max_strip_mm > usable:
                 msgs.append((tr("max strip length exceeds the usable page "
                                 "length (~{u:.0f} mm)").format(u=usable), False))
+            iw = preflight.indicator_width_warning(
+                geom, r.dpi, font=r.indicator_font, size_mm=r.indicator_size_mm,
+                show=r.show_strip_indicators)
+            if iw:
+                msgs.append((iw, False))
             html = ("<span style='color:#1a8f3c;font-weight:600'>"
                     + tr("≈ {n} patches per sheet").format(n=cap) + "</span>")
             for txt, is_err in msgs:
