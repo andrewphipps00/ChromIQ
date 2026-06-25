@@ -47,6 +47,8 @@ class LayoutOptionsPanel(QWidget):
         self._loading = False
         self._with_calibration = with_calibration
         self._with_selectors = with_selectors
+        self._inst = "i1"           # last-known instrument / clip state, for
+        self._clip = True           # clip-border-width row visibility
         v = QVBoxLayout(self)
         v.setContentsMargins(0, 0, 0, 0)
         v.setSpacing(10)
@@ -105,6 +107,7 @@ class LayoutOptionsPanel(QWidget):
             self.instr.currentIndexChanged.connect(self._on_instr_changed)
             self.paper.currentIndexChanged.connect(self._on_paper_changed)
             self.mode.currentIndexChanged.connect(self._emit)
+            self.mode.currentIndexChanged.connect(self._update_clip_visibility)
             self._on_instr_changed()
 
         def mm(special_auto: bool = False, top: float = 300.0) -> NoScrollDoubleSpinBox:
@@ -232,15 +235,31 @@ class LayoutOptionsPanel(QWidget):
         self.offy = small_mm(top=300.0)
         self.strip_pat = QLineEdit(self); self.strip_pat.textChanged.connect(self._emit)
         self.patch_pat = QLineEdit(self); self.patch_pat.textChanged.connect(self._emit)
+        # Clip-border width (i1/p3, clip mode only) — reserved left zone for the
+        # scanner's paper clip; printtarg hard-codes 26 mm, we make it adjustable.
+        self.clip_width = small_mm(top=100.0)
+        self.clip_width.setMinimum(10.0)
+        self.clip_width_label = QLabel(tr("Clip border width:"), self)
+        self.clip_width_tip = TooltipButton(
+            tr("Clip border width"),
+            tr("Width of the blank zone reserved down the left edge for the "
+               "clip that holds the sheet against the scanner bed. Make it wider "
+               "if your clip covers more of the page; the patches start to its "
+               "right. Only applies to the i1Pro / i1Pro 3 in clip-border mode "
+               "(printtarg fixes this at 26 mm)."), self)
         add_row(gg, 0, tr("Margins (mm):"), _margins_w)
-        add_row(gg, 1, tr("Resolution:"), self.dpi)
-        add_row(gg, 2, tr("Max strip length:"), self.max_strip)
-        add_row(gg, 3, tr("Chart offset (mm):"),
+        gg.addWidget(self.clip_width_label, 1, 0, _Qt.AlignmentFlag.AlignRight)
+        gg.addWidget(self.clip_width, 1, 1)
+        gg.addWidget(self.clip_width_tip, 1, 2)
+        add_row(gg, 2, tr("Resolution:"), self.dpi)
+        add_row(gg, 3, tr("Max strip length:"), self.max_strip)
+        add_row(gg, 4, tr("Chart offset (mm):"),
                 cell(self.offx, QLabel("×", self), self.offy))
-        add_row(gg, 4, tr("Strip pattern:"), self.strip_pat)
-        add_row(gg, 5, tr("Patch pattern:"), self.patch_pat)
-        gg.addWidget(self.nolimit, 6, 1)
+        add_row(gg, 5, tr("Strip pattern:"), self.strip_pat)
+        add_row(gg, 6, tr("Patch pattern:"), self.patch_pat)
+        gg.addWidget(self.nolimit, 7, 1)
         v.addWidget(pg)
+        self._update_clip_visibility()
 
         # ---- Output ----
         og = QGroupBox(tr("Output"), self)
@@ -375,6 +394,18 @@ class LayoutOptionsPanel(QWidget):
         self.mode.setCurrentIndex(j if j >= 0 else 0)
         self._loading = False
         self._on_paper_changed()
+
+    def _update_clip_visibility(self, *_a) -> None:
+        """Show the clip-border width row only for i1/p3 in clip-border mode."""
+        if not hasattr(self, "clip_width"):
+            return
+        if self.instr is not None:
+            inst = self.instr.currentData() or "i1"
+            clip = inst in ("i1", "p3") and (self.mode.currentData() == "clip")
+        else:
+            clip = self._clip and self._inst in ("i1", "p3")
+        for w in (self.clip_width_label, self.clip_width, self.clip_width_tip):
+            w.setVisible(clip)
 
     def _add_font_rows(self, grid, r, label, combo, size, bold, italic) -> None:
         """Font on row *r*; Size + Bold + Italic on row *r+1*."""
@@ -528,6 +559,9 @@ class LayoutOptionsPanel(QWidget):
         self.stamp_command.setChecked(r.stamp_command)
         ci = self.compression.findData(r.compression)
         self.compression.setCurrentIndex(ci if ci >= 0 else 0)
+        self.clip_width.setValue(r.clip_border_width_mm or 26.0)
+        self._inst, self._clip = r.instrument, r.clip_border
+        self._update_clip_visibility()
         self._loading = False
 
     def apply_to_recipe(self, r: LayoutRecipe) -> LayoutRecipe:
@@ -566,4 +600,5 @@ class LayoutOptionsPanel(QWidget):
         r.chart_text_italic = self.ct_italic.isChecked()
         r.stamp_command = self.stamp_command.isChecked()
         r.compression = self.compression.currentData() or "lzw"
+        r.clip_border_width_mm = self.clip_width.value()
         return r

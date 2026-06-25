@@ -119,6 +119,7 @@ def build_chart(
     project: str = "",
     nolpcbord: bool = False,
     nolimit: bool = False,
+    clip_border_width: float = 26.0,
     strip_pattern: str = permutation.DEFAULT_STRIP_PATTERN,
     patch_pattern: str = permutation.DEFAULT_PATCH_PATTERN,
     cal_path: str | Path | None = None,
@@ -149,6 +150,7 @@ def build_chart(
         patch_h=patch_h, spacer_width=spacer_width, inter_patch=inter_patch,
         max_strip=max_strip, strip_indicator_gap=strip_indicator_gap,
         offset_x=offset_x, offset_y=offset_y, nolpcbord=nolpcbord, nolimit=nolimit,
+        clip_border_width=clip_border_width,
     )
     w_mm, h_mm = papers.dimensions_mm(paper)
     layout = geometry.compute(geom, w_mm, h_mm, len(target.patches))

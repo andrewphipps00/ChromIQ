@@ -1880,5 +1880,8 @@
   "Stamp layout summary on the sheet": "Stamp layout summary on the sheet",
   "e.g. {project} — {date}": "e.g. {project} — {date}",
   "Bold": "Fett",
-  "Italic": "Kursiv"
+  "Italic": "Kursiv",
+  "Clip border width": "Breite des Klemmrands",
+  "Clip border width:": "Breite des Klemmrands:",
+  "Width of the blank zone reserved down the left edge for the clip that holds the sheet against the scanner bed. Make it wider if your clip covers more of the page; the patches start to its right. Only applies to the i1Pro / i1Pro 3 in clip-border mode (printtarg fixes this at 26 mm).": "Breite des freien Bereichs am linken Rand für die Klemme, die das Blatt auf der Scannerfläche hält. Mach ihn breiter, wenn deine Klemme mehr von der Seite verdeckt; die Felder beginnen rechts davon. Gilt nur für i1Pro / i1Pro 3 im Klemmrand-Modus (printtarg legt das fest auf 26 mm)."
 }

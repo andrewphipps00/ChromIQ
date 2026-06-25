@@ -1880,5 +1880,8 @@
   "Stamp layout summary on the sheet": "Stamp layout summary on the sheet",
   "e.g. {project} — {date}": "e.g. {project} — {date}",
   "Bold": "Gras",
-  "Italic": "Italique"
+  "Italic": "Italique",
+  "Clip border width": "Clip border width",
+  "Clip border width:": "Clip border width:",
+  "Width of the blank zone reserved down the left edge for the clip that holds the sheet against the scanner bed. Make it wider if your clip covers more of the page; the patches start to its right. Only applies to the i1Pro / i1Pro 3 in clip-border mode (printtarg fixes this at 26 mm).": "Width of the blank zone reserved down the left edge for the clip that holds the sheet against the scanner bed. Make it wider if your clip covers more of the page; the patches start to its right. Only applies to the i1Pro / i1Pro 3 in clip-border mode (printtarg fixes this at 26 mm)."
 }

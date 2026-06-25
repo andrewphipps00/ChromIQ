@@ -64,6 +64,7 @@ class LayoutRecipe:
     chart_text_italic: bool = False
     stamp_command: bool = False          # stamp the layout summary on the sheet
     clip_border: bool = True       # i1/p3 only — left paper clip border present
+    clip_border_width_mm: float = 26.0   # i1/p3 reserved clip zone width (mm)
     nolimit: bool = False
     strip_pattern: str = permutation.DEFAULT_STRIP_PATTERN
     patch_pattern: str = permutation.DEFAULT_PATCH_PATTERN
@@ -132,6 +133,7 @@ class LayoutRecipe:
             "chart_text_italic": self.chart_text_italic,
             "stamp_command": self.stamp_command,
             "nolpcbord": (not self.clip_border) if self.instrument in ("i1", "p3") else False,
+            "clip_border_width": self.clip_border_width_mm or 26.0,
             "nolimit": self.nolimit,
             "strip_pattern": self.strip_pattern,
             "patch_pattern": self.patch_pattern,

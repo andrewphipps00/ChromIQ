@@ -107,6 +107,7 @@ def build(
     offset_y: float = 0.0,
     nolpcbord: bool = False,
     nolimit: bool = False,
+    clip_border_width: float = 26.0,
 ) -> Geom:
     """Resolve :class:`Geom`, applying ChromIQ extensions over the base geometry.
 
@@ -119,7 +120,8 @@ def build(
     """
     geom = _build_base(
         key, pscale=pscale, sscale=sscale, hflag=hflag, density=density,
-        spacer_on=spacer_on, border=border, nolpcbord=nolpcbord, nolimit=nolimit)
+        spacer_on=spacer_on, border=border, nolpcbord=nolpcbord, nolimit=nolimit,
+        clip_border_width=clip_border_width)
     mt, mr, mb, ml = margins if margins else (geom.border,) * 4
     plen, pwid, rrsp = geom.plen, geom.pwid, geom.rrsp
     if patch_h:
@@ -152,6 +154,7 @@ def _build_base(
     border: float = 6.0,
     nolpcbord: bool = False,
     nolimit: bool = False,
+    clip_border_width: float = 26.0,
 ) -> Geom:
     """Resolve :class:`Geom` for *key* with the given options.
 
@@ -178,7 +181,8 @@ def _build_base(
 
     # ---- i1Pro family (5 mm and 8 mm apertures) -------------------------
     if key in ("i1", "p3"):
-        lbord = (26.0 - border) if (not nolpcbord and border < 26.0) else 0.0
+        clip_w = clip_border_width if clip_border_width else 26.0
+        lbord = max(0.0, clip_w - border) if not nolpcbord else 0.0
         if key == "i1":                       # 5 mm aperture
             lcar, plen_b, pspa_b, tspa = 10.0, 10.0, 1.0, 10.0
             pwid_b = rrsp_b = 8.0

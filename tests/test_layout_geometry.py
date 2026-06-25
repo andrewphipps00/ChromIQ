@@ -86,3 +86,18 @@ def test_colormunki_density_levels_increase_capacity():
     assert instruments.build("CM", density=2).rrsp == 13.7
     # hflag back-compat still maps to the rig (density 2)
     assert instruments.build("CM", hflag=True).rrsp == 13.7
+
+
+def test_clip_border_width_drives_lbord():
+    # Default reserved clip zone is 26 mm; lbord = zone − margin.
+    assert instruments.build("i1", border=6.0).lbord == pytest.approx(20.0)
+    # Widening the zone widens the extra clip strip.
+    assert instruments.build("i1", border=6.0, clip_border_width=40.0).lbord \
+        == pytest.approx(34.0)
+    # Margin already past the zone ⇒ no extra strip (never negative).
+    assert instruments.build("i1", border=30.0, clip_border_width=26.0).lbord == 0.0
+    # No clip border (-L) ⇒ no reserved zone regardless of width.
+    assert instruments.build("i1", nolpcbord=True, clip_border_width=40.0).lbord == 0.0
+    # p3 honours it too; non-clip instruments are unaffected (lbord stays 0).
+    assert instruments.build("p3", clip_border_width=40.0).lbord == pytest.approx(34.0)
+    assert instruments.build("CM", clip_border_width=40.0).lbord == 0.0
