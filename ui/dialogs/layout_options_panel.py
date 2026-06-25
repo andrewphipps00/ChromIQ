@@ -65,6 +65,28 @@ class LayoutOptionsPanel(QWidget):
             sel.addWidget(QLabel(tr("Mode:"), self), 1, 0)
             self.mode = NoScrollComboBox(self)
             sel.addWidget(self.mode, 1, 1)
+            sel.addWidget(QLabel(tr("Pages:"), self), 1, 2)
+            self.pages = NoScrollSpinBox(self)
+            self.pages.setRange(1, 20)
+            self.pages.setValue(1)
+            self.pages.setMaximumWidth(70)
+            self.pages.valueChanged.connect(self._emit)
+            sel.addWidget(self.pages, 1, 3)
+            # Custom paper W×H (shown only when Paper = "Custom…").
+            self._custom_paper_w = QWidget(self)
+            _cpl = QHBoxLayout(self._custom_paper_w)
+            _cpl.setContentsMargins(0, 0, 0, 0); _cpl.setSpacing(6)
+            _cpl.addWidget(QLabel(tr("Custom size (mm):"), self))
+            self.custom_w = NoScrollDoubleSpinBox(self)
+            self.custom_h = NoScrollDoubleSpinBox(self)
+            for _cs in (self.custom_w, self.custom_h):
+                _cs.setRange(20, 2000); _cs.setDecimals(0); _cs.setMaximumWidth(80)
+                _cs.valueChanged.connect(self._emit)
+            self.custom_w.setValue(210); self.custom_h.setValue(297)
+            _cpl.addWidget(self.custom_w); _cpl.addWidget(QLabel("×", self))
+            _cpl.addWidget(self.custom_h); _cpl.addStretch()
+            sel.addWidget(self._custom_paper_w, 2, 0, 1, 4)
+            self._custom_paper_w.setVisible(False)
             sel.setColumnStretch(1, 1)
             sel.setColumnStretch(3, 1)
             v.addLayout(sel)
@@ -76,7 +98,7 @@ class LayoutOptionsPanel(QWidget):
                     QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
                 _c.setMinimumContentsLength(10)
             self.instr.currentIndexChanged.connect(self._on_instr_changed)
-            self.paper.currentIndexChanged.connect(self._emit)
+            self.paper.currentIndexChanged.connect(self._on_paper_changed)
             self.mode.currentIndexChanged.connect(self._emit)
             self._on_instr_changed()
 
@@ -86,7 +108,7 @@ class LayoutOptionsPanel(QWidget):
             sb.setDecimals(1)
             sb.setSingleStep(0.5)
             sb.setSuffix(" mm")
-            sb.setMaximumWidth(96)
+            sb.setMinimumWidth(96)          # room for "300,0 mm" + buttons
             if special_auto:
                 sb.setSpecialValueText(tr("auto"))
             sb.valueChanged.connect(self._emit)
@@ -97,78 +119,95 @@ class LayoutOptionsPanel(QWidget):
             sb.setRange(0.5, 3.0)
             sb.setDecimals(3)
             sb.setSingleStep(0.05)
-            sb.setMaximumWidth(96)
+            sb.setMinimumWidth(96)
             sb.valueChanged.connect(self._emit)
             return sb
 
-        # ---- Patches & spacers ----
+        from PyQt6.QtCore import Qt as _Qt
+
+        def add_row(grid, r, label, control, tip=None):
+            """label | control (control fills the column → no clipping)."""
+            grid.addWidget(QLabel(label, self), r, 0, _Qt.AlignmentFlag.AlignRight)
+            grid.addWidget(control, r, 1)
+            if tip is not None:
+                grid.addWidget(tip, r, 2)
+            grid.setColumnStretch(1, 1)
+
+        def cell(*widgets):
+            """A compact left-aligned row of small widgets in one grid cell."""
+            box = QHBoxLayout(); box.setContentsMargins(0, 0, 0, 0); box.setSpacing(6)
+            for w in widgets:
+                box.addWidget(w)
+            box.addStretch()
+            wrap = QWidget(self); wrap.setLayout(box)
+            return wrap
+
+        from PyQt6.QtWidgets import QLineEdit
+
+        def small_mm(top: float = 60.0) -> NoScrollDoubleSpinBox:
+            sb = NoScrollDoubleSpinBox(self)
+            sb.setRange(0, top); sb.setDecimals(1); sb.setSingleStep(0.5)
+            sb.setMaximumWidth(58)            # compact (suffix lives in the label)
+            sb.valueChanged.connect(self._emit)
+            return sb
+
+        # ---- Patches & spacers (2-column: label | control) ----
         ps = QGroupBox(tr("Patches && spacers"), self)
         g = QGridLayout(ps)
-        g.addWidget(QLabel(tr("Patch scale:"), self), 0, 0)
-        self.pscale = scale(); g.addWidget(self.pscale, 0, 1)
-        g.addWidget(QLabel(tr("Spacer scale:"), self), 0, 2)
-        self.sscale = scale(); g.addWidget(self.sscale, 0, 3)
-        g.addWidget(QLabel(tr("Spacers:"), self), 1, 0)
+        self.pscale = scale()
+        self.sscale = scale()
         self.spacer_mode = NoScrollComboBox(self)
         for k, lbl in (("colored", tr("Coloured")), ("bw", tr("Black & white")),
                        ("none", tr("None"))):
             self.spacer_mode.addItem(lbl, k)
         self.spacer_mode.currentIndexChanged.connect(self._emit)
-        g.addWidget(self.spacer_mode, 1, 1)
-        g.addWidget(QLabel(tr("Spacer width:"), self), 1, 2)
-        self.spacer_width = mm(special_auto=True); g.addWidget(self.spacer_width, 1, 3)
-        g.addWidget(QLabel(tr("Patch size:"), self), 2, 0)
-        self.patch_x = mm(special_auto=True, top=60); g.addWidget(self.patch_x, 2, 1)
-        g.addWidget(QLabel(tr("× height:"), self), 2, 2)
-        self.patch_y = mm(special_auto=True, top=60); g.addWidget(self.patch_y, 2, 3)
-        g.addWidget(QLabel(tr("Inter-patch gap:"), self), 3, 0)
-        self.inter_patch = mm(); g.addWidget(self.inter_patch, 3, 1)
-        g.addWidget(QLabel(tr("Strip-indicator gap:"), self), 3, 2)
-        self.sig = mm(); g.addWidget(self.sig, 3, 3)
-        g.addWidget(TooltipButton(
-            tr("Patch size"),
-            tr("Width × height of each patch in millimetres. Leave at “auto” (0) "
-               "to use the instrument's recommended size (scaled by Patch scale). "
-               "A value below ~6 mm can make the chart hard to read."), self), 2, 4)
+        self.spacer_width = mm(special_auto=True)
+        self.patch_x = small_mm(); self.patch_x.setSpecialValueText(tr("auto"))
+        self.patch_y = small_mm(); self.patch_y.setSpecialValueText(tr("auto"))
+        self.inter_patch = mm()
+        self.sig = mm()
+        add_row(g, 0, tr("Patch scale:"), self.pscale)
+        add_row(g, 1, tr("Spacer scale:"), self.sscale)
+        add_row(g, 2, tr("Spacers:"), self.spacer_mode)
+        add_row(g, 3, tr("Spacer width:"), self.spacer_width)
+        add_row(g, 4, tr("Patch size (mm):"),
+                cell(self.patch_x, QLabel("×", self), self.patch_y),
+                tip=TooltipButton(
+                    tr("Patch size"),
+                    tr("Width × height of each patch in millimetres. Leave at "
+                       "“auto” (0) to use the instrument's recommended size "
+                       "(scaled by Patch scale). A value below ~6 mm can make the "
+                       "chart hard to read."), self))
+        add_row(g, 5, tr("Inter-patch gap:"), self.inter_patch)
+        add_row(g, 6, tr("Strip-indicator gap:"), self.sig)
         v.addWidget(ps)
 
         # ---- Page geometry ----
         pg = QGroupBox(tr("Page geometry"), self)
         gg = QGridLayout(pg)
-        gg.addWidget(QLabel(tr("Margins:"), self), 0, 0)
-        mrow = QHBoxLayout()
         self.margins: dict[str, NoScrollDoubleSpinBox] = {}
+        mwidgets = []
         for k, lbl in (("t", tr("T")), ("r", tr("R")), ("b", tr("B")), ("l", tr("L"))):
-            mrow.addWidget(QLabel(lbl, self))
-            sb = NoScrollDoubleSpinBox(self)
-            sb.setRange(0, 60); sb.setDecimals(1); sb.setSingleStep(0.5)
-            sb.setSuffix(" mm"); sb.setMaximumWidth(64)
-            sb.valueChanged.connect(self._emit)
-            self.margins[k] = sb
-            mrow.addWidget(sb)
-        mrow.addStretch()
-        mw = QWidget(self); mw.setLayout(mrow)
-        gg.addWidget(mw, 0, 1, 1, 4)
-        gg.addWidget(QLabel(tr("Resolution:"), self), 1, 0)
+            mwidgets.append(QLabel(lbl, self))
+            self.margins[k] = small_mm(top=60.0)
+            mwidgets.append(self.margins[k])
         self.dpi = NoScrollSpinBox(self); self.dpi.setRange(72, 1200)
         self.dpi.setSuffix(" dpi"); self.dpi.valueChanged.connect(self._emit)
-        gg.addWidget(self.dpi, 1, 1)
         self.nolimit = QCheckBox(tr("Don't cap strip length"), self)
         self.nolimit.toggled.connect(self._emit)
-        gg.addWidget(self.nolimit, 1, 2, 1, 2)
-        gg.addWidget(QLabel(tr("Max strip length:"), self), 2, 0)
-        self.max_strip = mm(special_auto=True); gg.addWidget(self.max_strip, 2, 1)
-        gg.addWidget(QLabel(tr("Chart offset:"), self), 2, 2)
-        self.offx = mm(); gg.addWidget(self.offx, 2, 3)
-        gg.addWidget(QLabel(tr("Strip pattern:"), self), 3, 0)
-        from PyQt6.QtWidgets import QLineEdit
+        self.max_strip = mm(special_auto=True)
+        self.offx = small_mm(top=300.0)
+        self.offy = small_mm(top=300.0)
         self.strip_pat = QLineEdit(self); self.strip_pat.textChanged.connect(self._emit)
-        gg.addWidget(self.strip_pat, 3, 1)
-        gg.addWidget(QLabel(tr("Patch pattern:"), self), 3, 2)
         self.patch_pat = QLineEdit(self); self.patch_pat.textChanged.connect(self._emit)
-        gg.addWidget(self.patch_pat, 3, 3)
-        gg.addWidget(QLabel(tr("× vertical:"), self), 4, 2)
-        self.offy = mm(); gg.addWidget(self.offy, 4, 3)
+        add_row(gg, 0, tr("Margins (mm):"), cell(*mwidgets))
+        add_row(gg, 1, tr("Resolution:"), self.dpi)
+        add_row(gg, 2, tr("Max strip length:"), self.max_strip)
+        add_row(gg, 3, tr("Chart offset (mm):"),
+                cell(self.offx, QLabel("×", self), self.offy))
+        add_row(gg, 4, tr("Strip pattern:"), self.strip_pat)
+        add_row(gg, 5, tr("Patch pattern:"), self.patch_pat)
+        gg.addWidget(self.nolimit, 6, 1)
         v.addWidget(pg)
 
         # ---- Output ----
@@ -176,13 +215,12 @@ class LayoutOptionsPanel(QWidget):
         ogg = QGridLayout(og)
         self.bit16 = QCheckBox(tr("16-bit TIFF"), self)
         self.bit16.toggled.connect(self._emit)
-        ogg.addWidget(self.bit16, 0, 0, 1, 2)
-        ogg.addWidget(QLabel(tr("Compression:"), self), 0, 2)
         self.compression = NoScrollComboBox(self)
         for k, lbl in (("lzw", "LZW"), ("zlib", "Zlib"), ("none", tr("None"))):
             self.compression.addItem(lbl, k)
         self.compression.currentIndexChanged.connect(self._emit)
-        ogg.addWidget(self.compression, 0, 3)
+        ogg.addWidget(self.bit16, 0, 1)
+        add_row(ogg, 1, tr("Compression:"), self.compression)
         v.addWidget(og)
 
         # ---- Calibration (per-chart; engine -K/-I) ----
@@ -203,7 +241,12 @@ class LayoutOptionsPanel(QWidget):
             self.cal_path_edit.setPlaceholderText(tr("no .cal file selected"))
             self.cal_path_edit.textChanged.connect(self._emit)
             cgg.addWidget(self.cal_path_edit, 1, 0, 1, 3)
-            browse = QPushButton(tr("Browse…"), self)
+            from ui.widgets import load_magenta_folder_icon
+            browse = QPushButton(self)
+            browse.setIcon(load_magenta_folder_icon())
+            browse.setToolTip(tr("Browse for a .cal file"))
+            browse.setFlat(True)
+            browse.setFixedSize(30, 26)        # compact, icon-only
             browse.clicked.connect(self._browse_cal)
             cgg.addWidget(browse, 1, 3)
             cgg.addWidget(TooltipButton(
@@ -214,6 +257,12 @@ class LayoutOptionsPanel(QWidget):
                    "the patches (use this if your printer/RIP already linearises). "
                    "Leave “None” if you don't calibrate."), self), 0, 2)
             v.addWidget(cg)
+
+        # Match the compact input styling used throughout the Manual module
+        # (app QSS targets #compact_input for the slim look + white bg).
+        from PyQt6.QtWidgets import QAbstractSpinBox, QComboBox, QLineEdit
+        for w in self.findChildren((QAbstractSpinBox, QComboBox, QLineEdit)):
+            w.setObjectName("compact_input")
 
     def _browse_cal(self) -> None:
         from PyQt6.QtWidgets import QFileDialog
@@ -252,6 +301,7 @@ class LayoutOptionsPanel(QWidget):
         self.paper.clear()
         for code, label, _dims in papers.list_papers(inst):
             self.paper.addItem(label, code)
+        self.paper.addItem(tr("Custom…"), "__custom__")
         i = self.paper.findData(prev_paper)
         self.paper.setCurrentIndex(i if i >= 0 else 0)
         prev_mode = self.mode.currentData()
@@ -261,15 +311,29 @@ class LayoutOptionsPanel(QWidget):
         j = self.mode.findData(prev_mode)
         self.mode.setCurrentIndex(j if j >= 0 else 0)
         self._loading = False
+        self._on_paper_changed()
+
+    def _on_paper_changed(self, *_a) -> None:
+        if self.paper is not None:
+            self._custom_paper_w.setVisible(self.paper.currentData() == "__custom__")
         self._emit()
 
     def selection(self) -> tuple[str, str, str]:
         """(instrument, paper, mode) from the selectors (when present)."""
         if self.instr is None:
             return "i1", "A4", "default"
-        return (self.instr.currentData() or "i1",
-                self.paper.currentData() or "A4",
+        paper = self.paper.currentData() or "A4"
+        if paper == "__custom__":
+            paper = f"{int(self.custom_w.value())}x{int(self.custom_h.value())}"
+        return (self.instr.currentData() or "i1", paper,
                 self.mode.currentData() or "default")
+
+    def get_pages(self) -> int:
+        return int(self.pages.value()) if self.pages is not None else 1
+
+    def set_pages(self, n: int) -> None:
+        if self.pages is not None:
+            self.pages.setValue(max(1, int(n)))
 
     def get_recipe(self, base: LayoutRecipe | None = None) -> LayoutRecipe:
         """Build a complete recipe from the selectors (if any) + the controls."""
@@ -295,6 +359,15 @@ class LayoutOptionsPanel(QWidget):
             pi = self.paper.findData(r.paper)
             if pi >= 0:
                 self.paper.setCurrentIndex(pi)
+            else:
+                from workflow.layout_engine import papers
+                dims = papers.parse_custom(r.paper)
+                ci = self.paper.findData("__custom__")
+                if dims and ci >= 0:
+                    self.paper.setCurrentIndex(ci)
+                    self.custom_w.setValue(dims[0])
+                    self.custom_h.setValue(dims[1])
+            self._custom_paper_w.setVisible(self.paper.currentData() == "__custom__")
             mi = self.mode.findData(r.mode())
             if mi >= 0:
                 self.mode.setCurrentIndex(mi)

@@ -2155,11 +2155,15 @@ class TabChart(QWidget):
         # ChromIQ layout panel (engine on): the full per-chart layout mirror,
         # replacing the printtarg controls. Hidden when the engine is off.
         from ui.dialogs.layout_options_panel import LayoutOptionsPanel
+        self._manual_layout_grp = QGroupBox(tr("ChromIQ layout"), inner)
+        _llg = QVBoxLayout(self._manual_layout_grp)
+        _llg.setContentsMargins(8, 8, 8, 8)
         self._manual_layout_panel = LayoutOptionsPanel(
-            inner, with_selectors=True, with_calibration=True)
+            self._manual_layout_grp, with_selectors=True, with_calibration=True)
         self._manual_layout_panel.changed.connect(self._refresh_manual_command_preview)
-        inner_layout.addWidget(self._manual_layout_panel)
-        self._manual_layout_panel.setVisible(False)
+        _llg.addWidget(self._manual_layout_panel)
+        inner_layout.addWidget(self._manual_layout_grp)
+        self._manual_layout_grp.setVisible(False)
         self._manual_panel_inited = False
 
         # Layout-engine preset bar (issue #93): shown only when the ChromIQ
@@ -2429,10 +2433,10 @@ class TabChart(QWidget):
                     + f"\n{_layout_cmd()}"
                 )
         # Engine on: the printtarg layout group is replaced by the layout panel.
-        if getattr(self, "_manual_layout_panel", None) is not None:
+        if getattr(self, "_manual_layout_grp", None) is not None:
             if use_engine and not self._manual_panel_inited:
                 self._init_manual_layout_panel()
-            self._manual_layout_panel.setVisible(use_engine)
+            self._manual_layout_grp.setVisible(use_engine)
         if getattr(self, "_manual_printtarg_grp", None) is not None:
             self._manual_printtarg_grp.setVisible(not use_engine)
         status = self._layout_preset_status() if use_engine else None
@@ -6809,6 +6813,7 @@ class TabChart(QWidget):
             p.instrument = recipe.instrument
             p.paper = recipe.paper
             p.tiff_dpi = recipe.dpi
+            p.pages = self._manual_layout_panel.get_pages()
             p.layout_recipe = recipe
             cal_path, apply_cal = self._manual_layout_panel.cal_settings()
             p.engine_cal_path = cal_path
