@@ -2439,6 +2439,17 @@ class TabChart(QWidget):
             self._manual_layout_grp.setVisible(use_engine)
         if getattr(self, "_manual_printtarg_grp", None) is not None:
             self._manual_printtarg_grp.setVisible(not use_engine)
+        # The command stamp covers targen + the layout engine when it's active
+        # (no printtarg). Relabel it, and default it off the first time the
+        # engine becomes active — the stamp is most useful for the printtarg
+        # command line, less so for the engine.
+        if getattr(self, "_manual_stamp_cmd_check", None) is not None:
+            self._manual_stamp_cmd_check.setText(
+                tr("Stamp targen and layout-engine info on the chart") if use_engine
+                else tr("Stamp targen and printtarg commands on the chart"))
+            if getattr(self, "_stamp_engine_state", None) != use_engine:
+                self._stamp_engine_state = use_engine
+                self._manual_stamp_cmd_check.setChecked(not use_engine)
         status = self._layout_preset_status() if use_engine else None
         if status is not None:
             summary, modified = status

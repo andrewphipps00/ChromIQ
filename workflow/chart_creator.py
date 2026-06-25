@@ -1121,9 +1121,14 @@ class ChartCreator:
                 cmd_lines.append("targen " + " ".join(
                     _shorten_argv_for_stamp(self._build_targen_args(params, patch_count))
                 ))
-            cmd_lines.append("printtarg " + " ".join(
-                _shorten_argv_for_stamp(self._build_printtarg_args(params))
-            ))
+            if self._should_use_engine(params):
+                # The ChromIQ layout engine replaces printtarg, so stamping a
+                # printtarg command would be a lie — name the engine instead.
+                cmd_lines.append("ChromIQ layout engine")
+            else:
+                cmd_lines.append("printtarg " + " ".join(
+                    _shorten_argv_for_stamp(self._build_printtarg_args(params))
+                ))
             cmd_lines.append(f"ChromIQ {APP_VERSION}")
 
         if not chromiq_clip:
