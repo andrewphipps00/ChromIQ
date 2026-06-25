@@ -3900,12 +3900,24 @@ class TabChart(QWidget):
                 self._manual_td_check.setChecked(td_on)
             finally:
                 self._suppress_td_override = False
-        # Restore the engine layout recipe if the preset carries one (#93).
+        # Auto-match the engine toggle to what the preset actually contains, so
+        # the shown controls reflect the preset (engine panel vs printtarg). A
+        # preset carries "layout_recipe" iff it was saved with the engine on;
+        # old/printtarg presets lack it → engine off. Shareable + back-compat
+        # (the flag lives in the preset file, not local state) (#93). Toggle and
+        # refresh FIRST so the engine panel is built before we seed it (the
+        # build reseeds from the store, which would clobber the preset recipe).
         lr = data.get("layout_recipe")
-        if (isinstance(lr, dict) and lr
-                and getattr(self, "_manual_layout_panel", None) is not None):
-            from workflow.layout_engine.presets import LayoutRecipe
-            self._manual_layout_panel.set_recipe(LayoutRecipe.from_dict(lr))
+        engine_on = isinstance(lr, dict) and bool(lr)
+        if bool(self._settings.get("use_chromiq_layout_engine", False)) != engine_on:
+            self._settings.set("use_chromiq_layout_engine", engine_on)
+        if engine_on:
+            self._refresh_manual_command_preview()   # swap groups + init panel
+            if getattr(self, "_manual_layout_panel", None) is not None:
+                from workflow.layout_engine.presets import LayoutRecipe
+                self._manual_layout_panel.set_recipe(LayoutRecipe.from_dict(lr))
+        else:
+            self._refresh_manual_command_preview()   # show printtarg controls
 
     def _preset_save_prefill(self) -> tuple[str, bool, bool, bool]:
         """Initial (name, auto_run, attach, from_generator) for the Save Preset

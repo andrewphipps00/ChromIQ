@@ -48,3 +48,22 @@ def test_named_preset_restores_engine_recipe(qapp):
               "underline_thickness_mm", "chart_text", "clip_content_mode",
               "clip_text", "clip_border_width_mm", "bit16", "compression"):
         assert getattr(out, f) == getattr(rec, f), f
+
+
+def test_preset_auto_toggles_engine(qapp):
+    # Engine off; loading a preset WITH a layout_recipe turns it on.
+    t = _tab(qapp)
+    t._settings.set("use_chromiq_layout_engine", False)
+    rec = LayoutRecipe(instrument="i1", paper="A4", clip_border=True)
+    t._restore_user_preset({"layout_recipe": replace(rec, seed=None).to_dict(),
+                            "pages": 1, "auto_patches": False})
+    assert t._settings.get("use_chromiq_layout_engine", False) is True
+    assert not t._manual_layout_grp.isHidden()        # engine panel shown
+
+    # Engine on; loading an old/printtarg preset (no layout_recipe) turns it off.
+    t._settings.set("use_chromiq_layout_engine", True)
+    t._refresh_manual_command_preview()
+    t._restore_user_preset({"printtarg_-i": "i1", "printtarg_-p": "A4",
+                            "pages": 1, "auto_patches": False})
+    assert t._settings.get("use_chromiq_layout_engine", False) is False
+    assert not t._manual_printtarg_grp.isHidden()     # printtarg controls shown
