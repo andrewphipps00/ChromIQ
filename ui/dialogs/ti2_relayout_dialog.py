@@ -3817,7 +3817,7 @@ class Ti2RelayoutDialog(QDialog):
         # The engine panel needs more width than the printtarg knobs; widen the
         # controls column AND its containing pane when shown, or the scroll area
         # stays narrow and the panel scrolls horizontally.
-        _w = 452 if use_engine else 360       # just fits the engine panel
+        _w = 440 if use_engine else 360       # just fits the engine panel (≈431 min)
         if getattr(self, "_controls_panel", None) is not None:
             self._controls_panel.setFixedWidth(_w)
         if getattr(self, "_right_pane", None) is not None:

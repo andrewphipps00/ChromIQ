@@ -960,6 +960,12 @@ class LayoutOptionsPanel(QWidget):
         b.style().polish(b)
         b.setIconSize(QSize(14, 14))
         b.setFixedHeight(22)
+        # Enforce the height in the button's OWN stylesheet too — when this panel
+        # is embedded in the editor, the editor's controls QSS
+        # (QPushButton { min-height: 26px }) cascades in and overrides
+        # setFixedHeight; a per-widget rule has higher precedence (#93).
+        b.setStyleSheet("QPushButton { min-height: 22px; max-height: 22px; "
+                        "padding: 0px; margin: 0px; }")
         return b
 
     def _insert_token_into(self, target, token: str) -> None:
