@@ -124,6 +124,29 @@ def _preset_match_key(name: str) -> str:
     """
     return _clean_preset_name(name).casefold()
 
+
+def _layout_options_from_params(params):
+    """Build an editor ``LayoutOptions`` (Set A) from Create Chart ``ChartParams``.
+
+    The one place the manual panel's effective layout knobs are mapped to the
+    editor's ``LayoutOptions`` — shared by the chart's meta stamp and the
+    Save-Preset layout sync so both describe the layout identically (#92)."""
+    from workflow.ti2_relayout import LayoutOptions
+    return LayoutOptions(
+        spacer_mode=("none" if params.no_spacers
+                     else "bw" if params.bw_spacers else "colored"),
+        patch_scale=params.patch_scale,
+        spacer_scale=params.spacer_scale,
+        margin_mm=params.margin_mm,
+        suppress_left_clip=params.disable_left_border,
+        no_strip_limit=params.no_strip_limit,
+        double_density=params.double_density,
+        triple_density=params.triple_density,
+        tiff_16bit=params.tiff_16bit,
+        dpi=params.tiff_dpi,
+    )
+
+
 # Built-in, read-only preset for the Create Chart → Manual presets dropdown.
 # Unlike user presets (one .json file each under presets_dir()), this one is
 # baked into the app: it can't be deleted, and selecting it loads a fixed
@@ -4152,11 +4175,30 @@ class TabChart(QWidget):
         # (#55). Presets without it simply won't appear in that dropdown.
         recipe = self._current_chart_recipe()
         if recipe:
-            capture["editor_recipe"] = recipe
+            capture["editor_recipe"] = self._recipe_synced_to_manual(recipe)
         presets = self._load_presets_from_settings()
         presets[name] = capture
         self._save_presets_to_settings(presets)
         self._populate_preset_combo(presets, select_name=name)
+
+    def _recipe_synced_to_manual(self, recipe: dict) -> dict:
+        """A copy of the chart's creation recipe (Set B) with its ``layout``
+        block refreshed from the current Manual-tab printtarg settings (Set A),
+        so a saved preset's two records can never disagree on scale / margin /
+        density / etc. (#92).
+
+        Only the layout (and the instrument / paper identity) sync — the
+        generators, colour-set params, source mode and patch count stay frozen as
+        "what was used at creation". Falls back to the recipe unchanged if the
+        manual params can't be read."""
+        try:
+            from workflow.ti2_relayout import recipe_layout_from_options
+            opts = _layout_options_from_params(self._collect_params())
+        except Exception:  # noqa: BLE001 — sync is best-effort, never block save
+            return recipe
+        synced = dict(recipe)
+        synced["layout"] = recipe_layout_from_options(opts)
+        return synced
 
     def _current_chart_recipe(self) -> dict | None:
         """The current run's stored New-chart creation recipe (Set B), or None.
@@ -6277,7 +6319,7 @@ class TabChart(QWidget):
             if run_dir.parent.name != "runs":   # cal/ or some other folder
                 return
             from core.file_manager import Run
-            from workflow.ti2_relayout import ChartSpec, LayoutOptions, save_editor_meta
+            from workflow.ti2_relayout import ChartSpec, save_editor_meta
             spec = ChartSpec.from_ti2(ti2)
             run = Run.for_dir(run_dir)
             # Build the editor's LayoutOptions from the params this chart was
@@ -6285,23 +6327,12 @@ class TabChart(QWidget):
             # still stamp instrument/paper but not the layout knobs.
             params = getattr(self, "_last_params", None)
             if params is not None:
-                opts = LayoutOptions(
-                    spacer_mode=("none" if params.no_spacers
-                                 else "bw" if params.bw_spacers
-                                 else "colored"),
-                    patch_scale=params.patch_scale,
-                    spacer_scale=params.spacer_scale,
-                    margin_mm=params.margin_mm,
-                    suppress_left_clip=params.disable_left_border,
-                    no_strip_limit=params.no_strip_limit,
-                    double_density=params.double_density,
-                    triple_density=params.triple_density,
-                    tiff_16bit=params.tiff_16bit,
-                    dpi=params.tiff_dpi,
-                )
+                opts = _layout_options_from_params(params)
                 # Pass the active preset's recipe (Set B) so a preset-generated
                 # chart carries it into meta.json; None preserves any existing
                 # recipe and never invents one for plain targen charts (#70).
+                # save_editor_meta reconciles the recipe's layout to these opts,
+                # so Set A and Set B never disagree on what was built (#92).
                 save_editor_meta(ti2, spec, opts, run.stem,
                                  recipe=self._pending_editor_recipe)
             else:

@@ -4362,18 +4362,9 @@ class Ti2RelayoutDialog(QDialog):
         if not isinstance(rec, dict) or self._options is None:
             return
         o = self._options
-        rec["layout"] = {
-            "spacer_mode": o.spacer_mode,
-            "patch_scale": o.patch_scale,
-            "spacer_scale": o.spacer_scale,
-            "margin": o.margin_mm,
-            "dpi": o.dpi,
-            "bit16": o.tiff_16bit,
-            "L": o.suppress_left_clip,
-            "P": o.no_strip_limit,
-            "h": o.double_density,
-            "td": o.triple_density,
-        }
+        # Shared Set-A → Set-B layout mapping (#92), so the editor and the Create
+        # Chart tab keep a recipe's layout in step the exact same way.
+        rec["layout"] = R.recipe_layout_from_options(o)
         if self._spec is not None:
             rec["instr"] = self._spec.instrument_flag
             rec["paper"] = self._spec.paper_flag

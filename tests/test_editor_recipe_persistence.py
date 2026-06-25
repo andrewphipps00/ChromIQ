@@ -41,15 +41,28 @@ class _FakeSettings:
 # meta.json round-trip
 # ---------------------------------------------------------------------------
 
-def test_recipe_round_trips_through_meta():
+def test_recipe_round_trips_with_layout_synced():
+    """#92: saving with a recipe keeps the generators / mode / colour-set params
+    frozen but syncs the recipe's ``layout`` block to the options the chart was
+    built with (Set A → Set B), so the two records can't disagree."""
     with tempfile.TemporaryDirectory() as tmp:
         ti2 = Path(tmp) / "chart.ti2"
         ti2.write_text("")  # only the parent folder's meta.json is used
         spec = R.ChartSpec.new("i1", "A4")
         recipe = {"mode": "generate", "cb": {"cube": True},
                   "sp": {"cube_n": 5}, "edges_auto": True}
-        R.save_editor_meta(ti2, spec, R.LayoutOptions(), "mychart", recipe=recipe)
-        assert R.load_editor_recipe(ti2) == recipe
+        opts = R.LayoutOptions(margin_mm=8, patch_scale=1.1)
+        R.save_editor_meta(ti2, spec, opts, "mychart", recipe=recipe)
+        loaded = R.load_editor_recipe(ti2)
+        # Generators / mode / colour-set params frozen.
+        assert loaded["mode"] == "generate"
+        assert loaded["cb"] == {"cube": True}
+        assert loaded["sp"] == {"cube_n": 5}
+        assert loaded["edges_auto"] is True
+        # Layout (Set B) synced from the built options (Set A).
+        assert loaded["layout"] == R.recipe_layout_from_options(opts)
+        assert loaded["instr"] == spec.instrument_flag
+        assert loaded["paper"] == spec.paper_flag
 
 
 def test_recipe_none_preserves_existing():
@@ -60,14 +73,16 @@ def test_recipe_none_preserves_existing():
         spec = R.ChartSpec.new("i1", "A4")
         recipe = {"mode": "generate", "sp": {"cube_n": 7}}
         R.save_editor_meta(ti2, spec, R.LayoutOptions(), "c", recipe=recipe)
+        stored = R.load_editor_recipe(ti2)           # now carries a synced layout
         R.save_editor_meta(ti2, spec, R.LayoutOptions(), "c", recipe=None)
-        assert R.load_editor_recipe(ti2) == recipe
+        assert R.load_editor_recipe(ti2) == stored   # untouched by recipe=None
 
 
 def test_divergence_layout_save_updates_set_a_keeps_set_b():
     """#54: a layout-only save (a Create Chart printtarg edit, recipe=None)
-    updates editor_layout (Set A) yet preserves editor_recipe (Set B), so the
-    two data sets diverge exactly as specified."""
+    updates editor_layout (Set A) yet preserves editor_recipe (Set B). The #92
+    sync only fires when a recipe is passed (on Generate), so a recipe=None save
+    still leaves Set B's layout where it was."""
     with tempfile.TemporaryDirectory() as tmp:
         ti2 = Path(tmp) / "chart.ti2"
         ti2.write_text("")
@@ -80,7 +95,10 @@ def test_divergence_layout_save_updates_set_a_keeps_set_b():
                            recipe=None)
         opts, _ = R.load_editor_meta(ti2)
         assert opts.margin_mm == 12                  # Set A followed the edit
-        assert R.load_editor_recipe(ti2) == recipe   # Set B stayed pristine
+        set_b = R.load_editor_recipe(ti2)
+        assert set_b["mode"] == "generate"           # generators pristine
+        assert set_b["sp"] == {"cube_n": 8}
+        assert set_b["layout"]["margin"] == 6        # Set B layout left as-built
 
 
 def test_recipe_absent_returns_none():
@@ -133,8 +151,13 @@ def test_preset_recipe_propagates_to_run_meta(qapp, tmp_path, monkeypatch):
     ti2 = run.dir / f"{run.stem}.ti2"
     ti2.write_text("x")
     tab._stamp_chart_meta(ti2)
-    # The recipe rode into meta.json → the editor will seed New chart / Add.
-    assert R.load_editor_recipe(ti2) == recipe
+    # The recipe rode into meta.json → the editor will seed New chart / Add. Its
+    # generators are preserved and its layout is synced to the built chart (#92).
+    loaded = R.load_editor_recipe(ti2)
+    assert loaded["mode"] == "generate"
+    assert loaded["cb"] == {"cube": True}
+    assert loaded["sp"] == {"cube_n": 5}
+    assert "layout" in loaded
 
 
 def test_plain_targen_chart_gets_no_recipe(qapp, tmp_path, monkeypatch):
