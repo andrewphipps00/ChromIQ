@@ -2870,6 +2870,11 @@ class Ti2RelayoutDialog(QDialog):
         # threaded from the New chart dialog, or loaded from meta.json — so it
         # can be re-persisted on save and reloaded into New chart / Add.
         self._chart_recipe: dict | None = None
+        # The chart's ChromIQ-engine recipe (from channels.json) when it was
+        # built by the engine — drives the engine layout panel (#93).
+        self._engine_recipe = None
+        self._engine_panel = None
+        self._engine_panel_grp = None
         # Snapshot of the chart's content (patches + spacers + layout knobs) as
         # last saved / loaded-from-disk. Compared against the live signature to
         # tell whether there are unsaved edits to warn about on Close (#49). A
@@ -3756,6 +3761,22 @@ class Ti2RelayoutDialog(QDialog):
         return f
 
     # -- source -------------------------------------------------------------
+    def _refresh_engine_panel_visible(self) -> None:
+        """Show the engine layout panel when the chart was built by the engine
+        (or the engine is active), hiding the printtarg layout group.
+
+        The panel UI is built in a later stage; until then this is a guarded
+        no-op so the engine-recipe load path is safe. The loaded recipe lives in
+        ``self._engine_recipe`` either way (#93).
+        """
+        if self._engine_panel_grp is None:
+            return
+        use_engine = (self._engine_recipe is not None
+                      or bool(self._settings.get("use_chromiq_layout_engine", False)))
+        self._engine_panel_grp.setVisible(use_engine)
+        if getattr(self, "_pt_box", None) is not None:
+            self._pt_box.setVisible(not use_engine)
+
     def _load_ti2(self) -> None:
         start = (self._settings.get("custom_output_path", "")
                  or str(Path.home() / "ChromIQ"))
@@ -3790,6 +3811,15 @@ class Ti2RelayoutDialog(QDialog):
         # The chart's creation recipe (if it carries one) — so New chart / Add
         # reopen with this design rather than the app-wide last-used state.
         self._chart_recipe = R.load_editor_recipe(path)
+        # If this chart was built by the ChromIQ layout engine, load the exact
+        # engine recipe from its channels.json so the engine panel can show all
+        # the settings it was created with (#93).
+        from workflow.layout_engine.presets import LayoutRecipe
+        self._engine_recipe = LayoutRecipe.from_channels_json(
+            path.with_suffix(".channels.json"))
+        if self._engine_recipe is not None and self._engine_panel is not None:
+            self._engine_panel.set_recipe(self._engine_recipe)
+        self._refresh_engine_panel_visible()
         self._set_chart(spec, program, note, is_saved=True)
         return True
 
