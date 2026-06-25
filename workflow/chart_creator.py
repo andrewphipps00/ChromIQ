@@ -889,6 +889,7 @@ class ChartCreator:
             randomize=not params.no_randomise,
             spacer_on=not params.no_spacers,
             spacer_mode=spacer_mode,
+            bit16=bool(params.tiff_16bit),
             pscale=float(params.patch_scale or 1.0),
             sscale=float(params.spacer_scale or 1.0),
             border=float(params.margin_mm),

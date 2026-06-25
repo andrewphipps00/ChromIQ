@@ -168,11 +168,11 @@ def placement(geom: Geom, paper_w_mm: float, paper_h_mm: float, layout: Layout) 
     slack = ph - mints - g.pspa - layout.pprow * (g.plen + g.pspa)
     amints = mints + 0.5 * (slack - minbs)
     return Placement(
-        x0=g.margin_l + g.lbord,
-        y0_first=amints + g.pspa,
+        x0=g.margin_l + g.lbord + g.offset_x,
+        y0_first=amints + g.pspa + g.strip_indicator_gap + g.offset_y,
         plen=g.plen, pwid=g.pwid, pspa=g.pspa, rrsp=g.rrsp,
         steps_in_pass=layout.steps_in_pass,
-        leader_top=g.margin_t + g.txhisl,
+        leader_top=g.margin_t + g.txhisl + g.offset_y,
     )
 
 

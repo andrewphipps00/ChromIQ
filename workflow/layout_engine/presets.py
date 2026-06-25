@@ -44,6 +44,14 @@ class LayoutRecipe:
     margin_left: float = 6.0
     patch_w_mm: float = 0.0        # explicit patch width / height (mm); 0 = auto
     patch_h_mm: float = 0.0
+    spacer_width_mm: float = 0.0   # 0 = instrument default
+    inter_patch_mm: float = 0.0    # extra gap between patches
+    max_strip_mm: float = 0.0      # 0 = no explicit cap
+    strip_indicator_gap_mm: float = 0.0
+    offset_x_mm: float = 0.0       # whole-chart offset
+    offset_y_mm: float = 0.0
+    bit16: bool = False            # 16-bit TIFF output
+    compression: str = "lzw"       # "lzw" | "zlib" | "none"
     clip_border: bool = True       # i1/p3 only — left paper clip border present
     nolimit: bool = False
     strip_pattern: str = permutation.DEFAULT_STRIP_PATTERN
@@ -94,6 +102,14 @@ class LayoutRecipe:
                         self.margin_bottom, self.margin_left),
             "patch_w": self.patch_w_mm or None,
             "patch_h": self.patch_h_mm or None,
+            "spacer_width": self.spacer_width_mm or None,
+            "inter_patch": self.inter_patch_mm or None,
+            "max_strip": self.max_strip_mm or None,
+            "strip_indicator_gap": self.strip_indicator_gap_mm or None,
+            "offset_x": self.offset_x_mm,
+            "offset_y": self.offset_y_mm,
+            "bit16": self.bit16,
+            "compression": self.compression,
             "nolpcbord": (not self.clip_border) if self.instrument in ("i1", "p3") else False,
             "nolimit": self.nolimit,
             "strip_pattern": self.strip_pattern,

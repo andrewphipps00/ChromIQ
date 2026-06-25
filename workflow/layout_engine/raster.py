@@ -117,21 +117,27 @@ def render_pages(
     return RenderResult(images=images, low_contrast_passes=flagged)
 
 
-def save_tiffs(images: list[Image.Image], base_path: str | Path, dpi: int = 300
-               ) -> list[Path]:
-    """Write *images* as LZW TIFF(s) in px/cm (ResolutionUnit=3); return paths.
+def save_tiffs(images: list[Image.Image], base_path: str | Path, dpi: int = 300,
+               *, bit16: bool = False, compression: str = "lzw") -> list[Path]:
+    """Write *images* as TIFF(s) in px/cm (ResolutionUnit=3); return paths.
 
-    Single page → ``base.tif``; multiple → ``base_01.tif`` ….
+    Single page → ``base.tif``; multiple → ``base_01.tif`` ….  *bit16* writes
+    16-bit channels (8-bit values scaled up); *compression* is the tifffile
+    codec name ("lzw", "zlib", or "none").
     """
     base = Path(base_path)
     stem = base.with_suffix("")
     res = dpi / 2.54  # pixels per centimetre, matching printtarg
+    comp = None if compression in ("none", "", None) else compression
     out: list[Path] = []
     for i, img in enumerate(images):
+        arr = np.asarray(img)
+        if bit16:
+            arr = (arr.astype(np.uint16) * 257)   # 8-bit → 16-bit (×257)
         path = base if len(images) == 1 else stem.parent / f"{stem.name}_{i + 1:02d}.tif"
         tifffile.imwrite(
-            str(path), np.asarray(img), photometric="rgb",
-            resolution=(res, res), resolutionunit=3, compression="lzw",
+            str(path), arr, photometric="rgb",
+            resolution=(res, res), resolutionunit=3, compression=comp,
         )
         out.append(path)
     return out

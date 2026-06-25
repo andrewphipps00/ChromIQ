@@ -97,6 +97,14 @@ def build_chart(
     margins: tuple[float, float, float, float] | None = None,
     patch_w: float | None = None,
     patch_h: float | None = None,
+    spacer_width: float | None = None,
+    inter_patch: float | None = None,
+    max_strip: float | None = None,
+    strip_indicator_gap: float | None = None,
+    offset_x: float = 0.0,
+    offset_y: float = 0.0,
+    bit16: bool = False,
+    compression: str = "lzw",
     nolpcbord: bool = False,
     nolimit: bool = False,
     strip_pattern: str = permutation.DEFAULT_STRIP_PATTERN,
@@ -126,7 +134,9 @@ def build_chart(
     geom = instruments.build(
         instrument, hflag=hflag, density=density, spacer_on=spacer_on, pscale=pscale,
         sscale=sscale, border=border, margins=margins, patch_w=patch_w,
-        patch_h=patch_h, nolpcbord=nolpcbord, nolimit=nolimit,
+        patch_h=patch_h, spacer_width=spacer_width, inter_patch=inter_patch,
+        max_strip=max_strip, strip_indicator_gap=strip_indicator_gap,
+        offset_x=offset_x, offset_y=offset_y, nolpcbord=nolpcbord, nolimit=nolimit,
     )
     w_mm, h_mm = papers.dimensions_mm(paper)
     layout = geometry.compute(geom, w_mm, h_mm, len(target.patches))
@@ -155,7 +165,8 @@ def build_chart(
         paper_w_mm=w_mm, paper_h_mm=h_mm, dpi=dpi, strip_pattern=strip_pattern,
         spacer_mode=spacer_mode,
     )
-    tiff_paths = raster.save_tiffs(render.images, stem.with_suffix(".tif"), dpi=dpi)
+    tiff_paths = raster.save_tiffs(render.images, stem.with_suffix(".tif"), dpi=dpi,
+                                   bit16=bit16, compression=compression)
 
     rects = geometry.strip_rects_px(geom, w_mm, h_mm, layout, dpi)
     patch_rects = geometry.patch_rects_px(geom, w_mm, h_mm, layout, dpi,

@@ -1294,6 +1294,50 @@ class SettingsDialog(QDialog):
             self), 2, 4)
         v.addWidget(pg)
 
+        # ---- advanced (the remaining agreed options) ----
+        adv = QGroupBox(tr("Advanced"), self)
+        ag = QGridLayout(adv)
+
+        def _mm_spin(special_auto: bool = False) -> NoScrollDoubleSpinBox:
+            sb = NoScrollDoubleSpinBox(self)
+            sb.setRange(0, 300)
+            sb.setDecimals(1)
+            sb.setSingleStep(0.5)
+            sb.setSuffix(" mm")
+            if special_auto:
+                sb.setSpecialValueText(tr("auto"))
+            return sb
+
+        ag.addWidget(QLabel(tr("Spacer width:"), self), 0, 0)
+        self._layout_spacer_width = _mm_spin(special_auto=True)
+        ag.addWidget(self._layout_spacer_width, 0, 1)
+        ag.addWidget(QLabel(tr("Inter-patch gap:"), self), 0, 2)
+        self._layout_inter_patch = _mm_spin()
+        ag.addWidget(self._layout_inter_patch, 0, 3)
+
+        ag.addWidget(QLabel(tr("Strip-indicator gap:"), self), 1, 0)
+        self._layout_sig = _mm_spin()
+        ag.addWidget(self._layout_sig, 1, 1)
+        ag.addWidget(QLabel(tr("Max strip length:"), self), 1, 2)
+        self._layout_max_strip = _mm_spin(special_auto=True)
+        ag.addWidget(self._layout_max_strip, 1, 3)
+
+        ag.addWidget(QLabel(tr("Chart offset:"), self), 2, 0)
+        self._layout_offx = _mm_spin()
+        ag.addWidget(self._layout_offx, 2, 1)
+        ag.addWidget(QLabel(tr("× vertical:"), self), 2, 2)
+        self._layout_offy = _mm_spin()
+        ag.addWidget(self._layout_offy, 2, 3)
+
+        self._layout_bit16 = QCheckBox(tr("16-bit TIFF"), self)
+        ag.addWidget(self._layout_bit16, 3, 0, 1, 2)
+        ag.addWidget(QLabel(tr("Compression:"), self), 3, 2)
+        self._layout_compression = NoScrollComboBox(self)
+        for _ck, _cl in (("lzw", "LZW"), ("zlib", "Zlib"), ("none", tr("None"))):
+            self._layout_compression.addItem(_cl, _ck)
+        ag.addWidget(self._layout_compression, 3, 3)
+        v.addWidget(adv)
+
         self._layout_calc = QLabel("", self)
         self._layout_calc.setStyleSheet("color: #1a8f3c; font-weight: 600;")
         v.addWidget(self._layout_calc)
@@ -1319,8 +1363,13 @@ class SettingsDialog(QDialog):
         self._layout_paper.currentIndexChanged.connect(self._load_layout_combo)
         self._layout_mode.currentIndexChanged.connect(self._load_layout_combo)
         for w in (self._layout_pscale, self._layout_sscale, self._layout_patch_x,
-                  self._layout_patch_y, *self._layout_margins.values()):
+                  self._layout_patch_y, self._layout_spacer_width,
+                  self._layout_inter_patch, self._layout_sig, self._layout_max_strip,
+                  self._layout_offx, self._layout_offy,
+                  *self._layout_margins.values()):
             w.valueChanged.connect(self._on_layout_field_changed)
+        self._layout_bit16.toggled.connect(self._on_layout_field_changed)
+        self._layout_compression.currentIndexChanged.connect(self._on_layout_field_changed)
         self._layout_dpi.valueChanged.connect(self._on_layout_field_changed)
         self._layout_spacer_mode.currentIndexChanged.connect(self._on_layout_field_changed)
         self._layout_nolimit.toggled.connect(self._on_layout_field_changed)
@@ -1378,6 +1427,15 @@ class SettingsDialog(QDialog):
         self._layout_margins["l"].setValue(recipe.margin_left)
         self._layout_patch_x.setValue(recipe.patch_w_mm)
         self._layout_patch_y.setValue(recipe.patch_h_mm)
+        self._layout_spacer_width.setValue(recipe.spacer_width_mm)
+        self._layout_inter_patch.setValue(recipe.inter_patch_mm)
+        self._layout_sig.setValue(recipe.strip_indicator_gap_mm)
+        self._layout_max_strip.setValue(recipe.max_strip_mm)
+        self._layout_offx.setValue(recipe.offset_x_mm)
+        self._layout_offy.setValue(recipe.offset_y_mm)
+        self._layout_bit16.setChecked(recipe.bit16)
+        _ci = self._layout_compression.findData(recipe.compression)
+        self._layout_compression.setCurrentIndex(_ci if _ci >= 0 else 0)
         self._layout_dpi.setValue(recipe.dpi)
         self._layout_nolimit.setChecked(recipe.nolimit)
         self._layout_strip_pat.setText(recipe.strip_pattern)
@@ -1400,6 +1458,14 @@ class SettingsDialog(QDialog):
         r.border = min(r.margin_top, r.margin_right, r.margin_bottom, r.margin_left)
         r.patch_w_mm = self._layout_patch_x.value()
         r.patch_h_mm = self._layout_patch_y.value()
+        r.spacer_width_mm = self._layout_spacer_width.value()
+        r.inter_patch_mm = self._layout_inter_patch.value()
+        r.strip_indicator_gap_mm = self._layout_sig.value()
+        r.max_strip_mm = self._layout_max_strip.value()
+        r.offset_x_mm = self._layout_offx.value()
+        r.offset_y_mm = self._layout_offy.value()
+        r.bit16 = self._layout_bit16.isChecked()
+        r.compression = self._layout_compression.currentData() or "lzw"
         r.dpi = int(self._layout_dpi.value())
         r.nolimit = self._layout_nolimit.isChecked()
         r.strip_pattern = self._layout_strip_pat.text() or r.strip_pattern

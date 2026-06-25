@@ -1855,5 +1855,12 @@
  "T": "T",
  "Width × height of each patch in millimetres. Leave at “auto” (0) to use the instrument's recommended size (scaled by Patch scale). A value below ~6 mm can make the chart hard to read — watch for the pre-flight warning.": "Width × height of each patch in millimetres. Leave at “auto” (0) to use the instrument's recommended size (scaled by Patch scale). A value below ~6 mm can make the chart hard to read — watch for the pre-flight warning.",
  "auto": "auto",
- "× height:": "× height:"
+ "× height:": "× height:",
+ "Chart offset:": "Chart offset:",
+ "Compression:": "Compression:",
+ "Inter-patch gap:": "Inter-patch gap:",
+ "Max strip length:": "Max strip length:",
+ "Spacer width:": "Spacer width:",
+ "Strip-indicator gap:": "Strip-indicator gap:",
+ "× vertical:": "× vertical:"
 }

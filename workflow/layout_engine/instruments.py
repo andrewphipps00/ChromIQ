@@ -78,6 +78,9 @@ class Geom:
     margin_r: float = 6.0
     margin_b: float = 6.0
     margin_l: float = 6.0
+    strip_indicator_gap: float = 0.0   # gap (mm) between strip label and strip
+    offset_x: float = 0.0              # whole-chart offset (mm)
+    offset_y: float = 0.0
 
 
 def supported() -> list[str]:
@@ -96,15 +99,23 @@ def build(
     margins: tuple[float, float, float, float] | None = None,
     patch_w: float | None = None,
     patch_h: float | None = None,
+    spacer_width: float | None = None,
+    inter_patch: float | None = None,
+    max_strip: float | None = None,
+    strip_indicator_gap: float | None = None,
+    offset_x: float = 0.0,
+    offset_y: float = 0.0,
     nolpcbord: bool = False,
     nolimit: bool = False,
 ) -> Geom:
     """Resolve :class:`Geom`, applying ChromIQ extensions over the base geometry.
 
     *margins* = independent ``(top, right, bottom, left)`` page margins in mm
-    (default: all = *border*).  *patch_w* / *patch_h* override the patch width /
-    height in mm (default: the instrument's size × *pscale*).  ``border`` still
-    drives the instrument leader and clip-holder base.
+    (default: all = *border*).  *patch_w* / *patch_h* override the patch size in
+    mm.  *spacer_width* overrides the inter-patch spacer thickness; *inter_patch*
+    adds extra gap between patches; *max_strip* caps the pass length (mm);
+    *strip_indicator_gap* is the gap (mm) between the strip label and its strip.
+    ``border`` still drives the instrument leader and clip-holder base.
     """
     geom = _build_base(
         key, pscale=pscale, sscale=sscale, hflag=hflag, density=density,
@@ -117,8 +128,17 @@ def build(
         ratio = (geom.rrsp / geom.pwid) if geom.pwid else 1.0
         pwid = float(patch_w)
         rrsp = pwid * ratio
+    pspa = geom.pspa
+    if spacer_width is not None and geom.pspa > 0:   # only when spacers are on
+        pspa = float(spacer_width)
+    if inter_patch:
+        pspa += float(inter_patch)
+    mxrowl = float(max_strip) if max_strip else geom.mxrowl
+    sig = geom.strip_indicator_gap if strip_indicator_gap is None \
+        else float(strip_indicator_gap)
     return replace(geom, margin_t=mt, margin_r=mr, margin_b=mb, margin_l=ml,
-                   plen=plen, pwid=pwid, rrsp=rrsp)
+                   plen=plen, pwid=pwid, rrsp=rrsp, pspa=pspa, mxrowl=mxrowl,
+                   strip_indicator_gap=sig, offset_x=offset_x, offset_y=offset_y)
 
 
 def _build_base(
