@@ -57,6 +57,7 @@ class LayoutRecipe:
     indicator_size_mm: float = 0.0       # 0 = auto (instrument text height)
     indicator_bold: bool = False
     indicator_italic: bool = False
+    indicator_rotation: int = 0          # 0 | 90 | 180 | 270 degrees
     underline_mode: str = "off"          # "off" | "colored" | "black" rule
     underline_thickness_mm: float = 0.5  # under-indicator rule thickness
     underline_gap_mm: float = 0.5        # gap between the label and the rule
@@ -158,6 +159,7 @@ class LayoutRecipe:
             "indicator_size_mm": self.indicator_size_mm,
             "indicator_bold": self.indicator_bold,
             "indicator_italic": self.indicator_italic,
+            "indicator_rotation": self.indicator_rotation,
             "underline_mode": self.underline_mode,
             "underline_thickness_mm": self.underline_thickness_mm,
             "underline_gap_mm": self.underline_gap_mm,

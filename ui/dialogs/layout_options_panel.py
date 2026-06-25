@@ -365,6 +365,21 @@ class LayoutOptionsPanel(QWidget):
                     tr("How far below the strip label the rule sits, in "
                        "millimetres. Increase it to give the label a little "
                        "breathing room above the line."), self))
+        self.indicator_rotation = NoScrollComboBox(self)
+        for _deg in (0, 90, 180, 270):
+            self.indicator_rotation.addItem(f"{_deg}°", _deg)
+        self.indicator_rotation.currentIndexChanged.connect(self._emit)
+        add_row(sig2, 6, tr("Rotation:"), self.indicator_rotation,
+                tip=TooltipButton(
+                    tr("Indicator rotation"),
+                    tr("Turns the little letter printed above each strip so it "
+                       "reads in the direction you want. 0° is normal, upright "
+                       "text. 90° and 270° lay it on its side — useful when the "
+                       "strips are very narrow (an upright letter would be wider "
+                       "than the strip) or so the labels face you the way you "
+                       "actually hold the sheet while measuring. 180° prints it "
+                       "upside-down, for when you feed the page in from the other "
+                       "end. If you're not sure, leave it at 0°."), self))
         v.addWidget(si)
 
         # ---- Page geometry ----
@@ -1053,6 +1068,8 @@ class LayoutOptionsPanel(QWidget):
         self.indicator_size.setValue(r.indicator_size_mm)
         self.ind_bold.setChecked(r.indicator_bold)
         self.ind_italic.setChecked(r.indicator_italic)
+        _rot = self.indicator_rotation.findData(int(r.indicator_rotation))
+        self.indicator_rotation.setCurrentIndex(_rot if _rot >= 0 else 0)
         _umkey = "segments" if r.underline_mode == "colored" else r.underline_mode
         _um = self.underline_mode.findData(_umkey)
         self.underline_mode.setCurrentIndex(_um if _um >= 0 else 0)
@@ -1115,6 +1132,7 @@ class LayoutOptionsPanel(QWidget):
         r.indicator_size_mm = self.indicator_size.value()
         r.indicator_bold = self.ind_bold.isChecked()
         r.indicator_italic = self.ind_italic.isChecked()
+        r.indicator_rotation = int(self.indicator_rotation.currentData() or 0)
         r.underline_mode = self.underline_mode.currentData() or "off"
         r.underline_thickness_mm = self.underline_thickness.value()
         r.underline_gap_mm = self.underline_gap.value()

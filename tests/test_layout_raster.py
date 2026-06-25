@@ -200,3 +200,18 @@ def test_no_interstrip_gaps_from_rounding():
     inked = np.where(colwhite <= 0.85)[0]
     interior = colwhite[inked.min():inked.max() + 1]
     assert not (interior > 0.85).any(), "found a white gap column between strips"
+
+
+def test_indicator_rotation_renders():
+    """Rotated strip labels still ink the leader area (0/90/180/270)."""
+    import numpy as np
+    target = _rgb_target(60)
+    geom = instruments.build("i1")
+    lay = geometry.compute(geom, 210.0, 297.0, 60)
+    for deg in (0, 90, 180, 270):
+        res = raster.render_pages(target, lay, geom, seed=1, paper_w_mm=210.0,
+                                  paper_h_mm=297.0, dpi=150, indicator_rotation=deg)
+        a = np.asarray(res.images[0])
+        # the top leader band should contain black label ink
+        band = a[: int(a.shape[0] * 0.12)]
+        assert (band < 60).all(axis=2).any(), f"no label ink at {deg}°"

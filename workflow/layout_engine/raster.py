@@ -178,6 +178,27 @@ def _draw_indicator(draw, cx: int, top: int, text: str, font, spacing_px: int) -
         x += w + spacing_px
 
 
+def _indicator_tile(text: str, font, spacing_px: int, degrees: int) -> Image.Image:
+    """A transparent tile of the strip label (letters spaced) rotated *degrees*."""
+    probe = ImageDraw.Draw(Image.new("RGBA", (4, 4)))
+    widths = [probe.textlength(c, font=font) for c in text]
+    try:
+        asc, desc = font.getmetrics()
+    except Exception:  # pragma: no cover - default bitmap font
+        asc, desc = 12, 3
+    W = int(sum(widths) + spacing_px * (len(text) - 1)) + 4
+    H = asc + desc + 4
+    tile = Image.new("RGBA", (max(1, W), max(1, H)), (0, 0, 0, 0))
+    d = ImageDraw.Draw(tile)
+    x = 2.0
+    for ch, w in zip(text, widths):
+        d.text((x, 2), ch, font=font, fill=(0, 0, 0, 255))
+        x += w + spacing_px
+    if degrees % 360:
+        tile = tile.rotate(degrees, expand=True)   # CCW; 90 reads bottom-to-top
+    return tile
+
+
 def effective_indicator_size_mm(geom, dpi: int, font: str, size_mm: float) -> float:
     """The indicator font size to use. An explicit *size_mm* is returned as-is;
     *size_mm* 0 = auto, where the size is chosen so the widest two-letter label
@@ -374,6 +395,7 @@ def render_pages(
     indicator_size_mm: float = 0.0,
     indicator_bold: bool = False,
     indicator_italic: bool = False,
+    indicator_rotation: int = 0,
     underline_mode: str = "off",
     underline_thickness_mm: float = 0.5,
     underline_gap_mm: float = 0.5,
@@ -451,8 +473,12 @@ def render_pages(
                 _lbl = label_strip(global_strip + 1)
                 _cx = x0 + strip_w // 2          # centre over the strip
                 _y = px(place.leader_top)
-                _draw_indicator(draw, _cx, _y, _lbl, font,
-                                max(1, round(ind_px * INDICATOR_LETTER_SPACING)))
+                _spc = max(1, round(ind_px * INDICATOR_LETTER_SPACING))
+                if indicator_rotation % 360 == 0:
+                    _draw_indicator(draw, _cx, _y, _lbl, font, _spc)
+                else:                            # rotated label → tile + paste
+                    _tile = _indicator_tile(_lbl, font, _spc, indicator_rotation)
+                    img.paste(_tile, (_cx - _tile.width // 2, _y), _tile)
                 if underline_on and underline_mode == "cycle":   # one accent / strip
                     _ly = _y + ind_px + ul_gap
                     draw.rectangle([x0, _ly, xR - 1, _ly + ul_th - 1],
