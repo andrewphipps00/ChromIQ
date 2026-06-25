@@ -123,6 +123,10 @@ def build_chart(
     nolpcbord: bool = False,
     nolimit: bool = False,
     clip_border_width: float = 26.0,
+    clip_content_mode: str = "off",
+    clip_text: str = "",
+    clip_text_font: str = "Inter",
+    clip_image_path: str = "",
     strip_pattern: str = permutation.DEFAULT_STRIP_PATTERN,
     patch_pattern: str = permutation.DEFAULT_PATCH_PATTERN,
     cal_path: str | Path | None = None,
@@ -184,10 +188,13 @@ def build_chart(
         "patchcount": str(layout.total_patches), "pages": str(layout.pages),
         "date": _time.strftime("%Y-%m-%d"), "seed": str(seed),
     }
-    try:
-        resolved_text = chart_text.format(**_ctx) if chart_text else ""
-    except (KeyError, IndexError, ValueError):
-        resolved_text = chart_text       # leave unknown placeholders literal
+    def _resolve(txt: str) -> str:
+        try:
+            return txt.format(**_ctx) if txt else ""
+        except (KeyError, IndexError, ValueError):
+            return txt                   # leave unknown placeholders literal
+    resolved_text = _resolve(chart_text)
+    resolved_clip_text = _resolve(clip_text)
     stamp_text = (f"ChromIQ engine · {instrument} · {paper} · {dpi} dpi · "
                   f"{layout.total_patches} patches · seed {seed}"
                   if stamp_command else "")
@@ -203,6 +210,8 @@ def build_chart(
         chart_text=resolved_text, chart_text_font=chart_text_font,
         chart_text_size_mm=chart_text_size_mm, chart_text_bold=chart_text_bold,
         chart_text_italic=chart_text_italic, stamp_text=stamp_text,
+        clip_content_mode=clip_content_mode, clip_text=resolved_clip_text,
+        clip_text_font=clip_text_font, clip_image_path=clip_image_path,
     )
     tiff_paths = raster.save_tiffs(render.images, stem.with_suffix(".tif"), dpi=dpi,
                                    bit16=bit16, compression=compression)

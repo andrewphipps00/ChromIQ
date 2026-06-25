@@ -176,6 +176,30 @@ def placement(geom: Geom, paper_w_mm: float, paper_h_mm: float, layout: Layout) 
     )
 
 
+def clip_area_mm(geom: Geom, paper_h_mm: float
+                 ) -> tuple[float, float, float, float] | None:
+    """The content-safe rectangle of the left clip strip, in mm.
+
+    Returns ``(x, y, w, h)`` for the reserved left band (the ``lbord`` strip
+    between the page margin and the first patch column, running from the top to
+    the bottom margin), or ``None`` when the instrument has no clip border.
+    """
+    if geom.lbord <= 0:
+        return None
+    return (geom.margin_l, geom.margin_t, geom.lbord,
+            max(0.0, paper_h_mm - geom.margin_t - geom.margin_b))
+
+
+def clip_area_px(geom: Geom, paper_h_mm: float, dpi: int
+                 ) -> tuple[int, int, int, int] | None:
+    """:func:`clip_area_mm` rounded to whole pixels at *dpi*."""
+    area = clip_area_mm(geom, paper_h_mm)
+    if area is None:
+        return None
+    mm2px = dpi / 25.4
+    return tuple(round(v * mm2px) for v in area)  # type: ignore[return-value]
+
+
 def strip_rects_px(geom: Geom, paper_w_mm: float, paper_h_mm: float,
                    layout: Layout, dpi: int) -> list[dict]:
     """Exact per-strip (pass) bounding rectangles in pixels, for the measure tab.

@@ -145,3 +145,23 @@ def test_underline_modes():
     # hiding indicators suppresses the rule even if a mode is set.
     assert not has_accent(raster.render_pages(
         target, lay, geom, underline_mode="segments", draw_indicators=False, **kw))
+
+
+def test_clip_content_modes():
+    import numpy as np
+    target = _rgb_target(120)
+    geom = instruments.build("i1")
+    lay = geometry.compute(geom, 210.0, 297.0, 120)
+    ax, ay, aw, ah = geometry.clip_area_px(geom, 297.0, 200)
+
+    def clip_ink(mode, **kw):
+        res = raster.render_pages(target, lay, geom, seed=7, paper_w_mm=210.0,
+                                  paper_h_mm=297.0, dpi=200,
+                                  clip_content_mode=mode, **kw)
+        sub = np.asarray(res.images[0])[ay:ay + ah, ax:ax + aw]
+        return int((sub < 200).any(axis=2).sum())
+
+    assert clip_ink("off") == 0
+    assert clip_ink("text", clip_text="Sample 12") > 0
+    assert clip_ink("branding") > 0
+    assert clip_ink("notes") > 0

@@ -163,6 +163,91 @@ def effective_indicator_size_mm(geom, dpi: int, font: str, size_mm: float) -> fl
     return target if widest2 <= geom.pwid else target * geom.pwid / widest2
 
 
+def render_clip_strip(mode: str, *, width_px: int, height_px: int, dpi: int,
+                      text: str = "", font_family: str = "Inter",
+                      image_path: str = "") -> Image.Image:
+    """Render the left clip-strip content as a ``width_px × height_px`` image.
+
+    The strip is tall and narrow, so text/branding are drawn on a landscape
+    canvas and rotated 90° to read up the strip. Shared by the page renderer and
+    the standalone template export.
+    """
+    mm2px = dpi / 25.4
+    strip = Image.new("RGB", (max(1, width_px), max(1, height_px)), (255, 255, 255))
+
+    if mode == "image" and image_path:
+        try:
+            logo = Image.open(image_path).convert("RGBA")
+            scale = min(width_px / logo.width, height_px / logo.height)
+            nw, nh = max(1, int(logo.width * scale)), max(1, int(logo.height * scale))
+            logo = logo.resize((nw, nh))
+            strip.paste(logo, ((width_px - nw) // 2, (height_px - nh) // 2), logo)
+        except Exception:  # pragma: no cover - bad/missing image falls back blank
+            pass
+        return strip
+
+    if mode == "notes":
+        d = ImageDraw.Draw(strip)
+        lw = max(1, round(0.3 * mm2px))
+        d.rectangle([0, 0, width_px - 1, height_px - 1], outline=(0, 0, 0), width=lw)
+        rule_gap = max(1, round(12.0 * mm2px))          # ~12 mm ruled lines
+        y = rule_gap
+        while y < height_px - rule_gap // 2:
+            d.line([(round(2 * mm2px), y), (width_px - round(2 * mm2px), y)],
+                   fill=(170, 170, 170), width=max(1, lw // 2))
+            y += rule_gap
+        caption = text or "Sample / Notes"
+        cap = _vtext(caption, font_family, width_px, height_px,
+                     valign="top", bold=True)
+        strip.paste(cap, (0, 0), cap)
+        return strip
+
+    # text / branding → rotated text up the strip
+    lines = [ln for ln in (text or "").splitlines() if ln.strip()]
+    if mode == "branding":
+        lines = ["ChromIQ"] + lines
+    if not lines:
+        return strip
+    overlay = _vtext("\n".join(lines), font_family, width_px, height_px,
+                     bold=(mode == "branding"))
+    strip.paste(overlay, (0, 0), overlay)
+    return strip
+
+
+def _vtext(text: str, font_family: str, width_px: int, height_px: int,
+           *, valign: str = "center", bold: bool = False) -> Image.Image:
+    """A transparent ``width_px × height_px`` overlay with *text* read up the strip."""
+    # Draw on a landscape canvas (long = height_px, short = width_px), rotate 90°.
+    canvas = Image.new("RGBA", (max(1, height_px), max(1, width_px)), (0, 0, 0, 0))
+    d = ImageDraw.Draw(canvas)
+    lines = text.split("\n")
+    size = max(8, int(width_px * 0.42))
+    f = _font(size, font_family, bold=bold)
+    # shrink to fit the short dimension across all stacked lines
+    for _ in range(40):
+        f = _font(size, font_family, bold=bold)
+        line_h = size * 1.2
+        block_h = line_h * len(lines)
+        widest = max((d.textlength(ln, font=f) for ln in lines), default=0)
+        if block_h <= width_px * 0.9 and widest <= height_px * 0.95:
+            break
+        size = int(size * 0.9)
+        if size <= 8:
+            break
+    line_h = size * 1.2
+    block_h = line_h * len(lines)
+    cy = (width_px - block_h) / 2
+    cx = (height_px * 0.04 if valign == "top" else height_px / 2)
+    anchor = "lm" if valign == "top" else "mm"
+    for i, ln in enumerate(lines):
+        y = cy + line_h * (i + 0.5)
+        try:
+            d.text((cx, y), ln, font=f, fill=(0, 0, 0, 255), anchor=anchor)
+        except Exception:  # pragma: no cover
+            d.text((cx, y), ln, font=f, fill=(0, 0, 0, 255))
+    return canvas.rotate(90, expand=True)
+
+
 @dataclass(frozen=True)
 class RenderResult:
     images: list[Image.Image]
@@ -195,6 +280,10 @@ def render_pages(
     chart_text_bold: bool = False,
     chart_text_italic: bool = False,
     stamp_text: str = "",
+    clip_content_mode: str = "off",
+    clip_text: str = "",
+    clip_text_font: str = "Inter",
+    clip_image_path: str = "",
 ) -> RenderResult:
     """Render one :class:`PIL.Image` per page for *target*.
 
@@ -289,6 +378,18 @@ def render_pages(
                     _sx0 = x_left + round(_span * _k / _n)
                     _sx1 = x_left + round(_span * (_k + 1) / _n) - 1
                     draw.rectangle([_sx0, _ly, _sx1, _yb], fill=ACCENT_RGB[_k])
+
+        # Left clip-strip content (i1/p3): rendered natively into the reserved
+        # lbord band, since the engine knows its exact geometry.
+        if clip_content_mode != "off":
+            _area = geometry.clip_area_px(geom, paper_h_mm, dpi)
+            if _area is not None and _area[2] > 0 and _area[3] > 0:
+                _ax, _ay, _aw, _ah = _area
+                _clip = render_clip_strip(
+                    clip_content_mode, width_px=_aw, height_px=_ah, dpi=dpi,
+                    text=clip_text, font_family=clip_text_font,
+                    image_path=clip_image_path)
+                img.paste(_clip, (_ax, _ay))
 
         # Bottom-of-sheet text: custom chart text + optional command stamp,
         # drawn in the bottom margin (clear of the patches).

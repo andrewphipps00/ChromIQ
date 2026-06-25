@@ -101,3 +101,15 @@ def test_clip_border_width_drives_lbord():
     # p3 honours it too; non-clip instruments are unaffected (lbord stays 0).
     assert instruments.build("p3", clip_border_width=40.0).lbord == pytest.approx(34.0)
     assert instruments.build("CM", clip_border_width=40.0).lbord == 0.0
+
+
+def test_clip_area_only_when_clip_border():
+    # i1 with clip border → a 20 mm-wide band (clip_width 26 − margin 6).
+    area = geometry.clip_area_mm(instruments.build("i1", border=6.0), 297.0)
+    assert area is not None
+    x, y, w, h = area
+    assert w == pytest.approx(20.0)
+    assert h == pytest.approx(297.0 - 12.0)
+    # no clip border → no area.
+    assert geometry.clip_area_mm(instruments.build("i1", nolpcbord=True), 297.0) is None
+    assert geometry.clip_area_mm(instruments.build("CM"), 297.0) is None
