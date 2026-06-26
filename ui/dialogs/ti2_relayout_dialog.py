@@ -3995,6 +3995,14 @@ class Ti2RelayoutDialog(QDialog):
         # printtarg even if the engine setting is on (preserve its real layout).
         self._loaded_printtarg_chart = self._engine_recipe is None
         if self._engine_recipe is not None and self._engine_panel is not None:
+            # The grid is loaded in the chart's final SHEET order (ChartSpec.
+            # from_ti2 sorts by SAMPLE_LOC), i.e. it already IS the randomised
+            # layout. So the preview must render it as-is — re-applying the
+            # original seed would randomise a second time, showing a different
+            # layout than the printed chart and than the grid (#93). Mark the
+            # working recipe un-randomised; the grid preserves the randomisation,
+            # and Shuffle re-randomises on demand.
+            self._engine_recipe.randomize = False
             self._engine_panel.set_recipe(self._engine_recipe)
         self._refresh_engine_panel_visible()
         self._set_chart(spec, program, note, is_saved=True)

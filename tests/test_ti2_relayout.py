@@ -498,3 +498,43 @@ def test_recolour_patch_lands_in_regenerated_ti2(ti2: Path, tmp_path: Path):
     # printtarg snaps to 8-bit, so allow a tolerance of one code (~0.4/100).
     assert any(all(abs(a - b) <= 0.4 for a, b in zip(p.dev, (20.0, 80.0, 75.0)))
                for p in new.patches)
+
+
+def test_engine_chart_reloads_in_sheet_order_renders_identically(tmp_path):
+    """A randomised engine chart, reloaded into the editor (grid = .ti2 SHEET
+    order), must re-render pixel-identically when treated as un-randomised — the
+    grid already IS the randomised layout, so re-applying the seed would show a
+    different chart than printed (#93)."""
+    import random
+    from workflow.layout_engine import chart as le_chart
+    from workflow.layout_engine.presets import default_recipe
+    from PIL import Image
+
+    src = R.ChartSpec.new("i1", "A4")
+    random.seed(7)
+    prog = [(random.random() * 100, random.random() * 100, random.random() * 100)
+            for _ in range(200)]
+    src_ti1 = tmp_path / "src.ti1"
+    R.write_ti1(src, prog, src_ti1)
+
+    # original chart, randomised with a fixed seed (like the Create Chart tab)
+    rec = default_recipe("i1", "A4"); rec.randomize = True; rec.seed = 4242
+    kw = rec.build_kwargs(); kw["dpi"] = 150
+    orig = le_chart.build_chart(str(src_ti1), tmp_path / "orig", **kw)
+    orig_img = np.asarray(Image.open(orig.tiff_paths[0]))
+
+    # editor load: grid comes from the .ti2 in SAMPLE_LOC sheet order
+    spec = R.ChartSpec.from_ti2(tmp_path / "orig.ti2")
+    grid_ti1 = tmp_path / "grid.ti1"
+    R.write_ti1(spec, R.default_program(spec), grid_ti1)
+
+    # the editor renders the loaded grid un-randomised (the fix)
+    rec2 = default_recipe("i1", "A4"); rec2.randomize = False
+    kw2 = rec2.build_kwargs(); kw2["dpi"] = 150
+    reloaded = le_chart.build_chart(str(grid_ti1), tmp_path / "reload", **kw2)
+    reload_img = np.asarray(Image.open(reloaded.tiff_paths[0]))
+
+    assert np.array_equal(orig_img, reload_img)
+    # and re-applying the seed on the sheet-order grid would NOT match (the bug)
+    bad = le_chart.build_chart(str(grid_ti1), tmp_path / "bad", **kw)
+    assert not np.array_equal(orig_img, np.asarray(Image.open(bad.tiff_paths[0])))
