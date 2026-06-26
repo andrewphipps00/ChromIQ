@@ -278,7 +278,10 @@ class LayoutOptionsPanel(QWidget):
         self.custom_spacer_cb.toggled.connect(self._on_custom_spacer_toggled)
         self._spacer_swatches = []
         _swrow = QHBoxLayout(); _swrow.setContentsMargins(0, 0, 0, 0); _swrow.setSpacing(4)
-        for _hex in ("#ff4573", "#ffb42d", "#56d6a5", "#37bcd6", "#9f82ff"):
+        # Five ChromIQ accents plus white + black, so the engine can pick a
+        # high-contrast separator against very light or very dark patches too.
+        for _hex in ("#ff4573", "#ffb42d", "#56d6a5", "#37bcd6", "#9f82ff",
+                     "#ffffff", "#000000"):
             _b = QPushButton(self)
             # NOT objectName "compact_input": that QSS imposes an input min-width
             # which overrides setFixedSize, blowing the 5 swatches up to ~446px
@@ -295,12 +298,14 @@ class LayoutOptionsPanel(QWidget):
         g.addWidget(TooltipButton(
             tr("Custom spacer colours"),
             tr("By default the engine separates patches with spacers drawn from "
-               "the five ChromIQ accent colours, automatically picking the one "
-               "with the most contrast at each gap so the instrument can always "
-               "find the patch edges. Turn this on to choose your own set of "
-               "spacer colours instead — click a swatch to change it. The engine "
-               "still auto-picks the highest-contrast one from your set per gap, "
-               "so keep them varied (and watch the low-contrast warning)."), self),
+               "the five ChromIQ accent colours plus white and black, "
+               "automatically picking the one with the most contrast at each gap "
+               "so the instrument can always find the patch edges (white and "
+               "black give it a strong choice against very dark or very light "
+               "patches). Turn this on to choose your own set instead — click a "
+               "swatch to change it. The engine still auto-picks the "
+               "highest-contrast one from your set per gap, so keep them varied "
+               "(and watch the low-contrast warning)."), self),
             7, 2)
         add_row(g, 8, tr("Spacer colours:"), _sww)
         self.edge_spacers_cb = QCheckBox(tr("Edge spacers (bracket each strip)"), self)
@@ -962,7 +967,11 @@ class LayoutOptionsPanel(QWidget):
         from PyQt6.QtGui import QColor
         from PyQt6.QtWidgets import QColorDialog
         cur = QColor(btn.property("hexcol") or "#ffffff")
-        col = QColorDialog.getColor(cur, self, tr("Spacer colour"))
+        # Non-native picker (hex field + RGB/HSV spinners), matching the editor's
+        # patch / single-colour pickers — not the OS colour panel.
+        col = QColorDialog.getColor(
+            cur, self, tr("Spacer colour"),
+            QColorDialog.ColorDialogOption.DontUseNativeDialog)
         if col.isValid():
             btn.setProperty("hexcol", col.name())
             self._style_swatch(btn)

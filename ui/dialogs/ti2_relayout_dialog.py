@@ -5733,8 +5733,9 @@ class Ti2RelayoutDialog(QDialog):
         if mods & Qt.KeyboardModifier.AltModifier:        # Alt-click clears it
             self._engine_panel.set_spacer_override(hit["flat"], None)
             return
-        from PyQt6.QtWidgets import QColorDialog
-        col = QColorDialog.getColor(QColor("#000000"), self, tr("Spacer colour"))
+        col = QColorDialog.getColor(
+            QColor("#000000"), self, tr("Spacer colour"),
+            QColorDialog.ColorDialogOption.DontUseNativeDialog)
         if col.isValid():
             self._engine_panel.set_spacer_override(hit["flat"], col.name())
 

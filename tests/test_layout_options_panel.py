@@ -94,3 +94,20 @@ def test_calibration_gated(app):
     assert p.cal_settings() == ("/tmp/x.cal", True)
     p.set_cal("/tmp/x.cal", "embed")
     assert p.cal_settings() == ("/tmp/x.cal", False)
+
+
+def test_custom_spacer_palette_includes_white_and_black(app):
+    """The custom spacer palette offers the 5 accents + white + black, and the
+    full 7-colour set round-trips through the recipe (#96 follow-up)."""
+    from ui.dialogs.layout_options_panel import LayoutOptionsPanel
+    panel = LayoutOptionsPanel(with_selectors=True)
+    assert len(panel._spacer_swatches) == 7
+    hexes = [b.property("hexcol").lower() for b in panel._spacer_swatches]
+    assert "#ffffff" in hexes and "#000000" in hexes
+    # enable custom and round-trip the 7-colour palette
+    panel.custom_spacer_cb.setChecked(True)
+    out = panel.get_recipe()
+    assert len(out.spacer_palette) == 7
+    panel.set_recipe(out)
+    assert [b.property("hexcol").lower() for b in panel._spacer_swatches] == \
+        [c.lower() for c in out.spacer_palette]
