@@ -186,9 +186,11 @@ def placement(geom: Geom, paper_w_mm: float, paper_h_mm: float, layout: Layout) 
     # the usable area (#93).
     # Effective label band (actual indicator+underline height when known) and
     # bottom reserve (sheet text / stamp), matching compute() so capacity and
-    # placement agree. leader_top still uses the plain instrument text height, so
-    # the label is rendered where it always was — only the patch block moves down
-    # to make room when the band is taller than the default.
+    # placement agree. The strip labels start flush under the top margin (the band
+    # below them is sized to the real label — font / size / rotation / multi-letter
+    # — by apply_furniture_reserves); the white leader still sits between the band
+    # and the first patch. A user strip_label_offset (applied in raster) nudges
+    # the labels from there.
     txhi = g.txhisl if g.label_band_mm < 0 else g.label_band_mm
     eff_lspa = max(g.border + g.lcar, g.lspa - g.txhisl + txhi)
     mints = max(g.margin_t + txhi + g.lcar, eff_lspa) + g.strip_indicator_gap
@@ -207,7 +209,7 @@ def placement(geom: Geom, paper_w_mm: float, paper_h_mm: float, layout: Layout) 
         y0_first=amints + _lead + g.offset_y,
         plen=g.plen, pwid=g.pwid, pspa=g.pspa, rrsp=g.rrsp,
         steps_in_pass=layout.steps_in_pass,
-        leader_top=g.margin_t + g.txhisl + g.offset_y,
+        leader_top=g.margin_t + g.offset_y,    # labels flush under the top margin
     )
 
 

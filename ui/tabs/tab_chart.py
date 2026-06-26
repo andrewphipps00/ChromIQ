@@ -2467,9 +2467,20 @@ class TabChart(QWidget):
         return PresetStore.from_named_dict(load_presets("chart_layout", self._settings))
 
     def _init_manual_layout_panel(self) -> None:
-        """Seed the layout panel from the active preset for its current
-        selection (first time the engine is shown in Manual)."""
+        """Seed the layout panel (first time the engine is shown in Manual).
+
+        Prefer the recipe saved by "Save as Defaults" (every engine option,
+        incl. paper, restored verbatim); otherwise fall back to the active
+        per-(instrument/paper/mode) preset for the current selection (#93)."""
         self._manual_panel_inited = True
+        saved = self._settings.get("manual_engine_recipe", None)
+        if isinstance(saved, dict):
+            from workflow.layout_engine.presets import LayoutRecipe
+            try:
+                self._manual_layout_panel.set_recipe(LayoutRecipe.from_dict(saved))
+                return
+            except Exception as exc:  # noqa: BLE001 — fall back to the preset
+                log.warning("restore engine layout defaults failed: %s", exc)
         inst, paper, mode = self._manual_layout_panel.selection()
         self._manual_layout_panel.set_recipe(self._layout_store().get(inst, paper, mode))
 
@@ -6701,6 +6712,16 @@ class TabChart(QWidget):
         if self._manual_td_check is not None:
             s.set("manual_printtarg__triple_density",
                   self._manual_td_check.isChecked())
+        # Persist the full ChromIQ layout-engine recipe so every engine option
+        # (paper, margins, indicators, strip gap, label offset, …) survives a
+        # restart — _init_manual_layout_panel restores it. Without this, only the
+        # printtarg widgets above were saved and the engine panel reset (#93).
+        if getattr(self, "_manual_layout_panel", None) is not None:
+            try:
+                s.set("manual_engine_recipe",
+                      self._current_layout_recipe().to_dict())
+            except Exception as exc:  # noqa: BLE001 — don't fail the whole save
+                log.warning("save engine layout defaults failed: %s", exc)
         log.info("Chart defaults saved")
         self._log.appendPlainText("Current settings saved as defaults.")
         self._log.ensureCursorVisible()

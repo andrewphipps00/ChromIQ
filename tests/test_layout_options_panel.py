@@ -78,6 +78,28 @@ def test_all_engine_options_roundtrip(app):
         assert getattr(out, f) == getattr(r, f), f
 
 
+def test_save_as_defaults_recipe_dict_roundtrip(app):
+    """Mirror the Create-Chart "Save as Defaults" path: a panel recipe survives
+    to_dict() → (settings) → from_dict() → set_recipe(), including paper and the
+    newer options. Guards the #93 bug where engine options reset after restart."""
+    from ui.dialogs.layout_options_panel import LayoutOptionsPanel
+    from workflow.layout_engine.presets import LayoutRecipe
+    src = LayoutOptionsPanel(with_selectors=True)
+    r = LayoutRecipe(instrument="i1", paper="A4R", margin_top=14.0,
+                     margin_bottom=14.0, strip_gap_mm=3.0,
+                     strip_label_offset_mm=-2.0, indicator_rotation=90,
+                     chart_text="{project} {page}")
+    src.set_recipe(r)
+    blob = src.get_recipe().to_dict()          # what _on_save_defaults stores
+
+    dst = LayoutOptionsPanel(with_selectors=True)
+    dst.set_recipe(LayoutRecipe.from_dict(blob))   # what _init_… restores
+    out = dst.get_recipe()
+    for f in ("paper", "margin_top", "margin_bottom", "strip_gap_mm",
+              "strip_label_offset_mm", "indicator_rotation", "chart_text"):
+        assert getattr(out, f) == getattr(r, f), f
+
+
 def test_changed_signal(app):
     from ui.dialogs.layout_options_panel import LayoutOptionsPanel
     panel = LayoutOptionsPanel()

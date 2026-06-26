@@ -490,12 +490,11 @@ class LayoutOptionsPanel(QWidget):
                 tip=TooltipButton(
                     tr("Label offset"),
                     tr("Moves the strip letters up or down without moving the "
-                       "patches. By default the labels sit a little below the top "
-                       "margin; a negative value (e.g. −6 mm) tucks them up "
-                       "closer to the edge to close that gap, a positive value "
-                       "lowers them toward the patches. The patch area doesn't "
-                       "change, so this doesn't affect how many patches fit."),
-                    self))
+                       "patches. By default the labels sit flush just under the "
+                       "top margin; a positive value lowers them toward the "
+                       "patches, a negative value raises them into the margin. The "
+                       "patch area doesn't change, so this doesn't affect how many "
+                       "patches fit."), self))
         v.addWidget(si)
         self._on_rotation_changed()
 

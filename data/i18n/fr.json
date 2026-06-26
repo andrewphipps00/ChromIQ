@@ -2003,7 +2003,6 @@
   "Strip gap (between strips):": "Strip gap (between strips):",
   "Label offset": "Label offset",
   "Label offset:": "Label offset:",
-  "Moves the strip letters up or down without moving the patches. By default the labels sit a little below the top margin; a negative value (e.g. −6 mm) tucks them up closer to the edge to close that gap, a positive value lowers them toward the patches. The patch area doesn't change, so this doesn't affect how many patches fit.": "Moves the strip letters up or down without moving the patches. By default the labels sit a little below the top margin; a negative value (e.g. −6 mm) tucks them up closer to the edge to close that gap, a positive value lowers them toward the patches. The patch area doesn't change, so this doesn't affect how many patches fit.",
   "Instrument name": "Instrument name",
   "Optional text printed in the bottom margin of every sheet. Use Insert ▾ to drop in a placeholder — it's replaced with a human-readable value when the chart is built: {project} (profile name), {page} (“page 1/3”), {date}, {paper} (e.g. “A4 landscape”), {instrument} (e.g. “i1Pro3+”), {patchcount}, {pages}, {seed}, {dpi}. The Preview line shows how it will read.": "Optional text printed in the bottom margin of every sheet. Use Insert ▾ to drop in a placeholder — it's replaced with a human-readable value when the chart is built: {project} (profile name), {page} (“page 1/3”), {date}, {paper} (e.g. “A4 landscape”), {instrument} (e.g. “i1Pro3+”), {patchcount}, {pages}, {seed}, {dpi}. The Preview line shows how it will read.",
   "Paper size & orientation": "Paper size & orientation",
@@ -2011,5 +2010,6 @@
   "Resolution (with “dpi”)": "Resolution (with “dpi”)",
   "Seed (with “seed”)": "Seed (with “seed”)",
   "This page, e.g. “page 1/3”": "This page, e.g. “page 1/3”",
-  "Total number of pages": "Total number of pages"
+  "Total number of pages": "Total number of pages",
+  "Moves the strip letters up or down without moving the patches. By default the labels sit flush just under the top margin; a positive value lowers them toward the patches, a negative value raises them into the margin. The patch area doesn't change, so this doesn't affect how many patches fit.": "Moves the strip letters up or down without moving the patches. By default the labels sit flush just under the top margin; a positive value lowers them toward the patches, a negative value raises them into the margin. The patch area doesn't change, so this doesn't affect how many patches fit."
 }
