@@ -1,5 +1,35 @@
 # Changelog
 
+## v3.13.0-beta.7
+
+Layout-engine flexibility & fixes from testing — more paper sizes, friendlier
+on-sheet text, tidier strip labels, and two persistence/preview bug fixes.
+
+### ✨ New / changed
+- **Portrait A2 / A3 / A3+** are now offered by the layout engine on the strip
+  readers (i1 / i1Pro3+) — the engine packs them itself, so it isn't bound by
+  printtarg's landscape-only capacity preference.
+- **The page-label column is gone and its ~5 mm reclaimed for patches** (i1/A4
+  now fits 462 vs printtarg's 441). The page number lives in the on-sheet text
+  instead, via a new **`{page}`** placeholder ("page 1/3").
+- **On-sheet placeholders now read in plain language:** `{instrument}` → "i1Pro3+",
+  `{paper}` → "A4 landscape", `{patchcount}` → "576 patches", `{seed}` → "seed
+  1234", `{dpi}` → "300 dpi", `{project}` → the printer-profile name. The Insert
+  menu, tooltip and live preview all match.
+- **Strip labels now sit flush under the top margin** (the band is still sized to
+  the real label — font, size, rotation, multi-letter). New **Label offset** lets
+  you nudge them; new **Strip gap** widens the space between strips.
+
+### 🐛 Fixed
+- **"Save as Defaults" now keeps every ChromIQ-engine option** (paper, margins,
+  indicators, strip gap, label offset, …). They were being reset on restart.
+- **Adding patches to an empty chart in the editor now shows a preview** built
+  from the current engine settings (the right pane stayed blank before).
+
+### 📝 Notes
+- Non-German engine strings remain English placeholders pending translation
+  before 3.13.0 final.
+
 ## v3.13.0-beta.6
 
 Refines the "stretch to fill the cube" option from Knut's testing — it now lives
