@@ -664,8 +664,9 @@ class SettingsDialog(QDialog):
         layout.addWidget(appearance_grp)
         layout.addStretch()
 
-        self._tabs.addTab(general_page, tr("General"))
-        self._tabs.addTab(self._build_margin_thresholds_tab(), tr("Margin Thresholds"))
+        self._tabs.addTab(self._scroll_wrap(general_page), tr("General"))
+        self._tabs.addTab(self._scroll_wrap(self._build_margin_thresholds_tab()),
+                          tr("Margin Thresholds"))
         self._tabs.addTab(self._build_chart_layout_tab(), tr("Chart Layout"))
 
         # ---- About / Updates (below the tabs) ----
@@ -1246,14 +1247,19 @@ class SettingsDialog(QDialog):
         _sync_layout_enabled(self._layout_engine_check.isChecked())
 
         self._on_layout_instr_changed()   # populate paper+mode, then load
+        return self._scroll_wrap(page)
 
-        # The full layout panel is tall — wrap it so the tab scrolls vertically
-        # instead of forcing the Settings window past the screen height.
-        from PyQt6.QtCore import Qt
-        from PyQt6.QtWidgets import QScrollArea
-        scroll = QScrollArea(self)
+    def _scroll_wrap(self, page: QWidget) -> QWidget:
+        """Wrap a settings tab in a fading scroll area so every tab scrolls and
+        shares the same backdrop (the tab pane is white, but a scroll area's
+        viewport follows the window tint — so wrapping all tabs keeps them
+        consistent) and gets the top/bottom fade the rest of the app uses."""
+        from ui.fade_scroll import FadeScrollArea
+        from ui.theme import resolve_mode
+        scroll = FadeScrollArea(self, surface="dialog")
+        scroll.set_appearance(resolve_mode(self._settings.get("appearance", "auto")))
         scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        scroll.setFrameShape(FadeScrollArea.Shape.NoFrame)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll.setWidget(page)
         return scroll

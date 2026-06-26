@@ -36,6 +36,7 @@ from PyQt6.QtWidgets import (
 from core.logger import get_logger
 from core.strip_utils import parse_passes_per_page
 from ui.styles import SPEC_AMBER, SPEC_MAGENTA, TAB_COLORS
+from ui.fade_scroll import FadeScrollArea
 from ui.gradient_overlay import GradientOverlay
 from ui.tab_header import SpectrumStripe as _SpectrumStripe, TabHeader
 from ui.tooltip_button import TooltipButton
@@ -644,67 +645,6 @@ class _PreviewLabel(QLabel):
 # ---------------------------------------------------------------------------
 # Right-panel scroll area with a top/bottom fade gradient.
 # ---------------------------------------------------------------------------
-class _FadeScrollArea(QScrollArea):
-    """QScrollArea that paints translucent fade strips at the top + bottom
-    edges so the user can see content continues out of view.
-
-    The fades only render when there's actually content above/below — at
-    the top they vanish when scrolled to the top, etc. The dialog colour
-    bleeds the fade into the surrounding panel.
-
-    We install an event filter on the viewport to draw AFTER the child
-    widget paints (QScrollArea's own paintEvent fires only on frame
-    repaints, not on scroll). The vertical scroll bar's valueChanged
-    triggers a viewport update so the fades refresh as the user scrolls.
-    """
-
-    _FADE_PX = 18
-
-    def __init__(self, parent=None) -> None:
-        super().__init__(parent)
-        self.verticalScrollBar().valueChanged.connect(
-            lambda _v: self.viewport().update()
-        )
-        self.viewport().installEventFilter(self)
-
-    def eventFilter(self, obj, ev):  # noqa: N802
-        if obj is self.viewport() and ev.type() == ev.Type.Paint:
-            # Let the viewport draw its child widget first, then overlay
-            # the fade strips on top.
-            res = super().eventFilter(obj, ev)
-            self._paint_fades(self.viewport())
-            return res
-        return super().eventFilter(obj, ev)
-
-    def _paint_fades(self, vp) -> None:
-        bar = self.verticalScrollBar()
-        if bar is None or bar.maximum() == 0:
-            return
-        from PyQt6.QtGui import QLinearGradient
-        w, h = vp.width(), vp.height()
-        if w <= 0 or h <= 0:
-            return
-        p = QPainter(vp)
-        p.setRenderHint(QPainter.RenderHint.Antialiasing, False)
-        # Sample the dialog background (one level up) so the fade matches
-        # whatever theme is active.
-        bg = (self.parentWidget() or self).palette().color(
-            self.backgroundRole())
-        clear  = QColor(bg.red(), bg.green(), bg.blue(), 0)
-        opaque = QColor(bg.red(), bg.green(), bg.blue(), 235)
-        if bar.value() > 0:
-            grad = QLinearGradient(0, 0, 0, self._FADE_PX)
-            grad.setColorAt(0.0, opaque)
-            grad.setColorAt(1.0, clear)
-            p.fillRect(0, 0, w, self._FADE_PX, grad)
-        if bar.value() < bar.maximum():
-            grad = QLinearGradient(0, h - self._FADE_PX, 0, h)
-            grad.setColorAt(0.0, clear)
-            grad.setColorAt(1.0, opaque)
-            p.fillRect(0, h - self._FADE_PX, w, self._FADE_PX, grad)
-        p.end()
-
-
 # ---------------------------------------------------------------------------
 # New-chart setup
 # ---------------------------------------------------------------------------
@@ -1194,7 +1134,10 @@ class _NewChartDialog(QDialog):
         btns.addWidget(ok)
         btns.addWidget(cancel)
 
-        scroll = QScrollArea(self)
+        scroll = FadeScrollArea(self, surface="dialog")
+        from ui.theme import resolve_mode
+        scroll.set_appearance(resolve_mode(
+            (self._settings.get("appearance", "auto") if self._settings else "auto")))
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
         scroll.setWidget(content)
@@ -2840,7 +2783,10 @@ class _AddPatchesDialog(_NewChartDialog):
         btns.addWidget(ok)
         btns.addWidget(cancel)
 
-        scroll = QScrollArea(self)
+        scroll = FadeScrollArea(self, surface="dialog")
+        from ui.theme import resolve_mode
+        scroll.set_appearance(resolve_mode(
+            (self._settings.get("appearance", "auto") if self._settings else "auto")))
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
         scroll.setWidget(content)
@@ -3379,7 +3325,10 @@ class Ti2RelayoutDialog(QDialog):
         body.setSpacing(8)
         body.addWidget(split, 1)
         controls = self._build_controls()
-        ctrl_scroll = _FadeScrollArea(self)
+        ctrl_scroll = FadeScrollArea(self, surface="dialog")
+        from ui.theme import resolve_mode
+        ctrl_scroll.set_appearance(
+            resolve_mode(self._settings.get("appearance", "auto")))
         ctrl_scroll.setWidget(controls)
         ctrl_scroll.setWidgetResizable(True)
         ctrl_scroll.setHorizontalScrollBarPolicy(
