@@ -336,9 +336,9 @@ def test_live_preview_pushes_existing_plus_new(qapp):
     assert pushed_existing == existing
 
 
-def test_live_preview_shows_existing_only_outside_generate_mode(qapp):
-    """In single-colour mode the panel shows just the existing patches (empty
-    generated set), not a stale generated view."""
+def test_live_preview_follows_single_colour_mode(qapp):
+    """In single-colour mode the cube previews the colour being added (not a
+    stale generated view, and no longer empty) (#96)."""
     existing = [(10.0, 10.0, 10.0)]
     dlg = _AddPatchesDialog(_FakeSettings(), existing_patches=existing)
     dlg._add_mode_single.setChecked(True)             # not generating
@@ -347,7 +347,7 @@ def test_live_preview_shows_existing_only_outside_generate_mode(qapp):
     dlg._cube_shown = True                            # preview unfolded
     dlg._do_push_live_preview()
     program, pushed_existing = dlg._cube_panel.pushed
-    assert program == []
+    assert program == [dlg._single_rgb]               # the colour being added
     assert pushed_existing == existing
 
 

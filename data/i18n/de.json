@@ -2000,5 +2000,6 @@
   "No colour values were found in that file.": "In dieser Datei wurden keine Farbwerte gefunden.",
   "No colours": "Keine Farben",
   "No file": "Keine Datei",
-  "{n} colours loaded": "{n} Farben geladen"
+  "{n} colours loaded": "{n} Farben geladen",
+  "Add the colours from an existing file to this chart. Works with Argyll measurement / target files (.ti1, .ti2, .ti3, .cgats), CIE reference files (.cie / .txt with XYZ or LAB values, like the ones that ship with scanner targets), and plain lists of hex or RGB values. Colour-only reference files have no printer numbers, so their colours are reconstructed for on-screen display and layout — handy for reusing a known chart's colours or inspecting them in the 3D cube. Near-duplicate colours are automatically spaced apart so the chart still reads reliably.": "Fügt die Farben aus einer vorhandenen Datei zu dieser Testkarte hinzu. Funktioniert mit Argyll-Mess-/Zieldateien (.ti1, .ti2, .ti3, .cgats), CIE-Referenzdateien (.cie / .txt mit XYZ- oder LAB-Werten, wie sie Scanner-Targets beiliegen) und einfachen Listen von Hex- oder RGB-Werten. Reine Farbreferenzdateien haben keine Druckerwerte, daher werden ihre Farben für die Bildschirmanzeige und das Layout rekonstruiert — praktisch, um die Farben einer bekannten Testkarte wiederzuverwenden oder sie im 3D-Würfel zu betrachten. Nahezu identische Farben werden automatisch auseinandergezogen, damit die Karte zuverlässig lesbar bleibt."
 }

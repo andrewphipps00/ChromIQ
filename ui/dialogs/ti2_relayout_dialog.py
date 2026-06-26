@@ -995,6 +995,7 @@ class _NewChartDialog(QDialog):
         paste_indent.addLayout(paste_btns)
         sl.addLayout(paste_indent)
         self._paste_edit.textChanged.connect(self._update_paste_count)
+        self._paste_edit.textChanged.connect(self._do_push_live_preview)  # cube (#96)
 
         # Generate colour sets — combinable generators (#37). Each ticked set
         # contributes its patches, concatenated top-to-bottom into the program.
@@ -2412,11 +2413,30 @@ class _NewChartDialog(QDialog):
         if self._existing_patches:
             self._gen_after_total.setText(tr("Chart after adding: {label}").format(
                 label=_patches_label(len(self._existing_patches) + len(additions))))
-        # The cube shows what's actually being added — nothing when generate is
-        # off (you're adding no sets), the additions otherwise.
-        program = additions if self._gen_sets_active() else []
+        # The cube shows whatever the *active* source mode would contribute —
+        # pasted/loaded colours and the single Add colour too, not only the
+        # generated sets (#96).
+        program = self._live_preview_program(additions)
         if getattr(self, "_cube_panel", None) is not None and self._cube_shown:
             self._cube_panel.set_program(program, self._existing_patches)
+
+    def _live_preview_program(self, additions: list) -> list:
+        """The colours the current source mode would add, for the live 3D cube.
+
+        Paste / "load from file" → the parsed colours; Add's single colour or
+        loaded file → those; generated sets → the additions. Seed-from-targen
+        isn't previewed (it needs a targen run, too slow to do live). (#96)
+        """
+        pm = getattr(self, "_mode_paste", None)
+        if pm is not None and pm.isChecked():
+            return R.parse_color_values(self._paste_edit.toPlainText())
+        sm = getattr(self, "_add_mode_single", None)
+        if sm is not None and sm.isChecked():
+            return [self._single_rgb]
+        fm = getattr(self, "_add_mode_file", None)
+        if fm is not None and fm.isChecked():
+            return list(getattr(self, "_loaded_add_program", []))
+        return additions if self._gen_sets_active() else []
 
     def showEvent(self, ev) -> None:  # noqa: N802
         super().showEvent(ev)
@@ -2478,6 +2498,7 @@ class _NewChartDialog(QDialog):
         self._count.setEnabled(self._mode_seed.isChecked())
         self._paste_edit.setEnabled(self._mode_paste.isChecked())
         self._update_gen_counts()
+        self._do_push_live_preview()   # the cube follows the active mode (#96)
 
     def _refresh_spacer_scale_enabled(self, *_a) -> None:
         """Disable Spacer scale (-A) when "None" is the spacer choice —
@@ -2616,6 +2637,7 @@ class _NewChartDialog(QDialog):
             "All files (*)", start_dir=str(Path.home()))
         if not path:
             return
+        self.raise_(); self.activateWindow()   # keep above the editor (#96)
         # Parse CGATS device files (ti1/ti2/ti3/cgats), CIE reference files
         # (XYZ/LAB → reconstructed sRGB) and plain hex/RGB lists alike (#96).
         try:
@@ -2787,6 +2809,17 @@ class _AddPatchesDialog(_NewChartDialog):
         file_row.addWidget(self._add_file_btn)
         file_row.addWidget(self._add_file_status)
         file_row.addStretch(1)
+        file_row.addWidget(_magenta_tip(
+            tr("Load colours from a file"),
+            tr("Add the colours from an existing file to this chart. Works with "
+               "Argyll measurement / target files (.ti1, .ti2, .ti3, .cgats), "
+               "CIE reference files (.cie / .txt with XYZ or LAB values, like the "
+               "ones that ship with scanner targets), and plain lists of hex or "
+               "RGB values. Colour-only reference files have no printer numbers, "
+               "so their colours are reconstructed for on-screen display and "
+               "layout — handy for reusing a known chart's colours or inspecting "
+               "them in the 3D cube. Near-duplicate colours are automatically "
+               "spaced apart so the chart still reads reliably."), self))
         lay.addLayout(file_row)
         self._add_mode_file.toggled.connect(self._refresh_add_mode)
 
@@ -2871,6 +2904,7 @@ class _AddPatchesDialog(_NewChartDialog):
 
     def _refresh_add_mode(self, *_a) -> None:
         self._update_gen_counts()
+        self._do_push_live_preview()   # the cube follows the active mode (#96)
 
     def _load_add_file(self) -> None:
         path = open_file_dialog(
@@ -2879,6 +2913,7 @@ class _AddPatchesDialog(_NewChartDialog):
             "All files (*)", start_dir=str(Path.home()))
         if not path:
             return
+        self.raise_(); self.activateWindow()   # keep above the editor (#96)
         try:
             prog = R.load_colour_file(Path(path))
         except Exception as exc:  # noqa: BLE001 — surface the parser's message
@@ -2888,11 +2923,18 @@ class _AddPatchesDialog(_NewChartDialog):
             QMessageBox.warning(self, tr("No colours"),
                                 tr("No colour values were found in that file."))
             return
+        # Space out near-duplicate colours so the chart still reads — a loaded
+        # set can repeat or run similar colours together (#96).
+        try:
+            prog = G.deduplicate(prog)
+        except Exception as exc:  # noqa: BLE001 — keep the raw set if dedupe fails
+            log.warning("deduplicate loaded colours failed: %s", exc)
         self._loaded_add_program = prog
         self._add_mode_file.setChecked(True)
         self._add_file_status.setText(
             tr("1 colour loaded") if len(prog) == 1
             else tr("{n} colours loaded").format(n=len(prog)))
+        self._do_push_live_preview()   # show the loaded colours in the cube (#96)
 
     def _paint_single_swatch(self) -> None:
         r, g, b = (max(0, min(255, round(c / 100 * 255)))
@@ -2914,6 +2956,7 @@ class _AddPatchesDialog(_NewChartDialog):
                             c.blue() / 255 * 100)
         self._paint_single_swatch()
         self._add_mode_single.setChecked(True)
+        self._do_push_live_preview()   # show the picked colour in the cube (#96)
 
     def _apply_gen_sets_and_refresh(self, st: dict) -> None:
         self._apply_gen_sets(st)
@@ -4158,6 +4201,9 @@ class Ti2RelayoutDialog(QDialog):
             self._status.setText(tr("Rendering initial preview…"))
             self._regenerate(save_to=None)
         else:
+            # Blank canvas: drop any preview left over from a previous chart so
+            # the empty grid and the preview agree (#96).
+            self._clear_preview()
             self._status.setText(tr("Empty chart — add patches, then preview."))
 
     # -- unsaved-change tracking (#49) -------------------------------------
@@ -5167,9 +5213,30 @@ class Ti2RelayoutDialog(QDialog):
 
 
     # -- regeneration / preview --------------------------------------------
+    def _clear_preview(self) -> None:
+        """Drop any shown preview (e.g. when the chart becomes empty) so a stale
+        image doesn't linger over an empty grid (#96)."""
+        self._full_pixmap = None
+        self._base_pixmap = None
+        self._engine_tiffs = []
+        self._regen = None
+        self._page = 0
+        self._spacers = []
+        self._sel_spacers.clear()
+        if hasattr(self, "_spacer_cache"):
+            self._spacer_cache.clear()
+        self._update_page_nav()
+        self._preview.clear()
+        self._preview.setText(tr("Preview will appear here."))
+
     def _regenerate(self, save_to: Path | None) -> None:
         if self._spec is None or self._grid.count() == 0:
-            self._status.setText(tr("Load or create a chart first."))
+            # Empty chart: clear any leftover preview rather than leaving a stale
+            # image (Update preview must "take" even with nothing to draw) (#96).
+            self._clear_preview()
+            self._status.setText(
+                tr("Empty chart — add patches, then preview.")
+                if self._spec is not None else tr("Load or create a chart first."))
             return
         if self._worker is not None and self._worker.isRunning():
             return

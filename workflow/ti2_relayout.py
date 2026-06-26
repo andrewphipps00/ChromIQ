@@ -559,7 +559,8 @@ def load_rgb_program(path: Path) -> list[tuple[float, float, float]]:
     return [(p.r, p.g, p.b) for p in patches]
 
 
-def parse_cie_values(text: str) -> list[tuple[float, float, float]]:
+def parse_cie_values(text: str, *, relative: bool = True
+                     ) -> list[tuple[float, float, float]]:
     """Parse a CIE reference table (CGATS carrying XYZ and/or LAB, but no device
     values) into a 0..100 RGB program by reconstructing approximate device sRGB.
 
@@ -568,6 +569,12 @@ def parse_cie_values(text: str) -> list[tuple[float, float, float]]:
     the colours can be laid out and analysed in the 3D cube. XYZ is preferred;
     LAB is used when only LAB is present. Returns ``[]`` when no XYZ/LAB columns
     are found (so callers can fall back to other parsers). (#96)
+
+    *relative* (default): media-relative rendering — the target's brightest /
+    white patch is mapped to display white so the colours fill the cube and read
+    naturally. Reflective targets have a media white well below a perfect 100
+    (e.g. Hutchcolor's is Y≈77), so *absolute* rendering would make everything
+    look dim and gamut-squeezed; pass ``relative=False`` for true absolute. (#96)
     """
     from workflow.spot_read_io import lab_d50_to_srgb, xyz_d50_to_srgb
     fm = re.search(r"BEGIN_DATA_FORMAT(.*?)END_DATA_FORMAT", text, re.DOTALL)
@@ -599,27 +606,43 @@ def parse_cie_values(text: str) -> list[tuple[float, float, float]]:
         return []
 
     out: list[tuple[float, float, float]] = []
+    _D50 = (0.96422, 1.0, 0.82521)
     if xyz_i:
         # XYZ scale varies (0..1 or 0..100, Y=white); detect from the peak.
         peak = max(max(r) for r in rows)
         s = 100.0 if peak > 2.0 else 1.0
-        for X, Y, Z in rows:
-            r, g, b = xyz_d50_to_srgb(X / s, Y / s, Z / s)
+        xyz = [(X / s, Y / s, Z / s) for X, Y, Z in rows]
+        if relative:
+            # Adapt to the media white (brightest patch by Y) so it renders as
+            # display white — per-component (von Kries in XYZ), fine for the
+            # near-neutral whites real targets have.
+            wx, wy, wz = max(xyz, key=lambda t: t[1])
+            wx, wy, wz = (wx or 1.0, wy or 1.0, wz or 1.0)
+            xyz = [(X / wx * _D50[0], Y / wy * _D50[1], Z / wz * _D50[2])
+                   for X, Y, Z in xyz]
+        for X, Y, Z in xyz:
+            r, g, b = xyz_d50_to_srgb(X, Y, Z)
             out.append((r / 255 * 100, g / 255 * 100, b / 255 * 100))
     else:
+        # LAB is already white-relative, but the media white's L* is usually
+        # < 100 (e.g. ~90), so scale lightness to map it to display white.
+        lmax = max(r[0] for r in rows) if relative else 100.0
+        lmax = lmax or 100.0
         for L, a, b in rows:
-            rr, gg, bb = lab_d50_to_srgb(L, a, b)
+            rr, gg, bb = lab_d50_to_srgb(L / lmax * 100.0, a, b)
             out.append((rr / 255 * 100, gg / 255 * 100, bb / 255 * 100))
     return out
 
 
-def load_colour_file(path: Path) -> list[tuple[float, float, float]]:
+def load_colour_file(path: Path, *, relative: bool = True
+                     ) -> list[tuple[float, float, float]]:
     """Load any supported colour file into a 0..100 RGB program.
 
     Extends :func:`load_rgb_program` (device-RGB CGATS / CxF — ti1 / ti2 / ti3 /
     cgats / txt / pxf) with **CIE reference files** (``.cie`` or text carrying
     XYZ / LAB, reconstructed to device sRGB) and a plain hex / RGB value list.
-    Raises ``ValueError`` if nothing usable is found. (#96)
+    Raises ``ValueError`` if nothing usable is found. *relative* picks the CIE
+    rendering intent (default media-relative; see :func:`parse_cie_values`). (#96)
     """
     path = Path(path)
     try:
@@ -629,7 +652,7 @@ def load_colour_file(path: Path) -> list[tuple[float, float, float]]:
     except Exception:  # noqa: BLE001 — fall through to the colorimetric / plain paths
         pass
     text = path.read_text(errors="ignore")
-    cie = parse_cie_values(text)
+    cie = parse_cie_values(text, relative=relative)
     if cie:
         return cie
     vals = parse_color_values(text)

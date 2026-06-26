@@ -593,3 +593,22 @@ def test_load_colour_file_plain_hex(tmp_path):
     p = tmp_path / "list.txt"; p.write_text("#ff0000\n#00ff00\n0,0,255\n")
     prog = R.load_colour_file(p)
     assert len(prog) == 3
+
+
+def test_parse_cie_media_relative_maps_white_to_display_white(tmp_path):
+    """A reflective target's media white (Y well below 100) renders as display
+    white under the default media-relative intent, and dim/gamut-squeezed under
+    absolute (#96)."""
+    cie = (
+        "NUMBER_OF_FIELDS 4\nBEGIN_DATA_FORMAT\nSAMPLE_ID XYZ_X XYZ_Y XYZ_Z\n"
+        "END_DATA_FORMAT\nBEGIN_DATA\n"
+        "A1\t74.0\t77.0\t64.0\n"     # media white (Y=77, like Hutchcolor)
+        "A2\t20.0\t21.0\t17.0\n"
+        "END_DATA\n"
+    )
+    rel = R.parse_cie_values(cie, relative=True)
+    ab = R.parse_cie_values(cie, relative=False)
+    # media-relative: white patch → near display white
+    assert min(rel[0]) > 97
+    # absolute: same white stays dim (it's only ~77% luminance)
+    assert max(ab[0]) < 95
