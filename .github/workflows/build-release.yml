@@ -410,9 +410,20 @@ jobs:
             echo "detach attempt $i failed; retrying in 3s…"; sleep 3
           done
           sleep 2
-          hdiutil convert /tmp/rw_x86.dmg \
-            -format UDZO -imagekey zlib-level=9 \
-            -o "$X86_DMG"
+          # Retry convert — the device can still report "Resource temporarily
+          # unavailable" right after detach on the runner (same guard as the
+          # universal DMG above; this bare convert flaked on v3.13.0-beta.2).
+          for i in 1 2 3; do
+            rm -f "$X86_DMG"
+            if hdiutil convert /tmp/rw_x86.dmg \
+                 -format UDZO -imagekey zlib-level=9 \
+                 -o "$X86_DMG"; then
+              break
+            fi
+            echo "x86_64 convert attempt $i failed; retrying in 5s…"
+            sleep 5
+          done
+          [ -f "$X86_DMG" ] || { echo "x86_64 DMG convert failed"; exit 1; }
           rm -f /tmp/rw_x86.dmg
           codesign --sign - "$X86_DMG"
 
