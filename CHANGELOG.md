@@ -1,5 +1,50 @@
 # Changelog
 
+## v3.13.0-beta.3
+
+A small follow-up beta: **load existing colour sets from files** (the first step
+toward the scanner-target workflow Knut proposed), plus polish and a correctness
+guarantee for the layout engine.
+
+### ✨ New
+- **Load colours from a file** — CIE reference files (`.cie` / `.txt` carrying
+  XYZ and/or LAB, e.g. SpyderChecker, QPcard, Wolf Faust IT8, Hutchcolor,
+  LaserSoft) as well as Argyll `.ti1` / `.ti2` / `.ti3` / `.cgats` and plain
+  hex/RGB lists. CIE files (no device values) are reconstructed to approximate
+  device sRGB so they can be laid out and analysed in the 3D cube. Available in:
+  - the **Edit / create chart layout** editor's **Load chart** button,
+  - the **New chart** window's "Load from file…",
+  - the **Add** window (new "Load colours from a file" option — previously you
+    had to create a whole new chart to add colours from a file).
+
+### 🎨 Polish
+- Dark-mode standard tabs (the Settings dialog) now match the roomier light-mode
+  tabs, so the two themes are consistent.
+
+### 🔒 Reliability
+- Added an end-to-end test that a generated chart's **saved TIFF carries the
+  exact device colour the `.ti2` records at every patch location** — i.e. what
+  gets printed is what `chartread` expects (verified across a randomised chart).
+- CI: the x86_64 DMG step now retries `hdiutil convert` (it flaked on beta-2).
+
+### 📝 Notes / still to do before 3.13.0 final
+- The engine is **beta** and **off by default**.
+- **Translations:** the new Chart-Layout / engine / file-loading strings are
+  English placeholders in the non-German catalogs — to be translated before final.
+- **Hardware verification:** print + measure on real i1Pro / i1Pro 3 /
+  ColorMunki / SpectroScan hardware — the gate to GA.
+- **CIE colour reconstruction is approximate** (D50→D65→sRGB, gamut-clamped) —
+  fine for layout/analysis, not a colour-managed proof; D65-referenced files
+  (e.g. SpyderChecker) shift slightly.
+- **Multi-strip instruments (DTP41/51):** denser multi-strip layout not done yet.
+- **Scanner workflow (planned, #97 / #98):** generate `.cht` + `.cie` from a
+  `.ti3`, then drive ArgyllCMS `scanin` + `colprof` for a full scanner→printer
+  roundtrip. `.ti1/.ti2/.ti3/.cie` loading (this release, #96) is the first step.
+- Deferred: DeviceN/Separation PDF output for wide-gamut / CMYK+N.
+
+Thanks again to **Knut Georg Larsson** for the detailed feature designs (#96–#98)
+and the example target files.
+
 ## v3.13.0-beta.2
 
 The second **ChromIQ layout engine** beta. It delivers the big beta-1 "coming
