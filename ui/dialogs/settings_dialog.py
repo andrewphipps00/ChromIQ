@@ -1275,7 +1275,7 @@ class SettingsDialog(QDialog):
         inst = self._layout_instr.currentData() or "i1"
         prev_paper = self._layout_paper.currentData()
         self._layout_paper.clear()
-        for code, label, _ in papers.list_papers(inst):
+        for code, label, _ in papers.list_papers(inst, for_engine=True):
             self._layout_paper.addItem(label, code)
         i = self._layout_paper.findData(prev_paper)
         self._layout_paper.setCurrentIndex(i if i >= 0 else 0)

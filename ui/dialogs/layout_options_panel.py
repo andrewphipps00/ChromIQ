@@ -768,7 +768,7 @@ class LayoutOptionsPanel(QWidget):
         inst = self.instr.currentData() or "i1"
         prev_paper = self.paper.currentData()
         self.paper.clear()
-        for code, label, _dims in papers.list_papers(inst):
+        for code, label, _dims in papers.list_papers(inst, for_engine=True):
             self.paper.addItem(label, code)
         self.paper.addItem(tr("Custom…"), "__custom__")
         i = self.paper.findData(prev_paper)

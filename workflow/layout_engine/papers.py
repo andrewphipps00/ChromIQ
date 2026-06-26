@@ -9,6 +9,18 @@ from __future__ import annotations
 
 from data.patch_db import EXCLUDED_PAPERS, PAPER_LABELS, PAPER_SIZES
 
+# The layout engine lays patches out itself, so it isn't bound by printtarg's
+# strip-reader capacity *preference* that hides portrait A2 / A3 / A3+ for the
+# i1 / p3 strip readers (``EXCLUDED_PAPERS``). The engine therefore offers those
+# portrait sizes on every instrument. Only genuinely physical / quality limits
+# remain: the SpectroScan bed can't reach a 594 mm-wide sheet (A2 landscape),
+# and p3's smallest photo formats still hold too few patches for a usable
+# profile. (#93)
+ENGINE_EXCLUDED_PAPERS: dict[str, set[str]] = {
+    "p3": {"127x178", "4x6"},
+    "SS": {"594x420"},
+}
+
 # Millimetre dimensions for the named (non ``WxH``) codes. The ``WxH`` codes in
 # PAPER_SIZES (e.g. "594x420") are parsed directly.
 _NAMED_MM: dict[str, tuple[float, float]] = {
@@ -50,13 +62,17 @@ def label(code: str) -> str:
     return PAPER_LABELS.get(code, code)
 
 
-def list_papers(instrument: str | None = None) -> list[tuple[str, str, tuple[float, float]]]:
+def list_papers(instrument: str | None = None, *, for_engine: bool = False
+                ) -> list[tuple[str, str, tuple[float, float]]]:
     """``[(code, label, (w_mm, h_mm))]`` in the app's canonical order.
 
-    If *instrument* is given, sizes excluded for it (``EXCLUDED_PAPERS``) are
-    omitted — matching the dropdown behaviour elsewhere in the app.
+    If *instrument* is given, sizes excluded for it are omitted. *for_engine*
+    picks the exclusion table: the engine's :data:`ENGINE_EXCLUDED_PAPERS`
+    (offers portrait A2/A3/A3+ on strip readers) vs printtarg's stricter
+    :data:`EXCLUDED_PAPERS`, matching the dropdown behaviour elsewhere.
     """
-    excluded = EXCLUDED_PAPERS.get(instrument or "", set())
+    table = ENGINE_EXCLUDED_PAPERS if for_engine else EXCLUDED_PAPERS
+    excluded = table.get(instrument or "", set())
     out: list[tuple[str, str, tuple[float, float]]] = []
     for code in PAPER_SIZES:
         if code in excluded:
