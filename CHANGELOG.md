@@ -1,5 +1,62 @@
 # Changelog
 
+## v3.13.0-beta.2
+
+The second **ChromIQ layout engine** beta. It delivers the big beta-1 "coming
+next" item — full layout-engine support in the **Edit / create chart layout**
+editor — plus much smarter capacity handling and a round of polish. Still
+**opt-in** (Settings → Chart Layout) and off by default.
+
+### ✨ New
+- **Engine in the chart editor.** Opening an engine chart shows every setting it
+  was made with, updates the preview live as you edit, and carries your changes
+  back to Create Chart. The **New chart** and **Add** windows respect the engine
+  too: the printtarg knobs are replaced by the engine's, with a Chart section for
+  the layout choices that change capacity (clip border on/off, *Don't cap strip
+  length*, ColorMunki density) and a live **"≈ N fit one page"** hint.
+- **Select patches in the preview.** Click or drag a marquee over the preview to
+  select patches (Shift to add, Alt to remove) — the same as printtarg charts.
+- **Multi-page navigation** (Page ◀ ▶) for engine charts in the editor preview.
+- **Seeded Shuffle.** Editor charts start un-randomised; **Shuffle** reuses the
+  same patches and randomises with a fresh, recorded seed.
+- **Rotated-label alignment.** For 90° / 270° strip indicators, choose Left /
+  Centered / Right; *Left* (default) keeps the first letter on a fixed line so a
+  two-letter label grows away from the patches instead of creeping toward them.
+- **Optional edge spacers** — bracket each strip with a leading + trailing
+  spacer like printtarg (off by default).
+
+### 🎯 Smarter packing (capacity now matches what's drawn)
+- The patches-per-page count now accounts for **everything that uses space**:
+  clip-border width, the strip-indicator gap, the real strip-label band
+  (indicator size / font / rotation), the underline, the bottom sheet text and
+  the command stamp. Charts no longer silently overflow, and the count is right.
+- **Reclaim space you're not using:** turning strip labels off, or choosing a
+  small indicator font, frees that space for more patches. With edge spacers
+  **off** (the default), the engine also reclaims the strip-end gaps printtarg
+  leaves — packing **denser than printtarg**, most at larger spacer widths.
+- The editor preview of a loaded chart now matches the printed chart exactly
+  (it was showing a second, different randomisation).
+
+### 🎨 Polish
+- Scroll **fade gradients** now actually render on the editor's controls panel
+  and the New chart / Add / Settings windows; the Settings tabs share one warm
+  background (the General / Margin tabs were stark white in light mode).
+- The checked Patches/Spacers selector is round again (was a magenta square).
+- The Settings window opens taller; the branding "IQ" uses the real Instrument
+  Serif italic; assorted editor layout/scroll fixes.
+
+### 📝 Notes / still to do before 3.13.0 final
+- The engine is **beta** and **off by default** — printtarg remains the default
+  and fallback.
+- **Translations:** the new Chart-Layout / engine strings are English
+  placeholders in the non-German catalogs — they'll be translated before final.
+- **Hardware verification:** print + measure on real i1Pro / i1Pro 3 /
+  ColorMunki / SpectroScan hardware is still pending and is the gate to GA.
+- **Multi-strip instruments (DTP41/51):** denser multi-strip layout isn't
+  implemented yet.
+- A future idea (deferred): emit charts as DeviceN/Separation PDF for
+  wide-gamut / CMYK+N profiling.
+
 ## v3.13.0-beta.1
 
 The first beta of the **ChromIQ layout engine** — an optional, built-in
