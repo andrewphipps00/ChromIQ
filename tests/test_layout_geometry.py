@@ -134,3 +134,27 @@ def test_spacer_rects_match_render_flat_index():
     a = np.asarray(res.images[0])
     r0 = rects[0]
     assert tuple(a[r0["y"] + r0["h"] // 2, r0["x"] + r0["w"] // 2]) == (255, 0, 255)
+
+
+def test_strip_indicator_gap_reduces_capacity_and_stays_in_bounds():
+    """A larger strip-indicator gap must reduce the patch count to fit, never
+    push patches off the usable area; a smaller gap fits more (#93)."""
+    pw, ph = 210.0, 297.0
+    prev = None
+    for gap in (0.0, 40.0, 60.0, 90.0):
+        g = instruments.build("i1", strip_indicator_gap=gap)
+        lay = geometry.compute(g, pw, ph, 1000)
+        pl = geometry.placement(g, pw, ph, lay)
+        block_bottom = pl.y_of(lay.steps_in_pass - 1) + pl.plen
+        usable_bottom = ph - max(g.margin_b, g.tspa)
+        # the last patch in a pass never crosses the bottom usable edge
+        assert block_bottom <= usable_bottom + 0.5, f"overflow at gap={gap}"
+        # capacity is monotonically non-increasing as the gap grows
+        if prev is not None:
+            assert lay.patches_per_page <= prev, f"gap={gap} didn't reduce count"
+        prev = lay.patches_per_page
+    # a big gap genuinely fits fewer than no gap
+    g0 = instruments.build("i1", strip_indicator_gap=0.0)
+    g9 = instruments.build("i1", strip_indicator_gap=90.0)
+    assert (geometry.compute(g9, pw, ph, 1000).patches_per_page
+            < geometry.compute(g0, pw, ph, 1000).patches_per_page)

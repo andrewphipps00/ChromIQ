@@ -63,7 +63,12 @@ def compute(geom: Geom, paper_w_mm: float, paper_h_mm: float, npat: int,
     minbs = g.margin_b
     if minbs < g.tspa:
         minbs = g.tspa
-    arowl = ph - mints - minbs - 2.0 * g.hxeh
+    # The strip-indicator gap is reserved white space between the label/clear
+    # area and the first patch, so it eats into the usable pass length — fewer
+    # patches fit a longer gap (and more fit a shorter one) instead of the chart
+    # just sliding down off the usable area (#93). placement() reserves the same
+    # amount, so capacity and placement agree.
+    arowl = ph - mints - minbs - 2.0 * g.hxeh - g.strip_indicator_gap
     if arowl > g.mxrowl:
         arowl = g.mxrowl
 
@@ -162,14 +167,21 @@ def placement(geom: Geom, paper_w_mm: float, paper_h_mm: float, layout: Layout) 
     """
     g = geom
     ph = paper_h_mm
-    mints = max(g.border + g.txhisl + g.lcar, g.lspa)
-    minbs = max(g.border, g.tspa)
+    # Top/bottom reservations use the independent page margins (floored by the
+    # instrument's leader/trailer minimums), matching compute() — previously this
+    # used the base `border` while compute used `margin_t`/`margin_b`, so the two
+    # disagreed whenever a margin differed from the border. The strip-indicator
+    # gap is folded into the top reservation (compute() reserves it too), so the
+    # patch block is centred in the space that actually remains and never runs off
+    # the usable area (#93).
+    mints = max(g.margin_t + g.txhisl + g.lcar, g.lspa) + g.strip_indicator_gap
+    minbs = max(g.margin_b, g.tspa)
     # Distribute slack like printtarg: amints = mints + 0.5*(slack - minbs)
     slack = ph - mints - g.pspa - layout.pprow * (g.plen + g.pspa)
     amints = mints + 0.5 * (slack - minbs)
     return Placement(
         x0=g.margin_l + g.lbord + g.offset_x,
-        y0_first=amints + g.pspa + g.strip_indicator_gap + g.offset_y,
+        y0_first=amints + g.pspa + g.offset_y,
         plen=g.plen, pwid=g.pwid, pspa=g.pspa, rrsp=g.rrsp,
         steps_in_pass=layout.steps_in_pass,
         leader_top=g.margin_t + g.txhisl + g.offset_y,
