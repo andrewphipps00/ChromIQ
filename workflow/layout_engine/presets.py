@@ -52,12 +52,16 @@ class LayoutRecipe:
     patch_h_mm: float = 0.0
     spacer_width_mm: float = 0.0   # 0 = instrument default
     inter_patch_mm: float = 0.0    # extra gap between patches
+    strip_gap_mm: float = 0.0      # extra gap BETWEEN strips (adds to row pitch)
     max_strip_mm: float = 0.0      # 0 = no explicit cap
     strip_indicator_gap_mm: float = 0.0
     offset_x_mm: float = 0.0       # whole-chart offset
     offset_y_mm: float = 0.0
     bit16: bool = False            # 16-bit TIFF output
     compression: str = "lzw"       # "lzw" | "zlib" | "none"
+    # Reserve + draw the per-page "N of M" label column (printtarg's page label).
+    # On by default (printtarg parity); off reclaims its ~5 mm for more patches.
+    show_page_label: bool = True
     show_strip_indicators: bool = True   # draw the per-strip letter labels
     indicator_font: str = "JetBrains Mono"
     indicator_size_mm: float = 0.0       # 0 = auto (instrument text height)
@@ -139,11 +143,13 @@ class LayoutRecipe:
             patch_h_mm=float(d.get("patch_h") or 0.0),
             spacer_width_mm=float(d.get("spacer_width") or 0.0),
             inter_patch_mm=float(d.get("inter_patch") or 0.0),
+            strip_gap_mm=float(d.get("strip_gap") or 0.0),
             max_strip_mm=float(d.get("max_strip") or 0.0),
             strip_indicator_gap_mm=float(d.get("strip_indicator_gap") or 0.0),
             offset_x_mm=float(d.get("offset_x", 0.0)),
             offset_y_mm=float(d.get("offset_y", 0.0)),
             bit16=bool(d.get("bit16", False)), compression=d.get("compression", "lzw"),
+            show_page_label=bool(d.get("page_label", True)),
             show_strip_indicators=bool(d.get("draw_indicators", True)),
             indicator_font=d.get("indicator_font", "JetBrains Mono"),
             indicator_size_mm=float(d.get("indicator_size_mm") or 0.0),
@@ -222,12 +228,14 @@ class LayoutRecipe:
             "patch_h": self.patch_h_mm or None,
             "spacer_width": self.spacer_width_mm or None,
             "inter_patch": self.inter_patch_mm or None,
+            "strip_gap": self.strip_gap_mm or None,
             "max_strip": self.max_strip_mm or None,
             "strip_indicator_gap": self.strip_indicator_gap_mm or None,
             "offset_x": self.offset_x_mm,
             "offset_y": self.offset_y_mm,
             "bit16": self.bit16,
             "compression": self.compression,
+            "page_label": self.show_page_label,
             "draw_indicators": self.show_strip_indicators,
             "indicator_font": self.indicator_font,
             "indicator_size_mm": self.indicator_size_mm,

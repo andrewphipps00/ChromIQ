@@ -223,3 +223,31 @@ def test_furniture_reserves_affect_capacity():
 def geometry_papers(code):
     from workflow.layout_engine import papers
     return papers.dimensions_mm(code)
+
+
+def test_page_label_toggle_reclaims_space():
+    """Turning the page label off drops the reserved ~5 mm column, so the
+    capacity rises; on is the printtarg-parity default (#93)."""
+    on = instruments.build("i1", page_label=True)
+    off = instruments.build("i1", page_label=False)
+    assert on.dopglabel and not off.dopglabel
+    cap_on = geometry.compute(on, *A4, 100_000).patches_per_page
+    cap_off = geometry.compute(off, *A4, 100_000).patches_per_page
+    assert cap_off > cap_on
+
+
+def test_strip_gap_reduces_capacity():
+    """Extra gap between strips widens the row pitch, so fewer strips (and
+    patches) fit; 0 is the default (#93)."""
+    base = instruments.build("i1")
+    wide = instruments.build("i1", strip_gap=4.0)
+    assert wide.rrsp == base.rrsp + 4.0
+    assert (geometry.compute(wide, *A4, 100_000).patches_per_page
+            < geometry.compute(base, *A4, 100_000).patches_per_page)
+
+
+def test_page_label_default_preserves_parity():
+    """build() with no page_label arg leaves the instrument's dopglabel as-is, so
+    the golden printtarg-parity numbers above are unchanged."""
+    assert instruments.build("i1").dopglabel is True
+    assert instruments.build("51").dopglabel is False

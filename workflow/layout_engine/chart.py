@@ -102,8 +102,10 @@ def build_chart(
     patch_h: float | None = None,
     spacer_width: float | None = None,
     inter_patch: float | None = None,
+    strip_gap: float | None = None,
     max_strip: float | None = None,
     strip_indicator_gap: float | None = None,
+    page_label: bool = True,
     offset_x: float = 0.0,
     offset_y: float = 0.0,
     bit16: bool = False,
@@ -160,9 +162,11 @@ def build_chart(
         instrument, hflag=hflag, density=density, spacer_on=spacer_on, pscale=pscale,
         sscale=sscale, border=border, margins=margins, patch_w=patch_w,
         patch_h=patch_h, spacer_width=spacer_width, inter_patch=inter_patch,
-        max_strip=max_strip, strip_indicator_gap=strip_indicator_gap,
+        strip_gap=strip_gap, max_strip=max_strip,
+        strip_indicator_gap=strip_indicator_gap,
         offset_x=offset_x, offset_y=offset_y, nolpcbord=nolpcbord, nolimit=nolimit,
         clip_border_width=clip_border_width, edge_spacers=edge_spacers,
+        page_label=page_label,
     )
     # Reserve the space the rendered furniture (strip-label band + underline,
     # bottom sheet text / stamp) actually consumes, so the laid-out patch count

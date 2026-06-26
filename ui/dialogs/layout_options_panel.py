@@ -221,6 +221,7 @@ class LayoutOptionsPanel(QWidget):
         self.patch_x = small_mm(); self.patch_x.setSpecialValueText(tr("auto"))
         self.patch_y = small_mm(); self.patch_y.setSpecialValueText(tr("auto"))
         self.inter_patch = mm()
+        self.strip_gap = mm()
         self.sig = mm()
         add_row(g, 0, tr("Patch size (mm):"),
                 cell(self.patch_x, QLabel("×", self), self.patch_y),
@@ -272,6 +273,16 @@ class LayoutOptionsPanel(QWidget):
                     tr("The gap, in mm, between a strip's letter label at the top "
                        "and the first patch below it. Larger values push the "
                        "patches down to leave more room for the label."), self))
+        add_row(g, 7, tr("Strip gap (between strips):"), self.strip_gap,
+                tip=TooltipButton(
+                    tr("Strip gap"),
+                    tr("Extra blank space added sideways between neighbouring "
+                       "strips (columns of patches), in mm. Usually 0, which packs "
+                       "the strips as tightly as the instrument allows to fit the "
+                       "most patches per sheet. Raise it if your scanner needs a "
+                       "wider gutter between strips, or to spread a sparse chart "
+                       "out — each millimetre here means fewer strips fit, so the "
+                       "patch count drops."), self))
         # Custom spacer palette (colored mode): the engine draws each gap's
         # spacer from this set instead of the built-in accents.
         self.custom_spacer_cb = QCheckBox(tr("Custom spacer colours"), self)
@@ -294,7 +305,7 @@ class LayoutOptionsPanel(QWidget):
             _swrow.addWidget(_b)
         _swrow.addStretch()
         _sww = QWidget(self); _sww.setLayout(_swrow)
-        g.addWidget(self.custom_spacer_cb, 7, 1)
+        g.addWidget(self.custom_spacer_cb, 8, 1)
         g.addWidget(TooltipButton(
             tr("Custom spacer colours"),
             tr("By default the engine separates patches with spacers drawn from "
@@ -306,11 +317,11 @@ class LayoutOptionsPanel(QWidget):
                "swatch to change it. The engine still auto-picks the "
                "highest-contrast one from your set per gap, so keep them varied "
                "(and watch the low-contrast warning)."), self),
-            7, 2)
-        add_row(g, 8, tr("Spacer colours:"), _sww)
+            8, 2)
+        add_row(g, 9, tr("Spacer colours:"), _sww)
         self.edge_spacers_cb = QCheckBox(tr("Edge spacers (bracket each strip)"), self)
         self.edge_spacers_cb.toggled.connect(self._emit)
-        g.addWidget(self.edge_spacers_cb, 9, 1)
+        g.addWidget(self.edge_spacers_cb, 10, 1)
         g.addWidget(TooltipButton(
             tr("Edge spacers"),
             tr("Adds a spacer before the first patch and after the last patch of "
@@ -320,7 +331,7 @@ class LayoutOptionsPanel(QWidget):
                "reading. It fits in space the layout already reserves, so it "
                "doesn't reduce the patch count. Turn it on if you prefer the "
                "printtarg look or want an extra separator at the strip ends."),
-            self), 9, 2)
+            self), 10, 2)
         v.addWidget(ps)
 
         # ---- Randomisation ----
@@ -487,6 +498,9 @@ class LayoutOptionsPanel(QWidget):
         self.dpi.setSuffix(" dpi"); self.dpi.valueChanged.connect(self._emit)
         self.nolimit = QCheckBox(tr("Don't cap strip length"), self)
         self.nolimit.toggled.connect(self._emit)
+        self.page_label_cb = QCheckBox(tr("Show page label"), self)
+        self.page_label_cb.setChecked(True)
+        self.page_label_cb.toggled.connect(self._emit)
         self.max_strip = mm(special_auto=True, top=2000.0)  # large paper / roll media
         self.offx = small_mm(top=300.0)
         self.offy = small_mm(top=300.0)
@@ -554,6 +568,14 @@ class LayoutOptionsPanel(QWidget):
                "strip run the full usable height. Only enable if your instrument "
                "can read an unlimited-length strip; otherwise leave it off."),
             self), 7, 2)
+        gg.addWidget(self.page_label_cb, 8, 1)
+        gg.addWidget(TooltipButton(
+            tr("Show page label"),
+            tr("Prints a small “page 1 of N” label in a narrow column down the "
+               "right edge, so the sheets of a multi-page chart stay in order. It "
+               "reserves about 5 mm on the right. Turn it off to reclaim that "
+               "space for more patches — handy on a single-page chart, where the "
+               "page number isn't needed."), self), 8, 2)
         v.addWidget(pg)
         self._update_clip_visibility()
 
@@ -1207,6 +1229,7 @@ class LayoutOptionsPanel(QWidget):
         self.patch_x.setValue(r.patch_w_mm)
         self.patch_y.setValue(r.patch_h_mm)
         self.inter_patch.setValue(r.inter_patch_mm)
+        self.strip_gap.setValue(r.strip_gap_mm)
         self.sig.setValue(r.strip_indicator_gap_mm)
         self.margins["t"].setValue(r.margin_top)
         self.margins["r"].setValue(r.margin_right)
@@ -1215,6 +1238,7 @@ class LayoutOptionsPanel(QWidget):
         self._border = r.border        # preserve base margin across the round-trip
         self.dpi.setValue(r.dpi)
         self.nolimit.setChecked(r.nolimit)
+        self.page_label_cb.setChecked(bool(r.show_page_label))
         self.max_strip.setValue(r.max_strip_mm)
         self.offx.setValue(r.offset_x_mm)
         self.offy.setValue(r.offset_y_mm)
@@ -1281,6 +1305,7 @@ class LayoutOptionsPanel(QWidget):
         r.patch_w_mm = self.patch_x.value()
         r.patch_h_mm = self.patch_y.value()
         r.inter_patch_mm = self.inter_patch.value()
+        r.strip_gap_mm = self.strip_gap.value()
         r.strip_indicator_gap_mm = self.sig.value()
         r.margin_top = self.margins["t"].value()
         r.margin_right = self.margins["r"].value()
@@ -1294,6 +1319,7 @@ class LayoutOptionsPanel(QWidget):
         r.border = self._border
         r.dpi = int(self.dpi.value())
         r.nolimit = self.nolimit.isChecked()
+        r.show_page_label = self.page_label_cb.isChecked()
         r.max_strip_mm = self.max_strip.value()
         r.offset_x_mm = self.offx.value()
         r.offset_y_mm = self.offy.value()

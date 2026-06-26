@@ -235,6 +235,30 @@ def clip_area_px(geom: Geom, paper_h_mm: float, dpi: int
     return tuple(round(v * mm2px) for v in area)  # type: ignore[return-value]
 
 
+def page_label_area_mm(geom: Geom, paper_w_mm: float, paper_h_mm: float
+                       ) -> tuple[float, float, float, float] | None:
+    """The reserved per-page label column (rightmost ``pglth`` strip), in mm.
+
+    Returns ``(x, y, w, h)`` or ``None`` when the page label is off for this
+    geometry (``dopglabel`` False). The strip-packing in :func:`compute` excludes
+    ``pglth`` from the patch area, so this column never overlaps the patches.
+    """
+    if not geom.dopglabel or geom.pglth <= 0:
+        return None
+    return (paper_w_mm - geom.margin_r - geom.pglth, geom.margin_t, geom.pglth,
+            max(0.0, paper_h_mm - geom.margin_t - geom.margin_b))
+
+
+def page_label_area_px(geom: Geom, paper_w_mm: float, paper_h_mm: float, dpi: int
+                       ) -> tuple[int, int, int, int] | None:
+    """:func:`page_label_area_mm` rounded to whole pixels at *dpi*."""
+    area = page_label_area_mm(geom, paper_w_mm, paper_h_mm)
+    if area is None:
+        return None
+    mm2px = dpi / 25.4
+    return tuple(round(v * mm2px) for v in area)  # type: ignore[return-value]
+
+
 def strip_rects_px(geom: Geom, paper_w_mm: float, paper_h_mm: float,
                    layout: Layout, dpi: int) -> list[dict]:
     """Exact per-strip (pass) bounding rectangles in pixels, for the measure tab.

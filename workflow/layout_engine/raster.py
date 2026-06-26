@@ -500,6 +500,7 @@ def render_pages(
     clip_text: str = "",
     clip_text_font: str = "Inter",
     clip_image_path: str = "",
+    page_label_text: str = "",
 ) -> RenderResult:
     """Render one :class:`PIL.Image` per page for *target*.
 
@@ -676,6 +677,19 @@ def render_pages(
             for ln in _btxt:
                 draw.text((px(geom.margin_l), yy), ln, font=sfont, fill=(0, 0, 0))
                 yy += line_h
+
+        # Per-page label column (printtarg's page label): a rotated "N of M"
+        # (optionally prefixed with the chart name) up the reserved right strip,
+        # so multi-page charts stay self-identifying. Drawn only where the
+        # geometry reserved the column (geom.dopglabel); the toggle that turns it
+        # off also drops the reservation, so capacity and ink agree.
+        _pa = geometry.page_label_area_px(geom, paper_w_mm, paper_h_mm, dpi)
+        if _pa is not None and _pa[2] > 0 and _pa[3] > 0:
+            _lx, _ly, _lw, _lh = _pa
+            _txt = ((f"{page_label_text} - " if page_label_text else "")
+                    + f"page {page + 1} of {layout.pages}")
+            _ptile = _vtext(_txt, chart_text_font, _lw, _lh, valign="center")
+            img.paste(_ptile, (_lx, _ly), _ptile)
         images.append(img)
 
     flagged = contrast.low_contrast_passes(rgb_by_slot, steps)

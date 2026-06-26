@@ -358,3 +358,23 @@ def test_custom_spacer_palette():
     a = np.asarray(res.images[0])
     assert (a == [255, 0, 0]).all(2).any()          # a palette colour is used
     assert not (a == [0, 255, 0]).all(2).any()      # a non-palette colour isn't
+
+
+def test_page_label_drawn_in_reserved_column():
+    """When the page label is on, ink appears in the reserved right-edge column
+    and the patches don't overlap it; off leaves the column blank (#93)."""
+    target = _rgb_target(120)
+    w_mm, h_mm = 210.0, 297.0
+    g_on = instruments.build("i1", page_label=True)
+    lay = geometry.compute(g_on, w_mm, h_mm, 120)
+    res = raster.render_pages(target, lay, g_on, seed=1, paper_w_mm=w_mm,
+                              paper_h_mm=h_mm, dpi=150, page_label_text="Demo")
+    import numpy as np
+    area = geometry.page_label_area_px(g_on, w_mm, h_mm, 150)
+    assert area is not None
+    x, y, ww, hh = area
+    col = np.asarray(res.images[0])[y:y + hh, x:x + ww]
+    assert (col < 120).any()          # some dark text ink present
+
+    g_off = instruments.build("i1", page_label=False)
+    assert geometry.page_label_area_px(g_off, w_mm, h_mm, 150) is None

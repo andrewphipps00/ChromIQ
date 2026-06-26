@@ -112,6 +112,7 @@ def build(
     patch_h: float | None = None,
     spacer_width: float | None = None,
     inter_patch: float | None = None,
+    strip_gap: float | None = None,
     max_strip: float | None = None,
     strip_indicator_gap: float | None = None,
     offset_x: float = 0.0,
@@ -120,6 +121,7 @@ def build(
     nolimit: bool = False,
     clip_border_width: float = 26.0,
     edge_spacers: bool = False,
+    page_label: bool | None = None,
 ) -> Geom:
     """Resolve :class:`Geom`, applying ChromIQ extensions over the base geometry.
 
@@ -142,6 +144,8 @@ def build(
         ratio = (geom.rrsp / geom.pwid) if geom.pwid else 1.0
         pwid = float(patch_w)
         rrsp = pwid * ratio
+    if strip_gap:                       # extra gutter between strips (adds to pitch)
+        rrsp += float(strip_gap)
     pspa = geom.pspa
     if spacer_width is not None and geom.pspa > 0:   # only when spacers are on
         pspa = float(spacer_width)
@@ -150,10 +154,13 @@ def build(
     mxrowl = float(max_strip) if max_strip else geom.mxrowl
     sig = geom.strip_indicator_gap if strip_indicator_gap is None \
         else float(strip_indicator_gap)
+    # The page-label column is reserved only where the instrument supports it
+    # (dopglabel); the user toggle can switch it off to reclaim that ~5 mm.
+    dopg = geom.dopglabel if page_label is None else (geom.dopglabel and bool(page_label))
     return replace(geom, margin_t=mt, margin_r=mr, margin_b=mb, margin_l=ml,
                    plen=plen, pwid=pwid, rrsp=rrsp, pspa=pspa, mxrowl=mxrowl,
                    strip_indicator_gap=sig, offset_x=offset_x, offset_y=offset_y,
-                   edge_spacers=edge_spacers)
+                   edge_spacers=edge_spacers, dopglabel=dopg)
 
 
 # Keys of a recipe ``build_kwargs()`` dict that affect the laid-out geometry —
@@ -164,9 +171,9 @@ def build(
 # truth shared by every capacity calculation.
 GEOM_BUILD_KEYS = (
     "hflag", "density", "spacer_on", "pscale", "sscale", "border", "margins",
-    "patch_w", "patch_h", "spacer_width", "inter_patch", "max_strip",
+    "patch_w", "patch_h", "spacer_width", "inter_patch", "strip_gap", "max_strip",
     "strip_indicator_gap", "offset_x", "offset_y", "nolpcbord", "nolimit",
-    "clip_border_width", "edge_spacers",
+    "clip_border_width", "edge_spacers", "page_label",
 )
 
 
