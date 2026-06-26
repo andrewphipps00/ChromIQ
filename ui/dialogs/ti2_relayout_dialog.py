@@ -993,28 +993,7 @@ class _NewChartDialog(QDialog):
         paste_btns.addStretch(1)
         paste_btns.addWidget(self._paste_status)
         paste_indent.addLayout(paste_btns)
-        # Optional non-colorimetric stretch so reference colours fill the RGB
-        # cube when reused as a chart layout (#96).
-        _stretch_row = QHBoxLayout()
-        self._stretch_cb = QCheckBox(tr("Stretch colours to fill the RGB cube"),
-                                     src_box)
-        self._stretch_cb.toggled.connect(self._do_push_live_preview)
-        _stretch_row.addWidget(self._stretch_cb)
-        _stretch_row.addWidget(_magenta_tip(
-            tr("Stretch colours to fill the RGB cube"),
-            tr("Off (default), colours load faithfully — measured/reference "
-               "colours (from CIE files) keep their true values, so a reflective "
-               "target only fills part of the cube because its inks can't reach "
-               "pure red/green/blue. Turn this on to stretch each channel to the "
-               "full range so the colours spread across the whole cube — handy "
-               "when you want to reuse a reference chart's colours as a fresh "
-               "layout. It changes the colours (no longer colorimetrically "
-               "accurate), so leave it off if you need the real values."), self))
-        _stretch_row.addStretch(1)
-        paste_indent.addLayout(_stretch_row)
         sl.addLayout(paste_indent)
-        # _add_stretch_cb is the Add dialog's equivalent; absent here so
-        # _maybe_stretch falls back to _stretch_cb in the New-chart dialog.
         self._paste_edit.textChanged.connect(self._update_paste_count)
         self._paste_edit.textChanged.connect(self._do_push_live_preview)  # cube (#96)
 
@@ -2450,27 +2429,19 @@ class _NewChartDialog(QDialog):
         """
         pm = getattr(self, "_mode_paste", None)
         if pm is not None and pm.isChecked():
-            return self._maybe_stretch(R.parse_color_values(self._paste_edit.toPlainText()))
+            return R.parse_color_values(self._paste_edit.toPlainText())
         sm = getattr(self, "_add_mode_single", None)
         if sm is not None and sm.isChecked():
             return [self._single_rgb]
         fm = getattr(self, "_add_mode_file", None)
         if fm is not None and fm.isChecked():
-            return self._maybe_stretch(list(getattr(self, "_loaded_add_program", [])))
+            return list(getattr(self, "_loaded_add_program", []))
         return additions if self._gen_sets_active() else []
-
-    def _maybe_stretch(self, prog: list) -> list:
-        """Apply the per-channel cube-fill stretch if the dialog's stretch
-        checkbox is on (#96)."""
-        cb = getattr(self, "_stretch_cb", None) or getattr(self, "_add_stretch_cb", None)
-        if cb is not None and cb.isChecked() and prog:
-            return R.stretch_to_cube(prog)
-        return prog
 
     def _ensure_cube_shown(self) -> None:
         """Unfold the live 3D cube if it's collapsed — called after loading
-        colours from a file so the distribution (and the stretch toggle's
-        effect) is visible immediately, not hidden behind the fold (Knut, #96)."""
+        colours from a file so the distribution is visible immediately, not
+        hidden behind the fold (#96)."""
         btn = getattr(self, "_fold_btn", None)
         if btn is not None and not btn.isChecked():
             btn.setChecked(True)   # fires _on_fold_toggled → re-pushes the cube
@@ -2670,13 +2641,13 @@ class _NewChartDialog(QDialog):
     def _load_paste_file(self) -> None:
         path = open_file_dialog(
             self, "Load colour values",
-            "Colour files (*.cie *.txt *.ti1 *.ti2 *.ti3 *.cgats *.csv *.tsv);;"
+            "Colour files (*.txt *.ti1 *.ti2 *.ti3 *.cgats *.csv *.tsv);;"
             "All files (*)", start_dir=str(Path.home()))
         if not path:
             return
         self.raise_(); self.activateWindow()   # keep above the editor (#96)
-        # Parse CGATS device files (ti1/ti2/ti3/cgats), CIE reference files
-        # (XYZ/LAB → reconstructed sRGB) and plain hex/RGB lists alike (#96).
+        # Parse device-RGB CGATS files (ti1/ti2/ti3/cgats) and plain hex/RGB
+        # lists. CIE reference files (XYZ/LAB) aren't supported (#96).
         try:
             prog = R.load_colour_file(Path(path))
         except Exception as exc:  # noqa: BLE001 — surface the parser's message
@@ -2718,7 +2689,6 @@ class _NewChartDialog(QDialog):
                                     tr("Couldn't parse any RGB / hex values "
                                     "from the pasted text."))
                 return
-            program = self._maybe_stretch(program)   # cube-fill stretch (#96)
         elif self._mode_generate.isChecked():
             program = self._build_generated_program()
             if not program:
@@ -2851,34 +2821,11 @@ class _AddPatchesDialog(_NewChartDialog):
         file_row.addWidget(_magenta_tip(
             tr("Load colours from a file"),
             tr("Add the colours from an existing file to this chart. Works with "
-               "Argyll measurement / target files (.ti1, .ti2, .ti3, .cgats), "
-               "CIE reference files (.cie / .txt with XYZ or LAB values, like the "
-               "ones that ship with scanner targets), and plain lists of hex or "
-               "RGB values. Colour-only reference files have no printer numbers, "
-               "so their colours are reconstructed for on-screen display and "
-               "layout — handy for reusing a known chart's colours or inspecting "
-               "them in the 3D cube. Near-duplicate colours are automatically "
-               "spaced apart so the chart still reads reliably."), self))
+               "Argyll measurement / target files (.ti1, .ti2, .ti3, .cgats) that "
+               "carry device-RGB values, and plain lists of hex or RGB values. "
+               "Near-duplicate colours are automatically spaced apart so the "
+               "chart still reads reliably."), self))
         lay.addLayout(file_row)
-        # Optional cube-fill stretch for the loaded colours (#96).
-        _add_stretch_row = QHBoxLayout()
-        _add_stretch_row.setContentsMargins(22, 0, 0, 0)
-        self._add_stretch_cb = QCheckBox(
-            tr("Stretch colours to fill the RGB cube"), self)
-        self._add_stretch_cb.toggled.connect(self._do_push_live_preview)
-        _add_stretch_row.addWidget(self._add_stretch_cb)
-        _add_stretch_row.addWidget(_magenta_tip(
-            tr("Stretch colours to fill the RGB cube"),
-            tr("Off (default), colours load faithfully — measured/reference "
-               "colours (from CIE files) keep their true values, so a reflective "
-               "target only fills part of the cube because its inks can't reach "
-               "pure red/green/blue. Turn this on to stretch each channel to the "
-               "full range so the colours spread across the whole cube — handy "
-               "when you want to reuse a reference chart's colours as a fresh "
-               "layout. It changes the colours (no longer colorimetrically "
-               "accurate), so leave it off if you need the real values."), self))
-        _add_stretch_row.addStretch(1)
-        lay.addLayout(_add_stretch_row)
         self._add_mode_file.toggled.connect(self._refresh_add_mode)
 
         lay.addWidget(self._add_mode_gen)
@@ -2967,7 +2914,7 @@ class _AddPatchesDialog(_NewChartDialog):
     def _load_add_file(self) -> None:
         path = open_file_dialog(
             self, "Load colours",
-            "Colour files (*.cie *.txt *.ti1 *.ti2 *.ti3 *.cgats *.csv *.tsv);;"
+            "Colour files (*.txt *.ti1 *.ti2 *.ti3 *.cgats *.csv *.tsv);;"
             "All files (*)", start_dir=str(Path.home()))
         if not path:
             return
@@ -3027,7 +2974,7 @@ class _AddPatchesDialog(_NewChartDialog):
                 QMessageBox.warning(self, tr("No file"),
                                     tr("Choose a colour file to add first."))
                 return
-            self.result_program = self._maybe_stretch(list(self._loaded_add_program))
+            self.result_program = list(self._loaded_add_program)
             self.accept()
             return
         if self._add_mode_gen.isChecked():
@@ -3832,13 +3779,6 @@ class Ti2RelayoutDialog(QDialog):
         addrem.addWidget(rem_b)
         pb.addLayout(addrem)
         combine = QHBoxLayout()
-        append_b = QPushButton(tr("Append from file…"), self._patch_box)
-        append_b.setToolTip(
-            tr("Load another patch set (.ti2 / .ti1 / .ti3 / CGATS .txt / "
-            "i1Profiler .pxf / .pwxf) and add its colours to the start or end "
-            "of this chart — an easy way to combine sets. RGB only."))
-        append_b.clicked.connect(self._append_from_file)
-        combine.addWidget(append_b)
         view3d_b = QPushButton(tr("3D distribution…"), self._patch_box)
         view3d_b.setToolTip(
             tr("Show the patch set as a rotatable 3D RGB cube so you can see how "
@@ -4157,11 +4097,9 @@ class Ti2RelayoutDialog(QDialog):
         """Load a device-RGB colours file (ti1 / ti3 / cgats / hex list) as a new
         editable chart — default instrument/paper, following the engine setting
         like a from-scratch chart, so the colours can be relaid out and analysed
-        in the 3D cube. CIE reference files are rejected here (allow_cie=False):
-        they load via the New chart / Add windows, which carry the fill-the-cube
-        stretch toggle (Knut, #96)."""
+        in the 3D cube. CIE reference files (XYZ/LAB only) aren't supported (#96)."""
         try:
-            program = R.load_colour_file(path, allow_cie=False)
+            program = R.load_colour_file(path)
         except Exception as exc:  # noqa: BLE001 — surface the parser's message
             QMessageBox.warning(self, tr("Could not load chart"), str(exc))
             return False
@@ -4649,50 +4587,11 @@ class Ti2RelayoutDialog(QDialog):
             return extra
         return None
 
-    def _append_from_file(self) -> None:
-        """Combine another patch set into this chart (start or end).
-
-        Parses any supported RGB patch file via
-        :func:`workflow.ti2_relayout.load_rgb_program`, asks whether to place
-        the new colours at the start or the end, splices them into the grid,
-        and re-previews. RGB-only — non-RGB sources surface the parser's error.
-        """
-        if self._spec is None:
-            self._status.setText(tr("Load or create a chart first."))
-            return
-        start = (self._settings.get("custom_output_path", "")
-                 or str(Path.home() / "ChromIQ"))
-        patterns = " ".join(f"*{s}" for s in R.LOADABLE_PATCH_SUFFIXES)
-        path = open_file_dialog(
-            self, "Append patches from file",
-            f"Patch sets ({patterns});;All files (*)", start_dir=start)
-        if not path:
-            return
-        try:
-            extra = R.load_rgb_program(Path(path))
-        except Exception as exc:  # noqa: BLE001 — show the parser's message
-            QMessageBox.warning(self, tr("Could not load patches"), str(exc))
-            return
-        if not extra:
-            QMessageBox.warning(self, tr("No patches"),
-                                tr("No RGB patches found in {name}.").format(
-                                    name=Path(path).name))
-            return
-
-        n = len(extra)
-        if n == 1:
-            ready = tr("1 colour from “{name}” is ready to add."
-                       ).format(name=Path(path).name)
-        else:
-            ready = tr("{n} colours from “{name}” are ready to add."
-                       ).format(n=n, name=Path(path).name)
-        self._place_patches_into_grid(extra, ready)
-
     def _place_patches_into_grid(self, extra: list[tuple], ready: str) -> None:
         """Ask whether to add *extra* RGB patches at the start or the end of the
         chart, splice them in, and re-preview. ``ready`` is the lead sentence of
-        the prompt (it names where the colours came from). Shared by "Add…"
-        (generated sets) and "Append from file…"."""
+        the prompt (it names where the colours came from). Used by "Add…"
+        (generated sets)."""
         box = QMessageBox(self)
         box.setWindowTitle(tr("Add the new colours"))
         box.setIcon(QMessageBox.Icon.NoIcon)

@@ -540,47 +540,6 @@ def test_engine_chart_reloads_in_sheet_order_renders_identically(tmp_path):
     assert not np.array_equal(orig_img, np.asarray(Image.open(bad.tiff_paths[0])))
 
 
-def test_load_colour_file_cie_xyz(tmp_path):
-    """A CIE reference table (XYZ only, IT8.7/2 style) loads as a 0..100 RGB
-    program with the white patch landing near white (#96)."""
-    cie = (
-        "IT8.7/2\nNUMBER_OF_FIELDS 4\n"
-        "BEGIN_DATA_FORMAT\nSAMPLE_ID XYZ_X XYZ_Y XYZ_Z\nEND_DATA_FORMAT\n"
-        "NUMBER_OF_SETS 2\nBEGIN_DATA\n"
-        "A1\t95.0\t100.0\t108.0\n"      # ~D65 white
-        "A2\t0.0\t0.0\t0.0\n"           # black
-        "END_DATA\n"
-    )
-    p = tmp_path / "ref.cie"; p.write_text(cie)
-    prog = R.load_colour_file(p)
-    assert len(prog) == 2
-    r, g, b = prog[0]
-    assert min(r, g, b) > 85          # white patch is bright
-    assert sum(prog[1]) < 6           # black patch is ~0
-
-
-def test_load_colour_file_cie_lab_only(tmp_path):
-    """LAB-only reference data is reconstructed too."""
-    cie = (
-        "NUMBER_OF_FIELDS 4\nBEGIN_DATA_FORMAT\n"
-        "SAMPLE_ID LAB_L LAB_A LAB_B\nEND_DATA_FORMAT\n"
-        "BEGIN_DATA\nA1\t100.0\t0.0\t0.0\nA2\t0.0\t0.0\t0.0\nEND_DATA\n"
-    )
-    p = tmp_path / "ref.txt"; p.write_text(cie)
-    prog = R.load_colour_file(p)
-    assert len(prog) == 2 and min(prog[0]) > 90 and sum(prog[1]) < 6
-
-
-def test_load_colour_file_classic_mac_cr_endings(tmp_path):
-    """A reference file with classic-Mac \\r line endings (as in the Hutchcolor
-    sample) still parses (#96)."""
-    cie = ("NUMBER_OF_FIELDS 4\rBEGIN_DATA_FORMAT\rSAMPLE_ID XYZ_X XYZ_Y XYZ_Z\r"
-           "END_DATA_FORMAT\rBEGIN_DATA\rA1\t95\t100\t108\rA2\t20\t20\t20\rEND_DATA\r")
-    p = tmp_path / "cr.txt"; p.write_text(cie)
-    prog = R.load_colour_file(p)
-    assert len(prog) == 2
-
-
 def test_load_colour_file_ti1_device_values(tmp_path):
     """Device-RGB CGATS (ti1) load via the existing loader, values preserved."""
     R.write_ti1(R.ChartSpec.new("i1", "A4"),
@@ -595,60 +554,12 @@ def test_load_colour_file_plain_hex(tmp_path):
     assert len(prog) == 3
 
 
-def test_parse_cie_media_relative_maps_white_to_display_white(tmp_path):
-    """A reflective target's media white (Y well below 100) renders as display
-    white under the default media-relative intent, and dim/gamut-squeezed under
-    absolute (#96)."""
-    cie = (
-        "NUMBER_OF_FIELDS 4\nBEGIN_DATA_FORMAT\nSAMPLE_ID XYZ_X XYZ_Y XYZ_Z\n"
-        "END_DATA_FORMAT\nBEGIN_DATA\n"
-        "A1\t74.0\t77.0\t64.0\n"     # media white (Y=77, like Hutchcolor)
-        "A2\t20.0\t21.0\t17.0\n"
-        "END_DATA\n"
-    )
-    rel = R.parse_cie_values(cie, relative=True)
-    ab = R.parse_cie_values(cie, relative=False)
-    # media-relative: white patch → near display white
-    assert min(rel[0]) > 97
-    # absolute: same white stays dim (it's only ~77% luminance)
-    assert max(ab[0]) < 95
-
-
-def test_stretch_to_cube_fills_range():
-    """Per-channel stretch maps each channel's range to the full 0..100 cube,
-    leaving a no-range channel alone (#96)."""
-    prog = [(20.0, 40.0, 50.0), (60.0, 40.0, 80.0), (40.0, 40.0, 65.0)]
-    out = R.stretch_to_cube(prog)
-    rs = [p[0] for p in out]; bs = [p[2] for p in out]
-    assert min(rs) == 0.0 and max(rs) == 100.0      # R stretched
-    assert min(bs) == 0.0 and max(bs) == 100.0      # B stretched
-    assert all(p[1] == 40.0 for p in out)           # G had no range → unchanged
-    assert R.stretch_to_cube([]) == []
-
-
-def test_load_colour_file_allow_cie_false_rejects_cie(tmp_path):
-    """The editor's Load chart passes allow_cie=False: a CIE-only reference
-    (no device RGB) is rejected with a message pointing at New chart / Add,
-    while a device-RGB file still loads (Knut, #96)."""
+def test_load_colour_file_rejects_cie(tmp_path):
+    """CIE reference files (XYZ/LAB only, no device values) are not supported —
+    they raise a clear ValueError pointing the user elsewhere (#96)."""
     cie = ("NUMBER_OF_FIELDS 4\nBEGIN_DATA_FORMAT\nSAMPLE_ID XYZ_X XYZ_Y XYZ_Z\n"
            "END_DATA_FORMAT\nBEGIN_DATA\nA1\t95\t100\t108\nA2\t0\t0\t0\n"
            "END_DATA\n")
     p = tmp_path / "ref.cie"; p.write_text(cie)
     with pytest.raises(ValueError, match="CIE reference"):
-        R.load_colour_file(p, allow_cie=False)
-    # device-RGB file still loads with the CIE path disabled
-    R.write_ti1(R.ChartSpec.new("i1", "A4"),
-                [(100.0, 0.0, 0.0), (0.0, 50.0, 100.0)], tmp_path / "s.ti1")
-    prog = R.load_colour_file(tmp_path / "s.ti1", allow_cie=False)
-    assert (100.0, 0.0, 0.0) in [tuple(round(v, 3) for v in p) for p in prog]
-
-
-def test_load_colour_file_default_is_faithful(tmp_path):
-    """Default load is colorimetric (absolute) — a reflective media white
-    (Y≈77) does NOT stretch to display white (#96)."""
-    cie = ("NUMBER_OF_FIELDS 4\nBEGIN_DATA_FORMAT\nSAMPLE_ID XYZ_X XYZ_Y XYZ_Z\n"
-           "END_DATA_FORMAT\nBEGIN_DATA\nA1\t74\t77\t64\nA2\t20\t21\t17\n"
-           "END_DATA\n")
-    p = tmp_path / "r.cie"; p.write_text(cie)
-    prog = R.load_colour_file(p)                      # default faithful
-    assert max(prog[0]) < 95                          # media white stays ~228/255
+        R.load_colour_file(p)

@@ -559,141 +559,31 @@ def load_rgb_program(path: Path) -> list[tuple[float, float, float]]:
     return [(p.r, p.g, p.b) for p in patches]
 
 
-def parse_cie_values(text: str, *, relative: bool = True
-                     ) -> list[tuple[float, float, float]]:
-    """Parse a CIE reference table (CGATS carrying XYZ and/or LAB, but no device
-    values) into a 0..100 RGB program by reconstructing approximate device sRGB.
+def load_colour_file(path: Path) -> list[tuple[float, float, float]]:
+    """Load a **device-RGB** colour file into a 0..100 RGB program.
 
-    These reference files (``.cie`` / plain ``.txt``, used for scanner targets)
-    describe colours colorimetrically; we rebuild device RGB (D50→D65→sRGB) so
-    the colours can be laid out and analysed in the 3D cube. XYZ is preferred;
-    LAB is used when only LAB is present. Returns ``[]`` when no XYZ/LAB columns
-    are found (so callers can fall back to other parsers). (#96)
-
-    *relative* (default): media-relative rendering — the target's brightest /
-    white patch is mapped to display white so the colours fill the cube and read
-    naturally. Reflective targets have a media white well below a perfect 100
-    (e.g. Hutchcolor's is Y≈77), so *absolute* rendering would make everything
-    look dim and gamut-squeezed; pass ``relative=False`` for true absolute. (#96)
-    """
-    from workflow.spot_read_io import lab_d50_to_srgb, xyz_d50_to_srgb
-    fm = re.search(r"BEGIN_DATA_FORMAT(.*?)END_DATA_FORMAT", text, re.DOTALL)
-    dm = re.search(r"BEGIN_DATA(?!_FORMAT)(.*?)END_DATA", text, re.DOTALL)
-    if not fm or not dm:
-        return []
-    fields = fm.group(1).split()
-    idx = {n: i for i, n in enumerate(fields)}
-
-    def cols(*names):
-        return [idx[n] for n in names] if all(n in idx for n in names) else None
-
-    xyz_i = cols("XYZ_X", "XYZ_Y", "XYZ_Z")
-    lab_i = cols("LAB_L", "LAB_A", "LAB_B")
-    if not xyz_i and not lab_i:
-        return []
-
-    rows: list[tuple[float, float, float]] = []
-    for line in dm.group(1).splitlines():
-        toks = _split_cgats(line)
-        if len(toks) < len(fields):
-            continue
-        src = xyz_i or lab_i
-        try:
-            rows.append(tuple(float(toks[i]) for i in src))
-        except (ValueError, IndexError):
-            continue
-    if not rows:
-        return []
-
-    out: list[tuple[float, float, float]] = []
-    _D50 = (0.96422, 1.0, 0.82521)
-    if xyz_i:
-        # XYZ scale varies (0..1 or 0..100, Y=white); detect from the peak.
-        peak = max(max(r) for r in rows)
-        s = 100.0 if peak > 2.0 else 1.0
-        xyz = [(X / s, Y / s, Z / s) for X, Y, Z in rows]
-        if relative:
-            # Adapt to the media white (brightest patch by Y) so it renders as
-            # display white — per-component (von Kries in XYZ), fine for the
-            # near-neutral whites real targets have.
-            wx, wy, wz = max(xyz, key=lambda t: t[1])
-            wx, wy, wz = (wx or 1.0, wy or 1.0, wz or 1.0)
-            xyz = [(X / wx * _D50[0], Y / wy * _D50[1], Z / wz * _D50[2])
-                   for X, Y, Z in xyz]
-        for X, Y, Z in xyz:
-            r, g, b = xyz_d50_to_srgb(X, Y, Z)
-            out.append((r / 255 * 100, g / 255 * 100, b / 255 * 100))
-    else:
-        # LAB is already white-relative, but the media white's L* is usually
-        # < 100 (e.g. ~90), so scale lightness to map it to display white.
-        lmax = max(r[0] for r in rows) if relative else 100.0
-        lmax = lmax or 100.0
-        for L, a, b in rows:
-            rr, gg, bb = lab_d50_to_srgb(L / lmax * 100.0, a, b)
-            out.append((rr / 255 * 100, gg / 255 * 100, bb / 255 * 100))
-    return out
-
-
-def stretch_to_cube(program: list[tuple[float, float, float]]
-                    ) -> list[tuple[float, float, float]]:
-    """Per-channel stretch a 0..100 RGB program so it fills the RGB cube.
-
-    Each channel is mapped from its own [min, max] to [0, 100]. This is a
-    *non-colorimetric* visualisation/layout transform: a reflective target's
-    colours occupy only part of the cube, so stretching makes them span it when
-    reusing those colours as a chart layout (Knut's request, #96). A channel
-    with no range is left at its value. Empty input returns ``[]``.
-    """
-    if not program:
-        return []
-    cols = list(zip(*program))
-    lohi = [(min(c), max(c)) for c in cols]
-
-    def s(v: float, lo: float, hi: float) -> float:
-        return v if hi - lo < 1e-9 else (v - lo) / (hi - lo) * 100.0
-
-    return [tuple(s(v, *lohi[i]) for i, v in enumerate(p)) for p in program]
-
-
-def load_colour_file(path: Path, *, relative: bool = False,
-                     allow_cie: bool = True
-                     ) -> list[tuple[float, float, float]]:
-    """Load any supported colour file into a 0..100 RGB program.
-
-    Extends :func:`load_rgb_program` (device-RGB CGATS / CxF — ti1 / ti2 / ti3 /
-    cgats / txt / pxf) with **CIE reference files** (``.cie`` or text carrying
-    XYZ / LAB, reconstructed to device sRGB) and a plain hex / RGB value list.
-    Raises ``ValueError`` if nothing usable is found. *relative* picks the CIE
-    rendering intent — default **False** (absolute / faithful, matching Argyll's
-    rectarg "display" intent); see :func:`parse_cie_values`. Callers offer an
-    optional :func:`stretch_to_cube` pass for the "fill the cube" layout use.
-
-    *allow_cie* (default True) gates the CIE-reconstruction fallback. The editor's
-    Load chart button passes ``allow_cie=False`` so reference (CIE) files are
-    only loaded — and stretched — via the New chart / Add windows, where the
-    fill-the-cube toggle lives (Knut, #96).
+    Accepts device-RGB CGATS / CxF (ti1 / ti2 / ti3 / cgats / txt / pxf, via
+    :func:`load_rgb_program`) and a plain hex / RGB value list. Raises
+    ``ValueError`` if nothing usable is found. CIE reference files (XYZ / LAB
+    only, no device values) are **not** supported — for full-cube coverage use
+    the colour-set generators instead (#96).
     """
     path = Path(path)
     try:
         prog = load_rgb_program(path)
         if prog:
             return prog
-    except Exception:  # noqa: BLE001 — fall through to the colorimetric / plain paths
+    except Exception:  # noqa: BLE001 — fall through to the plain value list
         pass
     text = path.read_text(errors="ignore")
-    if allow_cie:
-        cie = parse_cie_values(text, relative=relative)
-        if cie:
-            return cie
-    elif parse_cie_values(text, relative=relative):
-        # The file is a CIE reference (only XYZ/LAB) — supported, but not here.
-        raise ValueError(
-            f"{path.name}: this is a CIE reference file. Load it in the "
-            "New chart or Add window, where you can stretch its colours to "
-            "fill the RGB cube.")
     vals = parse_color_values(text)
     if vals:
         return vals
+    if re.search(r"\b(XYZ_X|LAB_L)\b", text):
+        raise ValueError(
+            f"{path.name}: this is a CIE reference file (XYZ / LAB only), which "
+            "isn't supported. Load a device-RGB chart (.ti1 / .ti2 / .ti3 / "
+            "CGATS) or a hex / RGB list instead.")
     raise ValueError(f"{path.name}: no usable colour values found.")
 
 
