@@ -4258,10 +4258,16 @@ class Ti2RelayoutDialog(QDialog):
         self._suppress_undo = False
         self._reset_undo()
         # Auto-render the initial preview so the user sees the chart
-        # immediately instead of having to click "Update preview" first.
+        # immediately instead of having to click "Update preview" first. Use the
+        # engine when it's active (a from-scratch / engine chart), else printtarg
+        # — mirroring _schedule_auto_refresh, so a new engine chart previews via
+        # the engine instead of silently doing nothing (#93).
         if program:
             self._status.setText(tr("Rendering initial preview…"))
-            self._regenerate(save_to=None)
+            if self._engine_active():
+                self._engine_preview_timer.start()
+            else:
+                self._regenerate(save_to=None)
         else:
             # Blank canvas: drop any preview left over from a previous chart so
             # the empty grid and the preview agree (#96).
@@ -4508,11 +4514,28 @@ class Ti2RelayoutDialog(QDialog):
         extra = dlg.result_program
         if self._spec is None:
             # Nothing loaded yet — seed a fresh blank chart from the added
-            # patches (there's nothing to append to). _set_chart renders the
-            # initial preview; plain grid edits don't, since _schedule_auto_
-            # refresh needs a spec.
-            self._set_chart(R.ChartSpec.new("i1", "A4"), list(extra),
-                            tr("New chart"))
+            # patches (there's nothing to append to). Set up the engine panel the
+            # way a from-scratch chart does (mirroring _load_colour_chart_from),
+            # so when the engine is on _set_chart renders the initial preview via
+            # the engine instead of leaving the right pane blank (#93).
+            spec = R.ChartSpec.new("i1", "A4")
+            self._options = R.LayoutOptions()
+            self._basename = "chart"
+            self._chart_recipe = None
+            self._engine_recipe = None
+            self._engine_ti1 = None
+            self._loaded_printtarg_chart = False   # follow the engine setting
+            if (bool(self._settings.get("use_chromiq_layout_engine", False))
+                    and self._engine_panel is not None):
+                from workflow.layout_engine.presets import default_recipe
+                try:
+                    rec = default_recipe("i1", spec.paper_flag)
+                    rec.randomize = False
+                    self._engine_panel.set_recipe(rec)
+                except Exception as exc:  # noqa: BLE001
+                    log.warning("seed engine panel for added patches failed: %s", exc)
+            self._refresh_engine_panel_visible()
+            self._set_chart(spec, list(extra), tr("New chart"))
             return
         if len(extra) == 1:
             # A single hand-picked colour goes straight on the end (no prompt).
