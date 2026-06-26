@@ -655,7 +655,8 @@ def stretch_to_cube(program: list[tuple[float, float, float]]
     return [tuple(s(v, *lohi[i]) for i, v in enumerate(p)) for p in program]
 
 
-def load_colour_file(path: Path, *, relative: bool = False
+def load_colour_file(path: Path, *, relative: bool = False,
+                     allow_cie: bool = True
                      ) -> list[tuple[float, float, float]]:
     """Load any supported colour file into a 0..100 RGB program.
 
@@ -665,7 +666,12 @@ def load_colour_file(path: Path, *, relative: bool = False
     Raises ``ValueError`` if nothing usable is found. *relative* picks the CIE
     rendering intent — default **False** (absolute / faithful, matching Argyll's
     rectarg "display" intent); see :func:`parse_cie_values`. Callers offer an
-    optional :func:`stretch_to_cube` pass for the "fill the cube" layout use. (#96)
+    optional :func:`stretch_to_cube` pass for the "fill the cube" layout use.
+
+    *allow_cie* (default True) gates the CIE-reconstruction fallback. The editor's
+    Load chart button passes ``allow_cie=False`` so reference (CIE) files are
+    only loaded — and stretched — via the New chart / Add windows, where the
+    fill-the-cube toggle lives (Knut, #96).
     """
     path = Path(path)
     try:
@@ -675,9 +681,16 @@ def load_colour_file(path: Path, *, relative: bool = False
     except Exception:  # noqa: BLE001 — fall through to the colorimetric / plain paths
         pass
     text = path.read_text(errors="ignore")
-    cie = parse_cie_values(text, relative=relative)
-    if cie:
-        return cie
+    if allow_cie:
+        cie = parse_cie_values(text, relative=relative)
+        if cie:
+            return cie
+    elif parse_cie_values(text, relative=relative):
+        # The file is a CIE reference (only XYZ/LAB) — supported, but not here.
+        raise ValueError(
+            f"{path.name}: this is a CIE reference file. Load it in the "
+            "New chart or Add window, where you can stretch its colours to "
+            "fill the RGB cube.")
     vals = parse_color_values(text)
     if vals:
         return vals

@@ -626,6 +626,23 @@ def test_stretch_to_cube_fills_range():
     assert R.stretch_to_cube([]) == []
 
 
+def test_load_colour_file_allow_cie_false_rejects_cie(tmp_path):
+    """The editor's Load chart passes allow_cie=False: a CIE-only reference
+    (no device RGB) is rejected with a message pointing at New chart / Add,
+    while a device-RGB file still loads (Knut, #96)."""
+    cie = ("NUMBER_OF_FIELDS 4\nBEGIN_DATA_FORMAT\nSAMPLE_ID XYZ_X XYZ_Y XYZ_Z\n"
+           "END_DATA_FORMAT\nBEGIN_DATA\nA1\t95\t100\t108\nA2\t0\t0\t0\n"
+           "END_DATA\n")
+    p = tmp_path / "ref.cie"; p.write_text(cie)
+    with pytest.raises(ValueError, match="CIE reference"):
+        R.load_colour_file(p, allow_cie=False)
+    # device-RGB file still loads with the CIE path disabled
+    R.write_ti1(R.ChartSpec.new("i1", "A4"),
+                [(100.0, 0.0, 0.0), (0.0, 50.0, 100.0)], tmp_path / "s.ti1")
+    prog = R.load_colour_file(tmp_path / "s.ti1", allow_cie=False)
+    assert (100.0, 0.0, 0.0) in [tuple(round(v, 3) for v in p) for p in prog]
+
+
 def test_load_colour_file_default_is_faithful(tmp_path):
     """Default load is colorimetric (absolute) — a reflective media white
     (Y≈77) does NOT stretch to display white (#96)."""

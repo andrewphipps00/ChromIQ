@@ -2467,6 +2467,14 @@ class _NewChartDialog(QDialog):
             return R.stretch_to_cube(prog)
         return prog
 
+    def _ensure_cube_shown(self) -> None:
+        """Unfold the live 3D cube if it's collapsed — called after loading
+        colours from a file so the distribution (and the stretch toggle's
+        effect) is visible immediately, not hidden behind the fold (Knut, #96)."""
+        btn = getattr(self, "_fold_btn", None)
+        if btn is not None and not btn.isChecked():
+            btn.setChecked(True)   # fires _on_fold_toggled → re-pushes the cube
+
     def showEvent(self, ev) -> None:  # noqa: N802
         super().showEvent(ev)
         # Centre over the parent window on first show. The dialog used to settle
@@ -2683,6 +2691,7 @@ class _NewChartDialog(QDialog):
         self._paste_edit.setPlainText(
             "\n".join(f"{r:.4f} {g:.4f} {b:.4f}" for r, g, b in prog))
         self._mode_paste.setChecked(True)
+        self._ensure_cube_shown()   # reveal the distribution right away (#96)
 
     def _on_ok(self) -> None:
         paper_code = self._paper.currentData() or self._paper.currentText()
@@ -2983,6 +2992,7 @@ class _AddPatchesDialog(_NewChartDialog):
         self._add_file_status.setText(
             tr("1 colour loaded") if len(prog) == 1
             else tr("{n} colours loaded").format(n=len(prog)))
+        self._ensure_cube_shown()      # reveal the distribution right away (#96)
         self._do_push_live_preview()   # show the loaded colours in the cube (#96)
 
     def _paint_single_swatch(self) -> None:
@@ -3809,25 +3819,6 @@ class Ti2RelayoutDialog(QDialog):
         tone_row.addWidget(dark)
         tone_row.addWidget(light)
         pb.addLayout(tone_row)
-        # Stretch the whole chart's colours to fill the RGB cube — for reusing a
-        # loaded reference (CIE) chart's colours as a fresh layout. Undoable, so
-        # the 3D distribution can be compared faithful vs stretched (#96).
-        stretch_row = QHBoxLayout()
-        stretch_b = QPushButton(tr("Stretch colours to fill the RGB cube"),
-                                self._patch_box)
-        stretch_b.clicked.connect(self._stretch_program_to_cube)
-        stretch_row.addWidget(stretch_b)
-        stretch_row.addWidget(_magenta_tip(
-            tr("Stretch colours to fill the RGB cube"),
-            tr("Stretches every patch so the chart's colours span the whole RGB "
-               "cube. Reference colours from a CIE file (a reflective target) "
-               "only fill part of the cube because their inks can't reach pure "
-               "red/green/blue — turn that into a full-range layout you can reuse "
-               "as a fresh chart. It changes the colours (no longer "
-               "colorimetrically accurate); use Undo to compare with the real "
-               "values, or check the 3D distribution before and after."), self))
-        stretch_row.addStretch(1)
-        pb.addLayout(stretch_row)
         addrem = QHBoxLayout()
         add_b = QPushButton(tr("Add…"), self._patch_box)
         add_b.setToolTip(tr("Add a single chosen colour, or generate colour "
@@ -4100,7 +4091,7 @@ class Ti2RelayoutDialog(QDialog):
                  or str(Path.home() / "ChromIQ"))
         path = open_file_dialog(
             self, "Load chart",
-            "Charts & colour files (*.ti2 *.ti1 *.ti3 *.cgats *.cie *.txt);;"
+            "Charts & colour files (*.ti2 *.ti1 *.ti3 *.cgats *.txt);;"
             "All files (*)", start_dir=start)
         if not path:
             return
@@ -4111,8 +4102,9 @@ class Ti2RelayoutDialog(QDialog):
         into the editor. Shared by the Load chart button and the open-time
         pre-load from the Create Chart tab (#45). Returns True on success.
 
-        A non-``.ti2`` colour file (CIE / ti1 / ti3 / cgats / list) loads its
-        colours into a new editable chart instead (#96)."""
+        A non-``.ti2`` device-RGB file (ti1 / ti3 / cgats / list) loads its
+        colours into a new editable chart instead. CIE reference files are not
+        accepted here — load them via New chart / Add (#96)."""
         if path.suffix.lower() != ".ti2":
             return self._load_colour_chart_from(path)
         try:
@@ -4162,12 +4154,14 @@ class Ti2RelayoutDialog(QDialog):
         return True
 
     def _load_colour_chart_from(self, path: Path) -> bool:
-        """Load a colours-only file (CIE reference / ti1 / ti3 / cgats / hex
-        list) as a new editable chart — default instrument/paper, following the
-        engine setting like a from-scratch chart, so the colours can be relaid
-        out and analysed in the 3D cube (#96)."""
+        """Load a device-RGB colours file (ti1 / ti3 / cgats / hex list) as a new
+        editable chart — default instrument/paper, following the engine setting
+        like a from-scratch chart, so the colours can be relaid out and analysed
+        in the 3D cube. CIE reference files are rejected here (allow_cie=False):
+        they load via the New chart / Add windows, which carry the fill-the-cube
+        stretch toggle (Knut, #96)."""
         try:
-            program = R.load_colour_file(path)
+            program = R.load_colour_file(path, allow_cie=False)
         except Exception as exc:  # noqa: BLE001 — surface the parser's message
             QMessageBox.warning(self, tr("Could not load chart"), str(exc))
             return False
@@ -4949,21 +4943,6 @@ class Ti2RelayoutDialog(QDialog):
             new = tuple(max(0.0, min(100.0, v * factor)) for v in rgb)
             it.setData(Qt.ItemDataRole.UserRole, new)
             it.setIcon(_swatch_icon(new))
-        self._schedule_auto_refresh()
-
-    def _stretch_program_to_cube(self) -> None:
-        """Stretch the whole chart's colours per-channel to fill the RGB cube
-        (reuse a loaded reference chart as a full-range layout) (#96)."""
-        prog = self._program_from_grid()
-        if not prog:
-            self._status.setText(tr("Load or create a chart first."))
-            return
-        stretched = R.stretch_to_cube(prog)
-        for row, rgb in enumerate(stretched):
-            it = self._grid.item(row)
-            it.setData(Qt.ItemDataRole.UserRole, tuple(rgb))
-            it.setIcon(_swatch_icon(tuple(rgb)))
-        self._status.setText(tr("Stretched colours to fill the RGB cube."))
         self._schedule_auto_refresh()
 
     def _selected_rows(self) -> list[int]:
