@@ -1992,5 +1992,13 @@
   "Centered": "Centered",
   "Edge spacers": "Edge spacers",
   "Edge spacers (bracket each strip)": "Edge spacers (bracket each strip)",
-  "Adds a spacer before the first patch and after the last patch of every strip — the way ArgyllCMS printtarg does. It's optional: the instrument finds each strip from the white border the layout already leaves at both ends, so this isn't needed for reliable reading. It fits in space the layout already reserves, so it doesn't reduce the patch count. Turn it on if you prefer the printtarg look or want an extra separator at the strip ends.": "Adds a spacer before the first patch and after the last patch of every strip — the way ArgyllCMS printtarg does. It's optional: the instrument finds each strip from the white border the layout already leaves at both ends, so this isn't needed for reliable reading. It fits in space the layout already reserves, so it doesn't reduce the patch count. Turn it on if you prefer the printtarg look or want an extra separator at the strip ends."
+  "Adds a spacer before the first patch and after the last patch of every strip — the way ArgyllCMS printtarg does. It's optional: the instrument finds each strip from the white border the layout already leaves at both ends, so this isn't needed for reliable reading. It fits in space the layout already reserves, so it doesn't reduce the patch count. Turn it on if you prefer the printtarg look or want an extra separator at the strip ends.": "Adds a spacer before the first patch and after the last patch of every strip — the way ArgyllCMS printtarg does. It's optional: the instrument finds each strip from the white border the layout already leaves at both ends, so this isn't needed for reliable reading. It fits in space the layout already reserves, so it doesn't reduce the patch count. Turn it on if you prefer the printtarg look or want an extra separator at the strip ends.",
+  "1 colour loaded": "1 colour loaded",
+  "Choose a colour file to add first.": "Choose a colour file to add first.",
+  "Choose file…": "Choose file…",
+  "Load colours from a file": "Load colours from a file",
+  "No colour values were found in that file.": "No colour values were found in that file.",
+  "No colours": "No colours",
+  "No file": "No file",
+  "{n} colours loaded": "{n} colours loaded"
 }

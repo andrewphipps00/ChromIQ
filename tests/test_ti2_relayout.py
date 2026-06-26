@@ -538,3 +538,58 @@ def test_engine_chart_reloads_in_sheet_order_renders_identically(tmp_path):
     # and re-applying the seed on the sheet-order grid would NOT match (the bug)
     bad = le_chart.build_chart(str(grid_ti1), tmp_path / "bad", **kw)
     assert not np.array_equal(orig_img, np.asarray(Image.open(bad.tiff_paths[0])))
+
+
+def test_load_colour_file_cie_xyz(tmp_path):
+    """A CIE reference table (XYZ only, IT8.7/2 style) loads as a 0..100 RGB
+    program with the white patch landing near white (#96)."""
+    cie = (
+        "IT8.7/2\nNUMBER_OF_FIELDS 4\n"
+        "BEGIN_DATA_FORMAT\nSAMPLE_ID XYZ_X XYZ_Y XYZ_Z\nEND_DATA_FORMAT\n"
+        "NUMBER_OF_SETS 2\nBEGIN_DATA\n"
+        "A1\t95.0\t100.0\t108.0\n"      # ~D65 white
+        "A2\t0.0\t0.0\t0.0\n"           # black
+        "END_DATA\n"
+    )
+    p = tmp_path / "ref.cie"; p.write_text(cie)
+    prog = R.load_colour_file(p)
+    assert len(prog) == 2
+    r, g, b = prog[0]
+    assert min(r, g, b) > 85          # white patch is bright
+    assert sum(prog[1]) < 6           # black patch is ~0
+
+
+def test_load_colour_file_cie_lab_only(tmp_path):
+    """LAB-only reference data is reconstructed too."""
+    cie = (
+        "NUMBER_OF_FIELDS 4\nBEGIN_DATA_FORMAT\n"
+        "SAMPLE_ID LAB_L LAB_A LAB_B\nEND_DATA_FORMAT\n"
+        "BEGIN_DATA\nA1\t100.0\t0.0\t0.0\nA2\t0.0\t0.0\t0.0\nEND_DATA\n"
+    )
+    p = tmp_path / "ref.txt"; p.write_text(cie)
+    prog = R.load_colour_file(p)
+    assert len(prog) == 2 and min(prog[0]) > 90 and sum(prog[1]) < 6
+
+
+def test_load_colour_file_classic_mac_cr_endings(tmp_path):
+    """A reference file with classic-Mac \\r line endings (as in the Hutchcolor
+    sample) still parses (#96)."""
+    cie = ("NUMBER_OF_FIELDS 4\rBEGIN_DATA_FORMAT\rSAMPLE_ID XYZ_X XYZ_Y XYZ_Z\r"
+           "END_DATA_FORMAT\rBEGIN_DATA\rA1\t95\t100\t108\rA2\t20\t20\t20\rEND_DATA\r")
+    p = tmp_path / "cr.txt"; p.write_text(cie)
+    prog = R.load_colour_file(p)
+    assert len(prog) == 2
+
+
+def test_load_colour_file_ti1_device_values(tmp_path):
+    """Device-RGB CGATS (ti1) load via the existing loader, values preserved."""
+    R.write_ti1(R.ChartSpec.new("i1", "A4"),
+                [(100.0, 0.0, 0.0), (0.0, 50.0, 100.0)], tmp_path / "s.ti1")
+    prog = R.load_colour_file(tmp_path / "s.ti1")
+    assert (100.0, 0.0, 0.0) in [tuple(round(v, 3) for v in p) for p in prog]
+
+
+def test_load_colour_file_plain_hex(tmp_path):
+    p = tmp_path / "list.txt"; p.write_text("#ff0000\n#00ff00\n0,0,255\n")
+    prog = R.load_colour_file(p)
+    assert len(prog) == 3

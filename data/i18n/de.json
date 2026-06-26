@@ -1992,5 +1992,13 @@
   "Centered": "Zentriert",
   "Edge spacers": "Randspacer",
   "Edge spacers (bracket each strip)": "Randspacer (jeden Streifen einrahmen)",
-  "Adds a spacer before the first patch and after the last patch of every strip — the way ArgyllCMS printtarg does. It's optional: the instrument finds each strip from the white border the layout already leaves at both ends, so this isn't needed for reliable reading. It fits in space the layout already reserves, so it doesn't reduce the patch count. Turn it on if you prefer the printtarg look or want an extra separator at the strip ends.": "Fügt vor dem ersten und nach dem letzten Messfeld jedes Streifens einen Spacer hinzu — so wie ArgyllCMS printtarg es macht. Optional: Das Gerät findet jeden Streifen am weißen Rand, den das Layout an beiden Enden ohnehin lässt, daher ist das fürs zuverlässige Messen nicht nötig. Es passt in den Platz, den das Layout bereits reserviert, verringert also die Anzahl der Messfelder nicht. Schalte es ein, wenn du die printtarg-Optik bevorzugst oder einen zusätzlichen Trenner an den Streifenenden möchtest."
+  "Adds a spacer before the first patch and after the last patch of every strip — the way ArgyllCMS printtarg does. It's optional: the instrument finds each strip from the white border the layout already leaves at both ends, so this isn't needed for reliable reading. It fits in space the layout already reserves, so it doesn't reduce the patch count. Turn it on if you prefer the printtarg look or want an extra separator at the strip ends.": "Fügt vor dem ersten und nach dem letzten Messfeld jedes Streifens einen Spacer hinzu — so wie ArgyllCMS printtarg es macht. Optional: Das Gerät findet jeden Streifen am weißen Rand, den das Layout an beiden Enden ohnehin lässt, daher ist das fürs zuverlässige Messen nicht nötig. Es passt in den Platz, den das Layout bereits reserviert, verringert also die Anzahl der Messfelder nicht. Schalte es ein, wenn du die printtarg-Optik bevorzugst oder einen zusätzlichen Trenner an den Streifenenden möchtest.",
+  "1 colour loaded": "1 Farbe geladen",
+  "Choose a colour file to add first.": "Wähle zuerst eine Farbdatei zum Hinzufügen.",
+  "Choose file…": "Datei wählen…",
+  "Load colours from a file": "Farben aus einer Datei laden",
+  "No colour values were found in that file.": "In dieser Datei wurden keine Farbwerte gefunden.",
+  "No colours": "Keine Farben",
+  "No file": "Keine Datei",
+  "{n} colours loaded": "{n} Farben geladen"
 }

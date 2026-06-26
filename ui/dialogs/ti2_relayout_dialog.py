@@ -2610,16 +2610,28 @@ class _NewChartDialog(QDialog):
                                     if parsed else "")
 
     def _load_paste_file(self) -> None:
-        path = open_file_dialog(self, "Load colour values",
-                                "Text files (*.txt *.csv *.tsv);;All files (*)",
-                                start_dir=str(Path.home()))
+        path = open_file_dialog(
+            self, "Load colour values",
+            "Colour files (*.cie *.txt *.ti1 *.ti2 *.ti3 *.cgats *.csv *.tsv);;"
+            "All files (*)", start_dir=str(Path.home()))
         if not path:
             return
+        # Parse CGATS device files (ti1/ti2/ti3/cgats), CIE reference files
+        # (XYZ/LAB → reconstructed sRGB) and plain hex/RGB lists alike (#96).
         try:
-            self._paste_edit.setPlainText(Path(path).read_text(errors="ignore"))
-            self._mode_paste.setChecked(True)
-        except OSError as exc:
+            prog = R.load_colour_file(Path(path))
+        except Exception as exc:  # noqa: BLE001 — surface the parser's message
             QMessageBox.warning(self, tr("Could not read file"), str(exc))
+            return
+        if not prog:
+            QMessageBox.warning(self, tr("No colours"),
+                                tr("No colour values were found in that file."))
+            return
+        # Write the parsed 0..100 RGB into the paste box (its parser reads them
+        # back unchanged — a white patch pins the 0..100 scale).
+        self._paste_edit.setPlainText(
+            "\n".join(f"{r:.4f} {g:.4f} {b:.4f}" for r, g, b in prog))
+        self._mode_paste.setChecked(True)
 
     def _on_ok(self) -> None:
         paper_code = self._paper.currentData() or self._paper.currentText()
@@ -2758,6 +2770,26 @@ class _AddPatchesDialog(_NewChartDialog):
         single_row.addStretch(1)
         lay.addLayout(single_row)
 
+        # Load colours from a file — CGATS (ti1/ti2/ti3/cgats), CIE reference
+        # (XYZ/LAB) or a plain hex/RGB list — so a set can be added from a file
+        # without having to create a whole new chart (#96).
+        self._add_mode_file = QRadioButton(tr("Load colours from a file"), self)
+        grp.addButton(self._add_mode_file)
+        lay.addWidget(self._add_mode_file)
+        self._loaded_add_program: list = []
+        file_row = QHBoxLayout()
+        file_row.setContentsMargins(22, 0, 0, 0)
+        self._add_file_btn = QPushButton(tr("Choose file…"), self)
+        self._add_file_btn.setObjectName("compact_input")
+        self._add_file_btn.clicked.connect(self._load_add_file)
+        self._add_file_status = QLabel("", self)
+        self._add_file_status.setStyleSheet("color: #888;")
+        file_row.addWidget(self._add_file_btn)
+        file_row.addWidget(self._add_file_status)
+        file_row.addStretch(1)
+        lay.addLayout(file_row)
+        self._add_mode_file.toggled.connect(self._refresh_add_mode)
+
         lay.addWidget(self._add_mode_gen)
         lay.addLayout(self._build_generate_panel(content))
         self._add_mode_single.toggled.connect(self._refresh_add_mode)
@@ -2840,6 +2872,28 @@ class _AddPatchesDialog(_NewChartDialog):
     def _refresh_add_mode(self, *_a) -> None:
         self._update_gen_counts()
 
+    def _load_add_file(self) -> None:
+        path = open_file_dialog(
+            self, "Load colours",
+            "Colour files (*.cie *.txt *.ti1 *.ti2 *.ti3 *.cgats *.csv *.tsv);;"
+            "All files (*)", start_dir=str(Path.home()))
+        if not path:
+            return
+        try:
+            prog = R.load_colour_file(Path(path))
+        except Exception as exc:  # noqa: BLE001 — surface the parser's message
+            QMessageBox.warning(self, tr("Could not read file"), str(exc))
+            return
+        if not prog:
+            QMessageBox.warning(self, tr("No colours"),
+                                tr("No colour values were found in that file."))
+            return
+        self._loaded_add_program = prog
+        self._add_mode_file.setChecked(True)
+        self._add_file_status.setText(
+            tr("1 colour loaded") if len(prog) == 1
+            else tr("{n} colours loaded").format(n=len(prog)))
+
     def _paint_single_swatch(self) -> None:
         r, g, b = (max(0, min(255, round(c / 100 * 255)))
                    for c in self._single_rgb)
@@ -2866,6 +2920,14 @@ class _AddPatchesDialog(_NewChartDialog):
         self._update_gen_counts()
 
     def _on_add(self) -> None:
+        if self._add_mode_file.isChecked():
+            if not self._loaded_add_program:
+                QMessageBox.warning(self, tr("No file"),
+                                    tr("Choose a colour file to add first."))
+                return
+            self.result_program = list(self._loaded_add_program)
+            self.accept()
+            return
         if self._add_mode_gen.isChecked():
             program = self._build_generated_program()
             if not program:
@@ -3925,16 +3987,23 @@ class Ti2RelayoutDialog(QDialog):
     def _load_ti2(self) -> None:
         start = (self._settings.get("custom_output_path", "")
                  or str(Path.home() / "ChromIQ"))
-        path = open_file_dialog(self, "Load chart",
-                                "Argyll chart (*.ti2)", start_dir=start)
+        path = open_file_dialog(
+            self, "Load chart",
+            "Charts & colour files (*.ti2 *.ti1 *.ti3 *.cgats *.cie *.txt);;"
+            "All files (*)", start_dir=start)
         if not path:
             return
         self._load_chart_from(Path(path))
 
     def _load_chart_from(self, path: Path) -> bool:
         """Load a ``.ti2`` (+ its sibling ``meta.json`` layout knobs, if any)
-        into the editor. Shared by the Load .ti2 button and the open-time
-        pre-load from the Create Chart tab (#45). Returns True on success."""
+        into the editor. Shared by the Load chart button and the open-time
+        pre-load from the Create Chart tab (#45). Returns True on success.
+
+        A non-``.ti2`` colour file (CIE / ti1 / ti3 / cgats / list) loads its
+        colours into a new editable chart instead (#96)."""
+        if path.suffix.lower() != ".ti2":
+            return self._load_colour_chart_from(path)
         try:
             spec = R.ChartSpec.from_ti2(path)
             program = R.default_program(spec)
@@ -3979,6 +4048,40 @@ class Ti2RelayoutDialog(QDialog):
             self._engine_panel.set_recipe(self._engine_recipe)
         self._refresh_engine_panel_visible()
         self._set_chart(spec, program, note, is_saved=True)
+        return True
+
+    def _load_colour_chart_from(self, path: Path) -> bool:
+        """Load a colours-only file (CIE reference / ti1 / ti3 / cgats / hex
+        list) as a new editable chart — default instrument/paper, following the
+        engine setting like a from-scratch chart, so the colours can be relaid
+        out and analysed in the 3D cube (#96)."""
+        try:
+            program = R.load_colour_file(path)
+        except Exception as exc:  # noqa: BLE001 — surface the parser's message
+            QMessageBox.warning(self, tr("Could not load chart"), str(exc))
+            return False
+        if not program:
+            QMessageBox.warning(self, tr("Could not load chart"),
+                                tr("No colour values were found in that file."))
+            return False
+        self._options = R.LayoutOptions()
+        self._basename = path.stem or "chart"
+        self._chart_recipe = None
+        self._engine_recipe = None
+        self._engine_ti1 = None
+        self._loaded_printtarg_chart = False   # follow the engine setting
+        spec = R.ChartSpec.new("i1", "A4")
+        if (bool(self._settings.get("use_chromiq_layout_engine", False))
+                and self._engine_panel is not None):
+            from workflow.layout_engine.presets import default_recipe
+            try:
+                rec = default_recipe("i1", spec.paper_flag)
+                rec.randomize = False
+                self._engine_panel.set_recipe(rec)
+            except Exception as exc:  # noqa: BLE001
+                log.warning("seed engine panel for loaded colours failed: %s", exc)
+        self._refresh_engine_panel_visible()
+        self._set_chart(spec, program, f"Loaded {path.name}")
         return True
 
     def _new_chart(self) -> None:

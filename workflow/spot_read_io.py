@@ -102,8 +102,16 @@ def lab_d50_to_srgb(L: float, a: float, b: float) -> tuple[int, int, int]:
     Out-of-gamut measurements (vivid inks, fluorescents) clamp per channel — the
     swatch is an *approximation* for orientation, never a colour-managed proof.
     """
-    xyz_d50 = _lab_to_xyz_d50(L, a, b)
-    xyz_d65 = _mul(_BRADFORD_D50_TO_D65, xyz_d50)
+    return xyz_d50_to_srgb(*_lab_to_xyz_d50(L, a, b))
+
+
+def xyz_d50_to_srgb(X: float, Y: float, Z: float) -> tuple[int, int, int]:
+    """D50 XYZ -> 8-bit sRGB ``(r, g, b)``, clamped to gamut. Expects Y on a
+    0..1 scale (reference white ≈ 1.0); scale 0..100 input down before calling.
+
+    Like :func:`lab_d50_to_srgb` this is an approximation for orientation /
+    analysis (loading a CIE reference chart), not a colour-managed proof."""
+    xyz_d65 = _mul(_BRADFORD_D50_TO_D65, (X, Y, Z))
     rgb_lin = _mul(_XYZ_TO_RGB, xyz_d65)
     return tuple(round(_gamma(c) * 255.0) for c in rgb_lin)  # type: ignore[return-value]
 
