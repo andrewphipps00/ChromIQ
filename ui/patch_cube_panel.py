@@ -208,8 +208,18 @@ class PatchCubePanel(QWidget):
     def _push(self, payload: dict) -> None:
         if self._web_view is None:
             return
+        # The view's C++ object may already be gone (teardown race on close):
+        # touching page() then raises RuntimeError. Guard so a late push can't
+        # crash the app.
+        try:
+            page = self._web_view.page()
+        except RuntimeError:
+            self._web_view = None
+            return
+        if page is None:
+            return
         js = "if(window.cqUpdateCube){cqUpdateCube(%s);}" % json.dumps(payload)
-        self._web_view.page().runJavaScript(js)
+        page.runJavaScript(js)
 
     def _on_load_finished(self, ok: bool) -> None:
         if not ok:
