@@ -1,5 +1,41 @@
 # Changelog
 
+## v3.13.0-beta.4
+
+Fixes and polish for the colour-file loading added in beta-3, from Knut's
+testing with real scanner-target files.
+
+### 🐛 Fixed
+- **Loaded reference colours are no longer dim / squeezed.** CIE files describe
+  reflective targets whose media white sits well below a perfect white (e.g.
+  Hutchcolor ≈ 77%), so rendering them *absolutely* made everything look dark
+  and the 3D cube collapse toward a gamut shape. Loading is now **media-relative**
+  by default — the target's white maps to display white, so the colours fill the
+  cube and read naturally.
+- **The live 3D cube now reflects pasted / loaded / single colours**, not only
+  the generated sets. (Seed-from-targen is still previewed only after generating.)
+- **"Blank canvas" clears the preview** (and *Update preview* now works on an
+  empty chart) instead of leaving the previous chart's image behind.
+- **The New chart / Add window no longer slips behind the editor** after the
+  file dialog closes.
+- **Colours loaded into the Add window are de-duplicated** (near-identical ones
+  spaced apart) so they don't run together and hurt readability.
+
+### ✨ New / changed
+- **Custom spacer colours** gained **white and black** swatches (5 accents → 7),
+  giving the engine a strong high-contrast separator against very light or very
+  dark patches.
+- The spacer-colour pickers now use ChromIQ's own colour dialog (hex + RGB/HSV),
+  matching the rest of the app, instead of the OS colour panel.
+- Dark-mode standard tabs (Settings) now match the roomier light-mode tabs.
+
+### 📝 Notes
+- Open follow-ups before 3.13.0 final are unchanged from beta-3: translations of
+  the new strings, real-hardware print+measure verification, multi-strip
+  instruments, and the planned scanner-target workflow (#95 / #97 / #98).
+- Thanks again to **Knut Georg Larsson** for the detailed testing and sample
+  files.
+
 ## v3.13.0-beta.3
 
 A small follow-up beta: **load existing colour sets from files** (the first step
