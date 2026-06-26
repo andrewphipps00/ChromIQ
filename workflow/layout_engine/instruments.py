@@ -83,9 +83,11 @@ class Geom:
     offset_y: float = 0.0
     # Rendered-furniture reservations (mm), filled in from the recipe + fonts by
     # raster.apply_furniture_reserves() so capacity reflects what's actually
-    # drawn. 0 ⇒ fall back to the instrument default (txhisl / margins) — i.e. a
-    # bare build() Geom behaves exactly as before. (#93)
-    label_band_mm: float = 0.0   # actual strip-label + underline band height
+    # drawn. label_band_mm < 0 ⇒ "not computed" → fall back to the instrument
+    # label height (txhisl); 0 ⇒ no label at all (indicators off → reclaim the
+    # band). bottom_reserve_mm 0 ⇒ no bottom furniture. A bare build() Geom keeps
+    # the sentinel so it behaves exactly as before. (#93)
+    label_band_mm: float = -1.0   # actual strip-label + underline band height
     bottom_reserve_mm: float = 0.0   # actual bottom sheet-text + stamp height
 
 

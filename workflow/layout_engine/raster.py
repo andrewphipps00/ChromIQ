@@ -251,11 +251,11 @@ def _furniture_reserves_mm(geom, kw: dict) -> tuple[float, float]:
     """
     dpi = int(kw.get("dpi") or 150)
     mm2px = dpi / 25.4
-    label_band = 0.0
+    label_band = 0.0   # indicators off ⇒ reclaim the whole label band
     if kw.get("draw_indicators", True):
         fam = kw.get("indicator_font", DEFAULT_INDICATOR_FONT)
-        size_mm = effective_indicator_size_mm(
-            geom, dpi, fam, float(kw.get("indicator_size_mm") or 0.0))
+        raw_size = float(kw.get("indicator_size_mm") or 0.0)   # 0 = auto
+        size_mm = effective_indicator_size_mm(geom, dpi, fam, raw_size)
         ind_px = max(6, round(size_mm * mm2px))
         f = _font(ind_px, fam, bool(kw.get("indicator_bold")),
                   bool(kw.get("indicator_italic")))
@@ -272,10 +272,14 @@ def _furniture_reserves_mm(geom, kw: dict) -> tuple[float, float]:
                                        fill=(0, 0, 0, 255))
             bb = probe.getbbox()
             band_px = (bb[3] - bb[1]) if bb else ind_px
-        label_band = band_px / mm2px
+        band = band_px / mm2px
         if kw.get("underline_mode", "off") in ("segments", "cycle", "black", "colored"):
-            label_band += (float(kw.get("underline_gap_mm") or 0.0)
-                           + max(0.0, float(kw.get("underline_thickness_mm") or 0.0)))
+            band += (float(kw.get("underline_gap_mm") or 0.0)
+                     + max(0.0, float(kw.get("underline_thickness_mm") or 0.0)))
+        # Auto size keeps the instrument label floor (txhisl) so default charts
+        # stay printtarg-identical; an EXPLICIT size reserves exactly what it
+        # draws, so a smaller font frees space for more patches (#93).
+        label_band = band if raw_size > 0 else max(geom.txhisl, band)
     # Bottom-of-sheet block: one line each for custom sheet text and the stamp,
     # drawn at line_h = px(4.2) above a px(1.5) bottom inset (see render_pages).
     nlines = (1 if kw.get("chart_text") else 0) + (1 if kw.get("stamp_command") else 0)

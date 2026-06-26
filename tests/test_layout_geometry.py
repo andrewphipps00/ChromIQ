@@ -204,6 +204,10 @@ def test_furniture_reserves_affect_capacity():
     assert cap(indicator_size_mm=18.0, underline_mode="black",
                underline_thickness_mm=3.0, underline_gap_mm=6.0,
                stamp_command=True, chart_text="x") < base
+    # Turning strip labels OFF, or choosing an explicit SMALL font, reclaims the
+    # label band for more patches; auto size stays at the printtarg floor (#93).
+    assert cap(show_strip_indicators=False) > base
+    assert cap(indicator_size_mm=2.5) > base
     # A bare build() Geom (no furniture info) is unchanged from the default
     bare = geometry.patches_per_sheet(instruments.build("i1"), *geometry_papers("A4"))
     assert bare == geometry.patches_per_sheet(

@@ -61,10 +61,14 @@ def compute(geom: Geom, paper_w_mm: float, paper_h_mm: float, npat: int,
     # not just the fixed instrument text height, so a big/rotated indicator or an
     # underline reduces the patch count instead of overlapping the patches; the
     # bottom likewise reserves the sheet-text/stamp block (#93).
-    txhi = max(g.txhisl, g.label_band_mm)
-    mints = g.margin_t + txhi + g.lcar
-    if mints < g.lspa:
-        mints = g.lspa
+    # Effective label band: the actual rendered height when known (≥0; 0 when
+    # indicators are off), else the instrument default txhisl. The leader floor
+    # (lspa) bakes in the label height, so when the band is smaller/absent it
+    # drops by the reclaimed amount — but never below the instrument's physical
+    # run-up (border + lcar), which must stay clear (#93).
+    txhi = g.txhisl if g.label_band_mm < 0 else g.label_band_mm
+    eff_lspa = max(g.border + g.lcar, g.lspa - g.txhisl + txhi)
+    mints = max(g.margin_t + txhi + g.lcar, eff_lspa)
     minbs = max(g.margin_b, g.tspa, g.bottom_reserve_mm)
     # The strip-indicator gap is reserved too, so a longer gap reduces the patch
     # count instead of sliding the chart off the usable area. placement()
@@ -180,8 +184,9 @@ def placement(geom: Geom, paper_w_mm: float, paper_h_mm: float, layout: Layout) 
     # placement agree. leader_top still uses the plain instrument text height, so
     # the label is rendered where it always was — only the patch block moves down
     # to make room when the band is taller than the default.
-    txhi = max(g.txhisl, g.label_band_mm)
-    mints = max(g.margin_t + txhi + g.lcar, g.lspa) + g.strip_indicator_gap
+    txhi = g.txhisl if g.label_band_mm < 0 else g.label_band_mm
+    eff_lspa = max(g.border + g.lcar, g.lspa - g.txhisl + txhi)
+    mints = max(g.margin_t + txhi + g.lcar, eff_lspa) + g.strip_indicator_gap
     minbs = max(g.margin_b, g.tspa, g.bottom_reserve_mm)
     # Distribute slack like printtarg: amints = mints + 0.5*(slack - minbs)
     slack = ph - mints - g.pspa - layout.pprow * (g.plen + g.pspa)
