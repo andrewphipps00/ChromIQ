@@ -479,6 +479,7 @@ def render_pages(
     spacer_mode: str = "colored",
     spacer_palette: "list[tuple[int, int, int]] | None" = None,
     spacer_overrides: "dict[int, tuple[int, int, int]] | None" = None,
+    edge_spacers: bool = False,
     draw_indicators: bool = True,
     indicator_font: str = DEFAULT_INDICATOR_FONT,
     indicator_size_mm: float = 0.0,
@@ -614,6 +615,25 @@ def render_pages(
                         spacer_mode, rgb, nxt, spacer_palette)
                     draw.rectangle(
                         [x0, y0 + pl_px, xR - 1, y0 + pl_px + sp_px - 1], fill=_fill)
+            # Bracket the strip with a leading + trailing spacer (printtarg does
+            # this). Fits in space the layout already reserves, so it doesn't
+            # change the patch count. Auto-coloured against the paper white on the
+            # outer side and the adjacent patch on the inner; not individually
+            # recolourable (the override scheme covers the between-patch spacers).
+            if edge_spacers and sp_px > 0 and col_slots:
+                _white = (255, 255, 255)
+                _first = rgb_by_slot[col_slots[0]]
+                _last = rgb_by_slot[col_slots[-1]]
+                _yl = px(place.y_of(0)) - sp_px            # leading: above patch 0
+                draw.rectangle(
+                    [x0, _yl, xR - 1, _yl + sp_px - 1],
+                    fill=contrast.spacer_for_mode(spacer_mode, _white, _first,
+                                                  spacer_palette))
+                _yt = px(place.y_of(len(col_slots) - 1)) + pl_px   # trailing
+                draw.rectangle(
+                    [x0, _yt, xR - 1, _yt + sp_px - 1],
+                    fill=contrast.spacer_for_mode(spacer_mode, _last, _white,
+                                                  spacer_palette))
         # Full-width rule under the whole label row (one continuous line):
         # "segments" splits it into the five accents across the entire width;
         # "black" is a single plain line. ("cycle" is drawn per strip above.)

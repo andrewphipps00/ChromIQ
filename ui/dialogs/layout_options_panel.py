@@ -303,6 +303,19 @@ class LayoutOptionsPanel(QWidget):
                "so keep them varied (and watch the low-contrast warning)."), self),
             7, 2)
         add_row(g, 8, tr("Spacer colours:"), _sww)
+        self.edge_spacers_cb = QCheckBox(tr("Edge spacers (bracket each strip)"), self)
+        self.edge_spacers_cb.toggled.connect(self._emit)
+        g.addWidget(self.edge_spacers_cb, 9, 1)
+        g.addWidget(TooltipButton(
+            tr("Edge spacers"),
+            tr("Adds a spacer before the first patch and after the last patch of "
+               "every strip — the way ArgyllCMS printtarg does. It's optional: "
+               "the instrument finds each strip from the white border the layout "
+               "already leaves at both ends, so this isn't needed for reliable "
+               "reading. It fits in space the layout already reserves, so it "
+               "doesn't reduce the patch count. Turn it on if you prefer the "
+               "printtarg look or want an extra separator at the strip ends."),
+            self), 9, 2)
         v.addWidget(ps)
 
         # ---- Randomisation ----
@@ -1173,6 +1186,7 @@ class LayoutOptionsPanel(QWidget):
         i = self.spacer_mode.findData(r.spacer_mode)
         self.spacer_mode.setCurrentIndex(i if i >= 0 else 0)
         self.spacer_width.setValue(r.spacer_width_mm)
+        self.edge_spacers_cb.setChecked(bool(r.edge_spacers))
         self._spacer_overrides = {str(k): v for k, v in (r.spacer_overrides or {}).items()}
         _pal = list(r.spacer_palette or [])
         self.custom_spacer_cb.setChecked(bool(_pal))
@@ -1253,6 +1267,7 @@ class LayoutOptionsPanel(QWidget):
                             if self.custom_spacer_cb.isChecked() else [])
         r.spacer_overrides = dict(self._spacer_overrides)
         r.spacer_on = r.spacer_mode != "none"
+        r.edge_spacers = self.edge_spacers_cb.isChecked()
         r.spacer_width_mm = self.spacer_width.value()
         r.patch_w_mm = self.patch_x.value()
         r.patch_h_mm = self.patch_y.value()

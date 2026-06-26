@@ -37,6 +37,10 @@ class LayoutRecipe:
     spacer_mode: str = "colored"   # "colored" | "bw" | "none"
     spacer_palette: list = field(default_factory=list)  # custom colored-spacer hexes
     spacer_overrides: dict = field(default_factory=dict)  # {str(flat_idx): "#hex"}
+    # Bracket each strip with a spacer before the first patch and after the last
+    # (what printtarg does). Only meaningful when spacers are on; fits in space
+    # the layout already reserves, so it doesn't change the patch count.
+    edge_spacers: bool = False
     pscale: float = 1.0
     sscale: float = 1.0
     border: float = 6.0            # base margin (drives leader/clip-holder)
@@ -127,6 +131,7 @@ class LayoutRecipe:
             spacer_mode=d.get("spacer_mode", "colored"),
             spacer_palette=list(d.get("spacer_palette") or []),
             spacer_overrides=dict(d.get("spacer_overrides") or {}),
+            edge_spacers=bool(d.get("edge_spacers", False)),
             pscale=float(d.get("pscale", 1.0)), sscale=float(d.get("sscale", 1.0)),
             border=float(d.get("border", 6.0)),
             margin_top=m[0], margin_right=m[1], margin_bottom=m[2], margin_left=m[3],
@@ -207,6 +212,7 @@ class LayoutRecipe:
             "spacer_mode": self.spacer_mode,
             "spacer_palette": list(self.spacer_palette) or None,
             "spacer_overrides": dict(self.spacer_overrides) or None,
+            "edge_spacers": self.edge_spacers,
             "pscale": self.pscale,
             "sscale": self.sscale,
             "border": self.border,

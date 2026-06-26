@@ -266,6 +266,34 @@ def test_indicator_align_noop_without_multiletter():
     assert np.array_equal(page0("left"), page0("center"))
 
 
+def test_edge_spacers_draw_without_reducing_capacity():
+    """Edge spacers bracket each strip (printtarg parity) and fill space the
+    layout already reserves, so they change the render but NOT the patch count
+    (#93)."""
+    import numpy as np
+    target = _rgb_target(120)
+    geom = instruments.build("i1")
+    lay = geometry.compute(geom, 210.0, 297.0, 120)
+
+    def render(edge):
+        return raster.render_pages(
+            target, lay, geom, seed=1, randomize=False, paper_w_mm=210.0,
+            paper_h_mm=297.0, dpi=150, spacer_mode="bw", edge_spacers=edge)
+
+    off = np.asarray(render(False).images[0])
+    on = np.asarray(render(True).images[0])
+    # same layout (capacity is the geom's; edge_spacers isn't an input to it)
+    assert off.shape == on.shape
+    # edge spacers actually changed the pixels (drawn at the strip ends)
+    assert not np.array_equal(off, on)
+    # the extra ink sits ABOVE the first patch row (the reserved leading gap),
+    # not past the bottom edge → no overflow
+    pl = geometry.placement(geom, 210.0, 297.0, lay)
+    first_top = int(pl.y_of(0) * 150 / 25.4)
+    band = on[max(0, first_top - 4):first_top]      # the leading-gap rows
+    assert (band < 250).any(), "no leading edge spacer drawn"
+
+
 def test_custom_spacer_palette():
     """Coloured spacers are drawn only from a supplied custom palette."""
     import numpy as np
