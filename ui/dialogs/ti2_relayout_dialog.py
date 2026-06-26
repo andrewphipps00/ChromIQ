@@ -2122,6 +2122,16 @@ class _NewChartDialog(QDialog):
                 background: {SPEC_MAGENTA}; border-color: {SPEC_MAGENTA};
             }}
             QCheckBox::indicator:hover {{ border-color: {SPEC_MAGENTA}; }}
+            /* This dialog sets its own stylesheet, which drops the app-wide
+               round radio geometry — so re-declare the base indicator round
+               (border-radius = half ⇒ circle), else a checked radio draws as a
+               magenta square. Checkboxes keep their square tick. */
+            QRadioButton::indicator {{
+                width: 14px; height: 14px;
+                border: 1px solid palette(mid);
+                border-radius: 8px;
+                background: palette(base);
+            }}
             QRadioButton::indicator:checked {{
                 background: {SPEC_MAGENTA}; border-color: {SPEC_MAGENTA};
             }}
@@ -2129,9 +2139,11 @@ class _NewChartDialog(QDialog):
                magenta :checked fill wins over Qt's disabled greying, so an
                unselected panel (e.g. "Generate colour sets") still showed bright
                ticks. The two-state selector outranks the single :checked rule. */
-            QCheckBox::indicator:checked:disabled,
-            QRadioButton::indicator:checked:disabled {{
+            QCheckBox::indicator:checked:disabled {{
                 background: #4a4a4a; border-color: #4a4a4a;
+            }}
+            QRadioButton::indicator:checked:disabled {{
+                background: #4a4a4a; border-color: #4a4a4a; border-radius: 8px;
             }}
             QLineEdit:focus, QComboBox:focus,
             QSpinBox:focus, QDoubleSpinBox:focus {{
@@ -3420,6 +3432,16 @@ class Ti2RelayoutDialog(QDialog):
                 background: {SPEC_MAGENTA}; border-color: {SPEC_MAGENTA};
             }}
             QCheckBox::indicator:hover {{ border-color: {SPEC_MAGENTA}; }}
+            /* This dialog sets its own stylesheet, which drops the app-wide
+               round radio geometry — so re-declare the base indicator round
+               (border-radius = half ⇒ circle), else a checked radio draws as a
+               magenta square. Checkboxes keep their square tick. */
+            QRadioButton::indicator {{
+                width: 14px; height: 14px;
+                border: 1px solid palette(mid);
+                border-radius: 8px;
+                background: palette(base);
+            }}
             QRadioButton::indicator:checked {{
                 background: {SPEC_MAGENTA}; border-color: {SPEC_MAGENTA};
             }}
@@ -3427,9 +3449,11 @@ class Ti2RelayoutDialog(QDialog):
                magenta :checked fill wins over Qt's disabled greying, so an
                unselected panel (e.g. "Generate colour sets") still showed bright
                ticks. The two-state selector outranks the single :checked rule. */
-            QCheckBox::indicator:checked:disabled,
-            QRadioButton::indicator:checked:disabled {{
+            QCheckBox::indicator:checked:disabled {{
                 background: #4a4a4a; border-color: #4a4a4a;
+            }}
+            QRadioButton::indicator:checked:disabled {{
+                background: #4a4a4a; border-color: #4a4a4a; border-radius: 8px;
             }}
             QLineEdit:focus, QComboBox:focus,
             QSpinBox:focus, QDoubleSpinBox:focus {{
@@ -5526,6 +5550,42 @@ class Ti2RelayoutDialog(QDialog):
                 return sid
         return None
 
+    def _engine_slot_to_grid(self) -> dict:
+        """slot → grid-row index (inverse of the seeded permutation), so a
+        preview hit on a patch maps back to its row in the editor grid (#93)."""
+        return {slot: i for i, slot in enumerate(self._engine_slots)}
+
+    def _engine_patch_at(self, ix: float, iy: float) -> int | None:
+        """Grid row of the engine patch under (ix, iy) on the current page."""
+        if not self._engine_patch_rects or not self._engine_slots:
+            return None
+        s2g = self._engine_slot_to_grid()
+        for (pg, slot), d in self._engine_patch_rects.items():
+            if pg != self._page:
+                continue
+            if (d["x"] <= ix <= d["x"] + d["w"]
+                    and d["y"] <= iy <= d["y"] + d["h"]):
+                gi = s2g.get(slot)
+                if gi is not None and 0 <= gi < self._grid.count():
+                    return gi
+        return None
+
+    def _engine_patches_in_rect(self, ix0, iy0, ix1, iy1) -> list[int]:
+        """Grid rows of every engine patch the rectangle touches (current page)."""
+        if not self._engine_patch_rects or not self._engine_slots:
+            return []
+        s2g = self._engine_slot_to_grid()
+        out: list[int] = []
+        for (pg, slot), d in self._engine_patch_rects.items():
+            if pg != self._page:
+                continue
+            x0, y0, x1, y1 = d["x"], d["y"], d["x"] + d["w"], d["y"] + d["h"]
+            if not (x1 < ix0 or x0 > ix1 or y1 < iy0 or y0 > iy1):
+                gi = s2g.get(slot)
+                if gi is not None and 0 <= gi < self._grid.count():
+                    out.append(gi)
+        return out
+
     def _select_patches_by_ids(
         self, sids: list[int], *, extend: bool, remove: bool = False,
     ) -> None:
@@ -5620,16 +5680,23 @@ class Ti2RelayoutDialog(QDialog):
                 else tr("{n} spacers selected.").format(n=n_sp))
             return
 
-        # Patches mode (+ highlight): marquee picks patches into the grid.
-        if not (self._hl_patches.isChecked() and self._regen is not None):
+        # Patches mode (+ highlight): marquee picks patches into the grid — for
+        # printtarg charts and engine charts alike (#93).
+        if not self._hl_patches.isChecked():
             return
-        geom = self._patch_geom_for_page(self._page)
-        if not geom:
+        if self._engine_active():
+            touched_p = [gi + 1 for gi in
+                         self._engine_patches_in_rect(ix0, iy0, ix1, iy1)]
+        elif self._regen is not None:
+            geom = self._patch_geom_for_page(self._page)
+            if not geom:
+                return
+            touched_p = [
+                sid for sid, (x0, y0, x1, y1) in geom.items()
+                if not (x1 < ix0 or x0 > ix1 or y1 < iy0 or y0 > iy1)
+            ]
+        else:
             return
-        touched_p = [
-            sid for sid, (x0, y0, x1, y1) in geom.items()
-            if not (x1 < ix0 or x0 > ix1 or y1 < iy0 or y0 > iy1)
-        ]
         if is_alt:
             if touched_p:
                 self._select_patches_by_ids(touched_p, extend=True, remove=True)
@@ -5704,10 +5771,18 @@ class Ti2RelayoutDialog(QDialog):
                 else tr("{n} spacers selected.").format(n=n_sp))
             return
 
-        # Patches mode (+ highlight): click maps to the grid selection.
-        if not (self._hl_patches.isChecked() and self._regen is not None):
+        # Patches mode (+ highlight): click maps to the grid selection — for both
+        # printtarg charts (_regen geometry) and engine charts (_engine_patch
+        # rects via the seeded permutation) (#93).
+        if not self._hl_patches.isChecked():
             return
-        sid = self._patch_at(ix, iy)
+        if self._engine_active():
+            gi = self._engine_patch_at(ix, iy)
+            sid = (gi + 1) if gi is not None else None
+        elif self._regen is not None:
+            sid = self._patch_at(ix, iy)
+        else:
+            return
         if sid is None:
             if not (is_alt or is_shift):
                 self._grid.clearSelection()
