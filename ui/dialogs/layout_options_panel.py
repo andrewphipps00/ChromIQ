@@ -21,16 +21,19 @@ from ui.tooltip_button import TooltipButton
 from ui.widgets import NoScrollComboBox, NoScrollDoubleSpinBox, NoScrollSpinBox
 from workflow.layout_engine.presets import LayoutRecipe
 
-# Sheet-text placeholders, filled in at build time by chart.build_chart.
+# Sheet-text placeholders, filled in at build time by chart.build_chart with
+# human-readable values (e.g. {instrument} → "i1Pro3+", {paper} → "A4 landscape",
+# {patchcount} → "576 patches", {seed} → "seed 1234", {dpi} → "300 dpi").
 SHEET_TOKENS = (
-    ("project", tr("Project / target name")),
+    ("project", tr("Printer profile name")),
+    ("page", tr("This page, e.g. “page 1/3”")),
     ("date", tr("Build date")),
-    ("paper", tr("Paper size code")),
-    ("instrument", tr("Instrument")),
-    ("patchcount", tr("Total patch count")),
-    ("pages", tr("Number of pages")),
-    ("seed", tr("Randomisation seed")),
-    ("dpi", tr("Resolution")),
+    ("paper", tr("Paper size & orientation")),
+    ("instrument", tr("Instrument name")),
+    ("patchcount", tr("Patch count (with “patches”)")),
+    ("pages", tr("Total number of pages")),
+    ("seed", tr("Seed (with “seed”)")),
+    ("dpi", tr("Resolution (with “dpi”)")),
 )
 
 
@@ -476,6 +479,23 @@ class LayoutOptionsPanel(QWidget):
                        "letter on a fixed line nearest the patches so the label "
                        "grows away from them, Right anchors the last letter, and "
                        "Centered splits the difference."), self))
+        self.strip_label_offset = NoScrollDoubleSpinBox(self)
+        self.strip_label_offset.setRange(-50.0, 50.0)
+        self.strip_label_offset.setDecimals(1)
+        self.strip_label_offset.setSingleStep(0.5)
+        self.strip_label_offset.setSuffix(" mm")
+        self.strip_label_offset.setMinimumWidth(96)
+        self.strip_label_offset.valueChanged.connect(self._emit)
+        add_row(sig2, 7, tr("Label offset:"), self.strip_label_offset,
+                tip=TooltipButton(
+                    tr("Label offset"),
+                    tr("Moves the strip letters up or down without moving the "
+                       "patches. By default the labels sit a little below the top "
+                       "margin; a negative value (e.g. −6 mm) tucks them up "
+                       "closer to the edge to close that gap, a positive value "
+                       "lowers them toward the patches. The patch area doesn't "
+                       "change, so this doesn't affect how many patches fit."),
+                    self))
         v.addWidget(si)
         self._on_rotation_changed()
 
@@ -498,9 +518,6 @@ class LayoutOptionsPanel(QWidget):
         self.dpi.setSuffix(" dpi"); self.dpi.valueChanged.connect(self._emit)
         self.nolimit = QCheckBox(tr("Don't cap strip length"), self)
         self.nolimit.toggled.connect(self._emit)
-        self.page_label_cb = QCheckBox(tr("Show page label"), self)
-        self.page_label_cb.setChecked(True)
-        self.page_label_cb.toggled.connect(self._emit)
         self.max_strip = mm(special_auto=True, top=2000.0)  # large paper / roll media
         self.offx = small_mm(top=300.0)
         self.offy = small_mm(top=300.0)
@@ -568,14 +585,6 @@ class LayoutOptionsPanel(QWidget):
                "strip run the full usable height. Only enable if your instrument "
                "can read an unlimited-length strip; otherwise leave it off."),
             self), 7, 2)
-        gg.addWidget(self.page_label_cb, 8, 1)
-        gg.addWidget(TooltipButton(
-            tr("Show page label"),
-            tr("Prints a small “page 1 of N” label in a narrow column down the "
-               "right edge, so the sheets of a multi-page chart stay in order. It "
-               "reserves about 5 mm on the right. Turn it off to reclaim that "
-               "space for more patches — handy on a single-page chart, where the "
-               "page number isn't needed."), self), 8, 2)
         v.addWidget(pg)
         self._update_clip_visibility()
 
@@ -634,9 +643,11 @@ class LayoutOptionsPanel(QWidget):
                     tr("Sheet text"),
                     tr("Optional text printed in the bottom margin of every sheet. "
                        "Use Insert ▾ to drop in a placeholder — it's replaced with "
-                       "the real value when the chart is built: {project}, {date}, "
-                       "{paper}, {instrument}, {patchcount}, {pages}, {seed}, "
-                       "{dpi}. The Preview line shows how it will read."), self))
+                       "a human-readable value when the chart is built: {project} "
+                       "(profile name), {page} (“page 1/3”), {date}, {paper} (e.g. "
+                       "“A4 landscape”), {instrument} (e.g. “i1Pro3+”), "
+                       "{patchcount}, {pages}, {seed}, {dpi}. The Preview line "
+                       "shows how it will read."), self))
         add_row(stg, 1, tr("Preview:"), self.text_preview)
         self._add_font_rows(stg, 2, tr("Font:"), self.chart_text_font,
                             self.chart_text_size, self.ct_bold, self.ct_italic,
@@ -1047,16 +1058,28 @@ class LayoutOptionsPanel(QWidget):
         target.setFocus()
 
     def _resolve_sample(self, text: str) -> str:
-        """Fill *text*'s placeholders with representative values for preview."""
+        """Fill *text*'s placeholders with representative values for preview —
+        mirroring the human-readable values chart.build_chart produces."""
         import time
+        from data.patch_db import PAPER_LABELS
         inst, paper = "i1", "A4"
         if self.instr is not None:
             inst, paper, _ = self.selection()
+        _instr_friendly = {"i1": "i1Pro", "p3": "i1Pro3+", "CM": "ColorMunki",
+                           "SS": "SpectroScan", "41": "DTP41", "51": "DTP51"}
+        _plabel = PAPER_LABELS.get(paper, paper)
+        _pname = _plabel.split(" (")[0]
+        _porient = (" landscape" if "Landscape" in _plabel
+                    else " portrait" if "Portrait" in _plabel else "")
+        _pages = self.get_pages()
         ctx = {
-            "project": "MyChart", "date": time.strftime("%Y-%m-%d"),
-            "paper": paper, "instrument": inst, "patchcount": "600",
-            "pages": str(self.get_pages()), "seed": "12345",
-            "dpi": str(int(self.dpi.value())),
+            "project": "MyChart", "page": f"page 1/{_pages}",
+            "date": time.strftime("%Y-%m-%d"),
+            "paper": f"{_pname}{_porient}",
+            "instrument": _instr_friendly.get(inst, inst),
+            "patchcount": "600 patches",
+            "pages": str(_pages), "seed": "seed 12345",
+            "dpi": f"{int(self.dpi.value())} dpi",
         }
         try:
             return text.format(**ctx)
@@ -1238,7 +1261,6 @@ class LayoutOptionsPanel(QWidget):
         self._border = r.border        # preserve base margin across the round-trip
         self.dpi.setValue(r.dpi)
         self.nolimit.setChecked(r.nolimit)
-        self.page_label_cb.setChecked(bool(r.show_page_label))
         self.max_strip.setValue(r.max_strip_mm)
         self.offx.setValue(r.offset_x_mm)
         self.offy.setValue(r.offset_y_mm)
@@ -1257,6 +1279,7 @@ class LayoutOptionsPanel(QWidget):
                   "right": self.ind_align_right}.get(r.indicator_align,
                                                      self.ind_align_left)
         _align.setChecked(True)
+        self.strip_label_offset.setValue(r.strip_label_offset_mm)
         self._on_rotation_changed()      # grey out align unless 90°/270°
         _umkey = "segments" if r.underline_mode == "colored" else r.underline_mode
         _um = self.underline_mode.findData(_umkey)
@@ -1319,7 +1342,6 @@ class LayoutOptionsPanel(QWidget):
         r.border = self._border
         r.dpi = int(self.dpi.value())
         r.nolimit = self.nolimit.isChecked()
-        r.show_page_label = self.page_label_cb.isChecked()
         r.max_strip_mm = self.max_strip.value()
         r.offset_x_mm = self.offx.value()
         r.offset_y_mm = self.offy.value()
@@ -1335,6 +1357,7 @@ class LayoutOptionsPanel(QWidget):
         r.indicator_align = ("center" if self.ind_align_center.isChecked()
                              else "right" if self.ind_align_right.isChecked()
                              else "left")
+        r.strip_label_offset_mm = self.strip_label_offset.value()
         r.underline_mode = self.underline_mode.currentData() or "off"
         r.underline_thickness_mm = self.underline_thickness.value()
         r.underline_gap_mm = self.underline_gap.value()

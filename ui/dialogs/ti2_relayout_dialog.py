@@ -6169,7 +6169,7 @@ class Ti2RelayoutDialog(QDialog):
         # .ti1 to adopt (#93).
         self._engine_grid_ti1(target / f"{name}.ti1")
         result = le_chart.build_chart(str(target / f"{name}.ti1"), target / name,
-                                      **recipe.build_kwargs())
+                                      project=name, **recipe.build_kwargs())
         # Fold the strip geometry + recipe into channels.json, mirroring the
         # Create Chart build (workflow.chart_creator._embed_layout_geometry).
         sidecar = target / f"{name}.channels.json"

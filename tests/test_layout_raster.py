@@ -360,21 +360,41 @@ def test_custom_spacer_palette():
     assert not (a == [0, 255, 0]).all(2).any()      # a non-palette colour isn't
 
 
-def test_page_label_drawn_in_reserved_column():
-    """When the page label is on, ink appears in the reserved right-edge column
-    and the patches don't overlap it; off leaves the column blank (#93)."""
-    target = _rgb_target(120)
-    w_mm, h_mm = 210.0, 297.0
-    g_on = instruments.build("i1", page_label=True)
-    lay = geometry.compute(g_on, w_mm, h_mm, 120)
-    res = raster.render_pages(target, lay, g_on, seed=1, paper_w_mm=w_mm,
-                              paper_h_mm=h_mm, dpi=150, page_label_text="Demo")
+def test_strip_label_offset_moves_labels_up():
+    """A negative strip-label offset moves the indicator letters higher (toward
+    the top margin) without changing the patch positions (#93)."""
     import numpy as np
-    area = geometry.page_label_area_px(g_on, w_mm, h_mm, 150)
-    assert area is not None
-    x, y, ww, hh = area
-    col = np.asarray(res.images[0])[y:y + hh, x:x + ww]
-    assert (col < 120).any()          # some dark text ink present
+    target = _rgb_target(60)
+    w_mm, h_mm = 210.0, 297.0
+    geom = instruments.build("i1")
+    lay = geometry.compute(geom, w_mm, h_mm, 60)
 
-    g_off = instruments.build("i1", page_label=False)
-    assert geometry.page_label_area_px(g_off, w_mm, h_mm, 150) is None
+    def label_top_row(offset):
+        res = raster.render_pages(target, lay, geom, seed=1, randomize=False,
+                                  paper_w_mm=w_mm, paper_h_mm=h_mm, dpi=150,
+                                  strip_label_offset_mm=offset)
+        a = np.asarray(res.images[0])
+        # first row (from top) that has any dark ink = the indicator letters
+        dark_rows = np.where((a < 100).any(axis=2).any(axis=1))[0]
+        return int(dark_rows[0])
+
+    base = label_top_row(0.0)
+    up = label_top_row(-5.0)
+    assert up < base                       # labels moved nearer the top edge
+
+
+def test_chart_text_placeholders_resolved_per_page():
+    """{page} resolves to 'page X/Y' per page and {paper} etc. to friendly values
+    via text_ctx, drawn into the bottom text (#93)."""
+    import numpy as np
+    target = _rgb_target(60)
+    w_mm, h_mm = 210.0, 297.0
+    geom = instruments.build("i1")
+    lay = geometry.compute(geom, w_mm, h_mm, 60)
+    res = raster.render_pages(target, lay, geom, seed=1, randomize=False,
+                              paper_w_mm=w_mm, paper_h_mm=h_mm, dpi=150,
+                              chart_text="{page} {paper}",
+                              text_ctx={"paper": "A4 portrait"})
+    # bottom strip has ink (the resolved text rendered)
+    a = np.asarray(res.images[0])
+    assert (a[-int(8 * 150 / 25.4):] < 100).any()

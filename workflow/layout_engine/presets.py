@@ -59,9 +59,6 @@ class LayoutRecipe:
     offset_y_mm: float = 0.0
     bit16: bool = False            # 16-bit TIFF output
     compression: str = "lzw"       # "lzw" | "zlib" | "none"
-    # Reserve + draw the per-page "N of M" label column (printtarg's page label).
-    # On by default (printtarg parity); off reclaims its ~5 mm for more patches.
-    show_page_label: bool = True
     show_strip_indicators: bool = True   # draw the per-strip letter labels
     indicator_font: str = "JetBrains Mono"
     indicator_size_mm: float = 0.0       # 0 = auto (instrument text height)
@@ -72,6 +69,10 @@ class LayoutRecipe:
     # axis: "left" (reading-start anchored — first letter stays put, label grows
     # away from the patches), "center", or "right". Ignored at 0°/180°.
     indicator_align: str = "left"
+    # Nudge the strip-label band up (negative) or down (positive) within the top
+    # reserve, in mm. Default 0 keeps the label where printtarg places it; a small
+    # negative value tucks the labels closer to the top margin (#93).
+    strip_label_offset_mm: float = 0.0
     underline_mode: str = "off"          # "off" | "colored" | "black" rule
     underline_thickness_mm: float = 0.5  # under-indicator rule thickness
     underline_gap_mm: float = 0.5        # gap between the label and the rule
@@ -149,7 +150,6 @@ class LayoutRecipe:
             offset_x_mm=float(d.get("offset_x", 0.0)),
             offset_y_mm=float(d.get("offset_y", 0.0)),
             bit16=bool(d.get("bit16", False)), compression=d.get("compression", "lzw"),
-            show_page_label=bool(d.get("page_label", True)),
             show_strip_indicators=bool(d.get("draw_indicators", True)),
             indicator_font=d.get("indicator_font", "JetBrains Mono"),
             indicator_size_mm=float(d.get("indicator_size_mm") or 0.0),
@@ -157,6 +157,7 @@ class LayoutRecipe:
             indicator_italic=bool(d.get("indicator_italic", False)),
             indicator_rotation=int(d.get("indicator_rotation", 0)),
             indicator_align=d.get("indicator_align", "left"),
+            strip_label_offset_mm=float(d.get("strip_label_offset_mm") or 0.0),
             underline_mode=d.get("underline_mode", "off"),
             underline_thickness_mm=float(d.get("underline_thickness_mm") or 0.5),
             underline_gap_mm=float(d.get("underline_gap_mm") or 0.5),
@@ -235,7 +236,6 @@ class LayoutRecipe:
             "offset_y": self.offset_y_mm,
             "bit16": self.bit16,
             "compression": self.compression,
-            "page_label": self.show_page_label,
             "draw_indicators": self.show_strip_indicators,
             "indicator_font": self.indicator_font,
             "indicator_size_mm": self.indicator_size_mm,
@@ -243,6 +243,7 @@ class LayoutRecipe:
             "indicator_italic": self.indicator_italic,
             "indicator_rotation": self.indicator_rotation,
             "indicator_align": self.indicator_align,
+            "strip_label_offset_mm": self.strip_label_offset_mm,
             "underline_mode": self.underline_mode,
             "underline_thickness_mm": self.underline_thickness_mm,
             "underline_gap_mm": self.underline_gap_mm,

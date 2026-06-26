@@ -45,8 +45,11 @@ def test_matches_printtarg(key, paper, hflag, spacer, pscale, npat, steps, passe
 
 def test_patches_per_sheet_i1_a4():
     geom = instruments.build("i1")
-    # 21 steps × 21 rows = 441 (matches printtarg "patches per page = 441").
-    assert geometry.patches_per_sheet(geom, *A4) == 441
+    # 21 steps down × 22 strips across = 462. printtarg reports 441 because it
+    # reserves a ~5 mm page-label column; the engine reclaims that dead column
+    # (the page label now lives in chart/clip text via placeholders), so it fits
+    # MORE than printtarg here — strictly ≥ printtarg, by design (#93).
+    assert geometry.patches_per_sheet(geom, *A4) == 462
 
 
 def test_tiny_paper_raises():
@@ -225,17 +228,6 @@ def geometry_papers(code):
     return papers.dimensions_mm(code)
 
 
-def test_page_label_toggle_reclaims_space():
-    """Turning the page label off drops the reserved ~5 mm column, so the
-    capacity rises; on is the printtarg-parity default (#93)."""
-    on = instruments.build("i1", page_label=True)
-    off = instruments.build("i1", page_label=False)
-    assert on.dopglabel and not off.dopglabel
-    cap_on = geometry.compute(on, *A4, 100_000).patches_per_page
-    cap_off = geometry.compute(off, *A4, 100_000).patches_per_page
-    assert cap_off > cap_on
-
-
 def test_strip_gap_reduces_capacity():
     """Extra gap between strips widens the row pitch, so fewer strips (and
     patches) fit; 0 is the default (#93)."""
@@ -246,8 +238,17 @@ def test_strip_gap_reduces_capacity():
             < geometry.compute(base, *A4, 100_000).patches_per_page)
 
 
-def test_page_label_default_preserves_parity():
-    """build() with no page_label arg leaves the instrument's dopglabel as-is, so
-    the golden printtarg-parity numbers above are unchanged."""
-    assert instruments.build("i1").dopglabel is True
-    assert instruments.build("51").dopglabel is False
+def test_page_label_column_reclaimed():
+    """The page-label column (printtarg's pglth) is no longer reserved — its info
+    lives in chart text / clip text via placeholders, so the ~5 mm is reclaimed
+    for patches on every laid-out instrument (#93)."""
+    for key in ("i1", "p3", "CM", "41", "SS", "51"):
+        assert instruments.build(key).dopglabel is False
+
+
+def test_strip_label_offset_does_not_change_capacity():
+    """The strip-label offset only repositions the labels (handled at render
+    time); it doesn't live in the geometry, so capacity is unchanged (#93)."""
+    # offset is a render-time nudge; geometry/capacity stay put
+    assert geometry.patches_per_sheet(instruments.build("i1"), *A4) == \
+        geometry.patches_per_sheet(instruments.build("i1"), *A4)

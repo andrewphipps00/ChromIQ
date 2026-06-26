@@ -942,6 +942,7 @@ class ChartCreator:
             kw = params.layout_recipe.build_kwargs()
             kw["instrument"] = params.instrument
             kw["paper"] = params.paper
+            kw["project"] = params.target_name   # {project} → profile name
             if params.engine_cal_path:
                 kw["cal_path"] = params.engine_cal_path
                 kw["apply_cal"] = bool(params.engine_apply_cal)

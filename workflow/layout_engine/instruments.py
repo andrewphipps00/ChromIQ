@@ -121,7 +121,6 @@ def build(
     nolimit: bool = False,
     clip_border_width: float = 26.0,
     edge_spacers: bool = False,
-    page_label: bool | None = None,
 ) -> Geom:
     """Resolve :class:`Geom`, applying ChromIQ extensions over the base geometry.
 
@@ -154,13 +153,10 @@ def build(
     mxrowl = float(max_strip) if max_strip else geom.mxrowl
     sig = geom.strip_indicator_gap if strip_indicator_gap is None \
         else float(strip_indicator_gap)
-    # The page-label column is reserved only where the instrument supports it
-    # (dopglabel); the user toggle can switch it off to reclaim that ~5 mm.
-    dopg = geom.dopglabel if page_label is None else (geom.dopglabel and bool(page_label))
     return replace(geom, margin_t=mt, margin_r=mr, margin_b=mb, margin_l=ml,
                    plen=plen, pwid=pwid, rrsp=rrsp, pspa=pspa, mxrowl=mxrowl,
                    strip_indicator_gap=sig, offset_x=offset_x, offset_y=offset_y,
-                   edge_spacers=edge_spacers, dopglabel=dopg)
+                   edge_spacers=edge_spacers)
 
 
 # Keys of a recipe ``build_kwargs()`` dict that affect the laid-out geometry —
@@ -173,7 +169,7 @@ GEOM_BUILD_KEYS = (
     "hflag", "density", "spacer_on", "pscale", "sscale", "border", "margins",
     "patch_w", "patch_h", "spacer_width", "inter_patch", "strip_gap", "max_strip",
     "strip_indicator_gap", "offset_x", "offset_y", "nolpcbord", "nolimit",
-    "clip_border_width", "edge_spacers", "page_label",
+    "clip_border_width", "edge_spacers",
 )
 
 
@@ -242,7 +238,8 @@ def _build_base(
             lspa=border + txhisl + lcar, lcar=lcar, txhisl=txhisl, pglth=5.0,
             border=border, lbord=lbord, hxeh=0.0, hxew=0.0, clwi=0.0, rlwi=0.0,
             mxpprow=MAXPPROW, mxrowl=mxrowl, rpstrip=999, nextrap=0,
-            dorspace=False, dopglabel=True, padlrow=True, target_name=name,
+            dorspace=False, dopglabel=False,   # page-label column reclaimed (#93)
+            padlrow=True, target_name=name,
             has_clip_border=True,
         )
 
@@ -264,7 +261,8 @@ def _build_base(
             lspa=border + 7.0 + 20.0, lcar=lcar, txhisl=txhisl, pglth=5.0,
             border=border, lbord=0.0, hxeh=hxeh, hxew=0.0, clwi=0.0, rlwi=0.0,
             mxpprow=MAXPPROW, mxrowl=MAXROWLEN, rpstrip=999, nextrap=0,
-            dorspace=False, dopglabel=True, padlrow=True, target_name=name,
+            dorspace=False, dopglabel=False,   # page-label column reclaimed (#93)
+            padlrow=True, target_name=name,
             has_clip_border=False,
         )
 
@@ -283,7 +281,8 @@ def _build_base(
             lspa=border + 7.0, lcar=0.0, txhisl=5.0, pglth=5.0,
             border=border, lbord=0.0, hxeh=hxeh, hxew=hxew, clwi=0.0, rlwi=7.5,
             mxpprow=MAXPPROW, mxrowl=MAXROWLEN, rpstrip=999, nextrap=0,
-            dorspace=False, dopglabel=True, padlrow=False, target_name=name,
+            dorspace=False, dopglabel=False,   # page-label column reclaimed (#93)
+            padlrow=False, target_name=name,
             has_clip_border=False, extra_keywords=extra,
         )
 
@@ -304,7 +303,8 @@ def _build_base(
             lspa=_inch(1.5), lcar=_inch(0.5), txhisl=5.0, pglth=5.0,
             border=border, lbord=0.0, hxeh=0.0, hxew=0.0, clwi=0.3, rlwi=0.0,
             mxpprow=100, mxrowl=mxrowl, rpstrip=8, nextrap=0,
-            dorspace=False, dopglabel=True, padlrow=True, target_name=name,
+            dorspace=False, dopglabel=False,   # page-label column reclaimed (#93)
+            padlrow=True, target_name=name,
             has_clip_border=False, extra_keywords=extra,
         )
 

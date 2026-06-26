@@ -105,7 +105,6 @@ def build_chart(
     strip_gap: float | None = None,
     max_strip: float | None = None,
     strip_indicator_gap: float | None = None,
-    page_label: bool = True,
     offset_x: float = 0.0,
     offset_y: float = 0.0,
     bit16: bool = False,
@@ -117,6 +116,7 @@ def build_chart(
     indicator_italic: bool = False,
     indicator_rotation: int = 0,
     indicator_align: str = "left",
+    strip_label_offset_mm: float = 0.0,
     underline_mode: str = "off",
     underline_thickness_mm: float = 0.5,
     underline_gap_mm: float = 0.5,
@@ -166,7 +166,6 @@ def build_chart(
         strip_indicator_gap=strip_indicator_gap,
         offset_x=offset_x, offset_y=offset_y, nolpcbord=nolpcbord, nolimit=nolimit,
         clip_border_width=clip_border_width, edge_spacers=edge_spacers,
-        page_label=page_label,
     )
     # Reserve the space the rendered furniture (strip-label band + underline,
     # bottom sheet text / stamp) actually consumes, so the laid-out patch count
@@ -202,21 +201,27 @@ def build_chart(
             fh.write("\n" + calibration.cal_table_text(cal))
 
     import time as _time
+    # Human-friendly placeholder values for {project}/{instrument}/{paper}/… in
+    # chart text, clip text and the stamp. {page} is resolved per page inside
+    # render_pages (it needs the page index), so it's not in this dict. (#93)
+    _instr_friendly = {"i1": "i1Pro", "p3": "i1Pro3+", "CM": "ColorMunki",
+                       "SS": "SpectroScan", "41": "DTP41", "51": "DTP51"}
+    _plabel = papers.label(paper)                       # "A4 (210 × 297 mm) Portrait"
+    _pname = _plabel.split(" (")[0]                      # "A4"
+    _porient = (" landscape" if "Landscape" in _plabel
+                else " portrait" if "Portrait" in _plabel else "")
     _ctx = {
         "project": project or Path(out_base).name,
-        "instrument": instrument, "paper": paper, "dpi": str(dpi),
-        "patchcount": str(layout.total_patches), "pages": str(layout.pages),
-        "date": _time.strftime("%Y-%m-%d"), "seed": str(seed),
+        "instrument": _instr_friendly.get(instrument, instrument),
+        "paper": f"{_pname}{_porient}",
+        "dpi": f"{dpi} dpi",
+        "patchcount": f"{layout.total_patches} patches",
+        "pages": str(layout.pages),                     # total; {page} = "page X/Y"
+        "date": _time.strftime("%Y-%m-%d"),
+        "seed": f"seed {seed}",
     }
-    def _resolve(txt: str) -> str:
-        try:
-            return txt.format(**_ctx) if txt else ""
-        except (KeyError, IndexError, ValueError):
-            return txt                   # leave unknown placeholders literal
-    resolved_text = _resolve(chart_text)
-    resolved_clip_text = _resolve(clip_text)
-    stamp_text = (f"ChromIQ engine · {instrument} · {paper} · {dpi} dpi · "
-                  f"{layout.total_patches} patches · seed {seed}"
+    stamp_text = (f"ChromIQ engine · {_ctx['instrument']} · {_ctx['paper']} · "
+                  f"{_ctx['dpi']} · {_ctx['patchcount']} · {_ctx['seed']}"
                   if stamp_command else "")
     def _to_rgb(c):
         if isinstance(c, str):
@@ -239,11 +244,13 @@ def build_chart(
         underline_mode=underline_mode,
         underline_thickness_mm=underline_thickness_mm,
         underline_gap_mm=underline_gap_mm,
-        chart_text=resolved_text, chart_text_font=chart_text_font,
+        strip_label_offset_mm=strip_label_offset_mm,
+        chart_text=chart_text, chart_text_font=chart_text_font,
         chart_text_size_mm=chart_text_size_mm, chart_text_bold=chart_text_bold,
         chart_text_italic=chart_text_italic, stamp_text=stamp_text,
-        clip_content_mode=clip_content_mode, clip_text=resolved_clip_text,
+        clip_content_mode=clip_content_mode, clip_text=clip_text,
         clip_text_font=clip_text_font, clip_image_path=clip_image_path,
+        text_ctx=_ctx,
     )
     tiff_paths = raster.save_tiffs(render.images, stem.with_suffix(".tif"), dpi=dpi,
                                    bit16=bit16, compression=compression)

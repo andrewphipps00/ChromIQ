@@ -500,7 +500,8 @@ def render_pages(
     clip_text: str = "",
     clip_text_font: str = "Inter",
     clip_image_path: str = "",
-    page_label_text: str = "",
+    strip_label_offset_mm: float = 0.0,
+    text_ctx: "dict | None" = None,
 ) -> RenderResult:
     """Render one :class:`PIL.Image` per page for *target*.
 
@@ -555,10 +556,27 @@ def render_pages(
     else:
         label_band_h = ind_px
 
+    # Strip-label vertical position: leader_top is where the band sits; a user
+    # offset (mm) nudges the labels up (negative, toward the top margin) or down,
+    # together with their underline (#93).
+    _lbl_top = px(place.leader_top + strip_label_offset_mm)
+
+    def _resolve_with(t: str, ctx: dict) -> str:
+        try:
+            return t.format(**ctx) if t else ""
+        except (KeyError, IndexError, ValueError):
+            return t                       # leave unknown placeholders literal
+
     images: list[Image.Image] = []
     for page in range(layout.pages):
         img = Image.new("RGB", (W, H), (255, 255, 255))
         draw = ImageDraw.Draw(img)
+        # Per-page placeholder context: {page} = "page X/Y", plus the chart-wide
+        # {project}/{paper}/… from text_ctx. Used for chart text + clip text.
+        _pctx = dict(text_ctx or {})
+        _pctx["page"] = f"page {page + 1}/{layout.pages}"
+        _chart_text = _resolve_with(chart_text, _pctx)
+        _clip_text = _resolve_with(clip_text, _pctx)
         first = page * pppage
         last = min(total, first + pppage)
         n_on_page = last - first
@@ -579,7 +597,7 @@ def render_pages(
             if draw_indicators:
                 _lbl = label_strip(global_strip + 1)
                 _cx = x0 + strip_w // 2          # centre over the strip
-                _y = px(place.leader_top)
+                _y = _lbl_top
                 if _rot == 0:
                     _draw_indicator(draw, _cx, _y, _lbl, font, _spc)
                 else:                            # rotated label → tile + paste
@@ -640,7 +658,7 @@ def render_pages(
         # "black" is a single plain line. ("cycle" is drawn per strip above.)
         if (draw_indicators and underline_mode in ("segments", "black")
                 and n_passes > 0):
-            _ly = px(place.leader_top) + label_band_h + ul_gap
+            _ly = _lbl_top + label_band_h + ul_gap
             _yb = _ly + ul_th - 1
             x_left = px(place.x_of(0))
             x_right = px(place.x_of(n_passes - 1) + place.pwid) - 1
@@ -662,13 +680,13 @@ def render_pages(
                 _ax, _ay, _aw, _ah = _area
                 _clip = render_clip_strip(
                     clip_content_mode, width_px=_aw, height_px=_ah, dpi=dpi,
-                    text=clip_text, font_family=clip_text_font,
+                    text=_clip_text, font_family=clip_text_font,
                     image_path=clip_image_path)
                 img.paste(_clip, (_ax, _ay))
 
         # Bottom-of-sheet text: custom chart text + optional command stamp,
         # drawn in the bottom margin (clear of the patches).
-        _btxt = [t for t in (chart_text, stamp_text) if t]
+        _btxt = [t for t in (_chart_text, stamp_text) if t]
         if _btxt:
             sfont = _font(px(chart_text_size_mm or 3.2), chart_text_font,
                           chart_text_bold, chart_text_italic)
@@ -677,19 +695,6 @@ def render_pages(
             for ln in _btxt:
                 draw.text((px(geom.margin_l), yy), ln, font=sfont, fill=(0, 0, 0))
                 yy += line_h
-
-        # Per-page label column (printtarg's page label): a rotated "N of M"
-        # (optionally prefixed with the chart name) up the reserved right strip,
-        # so multi-page charts stay self-identifying. Drawn only where the
-        # geometry reserved the column (geom.dopglabel); the toggle that turns it
-        # off also drops the reservation, so capacity and ink agree.
-        _pa = geometry.page_label_area_px(geom, paper_w_mm, paper_h_mm, dpi)
-        if _pa is not None and _pa[2] > 0 and _pa[3] > 0:
-            _lx, _ly, _lw, _lh = _pa
-            _txt = ((f"{page_label_text} - " if page_label_text else "")
-                    + f"page {page + 1} of {layout.pages}")
-            _ptile = _vtext(_txt, chart_text_font, _lw, _lh, valign="center")
-            img.paste(_ptile, (_lx, _ly), _ptile)
         images.append(img)
 
     flagged = contrast.low_contrast_passes(rgb_by_slot, steps)
