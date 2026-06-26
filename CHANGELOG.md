@@ -1,5 +1,24 @@
 # Changelog
 
+## v3.13.0-beta.8
+
+Simplifies colour loading based on testing: reflective scan-target (CIE) files
+and the experimental "stretch to fill the cube" option are removed.
+
+### 🔧 Changed
+- **Loading colours now accepts device-RGB files only** — Argyll `.ti1` / `.ti2`
+  / `.ti3` / CGATS and plain hex/RGB lists, in New chart, Add and the editor's
+  Load chart. **CIE reference files (XYZ/LAB) are no longer read**: a reflective
+  scan target's colours can't be turned into a full-range chart layout in a
+  meaningful way, so the **"Stretch colours to fill the RGB cube" option is
+  gone** too. A CIE file now shows a clear "not supported" message.
+  - **Want colours that span the whole RGB cube?** Use **Generate colour sets →
+    3D cube / Saturated edges** — those place patches at the cube's faces and
+    corners by construction, which is exactly what stretching a scan target
+    could never do.
+- **Removed the editor's "Append from file…" button** — it duplicated **Add →
+  Load colours from a file**. ("Load Chart" is unchanged.)
+
 ## v3.13.0-beta.7
 
 Layout-engine flexibility & fixes from testing — more paper sizes, friendlier
