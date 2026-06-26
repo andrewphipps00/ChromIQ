@@ -56,18 +56,19 @@ def compute(geom: Geom, paper_w_mm: float, paper_h_mm: float, npat: int,
     iw = pw - g.margin_l - g.lbord - g.margin_r
 
     # Available pass length down the sheet (top/bottom margins, floored by the
-    # instrument's own leader/trailer requirements).
-    mints = g.margin_t + g.txhisl + g.lcar
+    # instrument's own leader/trailer requirements). The top label band uses the
+    # ACTUAL rendered strip-label + underline height when known (label_band_mm),
+    # not just the fixed instrument text height, so a big/rotated indicator or an
+    # underline reduces the patch count instead of overlapping the patches; the
+    # bottom likewise reserves the sheet-text/stamp block (#93).
+    txhi = max(g.txhisl, g.label_band_mm)
+    mints = g.margin_t + txhi + g.lcar
     if mints < g.lspa:
         mints = g.lspa
-    minbs = g.margin_b
-    if minbs < g.tspa:
-        minbs = g.tspa
-    # The strip-indicator gap is reserved white space between the label/clear
-    # area and the first patch, so it eats into the usable pass length — fewer
-    # patches fit a longer gap (and more fit a shorter one) instead of the chart
-    # just sliding down off the usable area (#93). placement() reserves the same
-    # amount, so capacity and placement agree.
+    minbs = max(g.margin_b, g.tspa, g.bottom_reserve_mm)
+    # The strip-indicator gap is reserved too, so a longer gap reduces the patch
+    # count instead of sliding the chart off the usable area. placement()
+    # reserves the same amounts, so capacity and placement agree (#93).
     arowl = ph - mints - minbs - 2.0 * g.hxeh - g.strip_indicator_gap
     if arowl > g.mxrowl:
         arowl = g.mxrowl
@@ -174,8 +175,14 @@ def placement(geom: Geom, paper_w_mm: float, paper_h_mm: float, layout: Layout) 
     # gap is folded into the top reservation (compute() reserves it too), so the
     # patch block is centred in the space that actually remains and never runs off
     # the usable area (#93).
-    mints = max(g.margin_t + g.txhisl + g.lcar, g.lspa) + g.strip_indicator_gap
-    minbs = max(g.margin_b, g.tspa)
+    # Effective label band (actual indicator+underline height when known) and
+    # bottom reserve (sheet text / stamp), matching compute() so capacity and
+    # placement agree. leader_top still uses the plain instrument text height, so
+    # the label is rendered where it always was — only the patch block moves down
+    # to make room when the band is taller than the default.
+    txhi = max(g.txhisl, g.label_band_mm)
+    mints = max(g.margin_t + txhi + g.lcar, g.lspa) + g.strip_indicator_gap
+    minbs = max(g.margin_b, g.tspa, g.bottom_reserve_mm)
     # Distribute slack like printtarg: amints = mints + 0.5*(slack - minbs)
     slack = ph - mints - g.pspa - layout.pprow * (g.plen + g.pspa)
     amints = mints + 0.5 * (slack - minbs)

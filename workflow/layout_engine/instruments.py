@@ -81,6 +81,12 @@ class Geom:
     strip_indicator_gap: float = 0.0   # gap (mm) between strip label and strip
     offset_x: float = 0.0              # whole-chart offset (mm)
     offset_y: float = 0.0
+    # Rendered-furniture reservations (mm), filled in from the recipe + fonts by
+    # raster.apply_furniture_reserves() so capacity reflects what's actually
+    # drawn. 0 ⇒ fall back to the instrument default (txhisl / margins) — i.e. a
+    # bare build() Geom behaves exactly as before. (#93)
+    label_band_mm: float = 0.0   # actual strip-label + underline band height
+    bottom_reserve_mm: float = 0.0   # actual bottom sheet-text + stamp height
 
 
 def supported() -> list[str]:
@@ -160,9 +166,12 @@ GEOM_BUILD_KEYS = (
 def geom_from_build_kwargs(kw: dict) -> Geom:
     """Build a :class:`Geom` from a recipe ``build_kwargs()`` dict using every
     geometry-affecting key, so capacity estimates can never silently drift from
-    the actual render (#93)."""
-    return build(kw["instrument"],
+    the actual render (#93). Rendered-furniture reservations (label band, bottom
+    sheet text / stamp) are applied too — the same step the renderer uses."""
+    geom = build(kw["instrument"],
                  **{k: v for k, v in kw.items() if k in GEOM_BUILD_KEYS})
+    from . import raster   # lazy: raster imports this module
+    return raster.apply_furniture_reserves(geom, kw)
 
 
 def _build_base(

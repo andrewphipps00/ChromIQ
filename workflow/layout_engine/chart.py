@@ -163,6 +163,17 @@ def build_chart(
         offset_x=offset_x, offset_y=offset_y, nolpcbord=nolpcbord, nolimit=nolimit,
         clip_border_width=clip_border_width,
     )
+    # Reserve the space the rendered furniture (strip-label band + underline,
+    # bottom sheet text / stamp) actually consumes, so the laid-out patch count
+    # matches what fits — the same reservation every capacity estimate uses (#93).
+    geom = raster.apply_furniture_reserves(geom, {
+        "dpi": dpi, "draw_indicators": draw_indicators,
+        "indicator_font": indicator_font, "indicator_size_mm": indicator_size_mm,
+        "indicator_bold": indicator_bold, "indicator_italic": indicator_italic,
+        "indicator_rotation": indicator_rotation, "underline_mode": underline_mode,
+        "underline_thickness_mm": underline_thickness_mm,
+        "underline_gap_mm": underline_gap_mm,
+        "chart_text": chart_text, "stamp_command": stamp_command})
     w_mm, h_mm = papers.dimensions_mm(paper)
     layout = geometry.compute(geom, w_mm, h_mm, len(target.patches))
     if seed is None:

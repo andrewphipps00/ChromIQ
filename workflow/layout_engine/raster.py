@@ -8,7 +8,7 @@ printtarg, so the existing `page_geometry` / print pipeline read the DPI right.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import numpy as np
@@ -237,6 +237,58 @@ def effective_indicator_size_mm(geom, dpi: int, font: str, size_mm: float) -> fl
     # letters of one indicator (otherwise "AA AB" reads as "A AA B"). (#93)
     avail = geom.pwid * INDICATOR_FIT_FRAC
     return target if widest2 <= avail else target * avail / widest2
+
+
+def _furniture_reserves_mm(geom, kw: dict) -> tuple[float, float]:
+    """``(label_band_mm, bottom_reserve_mm)`` — the vertical space the rendered
+    strip-label band (indicator + underline) and the bottom sheet-text/stamp
+    block actually consume, so :func:`geometry.compute` can reserve them.
+
+    An auto-sized upright indicator measures its *ink* height (≈ cap height),
+    which stays under the instrument ``txhisl`` so default charts keep
+    printtarg-parity capacity; a big, rotated, or underlined label grows the band
+    and reduces the count instead of overlapping the patches (#93).
+    """
+    dpi = int(kw.get("dpi") or 150)
+    mm2px = dpi / 25.4
+    label_band = 0.0
+    if kw.get("draw_indicators", True):
+        fam = kw.get("indicator_font", DEFAULT_INDICATOR_FONT)
+        size_mm = effective_indicator_size_mm(
+            geom, dpi, fam, float(kw.get("indicator_size_mm") or 0.0))
+        ind_px = max(6, round(size_mm * mm2px))
+        f = _font(ind_px, fam, bool(kw.get("indicator_bold")),
+                  bool(kw.get("indicator_italic")))
+        rot = int(kw.get("indicator_rotation") or 0) % 360
+        spc = max(1, round(ind_px * INDICATOR_LETTER_SPACING))
+        if rot in (90, 270):
+            # Side-rotated: the band runs along the strip, so its height is the
+            # label's drawn length. Reserve for up to two letters (≤702 strips).
+            band_px = _indicator_tile("WW", f, spc, rot).height
+        else:
+            # Upright: the visible ink height of representative cap/digit glyphs.
+            probe = Image.new("RGBA", (ind_px * 4, ind_px * 4), (0, 0, 0, 0))
+            ImageDraw.Draw(probe).text((ind_px, ind_px), "W8", font=f,
+                                       fill=(0, 0, 0, 255))
+            bb = probe.getbbox()
+            band_px = (bb[3] - bb[1]) if bb else ind_px
+        label_band = band_px / mm2px
+        if kw.get("underline_mode", "off") in ("segments", "cycle", "black", "colored"):
+            label_band += (float(kw.get("underline_gap_mm") or 0.0)
+                           + max(0.0, float(kw.get("underline_thickness_mm") or 0.0)))
+    # Bottom-of-sheet block: one line each for custom sheet text and the stamp,
+    # drawn at line_h = px(4.2) above a px(1.5) bottom inset (see render_pages).
+    nlines = (1 if kw.get("chart_text") else 0) + (1 if kw.get("stamp_command") else 0)
+    bottom = (1.5 + 4.2 * nlines) if nlines else 0.0
+    return label_band, bottom
+
+
+def apply_furniture_reserves(geom, kw: dict):
+    """Return *geom* with label_band_mm / bottom_reserve_mm filled from the
+    rendered furniture (single source of truth shared by the renderer and every
+    capacity estimate, so they can't disagree — #93)."""
+    lb, br = _furniture_reserves_mm(geom, kw)
+    return replace(geom, label_band_mm=lb, bottom_reserve_mm=br)
 
 
 def render_clip_strip(mode: str, *, width_px: int, height_px: int, dpi: int,

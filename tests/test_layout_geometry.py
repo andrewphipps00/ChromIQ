@@ -177,3 +177,41 @@ def test_geom_from_build_kwargs_honours_clip_width():
                      clip_border_width_mm=60.0)
     g = instruments.geom_from_build_kwargs(r.build_kwargs())
     assert g.lbord == pytest.approx(60.0 - r.border)
+
+
+def test_furniture_reserves_affect_capacity():
+    """Rendered furniture (big/rotated indicators, underline, sheet text, stamp)
+    must reserve space so capacity reflects it — while a default chart keeps its
+    printtarg-parity count (#93)."""
+    from workflow.layout_engine.presets import LayoutRecipe
+    paper = "210x150"                     # short page → height-bound, not mxrowl
+    w, h = geometry_papers(paper)
+
+    def cap(**over):
+        r = LayoutRecipe(instrument="i1", paper=paper, **over)
+        g = instruments.geom_from_build_kwargs(r.build_kwargs())
+        return geometry.patches_per_sheet(g, w, h)
+
+    base = cap()
+    # A large indicator reserves a taller label band → fewer patches fit
+    assert cap(indicator_size_mm=20.0) < base
+    # Underline / sheet text / stamp reserve space too (≤: they may sit in the
+    # page's slack on a given size, but never exceed the no-furniture count)
+    assert cap(underline_mode="black", underline_thickness_mm=3.0,
+               underline_gap_mm=5.0) <= base
+    assert cap(stamp_command=True, chart_text="{project}") <= base
+    # an oversized stack of furniture clearly drops the count
+    assert cap(indicator_size_mm=18.0, underline_mode="black",
+               underline_thickness_mm=3.0, underline_gap_mm=6.0,
+               stamp_command=True, chart_text="x") < base
+    # A bare build() Geom (no furniture info) is unchanged from the default
+    bare = geometry.patches_per_sheet(instruments.build("i1"), *geometry_papers("A4"))
+    assert bare == geometry.patches_per_sheet(
+        instruments.geom_from_build_kwargs(
+            LayoutRecipe(instrument="i1", paper="A4").build_kwargs()),
+        *geometry_papers("A4"))
+
+
+def geometry_papers(code):
+    from workflow.layout_engine import papers
+    return papers.dimensions_mm(code)
