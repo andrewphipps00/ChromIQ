@@ -162,7 +162,7 @@ def build_chart(
         patch_h=patch_h, spacer_width=spacer_width, inter_patch=inter_patch,
         max_strip=max_strip, strip_indicator_gap=strip_indicator_gap,
         offset_x=offset_x, offset_y=offset_y, nolpcbord=nolpcbord, nolimit=nolimit,
-        clip_border_width=clip_border_width,
+        clip_border_width=clip_border_width, edge_spacers=edge_spacers,
     )
     # Reserve the space the rendered furniture (strip-label band + underline,
     # bottom sheet text / stamp) actually consumes, so the laid-out patch count

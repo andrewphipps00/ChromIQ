@@ -89,6 +89,9 @@ class Geom:
     # the sentinel so it behaves exactly as before. (#93)
     label_band_mm: float = -1.0   # actual strip-label + underline band height
     bottom_reserve_mm: float = 0.0   # actual bottom sheet-text + stamp height
+    # Bracket each strip with a leading + trailing spacer (printtarg parity).
+    # When OFF the two end gaps are reclaimed for patches (denser than printtarg).
+    edge_spacers: bool = False
 
 
 def supported() -> list[str]:
@@ -116,6 +119,7 @@ def build(
     nolpcbord: bool = False,
     nolimit: bool = False,
     clip_border_width: float = 26.0,
+    edge_spacers: bool = False,
 ) -> Geom:
     """Resolve :class:`Geom`, applying ChromIQ extensions over the base geometry.
 
@@ -148,7 +152,8 @@ def build(
         else float(strip_indicator_gap)
     return replace(geom, margin_t=mt, margin_r=mr, margin_b=mb, margin_l=ml,
                    plen=plen, pwid=pwid, rrsp=rrsp, pspa=pspa, mxrowl=mxrowl,
-                   strip_indicator_gap=sig, offset_x=offset_x, offset_y=offset_y)
+                   strip_indicator_gap=sig, offset_x=offset_x, offset_y=offset_y,
+                   edge_spacers=edge_spacers)
 
 
 # Keys of a recipe ``build_kwargs()`` dict that affect the laid-out geometry —
@@ -161,7 +166,7 @@ GEOM_BUILD_KEYS = (
     "hflag", "density", "spacer_on", "pscale", "sscale", "border", "margins",
     "patch_w", "patch_h", "spacer_width", "inter_patch", "max_strip",
     "strip_indicator_gap", "offset_x", "offset_y", "nolpcbord", "nolimit",
-    "clip_border_width",
+    "clip_border_width", "edge_spacers",
 )
 
 

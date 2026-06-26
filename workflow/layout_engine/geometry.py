@@ -77,10 +77,15 @@ def compute(geom: Geom, paper_w_mm: float, paper_h_mm: float, npat: int,
     if arowl > g.mxrowl:
         arowl = g.mxrowl
 
-    # Patches per pass (every patch may be surrounded by a spacer → pprow+1 gaps).
+    # Patches per pass. n patches need (n-1) between-spacers, plus a leading and
+    # trailing spacer when edge spacers are on (printtarg always reserves these).
+    # When edge spacers are OFF we reclaim those two end gaps for patches — the
+    # instrument's white leader/trailer comes from the clear area + margins, not
+    # these gaps — so the engine packs denser than printtarg (#93).
     if (g.plen + g.pspa) <= 0:
         raise LayoutError("degenerate patch length")
-    pprow = int((arowl - g.pspa) / (g.plen + g.pspa))
+    _edge_gaps = 2 if g.edge_spacers else 0
+    pprow = int((arowl - (_edge_gaps - 1) * g.pspa) / (g.plen + g.pspa))
     if pprow > g.mxpprow:
         pprow = g.mxpprow
     if pprow < (1 + g.nextrap):
@@ -188,12 +193,18 @@ def placement(geom: Geom, paper_w_mm: float, paper_h_mm: float, layout: Layout) 
     eff_lspa = max(g.border + g.lcar, g.lspa - g.txhisl + txhi)
     mints = max(g.margin_t + txhi + g.lcar, eff_lspa) + g.strip_indicator_gap
     minbs = max(g.margin_b, g.tspa, g.bottom_reserve_mm)
+    # The strip block carries a leading + trailing spacer only when edge spacers
+    # are on; off, those gaps are reclaimed (matching compute()), so the first
+    # patch sits at the block top. _lead is the leading gap.
+    _lead = g.pspa if g.edge_spacers else 0.0
+    _block = (layout.pprow * (g.plen + g.pspa)
+              + (g.pspa if g.edge_spacers else -g.pspa))
     # Distribute slack like printtarg: amints = mints + 0.5*(slack - minbs)
-    slack = ph - mints - g.pspa - layout.pprow * (g.plen + g.pspa)
+    slack = ph - mints - _block
     amints = mints + 0.5 * (slack - minbs)
     return Placement(
         x0=g.margin_l + g.lbord + g.offset_x,
-        y0_first=amints + g.pspa + g.offset_y,
+        y0_first=amints + _lead + g.offset_y,
         plen=g.plen, pwid=g.pwid, pspa=g.pspa, rrsp=g.rrsp,
         steps_in_pass=layout.steps_in_pass,
         leader_top=g.margin_t + g.txhisl + g.offset_y,

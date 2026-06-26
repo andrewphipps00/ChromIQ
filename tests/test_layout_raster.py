@@ -266,32 +266,40 @@ def test_indicator_align_noop_without_multiletter():
     assert np.array_equal(page0("left"), page0("center"))
 
 
-def test_edge_spacers_draw_without_reducing_capacity():
-    """Edge spacers bracket each strip (printtarg parity) and fill space the
-    layout already reserves, so they change the render but NOT the patch count
-    (#93)."""
+def test_edge_spacers_reclaim_when_off_and_draw_when_on():
+    """Edge spacers bracket each strip when ON (printtarg parity); when OFF the
+    two end gaps are reclaimed for patches (denser than printtarg). The render
+    draws them only when on, and the block fits the page either way (#93)."""
     import numpy as np
+    # Capacity: OFF reclaims, so it never fits fewer than ON; on a height-bound
+    # page with a fat spacer it fits strictly more.
+    on = geometry.patches_per_sheet(
+        instruments.build("i1", spacer_width=8.0, edge_spacers=True), 210.0, 297.0)
+    off = geometry.patches_per_sheet(
+        instruments.build("i1", spacer_width=8.0, edge_spacers=False), 210.0, 297.0)
+    assert off > on
+
+    # Render: edge spacers appear only when on, and nothing overflows.
     target = _rgb_target(120)
-    geom = instruments.build("i1")
-    lay = geometry.compute(geom, 210.0, 297.0, 120)
+    g_on = instruments.build("i1", spacer_width=8.0, edge_spacers=True)
+    lay = geometry.compute(g_on, 210.0, 297.0, 120)
+    pl = geometry.placement(g_on, 210.0, 297.0, lay)
 
     def render(edge):
         return raster.render_pages(
-            target, lay, geom, seed=1, randomize=False, paper_w_mm=210.0,
+            target, lay, g_on, seed=1, randomize=False, paper_w_mm=210.0,
             paper_h_mm=297.0, dpi=150, spacer_mode="bw", edge_spacers=edge)
 
-    off = np.asarray(render(False).images[0])
-    on = np.asarray(render(True).images[0])
-    # same layout (capacity is the geom's; edge_spacers isn't an input to it)
-    assert off.shape == on.shape
-    # edge spacers actually changed the pixels (drawn at the strip ends)
-    assert not np.array_equal(off, on)
-    # the extra ink sits ABOVE the first patch row (the reserved leading gap),
-    # not past the bottom edge → no overflow
-    pl = geometry.placement(geom, 210.0, 297.0, lay)
+    img_off = np.asarray(render(False).images[0])
+    img_on = np.asarray(render(True).images[0])
+    assert not np.array_equal(img_off, img_on)        # spacers drawn when on
+    # leading edge spacer sits in the reserved gap above the first patch
     first_top = int(pl.y_of(0) * 150 / 25.4)
-    band = on[max(0, first_top - 4):first_top]      # the leading-gap rows
+    band = img_on[max(0, first_top - int(g_on.pspa * 150 / 25.4)):first_top]
     assert (band < 250).any(), "no leading edge spacer drawn"
+    # trailing edge spacer stays within the usable area
+    last_bottom = pl.y_of(lay.steps_in_pass - 1) + pl.plen + g_on.pspa
+    assert last_bottom <= 297.0 - max(g_on.margin_b, g_on.tspa) + 0.5
 
 
 def test_custom_spacer_palette():

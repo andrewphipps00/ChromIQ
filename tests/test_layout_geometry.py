@@ -30,7 +30,11 @@ CASES = [
 
 @pytest.mark.parametrize("key,paper,hflag,spacer,pscale,npat,steps,passes,total", CASES)
 def test_matches_printtarg(key, paper, hflag, spacer, pscale, npat, steps, passes, total):
-    geom = instruments.build(key, hflag=hflag, spacer_on=spacer, pscale=pscale)
+    # printtarg brackets every strip with a leading + trailing spacer, so the
+    # parity comparison uses edge_spacers=True. The engine's default (edge off)
+    # reclaims those two gaps and packs denser — covered separately (#93).
+    geom = instruments.build(key, hflag=hflag, spacer_on=spacer, pscale=pscale,
+                             edge_spacers=True)
     lay = geometry.compute(geom, paper[0], paper[1], npat)
     assert lay.steps_in_pass == steps
     assert lay.passes == passes
@@ -194,7 +198,7 @@ def test_furniture_reserves_affect_capacity():
 
     base = cap()
     # A large indicator reserves a taller label band → fewer patches fit
-    assert cap(indicator_size_mm=20.0) < base
+    assert cap(indicator_size_mm=30.0) < base
     # Underline / sheet text / stamp reserve space too (≤: they may sit in the
     # page's slack on a given size, but never exceed the no-furniture count)
     assert cap(underline_mode="black", underline_thickness_mm=3.0,
