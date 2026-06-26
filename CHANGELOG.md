@@ -1,5 +1,33 @@
 # Changelog
 
+## v3.13.0-beta.5
+
+Refines how reference-colour files load (from Knut's testing), with a new
+fill-the-cube option for reusing them as chart layouts.
+
+### ✨ New / changed
+- **Loaded reference colours are now faithful by default.** CIE files describe
+  real reflective targets, so their colours are reconstructed colorimetrically
+  (matching Argyll rectarg's "display" intent exactly) — the 3D cube shows the
+  target's real, gamut-limited shape and the white sits at its true value. (This
+  replaces beta-4's media-relative stretch, which forced the white to screen
+  white.)
+- **"Stretch colours to fill the RGB cube"** — an optional, non-colorimetric
+  per-channel stretch for when you want to *reuse* a reference chart's colours as
+  a fresh full-range layout:
+  - in the **Edit / create chart layout** editor, a button next to Darken /
+    Lighten (undoable, so you can compare faithful vs stretched in the 3D
+    distribution),
+  - and as a checkbox in the **New chart "Load from file…"** and **Add "Load
+    colours from a file"** windows, which live-updates the 3D cube.
+  Each has a tooltip noting it changes the colours (no longer colour-accurate).
+
+### 📝 Notes
+- Open follow-ups before 3.13.0 final are unchanged: translations of the new
+  strings, real-hardware print+measure verification, multi-strip instruments,
+  and the planned scanner-target workflow (#95 / #97 / #98).
+- Thanks to **Knut Georg Larsson** for the detailed testing and the sample files.
+
 ## v3.13.0-beta.4
 
 Fixes and polish for the colour-file loading added in beta-3, from Knut's
