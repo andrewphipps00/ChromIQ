@@ -634,7 +634,28 @@ def parse_cie_values(text: str, *, relative: bool = True
     return out
 
 
-def load_colour_file(path: Path, *, relative: bool = True
+def stretch_to_cube(program: list[tuple[float, float, float]]
+                    ) -> list[tuple[float, float, float]]:
+    """Per-channel stretch a 0..100 RGB program so it fills the RGB cube.
+
+    Each channel is mapped from its own [min, max] to [0, 100]. This is a
+    *non-colorimetric* visualisation/layout transform: a reflective target's
+    colours occupy only part of the cube, so stretching makes them span it when
+    reusing those colours as a chart layout (Knut's request, #96). A channel
+    with no range is left at its value. Empty input returns ``[]``.
+    """
+    if not program:
+        return []
+    cols = list(zip(*program))
+    lohi = [(min(c), max(c)) for c in cols]
+
+    def s(v: float, lo: float, hi: float) -> float:
+        return v if hi - lo < 1e-9 else (v - lo) / (hi - lo) * 100.0
+
+    return [tuple(s(v, *lohi[i]) for i, v in enumerate(p)) for p in program]
+
+
+def load_colour_file(path: Path, *, relative: bool = False
                      ) -> list[tuple[float, float, float]]:
     """Load any supported colour file into a 0..100 RGB program.
 
@@ -642,7 +663,9 @@ def load_colour_file(path: Path, *, relative: bool = True
     cgats / txt / pxf) with **CIE reference files** (``.cie`` or text carrying
     XYZ / LAB, reconstructed to device sRGB) and a plain hex / RGB value list.
     Raises ``ValueError`` if nothing usable is found. *relative* picks the CIE
-    rendering intent (default media-relative; see :func:`parse_cie_values`). (#96)
+    rendering intent — default **False** (absolute / faithful, matching Argyll's
+    rectarg "display" intent); see :func:`parse_cie_values`. Callers offer an
+    optional :func:`stretch_to_cube` pass for the "fill the cube" layout use. (#96)
     """
     path = Path(path)
     try:

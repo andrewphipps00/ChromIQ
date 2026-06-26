@@ -612,3 +612,26 @@ def test_parse_cie_media_relative_maps_white_to_display_white(tmp_path):
     assert min(rel[0]) > 97
     # absolute: same white stays dim (it's only ~77% luminance)
     assert max(ab[0]) < 95
+
+
+def test_stretch_to_cube_fills_range():
+    """Per-channel stretch maps each channel's range to the full 0..100 cube,
+    leaving a no-range channel alone (#96)."""
+    prog = [(20.0, 40.0, 50.0), (60.0, 40.0, 80.0), (40.0, 40.0, 65.0)]
+    out = R.stretch_to_cube(prog)
+    rs = [p[0] for p in out]; bs = [p[2] for p in out]
+    assert min(rs) == 0.0 and max(rs) == 100.0      # R stretched
+    assert min(bs) == 0.0 and max(bs) == 100.0      # B stretched
+    assert all(p[1] == 40.0 for p in out)           # G had no range → unchanged
+    assert R.stretch_to_cube([]) == []
+
+
+def test_load_colour_file_default_is_faithful(tmp_path):
+    """Default load is colorimetric (absolute) — a reflective media white
+    (Y≈77) does NOT stretch to display white (#96)."""
+    cie = ("NUMBER_OF_FIELDS 4\nBEGIN_DATA_FORMAT\nSAMPLE_ID XYZ_X XYZ_Y XYZ_Z\n"
+           "END_DATA_FORMAT\nBEGIN_DATA\nA1\t74\t77\t64\nA2\t20\t21\t17\n"
+           "END_DATA\n")
+    p = tmp_path / "r.cie"; p.write_text(cie)
+    prog = R.load_colour_file(p)                      # default faithful
+    assert max(prog[0]) < 95                          # media white stays ~228/255

@@ -993,7 +993,28 @@ class _NewChartDialog(QDialog):
         paste_btns.addStretch(1)
         paste_btns.addWidget(self._paste_status)
         paste_indent.addLayout(paste_btns)
+        # Optional non-colorimetric stretch so reference colours fill the RGB
+        # cube when reused as a chart layout (#96).
+        _stretch_row = QHBoxLayout()
+        self._stretch_cb = QCheckBox(tr("Stretch colours to fill the RGB cube"),
+                                     src_box)
+        self._stretch_cb.toggled.connect(self._do_push_live_preview)
+        _stretch_row.addWidget(self._stretch_cb)
+        _stretch_row.addWidget(_magenta_tip(
+            tr("Stretch colours to fill the RGB cube"),
+            tr("Off (default), colours load faithfully — measured/reference "
+               "colours (from CIE files) keep their true values, so a reflective "
+               "target only fills part of the cube because its inks can't reach "
+               "pure red/green/blue. Turn this on to stretch each channel to the "
+               "full range so the colours spread across the whole cube — handy "
+               "when you want to reuse a reference chart's colours as a fresh "
+               "layout. It changes the colours (no longer colorimetrically "
+               "accurate), so leave it off if you need the real values."), self))
+        _stretch_row.addStretch(1)
+        paste_indent.addLayout(_stretch_row)
         sl.addLayout(paste_indent)
+        # _add_stretch_cb is the Add dialog's equivalent; absent here so
+        # _maybe_stretch falls back to _stretch_cb in the New-chart dialog.
         self._paste_edit.textChanged.connect(self._update_paste_count)
         self._paste_edit.textChanged.connect(self._do_push_live_preview)  # cube (#96)
 
@@ -2429,14 +2450,22 @@ class _NewChartDialog(QDialog):
         """
         pm = getattr(self, "_mode_paste", None)
         if pm is not None and pm.isChecked():
-            return R.parse_color_values(self._paste_edit.toPlainText())
+            return self._maybe_stretch(R.parse_color_values(self._paste_edit.toPlainText()))
         sm = getattr(self, "_add_mode_single", None)
         if sm is not None and sm.isChecked():
             return [self._single_rgb]
         fm = getattr(self, "_add_mode_file", None)
         if fm is not None and fm.isChecked():
-            return list(getattr(self, "_loaded_add_program", []))
+            return self._maybe_stretch(list(getattr(self, "_loaded_add_program", [])))
         return additions if self._gen_sets_active() else []
+
+    def _maybe_stretch(self, prog: list) -> list:
+        """Apply the per-channel cube-fill stretch if the dialog's stretch
+        checkbox is on (#96)."""
+        cb = getattr(self, "_stretch_cb", None) or getattr(self, "_add_stretch_cb", None)
+        if cb is not None and cb.isChecked() and prog:
+            return R.stretch_to_cube(prog)
+        return prog
 
     def showEvent(self, ev) -> None:  # noqa: N802
         super().showEvent(ev)
@@ -2680,6 +2709,7 @@ class _NewChartDialog(QDialog):
                                     tr("Couldn't parse any RGB / hex values "
                                     "from the pasted text."))
                 return
+            program = self._maybe_stretch(program)   # cube-fill stretch (#96)
         elif self._mode_generate.isChecked():
             program = self._build_generated_program()
             if not program:
@@ -2821,6 +2851,25 @@ class _AddPatchesDialog(_NewChartDialog):
                "them in the 3D cube. Near-duplicate colours are automatically "
                "spaced apart so the chart still reads reliably."), self))
         lay.addLayout(file_row)
+        # Optional cube-fill stretch for the loaded colours (#96).
+        _add_stretch_row = QHBoxLayout()
+        _add_stretch_row.setContentsMargins(22, 0, 0, 0)
+        self._add_stretch_cb = QCheckBox(
+            tr("Stretch colours to fill the RGB cube"), self)
+        self._add_stretch_cb.toggled.connect(self._do_push_live_preview)
+        _add_stretch_row.addWidget(self._add_stretch_cb)
+        _add_stretch_row.addWidget(_magenta_tip(
+            tr("Stretch colours to fill the RGB cube"),
+            tr("Off (default), colours load faithfully — measured/reference "
+               "colours (from CIE files) keep their true values, so a reflective "
+               "target only fills part of the cube because its inks can't reach "
+               "pure red/green/blue. Turn this on to stretch each channel to the "
+               "full range so the colours spread across the whole cube — handy "
+               "when you want to reuse a reference chart's colours as a fresh "
+               "layout. It changes the colours (no longer colorimetrically "
+               "accurate), so leave it off if you need the real values."), self))
+        _add_stretch_row.addStretch(1)
+        lay.addLayout(_add_stretch_row)
         self._add_mode_file.toggled.connect(self._refresh_add_mode)
 
         lay.addWidget(self._add_mode_gen)
@@ -2968,7 +3017,7 @@ class _AddPatchesDialog(_NewChartDialog):
                 QMessageBox.warning(self, tr("No file"),
                                     tr("Choose a colour file to add first."))
                 return
-            self.result_program = list(self._loaded_add_program)
+            self.result_program = self._maybe_stretch(list(self._loaded_add_program))
             self.accept()
             return
         if self._add_mode_gen.isChecked():
@@ -3760,6 +3809,25 @@ class Ti2RelayoutDialog(QDialog):
         tone_row.addWidget(dark)
         tone_row.addWidget(light)
         pb.addLayout(tone_row)
+        # Stretch the whole chart's colours to fill the RGB cube — for reusing a
+        # loaded reference (CIE) chart's colours as a fresh layout. Undoable, so
+        # the 3D distribution can be compared faithful vs stretched (#96).
+        stretch_row = QHBoxLayout()
+        stretch_b = QPushButton(tr("Stretch colours to fill the RGB cube"),
+                                self._patch_box)
+        stretch_b.clicked.connect(self._stretch_program_to_cube)
+        stretch_row.addWidget(stretch_b)
+        stretch_row.addWidget(_magenta_tip(
+            tr("Stretch colours to fill the RGB cube"),
+            tr("Stretches every patch so the chart's colours span the whole RGB "
+               "cube. Reference colours from a CIE file (a reflective target) "
+               "only fill part of the cube because their inks can't reach pure "
+               "red/green/blue — turn that into a full-range layout you can reuse "
+               "as a fresh chart. It changes the colours (no longer "
+               "colorimetrically accurate); use Undo to compare with the real "
+               "values, or check the 3D distribution before and after."), self))
+        stretch_row.addStretch(1)
+        pb.addLayout(stretch_row)
         addrem = QHBoxLayout()
         add_b = QPushButton(tr("Add…"), self._patch_box)
         add_b.setToolTip(tr("Add a single chosen colour, or generate colour "
@@ -4881,6 +4949,21 @@ class Ti2RelayoutDialog(QDialog):
             new = tuple(max(0.0, min(100.0, v * factor)) for v in rgb)
             it.setData(Qt.ItemDataRole.UserRole, new)
             it.setIcon(_swatch_icon(new))
+        self._schedule_auto_refresh()
+
+    def _stretch_program_to_cube(self) -> None:
+        """Stretch the whole chart's colours per-channel to fill the RGB cube
+        (reuse a loaded reference chart as a full-range layout) (#96)."""
+        prog = self._program_from_grid()
+        if not prog:
+            self._status.setText(tr("Load or create a chart first."))
+            return
+        stretched = R.stretch_to_cube(prog)
+        for row, rgb in enumerate(stretched):
+            it = self._grid.item(row)
+            it.setData(Qt.ItemDataRole.UserRole, tuple(rgb))
+            it.setIcon(_swatch_icon(tuple(rgb)))
+        self._status.setText(tr("Stretched colours to fill the RGB cube."))
         self._schedule_auto_refresh()
 
     def _selected_rows(self) -> list[int]:
