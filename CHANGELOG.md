@@ -1,5 +1,33 @@
 # Changelog
 
+## v3.13.0-beta.6
+
+Refines the "stretch to fill the cube" option from Knut's testing — it now lives
+only where it belongs (New chart / Add), and the 3D cube shows it immediately.
+
+### ✨ Changed
+- **The "Stretch colours to fill the RGB cube" option is now only in the New
+  chart and Add windows**, as a non-destructive checkbox — turn it on/off and
+  the 3D cube updates live; nothing is committed until you press Create / Add.
+  The button that was in the Edit Chart window has been **removed**.
+- **Edit Chart → Load chart no longer opens CIE reference files.** Load those in
+  New chart or Add, where the fill-the-cube toggle lives. Device-RGB charts
+  (`.ti1` / `.ti2` / `.ti3` / CGATS) still load in the editor as before.
+- **The live 3D cube now opens automatically when you load colours from a
+  file**, so the distribution — and the effect of the stretch toggle — is
+  visible right away instead of hidden behind the (collapsed) preview.
+
+### 📝 Notes
+- This follows from studying Argyll's `scanin`: a `.cie` reference holds only
+  colorimetry (XYZ/LAB) — the device RGB in scanner profiling comes from the
+  *scanned image*, never computed from CIE. Faithful loading shows a reflective
+  target's real (gamut-limited) shape; the stretch is a deliberate layout-reuse
+  transform. See the discussion in #96.
+- Open follow-ups before 3.13.0 final are unchanged: translations of the new
+  strings, real-hardware print+measure verification, multi-strip instruments,
+  and the planned scanner-target workflow (#95 / #97 / #98).
+- Thanks again to **Knut Georg Larsson**.
+
 ## v3.13.0-beta.5
 
 Refines how reference-colour files load (from Knut's testing), with a new
