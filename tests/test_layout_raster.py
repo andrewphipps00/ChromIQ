@@ -28,6 +28,48 @@ def test_render_dimensions_and_pages():
     assert h == round(297.0 * 150 / 25.4)
 
 
+def test_saved_tiff_colours_match_ti2_at_every_location(tmp_path):
+    """The chartread-critical property end to end: every patch in the SAVED .tif
+    must show the exact device colour the .ti2 records at that SAMPLE_LOC — so
+    what gets printed is what chartread expects, for a *randomised* chart (#93)."""
+    import random
+    from PIL import Image
+    from workflow.layout_engine import chart as le_chart, papers
+    from workflow.layout_engine.presets import default_recipe
+    import workflow.ti2_relayout as R
+
+    random.seed(11)
+    prog = [(random.random() * 100, random.random() * 100, random.random() * 100)
+            for _ in range(300)]
+    R.write_ti1(R.ChartSpec.new("i1", "A4"), prog, tmp_path / "s.ti1")
+    rec = default_recipe("i1", "A4"); rec.randomize = True; rec.seed = 777
+    kw = rec.build_kwargs(); kw["dpi"] = 200
+    res = le_chart.build_chart(str(tmp_path / "s.ti1"), tmp_path / "chart", **kw)
+
+    # The .ti2 chartread reads: SAMPLE_LOC -> device value.
+    spec = R.ChartSpec.from_ti2(tmp_path / "chart.ti2")
+    loc_dev = {p.loc: p.dev for p in spec.patches if p.loc}
+    assert loc_dev, "no SAMPLE_LOC patches parsed from .ti2"
+
+    geom = instruments.geom_from_build_kwargs(kw)
+    w, h = papers.dimensions_mm("A4")
+    rects = geometry.patch_rects_px(geom, w, h, res.layout, kw["dpi"],
+                                    rec.strip_pattern, rec.patch_pattern)
+    imgs = [np.asarray(Image.open(p).convert("RGB")) for p in res.tiff_paths]
+
+    checked = 0
+    for d in rects:
+        dev = loc_dev.get(d["loc"])
+        if dev is None:
+            continue
+        cx, cy = d["x"] + d["w"] // 2, d["y"] + d["h"] // 2
+        got = tuple(int(v) for v in imgs[d["page"]][cy, cx])
+        assert got == tuple(to_display_rgb(dev, spec.color_rep)), \
+            f"{d['loc']}: tif {got} != ti2 {to_display_rgb(dev, spec.color_rep)}"
+        checked += 1
+    assert checked >= 300
+
+
 def test_raster_matches_ti2_slot_assignment():
     # randomize=False -> patch 0 sits at slot 0 = top of column A.
     target = _rgb_target(60)
