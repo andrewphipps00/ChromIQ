@@ -75,7 +75,12 @@ class SettingsDialog(QDialog):
         # "Request a Feature…" button — fit the real sizeHint instead.
         _w = max(1040, self.sizeHint().width())
         self.setMinimumWidth(_w)
-        self.resize(_w, self.sizeHint().height())
+        # Open (and floor) ~50% taller than the bare sizeHint: now that each tab
+        # scrolls, the natural hint is short, which left a lot of the content
+        # hidden behind a scrollbar. A taller floor shows more at a glance.
+        _h = int(self.sizeHint().height() * 1.5)
+        self.setMinimumHeight(_h)
+        self.resize(_w, _h)
 
     # ------------------------------------------------------------------
 
