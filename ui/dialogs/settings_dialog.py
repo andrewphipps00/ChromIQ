@@ -1299,19 +1299,11 @@ class SettingsDialog(QDialog):
         self._layout_store.set(self._recipe_from_fields())
         self._update_layout_calc()
 
-    _LAYOUT_GEOM_KEYS = {
-        "hflag", "density", "spacer_on", "pscale", "sscale", "border", "nolpcbord",
-        "nolimit", "margins", "patch_w", "patch_h", "spacer_width", "inter_patch",
-        "max_strip", "strip_indicator_gap", "offset_x", "offset_y"}
-
     def _update_layout_calc(self) -> None:
         from workflow.layout_engine import geometry, instruments, papers, preflight
         try:
             r = self._recipe_from_fields()
-            bk = r.build_kwargs()
-            geom = instruments.build(
-                bk["instrument"],
-                **{k: v for k, v in bk.items() if k in self._LAYOUT_GEOM_KEYS})
+            geom = instruments.geom_from_build_kwargs(r.build_kwargs())
             w_mm, h_mm = papers.dimensions_mm(r.paper)
             cap = geometry.patches_per_sheet(geom, w_mm, h_mm)
             layout = geometry.compute(geom, w_mm, h_mm, cap)

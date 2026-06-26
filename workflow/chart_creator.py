@@ -912,11 +912,6 @@ class ChartCreator:
             kw["hflag"] = bool(params.double_density)   # hexagon patches
         return kw
 
-    _ENGINE_GEOM_KEYS = {"hflag", "density", "spacer_on", "pscale", "sscale",
-                         "border", "nolpcbord", "nolimit", "margins", "patch_w",
-                         "patch_h", "spacer_width", "inter_patch", "max_strip",
-                         "strip_indicator_gap", "offset_x", "offset_y"}
-
     def _engine_total_patches(self, params: "ChartParams") -> int | None:
         """Patches the engine fits across all pages (capacity × pages), or None.
 
@@ -928,9 +923,7 @@ class ChartCreator:
         try:
             from workflow.layout_engine import geometry, instruments, papers
             kw = self._engine_kwargs(params)
-            geom = instruments.build(
-                kw["instrument"],
-                **{k: v for k, v in kw.items() if k in self._ENGINE_GEOM_KEYS})
+            geom = instruments.geom_from_build_kwargs(kw)
             w_mm, h_mm = papers.dimensions_mm(kw["paper"])
             per_sheet = geometry.patches_per_sheet(geom, w_mm, h_mm)
             return per_sheet * max(1, int(params.pages))

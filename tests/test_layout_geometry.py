@@ -158,3 +158,22 @@ def test_strip_indicator_gap_reduces_capacity_and_stays_in_bounds():
     g9 = instruments.build("i1", strip_indicator_gap=90.0)
     assert (geometry.compute(g9, pw, ph, 1000).patches_per_page
             < geometry.compute(g0, pw, ph, 1000).patches_per_page)
+
+
+def test_geom_from_build_kwargs_honours_clip_width():
+    """The shared geom builder must apply clip_border_width so capacity
+    estimates match the render — a wider clip fits fewer patches (#93)."""
+    from workflow.layout_engine.presets import LayoutRecipe
+    pw, ph = 210.0, 297.0
+    def cap(width):
+        r = LayoutRecipe(instrument="i1", paper="A4", clip_border=True,
+                         clip_border_width_mm=width)
+        g = instruments.geom_from_build_kwargs(r.build_kwargs())
+        return geometry.patches_per_sheet(g, pw, ph)
+    wide, narrow = cap(60.0), cap(26.0)
+    assert wide < narrow, f"wider clip ({wide}) should fit fewer than default ({narrow})"
+    # and it matches building the geom the same way the renderer does
+    r = LayoutRecipe(instrument="i1", paper="A4", clip_border=True,
+                     clip_border_width_mm=60.0)
+    g = instruments.geom_from_build_kwargs(r.build_kwargs())
+    assert g.lbord == pytest.approx(60.0 - r.border)

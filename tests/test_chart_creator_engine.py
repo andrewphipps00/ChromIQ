@@ -112,9 +112,7 @@ def test_auto_count_uses_engine_capacity(tmp_path: Path) -> None:
                            _EngineSettings())
     p = ChartParams(instrument="i1", paper="A4", pages=1)
     kw = creator._engine_build_kwargs(p)
-    geom = instruments.build(
-        kw["instrument"],
-        **{k: v for k, v in kw.items() if k in creator._ENGINE_GEOM_KEYS})
+    geom = instruments.geom_from_build_kwargs(kw)
     cap = geometry.patches_per_sheet(geom, *papers.dimensions_mm(p.paper))
     assert cap > 0
     assert creator._engine_total_patches(p) == cap

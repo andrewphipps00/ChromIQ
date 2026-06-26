@@ -143,6 +143,28 @@ def build(
                    strip_indicator_gap=sig, offset_x=offset_x, offset_y=offset_y)
 
 
+# Keys of a recipe ``build_kwargs()`` dict that affect the laid-out geometry —
+# i.e. every option that can change how many patches fit a page (capacity) or
+# where they sit (placement). Keep in lockstep with build()'s keyword args: a
+# missing key silently makes capacity ESTIMATES disagree with the actual render
+# (clip_border_width once did exactly that — #93). This is the single source of
+# truth shared by every capacity calculation.
+GEOM_BUILD_KEYS = (
+    "hflag", "density", "spacer_on", "pscale", "sscale", "border", "margins",
+    "patch_w", "patch_h", "spacer_width", "inter_patch", "max_strip",
+    "strip_indicator_gap", "offset_x", "offset_y", "nolpcbord", "nolimit",
+    "clip_border_width",
+)
+
+
+def geom_from_build_kwargs(kw: dict) -> Geom:
+    """Build a :class:`Geom` from a recipe ``build_kwargs()`` dict using every
+    geometry-affecting key, so capacity estimates can never silently drift from
+    the actual render (#93)."""
+    return build(kw["instrument"],
+                 **{k: v for k, v in kw.items() if k in GEOM_BUILD_KEYS})
+
+
 def _build_base(
     key: str,
     *,

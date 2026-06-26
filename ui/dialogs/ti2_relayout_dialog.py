@@ -2547,21 +2547,28 @@ class _NewChartDialog(QDialog):
             return
         try:
             from workflow.layout_engine import geometry, instruments, papers
+            from workflow.layout_engine.presets import default_recipe
             code = self._instr.currentData()
             eng = {"i1": "i1", "3p": "p3", "CM": "CM"}.get(code)
             paper = self._paper.currentData()
             if eng is None or paper in (None, "custom"):
                 hint.setText("")
                 return
+            # Build from the full default recipe (so EVERY capacity-affecting
+            # option — clip-border width, patch size/scale, spacers, margins,
+            # inter-patch & strip-indicator gaps, max strip — is honoured, not
+            # just clip on/off + density), then apply the Chart-section choices.
             if eng == "CM":
-                density = self._eng_density.currentData() or 1
-                geom = instruments.build(eng, density=density)
+                density = int(self._eng_density.currentData() or 1)
+                mode = {1: "freehand", 2: "high", 3: "extrahigh"}[density]
+                rec = default_recipe(eng, paper, mode=mode)
+                rec.cm_density = density
             else:
-                # nolpcbord = suppress clip = clip border OFF;
-                # nolimit = don't cap strip length (lets strips run longer).
-                geom = instruments.build(
-                    eng, nolpcbord=not self._eng_clip.isChecked(),
-                    nolimit=self._eng_nocap.isChecked())
+                rec = default_recipe(
+                    eng, paper, mode="clip" if self._eng_clip.isChecked() else "noclip")
+                rec.clip_border = self._eng_clip.isChecked()
+                rec.nolimit = self._eng_nocap.isChecked()
+            geom = instruments.geom_from_build_kwargs(rec.build_kwargs())
             w_mm, h_mm = papers.dimensions_mm(paper)
             cap = geometry.patches_per_sheet(geom, w_mm, h_mm)
             hint.setText(tr("≈ {n} fit one page").format(n=cap))
@@ -5292,16 +5299,7 @@ class Ti2RelayoutDialog(QDialog):
     def _engine_geom_from_recipe(recipe):
         """Build the engine Geom + paper mm for *recipe* (for spacer geometry)."""
         from workflow.layout_engine import instruments, papers
-        kw = recipe.build_kwargs()
-        geom = instruments.build(
-            kw["instrument"], hflag=kw["hflag"], density=kw["density"],
-            spacer_on=kw["spacer_on"], pscale=kw["pscale"], sscale=kw["sscale"],
-            border=kw["border"], margins=kw["margins"], patch_w=kw["patch_w"],
-            patch_h=kw["patch_h"], spacer_width=kw["spacer_width"],
-            inter_patch=kw["inter_patch"], max_strip=kw["max_strip"],
-            strip_indicator_gap=kw["strip_indicator_gap"], offset_x=kw["offset_x"],
-            offset_y=kw["offset_y"], nolpcbord=kw["nolpcbord"], nolimit=kw["nolimit"],
-            clip_border_width=kw["clip_border_width"])
+        geom = instruments.geom_from_build_kwargs(recipe.build_kwargs())
         w_mm, h_mm = papers.dimensions_mm(recipe.paper)
         return geom, w_mm, h_mm
 
