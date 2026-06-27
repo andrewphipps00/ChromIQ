@@ -213,6 +213,29 @@ def placement(geom: Geom, paper_w_mm: float, paper_h_mm: float, layout: Layout) 
     )
 
 
+def realized_margins_mm(geom: Geom, paper_w_mm: float, paper_h_mm: float,
+                        layout: Layout) -> tuple[float, float, float, float]:
+    """``(left, right, top, bottom)`` white gap from each page edge to the patch
+    area, in mm — the analytic twin of what :mod:`workflow.margin_inspector`
+    measures from a rendered page. Used to enforce the user's margin thresholds
+    at layout time, before anything is rendered (#93).
+
+    Measured to the patches/spacers block only: the left includes the clip
+    border, the top includes the strip-label band, exactly as the inspector
+    reports them. The fullest page (page 0) governs.
+    """
+    place = placement(geom, paper_w_mm, paper_h_mm, layout)
+    steps = layout.steps_in_pass
+    n_first = min(layout.total_patches, layout.patches_per_page)
+    n_passes = (n_first + steps - 1) // steps if steps else 0
+    rows0 = min(steps, n_first) if steps else 0
+    left = place.x_of(0)
+    top = place.y_of(0)
+    right = paper_w_mm - (place.x_of(max(0, n_passes - 1)) + geom.pwid)
+    bottom = paper_h_mm - (place.y_of(max(0, rows0 - 1)) + geom.plen)
+    return (max(0.0, left), max(0.0, right), max(0.0, top), max(0.0, bottom))
+
+
 def clip_area_mm(geom: Geom, paper_h_mm: float
                  ) -> tuple[float, float, float, float] | None:
     """The content-safe rectangle of the left clip strip, in mm.

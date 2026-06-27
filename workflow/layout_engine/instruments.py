@@ -173,11 +173,19 @@ GEOM_BUILD_KEYS = (
 )
 
 
-def geom_from_build_kwargs(kw: dict) -> Geom:
+def geom_from_build_kwargs(kw: dict, thresholds: dict | None = None) -> Geom:
     """Build a :class:`Geom` from a recipe ``build_kwargs()`` dict using every
     geometry-affecting key, so capacity estimates can never silently drift from
     the actual render (#93). Rendered-furniture reservations (label band, bottom
-    sheet text / stamp) are applied too — the same step the renderer uses."""
+    sheet text / stamp) are applied too — the same step the renderer uses.
+
+    When *thresholds* (a ``{"L","R","T","B": mm}`` minimum-margin dict) is given,
+    the page margins are first raised so the realised patch area meets those
+    minimums — so both the capacity estimate and the render honour the user's
+    margin thresholds from this one chokepoint (#93)."""
+    if thresholds:
+        from . import margins_fit   # lazy: imports this module
+        kw, _notes = margins_fit.clamp_margins_to_thresholds(kw, thresholds)
     geom = build(kw["instrument"],
                  **{k: v for k, v in kw.items() if k in GEOM_BUILD_KEYS})
     from . import raster   # lazy: raster imports this module

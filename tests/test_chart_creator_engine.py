@@ -155,6 +155,35 @@ def test_engine_kwargs_uses_full_recipe(tmp_path: Path) -> None:
     assert kw["cal_path"] == "/tmp/c.cal" and kw["apply_cal"] is True
 
 
+class _ThresholdSettings(_EngineSettings):
+    """Engine on, plus a margin-threshold table (the real settings API)."""
+
+    def get_margin_thresholds(self):
+        from core.settings import margin_combo_key
+        return {margin_combo_key("i1Pro", "A4", "Portrait"): {"T": 60, "R": 9}}
+
+
+def test_engine_kwargs_enforces_margin_thresholds(tmp_path: Path) -> None:
+    """_engine_kwargs raises the margins to meet the user's thresholds, and the
+    same clamp drives the capacity estimate (so count and chart agree, #93)."""
+    from workflow.layout_engine import geometry, instruments, papers
+    creator = ChartCreator(_EngineRunner(), _MockFileManager(tmp_path / "p"),
+                           _ThresholdSettings())
+    p = ChartParams(instrument="i1", paper="A4", pages=1)
+    kw = creator._engine_kwargs(p)
+    geom = instruments.geom_from_build_kwargs(kw)
+    w, h = papers.dimensions_mm("A4")
+    cap = geometry.patches_per_sheet(geom, w, h)
+    lay = geometry.compute(geom, w, h, cap)
+    L, R, T, B = geometry.realized_margins_mm(geom, w, h, lay)
+    assert T >= 60 - 0.05 and R >= 9 - 0.05
+    assert creator._threshold_notes, "an adjustment note must be recorded"
+    # capacity estimate uses the same clamped kwargs → drops vs no thresholds
+    plain = ChartCreator(_EngineRunner(), _MockFileManager(tmp_path / "q"),
+                         _EngineSettings())._engine_total_patches(p)
+    assert creator._engine_total_patches(p) <= plain
+
+
 def test_full_recipe_chart_builds(tmp_path: Path) -> None:
     work_dir = tmp_path / "rp"
     creator = ChartCreator(_EngineRunner(), _MockFileManager(work_dir), _EngineSettings())

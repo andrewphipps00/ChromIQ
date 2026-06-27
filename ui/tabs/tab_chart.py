@@ -5442,27 +5442,45 @@ class TabChart(QWidget):
     # Patch count display
     # ------------------------------------------------------------------
 
-    def _engine_geom(self, instr: str, *, dd: bool, td: bool, eff_lb: bool,
-                     nsl: bool, pscale: float, margin: float):
-        """Build a layout-engine Geom from the guided/manual effective values."""
+    def _combo_thresholds(self, instr: str, paper: str):
+        """The user's margin-threshold minimums for an engine instrument + paper,
+        or None — so the live patch count honours the same minimums the engine
+        enforces at generation (#93)."""
+        try:
+            from core.settings import thresholds_for_combo
+            from workflow.layout_engine import papers
+            w_mm, h_mm = papers.dimensions_mm(paper)
+            return thresholds_for_combo(
+                self._settings.get_margin_thresholds(), instr, w_mm, h_mm)
+        except Exception:
+            return None
+
+    def _engine_geom(self, instr: str, paper: str, *, dd: bool, td: bool,
+                     eff_lb: bool, nsl: bool, pscale: float, margin: float):
+        """Build a layout-engine Geom from the guided/manual effective values,
+        with the user's margin thresholds enforced (so the count matches what
+        the engine will actually build, #93)."""
         from workflow.layout_engine import instruments
-        kw: dict = dict(spacer_on=True, pscale=float(pscale),
-                        border=float(margin), nolimit=bool(nsl))
+        kw: dict = dict(instrument=instr, paper=paper, spacer_on=True,
+                        pscale=float(pscale),
+                        margins=(float(margin),) * 4, border=float(margin),
+                        nolimit=bool(nsl))
         if instr in ("i1", "p3"):
             kw["nolpcbord"] = bool(eff_lb)
         elif instr == "CM":
             kw["density"] = 3 if td else (2 if dd else 1)
         elif instr == "SS":
             kw["hflag"] = bool(dd)
-        return instruments.build(instr, **kw)
+        return instruments.geom_from_build_kwargs(
+            kw, thresholds=self._combo_thresholds(instr, paper))
 
     def _engine_capacity(self, instr: str, paper: str, *, dd: bool, td: bool,
                          eff_lb: bool, nsl: bool, pscale: float, margin: float):
         """Patches per sheet from the ChromIQ engine (None if it can't lay out)."""
         try:
             from workflow.layout_engine import geometry, papers
-            geom = self._engine_geom(instr, dd=dd, td=td, eff_lb=eff_lb, nsl=nsl,
-                                     pscale=pscale, margin=margin)
+            geom = self._engine_geom(instr, paper, dd=dd, td=td, eff_lb=eff_lb,
+                                     nsl=nsl, pscale=pscale, margin=margin)
             w_mm, h_mm = papers.dimensions_mm(paper)
             return geometry.patches_per_sheet(geom, w_mm, h_mm)
         except Exception:

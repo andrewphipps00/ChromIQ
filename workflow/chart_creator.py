@@ -946,8 +946,28 @@ class ChartCreator:
             if params.engine_cal_path:
                 kw["cal_path"] = params.engine_cal_path
                 kw["apply_cal"] = bool(params.engine_apply_cal)
-            return kw
-        return self._engine_build_kwargs(params)
+            return self._apply_margin_thresholds(kw)
+        return self._apply_margin_thresholds(self._engine_build_kwargs(params))
+
+    def _apply_margin_thresholds(self, kw: dict) -> dict:
+        """Raise the layout's margins so the patch area meets the user's margin
+        thresholds for this instrument/paper combo (#93). No-op when the combo
+        has no thresholds. Records any adjustments in ``_threshold_notes`` for
+        the build log. Applied at this one point so the capacity estimate
+        (_engine_total_patches) and the real render agree."""
+        self._threshold_notes: list[str] = []
+        try:
+            from core.settings import thresholds_for_combo
+            from workflow.layout_engine import margins_fit, papers
+            w_mm, h_mm = papers.dimensions_mm(kw.get("paper", "A4"))
+            thr = thresholds_for_combo(
+                self._settings.get_margin_thresholds(), kw.get("instrument", "i1"),
+                w_mm, h_mm)
+            kw, notes = margins_fit.clamp_margins_to_thresholds(kw, thr)
+            self._threshold_notes = notes
+        except Exception as exc:  # noqa: BLE001 — never block generation on this
+            log.warning("margin-threshold clamp skipped: %s", exc)
+        return kw
 
     def _run_engine(
         self,
@@ -960,9 +980,12 @@ class ChartCreator:
         stem = self._file_mgr.chart_stem(cal_target=params.cal_target)
         ti1 = work_dir / f"{stem}.ti1"
         on_line("[ChromIQ layout engine] building chart from the targen .ti1…")
+        engine_kwargs = self._engine_kwargs(params)
+        for _note in getattr(self, "_threshold_notes", []):
+            on_line(f"[ChromIQ layout engine] {_note}")
         try:
             result = le_chart.build_chart(
-                ti1, work_dir / stem, **self._engine_kwargs(params))
+                ti1, work_dir / stem, **engine_kwargs)
         except Exception as exc:  # noqa: BLE001 — surface any engine failure
             log.exception("ChromIQ layout engine failed")
             on_line(f"[ERROR] ChromIQ layout engine: {exc}")

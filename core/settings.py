@@ -269,6 +269,53 @@ def margin_combo_key(instrument: str, paper: str, orientation: str) -> str:
     return f"{instrument}|{paper}{suffix}"
 
 
+# Engine instrument flag → margin-threshold instrument label (matches the seed
+# keys + settings_dialog._MARGIN_INSTRUMENTS).
+THRESHOLD_INSTR_LABEL = {
+    "i1": "i1Pro", "p3": "i1Pro 3+", "CM": "ColorMunki",
+    "SS": "SpectroScan", "isis": "i1iSis",
+}
+
+# Canonical sheet name keyed by sorted (short, long) mm — so any paper code
+# (named, "WxH", rotated) maps to one threshold-combo paper name; orientation is
+# carried separately. Mirrors ui.tabs.tab_chart._CANON_PAPER_BY_DIMS.
+_CANON_PAPER_BY_DIMS = {
+    (210.0, 297.0): "A4",
+    (215.9, 279.4): "Letter",
+    (215.9, 355.6): "Legal",
+    (297.0, 420.0): "A3",
+    (329.0, 483.0): "A3+",
+    (420.0, 594.0): "A2",
+    (279.4, 431.8): "Tabloid",
+}
+
+
+def canonical_paper_name(w_mm: float, h_mm: float) -> "str | None":
+    """Best-effort canonical sheet name from page dimensions (mm), or None.
+
+    Tolerant to ~2.5 mm so a measured page still matches a named size."""
+    lo, hi = sorted((w_mm, h_mm))
+    for (clo, chi), name in _CANON_PAPER_BY_DIMS.items():
+        if abs(lo - clo) <= 2.5 and abs(hi - chi) <= 2.5:
+            return name
+    return None
+
+
+def thresholds_for_combo(
+    table: "dict[str, dict[str, Any]]", instrument_flag: str,
+    w_mm: float, h_mm: float,
+) -> "dict[str, Any] | None":
+    """The margin-threshold entry for an engine instrument flag + page size, or
+    None when the combo has no thresholds. Used to enforce the user's minimums
+    in the layout engine (#93)."""
+    label = THRESHOLD_INSTR_LABEL.get(instrument_flag)
+    name = canonical_paper_name(w_mm, h_mm)
+    if not label or not name:
+        return None
+    orientation = "Landscape" if w_mm > h_mm else "Portrait"
+    return (table or {}).get(margin_combo_key(label, name, orientation))
+
+
 class AppSettings:
     def __init__(self) -> None:
         self._qs = QSettings("ChromIQ", "ChromIQ")
