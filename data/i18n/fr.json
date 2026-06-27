@@ -2017,5 +2017,11 @@
   "Top-left": "Top-left",
   "Top-right": "Top-right",
   "Where the whole patch block sits within the page once the margins are kept clear. The patches rarely fill the usable area exactly, so this decides where the leftover white space goes.\n\n“Top-left” pins the block to the top-left corner (the leftover sits at the right and bottom); “Centre” puts the spare space evenly around it; “Bottom-right” pins it to the opposite corner, and so on. It only moves the block — the patch count and size don't change. Margins / thresholds are still respected.": "Where the whole patch block sits within the page once the margins are kept clear. The patches rarely fill the usable area exactly, so this decides where the leftover white space goes.\n\n“Top-left” pins the block to the top-left corner (the leftover sits at the right and bottom); “Centre” puts the spare space evenly around it; “Bottom-right” pins it to the opposite corner, and so on. It only moves the block — the patch count and size don't change. Margins / thresholds are still respected.",
-  "align {a}": "align {a}"
+  "align {a}": "align {a}",
+  "Chart layout information": "Chart layout information",
+  "Generate a preview to see its layout.": "Generate a preview to see its layout.",
+  "Pages": "Pages",
+  "Patches per strip": "Patches per strip",
+  "Strips (this page)": "Strips (this page)",
+  "Total patches": "Total patches"
 }

@@ -1143,8 +1143,17 @@ class TabChart(QWidget):
         self._margin_tiffs: list[Path] = []
         self._margin_ti2: Path | None = None
         from ui.margin_inspector_panel import MarginInspectorPanel
+        from ui.chart_layout_info_panel import ChartLayoutInfoPanel
         self._margin_panel = MarginInspectorPanel(right)
-        right_layout.addWidget(self._margin_panel)
+        # Chart layout info (patch count, grid, pages) beside the margin readout
+        # so it's no longer buried in the log (Knut, #93).
+        self._layout_info_panel = ChartLayoutInfoPanel(right)
+        _info_row = QHBoxLayout()
+        _info_row.setContentsMargins(0, 0, 0, 0)
+        _info_row.setSpacing(8)
+        _info_row.addWidget(self._margin_panel, stretch=3)
+        _info_row.addWidget(self._layout_info_panel, stretch=2)
+        right_layout.addLayout(_info_row)
         self._margin_panel.set_guides_checked(
             bool(self._settings.get("margin_guides_show", False)))
         self._margin_panel.set_measured_guides_checked(
@@ -1159,6 +1168,7 @@ class TabChart(QWidget):
         # Re-measure when the user pages through a multi-page chart so the
         # inspector + guides always describe the page on screen (#83).
         self._preview.page_changed.connect(lambda _i: self._update_margin_inspector())
+        self._preview.page_changed.connect(lambda _i: self._update_layout_info())
 
         splitter.addWidget(right)
         splitter.setStretchFactor(0, 1)
@@ -6468,6 +6478,35 @@ class TabChart(QWidget):
         self._margin_tiffs = list(tiffs or [])
         self._margin_ti2 = ti2 if (ti2 and Path(ti2).is_file()) else None
         self._update_margin_inspector()
+        self._update_layout_info()
+
+    def _update_layout_info(self) -> None:
+        """Fill the Chart-layout-information panel from the previewed chart's
+        .ti2 (patch count, strip grid) + page TIFFs (#93)."""
+        panel = getattr(self, "_layout_info_panel", None)
+        if panel is None:
+            return
+        tiffs = getattr(self, "_margin_tiffs", None)
+        ti2 = getattr(self, "_margin_ti2", None)
+        if not tiffs or not ti2:
+            panel.show_placeholder()
+            return
+        try:
+            import re
+            from core.strip_utils import parse_passes_per_page
+            txt = Path(ti2).read_text(errors="replace")
+            total = int(re.search(r"NUMBER_OF_SETS\s+(\d+)", txt).group(1))
+            _m = re.search(r'STEPS_IN_PASS\s+"?(\d+)"?', txt)
+            rows = int(_m.group(1)) if _m else 0
+            passes = parse_passes_per_page(ti2) or []
+            idx = self._preview.current_page()
+            if not (0 <= idx < len(passes)):
+                idx = 0
+            cols = passes[idx] if passes else 0
+            panel.update_info(total=total, rows=rows, cols=cols,
+                              pages=len(tiffs))
+        except Exception:
+            panel.show_placeholder()
 
     def _update_margin_inspector(self) -> None:
         panel = getattr(self, "_margin_panel", None)
