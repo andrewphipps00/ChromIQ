@@ -433,3 +433,32 @@ def test_chart_text_placeholders_resolved_per_page():
     # bottom strip has ink (the resolved text rendered)
     a = np.asarray(res.images[0])
     assert (a[-int(8 * 150 / 25.4):] < 100).any()
+
+
+def test_notes_clip_strip_renders_and_scales():
+    """The notes clip design renders to the requested size, is non-blank, and
+    auto-fills from ctx; a wider clip uses a larger font (more ink) (#93)."""
+    import numpy as np
+    from workflow.layout_engine import raster
+    ctx = {"count": "768", "instrument": "i1Pro", "paper": "A4 landscape",
+           "page": "page 1/2", "strips": "24", "date": "2026-06-28",
+           "project": "My Profile"}
+
+    def ink(wmm, hmm):
+        dpi = 200
+        w, h = round(wmm * dpi / 25.4), round(hmm * dpi / 25.4)
+        img = raster.render_clip_strip("notes", width_px=w, height_px=h,
+                                       dpi=dpi, font_family="Inter", ctx=ctx)
+        assert img.size == (w, h)
+        arr = np.asarray(img.convert("L"))
+        return (arr < 128).sum()
+
+    narrow = ink(20, 297)
+    wide = ink(40, 297)
+    assert narrow > 0 and wide > 0                 # both have content
+    assert wide > narrow                           # thicker clip → bigger text
+
+    # No ctx → sample values, still renders (panel preview / template export).
+    img = raster.render_clip_strip("notes", width_px=200, height_px=2000,
+                                   dpi=200, font_family="Inter")
+    assert (np.asarray(img.convert("L")) < 128).any()

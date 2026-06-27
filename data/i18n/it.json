@@ -1901,7 +1901,6 @@
   "Custom text": "Custom text",
   "Export clip template": "Export clip template",
   "Export template (PNG + PDF)…": "Export template (PNG + PDF)…",
-  "Fills the blank strip down the left edge that the scanner clip reserves. Custom text and Notes box accept the same {project}/{date}/… tokens as the sheet text; ChromIQ branding stamps the wordmark; Imported image places a logo. Export template gives you an exact-size PNG and PDF to design a graphic in another tool.": "Fills the blank strip down the left edge that the scanner clip reserves. Custom text and Notes box accept the same {project}/{date}/… tokens as the sheet text; ChromIQ branding stamps the wordmark; Imported image places a logo. Export template gives you an exact-size PNG and PDF to design a graphic in another tool.",
   "Images (*.png *.jpg *.jpeg *.tif *.tiff *.bmp)": "Images (*.png *.jpg *.jpeg *.tif *.tiff *.bmp)",
   "Imported image": "Imported image",
   "Notes box": "Notes box",
@@ -2023,5 +2022,6 @@
   "Pages": "Pages",
   "Patches per strip": "Patches per strip",
   "Strips (this page)": "Strips (this page)",
-  "Total patches": "Total patches"
+  "Total patches": "Total patches",
+  "Fills the blank strip down the left edge that the scanner clip reserves. Custom text accepts the same {project}/{date}/… tokens as the sheet text; Notes box prints a ready-made record — chart facts filled in automatically (patches, instrument, paper, page, profile name, date) plus labelled lines to hand-write the printer, ink set, paper and media settings; ChromIQ branding stamps the wordmark; Imported image places a logo. Export template gives you an exact-size PNG and PDF to design a graphic in another tool.": "Fills the blank strip down the left edge that the scanner clip reserves. Custom text accepts the same {project}/{date}/… tokens as the sheet text; Notes box prints a ready-made record — chart facts filled in automatically (patches, instrument, paper, page, profile name, date) plus labelled lines to hand-write the printer, ink set, paper and media settings; ChromIQ branding stamps the wordmark; Imported image places a logo. Export template gives you an exact-size PNG and PDF to design a graphic in another tool."
 }

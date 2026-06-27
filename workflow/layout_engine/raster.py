@@ -297,12 +297,16 @@ def apply_furniture_reserves(geom, kw: dict):
 
 def render_clip_strip(mode: str, *, width_px: int, height_px: int, dpi: int,
                       text: str = "", font_family: str = "Inter",
-                      image_path: str = "") -> Image.Image:
+                      image_path: str = "", ctx: dict | None = None) -> Image.Image:
     """Render the left clip-strip content as a ``width_px × height_px`` image.
 
     The strip is tall and narrow, so text/branding are drawn on a landscape
     canvas and rotated 90° to read up the strip. Shared by the page renderer and
     the standalone template export.
+
+    *ctx* supplies the auto-filled values for the ``notes`` design (patch count,
+    instrument, paper, page, profile name, date…); when absent a sample is used
+    so the panel preview / template export still shows the layout (#93).
     """
     mm2px = dpi / 25.4
     strip = Image.new("RGB", (max(1, width_px), max(1, height_px)), (255, 255, 255))
@@ -319,20 +323,7 @@ def render_clip_strip(mode: str, *, width_px: int, height_px: int, dpi: int,
         return strip
 
     if mode == "notes":
-        d = ImageDraw.Draw(strip)
-        lw = max(1, round(0.3 * mm2px))
-        d.rectangle([0, 0, width_px - 1, height_px - 1], outline=(0, 0, 0), width=lw)
-        rule_gap = max(1, round(12.0 * mm2px))          # ~12 mm ruled lines
-        y = rule_gap
-        while y < height_px - rule_gap // 2:
-            d.line([(round(2 * mm2px), y), (width_px - round(2 * mm2px), y)],
-                   fill=(170, 170, 170), width=max(1, lw // 2))
-            y += rule_gap
-        caption = text or "Sample / Notes"
-        cap = _vtext(caption, font_family, width_px, height_px,
-                     valign="top", bold=True)
-        strip.paste(cap, (0, 0), cap)
-        return strip
+        return _render_notes_strip(width_px, height_px, dpi, ctx, font_family)
 
     if mode == "branding":
         extra = [ln for ln in (text or "").splitlines() if ln.strip()]
@@ -456,6 +447,149 @@ def _vtext(text: str, font_family: str, width_px: int, height_px: int,
             d.text((cx, y), ln, font=f, fill=(0, 0, 0, 255), anchor=anchor)
         except Exception:  # pragma: no cover
             d.text((cx, y), ln, font=f, fill=(0, 0, 0, 255))
+    return canvas.rotate(90, expand=True)
+
+
+def _notes_sample_ctx() -> dict:
+    """Placeholder values for the notes design when no real chart context is
+    supplied (panel preview / template export)."""
+    return {"count": "560", "instrument": "i1Pro", "paper": "A4 landscape",
+            "page": "page 1/2", "strips": "12", "date": "2026-01-01",
+            "project": "My printer profile"}
+
+
+def _draw_wordmark_h(canvas: Image.Image, draw: "ImageDraw.ImageDraw",
+                     x: float, top: float, height: float, max_w: float) -> float:
+    """Draw the ChromIQ wordmark (serif "Chrom" + italic-magenta "IQ") left-
+    anchored in a band of *height* at (x, top); returns the width consumed."""
+    size = max(8, int(height * 0.74))
+    f = _font(size, WORDMARK_FONT)
+    for _ in range(24):
+        f = _font(size, WORDMARK_FONT)
+        f_iq = _font(size, WORDMARK_FONT, italic=True)
+        iq_tile, iq_base, iq_left = _italic_tile(
+            "IQ", f_iq, WORDMARK_IQ_RGB + (255,), shear=0.0)
+        chrom_w = draw.textlength("Chrom", font=f)
+        kern = size * 0.02
+        total = chrom_w + kern + (iq_tile.width - iq_left)
+        if total <= max_w and iq_tile.height <= height * 1.05:
+            break
+        size = int(size * 0.9)
+        if size <= 8:
+            break
+    asc, desc = f.getmetrics()
+    baseline = top + height * 0.5 + (asc - desc) / 2
+    try:
+        draw.text((x, baseline), "Chrom", font=f, fill=WORDMARK_RGB, anchor="ls")
+        canvas.paste(iq_tile,
+                     (int(x + chrom_w + kern - iq_left), int(baseline - iq_base)),
+                     iq_tile)
+    except Exception:  # pragma: no cover - default font without anchor
+        draw.text((x, top), "ChromIQ", font=f, fill=WORDMARK_RGB)
+    return chrom_w + kern + (iq_tile.width - iq_left)
+
+
+def _notes_row(draw: "ImageDraw.ImageDraw", font, y_center: float, x0: float,
+               x_end: float, segments: list, mm2px: float,
+               rule_rgb=(120, 120, 120)) -> None:
+    """Lay out one info row left→right. *segments* are ``("text", s)`` for a
+    filled value or ``("rule", label)`` for a handwrite label followed by a write
+    line. The spare length is split among the rules, so a longer strip (taller
+    page) gives the user more room to write — not just a stretched bitmap."""
+    gap = max(2, round(3.0 * mm2px))
+    label_gap = max(1, round(1.5 * mm2px))
+    fixed = 0.0
+    n_rules = 0
+    for kind, s in segments:
+        fixed += draw.textlength(s, font=font) + gap
+        if kind == "rule":
+            n_rules += 1
+            fixed += label_gap
+    rule_w = max(0.0, (x_end - x0) - fixed) / n_rules if n_rules else 0.0
+    asc, desc = font.getmetrics()
+    baseline = y_center + (asc - desc) / 2
+    lw = max(1, round(0.3 * mm2px))
+    x = x0
+    for kind, s in segments:
+        draw.text((x, baseline), s, font=font, fill=(0, 0, 0), anchor="ls")
+        x += draw.textlength(s, font=font)
+        if kind == "rule":
+            x += label_gap
+            ly = baseline + max(1, round(0.6 * mm2px))
+            draw.line([(x, ly), (x + rule_w, ly)], fill=rule_rgb, width=lw)
+            x += rule_w
+        x += gap
+
+
+def _render_notes_strip(width_px: int, height_px: int, dpi: int,
+                        ctx: dict | None, font_family: str) -> Image.Image:
+    """The ChromIQ clip-border notes design (#93): a spectrum accent bar, the
+    wordmark, and three info rows — auto-filled values plus handwrite rules.
+
+    Drawn on a horizontal length×thickness canvas (so it scales by *content*, not
+    by stretching) and rotated 90° to read up the strip. Font size follows the
+    clip-border thickness; the handwrite rules absorb the extra length."""
+    c = dict(_notes_sample_ctx())
+    if ctx:
+        c.update({k: str(v) for k, v in ctx.items() if v not in (None, "")})
+    mm2px = dpi / 25.4
+    L, T = max(1, height_px), max(1, width_px)         # length × thickness (px)
+    canvas = Image.new("RGB", (L, T), (255, 255, 255))
+    d = ImageDraw.Draw(canvas)
+    pad = max(2, round(2.0 * mm2px))
+
+    # Full-length spectrum accent bar along the top edge.
+    bar_h = max(2, round(0.06 * T))
+    seg = L / len(ACCENT_RGB)
+    for i, col in enumerate(ACCENT_RGB):
+        d.rectangle([round(i * seg), 0, round((i + 1) * seg) - 1, bar_h - 1], fill=col)
+
+    top = bar_h + pad
+    avail = max(1.0, T - top - pad)
+    row_h = avail / 3.0
+
+    logo_w = _draw_wordmark_h(canvas, d, pad, top, avail, max_w=L * 0.20)
+    x0 = pad + logo_w + max(round(6 * mm2px), pad * 2)
+    x_end = L - pad
+    avail_w = max(1.0, x_end - x0)
+    yc = [top + row_h * (i + 0.5) for i in range(3)]
+
+    # Row content. Rules ("rule") absorb spare length; texts are fixed-width.
+    left1 = (f"{c['count']} patches  ·  {c['instrument']}  ·  {c['paper']}  ·  "
+             f"colour management: OFF")
+    right1 = f"{c['page']}  ·  strips on page: {c['strips']}"
+    row2 = [("text", f"date: {c['date']}"), ("rule", "printer:"),
+            ("rule", "ink set:"), ("rule", "paper brand / type:")]
+    row3 = [("rule", "media / resolution setting:"),
+            ("text", f"profile name: {c['project']}")]
+
+    # Font: sized from the clip thickness for legibility, then shrunk so the
+    # busiest row still fits the length (keeping a minimum write-line per rule),
+    # so a wider clip means bigger text — never text running off the strip (#93).
+    gap = max(2, round(3.0 * mm2px))
+    min_line = round(12.0 * mm2px)
+
+    def _need(font) -> float:
+        n1 = d.textlength(left1, font=font) + gap + d.textlength(right1, font=font)
+        n2 = sum(d.textlength(s, font=font) + gap for _, s in row2) \
+            + 3 * min_line
+        n3 = sum(d.textlength(s, font=font) + gap for _, s in row3) + min_line
+        return max(n1, n2, n3)
+
+    size = max(8, int(row_h * 0.46))
+    font = _font(size, font_family)
+    need = _need(font)
+    if need > avail_w:
+        size = max(8, int(size * avail_w / need))
+        font = _font(size, font_family)
+    asc, desc = font.getmetrics()
+
+    b1 = yc[0] + (asc - desc) / 2
+    d.text((x0, b1), left1, font=font, fill=(0, 0, 0), anchor="ls")
+    d.text((x_end, b1), right1, font=font, fill=(90, 90, 90), anchor="rs")
+    _notes_row(d, font, yc[1], x0, x_end, row2, mm2px)
+    _notes_row(d, font, yc[2], x0, x_end, row3, mm2px)
+
     return canvas.rotate(90, expand=True)
 
 
@@ -685,10 +819,13 @@ def render_pages(
             _area = geometry.clip_area_px(geom, paper_h_mm, dpi)
             if _area is not None and _area[2] > 0 and _area[3] > 0:
                 _ax, _ay, _aw, _ah = _area
+                _notes_ctx = dict(_pctx)
+                _notes_ctx["count"] = str(layout.total_patches)
+                _notes_ctx["strips"] = str(n_passes)
                 _clip = render_clip_strip(
                     clip_content_mode, width_px=_aw, height_px=_ah, dpi=dpi,
                     text=_clip_text, font_family=clip_text_font,
-                    image_path=clip_image_path)
+                    image_path=clip_image_path, ctx=_notes_ctx)
                 img.paste(_clip, (_ax, _ay))
 
         # Bottom-of-sheet text: custom chart text + optional command stamp,

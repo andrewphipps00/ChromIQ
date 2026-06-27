@@ -733,8 +733,12 @@ class LayoutOptionsPanel(QWidget):
                 tip=TooltipButton(
                     tr("Clip-border content"),
                     tr("Fills the blank strip down the left edge that the scanner "
-                       "clip reserves. Custom text and Notes box accept the same "
-                       "{project}/{date}/… tokens as the sheet text; ChromIQ "
+                       "clip reserves. Custom text accepts the same "
+                       "{project}/{date}/… tokens as the sheet text; Notes box "
+                       "prints a ready-made record — chart facts filled in "
+                       "automatically (patches, instrument, paper, page, profile "
+                       "name, date) plus labelled lines to hand-write the "
+                       "printer, ink set, paper and media settings; ChromIQ "
                        "branding stamps the wordmark; Imported image places a "
                        "logo. Export template gives you an exact-size PNG and PDF "
                        "to design a graphic in another tool."), self))
@@ -858,10 +862,13 @@ class LayoutOptionsPanel(QWidget):
     # ---- Clip-border content -------------------------------------------
     def _sync_clip_content_enabled(self) -> None:
         mode = self.clip_content_mode.currentData()
-        text_modes = mode in ("text", "branding", "notes")
-        self.clip_text.setEnabled(text_modes)
-        self.clip_insert_btn.setEnabled(text_modes)
-        self.clip_text_font.setEnabled(text_modes)
+        # The "notes" design is fixed (auto-filled from the chart) so it ignores
+        # the free Text field, but still honours the Font choice for its body.
+        custom_text = mode in ("text", "branding")
+        font_modes = mode in ("text", "branding", "notes")
+        self.clip_text.setEnabled(custom_text)
+        self.clip_insert_btn.setEnabled(custom_text)
+        self.clip_text_font.setEnabled(font_modes)
         self.clip_image_path.setEnabled(mode == "image")
         self.clip_image_browse.setEnabled(mode == "image")
 
