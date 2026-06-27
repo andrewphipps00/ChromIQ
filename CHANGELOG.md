@@ -1,5 +1,23 @@
 # Changelog
 
+## v3.13.0-beta.9
+
+Fixes two layout-engine issues found in testing.
+
+### 🐛 Fixed
+- **Create Chart → Manual info box now shows the engine's real settings.** When
+  the layout engine is on, the summary read from the old printtarg controls
+  instead of the engine, so it could show the clip border as "off" when it was
+  on, `patch ×0.95` even with a custom patch width/height set, and a single
+  `margin 10 mm` when the four edges differed. It now reads straight from the
+  active layout, shows per-edge margins and the custom patch size, and prints
+  the paper **with its orientation** (e.g. `A4 landscape`) — in both the engine
+  line and the "Layout preset:" line.
+- **Removed a 1-pixel paper gap between a patch and its spacer.** At certain
+  patch scales (e.g. ×0.95 at 300 dpi) a thin white line could appear between a
+  patch and the colour spacer below it on every other row. Rows are now tiled
+  seamlessly.
+
 ## v3.13.0-beta.8
 
 Simplifies colour loading based on testing: reflective scan-target (CIE) files
