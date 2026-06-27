@@ -193,6 +193,14 @@ def geom_from_build_kwargs(kw: dict, thresholds: dict | None = None) -> Geom:
     if thresholds:
         from . import margins_fit   # lazy: imports this module
         kw, _notes = margins_fit.clamp_margins_to_thresholds(kw, thresholds)
+    # Area-first layout: derive patch_w/patch_h from the target grid, unless the
+    # caller already set explicit sizes. Lazy import (it builds geoms via us).
+    if kw.get("layout_mode") == "area_first" and not (kw.get("patch_w")
+                                                      or kw.get("patch_h")):
+        from . import area_fit
+        _sz = area_fit.derive_area_patch_size(kw)
+        if _sz is not None:
+            kw = {**kw, "patch_w": _sz[0], "patch_h": _sz[1]}
     geom = build(kw["instrument"],
                  **{k: v for k, v in kw.items() if k in GEOM_BUILD_KEYS})
     from . import raster   # lazy: raster imports this module

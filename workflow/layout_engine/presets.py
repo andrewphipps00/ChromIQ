@@ -54,6 +54,17 @@ class LayoutRecipe:
     margin_left: float = 6.0
     patch_w_mm: float = 0.0        # explicit patch width / height (mm); 0 = auto
     patch_h_mm: float = 0.0
+    # Layout strategy (#93, Knut). "patch_first" (default) = size the patches
+    # (above) and fit as many as possible to the page. "area_first" = fit a
+    # target grid into the usable area and SIZE the patches to fill it:
+    #   area_cols  strips across   (0 = auto / fill width)
+    #   area_rows  patches/strip   (0 = auto / fill height)
+    #   area_ratio patch width:height used for the auto-sized dimension
+    #              (0 = square). Patch size is then derived, not set.
+    layout_mode: str = "patch_first"
+    area_cols: int = 0
+    area_rows: int = 0
+    area_ratio: float = 0.0
     spacer_width_mm: float = 0.0   # 0 = instrument default
     inter_patch_mm: float = 0.0    # extra gap between patches
     strip_gap_mm: float = 0.0      # extra gap BETWEEN strips (adds to row pitch)
@@ -150,6 +161,10 @@ class LayoutRecipe:
             margin_top=m[0], margin_right=m[1], margin_bottom=m[2], margin_left=m[3],
             patch_w_mm=float(d.get("patch_w") or 0.0),
             patch_h_mm=float(d.get("patch_h") or 0.0),
+            layout_mode=d.get("layout_mode") or "patch_first",
+            area_cols=int(d.get("area_cols") or 0),
+            area_rows=int(d.get("area_rows") or 0),
+            area_ratio=float(d.get("area_ratio") or 0.0),
             spacer_width_mm=float(d.get("spacer_width") or 0.0),
             inter_patch_mm=float(d.get("inter_patch") or 0.0),
             strip_gap_mm=float(d.get("strip_gap") or 0.0),
@@ -236,6 +251,10 @@ class LayoutRecipe:
                         self.margin_bottom, self.margin_left),
             "patch_w": self.patch_w_mm or None,
             "patch_h": self.patch_h_mm or None,
+            "layout_mode": self.layout_mode,
+            "area_cols": self.area_cols,
+            "area_rows": self.area_rows,
+            "area_ratio": self.area_ratio,
             "spacer_width": self.spacer_width_mm or None,
             "inter_patch": self.inter_patch_mm or None,
             "strip_gap": self.strip_gap_mm or None,

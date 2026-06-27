@@ -290,3 +290,36 @@ def test_align_default_matches_legacy_placement():
     p = geometry.placement(g, *A4, lay)
     # left-anchored: x0 = margin_l + lbord (+ offset 0)
     assert abs(p.x0 - (g.margin_l + g.lbord)) < 1e-9
+
+
+def test_area_first_fits_requested_grid():
+    """Area-first sizes the patches so the requested columns/rows fill the usable
+    area — capacity and the laid-out grid match (one chokepoint) (#93)."""
+    from workflow.layout_engine.presets import default_recipe
+    from dataclasses import replace
+
+    def grid(**area):
+        rec = replace(default_recipe("i1", "A4", mode="clip"),
+                      layout_mode="area_first", **area)
+        g = instruments.geom_from_build_kwargs(rec.build_kwargs())
+        lay = geometry.compute(g, *A4, geometry.patches_per_sheet(g, *A4))
+        return lay.patches_per_page // lay.steps_in_pass, lay.steps_in_pass
+
+    assert grid(area_cols=20, area_rows=30) == (20, 30)          # both pinned
+    assert grid(area_cols=24)[0] == 24                           # columns pinned
+    assert grid(area_rows=40)[1] == 40                           # rows pinned
+    # patch shape ratio drives the auto dimension (wider patches → fewer columns)
+    sq = grid(area_rows=40, area_ratio=1.0)[0]
+    wide = grid(area_rows=40, area_ratio=2.0)[0]
+    assert wide < sq
+
+
+def test_area_first_noop_without_targets():
+    """Area-first with no column/row target falls back to patch-first sizing."""
+    from workflow.layout_engine.presets import default_recipe
+    from dataclasses import replace
+    base = instruments.geom_from_build_kwargs(
+        default_recipe("i1", "A4", mode="clip").build_kwargs())
+    rec = replace(default_recipe("i1", "A4", mode="clip"), layout_mode="area_first")
+    area = instruments.geom_from_build_kwargs(rec.build_kwargs())
+    assert area.pwid == base.pwid and area.plen == base.plen

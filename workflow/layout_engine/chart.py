@@ -95,6 +95,10 @@ def build_chart(
     spacer_overrides: dict | None = None,
     edge_spacers: bool = False,
     patch_area_align: str = "center-left",
+    layout_mode: str = "patch_first",
+    area_cols: int = 0,
+    area_rows: int = 0,
+    area_ratio: float = 0.0,
     pscale: float = 1.0,
     sscale: float = 1.0,
     border: float = 6.0,
@@ -159,20 +163,20 @@ def build_chart(
         if apply_cal:
             target = calibration.apply_to_target(target, cal)
     spacer_on = spacer_on and spacer_mode != "none"   # "none" ⇒ no gap
-    geom = instruments.build(
-        instrument, hflag=hflag, density=density, spacer_on=spacer_on, pscale=pscale,
-        sscale=sscale, border=border, margins=margins, patch_w=patch_w,
-        patch_h=patch_h, spacer_width=spacer_width, inter_patch=inter_patch,
-        strip_gap=strip_gap, max_strip=max_strip,
-        strip_indicator_gap=strip_indicator_gap,
-        offset_x=offset_x, offset_y=offset_y, nolpcbord=nolpcbord, nolimit=nolimit,
-        clip_border_width=clip_border_width, edge_spacers=edge_spacers,
-        patch_area_align=patch_area_align,
-    )
-    # Reserve the space the rendered furniture (strip-label band + underline,
-    # bottom sheet text / stamp) actually consumes, so the laid-out patch count
-    # matches what fits — the same reservation every capacity estimate uses (#93).
-    geom = raster.apply_furniture_reserves(geom, {
+    # Build the Geom through the one chokepoint so area-first patch sizing and the
+    # furniture reservations (label band, bottom sheet text / stamp) match every
+    # capacity estimate exactly (#93).
+    geom = instruments.geom_from_build_kwargs({
+        "instrument": instrument, "paper": paper, "hflag": hflag,
+        "density": density, "spacer_on": spacer_on, "pscale": pscale,
+        "sscale": sscale, "border": border, "margins": margins,
+        "patch_w": patch_w, "patch_h": patch_h, "spacer_width": spacer_width,
+        "inter_patch": inter_patch, "strip_gap": strip_gap, "max_strip": max_strip,
+        "strip_indicator_gap": strip_indicator_gap, "offset_x": offset_x,
+        "offset_y": offset_y, "nolpcbord": nolpcbord, "nolimit": nolimit,
+        "clip_border_width": clip_border_width, "edge_spacers": edge_spacers,
+        "patch_area_align": patch_area_align, "layout_mode": layout_mode,
+        "area_cols": area_cols, "area_rows": area_rows, "area_ratio": area_ratio,
         "dpi": dpi, "draw_indicators": draw_indicators,
         "indicator_font": indicator_font, "indicator_size_mm": indicator_size_mm,
         "indicator_bold": indicator_bold, "indicator_italic": indicator_italic,

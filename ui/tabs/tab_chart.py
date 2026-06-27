@@ -5557,9 +5557,13 @@ class TabChart(QWidget):
         else:
             bits.append(tr("margins {t:g}/{r:g}/{b:g}/{l:g} mm").format(
                 t=m[0], r=m[1], b=m[2], l=m[3]))
-        # Patch size — explicit width AND height wins over a uniform scale
-        # factor; a half-set (one auto dimension) falls back to the scale.
-        if r.patch_w_mm > 0 and r.patch_h_mm > 0:
+        # Layout strategy: area-first shows the target grid (patches are derived);
+        # patch-first shows the explicit size or scale.
+        if getattr(r, "layout_mode", "patch_first") == "area_first":
+            _c = r.area_cols or tr("auto")
+            _rr = r.area_rows or tr("auto")
+            bits.append(tr("area-fit {c}×{r}").format(c=_c, r=_rr))
+        elif r.patch_w_mm > 0 and r.patch_h_mm > 0:
             bits.append(tr("patch {w:g}×{h:g} mm").format(
                 w=r.patch_w_mm, h=r.patch_h_mm))
         elif abs(r.pscale - 1.0) > 0.01:

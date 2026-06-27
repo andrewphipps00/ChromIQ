@@ -209,6 +209,74 @@ class LayoutOptionsPanel(QWidget):
             sb.valueChanged.connect(self._emit)
             return sb
 
+        # ---- Layout strategy (patch-first vs area-first, #93 / Knut) ----
+        lg = QGroupBox(tr("Layout"), self)
+        lgg = QGridLayout(lg)
+        self.layout_mode = NoScrollComboBox(self)
+        self.layout_mode.addItem(
+            tr("Prioritise patch size, then fit to page"), "patch_first")
+        self.layout_mode.addItem(
+            tr("Prioritise chart area, then fit patches to it"), "area_first")
+        self.layout_mode.currentIndexChanged.connect(self._emit)
+        self.layout_mode.currentIndexChanged.connect(self._sync_layout_mode)
+        add_row(lgg, 0, tr("Create layout:"), self.layout_mode,
+                tip=TooltipButton(
+                    tr("Create layout"),
+                    tr("Two ways to decide patch size vs. how many fit:\n\n"
+                       "• Prioritise patch size — you set the patch size (or "
+                       "scale) and ChromIQ fits as many patches as it can. Simple, "
+                       "but the last strip may not reach the far margin.\n\n"
+                       "• Prioritise chart area — you say how many strips "
+                       "(columns) and/or patches per strip (rows) you want, and "
+                       "ChromIQ SIZES the patches so the grid fills the usable area "
+                       "(the space left inside your margins). The patch area always "
+                       "lands exactly where you defined it; you trade patch size "
+                       "for the grid you asked for. Watch that the patches don't "
+                       "get too small for your instrument to read."), self))
+        # Area-first fields (shown only in that mode).
+        self._area_fields_w = QWidget(self)
+        afg = QGridLayout(self._area_fields_w)
+        afg.setContentsMargins(0, 0, 0, 0)
+        self.area_cols = NoScrollSpinBox(self); self.area_cols.setRange(0, 200)
+        self.area_cols.setSpecialValueText(tr("auto")); self.area_cols.setMaximumWidth(96)
+        self.area_cols.valueChanged.connect(self._emit)
+        self.area_cols.valueChanged.connect(self._sync_layout_mode)
+        self.area_rows = NoScrollSpinBox(self); self.area_rows.setRange(0, 500)
+        self.area_rows.setSpecialValueText(tr("auto")); self.area_rows.setMaximumWidth(96)
+        self.area_rows.valueChanged.connect(self._emit)
+        self.area_rows.valueChanged.connect(self._sync_layout_mode)
+        self.area_ratio = NoScrollDoubleSpinBox(self)
+        self.area_ratio.setRange(0.0, 10.0); self.area_ratio.setDecimals(2)
+        self.area_ratio.setSingleStep(0.1); self.area_ratio.setMaximumWidth(96)
+        self.area_ratio.setSpecialValueText(tr("square"))
+        self.area_ratio.valueChanged.connect(self._emit)
+        add_row(afg, 0, tr("Strips (columns):"), self.area_cols,
+                tip=TooltipButton(
+                    tr("Strips (columns)"),
+                    tr("How many strips (columns of patches) to fit across the "
+                       "page. ChromIQ makes the patches exactly wide enough that "
+                       "this many strips span the usable width — so the block "
+                       "reaches the margins evenly. Leave at “auto” to let the "
+                       "patch shape (below) decide the width instead."), self))
+        add_row(afg, 1, tr("Patches per strip (rows):"), self.area_rows,
+                tip=TooltipButton(
+                    tr("Patches per strip (rows)"),
+                    tr("How many patches to stack down each strip. ChromIQ makes "
+                       "the patches exactly tall enough that this many fit the "
+                       "usable height. Leave at “auto” to fill the height with "
+                       "whatever number fits at the chosen patch shape."), self))
+        add_row(afg, 2, tr("Patch shape (W:H):"), self.area_ratio,
+                tip=TooltipButton(
+                    tr("Patch shape"),
+                    tr("The width-to-height ratio for the patch dimension that "
+                       "ISN'T pinned by a column/row count — e.g. set Strips and "
+                       "leave rows on “auto”, and this controls how tall each patch "
+                       "is. “square” keeps width = height. 1.5 makes patches half "
+                       "again as wide as they are tall. Ignored when you pin both "
+                       "columns and rows."), self))
+        lgg.addWidget(self._area_fields_w, 1, 0, 1, 3)
+        v.addWidget(lg)
+
         # ---- Patches & spacers (2-column: label | control) ----
         ps = QGroupBox(tr("Patches && spacers"), self)
         g = QGridLayout(ps)
@@ -793,6 +861,7 @@ class LayoutOptionsPanel(QWidget):
         self._sync_clip_content_enabled()
         self._sync_spacer_swatches()
         self._update_clip_visibility()
+        self._sync_layout_mode()
 
     def _browse_cal(self) -> None:
         from PyQt6.QtWidgets import QFileDialog
@@ -875,6 +944,21 @@ class LayoutOptionsPanel(QWidget):
     def _on_clip_content_changed(self, *_a) -> None:
         self._sync_clip_content_enabled()
         self._emit()
+
+    def _sync_layout_mode(self, *_a) -> None:
+        """Show area-first fields only in that mode, and grey the patch size /
+        scale (which the engine derives in area-first) so only the relevant
+        inputs are active for each choice (#93 / Knut)."""
+        if not hasattr(self, "layout_mode"):
+            return
+        area = (self.layout_mode.currentData() == "area_first")
+        self._area_fields_w.setVisible(area)
+        for w in (self.patch_x, self.patch_y, self.pscale):
+            w.setEnabled(not area)
+        # The patch-shape ratio only matters for the dimension that isn't pinned
+        # by a count — disable it when both columns and rows are pinned.
+        both_pinned = self.area_cols.value() > 0 and self.area_rows.value() > 0
+        self.area_ratio.setEnabled(area and not both_pinned)
 
     def _browse_clip_image(self) -> None:
         from PyQt6.QtWidgets import QFileDialog
@@ -1280,6 +1364,12 @@ class LayoutOptionsPanel(QWidget):
                 _b.setProperty("hexcol", _pal[_i])
                 self._style_swatch(_b)
         self._sync_spacer_swatches()
+        _lm = self.layout_mode.findData(r.layout_mode or "patch_first")
+        self.layout_mode.setCurrentIndex(_lm if _lm >= 0 else 0)
+        self.area_cols.setValue(int(r.area_cols or 0))
+        self.area_rows.setValue(int(r.area_rows or 0))
+        self.area_ratio.setValue(float(r.area_ratio or 0.0))
+        self._sync_layout_mode()
         self.patch_x.setValue(r.patch_w_mm)
         self.patch_y.setValue(r.patch_h_mm)
         self.inter_patch.setValue(r.inter_patch_mm)
@@ -1359,6 +1449,10 @@ class LayoutOptionsPanel(QWidget):
         r.spacer_on = r.spacer_mode != "none"
         r.edge_spacers = self.edge_spacers_cb.isChecked()
         r.spacer_width_mm = self.spacer_width.value()
+        r.layout_mode = self.layout_mode.currentData() or "patch_first"
+        r.area_cols = int(self.area_cols.value())
+        r.area_rows = int(self.area_rows.value())
+        r.area_ratio = float(self.area_ratio.value())
         r.patch_w_mm = self.patch_x.value()
         r.patch_h_mm = self.patch_y.value()
         r.inter_patch_mm = self.inter_patch.value()
