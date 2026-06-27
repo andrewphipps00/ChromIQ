@@ -2323,6 +2323,14 @@ class TabChart(QWidget):
 
         def _layout_cmd() -> str:
             if use_engine:
+                # The engine recipe panel — not the printtarg widgets — is the
+                # source of truth in Manual mode, so summarise the recipe (#93).
+                if getattr(self, "_manual_layout_panel", None) is not None:
+                    try:
+                        return self._engine_info_line_from_recipe(
+                            self._current_layout_recipe())
+                    except Exception:
+                        pass
                 return self._engine_info_line(
                     p.instrument, p.paper, p.tiff_dpi, dd=p.double_density,
                     td=triple, eff_lb=(p.disable_left_border or force_l),
@@ -2505,8 +2513,9 @@ class TabChart(QWidget):
             return None
         modified = (self._layout_recipe_values(cur)
                     != self._layout_recipe_values(preset))
+        from workflow.layout_engine import papers
         summary = tr("Layout preset: {i} · {p} · {m}").format(
-            i=cur.instrument, p=cur.paper, m=cur.mode())
+            i=cur.instrument, p=papers.friendly_label(cur.paper), m=cur.mode())
         return summary, modified
 
     def _refresh_manual_preset_bar(self, use_engine: bool, status=None) -> None:
@@ -5459,7 +5468,11 @@ class TabChart(QWidget):
     def _engine_info_line(self, instr: str, paper: str, dpi: int, *, dd: bool,
                           td: bool, eff_lb: bool, nsl: bool, pscale: float,
                           margin: float) -> str:
-        """One-line description of what the ChromIQ engine will build."""
+        """One-line description of what the ChromIQ engine will build.
+
+        Used by Guided mode, where the engine runs on fixed settings derived
+        from the instrument/paper (not from an editable recipe). Manual mode
+        has a live recipe panel — see :meth:`_engine_info_line_from_recipe`."""
         bits = [tr("ChromIQ layout engine"), instr, paper, f"{dpi} dpi",
                 tr("margin {mm:g} mm").format(mm=margin)]
         if abs(pscale - 1.0) > 0.01:
@@ -5472,6 +5485,43 @@ class TabChart(QWidget):
         if instr == "SS" and dd:
             bits.append(tr("hexagonal"))
         if nsl:
+            bits.append(tr("no strip-length cap"))
+        return " · ".join(bits)
+
+    @staticmethod
+    def _engine_info_line_from_recipe(r) -> str:
+        """One-line summary of what the engine will build, read straight from
+        the live layout recipe (Manual mode's source of truth).
+
+        The printtarg widgets do NOT drive the engine here, so the info box has
+        to reflect the recipe's own margins / patch size / clip border / etc.,
+        otherwise it shows stale printtarg values (#93)."""
+        from workflow.layout_engine import papers
+        bits = [tr("ChromIQ layout engine"), r.instrument,
+                papers.friendly_label(r.paper), f"{r.dpi} dpi"]
+        # Margins — collapse to one value when all four agree, else show them.
+        m = (r.margin_top, r.margin_right, r.margin_bottom, r.margin_left)
+        if len(set(m)) == 1:
+            bits.append(tr("margin {mm:g} mm").format(mm=m[0]))
+        else:
+            bits.append(tr("margins {t:g}/{r:g}/{b:g}/{l:g} mm").format(
+                t=m[0], r=m[1], b=m[2], l=m[3]))
+        # Patch size — explicit width AND height wins over a uniform scale
+        # factor; a half-set (one auto dimension) falls back to the scale.
+        if r.patch_w_mm > 0 and r.patch_h_mm > 0:
+            bits.append(tr("patch {w:g}×{h:g} mm").format(
+                w=r.patch_w_mm, h=r.patch_h_mm))
+        elif abs(r.pscale - 1.0) > 0.01:
+            bits.append(tr("patch ×{s:.2f}").format(s=r.pscale))
+        if r.instrument in ("i1", "p3"):
+            bits.append(tr("clip border on") if r.clip_border
+                        else tr("clip border off"))
+        if r.instrument == "CM":
+            bits.append({3: tr("extra-high density"), 2: tr("high density")}.get(
+                r.cm_density, tr("hand-held")))
+        if r.instrument == "SS" and r.hflag:
+            bits.append(tr("hexagonal"))
+        if r.nolimit:
             bits.append(tr("no strip-length cap"))
         return " · ".join(bits)
 

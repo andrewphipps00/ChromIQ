@@ -62,6 +62,20 @@ def label(code: str) -> str:
     return PAPER_LABELS.get(code, code)
 
 
+def friendly_label(code: str) -> str:
+    """Compact name with orientation, e.g. ``"A4 landscape"`` (for info boxes /
+    on-sheet placeholders). Falls back to the raw code for custom sizes."""
+    lab = PAPER_LABELS.get(code)
+    if not lab:
+        return code
+    name = lab.split(" (")[0]                       # "A4 (210 × 297 mm) Portrait"
+    if "Landscape" in lab:
+        return f"{name} landscape"
+    if "Portrait" in lab:
+        return f"{name} portrait"
+    return name
+
+
 def list_papers(instrument: str | None = None, *, for_engine: bool = False
                 ) -> list[tuple[str, str, tuple[float, float]]]:
     """``[(code, label, (w_mm, h_mm))]`` in the app's canonical order.

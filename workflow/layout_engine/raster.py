@@ -622,9 +622,17 @@ def render_pages(
                                    fill=ACCENT_RGB[global_strip % len(ACCENT_RGB)])
             for j, gslot in enumerate(col_slots):
                 y0 = px(place.y_of(j))
+                # Derive each row's bottom edge from its true mm position (the
+                # way xR does horizontally) instead of adding a fixed rounded
+                # height: round(plen)+round(pspa) drifts from round(plen+pspa),
+                # which left a 1 px gap between the spacer and the next patch on
+                # every other row. Tying the spacer's bottom to the next patch's
+                # top tiles them seamlessly (#93).
+                yB = px(place.y_of(j) + place.plen)            # patch bottom edge
                 rgb = rgb_by_slot[gslot]
-                draw.rectangle([x0, y0, xR - 1, y0 + pl_px - 1], fill=rgb)
+                draw.rectangle([x0, y0, xR - 1, yB - 1], fill=rgb)
                 if sp_px > 0 and j + 1 < len(col_slots):
+                    y_next = px(place.y_of(j + 1))             # next patch top
                     nxt = rgb_by_slot[col_slots[j + 1]]
                     # A per-spacer manual override (keyed by flat geometric index)
                     # wins over the auto/contrast colour.
@@ -632,8 +640,7 @@ def render_pages(
                     _ov = spacer_overrides.get(_flat) if spacer_overrides else None
                     _fill = _ov if _ov is not None else contrast.spacer_for_mode(
                         spacer_mode, rgb, nxt, spacer_palette)
-                    draw.rectangle(
-                        [x0, y0 + pl_px, xR - 1, y0 + pl_px + sp_px - 1], fill=_fill)
+                    draw.rectangle([x0, yB, xR - 1, y_next - 1], fill=_fill)
             # Bracket the strip with a leading + trailing spacer (printtarg does
             # this). Fits in space the layout already reserves, so it doesn't
             # change the patch count. Auto-coloured against the paper white on the
@@ -648,7 +655,7 @@ def render_pages(
                     [x0, _yl, xR - 1, _yl + sp_px - 1],
                     fill=contrast.spacer_for_mode(spacer_mode, _white, _first,
                                                   spacer_palette))
-                _yt = px(place.y_of(len(col_slots) - 1)) + pl_px   # trailing
+                _yt = px(place.y_of(len(col_slots) - 1) + place.plen)   # trailing
                 draw.rectangle(
                     [x0, _yt, xR - 1, _yt + sp_px - 1],
                     fill=contrast.spacer_for_mode(spacer_mode, _last, _white,

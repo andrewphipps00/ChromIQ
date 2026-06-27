@@ -131,6 +131,41 @@ def test_patch_rects_known_for_every_slot():
         assert 0 <= r["y"] and r["y"] + r["h"] <= H
 
 
+def test_no_vertical_gap_between_patches_and_spacers():
+    """Walking down a strip there must be no white (paper) row between a patch
+    and the spacer below it, nor between the spacer and the next patch — the
+    old code rounded plen/pspa as fixed heights, leaving a 1 px gap on every
+    other row (#93).
+
+    All patches are a uniform light grey and spacers are forced to ``bw`` so the
+    spacer between two light patches is always black — that way any white pixel
+    found in the column is genuine paper showing through a gap, not a spacer that
+    the colour palette happened to pick white."""
+    patches = [((75.0, 75.0, 75.0), (40.0, 45.0, 50.0)) for _ in range(120)]
+    target = ColorTarget(color_rep="iRGB",
+                         device_fields=["RGB_R", "RGB_G", "RGB_B"], patches=patches)
+    # patch ×0.95 (a common scale, and the one in the bug report) gives a
+    # fractional patch/spacer pitch — exactly what made round(plen)+round(pspa)
+    # drift from round(plen+pspa) and open the 1 px gaps.
+    geom = instruments.build("i1", pscale=0.95)
+    lay = geometry.compute(geom, 210.0, 297.0, 120)
+    dpi = 300
+    res = raster.render_pages(target, lay, geom, seed=3, randomize=False,
+                              spacer_mode="bw",
+                              paper_w_mm=210.0, paper_h_mm=297.0, dpi=dpi)
+    img = res.images[0]
+    place = geometry.placement(geom, 210.0, 297.0, lay)
+    mm2px = dpi / 25.4
+    steps = lay.steps_in_pass
+    cx = int(round((place.x_of(0) + place.pwid / 2) * mm2px))
+    n_rows = min(steps, lay.total_patches)
+    y_top = int(round(place.y_of(0) * mm2px))
+    y_bot = int(round((place.y_of(n_rows - 1) + place.plen) * mm2px))
+    white_rows = [y for y in range(y_top, y_bot)
+                  if img.getpixel((cx, y)) == (255, 255, 255)]
+    assert not white_rows, f"paper showing through at rows {white_rows[:5]}"
+
+
 def test_contrast_spacer_choice():
     assert contrast.spacer_rgb((255, 255, 255), (240, 240, 240)) == (0, 0, 0)
     assert contrast.spacer_rgb((0, 0, 0), (10, 10, 10)) == (255, 255, 255)

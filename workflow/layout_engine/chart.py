@@ -206,14 +206,10 @@ def build_chart(
     # render_pages (it needs the page index), so it's not in this dict. (#93)
     _instr_friendly = {"i1": "i1Pro", "p3": "i1Pro3+", "CM": "ColorMunki",
                        "SS": "SpectroScan", "41": "DTP41", "51": "DTP51"}
-    _plabel = papers.label(paper)                       # "A4 (210 × 297 mm) Portrait"
-    _pname = _plabel.split(" (")[0]                      # "A4"
-    _porient = (" landscape" if "Landscape" in _plabel
-                else " portrait" if "Portrait" in _plabel else "")
     _ctx = {
         "project": project or Path(out_base).name,
         "instrument": _instr_friendly.get(instrument, instrument),
-        "paper": f"{_pname}{_porient}",
+        "paper": papers.friendly_label(paper),          # "A4 landscape"
         "dpi": f"{dpi} dpi",
         "patchcount": f"{layout.total_patches} patches",
         "pages": str(layout.pages),                     # total; {page} = "page X/Y"

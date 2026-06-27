@@ -135,3 +135,44 @@ def test_custom_spacer_palette_includes_white_and_black(app):
     panel.set_recipe(out)
     assert [b.property("hexcol").lower() for b in panel._spacer_swatches] == \
         [c.lower() for c in out.spacer_palette]
+
+
+def test_engine_info_line_from_recipe_reflects_recipe():
+    """The Manual info box must read engine values from the recipe, not the
+    printtarg widgets — clip border, custom patch size and per-edge margins all
+    have to show through (#93)."""
+    from ui.tabs.tab_chart import TabChart
+    line = TabChart._engine_info_line_from_recipe
+
+    # Paper carries its orientation, not just the size.
+    assert "A4 portrait" in line(LayoutRecipe(instrument="i1", paper="A4"))
+    assert "A4 landscape" in line(LayoutRecipe(instrument="i1", paper="A4R"))
+
+    # Clip border ON must say "on" (the bug showed "off").
+    r = LayoutRecipe(instrument="i1", paper="A4", clip_border=True)
+    assert "clip border on" in line(r)
+    r = LayoutRecipe(instrument="i1", paper="A4", clip_border=False)
+    assert "clip border off" in line(r)
+
+    # Explicit patch width/height wins over a uniform scale factor.
+    r = LayoutRecipe(instrument="i1", paper="A4", patch_w_mm=7.5, patch_h_mm=9.0,
+                     pscale=0.95)
+    s = line(r)
+    assert "patch 7.5×9 mm" in s
+    assert "×0.95" not in s
+
+    # No explicit size → fall back to the scale factor.
+    r = LayoutRecipe(instrument="i1", paper="A4", pscale=0.95)
+    assert "patch ×0.95" in line(r)
+
+    # Per-edge margins must not collapse to a single value.
+    r = LayoutRecipe(instrument="i1", paper="A4", margin_top=27.8,
+                     margin_right=4, margin_bottom=10.8, margin_left=26)
+    s = line(r)
+    assert "margins 27.8/4/10.8/26 mm" in s
+    assert "margin 10 mm" not in s
+
+    # Uniform margins collapse.
+    r = LayoutRecipe(instrument="i1", paper="A4", margin_top=10, margin_right=10,
+                     margin_bottom=10, margin_left=10)
+    assert "margin 10 mm" in line(r)
