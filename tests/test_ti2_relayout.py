@@ -520,6 +520,10 @@ def test_engine_chart_reloads_in_sheet_order_renders_identically(tmp_path):
     # original chart, randomised with a fixed seed (like the Create Chart tab)
     rec = default_recipe("i1", "A4"); rec.randomize = True; rec.seed = 4242
     kw = rec.build_kwargs(); kw["dpi"] = 150
+    # Same project on both so the notes strip (on by default; its profile name
+    # comes from the output stem) doesn't make the pages differ — this test is
+    # about patch-grid identity, not the notes content.
+    kw["project"] = "Profile"
     orig = le_chart.build_chart(str(src_ti1), tmp_path / "orig", **kw)
     orig_img = np.asarray(Image.open(orig.tiff_paths[0]))
 
@@ -531,6 +535,7 @@ def test_engine_chart_reloads_in_sheet_order_renders_identically(tmp_path):
     # the editor renders the loaded grid un-randomised (the fix)
     rec2 = default_recipe("i1", "A4"); rec2.randomize = False
     kw2 = rec2.build_kwargs(); kw2["dpi"] = 150
+    kw2["project"] = "Profile"
     reloaded = le_chart.build_chart(str(grid_ti1), tmp_path / "reload", **kw2)
     reload_img = np.asarray(Image.open(reloaded.tiff_paths[0]))
 

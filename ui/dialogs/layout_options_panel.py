@@ -73,7 +73,7 @@ class LayoutOptionsPanel(QWidget):
         v.setContentsMargins(0, 0, 0, 0)
         v.setSpacing(10)
 
-        self.instr = self.paper = self.mode = None
+        self.instr = self.paper = self.mode = self.pages = None
         if with_selectors:
             sel = QGridLayout()
             # Instrument and Mode each get a full-width row.

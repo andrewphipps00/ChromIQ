@@ -88,8 +88,11 @@ class LayoutRecipe:
     stamp_command: bool = False          # stamp the layout summary on the sheet
     clip_border: bool = True       # i1/p3 only — left paper clip border present
     clip_border_width_mm: float = 26.0   # i1/p3 reserved clip zone width (mm)
-    # Clip-strip content (i1/p3): "off" | "text" | "image" | "branding" | "notes"
-    clip_content_mode: str = "off"
+    # Clip-strip content (i1/p3): "off" | "text" | "image" | "branding" | "notes".
+    # Defaults to the auto-filled notes record so every clip-border chart carries
+    # its own documentation strip out of the box (#93). Only drawn where a clip
+    # border exists (i1/p3 clip mode); harmless elsewhere.
+    clip_content_mode: str = "notes"
     clip_text: str = ""                  # rotated text / notes caption (tokens ok)
     clip_text_font: str = "Inter"
     clip_image_path: str = ""            # imported logo/graphic for "image" mode
