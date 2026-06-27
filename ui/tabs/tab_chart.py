@@ -2925,6 +2925,14 @@ class TabChart(QWidget):
         if mode == "manual" and getattr(self, "_guided_transfer_pending", False):
             self._guided_transfer_pending = False
             self._transfer_guided_to_manual()
+        # Refresh the now-active mode's predictors so the patch count and the
+        # Chart-layout-information estimate describe the mode on screen (#93) —
+        # each predictor is guarded by active mode, so the just-hidden one stops
+        # updating and the newly-shown one takes over.
+        if mode == "guided":
+            self._update_patch_count()
+        else:
+            self._refresh_manual_command_preview()
 
     def _transfer_guided_to_manual(self) -> None:
         """Seed the Manual panel from the Guided settings that produced the

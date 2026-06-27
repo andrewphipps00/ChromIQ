@@ -48,3 +48,19 @@ def test_layout_info_placeholder_without_engine(qapp, tmp_path):
     tab._update_patch_count()
     # printtarg layout isn't predicted — placeholder until a chart is generated.
     assert not tab._layout_info_panel._placeholder.isHidden()
+
+
+def test_estimate_refreshes_on_mode_switch(qapp, tmp_path):
+    """Switching Guided ↔ Manual must re-run the active mode's predictor so the
+    estimate describes the mode on screen (#93)."""
+    tab = _tab(tmp_path, use_chromiq_layout_engine=True)
+    panel = tab._layout_info_panel
+    tab._switch_mode("manual")
+    man = panel._estimate_labels["total"].text()
+    assert man not in ("—", "")
+    tab._switch_mode("guided")
+    gui = panel._estimate_labels["total"].text()
+    assert gui not in ("—", "")
+    # both modes produce an estimate; switching back to manual still works
+    tab._switch_mode("manual")
+    assert panel._estimate_labels["total"].text() not in ("—", "")
