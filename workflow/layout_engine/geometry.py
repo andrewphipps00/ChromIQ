@@ -177,6 +177,7 @@ def placement(geom: Geom, paper_w_mm: float, paper_h_mm: float, layout: Layout) 
     """
     g = geom
     ph = paper_h_mm
+    pw = paper_w_mm
     # Top/bottom reservations use the independent page margins (floored by the
     # instrument's leader/trailer minimums), matching compute() — previously this
     # used the base `border` while compute used `margin_t`/`margin_b`, so the two
@@ -201,16 +202,48 @@ def placement(geom: Geom, paper_w_mm: float, paper_h_mm: float, layout: Layout) 
     _lead = g.pspa if g.edge_spacers else 0.0
     _block = (layout.pprow * (g.plen + g.pspa)
               + (g.pspa if g.edge_spacers else -g.pspa))
-    # Distribute slack like printtarg: amints = mints + 0.5*(slack - minbs)
+    # Patch-area alignment within the usable area (#93). The block is positioned
+    # in the free span between the top reserve (mints) and bottom reserve (minbs)
+    # vertically, and within the imageable width horizontally. The default
+    # "center-left" reproduces printtarg's behaviour exactly: vertically centred
+    # (fv = 0.5 → amints = mints + 0.5*(slack - minbs)) and left-anchored
+    # (fh = 0). top/bottom and center/right shift the block within the slack only
+    # — capacity is unchanged.
+    fv, fh = _align_fractions(g.patch_area_align)
     slack = ph - mints - _block
-    amints = mints + 0.5 * (slack - minbs)
+    amints = mints + fv * (slack - minbs)
+    # Horizontal slack: passes tile from the left of the imageable area; the
+    # leftover to the right of the block is distributed by fh.
+    n_passes = (layout.patches_per_page // layout.steps_in_pass
+                if layout.steps_in_pass else 0)
+    block_w = (max(0, n_passes - 1) * g.rrsp + g.pwid) if n_passes else 0.0
+    avail_w = (pw - g.margin_l - g.lbord - g.margin_r
+               - g.rlwi - 2.0 * g.hxew - (g.pglth if g.dopglabel else 0.0))
+    extra_w = max(0.0, avail_w - block_w)
     return Placement(
-        x0=g.margin_l + g.lbord + g.offset_x,
+        x0=g.margin_l + g.lbord + fh * extra_w + g.offset_x,
         y0_first=amints + _lead + g.offset_y,
         plen=g.plen, pwid=g.pwid, pspa=g.pspa, rrsp=g.rrsp,
         steps_in_pass=layout.steps_in_pass,
         leader_top=g.margin_t + g.offset_y,    # labels flush under the top margin
     )
+
+
+_VFRAC = {"top": 0.0, "center": 0.5, "bottom": 1.0}
+_HFRAC = {"left": 0.0, "center": 0.5, "right": 1.0}
+
+
+def _align_fractions(align: str) -> tuple[float, float]:
+    """(vertical, horizontal) slack fractions for a patch-area alignment key
+    like ``"top-left"`` / ``"center"`` (the centre). Unknown → center-left."""
+    align = (align or "center-left").strip().lower()
+    if align == "center":
+        vk = hk = "center"
+    elif "-" in align:
+        vk, hk = align.split("-", 1)
+    else:
+        vk, hk = "center", align
+    return _VFRAC.get(vk, 0.5), _HFRAC.get(hk, 0.0)
 
 
 def realized_margins_mm(geom: Geom, paper_w_mm: float, paper_h_mm: float,

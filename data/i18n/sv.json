@@ -2004,5 +2004,18 @@
   "Moves the strip letters up or down without moving the patches. By default the labels sit flush just under the top margin; a positive value lowers them toward the patches, a negative value raises them into the margin. The patch area doesn't change, so this doesn't affect how many patches fit.": "Moves the strip letters up or down without moving the patches. By default the labels sit flush just under the top margin; a positive value lowers them toward the patches, a negative value raises them into the margin. The patch area doesn't change, so this doesn't affect how many patches fit.",
   "Add the colours from an existing file to this chart. Works with Argyll measurement / target files (.ti1, .ti2, .ti3, .cgats) that carry device-RGB values, and plain lists of hex or RGB values. Near-duplicate colours are automatically spaced apart so the chart still reads reliably.": "Add the colours from an existing file to this chart. Works with Argyll measurement / target files (.ti1, .ti2, .ti3, .cgats) that carry device-RGB values, and plain lists of hex or RGB values. Near-duplicate colours are automatically spaced apart so the chart still reads reliably.",
   "margins {t:g}/{r:g}/{b:g}/{l:g} mm": "margins {t:g}/{r:g}/{b:g}/{l:g} mm",
-  "patch {w:g}×{h:g} mm": "patch {w:g}×{h:g} mm"
+  "patch {w:g}×{h:g} mm": "patch {w:g}×{h:g} mm",
+  "Bottom-centre": "Bottom-centre",
+  "Bottom-left": "Bottom-left",
+  "Bottom-right": "Bottom-right",
+  "Centre": "Centre",
+  "Centre-left": "Centre-left",
+  "Centre-right": "Centre-right",
+  "Patch area alignment": "Patch area alignment",
+  "Patch area alignment:": "Patch area alignment:",
+  "Top-centre": "Top-centre",
+  "Top-left": "Top-left",
+  "Top-right": "Top-right",
+  "Where the whole patch block sits within the page once the margins are kept clear. The patches rarely fill the usable area exactly, so this decides where the leftover white space goes.\n\n“Top-left” pins the block to the top-left corner (the leftover sits at the right and bottom); “Centre” puts the spare space evenly around it; “Bottom-right” pins it to the opposite corner, and so on. It only moves the block — the patch count and size don't change. Margins / thresholds are still respected.": "Where the whole patch block sits within the page once the margins are kept clear. The patches rarely fill the usable area exactly, so this decides where the leftover white space goes.\n\n“Top-left” pins the block to the top-left corner (the leftover sits at the right and bottom); “Centre” puts the spare space evenly around it; “Bottom-right” pins it to the opposite corner, and so on. It only moves the block — the patch count and size don't change. Margins / thresholds are still respected.",
+  "align {a}": "align {a}"
 }

@@ -522,6 +522,18 @@ class LayoutOptionsPanel(QWidget):
         self.offy = small_mm(top=300.0)
         self.strip_pat = QLineEdit(self); self.strip_pat.textChanged.connect(self._emit)
         self.patch_pat = QLineEdit(self); self.patch_pat.textChanged.connect(self._emit)
+        # Patch-area alignment — where the block sits within the usable area.
+        self.patch_align = NoScrollComboBox(self)
+        for _key, _lbl in (
+            ("top-left", tr("Top-left")), ("top-center", tr("Top-centre")),
+            ("top-right", tr("Top-right")),
+            ("center-left", tr("Centre-left")), ("center", tr("Centre")),
+            ("center-right", tr("Centre-right")),
+            ("bottom-left", tr("Bottom-left")), ("bottom-center", tr("Bottom-centre")),
+            ("bottom-right", tr("Bottom-right")),
+        ):
+            self.patch_align.addItem(_lbl, _key)
+        self.patch_align.currentIndexChanged.connect(self._emit)
         # Clip-border width (i1/p3, clip mode only) — reserved left zone for the
         # scanner's paper clip; printtarg hard-codes 26 mm, we make it adjustable.
         self.clip_width = small_mm(top=100.0)
@@ -577,13 +589,26 @@ class LayoutOptionsPanel(QWidget):
                     tr("How patches within a strip are numbered — the number part "
                        "of a location, e.g. A1, A2, A3. Leave the default unless "
                        "matching a specific scheme."), self))
-        gg.addWidget(self.nolimit, 7, 1)
+        add_row(gg, 7, tr("Patch area alignment:"), self.patch_align,
+                tip=TooltipButton(
+                    tr("Patch area alignment"),
+                    tr("Where the whole patch block sits within the page once the "
+                       "margins are kept clear. The patches rarely fill the usable "
+                       "area exactly, so this decides where the leftover white "
+                       "space goes.\n\n"
+                       "“Top-left” pins the block to the top-left corner (the "
+                       "leftover sits at the right and bottom); “Centre” puts the "
+                       "spare space evenly around it; “Bottom-right” pins it to the "
+                       "opposite corner, and so on. It only moves the block — the "
+                       "patch count and size don't change. Margins / thresholds "
+                       "are still respected."), self))
+        gg.addWidget(self.nolimit, 8, 1)
         gg.addWidget(TooltipButton(
             tr("Don't cap strip length"),
             tr("Removes the strip-length limit entirely (printtarg -P), letting a "
                "strip run the full usable height. Only enable if your instrument "
                "can read an unlimited-length strip; otherwise leave it off."),
-            self), 7, 2)
+            self), 8, 2)
         v.addWidget(pg)
         self._update_clip_visibility()
 
@@ -1265,6 +1290,9 @@ class LayoutOptionsPanel(QWidget):
         self.offy.setValue(r.offset_y_mm)
         self.strip_pat.setText(r.strip_pattern)
         self.patch_pat.setText(r.patch_pattern)
+        _ai = self.patch_align.findData(r.patch_area_align or "center-left")
+        self.patch_align.setCurrentIndex(_ai if _ai >= 0 else
+                                         self.patch_align.findData("center-left"))
         self.bit_depth.setCurrentIndex(1 if r.bit16 else 0)
         self.show_indicators.setChecked(r.show_strip_indicators)
         _fi = self.indicator_font.findData(r.indicator_font)
@@ -1346,6 +1374,7 @@ class LayoutOptionsPanel(QWidget):
         r.offset_y_mm = self.offy.value()
         r.strip_pattern = self.strip_pat.text() or r.strip_pattern
         r.patch_pattern = self.patch_pat.text() or r.patch_pattern
+        r.patch_area_align = self.patch_align.currentData() or "center-left"
         r.bit16 = (self.bit_depth.currentData() == 16)
         r.show_strip_indicators = self.show_indicators.isChecked()
         r.indicator_font = self.indicator_font.currentData() or "JetBrains Mono"

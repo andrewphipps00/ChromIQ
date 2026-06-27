@@ -94,6 +94,7 @@ def build_chart(
     spacer_palette: list | None = None,
     spacer_overrides: dict | None = None,
     edge_spacers: bool = False,
+    patch_area_align: str = "center-left",
     pscale: float = 1.0,
     sscale: float = 1.0,
     border: float = 6.0,
@@ -166,6 +167,7 @@ def build_chart(
         strip_indicator_gap=strip_indicator_gap,
         offset_x=offset_x, offset_y=offset_y, nolpcbord=nolpcbord, nolimit=nolimit,
         clip_border_width=clip_border_width, edge_spacers=edge_spacers,
+        patch_area_align=patch_area_align,
     )
     # Reserve the space the rendered furniture (strip-label band + underline,
     # bottom sheet text / stamp) actually consumes, so the laid-out patch count

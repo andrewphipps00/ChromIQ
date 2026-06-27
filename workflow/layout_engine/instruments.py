@@ -92,6 +92,11 @@ class Geom:
     # Bracket each strip with a leading + trailing spacer (printtarg parity).
     # When OFF the two end gaps are reclaimed for patches (denser than printtarg).
     edge_spacers: bool = False
+    # Where the patch block sits within the usable area (#93). One of
+    # "{top,center,bottom}-{left,center,right}" (the middle is plain "center").
+    # Default "center-left" reproduces the prior behaviour (vertically centred in
+    # the free span, left-anchored). Render-only — capacity is unchanged.
+    patch_area_align: str = "center-left"
 
 
 def supported() -> list[str]:
@@ -121,6 +126,7 @@ def build(
     nolimit: bool = False,
     clip_border_width: float = 26.0,
     edge_spacers: bool = False,
+    patch_area_align: str = "center-left",
 ) -> Geom:
     """Resolve :class:`Geom`, applying ChromIQ extensions over the base geometry.
 
@@ -156,7 +162,8 @@ def build(
     return replace(geom, margin_t=mt, margin_r=mr, margin_b=mb, margin_l=ml,
                    plen=plen, pwid=pwid, rrsp=rrsp, pspa=pspa, mxrowl=mxrowl,
                    strip_indicator_gap=sig, offset_x=offset_x, offset_y=offset_y,
-                   edge_spacers=edge_spacers)
+                   edge_spacers=edge_spacers,
+                   patch_area_align=patch_area_align or "center-left")
 
 
 # Keys of a recipe ``build_kwargs()`` dict that affect the laid-out geometry —
@@ -169,7 +176,7 @@ GEOM_BUILD_KEYS = (
     "hflag", "density", "spacer_on", "pscale", "sscale", "border", "margins",
     "patch_w", "patch_h", "spacer_width", "inter_patch", "strip_gap", "max_strip",
     "strip_indicator_gap", "offset_x", "offset_y", "nolpcbord", "nolimit",
-    "clip_border_width", "edge_spacers",
+    "clip_border_width", "edge_spacers", "patch_area_align",
 )
 
 

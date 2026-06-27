@@ -41,6 +41,10 @@ class LayoutRecipe:
     # (what printtarg does). Only meaningful when spacers are on; fits in space
     # the layout already reserves, so it doesn't change the patch count.
     edge_spacers: bool = False
+    # Where the patch block sits within the usable area: one of
+    # "{top,center,bottom}-{left,center,right}" (middle is plain "center").
+    # "center-left" reproduces printtarg's behaviour (the prior default) (#93).
+    patch_area_align: str = "center-left"
     pscale: float = 1.0
     sscale: float = 1.0
     border: float = 6.0            # base margin (drives leader/clip-holder)
@@ -137,6 +141,7 @@ class LayoutRecipe:
             spacer_palette=list(d.get("spacer_palette") or []),
             spacer_overrides=dict(d.get("spacer_overrides") or {}),
             edge_spacers=bool(d.get("edge_spacers", False)),
+            patch_area_align=d.get("patch_area_align") or "center-left",
             pscale=float(d.get("pscale", 1.0)), sscale=float(d.get("sscale", 1.0)),
             border=float(d.get("border", 6.0)),
             margin_top=m[0], margin_right=m[1], margin_bottom=m[2], margin_left=m[3],
@@ -220,6 +225,7 @@ class LayoutRecipe:
             "spacer_palette": list(self.spacer_palette) or None,
             "spacer_overrides": dict(self.spacer_overrides) or None,
             "edge_spacers": self.edge_spacers,
+            "patch_area_align": self.patch_area_align,
             "pscale": self.pscale,
             "sscale": self.sscale,
             "border": self.border,

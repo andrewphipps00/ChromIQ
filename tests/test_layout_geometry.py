@@ -252,3 +252,41 @@ def test_strip_label_offset_does_not_change_capacity():
     # offset is a render-time nudge; geometry/capacity stay put
     assert geometry.patches_per_sheet(instruments.build("i1"), *A4) == \
         geometry.patches_per_sheet(instruments.build("i1"), *A4)
+
+
+def test_patch_area_alignment_positions_block_without_changing_capacity():
+    """Patch-area alignment shifts the block within the usable area only — the
+    patch count is identical, but the realised margins move toward the chosen
+    anchor (#93). Default 'center-left' reproduces the prior placement."""
+    def geom(align):
+        return instruments.build("i1", patch_area_align=align)
+
+    cap = geometry.patches_per_sheet(geom("center-left"), *A4)
+    for align in ("top-left", "bottom-right", "center", "top-right"):
+        assert geometry.patches_per_sheet(geom(align), *A4) == cap
+
+    def insets(align):
+        g = geom(align)
+        lay = geometry.compute(g, *A4, cap)
+        return geometry.realized_margins_mm(g, *A4, lay)  # (L, R, T, B)
+
+    L0, R0, T0, B0 = insets("center-left")          # the prior default
+    Lt, Rt, Tt, Bt = insets("top-left")
+    Lb, Rb, Tb, Bb = insets("bottom-left")
+    Lr, Rr, Tr, Br = insets("top-right")
+    # top alignment → smaller top inset, larger bottom; bottom → the reverse
+    assert Tt < T0 and Bt > B0
+    assert Tb > T0 and Bb < B0
+    # right alignment → smaller right inset, larger left
+    assert Rr < R0 and Lr > L0
+
+
+def test_align_default_matches_legacy_placement():
+    """'center-left' must reproduce the exact placement the engine used before
+    the alignment option existed (vertically centred, left-anchored)."""
+    g = instruments.build("i1")
+    assert g.patch_area_align == "center-left"
+    lay = geometry.compute(g, *A4, 60)
+    p = geometry.placement(g, *A4, lay)
+    # left-anchored: x0 = margin_l + lbord (+ offset 0)
+    assert abs(p.x0 - (g.margin_l + g.lbord)) < 1e-9

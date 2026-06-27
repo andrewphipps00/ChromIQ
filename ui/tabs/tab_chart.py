@@ -5544,6 +5544,9 @@ class TabChart(QWidget):
             bits.append(tr("hexagonal"))
         if r.nolimit:
             bits.append(tr("no strip-length cap"))
+        # Patch-area alignment, only when it differs from the default.
+        if (r.patch_area_align or "center-left") != "center-left":
+            bits.append(tr("align {a}").format(a=r.patch_area_align))
         return " · ".join(bits)
 
     def _update_patch_count(self) -> None:
