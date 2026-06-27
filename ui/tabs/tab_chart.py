@@ -2476,6 +2476,21 @@ class TabChart(QWidget):
         self._refresh_manual_preset_bar(use_engine, status)
         self._refresh_name_prefix()     # keep the name field plain (no prefix)
 
+        # Live layout-info prediction (Manual + engine, before any chart exists).
+        if (use_engine and not getattr(self, "_margin_tiffs", None)
+                and getattr(self, "_manual_layout_panel", None) is not None):
+            try:
+                from workflow.layout_engine import instruments
+                r = self._current_layout_recipe()
+                geom = instruments.geom_from_build_kwargs(
+                    r.build_kwargs(), thresholds=self._combo_thresholds(
+                        r.instrument, r.paper))
+                pages_req = (self._manual_pages_spin.value()
+                             if self._manual_pages_spin is not None else 1)
+                self._predict_layout_info(geom, r.paper, pages_req)
+            except Exception:
+                pass
+
     # ------------------------------------------------------------------
     # Layout-engine per-chart preset bar (issue #93)
     # ------------------------------------------------------------------
@@ -5616,6 +5631,14 @@ class TabChart(QWidget):
             self._patch_count_lbl.setText("?")
             self._patch_detail_lbl.setText(tr("CUSTOM LAYOUT"))
 
+        # Live layout-info prediction (Guided + engine, before any chart exists).
+        guided_active = not (self._manual_btn is not None
+                             and self._manual_btn.isChecked())
+        if engine_on and guided_active and not getattr(self, "_margin_tiffs", None):
+            geom = self._engine_geom(instr, paper, dd=dd, td=td, eff_lb=eff_lb,
+                                     nsl=nsl_eff, pscale=eff_scale, margin=eff_margin)
+            self._predict_layout_info(geom, paper, pages)
+
         # Hidden-defaults info label (values mirror _collect_guided logic).
         # The base is fixed (no settings UI exposes it); reading it from settings
         # used to round-trip the auto-computed result back into the base via
@@ -6479,6 +6502,30 @@ class TabChart(QWidget):
         self._margin_ti2 = ti2 if (ti2 and Path(ti2).is_file()) else None
         self._update_margin_inspector()
         self._update_layout_info()
+
+    def _predict_layout_info(self, geom, paper: str, pages_req: int) -> None:
+        """Fill the Chart-layout-information panel with the engine's predicted
+        grid BEFORE a chart exists (#93). Engine geometry is deterministic, so a
+        capacity-filled layout is exactly what Generate will produce. Only used
+        while no generated chart is in the preview (then the .ti2 takes over)."""
+        panel = getattr(self, "_layout_info_panel", None)
+        if panel is None:
+            return
+        try:
+            from workflow.layout_engine import geometry, papers
+            w_mm, h_mm = papers.dimensions_mm(paper)
+            per_sheet = geometry.patches_per_sheet(geom, w_mm, h_mm)
+            if not per_sheet:
+                panel.show_placeholder()
+                return
+            lay = geometry.compute(geom, w_mm, h_mm, per_sheet * max(1, pages_req))
+            rows = lay.steps_in_pass
+            n0 = min(lay.total_patches, lay.patches_per_page)
+            cols = (n0 + rows - 1) // rows if rows else 0
+            panel.update_info(total=lay.total_patches, rows=rows, cols=cols,
+                              pages=lay.pages)
+        except Exception:
+            panel.show_placeholder()
 
     def _update_layout_info(self) -> None:
         """Fill the Chart-layout-information panel from the previewed chart's
