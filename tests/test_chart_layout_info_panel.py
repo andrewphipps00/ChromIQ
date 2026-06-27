@@ -48,3 +48,11 @@ def test_estimate_flagged_when_it_differs(app):
     assert "c47f17" in panel._estimate_labels["cols"].styleSheet()
     assert "c47f17" not in panel._estimate_labels["rows"].styleSheet()
     panel.deleteLater()
+
+
+def test_panel_has_tooltip_button(app):
+    from ui.chart_layout_info_panel import ChartLayoutInfoPanel
+    from ui.tooltip_button import TooltipButton
+    panel = ChartLayoutInfoPanel()
+    assert panel.findChildren(TooltipButton), "panel must have an ⓘ tooltip"
+    panel.deleteLater()

@@ -12,9 +12,11 @@ regenerating would give (#93).
 from __future__ import annotations
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QGridLayout, QGroupBox, QLabel, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import (QGridLayout, QGroupBox, QHBoxLayout, QLabel,
+                            QVBoxLayout, QWidget)
 
 from core.i18n import tr
+from ui.tooltip_button import TooltipButton
 
 _DASH = "—"
 _AMBER = "#c47f17"      # estimate differs from the chart on screen
@@ -76,6 +78,37 @@ class ChartLayoutInfoPanel(QGroupBox):
         grid.setColumnStretch(0, 1)
         v.addWidget(self._table)
         v.addStretch(1)
+
+        bottom = QHBoxLayout()
+        bottom.addStretch()
+        bottom.addWidget(TooltipButton(
+            tr("About chart layout information"),
+            tr("This panel shows the SIZE and SHAPE of your chart — how many "
+               "colour patches it has, how they're arranged, and how many pages "
+               "it needs — so you can judge a chart before (and after) you make "
+               "it.\n\n"
+               "What the rows mean:\n"
+               "• Total patches — how many colour squares the whole chart holds. "
+               "More patches usually means a more accurate profile, but a bigger "
+               "chart to print and measure.\n"
+               "• Patches per strip — how many patches sit in one strip (a strip "
+               "is a single column the instrument reads from top to bottom).\n"
+               "• Strips (this page) — how many of those strips fit across the "
+               "page you're looking at.\n"
+               "• Pages — how many sheets the chart spans.\n\n"
+               "The two columns:\n"
+               "• on screen — the real numbers of the chart currently in the "
+               "preview.\n"
+               "• estimate — what the settings you have right now would produce "
+               "if you generate. This is shown while the ChromIQ layout engine "
+               "is switched on, because the engine can work the layout out "
+               "exactly in advance.\n\n"
+               "Change a setting (patch size, paper, margins, alignment…) and the "
+               "estimate updates live. Any number that would come out different "
+               "from the chart on screen turns amber — so you can see the effect "
+               "of a change before re-generating the chart."),
+            self))
+        v.addLayout(bottom)
 
     # ------------------------------------------------------------------
     @staticmethod
