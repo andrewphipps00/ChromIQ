@@ -56,12 +56,18 @@ from core.i18n import tr
 
 class SettingsDialog(QDialog):
     def __init__(self, settings: "AppSettings", parent: QWidget | None = None,
-                 *, margin_combo: "tuple[str, str, str] | None" = None) -> None:
+                 *, margin_combo: "tuple[str, str, str] | None" = None,
+                 layout_combo: "tuple[str, str, str] | None" = None) -> None:
         super().__init__(parent)
         self._settings = settings
         # (instrument label, paper name, orientation) to preselect on the
         # Margin Thresholds tab (#80); None → the pulldowns' first entries.
         self._initial_margin_combo = margin_combo
+        # (engine instrument, paper code, mode) to preselect on the Chart
+        # Layout tab so it opens on the combination the user is editing in
+        # Create Chart — otherwise it always resets to i1/A4 and a preset saved
+        # under any other combination looks lost (#93). None → first entries.
+        self._initial_layout_combo = layout_combo
         self._update_checker: UpdateChecker | None = None
         self.setWindowTitle(tr("ChromIQ Preferences"))
         self.setWindowFlags(
@@ -1251,8 +1257,28 @@ class SettingsDialog(QDialog):
         self._layout_engine_check.toggled.connect(_sync_layout_enabled)
         _sync_layout_enabled(self._layout_engine_check.isChecked())
 
-        self._on_layout_instr_changed()   # populate paper+mode, then load
+        self._on_layout_instr_changed()      # populate paper+mode for the default
+        self._preselect_layout_combo()       # then jump to the active combo (#93)
         return self._scroll_wrap(page)
+
+    def _preselect_layout_combo(self) -> None:
+        """Select the instrument/paper/mode the user is editing in Create Chart,
+        so a preset saved under that combination is visible on open (#93)."""
+        combo = self._initial_layout_combo
+        if not combo:
+            return
+        inst, paper, mode = combo
+        i = self._layout_instr.findData(inst)
+        if i >= 0 and i != self._layout_instr.currentIndex():
+            self._layout_instr.setCurrentIndex(i)   # repopulates paper+mode, loads
+        elif i >= 0:
+            self._on_layout_instr_changed()         # same instrument: refresh lists
+        j = self._layout_paper.findData(paper)
+        if j >= 0:
+            self._layout_paper.setCurrentIndex(j)   # fires _load_layout_combo
+        k = self._layout_mode.findData(mode)
+        if k >= 0:
+            self._layout_mode.setCurrentIndex(k)    # fires _load_layout_combo
 
     def _scroll_wrap(self, page: QWidget) -> QWidget:
         """Wrap a settings tab in a fading scroll area so every tab scrolls and

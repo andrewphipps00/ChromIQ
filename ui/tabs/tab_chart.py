@@ -2551,9 +2551,12 @@ class TabChart(QWidget):
         self._refresh_manual_command_preview()
 
     def _edit_layout_defaults(self) -> None:
-        """Open Settings on the Chart Layout tab."""
+        """Open Settings on the Chart Layout tab, preselected to the layout the
+        user is editing here (#93)."""
         from ui.dialogs.settings_dialog import SettingsDialog
-        dlg = SettingsDialog(self._settings, self)
+        dlg = SettingsDialog(self._settings, self,
+                             margin_combo=self.current_margin_combo(),
+                             layout_combo=self.current_layout_combo())
         tabs = getattr(dlg, "_tabs", None)
         if tabs is not None:
             for i in range(tabs.count()):
@@ -6600,6 +6603,33 @@ class TabChart(QWidget):
             return None
         orient = "Landscape" if dims[0] > dims[1] else "Portrait"
         return (instr_label, paper_name, orient)
+
+    def current_layout_combo(self) -> "tuple[str, str, str] | None":
+        """The (engine instrument, paper code, layout mode) the Chart Layout tab
+        should preselect (#93), mirroring :meth:`current_margin_combo`. Follows
+        the live engine recipe in Manual when present, else the active
+        instrument + paper selection — so Preferences opens on what the user is
+        editing, instead of always resetting to i1/A4 (which made a preset saved
+        under any other combination look lost)."""
+        try:
+            if (self._manual_btn is not None and self._manual_btn.isChecked()
+                    and getattr(self, "_manual_layout_panel", None) is not None):
+                r = self._current_layout_recipe()
+                return (r.instrument, r.paper, r.mode())
+        except Exception:
+            pass
+        instr = {"3p": "p3"}.get(self._active_instrument_flag(),
+                                 self._active_instrument_flag())
+        if instr not in ("i1", "p3", "CM", "SS"):
+            instr = "i1"
+        paper = self._active_paper_code() or "A4"
+        try:
+            from workflow.layout_engine.presets import default_recipe
+            mode = default_recipe(instr, paper).mode()
+        except Exception:
+            mode = "clip" if instr in ("i1", "p3") else (
+                "freehand" if instr == "CM" else "flat")
+        return (instr, paper, mode)
 
     def refresh_margin_inspector_settings(self) -> None:
         """Re-read margin-inspector settings after the Preferences dialog closes
