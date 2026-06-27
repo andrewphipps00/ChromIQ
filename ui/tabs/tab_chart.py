@@ -2476,20 +2476,25 @@ class TabChart(QWidget):
         self._refresh_manual_preset_bar(use_engine, status)
         self._refresh_name_prefix()     # keep the name field plain (no prefix)
 
-        # Live layout-info prediction (Manual + engine, before any chart exists).
-        if (use_engine and not getattr(self, "_margin_tiffs", None)
-                and getattr(self, "_manual_layout_panel", None) is not None):
-            try:
-                from workflow.layout_engine import instruments
-                r = self._current_layout_recipe()
-                geom = instruments.geom_from_build_kwargs(
-                    r.build_kwargs(), thresholds=self._combo_thresholds(
-                        r.instrument, r.paper))
-                pages_req = (self._manual_pages_spin.value()
-                             if self._manual_pages_spin is not None else 1)
-                self._predict_layout_info(geom, r.paper, pages_req)
-            except Exception:
-                pass
+        # Live layout-info estimate (Manual + engine). Runs even with a chart on
+        # screen so the "estimate" column tracks the current settings (#93).
+        manual_active = (self._manual_btn is not None
+                         and self._manual_btn.isChecked())
+        if manual_active and getattr(self, "_layout_info_panel", None) is not None:
+            if use_engine and getattr(self, "_manual_layout_panel", None) is not None:
+                try:
+                    from workflow.layout_engine import instruments
+                    r = self._current_layout_recipe()
+                    geom = instruments.geom_from_build_kwargs(
+                        r.build_kwargs(), thresholds=self._combo_thresholds(
+                            r.instrument, r.paper))
+                    pages_req = (self._manual_pages_spin.value()
+                                 if self._manual_pages_spin is not None else 1)
+                    self._predict_layout_info(geom, r.paper, pages_req)
+                except Exception:
+                    self._layout_info_panel.clear_estimate()
+            else:
+                self._layout_info_panel.clear_estimate()
 
     # ------------------------------------------------------------------
     # Layout-engine per-chart preset bar (issue #93)
@@ -5631,13 +5636,19 @@ class TabChart(QWidget):
             self._patch_count_lbl.setText("?")
             self._patch_detail_lbl.setText(tr("CUSTOM LAYOUT"))
 
-        # Live layout-info prediction (Guided + engine, before any chart exists).
+        # Live layout-info estimate (Guided + engine). Runs even with a chart on
+        # screen, so its "estimate" column tracks the current settings while the
+        # "on screen" column keeps the generated chart's real numbers (#93).
         guided_active = not (self._manual_btn is not None
                              and self._manual_btn.isChecked())
-        if engine_on and guided_active and not getattr(self, "_margin_tiffs", None):
-            geom = self._engine_geom(instr, paper, dd=dd, td=td, eff_lb=eff_lb,
-                                     nsl=nsl_eff, pscale=eff_scale, margin=eff_margin)
-            self._predict_layout_info(geom, paper, pages)
+        if guided_active and getattr(self, "_layout_info_panel", None) is not None:
+            if engine_on:
+                geom = self._engine_geom(instr, paper, dd=dd, td=td, eff_lb=eff_lb,
+                                         nsl=nsl_eff, pscale=eff_scale,
+                                         margin=eff_margin)
+                self._predict_layout_info(geom, paper, pages)
+            else:
+                self._layout_info_panel.clear_estimate()
 
         # Hidden-defaults info label (values mirror _collect_guided logic).
         # The base is fixed (no settings UI exposes it); reading it from settings
@@ -6522,21 +6533,22 @@ class TabChart(QWidget):
             rows = lay.steps_in_pass
             n0 = min(lay.total_patches, lay.patches_per_page)
             cols = (n0 + rows - 1) // rows if rows else 0
-            panel.update_info(total=lay.total_patches, rows=rows, cols=cols,
-                              pages=lay.pages)
+            panel.set_estimate(total=lay.total_patches, rows=rows, cols=cols,
+                               pages=lay.pages)
         except Exception:
-            panel.show_placeholder()
+            panel.clear_estimate()
 
     def _update_layout_info(self) -> None:
-        """Fill the Chart-layout-information panel from the previewed chart's
-        .ti2 (patch count, strip grid) + page TIFFs (#93)."""
+        """Fill the on-screen column of the Chart-layout-information panel from
+        the previewed chart's .ti2 (patch count, strip grid) + page TIFFs (#93).
+        The estimate column is driven separately by the live predictors."""
         panel = getattr(self, "_layout_info_panel", None)
         if panel is None:
             return
         tiffs = getattr(self, "_margin_tiffs", None)
         ti2 = getattr(self, "_margin_ti2", None)
         if not tiffs or not ti2:
-            panel.show_placeholder()
+            panel.clear_actual()
             return
         try:
             import re
@@ -6550,10 +6562,9 @@ class TabChart(QWidget):
             if not (0 <= idx < len(passes)):
                 idx = 0
             cols = passes[idx] if passes else 0
-            panel.update_info(total=total, rows=rows, cols=cols,
-                              pages=len(tiffs))
+            panel.set_actual(total=total, rows=rows, cols=cols, pages=len(tiffs))
         except Exception:
-            panel.show_placeholder()
+            panel.clear_actual()
 
     def _update_margin_inspector(self) -> None:
         panel = getattr(self, "_margin_panel", None)

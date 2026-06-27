@@ -33,13 +33,14 @@ def test_layout_info_predicted_before_generate_with_engine(qapp, tmp_path):
     assert tab._margin_tiffs == []          # nothing generated yet
     tab._update_patch_count()               # Guided predictor runs
     panel = tab._layout_info_panel
-    # The panel shows a real prediction, not the placeholder.
+    # The estimate column shows a real prediction; on-screen is dashed (no chart).
     assert panel._placeholder.isHidden()
     assert not panel._table.isHidden()
-    total = int(panel._value_labels["total"].text())
-    rows = int(panel._value_labels["rows"].text())
-    cols = int(panel._value_labels["cols"].text())
+    total = int(panel._estimate_labels["total"].text())
+    rows = int(panel._estimate_labels["rows"].text())
+    cols = int(panel._estimate_labels["cols"].text())
     assert total > 0 and rows > 0 and cols > 0
+    assert panel._actual_labels["total"].text() == "—"
 
 
 def test_layout_info_placeholder_without_engine(qapp, tmp_path):
