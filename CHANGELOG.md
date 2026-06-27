@@ -1,5 +1,46 @@
 # Changelog
 
+## v3.13.0-beta.10
+
+A big round of layout-engine improvements from Knut's testing feedback.
+
+### ✨ New
+- **Two ways to lay out a chart.** A new **Create layout** choice in the engine's
+  Layout section: **Prioritise patch size** (the old behaviour — you set the
+  patch size and it fits as many as it can) or **Prioritise chart area** — you
+  say how many strips (columns) and/or patches per strip (rows) you want and
+  ChromIQ sizes the patches so the grid fills the usable area, so the patches
+  reach the margins evenly. Only the fields each choice needs are shown.
+- **Patch area alignment.** Place the whole patch block where you want it within
+  the page — top-left, centre, bottom-right, and the rest.
+- **Redesigned clip-border “Notes box”, now the default.** The left strip now
+  prints a tidy record: chart facts filled in automatically (patches,
+  instrument, paper, page, profile name, date) plus labelled lines to hand-write
+  the printer, ink set, paper and media settings. It scales with the clip width
+  and gives more writing room on larger sheets.
+- **Chart layout information panel** next to “Measured from Preview”: total
+  patches, patches per strip, strips and pages — with separate **on screen** and
+  **estimate** columns, so after loading a chart and changing a setting you can
+  see both what's printed and what re-generating would produce (changed values
+  turn amber). The estimate shows even before you create the chart.
+
+### 🔧 Changed
+- **The layout engine now honours your margin thresholds.** If a chart would land
+  inside the minimum margin you set (Preferences → Margin Thresholds), the engine
+  widens that margin automatically — so i1Pro charts meet the run-up the ruler
+  needs out of the box.
+- The **Chart Layout** preferences tab now opens on the instrument/paper you're
+  working with in Create Chart (so a saved preset is visible, not seemingly lost).
+
+### 🐛 Fixed
+- Removed a 1-pixel paper gap that could appear between a patch and its spacer.
+- The Create Chart info box now reflects the engine's real settings (clip border,
+  custom patch size, per-edge margins, paper orientation).
+
+**Note for testers:** if you saved engine **defaults** before this build, your
+saved clip-content and alignment values stay as they were until you re-save —
+new charts pick up the new defaults (e.g. the Notes box).
+
 ## v3.13.0-beta.9
 
 Fixes two layout-engine issues found in testing.
