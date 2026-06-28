@@ -1,5 +1,21 @@
 # Changelog
 
+## v3.13.0-beta.11
+
+Follow-up tweaks to the layout engine from testing.
+
+### ✨ New
+- **Chart layout information now shows patch size** (width × height), and the
+  panel has separate **on screen** / **estimate** columns with steady, aligned
+  widths so the numbers no longer shuffle as values change.
+
+### 🔧 Changed
+- **“Prioritise chart area” is now the default layout mode.** With columns/rows
+  left on “auto” it fills the page just like before, so default charts are
+  unchanged — but the area fields are right there when you want to pin a grid.
+- The Chart layout estimate now refreshes immediately when you switch between
+  Guided and Manual.
+
 ## v3.13.0-beta.10
 
 A big round of layout-engine improvements from Knut's testing feedback.
