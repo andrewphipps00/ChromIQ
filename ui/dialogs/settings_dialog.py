@@ -1201,6 +1201,14 @@ class SettingsDialog(QDialog):
                "• SpectroScan — rectangular or hexagonal patches; hexagons "
                "tessellate tighter, fitting a few more per sheet."),
             self), 1, 2)
+        # Clip-border On/Off for CM/SS — same extra selector as Create Chart, so
+        # the toggle is reachable here too (Knut, #93). i1/p3 use their Mode row.
+        self._layout_clip_enable_lbl = QLabel(tr("Clip border:"), self)
+        sel.addWidget(self._layout_clip_enable_lbl, 2, 0)
+        self._layout_clip_enable = NoScrollComboBox(self)
+        self._layout_clip_enable.addItem(tr("Off — more patches"), "off")
+        self._layout_clip_enable.addItem(tr("On"), "on")
+        sel.addWidget(self._layout_clip_enable, 2, 1)
         sel.setColumnStretch(1, 1)
         sel.setColumnStretch(3, 1)
         v.addLayout(sel)
@@ -1237,6 +1245,8 @@ class SettingsDialog(QDialog):
         self._layout_instr.currentIndexChanged.connect(self._on_layout_instr_changed)
         self._layout_paper.currentIndexChanged.connect(self._load_layout_combo)
         self._layout_mode.currentIndexChanged.connect(self._load_layout_combo)
+        self._layout_clip_enable.currentIndexChanged.connect(
+            self._on_layout_clip_enable_changed)
         # panel.changed (wired above) drives _on_layout_field_changed
 
         # Grey the whole body (controls + labels) unless the engine is enabled —
@@ -1305,6 +1315,10 @@ class SettingsDialog(QDialog):
             self._layout_mode.addItem(label, key)
         from ui.dialogs.layout_options_panel import LayoutOptionsPanel
         self._layout_mode_lbl.setText(LayoutOptionsPanel.mode_label_for(inst))
+        # The extra clip-border On/Off selector is for CM/SS only.
+        is_band = inst in ("CM", "SS")
+        self._layout_clip_enable.setVisible(is_band)
+        self._layout_clip_enable_lbl.setVisible(is_band)
         self._loading_layout = False
         self._load_layout_combo()
 
@@ -1318,8 +1332,20 @@ class SettingsDialog(QDialog):
         recipe = self._layout_store.get(inst, paper, mode)
         self._loading_layout = True
         self._layout_panel.set_recipe(recipe)
+        # Mirror the loaded clip state into the CM/SS On/Off selector.
+        i = self._layout_clip_enable.findData(
+            "on" if self._layout_panel.clip_enabled() else "off")
+        self._layout_clip_enable.setCurrentIndex(i if i >= 0 else 0)
         self._loading_layout = False
         self._update_layout_calc()
+
+    def _on_layout_clip_enable_changed(self) -> None:
+        if self._loading_layout:
+            return
+        self._layout_panel.set_clip_enabled(
+            self._layout_clip_enable.currentData() == "on")
+        # set_clip_enabled flips the panel's content mode → panel.changed →
+        # _on_layout_field_changed persists it; nothing more to do here.
 
     def _recipe_from_fields(self):
         from workflow.layout_engine.presets import default_recipe

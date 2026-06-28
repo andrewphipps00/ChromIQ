@@ -73,3 +73,36 @@ def test_chart_layout_preset_saves_and_reopens_visible(_app, tmp_path):
             assert dlg2._recipe_from_fields().margin_top == 33.0
         finally:
             dlg2.deleteLater()
+
+
+def test_chart_layout_clip_enable_for_cm_ss(_app, tmp_path):
+    """The CM/SS clip-border On/Off selector is shown only for CM/SS, drives the
+    embedded panel's content mode, and persists through save → reopen (#93)."""
+    import core.preset_store as ps
+    from ui.dialogs.settings_dialog import SettingsDialog
+    with mock.patch.object(ps, "presets_dir", lambda: Path(tmp_path)):
+        combo = ("SS", "A4", "flat")
+        dlg = SettingsDialog(_FakeSettings(), None, layout_combo=combo)
+        try:
+            # hidden for i1, shown for SS (isHidden reflects the explicit
+            # setVisible call without needing the tab to be the current one)
+            dlg._layout_instr.setCurrentIndex(dlg._layout_instr.findData("i1"))
+            assert dlg._layout_clip_enable.isHidden()
+            dlg._layout_instr.setCurrentIndex(dlg._layout_instr.findData("SS"))
+            assert not dlg._layout_clip_enable.isHidden()
+            dlg._layout_paper.setCurrentIndex(dlg._layout_paper.findData("A4"))
+            # turn clip on → panel content becomes a band, persist
+            dlg._layout_clip_enable.setCurrentIndex(
+                dlg._layout_clip_enable.findData("on"))
+            assert dlg._layout_panel.clip_enabled()
+            assert dlg._recipe_from_fields().clip_content_mode != "off"
+            dlg._save_and_close()
+        finally:
+            dlg.deleteLater()
+
+        dlg2 = SettingsDialog(_FakeSettings(), None, layout_combo=("SS", "A4", "flat"))
+        try:
+            assert dlg2._layout_clip_enable.currentData() == "on"
+            assert dlg2._layout_panel.clip_enabled()
+        finally:
+            dlg2.deleteLater()

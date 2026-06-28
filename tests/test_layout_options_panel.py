@@ -194,6 +194,31 @@ def test_engine_info_line_from_recipe_reflects_recipe():
     assert "9×9 mm" not in s
 
 
+def test_cm_ss_clip_enable_selector(app):
+    """CM/SS get an extra clip-border On/Off selector (i1/p3 use their Mode
+    selector). It's hidden for i1, drives the content on/off, and hides the
+    content group when off (#93, Knut)."""
+    from ui.dialogs.layout_options_panel import LayoutOptionsPanel
+    from workflow.layout_engine.presets import LayoutRecipe
+    p = LayoutOptionsPanel(with_selectors=True)
+    p.show()
+    p.instr.setCurrentIndex(p.instr.findData("i1"))
+    assert not p.clip_enable.isVisibleTo(p)             # i1 uses its Mode combo
+    p.instr.setCurrentIndex(p.instr.findData("CM"))
+    assert p.clip_enable.isVisibleTo(p)
+    assert p.clip_enable.currentData() == "off"          # default off
+    assert not p._clip_content_grp.isVisibleTo(p)        # group hidden when off
+    p.clip_enable.setCurrentIndex(p.clip_enable.findData("on"))
+    assert p.clip_content_mode.currentData() == "notes"  # seeds a notes band
+    assert p._clip_content_grp.isVisibleTo(p)
+    p.clip_enable.setCurrentIndex(p.clip_enable.findData("off"))
+    assert p.clip_content_mode.currentData() == "off"
+    assert not p._clip_content_grp.isVisibleTo(p)
+    # set_recipe with a band on reflects in the selector
+    p.set_recipe(LayoutRecipe(instrument="SS", paper="A4", clip_content_mode="notes"))
+    assert p.clip_enable.currentData() == "on"
+
+
 def test_use_instrument_margins_fills_and_locks(app):
     """Ticking "Use instrument margins" fills the four margins from the wired
     threshold lookup and locks them read-only (#93, Knut)."""

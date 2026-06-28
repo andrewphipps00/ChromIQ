@@ -112,24 +112,41 @@ class LayoutOptionsPanel(QWidget):
                    "ColorMunki it's the reading density (hand-held vs rig vs "
                    "extra-high); for the SpectroScan it's rectangular vs hexagonal "
                    "patches."), self), 1, 4)
+            # Clip-border On/Off for CM/SS — an extra selector so they get the
+            # same clip toggle the i1Pro has in its Mode selector (Knut, #93).
+            # Mirrors the content on/off: On reserves a notes band, Off hides it.
+            self._clip_enable_lbl = QLabel(tr("Clip border:"), self)
+            self.clip_enable = NoScrollComboBox(self)
+            self.clip_enable.addItem(tr("Off — more patches"), "off")
+            self.clip_enable.addItem(tr("On"), "on")
+            self.clip_enable.currentIndexChanged.connect(self._on_clip_enable_changed)
+            sel.addWidget(self._clip_enable_lbl, 2, 0)
+            sel.addWidget(self.clip_enable, 2, 1, 1, 3)
+            sel.addWidget(TooltipButton(
+                tr("Clip border"),
+                tr("Reserve a clip-border strip on this chart (the same option the "
+                   "i1Pro has). On reserves a band you can fill with a notes box, "
+                   "text or a logo in the Clip-border content section below; Off "
+                   "uses the whole page for patches. Choose which edge it sits on "
+                   "in that section."), self), 2, 4)
             # Paper + Pages share a row; paper gets the stretch (wider).
             self.paper = NoScrollComboBox(self)
-            sel.addWidget(QLabel(tr("Paper:"), self), 2, 0)
-            sel.addWidget(self.paper, 2, 1)
+            sel.addWidget(QLabel(tr("Paper:"), self), 3, 0)
+            sel.addWidget(self.paper, 3, 1)
             self._pages_lbl = QLabel(tr("Pages:"), self)
-            sel.addWidget(self._pages_lbl, 2, 2)
+            sel.addWidget(self._pages_lbl, 3, 2)
             self.pages = NoScrollSpinBox(self)
             self.pages.setRange(1, 20)
             self.pages.setValue(1)
             self.pages.setMaximumWidth(70)
             self.pages.valueChanged.connect(self._emit)
-            sel.addWidget(self.pages, 2, 3)
+            sel.addWidget(self.pages, 3, 3)
             sel.addWidget(TooltipButton(
                 tr("Paper and pages"),
                 tr("Paper is the sheet size you'll print on — the profile is only "
                    "valid for the paper you actually use. Pages is how many sheets "
                    "to spread the patches across: more pages = more patches total "
-                   "(and more ink and paper)."), self), 2, 4)
+                   "(and more ink and paper)."), self), 3, 4)
             # Custom paper W×H (shown only when Paper = "Custom…").
             self._custom_paper_w = QWidget(self)
             _cpl = QHBoxLayout(self._custom_paper_w)
@@ -143,7 +160,7 @@ class LayoutOptionsPanel(QWidget):
             self.custom_w.setValue(210); self.custom_h.setValue(297)
             _cpl.addWidget(self.custom_w); _cpl.addWidget(QLabel("×", self))
             _cpl.addWidget(self.custom_h); _cpl.addStretch()
-            sel.addWidget(self._custom_paper_w, 3, 0, 1, 4)
+            sel.addWidget(self._custom_paper_w, 4, 0, 1, 4)
             self._custom_paper_w.setVisible(False)
             sel.setColumnStretch(1, 1)        # paper / instrument / mode expand
             v.addLayout(sel)
@@ -1015,6 +1032,13 @@ class LayoutOptionsPanel(QWidget):
         self.mode.setCurrentIndex(j if j >= 0 else 0)
         if getattr(self, "_mode_lbl", None) is not None:
             self._mode_lbl.setText(self.mode_label_for(inst))
+        # The extra clip-border On/Off selector is for CM/SS only (i1/p3 use
+        # their Mode selector for it).
+        if hasattr(self, "clip_enable"):
+            is_band = inst in ("CM", "SS")
+            self.clip_enable.setVisible(is_band)
+            self._clip_enable_lbl.setVisible(is_band)
+            self._sync_clip_enable_display()
         self._loading = False
         self._on_paper_changed()
 
@@ -1034,7 +1058,10 @@ class LayoutOptionsPanel(QWidget):
         is_band_inst = inst in ("CM", "SS")
         content_on = (hasattr(self, "clip_content_mode")
                       and self.clip_content_mode.currentData() != "off")
-        show_group = clip_mode or is_band_inst
+        # For CM/SS the band (and its content group) appears only when the clip
+        # border is turned on — i.e. content is set to something — matching the
+        # i1Pro, whose group hides when its clip is off (#93).
+        show_group = clip_mode or (is_band_inst and content_on)
         show_width = clip_mode or (is_band_inst and content_on)
         for w in (self.clip_width_label, self.clip_width, self.clip_width_tip):
             w.setVisible(show_width)
@@ -1060,8 +1087,48 @@ class LayoutOptionsPanel(QWidget):
         self._sync_clip_content_enabled()
         # On CM/SS the clip-width row appears only once notes content is on, so
         # re-evaluate visibility when the content mode changes (#93).
+        self._sync_clip_enable_display()
         self._update_clip_visibility()
         self._emit()
+
+    def _sync_clip_enable_display(self) -> None:
+        """Keep the CM/SS clip-border On/Off selector in step with the content
+        mode (On ⇔ content set, Off ⇔ content off), without re-triggering its
+        own handler (#93)."""
+        if not hasattr(self, "clip_enable"):
+            return
+        on = (hasattr(self, "clip_content_mode")
+              and self.clip_content_mode.currentData() not in (None, "off"))
+        i = self.clip_enable.findData("on" if on else "off")
+        self.clip_enable.blockSignals(True)
+        self.clip_enable.setCurrentIndex(i if i >= 0 else 0)
+        self.clip_enable.blockSignals(False)
+
+    def _on_clip_enable_changed(self, *_a) -> None:
+        """The CM/SS clip-border On/Off selector drives the content on/off."""
+        self.set_clip_enabled(self.clip_enable.currentData() == "on")
+
+    def clip_enabled(self) -> bool:
+        """Whether a clip / notes band is currently turned on (content set)."""
+        return (hasattr(self, "clip_content_mode")
+                and self.clip_content_mode.currentData() not in (None, "off"))
+
+    def set_clip_enabled(self, on: bool) -> None:
+        """Turn the clip / notes band on or off by driving the content mode: On
+        seeds a notes band (if none yet), Off clears it (#93). Lets a host (the
+        Settings window) expose the CM/SS clip toggle without its own selector."""
+        cur = self.clip_content_mode.currentData()
+        if on and cur in (None, "off"):
+            j = self.clip_content_mode.findData("notes")
+            if j >= 0:
+                self.clip_content_mode.setCurrentIndex(j)   # fires content-changed
+        elif not on and cur not in (None, "off"):
+            j = self.clip_content_mode.findData("off")
+            if j >= 0:
+                self.clip_content_mode.setCurrentIndex(j)   # fires content-changed
+        else:
+            self._update_clip_visibility()
+            self._emit()
 
     def set_threshold_lookup(self, fn) -> None:
         """Wire a callable ``fn(instrument, paper_code) -> {L,R,T,B}|None`` that
@@ -1616,6 +1683,7 @@ class LayoutOptionsPanel(QWidget):
         self.clip_text_font.setCurrentIndex(_cf if _cf >= 0 else 0)
         self.clip_image_path.setText(r.clip_image_path)
         self._sync_clip_content_enabled()
+        self._sync_clip_enable_display()
         self.randomize_cb.setChecked(r.randomize)
         _fixed = r.seed is not None
         self.fixed_seed_cb.setChecked(_fixed)
