@@ -130,6 +130,7 @@ def build(
     nolpcbord: bool = False,
     nolimit: bool = False,
     clip_border_width: float = 26.0,
+    clip_band: float = 0.0,
     edge_spacers: bool = False,
     patch_area_align: str = "center-left",
     clip_side: str = "left",
@@ -146,7 +147,7 @@ def build(
     geom = _build_base(
         key, pscale=pscale, sscale=sscale, hflag=hflag, density=density,
         spacer_on=spacer_on, border=border, nolpcbord=nolpcbord, nolimit=nolimit,
-        clip_border_width=clip_border_width)
+        clip_border_width=clip_border_width, clip_band=clip_band)
     mt, mr, mb, ml = margins if margins else (geom.border,) * 4
     plen, pwid, rrsp = geom.plen, geom.pwid, geom.rrsp
     if patch_h:
@@ -183,7 +184,8 @@ GEOM_BUILD_KEYS = (
     "hflag", "density", "spacer_on", "pscale", "sscale", "border", "margins",
     "patch_w", "patch_h", "spacer_width", "inter_patch", "strip_gap", "max_strip",
     "strip_indicator_gap", "offset_x", "offset_y", "nolpcbord", "nolimit",
-    "clip_border_width", "edge_spacers", "patch_area_align", "clip_side",
+    "clip_border_width", "clip_band", "edge_spacers", "patch_area_align",
+    "clip_side",
 )
 
 
@@ -197,6 +199,12 @@ def geom_from_build_kwargs(kw: dict, thresholds: dict | None = None) -> Geom:
     the page margins are first raised so the realised patch area meets those
     minimums — so both the capacity estimate and the render honour the user's
     margin thresholds from this one chokepoint (#93)."""
+    # CM/SS have no native clip border, but can still carry a notes/clip band
+    # when clip content is on — reserve that band so capacity reflects it (#93).
+    if (kw.get("instrument") in ("CM", "SS")
+            and kw.get("clip_content_mode", "off") not in ("off", None)
+            and not kw.get("clip_band")):
+        kw = {**kw, "clip_band": float(kw.get("clip_border_width") or 26.0)}
     if thresholds:
         from . import margins_fit   # lazy: imports this module
         kw, _notes = margins_fit.clamp_margins_to_thresholds(kw, thresholds)
@@ -226,6 +234,7 @@ def _build_base(
     nolpcbord: bool = False,
     nolimit: bool = False,
     clip_border_width: float = 26.0,
+    clip_band: float = 0.0,
 ) -> Geom:
     """Resolve :class:`Geom` for *key* with the given options.
 
@@ -273,6 +282,10 @@ def _build_base(
             has_clip_border=True,
         )
 
+    # Optional notes band for instruments without a native clip border (CM/SS):
+    # reserve the same total zone from the edge as the i1Pro clip (#93, Knut).
+    _band = max(0.0, clip_band - border) if clip_band > 0 else 0.0
+
     # ---- X-Rite ColorMunki ---------------------------------------------
     if key == "CM":
         plen = pscale * 14.0
@@ -289,11 +302,11 @@ def _build_base(
         return Geom(
             key=key, plen=plen, pspa=spacer(1.0), tspa=25.0, pwid=pwid, rrsp=rrsp,
             lspa=border + 7.0 + 20.0, lcar=lcar, txhisl=txhisl, pglth=5.0,
-            border=border, lbord=0.0, hxeh=hxeh, hxew=0.0, clwi=0.0, rlwi=0.0,
+            border=border, lbord=_band, hxeh=hxeh, hxew=0.0, clwi=0.0, rlwi=0.0,
             mxpprow=MAXPPROW, mxrowl=MAXROWLEN, rpstrip=999, nextrap=0,
             dorspace=False, dopglabel=False,   # page-label column reclaimed (#93)
             padlrow=True, target_name=name,
-            has_clip_border=False,
+            has_clip_border=_band > 0,
         )
 
     # ---- GretagMacbeth SpectroScan (flatbed) ---------------------------
@@ -309,11 +322,11 @@ def _build_base(
         return Geom(
             key=key, plen=plen, pspa=0.0, tspa=0.0, pwid=pscale * 7.0, rrsp=pscale * 7.0,
             lspa=border + 7.0, lcar=0.0, txhisl=5.0, pglth=5.0,
-            border=border, lbord=0.0, hxeh=hxeh, hxew=hxew, clwi=0.0, rlwi=7.5,
+            border=border, lbord=_band, hxeh=hxeh, hxew=hxew, clwi=0.0, rlwi=7.5,
             mxpprow=MAXPPROW, mxrowl=MAXROWLEN, rpstrip=999, nextrap=0,
             dorspace=False, dopglabel=False,   # page-label column reclaimed (#93)
             padlrow=False, target_name=name,
-            has_clip_border=False, extra_keywords=extra,
+            has_clip_border=_band > 0, extra_keywords=extra,
         )
 
     # ---- X-Rite DTP41 ---------------------------------------------------

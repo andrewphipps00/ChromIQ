@@ -178,6 +178,7 @@ def build_chart(
         "strip_indicator_gap": strip_indicator_gap, "offset_x": offset_x,
         "offset_y": offset_y, "nolpcbord": nolpcbord, "nolimit": nolimit,
         "clip_border_width": clip_border_width, "clip_side": clip_side,
+        "clip_content_mode": clip_content_mode,
         "edge_spacers": edge_spacers,
         "patch_area_align": patch_area_align, "layout_mode": layout_mode,
         "area_method": area_method, "area_cols": area_cols,

@@ -1003,19 +1003,28 @@ class LayoutOptionsPanel(QWidget):
         self._on_paper_changed()
 
     def _update_clip_visibility(self, *_a) -> None:
-        """Show the clip-border width row only for i1/p3 in clip-border mode."""
+        """Show the clip-content group when a clip / notes band is available: for
+        i1/p3 in clip-border mode, and for CM/SS (which can carry an optional
+        notes band, #93). The clip-width row shows whenever that band exists
+        (i1/p3 clip mode, or CM/SS once notes content is turned on)."""
         if not hasattr(self, "clip_width"):
             return
         if self.instr is not None:
             inst = self.instr.currentData() or "i1"
-            clip = inst in ("i1", "p3") and (self.mode.currentData() == "clip")
+            clip_mode = inst in ("i1", "p3") and (self.mode.currentData() == "clip")
         else:
-            clip = self._clip and self._inst in ("i1", "p3")
+            inst = self._inst
+            clip_mode = self._clip and inst in ("i1", "p3")
+        is_band_inst = inst in ("CM", "SS")
+        content_on = (hasattr(self, "clip_content_mode")
+                      and self.clip_content_mode.currentData() != "off")
+        show_group = clip_mode or is_band_inst
+        show_width = clip_mode or (is_band_inst and content_on)
         for w in (self.clip_width_label, self.clip_width, self.clip_width_tip):
-            w.setVisible(clip)
+            w.setVisible(show_width)
         if hasattr(self, "_clip_content_grp"):
-            self._clip_content_grp.setVisible(clip)
-            if clip:
+            self._clip_content_grp.setVisible(show_group)
+            if show_group:
                 self._refresh_clip_preview()
 
     # ---- Clip-border content -------------------------------------------
@@ -1033,6 +1042,9 @@ class LayoutOptionsPanel(QWidget):
 
     def _on_clip_content_changed(self, *_a) -> None:
         self._sync_clip_content_enabled()
+        # On CM/SS the clip-width row appears only once notes content is on, so
+        # re-evaluate visibility when the content mode changes (#93).
+        self._update_clip_visibility()
         self._emit()
 
     def _sync_layout_mode(self, *_a) -> None:

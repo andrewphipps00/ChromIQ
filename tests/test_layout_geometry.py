@@ -371,3 +371,25 @@ def test_clip_side_left_right():
     ar = geometry.clip_area_mm(gr, A4[1], A4[0])
     assert al[0] < ar[0]            # band moves from the left edge to the right
     assert ar[0] + ar[2] <= A4[0] + 1e-6
+
+
+def test_cm_ss_notes_band_reserves_space():
+    """CM/SS have no native clip border, but a notes band can be reserved on
+    either edge when clip content is on — reducing capacity (#93, Knut)."""
+    from workflow.layout_engine.presets import default_recipe
+    from dataclasses import replace
+
+    def cap(content, side="left"):
+        kw = replace(default_recipe("CM", "A4"), clip_content_mode=content,
+                     clip_side=side).build_kwargs()
+        g = instruments.geom_from_build_kwargs(kw)
+        return geometry.patches_per_sheet(g, *A4), g
+
+    base, gb = cap("off")
+    withnotes, gn = cap("notes")
+    assert gb.lbord == 0 and gn.lbord > 0          # band reserved only with notes
+    assert withnotes < base                        # capacity drops for the band
+    # band flips to the right edge
+    area = geometry.clip_area_mm(gn, A4[1], A4[0])
+    area_r = geometry.clip_area_mm(cap("notes", "right")[1], A4[1], A4[0])
+    assert area[0] < area_r[0]
