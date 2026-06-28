@@ -904,7 +904,12 @@ class ChartCreator:
             nolimit=bool(params.no_strip_limit),
         )
         if params.instrument in ("i1", "p3"):
-            kw["nolpcbord"] = _effective_suppress_lb(params)
+            suppress = _effective_suppress_lb(params)
+            kw["nolpcbord"] = suppress
+            # Guided/basic path (no layout recipe): when the i1/p3 clip border is
+            # kept, fill it with the ChromIQ notes record instead of leaving it
+            # blank (Manual already defaults to this via the recipe) (#93).
+            kw["clip_content_mode"] = "off" if suppress else "notes"
         elif params.instrument == "CM":
             kw["density"] = 3 if params.triple_density else (
                 2 if params.double_density else 1)

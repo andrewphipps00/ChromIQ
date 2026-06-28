@@ -200,3 +200,19 @@ def test_full_recipe_chart_builds(tmp_path: Path) -> None:
         (work_dir / "runs" / "run1" / "rp.channels.json").read_text())
     assert sidecar["layout"]["engine"] == "chromiq"
     assert sidecar["layout"]["recipe"]["margin_top"] == 12
+
+
+def test_guided_clip_border_uses_notes_when_kept(tmp_path: Path) -> None:
+    """Guided/basic path: keeping the i1/p3 clip border fills it with the notes
+    record; suppressing it leaves no clip content (#93)."""
+    creator = ChartCreator(_EngineRunner(), _MockFileManager(tmp_path / "p"),
+                           _EngineSettings())
+    kept = creator._engine_build_kwargs(
+        ChartParams(instrument="i1", paper="A4", disable_left_border=False))
+    assert kept["clip_content_mode"] == "notes" and kept["nolpcbord"] is False
+    supp = creator._engine_build_kwargs(
+        ChartParams(instrument="i1", paper="A4", disable_left_border=True))
+    assert supp["clip_content_mode"] == "off" and supp["nolpcbord"] is True
+    # non-clip instruments don't set it
+    assert "clip_content_mode" not in creator._engine_build_kwargs(
+        ChartParams(instrument="CM", paper="A4"))
