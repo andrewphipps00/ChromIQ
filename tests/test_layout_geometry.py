@@ -111,12 +111,18 @@ def test_clip_border_width_drives_lbord():
 
 
 def test_clip_area_only_when_clip_border():
-    # i1 with clip border → a 20 mm-wide band (clip_width 26 − margin 6).
-    area = geometry.clip_area_mm(instruments.build("i1", border=6.0), 297.0)
-    assert area is not None
-    x, y, w, h = area
-    assert w == pytest.approx(20.0)
-    assert h == pytest.approx(297.0 - 12.0)
+    # i1 with clip border → the full clip zone (26 mm) minus the printer-safe
+    # inset, NOT shrunk by the patch margin, so the content stays wide (#93).
+    inset = geometry.CLIP_CONTENT_INSET_MM
+    a6 = geometry.clip_area_mm(instruments.build("i1", border=6.0), 297.0)
+    a10 = geometry.clip_area_mm(instruments.build("i1", border=10.0), 297.0)
+    assert a6 is not None
+    assert a6[0] == pytest.approx(inset)              # starts at the inset
+    assert a6[2] == pytest.approx(26.0 - inset)       # full zone minus inset
+    assert a6[3] == pytest.approx(297.0 - 12.0)
+    # a larger patch margin must NOT shrink the clip content any more (Guided
+    # used to come out narrower than Manual).
+    assert a10[2] == pytest.approx(a6[2])
     # no clip border → no area.
     assert geometry.clip_area_mm(instruments.build("i1", nolpcbord=True), 297.0) is None
     assert geometry.clip_area_mm(instruments.build("CM"), 297.0) is None

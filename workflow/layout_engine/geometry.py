@@ -269,17 +269,35 @@ def realized_margins_mm(geom: Geom, paper_w_mm: float, paper_h_mm: float,
     return (max(0.0, left), max(0.0, right), max(0.0, top), max(0.0, bottom))
 
 
+# Printer-safe inset for clip-strip content (mm). The clip strip is white space
+# the scanner clip grips, so its content can sit closer to the page edge than the
+# patch margin — we keep a small safety inset. This makes the clip content (e.g.
+# the notes box) the same width regardless of the patch margin, so it isn't
+# shrunk by a larger margin (#93, Guided vs Manual). 4 mm is a middle ground
+# between the old Manual start (the 6 mm patch margin) and a flush 2 mm edge.
+CLIP_CONTENT_INSET_MM = 4.0
+
+
 def clip_area_mm(geom: Geom, paper_h_mm: float
                  ) -> tuple[float, float, float, float] | None:
     """The content-safe rectangle of the left clip strip, in mm.
 
-    Returns ``(x, y, w, h)`` for the reserved left band (the ``lbord`` strip
-    between the page margin and the first patch column, running from the top to
-    the bottom margin), or ``None`` when the instrument has no clip border.
+    Returns ``(x, y, w, h)`` for the reserved left band — the whole zone from a
+    small printer-safe inset out to the clip-border width (where the first patch
+    column begins), running from the top to the bottom margin — or ``None`` when
+    the instrument has no clip border.
+
+    The band spans the full clip zone (not just ``lbord`` after the patch
+    margin): the patch margin only governs where PATCHES start, but the clip
+    strip is white run-up the instrument grips, so its content uses the edge down
+    to ``CLIP_CONTENT_INSET_MM``. Otherwise a larger patch margin would needlessly
+    shrink the clip content (the Guided-vs-Manual size difference, #93).
     """
     if geom.lbord <= 0:
         return None
-    return (geom.margin_l, geom.margin_t, geom.lbord,
+    clip_w = geom.lbord + geom.border          # full reserved zone from the edge
+    inset = min(CLIP_CONTENT_INSET_MM, clip_w * 0.2)
+    return (inset, geom.margin_t, max(0.0, clip_w - inset),
             max(0.0, paper_h_mm - geom.margin_t - geom.margin_b))
 
 
