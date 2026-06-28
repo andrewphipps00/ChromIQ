@@ -6546,7 +6546,7 @@ class TabChart(QWidget):
             n0 = min(lay.total_patches, lay.patches_per_page)
             cols = (n0 + rows - 1) // rows if rows else 0
             panel.set_estimate(total=lay.total_patches, rows=rows, cols=cols,
-                               pages=lay.pages)
+                               pages=lay.pages, patch_w=geom.pwid, patch_h=geom.plen)
         except Exception:
             panel.clear_estimate()
 
@@ -6574,9 +6574,33 @@ class TabChart(QWidget):
             if not (0 <= idx < len(passes)):
                 idx = 0
             cols = passes[idx] if passes else 0
-            panel.set_actual(total=total, rows=rows, cols=cols, pages=len(tiffs))
+            pw, ph = self._chart_patch_size_mm(ti2)
+            panel.set_actual(total=total, rows=rows, cols=cols, pages=len(tiffs),
+                             patch_w=pw, patch_h=ph)
         except Exception:
             panel.clear_actual()
+
+    @staticmethod
+    def _chart_patch_size_mm(ti2: "Path") -> "tuple[float, float]":
+        """Patch (width, height) in mm of the previewed chart, from its engine
+        ``channels.json`` patch rects (px → mm). (0, 0) for printtarg charts /
+        when unavailable (#93)."""
+        try:
+            import json
+            sidecar = Path(ti2).with_suffix(".channels.json")
+            if not sidecar.is_file():
+                return (0.0, 0.0)
+            doc = json.loads(sidecar.read_text())
+            layout = doc.get("layout") or {}
+            rects = layout.get("patches") or []
+            recipe = layout.get("recipe") or {}
+            dpi = float(recipe.get("dpi") or 300)
+            if not rects or dpi <= 0:
+                return (0.0, 0.0)
+            r0 = rects[0]
+            return (r0["w"] * 25.4 / dpi, r0["h"] * 25.4 / dpi)
+        except Exception:
+            return (0.0, 0.0)
 
     def _update_margin_inspector(self) -> None:
         panel = getattr(self, "_margin_panel", None)

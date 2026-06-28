@@ -46,10 +46,14 @@ class ChartLayoutInfoPanel(QGroupBox):
         self._placeholder.setStyleSheet("color: #909090; font-size: 11px;")
         v.addWidget(self._placeholder)
 
+        # Fixed value-column width so the columns don't shift as values change
+        # width (e.g. "8.9×8.9" vs "—"); the label column absorbs the slack.
+        _COLW = 72
+
         self._table = QWidget(self)
         grid = QGridLayout(self._table)
         grid.setContentsMargins(0, 0, 0, 0)
-        grid.setHorizontalSpacing(14)
+        grid.setHorizontalSpacing(18)
         grid.setVerticalSpacing(3)
 
         hdr_screen = QLabel(tr("on screen"), self)
@@ -57,6 +61,7 @@ class ChartLayoutInfoPanel(QGroupBox):
         for w in (hdr_screen, hdr_est):
             w.setAlignment(Qt.AlignmentFlag.AlignRight)
             w.setStyleSheet("color: #909090; font-size: 10px;")
+            w.setFixedWidth(_COLW)
         grid.addWidget(hdr_screen, 0, 1)
         grid.addWidget(hdr_est, 0, 2)
 
@@ -65,6 +70,7 @@ class ChartLayoutInfoPanel(QGroupBox):
             ("rows", tr("Patches per strip")),
             ("cols", tr("Strips (this page)")),
             ("pages", tr("Pages")),
+            ("patch", tr("Patch size (mm)")),
         )
         for r, (key, label) in enumerate(rows, start=1):
             grid.addWidget(QLabel(label, self), r, 0)
@@ -73,6 +79,7 @@ class ChartLayoutInfoPanel(QGroupBox):
                 val.setAlignment(Qt.AlignmentFlag.AlignRight
                                  | Qt.AlignmentFlag.AlignVCenter)
                 val.setStyleSheet("font-family: Menlo; font-size: 11px;")
+                val.setFixedWidth(_COLW)
                 grid.addWidget(val, r, col)
                 store[key] = val
         grid.setColumnStretch(0, 1)
@@ -95,7 +102,10 @@ class ChartLayoutInfoPanel(QGroupBox):
                "is a single column the instrument reads from top to bottom).\n"
                "• Strips (this page) — how many of those strips fit across the "
                "page you're looking at.\n"
-               "• Pages — how many sheets the chart spans.\n\n"
+               "• Pages — how many sheets the chart spans.\n"
+               "• Patch size — how big each patch is (width × height in mm). With "
+               "“Prioritise chart area” this is worked out for you; very small "
+               "patches can be hard for the instrument to read.\n\n"
                "The two columns:\n"
                "• on screen — the real numbers of the chart currently in the "
                "preview.\n"
@@ -112,21 +122,29 @@ class ChartLayoutInfoPanel(QGroupBox):
 
     # ------------------------------------------------------------------
     @staticmethod
-    def _as_dict(total, rows, cols, pages) -> dict:
-        return {"total": total, "rows": rows, "cols": cols, "pages": pages}
+    def _as_dict(total, rows, cols, pages, patch_w, patch_h) -> dict:
+        # Patch size is held as a rounded (w, h) tuple so the diff-highlight can
+        # compare it; formatted to "w×h mm" at render time.
+        patch = None
+        if patch_w and patch_h and patch_w > 0 and patch_h > 0:
+            patch = (round(float(patch_w), 1), round(float(patch_h), 1))
+        return {"total": total, "rows": rows, "cols": cols, "pages": pages,
+                "patch": patch}
 
-    def set_actual(self, *, total: int, rows: int, cols: int, pages: int) -> None:
+    def set_actual(self, *, total: int, rows: int, cols: int, pages: int,
+                   patch_w: float = 0.0, patch_h: float = 0.0) -> None:
         """The measured values of the chart currently in the preview."""
-        self._actual = self._as_dict(total, rows, cols, pages)
+        self._actual = self._as_dict(total, rows, cols, pages, patch_w, patch_h)
         self._render()
 
     def clear_actual(self) -> None:
         self._actual = None
         self._render()
 
-    def set_estimate(self, *, total: int, rows: int, cols: int, pages: int) -> None:
+    def set_estimate(self, *, total: int, rows: int, cols: int, pages: int,
+                     patch_w: float = 0.0, patch_h: float = 0.0) -> None:
         """The predicted values for the current (engine) settings."""
-        self._estimate = self._as_dict(total, rows, cols, pages)
+        self._estimate = self._as_dict(total, rows, cols, pages, patch_w, patch_h)
         self._render()
 
     def clear_estimate(self) -> None:
@@ -145,12 +163,19 @@ class ChartLayoutInfoPanel(QGroupBox):
             return
         self._placeholder.setVisible(False)
         self._table.setVisible(True)
+        def _fmt(key, v):
+            if v is None:
+                return _DASH
+            if key == "patch":
+                return f"{v[0]:g}×{v[1]:g}"
+            return str(v)
+
         for key in self._actual_labels:
             a = self._actual.get(key) if self._actual else None
             e = self._estimate.get(key) if self._estimate else None
-            self._actual_labels[key].setText(_DASH if a is None else str(a))
+            self._actual_labels[key].setText(_fmt(key, a))
             est = self._estimate_labels[key]
-            est.setText(_DASH if e is None else str(e))
+            est.setText(_fmt(key, e))
             # Flag the estimate amber when it diverges from the shown chart.
             differs = a is not None and e is not None and a != e
             est.setStyleSheet(

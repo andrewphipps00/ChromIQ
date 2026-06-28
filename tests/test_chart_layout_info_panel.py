@@ -29,9 +29,12 @@ def test_panel_placeholder_then_filled(app):
     assert panel._actual_labels["total"].text() == "—"
 
     # A chart on screen fills the on-screen column.
-    panel.set_actual(total=768, rows=32, cols=24, pages=2)
+    panel.set_actual(total=768, rows=32, cols=24, pages=2, patch_w=8.0, patch_h=10.0)
     assert panel._actual_labels["rows"].text() == "32"
     assert panel._estimate_labels["cols"].text() == "24"
+    # patch size shown as "w×h" on screen; estimate had no size → dash
+    assert panel._actual_labels["patch"].text() == "8×10"
+    assert panel._estimate_labels["patch"].text() == "—"
 
     panel.show_placeholder()
     assert not panel._placeholder.isHidden()
