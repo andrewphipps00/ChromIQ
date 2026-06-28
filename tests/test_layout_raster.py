@@ -254,6 +254,26 @@ def test_clip_content_modes():
     assert clip_ink("notes") > 0
 
 
+def test_right_clip_content_is_rotated_180(_no_op=None):
+    """A clip on the right edge renders its content turned 180° vs the left, so
+    it stays the right way up for the reader (#93, Knut)."""
+    import numpy as np
+    target = _rgb_target(120)
+
+    def clip_sub(side):
+        geom = instruments.build("i1", clip_side=side)
+        lay = geometry.compute(geom, 210.0, 297.0, 120)
+        ax, ay, aw, ah = geometry.clip_area_px(geom, 297.0, 200, 210.0)
+        res = raster.render_pages(target, lay, geom, seed=7, paper_w_mm=210.0,
+                                  paper_h_mm=297.0, dpi=200,
+                                  clip_content_mode="text", clip_text="Sample 12")
+        return np.asarray(res.images[0])[ay:ay + ah, ax:ax + aw]
+
+    left, right = clip_sub("left"), clip_sub("right")
+    assert left.shape == right.shape
+    assert np.array_equal(right, np.rot90(left, 2))
+
+
 def test_export_clip_template(tmp_path):
     from PIL import Image
     paths = raster.export_clip_template(

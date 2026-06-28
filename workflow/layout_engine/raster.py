@@ -833,6 +833,11 @@ def render_pages(
                     clip_content_mode, width_px=_aw, height_px=_ah, dpi=dpi,
                     text=_clip_text, font_family=clip_text_font,
                     image_path=clip_image_path, ctx=_notes_ctx)
+                # On the right edge the band sits on the far side of the sheet, so
+                # turn the content 180° to keep it the right way up for the reader
+                # (Knut, #93). Left clips are unchanged.
+                if getattr(geom, "clip_side", "left") == "right":
+                    _clip = _clip.rotate(180, expand=True)
                 img.paste(_clip, (_ax, _ay))
 
         # Bottom-of-sheet text: custom chart text + optional command stamp,
