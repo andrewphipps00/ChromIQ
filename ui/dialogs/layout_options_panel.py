@@ -46,10 +46,22 @@ class LayoutOptionsPanel(QWidget):
                    ("CM", "ColorMunki"), ("SS", "SpectroScan")]
 
     @staticmethod
+    def mode_label_for(inst: str) -> str:
+        """The selector's label — it isn't really a generic "Mode" (#93, Knut):
+        for i1/p3 it's the clip border, for CM the density, for SS the shape."""
+        if inst in ("i1", "p3"):
+            return tr("Clip border:")
+        if inst == "CM":
+            return tr("Density:")
+        if inst == "SS":
+            return tr("Patch shape:")
+        return tr("Mode:")
+
+    @staticmethod
     def modes_for(inst: str) -> list[tuple[str, str]]:
         if inst in ("i1", "p3"):
-            return [("clip", tr("Clip border on")),
-                    ("noclip", tr("Clip border off — more patches"))]
+            return [("clip", tr("On (left clip border)")),
+                    ("noclip", tr("Off — more patches"))]
         if inst == "CM":
             return [("freehand", tr("Hand-held")), ("high", tr("High density (rig)")),
                     ("extrahigh", tr("Extra-high density"))]
@@ -90,7 +102,8 @@ class LayoutOptionsPanel(QWidget):
                    "out for one instrument may not read correctly on another."),
                 self), 0, 4)
             self.mode = NoScrollComboBox(self)
-            sel.addWidget(QLabel(tr("Mode:"), self), 1, 0)
+            self._mode_lbl = QLabel(tr("Mode:"), self)
+            sel.addWidget(self._mode_lbl, 1, 0)
             sel.addWidget(self.mode, 1, 1, 1, 3)
             sel.addWidget(TooltipButton(
                 tr("Layout mode"),
@@ -948,6 +961,8 @@ class LayoutOptionsPanel(QWidget):
             self.mode.addItem(lbl, k)
         j = self.mode.findData(prev_mode)
         self.mode.setCurrentIndex(j if j >= 0 else 0)
+        if getattr(self, "_mode_lbl", None) is not None:
+            self._mode_lbl.setText(self.mode_label_for(inst))
         self._loading = False
         self._on_paper_changed()
 

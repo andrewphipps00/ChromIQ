@@ -1088,16 +1088,9 @@ class SettingsDialog(QDialog):
 
     @staticmethod
     def _layout_modes(inst: str) -> list[tuple[str, str]]:
-        if inst in ("i1", "p3"):
-            return [("clip", tr("Clip border on")),
-                    ("noclip", tr("Clip border off — more patches"))]
-        if inst == "CM":
-            return [("freehand", tr("Hand-held")),
-                    ("high", tr("High density (rig)")),
-                    ("extrahigh", tr("Extra-high density"))]
-        if inst == "SS":
-            return [("flat", tr("Rectangular")), ("hex", tr("Hexagonal — denser"))]
-        return [("default", tr("Default"))]
+        # Share the engine panel's options so the two stay in sync (#93).
+        from ui.dialogs.layout_options_panel import LayoutOptionsPanel
+        return LayoutOptionsPanel.modes_for(inst)
 
     def _build_chart_layout_tab(self) -> QWidget:
         from core.preset_store import load_presets
@@ -1188,7 +1181,8 @@ class SettingsDialog(QDialog):
         sel.addWidget(QLabel(tr("Paper:"), self), 0, 2)
         self._layout_paper = NoScrollComboBox(self)
         sel.addWidget(self._layout_paper, 0, 3)
-        sel.addWidget(QLabel(tr("Mode:"), self), 1, 0)
+        self._layout_mode_lbl = QLabel(tr("Mode:"), self)
+        sel.addWidget(self._layout_mode_lbl, 1, 0)
         self._layout_mode = NoScrollComboBox(self)
         sel.addWidget(self._layout_mode, 1, 1)
         sel.addWidget(TooltipButton(
@@ -1309,6 +1303,8 @@ class SettingsDialog(QDialog):
         self._layout_mode.clear()
         for key, label in self._layout_modes(inst):
             self._layout_mode.addItem(label, key)
+        from ui.dialogs.layout_options_panel import LayoutOptionsPanel
+        self._layout_mode_lbl.setText(LayoutOptionsPanel.mode_label_for(inst))
         self._loading_layout = False
         self._load_layout_combo()
 
