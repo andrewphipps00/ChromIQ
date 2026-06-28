@@ -2053,5 +2053,7 @@
   "Clip border:": "Clip border:",
   "Off — more patches": "Off — more patches",
   "On (left clip border)": "On (left clip border)",
-  "Patch shape:": "Patch shape:"
+  "Patch shape:": "Patch shape:",
+  "pages": "pages",
+  "patches": "patches"
 }

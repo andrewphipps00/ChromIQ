@@ -665,3 +665,30 @@ def test_builtin_recipes_listed_in_load_setup_pulldown(qapp):
     assert starred, "no built-in recipes surfaced in the pulldown"
     # Each carries a real recipe dict.
     assert all(isinstance(recipes[k], dict) and recipes[k] for k in starred)
+
+
+def test_fill_to_pages_target(qapp, tmp_path):
+    """'fill to N pages' multiplies by the engine's capacity per page; disabled
+    when the engine is off (#93)."""
+    from pathlib import Path
+    from workflow.layout_engine import geometry, instruments, papers
+    from workflow.layout_engine.presets import default_recipe
+    s = _FakeSettings(); s.set("use_chromiq_layout_engine", True)
+    rec = default_recipe("i1", "A4", mode="clip")
+    d = _NewChartDialog(tmp_path, s, initial_recipe=rec.to_dict())
+    per = d._engine_cap_per_page()
+    assert per > 0
+    d._gen_fill_to.setValue(3)
+    # patches mode → the raw value
+    d._gen_fill_unit.setCurrentIndex(d._gen_fill_unit.findData("patches"))
+    assert d._effective_fill_target() == 3
+    # pages mode → pages × capacity
+    d._gen_fill_unit.setCurrentIndex(d._gen_fill_unit.findData("pages"))
+    assert d._effective_fill_target() == 3 * per
+
+    # engine off → no per-page capacity, unit selector forced to patches
+    s.set("use_chromiq_layout_engine", False)
+    assert d._engine_cap_per_page() == 0
+    d._sync_fill_unit()
+    assert d._gen_fill_unit.currentData() == "patches"
+    assert not d._gen_fill_unit.isEnabled()

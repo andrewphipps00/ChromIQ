@@ -1822,10 +1822,19 @@ class _NewChartDialog(QDialog):
                                   "without repeating. 'Fill to' is the target "
                                   "total patch count."))
         self._gen_fill_to = _spin(1, 30000, 1000)
+        # Fill target unit: patches, or — with the ChromIQ engine — whole pages
+        # (target = pages × the engine's capacity per sheet for the current
+        # layout). The two are one control (you pick a unit), so they're mutually
+        # exclusive by construction (#93, user request).
+        self._gen_fill_unit = NoScrollComboBox(self._gen_panel)
+        self._gen_fill_unit.addItem(tr("patches"), "patches")
+        self._gen_fill_unit.addItem(tr("pages"), "pages")
+        self._gen_fill_unit.currentIndexChanged.connect(self._update_gen_counts)
         self._gen_fill_count = _count_label()
         gg.addWidget(self._gen_fill, 15, 0)
         gg.addWidget(QLabel(tr("fill to:")), 15, 1)
         gg.addWidget(self._gen_fill_to, 15, 2)
+        gg.addWidget(self._gen_fill_unit, 15, 3)
         gg.addWidget(self._gen_fill_count, 15, 7)
 
         # A per-set ⓘ icon (col 8) opens the set's explanation in its own little
@@ -2112,6 +2121,65 @@ class _NewChartDialog(QDialog):
         editor's Add dialog) override this."""
         return self._mode_generate.isChecked()
 
+    def _engine_cap_per_page(self) -> int:
+        """Patches the engine fits on one sheet for this dialog's layout, or 0
+        when the engine is off / not resolvable. Bases the layout on the main
+        editor's recipe (``_initial_recipe`` — the user's "settings from the main
+        editor") and applies this dialog's instrument/paper/mode when present.
+        Shared by the capacity hint and the 'fill to N pages' target (#93)."""
+        if not (self._settings is not None
+                and bool(self._settings.get("use_chromiq_layout_engine", False))):
+            return 0
+        try:
+            from workflow.layout_engine import geometry, instruments, papers
+            from workflow.layout_engine.presets import default_recipe, LayoutRecipe
+            rec = (LayoutRecipe.from_dict(self._initial_recipe)
+                   if isinstance(self._initial_recipe, dict) else None)
+            instr_w = getattr(self, "_instr", None)
+            paper_w = getattr(self, "_paper", None)
+            if instr_w is not None and paper_w is not None:
+                eng = {"i1": "i1", "3p": "p3", "CM": "CM"}.get(instr_w.currentData())
+                paper = paper_w.currentData()
+            elif rec is not None:
+                eng, paper = rec.instrument, rec.paper
+            else:
+                return 0
+            if eng is None or paper in (None, "custom"):
+                return 0
+            if rec is None:
+                rec = default_recipe(eng, paper)
+            rec.instrument, rec.paper = eng, paper
+            if eng == "CM" and getattr(self, "_eng_density", None) is not None:
+                rec.cm_density = int(self._eng_density.currentData() or 1)
+            elif eng in ("i1", "p3") and getattr(self, "_eng_clip", None) is not None:
+                rec.clip_border = self._eng_clip.isChecked()
+                rec.nolimit = self._eng_nocap.isChecked()
+            geom = instruments.geom_from_build_kwargs(rec.build_kwargs())
+            w_mm, h_mm = papers.dimensions_mm(paper)
+            return geometry.patches_per_sheet(geom, w_mm, h_mm)
+        except Exception:
+            return 0
+
+    def _effective_fill_target(self) -> int:
+        """The fill target as a patch count: the spin value directly in 'patches'
+        mode, or pages × engine capacity-per-page in 'pages' mode (#93)."""
+        val = int(self._gen_fill_to.value())
+        if self._gen_fill_unit.currentData() == "pages":
+            per = self._engine_cap_per_page()
+            if per > 0:
+                return val * per
+        return val
+
+    def _sync_fill_unit(self) -> None:
+        """'pages' fill only makes sense with the engine — disable the unit
+        selector (forcing patches) when the engine can't size a page (#93)."""
+        can_pages = self._engine_cap_per_page() > 0
+        self._gen_fill_unit.setEnabled(can_pages)
+        if not can_pages and self._gen_fill_unit.currentData() == "pages":
+            self._gen_fill_unit.blockSignals(True)
+            self._gen_fill_unit.setCurrentIndex(0)
+            self._gen_fill_unit.blockSignals(False)
+
     def _update_gen_counts(self, *_a) -> None:
         """Refresh each generator's patch count + the running total, and gate
         the per-row spin boxes on their checkbox."""
@@ -2178,8 +2246,9 @@ class _NewChartDialog(QDialog):
             total += wb_n
         # Fill remaining gaps tops the whole chart (existing + sets + white/black)
         # up to its target, so it's counted last.
+        self._sync_fill_unit()
         fill_n = G.fill_gaps_count(total + len(self._existing_patches),
-                                   self._gen_fill_to.value())
+                                   self._effective_fill_target())
         self._gen_fill_count.setText(_patches_label(fill_n))
         if self._gen_fill.isChecked():
             total += fill_n
@@ -2239,7 +2308,7 @@ class _NewChartDialog(QDialog):
         # it's sparse and avoiding everything already chosen (#51).
         if self._gen_fill.isChecked():
             seed = self._existing_patches + program
-            program.extend(G.fill_gaps(seed, self._gen_fill_to.value()))
+            program.extend(G.fill_gaps(seed, self._effective_fill_target()))
         return program
 
     # -- live 3D-cube preview (embedded panel) ----------------------------
@@ -2520,44 +2589,13 @@ class _NewChartDialog(QDialog):
         self._update_engine_cap_hint()
 
     def _update_engine_cap_hint(self, *_a) -> None:
-        """Show how many patches fit one page (engine, default layout) for the
-        current instrument/paper/mode — only when the engine is active (#93)."""
+        """Show how many patches fit one page (engine layout) for the current
+        instrument/paper/mode — only when the engine is active (#93)."""
         hint = getattr(self, "_engine_cap_hint", None)
         if hint is None:
             return
-        if not (self._settings is not None
-                and bool(self._settings.get("use_chromiq_layout_engine", False))):
-            hint.setText("")
-            return
-        try:
-            from workflow.layout_engine import geometry, instruments, papers
-            from workflow.layout_engine.presets import default_recipe
-            code = self._instr.currentData()
-            eng = {"i1": "i1", "3p": "p3", "CM": "CM"}.get(code)
-            paper = self._paper.currentData()
-            if eng is None or paper in (None, "custom"):
-                hint.setText("")
-                return
-            # Build from the full default recipe (so EVERY capacity-affecting
-            # option — clip-border width, patch size/scale, spacers, margins,
-            # inter-patch & strip-indicator gaps, max strip — is honoured, not
-            # just clip on/off + density), then apply the Chart-section choices.
-            if eng == "CM":
-                density = int(self._eng_density.currentData() or 1)
-                mode = {1: "freehand", 2: "high", 3: "extrahigh"}[density]
-                rec = default_recipe(eng, paper, mode=mode)
-                rec.cm_density = density
-            else:
-                rec = default_recipe(
-                    eng, paper, mode="clip" if self._eng_clip.isChecked() else "noclip")
-                rec.clip_border = self._eng_clip.isChecked()
-                rec.nolimit = self._eng_nocap.isChecked()
-            geom = instruments.geom_from_build_kwargs(rec.build_kwargs())
-            w_mm, h_mm = papers.dimensions_mm(paper)
-            cap = geometry.patches_per_sheet(geom, w_mm, h_mm)
-            hint.setText(tr("≈ {n} fit one page").format(n=cap))
-        except Exception:  # noqa: BLE001 — hint is best-effort
-            hint.setText("")
+        cap = self._engine_cap_per_page()
+        hint.setText(tr("≈ {n} fit one page").format(n=cap) if cap > 0 else "")
 
     def _refresh_instr_widgets(self) -> None:
         """Show/hide instrument-conditional options.
