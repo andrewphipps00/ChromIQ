@@ -72,8 +72,15 @@ def derive_area_patch_size(kw: dict) -> tuple[float, float] | None:
         return None
     cols = int(kw.get("area_cols") or 0)
     rows = int(kw.get("area_rows") or 0)
-    ratio = float(kw.get("area_ratio") or 0.0)     # patch width : height
+    ratio = float(kw.get("area_ratio") or 0.0)     # height : width
     min_w = float(kw.get("area_min_patch") or 0.0)
+    # The calculation method selects which inputs drive the grid: "by_width" uses
+    # the minimum width + height%, "by_grid" uses explicit columns + rows (#93).
+    method = kw.get("area_method") or "by_width"
+    if method == "by_grid":
+        min_w = 0.0
+    else:
+        cols = rows = 0
     if cols <= 0 and rows <= 0 and min_w <= 0:
         return None
     try:

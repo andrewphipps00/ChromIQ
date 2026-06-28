@@ -43,8 +43,8 @@ def test_all_engine_options_roundtrip(app):
         instrument="i1", paper="A4", clip_border=True,
         pscale=0.9, sscale=1.1, spacer_mode="bw", spacer_width_mm=2.0,
         edge_spacers=True, patch_area_align="bottom-right",
-        layout_mode="area_first", area_cols=20, area_rows=30, area_ratio=1.5,
-        area_min_patch_mm=7.5,
+        layout_mode="area_first", area_method="by_grid", area_cols=20,
+        area_rows=30, area_ratio=1.5, area_min_patch_mm=7.5,
         patch_w_mm=9.0, patch_h_mm=11.0, inter_patch_mm=1.0, strip_gap_mm=2.5,
         strip_label_offset_mm=-4.0,
         strip_indicator_gap_mm=3.0, margin_top=10.0, margin_right=8.0,
@@ -63,8 +63,8 @@ def test_all_engine_options_roundtrip(app):
     out = panel.get_recipe()
     for f in ("instrument", "paper", "pscale", "sscale", "spacer_mode",
               "spacer_palette", "spacer_overrides", "edge_spacers",
-              "patch_area_align", "layout_mode", "area_cols", "area_rows",
-              "area_ratio", "area_min_patch_mm",
+              "patch_area_align", "layout_mode", "area_method", "area_cols",
+              "area_rows", "area_ratio", "area_min_patch_mm",
               "spacer_width_mm", "patch_w_mm", "patch_h_mm", "inter_patch_mm",
               "strip_gap_mm", "strip_label_offset_mm",
               "strip_indicator_gap_mm", "margin_top", "margin_right",
@@ -184,7 +184,8 @@ def test_engine_info_line_from_recipe_reflects_recipe():
 
     # Area-first shows the target grid instead of a patch size.
     r = LayoutRecipe(instrument="i1", paper="A4", layout_mode="area_first",
-                     area_cols=24, area_rows=30, patch_w_mm=9, patch_h_mm=9)
+                     area_method="by_grid", area_cols=24, area_rows=30,
+                     patch_w_mm=9, patch_h_mm=9)
     s = line(r)
     assert "area-fit 24×30" in s
     assert "9×9 mm" not in s

@@ -306,7 +306,7 @@ def test_area_first_fits_requested_grid():
 
     def grid(**area):
         rec = replace(default_recipe("i1", "A4", mode="clip"),
-                      layout_mode="area_first", **area)
+                      layout_mode="area_first", area_method="by_grid", **area)
         g = instruments.geom_from_build_kwargs(rec.build_kwargs())
         lay = geometry.compute(g, *A4, geometry.patches_per_sheet(g, *A4))
         return lay.patches_per_page // lay.steps_in_pass, lay.steps_in_pass

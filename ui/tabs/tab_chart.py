@@ -5577,13 +5577,15 @@ class TabChart(QWidget):
         # Layout strategy: area-first shows the target grid (patches are derived);
         # patch-first shows the explicit size or scale.
         if getattr(r, "layout_mode", "patch_first") == "area_first":
-            if not r.area_cols and not r.area_rows and r.area_min_patch_mm > 0:
-                bits.append(tr("area-fit ≥{mm:g} mm").format(
-                    mm=r.area_min_patch_mm))
-            else:
+            if getattr(r, "area_method", "by_width") == "by_grid":
                 _c = r.area_cols or tr("auto")
                 _rr = r.area_rows or tr("auto")
                 bits.append(tr("area-fit {c}×{r}").format(c=_c, r=_rr))
+            elif r.area_min_patch_mm > 0:
+                bits.append(tr("area-fit ≥{mm:g} mm").format(
+                    mm=r.area_min_patch_mm))
+            else:
+                bits.append(tr("area-fit"))
         elif r.patch_w_mm > 0 and r.patch_h_mm > 0:
             bits.append(tr("patch {w:g}×{h:g} mm").format(
                 w=r.patch_w_mm, h=r.patch_h_mm))

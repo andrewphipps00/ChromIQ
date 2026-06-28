@@ -262,41 +262,55 @@ class LayoutOptionsPanel(QWidget):
         self.area_min_patch.setSingleStep(0.5); self.area_min_patch.setMaximumWidth(96)
         self.area_min_patch.setSpecialValueText(tr("auto"))
         self.area_min_patch.valueChanged.connect(self._emit)
-        add_row(afg, 0, tr("Minimum patch size (mm):"), self.area_min_patch,
+        self.area_method = NoScrollComboBox(self)
+        self.area_method.addItem(tr("By patch width"), "by_width")
+        self.area_method.addItem(tr("By columns / rows"), "by_grid")
+        self.area_method.currentIndexChanged.connect(self._emit)
+        self.area_method.currentIndexChanged.connect(self._sync_layout_mode)
+        add_row(afg, 0, tr("Calculation method:"), self.area_method,
                 tip=TooltipButton(
-                    tr("Minimum patch size"),
-                    tr("The simplest way to lay out a chart: set the smallest "
-                       "patch your instrument can read reliably, leave Strips and "
-                       "Rows on “auto”, and ChromIQ fits as many patches as it "
-                       "can at that size and then grows them to fill the area "
-                       "exactly. You get the densest readable chart with no "
-                       "counting. Combine with Patch shape to control how the "
-                       "patches grow. Ignored for an axis where you pin a count "
-                       "below."), self))
-        add_row(afg, 1, tr("Minimum patch height (% of width):"), self.area_ratio,
+                    tr("Calculation method"),
+                    tr("How to work out the patch grid inside the area:\n\n"
+                       "• By patch width — you set the smallest patch width (and a "
+                       "height %); ChromIQ fits as many as possible at that size "
+                       "and grows them to fill the area. You know the strip width "
+                       "you want, without juggling column counts.\n\n"
+                       "• By columns / rows — you set exactly how many strips and "
+                       "patches-per-strip; ChromIQ sizes the patches to fit. Full "
+                       "control of the grid, but you tune the counts to land on a "
+                       "patch size you like.\n\n"
+                       "Both fill the same patch area defined by the margins."),
+                    self))
+        self._area_row_minpatch = add_row(afg, 1, tr("Minimum patch width (mm):"),
+                self.area_min_patch,
+                tip=TooltipButton(
+                    tr("Minimum patch width"),
+                    tr("The smallest strip (patch) width your instrument can read "
+                       "reliably. ChromIQ fits as many strips as possible at this "
+                       "width, then grows them slightly so the grid fills the area "
+                       "exactly. The patch height follows the height % below."),
+                    self))
+        self._area_row_ratio = add_row(afg, 2,
+                tr("Minimum patch height (% of width):"), self.area_ratio,
                 tip=TooltipButton(
                     tr("Minimum patch height"),
-                    tr("The patch height as a percentage of its width, for the "
-                       "dimension that isn't pinned by a column/row count — e.g. "
-                       "set a minimum width and this controls how tall the patches "
-                       "grow. “square” keeps height = width (100%). 150% makes each "
-                       "patch half again as tall as it is wide. Ignored when you "
-                       "pin both columns and rows."), self))
-        add_row(afg, 2, tr("Strips (columns):"), self.area_cols,
+                    tr("The patch height as a percentage of its width. “square” "
+                       "keeps height = width (100%). 150% makes each patch half "
+                       "again as tall as it is wide."), self))
+        self._area_row_cols = add_row(afg, 3, tr("Strips (columns):"), self.area_cols,
                 tip=TooltipButton(
                     tr("Strips (columns)"),
-                    tr("Pin how many strips (columns of patches) to fit across the "
-                       "page — for exact control. ChromIQ makes the patches exactly "
-                       "wide enough that this many strips span the usable width, so "
-                       "the block reaches the margins evenly. Leave at “auto” to "
-                       "let the minimum size / patch shape decide."), self))
-        add_row(afg, 3, tr("Patches per strip (rows):"), self.area_rows,
+                    tr("How many strips (columns of patches) to fit across the "
+                       "page. ChromIQ makes the patches exactly wide enough that "
+                       "this many strips span the usable width, so the block "
+                       "reaches the margins evenly."), self))
+        self._area_row_rows = add_row(afg, 4, tr("Patches per strip (rows):"),
+                self.area_rows,
                 tip=TooltipButton(
                     tr("Patches per strip (rows)"),
-                    tr("Pin how many patches to stack down each strip — for exact "
-                       "control. ChromIQ makes the patches exactly tall enough that "
-                       "this many fit the usable height. Leave at “auto” to let the "
-                       "minimum size / patch shape decide."), self))
+                    tr("How many patches to stack down each strip. ChromIQ makes "
+                       "the patches exactly tall enough that this many fit the "
+                       "usable height."), self))
         lgg.addWidget(self._area_fields_w, 1, 0, 1, 3)
         v.addWidget(lg)
 
@@ -985,10 +999,14 @@ class LayoutOptionsPanel(QWidget):
                     getattr(self, "_patch_align_row", [])):
             for w in row:
                 w.setVisible(not area)
-        # The patch-shape ratio only matters for an auto (unpinned) dimension —
-        # disable it when both columns and rows are pinned to exact counts.
-        both_pinned = self.area_cols.value() > 0 and self.area_rows.value() > 0
-        self.area_ratio.setEnabled(area and not both_pinned)
+        # Within area-first, show only the rows the chosen Calculation method
+        # needs: "by patch width" → min width + height%; "by columns/rows" →
+        # strips + rows (Knut's two methods).
+        by_width = (self.area_method.currentData() == "by_width")
+        for w in self._area_row_minpatch + self._area_row_ratio:
+            w.setVisible(area and by_width)
+        for w in self._area_row_cols + self._area_row_rows:
+            w.setVisible(area and not by_width)
 
     def _browse_clip_image(self) -> None:
         from PyQt6.QtWidgets import QFileDialog
@@ -1404,6 +1422,8 @@ class LayoutOptionsPanel(QWidget):
         self._sync_spacer_swatches()
         _lm = self.layout_mode.findData(r.layout_mode or "patch_first")
         self.layout_mode.setCurrentIndex(_lm if _lm >= 0 else 0)
+        _am = self.area_method.findData(r.area_method or "by_width")
+        self.area_method.setCurrentIndex(_am if _am >= 0 else 0)
         self.area_cols.setValue(int(r.area_cols or 0))
         self.area_rows.setValue(int(r.area_rows or 0))
         self.area_ratio.setValue(float(r.area_ratio or 0.0) * 100.0)   # frac → %
@@ -1489,6 +1509,7 @@ class LayoutOptionsPanel(QWidget):
         r.edge_spacers = self.edge_spacers_cb.isChecked()
         r.spacer_width_mm = self.spacer_width.value()
         r.layout_mode = self.layout_mode.currentData() or "patch_first"
+        r.area_method = self.area_method.currentData() or "by_width"
         r.area_cols = int(self.area_cols.value())
         r.area_rows = int(self.area_rows.value())
         r.area_ratio = float(self.area_ratio.value()) / 100.0          # % → frac

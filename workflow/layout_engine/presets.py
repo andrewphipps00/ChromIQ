@@ -66,6 +66,9 @@ class LayoutRecipe:
     # Defaults to area-first (Knut); with cols/rows on auto it fills like patch-
     # first until a count is pinned, so it's a safe default.
     layout_mode: str = "area_first"
+    # How area-first sizes the grid: "by_width" = from a minimum patch width +
+    # height%; "by_grid" = from explicit columns + rows (Knut's two methods).
+    area_method: str = "by_width"
     area_cols: int = 0
     area_rows: int = 0
     area_ratio: float = 0.0
@@ -170,6 +173,7 @@ class LayoutRecipe:
             patch_w_mm=float(d.get("patch_w") or 0.0),
             patch_h_mm=float(d.get("patch_h") or 0.0),
             layout_mode=d.get("layout_mode") or "patch_first",
+            area_method=d.get("area_method") or "by_width",
             area_cols=int(d.get("area_cols") or 0),
             area_rows=int(d.get("area_rows") or 0),
             area_ratio=float(d.get("area_ratio") or 0.0),
@@ -261,6 +265,7 @@ class LayoutRecipe:
             "patch_w": self.patch_w_mm or None,
             "patch_h": self.patch_h_mm or None,
             "layout_mode": self.layout_mode,
+            "area_method": self.area_method,
             "area_cols": self.area_cols,
             "area_rows": self.area_rows,
             "area_ratio": self.area_ratio,
