@@ -57,6 +57,7 @@ def test_all_engine_options_roundtrip(app):
         chart_text="{project}", chart_text_font="Inter", chart_text_size_mm=3.5,
         chart_text_bold=True, chart_text_italic=False, stamp_command=True,
         clip_border_width_mm=30.0, clip_content_mode="text", clip_text="ID",
+        clip_side="right",
         clip_text_font="Inter", clip_image_path="/tmp/logo.png",
         strip_pattern="A-Z", patch_pattern="1-99", randomize=True, seed=12345)
     panel.set_recipe(r)
@@ -76,7 +77,7 @@ def test_all_engine_options_roundtrip(app):
               "underline_thickness_mm", "underline_gap_mm", "chart_text",
               "chart_text_font", "chart_text_size_mm", "chart_text_bold",
               "chart_text_italic", "stamp_command", "clip_border_width_mm",
-              "clip_content_mode", "clip_text", "clip_text_font",
+              "clip_content_mode", "clip_side", "clip_text", "clip_text_font",
               "clip_image_path", "strip_pattern", "patch_pattern",
               "randomize", "seed"):
         assert getattr(out, f) == getattr(r, f), f

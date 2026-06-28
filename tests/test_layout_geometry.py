@@ -353,3 +353,21 @@ def test_area_first_min_patch_autofit():
     # ratio is height:width — at 1.5 the patches grow taller than wide
     gr = geom(area_min_patch_mm=10.0, area_ratio=1.5)
     assert gr.plen > gr.pwid
+
+
+def test_clip_side_left_right():
+    """clip_side flips the clip band to the other edge and shifts the patch block
+    accordingly, with the patch count unchanged (#93)."""
+    gl = instruments.build("i1", clip_side="left")
+    gr = instruments.build("i1", clip_side="right")
+    # capacity is identical (the band reserves the same width either side)
+    assert geometry.patches_per_sheet(gl, *A4) == geometry.patches_per_sheet(gr, *A4)
+    lay = geometry.compute(gl, *A4, 60)
+    pl = geometry.placement(gl, *A4, lay)
+    pr = geometry.placement(gr, *A4, lay)
+    # left: patches start after the clip band; right: at the left margin
+    assert pl.x_of(0) > pr.x_of(0)
+    al = geometry.clip_area_mm(gl, A4[1], A4[0])
+    ar = geometry.clip_area_mm(gr, A4[1], A4[0])
+    assert al[0] < ar[0]            # band moves from the left edge to the right
+    assert ar[0] + ar[2] <= A4[0] + 1e-6

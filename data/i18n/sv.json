@@ -2054,6 +2054,9 @@
   "Off — more patches": "Off — more patches",
   "On (left clip border)": "On (left clip border)",
   "Patch shape:": "Patch shape:",
-  "pages": "pages",
-  "patches": "patches"
+  "pages:": "pages:",
+  "patches:": "patches:",
+  "Clip border side": "Clip border side",
+  "Side:": "Side:",
+  "Which edge of the page the clip border / notes band sits on — Left or Right. Choose whichever matches how you feed the chart into your instrument's ruler. The patches fill the rest of the page; the patch count is the same either way.": "Which edge of the page the clip border / notes band sits on — Left or Right. Choose whichever matches how you feed the chart into your instrument's ruler. The patches fill the rest of the page; the patch count is the same either way."
 }

@@ -97,6 +97,11 @@ class Geom:
     # Default "center-left" reproduces the prior behaviour (vertically centred in
     # the free span, left-anchored). Render-only — capacity is unchanged.
     patch_area_align: str = "center-left"
+    # Which page edge the clip border / notes band sits on, "left" or "right"
+    # (#93, Knut). The reserved width (lbord) is the same either side, so this
+    # only moves the band + shifts the patch block to the other edge — capacity
+    # is unchanged.
+    clip_side: str = "left"
 
 
 def supported() -> list[str]:
@@ -127,6 +132,7 @@ def build(
     clip_border_width: float = 26.0,
     edge_spacers: bool = False,
     patch_area_align: str = "center-left",
+    clip_side: str = "left",
 ) -> Geom:
     """Resolve :class:`Geom`, applying ChromIQ extensions over the base geometry.
 
@@ -163,7 +169,8 @@ def build(
                    plen=plen, pwid=pwid, rrsp=rrsp, pspa=pspa, mxrowl=mxrowl,
                    strip_indicator_gap=sig, offset_x=offset_x, offset_y=offset_y,
                    edge_spacers=edge_spacers,
-                   patch_area_align=patch_area_align or "center-left")
+                   patch_area_align=patch_area_align or "center-left",
+                   clip_side=clip_side or "left")
 
 
 # Keys of a recipe ``build_kwargs()`` dict that affect the laid-out geometry —
@@ -176,7 +183,7 @@ GEOM_BUILD_KEYS = (
     "hflag", "density", "spacer_on", "pscale", "sscale", "border", "margins",
     "patch_w", "patch_h", "spacer_width", "inter_patch", "strip_gap", "max_strip",
     "strip_indicator_gap", "offset_x", "offset_y", "nolpcbord", "nolimit",
-    "clip_border_width", "edge_spacers", "patch_area_align",
+    "clip_border_width", "edge_spacers", "patch_area_align", "clip_side",
 )
 
 

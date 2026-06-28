@@ -1821,20 +1821,34 @@ class _NewChartDialog(QDialog):
                                   "chart reaches the size you set, evenly and "
                                   "without repeating. 'Fill to' is the target "
                                   "total patch count."))
-        self._gen_fill_to = _spin(1, 30000, 1000)
-        # Fill target unit: patches, or — with the ChromIQ engine — whole pages
-        # (target = pages × the engine's capacity per sheet for the current
-        # layout). The two are one control (you pick a unit), so they're mutually
-        # exclusive by construction (#93, user request).
-        self._gen_fill_unit = NoScrollComboBox(self._gen_panel)
-        self._gen_fill_unit.addItem(tr("patches"), "patches")
-        self._gen_fill_unit.addItem(tr("pages"), "pages")
-        self._gen_fill_unit.currentIndexChanged.connect(self._update_gen_counts)
+        # Fill target: to a patch count OR (with the engine) to a page count —
+        # two mutually exclusive toggles, each with its OWN spinbox, because a
+        # patch target is a much bigger number than a page target (#93, user).
+        from PyQt6.QtWidgets import QButtonGroup, QRadioButton
+        self._gen_fill_to = _spin(1, 30000, 1000)        # patches target
+        self._gen_fill_pages = _spin(1, 99, 1)           # pages target
+        self._gen_fill_unit_patches = QRadioButton(tr("patches:"), self._gen_panel)
+        self._gen_fill_unit_pages = QRadioButton(tr("pages:"), self._gen_panel)
+        self._gen_fill_unit_patches.setChecked(True)
+        self._gen_fill_unit_grp = QButtonGroup(self._gen_panel)
+        self._gen_fill_unit_grp.setExclusive(True)
+        self._gen_fill_unit_grp.addButton(self._gen_fill_unit_patches)
+        self._gen_fill_unit_grp.addButton(self._gen_fill_unit_pages)
+        self._gen_fill_unit_grp.buttonToggled.connect(self._update_gen_counts)
+        self._gen_fill_pages.valueChanged.connect(self._update_gen_counts)
+        _fill_row = QHBoxLayout(); _fill_row.setContentsMargins(0, 0, 0, 0)
+        _fill_row.setSpacing(6)
+        _fill_row.addWidget(self._gen_fill_unit_patches)
+        _fill_row.addWidget(self._gen_fill_to)
+        _fill_row.addSpacing(10)
+        _fill_row.addWidget(self._gen_fill_unit_pages)
+        _fill_row.addWidget(self._gen_fill_pages)
+        _fill_row.addStretch()
+        _fill_w = QWidget(self._gen_panel); _fill_w.setLayout(_fill_row)
         self._gen_fill_count = _count_label()
         gg.addWidget(self._gen_fill, 15, 0)
         gg.addWidget(QLabel(tr("fill to:")), 15, 1)
-        gg.addWidget(self._gen_fill_to, 15, 2)
-        gg.addWidget(self._gen_fill_unit, 15, 3)
+        gg.addWidget(_fill_w, 15, 2, 1, 5)
         gg.addWidget(self._gen_fill_count, 15, 7)
 
         # A per-set ⓘ icon (col 8) opens the set's explanation in its own little
@@ -2161,24 +2175,25 @@ class _NewChartDialog(QDialog):
             return 0
 
     def _effective_fill_target(self) -> int:
-        """The fill target as a patch count: the spin value directly in 'patches'
-        mode, or pages × engine capacity-per-page in 'pages' mode (#93)."""
-        val = int(self._gen_fill_to.value())
-        if self._gen_fill_unit.currentData() == "pages":
+        """The fill target as a patch count: the patches spin in 'patches' mode,
+        or the pages spin × engine capacity-per-page in 'pages' mode (#93)."""
+        if self._gen_fill_unit_pages.isChecked():
             per = self._engine_cap_per_page()
             if per > 0:
-                return val * per
-        return val
+                return int(self._gen_fill_pages.value()) * per
+        return int(self._gen_fill_to.value())
 
     def _sync_fill_unit(self) -> None:
-        """'pages' fill only makes sense with the engine — disable the unit
-        selector (forcing patches) when the engine can't size a page (#93)."""
+        """'pages' fill only makes sense with the engine — disable the 'pages'
+        toggle (falling back to 'patches') when the engine can't size a page;
+        grey the spinbox of whichever unit isn't active."""
         can_pages = self._engine_cap_per_page() > 0
-        self._gen_fill_unit.setEnabled(can_pages)
-        if not can_pages and self._gen_fill_unit.currentData() == "pages":
-            self._gen_fill_unit.blockSignals(True)
-            self._gen_fill_unit.setCurrentIndex(0)
-            self._gen_fill_unit.blockSignals(False)
+        self._gen_fill_unit_pages.setEnabled(can_pages)
+        if not can_pages and self._gen_fill_unit_pages.isChecked():
+            self._gen_fill_unit_patches.setChecked(True)
+        pages_on = self._gen_fill_unit_pages.isChecked()
+        self._gen_fill_pages.setEnabled(can_pages and pages_on)
+        self._gen_fill_to.setEnabled(not pages_on)
 
     def _update_gen_counts(self, *_a) -> None:
         """Refresh each generator's patch count + the running total, and gate

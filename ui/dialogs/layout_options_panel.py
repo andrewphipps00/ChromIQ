@@ -844,6 +844,10 @@ class LayoutOptionsPanel(QWidget):
                        ("notes", tr("Notes box")), ("image", tr("Imported image"))):
             self.clip_content_mode.addItem(lbl, k)
         self.clip_content_mode.currentIndexChanged.connect(self._on_clip_content_changed)
+        self.clip_side = NoScrollComboBox(self)
+        self.clip_side.addItem(tr("Left"), "left")
+        self.clip_side.addItem(tr("Right"), "right")
+        self.clip_side.currentIndexChanged.connect(self._emit)
         self.clip_text = QLineEdit(self)
         self.clip_text.setPlaceholderText(tr("e.g. {project} — {date}"))
         self.clip_text.textChanged.connect(self._emit)
@@ -886,13 +890,21 @@ class LayoutOptionsPanel(QWidget):
                        "branding stamps the wordmark; Imported image places a "
                        "logo. Export template gives you an exact-size PNG and PDF "
                        "to design a graphic in another tool."), self))
-        add_row(ccg, 1, tr("Text:"), cell_fill(self.clip_text, self.clip_insert_btn))
-        add_row(ccg, 2, tr("Font:"), self.clip_text_font)
-        add_row(ccg, 3, tr("Image:"), cell_fill(self.clip_image_path,
+        add_row(ccg, 1, tr("Side:"), self.clip_side,
+                tip=TooltipButton(
+                    tr("Clip border side"),
+                    tr("Which edge of the page the clip border / notes band sits "
+                       "on — Left or Right. Choose whichever matches how you feed "
+                       "the chart into your instrument's ruler. The patches fill "
+                       "the rest of the page; the patch count is the same either "
+                       "way."), self))
+        add_row(ccg, 2, tr("Text:"), cell_fill(self.clip_text, self.clip_insert_btn))
+        add_row(ccg, 3, tr("Font:"), self.clip_text_font)
+        add_row(ccg, 4, tr("Image:"), cell_fill(self.clip_image_path,
                                                  self.clip_image_browse))
-        add_row(ccg, 4, tr("Clip area:"), self.clip_dims_label)
-        add_row(ccg, 5, tr("Preview:"), self.clip_preview)
-        ccg.addWidget(self.clip_export_btn, 6, 1)
+        add_row(ccg, 5, tr("Clip area:"), self.clip_dims_label)
+        add_row(ccg, 6, tr("Preview:"), self.clip_preview)
+        ccg.addWidget(self.clip_export_btn, 7, 1)
         v.addWidget(self._clip_content_grp)
 
         # ---- Calibration (per-chart; engine -K/-I) ----
@@ -1521,6 +1533,8 @@ class LayoutOptionsPanel(QWidget):
         self.clip_width.setValue(r.clip_border_width_mm or 26.0)
         _cc = self.clip_content_mode.findData(r.clip_content_mode)
         self.clip_content_mode.setCurrentIndex(_cc if _cc >= 0 else 0)
+        _cs = self.clip_side.findData(getattr(r, "clip_side", "left") or "left")
+        self.clip_side.setCurrentIndex(_cs if _cs >= 0 else 0)
         self.clip_text.setText(r.clip_text)
         _cf = self.clip_text_font.findData(r.clip_text_font)
         self.clip_text_font.setCurrentIndex(_cf if _cf >= 0 else 0)
@@ -1599,6 +1613,7 @@ class LayoutOptionsPanel(QWidget):
         r.compression = self.compression.currentData() or "lzw"
         r.clip_border_width_mm = self.clip_width.value()
         r.clip_content_mode = self.clip_content_mode.currentData() or "off"
+        r.clip_side = self.clip_side.currentData() or "left"
         r.clip_text = self.clip_text.text()
         r.clip_text_font = self.clip_text_font.currentData() or "Inter"
         r.clip_image_path = self.clip_image_path.text().strip()

@@ -220,8 +220,11 @@ def placement(geom: Geom, paper_w_mm: float, paper_h_mm: float, layout: Layout) 
     avail_w = (pw - g.margin_l - g.lbord - g.margin_r
                - g.rlwi - 2.0 * g.hxew - (g.pglth if g.dopglabel else 0.0))
     extra_w = max(0.0, avail_w - block_w)
+    # Clip band on the left shifts the patch block right by lbord; on the right
+    # the block starts at the left margin and the band sits at the far edge (#93).
+    _clip_left = g.lbord if getattr(g, "clip_side", "left") != "right" else 0.0
     return Placement(
-        x0=g.margin_l + g.lbord + fh * extra_w + g.offset_x,
+        x0=g.margin_l + _clip_left + fh * extra_w + g.offset_x,
         y0_first=amints + _lead + g.offset_y,
         plen=g.plen, pwid=g.pwid, pspa=g.pspa, rrsp=g.rrsp,
         steps_in_pass=layout.steps_in_pass,
@@ -278,9 +281,9 @@ def realized_margins_mm(geom: Geom, paper_w_mm: float, paper_h_mm: float,
 CLIP_CONTENT_INSET_MM = 4.0
 
 
-def clip_area_mm(geom: Geom, paper_h_mm: float
+def clip_area_mm(geom: Geom, paper_h_mm: float, paper_w_mm: float | None = None
                  ) -> tuple[float, float, float, float] | None:
-    """The content-safe rectangle of the left clip strip, in mm.
+    """The content-safe rectangle of the clip strip, in mm.
 
     Returns ``(x, y, w, h)`` for the reserved left band — the whole zone from a
     small printer-safe inset out to the clip-border width (where the first patch
@@ -297,14 +300,21 @@ def clip_area_mm(geom: Geom, paper_h_mm: float
         return None
     clip_w = geom.lbord + geom.border          # full reserved zone from the edge
     inset = min(CLIP_CONTENT_INSET_MM, clip_w * 0.2)
-    return (inset, geom.margin_t, max(0.0, clip_w - inset),
-            max(0.0, paper_h_mm - geom.margin_t - geom.margin_b))
+    width = max(0.0, clip_w - inset)
+    height = max(0.0, paper_h_mm - geom.margin_t - geom.margin_b)
+    # Right-side band: mirror to the far edge (needs the paper width) (#93).
+    if getattr(geom, "clip_side", "left") == "right" and paper_w_mm:
+        x = paper_w_mm - clip_w
+    else:
+        x = inset
+    return (x, geom.margin_t, width, height)
 
 
-def clip_area_px(geom: Geom, paper_h_mm: float, dpi: int
+def clip_area_px(geom: Geom, paper_h_mm: float, dpi: int,
+                 paper_w_mm: float | None = None
                  ) -> tuple[int, int, int, int] | None:
     """:func:`clip_area_mm` rounded to whole pixels at *dpi*."""
-    area = clip_area_mm(geom, paper_h_mm)
+    area = clip_area_mm(geom, paper_h_mm, paper_w_mm)
     if area is None:
         return None
     mm2px = dpi / 25.4

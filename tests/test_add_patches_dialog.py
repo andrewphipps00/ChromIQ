@@ -678,17 +678,18 @@ def test_fill_to_pages_target(qapp, tmp_path):
     d = _NewChartDialog(tmp_path, s, initial_recipe=rec.to_dict())
     per = d._engine_cap_per_page()
     assert per > 0
-    d._gen_fill_to.setValue(3)
-    # patches mode → the raw value
-    d._gen_fill_unit.setCurrentIndex(d._gen_fill_unit.findData("patches"))
-    assert d._effective_fill_target() == 3
-    # pages mode → pages × capacity
-    d._gen_fill_unit.setCurrentIndex(d._gen_fill_unit.findData("pages"))
-    assert d._effective_fill_target() == 3 * per
+    d._gen_fill_to.setValue(900)        # patches spin
+    d._gen_fill_pages.setValue(2)       # pages spin (separate)
+    # patches mode → the patches spin
+    d._gen_fill_unit_patches.setChecked(True)
+    assert d._effective_fill_target() == 900
+    # pages mode → pages spin × capacity
+    d._gen_fill_unit_pages.setChecked(True)
+    assert d._effective_fill_target() == 2 * per
 
-    # engine off → no per-page capacity, unit selector forced to patches
+    # engine off → no per-page capacity, 'pages' toggle disabled + reverts
     s.set("use_chromiq_layout_engine", False)
     assert d._engine_cap_per_page() == 0
     d._sync_fill_unit()
-    assert d._gen_fill_unit.currentData() == "patches"
-    assert not d._gen_fill_unit.isEnabled()
+    assert d._gen_fill_unit_patches.isChecked()
+    assert not d._gen_fill_unit_pages.isEnabled()

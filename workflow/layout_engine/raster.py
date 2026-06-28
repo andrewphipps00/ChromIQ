@@ -816,7 +816,7 @@ def render_pages(
         # Left clip-strip content (i1/p3): rendered natively into the reserved
         # lbord band, since the engine knows its exact geometry.
         if clip_content_mode != "off":
-            _area = geometry.clip_area_px(geom, paper_h_mm, dpi)
+            _area = geometry.clip_area_px(geom, paper_h_mm, dpi, paper_w_mm)
             if _area is not None and _area[2] > 0 and _area[3] > 0:
                 _ax, _ay, _aw, _ah = _area
                 _notes_ctx = dict(_pctx)

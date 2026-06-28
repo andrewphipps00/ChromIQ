@@ -108,8 +108,9 @@ class LayoutRecipe:
     chart_text_bold: bool = False
     chart_text_italic: bool = False
     stamp_command: bool = False          # stamp the layout summary on the sheet
-    clip_border: bool = True       # i1/p3 only — left paper clip border present
-    clip_border_width_mm: float = 26.0   # i1/p3 reserved clip zone width (mm)
+    clip_border: bool = True       # i1/p3 only — paper clip border present
+    clip_border_width_mm: float = 26.0   # reserved clip-zone width (mm)
+    clip_side: str = "left"        # which edge the clip / notes band sits on
     # Clip-strip content (i1/p3): "off" | "text" | "image" | "branding" | "notes".
     # Defaults to the auto-filled notes record so every clip-border chart carries
     # its own documentation strip out of the box (#93). Only drawn where a clip
@@ -206,6 +207,7 @@ class LayoutRecipe:
             clip_border=(not bool(d.get("nolpcbord", False)))
             if inst in ("i1", "p3") else True,
             clip_border_width_mm=float(d.get("clip_border_width") or 26.0),
+            clip_side=d.get("clip_side") or "left",
             clip_content_mode=d.get("clip_content_mode", "off"),
             clip_text=d.get("clip_text", ""),
             clip_text_font=d.get("clip_text_font", "Inter"),
@@ -298,6 +300,7 @@ class LayoutRecipe:
             "stamp_command": self.stamp_command,
             "nolpcbord": (not self.clip_border) if self.instrument in ("i1", "p3") else False,
             "clip_border_width": self.clip_border_width_mm or 26.0,
+            "clip_side": self.clip_side or "left",
             "clip_content_mode": self.clip_content_mode,
             "clip_text": self.clip_text,
             "clip_text_font": self.clip_text_font,
