@@ -314,10 +314,11 @@ def test_area_first_fits_requested_grid():
     assert grid(area_cols=20, area_rows=30) == (20, 30)          # both pinned
     assert grid(area_cols=24)[0] == 24                           # columns pinned
     assert grid(area_rows=40)[1] == 40                           # rows pinned
-    # patch shape ratio drives the auto dimension (wider patches → fewer columns)
+    # ratio is height:width; with rows pinned, a taller ratio → narrower patches
+    # → more columns fit.
     sq = grid(area_rows=40, area_ratio=1.0)[0]
-    wide = grid(area_rows=40, area_ratio=2.0)[0]
-    assert wide < sq
+    tall = grid(area_rows=40, area_ratio=2.0)[0]
+    assert tall > sq
 
 
 def test_area_first_noop_without_targets():
@@ -349,6 +350,6 @@ def test_area_first_min_patch_autofit():
     # a smaller minimum packs more patches
     assert (geometry.patches_per_sheet(g6, *A4)
             > geometry.patches_per_sheet(g8, *A4))
-    # ratio drives the grown shape (wider than tall at 1.5)
+    # ratio is height:width — at 1.5 the patches grow taller than wide
     gr = geom(area_min_patch_mm=10.0, area_ratio=1.5)
-    assert gr.pwid > gr.plen
+    assert gr.plen > gr.pwid

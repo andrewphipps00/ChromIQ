@@ -249,9 +249,12 @@ class LayoutOptionsPanel(QWidget):
         self.area_rows.setSpecialValueText(tr("auto")); self.area_rows.setMaximumWidth(96)
         self.area_rows.valueChanged.connect(self._emit)
         self.area_rows.valueChanged.connect(self._sync_layout_mode)
+        # Patch shape as "minimum patch height, % of width" (Knut): 150 → height
+        # 1.5× width. Stored in the recipe as a height:width fraction (value/100).
         self.area_ratio = NoScrollDoubleSpinBox(self)
-        self.area_ratio.setRange(0.0, 10.0); self.area_ratio.setDecimals(2)
-        self.area_ratio.setSingleStep(0.1); self.area_ratio.setMaximumWidth(96)
+        self.area_ratio.setRange(0.0, 1000.0); self.area_ratio.setDecimals(0)
+        self.area_ratio.setSingleStep(10.0); self.area_ratio.setMaximumWidth(96)
+        self.area_ratio.setSuffix(" %")
         self.area_ratio.setSpecialValueText(tr("square"))
         self.area_ratio.valueChanged.connect(self._emit)
         self.area_min_patch = NoScrollDoubleSpinBox(self)
@@ -270,15 +273,15 @@ class LayoutOptionsPanel(QWidget):
                        "counting. Combine with Patch shape to control how the "
                        "patches grow. Ignored for an axis where you pin a count "
                        "below."), self))
-        add_row(afg, 1, tr("Patch shape (W:H):"), self.area_ratio,
+        add_row(afg, 1, tr("Minimum patch height (% of width):"), self.area_ratio,
                 tip=TooltipButton(
-                    tr("Patch shape"),
-                    tr("The width-to-height ratio for any patch dimension that "
-                       "isn't pinned by a column/row count — e.g. set a minimum "
-                       "size and this controls how the patches grow. “square” "
-                       "keeps width = height. 1.5 makes patches half again as wide "
-                       "as they are tall. Ignored when you pin both columns and "
-                       "rows."), self))
+                    tr("Minimum patch height"),
+                    tr("The patch height as a percentage of its width, for the "
+                       "dimension that isn't pinned by a column/row count — e.g. "
+                       "set a minimum width and this controls how tall the patches "
+                       "grow. “square” keeps height = width (100%). 150% makes each "
+                       "patch half again as tall as it is wide. Ignored when you "
+                       "pin both columns and rows."), self))
         add_row(afg, 2, tr("Strips (columns):"), self.area_cols,
                 tip=TooltipButton(
                     tr("Strips (columns)"),
@@ -1403,7 +1406,7 @@ class LayoutOptionsPanel(QWidget):
         self.layout_mode.setCurrentIndex(_lm if _lm >= 0 else 0)
         self.area_cols.setValue(int(r.area_cols or 0))
         self.area_rows.setValue(int(r.area_rows or 0))
-        self.area_ratio.setValue(float(r.area_ratio or 0.0))
+        self.area_ratio.setValue(float(r.area_ratio or 0.0) * 100.0)   # frac → %
         self.area_min_patch.setValue(float(r.area_min_patch_mm or 0.0))
         self._sync_layout_mode()
         self.patch_x.setValue(r.patch_w_mm)
@@ -1488,7 +1491,7 @@ class LayoutOptionsPanel(QWidget):
         r.layout_mode = self.layout_mode.currentData() or "patch_first"
         r.area_cols = int(self.area_cols.value())
         r.area_rows = int(self.area_rows.value())
-        r.area_ratio = float(self.area_ratio.value())
+        r.area_ratio = float(self.area_ratio.value()) / 100.0          # % → frac
         r.area_min_patch_mm = float(self.area_min_patch.value())
         r.patch_w_mm = self.patch_x.value()
         r.patch_h_mm = self.patch_y.value()

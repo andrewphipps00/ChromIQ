@@ -59,8 +59,10 @@ class LayoutRecipe:
     # target grid into the usable area and SIZE the patches to fill it:
     #   area_cols  strips across   (0 = auto / fill width)
     #   area_rows  patches/strip   (0 = auto / fill height)
-    #   area_ratio patch width:height used for the auto-sized dimension
-    #              (0 = square). Patch size is then derived, not set.
+    #   area_ratio patch HEIGHT as a fraction of width (height:width) for the
+    #              auto-sized dimension; 0 = square. The panel shows it as a
+    #              percentage ("minimum patch height, % of width": 150 → 1.5).
+    #              Patch size is then derived, not set.
     # Defaults to area-first (Knut); with cols/rows on auto it fills like patch-
     # first until a count is pinned, so it's a safe default.
     layout_mode: str = "area_first"

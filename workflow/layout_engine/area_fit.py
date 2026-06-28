@@ -116,11 +116,13 @@ def derive_area_patch_size(kw: dict) -> tuple[float, float] | None:
     # and a row target (pinned, or the most that fit at the minimum height), then
     # SIZE the patches to fill — Knut's "min size + ratio, grow to fill" path,
     # and the explicit-count path, share this fill step.
+    # ratio is HEIGHT:WIDTH (height = width * ratio); 0 = square. (The panel
+    # shows it as "minimum patch height, % of width".)
     pw = ph = None
     if rows > 0:
         ph = max(_MIN_PATCH_MM, _rows_filling(rows))
     elif min_w > 0:
-        h_min = (min_w / ratio) if ratio > 0 else min_w
+        h_min = (min_w * ratio) if ratio > 0 else min_w
         ph = max(_MIN_PATCH_MM, _rows_filling(_max_rows_at(h_min)))
     if cols > 0:
         pw = _fit_columns(base, w_mm, h_mm, cols, max_pw=avail_w)
@@ -130,9 +132,9 @@ def derive_area_patch_size(kw: dict) -> tuple[float, float] | None:
             pw = _fit_columns(base, w_mm, h_mm, c, max_pw=avail_w)
 
     if pw is None and ph is not None:
-        pw = ph * ratio if ratio > 0 else ph
+        pw = ph / ratio if ratio > 0 else ph
     if ph is None and pw is not None:
-        ph = pw / ratio if ratio > 0 else pw
+        ph = pw * ratio if ratio > 0 else pw
     if pw is None or ph is None or pw <= 0 or ph <= 0:
         return None
     # Floor to 0.01 mm so rounding can't nudge the patch over the boundary and
