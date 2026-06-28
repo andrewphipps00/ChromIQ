@@ -125,7 +125,7 @@ class MarginInspectorPanel(QGroupBox):
         checks = QVBoxLayout()
         checks.setSpacing(2)
         self._guide_check = QCheckBox(
-            tr("Show margin threshold guide lines on preview (dotted lines)"), self)
+            tr("Show instrument-margin guide lines on preview (dotted lines)"), self)
         self._guide_check.toggled.connect(self.guides_toggled.emit)
         checks.addWidget(self._guide_check)
         self._measured_check = QCheckBox(
@@ -156,12 +156,12 @@ class MarginInspectorPanel(QGroupBox):
                "ruler or jig. If a margin is below its minimum, that row turns "
                "red and a short warning appears; when everything is fine you'll "
                "see a friendly green 'Margins: OK'.\n\n"
-               "You decide those minimums yourself: open Preferences → Margin "
-               "Thresholds and set them for each instrument and paper size (the "
+               "You decide those minimums yourself: open Preferences → Instrument "
+               "Margins and set them for each instrument and paper size (the "
                "starting values are sensible defaults you can adjust to your own "
                "ruler). They’re only a helpful warning — you can always go ahead "
                "and print anyway.\n\n"
-               "Seeing it on the preview: tick 'Show margin threshold guide "
+               "Seeing it on the preview: tick 'Show instrument-margin guide "
                "lines on preview' to draw each minimum as a dotted line right on "
                "the chart — black where the margin is fine, red on any edge "
                "that's too tight. A patch area that stays inside all four dotted "
@@ -276,7 +276,7 @@ class MarginInspectorPanel(QGroupBox):
         self._status.setVisible(True)
         if not thresholds_defined:
             self._status.setText(tr(
-                "No margin thresholds set for this instrument and paper size."))
+                "No instrument margins set for this instrument and paper size."))
             self._status.setStyleSheet("color: #909090; font-size: 11px;")
             return
         if not violations:

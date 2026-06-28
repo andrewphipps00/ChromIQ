@@ -677,7 +677,7 @@ class SettingsDialog(QDialog):
 
         self._tabs.addTab(self._scroll_wrap(general_page), tr("General"))
         self._tabs.addTab(self._scroll_wrap(self._build_margin_thresholds_tab()),
-                          tr("Margin Thresholds"))
+                          tr("Instrument Margins"))
         self._tabs.addTab(self._build_chart_layout_tab(), tr("Chart Layout"))
 
         # ---- About / Updates (below the tabs) ----
@@ -782,9 +782,10 @@ class SettingsDialog(QDialog):
         intro.setStyleSheet("color: #909090; font-size: 11px;")
         intro_row.addWidget(intro, stretch=1)
         intro_row.addWidget(TooltipButton(
-            tr("About margin thresholds"),
-            tr("Here you decide how much blank white paper a chart should have "
-               "around its patches, so it's comfortable to measure.\n\n"
+            tr("About instrument margins"),
+            tr("These are your INSTRUMENT margins (not printer margins): how much "
+               "blank white paper a chart should have around its patches so it's "
+               "comfortable to measure.\n\n"
                "Why it matters: many spectrophotometers (i1Pro, ColorMunki…) are "
                "slid by hand along the chart, usually in a ruler or holder (a "
                "'jig' or 'rig'). If the patches sit too close to the edge of the "
