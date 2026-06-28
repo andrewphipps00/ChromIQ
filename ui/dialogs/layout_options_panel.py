@@ -214,9 +214,9 @@ class LayoutOptionsPanel(QWidget):
         lgg = QGridLayout(lg)
         self.layout_mode = NoScrollComboBox(self)
         self.layout_mode.addItem(
-            tr("Prioritise patch size, then fit to page"), "patch_first")
-        self.layout_mode.addItem(
             tr("Prioritise chart area, then fit patches to it"), "area_first")
+        self.layout_mode.addItem(
+            tr("Prioritise patch size, then fit to page"), "patch_first")
         self.layout_mode.currentIndexChanged.connect(self._emit)
         self.layout_mode.currentIndexChanged.connect(self._sync_layout_mode)
         add_row(lgg, 0, tr("Create layout:"), self.layout_mode,

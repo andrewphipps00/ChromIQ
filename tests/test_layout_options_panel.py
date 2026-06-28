@@ -157,15 +157,16 @@ def test_engine_info_line_from_recipe_reflects_recipe():
     r = LayoutRecipe(instrument="i1", paper="A4", clip_border=False)
     assert "clip border off" in line(r)
 
-    # Explicit patch width/height wins over a uniform scale factor.
-    r = LayoutRecipe(instrument="i1", paper="A4", patch_w_mm=7.5, patch_h_mm=9.0,
-                     pscale=0.95)
+    # Explicit patch width/height wins over a uniform scale factor (patch-first).
+    r = LayoutRecipe(instrument="i1", paper="A4", layout_mode="patch_first",
+                     patch_w_mm=7.5, patch_h_mm=9.0, pscale=0.95)
     s = line(r)
     assert "patch 7.5×9 mm" in s
     assert "×0.95" not in s
 
-    # No explicit size → fall back to the scale factor.
-    r = LayoutRecipe(instrument="i1", paper="A4", pscale=0.95)
+    # No explicit size → fall back to the scale factor (patch-first).
+    r = LayoutRecipe(instrument="i1", paper="A4", layout_mode="patch_first",
+                     pscale=0.95)
     assert "patch ×0.95" in line(r)
 
     # Per-edge margins must not collapse to a single value.

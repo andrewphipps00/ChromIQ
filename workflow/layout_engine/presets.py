@@ -61,7 +61,9 @@ class LayoutRecipe:
     #   area_rows  patches/strip   (0 = auto / fill height)
     #   area_ratio patch width:height used for the auto-sized dimension
     #              (0 = square). Patch size is then derived, not set.
-    layout_mode: str = "patch_first"
+    # Defaults to area-first (Knut); with cols/rows on auto it fills like patch-
+    # first until a count is pinned, so it's a safe default.
+    layout_mode: str = "area_first"
     area_cols: int = 0
     area_rows: int = 0
     area_ratio: float = 0.0
