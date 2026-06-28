@@ -5526,6 +5526,11 @@ class Ti2RelayoutDialog(QDialog):
         n_add = target - len(existing)
         if n_add > 0:
             fresh = G.fill_gaps(existing, target)
+            # Same hard minimum-distance guarantee the New-chart generator and the
+            # Add-patches "fill the gaps" flow apply: nudge any added patch that
+            # still lands within _GEN_MIN_DIST of an existing one so every filled
+            # patch is meaningfully distinct, not just spread (Knut, #93/#78).
+            fresh = G.enforce_min_distance(fresh, _GEN_MIN_DIST, existing=existing)
             for rgb in fresh:
                 self._grid.addItem(self._grid_item(rgb))
             self._renumber()

@@ -88,6 +88,22 @@ def test_pages_fill_is_wired_to_the_spin(qapp, tmp_path, monkeypatch):
     assert ed._grid.count() == 8
 
 
+def test_fill_enforces_minimum_distance(qapp, tmp_path, monkeypatch):
+    """Patches added by the page-fill honour the same hard minimum-distance rule
+    as the generator (no two patches closer than _GEN_MIN_DIST in 0..100 RGB)."""
+    import math
+    import ui.dialogs.ti2_relayout_dialog as M
+    ed = _engine_editor(qapp, tmp_path, monkeypatch, cap=40)
+    ed._on_engine_pages_changed(3)             # add ~117 patches
+    prog = ed._program_from_grid()
+    md = M._GEN_MIN_DIST
+    # brute-force nearest-neighbour check (small enough program)
+    closest = min(
+        math.dist(prog[i], prog[j])
+        for i in range(len(prog)) for j in range(i + 1, len(prog)))
+    assert closest >= md - 1e-6
+
+
 def test_sync_does_not_refill(qapp, tmp_path, monkeypatch):
     ed = _engine_editor(qapp, tmp_path, monkeypatch, cap=5)
     ed._syncing_pages = True
