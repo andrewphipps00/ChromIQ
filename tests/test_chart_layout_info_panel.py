@@ -53,6 +53,22 @@ def test_estimate_flagged_when_it_differs(app):
     panel.deleteLater()
 
 
+def test_patch_size_two_decimals_and_rounding_tolerance(app):
+    from ui.chart_layout_info_panel import ChartLayoutInfoPanel
+    panel = ChartLayoutInfoPanel()
+    # 2 decimals so a derived size (7.34) is visible, not hidden by 1-dp rounding.
+    panel.set_actual(total=756, rows=21, cols=36, pages=1, patch_w=7.30, patch_h=7.37)
+    panel.set_estimate(total=756, rows=21, cols=36, pages=1, patch_w=7.30, patch_h=7.34)
+    assert panel._actual_labels["patch"].text() == "7.3×7.37"
+    assert panel._estimate_labels["patch"].text() == "7.3×7.34"
+    # sub-pixel rounding (0.03 mm) is within tolerance → NOT amber.
+    assert "c47f17" not in panel._estimate_labels["patch"].styleSheet()
+    # a real size difference (> tolerance) is still flagged.
+    panel.set_estimate(total=756, rows=21, cols=36, pages=1, patch_w=7.30, patch_h=8.5)
+    assert "c47f17" in panel._estimate_labels["patch"].styleSheet()
+    panel.deleteLater()
+
+
 def test_panel_has_tooltip_button(app):
     from ui.chart_layout_info_panel import ChartLayoutInfoPanel
     from ui.tooltip_button import TooltipButton

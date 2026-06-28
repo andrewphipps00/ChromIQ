@@ -121,13 +121,20 @@ class ChartLayoutInfoPanel(QGroupBox):
         v.addLayout(bottom)
 
     # ------------------------------------------------------------------
+    # Patch sizes within this many mm count as equal (estimate vs on screen): the
+    # estimate is the exact geometric size, the on-screen value is read back from
+    # the pixel-snapped render, so they can legitimately differ by up to a pixel
+    # plus a display-rounding step (~0.1 mm) without anything being wrong (#93).
+    _PATCH_TOL_MM = 0.15
+
     @staticmethod
     def _as_dict(total, rows, cols, pages, patch_w, patch_h) -> dict:
         # Patch size is held as a rounded (w, h) tuple so the diff-highlight can
-        # compare it; formatted to "w×h mm" at render time.
+        # compare it; formatted to "w×h mm" at render time. 2 decimals so a
+        # derived size like 7.34 mm is visible instead of hidden by 1-dp rounding.
         patch = None
         if patch_w and patch_h and patch_w > 0 and patch_h > 0:
-            patch = (round(float(patch_w), 1), round(float(patch_h), 1))
+            patch = (round(float(patch_w), 2), round(float(patch_h), 2))
         return {"total": total, "rows": rows, "cols": cols, "pages": pages,
                 "patch": patch}
 
@@ -176,8 +183,16 @@ class ChartLayoutInfoPanel(QGroupBox):
             self._actual_labels[key].setText(_fmt(key, a))
             est = self._estimate_labels[key]
             est.setText(_fmt(key, e))
-            # Flag the estimate amber when it diverges from the shown chart.
-            differs = a is not None and e is not None and a != e
+            # Flag the estimate amber when it diverges from the shown chart. Patch
+            # size gets a small tolerance so sub-pixel render rounding (estimate =
+            # exact mm, on screen = pixel-snapped) isn't flagged as a mismatch.
+            if a is None or e is None:
+                differs = False
+            elif key == "patch":
+                differs = (abs(a[0] - e[0]) > self._PATCH_TOL_MM
+                           or abs(a[1] - e[1]) > self._PATCH_TOL_MM)
+            else:
+                differs = a != e
             est.setStyleSheet(
                 f"font-family: Menlo; font-size: 11px; "
                 f"color: {_AMBER if differs else _MUTED};")
