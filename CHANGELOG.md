@@ -1,5 +1,14 @@
 # Changelog
 
+## v3.13.0-beta.16
+
+### 🔧 Fixed
+- **Patch size in the Chart-layout panel** now shows 2 decimals, and the
+  estimate-vs-on-screen highlight no longer flags a sub-pixel (≤0.15 mm)
+  difference between the exact target size and the pixel-snapped rendered size —
+  so a derived size like 7.34 mm reads honestly instead of looking like a 7.3 vs
+  7.4 mismatch.
+
 ## v3.13.0-beta.15
 
 ### 🔧 Fixed
