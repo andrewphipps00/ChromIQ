@@ -2519,8 +2519,17 @@ class TabChart(QWidget):
                         r.build_kwargs(), thresholds=_thr)
                     pages_req = (self._manual_pages_spin.value()
                                  if self._manual_pages_spin is not None else 1)
-                    self._predict_layout_info(geom, r.paper, pages_req,
-                                              npat=self._onscreen_patch_total())
+                    # Use the on-screen chart's fixed patch count ONLY when the
+                    # count is fixed (Auto patch count OFF). With Auto ON the count
+                    # is a capacity-fill that changes with the patch size, so let
+                    # the estimate recompute it (npat=None) — otherwise the estimate
+                    # sticks on the stale generated count when you change e.g. the
+                    # minimum patch width (#93, Knut beta-14 regression).
+                    _auto = (self._manual_auto_patches_check is not None
+                             and self._manual_auto_patches_check.isChecked())
+                    self._predict_layout_info(
+                        geom, r.paper, pages_req,
+                        npat=None if _auto else self._onscreen_patch_total())
                 except Exception:
                     self._layout_info_panel.clear_estimate()
             else:

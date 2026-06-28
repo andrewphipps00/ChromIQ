@@ -70,6 +70,30 @@ def test_estimate_lays_out_onscreen_patch_count(qapp, tmp_path):
     assert int(panel._estimate_labels["pages"].text()) == 1
 
 
+def test_estimate_ignores_stale_count_when_auto_patches_on(qapp, tmp_path):
+    """With "Auto patch count" ON the estimate must recompute the capacity-fill as
+    settings change (e.g. minimum patch width), not stick on the last generated
+    chart's count. With it OFF it uses that fixed count (#93, Knut beta-14
+    regression)."""
+    tab = _tab(tmp_path, use_chromiq_layout_engine=True)
+    tab._switch_mode("manual")
+    if tab._manual_auto_patches_check is None:
+        pytest.skip("manual auto-patches toggle not present")
+    panel = tab._layout_info_panel
+    tab._onscreen_patch_total = lambda: 7        # a deliberately stale small count
+    # Auto ON → estimate is a full capacity-fill, independent of the stale count.
+    tab._manual_auto_patches_check.setChecked(True)
+    tab._refresh_manual_command_preview()
+    auto_total = int(panel._estimate_labels["total"].text())
+    # Auto OFF → estimate lays out the fixed on-screen count (padded to a pass).
+    tab._manual_auto_patches_check.setChecked(False)
+    tab._refresh_manual_command_preview()
+    fixed_total = int(panel._estimate_labels["total"].text())
+    assert auto_total > 100                       # a page's worth of patches
+    assert fixed_total < 50                       # just the small fixed count (padded)
+    assert auto_total != fixed_total
+
+
 def test_estimate_refreshes_on_mode_switch(qapp, tmp_path):
     """Switching Guided ↔ Manual must re-run the active mode's predictor so the
     estimate describes the mode on screen (#93)."""
