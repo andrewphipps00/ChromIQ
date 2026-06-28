@@ -25,6 +25,7 @@ class ChartResult:
     tiff_paths: list[Path] | None = None
     strip_rects: list[dict] | None = None
     low_contrast_passes: list[int] | None = None
+    cht_paths: list[Path] | None = None
 
 
 def build_ti2_from_ti1(
@@ -146,6 +147,7 @@ def build_chart(
     patch_pattern: str = permutation.DEFAULT_PATCH_PATTERN,
     cal_path: str | Path | None = None,
     apply_cal: bool = False,
+    emit_cht: bool = False,
 ) -> ChartResult:
     """Full chart build: write ``out_base.ti2`` + page TIFF(s) + strip geometry.
 
@@ -274,11 +276,36 @@ def build_chart(
         "strips": rects, "patches": patch_rects,
     }, indent=2), encoding="utf-8")
 
+    cht_paths: list[Path] | None = None
+    if emit_cht:
+        from . import cht_writer
+        # slot → reference XYZ, so each box can carry its EXPECTED value.
+        slots = permutation.location_permutation(layout.total_patches, seed,
+                                                 randomize)
+        all_patches = list(target.patches) + [media] * layout.padding
+        xyz_by_slot: dict[int, tuple] = {}
+        for i, (_dev, xyz) in enumerate(all_patches):
+            xyz_by_slot[slots[i]] = xyz
+        cht_paths = []
+        npages = layout.pages
+        for pg in range(npages):
+            boxes = cht_writer.boxes_from_patch_rects(patch_rects, h_mm, dpi, page=pg)
+            expected = []
+            for r in patch_rects:
+                if r.get("page", 0) != pg:
+                    continue
+                x, y, z = xyz_by_slot.get(r["slot"], (0.0, 0.0, 0.0))
+                expected.append((r["loc"], x, y, z))
+            cht = (stem.with_suffix(".cht") if npages == 1
+                   else stem.parent / f"{stem.name}_{pg + 1:02d}.cht")
+            cht_paths.append(cht_writer.write_cht(cht, boxes, expected))
+
     return ChartResult(
         ti2_path=ti2_path, seed=seed, randomize=randomize,
         color_rep=target.color_rep, layout=layout,
         tiff_paths=tiff_paths, strip_rects=rects,
         low_contrast_passes=render.low_contrast_passes,
+        cht_paths=cht_paths,
     )
 
 
