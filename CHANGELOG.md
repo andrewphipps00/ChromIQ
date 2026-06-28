@@ -1,5 +1,32 @@
 # Changelog
 
+## v3.13.0-beta.12
+
+More layout-engine refinements from testing.
+
+### ✨ New
+- **Area-first “minimum patch size” mode.** Set the smallest patch your
+  instrument can read, leave Strips/Rows on “auto”, and ChromIQ fits the most
+  patches at that size and grows them to fill the area — the densest readable
+  chart with no counting (a Patch shape ratio controls how they grow). Pin
+  columns/rows instead when you want exact control.
+- Area-first now shows **only the fields that choice needs** (the patch size /
+  scale and patch-area-alignment rows are hidden when not used); margins and
+  clip-border width stay, since they define the area.
+
+### 🔧 Changed
+- **Clip-border content (Notes box) is now the same size in Guided and Manual.**
+  It uses the full clip strip from a small fixed inset, so a larger page margin
+  no longer shrinks the notes text.
+- **Guided mode** now fills a kept i1Pro/i1Pro 3+ clip border with the Notes box
+  and brackets each strip with edge spacers (i1Pro / i1Pro 3+ / ColorMunki).
+
+### ⚠️ Known issue
+- **ColorMunki “extra-high (triple) density” with the new layout engine is
+  wrong** — it currently produces *fewer* patches than double density. Use
+  double density (or printtarg) for ColorMunki extra-high charts until this is
+  fixed.
+
 ## v3.13.0-beta.11
 
 Follow-up tweaks to the layout engine from testing.
