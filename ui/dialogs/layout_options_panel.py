@@ -60,7 +60,7 @@ class LayoutOptionsPanel(QWidget):
     @staticmethod
     def modes_for(inst: str) -> list[tuple[str, str]]:
         if inst in ("i1", "p3"):
-            return [("clip", tr("On (left clip border)")),
+            return [("clip", tr("On")),
                     ("noclip", tr("Off — more patches"))]
         if inst == "CM":
             return [("freehand", tr("Hand-held")), ("high", tr("High density (rig)")),
@@ -659,6 +659,14 @@ class LayoutOptionsPanel(QWidget):
         self.use_instr_margins.toggled.connect(self._sync_instr_margins)
         self.use_instr_margins.toggled.connect(self._emit)
         _mgrid.addWidget(self.use_instr_margins, 0, 0, 1, 2)
+        _mgrid.addWidget(TooltipButton(
+            tr("Use instrument margins"),
+            tr("Fill the four page margins from the per-instrument minimums set "
+               "in Preferences → Instrument Margins for this instrument and "
+               "paper, and lock them so the patch area always clears your "
+               "reading jig. They refill automatically when you change "
+               "instrument or paper. Untick to type your own margins."),
+            self), 0, 2)
         for _i, _k in enumerate(("t", "r", "b", "l"), start=1):
             _dl = QLabel(_mlabels[_k], self); _dl.setMinimumWidth(46)
             _mgrid.addWidget(_dl, _i, 0)
