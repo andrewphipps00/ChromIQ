@@ -903,6 +903,11 @@ class ChartCreator:
             border=float(params.margin_mm),
             nolimit=bool(params.no_strip_limit),
         )
+        # Guided/basic path: bracket each strip with a leading + trailing spacer
+        # for the strip-reader instruments (i1Pro / i1Pro 3+ / ColorMunki), so the
+        # instrument always starts and ends a strip on a spacer (#93).
+        if params.instrument in ("i1", "p3", "CM"):
+            kw["edge_spacers"] = True
         if params.instrument in ("i1", "p3"):
             suppress = _effective_suppress_lb(params)
             kw["nolpcbord"] = suppress

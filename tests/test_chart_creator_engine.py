@@ -216,3 +216,15 @@ def test_guided_clip_border_uses_notes_when_kept(tmp_path: Path) -> None:
     # non-clip instruments don't set it
     assert "clip_content_mode" not in creator._engine_build_kwargs(
         ChartParams(instrument="CM", paper="A4"))
+
+
+def test_guided_uses_edge_spacers_for_strip_readers(tmp_path: Path) -> None:
+    """Guided/basic path brackets each strip with edge spacers for i1Pro /
+    i1Pro 3+ / ColorMunki, but not SpectroScan (#93)."""
+    creator = ChartCreator(_EngineRunner(), _MockFileManager(tmp_path / "p"),
+                           _EngineSettings())
+    for inst in ("i1", "p3", "CM"):
+        kw = creator._engine_build_kwargs(ChartParams(instrument=inst, paper="A4"))
+        assert kw.get("edge_spacers") is True, inst
+    assert creator._engine_build_kwargs(
+        ChartParams(instrument="SS", paper="A4")).get("edge_spacers") is not True
