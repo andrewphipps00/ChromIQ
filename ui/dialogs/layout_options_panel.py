@@ -740,6 +740,7 @@ class LayoutOptionsPanel(QWidget):
         # scanner's paper clip; printtarg hard-codes 26 mm, we make it adjustable.
         self.clip_width = small_mm(top=100.0)
         self.clip_width.setMinimum(10.0)
+        self.clip_width.valueChanged.connect(self._sync_clip_margin_floor)
         self.clip_width_label = QLabel(tr("Clip border width:"), self)
         self.clip_width_tip = TooltipButton(
             tr("Clip border width"),
@@ -906,6 +907,7 @@ class LayoutOptionsPanel(QWidget):
         self.clip_side = NoScrollComboBox(self)
         self.clip_side.addItem(tr("Left"), "left")
         self.clip_side.addItem(tr("Right"), "right")
+        self.clip_side.currentIndexChanged.connect(self._sync_clip_margin_floor)
         self.clip_side.currentIndexChanged.connect(self._emit)
         self.clip_text = QLineEdit(self)
         self.clip_text.setPlaceholderText(tr("e.g. {project} — {date}"))
@@ -1099,6 +1101,8 @@ class LayoutOptionsPanel(QWidget):
             self._clip_content_grp.setVisible(show_group)
             if show_group:
                 self._refresh_clip_preview()
+        # Floor the clip-side margin at the clip width whenever a band is active.
+        self._sync_clip_margin_floor()
 
     # ---- Clip-border content -------------------------------------------
     def _sync_clip_content_enabled(self) -> None:
@@ -1198,6 +1202,36 @@ class LayoutOptionsPanel(QWidget):
                         self.margins[k].blockSignals(False)
         for k in ("t", "r", "b", "l"):
             self.margins[k].setEnabled(not on)
+
+    def _clip_band_active(self) -> bool:
+        """Whether a clip / notes band is currently on for the selected
+        instrument (i1/p3 clip mode, or CM/SS with notes content)."""
+        inst = (self.instr.currentData() if self.instr is not None
+                else self._inst) or "i1"
+        if inst in ("i1", "p3"):
+            return (self.mode.currentData() == "clip") if self.mode is not None \
+                else bool(self._clip)
+        if inst in ("CM", "SS"):
+            return (hasattr(self, "clip_content_mode")
+                    and self.clip_content_mode.currentData() not in (None, "off"))
+        return False
+
+    def _sync_clip_margin_floor(self, *_a) -> None:
+        """The clip / notes band lives inside the clip-side page margin, so floor
+        that margin at the clip-border width and show it in the box — editable, so
+        the user can push the patches further in (Knut beta-13). Skipped while
+        "Use instrument margins" locks the margins."""
+        if self._loading or not (hasattr(self, "clip_width")
+                                 and hasattr(self, "clip_side")):
+            return
+        if (hasattr(self, "use_instr_margins") and self.use_instr_margins.isChecked()):
+            return
+        if not self._clip_band_active():
+            return
+        clip_w = self.clip_width.value()
+        key = "r" if (self.clip_side.currentData() or "left") == "right" else "l"
+        if self.margins[key].value() < clip_w:
+            self.margins[key].setValue(clip_w)        # fires its own _emit
 
     def _sync_layout_mode(self, *_a) -> None:
         """Show only the fields each layout choice needs (#93 / Knut). Area-first

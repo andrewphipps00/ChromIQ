@@ -66,7 +66,9 @@ def test_delegated_instrument_rejected():
 def test_independent_margins_reduce_capacity():
     base = instruments.build("i1")
     wide = instruments.build("i1", margins=(20.0, 20.0, 20.0, 20.0))
-    assert wide.margin_t == 20.0 and wide.margin_l == 20.0
+    # Top follows the box; the LEFT is floored to the clip-border width (26 mm),
+    # since the clip band lives inside the clip-side margin (Knut beta-13).
+    assert wide.margin_t == 20.0 and wide.margin_l == 26.0
     assert (geometry.patches_per_sheet(wide, *A4)
             < geometry.patches_per_sheet(base, *A4))
     # default margins (None) leave geometry identical to the uniform border
@@ -294,8 +296,11 @@ def test_align_default_matches_legacy_placement():
     assert g.patch_area_align == "center-left"
     lay = geometry.compute(g, *A4, 60)
     p = geometry.placement(g, *A4, lay)
-    # left-anchored: x0 = margin_l + lbord (+ offset 0)
-    assert abs(p.x0 - (g.margin_l + g.lbord)) < 1e-9
+    # left-anchored: patches start at the (clip-floored) left margin. The clip now
+    # lives inside that margin, so x0 == margin_l (== 26 mm for the default clip),
+    # the same absolute position as the old additive border+lbord (Knut beta-13).
+    assert abs(p.x0 - g.margin_l) < 1e-9
+    assert g.margin_l == 26.0
 
 
 def test_area_first_fits_requested_grid():

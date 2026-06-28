@@ -239,6 +239,29 @@ def test_mode_tooltip_is_instrument_specific(app):
     assert "ColorMunki" not in p._mode_tip._body
 
 
+def test_clip_width_floors_clip_side_margin(app):
+    """The clip / notes band lives inside the clip-side margin, so turning the
+    clip on (or widening it) floors that page margin at the clip width and shows
+    it in the box — editable (Knut beta-13, clip-inside-margin)."""
+    from ui.dialogs.layout_options_panel import LayoutOptionsPanel
+    p = LayoutOptionsPanel(with_selectors=True)
+    p.show()
+    p.instr.setCurrentIndex(p.instr.findData("i1"))   # clip on by default
+    p.margins["l"].setValue(9.0)
+    p.clip_width.setValue(30.0)
+    assert p.margins["l"].value() == 30.0             # floored up to the clip width
+    # Clip off → the floor no longer applies; the box is free again.
+    p.mode.setCurrentIndex(p.mode.findData("noclip"))
+    p.margins["l"].setValue(5.0)
+    assert p.margins["l"].value() == 5.0
+    # Right-side clip floors the RIGHT margin instead.
+    p.mode.setCurrentIndex(p.mode.findData("clip"))
+    p.clip_side.setCurrentIndex(p.clip_side.findData("right"))
+    p.margins["r"].setValue(8.0)
+    p.clip_width.setValue(28.0)
+    assert p.margins["r"].value() == 28.0
+
+
 def test_use_instrument_margins_fills_and_locks(app):
     """Ticking "Use instrument margins" fills the four margins from the wired
     threshold lookup and locks them read-only (#93, Knut)."""

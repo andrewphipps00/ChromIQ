@@ -51,9 +51,12 @@ def compute(geom: Geom, paper_w_mm: float, paper_h_mm: float, npat: int,
 
     sxwi = g.pwid / 2.0 if (scanc & 2) else 0.0
 
-    # Imageable width: left margin + clip border on the left, right margin on the
-    # right (independent margins; default to the uniform border).
-    iw = pw - g.margin_l - g.lbord - g.margin_r
+    # Imageable width: the per-edge page margins govern where patches start. The
+    # clip / notes band lives INSIDE the clip-side margin (the UI bumps that
+    # margin to at least the clip-border width), so it is NOT subtracted again
+    # here — otherwise it would be double-counted (Knut beta-13, clip-inside-
+    # margin; supersedes the old additive lbord model).
+    iw = pw - g.margin_l - g.margin_r
 
     # Available pass length down the sheet (top/bottom margins, floored by the
     # instrument's own leader/trailer requirements). The top label band uses the
@@ -217,18 +220,16 @@ def placement(geom: Geom, paper_w_mm: float, paper_h_mm: float, layout: Layout) 
     n_passes = (layout.patches_per_page // layout.steps_in_pass
                 if layout.steps_in_pass else 0)
     block_w = (max(0, n_passes - 1) * g.rrsp + g.pwid) if n_passes else 0.0
-    avail_w = (pw - g.margin_l - g.lbord - g.margin_r
+    avail_w = (pw - g.margin_l - g.margin_r
                - g.rlwi - 2.0 * g.hxew - (g.pglth if g.dopglabel else 0.0))
     extra_w = max(0.0, avail_w - block_w)
-    # Clip band on the left shifts the patch block right by lbord; on the right
-    # the block starts at the left margin and the band sits at the far edge (#93).
-    _clip_left = g.lbord if getattr(g, "clip_side", "left") != "right" else 0.0
-    # Hex stagger (SpectroScan): patches shift ±¼·width / the apexes overshoot by
-    # hxeh, so start the block hxew in from the left and hxeh down from the top
-    # (the area reserves 2·hxew / 2·hxeh) — otherwise the left-shifted hexagons of
-    # the first column are clipped at the margin (#93, Knut). Zero for non-hex.
+    # The clip / notes band lives inside the clip-side margin now (not added to
+    # the patch origin), so patches simply start at the left margin (Knut beta-13,
+    # clip-inside-margin). Hex stagger (SpectroScan): patches shift ±¼·width / the
+    # apexes overshoot by hxeh, so start the block hxew in from the left and hxeh
+    # down from the top (the area reserves 2·hxew / 2·hxeh). Zero for non-hex.
     return Placement(
-        x0=g.margin_l + _clip_left + fh * extra_w + g.hxew + g.offset_x,
+        x0=g.margin_l + fh * extra_w + g.hxew + g.offset_x,
         y0_first=amints + _lead + g.hxeh + g.offset_y,
         plen=g.plen, pwid=g.pwid, pspa=g.pspa, rrsp=g.rrsp,
         steps_in_pass=layout.steps_in_pass,

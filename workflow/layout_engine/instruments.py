@@ -166,6 +166,17 @@ def build(
     mxrowl = float(max_strip) if max_strip else geom.mxrowl
     sig = geom.strip_indicator_gap if strip_indicator_gap is None \
         else float(strip_indicator_gap)
+    # Clip / notes band lives INSIDE the clip-side margin (Knut beta-13): raise
+    # that margin to at least the clip-border width so the band fits and the patch
+    # area starts at the (possibly bumped) margin — no additive double-count. This
+    # keeps printtarg parity for the default clip (border + lbord == clip width)
+    # while a larger user margin still pushes the patches further in.
+    if geom.lbord > 0:
+        clip_w = geom.lbord + geom.border
+        if (clip_side or "left") == "right":
+            mr = max(mr, clip_w)
+        else:
+            ml = max(ml, clip_w)
     return replace(geom, margin_t=mt, margin_r=mr, margin_b=mb, margin_l=ml,
                    plen=plen, pwid=pwid, rrsp=rrsp, pspa=pspa, mxrowl=mxrowl,
                    strip_indicator_gap=sig, offset_x=offset_x, offset_y=offset_y,
