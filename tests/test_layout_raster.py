@@ -298,6 +298,29 @@ def test_spectroscan_hex_pokes_above_first_row():
     assert checked >= 1
 
 
+def test_text_edge_mm_moves_bottom_text():
+    """A larger 'text distance from edge' pushes the bottom sheet text further up
+    from the page edge (#93, Knut: the text-distance parameter)."""
+    import numpy as np
+    target = _rgb_target(60)
+    geom = instruments.build("i1")
+    lay = geometry.compute(geom, 210.0, 297.0, 60)
+
+    def lowest_ink_row(edge):
+        res = raster.render_pages(target, lay, geom, seed=1, randomize=False,
+                                  paper_w_mm=210.0, paper_h_mm=297.0, dpi=150,
+                                  chart_text="ChromIQ", text_edge_mm=edge)
+        img = np.asarray(res.images[0])
+        H = img.shape[0]
+        # scan the bottom 60 px band for the lowest row carrying text ink
+        rows = [y for y in range(H - 60, H) if (img[y] < 120).any()]
+        return max(rows) if rows else 0
+
+    near = lowest_ink_row(2.0)
+    far = lowest_ink_row(12.0)
+    assert far < near        # bigger inset → text sits higher up the page
+
+
 def test_spectroscan_row_labels_drawn_in_side_band():
     """SpectroScan labels the grid 2-D: column letters on top + row NUMBERS down
     the side, in the reserved rlwi band left of the patches — for both flat and

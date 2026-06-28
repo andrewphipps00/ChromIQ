@@ -290,7 +290,8 @@ def _furniture_reserves_mm(geom, kw: dict) -> tuple[float, float]:
     # render_pages); the inset keeps the text clear of a printer's unprintable
     # edge (#93, Knut's "distance from page edge to text").
     nlines = (1 if kw.get("chart_text") else 0) + (1 if kw.get("stamp_command") else 0)
-    bottom = (TEXT_EDGE_MARGIN_MM + 4.2 * nlines) if nlines else 0.0
+    _edge = float(kw.get("text_edge") or TEXT_EDGE_MARGIN_MM)
+    bottom = (_edge + 4.2 * nlines) if nlines else 0.0
     return label_band, bottom
 
 
@@ -657,6 +658,7 @@ def render_pages(
     chart_text_bold: bool = False,
     chart_text_italic: bool = False,
     stamp_text: str = "",
+    text_edge_mm: float = TEXT_EDGE_MARGIN_MM,
     clip_content_mode: str = "off",
     clip_text: str = "",
     clip_text_font: str = "Inter",
@@ -793,11 +795,16 @@ def render_pages(
                 # left of the patches. Drawn once, against the leftmost strip (#93,
                 # Knut). The band sits in [x0 - rlwi, x0].
                 if _row_band_px > 0 and p == 0:
-                    _bx = x0 - _row_band_px // 2
+                    # Right-align each number so it ends just left of the patches
+                    # and grows LEFT into the band — a two-digit number (10–13…)
+                    # can't spill over the patches (#93, Knut).
+                    _gap = max(1, px(1.0))
                     for _j in range(len(col_slots)):
                         _ry = (px(place.y_of(_j)) + px(place.y_of(_j) + place.plen)) // 2
-                        _draw_indicator(draw, _bx, _ry - ind_px // 2,
-                                        label_patch(_j + 1), font, _spc)
+                        _txt = label_patch(_j + 1)
+                        _tw = int(draw.textlength(_txt, font=font))
+                        draw.text((x0 - _gap - _tw, _ry - ind_px // 2), _txt,
+                                  font=font, fill=(0, 0, 0))
             for j, gslot in enumerate(col_slots):
                 y0 = px(place.y_of(j))
                 # Derive each row's bottom edge from its true mm position (the
@@ -888,7 +895,7 @@ def render_pages(
             sfont = _font(px(chart_text_size_mm or 3.2), chart_text_font,
                           chart_text_bold, chart_text_italic)
             line_h = px(4.2)
-            yy = H - px(TEXT_EDGE_MARGIN_MM) - line_h * len(_btxt)
+            yy = H - px(text_edge_mm) - line_h * len(_btxt)
             for ln in _btxt:
                 draw.text((px(geom.margin_l), yy), ln, font=sfont, fill=(0, 0, 0))
                 yy += line_h

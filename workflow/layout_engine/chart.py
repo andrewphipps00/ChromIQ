@@ -133,6 +133,7 @@ def build_chart(
     chart_text_size_mm: float = 0.0,
     chart_text_bold: bool = False,
     chart_text_italic: bool = False,
+    text_edge: float = 4.0,
     stamp_command: bool = False,
     project: str = "",
     nolpcbord: bool = False,
@@ -192,7 +193,8 @@ def build_chart(
         "indicator_rotation": indicator_rotation, "underline_mode": underline_mode,
         "underline_thickness_mm": underline_thickness_mm,
         "underline_gap_mm": underline_gap_mm,
-        "chart_text": chart_text, "stamp_command": stamp_command})
+        "chart_text": chart_text, "stamp_command": stamp_command,
+        "text_edge": text_edge})
     w_mm, h_mm = papers.dimensions_mm(paper)
     layout = geometry.compute(geom, w_mm, h_mm, len(target.patches))
     if seed is None:
@@ -259,6 +261,7 @@ def build_chart(
         chart_text=chart_text, chart_text_font=chart_text_font,
         chart_text_size_mm=chart_text_size_mm, chart_text_bold=chart_text_bold,
         chart_text_italic=chart_text_italic, stamp_text=stamp_text,
+        text_edge_mm=text_edge,
         clip_content_mode=clip_content_mode, clip_text=clip_text,
         clip_text_font=clip_text_font, clip_image_path=clip_image_path,
         text_ctx=_ctx,
