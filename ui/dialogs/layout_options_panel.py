@@ -42,8 +42,12 @@ class LayoutOptionsPanel(QWidget):
 
     changed = pyqtSignal()
 
-    INSTRUMENTS = [("i1", "i1Pro"), ("p3", "i1Pro 3+"),
-                   ("CM", "ColorMunki"), ("SS", "SpectroScan")]
+    # Labels mirror the printtarg -i combobox (data/parameters.yaml) so the engine
+    # and printtarg show the same instrument names (Knut). Codes stay i1/p3/CM/SS.
+    INSTRUMENTS = [("i1", "i1Pro / i1Pro 2 / i1Pro 3"),
+                   ("p3", "i1Pro 3 Plus"),
+                   ("CM", "ColorMunki / i1Studio / ColorChecker Studio"),
+                   ("SS", "SpectroScan (flatbed)")]
 
     @staticmethod
     def mode_label_for(inst: str) -> str:

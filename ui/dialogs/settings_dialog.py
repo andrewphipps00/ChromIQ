@@ -1081,9 +1081,12 @@ class SettingsDialog(QDialog):
     # ------------------------------------------------------------------
     # Chart Layout tab (ChromIQ layout engine, issue #93)
     # ------------------------------------------------------------------
+    # Labels mirror the printtarg -i combobox (data/parameters.yaml), so the
+    # engine and printtarg show the same instrument names (Knut). Codes unchanged.
     _LAYOUT_INSTRUMENTS = [
-        ("i1", "i1Pro"), ("p3", "i1Pro 3+"), ("CM", "ColorMunki"),
-        ("SS", "SpectroScan"), ("41", "DTP41"), ("51", "DTP51"),
+        ("i1", "i1Pro / i1Pro 2 / i1Pro 3"), ("p3", "i1Pro 3 Plus"),
+        ("CM", "ColorMunki / i1Studio / ColorChecker Studio"),
+        ("SS", "SpectroScan (flatbed)"), ("41", "DTP41"), ("51", "DTP51"),
     ]
 
     @staticmethod

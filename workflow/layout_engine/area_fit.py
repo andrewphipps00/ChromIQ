@@ -23,7 +23,9 @@ def _usable(geom, w_mm: float, h_mm: float) -> tuple[float, float]:
     """(usable_width, usable_pass_length) in mm for the patch block — mirrors
     geometry.compute()'s avail_w / arowl so the derivation matches placement."""
     g = geom
-    iw = w_mm - g.margin_l - g.lbord - g.margin_r
+    # Clip / notes band lives inside the clip-side margin (not subtracted again) —
+    # mirrors geometry.compute() (Knut beta-13, clip-inside-margin).
+    iw = w_mm - g.margin_l - g.margin_r
     avail_w = iw - g.rlwi - 2.0 * g.hxew - (g.pglth if g.dopglabel else 0.0)
     txhi = g.txhisl if g.label_band_mm < 0 else g.label_band_mm
     eff_lspa = max(g.border + g.lcar, g.lspa - g.txhisl + txhi)
