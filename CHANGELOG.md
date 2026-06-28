@@ -1,5 +1,13 @@
 # Changelog
 
+## v3.13.0-beta.15
+
+### 🔧 Fixed
+- **Chart-layout “estimate” now tracks the patch size again.** With *Auto patch
+  count* on, changing the minimum patch width (or other sizing) updates the
+  estimated total/rows/columns/pages instead of sticking on the last generated
+  chart’s count. (The generated chart was already correct.)
+
 ## v3.13.0-beta.14
 
 Big batch of layout-engine fixes from Knut's beta-13 testing.
