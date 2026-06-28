@@ -606,6 +606,26 @@ class RenderResult:
     low_contrast_passes: list[int]   # global pass indices flagged by the guard
 
 
+def _hexagon_points(x0: int, y0: int, w: int, ph: int, step: int):
+    """Six vertices of a printtarg-style SpectroScan hexagon for the patch slot
+    at ``(x0, y0)`` sized ``w × ph`` (px), staggered ±¼·w by the patch's index
+    in the strip (#93, Knut). Pointed top and bottom, flat vertical sides; the
+    apexes reach ⅙·ph beyond the slot top and bottom (the geometry reserves that
+    as ``hxeh``), so neighbouring rows interlock as in ``printtarg -h``."""
+    dx = round(-w / 4) if step % 2 == 0 else round(w / 4)
+    t6 = ph / 6.0
+    left, right = x0 + dx, x0 + w + dx
+    cx = round(x0 + w / 2 + dx)
+    return [
+        (cx, round(y0 - t6)),               # top apex
+        (right, round(y0 + t6)),            # upper-right
+        (right, round(y0 + 5 * t6)),        # lower-right
+        (cx, round(y0 + ph + t6)),          # bottom apex
+        (left, round(y0 + 5 * t6)),         # lower-left
+        (left, round(y0 + t6)),             # upper-left
+    ]
+
+
 def render_pages(
     target: ColorTarget,
     layout: Layout,
@@ -673,6 +693,9 @@ def render_pages(
 
     pl_px = px(place.plen)
     sp_px = px(place.pspa)
+    # SpectroScan hexagonal patches (printtarg -h): draw interlocking hexagons
+    # instead of rectangles (#93, Knut). Capacity is unchanged — only the shape.
+    ss_hex = getattr(geom, "key", "") == "SS" and getattr(geom, "hxew", 0.0) > 0
     ind_px = px(effective_indicator_size_mm(
         geom, dpi, indicator_font, indicator_size_mm))
     font = _font(ind_px, indicator_font, indicator_bold, indicator_italic)
@@ -771,7 +794,11 @@ def render_pages(
                 # top tiles them seamlessly (#93).
                 yB = px(place.y_of(j) + place.plen)            # patch bottom edge
                 rgb = rgb_by_slot[gslot]
-                draw.rectangle([x0, y0, xR - 1, yB - 1], fill=rgb)
+                if ss_hex:
+                    draw.polygon(_hexagon_points(x0, y0, xR - x0, yB - y0, j),
+                                 fill=rgb)
+                else:
+                    draw.rectangle([x0, y0, xR - 1, yB - 1], fill=rgb)
                 if sp_px > 0 and j + 1 < len(col_slots):
                     y_next = px(place.y_of(j + 1))             # next patch top
                     nxt = rgb_by_slot[col_slots[j + 1]]

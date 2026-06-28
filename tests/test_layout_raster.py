@@ -254,6 +254,57 @@ def test_clip_content_modes():
     assert clip_ink("notes") > 0
 
 
+def test_hexagon_points_shape_and_stagger():
+    """The SpectroScan hexagon helper makes a pointed-top/bottom, flat-sided hex
+    whose apexes reach beyond the slot, staggered ±¼w by patch index (#93)."""
+    even = raster._hexagon_points(100, 200, 60, 60, 0)   # step 0 → shift left
+    odd = raster._hexagon_points(100, 200, 60, 60, 1)    # step 1 → shift right
+    # six vertices
+    assert len(even) == 6
+    top, ur, lr, bot, ll, ul = even
+    # top & bottom apexes share the centre x; apexes overshoot the slot top/bottom
+    assert top[0] == bot[0]
+    assert top[1] < 200 and bot[1] > 260            # beyond [y0, y0+ph]
+    # flat vertical sides: left pair share x, right pair share x
+    assert ul[0] == ll[0] and ur[0] == lr[0] and ul[0] < ur[0]
+    # stagger: even shifts left of odd by ~half the width
+    assert odd[0][0] - even[0][0] == 30             # +w/4 - (-w/4) = w/2
+
+
+def test_spectroscan_hex_pokes_above_first_row():
+    """SpectroScan hex patches render as hexagons whose top apex pokes above the
+    slot — so on the first row a coloured patch paints pixels above its slot top
+    where the flat (rectangular) layout leaves paper white (#93, Knut)."""
+    import numpy as np
+    target = _rgb_target(80)
+
+    def render(hflag):
+        geom = instruments.build("SS", hflag=hflag)
+        lay = geometry.compute(geom, 210.0, 297.0, 80)
+        res = raster.render_pages(target, lay, geom, seed=1, randomize=False,
+                                  paper_w_mm=210.0, paper_h_mm=297.0, dpi=200)
+        rects = geometry.patch_rects_px(geom, 210.0, 297.0, lay, 200)
+        return np.asarray(res.images[0]), rects
+
+    hex_img, rects = render(True)
+    flat_img, _ = render(False)
+    top_y = min(r["y"] for r in rects)                  # first patch row
+    checked = 0
+    for r in (r for r in rects if r["y"] == top_y):
+        cx0, cy0 = r["x"] + r["w"] // 2, r["y"] + r["h"] // 2
+        if max(hex_img[cy0, cx0]) >= 240:               # skip near-white patches
+            continue
+        dx = -(r["w"] // 4)                              # step 0 (even) shifts left
+        cx = r["x"] + r["w"] // 2 + dx
+        ay = r["y"] - r["h"] // 12                       # inside the top apex
+        assert tuple(flat_img[ay, cx]) == (255, 255, 255)   # flat: white above slot
+        assert tuple(hex_img[ay, cx]) != (255, 255, 255)    # hex: apex paints it
+        checked += 1
+        if checked >= 3:
+            break
+    assert checked >= 1
+
+
 def test_right_clip_content_is_rotated_180(_no_op=None):
     """A clip on the right edge renders its content turned 180° vs the left, so
     it stays the right way up for the reader (#93, Knut)."""
