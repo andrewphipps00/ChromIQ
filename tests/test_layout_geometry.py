@@ -326,6 +326,26 @@ def test_area_first_fits_requested_grid():
     assert tall > sq
 
 
+def test_area_first_cols_pinned_rows_auto_fill_to_bottom():
+    """Columns pinned + rows on auto: area-first grows the patch height so the
+    rows fill the page down to the bottom margin/trailer, instead of leaving a
+    big gap with square patches (#93, Knut beta-13)."""
+    from workflow.layout_engine.presets import default_recipe
+    from dataclasses import replace
+    rec = replace(default_recipe("i1", "A4R", mode="clip"),
+                  layout_mode="area_first", area_method="by_grid",
+                  area_cols=18, area_rows=0,
+                  margin_top=9.0, margin_bottom=9.0, margin_right=9.0)
+    g = instruments.geom_from_build_kwargs(rec.build_kwargs())
+    w, h = 297.0, 210.0
+    lay = geometry.compute(g, w, h, geometry.patches_per_sheet(g, w, h))
+    B = geometry.realized_margins_mm(g, w, h, lay)[1]
+    # The rows reach the bottom: the gap collapses to the instrument trailer
+    # (~tspa), nowhere near the old square-patch gap (Knut measured 33 mm).
+    assert B < 13.0
+    assert g.plen > g.pwid * 0.9            # patches grew vertically to fill
+
+
 def test_area_first_noop_without_targets():
     """Area-first with no column/row target falls back to patch-first sizing."""
     from workflow.layout_engine.presets import default_recipe

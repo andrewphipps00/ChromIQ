@@ -141,7 +141,12 @@ def derive_area_patch_size(kw: dict) -> tuple[float, float] | None:
     if pw is None and ph is not None:
         pw = ph / ratio if ratio > 0 else ph
     if ph is None and pw is not None:
-        ph = pw * ratio if ratio > 0 else pw
+        # Columns pinned, rows on "auto": area-first should FILL the page, so grow
+        # the patch height until the last row reaches the bottom margin, using the
+        # ratio/square height only as a floor — otherwise square patches leave a
+        # gap at the bottom (#93, Knut beta-13).
+        base_h = pw * ratio if ratio > 0 else pw
+        ph = max(_MIN_PATCH_MM, base_h, _rows_filling(_max_rows_at(base_h)))
     if pw is None or ph is None or pw <= 0 or ph <= 0:
         return None
     # Floor to 0.01 mm so rounding can't nudge the patch over the boundary and
