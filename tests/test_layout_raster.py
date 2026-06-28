@@ -273,36 +273,45 @@ def test_hexagon_points_shape_and_stagger():
 
 def test_spectroscan_hex_pokes_above_first_row():
     """SpectroScan hex patches render as hexagons whose top apex pokes above the
-    slot — so on the first row a coloured patch paints pixels above its slot top
-    where the flat (rectangular) layout leaves paper white (#93, Knut)."""
+    slot — a coloured first-row patch paints pixels above its slot top, in the
+    hxeh space the geometry reserves (#93, Knut)."""
     import numpy as np
-    target = _rgb_target(80)
-
-    def render(hflag):
-        geom = instruments.build("SS", hflag=hflag)
-        lay = geometry.compute(geom, 210.0, 297.0, 80)
-        res = raster.render_pages(target, lay, geom, seed=1, randomize=False,
-                                  paper_w_mm=210.0, paper_h_mm=297.0, dpi=200)
-        rects = geometry.patch_rects_px(geom, 210.0, 297.0, lay, 200)
-        return np.asarray(res.images[0]), rects
-
-    hex_img, rects = render(True)
-    flat_img, _ = render(False)
+    geom = instruments.build("SS", hflag=True)
+    lay = geometry.compute(geom, 210.0, 297.0, 80)
+    res = raster.render_pages(_rgb_target(80), lay, geom, seed=1, randomize=False,
+                              paper_w_mm=210.0, paper_h_mm=297.0, dpi=200)
+    hex_img = np.asarray(res.images[0])
+    rects = geometry.patch_rects_px(geom, 210.0, 297.0, lay, 200)
     top_y = min(r["y"] for r in rects)                  # first patch row
     checked = 0
     for r in (r for r in rects if r["y"] == top_y):
-        cx0, cy0 = r["x"] + r["w"] // 2, r["y"] + r["h"] // 2
-        if max(hex_img[cy0, cx0]) >= 240:               # skip near-white patches
+        cy0 = r["y"] + r["h"] // 2
+        dx = -(r["w"] // 4)                             # step 0 (even) shifts left
+        cx = r["x"] + r["w"] // 2 + dx                  # apex x
+        if max(hex_img[cy0, cx]) >= 240:               # skip near-white patches
             continue
-        dx = -(r["w"] // 4)                              # step 0 (even) shifts left
-        cx = r["x"] + r["w"] // 2 + dx
-        ay = r["y"] - r["h"] // 12                       # inside the top apex
-        assert tuple(flat_img[ay, cx]) == (255, 255, 255)   # flat: white above slot
-        assert tuple(hex_img[ay, cx]) != (255, 255, 255)    # hex: apex paints it
+        ay = r["y"] - r["h"] // 12                       # just above the slot top
+        assert tuple(hex_img[ay, cx]) != (255, 255, 255)   # apex paints above slot
         checked += 1
         if checked >= 3:
             break
     assert checked >= 1
+
+
+def test_spectroscan_hex_first_column_not_clipped():
+    """The left-shifted (even-step) hexagons of the first column must stay inside
+    the left margin — the stagger offset is reserved by hxew (#93, Knut)."""
+    geom = instruments.build("SS", hflag=True)
+    lay = geometry.compute(geom, 297.0, 210.0, 200)        # A4 landscape
+    place = geometry.placement(geom, 297.0, 210.0, lay)
+    dpi = 200
+    mm2px = dpi / 25.4
+    x0 = round(place.x_of(0) * mm2px)
+    w = round((place.x_of(0) + place.pwid) * mm2px) - x0
+    pts = raster._hexagon_points(x0, round(place.y_of(0) * mm2px), w,
+                                 round(place.plen * mm2px), 0)   # even → shifts left
+    left_vertex = min(p[0] for p in pts)
+    assert left_vertex >= round(geom.margin_l * mm2px) - 1     # not past the margin
 
 
 def test_right_clip_content_is_rotated_180(_no_op=None):

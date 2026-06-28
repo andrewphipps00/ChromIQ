@@ -223,9 +223,13 @@ def placement(geom: Geom, paper_w_mm: float, paper_h_mm: float, layout: Layout) 
     # Clip band on the left shifts the patch block right by lbord; on the right
     # the block starts at the left margin and the band sits at the far edge (#93).
     _clip_left = g.lbord if getattr(g, "clip_side", "left") != "right" else 0.0
+    # Hex stagger (SpectroScan): patches shift ±¼·width / the apexes overshoot by
+    # hxeh, so start the block hxew in from the left and hxeh down from the top
+    # (the area reserves 2·hxew / 2·hxeh) — otherwise the left-shifted hexagons of
+    # the first column are clipped at the margin (#93, Knut). Zero for non-hex.
     return Placement(
-        x0=g.margin_l + _clip_left + fh * extra_w + g.offset_x,
-        y0_first=amints + _lead + g.offset_y,
+        x0=g.margin_l + _clip_left + fh * extra_w + g.hxew + g.offset_x,
+        y0_first=amints + _lead + g.hxeh + g.offset_y,
         plen=g.plen, pwid=g.pwid, pspa=g.pspa, rrsp=g.rrsp,
         steps_in_pass=layout.steps_in_pass,
         leader_top=g.margin_t + g.offset_y,    # labels flush under the top margin
