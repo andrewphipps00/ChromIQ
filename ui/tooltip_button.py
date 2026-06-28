@@ -62,6 +62,13 @@ class TooltipButton(QToolButton):
         log.debug("TooltipButton created: %s", title)
 
     # ------------------------------------------------------------------
+    def set_content(self, title: str, body: str) -> None:
+        """Replace the dialog title/body (e.g. to make a tooltip describe only
+        the option that's available for the current selection)."""
+        self._title = title
+        self._body = body.strip()
+        self.setToolTip(title + "\n\n" + tr("Click for details"))
+
     def setEnabled(self, enabled: bool) -> None:
         self._explicitly_disabled = not enabled
         super().setEnabled(enabled)

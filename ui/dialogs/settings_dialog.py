@@ -1185,22 +1185,10 @@ class SettingsDialog(QDialog):
         sel.addWidget(self._layout_mode_lbl, 1, 0)
         self._layout_mode = NoScrollComboBox(self)
         sel.addWidget(self._layout_mode, 1, 1)
-        sel.addWidget(TooltipButton(
-            tr("Layout mode"),
-            tr("A per-instrument choice that has its own saved preset, so you can "
-               "keep separate defaults for each:\n\n"
-               "• i1Pro / i1Pro 3+ — whether a left CLIP BORDER is printed. The "
-               "clip border is the white strip the measuring rail grips; turning "
-               "it off frees that space for more patches, but only do so if your "
-               "rig does not need it.\n\n"
-               "• ColorMunki — the reading DENSITY. “Hand-held” reads one patch "
-               "at a time. “High density (rig)” needs the measuring-rig accessory "
-               "and packs more patches per sheet. “Extra-high density” packs even "
-               "more (a ChromIQ extension) — only use it if your patches stay "
-               "large enough to read reliably (watch the warning).\n\n"
-               "• SpectroScan — rectangular or hexagonal patches; hexagons "
-               "tessellate tighter, fitting a few more per sheet."),
-            self), 1, 2)
+        from ui.dialogs.layout_options_panel import LayoutOptionsPanel
+        self._layout_mode_tip = TooltipButton(
+            *LayoutOptionsPanel.mode_tooltip_for("i1"), self)
+        sel.addWidget(self._layout_mode_tip, 1, 2)
         # Clip-border On/Off for CM/SS — same extra selector as Create Chart, so
         # the toggle is reachable here too (Knut, #93). i1/p3 use their Mode row.
         self._layout_clip_enable_lbl = QLabel(tr("Clip border:"), self)
@@ -1315,6 +1303,7 @@ class SettingsDialog(QDialog):
             self._layout_mode.addItem(label, key)
         from ui.dialogs.layout_options_panel import LayoutOptionsPanel
         self._layout_mode_lbl.setText(LayoutOptionsPanel.mode_label_for(inst))
+        self._layout_mode_tip.set_content(*LayoutOptionsPanel.mode_tooltip_for(inst))
         # The extra clip-border On/Off selector is for CM/SS only.
         is_band = inst in ("CM", "SS")
         self._layout_clip_enable.setVisible(is_band)

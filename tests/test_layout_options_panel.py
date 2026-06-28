@@ -219,6 +219,26 @@ def test_cm_ss_clip_enable_selector(app):
     assert p.clip_enable.currentData() == "on"
 
 
+def test_mode_tooltip_is_instrument_specific(app):
+    """The Mode ⓘ describes only the option the current instrument has, and the
+    extra clip-border ⓘ shows only for CM/SS (no orphan tooltip on i1) (#93)."""
+    from ui.dialogs.layout_options_panel import LayoutOptionsPanel
+    p = LayoutOptionsPanel(with_selectors=True)
+    p.show()
+    p.instr.setCurrentIndex(p.instr.findData("i1"))
+    assert "clip border" in p._mode_tip._title.lower()
+    assert "ColorMunki" not in p._mode_tip._body      # no other instruments
+    assert "SpectroScan" not in p._mode_tip._body
+    assert not p._clip_enable_tip.isVisibleTo(p)       # no second tooltip on i1
+    p.instr.setCurrentIndex(p.instr.findData("CM"))
+    assert "density" in p._mode_tip._title.lower()
+    assert "SpectroScan" not in p._mode_tip._body
+    assert p._clip_enable_tip.isVisibleTo(p)
+    p.instr.setCurrentIndex(p.instr.findData("SS"))
+    assert "shape" in p._mode_tip._title.lower()
+    assert "ColorMunki" not in p._mode_tip._body
+
+
 def test_use_instrument_margins_fills_and_locks(app):
     """Ticking "Use instrument margins" fills the four margins from the wired
     threshold lookup and locks them read-only (#93, Knut)."""

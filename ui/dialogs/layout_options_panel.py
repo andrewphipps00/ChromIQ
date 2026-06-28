@@ -58,6 +58,35 @@ class LayoutOptionsPanel(QWidget):
         return tr("Mode:")
 
     @staticmethod
+    def mode_tooltip_for(inst: str) -> tuple[str, str]:
+        """(title, body) for the Mode selector's ⓘ, describing only the option
+        that actually applies to *inst* — not every instrument's (#93, Knut)."""
+        if inst in ("i1", "p3"):
+            return (tr("Clip border"),
+                    tr("Whether a CLIP BORDER is printed — the white strip the "
+                       "measuring rail grips so it can pull the chart through. "
+                       "Turning it off frees that space for more patches; only do "
+                       "so if your rig doesn't need it. Choose which edge it sits "
+                       "on, and what it carries (a notes box, text or a logo), in "
+                       "the Clip-border content section."))
+        if inst == "CM":
+            return (tr("Reading density"),
+                    tr("How densely the ColorMunki reads. “Hand-held” reads one "
+                       "patch at a time. “High density (rig)” needs the "
+                       "measuring-rig accessory and packs more patches per sheet. "
+                       "“Extra-high density” packs even more (a ChromIQ extension) "
+                       "— only use it if your patches stay large enough to read "
+                       "reliably (watch the warning)."))
+        if inst == "SS":
+            return (tr("Patch shape"),
+                    tr("Rectangular or hexagonal patches. Hexagons tessellate "
+                       "tighter, fitting a few more patches per sheet; "
+                       "rectangular is the safe default."))
+        return (tr("Layout mode"),
+                tr("A per-instrument layout choice that keeps its own saved "
+                   "preset."))
+
+    @staticmethod
     def modes_for(inst: str) -> list[tuple[str, str]]:
         if inst in ("i1", "p3"):
             return [("clip", tr("On")),
@@ -105,13 +134,9 @@ class LayoutOptionsPanel(QWidget):
             self._mode_lbl = QLabel(tr("Mode:"), self)
             sel.addWidget(self._mode_lbl, 1, 0)
             sel.addWidget(self.mode, 1, 1, 1, 3)
-            sel.addWidget(TooltipButton(
-                tr("Layout mode"),
-                tr("A per-instrument choice that keeps its own saved preset: for "
-                   "the i1Pro it's whether a left clip border is printed; for the "
-                   "ColorMunki it's the reading density (hand-held vs rig vs "
-                   "extra-high); for the SpectroScan it's rectangular vs hexagonal "
-                   "patches."), self), 1, 4)
+            _mt, _mb = self.mode_tooltip_for("i1")
+            self._mode_tip = TooltipButton(_mt, _mb, self)
+            sel.addWidget(self._mode_tip, 1, 4)
             # Clip-border On/Off for CM/SS — an extra selector so they get the
             # same clip toggle the i1Pro has in its Mode selector (Knut, #93).
             # Mirrors the content on/off: On reserves a notes band, Off hides it.
@@ -122,13 +147,14 @@ class LayoutOptionsPanel(QWidget):
             self.clip_enable.currentIndexChanged.connect(self._on_clip_enable_changed)
             sel.addWidget(self._clip_enable_lbl, 2, 0)
             sel.addWidget(self.clip_enable, 2, 1, 1, 3)
-            sel.addWidget(TooltipButton(
+            self._clip_enable_tip = TooltipButton(
                 tr("Clip border"),
                 tr("Reserve a clip-border strip on this chart (the same option the "
                    "i1Pro has). On reserves a band you can fill with a notes box, "
                    "text or a logo in the Clip-border content section below; Off "
                    "uses the whole page for patches. Choose which edge it sits on "
-                   "in that section."), self), 2, 4)
+                   "in that section."), self)
+            sel.addWidget(self._clip_enable_tip, 2, 4)
             # Paper + Pages share a row; paper gets the stretch (wider).
             self.paper = NoScrollComboBox(self)
             sel.addWidget(QLabel(tr("Paper:"), self), 3, 0)
@@ -1032,12 +1058,16 @@ class LayoutOptionsPanel(QWidget):
         self.mode.setCurrentIndex(j if j >= 0 else 0)
         if getattr(self, "_mode_lbl", None) is not None:
             self._mode_lbl.setText(self.mode_label_for(inst))
-        # The extra clip-border On/Off selector is for CM/SS only (i1/p3 use
-        # their Mode selector for it).
+        # Mode tooltip describes only the option this instrument actually has.
+        if getattr(self, "_mode_tip", None) is not None:
+            self._mode_tip.set_content(*self.mode_tooltip_for(inst))
+        # The extra clip-border On/Off selector — and its tooltip — are for CM/SS
+        # only (i1/p3 use their Mode selector for the clip border).
         if hasattr(self, "clip_enable"):
             is_band = inst in ("CM", "SS")
             self.clip_enable.setVisible(is_band)
             self._clip_enable_lbl.setVisible(is_band)
+            self._clip_enable_tip.setVisible(is_band)
             self._sync_clip_enable_display()
         self._loading = False
         self._on_paper_changed()
