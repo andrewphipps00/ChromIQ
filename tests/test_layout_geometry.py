@@ -323,3 +323,26 @@ def test_area_first_noop_without_targets():
     rec = replace(default_recipe("i1", "A4", mode="clip"), layout_mode="area_first")
     area = instruments.geom_from_build_kwargs(rec.build_kwargs())
     assert area.pwid == base.pwid and area.plen == base.plen
+
+
+def test_area_first_min_patch_autofit():
+    """Knut's friendly path: min patch size + ratio, columns/rows on auto →
+    the engine fits the most patches at >= the minimum and grows them to fill
+    (so the realised patches are never smaller than the minimum) (#93)."""
+    from workflow.layout_engine.presets import default_recipe
+    from dataclasses import replace
+
+    def geom(**area):
+        rec = replace(default_recipe("i1", "A4", mode="clip"),
+                      layout_mode="area_first", **area)
+        return instruments.geom_from_build_kwargs(rec.build_kwargs())
+
+    g8 = geom(area_min_patch_mm=8.0, area_ratio=1.0)
+    assert g8.pwid >= 8.0 - 1e-6 and g8.plen >= 8.0 - 1e-6     # never below min
+    g6 = geom(area_min_patch_mm=6.0, area_ratio=1.0)
+    # a smaller minimum packs more patches
+    assert (geometry.patches_per_sheet(g6, *A4)
+            > geometry.patches_per_sheet(g8, *A4))
+    # ratio drives the grown shape (wider than tall at 1.5)
+    gr = geom(area_min_patch_mm=10.0, area_ratio=1.5)
+    assert gr.pwid > gr.plen

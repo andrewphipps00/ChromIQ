@@ -67,6 +67,10 @@ class LayoutRecipe:
     area_cols: int = 0
     area_rows: int = 0
     area_ratio: float = 0.0
+    # Minimum patch width (mm) for the auto path: with columns/rows on auto, the
+    # engine fits the most patches at this minimum size and then grows them to
+    # fill the area (Knut's "max friendliness"). 0 = not used.
+    area_min_patch_mm: float = 0.0
     spacer_width_mm: float = 0.0   # 0 = instrument default
     inter_patch_mm: float = 0.0    # extra gap between patches
     strip_gap_mm: float = 0.0      # extra gap BETWEEN strips (adds to row pitch)
@@ -167,6 +171,7 @@ class LayoutRecipe:
             area_cols=int(d.get("area_cols") or 0),
             area_rows=int(d.get("area_rows") or 0),
             area_ratio=float(d.get("area_ratio") or 0.0),
+            area_min_patch_mm=float(d.get("area_min_patch") or 0.0),
             spacer_width_mm=float(d.get("spacer_width") or 0.0),
             inter_patch_mm=float(d.get("inter_patch") or 0.0),
             strip_gap_mm=float(d.get("strip_gap") or 0.0),
@@ -257,6 +262,7 @@ class LayoutRecipe:
             "area_cols": self.area_cols,
             "area_rows": self.area_rows,
             "area_ratio": self.area_ratio,
+            "area_min_patch": self.area_min_patch_mm or None,
             "spacer_width": self.spacer_width_mm or None,
             "inter_patch": self.inter_patch_mm or None,
             "strip_gap": self.strip_gap_mm or None,

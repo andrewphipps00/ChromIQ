@@ -73,7 +73,8 @@ def derive_area_patch_size(kw: dict) -> tuple[float, float] | None:
     cols = int(kw.get("area_cols") or 0)
     rows = int(kw.get("area_rows") or 0)
     ratio = float(kw.get("area_ratio") or 0.0)     # patch width : height
-    if cols <= 0 and rows <= 0:
+    min_w = float(kw.get("area_min_patch") or 0.0)
+    if cols <= 0 and rows <= 0 and min_w <= 0:
         return None
     try:
         w_mm, h_mm = papers.dimensions_mm(kw.get("paper", "A4"))
@@ -92,16 +93,41 @@ def derive_area_patch_size(kw: dict) -> tuple[float, float] | None:
     if avail_w <= 0 or arowl <= 0:
         return None
 
+    ec = 1.0 if geom.edge_spacers else -1.0     # geometry.compute()'s edge term
+
+    def _rows_filling(n: int) -> float:
+        # Invert compute()'s pprow so exactly n patches fill arowl.
+        return (arowl - ec * geom.pspa) / max(1, n) - geom.pspa
+
+    def _max_rows_at(height: float) -> int:
+        return max(1, int((arowl - ec * geom.pspa) / (height + geom.pspa)))
+
+    def _cols_at(width: float) -> int:
+        # Columns a chart with this patch width would lay out across the page.
+        try:
+            g = instruments.geom_from_build_kwargs({**base, "patch_w": width})
+            lay = geometry.compute(g, w_mm, h_mm, 100_000)
+            return (lay.patches_per_page // lay.steps_in_pass
+                    if lay.steps_in_pass else 0)
+        except geometry.LayoutError:
+            return 0
+
+    # Resolve a column target (pinned, or the most that fit at the minimum width)
+    # and a row target (pinned, or the most that fit at the minimum height), then
+    # SIZE the patches to fill — Knut's "min size + ratio, grow to fill" path,
+    # and the explicit-count path, share this fill step.
     pw = ph = None
     if rows > 0:
-        # Invert geometry.compute()'s pprow:
-        #   pprow = (arowl - (edge_gaps - 1)*pspa) / (plen + pspa)
-        # with edge_gaps = 2 (edge spacers) or 0 → (edge_gaps - 1) = +1 or -1.
-        ec = 1.0 if geom.edge_spacers else -1.0
-        ph = (arowl - ec * geom.pspa) / rows - geom.pspa
-        ph = max(_MIN_PATCH_MM, ph)
+        ph = max(_MIN_PATCH_MM, _rows_filling(rows))
+    elif min_w > 0:
+        h_min = (min_w / ratio) if ratio > 0 else min_w
+        ph = max(_MIN_PATCH_MM, _rows_filling(_max_rows_at(h_min)))
     if cols > 0:
         pw = _fit_columns(base, w_mm, h_mm, cols, max_pw=avail_w)
+    elif min_w > 0:
+        c = _cols_at(min_w)
+        if c > 0:
+            pw = _fit_columns(base, w_mm, h_mm, c, max_pw=avail_w)
 
     if pw is None and ph is not None:
         pw = ph * ratio if ratio > 0 else ph
