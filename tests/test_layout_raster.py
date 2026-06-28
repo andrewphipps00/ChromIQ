@@ -324,27 +324,40 @@ def test_text_edge_mm_moves_bottom_text():
 def test_spectroscan_row_labels_drawn_in_side_band():
     """SpectroScan labels the grid 2-D: column letters on top + row NUMBERS down
     the side, in the reserved rlwi band left of the patches — for both flat and
-    hex (#93, Knut). Other instruments have no such band."""
+    hex. The number ink must stay LEFT of the patches; for hex it must also clear
+    the ¼-width left stagger of the first column (#93, Knut). Light patches so the
+    only dark ink is the labels."""
     import numpy as np
-    target = _rgb_target(200)
+    # near-white patches → any dark pixel is label text, not a patch
+    light = ColorTarget(color_rep="iRGB", device_fields=["RGB_R", "RGB_G", "RGB_B"],
+                        patches=[((95.0, 95.0, 95.0), (90.0, 95.0, 100.0))
+                                 for _ in range(400)])
 
-    def side_band_ink(geom):
-        lay = geometry.compute(geom, 297.0, 210.0, 200)
+    def rightmost_label_x(geom):
+        lay = geometry.compute(geom, 297.0, 210.0, 400)
         place = geometry.placement(geom, 297.0, 210.0, lay)
-        res = raster.render_pages(target, lay, geom, seed=1, randomize=False,
+        res = raster.render_pages(light, lay, geom, seed=1, randomize=False,
                                   paper_w_mm=297.0, paper_h_mm=210.0, dpi=200)
         img = np.asarray(res.images[0])
         mm2px = 200 / 25.4
         x0 = round(place.x_of(0) * mm2px)
-        rl = round(geom.rlwi * mm2px)
-        if rl <= 0:
-            return 0, rl
-        band = img[:, max(0, x0 - rl):x0]
-        return int((band < 120).any(axis=2).sum()), rl
+        strip_w = round(place.pwid * mm2px)
+        x_lo = max(0, x0 - round(geom.rlwi * mm2px))
+        # Scan only the patch-row band (exclude the top column-letter band), so
+        # the only dark ink is the row numbers.
+        y_lo = round(place.y_of(1) * mm2px)
+        y_hi = round((place.y_of(lay.steps_in_pass - 1) + place.plen) * mm2px)
+        zone = img[y_lo:y_hi, x_lo:x0 + strip_w]
+        dark_cols = np.where((zone < 60).all(axis=2).any(axis=0))[0]
+        rightmost = (x_lo + dark_cols.max()) if len(dark_cols) else 0
+        return rightmost, x0, strip_w
 
-    flat_ink, rl = side_band_ink(instruments.build("SS"))
-    hex_ink, _ = side_band_ink(instruments.build("SS", hflag=True))
-    assert rl > 0 and flat_ink > 0 and hex_ink > 0     # row numbers present
+    # flat: labels present and end left of the patch start.
+    r, x0, _ = rightmost_label_x(instruments.build("SS"))
+    assert 0 < r < x0
+    # hex: labels must clear the ¼-width left stagger, not just x0.
+    rh, x0h, sw = rightmost_label_x(instruments.build("SS", hflag=True))
+    assert 0 < rh <= x0h - sw // 4
     # i1 has no row-label band reserved.
     assert instruments.build("i1").rlwi == 0
 

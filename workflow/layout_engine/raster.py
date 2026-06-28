@@ -797,13 +797,17 @@ def render_pages(
                 if _row_band_px > 0 and p == 0:
                     # Right-align each number so it ends just left of the patches
                     # and grows LEFT into the band — a two-digit number (10–13…)
-                    # can't spill over the patches (#93, Knut).
+                    # can't spill over the patches (#93, Knut). For hex patches the
+                    # left column's even rows stagger ¼·width LEFT past x0, so clear
+                    # that protrusion too, else the hexagons cover the numbers.
                     _gap = max(1, px(1.0))
+                    _protrude = (strip_w // 4) if ss_hex else 0
+                    _rx = x0 - _protrude - _gap
                     for _j in range(len(col_slots)):
                         _ry = (px(place.y_of(_j)) + px(place.y_of(_j) + place.plen)) // 2
                         _txt = label_patch(_j + 1)
                         _tw = int(draw.textlength(_txt, font=font))
-                        draw.text((x0 - _gap - _tw, _ry - ind_px // 2), _txt,
+                        draw.text((_rx - _tw, _ry - ind_px // 2), _txt,
                                   font=font, fill=(0, 0, 0))
             for j, gslot in enumerate(col_slots):
                 y0 = px(place.y_of(j))
