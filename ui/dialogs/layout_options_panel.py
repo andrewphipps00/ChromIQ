@@ -216,6 +216,29 @@ class LayoutOptionsPanel(QWidget):
             wrap = QWidget(self); wrap.setLayout(box)
             return wrap
 
+        def mm_inch(spin):
+            """A mm spinbox with a live, non-editable inch readout to its right —
+            metric + imperial at a glance (#93, Knut). Sits in the control
+            column's slack, so it doesn't widen the panel. Blank for a spinbox
+            on its special ('auto'/'square') value."""
+            inch = QLabel("", self)
+            inch.setStyleSheet("color: #909090; font-size: 10px;")
+            inch.setMinimumWidth(42)
+
+            def _upd(*_a):
+                v = spin.value()
+                if spin.specialValueText() and v <= spin.minimum() + 1e-9:
+                    inch.setText("")
+                else:
+                    inch.setText(f"{v / 25.4:.2f}″")
+            spin.valueChanged.connect(_upd)
+            _upd()
+            box = QHBoxLayout(); box.setContentsMargins(0, 0, 0, 0); box.setSpacing(6)
+            box.addWidget(spin); box.addWidget(inch); box.addStretch()
+            wrap = QWidget(self); wrap.setLayout(box)
+            return wrap
+        self._mm_inch = mm_inch
+
         from PyQt6.QtWidgets import QLineEdit, QPushButton
 
         def small_mm(top: float = 60.0) -> NoScrollDoubleSpinBox:
@@ -295,7 +318,7 @@ class LayoutOptionsPanel(QWidget):
                        "Both fill the same patch area defined by the margins."),
                     self))
         self._area_row_minpatch = add_row(afg, 1, tr("Minimum patch width (mm):"),
-                self.area_min_patch,
+                mm_inch(self.area_min_patch),
                 tip=TooltipButton(
                     tr("Minimum patch width"),
                     tr("The smallest strip (patch) width your instrument can read "
@@ -369,7 +392,7 @@ class LayoutOptionsPanel(QWidget):
                        "(default, most reliable); “Black & white” uses plain "
                        "black/white; “None” removes them — only if your instrument "
                        "doesn't need gaps."), self))
-        add_row(g, 3, tr("Spacer size:"), self.spacer_width,
+        add_row(g, 3, tr("Spacer size:"), mm_inch(self.spacer_width),
                 tip=TooltipButton(
                     tr("Spacer size"),
                     tr("How thick the separator between patches is, in mm (it runs "
@@ -621,17 +644,18 @@ class LayoutOptionsPanel(QWidget):
         pg = QGroupBox(tr("Page geometry"), self)
         gg = QGridLayout(pg)
         self.margins = {k: small_mm(top=60.0) for k in ("t", "r", "b", "l")}
-        _mlabels = {"t": tr("T"), "r": tr("R"), "b": tr("B"), "l": tr("L")}
-        _mbox = QVBoxLayout(); _mbox.setContentsMargins(0, 0, 0, 0); _mbox.setSpacing(4)
-        for _pair in (("t", "r"), ("b", "l")):
-            _hb = QHBoxLayout(); _hb.setContentsMargins(0, 0, 0, 0); _hb.setSpacing(6)
-            for _k in _pair:
-                _hb.addWidget(QLabel(_mlabels[_k], self))
-                _hb.addWidget(self.margins[_k])
-            _hb.addStretch()
-            _rw = QWidget(self); _rw.setLayout(_hb)
-            _mbox.addWidget(_rw)
-        _margins_w = QWidget(self); _margins_w.setLayout(_mbox)
+        # One row per edge (Top/Right/Bottom/Left), each with a live inch readout
+        # — Knut's "list all 4 margins, mm and inch" (#93).
+        _mlabels = {"t": tr("Top"), "r": tr("Right"), "b": tr("Bottom"),
+                    "l": tr("Left")}
+        _mgrid = QGridLayout()
+        _mgrid.setContentsMargins(0, 0, 0, 0)
+        _mgrid.setVerticalSpacing(4); _mgrid.setHorizontalSpacing(6)
+        for _i, _k in enumerate(("t", "r", "b", "l")):
+            _dl = QLabel(_mlabels[_k], self); _dl.setMinimumWidth(46)
+            _mgrid.addWidget(_dl, _i, 0)
+            _mgrid.addWidget(mm_inch(self.margins[_k]), _i, 1)
+        _margins_w = QWidget(self); _margins_w.setLayout(_mgrid)
         self.dpi = NoScrollSpinBox(self); self.dpi.setRange(72, 1200)
         self.dpi.setSuffix(" dpi"); self.dpi.valueChanged.connect(self._emit)
         self.nolimit = QCheckBox(tr("Don't cap strip length"), self)
@@ -681,7 +705,7 @@ class LayoutOptionsPanel(QWidget):
                     tr("Pixel density of the printed chart TIFF, in dots per inch. "
                        "300 dpi is a good default; higher makes a larger file with "
                        "no real benefit for solid colour patches."), self))
-        add_row(gg, 3, tr("Max strip length:"), self.max_strip,
+        add_row(gg, 3, tr("Max strip length:"), mm_inch(self.max_strip),
                 tip=TooltipButton(
                     tr("Max strip length"),
                     tr("Caps how long a single strip (column of patches) may get, "
