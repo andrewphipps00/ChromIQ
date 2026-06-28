@@ -3127,6 +3127,9 @@ class Ti2RelayoutDialog(QDialog):
         # engine setting is on. A new/from-scratch chart follows the setting.
         self._loaded_printtarg_chart = False
         self._engine_ti1: "Path | None" = None     # patch data for engine preview
+        # Guards the live "Pages" spin against re-entrancy while we sync its
+        # value to the rendered page count (#93).
+        self._syncing_pages = False
         self._engine_spacer_rects: list = []        # spacer hit-boxes (preview dpi)
         self._engine_patch_rects: dict = {}         # (page,slot) -> rect dict
         self._engine_slots: list = []               # grid index -> slot
@@ -3911,6 +3914,11 @@ class Ti2RelayoutDialog(QDialog):
         self._engine_panel = LayoutOptionsPanel(
             panel, with_selectors=True, with_calibration=True)
         self._engine_panel.changed.connect(self._engine_preview_timer.start)
+        # Live "Pages": editing it fills patches (via the generator) up to that
+        # many full pages, so the new page isn't left empty (#93, Knut).
+        if self._engine_panel.pages is not None:
+            self._engine_panel.pages.valueChanged.connect(
+                self._on_engine_pages_changed)
         self._engine_panel_grp = QGroupBox(tr("ChromIQ layout"), panel)
         _eg = QVBoxLayout(self._engine_panel_grp)
         _eg.setContentsMargins(8, 8, 8, 8)
@@ -5491,6 +5499,53 @@ class Ti2RelayoutDialog(QDialog):
         w_mm, h_mm = papers.dimensions_mm(recipe.paper)
         return geom, w_mm, h_mm
 
+    def _engine_cap_per_page(self) -> int:
+        """Patches the engine fits on one sheet for the editor's current recipe,
+        or 0 when not resolvable. Used by the live "Pages" fill (#93)."""
+        try:
+            from workflow.layout_engine import geometry
+            recipe = self._engine_panel.get_recipe()
+            geom, w_mm, h_mm = self._engine_geom_from_recipe(recipe)
+            return geometry.patches_per_sheet(geom, w_mm, h_mm)
+        except Exception:  # noqa: BLE001 — best-effort
+            return 0
+
+    def _on_engine_pages_changed(self, value: int) -> None:
+        """The editor's live "Pages" spin: top the chart up with generated
+        patches so it fills *value* whole pages, then re-render. Only grows the
+        chart (lowering Pages never deletes patches); fires only for real user
+        edits of an engine chart (#93, Knut)."""
+        if self._syncing_pages or not self._engine_active():
+            return
+        cap = self._engine_cap_per_page()
+        if cap <= 0:
+            self._engine_preview_timer.start()
+            return
+        existing = self._program_from_grid()
+        target = max(1, int(value)) * cap
+        n_add = target - len(existing)
+        if n_add > 0:
+            fresh = G.fill_gaps(existing, target)
+            for rgb in fresh:
+                self._grid.addItem(self._grid_item(rgb))
+            self._renumber()
+            self._status.setText(
+                tr("Filled to {p} pages — added {n} patches. Updating preview…")
+                .format(p=int(value), n=len(fresh)))
+        self._engine_preview_timer.start()
+
+    def _sync_pages_spin(self, pages: int) -> None:
+        """Show the actually-rendered page count in the Pages spin without
+        re-triggering the fill (#93)."""
+        sp = getattr(self._engine_panel, "pages", None)
+        if sp is None or sp.value() == pages or pages < 1:
+            return
+        self._syncing_pages = True
+        sp.blockSignals(True)
+        sp.setValue(min(pages, sp.maximum()))
+        sp.blockSignals(False)
+        self._syncing_pages = False
+
     def _do_engine_preview(self) -> None:
         """Render the current engine recipe to a temp page and show it as the
         preview — the live, engine-accurate picture for an engine chart (#93)."""
@@ -5515,6 +5570,7 @@ class Ti2RelayoutDialog(QDialog):
                     self._page = 0
                 self._show_image(tiffs[self._page])
                 self._update_page_nav()
+                self._sync_pages_spin(len(tiffs))   # keep "Pages" truthful (#93)
                 # Cache spacer rects at the preview DPI so a preview click maps
                 # to the spacer the engine will recolour (#93).
                 from workflow.layout_engine import geometry, permutation
