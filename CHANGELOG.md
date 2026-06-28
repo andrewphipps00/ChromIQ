@@ -1,5 +1,43 @@
 # Changelog
 
+## v3.13.0-beta.14
+
+Big batch of layout-engine fixes from Knut's beta-13 testing.
+
+### 🔧 Changed / fixed
+- **Loading a preset then enabling the engine now carries Instrument and Paper
+  across** to the ChromIQ layout panel, so the margins, the “Use instrument
+  margins” lookup and Preferences all use the combo you actually selected.
+- **Your margin boxes are authoritative again** — the engine no longer silently
+  raises them to the instrument minimums on every generate. The minimums apply
+  only when “Use instrument margins” is ticked.
+- **The clip border now sits *inside* the page margin** instead of being added on
+  top: turning it on copies the clip width into the margin box (editable), and
+  the patches start at that margin.
+- **Area-first “by columns/rows” fills the page** — with rows on auto the patches
+  grow down so the last row reaches the bottom margin.
+- The **layout-info “estimate”** column now lays out the on-screen chart’s real
+  patch count under your current settings (correct pages/total).
+- **“Text distance from edge”** is now an adjustable setting (Sheet text).
+- The engine’s **instrument names match the printtarg list** (i1Pro / i1Pro 2 /
+  i1Pro 3, ColorMunki / i1Studio / ColorChecker Studio, …).
+
+### ✨ New
+- **SpectroScan** now renders real interlocking **hexagons** (and the left column
+  isn’t clipped), and labels the grid 2-D: **column letters + row numbers**.
+- **ColorMunki “offset every second strip”** — printtarg’s measuring-rig brick
+  layout, as its own option (independent of density).
+- **ColorMunki / SpectroScan clip-border On/Off** selector, matching the i1Pro.
+- The editor’s **“Pages”** spin fills the new page from the patch generator, now
+  with the same guaranteed minimum patch spacing as the generator.
+- The engine can emit an ArgyllCMS **`.cht`** recognition file (opt-in).
+
+### ⚠️ Known / pending
+- A few vertical-margin details (patch-area top exactly at the margin, strip
+  labels 4 mm above the patches) depend on a pending decision about overriding
+  the instrument’s physical run-off; unchanged for now.
+- ColorMunki extra-high (triple) density still under-counts with the engine.
+
 ## v3.13.0-beta.13
 
 Final round of layout-engine refinements from testing.
