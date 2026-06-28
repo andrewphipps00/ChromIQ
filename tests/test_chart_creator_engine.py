@@ -228,3 +228,24 @@ def test_guided_uses_edge_spacers_for_strip_readers(tmp_path: Path) -> None:
         assert kw.get("edge_spacers") is True, inst
     assert creator._engine_build_kwargs(
         ChartParams(instrument="SS", paper="A4")).get("edge_spacers") is not True
+
+
+def test_load_ti1_uses_engine_when_enabled(tmp_path: Path) -> None:
+    """A loaded preset / built-in .ti1 must be laid out by the engine when it's
+    enabled — not silently fall back to printtarg (the bug Knut hit: columns /
+    patch width / notes box did nothing with a preset loaded) (#93)."""
+    work_dir = tmp_path / "preset_proj"
+    creator = ChartCreator(_EngineRunner(), _MockFileManager(work_dir),
+                           _EngineSettings())
+    ti1 = tmp_path / "preset.ti1"
+    _real_ti1(ti1, 60)
+    finished: list[list[Path]] = []
+    creator.load_ti1_and_generate_preview(
+        ti1, ChartParams(instrument="i1", paper="A4", tiff_dpi=150),
+        on_line=lambda _l: None, on_finish=lambda t: finished.append(t))
+    assert finished and finished[0] and all(p.exists() for p in finished[0])
+    run_dir = work_dir / "runs" / "run1"
+    stem = "preset_proj"
+    sidecar = json.loads((run_dir / f"{stem}.channels.json").read_text())
+    assert sidecar.get("layout", {}).get("engine") == "chromiq", \
+        "the engine must lay out the loaded .ti1, not printtarg"

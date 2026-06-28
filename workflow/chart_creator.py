@@ -702,6 +702,19 @@ class ChartCreator:
         dest = run.chart_ti1
         dest.write_bytes(ti1_bytes)
 
+        # ChromIQ layout engine: when enabled, lay the loaded patches out with the
+        # engine instead of printtarg — otherwise a loaded preset / built-in chart
+        # silently ignored the engine (columns / patch width / notes box did
+        # nothing) because this path always ran printtarg (#93). The .ti1 is
+        # already in place, so the engine builds from it just like the targen path.
+        if self._should_use_engine(params):
+            self._pending_on_finish = on_finish
+            self._pending_on_line = on_line
+            self._matched_errors = []
+            self._matched_warnings = []
+            self._run_engine(params, work_dir, on_line)
+            return
+
         pt_args = self._build_printtarg_args(params)
         log.debug("printtarg args (from ti1): %s", pt_args)
         self._matched_errors = []
