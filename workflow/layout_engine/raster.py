@@ -687,6 +687,7 @@ def render_pages(
     steps = layout.steps_in_pass
     pppage = layout.patches_per_page
     label_strip = permutation.make_labeller(strip_pattern)
+    label_patch = permutation.make_labeller(permutation.DEFAULT_PATCH_PATTERN)
 
     def px(mm: float) -> int:
         return round(mm * mm2px)
@@ -696,6 +697,9 @@ def render_pages(
     # SpectroScan hexagonal patches (printtarg -h): draw interlocking hexagons
     # instead of rectangles (#93, Knut). Capacity is unchanged — only the shape.
     ss_hex = getattr(geom, "key", "") == "SS" and getattr(geom, "hxew", 0.0) > 0
+    # Row-number band width (SpectroScan labels the grid 2-D): 0 for instruments
+    # without it. Drawn to the left of the patches, the band placement reserves.
+    _row_band_px = px(getattr(geom, "rlwi", 0.0))
     ind_px = px(effective_indicator_size_mm(
         geom, dpi, indicator_font, indicator_size_mm))
     font = _font(ind_px, indicator_font, indicator_bold, indicator_italic)
@@ -784,6 +788,16 @@ def render_pages(
                     _ly = _y + label_band_h + ul_gap
                     draw.rectangle([x0, _ly, xR - 1, _ly + ul_th - 1],
                                    fill=ACCENT_RGB[global_strip % len(ACCENT_RGB)])
+                # SpectroScan labels the grid 2-D: column letters on top (above)
+                # plus row NUMBERS down the side, in the reserved rlwi band to the
+                # left of the patches. Drawn once, against the leftmost strip (#93,
+                # Knut). The band sits in [x0 - rlwi, x0].
+                if _row_band_px > 0 and p == 0:
+                    _bx = x0 - _row_band_px // 2
+                    for _j in range(len(col_slots)):
+                        _ry = (px(place.y_of(_j)) + px(place.y_of(_j) + place.plen)) // 2
+                        _draw_indicator(draw, _bx, _ry - ind_px // 2,
+                                        label_patch(_j + 1), font, _spc)
             for j, gslot in enumerate(col_slots):
                 y0 = px(place.y_of(j))
                 # Derive each row's bottom edge from its true mm position (the

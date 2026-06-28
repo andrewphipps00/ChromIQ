@@ -298,6 +298,34 @@ def test_spectroscan_hex_pokes_above_first_row():
     assert checked >= 1
 
 
+def test_spectroscan_row_labels_drawn_in_side_band():
+    """SpectroScan labels the grid 2-D: column letters on top + row NUMBERS down
+    the side, in the reserved rlwi band left of the patches — for both flat and
+    hex (#93, Knut). Other instruments have no such band."""
+    import numpy as np
+    target = _rgb_target(200)
+
+    def side_band_ink(geom):
+        lay = geometry.compute(geom, 297.0, 210.0, 200)
+        place = geometry.placement(geom, 297.0, 210.0, lay)
+        res = raster.render_pages(target, lay, geom, seed=1, randomize=False,
+                                  paper_w_mm=297.0, paper_h_mm=210.0, dpi=200)
+        img = np.asarray(res.images[0])
+        mm2px = 200 / 25.4
+        x0 = round(place.x_of(0) * mm2px)
+        rl = round(geom.rlwi * mm2px)
+        if rl <= 0:
+            return 0, rl
+        band = img[:, max(0, x0 - rl):x0]
+        return int((band < 120).any(axis=2).sum()), rl
+
+    flat_ink, rl = side_band_ink(instruments.build("SS"))
+    hex_ink, _ = side_band_ink(instruments.build("SS", hflag=True))
+    assert rl > 0 and flat_ink > 0 and hex_ink > 0     # row numbers present
+    # i1 has no row-label band reserved.
+    assert instruments.build("i1").rlwi == 0
+
+
 def test_spectroscan_hex_first_column_not_clipped():
     """The left-shifted (even-step) hexagons of the first column must stay inside
     the left margin — the stagger offset is reserved by hxew (#93, Knut)."""

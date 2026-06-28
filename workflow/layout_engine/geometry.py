@@ -228,8 +228,11 @@ def placement(geom: Geom, paper_w_mm: float, paper_h_mm: float, layout: Layout) 
     # clip-inside-margin). Hex stagger (SpectroScan): patches shift ±¼·width / the
     # apexes overshoot by hxeh, so start the block hxew in from the left and hxeh
     # down from the top (the area reserves 2·hxew / 2·hxeh). Zero for non-hex.
+    # rlwi reserves a row-label band on the left (SpectroScan only — it labels the
+    # grid 2-D: column letters on top + row numbers down the side, #93 Knut), so
+    # the patch block starts after it. avail_w already excludes rlwi.
     return Placement(
-        x0=g.margin_l + fh * extra_w + g.hxew + g.offset_x,
+        x0=g.margin_l + g.rlwi + fh * extra_w + g.hxew + g.offset_x,
         y0_first=amints + _lead + g.hxeh + g.offset_y,
         plen=g.plen, pwid=g.pwid, pspa=g.pspa, rrsp=g.rrsp,
         steps_in_pass=layout.steps_in_pass,
