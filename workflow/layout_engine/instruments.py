@@ -102,6 +102,11 @@ class Geom:
     # only moves the band + shifts the patch block to the other edge — capacity
     # is unchanged.
     clip_side: str = "left"
+    # ColorMunki "offset every second strip" (printtarg's rig stagger): shift each
+    # odd strip down the page by this much (mm) so the columns interleave like a
+    # brick wall (#93, Knut). 0 = no stagger. Render + patch_rects honour it; the
+    # hxeh reservation makes room so capacity reflects it.
+    row_stagger_mm: float = 0.0
 
 
 def supported() -> list[str]:
@@ -134,6 +139,7 @@ def build(
     edge_spacers: bool = False,
     patch_area_align: str = "center-left",
     clip_side: str = "left",
+    cm_stagger: bool = False,
 ) -> Geom:
     """Resolve :class:`Geom`, applying ChromIQ extensions over the base geometry.
 
@@ -166,6 +172,14 @@ def build(
     mxrowl = float(max_strip) if max_strip else geom.mxrowl
     sig = geom.strip_indicator_gap if strip_indicator_gap is None \
         else float(strip_indicator_gap)
+    # ColorMunki "offset every second strip": shift odd strips down by half a
+    # patch (printtarg's rig stagger = 0.5·(plen + ½·spacer)) and reserve hxeh =
+    # ¼·plen so the overhang stays on the page. Decoupled from density (#93, Knut).
+    hxeh = geom.hxeh
+    row_stagger = 0.0
+    if key == "CM" and cm_stagger:
+        row_stagger = 0.5 * (plen + 0.5 * pspa)
+        hxeh = 0.25 * plen
     # Clip / notes band lives INSIDE the clip-side margin (Knut beta-13): raise
     # that margin to at least the clip-border width so the band fits and the patch
     # area starts at the (possibly bumped) margin — no additive double-count. This
@@ -179,6 +193,7 @@ def build(
             ml = max(ml, clip_w)
     return replace(geom, margin_t=mt, margin_r=mr, margin_b=mb, margin_l=ml,
                    plen=plen, pwid=pwid, rrsp=rrsp, pspa=pspa, mxrowl=mxrowl,
+                   hxeh=hxeh, row_stagger_mm=row_stagger,
                    strip_indicator_gap=sig, offset_x=offset_x, offset_y=offset_y,
                    edge_spacers=edge_spacers,
                    patch_area_align=patch_area_align or "center-left",
@@ -196,7 +211,7 @@ GEOM_BUILD_KEYS = (
     "patch_w", "patch_h", "spacer_width", "inter_patch", "strip_gap", "max_strip",
     "strip_indicator_gap", "offset_x", "offset_y", "nolpcbord", "nolimit",
     "clip_border_width", "clip_band", "edge_spacers", "patch_area_align",
-    "clip_side",
+    "clip_side", "cm_stagger",
 )
 
 
@@ -300,15 +315,16 @@ def _build_base(
     # ---- X-Rite ColorMunki ---------------------------------------------
     if key == "CM":
         plen = pscale * 14.0
-        if density >= 2:                      # high density — staggered rows (rig)
+        if density >= 2:                      # high density (rig) — tighter rows
             # Level 2 = printtarg's exact rig spacing (13.7 mm). Higher levels
             # tighten rows further (ChromIQ extension): 28/density.
             span = 13.7 if density == 2 else 28.0 / density
             pwid = rrsp = pscale * span
-            hxeh = 0.25 * plen
         else:                                 # normal hand-held
             pwid = rrsp = pscale * 28.0
-            hxeh = 0.0
+        # The strip stagger (and its hxeh reservation) is now a separate option
+        # (cm_stagger), applied in build() — not tied to density (#93, Knut).
+        hxeh = 0.0
         txhisl, lcar = 7.0, 20.0
         return Geom(
             key=key, plen=plen, pspa=spacer(1.0), tspa=25.0, pwid=pwid, rrsp=rrsp,

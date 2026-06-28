@@ -762,6 +762,9 @@ def render_pages(
             xR = px(place.x_of(p) + place.pwid)
             strip_w = xR - x0
             global_strip = (first // steps) + p
+            # ColorMunki "offset every second strip": odd strips shift down by
+            # the rig stagger (#93, Knut). 0 for everything else.
+            _stag = px(getattr(geom, "row_stagger_mm", 0.0)) if (global_strip & 1) else 0
             col_slots = list(range(first + p * steps,
                                    min(last, first + (p + 1) * steps)))
             if draw_indicators:
@@ -810,14 +813,14 @@ def render_pages(
                         draw.text((_rx - _tw, _ry - ind_px // 2), _txt,
                                   font=font, fill=(0, 0, 0))
             for j, gslot in enumerate(col_slots):
-                y0 = px(place.y_of(j))
+                y0 = px(place.y_of(j)) + _stag
                 # Derive each row's bottom edge from its true mm position (the
                 # way xR does horizontally) instead of adding a fixed rounded
                 # height: round(plen)+round(pspa) drifts from round(plen+pspa),
                 # which left a 1 px gap between the spacer and the next patch on
                 # every other row. Tying the spacer's bottom to the next patch's
                 # top tiles them seamlessly (#93).
-                yB = px(place.y_of(j) + place.plen)            # patch bottom edge
+                yB = px(place.y_of(j) + place.plen) + _stag    # patch bottom edge
                 rgb = rgb_by_slot[gslot]
                 if ss_hex:
                     draw.polygon(_hexagon_points(x0, y0, xR - x0, yB - y0, j),
@@ -825,7 +828,7 @@ def render_pages(
                 else:
                     draw.rectangle([x0, y0, xR - 1, yB - 1], fill=rgb)
                 if sp_px > 0 and j + 1 < len(col_slots):
-                    y_next = px(place.y_of(j + 1))             # next patch top
+                    y_next = px(place.y_of(j + 1)) + _stag     # next patch top
                     nxt = rgb_by_slot[col_slots[j + 1]]
                     # A per-spacer manual override (keyed by flat geometric index)
                     # wins over the auto/contrast colour.
@@ -843,12 +846,12 @@ def render_pages(
                 _white = (255, 255, 255)
                 _first = rgb_by_slot[col_slots[0]]
                 _last = rgb_by_slot[col_slots[-1]]
-                _yl = px(place.y_of(0)) - sp_px            # leading: above patch 0
+                _yl = px(place.y_of(0)) + _stag - sp_px     # leading: above patch 0
                 draw.rectangle(
                     [x0, _yl, xR - 1, _yl + sp_px - 1],
                     fill=contrast.spacer_for_mode(spacer_mode, _white, _first,
                                                   spacer_palette))
-                _yt = px(place.y_of(len(col_slots) - 1) + place.plen)   # trailing
+                _yt = px(place.y_of(len(col_slots) - 1) + place.plen) + _stag  # trailing
                 draw.rectangle(
                     [x0, _yt, xR - 1, _yt + sp_px - 1],
                     fill=contrast.spacer_for_mode(spacer_mode, _last, _white,

@@ -40,7 +40,7 @@ def test_all_engine_options_roundtrip(app):
     from ui.dialogs.layout_options_panel import LayoutOptionsPanel
     panel = LayoutOptionsPanel(with_calibration=True, with_selectors=True)
     r = LayoutRecipe(
-        instrument="i1", paper="A4", clip_border=True,
+        instrument="i1", paper="A4", clip_border=True, cm_stagger=True,
         pscale=0.9, sscale=1.1, spacer_mode="bw", spacer_width_mm=2.0,
         edge_spacers=True, patch_area_align="bottom-right",
         layout_mode="area_first", area_method="by_grid", area_cols=20,
@@ -65,7 +65,7 @@ def test_all_engine_options_roundtrip(app):
     panel.set_recipe(r)
     out = panel.get_recipe()
     for f in ("instrument", "paper", "pscale", "sscale", "spacer_mode",
-              "spacer_palette", "spacer_overrides", "edge_spacers",
+              "spacer_palette", "spacer_overrides", "edge_spacers", "cm_stagger",
               "patch_area_align", "layout_mode", "area_method", "area_cols",
               "area_rows", "area_ratio", "area_min_patch_mm",
               "spacer_width_mm", "patch_w_mm", "patch_h_mm", "inter_patch_mm",

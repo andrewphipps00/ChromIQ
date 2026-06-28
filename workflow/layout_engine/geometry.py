@@ -392,10 +392,14 @@ def patch_rects_px(geom: Geom, paper_w_mm: float, paper_h_mm: float,
         for wp in range(last - first):
             gslot = first + wp
             p, j = wp // steps, wp % steps
+            # Match the renderer's per-strip ColorMunki stagger so click/highlight
+            # rects line up with the drawn patches (#93, Knut).
+            _stag = (px(geom.row_stagger_mm)
+                     if (((first // steps) + p) & 1) else 0)
             loc = permutation.location_label(gslot, steps, strip_pattern, patch_pattern)
             out.append({
                 "page": page, "slot": gslot, "loc": loc,
-                "x": px(place.x_of(p)), "y": px(place.y_of(j)),
+                "x": px(place.x_of(p)), "y": px(place.y_of(j)) + _stag,
                 "w": px(place.pwid), "h": px(place.plen),
             })
     return out

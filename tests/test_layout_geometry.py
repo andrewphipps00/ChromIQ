@@ -326,6 +326,28 @@ def test_area_first_fits_requested_grid():
     assert tall > sq
 
 
+def test_colormunki_stagger_offsets_odd_strips_and_reserves_space():
+    """ColorMunki 'offset every second strip' shifts odd strips down by ~half a
+    patch and reserves hxeh so the count drops — independent of density (#93)."""
+    plain = instruments.geom_from_build_kwargs({"instrument": "CM", "paper": "A4"})
+    stag = instruments.geom_from_build_kwargs(
+        {"instrument": "CM", "paper": "A4", "cm_stagger": True})
+    assert plain.row_stagger_mm == 0 and stag.row_stagger_mm > 0
+    assert stag.hxeh > 0                       # reservation for the overhang
+    assert geometry.patches_per_sheet(stag, *A4) <= geometry.patches_per_sheet(plain, *A4)
+    # odd strip's first patch sits lower than the even strip's by the stagger.
+    lay = geometry.compute(stag, *A4, geometry.patches_per_sheet(stag, *A4))
+    pr = geometry.patch_rects_px(stag, *A4, lay, 150)
+    steps = lay.steps_in_pass
+    even_y = next(r["y"] for r in pr if r["slot"] == 0)
+    odd_y = next(r["y"] for r in pr if r["slot"] == steps)   # first patch of strip 1
+    assert odd_y > even_y
+    # decoupled from density: high density without the option does NOT stagger.
+    hd = instruments.geom_from_build_kwargs(
+        {"instrument": "CM", "paper": "A4", "density": 2})
+    assert hd.row_stagger_mm == 0
+
+
 def test_area_first_cols_pinned_rows_auto_fill_to_bottom():
     """Columns pinned + rows on auto: area-first grows the patch height so the
     rows fill the page down to the bottom margin/trailer, instead of leaving a

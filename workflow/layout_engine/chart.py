@@ -90,6 +90,7 @@ def build_chart(
     dpi: int = 300,
     hflag: bool = False,
     density: int = 1,
+    cm_stagger: bool = False,
     spacer_on: bool = True,
     spacer_mode: str = "colored",
     spacer_palette: list | None = None,
@@ -174,7 +175,8 @@ def build_chart(
     # capacity estimate exactly (#93).
     geom = instruments.geom_from_build_kwargs({
         "instrument": instrument, "paper": paper, "hflag": hflag,
-        "density": density, "spacer_on": spacer_on, "pscale": pscale,
+        "density": density, "cm_stagger": cm_stagger,
+        "spacer_on": spacer_on, "pscale": pscale,
         "sscale": sscale, "border": border, "margins": margins,
         "patch_w": patch_w, "patch_h": patch_h, "spacer_width": spacer_width,
         "inter_patch": inter_patch, "strip_gap": strip_gap, "max_strip": max_strip,

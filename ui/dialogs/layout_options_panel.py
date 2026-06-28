@@ -524,6 +524,18 @@ class LayoutOptionsPanel(QWidget):
                "doesn't reduce the patch count. Turn it on if you prefer the "
                "printtarg look or want an extra separator at the strip ends."),
             self), 10, 2)
+        # ColorMunki only: offset every second strip (printtarg's rig stagger).
+        self.cm_stagger_cb = QCheckBox(tr("Offset every second strip"), self)
+        self.cm_stagger_cb.toggled.connect(self._emit)
+        g.addWidget(self.cm_stagger_cb, 11, 1)
+        self._cm_stagger_tip = TooltipButton(
+            tr("Offset every second strip"),
+            tr("ColorMunki only: shifts every second strip down by half a patch so "
+               "the columns interleave like a brick wall — matching ArgyllCMS "
+               "printtarg's measuring-rig layout. Reserves a little space at the "
+               "top and bottom for the offset, so the patch count drops slightly. "
+               "Leave off for a plain aligned grid."), self)
+        g.addWidget(self._cm_stagger_tip, 11, 2)
         v.addWidget(ps)
 
         # ---- Randomisation ----
@@ -1085,6 +1097,10 @@ class LayoutOptionsPanel(QWidget):
             self._clip_enable_lbl.setVisible(is_band)
             self._clip_enable_tip.setVisible(is_band)
             self._sync_clip_enable_display()
+        # "Offset every second strip" is a ColorMunki-only option.
+        if hasattr(self, "cm_stagger_cb"):
+            self.cm_stagger_cb.setVisible(inst == "CM")
+            self._cm_stagger_tip.setVisible(inst == "CM")
         self._loading = False
         self._on_paper_changed()
 
@@ -1678,6 +1694,7 @@ class LayoutOptionsPanel(QWidget):
         self.spacer_mode.setCurrentIndex(i if i >= 0 else 0)
         self.spacer_width.setValue(r.spacer_width_mm)
         self.edge_spacers_cb.setChecked(bool(r.edge_spacers))
+        self.cm_stagger_cb.setChecked(bool(getattr(r, "cm_stagger", False)))
         self._spacer_overrides = {str(k): v for k, v in (r.spacer_overrides or {}).items()}
         _pal = list(r.spacer_palette or [])
         self.custom_spacer_cb.setChecked(bool(_pal))
@@ -1783,6 +1800,7 @@ class LayoutOptionsPanel(QWidget):
         r.spacer_overrides = dict(self._spacer_overrides)
         r.spacer_on = r.spacer_mode != "none"
         r.edge_spacers = self.edge_spacers_cb.isChecked()
+        r.cm_stagger = self.cm_stagger_cb.isChecked()
         r.spacer_width_mm = self.spacer_width.value()
         r.layout_mode = self.layout_mode.currentData() or "patch_first"
         r.area_method = self.area_method.currentData() or "by_width"

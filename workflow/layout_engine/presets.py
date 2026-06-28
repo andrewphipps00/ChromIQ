@@ -33,6 +33,7 @@ class LayoutRecipe:
     seed: int | None = None
     hflag: bool = False            # SpectroScan hex (n/a elsewhere)
     cm_density: int = 1            # ColorMunki rows: 1 normal, 2 rig, 3 extra-high
+    cm_stagger: bool = False       # ColorMunki: offset every second strip (rig)
     spacer_on: bool = True
     spacer_mode: str = "colored"   # "colored" | "bw" | "none"
     spacer_palette: list = field(default_factory=list)  # custom colored-spacer hexes
@@ -169,6 +170,7 @@ class LayoutRecipe:
             instrument=inst, paper=d.get("paper", "A4"), dpi=int(d.get("dpi", 300)),
             randomize=bool(d.get("randomize", True)), seed=d.get("seed"),
             hflag=bool(d.get("hflag", False)), cm_density=int(d.get("density", 1)),
+            cm_stagger=bool(d.get("cm_stagger", False)),
             spacer_mode=d.get("spacer_mode", "colored"),
             spacer_palette=list(d.get("spacer_palette") or []),
             spacer_overrides=dict(d.get("spacer_overrides") or {}),
@@ -260,6 +262,7 @@ class LayoutRecipe:
             "dpi": self.dpi,
             "hflag": self.hflag,
             "density": self.cm_density,
+            "cm_stagger": self.cm_stagger,
             "spacer_on": self.spacer_mode != "none",
             "spacer_mode": self.spacer_mode,
             "spacer_palette": list(self.spacer_palette) or None,
