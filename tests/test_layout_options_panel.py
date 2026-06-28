@@ -48,7 +48,8 @@ def test_all_engine_options_roundtrip(app):
         patch_w_mm=9.0, patch_h_mm=11.0, inter_patch_mm=1.0, strip_gap_mm=2.5,
         strip_label_offset_mm=-4.0,
         strip_indicator_gap_mm=3.0, margin_top=10.0, margin_right=8.0,
-        margin_bottom=12.0, margin_left=9.0, dpi=150, nolimit=True,
+        margin_bottom=12.0, margin_left=9.0, use_instrument_margins=True,
+        dpi=150, nolimit=True,
         max_strip_mm=200.0, offset_x_mm=4.0, offset_y_mm=5.0, bit16=True,
         compression="zlib", show_strip_indicators=True, indicator_font="Inter",
         indicator_size_mm=4.0, indicator_bold=True, indicator_italic=False,
@@ -69,7 +70,8 @@ def test_all_engine_options_roundtrip(app):
               "spacer_width_mm", "patch_w_mm", "patch_h_mm", "inter_patch_mm",
               "strip_gap_mm", "strip_label_offset_mm",
               "strip_indicator_gap_mm", "margin_top", "margin_right",
-              "margin_bottom", "margin_left", "dpi", "nolimit", "max_strip_mm",
+              "margin_bottom", "margin_left", "use_instrument_margins",
+              "dpi", "nolimit", "max_strip_mm",
               "offset_x_mm", "offset_y_mm", "bit16", "compression",
               "show_strip_indicators", "indicator_font", "indicator_size_mm",
               "indicator_bold", "indicator_italic", "indicator_rotation",
@@ -190,3 +192,20 @@ def test_engine_info_line_from_recipe_reflects_recipe():
     s = line(r)
     assert "area-fit 24×30" in s
     assert "9×9 mm" not in s
+
+
+def test_use_instrument_margins_fills_and_locks(app):
+    """Ticking "Use instrument margins" fills the four margins from the wired
+    threshold lookup and locks them read-only (#93, Knut)."""
+    from ui.dialogs.layout_options_panel import LayoutOptionsPanel
+    panel = LayoutOptionsPanel(with_selectors=True)
+    panel.set_threshold_lookup(lambda inst, paper: {"L": 26, "R": 9, "T": 38, "B": 10})
+    panel.use_instr_margins.setChecked(True)
+    assert panel.margins["l"].value() == 26 and panel.margins["t"].value() == 38
+    assert panel.margins["r"].value() == 9 and panel.margins["b"].value() == 10
+    assert not panel.margins["t"].isEnabled()        # locked while ticked
+    panel.use_instr_margins.setChecked(False)
+    assert panel.margins["t"].isEnabled()            # editable again
+    # hidden when no lookup is wired
+    bare = LayoutOptionsPanel(with_selectors=True)
+    assert not bare.use_instr_margins.isVisibleTo(bare)

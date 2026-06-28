@@ -45,6 +45,11 @@ WORDMARK_IQ_RGB = (255, 69, 115)  # #ff4573 — magenta accent for "IQ"
 
 # ChromIQ accent palette (ui.styles TAB_COLORS) as RGB, for the coloured
 # under-indicator rule; cycled per strip so adjacent strips read distinctly.
+# Printer-safe distance (mm) on-sheet text keeps from the page edge, so it isn't
+# clipped by a printer's unprintable border (#93, Knut). Matches the clip-content
+# inset so all text/labels share one safe edge.
+TEXT_EDGE_MARGIN_MM = 4.0
+
 ACCENT_RGB = (
     (255, 69, 115),    # magenta
     (255, 180, 45),    # amber
@@ -281,9 +286,11 @@ def _furniture_reserves_mm(geom, kw: dict) -> tuple[float, float]:
         # draws, so a smaller font frees space for more patches (#93).
         label_band = band if raw_size > 0 else max(geom.txhisl, band)
     # Bottom-of-sheet block: one line each for custom sheet text and the stamp,
-    # drawn at line_h = px(4.2) above a px(1.5) bottom inset (see render_pages).
+    # drawn at line_h = px(4.2) above the printer-safe bottom inset (see
+    # render_pages); the inset keeps the text clear of a printer's unprintable
+    # edge (#93, Knut's "distance from page edge to text").
     nlines = (1 if kw.get("chart_text") else 0) + (1 if kw.get("stamp_command") else 0)
-    bottom = (1.5 + 4.2 * nlines) if nlines else 0.0
+    bottom = (TEXT_EDGE_MARGIN_MM + 4.2 * nlines) if nlines else 0.0
     return label_band, bottom
 
 
@@ -835,7 +842,7 @@ def render_pages(
             sfont = _font(px(chart_text_size_mm or 3.2), chart_text_font,
                           chart_text_bold, chart_text_italic)
             line_h = px(4.2)
-            yy = H - px(1.5) - line_h * len(_btxt)
+            yy = H - px(TEXT_EDGE_MARGIN_MM) - line_h * len(_btxt)
             for ln in _btxt:
                 draw.text((px(geom.margin_l), yy), ln, font=sfont, fill=(0, 0, 0))
                 yy += line_h

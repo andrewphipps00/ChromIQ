@@ -651,7 +651,15 @@ class LayoutOptionsPanel(QWidget):
         _mgrid = QGridLayout()
         _mgrid.setContentsMargins(0, 0, 0, 0)
         _mgrid.setVerticalSpacing(4); _mgrid.setHorizontalSpacing(6)
-        for _i, _k in enumerate(("t", "r", "b", "l")):
+        # "Use instrument margins" — when ticked, the four margins come from
+        # Preferences → Instrument Margins for this combo (read-only) (#93, Knut).
+        # Shown only when a threshold lookup is wired (set_threshold_lookup).
+        self.use_instr_margins = QCheckBox(tr("Use instrument margins"), self)
+        self.use_instr_margins.setVisible(False)
+        self.use_instr_margins.toggled.connect(self._sync_instr_margins)
+        self.use_instr_margins.toggled.connect(self._emit)
+        _mgrid.addWidget(self.use_instr_margins, 0, 0, 1, 2)
+        for _i, _k in enumerate(("t", "r", "b", "l"), start=1):
             _dl = QLabel(_mlabels[_k], self); _dl.setMinimumWidth(46)
             _mgrid.addWidget(_dl, _i, 0)
             _mgrid.addWidget(mm_inch(self.margins[_k]), _i, 1)
@@ -1047,6 +1055,45 @@ class LayoutOptionsPanel(QWidget):
         self._update_clip_visibility()
         self._emit()
 
+    def set_threshold_lookup(self, fn) -> None:
+        """Wire a callable ``fn(instrument, paper_code) -> {L,R,T,B}|None`` that
+        returns the user's Instrument-Margins thresholds, enabling the "Use
+        instrument margins" checkbox (#93). Without it the checkbox stays hidden."""
+        self._threshold_lookup = fn
+        if hasattr(self, "use_instr_margins"):
+            self.use_instr_margins.setVisible(fn is not None)
+            self._sync_instr_margins()
+
+    def _current_instrument_paper(self) -> tuple[str, str]:
+        if self.instr is not None and self.paper is not None:
+            return (self.instr.currentData() or "i1",
+                    self.paper.currentData() or "A4")
+        return (self._inst, "A4")
+
+    def _sync_instr_margins(self, *_a) -> None:
+        """When "Use instrument margins" is on, fill the four margins from the
+        threshold lookup for the current combo and lock them read-only (#93)."""
+        fn = getattr(self, "_threshold_lookup", None)
+        on = (fn is not None and hasattr(self, "use_instr_margins")
+              and self.use_instr_margins.isChecked())
+        if on:
+            inst, paper = self._current_instrument_paper()
+            thr = None
+            try:
+                thr = fn(inst, paper)
+            except Exception:
+                thr = None
+            if thr:
+                _m = {"t": "T", "r": "R", "b": "B", "l": "L"}
+                for k, key in _m.items():
+                    v = thr.get(key)
+                    if v not in (None, ""):
+                        self.margins[k].blockSignals(True)
+                        self.margins[k].setValue(float(v))
+                        self.margins[k].blockSignals(False)
+        for k in ("t", "r", "b", "l"):
+            self.margins[k].setEnabled(not on)
+
     def _sync_layout_mode(self, *_a) -> None:
         """Show only the fields each layout choice needs (#93 / Knut). Area-first
         derives the patch size, so HIDE the patch size/scale rows and the patch-
@@ -1404,6 +1451,9 @@ class LayoutOptionsPanel(QWidget):
     def _on_paper_changed(self, *_a) -> None:
         if self.paper is not None:
             self._custom_paper_w.setVisible(self.paper.currentData() == "__custom__")
+        # Re-pull instrument margins for the new instrument/paper combo (#93).
+        if hasattr(self, "use_instr_margins") and self.use_instr_margins.isChecked():
+            self._sync_instr_margins()
         self._emit()
 
     def selection(self) -> tuple[str, str, str]:
@@ -1501,6 +1551,12 @@ class LayoutOptionsPanel(QWidget):
         self.margins["r"].setValue(r.margin_right)
         self.margins["b"].setValue(r.margin_bottom)
         self.margins["l"].setValue(r.margin_left)
+        if hasattr(self, "use_instr_margins"):
+            self.use_instr_margins.blockSignals(True)
+            self.use_instr_margins.setChecked(bool(getattr(
+                r, "use_instrument_margins", False)))
+            self.use_instr_margins.blockSignals(False)
+            self._sync_instr_margins()     # fill from thresholds when ticked
         self._border = r.border        # preserve base margin across the round-trip
         self.dpi.setValue(r.dpi)
         self.nolimit.setChecked(r.nolimit)
@@ -1588,6 +1644,8 @@ class LayoutOptionsPanel(QWidget):
         r.margin_right = self.margins["r"].value()
         r.margin_bottom = self.margins["b"].value()
         r.margin_left = self.margins["l"].value()
+        if hasattr(self, "use_instr_margins"):
+            r.use_instrument_margins = self.use_instr_margins.isChecked()
         # Preserve the chart's base margin (printtarg -m; drives the clip-holder
         # width lbord = clip_width − border). The panel has no separate control
         # for it, so re-deriving it from min(margins) silently changed it on a

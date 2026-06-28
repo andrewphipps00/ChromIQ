@@ -52,6 +52,9 @@ class LayoutRecipe:
     margin_right: float = 6.0
     margin_bottom: float = 6.0
     margin_left: float = 6.0
+    # When True, the four margins are taken from Preferences → Instrument Margins
+    # for this instrument/paper/orientation (read-only in the panel) (#93, Knut).
+    use_instrument_margins: bool = False
     patch_w_mm: float = 0.0        # explicit patch width / height (mm); 0 = auto
     patch_h_mm: float = 0.0
     # Layout strategy (#93, Knut). "patch_first" (default) = size the patches
