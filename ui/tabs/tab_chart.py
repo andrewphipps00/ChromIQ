@@ -2101,6 +2101,7 @@ class TabChart(QWidget):
                 # param_label carries the right per-theme colour AND a :disabled
                 # rule, so it greys when a preset locks the printtarg panel.
                 pages_lbl.setObjectName("param_label")
+                self._manual_pages_lbl = pages_lbl
                 pages_row_l.addWidget(pages_lbl)
                 self._manual_pages_spin = NoScrollSpinBox(pages_row_w)
                 self._manual_pages_spin.setObjectName("compact_input")
@@ -3352,6 +3353,14 @@ class TabChart(QWidget):
         """
         if self._manual_pages_spin is not None:
             self._manual_pages_spin.setEnabled(checked)
+        # Grey the "Pages:" label too (not just the spin) — with Auto off the
+        # user has set an exact patch count, so the page count is fixed (#93).
+        if getattr(self, "_manual_pages_lbl", None) is not None:
+            self._manual_pages_lbl.setEnabled(checked)
+        # Same for the engine layout panel's own Pages control (shown when the
+        # ChromIQ engine is on), which is a separate widget.
+        if getattr(self, "_manual_layout_panel", None) is not None:
+            self._manual_layout_panel.set_pages_enabled(checked)
         if self._manual_f_pw is None or self._manual_f_pw._control is None:
             return
         spin = self._manual_f_pw._control

@@ -103,7 +103,8 @@ class LayoutOptionsPanel(QWidget):
             self.paper = NoScrollComboBox(self)
             sel.addWidget(QLabel(tr("Paper:"), self), 2, 0)
             sel.addWidget(self.paper, 2, 1)
-            sel.addWidget(QLabel(tr("Pages:"), self), 2, 2)
+            self._pages_lbl = QLabel(tr("Pages:"), self)
+            sel.addWidget(self._pages_lbl, 2, 2)
             self.pages = NoScrollSpinBox(self)
             self.pages.setRange(1, 20)
             self.pages.setValue(1)
@@ -338,12 +339,13 @@ class LayoutOptionsPanel(QWidget):
                        "(default, most reliable); “Black & white” uses plain "
                        "black/white; “None” removes them — only if your instrument "
                        "doesn't need gaps."), self))
-        add_row(g, 3, tr("Spacer width:"), self.spacer_width,
+        add_row(g, 3, tr("Spacer size:"), self.spacer_width,
                 tip=TooltipButton(
-                    tr("Spacer width"),
-                    tr("How thick the separator between patches is, in mm. Leave "
-                       "at “auto” (0) for the instrument default; increase it only "
-                       "if your scanner has trouble finding the patch edges."),
+                    tr("Spacer size"),
+                    tr("How thick the separator between patches is, in mm (it runs "
+                       "along the strip, between consecutive patches). Leave at "
+                       "“auto” (0) for the instrument default; increase it only if "
+                       "your scanner has trouble finding the patch edges."),
                     self))
         add_row(g, 4, tr("Spacer scale:"), self.sscale,
                 tip=TooltipButton(
@@ -1336,6 +1338,14 @@ class LayoutOptionsPanel(QWidget):
     def set_pages(self, n: int) -> None:
         if self.pages is not None:
             self.pages.setValue(max(1, int(n)))
+
+    def set_pages_enabled(self, enabled: bool) -> None:
+        """Grey the Pages control (spin + label) — used when an exact patch count
+        is set, so the page count is fixed (#93)."""
+        if self.pages is not None:
+            self.pages.setEnabled(enabled)
+        if getattr(self, "_pages_lbl", None) is not None:
+            self._pages_lbl.setEnabled(enabled)
 
     def get_recipe(self, base: LayoutRecipe | None = None) -> LayoutRecipe:
         """Build a complete recipe from the selectors (if any) + the controls."""

@@ -1844,7 +1844,6 @@
   "Compression:": "Compression:",
   "Inter-patch gap:": "Inter-patch gap:",
   "Max strip length:": "Max strip length:",
-  "Spacer width:": "Spacer width:",
   "Strip-indicator gap:": "Strip-indicator gap:",
   "ArgyllCMS calibration (*.cal)": "ArgyllCMS calibration (*.cal)",
   "Embed only (-I)": "Embed only (-I)",
@@ -1922,7 +1921,6 @@
   "Patch scale": "Patch scale",
   "Sheet-text font": "Sheet-text font",
   "Spacer scale": "Spacer scale",
-  "Spacer width": "Spacer width",
   "Stamp layout summary": "Stamp layout summary",
   "Strip pattern": "Strip pattern",
   "Strip-indicator gap": "Strip-indicator gap",
@@ -1937,7 +1935,6 @@
   "How patches within a strip are numbered — the number part of a location, e.g. A1, A2, A3. Leave the default unless matching a specific scheme.": "How patches within a strip are numbered — the number part of a location, e.g. A1, A2, A3. Leave the default unless matching a specific scheme.",
   "How strips (columns) are labelled — the letter part of a patch's location, e.g. A, B, C. Leave the default unless you have a specific labelling scheme to match.": "How strips (columns) are labelled — the letter part of a patch's location, e.g. A, B, C. Leave the default unless you have a specific labelling scheme to match.",
   "How the chart TIFF is compressed. LZW (default) and Zlib are lossless and shrink the file; “None” writes it uncompressed (largest, most compatible). All keep the exact colours.": "How the chart TIFF is compressed. LZW (default) and Zlib are lossless and shrink the file; “None” writes it uncompressed (largest, most compatible). All keep the exact colours.",
-  "How thick the separator between patches is, in mm. Leave at “auto” (0) for the instrument default; increase it only if your scanner has trouble finding the patch edges.": "How thick the separator between patches is, in mm. Leave at “auto” (0) for the instrument default; increase it only if your scanner has trouble finding the patch edges.",
   "Paper is the sheet size you'll print on — the profile is only valid for the paper you actually use. Pages is how many sheets to spread the patches across: more pages = more patches total (and more ink and paper).": "Paper is the sheet size you'll print on — the profile is only valid for the paper you actually use. Pages is how many sheets to spread the patches across: more pages = more patches total (and more ink and paper).",
   "Pixel density of the printed chart TIFF, in dots per inch. 300 dpi is a good default; higher makes a larger file with no real benefit for solid colour patches.": "Pixel density of the printed chart TIFF, in dots per inch. 300 dpi is a good default; higher makes a larger file with no real benefit for solid colour patches.",
   "Prints a one-line summary of how the chart was made (engine, instrument, paper, dpi, patch count, seed) in the bottom margin. Handy for re-creating an identical chart later from the printed sheet alone.": "Prints a one-line summary of how the chart was made (engine, instrument, paper, dpi, patch count, seed) in the bottom margin. Handy for re-creating an identical chart later from the printed sheet alone.",
@@ -2049,5 +2046,8 @@
   "Pin how many strips (columns of patches) to fit across the page — for exact control. ChromIQ makes the patches exactly wide enough that this many strips span the usable width, so the block reaches the margins evenly. Leave at “auto” to let the minimum size / patch shape decide.": "Pin how many strips (columns of patches) to fit across the page — for exact control. ChromIQ makes the patches exactly wide enough that this many strips span the usable width, so the block reaches the margins evenly. Leave at “auto” to let the minimum size / patch shape decide.",
   "The simplest way to lay out a chart: set the smallest patch your instrument can read reliably, leave Strips and Rows on “auto”, and ChromIQ fits as many patches as it can at that size and then grows them to fill the area exactly. You get the densest readable chart with no counting. Combine with Patch shape to control how the patches grow. Ignored for an axis where you pin a count below.": "The simplest way to lay out a chart: set the smallest patch your instrument can read reliably, leave Strips and Rows on “auto”, and ChromIQ fits as many patches as it can at that size and then grows them to fill the area exactly. You get the densest readable chart with no counting. Combine with Patch shape to control how the patches grow. Ignored for an axis where you pin a count below.",
   "The width-to-height ratio for any patch dimension that isn't pinned by a column/row count — e.g. set a minimum size and this controls how the patches grow. “square” keeps width = height. 1.5 makes patches half again as wide as they are tall. Ignored when you pin both columns and rows.": "The width-to-height ratio for any patch dimension that isn't pinned by a column/row count — e.g. set a minimum size and this controls how the patches grow. “square” keeps width = height. 1.5 makes patches half again as wide as they are tall. Ignored when you pin both columns and rows.",
-  "area-fit ≥{mm:g} mm": "area-fit ≥{mm:g} mm"
+  "area-fit ≥{mm:g} mm": "area-fit ≥{mm:g} mm",
+  "How thick the separator between patches is, in mm (it runs along the strip, between consecutive patches). Leave at “auto” (0) for the instrument default; increase it only if your scanner has trouble finding the patch edges.": "How thick the separator between patches is, in mm (it runs along the strip, between consecutive patches). Leave at “auto” (0) for the instrument default; increase it only if your scanner has trouble finding the patch edges.",
+  "Spacer size": "Spacer size",
+  "Spacer size:": "Spacer size:"
 }
