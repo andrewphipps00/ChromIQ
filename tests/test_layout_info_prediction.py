@@ -50,6 +50,26 @@ def test_layout_info_placeholder_without_engine(qapp, tmp_path):
     assert not tab._layout_info_panel._placeholder.isHidden()
 
 
+def test_estimate_lays_out_onscreen_patch_count(qapp, tmp_path):
+    """When a chart is on screen, the estimate lays out the SAME patch count
+    under the current settings — not a capacity-fill of pages_req pages (#93,
+    Knut beta-13: estimate pages/total were wrong for a loaded chart)."""
+    from workflow.layout_engine import geometry, instruments, papers
+    tab = _tab(tmp_path, use_chromiq_layout_engine=True)
+    panel = tab._layout_info_panel
+    geom = instruments.geom_from_build_kwargs(
+        {"instrument": "i1", "paper": "A4"})
+    per = geometry.patches_per_sheet(geom, *papers.dimensions_mm("A4"))
+    # A fixed, larger patch set than 1 page → must report multiple pages, total N.
+    npat = per * 3 + 5
+    tab._predict_layout_info(geom, "A4", pages_req=1, npat=npat)
+    assert int(panel._estimate_labels["total"].text()) >= npat
+    assert int(panel._estimate_labels["pages"].text()) >= 4
+    # Without npat (fresh, auto-count) it fills pages_req pages instead.
+    tab._predict_layout_info(geom, "A4", pages_req=1, npat=None)
+    assert int(panel._estimate_labels["pages"].text()) == 1
+
+
 def test_estimate_refreshes_on_mode_switch(qapp, tmp_path):
     """Switching Guided ↔ Manual must re-run the active mode's predictor so the
     estimate describes the mode on screen (#93)."""

@@ -2519,7 +2519,8 @@ class TabChart(QWidget):
                         r.build_kwargs(), thresholds=_thr)
                     pages_req = (self._manual_pages_spin.value()
                                  if self._manual_pages_spin is not None else 1)
-                    self._predict_layout_info(geom, r.paper, pages_req)
+                    self._predict_layout_info(geom, r.paper, pages_req,
+                                              npat=self._onscreen_patch_total())
                 except Exception:
                     self._layout_info_panel.clear_estimate()
             else:
@@ -6624,11 +6625,29 @@ class TabChart(QWidget):
         self._update_margin_inspector()
         self._update_layout_info()
 
-    def _predict_layout_info(self, geom, paper: str, pages_req: int) -> None:
+    def _onscreen_patch_total(self) -> "int | None":
+        """Patch count of the chart currently in the preview (its .ti2
+        NUMBER_OF_SETS), or None when nothing is generated. Lets the estimate lay
+        out the SAME patches the on-screen chart has under the current settings,
+        instead of a capacity-fill (#93, Knut beta-13: estimate pages were wrong
+        for a loaded chart)."""
+        ti2 = getattr(self, "_margin_ti2", None)
+        if not ti2 or not getattr(self, "_margin_tiffs", None):
+            return None
+        try:
+            import re
+            m = re.search(r"NUMBER_OF_SETS\s+(\d+)",
+                          Path(ti2).read_text(errors="replace"))
+            return int(m.group(1)) if m else None
+        except Exception:
+            return None
+
+    def _predict_layout_info(self, geom, paper: str, pages_req: int,
+                             npat: "int | None" = None) -> None:
         """Fill the Chart-layout-information panel with the engine's predicted
-        grid BEFORE a chart exists (#93). Engine geometry is deterministic, so a
-        capacity-filled layout is exactly what Generate will produce. Only used
-        while no generated chart is in the preview (then the .ti2 takes over)."""
+        grid (#93). With *npat* (the on-screen chart's patch count) the SAME
+        patches are laid out under the current settings; otherwise a capacity-
+        filled layout of *pages_req* pages is shown (the auto-count prediction)."""
         panel = getattr(self, "_layout_info_panel", None)
         if panel is None:
             return
@@ -6639,7 +6658,8 @@ class TabChart(QWidget):
             if not per_sheet:
                 panel.show_placeholder()
                 return
-            lay = geometry.compute(geom, w_mm, h_mm, per_sheet * max(1, pages_req))
+            total = npat if npat else per_sheet * max(1, pages_req)
+            lay = geometry.compute(geom, w_mm, h_mm, total)
             rows = lay.steps_in_pass
             n0 = min(lay.total_patches, lay.patches_per_page)
             cols = (n0 + rows - 1) // rows if rows else 0
