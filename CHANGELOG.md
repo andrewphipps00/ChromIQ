@@ -1,5 +1,20 @@
 # Changelog
 
+## v3.13.0-beta.13
+
+Final round of layout-engine refinements from testing.
+
+### ✨ New
+- **“Use instrument margins” checkbox.** Tick it and the four page margins fill
+  from your instrument’s margin thresholds and lock — so the patch area always
+  clears the jig — and re-fill when you change instrument or paper.
+
+### 🔧 Changed
+- **New charts align the patch block to the top-left by default** (was
+  centre-left). Existing presets and saved defaults keep their own setting.
+- **Sheet text now sits 4 mm from the paper edge** (was 1.5 mm), so it can’t be
+  clipped by the printer’s unprintable border.
+
 ## v3.13.0-beta.12
 
 More layout-engine refinements from testing.

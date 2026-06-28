@@ -43,8 +43,9 @@ class LayoutRecipe:
     edge_spacers: bool = False
     # Where the patch block sits within the usable area: one of
     # "{top,center,bottom}-{left,center,right}" (middle is plain "center").
-    # "center-left" reproduces printtarg's behaviour (the prior default) (#93).
-    patch_area_align: str = "center-left"
+    # "top-left" is the default for new charts (Knut, #93); "center-left"
+    # reproduces printtarg's behaviour and is kept for older dicts via from_dict.
+    patch_area_align: str = "top-left"
     pscale: float = 1.0
     sscale: float = 1.0
     border: float = 6.0            # base margin (drives leader/clip-holder)
