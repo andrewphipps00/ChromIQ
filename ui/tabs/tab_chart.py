@@ -2174,11 +2174,27 @@ class TabChart(QWidget):
         # Let the panel's "Use instrument margins" checkbox read the user's
         # Instrument-Margins thresholds for the current combo (#93, Knut).
         self._manual_layout_panel.set_threshold_lookup(self._combo_thresholds)
+        # Keep the engine panel's instrument/paper and the canonical Manual
+        # selection (printtarg -i/-p) in step, so loading a preset then enabling
+        # the engine carries Instrument/Paper across and the threshold lookup +
+        # Preferences preselect use the right combo (#93, Knut beta-13).
+        if self._manual_layout_panel.instr is not None:
+            self._manual_layout_panel.instr.currentIndexChanged.connect(
+                self._sync_manual_selection_from_panel)
+        if self._manual_layout_panel.paper is not None:
+            self._manual_layout_panel.paper.currentIndexChanged.connect(
+                self._sync_manual_selection_from_panel)
         self._manual_layout_panel.changed.connect(self._refresh_manual_command_preview)
         _llg.addWidget(self._manual_layout_panel)
         inner_layout.addWidget(self._manual_layout_grp)
         self._manual_layout_grp.setVisible(False)
         self._manual_panel_inited = False
+        self._syncing_manual_sel = False
+        # Treat the engine's start-of-session state as "already settled" so the
+        # first preview render isn't seen as an off→on toggle (which would pull
+        # the printtarg default over a restored saved recipe at startup) (#93).
+        self._engine_was_active = bool(
+            self._settings.get("use_chromiq_layout_engine", False))
 
         # Layout-engine preset bar (issue #93): shown only when the ChromIQ
         # layout engine is active. Summarises the active preset (instrument ×
@@ -2458,6 +2474,11 @@ class TabChart(QWidget):
         if getattr(self, "_manual_layout_grp", None) is not None:
             if use_engine and not self._manual_panel_inited:
                 self._init_manual_layout_panel()
+            # On the off→on transition, carry the current Manual instrument/paper
+            # (e.g. from a just-loaded preset) into the engine panel (#93, Knut).
+            if use_engine and not getattr(self, "_engine_was_active", False):
+                self._sync_engine_panel_selection()
+            self._engine_was_active = use_engine
             self._manual_layout_grp.setVisible(use_engine)
         if getattr(self, "_manual_printtarg_grp", None) is not None:
             self._manual_printtarg_grp.setVisible(not use_engine)
@@ -2525,6 +2546,57 @@ class TabChart(QWidget):
                 log.warning("restore engine layout defaults failed: %s", exc)
         inst, paper, mode = self._manual_layout_panel.selection()
         self._manual_layout_panel.set_recipe(self._layout_store().get(inst, paper, mode))
+
+    def _sync_engine_panel_selection(self) -> None:
+        """Seed the engine layout panel's instrument/paper from the canonical
+        Manual selection (printtarg -i/-p) — so enabling the engine after loading
+        a preset carries Instrument and Paper into the ChromIQ frame, and the
+        threshold lookup / Preferences preselect use the right combo (#93, Knut
+        beta-13). Run only on the off→on transition; after that the panel is the
+        source and the reverse mirror keeps printtarg in step."""
+        p = getattr(self, "_manual_layout_panel", None)
+        if p is None or p.instr is None or p.paper is None:
+            return
+        if getattr(self, "_syncing_manual_sel", False):
+            return
+        eng = {"3p": "p3"}.get(self._active_instrument_flag(),
+                               self._active_instrument_flag())
+        if eng not in ("i1", "p3", "CM", "SS"):
+            eng = "i1"
+        paper = self._active_paper_code() or "A4"
+        self._syncing_manual_sel = True
+        try:
+            ii = p.instr.findData(eng)
+            if ii >= 0 and p.instr.currentIndex() != ii:
+                p.instr.setCurrentIndex(ii)          # rebuilds the paper list
+            pi = p.paper.findData(paper)
+            if pi >= 0:
+                p.paper.setCurrentIndex(pi)
+        finally:
+            self._syncing_manual_sel = False
+
+    def _sync_manual_selection_from_panel(self, *_a) -> None:
+        """Reverse of :meth:`_sync_engine_panel_selection`: mirror the engine
+        panel's instrument/paper back onto the printtarg -i/-p widgets, so the
+        margin/layout Preferences preselect and naming follow what the engine
+        panel shows (#93, Knut beta-13)."""
+        p = getattr(self, "_manual_layout_panel", None)
+        if (p is None or p.instr is None
+                or getattr(self, "_syncing_manual_sel", False)
+                or getattr(p, "_loading", False)):
+            return
+        eng = p.instr.currentData() or "i1"
+        paper = p.paper.currentData() or "A4"
+        flag = {"p3": "3p"}.get(eng, eng)
+        self._syncing_manual_sel = True
+        try:
+            for pw in self._manual_widgets.get("printtarg", []):
+                if pw.flag == "-i":
+                    pw.set_value(flag)
+                elif pw.flag == "-p":
+                    pw.set_value(paper)
+        finally:
+            self._syncing_manual_sel = False
 
     def _current_layout_recipe(self):
         """The LayoutRecipe from the engine layout panel."""
@@ -3989,6 +4061,10 @@ class TabChart(QWidget):
             if getattr(self, "_manual_layout_panel", None) is not None:
                 from workflow.layout_engine.presets import LayoutRecipe
                 self._manual_layout_panel.set_recipe(LayoutRecipe.from_dict(lr))
+                # The recipe carries its own instrument/paper — mirror them onto
+                # the printtarg -i/-p so Preferences preselect + naming follow the
+                # loaded engine preset (set_recipe suppresses the live mirror) (#93).
+                self._sync_manual_selection_from_panel()
         else:
             self._refresh_manual_command_preview()   # show printtarg controls
 
