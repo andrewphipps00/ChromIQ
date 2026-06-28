@@ -2510,9 +2510,13 @@ class TabChart(QWidget):
                 try:
                     from workflow.layout_engine import instruments
                     r = self._current_layout_recipe()
+                    # Margin boxes are authoritative; only clamp to instrument
+                    # minimums when "Use instrument margins" is on (matches the
+                    # real render in chart_creator) (#93, Knut beta-13).
+                    _thr = (self._combo_thresholds(r.instrument, r.paper)
+                            if r.use_instrument_margins else None)
                     geom = instruments.geom_from_build_kwargs(
-                        r.build_kwargs(), thresholds=self._combo_thresholds(
-                            r.instrument, r.paper))
+                        r.build_kwargs(), thresholds=_thr)
                     pages_req = (self._manual_pages_spin.value()
                                  if self._manual_pages_spin is not None else 1)
                     self._predict_layout_info(geom, r.paper, pages_req)

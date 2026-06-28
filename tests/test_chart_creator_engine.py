@@ -163,6 +163,36 @@ class _ThresholdSettings(_EngineSettings):
         return {margin_combo_key("i1Pro", "A4", "Portrait"): {"T": 60, "R": 9}}
 
 
+def test_recipe_margins_authoritative_unless_use_instrument_margins(tmp_path: Path) -> None:
+    """With a recipe, the margin boxes are authoritative: the instrument-margin
+    clamp only kicks in when "Use instrument margins" is on, so the user's typed
+    margins aren't silently raised (#93, Knut beta-13)."""
+    from workflow.layout_engine.presets import LayoutRecipe
+    # Boxes off → typed margins survive even though a threshold table exists.
+    off = LayoutRecipe(instrument="i1", paper="A4", margin_top=5.0,
+                       use_instrument_margins=False)
+    creator = ChartCreator(_EngineRunner(), _MockFileManager(tmp_path / "a"),
+                           _ThresholdSettings())
+    kw = creator._engine_kwargs(ChartParams(instrument="i1", paper="A4",
+                                            layout_recipe=off))
+    assert kw["margins"][0] == 5.0           # not clamped up to the 60 threshold
+    assert not creator._threshold_notes
+    # Boxes on → clamp applies (the UI fills them from the thresholds anyway):
+    # the patch-area top inset is raised to meet the 60 mm threshold.
+    from workflow.layout_engine import geometry, instruments, papers
+    on = LayoutRecipe(instrument="i1", paper="A4", margin_top=5.0,
+                      use_instrument_margins=True)
+    kw2 = creator._engine_kwargs(ChartParams(instrument="i1", paper="A4",
+                                             layout_recipe=on))
+    assert kw2["margins"][0] > 5.0           # raised from the typed value
+    assert creator._threshold_notes
+    geom = instruments.geom_from_build_kwargs(kw2)
+    w, h = papers.dimensions_mm("A4")
+    lay = geometry.compute(geom, w, h, geometry.patches_per_sheet(geom, w, h))
+    T = geometry.realized_margins_mm(geom, w, h, lay)[2]
+    assert T >= 60 - 0.05                     # patch area clears the threshold
+
+
 def test_engine_kwargs_enforces_margin_thresholds(tmp_path: Path) -> None:
     """_engine_kwargs raises the margins to meet the user's thresholds, and the
     same clamp drives the capacity estimate (so count and chart agree, #93)."""
