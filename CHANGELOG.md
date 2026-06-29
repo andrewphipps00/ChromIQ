@@ -1,5 +1,31 @@
 # Changelog
 
+## v3.13.0-beta.18
+
+### 🔧 Changed
+- **"Margins are the law" is now opt-in.** Knut's exact-margin behaviour (patch
+  area = the margin box, no hidden instrument leader/trailer, strip labels at the
+  page edge) applies only when **Use instrument margins** is on. With it off the
+  engine uses the original printtarg-style layout, so the default matches
+  printtarg again.
+- **Use instrument margins**: the ⓘ aligns with the other tooltips, and
+  unticking it **restores the margins you had** before ticking.
+- Below the preview, a warning now appears if a margin is too small for its
+  strip-label / sheet-text band (law mode).
+
+### ✨ New
+- **Clip-border image: rotate / scale / move.** The imported clip image can be
+  rotated, scaled (1–50000 % of the fit-to-band size) and moved (X/Y in mm), with
+  a live preview that stays smooth on big images (full resolution is used at
+  generation).
+- The **Browse** buttons (printer calibration and clip image) now use ChromIQ's
+  own file dialog — sidebar shortcuts, and an image thumbnail preview.
+- The **clip "ChromIQ branding"** extra text uses your chosen font.
+
+### 🔧 Fixed
+- **ColorMunki Density** is disabled in area-first layouts (the area fields define
+  the grid there).
+
 ## v3.13.0-beta.17
 
 More of Knut's decisions implemented.
