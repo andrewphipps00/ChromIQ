@@ -989,9 +989,21 @@ class SettingsDialog(QDialog):
         i1pro_key = str(s.get("i1pro_default_preset", I1PRO_DEFAULT_PRESET_KEY))
         idx = self._i1pro_preset_combo.findData(i1pro_key)
         self._i1pro_preset_combo.setCurrentIndex(idx if idx >= 0 else 0)
-        self._chromiq_clip_check.setChecked(
-            bool(s.get("i1pro_chromiq_clip_style", False))
-        )
+        # Clip-border vs. layout engine are mutually exclusive — the engine can't
+        # render the clip content yet (see _sync_layout_enabled). _load_settings
+        # runs after _build_ui, so it's the authoritative point to seed that
+        # coupling from the *stored* values (the build-time sync only saw the
+        # pre-load default). With the engine on, force the clip-border off +
+        # disabled and remember its stored state for restore-on-disable.
+        clip_on = bool(s.get("i1pro_chromiq_clip_style", False))
+        if bool(s.get("use_chromiq_layout_engine", False)):
+            self._clip_saved_state = clip_on
+            self._chromiq_clip_check.setChecked(False)
+            self._chromiq_clip_check.setEnabled(False)
+        else:
+            self.__dict__.pop("_clip_saved_state", None)
+            self._chromiq_clip_check.setChecked(clip_on)
+            self._chromiq_clip_check.setEnabled(True)
         self._grey_ref_spin.setValue(int(s.get("grey_ramp_reference", 560)))
         # Appearance: capture current value so Cancel can revert any live preview.
         current = str(s.get("appearance", "auto"))
@@ -1249,6 +1261,23 @@ class SettingsDialog(QDialog):
         def _sync_layout_enabled(on: bool) -> None:
             self._layout_body.setEnabled(on)
             self._layout_body_dim.setOpacity(1.0 if on else 0.4)
+            # The engine can't render the ChromIQ clip-border content yet, so the
+            # two are mutually exclusive — with both on, use_engine silently
+            # collapses to the printtarg path (chart_creator._should_use_engine),
+            # which looks like "the engine doesn't activate". Enabling the engine
+            # therefore disables (and remembers) the clip-border; disabling it
+            # restores the remembered state. Runs at open too, so an existing
+            # both-on config self-heals on the next Settings visit (#93 follow-up).
+            if on:
+                if not hasattr(self, "_clip_saved_state"):
+                    self._clip_saved_state = self._chromiq_clip_check.isChecked()
+                self._chromiq_clip_check.setChecked(False)
+                self._chromiq_clip_check.setEnabled(False)
+            else:
+                if hasattr(self, "_clip_saved_state"):
+                    self._chromiq_clip_check.setChecked(self._clip_saved_state)
+                    del self._clip_saved_state
+                self._chromiq_clip_check.setEnabled(True)
 
         self._layout_engine_check.toggled.connect(_sync_layout_enabled)
         _sync_layout_enabled(self._layout_engine_check.isChecked())
