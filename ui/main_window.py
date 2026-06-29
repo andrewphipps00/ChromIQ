@@ -111,6 +111,9 @@ class MainWindow(QMainWindow):
             GradientOverlay(TAB_COLORS[_i], parent=_target)
 
         self._tab_chart.chart_finished.connect(self._on_chart_generated)
+        # "Last page not full" hint → open the patch-set editor on the current chart.
+        self._tab_chart.edit_patch_set_requested.connect(
+            lambda: self._launch_tool("ti2_relayout"))
         self._tab_chart.target_started.connect(self._tab_profile.clear_files)
         self._tab_chart.target_started.connect(self._tab_check.clear_files)
         self._tab_measure.measure_finished.connect(self._on_measure_done)

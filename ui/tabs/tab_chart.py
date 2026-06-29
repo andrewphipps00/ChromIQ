@@ -830,6 +830,9 @@ class TabChart(QWidget):
     # uses it to skip routing TIFFs/TI2 to the Print and Measure tabs.
     chart_finished  = pyqtSignal(object, object, bool)
     target_started  = pyqtSignal()
+    # Asks the host to open the Edit / Create Chart Patch Set editor on the
+    # current chart (from the "last page not full" hint, #93, Knut).
+    edit_patch_set_requested = pyqtSignal()
 
     def __init__(
         self,
@@ -6675,6 +6678,9 @@ class TabChart(QWidget):
             # layout editor does on save. No-op for the common case (printtarg
             # randomises by default → already RANDOM_START).
             self._maybe_autotag_randomised(ti2)
+            # If the patch set leaves a notably under-filled last page (or spilled
+            # onto a near-empty extra page), offer to edit the patch set (#93, Knut).
+            self._maybe_warn_partial_last_page(ti2)
             # Remember the .ti1 backing this chart so the Save Preset dialog can
             # offer to attach it.
             ti1 = tiffs[0].parent / f"{stem}.ti1"
@@ -7076,6 +7082,63 @@ class TabChart(QWidget):
             panel.set_measured_guides_checked(
                 bool(self._settings.get("margin_measured_guides_show", False)))
         self._update_margin_inspector()
+
+    def _partial_last_page_blank(self, ti2: Path) -> "int | None":
+        """Engine charts only: the number of unused patch slots on the last page
+        when that's at least one full empty strip (so a notable under-fill or a
+        near-empty overflow page), else None. Pure so it's unit-testable (#93)."""
+        try:
+            from workflow.layout_engine.presets import LayoutRecipe
+            from workflow.layout_engine import instruments, geometry, papers
+            ch = Path(ti2).with_suffix(".channels.json")
+            rec = LayoutRecipe.from_channels_json(ch)
+            if rec is None:
+                return None                  # printtarg chart — no engine layout
+            m = re.search(r"NUMBER_OF_SETS\s+(\d+)",
+                          Path(ti2).read_text(errors="replace"))
+            if not m:
+                return None
+            total = int(m.group(1))
+            kw = self._with_default_patch_size(rec.build_kwargs())
+            geom = instruments.geom_from_build_kwargs(kw)
+            w_mm, h_mm = papers.dimensions_mm(rec.paper)
+            per = geometry.patches_per_sheet(geom, w_mm, h_mm)
+            if per <= 0 or total <= 0:
+                return None
+            lay = geometry.compute(geom, w_mm, h_mm, total)
+            steps = lay.steps_in_pass or 1
+            blank = per - (total - (lay.pages - 1) * per)
+            return blank if blank >= steps else None
+        except Exception as exc:  # noqa: BLE001
+            log.debug("partial-last-page check skipped: %s", exc)
+            return None
+
+    def _maybe_warn_partial_last_page(self, ti2: Path) -> None:
+        """If the patch set leaves a notably under-filled last page (or spilled
+        onto a near-empty extra page), show a general heads-up with a button to
+        open the patch-set editor so the user can fill or trim the set (Knut #93).
+        We don't auto-fill or guess — over/under-fill can equally mean patches
+        should be removed."""
+        blank = self._partial_last_page_blank(ti2)
+        if not blank:
+            return
+        try:
+            from PyQt6.QtWidgets import QMessageBox
+            box = QMessageBox(self)
+            box.setIcon(QMessageBox.Icon.Information)
+            box.setWindowTitle(tr("Last page not full"))
+            box.setText(tr(
+                "The last page has room for about {n} more patches. The page "
+                "layout is set here in Create Chart; to fill or trim the patch "
+                "set, edit it in the patch-set editor.").format(n=blank))
+            edit_btn = box.addButton(tr("Edit patch set…"),
+                                     QMessageBox.ButtonRole.ActionRole)
+            box.addButton(QMessageBox.StandardButton.Ok)
+            box.exec()
+            if box.clickedButton() is edit_btn:
+                self.edit_patch_set_requested.emit()
+        except Exception as exc:  # noqa: BLE001 — never block on this hint
+            log.debug("partial-last-page check skipped: %s", exc)
 
     def _maybe_autotag_randomised(self, ti2: Path) -> None:
         """Upgrade a fixed-order (CHART_ID) chart to RANDOM_START when its layout
