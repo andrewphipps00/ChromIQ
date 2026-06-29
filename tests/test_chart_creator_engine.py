@@ -193,25 +193,24 @@ def test_recipe_margins_authoritative_unless_use_instrument_margins(tmp_path: Pa
     assert T >= 60 - 0.05                     # patch area clears the threshold
 
 
-def test_engine_kwargs_enforces_margin_thresholds(tmp_path: Path) -> None:
-    """_engine_kwargs raises the margins to meet the user's thresholds, and the
-    same clamp drives the capacity estimate (so count and chart agree, #93)."""
-    from workflow.layout_engine import geometry, instruments, papers
+def test_guided_does_not_enforce_margin_thresholds(tmp_path: Path) -> None:
+    """Guided mode (no recipe) does NOT clamp to the margin thresholds: it has
+    no margin boxes and no "Use instrument margins" toggle, and clamping pinned
+    the patch count regardless of the clip-border / strip-cap toggles. Reverted
+    so Guided behaves like before the #93 threshold feature — the count must
+    match an engine built without thresholds."""
+    from workflow.layout_engine import instruments
     creator = ChartCreator(_EngineRunner(), _MockFileManager(tmp_path / "p"),
                            _ThresholdSettings())
     p = ChartParams(instrument="i1", paper="A4", pages=1)
     kw = creator._engine_kwargs(p)
-    geom = instruments.geom_from_build_kwargs(kw)
-    w, h = papers.dimensions_mm("A4")
-    cap = geometry.patches_per_sheet(geom, w, h)
-    lay = geometry.compute(geom, w, h, cap)
-    L, R, T, B = geometry.realized_margins_mm(geom, w, h, lay)
-    assert T >= 60 - 0.05 and R >= 9 - 0.05
-    assert creator._threshold_notes, "an adjustment note must be recorded"
-    # capacity estimate uses the same clamped kwargs → drops vs no thresholds
+    # geom_from_build_kwargs is called without thresholds → no silent clamp
+    assert instruments.geom_from_build_kwargs(kw) is not None
+    assert not creator._threshold_notes, "Guided must not record a clamp note"
+    # capacity equals an engine with no threshold table at all
     plain = ChartCreator(_EngineRunner(), _MockFileManager(tmp_path / "q"),
                          _EngineSettings())._engine_total_patches(p)
-    assert creator._engine_total_patches(p) <= plain
+    assert creator._engine_total_patches(p) == plain
 
 
 def test_full_recipe_chart_builds(tmp_path: Path) -> None:

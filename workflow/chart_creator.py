@@ -977,8 +977,15 @@ class ChartCreator:
             if getattr(params.layout_recipe, "use_instrument_margins", False):
                 return self._apply_margin_thresholds(kw)
             return kw
-        # Guided mode has no editable margin boxes → keep the jig-safety clamp.
-        return self._apply_margin_thresholds(self._engine_build_kwargs(params))
+        # Guided mode has no editable margin boxes and no "Use instrument
+        # margins" toggle, so the jig-safety threshold clamp is intentionally
+        # NOT applied here. Clamping pinned the patch count regardless of the
+        # clip-border / strip-cap toggles (the thresholds dominated), which the
+        # user asked to revert: Guided behaves like before the #93 threshold
+        # feature. Mirrors the Guided capacity estimate in
+        # tab_chart._engine_geom (thresholds=None) so count and chart agree.
+        self._threshold_notes = []
+        return self._engine_build_kwargs(params)
 
     def _apply_margin_thresholds(self, kw: dict) -> dict:
         """Raise the layout's margins so the patch area meets the user's margin

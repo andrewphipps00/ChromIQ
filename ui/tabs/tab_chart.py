@@ -5611,8 +5611,12 @@ class TabChart(QWidget):
             kw["density"] = 3 if td else (2 if dd else 1)
         elif instr == "SS":
             kw["hflag"] = bool(dd)
-        return instruments.geom_from_build_kwargs(
-            kw, thresholds=self._combo_thresholds(instr, paper))
+        # Guided mode has no margin boxes and no "Use instrument margins"
+        # recipe toggle, so the jig-safety threshold clamp is NOT applied here.
+        # It would pin the patch count regardless of the clip-border / strip-cap
+        # toggles (the thresholds dominate). Mirrors chart_creator's Guided
+        # generation path so the estimate matches the real render.
+        return instruments.geom_from_build_kwargs(kw, thresholds=None)
 
     def _engine_capacity(self, instr: str, paper: str, *, dd: bool, td: bool,
                          eff_lb: bool, nsl: bool, pscale: float, margin: float):

@@ -1,5 +1,16 @@
 # Changelog
 
+## v3.13.0-beta.19
+
+### 🔧 Changed
+- **Guided mode no longer clamps to the margin thresholds.** For some
+  instrument/paper combos (notably i1Pro · A4 portrait) the jig thresholds
+  dominated the layout, so **Suppress left clip border** and **Don't limit strip
+  length** changed the chart but not the patch count. Guided now behaves like
+  before the threshold feature — those toggles affect the count again, and the
+  layout matches printtarg's default reserves. The custom Margin-Thresholds
+  safety still applies in Manual mode with **Use instrument margins** on.
+
 ## v3.13.0-beta.18
 
 ### 🔧 Changed
