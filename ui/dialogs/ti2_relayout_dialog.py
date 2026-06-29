@@ -410,42 +410,54 @@ class _RegenWorker(QThread):
 
 class _SwatchDelegate(QStyledItemDelegate):
     """Paint a swatch (icon) above a Menlo-styled patch number, inside the
-    grid cell sized by :meth:`sizeHint`."""
+    grid cell sized by :meth:`sizeHint`.
+
+    The gap between swatches is independently settable per axis (h_gap / v_gap,
+    px) and is the cell's trailing margin, so the grid's own spacing stays 0 and
+    horizontal == vertical when both are equal (Knut #93). Selection is shown as a
+    pink border around the swatch so it's visible even with numbers + gaps off.
+    """
 
     LABEL_H = 16
-    H_PAD = 6
-    V_PAD = 4
+    _SEL = QColor(255, 69, 115)         # SPEC_MAGENTA-ish selection pink
 
     def __init__(self, parent=None, swatch_size: int = _SWATCH) -> None:
         super().__init__(parent)
         self.swatch_size = swatch_size
         self.show_label = True          # "Show patch number" (Knut #93)
+        self.h_gap = 3                  # px between swatches across / down
+        self.v_gap = 3
 
     def paint(self, painter, opt, idx) -> None:
         painter.save()
-        if opt.state & QStyle.StateFlag.State_Selected:
-            painter.fillRect(opt.rect, QColor(255, 69, 115, 110))
-
         icon = idx.data(Qt.ItemDataRole.DecorationRole)
         text = idx.data(Qt.ItemDataRole.DisplayRole) or ""
-
         rect = opt.rect
         size = self.swatch_size
-        cx = rect.x() + (rect.width() - size) // 2
-        cy = rect.y() + self.V_PAD
+        selected = bool(opt.state & QStyle.StateFlag.State_Selected)
+        # Swatch sits at the cell's top-left; the gap is the trailing margin.
+        sx, sy = rect.x(), rect.y()
+        swatch = QRect(sx, sy, size, size)
         if isinstance(icon, QIcon) and not icon.isNull():
-            icon.paint(painter, QRect(cx, cy, size, size))
-
+            icon.paint(painter, swatch)
+        if selected:
+            # A pink border (and a faint pink wash) marks selection — visible even
+            # when numbers + gaps are off and the swatches touch (Knut #93).
+            painter.fillRect(swatch, QColor(255, 69, 115, 70))
+            from PyQt6.QtGui import QPen
+            pen = QPen(self._SEL)
+            pen.setWidth(2)
+            painter.setPen(pen)
+            painter.drawRect(swatch.adjusted(1, 1, -1, -1))
         if self.show_label:
             f = QFont("Menlo")
             f.setPixelSize(10)
             painter.setFont(f)
             text_color = (opt.palette.color(opt.palette.ColorRole.HighlightedText)
-                          if opt.state & QStyle.StateFlag.State_Selected
+                          if selected
                           else opt.palette.color(opt.palette.ColorRole.Text))
             painter.setPen(text_color)
-            text_rect = QRect(rect.x(), cy + size + 2,
-                              rect.width(), self.LABEL_H)
+            text_rect = QRect(sx, sy + size + 2, size, self.LABEL_H)
             painter.drawText(
                 text_rect,
                 int(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop),
@@ -454,10 +466,11 @@ class _SwatchDelegate(QStyledItemDelegate):
         painter.restore()
 
     def sizeHint(self, opt, idx) -> QSize:
-        # Reserve the label row only when numbers are shown, so "no numbers" packs
-        # the swatches tightly (Knut #93).
-        label = (self.V_PAD + self.LABEL_H + 2) if self.show_label else self.V_PAD
-        return QSize(self.swatch_size + 2 * self.H_PAD, self.swatch_size + label)
+        # Cell = swatch + trailing gap (+ label row when numbers are shown). The
+        # grid's spacing is 0, so the gap here IS the visible inter-swatch gap.
+        label = (self.LABEL_H + 2) if self.show_label else 0
+        return QSize(self.swatch_size + self.h_gap,
+                     self.swatch_size + label + self.v_gap)
 
 
 # ---------------------------------------------------------------------------
@@ -3389,6 +3402,31 @@ class Ti2RelayoutDialog(QDialog):
         _crow2.addWidget(self._show_gap_check)
         _crow2.addStretch(1)
         self._swatch_chrome.addLayout(_crow2)
+        # Gap size row: independent Horizontal / Vertical (px), editable only while
+        # "Show gap between patches" is on (Knut #93). 1–30 px, default 3 each.
+        from ui.widgets import NoScrollSpinBox as _NSpin
+        _crow3 = QHBoxLayout()
+        _crow3.setSpacing(8)
+        self._gap_lbl = QLabel(tr("Gap size:"), self)
+        _crow3.addWidget(self._gap_lbl)
+        self._gap_h_lbl = QLabel(tr("Horizontal:"), self)
+        _crow3.addWidget(self._gap_h_lbl)
+        self._gap_h_spin = _NSpin(self)
+        self._gap_h_spin.setRange(1, 30)
+        self._gap_h_spin.setValue(3)
+        self._gap_h_spin.setSuffix(" px")
+        self._gap_h_spin.valueChanged.connect(self._set_gap_sizes)
+        _crow3.addWidget(self._gap_h_spin)
+        self._gap_v_lbl = QLabel(tr("Vertical:"), self)
+        _crow3.addWidget(self._gap_v_lbl)
+        self._gap_v_spin = _NSpin(self)
+        self._gap_v_spin.setRange(1, 30)
+        self._gap_v_spin.setValue(3)
+        self._gap_v_spin.setSuffix(" px")
+        self._gap_v_spin.valueChanged.connect(self._set_gap_sizes)
+        _crow3.addWidget(self._gap_v_spin)
+        _crow3.addStretch(1)
+        self._swatch_chrome.addLayout(_crow3)
         # It isn't obvious the swatches can be rearranged, so spell it out right
         # above the grid (Knut's suggestion) where it's always visible — the full
         # story stays in the ⓘ. (Below the grid it gets squeezed by the list.)
@@ -3422,7 +3460,7 @@ class Ti2RelayoutDialog(QDialog):
         self._grid.setDropIndicatorShown(False)
         self._grid.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
         self._grid.setIconSize(QSize(_SWATCH, _SWATCH))
-        self._grid.setSpacing(3)
+        self._grid.setSpacing(0)        # gap is the delegate's per-cell trailing margin
         self._delegate = _SwatchDelegate(self._grid, _SWATCH)
         self._grid.setItemDelegate(self._delegate)
         self._grid.setGridSize(self._delegate.sizeHint(None, None))
@@ -4547,15 +4585,28 @@ class Ti2RelayoutDialog(QDialog):
     def _set_show_numbers(self, on: bool) -> None:
         """Toggle the patch-number label under each swatch (Knut #93)."""
         self._delegate.show_label = bool(on)
-        self._grid.setGridSize(self._delegate.sizeHint(None, None))
-        self._grid.scheduleDelayedItemsLayout()
-        self._grid.viewport().update()
+        self._reflow_grid()
 
     def _set_show_gap(self, on: bool) -> None:
-        """Toggle the gaps between swatches so the set can be read as a whole."""
-        self._delegate.H_PAD = 6 if on else 0
-        self._delegate.V_PAD = 4 if on else 0
-        self._grid.setSpacing(3 if on else 0)
+        """Toggle the gaps between swatches; the H/V spinboxes drive the size when
+        on, and they're greyed when off (Knut #93)."""
+        for w in (getattr(self, "_gap_lbl", None), getattr(self, "_gap_h_lbl", None),
+                  getattr(self, "_gap_h_spin", None), getattr(self, "_gap_v_lbl", None),
+                  getattr(self, "_gap_v_spin", None)):
+            if w is not None:
+                w.setEnabled(bool(on))
+        self._set_gap_sizes()
+
+    def _set_gap_sizes(self, *_a) -> None:
+        """Apply the Horizontal / Vertical gap (px) to the swatch grid — 0 when
+        "Show gap between patches" is off (Knut #93)."""
+        on = (getattr(self, "_show_gap_check", None) is not None
+              and self._show_gap_check.isChecked())
+        self._delegate.h_gap = self._gap_h_spin.value() if on else 0
+        self._delegate.v_gap = self._gap_v_spin.value() if on else 0
+        self._reflow_grid()
+
+    def _reflow_grid(self) -> None:
         self._grid.setGridSize(self._delegate.sizeHint(None, None))
         self._grid.scheduleDelayedItemsLayout()
         self._grid.viewport().update()
