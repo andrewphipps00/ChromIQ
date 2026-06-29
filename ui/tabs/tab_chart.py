@@ -3061,6 +3061,7 @@ class TabChart(QWidget):
             return {}
 
     def _switch_mode(self, mode: str) -> None:
+        prev = self._current_mode()     # capture BEFORE the stack changes
         if mode == "guided":
             self._stack.setCurrentIndex(0)
             self._guided_btn.setChecked(True)
@@ -3071,13 +3072,28 @@ class TabChart(QWidget):
             self._manual_btn.setChecked(True)
         self._update_isis_preview_banner()
         self._refresh_name_prefix()     # apply the prefix to the now-active field
-        # #79: when a chart was just generated in Guided mode and the user opens
-        # Manual, seed the Manual panel with the exact recipe that produced it,
-        # so they can edit the settings used. One-shot (consumed here) so later
-        # manual edits aren't clobbered by toggling modes back and forth.
-        if mode == "manual" and getattr(self, "_guided_transfer_pending", False):
-            self._guided_transfer_pending = False
-            self._transfer_guided_to_manual()
+        # Keep the two tabs in step (Knut #9): carry the shared chart-defining
+        # settings the user CHANGED in the tab they're leaving into the one they're
+        # opening. Only changed fields move (snapshot-on-arrival / diff-on-leave),
+        # so a setting the destination can't represent — e.g. an A3 paper Guided
+        # doesn't offer — is never "changed" there and so can never clobber the
+        # other tab on the way back. The post-generate #79 path still does the full
+        # exact-recipe seed.
+        if prev != mode and not getattr(self, "_mode_transfer_active", False):
+            self._mode_transfer_active = True
+            try:
+                if mode == "manual" and getattr(self, "_guided_transfer_pending", False):
+                    # #79: a chart was just generated in Guided — seed Manual with
+                    # the EXACT recipe that produced it (incl. scale/margin), once.
+                    self._guided_transfer_pending = False
+                    self._transfer_guided_to_manual()
+                else:
+                    self._carry_shared_settings(prev, mode)
+            finally:
+                self._mode_transfer_active = False
+        # Snapshot the now-active tab's shared settings so the next switch can tell
+        # what the user changed while it was open.
+        self._snapshot_shared_settings(mode)
         # Refresh the now-active mode's predictors so the patch count and the
         # Chart-layout-information estimate describe the mode on screen (#93) —
         # each predictor is guarded by active mode, so the just-hidden one stops
@@ -3087,9 +3103,15 @@ class TabChart(QWidget):
         else:
             self._refresh_manual_command_preview()
 
-    def _transfer_guided_to_manual(self) -> None:
-        """Seed the Manual panel from the Guided settings that produced the
-        chart now in the preview (#79). Best-effort: never blocks a mode switch."""
+    def _transfer_guided_to_manual(self, quiet: bool = False) -> None:
+        """Seed the Manual panel from the Guided settings.
+
+        *quiet* = the plain tab-switch sync (Knut #9): carry only the shared
+        chart-defining fields and leave Manual's patch count and custom
+        scale/margin alone (changing -i below still cascades the instrument
+        defaults). Without *quiet* it's the post-generation #79 transfer, which
+        reproduces the EXACT generated chart (scale, margin, Auto count) and logs.
+        Best-effort: never blocks a mode switch."""
         try:
             p = self._collect_guided()
         except Exception:
@@ -3102,16 +3124,15 @@ class TabChart(QWidget):
         self._set_manual_value("printtarg", "-p", p.paper)
         if self._manual_pages_spin is not None:
             self._manual_pages_spin.setValue(int(p.pages))
-        # targen inputs. Patch count mirrors Guided's Auto (which also drives the
-        # neutral counts), so the Manual recipe reproduces the same chart.
         self._set_manual_value("targen", "-d", str(p.device_type))
         self._set_manual_value("targen", "-G", bool(p.good_mode))
-        if self._manual_auto_patches_check is not None:
-            self._manual_auto_patches_check.setChecked(True)
-        # printtarg layout — after -i so the instrument-default cascade can't
-        # overwrite these.
-        self._set_manual_value("printtarg", "-a", round(float(p.patch_scale), 3))
-        self._set_manual_value("printtarg", "-m", int(p.margin_mm))
+        if not quiet:
+            # Reproduce the exact generated chart: mirror Guided's Auto count
+            # (which drives the neutral counts) and its derived scale/margin.
+            if self._manual_auto_patches_check is not None:
+                self._manual_auto_patches_check.setChecked(True)
+            self._set_manual_value("printtarg", "-a", round(float(p.patch_scale), 3))
+            self._set_manual_value("printtarg", "-m", int(p.margin_mm))
         self._set_manual_value("printtarg", "-h", bool(p.double_density))
         self._set_manual_value("printtarg", "-P", bool(p.no_strip_limit))
         self._set_manual_value("printtarg", "-L", bool(p.disable_left_border))
@@ -3126,14 +3147,149 @@ class TabChart(QWidget):
                     self._set_manual_value("targen", "-c", toks[i + 1])
         except ValueError:
             pass
-        # Printer profile name.
-        name_edit = getattr(self, "_target_name_edit", None)
-        name = name_edit.text().strip() if name_edit is not None else ""
-        if name:
-            self._set_manual_name_plain(name)
+        if not quiet:
+            # Printer profile name + a one-time confirmation.
+            name_edit = getattr(self, "_target_name_edit", None)
+            name = name_edit.text().strip() if name_edit is not None else ""
+            if name:
+                self._set_manual_name_plain(name)
         self._refresh_manual_command_preview()
-        self._log.appendPlainText(
-            tr("Guided settings copied to Manual mode — edit and regenerate as needed."))
+        if not quiet:
+            self._log.appendPlainText(tr(
+                "Guided settings copied to Manual mode — edit and regenerate as "
+                "needed."))
+
+    # Shared chart-defining settings both tabs express (Knut #9). Each is read /
+    # written per tab below; only the ones the user CHANGED in the tab being left
+    # are carried, so a value the other tab can't represent never clobbers it.
+    _SHARED_SETTINGS = ("instrument", "paper", "pages", "double_density",
+                        "triple_density", "left_border", "no_strip_limit",
+                        "precond")
+
+    def _manual_get(self, tool: str, flag: str, default: Any) -> Any:
+        for pw in self._manual_widgets.get(tool, []):
+            if pw.flag == flag:
+                v = pw.get_raw_value()
+                return v if v is not None else default
+        return default
+
+    def _shared_get(self, tab: str) -> "dict[str, Any]":
+        """Current value of every shared setting for *tab* ('guided'|'manual')."""
+        if tab == "guided":
+            precond = (self._guided_precond_path.text().strip()
+                       if self._guided_precond_check.isChecked() else "")
+            return {
+                "instrument": self._instr_combo.currentData(),
+                "paper": self._paper_combo.currentData(),
+                "pages": int(self._pages_spin.value()),
+                "double_density": self._dd_check.isChecked(),
+                "triple_density": self._td_check.isChecked(),
+                "left_border": self._lb_check.isChecked(),
+                "no_strip_limit": self._nsl_check.isChecked(),
+                "precond": precond,
+            }
+        # manual
+        toks = []
+        try:
+            toks = shlex.split(str(self._manual_get("targen", "-c", "") or ""))
+        except ValueError:
+            toks = []
+        precond = toks[0] if toks else str(self._manual_get("targen", "-c", "") or "")
+        td = (self._manual_td_check is not None
+              and self._manual_td_check.isChecked())
+        return {
+            "instrument": str(self._manual_get("printtarg", "-i", "i1")),
+            "paper": str(self._manual_get("printtarg", "-p", "A4")),
+            "pages": (int(self._manual_pages_spin.value())
+                      if self._manual_pages_spin is not None else 1),
+            "double_density": bool(self._manual_get("printtarg", "-h", False)),
+            "triple_density": bool(td),
+            "left_border": bool(self._manual_get("printtarg", "-L", True)),
+            "no_strip_limit": bool(self._manual_get("printtarg", "-P", False)),
+            "precond": precond,
+        }
+
+    def _shared_set(self, tab: str, field: str, value: Any) -> None:
+        """Apply one shared setting to *tab*. Skips quietly when the tab can't
+        represent the value (e.g. a paper Guided doesn't offer) so it never gets
+        clobbered to a wrong value."""
+        if tab == "guided":
+            if field == "instrument":
+                i = self._instr_combo.findData(value)
+                if i >= 0:
+                    self._instr_combo.setCurrentIndex(i)
+            elif field == "paper":
+                i = self._paper_combo.findData(value)
+                if i < 0:                       # try a same-dimensions guided code
+                    dims = _PAPER_MM.get(value)
+                    if dims:
+                        for k in range(self._paper_combo.count()):
+                            if _PAPER_MM.get(self._paper_combo.itemData(k)) == dims:
+                                i = k
+                                break
+                if i >= 0:
+                    self._paper_combo.setCurrentIndex(i)
+            elif field == "pages":
+                self._pages_spin.setValue(int(value))
+            elif field == "double_density":
+                self._dd_check.setChecked(bool(value))
+            elif field == "triple_density":
+                self._td_check.setChecked(bool(value))
+            elif field == "left_border":
+                self._lb_check.setChecked(bool(value))
+            elif field == "no_strip_limit":
+                self._nsl_check.setChecked(bool(value))
+            elif field == "precond":
+                self._guided_precond_path.setText(str(value or ""))
+                self._guided_precond_check.setChecked(bool(value))
+        else:  # manual (a superset of guided's options)
+            if field == "instrument":
+                self._set_manual_value("printtarg", "-i", value)
+            elif field == "paper":
+                self._set_manual_value("printtarg", "-p", value)
+            elif field == "pages":
+                if self._manual_pages_spin is not None:
+                    self._manual_pages_spin.setValue(int(value))
+            elif field == "double_density":
+                self._set_manual_value("printtarg", "-h", bool(value))
+            elif field == "triple_density":
+                if self._manual_td_check is not None:
+                    self._manual_td_check.setChecked(bool(value))
+            elif field == "left_border":
+                self._set_manual_value("printtarg", "-L", bool(value))
+            elif field == "no_strip_limit":
+                self._set_manual_value("printtarg", "-P", bool(value))
+            elif field == "precond":
+                self._set_manual_value("targen", "-c", str(value or ""))
+
+    def _snapshot_shared_settings(self, tab: str) -> None:
+        """Remember *tab*'s shared settings as they are now, so the next switch
+        can tell which ones the user changed while it was open."""
+        try:
+            snaps = self.__dict__.setdefault("_shared_snapshots", {})
+            snaps[tab] = self._shared_get(tab)
+        except Exception:  # noqa: BLE001 — never block a mode switch
+            log.debug("shared-settings snapshot skipped", exc_info=True)
+
+    def _carry_shared_settings(self, src: str, dst: str) -> None:
+        """Carry the shared settings the user CHANGED in *src* into *dst* (#9)."""
+        try:
+            snaps = getattr(self, "_shared_snapshots", {})
+            before = snaps.get(src)
+            now = self._shared_get(src)
+        except Exception:  # noqa: BLE001
+            log.debug("Guided↔Manual transfer skipped", exc_info=True)
+            return
+        if not now:
+            return
+        for field in self._SHARED_SETTINGS:
+            new = now.get(field)
+            if before is None or before.get(field) != new:
+                self._shared_set(dst, field, new)
+        if dst == "guided":
+            self._update_patch_count()
+        else:
+            self._refresh_manual_command_preview()
 
     def _on_guided_precond_toggled(self, checked: bool) -> None:
         self._guided_precond_path.setEnabled(checked)

@@ -75,3 +75,28 @@ def test_no_transfer_without_arming(tab):
     tab._switch_mode("guided")
     tab._switch_mode("manual")          # flag not armed → no transfer
     assert _manual(tab, "printtarg", "-p") == "A3"
+
+
+def test_switch_carries_changed_instrument_both_ways(tab):
+    """Editing a shared setting in one tab and switching carries it to the other
+    (Knut #9). Snapshot/diff means only what the user changed moves."""
+    tab._switch_mode("guided")
+    tab._instr_combo.setCurrentIndex(tab._instr_combo.findData("CM"))
+    tab._dd_check.setChecked(True)
+    tab._switch_mode("manual")
+    assert _manual(tab, "printtarg", "-i") == "CM"
+    assert bool(_manual(tab, "printtarg", "-h")) is True
+    # Now change it in Manual and switch back — Guided reflects it.
+    tab._set_manual_value("printtarg", "-i", "p3")
+    tab._switch_mode("guided")
+    assert tab._instr_combo.currentData() == "p3"
+
+
+def test_switch_does_not_clobber_unrepresentable_paper(tab):
+    """A paper only Manual offers (A3 portrait, which Guided lacks) must survive a
+    round-trip through Guided — it's never 'changed' there, so it can't clobber."""
+    tab._switch_mode("manual")
+    tab._set_manual_value("printtarg", "-p", "A3")
+    tab._switch_mode("guided")          # Guided can't show A3 → keeps its own
+    tab._switch_mode("manual")          # …so it can't overwrite Manual's A3
+    assert _manual(tab, "printtarg", "-p") == "A3"

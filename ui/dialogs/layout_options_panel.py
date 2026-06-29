@@ -885,11 +885,15 @@ class LayoutOptionsPanel(QWidget):
                "page, so it's hidden there."),
             self)
         gg.addWidget(self._nolimit_tip, 9, 2)
-        # The Layout frame sits ABOVE Page geometry (Knut #93): the Create-layout
-        # choice in Layout governs which Page-geometry fields apply, so it reads
-        # first. (pg is built after lg, so its natural append order already places
-        # it below — just add it normally.)
-        v.addWidget(pg)
+        # Page geometry sits directly UNDER the Layout frame (Knut): the two are
+        # the core layout block, so they read together, with patches/spacers and
+        # the rest below. pg is built after several other groups, so insert it just
+        # after Layout rather than appending at the end.
+        _lg_idx = v.indexOf(lg)
+        if _lg_idx >= 0:
+            v.insertWidget(_lg_idx + 1, pg)
+        else:
+            v.addWidget(pg)
         self._update_clip_visibility()
 
         # ---- Output ----

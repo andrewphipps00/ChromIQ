@@ -3419,8 +3419,8 @@ class Ti2RelayoutDialog(QDialog):
         self._gap_h_spin.setValue(3)
         self._gap_h_spin.setSuffix(" px")
         # Wide enough that the two-digit value + " px" suffix + the up/down
-        # arrows all fit (the default width clipped to "30 p").
-        self._gap_h_spin.setMinimumWidth(72)
+        # arrows all fit (the default width clipped " px" to " p").
+        self._gap_h_spin.setMinimumWidth(96)
         self._gap_h_spin.valueChanged.connect(self._set_gap_sizes)
         _crow3.addWidget(self._gap_h_spin)
         self._gap_v_lbl = QLabel(tr("Vertical:"), self)
@@ -3429,7 +3429,7 @@ class Ti2RelayoutDialog(QDialog):
         self._gap_v_spin.setRange(1, 30)
         self._gap_v_spin.setValue(3)
         self._gap_v_spin.setSuffix(" px")
-        self._gap_v_spin.setMinimumWidth(72)
+        self._gap_v_spin.setMinimumWidth(96)
         self._gap_v_spin.valueChanged.connect(self._set_gap_sizes)
         _crow3.addWidget(self._gap_v_spin)
         _crow3.addStretch(1)
