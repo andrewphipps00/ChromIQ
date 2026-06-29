@@ -3226,12 +3226,12 @@ class Ti2RelayoutDialog(QDialog):
         # headers (uppercase eyebrow + large serif title), in the editor's
         # magenta accent.
         src.addWidget(TabHeader(
-            tr("CHART LAYOUT · EDITOR"), tr("Design your chart"),
+            tr("CHART PATCH SET · EDITOR"), tr("Arrange and recolour your patches"),
             SPEC_MAGENTA, self), 0, Qt.AlignmentFlag.AlignVCenter)
         GradientOverlay(SPEC_MAGENTA, parent=self, alpha=15, height=95, on_top=False)
         src.addSpacing(16)
-        load_btn = QPushButton(tr("Load chart…"), self)
-        load_btn.setToolTip(tr("Load a chart from a .ti2 file."))
+        load_btn = QPushButton(tr("Load patch set…"), self)
+        load_btn.setToolTip(tr("Load a patch set from a .ti2 / .ti1 file."))
         load_btn.clicked.connect(self._load_ti2)
         new_btn = QPushButton(tr("New chart…"), self)
         new_btn.clicked.connect(self._new_chart)
@@ -3270,34 +3270,33 @@ class Ti2RelayoutDialog(QDialog):
                                  QSizePolicy.Policy.Preferred)
         src.addWidget(self._info)
         src.addWidget(_magenta_tip(
-            "Chart layout editor",
-            "Welcome! This is where you design the test chart you'll print and "
-            "then measure. A chart is just a page full of little colour squares "
-            "(we call each one a \"patch\"). You can start a brand-new chart or "
-            "open one you already have, rearrange and recolour the patches however "
-            "you like, and save a ready-to-print chart when you're happy.\n\n"
+            "Chart patch set editor",
+            "Welcome! This is where you build the PATCH SET for your chart — the "
+            "collection of little colour squares (we call each one a \"patch\") that "
+            "will be measured. You choose which colours are in the set, what order "
+            "they're in, and you can recolour, add or remove them.\n\n"
+            "The page LAYOUT — which instrument and paper, the strips, spacers, "
+            "margins and sizing — is set over in the Create Chart tab. Here you only "
+            "shape the patch set itself; when you apply it, Create Chart lays it out "
+            "for you. That keeps layout in one place and this window simple.\n\n"
             "Don't worry — you can't break anything here. Nothing is printed or "
-            "measured until you choose to, and you can preview every change first.\n\n"
-            "There are three areas to know about:\n\n"
-            "• The patch grid on the left shows every colour as a small square. "
-            "This is your workbench: drag squares around to reorder them, click to "
-            "select, and recolour or add and remove patches. The order you see "
-            "here is the order they'll be printed in.\n\n"
-            "• The preview in the middle is a live picture of the actual printed "
-            "page. It redraws as you edit, so you always see what will really come "
-            "out of the printer — strips, spacers, margins and all. If the chart "
-            "needs more than one page, little Page ◀ ▶ buttons appear.\n\n"
-            "• The controls on the right let you pick whether you're editing "
-            "patches or the spacer squares between them, and adjust how the page is "
-            "laid out (which instrument and paper, spacer style, sizing, margin, "
-            "resolution). This is also where you save.\n\n"
+            "measured until you choose to.\n\n"
+            "Two areas to know about:\n\n"
+            "• The patch grid fills most of the window: every colour is a small "
+            "square. This is your workbench — drag squares around to reorder them, "
+            "click to select, and recolour or add and remove patches. The order you "
+            "see here is the order they'll be measured in. Use the controls above "
+            "the grid to show or hide the patch numbers and the gaps between "
+            "swatches.\n\n"
+            "• The controls on the right let you add or remove patches, generate "
+            "whole colour sets, recolour a selection, and save.\n\n"
             "A typical session goes: load a chart or start a new one, arrange and "
-            "recolour the patches, glance at the preview, then Save. The file you "
-            "save is exactly what you print and then read in on the Measure tab.\n\n"
+            "recolour the patches, then Apply / Save to send the set back to the "
+            "Create Chart tab (or Save As to export it).\n\n"
             "One handy thing happens automatically: when you save, ChromIQ checks "
-            "whether your colours are well mixed and, if they are, marks the chart "
+            "whether your colours are well mixed and, if they are, marks the set "
             "so your instrument may read each strip in either direction. You only "
-            "have to get involved for tricky, structured layouts — see the "
+            "have to get involved for tricky, structured sets — see the "
             "\"Force randomised tag\" option in the controls for more.",
             self, min_width=560))
         outer.addLayout(src)
@@ -3353,8 +3352,8 @@ class Ti2RelayoutDialog(QDialog):
         top.addWidget(_magenta_tip(
             "Patch grid",
             "This is your main workspace. Every little square is one colour patch "
-            "from your chart, and the order you see — reading left to right, top to "
-            "bottom — is exactly the order they'll be printed in.\n\n"
+            "in your set, and the order you see — reading left to right, top to "
+            "bottom — is exactly the order they'll be measured in.\n\n"
             "Here's everything you can do:\n\n"
             "• Move patches around. Just drag a square (or several at once) to a "
             "new spot — a magenta line shows where it will land when you let go. "
@@ -3362,18 +3361,16 @@ class Ti2RelayoutDialog(QDialog):
             "the arrow keys, or press F to send them to the very front and L to the "
             "very end.\n\n"
             "• Pick patches. Click a square to select it, hold Shift or Ctrl to "
-            "select more, or drag a box around several. If you turn on \"Highlight "
-            "selected in preview\", the patches you pick here light up in the "
-            "preview too (and the other way round), so it's easy to see where each "
-            "one sits on the page.\n\n"
+            "select more, or drag a box around several.\n\n"
             "• Change a colour. Select one or more patches, then use \"Set colour "
             "of selection…\" over in the Patches controls to give them a new "
             "colour.\n\n"
             "• Add or remove. The Patches controls also let you add fresh patches "
             "or delete the ones you've selected.\n\n"
-            "And don't worry about the \"Swatch size\" slider next to this button — "
-            "it only changes how big the squares look on your screen. It makes no "
-            "difference at all to the printed chart.",
+            "The controls above adjust how the grid looks — the swatch size, and "
+            "whether the patch numbers and the gaps between swatches are shown. "
+            "None of that changes the printed chart; the page layout is set in the "
+            "Create Chart tab.",
             self, min_width=520))
         top.addSpacing(10)
         lv.addLayout(top)
@@ -3621,7 +3618,11 @@ class Ti2RelayoutDialog(QDialog):
         self._mode_patches.toggled.connect(self._on_mode_change)
         mb.addWidget(self._mode_patches)
         mb.addWidget(self._mode_spacers)
-        v.addWidget(mode_box)
+        # The Patches/Spacers mode frame is removed from the editor (Knut #93):
+        # with layout done in Create Chart there are no editor spacers to edit, so
+        # the editor is always in patches mode. Kept constructed (hidden) so the
+        # patches-mode logic that reads these radios keeps working.
+        mode_box.setVisible(False)
 
         # printtarg options — all the knobs the New chart dialog exposes,
         # editable on an already-loaded chart. Mirrors LayoutOptions; each
@@ -3830,7 +3831,11 @@ class Ti2RelayoutDialog(QDialog):
             "• clicking or marquee-dragging on the preview selects them on "
             "the left"))
         self._hl_patches.toggled.connect(self._on_patch_highlight_toggled)
-        pb.addWidget(self._hl_patches)
+        # "Highlight selected in preview" is gone — there's no preview to
+        # highlight into now (Knut #93). Kept unchecked + hidden so the highlight
+        # branches that read it simply stay off.
+        self._hl_patches.setChecked(False)
+        self._hl_patches.setVisible(False)
         set_col = QPushButton(tr("Set colour of selection…"), self._patch_box)
         set_col.clicked.connect(self._set_patch_colour)
         pb.addWidget(set_col)
@@ -4014,20 +4019,16 @@ class Ti2RelayoutDialog(QDialog):
         # "Update preview" shares its row with "Shuffle" — each takes half the
         # width so the preview button is a little smaller and the randomiser
         # sits right beside it.
-        top_row = QHBoxLayout()
-        top_row.setSpacing(6)
+        # "Update preview" and "Shuffle" are gone from the editor (Knut #93): there
+        # is no preview to update, and randomisation is handled in the Create Chart
+        # Manual tab. Kept constructed (hidden) so the busy/enable plumbing that
+        # references them keeps working.
         self._preview_btn = QPushButton(tr("Update preview"), bar)
         self._preview_btn.clicked.connect(lambda: self._regenerate(save_to=None))
-        top_row.addWidget(self._preview_btn, 1)
+        self._preview_btn.setVisible(False)
         self._shuffle_btn = QPushButton(tr("Shuffle"), bar)
-        self._shuffle_btn.setToolTip(
-            tr("Randomise the patch order. Mixing up a structured set (a smooth "
-            "ramp or an RGB grid) so neighbouring strips read differently is "
-            "what lets a chart be safely read in either direction — it also "
-            "unlocks the “tag as randomised” option on Save."))
         self._shuffle_btn.clicked.connect(self._randomise_patches)
-        top_row.addWidget(self._shuffle_btn, 1)
-        bv.addLayout(top_row)
+        self._shuffle_btn.setVisible(False)
         save_row = QHBoxLayout()
         save_row.setSpacing(6)
         # "Apply / Save" is the headline action (#70, Knut). It opens a small
