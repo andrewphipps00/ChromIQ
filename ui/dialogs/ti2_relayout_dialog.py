@@ -419,6 +419,7 @@ class _SwatchDelegate(QStyledItemDelegate):
     def __init__(self, parent=None, swatch_size: int = _SWATCH) -> None:
         super().__init__(parent)
         self.swatch_size = swatch_size
+        self.show_label = True          # "Show patch number" (Knut #93)
 
     def paint(self, painter, opt, idx) -> None:
         painter.save()
@@ -435,25 +436,28 @@ class _SwatchDelegate(QStyledItemDelegate):
         if isinstance(icon, QIcon) and not icon.isNull():
             icon.paint(painter, QRect(cx, cy, size, size))
 
-        f = QFont("Menlo")
-        f.setPixelSize(10)
-        painter.setFont(f)
-        text_color = (opt.palette.color(opt.palette.ColorRole.HighlightedText)
-                      if opt.state & QStyle.StateFlag.State_Selected
-                      else opt.palette.color(opt.palette.ColorRole.Text))
-        painter.setPen(text_color)
-        text_rect = QRect(rect.x(), cy + size + 2,
-                          rect.width(), self.LABEL_H)
-        painter.drawText(
-            text_rect,
-            int(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop),
-            text,
-        )
+        if self.show_label:
+            f = QFont("Menlo")
+            f.setPixelSize(10)
+            painter.setFont(f)
+            text_color = (opt.palette.color(opt.palette.ColorRole.HighlightedText)
+                          if opt.state & QStyle.StateFlag.State_Selected
+                          else opt.palette.color(opt.palette.ColorRole.Text))
+            painter.setPen(text_color)
+            text_rect = QRect(rect.x(), cy + size + 2,
+                              rect.width(), self.LABEL_H)
+            painter.drawText(
+                text_rect,
+                int(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop),
+                text,
+            )
         painter.restore()
 
     def sizeHint(self, opt, idx) -> QSize:
-        return QSize(self.swatch_size + 2 * self.H_PAD,
-                     self.swatch_size + self.V_PAD + self.LABEL_H + 2)
+        # Reserve the label row only when numbers are shown, so "no numbers" packs
+        # the swatches tightly (Knut #93).
+        label = (self.V_PAD + self.LABEL_H + 2) if self.show_label else self.V_PAD
+        return QSize(self.swatch_size + 2 * self.H_PAD, self.swatch_size + label)
 
 
 # ---------------------------------------------------------------------------
@@ -3313,7 +3317,8 @@ class Ti2RelayoutDialog(QDialog):
         top.addWidget(QLabel(tr("Swatch size:")))
         top.addSpacing(20)
         self._size_slider = QSlider(Qt.Orientation.Horizontal, left)
-        self._size_slider.setRange(24, 96)
+        # Min lowered to 8 px so the whole patch set fits on screen at once (Knut).
+        self._size_slider.setRange(8, 96)
         self._size_slider.setValue(_SWATCH)
         self._size_slider.valueChanged.connect(self._set_swatch_size)
         # Same recipe as the Gamut viewer's opacity / saturation sliders
@@ -3333,6 +3338,17 @@ class Ti2RelayoutDialog(QDialog):
         )
         self._size_slider.setFixedWidth(220)
         top.addWidget(self._size_slider)
+        top.addSpacing(16)
+        # Show/hide the patch number under each swatch, and the gaps between them,
+        # so the set can be viewed as a whole like in i1Profiler (Knut #93).
+        self._show_numbers_check = QCheckBox(tr("Show patch number"), left)
+        self._show_numbers_check.setChecked(True)
+        self._show_numbers_check.toggled.connect(self._set_show_numbers)
+        top.addWidget(self._show_numbers_check)
+        self._show_gap_check = QCheckBox(tr("Show gap between patches"), left)
+        self._show_gap_check.setChecked(True)
+        self._show_gap_check.toggled.connect(self._set_show_gap)
+        top.addWidget(self._show_gap_check)
         top.addStretch(1)
         top.addWidget(_magenta_tip(
             "Patch grid",
@@ -4494,6 +4510,22 @@ class Ti2RelayoutDialog(QDialog):
             it = self._grid.item(i)
             it.setIcon(_swatch_icon(it.data(Qt.ItemDataRole.UserRole), size))
         self._grid.scheduleDelayedItemsLayout()
+
+    def _set_show_numbers(self, on: bool) -> None:
+        """Toggle the patch-number label under each swatch (Knut #93)."""
+        self._delegate.show_label = bool(on)
+        self._grid.setGridSize(self._delegate.sizeHint(None, None))
+        self._grid.scheduleDelayedItemsLayout()
+        self._grid.viewport().update()
+
+    def _set_show_gap(self, on: bool) -> None:
+        """Toggle the gaps between swatches so the set can be read as a whole."""
+        self._delegate.H_PAD = 6 if on else 0
+        self._delegate.V_PAD = 4 if on else 0
+        self._grid.setSpacing(3 if on else 0)
+        self._grid.setGridSize(self._delegate.sizeHint(None, None))
+        self._grid.scheduleDelayedItemsLayout()
+        self._grid.viewport().update()
 
     def _grid_item(self, rgb: tuple) -> QListWidgetItem:
         """Build a grid item for one RGB patch (icon + UserRole payload)."""
