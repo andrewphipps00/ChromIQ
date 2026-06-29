@@ -3296,14 +3296,14 @@ class Ti2RelayoutDialog(QDialog):
             "swatches.\n\n"
             "• The controls on the right let you add or remove patches, generate "
             "whole colour sets, recolour a selection, and save.\n\n"
-            "A typical session goes: load a chart or start a new one, arrange and "
-            "recolour the patches, then Apply / Save to send the set back to the "
-            "Create Chart tab (or Save As to export it).\n\n"
+            "A typical session goes: load a patch set or start a new one, arrange "
+            "and recolour the patches, then Apply / Save to send the set back to "
+            "the Create Chart tab (or Save As to export it).\n\n"
             "One handy thing happens automatically: when you save, ChromIQ checks "
             "whether your colours are well mixed and, if they are, marks the set "
             "so your instrument may read each strip in either direction. You only "
             "have to get involved for tricky, structured sets — see the "
-            "\"Force randomised tag\" option in the controls for more.",
+            "force-randomised-tag option in the controls for more.",
             self, min_width=560))
         outer.addLayout(src)
 
@@ -6407,7 +6407,7 @@ class Ti2RelayoutDialog(QDialog):
         from here.
         """
         dlg = QDialog(self)
-        dlg.setWindowTitle(tr("Apply or save this chart layout"))
+        dlg.setWindowTitle(tr("Apply or save this patch set"))
         dlg.setMinimumWidth(580)
         lay = QVBoxLayout(dlg)
         lay.setContentsMargins(24, 20, 24, 16)

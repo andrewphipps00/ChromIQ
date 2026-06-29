@@ -466,15 +466,18 @@ class LayoutOptionsPanel(QWidget):
         add_row(g, 5, tr("Inter-patch gap:"), self.inter_patch,
                 tip=TooltipButton(
                     tr("Inter-patch gap"),
-                    tr("Extra blank space added between patches on top of the "
-                       "spacer, in mm. Usually 0 — raise it only if patches bleed "
-                       "into each other on your printer/paper."), self))
+                    tr("Makes the spacer between patches thicker, in mm — extra "
+                       "blank separation along the strip. Usually 0; raise it only "
+                       "if patches bleed into each other on your printer/paper."),
+                    self))
         add_row(g, 6, tr("Strip-indicator gap:"), self.sig,
                 tip=TooltipButton(
                     tr("Strip-indicator gap"),
-                    tr("The gap, in mm, between a strip's letter label at the top "
-                       "and the first patch below it. Larger values push the "
-                       "patches down to leave more room for the label."), self))
+                    tr("How far the strip's letter label sits below the top edge of "
+                       "the page, in mm. At 0 the labels hug the minimum text-edge "
+                       "distance at the very top; raising it slides them down, "
+                       "toward the patches, to fine-tune where the labels print."),
+                    self))
         add_row(g, 7, tr("Strip gap (between strips):"), self.strip_gap,
                 tip=TooltipButton(
                     tr("Strip gap"),

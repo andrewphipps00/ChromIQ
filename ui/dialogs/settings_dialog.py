@@ -964,9 +964,15 @@ class SettingsDialog(QDialog):
                "absurdly large to fill the page: an auto dimension is sized to the "
                "value here rather than blown up to fill at any cost.\n\n"
                "Pick an Instrument and Paper (with orientation) at the top, then "
-               "set the width and height in millimetres. The defaults match each "
-               "instrument's natural patch size; change them if you prefer larger "
-               "or smaller auto patches."),
+               "set the width and height in millimetres.\n\n"
+               "Where the defaults come from: each value starts at the "
+               "instrument's “natural” patch size — the patch dimensions the "
+               "device was designed to read (its aperture and the spacing along a "
+               "strip). For example the i1Pro is ~8 × 10 mm, the i1Pro 3 Plus "
+               "~16 × 20 mm, the ColorMunki ~10 × 13 mm and the SpectroScan "
+               "~7 × 7 mm. These read comfortably for each instrument, so they're "
+               "a safe starting point; change them here if you prefer larger or "
+               "smaller auto patches."),
             self))
         v.addLayout(intro_row)
 
