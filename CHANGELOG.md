@@ -1,5 +1,39 @@
 # Changelog
 
+## v3.13.0-beta.23
+
+Big engine + editor rework from Knut's feedback.
+
+### 🐛 Fixed
+- **Area-first now fills the whole patch area.** “Prioritise chart area” sizes the
+  patches to fill the margin box instead of leaving a large empty band at the
+  bottom; the minimum patch width / height-% are true minimums that grow to fill.
+  By-columns/rows with a dimension on “auto” fills at a sensible patch size too.
+- **Strip labels never sit behind the patches.** When the top margin is too small
+  the labels slide toward the page edge (and a warning shows) instead of being
+  covered by the first patch row.
+- **Correct preview measurements.** The “Measured from Preview” numbers (margins,
+  patch width, strip length) now come from the engine’s exact geometry, fixing the
+  wrong patch width and the corruption when a strip gap was added.
+
+### 🔧 Changed
+- **“Margins are the law” is tied to area-first**, not “Use instrument margins”.
+  The margin box is always authoritative; going below an instrument minimum is
+  allowed and only flagged as a warning (no silent clamping).
+- **The layout-engine on/off switch moved to the Create Chart tab**, above the
+  layout panel; the old printtarg i1Pro options moved to the Chart Layout settings
+  tab (greyed when the engine is on). Paper & Pages now sit under Instrument.
+- **Loading a Manual preset selects the engine it was made with** (printtarg
+  presets load with the printtarg engine).
+- **The chart editor is now a patch-set editor.** The middle layout preview and
+  all layout controls are gone — layout is done in Create Chart — so the swatch
+  grid fills the window, with Show-patch-number / Show-gap toggles and a smaller
+  minimum swatch size. Renamed throughout to “patch set”.
+
+### ➕ Added
+- **“Patches (this page)”** readout, and a warning when a strip is longer than the
+  instrument’s ruler.
+
 ## v3.13.0-beta.22
 
 ### 🐛 Fixed
