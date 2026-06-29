@@ -3312,10 +3312,19 @@ class Ti2RelayoutDialog(QDialog):
         lv = QVBoxLayout(left)
         lv.setContentsMargins(0, 0, 0, 0)
         lv.setSpacing(6)
-        top = QHBoxLayout()
-        top.addWidget(QLabel(tr("Swatch size:")))
-        top.addSpacing(20)
-        self._size_slider = QSlider(Qt.Orientation.Horizontal, left)
+        # Swatch chrome — the size slider, the show-number / show-gap toggles and
+        # the patch-grid ⓘ. Built here but placed at the TOP of the RIGHT column
+        # (below), so the Patches frame lines up with the top of the swatch grid
+        # and the ⓘ sits in the right-most corner (Knut #93). Two compact rows so
+        # it fits the narrow controls column. Widgets are parented to the dialog
+        # so they reparent cleanly when the layout is added to the right column.
+        self._swatch_chrome = QVBoxLayout()
+        self._swatch_chrome.setContentsMargins(0, 0, 0, 0)
+        self._swatch_chrome.setSpacing(4)
+        _crow1 = QHBoxLayout()
+        _crow1.setSpacing(8)
+        _crow1.addWidget(QLabel(tr("Swatch size:"), self))
+        self._size_slider = QSlider(Qt.Orientation.Horizontal, self)
         # Min lowered to 8 px so the whole patch set fits on screen at once (Knut).
         self._size_slider.setRange(8, 96)
         self._size_slider.setValue(_SWATCH)
@@ -3335,21 +3344,8 @@ class Ti2RelayoutDialog(QDialog):
             f"QSlider::sub-page:horizontal {{ background: {SPEC_MAGENTA};"
             " border-radius: 2px; }"
         )
-        self._size_slider.setFixedWidth(220)
-        top.addWidget(self._size_slider)
-        top.addSpacing(16)
-        # Show/hide the patch number under each swatch, and the gaps between them,
-        # so the set can be viewed as a whole like in i1Profiler (Knut #93).
-        self._show_numbers_check = QCheckBox(tr("Show patch number"), left)
-        self._show_numbers_check.setChecked(True)
-        self._show_numbers_check.toggled.connect(self._set_show_numbers)
-        top.addWidget(self._show_numbers_check)
-        self._show_gap_check = QCheckBox(tr("Show gap between patches"), left)
-        self._show_gap_check.setChecked(True)
-        self._show_gap_check.toggled.connect(self._set_show_gap)
-        top.addWidget(self._show_gap_check)
-        top.addStretch(1)
-        top.addWidget(_magenta_tip(
+        _crow1.addWidget(self._size_slider, 1)
+        _crow1.addWidget(_magenta_tip(
             "Patch grid",
             "This is your main workspace. Every little square is one colour patch "
             "in your set, and the order you see — reading left to right, top to "
@@ -3372,8 +3368,21 @@ class Ti2RelayoutDialog(QDialog):
             "None of that changes the printed chart; the page layout is set in the "
             "Create Chart tab.",
             self, min_width=520))
-        top.addSpacing(10)
-        lv.addLayout(top)
+        self._swatch_chrome.addLayout(_crow1)
+        # Show/hide the patch number under each swatch, and the gaps between them,
+        # so the set can be viewed as a whole like in i1Profiler (Knut #93).
+        _crow2 = QHBoxLayout()
+        _crow2.setSpacing(12)
+        self._show_numbers_check = QCheckBox(tr("Show patch number"), self)
+        self._show_numbers_check.setChecked(True)
+        self._show_numbers_check.toggled.connect(self._set_show_numbers)
+        _crow2.addWidget(self._show_numbers_check)
+        self._show_gap_check = QCheckBox(tr("Show gap between patches"), self)
+        self._show_gap_check.setChecked(True)
+        self._show_gap_check.toggled.connect(self._set_show_gap)
+        _crow2.addWidget(self._show_gap_check)
+        _crow2.addStretch(1)
+        self._swatch_chrome.addLayout(_crow2)
         # It isn't obvious the swatches can be rearranged, so spell it out right
         # above the grid (Knut's suggestion) where it's always visible — the full
         # story stays in the ⓘ. (Below the grid it gets squeezed by the list.)
@@ -3441,7 +3450,10 @@ class Ti2RelayoutDialog(QDialog):
         # spanning the whole window. Auto-hides a few seconds after each message.
         self._status = _AutoHideLabel(left)
         self._status.setStyleSheet("color: #888;")
-        lv.addWidget(self._status)
+        # The status line moves to a full-width row UNDER the body (added after
+        # the body, below) so the swatch grid fills the left column to its bottom
+        # edge — letting the right column's action buttons line up with the bottom
+        # of the swatch grid (Knut #93).
         split.addWidget(left)
 
         # Middle: preview + page navigation
@@ -3532,14 +3544,21 @@ class Ti2RelayoutDialog(QDialog):
         # not just the inner panel — otherwise the scroll area stays narrow and
         # the engine panel scrolls horizontally (#93).
         self._right_pane = right
-        right.setFixedWidth(controls.width() + 14)
+        right.setFixedWidth(controls.width() + 4)   # tight scrollbar gutter (symmetric margins)
         rv = QVBoxLayout(right)
         rv.setContentsMargins(0, 0, 0, 0)
         rv.setSpacing(6)
+        # Swatch chrome (size slider + toggles + ⓘ) sits at the TOP of the right
+        # column so the Patches frame below it lines up with the top of the swatch
+        # grid and the ⓘ is in the right-most corner (Knut #93).
+        rv.addLayout(self._swatch_chrome, 0)
         rv.addWidget(ctrl_scroll, 1)
         rv.addWidget(self._build_action_bar(right), 0)
         body.addWidget(right, 0)
         outer.addLayout(body, 1)
+        # Full-width status line under the body (moved out of the left column so the
+        # swatch grid reaches the bottom edge — see split.addWidget(left)).
+        outer.addWidget(self._status)
 
     def _build_controls(self) -> QWidget:
         panel = QWidget(self)
@@ -4051,14 +4070,19 @@ class Ti2RelayoutDialog(QDialog):
             "this layout — or Save As to export the full chart to a folder you "
             "pick, without leaving the editor."))
         self._apply_btn.clicked.connect(self._save_and_apply)
-        save_row.addWidget(self._apply_btn)
         self._close_btn = QPushButton(tr("Close"), bar)
         self._close_btn.setToolTip(
             tr("Close the editor without saving. If the layout has unsaved "
             "changes you'll be asked to confirm first; “Apply / Save…” "
             "keeps your work."))
         self._close_btn.clicked.connect(self._on_close_clicked)
-        save_row.addWidget(self._close_btn)
+        # Both buttons share the column width equally so Close doesn't spill past
+        # the controls' right edge (Knut #93).
+        for _b in (self._apply_btn, self._close_btn):
+            _b.setSizePolicy(QSizePolicy.Policy.Expanding,
+                             _b.sizePolicy().verticalPolicy())
+        save_row.addWidget(self._apply_btn, 1)
+        save_row.addWidget(self._close_btn, 1)
         bv.addLayout(save_row)
         return bar
 
@@ -4101,7 +4125,10 @@ class Ti2RelayoutDialog(QDialog):
         if getattr(self, "_controls_panel", None) is not None:
             self._controls_panel.setFixedWidth(360)
         if getattr(self, "_right_pane", None) is not None:
-            self._right_pane.setFixedWidth(360 + 22)   # + scrollbar/frame gutter
+            # Tight scrollbar gutter so the right column's content sits the same
+            # small distance from the window edge as the swatch frame on the left
+            # (Knut #93 — symmetric margins).
+            self._right_pane.setFixedWidth(360 + 4)
 
     def _load_ti2(self) -> None:
         start = (self._settings.get("custom_output_path", "")
