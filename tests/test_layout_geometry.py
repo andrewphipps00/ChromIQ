@@ -97,6 +97,38 @@ def test_colormunki_density_levels_increase_capacity():
     assert instruments.build("CM", hflag=True).rrsp == 13.7
 
 
+def test_colormunki_triple_density_is_i1_strip_layout_tagged_colormunki():
+    """ColorMunki triple density (extra-high, density=3) IS the proven i1Pro
+    strip layout — the engine builds it natively and stamps TARGET_INSTRUMENT
+    "X-Rite ColorMunki" itself, so no generate-as-i1-then-rename trickery is
+    needed (#93, Knut)."""
+    g3 = instruments.build("CM", density=3, pscale=1.3, border=5.0)
+    i1 = instruments.build("i1", nolpcbord=True, nolimit=True,
+                           pscale=1.3, border=5.0)
+    # Geometry == the i1 strip layout (patch size, spacers, leader, cap)…
+    assert (g3.pwid, g3.plen, g3.pspa, g3.lspa, g3.mxrowl) == \
+           (i1.pwid, i1.plen, i1.pspa, i1.lspa, i1.mxrowl)
+    # …but the CGATS instrument tag is the ColorMunki the user owns.
+    assert g3.target_name == instruments.TARGET_INSTRUMENT_NAME["CM"]
+    # Triple density always suppresses the clip border (-L) and lifts the
+    # strip-length cap (-P), regardless of what the caller passed.
+    assert g3.lbord == 0.0
+    assert instruments.build("CM", density=3, nolpcbord=False, nolimit=False).lbord == 0.0
+
+
+def test_colormunki_density_inert_in_area_first_even_at_triple():
+    """Triple density is patch-first; in area-first the two area fields own the
+    grid, so density (incl. 3) must not switch to the strip layout (#93)."""
+    def grid(d):
+        g = instruments.geom_from_build_kwargs(
+            {"instrument": "CM", "paper": "A4", "layout_mode": "area_first",
+             "area_method": "by_width", "area_min_patch": 8.0, "density": d})
+        return geometry.patches_per_sheet(g, *A4), g.target_name
+    assert grid(1) == grid(2) == grid(3)
+    # tag stays ColorMunki (no strip-layout redirect leaking through)
+    assert grid(3)[1] == instruments.TARGET_INSTRUMENT_NAME["CM"]
+
+
 def test_clip_border_width_drives_lbord():
     # Default reserved clip zone is 26 mm; lbord = zone − margin.
     assert instruments.build("i1", border=6.0).lbord == pytest.approx(20.0)

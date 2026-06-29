@@ -1,5 +1,16 @@
 # Changelog
 
+## v3.13.0-beta.20
+
+### 🔧 Changed
+- **ColorMunki “Extra-high density” now uses the proven i1Pro strip layout.**
+  This is the mode that replaces the old triple-density trick. The engine builds
+  the dense strip layout (clip border suppressed, strip-length cap lifted) and
+  tags the chart as a ColorMunki directly — no more generating an i1Pro chart
+  and rewriting the measurement file afterwards. The clip-border / strip-cap
+  toggles and your patch scale / margin still apply. Density stays inert in
+  area-first mode (the area fields define that grid).
+
 ## v3.13.0-beta.19
 
 ### 🔧 Changed

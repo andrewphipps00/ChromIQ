@@ -244,6 +244,15 @@ def geom_from_build_kwargs(kw: dict, thresholds: dict | None = None) -> Geom:
     the page margins are first raised so the realised patch area meets those
     minimums — so both the capacity estimate and the render honour the user's
     margin thresholds from this one chokepoint (#93)."""
+    # ColorMunki "Density" doesn't define an area-first grid (the two area fields
+    # do, and the UI disables Density there). Triple density in particular is a
+    # patch-first mode — it switches to the dense i1Pro strip layout — so it would
+    # change the grid that area-first is supposed to own. Normalise density to 1
+    # in area-first to keep it inert and suppress the strip-layout redirect (#93).
+    if (kw.get("instrument") == "CM"
+            and kw.get("layout_mode") == "area_first"
+            and int(kw.get("density") or 1) != 1):
+        kw = {**kw, "density": 1}
     # CM/SS have no native clip border, but can still carry a notes/clip band
     # when clip content is on — reserve that band so capacity reflects it (#93).
     if (kw.get("instrument") in ("CM", "SS")
@@ -333,6 +342,22 @@ def _build_base(
 
     # ---- X-Rite ColorMunki ---------------------------------------------
     if key == "CM":
+        # Triple density (extra-high) = the proven i1Pro strip layout, NOT a
+        # tighter ColorMunki grid. printtarg could only achieve this by laying
+        # the chart out as an i1Pro target and then rewriting TARGET_INSTRUMENT
+        # back to ColorMunki in the .ti2. The engine writes the .ti2 itself, so
+        # the instrument *tag* (target_name) is decoupled from the *geometry* —
+        # we build the i1 strip geometry directly and just stamp it ColorMunki,
+        # with no generate-as-i1-then-rename trickery (#93, Knut). The strip
+        # layout always suppresses the clip border (-L) and lifts the strip-
+        # length cap (-P), exactly as the old triple-density command did; the
+        # caller's pscale / border still apply (default 1.3 / 5 mm preset).
+        if density >= 3:
+            i1 = _build_base(
+                "i1", pscale=pscale, sscale=sscale, spacer_on=spacer_on,
+                border=border, nolpcbord=True, nolimit=True,
+                clip_border_width=clip_border_width, clip_band=clip_band)
+            return replace(i1, target_name=TARGET_INSTRUMENT_NAME["CM"])
         plen = pscale * 14.0
         if density >= 2:                      # high density (rig) — tighter rows
             # Level 2 = printtarg's exact rig spacing (13.7 mm). Higher levels
