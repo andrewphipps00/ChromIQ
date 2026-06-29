@@ -1,5 +1,12 @@
 # Changelog
 
+## v3.13.0-beta.27
+
+### 🐛 Fixed
+- **Engine chart generation crashed in beta.26** (`build_chart() got an
+  unexpected keyword argument 'area_default_w'`). The Default-Patch-Sizes value
+  threaded into the build is now accepted by the engine. Regression test added.
+
 ## v3.13.0-beta.26
 
 ### ➕ Added

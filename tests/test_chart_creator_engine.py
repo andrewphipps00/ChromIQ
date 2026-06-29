@@ -298,3 +298,20 @@ def test_load_ti1_uses_engine_when_enabled(tmp_path: Path) -> None:
     sidecar = json.loads((run_dir / f"{stem}.channels.json").read_text())
     assert sidecar.get("layout", {}).get("engine") == "chromiq", \
         "the engine must lay out the loaded .ti1, not printtarg"
+
+
+def test_build_chart_accepts_area_default_kwargs(tmp_path: Path) -> None:
+    """Regression (beta.26): the area-first default-patch-size keys threaded into
+    the build kwargs (area_default_w/h) must be accepted by build_chart — they
+    crashed engine generation with a TypeError."""
+    from workflow.layout_engine import chart
+    ti1 = tmp_path / "p.ti1"
+    ti1.write_text(
+        'CTI1\nCOLOR_REP "RGB"\nNUMBER_OF_FIELDS 4\nBEGIN_DATA_FORMAT\n'
+        'SAMPLE_ID RGB_R RGB_G RGB_B\nEND_DATA_FORMAT\nNUMBER_OF_SETS 3\n'
+        'BEGIN_DATA\n1 100 0 0\n2 0 100 0\n3 0 0 100\nEND_DATA\n')
+    res = chart.build_chart(
+        str(ti1), str(tmp_path / "out"), instrument="i1", paper="A4",
+        layout_mode="area_first", area_method="by_grid",
+        area_default_w=16.0, area_default_h=20.0, dpi=72)
+    assert res.layout.total_patches >= 3
