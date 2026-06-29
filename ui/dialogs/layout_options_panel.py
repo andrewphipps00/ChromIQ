@@ -1013,7 +1013,10 @@ class LayoutOptionsPanel(QWidget):
         self.clip_image_rotation = NoScrollSpinBox(self)
         self.clip_image_rotation.setRange(0, 359); self.clip_image_rotation.setSuffix("°")
         self.clip_image_scale = NoScrollDoubleSpinBox(self)
-        self.clip_image_scale.setRange(10.0, 400.0); self.clip_image_scale.setDecimals(0)
+        # Generous max so a small logo can be blown up to fill the band; typing a
+        # value above the max would otherwise snap back (Knut). Step 10 for arrows.
+        self.clip_image_scale.setRange(1.0, 5000.0); self.clip_image_scale.setDecimals(0)
+        self.clip_image_scale.setSingleStep(10.0)
         self.clip_image_scale.setSuffix(" %"); self.clip_image_scale.setValue(100.0)
         self.clip_image_offx = NoScrollDoubleSpinBox(self)
         self.clip_image_offy = NoScrollDoubleSpinBox(self)
