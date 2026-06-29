@@ -7115,10 +7115,21 @@ class TabChart(QWidget):
 
     def _maybe_warn_partial_last_page(self, ti2: Path) -> None:
         """If the patch set leaves a notably under-filled last page (or spilled
-        onto a near-empty extra page), show a general heads-up with a button to
+        onto a near-empty extra page), show a friendly heads-up with a button to
         open the patch-set editor so the user can fill or trim the set (Knut #93).
         We don't auto-fill or guess — over/under-fill can equally mean patches
-        should be removed."""
+        should be removed.
+
+        Only in Manual mode with a FIXED patch count: in Guided (and Manual with
+        "Auto patch count" on) the count is auto-filled to the page, so any small
+        gap is just estimate rounding, not the user's choice — and Guided has no
+        patch-set editor to point them at (Knut)."""
+        manual = (getattr(self, "_manual_btn", None) is not None
+                  and self._manual_btn.isChecked())
+        auto_count = (getattr(self, "_manual_auto_patches_check", None) is not None
+                      and self._manual_auto_patches_check.isChecked())
+        if not manual or auto_count:
+            return
         blank = self._partial_last_page_blank(ti2)
         if not blank:
             return
@@ -7126,11 +7137,20 @@ class TabChart(QWidget):
             from PyQt6.QtWidgets import QMessageBox
             box = QMessageBox(self)
             box.setIcon(QMessageBox.Icon.Information)
-            box.setWindowTitle(tr("Last page not full"))
+            box.setWindowTitle(tr("There's a little room left on the last page"))
             box.setText(tr(
-                "The last page has room for about {n} more patches. The page "
-                "layout is set here in Create Chart; to fill or trim the patch "
-                "set, edit it in the patch-set editor.").format(n=blank))
+                "Your patch set doesn't quite fill the last page — there's space "
+                "for about {n} more patches.\n\n"
+                "That's perfectly fine to print as it is; the empty area is just "
+                "blank paper. If you'd rather have a tidy, completely full page, "
+                "you have two easy options in the patch-set editor:\n\n"
+                "• Add a few more patches to fill the gap, or\n"
+                "• Remove a few so the set ends neatly on the previous page.\n\n"
+                "The page layout itself — instrument, paper, margins and patch "
+                "size — stays exactly as you've set it here in Create Chart; only "
+                "the colours in the set change. Click “Edit patch set…” to open "
+                "the editor now, or “OK” to keep the chart as it is."
+            ).format(n=blank))
             edit_btn = box.addButton(tr("Edit patch set…"),
                                      QMessageBox.ButtonRole.ActionRole)
             box.addButton(QMessageBox.StandardButton.Ok)

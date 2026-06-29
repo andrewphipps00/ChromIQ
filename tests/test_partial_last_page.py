@@ -66,3 +66,27 @@ def test_none_for_printtarg_chart(tab, tmp_path):
     d = tmp_path / "pt"; d.mkdir()
     ti2 = d / "chart.ti2"; ti2.write_text("NUMBER_OF_SETS 100\n")
     assert tab._partial_last_page_blank(ti2) is None
+
+
+def test_no_warning_in_guided_mode(tab, monkeypatch):
+    """Guided has no patch-set editor and auto-fills the count, so the hint must
+    not fire there (#93, Knut)."""
+    tab._switch_mode("guided")
+    called = []
+    monkeypatch.setattr(tab, "_partial_last_page_blank",
+                        lambda ti2: called.append(1) or 50)
+    tab._maybe_warn_partial_last_page(Path("x.ti2"))
+    assert not called           # gated out before computing → no modal
+
+
+def test_no_warning_when_auto_patch_count(tab, monkeypatch):
+    """Manual with Auto patch count on auto-fills the page, so a small gap is just
+    rounding — no hint (#93)."""
+    tab._switch_mode("manual")
+    if tab._manual_auto_patches_check is not None:
+        tab._manual_auto_patches_check.setChecked(True)
+    called = []
+    monkeypatch.setattr(tab, "_partial_last_page_blank",
+                        lambda ti2: called.append(1) or 50)
+    tab._maybe_warn_partial_last_page(Path("x.ti2"))
+    assert not called
