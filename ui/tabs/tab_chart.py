@@ -2566,7 +2566,8 @@ class TabChart(QWidget):
                     # render never clamps to instrument minimums, so the estimate
                     # mustn't either, or the two would disagree. Below-minimum is
                     # only flagged as a violation in the inspector.
-                    geom = instruments.geom_from_build_kwargs(r.build_kwargs())
+                    geom = instruments.geom_from_build_kwargs(
+                        self._with_default_patch_size(r.build_kwargs()))
                     pages_req = (self._manual_pages_spin.value()
                                  if self._manual_pages_spin is not None else 1)
                     # Use the on-screen chart's fixed patch count ONLY when the
@@ -5653,6 +5654,21 @@ class TabChart(QWidget):
                 self._settings.get_margin_thresholds(), instr, w_mm, h_mm)
         except Exception:
             return None
+
+    def _with_default_patch_size(self, kw: dict) -> dict:
+        """Thread the Default Patch Sizes table value for this combo into the
+        build kwargs so the area-first estimate matches the render (#93)."""
+        try:
+            from core.settings import patch_size_for_combo
+            from workflow.layout_engine import papers
+            w_mm, h_mm = papers.dimensions_mm(kw.get("paper", "A4"))
+            sz = patch_size_for_combo(self._settings.get_patch_sizes(),
+                                      kw.get("instrument", "i1"), w_mm, h_mm)
+            if sz and sz[0] > 0 and sz[1] > 0:
+                kw = {**kw, "area_default_w": sz[0], "area_default_h": sz[1]}
+        except Exception:  # noqa: BLE001
+            pass
+        return kw
 
     def _engine_geom(self, instr: str, paper: str, *, dd: bool, td: bool,
                      eff_lb: bool, nsl: bool, pscale: float, margin: float):

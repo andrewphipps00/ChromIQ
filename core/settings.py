@@ -171,6 +171,7 @@ DEFAULTS: dict[str, Any] = {
     "margin_guides_show":        False,   # dotted threshold guide lines on preview
     "margin_measured_guides_show": False,  # long dotted lines at the measured margins
     "margin_thresholds":         "",      # JSON blob; "" → default_margin_thresholds()
+    "patch_sizes":               "",      # JSON blob; "" → default_patch_sizes()
 }
 
 
@@ -316,6 +317,72 @@ def thresholds_for_combo(
     return (table or {}).get(margin_combo_key(label, name, orientation))
 
 
+# ---------------------------------------------------------------------------
+# Default patch-size table (#93, Knut): the "reasonable" patch width/height the
+# area-first "auto" fill and the stretch cap use, keyed by instrument × paper ×
+# orientation, editable in Settings → Default Patch Sizes. Seeded from each
+# instrument's natural patch geometry (same numbers the engine used implicitly).
+# ---------------------------------------------------------------------------
+_PATCH_SIZE_BY_INSTR = {
+    "i1Pro": (8.0, 10.0), "i1Pro 3+": (16.0, 20.0),
+    "ColorMunki": (10.4, 13.0), "SpectroScan": (7.0, 7.0),
+}
+
+
+def default_patch_sizes() -> dict[str, dict[str, Any]]:
+    """Seed default-patch-size table: every instrument × paper × orientation gets
+    that instrument's natural patch size ``{"w":mm,"h":mm}``."""
+    out: dict[str, dict[str, Any]] = {}
+    for label, (w, h) in _PATCH_SIZE_BY_INSTR.items():
+        for paper, orient in _ALL_COMBOS:
+            out[margin_combo_key(label, paper, orient)] = {"w": w, "h": h}
+    return out
+
+
+def parse_patch_sizes(raw: str) -> dict[str, dict[str, Any]]:
+    """Decode the stored patch-size JSON blob (``""`` → seed defaults), merged
+    over the seed so new instrument/paper combos always have an entry."""
+    import json
+
+    table = default_patch_sizes()
+    if not raw:
+        return table
+    try:
+        doc = json.loads(raw)
+        if isinstance(doc, dict):
+            table.update({k: v for k, v in doc.items() if isinstance(v, dict)})
+    except (ValueError, TypeError):
+        log.warning("Corrupt patch_sizes blob — using seed defaults")
+    return table
+
+
+def serialize_patch_sizes(table: dict[str, dict[str, Any]]) -> str:
+    import json
+
+    return json.dumps(table, ensure_ascii=False)
+
+
+def patch_size_for_combo(
+    table: "dict[str, dict[str, Any]]", instrument_flag: str,
+    w_mm: float, h_mm: float,
+) -> "tuple[float, float] | None":
+    """``(w_mm, h_mm)`` default patch size for an engine instrument flag + page
+    size, or None when the combo isn't in the table. Used by the area-first
+    "auto" fill and the stretch cap (#93)."""
+    label = THRESHOLD_INSTR_LABEL.get(instrument_flag)
+    name = canonical_paper_name(w_mm, h_mm)
+    if not label or not name:
+        return None
+    orientation = "Landscape" if w_mm > h_mm else "Portrait"
+    entry = (table or {}).get(margin_combo_key(label, name, orientation))
+    if not entry:
+        return None
+    try:
+        return float(entry.get("w") or 0.0), float(entry.get("h") or 0.0)
+    except (TypeError, ValueError):
+        return None
+
+
 class AppSettings:
     def __init__(self) -> None:
         self._qs = QSettings("ChromIQ", "ChromIQ")
@@ -375,3 +442,10 @@ class AppSettings:
 
     def set_margin_thresholds(self, table: dict[str, dict[str, Any]]) -> None:
         self.set("margin_thresholds", serialize_margin_thresholds(table))
+
+    def get_patch_sizes(self) -> dict[str, dict[str, Any]]:
+        """The per-combo default-patch-size table (seed-merged)."""
+        return parse_patch_sizes(self.get("patch_sizes", ""))
+
+    def set_patch_sizes(self, table: dict[str, dict[str, Any]]) -> None:
+        self.set("patch_sizes", serialize_patch_sizes(table))

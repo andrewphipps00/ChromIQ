@@ -106,6 +106,14 @@ def derive_area_patch_size(kw: dict) -> tuple[float, float] | None:
     if avail_w <= 0 or arowl <= 0:
         return None
 
+    # "Reasonable" default patch size for an auto dimension — from the editable
+    # Default Patch Sizes table (Settings) when the caller threaded it in, else
+    # the instrument's natural geometry (Knut #93). This is also the effective
+    # stretch reference: auto dimensions size to it, so the layout never grows
+    # patches unboundedly.
+    default_w = float(kw.get("area_default_w") or 0.0) or geom.pwid
+    default_h = float(kw.get("area_default_h") or 0.0) or geom.plen
+
     ec = 1.0 if geom.edge_spacers else -1.0     # geometry.compute()'s edge term
 
     def _rows_filling(n: int) -> float:
@@ -150,12 +158,12 @@ def derive_area_patch_size(kw: dict) -> tuple[float, float] | None:
         if cols > 0:
             pw = _fit_columns(base, w_mm, h_mm, cols, max_pw=avail_w)
         if cols <= 0:                               # columns auto → fill the width
-            target_w = (ph / ratio) if (ph is not None and ratio > 0) else geom.pwid
+            target_w = (ph / ratio) if (ph is not None and ratio > 0) else default_w
             c = _cols_at(target_w)
             if c > 0:
                 pw = _fit_columns(base, w_mm, h_mm, c, max_pw=avail_w)
         if rows <= 0:                               # rows auto → fill the height
-            target_h = (pw * ratio) if (pw is not None and ratio > 0) else geom.plen
+            target_h = (pw * ratio) if (pw is not None and ratio > 0) else default_h
             ph = max(_MIN_PATCH_MM, _rows_filling(_max_rows_at(target_h)))
 
     if pw is None and ph is not None:

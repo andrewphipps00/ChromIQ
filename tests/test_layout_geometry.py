@@ -438,6 +438,32 @@ def test_area_first_by_grid_auto_dims_fill_at_natural_size():
     assert R < 10.0 and B < 12.0
 
 
+def test_area_first_auto_uses_default_patch_size_from_table():
+    """An area-first auto dimension sizes patches to the Default Patch Sizes table
+    value (area_default_w/h) when threaded in, not the instrument's natural size —
+    so the size is tunable and patches don't stretch unboundedly (Knut #93)."""
+    from workflow.layout_engine.presets import LayoutRecipe
+    w, h = A4
+    base = dict(instrument="i1", paper="A4", clip_border=True,
+                layout_mode="area_first", area_method="by_grid",
+                area_cols=0, area_rows=0)
+    nat = instruments.geom_from_build_kwargs(LayoutRecipe(**base).build_kwargs())
+    big = instruments.geom_from_build_kwargs(
+        {**LayoutRecipe(**base).build_kwargs(),
+         "area_default_w": 16.0, "area_default_h": 20.0})
+    assert big.pwid > nat.pwid + 4 and big.plen > nat.plen + 6   # follows the table
+    assert 15.0 <= big.pwid <= 18.0 and 19.0 <= big.plen <= 22.0
+
+
+def test_patch_size_table_lookup():
+    """The Default Patch Sizes table resolves per instrument/paper/orientation."""
+    from core.settings import default_patch_sizes, patch_size_for_combo
+    t = default_patch_sizes()
+    assert patch_size_for_combo(t, "i1", 210.0, 297.0) == (8.0, 10.0)
+    assert patch_size_for_combo(t, "p3", 210.0, 297.0) == (16.0, 20.0)
+    assert patch_size_for_combo(t, "i1", 999.0, 999.0) is None   # unknown paper
+
+
 def test_area_first_noop_without_targets():
     """Area-first with no column/row target falls back to patch-first sizing."""
     from workflow.layout_engine.presets import default_recipe

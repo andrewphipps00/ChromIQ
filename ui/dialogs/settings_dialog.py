@@ -681,7 +681,8 @@ class SettingsDialog(QDialog):
 
         self._tabs.addTab(self._scroll_wrap(general_page), tr("General"))
         self._tabs.addTab(self._scroll_wrap(self._build_margin_thresholds_tab()),
-                          tr("Instrument Margins"))
+                          tr("Instrument Limits"))
+        self._tabs.addTab(self._build_patch_sizes_tab(), tr("Default Patch Sizes"))
         self._tabs.addTab(self._build_chart_layout_tab(), tr("Chart Layout"))
 
         # ---- About / Updates (below the tabs) ----
@@ -906,6 +907,119 @@ class SettingsDialog(QDialog):
         self._loading_margin_combo = False
         self._load_margin_combo()
         return page
+
+    def _build_patch_sizes_tab(self) -> QWidget:
+        """Per-(instrument, paper+orientation) default patch-size editor (#93).
+
+        The area-first "auto" fill (By columns/rows with a dimension on auto)
+        sizes patches to the value here, and it's the reference the layout uses so
+        patches never stretch unboundedly. Editable so the lookup can be tuned.
+        """
+        from core.settings import parse_patch_sizes
+        page = QWidget()
+        v = QVBoxLayout(page)
+        v.setSpacing(10)
+        v.setContentsMargins(12, 12, 12, 12)
+
+        intro_row = QHBoxLayout()
+        intro = QLabel(tr(
+            "Default patch size (width × height, mm) the area-first layout uses "
+            "for an “auto” column/row count, per instrument, paper and "
+            "orientation. These are sensible starting points — tune them to your "
+            "instrument and taste."), self)
+        intro.setWordWrap(True)
+        intro.setStyleSheet("color: #909090; font-size: 11px;")
+        intro_row.addWidget(intro, stretch=1)
+        intro_row.addWidget(TooltipButton(
+            tr("About default patch sizes"),
+            tr("When you build a chart with “Prioritise chart area” and leave the "
+               "number of columns or rows on “auto”, ChromIQ has to choose a "
+               "sensible patch size to aim for before it fills the page. The size "
+               "it aims for comes from this table — one value per instrument, "
+               "paper size and orientation.\n\n"
+               "It's also the reference that stops patches from being stretched "
+               "absurdly large to fill the page: an auto dimension is sized to the "
+               "value here rather than blown up to fill at any cost.\n\n"
+               "Pick an Instrument and Paper (with orientation) at the top, then "
+               "set the width and height in millimetres. The defaults match each "
+               "instrument's natural patch size; change them if you prefer larger "
+               "or smaller auto patches."),
+            self))
+        v.addLayout(intro_row)
+
+        self._patch_size_table = parse_patch_sizes(
+            self._settings.get("patch_sizes", ""))
+
+        sel = QGridLayout()
+        sel.addWidget(QLabel(tr("Instrument:"), self), 0, 0)
+        self._psz_instr = NoScrollComboBox(self)
+        self._psz_instr.addItems(list(self._MARGIN_INSTRUMENTS))
+        sel.addWidget(self._psz_instr, 0, 1)
+        sel.addWidget(QLabel(tr("Paper size:"), self), 0, 2)
+        self._psz_paper = NoScrollComboBox(self)
+        self._psz_paper.addItems(
+            [f"{p} {o}" for p in self._MARGIN_PAPERS for o in self._MARGIN_ORIENTS])
+        sel.addWidget(self._psz_paper, 0, 3)
+        sel.setColumnStretch(1, 1)
+        sel.setColumnStretch(3, 1)
+        v.addLayout(sel)
+
+        grid = QGridLayout()
+        self._psz_fields: dict[str, NoScrollDoubleSpinBox] = {}
+        for col, (key, label) in enumerate(
+                (("w", tr("Width")), ("h", tr("Height")))):
+            grid.addWidget(QLabel(label, self), 0, col, Qt.AlignmentFlag.AlignHCenter)
+            sb = NoScrollDoubleSpinBox(self)
+            sb.setRange(1, 200)
+            sb.setDecimals(1)
+            sb.setSingleStep(0.5)
+            sb.setSuffix(" mm")
+            sb.valueChanged.connect(self._on_patch_size_field_changed)
+            self._psz_fields[key] = sb
+            grid.addWidget(sb, 1, col)
+        grid.setColumnStretch(2, 1)
+        v.addLayout(grid)
+
+        reset_row = QHBoxLayout()
+        reset_row.addStretch()
+        reset_btn = QPushButton(tr("Restore default patch sizes"), self)
+        reset_btn.clicked.connect(self._restore_default_patch_sizes)
+        reset_row.addWidget(reset_btn)
+        v.addLayout(reset_row)
+        v.addStretch()
+
+        self._psz_instr.currentIndexChanged.connect(self._load_patch_size_combo)
+        self._psz_paper.currentIndexChanged.connect(self._load_patch_size_combo)
+        self._loading_patch_size_combo = False
+        self._load_patch_size_combo()
+        return self._scroll_wrap(page)
+
+    def _current_patch_size_key(self) -> str:
+        from core.settings import margin_combo_key
+        parts = self._psz_paper.currentText().rsplit(" ", 1)
+        paper, orient = (parts[0], parts[1]) if len(parts) == 2 else (parts[0], "")
+        return margin_combo_key(self._psz_instr.currentText(), paper, orient)
+
+    def _load_patch_size_combo(self) -> None:
+        self._loading_patch_size_combo = True
+        entry = self._patch_size_table.get(self._current_patch_size_key(), {})
+        for key, sb in self._psz_fields.items():
+            try:
+                sb.setValue(round(float(entry.get(key, 0)) or 0.0, 1))
+            except (TypeError, ValueError):
+                sb.setValue(0.0)
+        self._loading_patch_size_combo = False
+
+    def _on_patch_size_field_changed(self) -> None:
+        if getattr(self, "_loading_patch_size_combo", False):
+            return
+        self._patch_size_table[self._current_patch_size_key()] = {
+            k: sb.value() for k, sb in self._psz_fields.items()}
+
+    def _restore_default_patch_sizes(self) -> None:
+        from core.settings import default_patch_sizes
+        self._patch_size_table = default_patch_sizes()
+        self._load_patch_size_combo()
 
     def _current_margin_key(self) -> str:
         from core.settings import margin_combo_key
@@ -1456,8 +1570,11 @@ class SettingsDialog(QDialog):
         self._commit_margin_combo()   # flush the currently-shown combo's edits
         s.set("margin_inspector_show",     self._margin_show_check.isChecked())
         s.set("margin_violation_notify",   self._margin_notify_check.isChecked())
-        from core.settings import serialize_margin_thresholds
+        from core.settings import (serialize_margin_thresholds,
+                                    serialize_patch_sizes)
         s.set("margin_thresholds", serialize_margin_thresholds(self._margin_table))
+        if getattr(self, "_patch_size_table", None) is not None:
+            s.set("patch_sizes", serialize_patch_sizes(self._patch_size_table))
         # ChromIQ layout engine (issue #93): toggle + file-backed presets.
         s.set("use_chromiq_layout_engine", self._layout_engine_check.isChecked())
         from core.preset_store import save_presets

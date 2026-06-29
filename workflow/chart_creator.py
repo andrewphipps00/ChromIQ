@@ -975,7 +975,7 @@ class ChartCreator:
             # going below an instrument minimum is allowed and merely flagged as a
             # violation in the Measured-from-Preview panel. So no build-time clamp.
             self._threshold_notes = []
-            return kw
+            return self._with_default_patch_size(kw)
         # Guided mode has no editable margin boxes and no "Use instrument
         # margins" toggle, so the jig-safety threshold clamp is intentionally
         # NOT applied here. Clamping pinned the patch count regardless of the
@@ -984,7 +984,26 @@ class ChartCreator:
         # feature. Mirrors the Guided capacity estimate in
         # tab_chart._engine_geom (thresholds=None) so count and chart agree.
         self._threshold_notes = []
-        return self._engine_build_kwargs(params)
+        return self._with_default_patch_size(self._engine_build_kwargs(params))
+
+    def _with_default_patch_size(self, kw: dict) -> dict:
+        """Thread the editable Default Patch Sizes table value for this combo into
+        the build kwargs, so the area-first "auto" fill sizes patches to it (#93,
+        Knut). No-op when the settings object doesn't expose the table."""
+        try:
+            from core.settings import patch_size_for_combo
+            from workflow.layout_engine import papers
+            getter = getattr(self._settings, "get_patch_sizes", None)
+            if getter is None:
+                return kw
+            w_mm, h_mm = papers.dimensions_mm(kw.get("paper", "A4"))
+            sz = patch_size_for_combo(getter(), kw.get("instrument", "i1"),
+                                      w_mm, h_mm)
+            if sz and sz[0] > 0 and sz[1] > 0:
+                kw = {**kw, "area_default_w": sz[0], "area_default_h": sz[1]}
+        except Exception as exc:  # noqa: BLE001 — never block generation on this
+            log.debug("default patch-size lookup skipped: %s", exc)
+        return kw
 
     def _apply_margin_thresholds(self, kw: dict) -> dict:
         """Raise the layout's margins so the patch area meets the user's margin
