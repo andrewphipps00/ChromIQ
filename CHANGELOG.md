@@ -34,10 +34,10 @@
 ## v3.13.0-beta.26
 
 ### ➕ Added
-- **Settings → Default Patch Sizes** — an editable table of the default patch
-  width/height the area-first “auto” fill aims for, per instrument, paper and
-  orientation (with a help ⓘ). It's also the reference that stops patches being
-  stretched unboundedly to fill the page.
+- **Settings → Default Patch Sizes** — an editable table of the patch
+  width/height the area-first “auto” column/row count aims for, per instrument,
+  paper and orientation (with a help ⓘ), so auto patches come out a sensible,
+  readable size for the instrument.
 - **Strip-length limit** in Settings → **Instrument Limits** — a configurable
   per-combo maximum strip length; the Create Chart preview warns when a strip is
   longer (0 = use the instrument's built-in ruler).

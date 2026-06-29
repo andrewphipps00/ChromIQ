@@ -106,11 +106,10 @@ def derive_area_patch_size(kw: dict) -> tuple[float, float] | None:
     if avail_w <= 0 or arowl <= 0:
         return None
 
-    # "Reasonable" default patch size for an auto dimension — from the editable
-    # Default Patch Sizes table (Settings) when the caller threaded it in, else
-    # the instrument's natural geometry (Knut #93). This is also the effective
-    # stretch reference: auto dimensions size to it, so the layout never grows
-    # patches unboundedly.
+    # "Reasonable" default patch size an auto dimension aims for — from the
+    # editable Default Patch Sizes table (Settings) when the caller threaded it
+    # in, else the instrument's natural geometry (Knut #93). An auto dimension is
+    # sized toward this rather than whatever falls out of the page size.
     default_w = float(kw.get("area_default_w") or 0.0) or geom.pwid
     default_h = float(kw.get("area_default_h") or 0.0) or geom.plen
 
