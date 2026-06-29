@@ -1009,9 +1009,40 @@ class LayoutOptionsPanel(QWidget):
         add_row(ccg, 3, tr("Font:"), self.clip_text_font)
         add_row(ccg, 4, tr("Image:"), cell_fill(self.clip_image_path,
                                                  self.clip_image_browse))
-        add_row(ccg, 5, tr("Clip area:"), self.clip_dims_label)
-        add_row(ccg, 6, tr("Preview:"), self.clip_preview)
-        ccg.addWidget(self.clip_export_btn, 7, 1)
+        # Image transform (rotate / scale / move) — applies to the imported image.
+        self.clip_image_rotation = NoScrollSpinBox(self)
+        self.clip_image_rotation.setRange(0, 359); self.clip_image_rotation.setSuffix("°")
+        self.clip_image_scale = NoScrollDoubleSpinBox(self)
+        self.clip_image_scale.setRange(10.0, 400.0); self.clip_image_scale.setDecimals(0)
+        self.clip_image_scale.setSuffix(" %"); self.clip_image_scale.setValue(100.0)
+        self.clip_image_offx = NoScrollDoubleSpinBox(self)
+        self.clip_image_offy = NoScrollDoubleSpinBox(self)
+        for _o in (self.clip_image_offx, self.clip_image_offy):
+            _o.setRange(-300.0, 300.0); _o.setDecimals(1); _o.setSingleStep(0.5)
+        def _xform_row(*pairs):
+            row = QHBoxLayout(); row.setContentsMargins(0, 0, 0, 0); row.setSpacing(6)
+            for _l, _w in pairs:
+                _w.setMinimumWidth(88); _w.valueChanged.connect(self._emit)
+                row.addWidget(QLabel(_l, self)); row.addWidget(_w)
+            row.addStretch()
+            wrap = QWidget(self); wrap.setLayout(row)
+            return wrap
+        # Two rows so each spin is wide enough for its content (rotate/scale on
+        # one, move X/Y on the next).
+        self._clip_image_xform_w = _xform_row((tr("Rotate"), self.clip_image_rotation),
+                                              (tr("Scale"), self.clip_image_scale))
+        self._clip_image_move_w = _xform_row((tr("X"), self.clip_image_offx),
+                                             (tr("Y"), self.clip_image_offy))
+        add_row(ccg, 5, tr("Image fit:"), self._clip_image_xform_w,
+                tip=TooltipButton(
+                    tr("Image fit"),
+                    tr("Adjust the imported clip image: rotate (°), scale (% of the "
+                       "fit-to-band size), and move it across (X) and along (Y) the "
+                       "clip band, in mm."), self))
+        add_row(ccg, 6, tr("Image move (mm):"), self._clip_image_move_w)
+        add_row(ccg, 7, tr("Clip area:"), self.clip_dims_label)
+        add_row(ccg, 8, tr("Preview:"), self.clip_preview)
+        ccg.addWidget(self.clip_export_btn, 9, 1)
         v.addWidget(self._clip_content_grp)
 
         # ---- Calibration (per-chart; engine -K/-I) ----
@@ -1174,6 +1205,9 @@ class LayoutOptionsPanel(QWidget):
         self.clip_text_font.setEnabled(font_modes)
         self.clip_image_path.setEnabled(mode == "image")
         self.clip_image_browse.setEnabled(mode == "image")
+        if hasattr(self, "_clip_image_xform_w"):
+            self._clip_image_xform_w.setEnabled(mode == "image")
+            self._clip_image_move_w.setEnabled(mode == "image")
 
     def _on_clip_content_changed(self, *_a) -> None:
         self._sync_clip_content_enabled()
@@ -1385,6 +1419,34 @@ class LayoutOptionsPanel(QWidget):
                       QImage.Format.Format_RGB888)
         return QPixmap.fromImage(qimg.copy())
 
+    def _preview_clip_image(self, max_px: int):
+        """A downscaled copy of the clip image for the live preview, cached by
+        (path, mtime, size) so dragging the rotate/scale/move spins stays smooth
+        on a big file — generation still uses the full-resolution original (#93)."""
+        path = self.clip_image_path.text().strip()
+        if not path:
+            return None
+        try:
+            from pathlib import Path as _P
+            mtime = _P(path).stat().st_mtime
+        except OSError:
+            return None
+        key = (path, mtime, int(max_px))
+        if getattr(self, "_clip_img_cache_key", None) == key:
+            return self._clip_img_cache
+        try:
+            from PIL import Image as _Img
+            im = _Img.open(path).convert("RGBA")
+            if max(im.width, im.height) > max_px:        # shrink for the preview
+                sc = max_px / max(im.width, im.height)
+                im = im.resize((max(1, int(im.width * sc)),
+                                max(1, int(im.height * sc))))
+            self._clip_img_cache_key, self._clip_img_cache = key, im
+            return im
+        except Exception:  # noqa: BLE001 — bad/missing image → blank preview
+            self._clip_img_cache_key, self._clip_img_cache = key, None
+            return None
+
     def _refresh_clip_preview(self) -> None:
         if not hasattr(self, "clip_preview"):
             return
@@ -1413,7 +1475,12 @@ class LayoutOptionsPanel(QWidget):
             mode, width_px=pw, height_px=ph, dpi=pdpi,
             text=self._resolve_sample(self.clip_text.text()),
             font_family=self.clip_text_font.currentData() or "Inter",
-            image_path=self.clip_image_path.text().strip())
+            image_path=self.clip_image_path.text().strip(),
+            image_obj=self._preview_clip_image(max(pw, ph)) if mode == "image" else None,
+            image_rotation=self.clip_image_rotation.value(),
+            image_scale=self.clip_image_scale.value(),
+            image_offset_x_mm=self.clip_image_offx.value(),
+            image_offset_y_mm=self.clip_image_offy.value())
         # Show it lying down (rotated 90°) so the long strip uses the panel's
         # horizontal space instead of a thin vertical ribbon.
         img = img.rotate(-90, expand=True)
@@ -1841,6 +1908,10 @@ class LayoutOptionsPanel(QWidget):
         _cf = self.clip_text_font.findData(r.clip_text_font)
         self.clip_text_font.setCurrentIndex(_cf if _cf >= 0 else 0)
         self.clip_image_path.setText(r.clip_image_path)
+        self.clip_image_rotation.setValue(int(getattr(r, "clip_image_rotation", 0) or 0))
+        self.clip_image_scale.setValue(float(getattr(r, "clip_image_scale", 100.0) or 100.0))
+        self.clip_image_offx.setValue(float(getattr(r, "clip_image_offset_x_mm", 0.0) or 0.0))
+        self.clip_image_offy.setValue(float(getattr(r, "clip_image_offset_y_mm", 0.0) or 0.0))
         self._sync_clip_content_enabled()
         self._sync_clip_enable_display()
         self.randomize_cb.setChecked(r.randomize)
@@ -1926,6 +1997,10 @@ class LayoutOptionsPanel(QWidget):
         r.clip_text = self.clip_text.text()
         r.clip_text_font = self.clip_text_font.currentData() or "Inter"
         r.clip_image_path = self.clip_image_path.text().strip()
+        r.clip_image_rotation = self.clip_image_rotation.value()
+        r.clip_image_scale = self.clip_image_scale.value()
+        r.clip_image_offset_x_mm = self.clip_image_offx.value()
+        r.clip_image_offset_y_mm = self.clip_image_offy.value()
         r.randomize = self.randomize_cb.isChecked()
         r.seed = (int(self.seed_spin.value())
                   if r.randomize and self.fixed_seed_cb.isChecked() else None)

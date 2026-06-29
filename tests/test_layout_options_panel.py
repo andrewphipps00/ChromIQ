@@ -62,6 +62,8 @@ def test_all_engine_options_roundtrip(app):
         clip_border_width_mm=30.0, clip_content_mode="text", clip_text="ID",
         clip_side="right",
         clip_text_font="Inter", clip_image_path="/tmp/logo.png",
+        clip_image_rotation=90, clip_image_scale=60.0,
+        clip_image_offset_x_mm=3.0, clip_image_offset_y_mm=4.0,
         strip_pattern="A-Z", patch_pattern="1-99", randomize=True, seed=12345)
     panel.set_recipe(r)
     out = panel.get_recipe()
@@ -83,7 +85,9 @@ def test_all_engine_options_roundtrip(app):
               "chart_text_italic", "text_edge_mm", "text_edge_top_mm",
               "text_edge_clip_mm", "stamp_command", "clip_border_width_mm",
               "clip_content_mode", "clip_side", "clip_text", "clip_text_font",
-              "clip_image_path", "strip_pattern", "patch_pattern",
+              "clip_image_path", "clip_image_rotation", "clip_image_scale",
+              "clip_image_offset_x_mm", "clip_image_offset_y_mm",
+              "strip_pattern", "patch_pattern",
               "randomize", "seed"):
         assert getattr(out, f) == getattr(r, f), f
 

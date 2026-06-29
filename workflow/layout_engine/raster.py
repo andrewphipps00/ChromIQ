@@ -305,7 +305,11 @@ def apply_furniture_reserves(geom, kw: dict):
 
 def render_clip_strip(mode: str, *, width_px: int, height_px: int, dpi: int,
                       text: str = "", font_family: str = "Inter",
-                      image_path: str = "", ctx: dict | None = None) -> Image.Image:
+                      image_path: str = "", ctx: dict | None = None,
+                      image_rotation: int = 0, image_scale: float = 100.0,
+                      image_offset_x_mm: float = 0.0,
+                      image_offset_y_mm: float = 0.0,
+                      image_obj: "Image.Image | None" = None) -> Image.Image:
     """Render the left clip-strip content as a ``width_px × height_px`` image.
 
     The strip is tall and narrow, so text/branding are drawn on a landscape
@@ -319,13 +323,23 @@ def render_clip_strip(mode: str, *, width_px: int, height_px: int, dpi: int,
     mm2px = dpi / 25.4
     strip = Image.new("RGB", (max(1, width_px), max(1, height_px)), (255, 255, 255))
 
-    if mode == "image" and image_path:
+    if mode == "image" and (image_path or image_obj is not None):
         try:
-            logo = Image.open(image_path).convert("RGBA")
-            scale = min(width_px / logo.width, height_px / logo.height)
+            # A pre-loaded (and possibly downscaled) image lets the panel preview
+            # stay smooth on a big file; generation passes the path = full quality.
+            logo = (image_obj if image_obj is not None
+                    else Image.open(image_path)).convert("RGBA")
+            if image_rotation % 360:
+                logo = logo.rotate(image_rotation % 360, expand=True,
+                                   resample=Image.BICUBIC)
+            # Scale = fit-to-band × the user's percent (100 = fit), then move.
+            fit = min(width_px / logo.width, height_px / logo.height)
+            scale = fit * max(0.05, (image_scale or 100.0) / 100.0)
             nw, nh = max(1, int(logo.width * scale)), max(1, int(logo.height * scale))
             logo = logo.resize((nw, nh))
-            strip.paste(logo, ((width_px - nw) // 2, (height_px - nh) // 2), logo)
+            cx = (width_px - nw) // 2 + round(image_offset_x_mm * mm2px)
+            cy = (height_px - nh) // 2 + round(image_offset_y_mm * mm2px)
+            strip.paste(logo, (cx, cy), logo)
         except Exception:  # pragma: no cover - bad/missing image falls back blank
             pass
         return strip
@@ -668,6 +682,10 @@ def render_pages(
     clip_text: str = "",
     clip_text_font: str = "Inter",
     clip_image_path: str = "",
+    clip_image_rotation: int = 0,
+    clip_image_scale: float = 100.0,
+    clip_image_offset_x_mm: float = 0.0,
+    clip_image_offset_y_mm: float = 0.0,
     strip_label_offset_mm: float = 0.0,
     text_ctx: "dict | None" = None,
 ) -> RenderResult:
@@ -892,7 +910,11 @@ def render_pages(
                 _clip = render_clip_strip(
                     clip_content_mode, width_px=_aw, height_px=_ah, dpi=dpi,
                     text=_clip_text, font_family=clip_text_font,
-                    image_path=clip_image_path, ctx=_notes_ctx)
+                    image_path=clip_image_path, ctx=_notes_ctx,
+                    image_rotation=clip_image_rotation,
+                    image_scale=clip_image_scale,
+                    image_offset_x_mm=clip_image_offset_x_mm,
+                    image_offset_y_mm=clip_image_offset_y_mm)
                 # On the right edge the band sits on the far side of the sheet, so
                 # turn the content 180° to keep it the right way up for the reader
                 # (Knut, #93). Left clips are unchanged.

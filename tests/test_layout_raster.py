@@ -298,6 +298,25 @@ def test_spectroscan_hex_pokes_above_first_row():
     assert checked >= 1
 
 
+def test_clip_image_transform_changes_render(tmp_path):
+    """The clip image's rotate / scale / move transform changes the rendered clip
+    band (#93, Knut)."""
+    import numpy as np
+    from PIL import Image
+    p = tmp_path / "logo.png"
+    Image.new("RGBA", (80, 40), (255, 0, 0, 255)).save(p)
+
+    def render(**xf):
+        img = raster.render_clip_strip("image", width_px=120, height_px=900,
+                                       dpi=200, image_path=str(p), **xf)
+        return np.asarray(img.convert("RGB"))
+
+    base = render()
+    assert not np.array_equal(base, render(image_rotation=90))
+    assert not np.array_equal(base, render(image_scale=50.0))
+    assert not np.array_equal(base, render(image_offset_y_mm=25.0))
+
+
 def test_branding_extra_text_uses_chosen_font():
     """The extra text under the ChromIQ branding clip content honours the user's
     chosen font, not the wordmark face (#93, Knut)."""

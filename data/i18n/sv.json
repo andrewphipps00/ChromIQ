@@ -2076,5 +2076,11 @@
   "T": "T",
   "Text distance from edge (mm):": "Text distance from edge (mm):",
   "⚠ Bottom margin is too small for the sheet text — it overflows toward the page edge.": "⚠ Bottom margin is too small for the sheet text — it overflows toward the page edge.",
-  "⚠ Top margin is too small for the strip labels — they overflow toward the page edge.": "⚠ Top margin is too small for the strip labels — they overflow toward the page edge."
+  "⚠ Top margin is too small for the strip labels — they overflow toward the page edge.": "⚠ Top margin is too small for the strip labels — they overflow toward the page edge.",
+  "Adjust the imported clip image: rotate (°), scale (% of the fit-to-band size), and move it across (X) and along (Y) the clip band, in mm.": "Adjust the imported clip image: rotate (°), scale (% of the fit-to-band size), and move it across (X) and along (Y) the clip band, in mm.",
+  "Image fit": "Image fit",
+  "Image fit:": "Image fit:",
+  "Image move (mm):": "Image move (mm):",
+  "Rotate": "Rotate",
+  "Scale": "Scale"
 }
