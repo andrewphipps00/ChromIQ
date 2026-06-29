@@ -173,6 +173,7 @@ class LayoutRecipe:
             randomize=bool(d.get("randomize", True)), seed=d.get("seed"),
             hflag=bool(d.get("hflag", False)), cm_density=int(d.get("density", 1)),
             cm_stagger=bool(d.get("cm_stagger", False)),
+            use_instrument_margins=bool(d.get("use_instrument_margins", False)),
             spacer_mode=d.get("spacer_mode", "colored"),
             spacer_palette=list(d.get("spacer_palette") or []),
             spacer_overrides=dict(d.get("spacer_overrides") or {}),
@@ -312,6 +313,9 @@ class LayoutRecipe:
             "text_edge": self.text_edge_mm or 4.0,
             "text_edge_top": self.text_edge_top_mm or 4.0,
             "text_edge_clip": self.text_edge_clip_mm or 4.0,
+            # Drives "margins are the law" mode in the engine (Knut): only when on
+            # are the margins exact (no leader/trailer). Off = printtarg-style.
+            "use_instrument_margins": self.use_instrument_margins,
             "chart_text_bold": self.chart_text_bold,
             "chart_text_italic": self.chart_text_italic,
             "stamp_command": self.stamp_command,

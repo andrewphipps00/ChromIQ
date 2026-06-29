@@ -69,18 +69,25 @@ def compute(geom: Geom, paper_w_mm: float, paper_h_mm: float, npat: int,
     # (lspa) bakes in the label height, so when the band is smaller/absent it
     # drops by the reclaimed amount — but never below the instrument's physical
     # run-up (border + lcar), which must stay clear (#93).
-    # "Margins are the law" (Knut): the patch area is exactly the page-margin box
-    # — NO hidden instrument leader/trailer/clear-area and NO label/sheet-text
-    # reserve is added on top. The strip labels and sheet text live INSIDE the
-    # margins (positioned by render); if a margin is too small for them they
-    # overflow toward the page edge and a violation is flagged, but they never
-    # shrink the patch area. The instrument-margin thresholds + the margin-
-    # violation notice are what warn the user about jig-unsafe margins. Only the
-    # hex/stagger overhang (hxeh, a property of the patch shape, not a margin)
-    # still reduces the usable length.
-    mints = g.margin_t
-    minbs = g.margin_b
-    arowl = ph - mints - minbs - 2.0 * g.hxeh
+    txhi = g.txhisl if g.label_band_mm < 0 else g.label_band_mm
+    eff_lspa = max(g.border + g.lcar, g.lspa - g.txhisl + txhi)
+    if g.margins_are_law:
+        # "Use instrument margins" mode (Knut): the patch area is exactly the
+        # page-margin box — no hidden leader/trailer/clear-area, no label/text
+        # reserve. Labels/text live INSIDE the margins (render-positioned); if a
+        # margin is too small they overflow toward the edge and a violation is
+        # flagged. Only the hex/stagger overhang (a patch-shape property) reduces
+        # the usable length.
+        mints = g.margin_t
+        minbs = g.margin_b
+        arowl = ph - mints - minbs - 2.0 * g.hxeh
+    else:
+        # Default (printtarg-style): the margins are floored by the instrument's
+        # physical leader/trailer + clear-area, and the rendered label/sheet-text
+        # band is reserved on top — so furniture reduces the patch count.
+        mints = max(g.margin_t + txhi + g.lcar, eff_lspa)
+        minbs = max(g.margin_b, g.tspa, g.bottom_reserve_mm)
+        arowl = ph - mints - minbs - 2.0 * g.hxeh - g.strip_indicator_gap
     if arowl > g.mxrowl:
         arowl = g.mxrowl
 
@@ -200,10 +207,14 @@ def placement(geom: Geom, paper_w_mm: float, paper_h_mm: float, layout: Layout) 
     # and the first patch. A user strip_label_offset (applied in raster) nudges
     # the labels from there.
     txhi = g.txhisl if g.label_band_mm < 0 else g.label_band_mm
-    # Margins are the law (Knut): patch area = the margin box, no hidden
-    # leader/trailer/label reserve. Matches compute().
-    mints = g.margin_t
-    minbs = g.margin_b
+    eff_lspa = max(g.border + g.lcar, g.lspa - g.txhisl + txhi)
+    # Match compute()'s branch: margins-are-law (exact box) vs printtarg-style.
+    if g.margins_are_law:
+        mints = g.margin_t
+        minbs = g.margin_b
+    else:
+        mints = max(g.margin_t + txhi + g.lcar, eff_lspa) + g.strip_indicator_gap
+        minbs = max(g.margin_b, g.tspa, g.bottom_reserve_mm)
     # The strip block carries a leading + trailing spacer only when edge spacers
     # are on; off, those gaps are reclaimed (matching compute()), so the first
     # patch sits at the block top. _lead is the leading gap.
@@ -237,12 +248,13 @@ def placement(geom: Geom, paper_w_mm: float, paper_h_mm: float, layout: Layout) 
     # grid 2-D: column letters on top + row numbers down the side, #93 Knut), so
     # the patch block starts after it. avail_w already excludes rlwi.
     _y0 = amints + _lead + g.hxeh + g.offset_y
-    # Strip labels anchor at the text-edge distance from the PAPER TOP EDGE (Knut
-    # #93: labels 4 mm from the edge, not flush above the patches), inside the top
-    # margin. A user strip_indicator_gap nudges them further in. If the band +
-    # edge distance exceeds the top margin the label overflows toward the patches
-    # (a violation is flagged), but the patches still start exactly at the margin.
-    _leader_top = g.text_edge_top_mm + g.strip_indicator_gap + g.offset_y
+    if g.margins_are_law:
+        # Labels anchor at the text-edge distance from the PAPER TOP EDGE (Knut:
+        # 4 mm from the edge), inside the top margin; strip_indicator_gap nudges
+        # them further in.
+        _leader_top = g.text_edge_top_mm + g.strip_indicator_gap + g.offset_y
+    else:
+        _leader_top = g.margin_t + g.offset_y   # default: flush under the margin
     return Placement(
         x0=g.margin_l + g.rlwi + fh * extra_w + g.hxew + g.offset_x,
         y0_first=_y0,

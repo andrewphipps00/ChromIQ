@@ -6816,8 +6816,13 @@ class TabChart(QWidget):
             if not (manual and getattr(self, "_manual_layout_panel", None) is not None
                     and bool(self._settings.get("use_chromiq_layout_engine", False))):
                 return warns
-            from workflow.layout_engine import instruments
             r = self._current_layout_recipe()
+            # The text-overflow warning only applies in "margins are law" mode
+            # (Use instrument margins on); otherwise the label/text band is
+            # reserved above/below the patches, so there's never an overflow.
+            if not r.use_instrument_margins:
+                return warns
+            from workflow.layout_engine import instruments
             geom = instruments.geom_from_build_kwargs(r.build_kwargs())
             lab = geom.label_band_mm if geom.label_band_mm >= 0 else geom.txhisl
             if r.show_strip_indicators and lab > 0 and \

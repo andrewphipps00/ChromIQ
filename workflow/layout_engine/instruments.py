@@ -113,6 +113,12 @@ class Geom:
     # for the text it overflows toward this line and a violation is flagged.
     text_edge_top_mm: float = 4.0
     text_edge_clip_mm: float = 4.0
+    # "Margins are the law" mode (Knut): only when the user turns on "Use
+    # instrument margins". Then the patch area is exactly the margin box (no
+    # hidden leader/trailer, labels anchored at the text-edge from the page edge).
+    # OFF = the original printtarg-style behaviour (leader/trailer + label band
+    # reserved on top of the margins). Set from recipe.use_instrument_margins.
+    margins_are_law: bool = False
 
 
 def supported() -> list[str]:
@@ -148,6 +154,7 @@ def build(
     cm_stagger: bool = False,
     text_edge_top: float = 4.0,
     text_edge_clip: float = 4.0,
+    use_instrument_margins: bool = False,
 ) -> Geom:
     """Resolve :class:`Geom`, applying ChromIQ extensions over the base geometry.
 
@@ -207,7 +214,8 @@ def build(
                    patch_area_align=patch_area_align or "center-left",
                    clip_side=clip_side or "left",
                    text_edge_top_mm=float(text_edge_top or 4.0),
-                   text_edge_clip_mm=float(text_edge_clip or 4.0))
+                   text_edge_clip_mm=float(text_edge_clip or 4.0),
+                   margins_are_law=bool(use_instrument_margins))
 
 
 # Keys of a recipe ``build_kwargs()`` dict that affect the laid-out geometry —
@@ -222,6 +230,7 @@ GEOM_BUILD_KEYS = (
     "strip_indicator_gap", "offset_x", "offset_y", "nolpcbord", "nolimit",
     "clip_border_width", "clip_band", "edge_spacers", "patch_area_align",
     "clip_side", "cm_stagger", "text_edge_top", "text_edge_clip",
+    "use_instrument_margins",
 )
 
 
