@@ -1,5 +1,34 @@
 # Changelog
 
+## v3.13.0-beta.31
+
+### 🐛 Fixed
+- **#18 — edge spacers no longer appear to overflow the margins.** The bracket
+  (edge) spacers print one gap-thickness above the first patch and below the
+  last, but the measured margins / guide lines were measured to the patches
+  only, so the spacers sat outside the purple guide lines (worse with a larger
+  inter-patch gap). The measured margins now include the edge-spacer overhang,
+  so the guides match what prints.
+- **Duplicate engine toggle removed** — "Use the ChromIQ layout engine" was
+  showing twice in Create Chart → Manual (above both the targen and printtarg
+  sections). Now shown once.
+
+### 🔧 Changed
+- **Strip-indicator styling moved to Settings → Chart Layout** (font, size,
+  bold/italic, rotation, alignment, label offset, underline) as the default for
+  new charts; Create Chart keeps just a "Show strip indicators" checkbox in the
+  Layout frame, above Clip border. Saved presets still carry and restore their
+  own styling.
+- **Guided ↔ Manual now stay in sync.** Changing a shared setting (instrument,
+  paper, pages, double/triple density, left border, strip limit, pre-conditioning)
+  in one tab carries it to the other when you switch — without overwriting a
+  setting the other tab can't represent.
+- **Default Patch Sizes table removed** — the area-first "auto" column/row count
+  aims for the instrument's natural patch size, explained in the columns/rows
+  help. (Simpler; no separate table to keep.)
+- Create Chart layout panel: **Page geometry now sits directly under Layout**.
+- Editor: the **gap-size spinboxes** are wider so "30 px" and the arrows fit.
+
 ## v3.13.0-beta.30
 
 ### 🐛 Fixed
