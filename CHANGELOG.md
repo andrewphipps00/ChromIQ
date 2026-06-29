@@ -1,5 +1,24 @@
 # Changelog
 
+## v3.13.0-beta.26
+
+### ➕ Added
+- **Settings → Default Patch Sizes** — an editable table of the default patch
+  width/height the area-first “auto” fill aims for, per instrument, paper and
+  orientation (with a help ⓘ). It's also the reference that stops patches being
+  stretched unboundedly to fill the page.
+- **Strip-length limit** in Settings → **Instrument Limits** — a configurable
+  per-combo maximum strip length; the Create Chart preview warns when a strip is
+  longer (0 = use the instrument's built-in ruler).
+- A **“last page not full” hint** after generating: when the patch set leaves a
+  notably under-filled last page (or a near-empty extra page), a message offers an
+  **“Edit patch set…”** button that opens the patch-set editor — it never auto-
+  fills or trims for you.
+
+### 🔧 Changed
+- The **“Instrument Margins”** settings tab is renamed **“Instrument Limits”** (it
+  now holds both the margin minimums and the strip-length limit).
+
 ## v3.13.0-beta.25
 
 ### 🔧 Changed
