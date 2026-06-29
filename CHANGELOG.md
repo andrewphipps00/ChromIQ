@@ -1,5 +1,20 @@
 # Changelog
 
+## v3.13.0-beta.29
+
+### 🔧 Changed
+- **Applying an edited patch set now keeps your Create Chart layout.** The editor
+  hands back only the patch set; Create Chart re-lays it out with the
+  instrument / paper / margins / patch size set there (the patch set is fixed,
+  the layout stays fully editable). This also fixes the case where an applied set
+  wasn't randomised — "Randomise patch order" now takes effect.
+
+### 🐛 Fixed / wording
+- Patch-set editor help + the Apply/Save dialog now say "patch set" (not "chart
+  layout"); the Inter-patch gap and Strip-indicator gap tooltips describe what
+  they actually do; the Default Patch Sizes help explains the natural-size basis
+  with example sizes.
+
 ## v3.13.0-beta.28
 
 ### 🐛 Fixed
