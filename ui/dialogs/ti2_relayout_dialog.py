@@ -3109,7 +3109,7 @@ class Ti2RelayoutDialog(QDialog):
         # the UI is built (end of __init__).
         self._initial_chart = initial_chart
         self._bin_dir = Path(settings.get("argyll_bin_path", "/Applications/Argyll/bin"))
-        self.setWindowTitle(tr("Edit / create chart layout"))
+        self.setWindowTitle(tr("Edit / create chart patch set"))
         # Wider default so the printtarg-options column doesn't clip its
         # row labels ("Margin (mm):", "Spacer -A:") or its combo content
         # ("A4 (210 × 297 mm) Portrait") on first open.
@@ -3489,10 +3489,14 @@ class Ti2RelayoutDialog(QDialog):
         pbl.addStretch(1)
         self._page_bar.setVisible(False)
         midv.addWidget(self._page_bar)
-        split.addWidget(mid)
-        split.setSizes([520, 520])
+        # The middle layout preview is GONE from the editor (Knut #93): layout is
+        # done in Create Chart, so the editor is a pure patch-set tool and the
+        # swatch grid fills the whole left/middle area. `mid` + self._preview are
+        # still constructed (kept off-screen) so the chart still renders for
+        # save/apply and the many methods that reference the preview keep working.
+        mid.setParent(self)
+        mid.setVisible(False)
         split.setStretchFactor(0, 1)
-        split.setStretchFactor(1, 1)
 
         # Right: controls — OUTSIDE the splitter so it sits flush at the right
         # edge with no jumpy "phantom" pane between it and the window border.

@@ -523,7 +523,6 @@
   "EXTEND THE CHART": "チャートを拡張",
   "Each line runs from the colour you asked for to the colour you got. <b><span style='color:#3ec95a;'>Green</span></b> dots are the reference (target) values; <b><span style='color:#e34d4d;'>red</span></b> dots are your measurement. Drag to rotate, scroll to zoom.": "各線は要求した色から得られた色へ伸びています。<b><span style='color:#3ec95a;'>緑</span></b>の点が参照（ターゲット）値、<b><span style='color:#e34d4d;'>赤</span></b>の点があなたの測定です。ドラッグで回転、スクロールでズーム。",
   "Each profile is a separate folder on disk. Changing the name points ChromIQ at a different folder, so the work you already created would be left behind. What would you like to do?": "各プロファイルはディスク上の独立したフォルダです。名前を変えるとChromIQは別のフォルダを指すようになり、これまでに作成した作業は置き去りになります。どうしますか？",
-  "Edit / create chart layout": "チャートレイアウトを編集／作成",
   "Edit chart": "チャートを編集",
   "Edit page layout": "ページレイアウトを編集",
   "Edit page layout (override preset)": "ページレイアウトを編集（プリセットを上書き）",
@@ -2087,5 +2086,6 @@
   "When ON, ChromIQ builds your test charts itself instead of calling ArgyllCMS printtarg. The engine packs the colour patches more efficiently, can put useful information where printtarg leaves blank space, and lets you fully customise the layout below per instrument and paper.\n\nWhen OFF the chart is made by printtarg exactly as before. This switch only affects how charts are CREATED; printing and measuring existing charts always work the same way, so it is safe to switch back at any time.": "When ON, ChromIQ builds your test charts itself instead of calling ArgyllCMS printtarg. The engine packs the colour patches more efficiently, can put useful information where printtarg leaves blank space, and lets you fully customise the layout below per instrument and paper.\n\nWhen OFF the chart is made by printtarg exactly as before. This switch only affects how charts are CREATED; printing and measuring existing charts always work the same way, so it is safe to switch back at any time.",
   "i1Pro Chart Defaults (printtarg engine)": "i1Pro Chart Defaults (printtarg engine)",
   "Show patch number": "Show patch number",
-  "Show gap between patches": "Show gap between patches"
+  "Show gap between patches": "Show gap between patches",
+  "Edit / create chart patch set": "Edit / create chart patch set"
 }

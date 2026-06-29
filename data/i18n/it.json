@@ -523,7 +523,6 @@
   "EXTEND THE CHART": "ESTENDI IL GRAFICO",
   "Each line runs from the colour you asked for to the colour you got. <b><span style='color:#3ec95a;'>Green</span></b> dots are the reference (target) values; <b><span style='color:#e34d4d;'>red</span></b> dots are your measurement. Drag to rotate, scroll to zoom.": "Ogni linea va dal colore che hai richiesto al colore che hai ottenuto. I punti <b><span style='color:#3ec95a;'>verdi</span></b> sono i valori di riferimento (target); i punti <b><span style='color:#e34d4d;'>rossi</span></b> sono la tua misurazione. Trascina per ruotare, scorri per zoomare.",
   "Each profile is a separate folder on disk. Changing the name points ChromIQ at a different folder, so the work you already created would be left behind. What would you like to do?": "Ogni profilo è una cartella separata su disco. Cambiando nome, ChromIQ punta a una cartella diversa — il lavoro già creato resterebbe indietro. Cosa vuoi fare?",
-  "Edit / create chart layout": "Modifica / crea layout grafico",
   "Edit chart": "Modifica grafico",
   "Edit page layout": "Modifica layout pagina",
   "Edit page layout (override preset)": "Modifica layout pagina (ignora preset)",
@@ -2087,5 +2086,6 @@
   "When ON, ChromIQ builds your test charts itself instead of calling ArgyllCMS printtarg. The engine packs the colour patches more efficiently, can put useful information where printtarg leaves blank space, and lets you fully customise the layout below per instrument and paper.\n\nWhen OFF the chart is made by printtarg exactly as before. This switch only affects how charts are CREATED; printing and measuring existing charts always work the same way, so it is safe to switch back at any time.": "When ON, ChromIQ builds your test charts itself instead of calling ArgyllCMS printtarg. The engine packs the colour patches more efficiently, can put useful information where printtarg leaves blank space, and lets you fully customise the layout below per instrument and paper.\n\nWhen OFF the chart is made by printtarg exactly as before. This switch only affects how charts are CREATED; printing and measuring existing charts always work the same way, so it is safe to switch back at any time.",
   "i1Pro Chart Defaults (printtarg engine)": "i1Pro Chart Defaults (printtarg engine)",
   "Show patch number": "Show patch number",
-  "Show gap between patches": "Show gap between patches"
+  "Show gap between patches": "Show gap between patches",
+  "Edit / create chart patch set": "Edit / create chart patch set"
 }
