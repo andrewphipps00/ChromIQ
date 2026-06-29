@@ -5313,35 +5313,33 @@ class TabChart(QWidget):
             self._leave_prebuilt()
         if self._reflected_active:
             self._leave_reflected()
-        self._applied_active = True
-        self._applied_src_dir = src_dir
-        self._applied_stem = name
-        self._reset_override_checks()
-        # Seed the printtarg panel from what the editor laid the chart out with,
-        # so an unlock-and-edit starts from the right state and — even while
-        # locked — the panel shows the chosen layout. Instrument + paper come
-        # from the .ti2; the rest (patch scale, margin, spacers, density, DPI,
-        # bit depth, -L/-P) come from the editor's meta.json LayoutOptions.
+        # Create Chart OWNS the layout (Knut #93): applying takes only the editor's
+        # PATCH SET (the .ti1) and lays it out with the layout currently set here —
+        # it never changes your instrument / paper / margins / patch size. So we
+        # adopt the .ti1 as the patch source (the same mechanism a bundled-.ti1
+        # preset uses: patch set fixed, layout fully editable) and regenerate. We
+        # do NOT seed or lock the editor's layout, and the layout panels stay live.
+        self._applied_active = False
+        ti1 = src_dir / f"{name}.ti1"
+        if not ti1.is_file():
+            log.warning("Applied patch set has no .ti1: %s", ti1)
+            return False
+        import shutil
         try:
-            from workflow.ti2_relayout import ChartSpec, load_editor_meta
-            ti2 = src_dir / f"{name}.ti2"
-            spec = ChartSpec.from_ti2(ti2)
-            self._set_manual_value("printtarg", "-i", spec.instrument_flag)
-            self._set_manual_value("printtarg", "-p", spec.paper_flag)
-            meta = load_editor_meta(ti2)
-            if meta is not None:
-                self._seed_manual_printtarg_from_layout(meta[0])
-        except Exception as exc:  # noqa: BLE001 — seeding is best-effort
-            log.warning("Could not seed printtarg layout from applied chart: %s", exc)
-        self._carry_engine_recipe_from(src_dir / f"{name}.channels.json")
-        # Never overwrite the user's profile name — only seed it when the field
-        # is empty so a brand-new Create Chart session still gets a sensible name.
+            dest = self._file_mgr.working_dir() / "edited_patch_set.ti1"
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(ti1, dest)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("Could not stage the edited patch set: %s", exc)
+            return False
+        self._preset_ti1_path = dest
+        self._preset_ti1_targen_sig = self._targen_signature()
+        # Never overwrite the user's profile name — only seed it when empty.
         self._ensure_profile_name(name)
-        # Baselines for the Generate-time change detection, taken after seeding.
-        self._applied_targen_sig = self._targen_signature()
-        self._applied_printtarg_sig = self._printtarg_signature()
-        self._update_preset_locks()      # grey both panels
-        self._import_applied_chart()     # overwrite the current run's chart
+        self._reset_override_checks()
+        self._update_preset_locks()
+        # Lay the patch set out NOW with the current Create Chart layout.
+        self._generate_from_ti1(dest)
         return True
 
     def _carry_engine_recipe_from(self, channels_json) -> None:
