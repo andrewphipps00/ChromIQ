@@ -1,5 +1,14 @@
 # Changelog
 
+## v3.13.0-beta.28
+
+### 🐛 Fixed
+- **The “last page not full” hint no longer pops up in Guided mode** (or in Manual
+  with Auto patch count), where the count is filled to the page automatically and
+  there's no patch-set to edit. It now appears only in Manual with a fixed patch
+  count, and its wording is friendlier — it explains you can add a few patches or
+  remove a few, and that the page layout stays as you set it.
+
 ## v3.13.0-beta.27
 
 ### 🐛 Fixed
