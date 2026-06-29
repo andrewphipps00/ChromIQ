@@ -315,3 +315,24 @@ def test_build_chart_accepts_area_default_kwargs(tmp_path: Path) -> None:
         layout_mode="area_first", area_method="by_grid",
         area_default_w=16.0, area_default_h=20.0, dpi=72)
     assert res.layout.total_patches >= 3
+
+
+def test_engine_randomize_scrambles_locations(tmp_path: Path) -> None:
+    """The engine honours randomize for a loaded .ti1 — the SAMPLE_LOC mapping is
+    scrambled vs a preserve-order build (so a chart applied from the editor with
+    "Randomise patch order" on is actually randomised; #93 Knut bug)."""
+    import re
+    from workflow.layout_engine import chart
+    ti1 = tmp_path / "p.ti1"
+    rows = "\n".join(f"{i} {i*4%101} {i*7%101} {i*11%101}" for i in range(1, 61))
+    ti1.write_text('CTI1\nCOLOR_REP "RGB"\nNUMBER_OF_FIELDS 4\nBEGIN_DATA_FORMAT\n'
+                   'SAMPLE_ID RGB_R RGB_G RGB_B\nEND_DATA_FORMAT\n'
+                   'NUMBER_OF_SETS 60\nBEGIN_DATA\n' + rows + '\nEND_DATA\n')
+
+    def first_locs(rnd):
+        chart.build_chart(str(ti1), str(tmp_path / f"o{rnd}"), instrument="i1",
+                          paper="A4", seed=7, randomize=rnd, dpi=72)
+        t = (tmp_path / f"o{rnd}.ti2").read_text()
+        return re.findall(r'^\d+ "([A-Z0-9]+)"', t, re.M)[:10]
+
+    assert first_locs(False) != first_locs(True)   # randomise actually changes it
