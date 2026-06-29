@@ -1,5 +1,14 @@
 # Changelog
 
+## v3.13.0-beta.25
+
+### 🔧 Changed
+- **The New Patch Set window is now generator-only.** The whole layout ("Chart")
+  frame — instrument, paper, clip border, density — and the printtarg “Layout
+  options” are gone; layout is set in the Create Chart tab. The window builds the
+  patch set only (seed from targen, blank, paste/load, Generate colour sets), and
+  the “fill to pages” option is replaced by “fill to N patches”.
+
 ## v3.13.0-beta.24
 
 The chart editor is now fully a **patch-set editor** (Knut's review).
