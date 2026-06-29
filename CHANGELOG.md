@@ -1,5 +1,27 @@
 # Changelog
 
+## v3.13.0-beta.17
+
+More of Knut's decisions implemented.
+
+### 🔧 Changed
+- **The page margins are now the law.** The patch area is exactly the margin box
+  you set — the engine no longer adds a hidden instrument leader/trailer or a
+  label/text reserve on top, so charts pack more patches than before (and more
+  than ArgyllCMS printtarg would). If a margin is too small for your jig, the
+  instrument-margin warning still flags it. Strip labels, sheet text and the
+  clip notes live **inside** the margins.
+- **Strip labels sit at the page edge** (4 mm by default), not floating above
+  the patches.
+
+### ✨ New
+- **"Text distance from edge"** is now three independent values — **Top** (strip
+  labels), **Bottom** (sheet text) and **Clip** (notes band) — each 4 mm by
+  default, in the Sheet text section.
+- The **ChromIQ branding** clip content's extra text uses your chosen font.
+- **ColorMunki Density** is disabled in area-first layouts (the area fields define
+  the grid there).
+
 ## v3.13.0-beta.16
 
 ### 🔧 Fixed
