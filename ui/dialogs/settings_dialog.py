@@ -989,12 +989,11 @@ class SettingsDialog(QDialog):
         i1pro_key = str(s.get("i1pro_default_preset", I1PRO_DEFAULT_PRESET_KEY))
         idx = self._i1pro_preset_combo.findData(i1pro_key)
         self._i1pro_preset_combo.setCurrentIndex(idx if idx >= 0 else 0)
-        # Clip-border vs. layout engine are mutually exclusive — the engine can't
-        # render the clip content yet (see _sync_layout_enabled). _load_settings
-        # runs after _build_ui, so it's the authoritative point to seed that
-        # coupling from the *stored* values (the build-time sync only saw the
-        # pre-load default). With the engine on, force the clip-border off +
-        # disabled and remember its stored state for restore-on-disable.
+        # Clip-border vs. layout engine are mutually exclusive — the engine
+        # replaces the printtarg path, so the old ChromIQ clip-border can't be on
+        # with it. The engine toggle now lives in Create Chart, so this dialog
+        # enforces the rule from the *stored* setting on open: with the engine on,
+        # force the clip-border off + disabled and remember its stored state.
         clip_on = bool(s.get("i1pro_chromiq_clip_style", False))
         if bool(s.get("use_chromiq_layout_engine", False)):
             self._clip_saved_state = clip_on
@@ -1116,27 +1115,22 @@ class SettingsDialog(QDialog):
         v.setSpacing(10)
         v.setContentsMargins(12, 12, 12, 12)
 
-        engine_row = QHBoxLayout()
-        self._layout_engine_check = QCheckBox(
-            tr("Use the ChromIQ layout engine instead of printtarg"), self)
+        # The engine ON/OFF toggle moved to the Create Chart tab (above the
+        # ChromIQ layout frame) so it's easy to switch engines per chart/preset
+        # (Knut #93). It's kept here as a hidden widget purely so the existing
+        # load/save plumbing keeps working; this tab now just edits the per-combo
+        # DEFAULTS the engine uses.
+        self._layout_engine_check = QCheckBox(self)
+        self._layout_engine_check.setVisible(False)
         self._layout_engine_check.setChecked(
             bool(self._settings.get("use_chromiq_layout_engine", False)))
-        engine_row.addWidget(self._layout_engine_check)
-        engine_row.addWidget(TooltipButton(
-            tr("ChromIQ layout engine"),
-            tr("When ON, ChromIQ builds your test charts itself instead of "
-               "calling ArgyllCMS printtarg. The engine packs the colour patches "
-               "more efficiently, can put useful information where printtarg "
-               "leaves blank space, and lets you fully customise the layout per "
-               "instrument and paper right here.\n\n"
-               "When OFF (the default) nothing changes — charts are made by "
-               "printtarg exactly as before. This switch only affects how charts "
-               "are CREATED; printing and measuring existing charts always work "
-               "the same way, so it is safe to switch back at any time.\n\n"
-               "Leave it OFF unless you want to try the new engine."),
-            self))
-        engine_row.addStretch()
-        v.addLayout(engine_row)
+        moved_note = QLabel(tr(
+            "The ChromIQ layout engine is switched on or off in the Create Chart "
+            "tab, above the layout panel. Here you set the default layout each "
+            "instrument and paper starts from."), self)
+        moved_note.setWordWrap(True)
+        moved_note.setStyleSheet("color: #909090; font-size: 11px;")
+        v.addWidget(moved_note)
 
         # Everything below the master toggle lives in a body widget that is
         # greyed out (controls AND their labels) when the engine is off.
@@ -1252,36 +1246,10 @@ class SettingsDialog(QDialog):
             self._on_layout_clip_enable_changed)
         # panel.changed (wired above) drives _on_layout_field_changed
 
-        # Grey the whole body (controls + labels) unless the engine is enabled —
-        # disable for interaction + dim for an unmistakable visual cue.
-        from PyQt6.QtWidgets import QGraphicsOpacityEffect
-        self._layout_body_dim = QGraphicsOpacityEffect(self._layout_body)
-        self._layout_body.setGraphicsEffect(self._layout_body_dim)
-
-        def _sync_layout_enabled(on: bool) -> None:
-            self._layout_body.setEnabled(on)
-            self._layout_body_dim.setOpacity(1.0 if on else 0.4)
-            # The engine can't render the ChromIQ clip-border content yet, so the
-            # two are mutually exclusive — with both on, use_engine silently
-            # collapses to the printtarg path (chart_creator._should_use_engine),
-            # which looks like "the engine doesn't activate". Enabling the engine
-            # therefore disables (and remembers) the clip-border; disabling it
-            # restores the remembered state. Runs at open too, so an existing
-            # both-on config self-heals on the next Settings visit (#93 follow-up).
-            if on:
-                if not hasattr(self, "_clip_saved_state"):
-                    self._clip_saved_state = self._chromiq_clip_check.isChecked()
-                self._chromiq_clip_check.setChecked(False)
-                self._chromiq_clip_check.setEnabled(False)
-            else:
-                if hasattr(self, "_clip_saved_state"):
-                    self._chromiq_clip_check.setChecked(self._clip_saved_state)
-                    del self._clip_saved_state
-                self._chromiq_clip_check.setEnabled(True)
-
-        self._layout_engine_check.toggled.connect(_sync_layout_enabled)
-        _sync_layout_enabled(self._layout_engine_check.isChecked())
-
+        # The defaults editor is always available now (the engine toggle moved to
+        # Create Chart). The engine ⇄ old-clip-border mutual exclusion is applied
+        # from the setting in _load_settings (and enforced live at the Create Chart
+        # toggle), so nothing to gate here.
         self._on_layout_instr_changed()      # populate paper+mode for the default
         self._preselect_layout_combo()       # then jump to the active combo (#93)
         return self._scroll_wrap(page)

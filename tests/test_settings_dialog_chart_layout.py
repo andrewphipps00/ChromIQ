@@ -75,36 +75,22 @@ def test_chart_layout_preset_saves_and_reopens_visible(_app, tmp_path):
             dlg2.deleteLater()
 
 
-def test_engine_and_clip_border_mutually_exclusive(_app, tmp_path):
-    """#93 follow-up: the layout engine can't render the ChromIQ clip-border yet,
-    so with both on use_engine silently falls back to printtarg ("engine won't
-    activate"). Enabling the engine must disable + remember the clip-border;
-    disabling the engine must restore it. An existing both-on config self-heals
-    when the dialog opens (engine on → clip unchecked → saved off)."""
+def test_engine_and_clip_border_mutually_exclusive_on_open(_app, tmp_path):
+    """#93: the engine can't share the page with the old printtarg ChromIQ
+    clip-border. The engine toggle now lives in Create Chart, so the Settings
+    dialog only enforces the rule when it OPENS: with the engine already on, an
+    existing both-on config self-heals (clip unchecked + disabled, saved off)."""
     import core.preset_store as ps
     from ui.dialogs.settings_dialog import SettingsDialog
     with mock.patch.object(ps, "presets_dir", lambda: Path(tmp_path)):
-        # Both persisted on (the stuck Windows state). _FakeSettings forces the
-        # engine on; add the clip-border on too.
+        # Both persisted on (the stuck state). _FakeSettings forces the engine on.
         dlg = SettingsDialog(_FakeSettings(i1pro_chromiq_clip_style=True),
                              None, layout_combo=("i1", "A4", "noclip"))
         try:
-            # Opening with the engine on disables + clears the clip checkbox,
-            # remembering its prior on-state.
+            # Opening with the engine on disables + clears the clip checkbox.
             assert not dlg._chromiq_clip_check.isChecked()
             assert not dlg._chromiq_clip_check.isEnabled()
-
-            # Turning the engine off restores the remembered clip-border.
-            dlg._layout_engine_check.setChecked(False)
-            assert dlg._chromiq_clip_check.isChecked()
-            assert dlg._chromiq_clip_check.isEnabled()
-
-            # Turning it back on clears + disables again.
-            dlg._layout_engine_check.setChecked(True)
-            assert not dlg._chromiq_clip_check.isChecked()
-            assert not dlg._chromiq_clip_check.isEnabled()
-
-            # Saving with the engine on persists the conflict resolved.
+            # Saving persists the conflict resolved.
             dlg._save_and_close()
             assert dlg._settings.get("use_chromiq_layout_engine") is True
             assert dlg._settings.get("i1pro_chromiq_clip_style") is False

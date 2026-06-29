@@ -2144,6 +2144,32 @@ class TabChart(QWidget):
 
             grp_layout.addWidget(basic_grp)
             grp_layout.addWidget(expert_grp)
+            # Engine toggle lives HERE now (moved out of Settings, Knut #93): above
+            # the layout frame so switching engines per chart/preset is easy. It
+            # decides whether the frame below is the printtarg controls or the
+            # ChromIQ layout panel.
+            _eng_row = QHBoxLayout()
+            self._manual_engine_check = QCheckBox(
+                tr("Use the ChromIQ layout engine instead of printtarg"), inner)
+            self._manual_engine_check.setChecked(
+                bool(self._settings.get("use_chromiq_layout_engine", False)))
+            self._manual_engine_check.toggled.connect(self._on_manual_engine_toggled)
+            _eng_row.addWidget(self._manual_engine_check)
+            _eng_row.addStretch()
+            _eng_row.addWidget(TooltipButton(
+                tr("ChromIQ layout engine"),
+                tr("When ON, ChromIQ builds your test charts itself instead of "
+                   "calling ArgyllCMS printtarg. The engine packs the colour "
+                   "patches more efficiently, can put useful information where "
+                   "printtarg leaves blank space, and lets you fully customise the "
+                   "layout below per instrument and paper.\n\n"
+                   "When OFF the chart is made by printtarg exactly as before. This "
+                   "switch only affects how charts are CREATED; printing and "
+                   "measuring existing charts always work the same way, so it is "
+                   "safe to switch back at any time."), inner))
+            _eng_w = QWidget(inner)
+            _eng_w.setLayout(_eng_row)
+            inner_layout.addWidget(_eng_w)
             inner_layout.addWidget(grp)
 
         self._update_manual_lb_visibility()
@@ -2259,11 +2285,37 @@ class TabChart(QWidget):
         layout.addWidget(scroll)
         return w
 
+    def _on_manual_engine_toggled(self, on: bool) -> None:
+        """The engine toggle moved from Settings to Create Chart (Knut #93).
+        Persist the choice, keep the engine and the old printtarg ChromIQ
+        clip-border mutually exclusive (the engine replaces the printtarg path),
+        and refresh the manual UI so the right frame shows."""
+        self._settings.set("use_chromiq_layout_engine", bool(on))
+        if on:
+            # Remember + clear the old ChromIQ clip-border so use_engine doesn't
+            # silently collapse back to the printtarg path (chart_creator).
+            if self._settings.get("i1pro_chromiq_clip_style", False):
+                self._engine_clip_saved = True
+                self._settings.set("i1pro_chromiq_clip_style", False)
+        elif getattr(self, "_engine_clip_saved", False):
+            self._settings.set("i1pro_chromiq_clip_style", True)
+            self._engine_clip_saved = False
+        self._refresh_manual_command_preview()
+
     def _refresh_manual_command_preview(self) -> None:
         """Rebuild the manual info label from the current ParameterWidget state.
 
         Mirrors workflow/chart_creator.py:_build_targen_args /
         _build_printtarg_args so the preview matches exactly what runs."""
+        # Keep the Create-Chart engine checkbox in step with the setting (a preset
+        # load or engine switch can change it elsewhere) without re-firing toggled.
+        chk = getattr(self, "_manual_engine_check", None)
+        if chk is not None:
+            want = bool(self._settings.get("use_chromiq_layout_engine", False))
+            if chk.isChecked() != want:
+                chk.blockSignals(True)
+                chk.setChecked(want)
+                chk.blockSignals(False)
         if getattr(self, "_manual_info_lbl", None) is None:
             return
         try:
