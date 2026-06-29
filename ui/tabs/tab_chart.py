@@ -2510,13 +2510,11 @@ class TabChart(QWidget):
                 try:
                     from workflow.layout_engine import instruments
                     r = self._current_layout_recipe()
-                    # Margin boxes are authoritative; only clamp to instrument
-                    # minimums when "Use instrument margins" is on (matches the
-                    # real render in chart_creator) (#93, Knut beta-13).
-                    _thr = (self._combo_thresholds(r.instrument, r.paper)
-                            if r.use_instrument_margins else None)
-                    geom = instruments.geom_from_build_kwargs(
-                        r.build_kwargs(), thresholds=_thr)
+                    # Margin boxes are ALWAYS the law now (Knut, new model): the
+                    # render never clamps to instrument minimums, so the estimate
+                    # mustn't either, or the two would disagree. Below-minimum is
+                    # only flagged as a violation in the inspector.
+                    geom = instruments.geom_from_build_kwargs(r.build_kwargs())
                     pages_req = (self._manual_pages_spin.value()
                                  if self._manual_pages_spin is not None else 1)
                     # Use the on-screen chart's fixed patch count ONLY when the
@@ -6850,10 +6848,11 @@ class TabChart(QWidget):
                     and bool(self._settings.get("use_chromiq_layout_engine", False))):
                 return warns
             r = self._current_layout_recipe()
-            # The text-overflow warning only applies in "margins are law" mode
-            # (Use instrument margins on); otherwise the label/text band is
-            # reserved above/below the patches, so there's never an overflow.
-            if not r.use_instrument_margins:
+            # The text-overflow warning only applies in "margins are law" mode,
+            # which is now AREA-FIRST (Knut #93): there the label/text lives inside
+            # the margin, so a too-small margin overflows toward the page edge. In
+            # patch-first the band is reserved above/below the patches — no overflow.
+            if r.layout_mode != "area_first":
                 return warns
             from workflow.layout_engine import instruments
             geom = instruments.geom_from_build_kwargs(r.build_kwargs())

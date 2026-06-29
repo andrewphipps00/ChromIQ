@@ -339,11 +339,13 @@ class LayoutOptionsPanel(QWidget):
         self.area_rows.valueChanged.connect(self._sync_layout_mode)
         # Patch shape as "minimum patch height, % of width" (Knut): 150 → height
         # 1.5× width. Stored in the recipe as a height:width fraction (value/100).
+        # Default 100 % (square); no "square" special value — the arrows step it
+        # up or down from 100 (Knut #93).
         self.area_ratio = NoScrollDoubleSpinBox(self)
-        self.area_ratio.setRange(0.0, 1000.0); self.area_ratio.setDecimals(0)
+        self.area_ratio.setRange(10.0, 1000.0); self.area_ratio.setDecimals(0)
         self.area_ratio.setSingleStep(10.0); self.area_ratio.setMaximumWidth(96)
         self.area_ratio.setSuffix(" %")
-        self.area_ratio.setSpecialValueText(tr("square"))
+        self.area_ratio.setValue(100.0)
         self.area_ratio.valueChanged.connect(self._emit)
         self.area_min_patch = NoScrollDoubleSpinBox(self)
         self.area_min_patch.setRange(0.0, 100.0); self.area_min_patch.setDecimals(1)
@@ -382,9 +384,11 @@ class LayoutOptionsPanel(QWidget):
                 tr("Minimum patch height (% of width):"), self.area_ratio,
                 tip=TooltipButton(
                     tr("Minimum patch height"),
-                    tr("The patch height as a percentage of its width. “square” "
-                       "keeps height = width (100%). 150% makes each patch half "
-                       "again as tall as it is wide."), self))
+                    tr("The patch height as a percentage of its width. 100% keeps "
+                       "height = width (square); 150% makes each patch half again "
+                       "as tall as it is wide; below 100% makes them wider than "
+                       "tall. It's a minimum — the engine grows the patches from "
+                       "here to fill the chart area."), self))
         self._area_row_cols = add_row(afg, 3, tr("Strips (columns):"), self.area_cols,
                 tip=TooltipButton(
                     tr("Strips (columns)"),
@@ -837,7 +841,9 @@ class LayoutOptionsPanel(QWidget):
                "strip run the full usable height. Only enable if your instrument "
                "can read an unlimited-length strip; otherwise leave it off."),
             self), 8, 2)
-        v.addWidget(pg)
+        # Page geometry sits ABOVE the Layout frame (Knut #93): the margin box /
+        # paper are the basis for the area-first calculation, so they read first.
+        v.insertWidget(v.indexOf(lg), pg)
         self._update_clip_visibility()
 
         # ---- Output ----
@@ -931,9 +937,10 @@ class LayoutOptionsPanel(QWidget):
         _te.addStretch()
         _te_w = QWidget(self); _te_w.setLayout(_te)
         # Label on its own row, the three compact spins below it, so the wide
-        # spin row doesn't force the whole panel wider.
+        # spin row doesn't force the whole panel wider. The spin row is indented to
+        # the field column (1) so it lines up with the boxes above it (Knut #93).
         stg.addWidget(QLabel(tr("Text distance from edge (mm):"), self), 5, 0, 1, 2)
-        stg.addWidget(_te_w, 6, 0, 1, 3)
+        stg.addWidget(_te_w, 6, 1, 1, 2)
         stg.addWidget(TooltipButton(
             tr("Text distance from edge"),
             tr("The minimum distance from the paper edge to the text on each side "
@@ -1893,7 +1900,8 @@ class LayoutOptionsPanel(QWidget):
         self.area_method.setCurrentIndex(_am if _am >= 0 else 0)
         self.area_cols.setValue(int(r.area_cols or 0))
         self.area_rows.setValue(int(r.area_rows or 0))
-        self.area_ratio.setValue(float(r.area_ratio or 0.0) * 100.0)   # frac → %
+        # frac → %; an old 0.0 ("square") maps to 100 % (same height = width).
+        self.area_ratio.setValue((float(r.area_ratio) or 1.0) * 100.0)
         self.area_min_patch.setValue(float(r.area_min_patch_mm or 0.0))
         self._sync_layout_mode()
         self.patch_x.setValue(r.patch_w_mm)
