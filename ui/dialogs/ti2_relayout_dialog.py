@@ -660,7 +660,7 @@ class _NewChartDialog(QDialog):
                  parent: QWidget | None = None,
                  initial_recipe: dict | None = None) -> None:
         super().__init__(parent)
-        self.setWindowTitle(tr("New chart"))
+        self.setWindowTitle(tr("New patch set"))
         self.setMinimumWidth(620)
         self._bin_dir = bin_dir
         self._settings = settings
@@ -698,12 +698,12 @@ class _NewChartDialog(QDialog):
         # ``outer`` below), so the 3D-cube preview starts beneath it.
         head.setContentsMargins(16, 12, 16, 0)
         head.addWidget(TabHeader(
-            tr("NEW CHART · SETUP"), tr("Set up your chart"),
+            tr("NEW PATCH SET · SETUP"), tr("Set up your patch set"),
             SPEC_MAGENTA, self), 0, Qt.AlignmentFlag.AlignVCenter)
         GradientOverlay(SPEC_MAGENTA, parent=self, alpha=15, height=95, on_top=False)
         head.addStretch(1)
         head.addWidget(_magenta_tip(
-            tr("New chart"),
+            tr("New patch set"),
             tr("Let's start a brand-new chart. You only need to make a few quick "
             "choices here — once you're done, the chart opens in the editor where "
             "you can arrange and fine-tune everything.\n\n"
@@ -3233,7 +3233,7 @@ class Ti2RelayoutDialog(QDialog):
         load_btn = QPushButton(tr("Load patch set…"), self)
         load_btn.setToolTip(tr("Load a patch set from a .ti2 / .ti1 file."))
         load_btn.clicked.connect(self._load_ti2)
-        new_btn = QPushButton(tr("New chart…"), self)
+        new_btn = QPushButton(tr("New patch set…"), self)
         new_btn.clicked.connect(self._new_chart)
         src.addWidget(new_btn, 0, Qt.AlignmentFlag.AlignVCenter)
         src.addWidget(load_btn, 0, Qt.AlignmentFlag.AlignVCenter)

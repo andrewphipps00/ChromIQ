@@ -832,7 +832,6 @@
   "Move to the Print Chart tab and pick your printer and media. Driver colour management must be OFF — if the driver re-maps colours the patches won't match their definition and the profile will be wrong. On macOS ChromIQ disables it automatically; just confirm nothing in the print dialog has switched it back on. On Windows and other systems you need to switch it off yourself in the driver dialog. Click “Print”.": "チャート印刷タブに移り、プリンターと用紙を選んでください。ドライバーのカラーマネジメントはオフでなければなりません — ドライバーが色を再マッピングするとパッチが定義と一致せず、プロファイルが誤ったものになります。macOSではChromIQが自動的に無効化します。印刷ダイアログで何かが再び有効にしていないか確認するだけで結構です。Windowsや他のシステムでは、ドライバーダイアログで自分でオフにする必要があります。「印刷」をクリックしてください。",
   "Move to the Print Chart tab and pick your printer and media. Driver colour management must be OFF — if the driver re-maps colours the patches won't match their definition and the refined profile will be wrong. On macOS ChromIQ disables it automatically; just confirm nothing in the print dialog has switched it back on. On Windows and other systems you need to switch it off yourself in the driver dialog. Click “Print”.": "チャート印刷タブに移り、プリンターと用紙を選んでください。ドライバーのカラーマネジメントはオフでなければなりません — ドライバーが色を再マッピングするとパッチが定義と一致せず、改良されたプロファイルが誤ったものになります。macOSではChromIQが自動的に無効化します。印刷ダイアログで何かが再び有効にしていないか確認するだけで結構です。Windowsや他のシステムでは、ドライバーダイアログで自分でオフにする必要があります。「印刷」をクリックしてください。",
   "Move to the next stripe": "次のストリップへ進む",
-  "NEW CHART · SETUP": "新規チャート · 設定",
   "Name": "名前",
   "Names this preset after its chart layout, so layout presets sort and read clearly together. With this on, ChromIQ leads the name with the layout's key details — instrument, paper size, patch count, pages and orientation — as a locked prefix, then you add your own detail after. So the name begins “i1Pro-A4-484p-1page-Portrait-” and you just add what tells this layout apart from your others.\n\nAdd a detail about the layout itself — for example a variant or revision (“v2”), how it was built (“denser”, “no-greys”), or a date. There's no need to repeat printer or paper here: those name the finished profile, not the chart layout.\n\nThe prefix updates on its own as you change the settings and can't be edited directly — click the field and your cursor lands right after it, ready to type. Turn the option off to name the preset entirely yourself.": "このプリセットをチャートのレイアウトにちなんで命名します。これによりレイアウトプリセットがきれいに並び、読みやすくなります。オンにすると、ChromIQ はレイアウトの主要な情報——測定器・用紙サイズ・パッチ数・ページ数・向き——をロックされたプレフィックスとして名前の先頭に置き、その後ろにあなた自身の詳細を追加します。つまり名前は「i1Pro-A4-484p-1page-Portrait-」で始まり、このレイアウトを他と区別する情報だけを足します。\n\nレイアウト自体に関する詳細を加えてください——例えばバリエーションやリビジョン(「v2」)、作り方(「高密度」「グレーなし」)、日付など。ここでプリンターや用紙を繰り返す必要はありません。それらは完成したプロファイルの名前であり、チャートのレイアウトの名前ではありません。\n\nプレフィックスは設定を変えると自動で更新され、直接は編集できません——フィールドをクリックすると、カーソルはその直後に来て、すぐ入力できます。プリセット名を完全に自分で付けたい場合はこのオプションをオフにしてください。",
   "Native name:": "現地語名:",
@@ -846,7 +845,6 @@
   "Neutral patches": "ニュートラルパッチ",
   "Neutral ramp": "グレーランプ",
   "New chart": "新しいチャート",
-  "New chart…": "新しいチャート…",
   "New language…": "新しい言語…",
   "Next step: go to the <b>Create Chart</b> tab, make sure <i>Create target for calibration</i> is unchecked, and generate a profiling chart. The .cal path has been pre-filled in both the <b>-K</b> and <b>-I</b> fields — use whichever applies to your workflow:": "次のステップ: <b>チャート作成</b>タブへ行き、<i>キャリブレーション用ターゲットを作成</i>のチェックが外れていることを確認して、プロファイル用チャートを生成してください。.cal のパスは <b>-K</b> と <b>-I</b> の両フィールドに入力済みです — ワークフローに合う方を使ってください:",
   "Next ›": "次へ ›",
@@ -1268,7 +1266,6 @@
   "Set 1 patch.": "1個のパッチを変更しました。",
   "Set colour of selection…": "選択範囲の色を設定…",
   "Set patch size (otherwise i1Profiler decides)": "パッチサイズを指定（指定しなければi1Profilerが決定）",
-  "Set up your chart": "チャートを設定",
   "Set {n} patches.": "{n}個のパッチを変更しました。",
   "Sets how sensitive the quality check is when deciding which strips\nneed to be re-measured.\n\nA strip is flagged if any single patch on it has a colour error (ΔE)\nhigher than this value.\n\nLower value (e.g. 1.0) — more strict: flags strips with even small\nerrors. Use this for critical colour work where accuracy matters most.\n\nHigher value (e.g. 3.0 or 4.0) — more lenient: only flags strips with\nclearly visible errors. Use this to limit re-measurement to the worst\noffenders only.\n\nThe default of 2.0 is a good balance for most RGB printer profiles.\nNote: this does not affect the profcheck analysis itself — only which\nstrips appear in the re-measurement recommendation.": "どのストリップを再測定すべきか判定する際の、品質チェックの感度を\n設定します。\n\nストリップ上のどれか1つのパッチでも色誤差（ΔE）がこの値を超える\nと、そのストリップにフラグが立ちます。\n\n低い値（例: 1.0）— より厳格: 小さな誤差のストリップにもフラグを\n立てます。精度が最重要のクリティカルなカラーワーク向け。\n\n高い値（例: 3.0や4.0）— より寛容: 明らかに見える誤差のストリップ\nだけにフラグを立てます。再測定を最悪のものだけに絞りたいときに。\n\nデフォルトの2.0は、ほとんどのRGBプリンタープロファイルに良い\nバランスです。\n注意: これはprofcheckの分析自体には影響しません — 再測定の推奨に\nどのストリップが現れるかだけを変えます。",
   "Sets the default printtarg layout flags (−m / −M margin and −a patch scale) used by the Create Chart tab whenever the active instrument is an i1Pro (i1Pro / i1Pro 2 / i1Pro 3).\n\n  • −m 10  −a 0.95  — recommended. Wider margin protects strip optics from drifting onto paper at the trailing edge; smaller patches let ~9% more colours fit per sheet.\n  • −m 10  −a 1.0   — full-size patches with the wider margin.\n  • −m 6   −a 1.0   — tightest layout. Higher risk of 'not enough patches read' errors on some printers when the strip's last patch lands too close to the bare paper edge.\n\nOther instruments (i1Pro 3 Plus, ColorMunki, SpectroScan) are not affected by this setting — they keep their own defaults.\n\nChanges apply to both Guided and Manual mode. A custom margin or patch-scale you set manually is preserved — switching instruments only updates the value if it currently matches one of the three preset values above.": "使用中の測定器がi1Pro（i1Pro / i1Pro 2 / i1Pro 3）のときに、チャート作成タブが使うprinttargのデフォルトレイアウトフラグ（−m / −M マージンと −a パッチスケール）を設定します。\n\n  • −m 10  −a 0.95  — 推奨。広めのマージンで、終端で測定器の光学部が紙の上にずれ込むのを防ぎます。パッチが小さいぶん1枚あたり約9%多くの色が収まります。\n  • −m 10  −a 1.0   — 広めのマージンとフルサイズのパッチ。\n  • −m 6   −a 1.0   — 最も詰めたレイアウト。ストリップ最後のパッチが紙の端に近づきすぎると、一部のプリンターで「読めたパッチが足りない」エラーのリスクが高まります。\n\n他の測定器（i1Pro 3 Plus、ColorMunki、SpectroScan）はこの設定の影響を受けません — それぞれ独自のデフォルトを保ちます。\n\n変更はガイドモードと手動モードの両方に適用されます。手動で設定したカスタムのマージンやパッチスケールは保持されます — 測定器を切り替えたとき、現在の値が上の3つのプリセット値のどれかに一致する場合のみ更新されます。",
@@ -2086,5 +2083,9 @@
   "CHART PATCH SET · EDITOR": "CHART PATCH SET · EDITOR",
   "Load a patch set from a .ti2 / .ti1 file.": "Load a patch set from a .ti2 / .ti1 file.",
   "Load patch set…": "Load patch set…",
-  "Arrange and recolour your patches": "Arrange and recolour your patches"
+  "Arrange and recolour your patches": "Arrange and recolour your patches",
+  "Set up your patch set": "Set up your patch set",
+  "New patch set": "New patch set",
+  "NEW PATCH SET · SETUP": "NEW PATCH SET · SETUP",
+  "New patch set…": "New patch set…"
 }
