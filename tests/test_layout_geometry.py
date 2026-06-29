@@ -401,9 +401,11 @@ def test_area_first_cols_pinned_rows_auto_fill_to_bottom():
     big gap with square patches (#93, Knut beta-13)."""
     from workflow.layout_engine.presets import default_recipe
     from dataclasses import replace
+    # area_ratio 1.0 (square, the UI default): rows-auto then grows the patch
+    # height to the column width so the rows fill to the bottom.
     rec = replace(default_recipe("i1", "A4R", mode="clip"),
                   layout_mode="area_first", area_method="by_grid",
-                  area_cols=18, area_rows=0,
+                  area_cols=18, area_rows=0, area_ratio=1.0,
                   margin_top=9.0, margin_bottom=9.0, margin_right=9.0)
     g = instruments.geom_from_build_kwargs(rec.build_kwargs())
     w, h = 297.0, 210.0
@@ -413,6 +415,27 @@ def test_area_first_cols_pinned_rows_auto_fill_to_bottom():
     # (~tspa), nowhere near the old square-patch gap (Knut measured 33 mm).
     assert B < 13.0
     assert g.plen > g.pwid * 0.9            # patches grew vertically to fill
+
+
+def test_area_first_by_grid_auto_dims_fill_at_natural_size():
+    """by-grid with a dimension (or both) on auto picks the instrument's natural
+    patch size for that dimension and fills the box — no leftover gap (Knut #93)."""
+    from workflow.layout_engine.presets import LayoutRecipe
+    w, h = A4
+
+    def margins(**area):
+        r = LayoutRecipe(instrument="i1", paper="A4", clip_border=True,
+                         layout_mode="area_first", area_method="by_grid",
+                         margin_bottom=6.0, margin_right=6.0, **area)
+        g = instruments.geom_from_build_kwargs(r.build_kwargs())
+        lay = geometry.compute(g, w, h, 100_000)
+        return geometry.realized_margins_mm(g, w, h, lay)   # L,R,T,B
+
+    # cols auto + rows pinned → width fills (small right margin)
+    assert margins(area_cols=0, area_rows=20)[1] < 10.0
+    # both auto → both dimensions fill (small right AND bottom margins)
+    L, R, T, B = margins(area_cols=0, area_rows=0)
+    assert R < 10.0 and B < 12.0
 
 
 def test_area_first_noop_without_targets():

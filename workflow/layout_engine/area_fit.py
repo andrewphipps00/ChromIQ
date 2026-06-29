@@ -84,7 +84,10 @@ def derive_area_patch_size(kw: dict) -> tuple[float, float] | None:
         min_w = 0.0
     else:
         cols = rows = 0
-    if cols <= 0 and rows <= 0 and min_w <= 0:
+    # No-op (use the patch-first natural size) only when nothing drives the grid.
+    # by_grid always fills — even with both columns AND rows on auto it sizes the
+    # patches to the instrument's natural size and fills the box (Knut #93).
+    if cols <= 0 and rows <= 0 and min_w <= 0 and method != "by_grid":
         return None
     try:
         w_mm, h_mm = papers.dimensions_mm(kw.get("paper", "A4"))
@@ -129,17 +132,31 @@ def derive_area_patch_size(kw: dict) -> tuple[float, float] | None:
     # ratio is HEIGHT:WIDTH (height = width * ratio); 0 = square. (The panel
     # shows it as "minimum patch height, % of width".)
     pw = ph = None
-    if rows > 0:
-        ph = max(_MIN_PATCH_MM, _rows_filling(rows))
-    elif min_w > 0:
+    if min_w > 0:                                   # --- by_width: min width + % ---
         h_min = (min_w * ratio) if ratio > 0 else min_w
         ph = max(_MIN_PATCH_MM, _rows_filling(_max_rows_at(h_min)))
-    if cols > 0:
-        pw = _fit_columns(base, w_mm, h_mm, cols, max_pw=avail_w)
-    elif min_w > 0:
         c = _cols_at(min_w)
         if c > 0:
             pw = _fit_columns(base, w_mm, h_mm, c, max_pw=avail_w)
+    else:                                           # --- by_grid: columns / rows ---
+        # Pinned dimensions size their patches to fill exactly that many; an "auto"
+        # dimension picks a count that gives a REASONABLE patch size — the ratio-
+        # linked size when the other dimension is pinned (so the shape is kept),
+        # otherwise the instrument's NATURAL patch size (its built-in width/height,
+        # the per-instrument "default size" reference) — then fills to that count
+        # (Knut #93). Columns first, so rows-auto can use the resolved width.
+        if rows > 0:
+            ph = max(_MIN_PATCH_MM, _rows_filling(rows))
+        if cols > 0:
+            pw = _fit_columns(base, w_mm, h_mm, cols, max_pw=avail_w)
+        if cols <= 0:                               # columns auto → fill the width
+            target_w = (ph / ratio) if (ph is not None and ratio > 0) else geom.pwid
+            c = _cols_at(target_w)
+            if c > 0:
+                pw = _fit_columns(base, w_mm, h_mm, c, max_pw=avail_w)
+        if rows <= 0:                               # rows auto → fill the height
+            target_h = (pw * ratio) if (pw is not None and ratio > 0) else geom.plen
+            ph = max(_MIN_PATCH_MM, _rows_filling(_max_rows_at(target_h)))
 
     if pw is None and ph is not None:
         pw = ph / ratio if ratio > 0 else ph
