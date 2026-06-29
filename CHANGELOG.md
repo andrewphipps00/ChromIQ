@@ -1,5 +1,23 @@
 # Changelog
 
+## v3.13.0-beta.24
+
+The chart editor is now fully a **patch-set editor** (Knut's review).
+
+### 🔧 Changed
+- **All layout editing removed from the editor.** The printtarg/engine layout
+  panels are gone — layout is done in Create Chart, and a chart keeps the layout
+  it was opened with. The dead controls went too: Update preview, Shuffle (the
+  Create Chart Manual tab handles randomisation), “Highlight selected in preview”,
+  and the Patches/Spacers mode radios.
+- **Consistent “patch set” wording.** Masthead “Chart Patch Set · Editor”, Load /
+  New **patch set** buttons and dialog, and rewritten help.
+- **Editor layout tidied.** The swatch-size slider, the Show-patch-number /
+  Show-gap toggles and the ⓘ moved to the top of the right column (ⓘ in the
+  corner); the action buttons now line up with the bottom of the swatch grid;
+  Apply / Save + Close share the column width; and the right column sits the same
+  small distance from the window edge as the swatch on the left.
+
 ## v3.13.0-beta.23
 
 Big engine + editor rework from Knut's feedback.
