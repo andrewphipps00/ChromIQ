@@ -4019,6 +4019,15 @@ class TabChart(QWidget):
             presets = self._load_presets_from_settings()
             pdata = presets.get(name, {})
             self._restore_user_preset(pdata)
+            # Load the preset with the engine it was made with (Knut #93): a
+            # Manual preset stores printtarg widget values (no layout_recipe), so
+            # select the printtarg engine — otherwise the ChromIQ engine would try
+            # to render it and the preview is wrong. The restored -i/-p widgets
+            # then drive the (correct) instrument & paper. An engine preset (future
+            # layout_recipe) would instead switch the engine on.
+            if getattr(self, "_manual_engine_check", None) is not None:
+                has_recipe = isinstance(pdata, dict) and bool(pdata.get("layout_recipe"))
+                self._manual_engine_check.setChecked(has_recipe)
             # Carry the preset's stored New-chart recipe (Set B), if any, so a
             # chart generated from it reopens in the editor with this design
             # pre-loaded into New chart / Add (#70, Knut follow-up).
