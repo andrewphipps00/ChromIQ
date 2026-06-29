@@ -138,23 +138,19 @@ class LayoutOptionsPanel(QWidget):
                    "is built for, so pick the one you actually own — a chart laid "
                    "out for one instrument may not read correctly on another."),
                 self), 0, 4)
+            # Mode (= ColorMunki density / i1 clip mode / SpectroScan shape) and
+            # the CM/SS Clip-border toggle are created here but ADDED TO THE LAYOUT
+            # FRAME (below), grouped with the other layout choices for better order
+            # (Knut #93). Labels/tips stay referenced for the conditional enabling.
             self.mode = NoScrollComboBox(self)
             self._mode_lbl = QLabel(tr("Mode:"), self)
-            sel.addWidget(self._mode_lbl, 3, 0)
-            sel.addWidget(self.mode, 3, 1, 1, 3)
             _mt, _mb = self.mode_tooltip_for("i1")
             self._mode_tip = TooltipButton(_mt, _mb, self)
-            sel.addWidget(self._mode_tip, 3, 4)
-            # Clip-border On/Off for CM/SS — an extra selector so they get the
-            # same clip toggle the i1Pro has in its Mode selector (Knut, #93).
-            # Mirrors the content on/off: On reserves a notes band, Off hides it.
             self._clip_enable_lbl = QLabel(tr("Clip border:"), self)
             self.clip_enable = NoScrollComboBox(self)
             self.clip_enable.addItem(tr("Off — more patches"), "off")
             self.clip_enable.addItem(tr("On"), "on")
             self.clip_enable.currentIndexChanged.connect(self._on_clip_enable_changed)
-            sel.addWidget(self._clip_enable_lbl, 4, 0)
-            sel.addWidget(self.clip_enable, 4, 1, 1, 3)
             self._clip_enable_tip = TooltipButton(
                 tr("Clip border"),
                 tr("Reserve a clip-border strip on this chart (the same option the "
@@ -162,7 +158,6 @@ class LayoutOptionsPanel(QWidget):
                    "text or a logo in the Clip-border content section below; Off "
                    "uses the whole page for patches. Choose which edge it sits on "
                    "in that section."), self)
-            sel.addWidget(self._clip_enable_tip, 4, 4)
             # Paper + Pages share a row, directly under Instrument (Knut #93);
             # paper gets the stretch (wider).
             self.paper = NoScrollComboBox(self)
@@ -405,6 +400,16 @@ class LayoutOptionsPanel(QWidget):
                        "the patches exactly tall enough that this many fit the "
                        "usable height."), self))
         lgg.addWidget(self._area_fields_w, 1, 0, 1, 3)
+        # Mode (density / clip mode / shape) + the CM/SS Clip-border toggle live at
+        # the bottom of the Layout frame (Knut #93), grouped with the layout
+        # choices rather than up in the instrument selectors.
+        if getattr(self, "mode", None) is not None:
+            lgg.addWidget(self._mode_lbl, 2, 0)
+            lgg.addWidget(self.mode, 2, 1)
+            lgg.addWidget(self._mode_tip, 2, 2)
+            lgg.addWidget(self._clip_enable_lbl, 3, 0)
+            lgg.addWidget(self.clip_enable, 3, 1)
+            lgg.addWidget(self._clip_enable_tip, 3, 2)
         v.addWidget(lg)
 
         # ---- Patches & spacers (2-column: label | control) ----
@@ -797,21 +802,26 @@ class LayoutOptionsPanel(QWidget):
                     tr("Pixel density of the printed chart TIFF, in dots per inch. "
                        "300 dpi is a good default; higher makes a larger file with "
                        "no real benefit for solid colour patches."), self))
-        add_row(gg, 4, tr("Max strip length:"), mm_inch(self.max_strip),
+        self._max_strip_row = add_row(gg, 4, tr("Max strip length:"),
+                mm_inch(self.max_strip),
                 tip=TooltipButton(
                     tr("Max strip length"),
                     tr("Caps how long a single strip (column of patches) may get, "
-                       "in mm. Leave at “auto” to use the instrument's limit. Some "
+                       "in mm. Leave at “auto” to use the instrument's limit (set "
+                       "per instrument/paper in Settings → Instrument Limits). Some "
                        "scanners can't read a strip past a certain length; lower "
-                       "this if long strips misread."), self))
-        add_row(gg, 5, tr("Chart offset (mm):"),
+                       "this if long strips misread. Only used in “Prioritise patch "
+                       "size” — area-first fills the page and warns if a strip is "
+                       "longer than the instrument's ruler instead."), self))
+        self._offset_row = add_row(gg, 5, tr("Chart offset (mm):"),
                 cell(self.offx, QLabel("×", self), self.offy),
                 tip=TooltipButton(
                     tr("Chart offset"),
                     tr("Shifts the whole patch block right (X) and down (Y) on the "
                        "sheet, in mm. Usually 0 — use it to nudge the layout away "
                        "from a printer's unprintable area or to line up with a "
-                       "pre-printed sheet."), self))
+                       "pre-printed sheet. Only used in “Prioritise patch size”; "
+                       "area-first places the block by the margins."), self))
         add_row(gg, 6, tr("Strip pattern:"), self.strip_pat,
                 tip=TooltipButton(
                     tr("Strip pattern"),
@@ -839,15 +849,20 @@ class LayoutOptionsPanel(QWidget):
                        "patch count and size don't change. Margins / thresholds "
                        "are still respected."), self))
         gg.addWidget(self.nolimit, 9, 1)
-        gg.addWidget(TooltipButton(
+        self._nolimit_tip = TooltipButton(
             tr("Don't cap strip length"),
             tr("Removes the strip-length limit entirely (printtarg -P), letting a "
                "strip run the full usable height. Only enable if your instrument "
-               "can read an unlimited-length strip; otherwise leave it off."),
-            self), 8, 2)
-        # Page geometry sits ABOVE the Layout frame (Knut #93): the margin box /
-        # paper are the basis for the area-first calculation, so they read first.
-        v.insertWidget(v.indexOf(lg), pg)
+               "can read an unlimited-length strip; otherwise leave it off. Only "
+               "used in “Prioritise patch size” — area-first already fills the "
+               "page, so it's hidden there."),
+            self)
+        gg.addWidget(self._nolimit_tip, 9, 2)
+        # The Layout frame sits ABOVE Page geometry (Knut #93): the Create-layout
+        # choice in Layout governs which Page-geometry fields apply, so it reads
+        # first. (pg is built after lg, so its natural append order already places
+        # it below — just add it normally.)
+        v.addWidget(pg)
         self._update_clip_visibility()
 
         # ---- Output ----
@@ -1418,10 +1433,19 @@ class LayoutOptionsPanel(QWidget):
             return
         area = (self.layout_mode.currentData() == "area_first")
         self._area_fields_w.setVisible(area)
-        for row in (getattr(self, "_patch_size_row", []),
-                    getattr(self, "_patch_scale_row", []),
-                    getattr(self, "_patch_align_row", [])):
+        # Patch size/scale/alignment, the strip-length cap and the chart offset are
+        # all "Prioritise patch size" concerns — area-first sizes patches to fill
+        # the margin box, so hide them there (Knut #93).
+        _patch_first_rows = [getattr(self, "_patch_size_row", []),
+                             getattr(self, "_patch_scale_row", []),
+                             getattr(self, "_patch_align_row", []),
+                             getattr(self, "_max_strip_row", []),
+                             getattr(self, "_offset_row", [])]
+        for row in _patch_first_rows:
             for w in row:
+                w.setVisible(not area)
+        for w in (getattr(self, "nolimit", None), getattr(self, "_nolimit_tip", None)):
+            if w is not None:
                 w.setVisible(not area)
         # Within area-first, show only the rows the chosen Calculation method
         # needs: "by patch width" → min width + height%; "by columns/rows" →
