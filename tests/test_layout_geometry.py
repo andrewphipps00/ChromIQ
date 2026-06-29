@@ -1,8 +1,12 @@
 """Golden tests for the layout-engine packing math.
 
-Each expected (steps, passes, total) was captured from a live ``printtarg``
-run (Argyll 3.5.0) on a 60-patch RGB ``.ti1`` — see issue #93's feasibility
-matrix. If these drift, the engine no longer matches printtarg's geometry.
+These were originally captured from ``printtarg`` (Argyll 3.5.0), but the engine
+now follows Knut's "the margin box is the law" model: the patch area is exactly
+the page-margin box, with NO hidden instrument leader/trailer/clear-area and no
+furniture reserve — so for strips that printtarg would cap with run-up space, the
+engine reclaims it and packs MORE patches (#93). These goldens are therefore the
+engine's own layout, not printtarg parity; strip-length-capped i1 cases happen to
+still match. Captured from the engine after the margins-are-law change.
 """
 import pytest
 
@@ -13,15 +17,15 @@ A4R = (297.0, 210.0)
 
 # key, paper, hflag, spacer_on, pscale, npat, steps, passes, total
 CASES = [
-    ("i1", A4,  False, True,  1.0,   60, 21, 3, 63),
+    ("i1", A4,  False, True,  1.0,   60, 21, 3, 63),   # capped strip → unchanged
     ("p3", A4,  False, True,  1.0,   60,  9, 7, 63),
-    ("CM", A4,  False, True,  1.0,   60, 15, 4, 60),
-    ("CM", A4,  True,  True,  1.0,   60, 15, 4, 60),   # -h (rig): same logical grid
-    ("41", A4,  False, True,  1.0,   60, 25, 3, 75),
-    ("51", A4,  False, True,  1.0,   60, 19, 4, 76),
-    ("SS", A4,  False, True,  1.0,   60, 39, 2, 60),
-    ("SS", A4,  True,  True,  1.0,   60, 45, 2, 60),   # hex
-    ("i1", A4R, False, True,  1.0,   60, 16, 4, 64),
+    ("CM", A4,  False, True,  1.0,   60, 18, 4, 72),   # reclaimed leader/trailer
+    ("CM", A4,  True,  True,  1.0,   60, 18, 4, 72),   # -h (rig): same logical grid
+    ("41", A4,  False, True,  1.0,   60, 30, 2, 60),
+    ("51", A4,  False, True,  1.0,   60, 21, 3, 63),
+    ("SS", A4,  False, True,  1.0,   60, 40, 2, 60),
+    ("SS", A4,  True,  True,  1.0,   60, 46, 2, 60),   # hex
+    ("i1", A4R, False, True,  1.0,   60, 17, 4, 68),
     ("i1", A4,  False, False, 1.0,   60, 24, 3, 72),   # -n no spacers
     ("i1", A4,  False, True,  0.857, 60, 25, 3, 75),   # -a 0.857
     ("i1", A4,  False, True,  1.5,   60, 14, 5, 70),   # -a 1.5
@@ -29,10 +33,9 @@ CASES = [
 
 
 @pytest.mark.parametrize("key,paper,hflag,spacer,pscale,npat,steps,passes,total", CASES)
-def test_matches_printtarg(key, paper, hflag, spacer, pscale, npat, steps, passes, total):
-    # printtarg brackets every strip with a leading + trailing spacer, so the
-    # parity comparison uses edge_spacers=True. The engine's default (edge off)
-    # reclaims those two gaps and packs denser — covered separately (#93).
+def test_layout_golden(key, paper, hflag, spacer, pscale, npat, steps, passes, total):
+    # edge_spacers=True brackets each strip (printtarg-style); the engine's
+    # default (edge off) reclaims those two gaps and packs denser (#93).
     geom = instruments.build(key, hflag=hflag, spacer_on=spacer, pscale=pscale,
                              edge_spacers=True)
     lay = geometry.compute(geom, paper[0], paper[1], npat)
@@ -54,8 +57,10 @@ def test_patches_per_sheet_i1_a4():
 
 def test_tiny_paper_raises():
     geom = instruments.build("i1")
+    # Too small to hold even one patch row once the margins (6+6 mm) are taken —
+    # the margins are the law, so a paper shorter than the margins can't fit.
     with pytest.raises(geometry.LayoutError):
-        geometry.compute(geom, 40.0, 40.0, 60)
+        geometry.compute(geom, 12.0, 12.0, 60)
 
 
 def test_delegated_instrument_rejected():
@@ -151,28 +156,22 @@ def test_spacer_rects_match_render_flat_index():
     assert tuple(a[r0["y"] + r0["h"] // 2, r0["x"] + r0["w"] // 2]) == (255, 0, 255)
 
 
-def test_strip_indicator_gap_reduces_capacity_and_stays_in_bounds():
-    """A larger strip-indicator gap must reduce the patch count to fit, never
-    push patches off the usable area; a smaller gap fits more (#93)."""
+def test_strip_indicator_gap_does_not_change_capacity():
+    """The strip-indicator gap lives inside the top margin (margins are the law),
+    so it never changes the patch count — it only moves the label further above
+    the patches, toward the page edge (#93, Knut)."""
     pw, ph = 210.0, 297.0
-    prev = None
-    for gap in (0.0, 40.0, 60.0, 90.0):
+    base = geometry.compute(
+        instruments.build("i1", strip_indicator_gap=0.0), pw, ph, 1000).patches_per_page
+    prev_leader = None
+    for gap in (0.0, 10.0, 20.0):
         g = instruments.build("i1", strip_indicator_gap=gap)
         lay = geometry.compute(g, pw, ph, 1000)
+        assert lay.patches_per_page == base          # capacity unchanged by the gap
         pl = geometry.placement(g, pw, ph, lay)
-        block_bottom = pl.y_of(lay.steps_in_pass - 1) + pl.plen
-        usable_bottom = ph - max(g.margin_b, g.tspa)
-        # the last patch in a pass never crosses the bottom usable edge
-        assert block_bottom <= usable_bottom + 0.5, f"overflow at gap={gap}"
-        # capacity is monotonically non-increasing as the gap grows
-        if prev is not None:
-            assert lay.patches_per_page <= prev, f"gap={gap} didn't reduce count"
-        prev = lay.patches_per_page
-    # a big gap genuinely fits fewer than no gap
-    g0 = instruments.build("i1", strip_indicator_gap=0.0)
-    g9 = instruments.build("i1", strip_indicator_gap=90.0)
-    assert (geometry.compute(g9, pw, ph, 1000).patches_per_page
-            < geometry.compute(g0, pw, ph, 1000).patches_per_page)
+        if prev_leader is not None:
+            assert pl.leader_top <= prev_leader      # bigger gap → label higher up
+        prev_leader = pl.leader_top
 
 
 def test_geom_from_build_kwargs_honours_clip_width():
@@ -194,10 +193,10 @@ def test_geom_from_build_kwargs_honours_clip_width():
     assert g.lbord == pytest.approx(60.0 - r.border)
 
 
-def test_furniture_reserves_affect_capacity():
-    """Rendered furniture (big/rotated indicators, underline, sheet text, stamp)
-    must reserve space so capacity reflects it — while a default chart keeps its
-    printtarg-parity count (#93)."""
+def test_furniture_does_not_change_capacity():
+    """Margins are the law (Knut): strip labels, underline, sheet text and the
+    stamp all live INSIDE the page margins, so none of them change the patch
+    count — the patch area is exactly the margin box, whatever the furniture (#93)."""
     from workflow.layout_engine.presets import LayoutRecipe
     paper = "210x150"                     # short page → height-bound, not mxrowl
     w, h = geometry_papers(paper)
@@ -208,27 +207,15 @@ def test_furniture_reserves_affect_capacity():
         return geometry.patches_per_sheet(g, w, h)
 
     base = cap()
-    # A large indicator reserves a taller label band → fewer patches fit
-    assert cap(indicator_size_mm=30.0) < base
-    # Underline / sheet text / stamp reserve space too (≤: they may sit in the
-    # page's slack on a given size, but never exceed the no-furniture count)
+    assert cap(indicator_size_mm=30.0) == base          # big label band: unchanged
     assert cap(underline_mode="black", underline_thickness_mm=3.0,
-               underline_gap_mm=5.0) <= base
-    assert cap(stamp_command=True, chart_text="{project}") <= base
-    # an oversized stack of furniture clearly drops the count
+               underline_gap_mm=5.0) == base
+    assert cap(stamp_command=True, chart_text="{project}") == base
     assert cap(indicator_size_mm=18.0, underline_mode="black",
                underline_thickness_mm=3.0, underline_gap_mm=6.0,
-               stamp_command=True, chart_text="x") < base
-    # Turning strip labels OFF, or choosing an explicit SMALL font, reclaims the
-    # label band for more patches; auto size stays at the printtarg floor (#93).
-    assert cap(show_strip_indicators=False) > base
-    assert cap(indicator_size_mm=2.5) > base
-    # A bare build() Geom (no furniture info) is unchanged from the default
-    bare = geometry.patches_per_sheet(instruments.build("i1"), *geometry_papers("A4"))
-    assert bare == geometry.patches_per_sheet(
-        instruments.geom_from_build_kwargs(
-            LayoutRecipe(instrument="i1", paper="A4").build_kwargs()),
-        *geometry_papers("A4"))
+               stamp_command=True, chart_text="x") == base
+    assert cap(show_strip_indicators=False) == base     # labels off: still unchanged
+    assert cap(indicator_size_mm=2.5) == base
 
 
 def geometry_papers(code):

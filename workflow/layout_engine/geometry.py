@@ -69,14 +69,18 @@ def compute(geom: Geom, paper_w_mm: float, paper_h_mm: float, npat: int,
     # (lspa) bakes in the label height, so when the band is smaller/absent it
     # drops by the reclaimed amount — but never below the instrument's physical
     # run-up (border + lcar), which must stay clear (#93).
-    txhi = g.txhisl if g.label_band_mm < 0 else g.label_band_mm
-    eff_lspa = max(g.border + g.lcar, g.lspa - g.txhisl + txhi)
-    mints = max(g.margin_t + txhi + g.lcar, eff_lspa)
-    minbs = max(g.margin_b, g.tspa, g.bottom_reserve_mm)
-    # The strip-indicator gap is reserved too, so a longer gap reduces the patch
-    # count instead of sliding the chart off the usable area. placement()
-    # reserves the same amounts, so capacity and placement agree (#93).
-    arowl = ph - mints - minbs - 2.0 * g.hxeh - g.strip_indicator_gap
+    # "Margins are the law" (Knut): the patch area is exactly the page-margin box
+    # — NO hidden instrument leader/trailer/clear-area and NO label/sheet-text
+    # reserve is added on top. The strip labels and sheet text live INSIDE the
+    # margins (positioned by render); if a margin is too small for them they
+    # overflow toward the page edge and a violation is flagged, but they never
+    # shrink the patch area. The instrument-margin thresholds + the margin-
+    # violation notice are what warn the user about jig-unsafe margins. Only the
+    # hex/stagger overhang (hxeh, a property of the patch shape, not a margin)
+    # still reduces the usable length.
+    mints = g.margin_t
+    minbs = g.margin_b
+    arowl = ph - mints - minbs - 2.0 * g.hxeh
     if arowl > g.mxrowl:
         arowl = g.mxrowl
 
@@ -196,9 +200,10 @@ def placement(geom: Geom, paper_w_mm: float, paper_h_mm: float, layout: Layout) 
     # and the first patch. A user strip_label_offset (applied in raster) nudges
     # the labels from there.
     txhi = g.txhisl if g.label_band_mm < 0 else g.label_band_mm
-    eff_lspa = max(g.border + g.lcar, g.lspa - g.txhisl + txhi)
-    mints = max(g.margin_t + txhi + g.lcar, eff_lspa) + g.strip_indicator_gap
-    minbs = max(g.margin_b, g.tspa, g.bottom_reserve_mm)
+    # Margins are the law (Knut): patch area = the margin box, no hidden
+    # leader/trailer/label reserve. Matches compute().
+    mints = g.margin_t
+    minbs = g.margin_b
     # The strip block carries a leading + trailing spacer only when edge spacers
     # are on; off, those gaps are reclaimed (matching compute()), so the first
     # patch sits at the block top. _lead is the leading gap.
@@ -231,12 +236,20 @@ def placement(geom: Geom, paper_w_mm: float, paper_h_mm: float, layout: Layout) 
     # rlwi reserves a row-label band on the left (SpectroScan only — it labels the
     # grid 2-D: column letters on top + row numbers down the side, #93 Knut), so
     # the patch block starts after it. avail_w already excludes rlwi.
+    _y0 = amints + _lead + g.hxeh + g.offset_y
+    # Strip labels sit just above the first patch row, INSIDE the top margin (the
+    # margin is the law — no leader pushes the patches down). A user
+    # strip_indicator_gap opens a gap between the label and the patches; the label
+    # band itself (txhi) is added above that. If the top margin is too small to
+    # hold the band the label overflows toward the page edge (a violation is
+    # flagged) but the patches still start at the margin (Knut #93).
+    _leader_top = _y0 - g.strip_indicator_gap - txhi
     return Placement(
         x0=g.margin_l + g.rlwi + fh * extra_w + g.hxew + g.offset_x,
-        y0_first=amints + _lead + g.hxeh + g.offset_y,
+        y0_first=_y0,
         plen=g.plen, pwid=g.pwid, pspa=g.pspa, rrsp=g.rrsp,
         steps_in_pass=layout.steps_in_pass,
-        leader_top=g.margin_t + g.offset_y,    # labels flush under the top margin
+        leader_top=_leader_top,
     )
 
 
