@@ -1,5 +1,15 @@
 # Changelog
 
+## v3.13.0-beta.22
+
+### 🐛 Fixed
+- **Layout engine and ChromIQ-style clip border no longer conflict.** With both
+  enabled the engine silently fell back to the old printtarg path (so the Manual
+  tab never showed the layout panel and the engine looked dead — mostly on
+  Windows). The two settings are now mutually exclusive: turning the engine on
+  disables and remembers the clip border, turning it off restores it, and an
+  existing both-on configuration self-heals the next time Settings is opened.
+
 ## v3.13.0-beta.21
 
 ### 🔧 Changed
