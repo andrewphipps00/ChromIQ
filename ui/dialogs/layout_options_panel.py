@@ -1101,6 +1101,10 @@ class LayoutOptionsPanel(QWidget):
         if hasattr(self, "cm_stagger_cb"):
             self.cm_stagger_cb.setVisible(inst == "CM")
             self._cm_stagger_tip.setVisible(inst == "CM")
+        # Re-evaluate area-first field visibility / Density-disable for the new
+        # instrument (Density is moot for CM in area-first).
+        if hasattr(self, "layout_mode"):
+            self._sync_layout_mode()
         self._loading = False
         self._on_paper_changed()
 
@@ -1286,6 +1290,16 @@ class LayoutOptionsPanel(QWidget):
             w.setVisible(area and by_width)
         for w in self._area_row_cols + self._area_row_rows:
             w.setVisible(area and not by_width)
+        # ColorMunki "Density" doesn't define an area-first grid (the area fields
+        # do), so disable it there so it doesn't imply otherwise (Knut). i1 clip
+        # and SS shape still affect the area, so they stay active.
+        if self.mode is not None:
+            inst = (self.instr.currentData() if self.instr is not None
+                    else self._inst) or "i1"
+            density_moot = (inst == "CM" and area)
+            self.mode.setEnabled(not density_moot)
+            if getattr(self, "_mode_lbl", None) is not None:
+                self._mode_lbl.setEnabled(not density_moot)
 
     def _browse_clip_image(self) -> None:
         from PyQt6.QtWidgets import QFileDialog

@@ -196,6 +196,22 @@ def test_engine_info_line_from_recipe_reflects_recipe():
     assert "9×9 mm" not in s
 
 
+def test_colormunki_density_disabled_in_area_first(app):
+    """The Density selector is disabled for ColorMunki in area-first (it doesn't
+    define the grid there), but stays active for i1 clip / patch-first (#93,
+    Knut)."""
+    from ui.dialogs.layout_options_panel import LayoutOptionsPanel
+    p = LayoutOptionsPanel(with_selectors=True)
+    p.show()
+    p.instr.setCurrentIndex(p.instr.findData("CM"))
+    p.layout_mode.setCurrentIndex(p.layout_mode.findData("patch_first"))
+    assert p.mode.isEnabled()                       # density matters patch-first
+    p.layout_mode.setCurrentIndex(p.layout_mode.findData("area_first"))
+    assert not p.mode.isEnabled()                   # moot in area-first
+    p.instr.setCurrentIndex(p.instr.findData("i1"))
+    assert p.mode.isEnabled()                       # i1 clip still matters
+
+
 def test_cm_ss_clip_enable_selector(app):
     """CM/SS get an extra clip-border On/Off selector (i1/p3 use their Mode
     selector). It's hidden for i1, drives the content on/off, and hides the

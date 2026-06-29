@@ -326,6 +326,18 @@ def test_area_first_fits_requested_grid():
     assert tall > sq
 
 
+def test_colormunki_density_inert_in_area_first():
+    """In area-first the two area fields define the grid, so ColorMunki density
+    has no effect on the result (Knut). After decoupling the stagger, density
+    only sets a base patch width that area-fit overrides."""
+    def grid(d):
+        g = instruments.geom_from_build_kwargs(
+            {"instrument": "CM", "paper": "A4", "layout_mode": "area_first",
+             "area_method": "by_width", "area_min_patch": 8.0, "density": d})
+        return geometry.patches_per_sheet(g, *A4), round(g.pwid, 3), round(g.plen, 3)
+    assert grid(1) == grid(2) == grid(3)
+
+
 def test_colormunki_stagger_offsets_odd_strips_and_reserves_space():
     """ColorMunki 'offset every second strip' shifts odd strips down by ~half a
     patch and reserves hxeh so the count drops — independent of density (#93)."""
