@@ -103,3 +103,37 @@ def test_multiple_edges_and_missing_keys():
 
 def test_blank_string_threshold_ignored():
     assert check_violations(_report(L=1.0), {"L": "", "R": 11}) == []
+
+
+# --- default patch sizes (#15) + strip-length limit (#16) ------------------
+
+def test_patch_sizes_seed_and_lookup():
+    from core.settings import default_patch_sizes, patch_size_for_combo
+    t = default_patch_sizes()
+    assert patch_size_for_combo(t, "i1", 210.0, 297.0) == (8.0, 10.0)
+    assert patch_size_for_combo(t, "CM", 297.0, 210.0) == (10.4, 13.0)
+    assert patch_size_for_combo(t, "i1", 1.0, 1.0) is None       # unknown paper
+
+
+def test_patch_sizes_settings_round_trip(tmp_path):
+    from PyQt6.QtCore import QSettings
+    from core.settings import patch_size_for_combo
+    s = AppSettings()
+    s._qs = QSettings(str(tmp_path / "t.ini"), QSettings.Format.IniFormat)
+    table = s.get_patch_sizes()
+    table[margin_combo_key("i1Pro", "A4", "Portrait")] = {"w": 12.5, "h": 15.0}
+    s.set_patch_sizes(table)
+    # Re-read through a fresh accessor → the edit survives.
+    assert patch_size_for_combo(s.get_patch_sizes(), "i1", 210.0, 297.0) == (12.5, 15.0)
+
+
+def test_strip_length_limit_round_trip(tmp_path):
+    from PyQt6.QtCore import QSettings
+    from core.settings import thresholds_for_combo
+    s = AppSettings()
+    s._qs = QSettings(str(tmp_path / "t.ini"), QSettings.Format.IniFormat)
+    table = s.get_margin_thresholds()
+    table[margin_combo_key("i1Pro", "A4", "Portrait")]["ruler"] = 200.0
+    s.set_margin_thresholds(table)
+    entry = thresholds_for_combo(s.get_margin_thresholds(), "i1", 210.0, 297.0)
+    assert entry is not None and entry.get("ruler") == 200.0

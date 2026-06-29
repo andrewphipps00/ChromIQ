@@ -6851,16 +6851,14 @@ class TabChart(QWidget):
         # large Strip gap corrupts the detected margins (#93, Knut). Falls back to
         # image measurement for printtarg charts.
         self._ruler_over_mm = None
+        _geom_ruler = None
         report = None
         if self._margin_ti2 is not None:
             from workflow.margin_inspector import measure_from_engine
             ch = Path(self._margin_ti2).with_suffix(".channels.json")
             eng = measure_from_engine(ch, idx) if ch.is_file() else None
             if eng is not None:
-                report, ruler = eng
-                if (ruler and report.strip_length_mm is not None
-                        and report.strip_length_mm > ruler + 0.5):
-                    self._ruler_over_mm = ruler
+                report, _geom_ruler = eng
         if report is None:
             report = measure_margins(self._margin_tiffs[idx], dpi=dpi,
                                      ti2_path=self._margin_ti2)
@@ -6878,6 +6876,20 @@ class TabChart(QWidget):
         if paper_name:
             key = margin_combo_key(instr_label, paper_name, orient)
             thresholds = self._settings.get_margin_thresholds().get(key)
+
+        # Strip-length (ruler) limit: the per-combo value configured in
+        # Settings → Instrument Limits wins; else the instrument's built-in ruler
+        # reported by the engine geometry (#93, Knut). Warn when the strip is over.
+        _eff_ruler = _geom_ruler
+        try:
+            _cfg = float((thresholds or {}).get("ruler") or 0.0)
+            if _cfg > 0:
+                _eff_ruler = _cfg
+        except (TypeError, ValueError):
+            pass
+        if (_eff_ruler and report.strip_length_mm is not None
+                and report.strip_length_mm > _eff_ruler + 0.5):
+            self._ruler_over_mm = _eff_ruler
 
         violations = check_violations(report, thresholds)
         warns = self._engine_text_overflow_warnings()

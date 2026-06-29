@@ -778,16 +778,16 @@ class SettingsDialog(QDialog):
 
         intro_row = QHBoxLayout()
         intro = QLabel(tr(
-            "Warn when a generated chart's measured page margins fall below the "
-            "minimum needed for your measuring ruler / jig. Values are minimums "
-            "in millimetres (paper edge → patch area), in the printed (preview) "
-            "orientation. These are editable starting points — adjust them to "
-            "your own rig."), self)
+            "Limits for your measuring ruler / jig, per instrument, paper and "
+            "orientation: the minimum page margins (mm, paper edge → patch area, "
+            "in the printed orientation) and the maximum strip length. The Create "
+            "Chart preview warns when a chart goes outside these. Editable starting "
+            "points — adjust them to your own rig."), self)
         intro.setWordWrap(True)
         intro.setStyleSheet("color: #909090; font-size: 11px;")
         intro_row.addWidget(intro, stretch=1)
         intro_row.addWidget(TooltipButton(
-            tr("About instrument margins"),
+            tr("About instrument limits"),
             tr("These are your INSTRUMENT margins (not printer margins): how much "
                "blank white paper a chart should have around its patches so it's "
                "comfortable to measure.\n\n"
@@ -873,6 +873,29 @@ class SettingsDialog(QDialog):
             self._margin_fields[key] = sb
             grid.addWidget(sb, 1, col)
         v.addLayout(grid)
+
+        # ---- strip-length limit (the instrument's ruler / jig max, mm) ----
+        # Configurable per combo (Knut #93). The Create Chart preview warns when a
+        # strip is longer than this. 0 = use the instrument's built-in ruler.
+        ruler_row = QHBoxLayout()
+        ruler_row.addWidget(QLabel(tr("Strip length limit:"), self))
+        self._margin_ruler = NoScrollDoubleSpinBox(self)
+        self._margin_ruler.setRange(0, 2000)
+        self._margin_ruler.setDecimals(0)
+        self._margin_ruler.setSingleStep(10)
+        self._margin_ruler.setSuffix(" mm")
+        self._margin_ruler.setSpecialValueText(tr("instrument default"))
+        self._margin_ruler.valueChanged.connect(self._on_margin_field_changed)
+        ruler_row.addWidget(self._margin_ruler)
+        ruler_row.addWidget(TooltipButton(
+            tr("Strip length limit"),
+            tr("The longest a single strip of patches may be (mm) before the "
+               "Create Chart preview warns it won't fit your instrument's ruler / "
+               "jig. Set per instrument, paper and orientation. Leave at "
+               "“instrument default” to use the device's built-in ruler length "
+               "(e.g. ~240 mm for the i1Pro)."), self))
+        ruler_row.addStretch(1)
+        v.addLayout(ruler_row)
 
         # Restore-defaults button: re-seed the whole table to the shipped
         # defaults. Needed because changing the built-in defaults between
@@ -1041,6 +1064,10 @@ class SettingsDialog(QDialog):
                 sb.setValue(round(float(entry.get(key, 0)), 1))
             except (TypeError, ValueError):
                 sb.setValue(0.0)
+        try:
+            self._margin_ruler.setValue(round(float(entry.get("ruler", 0) or 0), 0))
+        except (TypeError, ValueError):
+            self._margin_ruler.setValue(0.0)
         self._loading_margin_combo = False
 
     def _restore_default_margin_thresholds(self) -> None:
@@ -1068,11 +1095,14 @@ class SettingsDialog(QDialog):
         key = self._current_margin_key()
         vals = {k: sb.value() for k, sb in self._margin_fields.items()}
         desc = self._margin_desc.text().strip()
-        if not any(vals.values()) and not desc:
+        ruler = self._margin_ruler.value() if getattr(self, "_margin_ruler", None) else 0
+        if not any(vals.values()) and not desc and not ruler:
             self._margin_table.pop(key, None)
             return
         entry = {k: v for k, v in vals.items()}
         entry["desc"] = desc
+        if ruler:
+            entry["ruler"] = ruler
         self._margin_table[key] = entry
 
     def _sync_margin_notify_enabled(self) -> None:

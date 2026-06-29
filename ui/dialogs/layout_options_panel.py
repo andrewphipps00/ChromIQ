@@ -721,7 +721,7 @@ class LayoutOptionsPanel(QWidget):
         _mgrid.setContentsMargins(0, 0, 0, 0)
         _mgrid.setVerticalSpacing(4); _mgrid.setHorizontalSpacing(6)
         # "Use instrument margins" — when ticked, the four margins come from
-        # Preferences → Instrument Margins for this combo (read-only) (#93, Knut).
+        # Preferences → Instrument Limits for this combo (read-only) (#93, Knut).
         # Shown only when a threshold lookup is wired (set_threshold_lookup).
         self.use_instr_margins = QCheckBox(tr("Use instrument margins"), self)
         self.use_instr_margins.setVisible(False)
@@ -732,7 +732,7 @@ class LayoutOptionsPanel(QWidget):
         self._use_instr_tip = TooltipButton(
             tr("Use instrument margins"),
             tr("Fill the four page margins from the per-instrument minimums set "
-               "in Preferences → Instrument Margins for this instrument and "
+               "in Preferences → Instrument Limits for this instrument and "
                "paper, and lock them so the patch area always clears your "
                "reading jig. They refill automatically when you change "
                "instrument or paper. Untick to type your own margins."), self)
