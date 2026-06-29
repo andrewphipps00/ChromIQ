@@ -2074,5 +2074,7 @@
   "The minimum distance from the paper edge to the text on each side that can carry text: Top = strip labels, Bottom = sheet text, Clip = the clip-border / notes band. Increase a value if your printer clips text near that edge. These are independent of the page margins; if a margin is too small for its text, the text overflows toward this line and a margin warning is shown.": "The minimum distance from the paper edge to the text on each side that can carry text: Top = strip labels, Bottom = sheet text, Clip = the clip-border / notes band. Increase a value if your printer clips text near that edge. These are independent of the page margins; if a margin is too small for its text, the text overflows toward this line and a margin warning is shown.",
   "B": "B",
   "T": "T",
-  "Text distance from edge (mm):": "Text distance from edge (mm):"
+  "Text distance from edge (mm):": "Text distance from edge (mm):",
+  "⚠ Bottom margin is too small for the sheet text — it overflows toward the page edge.": "⚠ Bottom margin is too small for the sheet text — it overflows toward the page edge.",
+  "⚠ Top margin is too small for the strip labels — they overflow toward the page edge.": "⚠ Top margin is too small for the strip labels — they overflow toward the page edge."
 }

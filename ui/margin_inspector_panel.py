@@ -212,13 +212,15 @@ class MarginInspectorPanel(QGroupBox):
         thresholds_defined: bool,
         notify: bool,
         thresholds: dict | None = None,
+        text_warnings: "list[str] | None" = None,
     ) -> None:
         """Show ``report``'s margins and the pass/fail status.
 
         ``thresholds_defined`` is False when no thresholds exist for the chart's
         combo (status is then a neutral note, not green/red). ``notify`` mirrors
         the Settings flag — when False the status line is suppressed entirely
-        (margins still shown).
+        (margins still shown). ``text_warnings`` are extra messages (e.g. a margin
+        too small for its label/text band) shown with the margin status (#93).
         """
         if report is None:
             self.show_placeholder()
@@ -263,32 +265,35 @@ class MarginInspectorPanel(QGroupBox):
             self._striplen_in.setText("—")
 
         self._update_status(violations, thresholds_defined=thresholds_defined,
-                            notify=notify)
+                            notify=notify, text_warnings=text_warnings)
 
     # ------------------------------------------------------------------
     def _update_status(
         self, violations: list[Violation], *,
         thresholds_defined: bool, notify: bool,
+        text_warnings: "list[str] | None" = None,
     ) -> None:
         if not notify:
             self._status.setVisible(False)
             return
         self._status.setVisible(True)
+        text_warnings = list(text_warnings or [])
+        margin_lines = [
+            tr("⚠ {edge} margin {measured:.1f} mm is below the {threshold:.0f} mm minimum")
+            .format(edge=tr(v.edge), measured=v.measured_mm, threshold=v.threshold_mm)
+            for v in violations
+        ] if thresholds_defined else []
+        lines = margin_lines + text_warnings
+        if lines:                                       # something to warn about
+            self._status.setText("\n".join(lines))
+            self._status.setStyleSheet(
+                "color: #e0564b; font-size: 14px; font-weight: 700;")
+            return
         if not thresholds_defined:
             self._status.setText(tr(
                 "No instrument margins set for this instrument and paper size."))
             self._status.setStyleSheet("color: #909090; font-size: 11px;")
             return
-        if not violations:
-            self._status.setText(tr("Margins: OK"))
-            self._status.setStyleSheet(
-                "color: #4fc27a; font-size: 15px; font-weight: 700;")
-            return
-        lines = [
-            tr("⚠ {edge} margin {measured:.1f} mm is below the {threshold:.0f} mm minimum")
-            .format(edge=tr(v.edge), measured=v.measured_mm, threshold=v.threshold_mm)
-            for v in violations
-        ]
-        self._status.setText("\n".join(lines))
+        self._status.setText(tr("Margins: OK"))
         self._status.setStyleSheet(
-            "color: #e0564b; font-size: 14px; font-weight: 700;")
+            "color: #4fc27a; font-size: 15px; font-weight: 700;")

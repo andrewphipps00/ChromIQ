@@ -159,3 +159,24 @@ def test_changing_threshold_moves_preview_guides(qapp, tmp_path):
     guides_after = list(tab._preview._margin_guides)
 
     assert guides_after != guides_before, "guide positions must follow the new thresholds"
+
+
+def test_panel_shows_text_overflow_warning(qapp):
+    """A 'margin too small for its text band' warning shows in the status (red),
+    alongside / instead of the green Margins-OK (#93, Knut)."""
+    from ui.margin_inspector_panel import MarginInspectorPanel
+    from workflow.margin_inspector import MarginReport
+    panel = MarginInspectorPanel()
+    report = MarginReport(left_mm=10, right_mm=10, top_mm=4, bottom_mm=10,
+                          strip_width_mm=8.0, strip_length_mm=200.0,
+                          page_w_mm=210.0, page_h_mm=297.0)
+    # No threshold violations, but a text-overflow warning is passed in.
+    panel.update_report(report, [], thresholds_defined=True, notify=True,
+                        text_warnings=["⚠ Top margin is too small for the strip labels."])
+    assert "too small for the strip labels" in panel._status.text()
+    assert "e0564b" in panel._status.styleSheet()        # warning (red), not green
+    # With no warnings and no violations it's back to green OK.
+    panel.update_report(report, [], thresholds_defined=True, notify=True,
+                        text_warnings=[])
+    assert panel._status.text() == "Margins: OK"
+    panel.deleteLater()

@@ -6783,6 +6783,7 @@ class TabChart(QWidget):
             thresholds_defined=bool(thresholds),
             notify=bool(self._settings.get("margin_violation_notify", True)),
             thresholds=thresholds,
+            text_warnings=self._engine_text_overflow_warnings(),
         )
         self._refresh_margin_guides(report, thresholds, violations)
         self._refresh_measured_guides(report)
@@ -6803,6 +6804,33 @@ class TabChart(QWidget):
             guides.append(("h", report.top_mm / ph))
             guides.append(("h", 1.0 - report.bottom_mm / ph))
         self._preview.set_measured_guides(guides or None)
+
+    def _engine_text_overflow_warnings(self) -> "list[str]":
+        """Warnings for when a page margin is too small to hold the text band that
+        side carries (margins are the law, so the text overflows toward the page
+        edge — flag it below the preview, by the margin violations) (#93, Knut).
+        Engine-Manual only; empty otherwise."""
+        warns: list[str] = []
+        try:
+            manual = (self._manual_btn is not None and self._manual_btn.isChecked())
+            if not (manual and getattr(self, "_manual_layout_panel", None) is not None
+                    and bool(self._settings.get("use_chromiq_layout_engine", False))):
+                return warns
+            from workflow.layout_engine import instruments
+            r = self._current_layout_recipe()
+            geom = instruments.geom_from_build_kwargs(r.build_kwargs())
+            lab = geom.label_band_mm if geom.label_band_mm >= 0 else geom.txhisl
+            if r.show_strip_indicators and lab > 0 and \
+                    r.margin_top + 0.05 < r.text_edge_top_mm + lab:
+                warns.append(tr("⚠ Top margin is too small for the strip labels — "
+                                "they overflow toward the page edge."))
+            nlines = (1 if r.chart_text else 0) + (1 if r.stamp_command else 0)
+            if nlines and r.margin_bottom + 0.05 < r.text_edge_mm + 4.2 * nlines:
+                warns.append(tr("⚠ Bottom margin is too small for the sheet text — "
+                                "it overflows toward the page edge."))
+        except Exception:  # noqa: BLE001 — never block the inspector on this
+            pass
+        return warns
 
     def _refresh_margin_guides(self, report, thresholds, violations) -> None:
         """Push dotted threshold guide lines to the preview (or clear them)."""
