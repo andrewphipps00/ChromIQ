@@ -1,5 +1,27 @@
 # Changelog
 
+## v3.13.0-beta.30
+
+### 🐛 Fixed
+- **Multi-page engine charts report the right strip count per page** — the
+  on-screen "strips / patches this page" now matches the preview and the estimate,
+  and chartread segments the pages correctly (PASSES_IN_STRIPS2 was a single
+  wrong number).
+
+### 🔧 Changed
+- **Patch-set editor swatch grid:** when "Show gap between patches" is on you can
+  set the **Horizontal and Vertical gap** independently (1–30 px); selected
+  patches get a pink border so the selection is visible even with numbers and gaps
+  off; horizontal and vertical gaps are equal by default.
+- **Create Chart layout panel reorg:** the Layout frame sits above Page geometry;
+  "Max strip length", "Chart offset" and "Don't cap strip length" are hidden in
+  "Prioritise chart area" (they don't apply there); Mode (ColorMunki Density /
+  i1 clip / SpectroScan shape) and the Clip-border toggle moved into the Layout
+  frame for better grouping.
+- Tooltip/help clarifications: ColorMunki Density notes it's greyed in area-first;
+  the Default Patch Sizes help describes the natural-size basis (and no longer
+  implies a hard "stretch cap"); the generator's per-set ⓘ icons align.
+
 ## v3.13.0-beta.29
 
 ### 🔧 Changed
