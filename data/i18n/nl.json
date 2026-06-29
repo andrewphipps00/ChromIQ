@@ -2082,5 +2082,7 @@
   "Image fit:": "Image fit:",
   "Image move (mm):": "Image move (mm):",
   "Rotate": "Rotate",
-  "Scale": "Scale"
+  "Scale": "Scale",
+  "Patches (this page)": "Patches (this page)",
+  "⚠ Strip length {len:.0f} mm exceeds the {ruler:.0f} mm instrument ruler — the strip may not fit your jig": "⚠ Strip length {len:.0f} mm exceeds the {ruler:.0f} mm instrument ruler — the strip may not fit your jig"
 }

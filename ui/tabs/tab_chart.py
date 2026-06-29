@@ -6677,7 +6677,8 @@ class TabChart(QWidget):
             n0 = min(lay.total_patches, lay.patches_per_page)
             cols = (n0 + rows - 1) // rows if rows else 0
             panel.set_estimate(total=lay.total_patches, rows=rows, cols=cols,
-                               pages=lay.pages, patch_w=geom.pwid, patch_h=geom.plen)
+                               pages=lay.pages, patch_w=geom.pwid, patch_h=geom.plen,
+                               page_patches=n0)
         except Exception:
             panel.clear_estimate()
 
@@ -6706,8 +6707,13 @@ class TabChart(QWidget):
                 idx = 0
             cols = passes[idx] if passes else 0
             pw, ph = self._chart_patch_size_mm(ti2)
+            # Patches on the SHOWN page: full passes are `rows` tall; the chart's
+            # last pass may be partial, so cap by the remaining count (#93, Knut).
+            before = rows * sum(passes[:idx]) if passes else 0
+            page_patches = (min(rows * cols, total - before)
+                            if rows and cols else None)
             panel.set_actual(total=total, rows=rows, cols=cols, pages=len(tiffs),
-                             patch_w=pw, patch_h=ph)
+                             patch_w=pw, patch_h=ph, page_patches=page_patches)
         except Exception:
             panel.clear_actual()
 
@@ -6764,8 +6770,25 @@ class TabChart(QWidget):
         idx = self._preview.current_page()
         if not (0 <= idx < len(self._margin_tiffs)):
             idx = 0
-        report = measure_margins(self._margin_tiffs[idx], dpi=dpi,
-                                 ti2_path=self._margin_ti2)
+        # Engine charts: report EXACT margins/patch size from the recorded
+        # geometry (channels.json) instead of detecting them from the image —
+        # the image detector mis-reads the patch width as the strip pitch and a
+        # large Strip gap corrupts the detected margins (#93, Knut). Falls back to
+        # image measurement for printtarg charts.
+        self._ruler_over_mm = None
+        report = None
+        if self._margin_ti2 is not None:
+            from workflow.margin_inspector import measure_from_engine
+            ch = Path(self._margin_ti2).with_suffix(".channels.json")
+            eng = measure_from_engine(ch, idx) if ch.is_file() else None
+            if eng is not None:
+                report, ruler = eng
+                if (ruler and report.strip_length_mm is not None
+                        and report.strip_length_mm > ruler + 0.5):
+                    self._ruler_over_mm = ruler
+        if report is None:
+            report = measure_margins(self._margin_tiffs[idx], dpi=dpi,
+                                     ti2_path=self._margin_ti2)
         if report is None:
             panel.show_placeholder()
             self._preview.set_margin_guides(None)
@@ -6782,12 +6805,18 @@ class TabChart(QWidget):
             thresholds = self._settings.get_margin_thresholds().get(key)
 
         violations = check_violations(report, thresholds)
+        warns = self._engine_text_overflow_warnings()
+        if getattr(self, "_ruler_over_mm", None):
+            warns = list(warns) + [tr(
+                "⚠ Strip length {len:.0f} mm exceeds the {ruler:.0f} mm "
+                "instrument ruler — the strip may not fit your jig").format(
+                    len=report.strip_length_mm or 0.0, ruler=self._ruler_over_mm)]
         panel.update_report(
             report, violations,
             thresholds_defined=bool(thresholds),
             notify=bool(self._settings.get("margin_violation_notify", True)),
             thresholds=thresholds,
-            text_warnings=self._engine_text_overflow_warnings(),
+            text_warnings=warns,
         )
         self._refresh_margin_guides(report, thresholds, violations)
         self._refresh_measured_guides(report)

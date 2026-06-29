@@ -121,6 +121,72 @@ def check_violations(
     return out
 
 
+def measure_from_engine(
+    channels_path: "Path | str", page_idx: int = 0,
+) -> "tuple[Optional[MarginReport], Optional[float]] | None":
+    """Build a :class:`MarginReport` from a ChromIQ-engine chart's exact geometry.
+
+    The engine records every patch's exact pixel rectangle (per page) and the
+    recipe in ``<stem>.channels.json``, so for engine charts we report the TRUE
+    margins / patch size instead of detecting them from the rendered image. This
+    fixes the image-detection artefacts Knut hit (patch width read as the strip
+    *pitch*, and a large Strip gap corrupting the detected margins) (#93).
+
+    Returns ``(report, ruler_mm)`` — ``ruler_mm`` is the instrument's physical
+    strip-length limit (0/None when it has none), so the caller can warn when the
+    strip is longer than the ruler. ``None`` when the chart isn't an engine chart
+    or has no usable geometry (caller then falls back to image measurement).
+    """
+    import json
+
+    try:
+        doc = json.loads(Path(channels_path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    layout = doc.get("layout") if isinstance(doc, dict) else None
+    if not isinstance(layout, dict) or layout.get("engine") != "chromiq":
+        return None
+    all_rects = layout.get("patches") or []
+    if not all_rects:
+        return None
+    rects = [r for r in all_rects if int(r.get("page", 0)) == page_idx]
+    if not rects:
+        rects = [r for r in all_rects if int(r.get("page", 0)) == 0]
+    if not rects:
+        return None
+    pm = layout.get("paper_mm") or []
+    if len(pm) != 2 or not pm[0] or not pm[1]:
+        return None
+    dpi = float(layout.get("dpi") or 300) or 300.0
+    px2mm = _MM_PER_INCH / dpi
+    paper_w_mm, paper_h_mm = float(pm[0]), float(pm[1])
+
+    x0 = min(r["x"] for r in rects)
+    x1 = max(r["x"] + r["w"] for r in rects)
+    y0 = min(r["y"] for r in rects)
+    y1 = max(r["y"] + r["h"] for r in rects)
+
+    report = MarginReport(
+        left_mm=max(0.0, x0 * px2mm),
+        right_mm=max(0.0, paper_w_mm - x1 * px2mm),
+        top_mm=max(0.0, y0 * px2mm),
+        bottom_mm=max(0.0, paper_h_mm - y1 * px2mm),
+        strip_width_mm=rects[0]["w"] * px2mm,        # exact patch width (pwid)
+        page_w_mm=paper_w_mm, page_h_mm=paper_h_mm,
+        strip_length_mm=(y1 - y0) * px2mm,
+    )
+    ruler_mm: Optional[float] = None
+    try:
+        from workflow.layout_engine import instruments
+        rec = layout.get("recipe") or {}
+        inst = rec.get("instrument")
+        if inst:
+            ruler_mm = instruments.build(inst).ruler_mm or None
+    except Exception:  # pragma: no cover - defensive
+        ruler_mm = None
+    return report, ruler_mm
+
+
 def _tiff_dpi(path: Path, fallback: float) -> float:
     """Resolution printtarg baked into the TIFF, or ``fallback`` when absent."""
     try:

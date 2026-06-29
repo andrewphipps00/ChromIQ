@@ -67,6 +67,7 @@ class ChartLayoutInfoPanel(QGroupBox):
 
         rows = (
             ("total", tr("Total patches")),
+            ("page_patches", tr("Patches (this page)")),
             ("rows", tr("Patches per strip")),
             ("cols", tr("Strips (this page)")),
             ("pages", tr("Pages")),
@@ -128,20 +129,23 @@ class ChartLayoutInfoPanel(QGroupBox):
     _PATCH_TOL_MM = 0.15
 
     @staticmethod
-    def _as_dict(total, rows, cols, pages, patch_w, patch_h) -> dict:
+    def _as_dict(total, rows, cols, pages, patch_w, patch_h,
+                 page_patches=None) -> dict:
         # Patch size is held as a rounded (w, h) tuple so the diff-highlight can
         # compare it; formatted to "w×h mm" at render time. 2 decimals so a
         # derived size like 7.34 mm is visible instead of hidden by 1-dp rounding.
         patch = None
         if patch_w and patch_h and patch_w > 0 and patch_h > 0:
             patch = (round(float(patch_w), 2), round(float(patch_h), 2))
-        return {"total": total, "rows": rows, "cols": cols, "pages": pages,
-                "patch": patch}
+        return {"total": total, "page_patches": page_patches, "rows": rows,
+                "cols": cols, "pages": pages, "patch": patch}
 
     def set_actual(self, *, total: int, rows: int, cols: int, pages: int,
-                   patch_w: float = 0.0, patch_h: float = 0.0) -> None:
+                   patch_w: float = 0.0, patch_h: float = 0.0,
+                   page_patches: "int | None" = None) -> None:
         """The measured values of the chart currently in the preview."""
-        self._actual = self._as_dict(total, rows, cols, pages, patch_w, patch_h)
+        self._actual = self._as_dict(total, rows, cols, pages, patch_w, patch_h,
+                                     page_patches)
         self._render()
 
     def clear_actual(self) -> None:
@@ -149,9 +153,11 @@ class ChartLayoutInfoPanel(QGroupBox):
         self._render()
 
     def set_estimate(self, *, total: int, rows: int, cols: int, pages: int,
-                     patch_w: float = 0.0, patch_h: float = 0.0) -> None:
+                     patch_w: float = 0.0, patch_h: float = 0.0,
+                     page_patches: "int | None" = None) -> None:
         """The predicted values for the current (engine) settings."""
-        self._estimate = self._as_dict(total, rows, cols, pages, patch_w, patch_h)
+        self._estimate = self._as_dict(total, rows, cols, pages, patch_w, patch_h,
+                                       page_patches)
         self._render()
 
     def clear_estimate(self) -> None:
