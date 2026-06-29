@@ -287,12 +287,18 @@ def test_use_instrument_margins_fills_and_locks(app):
     from ui.dialogs.layout_options_panel import LayoutOptionsPanel
     panel = LayoutOptionsPanel(with_selectors=True)
     panel.set_threshold_lookup(lambda inst, paper: {"L": 26, "R": 9, "T": 38, "B": 10})
+    # the user's own margins, remembered before ticking
+    for k, v in (("t", 7.0), ("r", 8.0), ("b", 9.0), ("l", 5.0)):
+        panel.margins[k].setValue(v)
     panel.use_instr_margins.setChecked(True)
     assert panel.margins["l"].value() == 26 and panel.margins["t"].value() == 38
     assert panel.margins["r"].value() == 9 and panel.margins["b"].value() == 10
     assert not panel.margins["t"].isEnabled()        # locked while ticked
     panel.use_instr_margins.setChecked(False)
     assert panel.margins["t"].isEnabled()            # editable again
+    # unticking restores the user's own margins (not the threshold values)
+    assert (panel.margins["t"].value(), panel.margins["r"].value(),
+            panel.margins["b"].value(), panel.margins["l"].value()) == (7, 8, 9, 5)
     # hidden when no lookup is wired
     bare = LayoutOptionsPanel(with_selectors=True)
     assert not bare.use_instr_margins.isVisibleTo(bare)

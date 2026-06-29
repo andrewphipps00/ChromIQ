@@ -717,16 +717,19 @@ class LayoutOptionsPanel(QWidget):
         self.use_instr_margins.setVisible(False)
         self.use_instr_margins.toggled.connect(self._sync_instr_margins)
         self.use_instr_margins.toggled.connect(self._emit)
-        _mgrid.addWidget(self.use_instr_margins, 0, 0, 1, 2)
-        _mgrid.addWidget(TooltipButton(
+        # Its own Page-geometry row so the ⓘ aligns with the panel's tooltip
+        # column (gg col 2), not buried inside the margins sub-grid (Knut).
+        self._use_instr_tip = TooltipButton(
             tr("Use instrument margins"),
             tr("Fill the four page margins from the per-instrument minimums set "
                "in Preferences → Instrument Margins for this instrument and "
                "paper, and lock them so the patch area always clears your "
                "reading jig. They refill automatically when you change "
-               "instrument or paper. Untick to type your own margins."),
-            self), 0, 2)
-        for _i, _k in enumerate(("t", "r", "b", "l"), start=1):
+               "instrument or paper. Untick to type your own margins."), self)
+        self._use_instr_tip.setVisible(False)
+        gg.addWidget(self.use_instr_margins, 0, 1)
+        gg.addWidget(self._use_instr_tip, 0, 2)
+        for _i, _k in enumerate(("t", "r", "b", "l")):
             _dl = QLabel(_mlabels[_k], self); _dl.setMinimumWidth(46)
             _mgrid.addWidget(_dl, _i, 0)
             _mgrid.addWidget(mm_inch(self.margins[_k]), _i, 1)
@@ -765,30 +768,30 @@ class LayoutOptionsPanel(QWidget):
                "if your clip covers more of the page; the patches start to its "
                "right. Only applies to the i1Pro / i1Pro 3 in clip-border mode "
                "(printtarg fixes this at 26 mm)."), self)
-        add_row(gg, 0, tr("Margins (mm):"), _margins_w,
+        add_row(gg, 1, tr("Margins (mm):"), _margins_w,
                 tip=TooltipButton(
                     tr("Margins"),
                     tr("Blank borders kept clear of patches on each edge — Top, "
                        "Right, Bottom, Left, in mm. Most printers can't print to "
                        "the very edge, so keep a few mm here; the smallest of the "
                        "four also sets the instrument's leader/clip base."), self))
-        gg.addWidget(self.clip_width_label, 1, 0, _Qt.AlignmentFlag.AlignRight)
-        gg.addWidget(self.clip_width, 1, 1)
-        gg.addWidget(self.clip_width_tip, 1, 2)
-        add_row(gg, 2, tr("Resolution:"), self.dpi,
+        gg.addWidget(self.clip_width_label, 2, 0, _Qt.AlignmentFlag.AlignRight)
+        gg.addWidget(self.clip_width, 2, 1)
+        gg.addWidget(self.clip_width_tip, 2, 2)
+        add_row(gg, 3, tr("Resolution:"), self.dpi,
                 tip=TooltipButton(
                     tr("Resolution"),
                     tr("Pixel density of the printed chart TIFF, in dots per inch. "
                        "300 dpi is a good default; higher makes a larger file with "
                        "no real benefit for solid colour patches."), self))
-        add_row(gg, 3, tr("Max strip length:"), mm_inch(self.max_strip),
+        add_row(gg, 4, tr("Max strip length:"), mm_inch(self.max_strip),
                 tip=TooltipButton(
                     tr("Max strip length"),
                     tr("Caps how long a single strip (column of patches) may get, "
                        "in mm. Leave at “auto” to use the instrument's limit. Some "
                        "scanners can't read a strip past a certain length; lower "
                        "this if long strips misread."), self))
-        add_row(gg, 4, tr("Chart offset (mm):"),
+        add_row(gg, 5, tr("Chart offset (mm):"),
                 cell(self.offx, QLabel("×", self), self.offy),
                 tip=TooltipButton(
                     tr("Chart offset"),
@@ -796,19 +799,19 @@ class LayoutOptionsPanel(QWidget):
                        "sheet, in mm. Usually 0 — use it to nudge the layout away "
                        "from a printer's unprintable area or to line up with a "
                        "pre-printed sheet."), self))
-        add_row(gg, 5, tr("Strip pattern:"), self.strip_pat,
+        add_row(gg, 6, tr("Strip pattern:"), self.strip_pat,
                 tip=TooltipButton(
                     tr("Strip pattern"),
                     tr("How strips (columns) are labelled — the letter part of a "
                        "patch's location, e.g. A, B, C. Leave the default unless "
                        "you have a specific labelling scheme to match."), self))
-        add_row(gg, 6, tr("Patch pattern:"), self.patch_pat,
+        add_row(gg, 7, tr("Patch pattern:"), self.patch_pat,
                 tip=TooltipButton(
                     tr("Patch pattern"),
                     tr("How patches within a strip are numbered — the number part "
                        "of a location, e.g. A1, A2, A3. Leave the default unless "
                        "matching a specific scheme."), self))
-        self._patch_align_row = add_row(gg, 7, tr("Patch area alignment:"),
+        self._patch_align_row = add_row(gg, 8, tr("Patch area alignment:"),
                 self.patch_align,
                 tip=TooltipButton(
                     tr("Patch area alignment"),
@@ -822,7 +825,7 @@ class LayoutOptionsPanel(QWidget):
                        "opposite corner, and so on. It only moves the block — the "
                        "patch count and size don't change. Margins / thresholds "
                        "are still respected."), self))
-        gg.addWidget(self.nolimit, 8, 1)
+        gg.addWidget(self.nolimit, 9, 1)
         gg.addWidget(TooltipButton(
             tr("Don't cap strip length"),
             tr("Removes the strip-length limit entirely (printtarg -P), letting a "
@@ -1226,6 +1229,8 @@ class LayoutOptionsPanel(QWidget):
         self._threshold_lookup = fn
         if hasattr(self, "use_instr_margins"):
             self.use_instr_margins.setVisible(fn is not None)
+            if hasattr(self, "_use_instr_tip"):
+                self._use_instr_tip.setVisible(fn is not None)
             self._sync_instr_margins()
 
     def _current_instrument_paper(self) -> tuple[str, str]:
@@ -1236,25 +1241,42 @@ class LayoutOptionsPanel(QWidget):
 
     def _sync_instr_margins(self, *_a) -> None:
         """When "Use instrument margins" is on, fill the four margins from the
-        threshold lookup for the current combo and lock them read-only (#93)."""
+        threshold lookup for the current combo and lock them read-only; ticking it
+        remembers the user's own margins and unticking restores them (#93, Knut)."""
         fn = getattr(self, "_threshold_lookup", None)
         on = (fn is not None and hasattr(self, "use_instr_margins")
               and self.use_instr_margins.isChecked())
+        loading = getattr(self, "_loading", False)
+        if loading:                      # a fresh recipe → no restore baseline
+            self._saved_margins = None
+
+        def _set(k, v):
+            self.margins[k].blockSignals(True)
+            self.margins[k].setValue(float(v))
+            self.margins[k].blockSignals(False)
+
         if on:
+            # Remember the user's typed margins the first time it's ticked, so
+            # unticking can put them back.
+            if not loading and getattr(self, "_saved_margins", None) is None:
+                self._saved_margins = {k: self.margins[k].value()
+                                       for k in ("t", "r", "b", "l")}
             inst, paper = self._current_instrument_paper()
-            thr = None
             try:
                 thr = fn(inst, paper)
             except Exception:
                 thr = None
             if thr:
-                _m = {"t": "T", "r": "R", "b": "B", "l": "L"}
-                for k, key in _m.items():
+                for k, key in {"t": "T", "r": "R", "b": "B", "l": "L"}.items():
                     v = thr.get(key)
                     if v not in (None, ""):
-                        self.margins[k].blockSignals(True)
-                        self.margins[k].setValue(float(v))
-                        self.margins[k].blockSignals(False)
+                        _set(k, v)
+        else:
+            saved = getattr(self, "_saved_margins", None)
+            if saved is not None:        # restore what was there before ticking
+                for k in ("t", "r", "b", "l"):
+                    _set(k, saved[k])
+                self._saved_margins = None
         for k in ("t", "r", "b", "l"):
             self.margins[k].setEnabled(not on)
 
