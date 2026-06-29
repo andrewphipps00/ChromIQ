@@ -249,7 +249,11 @@ class SettingsDialog(QDialog):
         ))
         i1g.addLayout(i1_clip_row)
 
-        layout.addWidget(i1pro_grp)
+        # These are printtarg (old-engine) i1Pro options; they live on the Chart
+        # Layout tab now and are greyed when the ChromIQ engine is active, since
+        # they have no effect then (Knut #93). Built here (widgets referenced by
+        # load/save), re-homed in _build_chart_layout_tab.
+        self._i1pro_grp = i1pro_grp
 
         # ---- Neutral patches ----
         neutral_grp = QGroupBox(tr("Neutral Patches"), self)
@@ -1252,6 +1256,14 @@ class SettingsDialog(QDialog):
         # toggle), so nothing to gate here.
         self._on_layout_instr_changed()      # populate paper+mode for the default
         self._preselect_layout_combo()       # then jump to the active combo (#93)
+
+        # Re-home the printtarg (old-engine) i1Pro options here, greyed when the
+        # ChromIQ engine is active (they have no effect then) (Knut #93).
+        if getattr(self, "_i1pro_grp", None) is not None:
+            engine_on = bool(self._settings.get("use_chromiq_layout_engine", False))
+            self._i1pro_grp.setEnabled(not engine_on)
+            self._i1pro_grp.setTitle(tr("i1Pro Chart Defaults (printtarg engine)"))
+            page.layout().addWidget(self._i1pro_grp)
         return self._scroll_wrap(page)
 
     def _preselect_layout_combo(self) -> None:
