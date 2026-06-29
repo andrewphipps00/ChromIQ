@@ -1898,9 +1898,12 @@ class _NewChartDialog(QDialog):
             (15, self._gen_fill,  tr("Fill remaining gaps")),
         )
         for row, cb, title in row_tips:
+            # Top-align the ⓘ so every set's icon lines up on the first row even
+            # when a row is taller (the "From image" row has a Load-image button) —
+            # AlignCenter put the From-image ⓘ lower than the rest (Knut #93).
             gg.addWidget(
                 _magenta_tip(title, cb.toolTip(), self._gen_panel, min_width=360),
-                row, 8, Qt.AlignmentFlag.AlignCenter)
+                row, 8, Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
 
         # The counts all live in one column (7), so they stay left-aligned in a
         # tidy column for every set. Greys' extra "offset:" control sits in cols

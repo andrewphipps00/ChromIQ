@@ -80,7 +80,10 @@ class LayoutOptionsPanel(QWidget):
                        "measuring-rig accessory and packs more patches per sheet. "
                        "“Extra-high density” packs even more (a ChromIQ extension) "
                        "— only use it if your patches stay large enough to read "
-                       "reliably (watch the warning)."))
+                       "reliably (watch the warning).\n\n"
+                       "Only available with “Prioritise patch size”: in "
+                       "“Prioritise chart area” the patch size comes from the "
+                       "columns/rows you set, so Density is greyed out."))
         if inst == "SS":
             return (tr("Patch shape"),
                     tr("Rectangular or hexagonal patches. Hexagons tessellate "
