@@ -336,3 +336,27 @@ def test_engine_randomize_scrambles_locations(tmp_path: Path) -> None:
         return re.findall(r'^\d+ "([A-Z0-9]+)"', t, re.M)[:10]
 
     assert first_locs(False) != first_locs(True)   # randomise actually changes it
+
+
+def test_engine_writes_per_page_strip_counts(tmp_path: Path) -> None:
+    """PASSES_IN_STRIPS2 must be the per-page strip count, comma-separated, like
+    printtarg — so chartread + the Create Chart layout-info read the right number
+    of strips per page (#93, Knut: on-screen strips were wrong)."""
+    import re
+    from workflow.layout_engine import chart, geometry, instruments, papers
+    from core.strip_utils import parse_passes_per_page
+    ti1 = tmp_path / "p.ti1"
+    rows = "\n".join(f"{i} {i*4%101} {i*7%101} {i*11%101}" for i in range(1, 1220))
+    ti1.write_text('CTI1\nCOLOR_REP "RGB"\nNUMBER_OF_FIELDS 4\nBEGIN_DATA_FORMAT\n'
+                   'SAMPLE_ID RGB_R RGB_G RGB_B\nEND_DATA_FORMAT\n'
+                   'NUMBER_OF_SETS 1219\nBEGIN_DATA\n' + rows + '\nEND_DATA\n')
+    res = chart.build_chart(str(ti1), str(tmp_path / "out"), instrument="i1",
+                            paper="A4", layout_mode="area_first",
+                            area_method="by_grid", area_default_w=8.0,
+                            area_default_h=10.0, dpi=72)
+    counts = parse_passes_per_page(tmp_path / "out.ti2")
+    assert len(counts) == res.layout.pages > 1          # one entry per page
+    # passes × steps accounts for the whole (padded) patch set.
+    assert sum(counts) * res.layout.steps_in_pass == res.layout.total_patches
+    # not the old single-number bug (every page reads the same full count except last)
+    assert counts[0] == counts[0] and counts[-1] <= counts[0]

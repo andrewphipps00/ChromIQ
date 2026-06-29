@@ -84,7 +84,20 @@ def build_ti2_text(
     for kw, val in geom.extra_keywords:
         add(f'{kw} "{val}"')
     add(f'STEPS_IN_PASS "{layout.steps_in_pass}"')
-    add(f'PASSES_IN_STRIPS2 "{layout.passes}"')
+    # PASSES_IN_STRIPS2 is the per-page STRIP (pass) count, comma-separated, just
+    # as printtarg writes it (e.g. "22,22,5") — chartread and the Create Chart
+    # layout-info read it this way. The engine previously wrote a single number
+    # (the last strip's row count), which mis-read as "page 1 has N strips"
+    # (#93, Knut). Derive the real per-page strip counts here.
+    _steps = layout.steps_in_pass or 1
+    _per_page = layout.patches_per_page or 0
+    _strip_counts: list[int] = []
+    _remaining = layout.total_patches
+    for _pg in range(max(1, layout.pages)):
+        _on_page = min(_per_page, _remaining) if _per_page else _remaining
+        _strip_counts.append((_on_page + _steps - 1) // _steps)
+        _remaining -= _on_page
+    add(f'PASSES_IN_STRIPS2 "{",".join(str(c) for c in _strip_counts)}"')
     add(f'STRIP_INDEX_PATTERN "{strip_pattern}"')
     add(f'PATCH_INDEX_PATTERN "{patch_pattern}"')
     add('INDEX_ORDER "STRIP_THEN_PATCH"')
