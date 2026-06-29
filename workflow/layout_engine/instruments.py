@@ -107,6 +107,12 @@ class Geom:
     # brick wall (#93, Knut). 0 = no stagger. Render + patch_rects honour it; the
     # hxeh reservation makes room so capacity reflects it.
     row_stagger_mm: float = 0.0
+    # Minimum distance (mm) from the PAPER EDGE to the start of text on that side
+    # (Knut #93): strip labels (top) and the clip/notes band (clip side) sit this
+    # far in from the edge. Independent of the margins; if a margin is too small
+    # for the text it overflows toward this line and a violation is flagged.
+    text_edge_top_mm: float = 4.0
+    text_edge_clip_mm: float = 4.0
 
 
 def supported() -> list[str]:
@@ -140,6 +146,8 @@ def build(
     patch_area_align: str = "center-left",
     clip_side: str = "left",
     cm_stagger: bool = False,
+    text_edge_top: float = 4.0,
+    text_edge_clip: float = 4.0,
 ) -> Geom:
     """Resolve :class:`Geom`, applying ChromIQ extensions over the base geometry.
 
@@ -197,7 +205,9 @@ def build(
                    strip_indicator_gap=sig, offset_x=offset_x, offset_y=offset_y,
                    edge_spacers=edge_spacers,
                    patch_area_align=patch_area_align or "center-left",
-                   clip_side=clip_side or "left")
+                   clip_side=clip_side or "left",
+                   text_edge_top_mm=float(text_edge_top or 4.0),
+                   text_edge_clip_mm=float(text_edge_clip or 4.0))
 
 
 # Keys of a recipe ``build_kwargs()`` dict that affect the laid-out geometry —
@@ -211,7 +221,7 @@ GEOM_BUILD_KEYS = (
     "patch_w", "patch_h", "spacer_width", "inter_patch", "strip_gap", "max_strip",
     "strip_indicator_gap", "offset_x", "offset_y", "nolpcbord", "nolimit",
     "clip_border_width", "clip_band", "edge_spacers", "patch_area_align",
-    "clip_side", "cm_stagger",
+    "clip_side", "cm_stagger", "text_edge_top", "text_edge_clip",
 )
 
 

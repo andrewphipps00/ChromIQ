@@ -237,13 +237,12 @@ def placement(geom: Geom, paper_w_mm: float, paper_h_mm: float, layout: Layout) 
     # grid 2-D: column letters on top + row numbers down the side, #93 Knut), so
     # the patch block starts after it. avail_w already excludes rlwi.
     _y0 = amints + _lead + g.hxeh + g.offset_y
-    # Strip labels sit just above the first patch row, INSIDE the top margin (the
-    # margin is the law — no leader pushes the patches down). A user
-    # strip_indicator_gap opens a gap between the label and the patches; the label
-    # band itself (txhi) is added above that. If the top margin is too small to
-    # hold the band the label overflows toward the page edge (a violation is
-    # flagged) but the patches still start at the margin (Knut #93).
-    _leader_top = _y0 - g.strip_indicator_gap - txhi
+    # Strip labels anchor at the text-edge distance from the PAPER TOP EDGE (Knut
+    # #93: labels 4 mm from the edge, not flush above the patches), inside the top
+    # margin. A user strip_indicator_gap nudges them further in. If the band +
+    # edge distance exceeds the top margin the label overflows toward the patches
+    # (a violation is flagged), but the patches still start exactly at the margin.
+    _leader_top = g.text_edge_top_mm + g.strip_indicator_gap + g.offset_y
     return Placement(
         x0=g.margin_l + g.rlwi + fh * extra_w + g.hxew + g.offset_x,
         y0_first=_y0,
@@ -320,7 +319,10 @@ def clip_area_mm(geom: Geom, paper_h_mm: float, paper_w_mm: float | None = None
     if geom.lbord <= 0:
         return None
     clip_w = geom.lbord + geom.border          # full reserved zone from the edge
-    inset = min(CLIP_CONTENT_INSET_MM, clip_w * 0.2)
+    # Clip content sits this far in from the page edge (the clip-side text-edge
+    # distance, default 4 mm; Knut #93), capped so it never eats the whole band.
+    inset = min(getattr(geom, "text_edge_clip_mm", CLIP_CONTENT_INSET_MM),
+                clip_w * 0.2)
     width = max(0.0, clip_w - inset)
     height = max(0.0, paper_h_mm - geom.margin_t - geom.margin_b)
     # Right-side band: mirror to the far edge (needs the paper width) (#93).

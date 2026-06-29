@@ -156,6 +156,19 @@ def test_spacer_rects_match_render_flat_index():
     assert tuple(a[r0["y"] + r0["h"] // 2, r0["x"] + r0["w"] // 2]) == (255, 0, 255)
 
 
+def test_strip_labels_anchor_at_text_edge_from_top():
+    """Strip labels anchor at the top text-edge distance from the PAPER EDGE
+    (Knut #93), not flush above the patches — and capacity is unchanged by it."""
+    pw, ph = 210.0, 297.0
+    base = geometry.patches_per_sheet(instruments.build("i1", text_edge_top=4.0), pw, ph)
+    for te in (4.0, 12.0, 20.0):
+        g = instruments.build("i1", text_edge_top=te)
+        lay = geometry.compute(g, pw, ph, 60)
+        pl = geometry.placement(g, pw, ph, lay)
+        assert abs(pl.leader_top - te) < 1e-9        # label anchored te mm from edge
+        assert geometry.patches_per_sheet(g, pw, ph) == base   # capacity unchanged
+
+
 def test_strip_indicator_gap_does_not_change_capacity():
     """The strip-indicator gap lives inside the top margin (margins are the law),
     so it never changes the patch count — it only moves the label further above
@@ -170,7 +183,9 @@ def test_strip_indicator_gap_does_not_change_capacity():
         assert lay.patches_per_page == base          # capacity unchanged by the gap
         pl = geometry.placement(g, pw, ph, lay)
         if prev_leader is not None:
-            assert pl.leader_top <= prev_leader      # bigger gap → label higher up
+            # labels anchor at the top text-edge; a bigger gap nudges them DOWN,
+            # further from the edge (toward the patches) — never changing capacity.
+            assert pl.leader_top >= prev_leader
         prev_leader = pl.leader_top
 
 

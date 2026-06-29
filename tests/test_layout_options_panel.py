@@ -57,6 +57,7 @@ def test_all_engine_options_roundtrip(app):
         underline_mode="cycle", underline_thickness_mm=0.8, underline_gap_mm=1.2,
         chart_text="{project}", chart_text_font="Inter", chart_text_size_mm=3.5,
         chart_text_bold=True, chart_text_italic=False, text_edge_mm=7.0,
+        text_edge_top_mm=5.0, text_edge_clip_mm=6.0,
         stamp_command=True,
         clip_border_width_mm=30.0, clip_content_mode="text", clip_text="ID",
         clip_side="right",
@@ -79,8 +80,8 @@ def test_all_engine_options_roundtrip(app):
               "indicator_align", "underline_mode",
               "underline_thickness_mm", "underline_gap_mm", "chart_text",
               "chart_text_font", "chart_text_size_mm", "chart_text_bold",
-              "chart_text_italic", "text_edge_mm", "stamp_command",
-              "clip_border_width_mm",
+              "chart_text_italic", "text_edge_mm", "text_edge_top_mm",
+              "text_edge_clip_mm", "stamp_command", "clip_border_width_mm",
               "clip_content_mode", "clip_side", "clip_text", "clip_text_font",
               "clip_image_path", "strip_pattern", "patch_pattern",
               "randomize", "seed"):

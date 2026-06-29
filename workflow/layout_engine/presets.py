@@ -112,8 +112,10 @@ class LayoutRecipe:
     chart_text_size_mm: float = 0.0      # 0 = default (~3.2 mm)
     chart_text_bold: bool = False
     chart_text_italic: bool = False
-    text_edge_mm: float = 4.0            # distance from the page edge to the
-    #                                      bottom sheet text (printer-safe inset)
+    text_edge_mm: float = 4.0            # min distance, page edge → BOTTOM sheet
+    #                                      text (printer-safe inset)
+    text_edge_top_mm: float = 4.0        # min distance, page edge → strip labels
+    text_edge_clip_mm: float = 4.0       # min distance, page edge → clip/notes
     stamp_command: bool = False          # stamp the layout summary on the sheet
     clip_border: bool = True       # i1/p3 only — paper clip border present
     clip_border_width_mm: float = 26.0   # reserved clip-zone width (mm)
@@ -210,6 +212,8 @@ class LayoutRecipe:
             chart_text_font=d.get("chart_text_font", "Inter"),
             chart_text_size_mm=float(d.get("chart_text_size_mm") or 0.0),
             text_edge_mm=float(d.get("text_edge") or 4.0),
+            text_edge_top_mm=float(d.get("text_edge_top") or 4.0),
+            text_edge_clip_mm=float(d.get("text_edge_clip") or 4.0),
             chart_text_bold=bool(d.get("chart_text_bold", False)),
             chart_text_italic=bool(d.get("chart_text_italic", False)),
             stamp_command=bool(d.get("stamp_command", False)),
@@ -306,6 +310,8 @@ class LayoutRecipe:
             "chart_text_font": self.chart_text_font,
             "chart_text_size_mm": self.chart_text_size_mm,
             "text_edge": self.text_edge_mm or 4.0,
+            "text_edge_top": self.text_edge_top_mm or 4.0,
+            "text_edge_clip": self.text_edge_clip_mm or 4.0,
             "chart_text_bold": self.chart_text_bold,
             "chart_text_italic": self.chart_text_italic,
             "stamp_command": self.stamp_command,

@@ -908,16 +908,33 @@ class LayoutOptionsPanel(QWidget):
                "instrument, paper, dpi, patch count, seed) in the bottom margin. "
                "Handy for re-creating an identical chart later from the printed "
                "sheet alone."), self), 4, 2)
-        self.text_edge = small_mm(top=30.0)
-        self.text_edge.setValue(4.0)
-        stg.addWidget(QLabel(tr("Text distance from edge:"), self), 5, 0)
-        stg.addWidget(self.text_edge, 5, 1)
+        # Min distance from the paper edge to text, one per text-bearing side
+        # (Knut #93): top = strip labels, bottom = sheet text, clip = notes/clip
+        # band. Independent of the margins; text overflows toward this line (and a
+        # violation is flagged) if its margin is too small.
+        self.text_edge_top = small_mm(top=30.0); self.text_edge_top.setValue(4.0)
+        self.text_edge = small_mm(top=30.0); self.text_edge.setValue(4.0)
+        self.text_edge_clip = small_mm(top=30.0); self.text_edge_clip.setValue(4.0)
+        _te = QHBoxLayout(); _te.setContentsMargins(0, 0, 0, 0); _te.setSpacing(4)
+        for _lbl, _sp in ((tr("T"), self.text_edge_top), (tr("B"), self.text_edge),
+                          (tr("Clip"), self.text_edge_clip)):
+            _sp.setMaximumWidth(50)
+            _te.addWidget(QLabel(_lbl, self)); _te.addWidget(_sp)
+        _te.addStretch()
+        _te_w = QWidget(self); _te_w.setLayout(_te)
+        # Label on its own row, the three compact spins below it, so the wide
+        # spin row doesn't force the whole panel wider.
+        stg.addWidget(QLabel(tr("Text distance from edge (mm):"), self), 5, 0, 1, 2)
+        stg.addWidget(_te_w, 6, 0, 1, 3)
         stg.addWidget(TooltipButton(
             tr("Text distance from edge"),
-            tr("How far the bottom sheet text sits from the page edge. Increase "
-               "it if your printer can't print that close to the edge and the "
-               "summary line gets clipped; the patches make room for it "
-               "automatically."), self), 5, 2)
+            tr("The minimum distance from the paper edge to the text on each side "
+               "that can carry text: Top = strip labels, Bottom = sheet text, "
+               "Clip = the clip-border / notes band. Increase a value if your "
+               "printer clips text near that edge. These are independent of the "
+               "page margins; if a margin is too small for its text, the text "
+               "overflows toward this line and a margin warning is shown."), self),
+            5, 2)
         v.addWidget(st)
         self._update_text_preview()
 
@@ -1778,6 +1795,8 @@ class LayoutOptionsPanel(QWidget):
         self.chart_text_font.setCurrentIndex(_ctf if _ctf >= 0 else 0)
         self.chart_text_size.setValue(r.chart_text_size_mm)
         self.text_edge.setValue(getattr(r, "text_edge_mm", 4.0) or 4.0)
+        self.text_edge_top.setValue(getattr(r, "text_edge_top_mm", 4.0) or 4.0)
+        self.text_edge_clip.setValue(getattr(r, "text_edge_clip_mm", 4.0) or 4.0)
         self.ct_bold.setChecked(r.chart_text_bold)
         self.ct_italic.setChecked(r.chart_text_italic)
         self.stamp_command.setChecked(r.stamp_command)
@@ -1865,6 +1884,8 @@ class LayoutOptionsPanel(QWidget):
         r.chart_text_font = self.chart_text_font.currentData() or "Inter"
         r.chart_text_size_mm = self.chart_text_size.value()
         r.text_edge_mm = self.text_edge.value()
+        r.text_edge_top_mm = self.text_edge_top.value()
+        r.text_edge_clip_mm = self.text_edge_clip.value()
         r.chart_text_bold = self.ct_bold.isChecked()
         r.chart_text_italic = self.ct_italic.isChecked()
         r.stamp_command = self.stamp_command.isChecked()

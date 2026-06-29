@@ -2067,9 +2067,12 @@
   "Reading density": "Reading density",
   "Rectangular or hexagonal patches. Hexagons tessellate tighter, fitting a few more patches per sheet; rectangular is the safe default.": "Rectangular or hexagonal patches. Hexagons tessellate tighter, fitting a few more patches per sheet; rectangular is the safe default.",
   "Whether a CLIP BORDER is printed — the white strip the measuring rail grips so it can pull the chart through. Turning it off frees that space for more patches; only do so if your rig doesn't need it. Choose which edge it sits on, and what it carries (a notes box, text or a logo), in the Clip-border content section.": "Whether a CLIP BORDER is printed — the white strip the measuring rail grips so it can pull the chart through. Turning it off frees that space for more patches; only do so if your rig doesn't need it. Choose which edge it sits on, and what it carries (a notes box, text or a logo), in the Clip-border content section.",
-  "How far the bottom sheet text sits from the page edge. Increase it if your printer can't print that close to the edge and the summary line gets clipped; the patches make room for it automatically.": "How far the bottom sheet text sits from the page edge. Increase it if your printer can't print that close to the edge and the summary line gets clipped; the patches make room for it automatically.",
   "Text distance from edge": "Text distance from edge",
-  "Text distance from edge:": "Text distance from edge:",
   "ColorMunki only: shifts every second strip down by half a patch so the columns interleave like a brick wall — matching ArgyllCMS printtarg's measuring-rig layout. Reserves a little space at the top and bottom for the offset, so the patch count drops slightly. Leave off for a plain aligned grid.": "ColorMunki only: shifts every second strip down by half a patch so the columns interleave like a brick wall — matching ArgyllCMS printtarg's measuring-rig layout. Reserves a little space at the top and bottom for the offset, so the patch count drops slightly. Leave off for a plain aligned grid.",
-  "Offset every second strip": "Offset every second strip"
+  "Offset every second strip": "Offset every second strip",
+  "Clip": "Clip",
+  "The minimum distance from the paper edge to the text on each side that can carry text: Top = strip labels, Bottom = sheet text, Clip = the clip-border / notes band. Increase a value if your printer clips text near that edge. These are independent of the page margins; if a margin is too small for its text, the text overflows toward this line and a margin warning is shown.": "The minimum distance from the paper edge to the text on each side that can carry text: Top = strip labels, Bottom = sheet text, Clip = the clip-border / notes band. Increase a value if your printer clips text near that edge. These are independent of the page margins; if a margin is too small for its text, the text overflows toward this line and a margin warning is shown.",
+  "B": "B",
+  "T": "T",
+  "Text distance from edge (mm):": "Text distance from edge (mm):"
 }
