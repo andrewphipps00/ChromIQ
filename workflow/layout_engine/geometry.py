@@ -307,10 +307,18 @@ def realized_margins_mm(geom: Geom, paper_w_mm: float, paper_h_mm: float,
     n_first = min(layout.total_patches, layout.patches_per_page)
     n_passes = (n_first + steps - 1) // steps if steps else 0
     rows0 = min(steps, n_first) if steps else 0
+    # Edge spacers (printtarg-style brackets) are drawn one spacer ABOVE the first
+    # patch and one BELOW the last (raster.render_pages), so the printed content
+    # extends pspa past the patch block on each end. Measure to that content — not
+    # the patches — or the strip-length-direction margins under-report and the
+    # measured-margin guides sit inside the spacers, which then appear to overflow
+    # them (Knut #93/#18). Edge spacers are along the strip axis only, so they
+    # affect the top/bottom margins, never left/right.
+    _edge = geom.pspa if (geom.edge_spacers and geom.pspa > 0) else 0.0
     left = place.x_of(0)
-    top = place.y_of(0)
+    top = place.y_of(0) - _edge
     right = paper_w_mm - (place.x_of(max(0, n_passes - 1)) + geom.pwid)
-    bottom = paper_h_mm - (place.y_of(max(0, rows0 - 1)) + geom.plen)
+    bottom = paper_h_mm - (place.y_of(max(0, rows0 - 1)) + geom.plen + _edge)
     return (max(0.0, left), max(0.0, right), max(0.0, top), max(0.0, bottom))
 
 

@@ -438,12 +438,11 @@ def test_area_first_by_grid_auto_dims_fill_at_natural_size():
     assert R < 10.0 and B < 12.0
 
 
-def test_area_first_auto_uses_default_patch_size_from_table():
-    """An area-first auto dimension sizes patches to the Default Patch Sizes table
-    value (area_default_w/h) when threaded in, not the instrument's natural size —
-    so the size is tunable and patches don't stretch unboundedly (Knut #93)."""
+def test_area_first_auto_aims_for_natural_size_with_override():
+    """An area-first auto dimension aims for the instrument's natural patch size;
+    the area_default_w/h kwargs let a caller override that target (the table was
+    removed — natural size is a sufficient default on its own, Knut #93)."""
     from workflow.layout_engine.presets import LayoutRecipe
-    w, h = A4
     base = dict(instrument="i1", paper="A4", clip_border=True,
                 layout_mode="area_first", area_method="by_grid",
                 area_cols=0, area_rows=0)
@@ -451,17 +450,8 @@ def test_area_first_auto_uses_default_patch_size_from_table():
     big = instruments.geom_from_build_kwargs(
         {**LayoutRecipe(**base).build_kwargs(),
          "area_default_w": 16.0, "area_default_h": 20.0})
-    assert big.pwid > nat.pwid + 4 and big.plen > nat.plen + 6   # follows the table
+    assert big.pwid > nat.pwid + 4 and big.plen > nat.plen + 6   # override applied
     assert 15.0 <= big.pwid <= 18.0 and 19.0 <= big.plen <= 22.0
-
-
-def test_patch_size_table_lookup():
-    """The Default Patch Sizes table resolves per instrument/paper/orientation."""
-    from core.settings import default_patch_sizes, patch_size_for_combo
-    t = default_patch_sizes()
-    assert patch_size_for_combo(t, "i1", 210.0, 297.0) == (8.0, 10.0)
-    assert patch_size_for_combo(t, "p3", 210.0, 297.0) == (16.0, 20.0)
-    assert patch_size_for_combo(t, "i1", 999.0, 999.0) is None   # unknown paper
 
 
 def test_area_first_noop_without_targets():
@@ -653,3 +643,23 @@ def test_margins_are_law_furniture_does_not_reduce_capacity():
 
     assert cap(True, indicator_size_mm=30.0) == cap(True)     # law: unchanged
     assert cap(False, indicator_size_mm=30.0) < cap(False)    # patch-first: reduces
+
+
+def test_edge_spacers_counted_in_realized_margins():
+    """Edge spacers bracket each strip one pspa beyond the patch block, so the
+    realized top/bottom margins (which drive the measured-margin guides) must
+    measure to the spacer, not the patch — else the guides sit inside the edge
+    spacers and they look like they overflow the margins (Knut #18)."""
+    w, h = A4
+    base = dict(instrument="i1", paper="A4", layout_mode="area_first",
+                inter_patch=3.5, spacer_on=True, margins=(6.0, 6.0, 6.0, 6.0))
+    g_off = instruments.geom_from_build_kwargs({**base, "edge_spacers": False})
+    g_on = instruments.geom_from_build_kwargs({**base, "edge_spacers": True})
+    lay_off = geometry.compute(g_off, w, h, 576)
+    lay_on = geometry.compute(g_on, w, h, 576)
+    _, _, top_off, bot_off = geometry.realized_margins_mm(g_off, w, h, lay_off)
+    _, _, top_on, bot_on = geometry.realized_margins_mm(g_on, w, h, lay_on)
+    # With edge spacers on, the reported margins shrink by ~pspa on each end
+    # (the bracket spacers reach toward the page edge).
+    assert top_off - top_on == pytest.approx(g_on.pspa, abs=0.2)
+    assert bot_off - bot_on == pytest.approx(g_on.pspa, abs=0.2)

@@ -682,7 +682,6 @@ class SettingsDialog(QDialog):
         self._tabs.addTab(self._scroll_wrap(general_page), tr("General"))
         self._tabs.addTab(self._scroll_wrap(self._build_margin_thresholds_tab()),
                           tr("Instrument Limits"))
-        self._tabs.addTab(self._build_patch_sizes_tab(), tr("Default Patch Sizes"))
         self._tabs.addTab(self._build_chart_layout_tab(), tr("Chart Layout"))
 
         # ---- About / Updates (below the tabs) ----
@@ -930,125 +929,6 @@ class SettingsDialog(QDialog):
         self._loading_margin_combo = False
         self._load_margin_combo()
         return page
-
-    def _build_patch_sizes_tab(self) -> QWidget:
-        """Per-(instrument, paper+orientation) default patch-size editor (#93).
-
-        The area-first "auto" fill (By columns/rows with a dimension on auto)
-        sizes patches to the value here, and it's the reference the layout uses so
-        patches never stretch unboundedly. Editable so the lookup can be tuned.
-        """
-        from core.settings import parse_patch_sizes
-        page = QWidget()
-        v = QVBoxLayout(page)
-        v.setSpacing(10)
-        v.setContentsMargins(12, 12, 12, 12)
-
-        intro_row = QHBoxLayout()
-        intro = QLabel(tr(
-            "Default patch size (width × height, mm) the area-first layout uses "
-            "for an “auto” column/row count, per instrument, paper and "
-            "orientation. These are sensible starting points — tune them to your "
-            "instrument and taste."), self)
-        intro.setWordWrap(True)
-        intro.setStyleSheet("color: #909090; font-size: 11px;")
-        intro_row.addWidget(intro, stretch=1)
-        intro_row.addWidget(TooltipButton(
-            tr("About default patch sizes"),
-            tr("When you build a chart with “Prioritise chart area” and leave the "
-               "number of columns or rows on “auto”, ChromIQ has to choose a "
-               "sensible patch size to aim for before it fills the page. The size "
-               "it aims for comes from this table — one value per instrument, "
-               "paper size and orientation.\n\n"
-               "So an “auto” dimension is sized toward this value — a sensible, "
-               "readable patch size for the instrument — rather than whatever "
-               "happens to fall out of the page size.\n\n"
-               "Pick an Instrument and Paper (with orientation) at the top, then "
-               "set the width and height in millimetres.\n\n"
-               "Where the defaults come from: each value starts at the "
-               "instrument's “natural” patch size — the patch dimensions the "
-               "device was designed to read (its aperture and the spacing along a "
-               "strip). For example the i1Pro is ~8 × 10 mm, the i1Pro 3 Plus "
-               "~16 × 20 mm, the ColorMunki ~10 × 13 mm and the SpectroScan "
-               "~7 × 7 mm. These read comfortably for each instrument, so they're "
-               "a safe starting point; change them here if you prefer larger or "
-               "smaller auto patches."),
-            self))
-        v.addLayout(intro_row)
-
-        self._patch_size_table = parse_patch_sizes(
-            self._settings.get("patch_sizes", ""))
-
-        sel = QGridLayout()
-        sel.addWidget(QLabel(tr("Instrument:"), self), 0, 0)
-        self._psz_instr = NoScrollComboBox(self)
-        self._psz_instr.addItems(list(self._MARGIN_INSTRUMENTS))
-        sel.addWidget(self._psz_instr, 0, 1)
-        sel.addWidget(QLabel(tr("Paper size:"), self), 0, 2)
-        self._psz_paper = NoScrollComboBox(self)
-        self._psz_paper.addItems(
-            [f"{p} {o}" for p in self._MARGIN_PAPERS for o in self._MARGIN_ORIENTS])
-        sel.addWidget(self._psz_paper, 0, 3)
-        sel.setColumnStretch(1, 1)
-        sel.setColumnStretch(3, 1)
-        v.addLayout(sel)
-
-        grid = QGridLayout()
-        self._psz_fields: dict[str, NoScrollDoubleSpinBox] = {}
-        for col, (key, label) in enumerate(
-                (("w", tr("Width")), ("h", tr("Height")))):
-            grid.addWidget(QLabel(label, self), 0, col, Qt.AlignmentFlag.AlignHCenter)
-            sb = NoScrollDoubleSpinBox(self)
-            sb.setRange(1, 200)
-            sb.setDecimals(1)
-            sb.setSingleStep(0.5)
-            sb.setSuffix(" mm")
-            sb.valueChanged.connect(self._on_patch_size_field_changed)
-            self._psz_fields[key] = sb
-            grid.addWidget(sb, 1, col)
-        grid.setColumnStretch(2, 1)
-        v.addLayout(grid)
-
-        reset_row = QHBoxLayout()
-        reset_row.addStretch()
-        reset_btn = QPushButton(tr("Restore default patch sizes"), self)
-        reset_btn.clicked.connect(self._restore_default_patch_sizes)
-        reset_row.addWidget(reset_btn)
-        v.addLayout(reset_row)
-        v.addStretch()
-
-        self._psz_instr.currentIndexChanged.connect(self._load_patch_size_combo)
-        self._psz_paper.currentIndexChanged.connect(self._load_patch_size_combo)
-        self._loading_patch_size_combo = False
-        self._load_patch_size_combo()
-        return self._scroll_wrap(page)
-
-    def _current_patch_size_key(self) -> str:
-        from core.settings import margin_combo_key
-        parts = self._psz_paper.currentText().rsplit(" ", 1)
-        paper, orient = (parts[0], parts[1]) if len(parts) == 2 else (parts[0], "")
-        return margin_combo_key(self._psz_instr.currentText(), paper, orient)
-
-    def _load_patch_size_combo(self) -> None:
-        self._loading_patch_size_combo = True
-        entry = self._patch_size_table.get(self._current_patch_size_key(), {})
-        for key, sb in self._psz_fields.items():
-            try:
-                sb.setValue(round(float(entry.get(key, 0)) or 0.0, 1))
-            except (TypeError, ValueError):
-                sb.setValue(0.0)
-        self._loading_patch_size_combo = False
-
-    def _on_patch_size_field_changed(self) -> None:
-        if getattr(self, "_loading_patch_size_combo", False):
-            return
-        self._patch_size_table[self._current_patch_size_key()] = {
-            k: sb.value() for k, sb in self._psz_fields.items()}
-
-    def _restore_default_patch_sizes(self) -> None:
-        from core.settings import default_patch_sizes
-        self._patch_size_table = default_patch_sizes()
-        self._load_patch_size_combo()
 
     def _current_margin_key(self) -> str:
         from core.settings import margin_combo_key
@@ -1390,6 +1270,13 @@ class SettingsDialog(QDialog):
             btns.addWidget(b)
         btns.addStretch()
         v.addLayout(btns)
+
+        # ---- Strip indicator style (global; applies to all new charts) ----
+        # The per-chart styling controls moved here from Create Chart (Knut #93):
+        # font / size / style / rotation / alignment / offset / underline. These
+        # are app-wide defaults for new charts; a saved preset still carries (and
+        # restores) its own styling.
+        v.addWidget(self._build_indicator_style_group())
         v.addStretch()
 
         # ---- wiring ----
@@ -1415,6 +1302,131 @@ class SettingsDialog(QDialog):
             self._i1pro_grp.setTitle(tr("i1Pro Chart Defaults (printtarg engine)"))
             page.layout().addWidget(self._i1pro_grp)
         return self._scroll_wrap(page)
+
+    # Underline-mode options shared with the Create Chart panel (key → label),
+    # so the two stay in sync (Knut #93).
+    _UNDERLINE_MODES = (
+        ("off", "Off"), ("segments", "Coloured (5 segments)"),
+        ("cycle", "Coloured (per strip)"), ("black", "Black"),
+    )
+
+    def _build_indicator_style_group(self) -> QWidget:
+        """Global strip-indicator styling (font/size/style/rotation/alignment/
+        offset/underline) — moved out of the per-chart panel (Knut #93). Wired to
+        the ``strip_indicator_*`` / ``strip_underline_*`` settings keys; saved in
+        ``_save``. Used as the default styling for new charts."""
+        s = self._settings
+        grp = QGroupBox(tr("Strip indicator style (all new charts)"), self)
+        g = QGridLayout(grp)
+        g.setHorizontalSpacing(8)
+        g.setVerticalSpacing(6)
+
+        intro = QLabel(tr(
+            "How the per-strip letter labels (A, B, C…) look on every new chart. "
+            "Saved presets keep their own styling."), self)
+        intro.setWordWrap(True)
+        intro.setStyleSheet("color: #909090; font-size: 11px;")
+        g.addWidget(intro, 0, 0, 1, 4)
+
+        # Font + size + bold/italic.
+        g.addWidget(QLabel(tr("Font:"), self), 1, 0)
+        self._isty_font = NoScrollComboBox(self)
+        # Reuse the panel's font list so the choices match Create Chart exactly.
+        self._layout_panel._populate_font_combo(self._isty_font)
+        g.addWidget(self._isty_font, 1, 1)
+        self._isty_size = NoScrollDoubleSpinBox(self)
+        self._isty_size.setRange(0.0, 20.0)
+        self._isty_size.setDecimals(1)
+        self._isty_size.setSingleStep(0.5)
+        self._isty_size.setSuffix(" mm")
+        self._isty_size.setSpecialValueText(tr("auto"))
+        g.addWidget(self._isty_size, 1, 2)
+        sty_row = QHBoxLayout()
+        self._isty_bold = QCheckBox(tr("Bold"), self)
+        self._isty_italic = QCheckBox(tr("Italic"), self)
+        sty_row.addWidget(self._isty_bold)
+        sty_row.addWidget(self._isty_italic)
+        sty_row.addStretch()
+        _styw = QWidget(self)
+        _styw.setLayout(sty_row)
+        g.addWidget(_styw, 1, 3)
+
+        # Rotation + alignment.
+        g.addWidget(QLabel(tr("Rotation:"), self), 2, 0)
+        self._isty_rotation = NoScrollComboBox(self)
+        for _deg in (0, 90, 180, 270):
+            self._isty_rotation.addItem(f"{_deg}°", _deg)
+        g.addWidget(self._isty_rotation, 2, 1)
+        g.addWidget(QLabel(tr("Alignment:"), self), 2, 2)
+        self._isty_align = NoScrollComboBox(self)
+        for _k, _lbl in (("left", tr("Left")), ("center", tr("Centered")),
+                         ("right", tr("Right"))):
+            self._isty_align.addItem(_lbl, _k)
+        g.addWidget(self._isty_align, 2, 3)
+
+        # Label offset.
+        g.addWidget(QLabel(tr("Label offset:"), self), 3, 0)
+        self._isty_offset = NoScrollDoubleSpinBox(self)
+        self._isty_offset.setRange(-50.0, 50.0)
+        self._isty_offset.setDecimals(1)
+        self._isty_offset.setSingleStep(0.5)
+        self._isty_offset.setSuffix(" mm")
+        g.addWidget(self._isty_offset, 3, 1)
+
+        # Underline mode + thickness + distance.
+        g.addWidget(QLabel(tr("Underline:"), self), 4, 0)
+        self._isty_underline = NoScrollComboBox(self)
+        for _k, _lbl in self._UNDERLINE_MODES:
+            self._isty_underline.addItem(tr(_lbl), _k)
+        g.addWidget(self._isty_underline, 4, 1)
+        g.addWidget(QLabel(tr("Line thickness:"), self), 4, 2)
+        self._isty_ul_thick = NoScrollDoubleSpinBox(self)
+        self._isty_ul_thick.setRange(0.1, 5.0)
+        self._isty_ul_thick.setDecimals(1)
+        self._isty_ul_thick.setSingleStep(0.1)
+        self._isty_ul_thick.setSuffix(" mm")
+        g.addWidget(self._isty_ul_thick, 4, 3)
+        g.addWidget(QLabel(tr("Line distance:"), self), 5, 2)
+        self._isty_ul_gap = NoScrollDoubleSpinBox(self)
+        self._isty_ul_gap.setRange(0.0, 20.0)
+        self._isty_ul_gap.setDecimals(1)
+        self._isty_ul_gap.setSingleStep(0.5)
+        self._isty_ul_gap.setSuffix(" mm")
+        g.addWidget(self._isty_ul_gap, 5, 3)
+        g.setColumnStretch(1, 1)
+
+        # ---- load current values ----
+        _fi = self._isty_font.findData(s.get("strip_indicator_font"))
+        self._isty_font.setCurrentIndex(_fi if _fi >= 0 else 0)
+        self._isty_size.setValue(float(s.get("strip_indicator_size_mm")))
+        self._isty_bold.setChecked(bool(s.get("strip_indicator_bold")))
+        self._isty_italic.setChecked(bool(s.get("strip_indicator_italic")))
+        _ri = self._isty_rotation.findData(int(s.get("strip_indicator_rotation")))
+        self._isty_rotation.setCurrentIndex(_ri if _ri >= 0 else 0)
+        _ai = self._isty_align.findData(s.get("strip_indicator_align"))
+        self._isty_align.setCurrentIndex(_ai if _ai >= 0 else 0)
+        self._isty_offset.setValue(float(s.get("strip_label_offset_mm")))
+        _ui = self._isty_underline.findData(s.get("strip_underline_mode"))
+        self._isty_underline.setCurrentIndex(_ui if _ui >= 0 else 0)
+        self._isty_ul_thick.setValue(float(s.get("strip_underline_thickness_mm")))
+        self._isty_ul_gap.setValue(float(s.get("strip_underline_gap_mm")))
+        return grp
+
+    def _save_indicator_style(self) -> None:
+        """Persist the global strip-indicator styling controls."""
+        if getattr(self, "_isty_font", None) is None:
+            return
+        s = self._settings
+        s.set("strip_indicator_font", self._isty_font.currentData() or "JetBrains Mono")
+        s.set("strip_indicator_size_mm", float(self._isty_size.value()))
+        s.set("strip_indicator_bold", self._isty_bold.isChecked())
+        s.set("strip_indicator_italic", self._isty_italic.isChecked())
+        s.set("strip_indicator_rotation", int(self._isty_rotation.currentData() or 0))
+        s.set("strip_indicator_align", self._isty_align.currentData() or "left")
+        s.set("strip_label_offset_mm", float(self._isty_offset.value()))
+        s.set("strip_underline_mode", self._isty_underline.currentData() or "off")
+        s.set("strip_underline_thickness_mm", float(self._isty_ul_thick.value()))
+        s.set("strip_underline_gap_mm", float(self._isty_ul_gap.value()))
 
     def _preselect_layout_combo(self) -> None:
         """Select the instrument/paper/mode the user is editing in Create Chart,
@@ -1606,11 +1618,10 @@ class SettingsDialog(QDialog):
         self._commit_margin_combo()   # flush the currently-shown combo's edits
         s.set("margin_inspector_show",     self._margin_show_check.isChecked())
         s.set("margin_violation_notify",   self._margin_notify_check.isChecked())
-        from core.settings import (serialize_margin_thresholds,
-                                    serialize_patch_sizes)
+        from core.settings import serialize_margin_thresholds
         s.set("margin_thresholds", serialize_margin_thresholds(self._margin_table))
-        if getattr(self, "_patch_size_table", None) is not None:
-            s.set("patch_sizes", serialize_patch_sizes(self._patch_size_table))
+        # Global strip-indicator styling (Knut #93): defaults for new charts.
+        self._save_indicator_style()
         # ChromIQ layout engine (issue #93): toggle + file-backed presets.
         s.set("use_chromiq_layout_engine", self._layout_engine_check.isChecked())
         from core.preset_store import save_presets

@@ -387,6 +387,12 @@ class PresetStore:
         self._presets: dict[str, LayoutRecipe] = dict(presets or {})
 
     # ---- access --------------------------------------------------------
+    def has(self, instrument: str, paper: str, mode: str) -> bool:
+        """True when a user preset exists for this combo (vs a fresh default).
+        Lets callers seed app-wide defaults (e.g. strip-indicator styling) only
+        for fresh charts, leaving stored presets to carry their own."""
+        return f"{instrument}|{paper}|{mode}" in self._presets
+
     def get(self, instrument: str, paper: str, mode: str) -> LayoutRecipe:
         key = f"{instrument}|{paper}|{mode}"
         if key in self._presets:

@@ -290,6 +290,22 @@ class LayoutOptionsPanel(QWidget):
             return wrap
         self._mm_inch = mm_inch
 
+        # "Show strip indicators" (the per-chart on/off) lives in the Layout frame
+        # right above Clip border (Knut #93); the indicator *styling* (font / size
+        # / rotation / underline …) moved to Settings → Chart Layout. Created
+        # unconditionally so from_recipe/to_recipe work even without selectors.
+        self.show_indicators = QCheckBox(tr("Show strip indicators"), self)
+        self.show_indicators.setChecked(True)
+        self.show_indicators.toggled.connect(self._on_show_indicators)
+        self.show_indicators.toggled.connect(self._emit)
+        self._show_indicators_tip = TooltipButton(
+            tr("Strip indicators"),
+            tr("The small letter label printed above each strip (A, B, C…) so "
+               "you always know which strip you're measuring and in what order. "
+               "Turn off only if you have another way to keep the strips "
+               "straight. Set the font, size and underline style in "
+               "Settings → Chart Layout."), self)
+
         from PyQt6.QtWidgets import QLineEdit, QPushButton
 
         def small_mm(top: float = 60.0) -> NoScrollDoubleSpinBox:
@@ -394,25 +410,36 @@ class LayoutOptionsPanel(QWidget):
                     tr("How many strips (columns of patches) to fit across the "
                        "page. ChromIQ makes the patches exactly wide enough that "
                        "this many strips span the usable width, so the block "
-                       "reaches the margins evenly."), self))
+                       "reaches the margins evenly.\n\n"
+                       "Leave it on “auto” and ChromIQ picks a count that gives a "
+                       "patch close to your instrument's natural patch size — the "
+                       "size it was designed to read — then fills the width to "
+                       "that count."), self))
         self._area_row_rows = add_row(afg, 4, tr("Patches per strip (rows):"),
                 self.area_rows,
                 tip=TooltipButton(
                     tr("Patches per strip (rows)"),
                     tr("How many patches to stack down each strip. ChromIQ makes "
                        "the patches exactly tall enough that this many fit the "
-                       "usable height."), self))
+                       "usable height.\n\n"
+                       "Leave it on “auto” and ChromIQ picks a count that gives a "
+                       "patch close to your instrument's natural patch size — the "
+                       "size it was designed to read — then fills the height to "
+                       "that count."), self))
         lgg.addWidget(self._area_fields_w, 1, 0, 1, 3)
-        # Mode (density / clip mode / shape) + the CM/SS Clip-border toggle live at
-        # the bottom of the Layout frame (Knut #93), grouped with the layout
-        # choices rather than up in the instrument selectors.
+        # Mode (density / clip mode / shape), "Show strip indicators" and the
+        # CM/SS Clip-border toggle live at the bottom of the Layout frame
+        # (Knut #93), grouped with the layout choices rather than up in the
+        # instrument selectors. Strip indicators sit just above Clip border.
         if getattr(self, "mode", None) is not None:
-            lgg.addWidget(self._mode_lbl, 2, 0)
-            lgg.addWidget(self.mode, 2, 1)
-            lgg.addWidget(self._mode_tip, 2, 2)
-            lgg.addWidget(self._clip_enable_lbl, 3, 0)
-            lgg.addWidget(self.clip_enable, 3, 1)
-            lgg.addWidget(self._clip_enable_tip, 3, 2)
+            lgg.addWidget(self.show_indicators, 2, 1)
+            lgg.addWidget(self._show_indicators_tip, 2, 2)
+            lgg.addWidget(self._mode_lbl, 3, 0)
+            lgg.addWidget(self.mode, 3, 1)
+            lgg.addWidget(self._mode_tip, 3, 2)
+            lgg.addWidget(self._clip_enable_lbl, 4, 0)
+            lgg.addWidget(self.clip_enable, 4, 1)
+            lgg.addWidget(self._clip_enable_tip, 4, 2)
         v.addWidget(lg)
 
         # ---- Patches & spacers (2-column: label | control) ----
@@ -598,19 +625,14 @@ class LayoutOptionsPanel(QWidget):
         v.addWidget(rg)
         self._on_randomize_toggled(True)
 
-        # ---- Strip indicators ----
+        # ---- Strip indicators (detail widgets) ----
+        # The styling controls moved to Settings → Chart Layout (Knut #93); only
+        # the "Show strip indicators" checkbox stays in the panel (in the Layout
+        # frame, above Clip border). These widgets are still built so a loaded
+        # preset's styling round-trips through from_recipe / to_recipe, but the
+        # group is never shown — it's a hidden carrier (see si.setVisible(False)).
         si = QGroupBox(tr("Strip indicators"), self)
         sig2 = QGridLayout(si)
-        self.show_indicators = QCheckBox(tr("Show strip indicators"), self)
-        self.show_indicators.setChecked(True)
-        self.show_indicators.toggled.connect(self._on_show_indicators)
-        sig2.addWidget(self.show_indicators, 0, 1)
-        sig2.addWidget(TooltipButton(
-            tr("Strip indicators"),
-            tr("The small letter label printed above each strip (A, B, C…) so you "
-               "always know which strip you're measuring and in what order. Turn "
-               "off only if you have another way to keep the strips straight."),
-            self), 0, 2)
         self.indicator_font = NoScrollComboBox(self)
         self._populate_font_combo(self.indicator_font)
         self.indicator_font.currentIndexChanged.connect(self._emit)
@@ -717,7 +739,9 @@ class LayoutOptionsPanel(QWidget):
                        "patches, a negative value raises them into the margin. The "
                        "patch area doesn't change, so this doesn't affect how many "
                        "patches fit."), self))
-        v.addWidget(si)
+        # Hidden carrier: the styling now lives in Settings → Chart Layout, but
+        # these widgets still back from_recipe / to_recipe so presets round-trip.
+        si.setVisible(False)
         self._on_rotation_changed()
 
         # ---- Page geometry ----

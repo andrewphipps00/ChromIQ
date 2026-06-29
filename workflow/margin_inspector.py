@@ -166,6 +166,29 @@ def measure_from_engine(
     y0 = min(r["y"] for r in rects)
     y1 = max(r["y"] + r["h"] for r in rects)
 
+    # Edge spacers bracket each strip with one spacer ABOVE the first patch and
+    # one BELOW the last (raster.render_pages), so the printed content reaches
+    # pspa past the patch rects along the strip axis. The recorded patch rects
+    # don't include them, so add that overhang here — otherwise the top/bottom
+    # margins under-report and the measured-margin guides land inside the edge
+    # spacers, which then look like they overflow the margins (Knut #18). Along
+    # the strip axis (vertical in the printtarg frame) only.
+    rec = layout.get("recipe") or {}
+    if rec.get("edge_spacers"):
+        try:
+            from dataclasses import fields as _fields
+            from workflow.layout_engine import instruments
+            from workflow.layout_engine.presets import LayoutRecipe
+            _valid = {f.name for f in _fields(LayoutRecipe)}
+            _rc = LayoutRecipe(**{k: v for k, v in rec.items() if k in _valid})
+            _g = instruments.geom_from_build_kwargs(_rc.build_kwargs())
+            _sp_px = round(_g.pspa * dpi / _MM_PER_INCH)
+            if _sp_px > 0:
+                y0 -= _sp_px
+                y1 += _sp_px
+        except Exception:  # pragma: no cover - defensive; fall back to patch rects
+            pass
+
     report = MarginReport(
         left_mm=max(0.0, x0 * px2mm),
         right_mm=max(0.0, paper_w_mm - x1 * px2mm),

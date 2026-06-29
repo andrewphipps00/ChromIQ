@@ -129,3 +129,47 @@ def test_chart_layout_clip_enable_for_cm_ss(_app, tmp_path):
             assert dlg2._layout_panel.clip_enabled()
         finally:
             dlg2.deleteLater()
+
+
+def test_indicator_style_settings_round_trip(_app, tmp_path):
+    """The global strip-indicator styling controls (moved out of Create Chart,
+    Knut #93) save to the strip_indicator_* / strip_underline_* keys and reload."""
+    import core.preset_store as ps
+    from ui.dialogs.settings_dialog import SettingsDialog
+    with mock.patch.object(ps, "presets_dir", lambda: Path(tmp_path)):
+        st = _FakeSettings()
+        dlg = SettingsDialog(st, None)
+        try:
+            dlg._isty_bold.setChecked(True)
+            dlg._isty_size.setValue(3.5)
+            dlg._isty_rotation.setCurrentIndex(dlg._isty_rotation.findData(90))
+            dlg._isty_align.setCurrentIndex(dlg._isty_align.findData("center"))
+            dlg._isty_underline.setCurrentIndex(
+                dlg._isty_underline.findData("black"))
+            dlg._isty_offset.setValue(2.0)
+            dlg._save_and_close()
+        finally:
+            dlg.deleteLater()
+    assert st.get("strip_indicator_bold") is True
+    assert st.get("strip_indicator_size_mm") == 3.5
+    assert st.get("strip_indicator_rotation") == 90
+    assert st.get("strip_indicator_align") == "center"
+    assert st.get("strip_underline_mode") == "black"
+    assert st.get("strip_label_offset_mm") == 2.0
+
+
+def test_apply_indicator_style_overlays_recipe():
+    """AppSettings.apply_indicator_style overlays the global styling onto a recipe
+    (used to seed fresh charts; presets keep their own styling)."""
+    from core.settings import AppSettings, INDICATOR_STYLE_KEYS
+    from workflow.layout_engine.presets import default_recipe
+    s = _FakeSettings(strip_indicator_bold=True, strip_indicator_rotation=270,
+                      strip_underline_mode="black")
+    # Borrow the real methods on the fake store.
+    s.indicator_style = AppSettings.indicator_style.__get__(s)
+    s.apply_indicator_style = AppSettings.apply_indicator_style.__get__(s)
+    r = s.apply_indicator_style(default_recipe("i1", "A4"))
+    assert r.indicator_bold is True
+    assert r.indicator_rotation == 270
+    assert r.underline_mode == "black"
+    assert set(INDICATOR_STYLE_KEYS) <= set(vars(r))

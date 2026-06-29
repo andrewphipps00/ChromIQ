@@ -1882,6 +1882,35 @@ class TabChart(QWidget):
         self._manual_td_row: QWidget | None = None
         self._td_saved_layout: dict | None = None
 
+        # Engine toggle lives HERE now (moved out of Settings, Knut #93): above the
+        # targen/printtarg groups so switching engines per chart/preset is easy. It
+        # decides whether the layout below is the printtarg controls or the ChromIQ
+        # layout panel. Created ONCE, before the per-tool loop — building it inside
+        # the loop added it twice (once per tool), so the toggle appeared above both
+        # targen and printtarg.
+        _eng_row = QHBoxLayout()
+        self._manual_engine_check = QCheckBox(
+            tr("Use the ChromIQ layout engine instead of printtarg"), inner)
+        self._manual_engine_check.setChecked(
+            bool(self._settings.get("use_chromiq_layout_engine", False)))
+        self._manual_engine_check.toggled.connect(self._on_manual_engine_toggled)
+        _eng_row.addWidget(self._manual_engine_check)
+        _eng_row.addStretch()
+        _eng_row.addWidget(TooltipButton(
+            tr("ChromIQ layout engine"),
+            tr("When ON, ChromIQ builds your test charts itself instead of "
+               "calling ArgyllCMS printtarg. The engine packs the colour "
+               "patches more efficiently, can put useful information where "
+               "printtarg leaves blank space, and lets you fully customise the "
+               "layout below per instrument and paper.\n\n"
+               "When OFF the chart is made by printtarg exactly as before. This "
+               "switch only affects how charts are CREATED; printing and "
+               "measuring existing charts always work the same way, so it is "
+               "safe to switch back at any time."), inner))
+        _eng_w = QWidget(inner)
+        _eng_w.setLayout(_eng_row)
+        inner_layout.addWidget(_eng_w)
+
         for tool, params in [
             ("targen",    self._params.get("targen", [])),
             ("printtarg", self._params.get("printtarg", [])),
@@ -2147,32 +2176,6 @@ class TabChart(QWidget):
 
             grp_layout.addWidget(basic_grp)
             grp_layout.addWidget(expert_grp)
-            # Engine toggle lives HERE now (moved out of Settings, Knut #93): above
-            # the layout frame so switching engines per chart/preset is easy. It
-            # decides whether the frame below is the printtarg controls or the
-            # ChromIQ layout panel.
-            _eng_row = QHBoxLayout()
-            self._manual_engine_check = QCheckBox(
-                tr("Use the ChromIQ layout engine instead of printtarg"), inner)
-            self._manual_engine_check.setChecked(
-                bool(self._settings.get("use_chromiq_layout_engine", False)))
-            self._manual_engine_check.toggled.connect(self._on_manual_engine_toggled)
-            _eng_row.addWidget(self._manual_engine_check)
-            _eng_row.addStretch()
-            _eng_row.addWidget(TooltipButton(
-                tr("ChromIQ layout engine"),
-                tr("When ON, ChromIQ builds your test charts itself instead of "
-                   "calling ArgyllCMS printtarg. The engine packs the colour "
-                   "patches more efficiently, can put useful information where "
-                   "printtarg leaves blank space, and lets you fully customise the "
-                   "layout below per instrument and paper.\n\n"
-                   "When OFF the chart is made by printtarg exactly as before. This "
-                   "switch only affects how charts are CREATED; printing and "
-                   "measuring existing charts always work the same way, so it is "
-                   "safe to switch back at any time."), inner))
-            _eng_w = QWidget(inner)
-            _eng_w.setLayout(_eng_row)
-            inner_layout.addWidget(_eng_w)
             inner_layout.addWidget(grp)
 
         self._update_manual_lb_visibility()
@@ -2569,8 +2572,7 @@ class TabChart(QWidget):
                     # render never clamps to instrument minimums, so the estimate
                     # mustn't either, or the two would disagree. Below-minimum is
                     # only flagged as a violation in the inspector.
-                    geom = instruments.geom_from_build_kwargs(
-                        self._with_default_patch_size(r.build_kwargs()))
+                    geom = instruments.geom_from_build_kwargs(r.build_kwargs())
                     pages_req = (self._manual_pages_spin.value()
                                  if self._manual_pages_spin is not None else 1)
                     # Use the on-screen chart's fixed patch count ONLY when the
@@ -2613,7 +2615,14 @@ class TabChart(QWidget):
             except Exception as exc:  # noqa: BLE001 — fall back to the preset
                 log.warning("restore engine layout defaults failed: %s", exc)
         inst, paper, mode = self._manual_layout_panel.selection()
-        self._manual_layout_panel.set_recipe(self._layout_store().get(inst, paper, mode))
+        store = self._layout_store()
+        recipe = store.get(inst, paper, mode)
+        # A fresh default (no stored preset for this combo) takes its strip-
+        # indicator styling from the app-wide Settings defaults; a stored preset
+        # keeps the styling it was saved with (Knut #93).
+        if not store.has(inst, paper, mode):
+            recipe = self._settings.apply_indicator_style(recipe)
+        self._manual_layout_panel.set_recipe(recipe)
 
     def _sync_engine_panel_selection(self) -> None:
         """Seed the engine layout panel's instrument/paper from the canonical
@@ -5656,21 +5665,6 @@ class TabChart(QWidget):
         except Exception:
             return None
 
-    def _with_default_patch_size(self, kw: dict) -> dict:
-        """Thread the Default Patch Sizes table value for this combo into the
-        build kwargs so the area-first estimate matches the render (#93)."""
-        try:
-            from core.settings import patch_size_for_combo
-            from workflow.layout_engine import papers
-            w_mm, h_mm = papers.dimensions_mm(kw.get("paper", "A4"))
-            sz = patch_size_for_combo(self._settings.get_patch_sizes(),
-                                      kw.get("instrument", "i1"), w_mm, h_mm)
-            if sz and sz[0] > 0 and sz[1] > 0:
-                kw = {**kw, "area_default_w": sz[0], "area_default_h": sz[1]}
-        except Exception:  # noqa: BLE001
-            pass
-        return kw
-
     def _engine_geom(self, instr: str, paper: str, *, dd: bool, td: bool,
                      eff_lb: bool, nsl: bool, pscale: float, margin: float):
         """Build a layout-engine Geom from the guided/manual effective values,
@@ -7097,8 +7091,7 @@ class TabChart(QWidget):
             if not m:
                 return None
             total = int(m.group(1))
-            kw = self._with_default_patch_size(rec.build_kwargs())
-            geom = instruments.geom_from_build_kwargs(kw)
+            geom = instruments.geom_from_build_kwargs(rec.build_kwargs())
             w_mm, h_mm = papers.dimensions_mm(rec.paper)
             per = geometry.patches_per_sheet(geom, w_mm, h_mm)
             if per <= 0 or total <= 0:
