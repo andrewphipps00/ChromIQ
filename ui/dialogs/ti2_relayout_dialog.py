@@ -4087,26 +4087,21 @@ class Ti2RelayoutDialog(QDialog):
         no-op so the engine-recipe load path is safe. The loaded recipe lives in
         ``self._engine_recipe`` either way (#93).
         """
-        if self._engine_panel_grp is None:
-            return
-        # Engine when: the loaded chart carries an engine recipe, OR the engine
-        # setting is on and we're not editing a loaded printtarg chart (i.e. a
-        # new/from-scratch chart follows the setting). A loaded printtarg chart
-        # keeps the printtarg knobs + its true -L/no-clip.
-        use_engine = (self._engine_recipe is not None
-                      or (bool(self._settings.get("use_chromiq_layout_engine", False))
-                          and not self._loaded_printtarg_chart))
-        self._engine_panel_grp.setVisible(use_engine)
+        # Layout editing is removed from the editor (Knut #93): it's a pure
+        # patch-set tool, so BOTH layout groups (the printtarg knobs and the
+        # ChromIQ engine panel) stay hidden. The chart keeps whatever layout it
+        # was opened with — Create Chart owns the layout — and the hidden widgets
+        # still hold those values so the chart renders and saves unchanged through
+        # the round-trip.
+        if self._engine_panel_grp is not None:
+            self._engine_panel_grp.setVisible(False)
         if getattr(self, "_pt_box", None) is not None:
-            self._pt_box.setVisible(not use_engine)
-        # The engine panel needs more width than the printtarg knobs; widen the
-        # controls column AND its containing pane when shown, or the scroll area
-        # stays narrow and the panel scrolls horizontally.
-        _w = 440 if use_engine else 360       # just fits the engine panel (≈431 min)
+            self._pt_box.setVisible(False)
+        # Narrower controls column now that the wide engine panel never shows.
         if getattr(self, "_controls_panel", None) is not None:
-            self._controls_panel.setFixedWidth(_w)
+            self._controls_panel.setFixedWidth(360)
         if getattr(self, "_right_pane", None) is not None:
-            self._right_pane.setFixedWidth(_w + 22)   # + scrollbar/frame gutter
+            self._right_pane.setFixedWidth(360 + 22)   # + scrollbar/frame gutter
 
     def _load_ti2(self) -> None:
         start = (self._settings.get("custom_output_path", "")
