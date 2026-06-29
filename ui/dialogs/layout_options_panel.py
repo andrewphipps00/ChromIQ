@@ -1056,10 +1056,14 @@ class LayoutOptionsPanel(QWidget):
         self._sync_layout_mode()
 
     def _browse_cal(self) -> None:
-        from PyQt6.QtWidgets import QFileDialog
-        path, _ = QFileDialog.getOpenFileName(
-            self, tr("Select printer calibration"), "",
-            tr("ArgyllCMS calibration (*.cal)"))
+        from pathlib import Path
+        from ui.widgets import open_file_dialog
+        cur = self.cal_path_edit.text().strip() if self.cal_path_edit else ""
+        start = str(Path(cur).parent) if cur else ""
+        path = open_file_dialog(
+            self, tr("Select printer calibration"),
+            name_filter=tr("ArgyllCMS calibration (*.cal)"),
+            start_dir=start, extra_path=start)
         if path and self.cal_path_edit is not None:
             self.cal_path_edit.setText(path)
 
@@ -1319,10 +1323,14 @@ class LayoutOptionsPanel(QWidget):
                 self._mode_lbl.setEnabled(not density_moot)
 
     def _browse_clip_image(self) -> None:
-        from PyQt6.QtWidgets import QFileDialog
-        path, _ = QFileDialog.getOpenFileName(
-            self, tr("Select clip-strip image"), "",
-            tr("Images (*.png *.jpg *.jpeg *.tif *.tiff *.bmp)"))
+        from pathlib import Path
+        from ui.widgets import open_file_dialog
+        cur = self.clip_image_path.text().strip()
+        start = str(Path(cur).parent) if cur else ""
+        path = open_file_dialog(
+            self, tr("Select clip-strip image"),
+            name_filter=tr("Images (*.png *.jpg *.jpeg *.tif *.tiff *.bmp)"),
+            start_dir=start, extra_path=start, preview=True)
         if path:
             self.clip_image_path.setText(path)
 
