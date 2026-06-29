@@ -113,12 +113,19 @@ class Geom:
     # for the text it overflows toward this line and a violation is flagged.
     text_edge_top_mm: float = 4.0
     text_edge_clip_mm: float = 4.0
-    # "Margins are the law" mode (Knut): only when the user turns on "Use
-    # instrument margins". Then the patch area is exactly the margin box (no
-    # hidden leader/trailer, labels anchored at the text-edge from the page edge).
-    # OFF = the original printtarg-style behaviour (leader/trailer + label band
-    # reserved on top of the margins). Set from recipe.use_instrument_margins.
+    # "Margins are the law" mode (Knut): the patch area is exactly the margin box
+    # (no hidden leader/trailer; strip labels live inside the top margin, anchored
+    # at the text-edge from the page edge). This is now driven by the LAYOUT MODE
+    # — it is ON for area-first ("Prioritise chart area, then fit patches to it")
+    # and OFF for patch-first (the historical printtarg-style engine). It is NOT
+    # tied to "Use instrument margins" anymore (that toggle only pre-fills the
+    # margin boxes once). Set in geom_from_build_kwargs from layout_mode.
     margins_are_law: bool = False
+    # Physical strip-length limit of the instrument's ruler/jig (mm); 0 = none
+    # (ColorMunki/SpectroScan have no ruler). In area-first the strip is NOT capped
+    # to this (the margin box is law — fill it), but a strip longer than the ruler
+    # is flagged as a violation so the user knows it won't fit their jig (Knut #93).
+    ruler_mm: float = 0.0
 
 
 def supported() -> list[str]:
@@ -154,7 +161,7 @@ def build(
     cm_stagger: bool = False,
     text_edge_top: float = 4.0,
     text_edge_clip: float = 4.0,
-    use_instrument_margins: bool = False,
+    margins_are_law: bool = False,
 ) -> Geom:
     """Resolve :class:`Geom`, applying ChromIQ extensions over the base geometry.
 
@@ -215,7 +222,7 @@ def build(
                    clip_side=clip_side or "left",
                    text_edge_top_mm=float(text_edge_top or 4.0),
                    text_edge_clip_mm=float(text_edge_clip or 4.0),
-                   margins_are_law=bool(use_instrument_margins))
+                   margins_are_law=bool(margins_are_law))
 
 
 # Keys of a recipe ``build_kwargs()`` dict that affect the laid-out geometry —
@@ -230,7 +237,6 @@ GEOM_BUILD_KEYS = (
     "strip_indicator_gap", "offset_x", "offset_y", "nolpcbord", "nolimit",
     "clip_border_width", "clip_band", "edge_spacers", "patch_area_align",
     "clip_side", "cm_stagger", "text_edge_top", "text_edge_clip",
-    "use_instrument_margins",
 )
 
 
@@ -261,7 +267,11 @@ def geom_from_build_kwargs(kw: dict, thresholds: dict | None = None) -> Geom:
         _sz = area_fit.derive_area_patch_size(kw)
         if _sz is not None:
             kw = {**kw, "patch_w": _sz[0], "patch_h": _sz[1]}
-    geom = build(kw["instrument"],
+    # "Margins are the law" is now decided by the LAYOUT MODE, not by the
+    # "Use instrument margins" toggle (Knut): area-first treats the margin box as
+    # the exact patch area; patch-first keeps the printtarg-style furniture.
+    law = (kw.get("layout_mode") == "area_first")
+    geom = build(kw["instrument"], margins_are_law=law,
                  **{k: v for k, v in kw.items() if k in GEOM_BUILD_KEYS})
     from . import raster   # lazy: raster imports this module
     return raster.apply_furniture_reserves(geom, kw)
@@ -324,7 +334,7 @@ def _build_base(
             mxpprow=MAXPPROW, mxrowl=mxrowl, rpstrip=999, nextrap=0,
             dorspace=False, dopglabel=False,   # page-label column reclaimed (#93)
             padlrow=True, target_name=name,
-            has_clip_border=True,
+            has_clip_border=True, ruler_mm=(260.0 - lcar - tspa),
         )
 
     # Optional notes band for instruments without a native clip border (CM/SS):
@@ -417,7 +427,7 @@ def _build_base(
             mxpprow=100, mxrowl=mxrowl, rpstrip=8, nextrap=0,
             dorspace=False, dopglabel=False,   # page-label column reclaimed (#93)
             padlrow=True, target_name=name,
-            has_clip_border=False, extra_keywords=extra,
+            has_clip_border=False, extra_keywords=extra, ruler_mm=_inch(55.0),
         )
 
     # ---- X-Rite DTP51 ---------------------------------------------------
@@ -432,7 +442,7 @@ def _build_base(
             border=border, lbord=0.0, hxeh=0.0, hxew=0.0, clwi=0.3, rlwi=0.0,
             mxpprow=72, mxrowl=mxrowl, rpstrip=6, nextrap=2,   # max+min header/trailer
             dorspace=True, dopglabel=False, padlrow=True, target_name=name,
-            has_clip_border=False,
+            has_clip_border=False, ruler_mm=_inch(40.0),
         )
 
     raise ValueError(f"unhandled instrument {key!r}")

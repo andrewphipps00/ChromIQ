@@ -20,20 +20,21 @@ _MIN_PATCH_MM = 1.0       # floor so a too-dense grid can't go degenerate
 
 
 def _usable(geom, w_mm: float, h_mm: float) -> tuple[float, float]:
-    """(usable_width, usable_pass_length) in mm for the patch block — mirrors
-    geometry.compute()'s avail_w / arowl so the derivation matches placement."""
+    """(usable_width, usable_pass_length) in mm for the patch block.
+
+    Area-first is "margins are the law" (Knut #93): the usable patch area is
+    exactly the margin box — no hidden leader/trailer/label-band reserve (strip
+    labels live inside the top margin) and no instrument ruler cap (the box is
+    filled even past the ruler; a violation warns). This mirrors
+    geometry.compute()'s law branch so the derived patch size fills the same area
+    the renderer places into. The clip / notes band lives inside the clip-side
+    margin (build() floors that margin to the clip width), so it is not
+    subtracted again here.
+    """
     g = geom
-    # Clip / notes band lives inside the clip-side margin (not subtracted again) —
-    # mirrors geometry.compute() (Knut beta-13, clip-inside-margin).
     iw = w_mm - g.margin_l - g.margin_r
     avail_w = iw - g.rlwi - 2.0 * g.hxew - (g.pglth if g.dopglabel else 0.0)
-    txhi = g.txhisl if g.label_band_mm < 0 else g.label_band_mm
-    eff_lspa = max(g.border + g.lcar, g.lspa - g.txhisl + txhi)
-    mints = max(g.margin_t + txhi + g.lcar, eff_lspa)
-    minbs = max(g.margin_b, g.tspa, g.bottom_reserve_mm)
-    arowl = h_mm - mints - minbs - 2.0 * g.hxeh - g.strip_indicator_gap
-    if arowl > g.mxrowl:
-        arowl = g.mxrowl
+    arowl = h_mm - g.margin_t - g.margin_b - 2.0 * g.hxeh
     return max(0.0, avail_w), max(0.0, arowl)
 
 

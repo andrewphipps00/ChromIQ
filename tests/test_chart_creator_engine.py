@@ -138,17 +138,19 @@ def test_engine_build_kwargs_mapping(tmp_path: Path) -> None:
         creator._engine_build_kwargs(ChartParams(instrument="CM", double_density=True))["density"] == 2
 
 
-def test_guided_and_manual_colormunki_extra_high_are_identical(tmp_path: Path) -> None:
-    """Manual's ColorMunki Extra-high defaults must build the EXACT same geometry
-    as Guided's triple density — same patch count AND the same strip-label-to-
-    patch spacing (Sebastian: "set the Manual defaults for this mode exactly to
-    what is used in Guided")."""
+def test_guided_and_manual_colormunki_extra_high_same_patch_geometry(tmp_path: Path) -> None:
+    """Manual's ColorMunki Extra-high and Guided's triple density share the SAME
+    native dense-strip patch geometry (10.4 mm patches, same spacing). They now
+    legitimately differ in *layout mode*: Guided stays patch-first (printtarg-
+    style), while Manual defaults to area-first ("margins are the law"), which
+    fills the margin box and so fits a few more patches (Knut #93; Sebastian:
+    keep Guided untouched, accept the divergence). The shared patch SIZE is what
+    matters for readability."""
     import dataclasses
-    from workflow.layout_engine import instruments, geometry, papers
+    from workflow.layout_engine import instruments, geometry
     from workflow.layout_engine.presets import default_recipe
     creator = ChartCreator(_EngineRunner(), _MockFileManager(tmp_path / "p"),
                            _EngineSettings())
-    # Guided seeds 5 mm margin, scale 1.3, no strip limit, clip off.
     gkw = creator._engine_build_kwargs(
         ChartParams(instrument="CM", paper="A4", triple_density=True,
                     margin_mm=5.0, patch_scale=1.3, no_strip_limit=True))
@@ -156,17 +158,17 @@ def test_guided_and_manual_colormunki_extra_high_are_identical(tmp_path: Path) -
     mkw["instrument"], mkw["paper"] = "CM", "A4"
     gg = instruments.geom_from_build_kwargs(gkw)
     gm = instruments.geom_from_build_kwargs(mkw)
+    # The only intended geometry difference is the layout-mode law flag.
     diffs = [f.name for f in dataclasses.fields(instruments.Geom)
              if getattr(gg, f.name) != getattr(gm, f.name)]
-    assert not diffs, f"guided/manual geometry differs: {diffs}"
-    # Same count and same first-patch position (→ same label↔patch gap).
+    assert diffs == ["margins_are_law"], f"unexpected geometry diff: {diffs}"
+    assert not gg.margins_are_law and gm.margins_are_law
+    # Same patch size, same row pitch (the readable dense ColorMunki strip).
+    assert (gg.pwid, gg.plen, gg.rrsp, gg.pspa) == (gm.pwid, gm.plen, gm.rrsp, gm.pspa)
+    # Area-first (Manual) fills the box → at least as many patches as Guided.
     for dims in ((210.0, 297.0), (297.0, 210.0)):
-        cg = geometry.patches_per_sheet(gg, *dims)
-        assert cg == geometry.patches_per_sheet(gm, *dims)
-        lg = geometry.compute(gg, *dims, cg)
-        lm = geometry.compute(gm, *dims, cg)
-        assert (geometry.placement(gg, *dims, lg).y_of(0)
-                == geometry.placement(gm, *dims, lm).y_of(0))
+        assert (geometry.patches_per_sheet(gm, *dims)
+                >= geometry.patches_per_sheet(gg, *dims))
 
 
 def test_engine_kwargs_uses_full_recipe(tmp_path: Path) -> None:
@@ -194,34 +196,21 @@ class _ThresholdSettings(_EngineSettings):
         return {margin_combo_key("i1Pro", "A4", "Portrait"): {"T": 60, "R": 9}}
 
 
-def test_recipe_margins_authoritative_unless_use_instrument_margins(tmp_path: Path) -> None:
-    """With a recipe, the margin boxes are authoritative: the instrument-margin
-    clamp only kicks in when "Use instrument margins" is on, so the user's typed
-    margins aren't silently raised (#93, Knut beta-13)."""
+def test_recipe_margins_always_authoritative_no_clamp(tmp_path: Path) -> None:
+    """The margin boxes are ALWAYS the law (Knut, new model): the engine never
+    silently raises them to meet instrument-margin minimums, regardless of the
+    "Use instrument margins" toggle. Going below a minimum is allowed and only
+    flagged as a violation in the inspector (#93)."""
     from workflow.layout_engine.presets import LayoutRecipe
-    # Boxes off → typed margins survive even though a threshold table exists.
-    off = LayoutRecipe(instrument="i1", paper="A4", margin_top=5.0,
-                       use_instrument_margins=False)
     creator = ChartCreator(_EngineRunner(), _MockFileManager(tmp_path / "a"),
                            _ThresholdSettings())
-    kw = creator._engine_kwargs(ChartParams(instrument="i1", paper="A4",
-                                            layout_recipe=off))
-    assert kw["margins"][0] == 5.0           # not clamped up to the 60 threshold
-    assert not creator._threshold_notes
-    # Boxes on → clamp applies (the UI fills them from the thresholds anyway):
-    # the patch-area top inset is raised to meet the 60 mm threshold.
-    from workflow.layout_engine import geometry, instruments, papers
-    on = LayoutRecipe(instrument="i1", paper="A4", margin_top=5.0,
-                      use_instrument_margins=True)
-    kw2 = creator._engine_kwargs(ChartParams(instrument="i1", paper="A4",
-                                             layout_recipe=on))
-    assert kw2["margins"][0] > 5.0           # raised from the typed value
-    assert creator._threshold_notes
-    geom = instruments.geom_from_build_kwargs(kw2)
-    w, h = papers.dimensions_mm("A4")
-    lay = geometry.compute(geom, w, h, geometry.patches_per_sheet(geom, w, h))
-    T = geometry.realized_margins_mm(geom, w, h, lay)[2]
-    assert T >= 60 - 0.05                     # patch area clears the threshold
+    for uim in (False, True):
+        r = LayoutRecipe(instrument="i1", paper="A4", margin_top=5.0,
+                         use_instrument_margins=uim)
+        kw = creator._engine_kwargs(ChartParams(instrument="i1", paper="A4",
+                                                layout_recipe=r))
+        assert kw["margins"][0] == 5.0       # never clamped up to the threshold
+        assert not creator._threshold_notes
 
 
 def test_guided_does_not_enforce_margin_thresholds(tmp_path: Path) -> None:

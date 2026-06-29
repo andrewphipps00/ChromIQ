@@ -969,13 +969,12 @@ class ChartCreator:
             if params.engine_cal_path:
                 kw["cal_path"] = params.engine_cal_path
                 kw["apply_cal"] = bool(params.engine_apply_cal)
-            # The per-edge margin boxes are authoritative (Knut beta-13): only
-            # clamp to the instrument minimums when "Use instrument margins" is on
-            # (then the boxes already hold those minimums, so it's a no-op). With
-            # it off, the user's typed margins are used as-is — no silent override.
+            # The per-edge margin boxes are ALWAYS the law (Knut, new model): the
+            # engine never silently raises them to meet instrument-margin minimums.
+            # "Use instrument margins" only pre-fills the boxes once in the UI;
+            # going below an instrument minimum is allowed and merely flagged as a
+            # violation in the Measured-from-Preview panel. So no build-time clamp.
             self._threshold_notes = []
-            if getattr(params.layout_recipe, "use_instrument_margins", False):
-                return self._apply_margin_thresholds(kw)
             return kw
         # Guided mode has no editable margin boxes and no "Use instrument
         # margins" toggle, so the jig-safety threshold clamp is intentionally

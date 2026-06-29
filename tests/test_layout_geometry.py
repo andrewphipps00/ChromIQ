@@ -245,7 +245,11 @@ def test_furniture_reserves_affect_capacity():
     w, h = geometry_papers(paper)
 
     def cap(**over):
-        r = LayoutRecipe(instrument="i1", paper=paper, **over)
+        # Furniture reserves only apply in patch-first (printtarg-style) mode;
+        # area-first is "margins are the law" and ignores them (Knut #93), so this
+        # furniture test pins patch-first explicitly.
+        r = LayoutRecipe(instrument="i1", paper=paper, layout_mode="patch_first",
+                         **over)
         g = instruments.geom_from_build_kwargs(r.build_kwargs())
         return geometry.patches_per_sheet(g, w, h)
 
@@ -269,7 +273,8 @@ def test_furniture_reserves_affect_capacity():
     bare = geometry.patches_per_sheet(instruments.build("i1"), *geometry_papers("A4"))
     assert bare == geometry.patches_per_sheet(
         instruments.geom_from_build_kwargs(
-            LayoutRecipe(instrument="i1", paper="A4").build_kwargs()),
+            LayoutRecipe(instrument="i1", paper="A4",
+                         layout_mode="patch_first").build_kwargs()),
         *geometry_papers("A4"))
 
 
@@ -444,6 +449,37 @@ def test_area_first_min_patch_autofit():
     assert gr.plen > gr.pwid
 
 
+def test_area_first_fills_box_past_ruler_cap():
+    """Area-first is "margins are the law": the patch block fills the whole margin
+    box height, even past the instrument ruler cap (i1Pro 240 mm). The leftover
+    bottom margin shrinks to ~the box margin, and the strip ends up longer than
+    the ruler — which a violation warning flags (Knut #93)."""
+    from workflow.layout_engine.presets import LayoutRecipe
+    r = LayoutRecipe(instrument="i1", paper="A4", clip_border=True,
+                     layout_mode="area_first", area_method="by_width",
+                     area_min_patch_mm=7.2, margin_bottom=6.0)
+    g = instruments.geom_from_build_kwargs(r.build_kwargs())
+    assert g.margins_are_law and g.ruler_mm == 240.0
+    lay = geometry.compute(g, *A4, 100_000)
+    bottom = geometry.realized_margins_mm(g, *A4, lay)[3]
+    assert bottom < 10.0                       # box filled, not a 35 mm gap
+    strip_len = lay.steps_in_pass * (g.plen + g.pspa)
+    assert strip_len > g.ruler_mm              # legitimately over the ruler
+
+
+def test_patch_first_keeps_ruler_cap():
+    """Patch-first (printtarg-style) still caps the strip at the instrument ruler
+    so the chart stays scannable — only area-first removes the cap (Knut #93)."""
+    from workflow.layout_engine.presets import LayoutRecipe
+    r = LayoutRecipe(instrument="i1", paper="A4", clip_border=True,
+                     layout_mode="patch_first", patch_w_mm=7.2, patch_h_mm=7.2)
+    g = instruments.geom_from_build_kwargs(r.build_kwargs())
+    assert not g.margins_are_law
+    lay = geometry.compute(g, *A4, 100_000)
+    strip_len = lay.steps_in_pass * (g.plen + g.pspa)
+    assert strip_len <= g.ruler_mm + g.plen    # capped near the ruler
+
+
 def test_clip_side_left_right():
     """clip_side flips the clip band to the other edge and shifts the patch block
     accordingly, with the patch count unchanged (#93)."""
@@ -484,27 +520,41 @@ def test_cm_ss_notes_band_reserves_space():
     assert area[0] < area_r[0]
 
 
-# --- "Margins are the law" mode (only when Use instrument margins is on) -------
+# --- "Margins are the law" mode (driven by area-first layout mode) ------------
 
-def test_margins_are_law_only_when_flag_on():
-    """With use_instrument_margins the patch area is exactly the margin box (no
-    hidden leader/trailer), so an un-capped strip packs MORE than the default
-    printtarg-style layout; without the flag it's the old behaviour (Knut)."""
+def test_margins_are_law_only_in_area_first():
+    """"Margins are the law" is now driven by the LAYOUT MODE (Knut #93): the
+    patch area is exactly the margin box in area-first, so an un-capped strip
+    packs MORE than the patch-first (printtarg-style) layout. The flag is no
+    longer tied to use_instrument_margins."""
     # ColorMunki strip isn't length-capped, so the reclaimed leader/trailer shows.
-    old = instruments.build("CM", spacer_on=True, edge_spacers=True)
+    old = instruments.build("CM", spacer_on=True, edge_spacers=True,
+                            margins_are_law=False)
     law = instruments.build("CM", spacer_on=True, edge_spacers=True,
-                            use_instrument_margins=True)
+                            margins_are_law=True)
     assert not old.margins_are_law and law.margins_are_law
     lay_old = geometry.compute(old, *A4, 60)
     lay_law = geometry.compute(law, *A4, 60)
     assert lay_law.steps_in_pass > lay_old.steps_in_pass     # patches at the margin
 
 
+def test_geom_from_build_kwargs_law_follows_layout_mode():
+    """geom_from_build_kwargs sets margins_are_law from layout_mode, not from the
+    use_instrument_margins toggle (Knut #93)."""
+    from workflow.layout_engine.presets import LayoutRecipe
+    af = LayoutRecipe(instrument="i1", paper="A4", layout_mode="area_first",
+                      use_instrument_margins=False)
+    pf = LayoutRecipe(instrument="i1", paper="A4", layout_mode="patch_first",
+                      use_instrument_margins=True)
+    assert instruments.geom_from_build_kwargs(af.build_kwargs()).margins_are_law
+    assert not instruments.geom_from_build_kwargs(pf.build_kwargs()).margins_are_law
+
+
 def test_margins_are_law_patch_top_at_margin_and_labels_at_edge():
     """In law mode the first patch row starts at the top margin and the strip
     label anchors at the top text-edge from the page edge (Knut)."""
     g = instruments.build("i1", margins=(38.0, 9.0, 9.0, 26.0),
-                          use_instrument_margins=True, text_edge_top=4.0,
+                          margins_are_law=True, text_edge_top=4.0,
                           patch_area_align="top-left")
     lay = geometry.compute(g, *A4, 200)
     pl = geometry.placement(g, *A4, lay)
@@ -513,17 +563,17 @@ def test_margins_are_law_patch_top_at_margin_and_labels_at_edge():
 
 
 def test_margins_are_law_furniture_does_not_reduce_capacity():
-    """In law mode furniture (label band) lives inside the margin and does not
-    change the patch count; in default mode it still does (Knut)."""
+    """In law (area-first) mode furniture (label band) lives inside the margin and
+    does not change the patch count; in patch-first mode it still does (Knut)."""
     from workflow.layout_engine.presets import LayoutRecipe
     paper = "210x150"
     w, h = geometry_papers(paper)
 
     def cap(law, **over):
         r = LayoutRecipe(instrument="i1", paper=paper,
-                         use_instrument_margins=law, **over)
+                         layout_mode="area_first" if law else "patch_first", **over)
         g = instruments.geom_from_build_kwargs(r.build_kwargs())
         return geometry.patches_per_sheet(g, w, h)
 
     assert cap(True, indicator_size_mm=30.0) == cap(True)     # law: unchanged
-    assert cap(False, indicator_size_mm=30.0) < cap(False)    # default: reduces
+    assert cap(False, indicator_size_mm=30.0) < cap(False)    # patch-first: reduces
