@@ -956,7 +956,12 @@ class _NewChartDialog(QDialog):
         self._eng_clip.toggled.connect(self._update_engine_cap_hint)
         self._eng_nocap.toggled.connect(self._update_engine_cap_hint)
         self._eng_density.currentIndexChanged.connect(self._update_engine_cap_hint)
-        lay.addWidget(chart_box)
+        # The whole "Chart" (layout) frame is removed from the New Patch Set
+        # window (Knut #93): instrument / paper / clip / density / pages are layout
+        # concerns owned by the Create Chart tab. The widgets stay constructed
+        # (hidden, defaulting to i1 / A4) so the patch-set result still carries a
+        # placeholder spec — Create Chart applies the real layout on apply.
+        chart_box.setVisible(False)
 
         # --- Source ---------------------------------------------------------
         src_box = QGroupBox(tr("Patches"), self)
@@ -1108,19 +1113,16 @@ class _NewChartDialog(QDialog):
         # Initial visibility for the conditional rows
         self._instr.currentIndexChanged.connect(self._refresh_instr_widgets)
         self._refresh_instr_widgets()
-        lay.addWidget(opt_box)
-        # With the ChromIQ layout engine active, the chart's layout is governed
-        # by the editor's engine panel after this window — the printtarg knobs
-        # here don't apply, so hide them and say so (#93).
-        if (self._settings is not None
-                and bool(self._settings.get("use_chromiq_layout_engine", False))):
-            opt_box.setVisible(False)
-            _eng_note = QLabel(tr("The ChromIQ layout engine is on — set the page "
-                                  "layout in the editor after creating the chart."),
-                               self)
-            _eng_note.setWordWrap(True)
-            _eng_note.setStyleSheet("color: palette(mid); font-size: 11px;")
-            lay.addWidget(_eng_note)
+        # The printtarg "Layout options" are removed too (Knut #93): this window
+        # builds a PATCH SET only; the page layout is set in the Create Chart tab.
+        # Kept constructed (hidden) so the result still carries placeholder values.
+        opt_box.setVisible(False)
+        _eng_note = QLabel(tr("This window builds a patch set. The page layout "
+                              "(instrument, paper, margins, spacers…) is set in "
+                              "the Create Chart tab."), self)
+        _eng_note.setWordWrap(True)
+        _eng_note.setStyleSheet("color: palette(mid); font-size: 11px;")
+        lay.addWidget(_eng_note)
 
         btns = QHBoxLayout()
         restore = QPushButton(tr("Restore defaults"), self)
@@ -1840,13 +1842,17 @@ class _NewChartDialog(QDialog):
         self._gen_fill_unit_grp.addButton(self._gen_fill_unit_pages)
         self._gen_fill_unit_grp.buttonToggled.connect(self._update_gen_counts)
         self._gen_fill_pages.valueChanged.connect(self._update_gen_counts)
+        # "Fill to pages" is removed from the generator (Knut #93): pages are a
+        # layout concern owned by the Create Chart tab, so the patch-set generator
+        # only fills to a PATCH COUNT. The pages widgets stay constructed (hidden,
+        # patches unit forced on) so the count plumbing keeps working.
+        self._gen_fill_unit_pages.setVisible(False)
+        self._gen_fill_pages.setVisible(False)
+        self._gen_fill_unit_patches.setChecked(True)
         _fill_row = QHBoxLayout(); _fill_row.setContentsMargins(0, 0, 0, 0)
         _fill_row.setSpacing(6)
         _fill_row.addWidget(self._gen_fill_unit_patches)
         _fill_row.addWidget(self._gen_fill_to)
-        _fill_row.addSpacing(10)
-        _fill_row.addWidget(self._gen_fill_unit_pages)
-        _fill_row.addWidget(self._gen_fill_pages)
         _fill_row.addStretch()
         _fill_w = QWidget(self._gen_panel); _fill_w.setLayout(_fill_row)
         self._gen_fill_count = _count_label()

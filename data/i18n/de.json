@@ -1935,7 +1935,6 @@
   "Spacer colours:": "Trennlinienfarben:",
   "Line distance:": "Linienabstand:",
   "Line thickness:": "Liniendicke:",
-  "The ChromIQ layout engine is on — set the page layout in the editor after creating the chart.": "Die ChromIQ-Layout-Engine ist an — lege das Seitenlayout nach dem Erstellen der Testkarte im Editor fest.",
   "≈ {n} fit one page": "≈ {n} passen auf eine Seite",
   "Shuffled with seed {s}.": "Mit Startwert {s} gemischt.",
   "Clip border": "Klemmrand",
@@ -2087,5 +2086,6 @@
   "Set up your patch set": "Set up your patch set",
   "New patch set": "New patch set",
   "NEW PATCH SET · SETUP": "NEW PATCH SET · SETUP",
-  "New patch set…": "New patch set…"
+  "New patch set…": "New patch set…",
+  "This window builds a patch set. The page layout (instrument, paper, margins, spacers…) is set in the Create Chart tab.": "This window builds a patch set. The page layout (instrument, paper, margins, spacers…) is set in the Create Chart tab."
 }
