@@ -253,10 +253,16 @@ def placement(geom: Geom, paper_w_mm: float, paper_h_mm: float, layout: Layout) 
     # the patch block starts after it. avail_w already excludes rlwi.
     _y0 = amints + _lead + g.hxeh + g.offset_y
     if g.margins_are_law:
-        # Labels anchor at the text-edge distance from the PAPER TOP EDGE (Knut:
-        # 4 mm from the edge), inside the top margin; strip_indicator_gap nudges
-        # them further in.
-        _leader_top = g.text_edge_top_mm + g.strip_indicator_gap + g.offset_y
+        # Strip labels live in the top margin at the text-edge distance from the
+        # PAGE EDGE (Knut: 4 mm), but they must NEVER sit behind the patches. So
+        # anchor the label's BOTTOM at the patch-area top (margin_t): when the top
+        # margin is too small for the label, the label slides UP toward the page
+        # edge (encroaching the 4 mm text-edge if it must) instead of overlapping
+        # the patch block — clamped at the page edge. A too-small margin still
+        # raises a warning in the inspector (#93, Knut).
+        _lab_h = g.label_band_mm if g.label_band_mm >= 0 else g.txhisl
+        _ideal_top = g.text_edge_top_mm + g.strip_indicator_gap
+        _leader_top = max(0.0, min(_ideal_top, g.margin_t - _lab_h)) + g.offset_y
     else:
         _leader_top = g.margin_t + g.offset_y   # default: flush under the margin
     return Placement(

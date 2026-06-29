@@ -585,6 +585,33 @@ def test_margins_are_law_patch_top_at_margin_and_labels_at_edge():
     assert abs(pl.leader_top - 4.0) < 1e-9                    # label 4 mm from edge
 
 
+def test_margins_are_law_label_slides_to_edge_not_behind_patches():
+    """In law mode a too-small top margin must push the strip label TOWARD the page
+    edge (out of the patch block), never behind the patches (Knut #93). The label
+    bottom stays at/above the patch-area top; a big margin still anchors at the
+    text-edge distance."""
+    from workflow.layout_engine.presets import LayoutRecipe
+    w, h = geometry_papers("A4R")
+    # Tight 7 mm top margin, label band ~7 mm → label must slide up to the edge.
+    tight = instruments.geom_from_build_kwargs(
+        LayoutRecipe(instrument="i1", paper="A4R", layout_mode="area_first",
+                     area_method="by_width", area_min_patch_mm=8.0,
+                     margin_top=7.0, text_edge_top_mm=4.0).build_kwargs())
+    lay = geometry.compute(tight, w, h, 1000)
+    pl = geometry.placement(tight, w, h, lay)
+    lab_h = tight.label_band_mm if tight.label_band_mm >= 0 else tight.txhisl
+    assert pl.leader_top >= 0.0                          # never off the page top
+    assert pl.leader_top + lab_h <= tight.margin_t + 0.05  # bottom not behind patches
+    # Roomy margin → label sits at the text-edge distance as before.
+    roomy = instruments.geom_from_build_kwargs(
+        LayoutRecipe(instrument="i1", paper="A4", layout_mode="area_first",
+                     area_method="by_width", area_min_patch_mm=8.0,
+                     margin_top=38.0, text_edge_top_mm=4.0).build_kwargs())
+    w2, h2 = A4
+    lay2 = geometry.compute(roomy, w2, h2, 200)
+    assert abs(geometry.placement(roomy, w2, h2, lay2).leader_top - 4.0) < 1e-9
+
+
 def test_margins_are_law_furniture_does_not_reduce_capacity():
     """In law (area-first) mode furniture (label band) lives inside the margin and
     does not change the patch count; in patch-first mode it still does (Knut)."""
