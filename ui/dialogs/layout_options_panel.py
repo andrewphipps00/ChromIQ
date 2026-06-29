@@ -140,11 +140,11 @@ class LayoutOptionsPanel(QWidget):
                 self), 0, 4)
             self.mode = NoScrollComboBox(self)
             self._mode_lbl = QLabel(tr("Mode:"), self)
-            sel.addWidget(self._mode_lbl, 1, 0)
-            sel.addWidget(self.mode, 1, 1, 1, 3)
+            sel.addWidget(self._mode_lbl, 3, 0)
+            sel.addWidget(self.mode, 3, 1, 1, 3)
             _mt, _mb = self.mode_tooltip_for("i1")
             self._mode_tip = TooltipButton(_mt, _mb, self)
-            sel.addWidget(self._mode_tip, 1, 4)
+            sel.addWidget(self._mode_tip, 3, 4)
             # Clip-border On/Off for CM/SS — an extra selector so they get the
             # same clip toggle the i1Pro has in its Mode selector (Knut, #93).
             # Mirrors the content on/off: On reserves a notes band, Off hides it.
@@ -153,8 +153,8 @@ class LayoutOptionsPanel(QWidget):
             self.clip_enable.addItem(tr("Off — more patches"), "off")
             self.clip_enable.addItem(tr("On"), "on")
             self.clip_enable.currentIndexChanged.connect(self._on_clip_enable_changed)
-            sel.addWidget(self._clip_enable_lbl, 2, 0)
-            sel.addWidget(self.clip_enable, 2, 1, 1, 3)
+            sel.addWidget(self._clip_enable_lbl, 4, 0)
+            sel.addWidget(self.clip_enable, 4, 1, 1, 3)
             self._clip_enable_tip = TooltipButton(
                 tr("Clip border"),
                 tr("Reserve a clip-border strip on this chart (the same option the "
@@ -162,25 +162,26 @@ class LayoutOptionsPanel(QWidget):
                    "text or a logo in the Clip-border content section below; Off "
                    "uses the whole page for patches. Choose which edge it sits on "
                    "in that section."), self)
-            sel.addWidget(self._clip_enable_tip, 2, 4)
-            # Paper + Pages share a row; paper gets the stretch (wider).
+            sel.addWidget(self._clip_enable_tip, 4, 4)
+            # Paper + Pages share a row, directly under Instrument (Knut #93);
+            # paper gets the stretch (wider).
             self.paper = NoScrollComboBox(self)
-            sel.addWidget(QLabel(tr("Paper:"), self), 3, 0)
-            sel.addWidget(self.paper, 3, 1)
+            sel.addWidget(QLabel(tr("Paper:"), self), 1, 0)
+            sel.addWidget(self.paper, 1, 1)
             self._pages_lbl = QLabel(tr("Pages:"), self)
-            sel.addWidget(self._pages_lbl, 3, 2)
+            sel.addWidget(self._pages_lbl, 1, 2)
             self.pages = NoScrollSpinBox(self)
             self.pages.setRange(1, 20)
             self.pages.setValue(1)
             self.pages.setMaximumWidth(70)
             self.pages.valueChanged.connect(self._emit)
-            sel.addWidget(self.pages, 3, 3)
+            sel.addWidget(self.pages, 1, 3)
             sel.addWidget(TooltipButton(
                 tr("Paper and pages"),
                 tr("Paper is the sheet size you'll print on — the profile is only "
                    "valid for the paper you actually use. Pages is how many sheets "
                    "to spread the patches across: more pages = more patches total "
-                   "(and more ink and paper)."), self), 3, 4)
+                   "(and more ink and paper)."), self), 1, 4)
             # Custom paper W×H (shown only when Paper = "Custom…").
             self._custom_paper_w = QWidget(self)
             _cpl = QHBoxLayout(self._custom_paper_w)
@@ -194,7 +195,7 @@ class LayoutOptionsPanel(QWidget):
             self.custom_w.setValue(210); self.custom_h.setValue(297)
             _cpl.addWidget(self.custom_w); _cpl.addWidget(QLabel("×", self))
             _cpl.addWidget(self.custom_h); _cpl.addStretch()
-            sel.addWidget(self._custom_paper_w, 4, 0, 1, 4)
+            sel.addWidget(self._custom_paper_w, 2, 0, 1, 4)   # directly below Paper
             self._custom_paper_w.setVisible(False)
             sel.setColumnStretch(1, 1)        # paper / instrument / mode expand
             v.addLayout(sel)
