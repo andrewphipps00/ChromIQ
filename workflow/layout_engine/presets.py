@@ -280,7 +280,14 @@ class LayoutRecipe:
             "spacer_mode": self.spacer_mode,
             "spacer_palette": list(self.spacer_palette) or None,
             "spacer_overrides": dict(self.spacer_overrides) or None,
-            "edge_spacers": self.edge_spacers,
+            # Strip readers (i1/p3/CM) always bracket each strip with a leading +
+            # trailing spacer, exactly like the Guided path (chart_creator) — so
+            # the instrument starts/ends a strip on a spacer, and the small gap it
+            # adds between the strip label and the first patch matches Guided
+            # (Sebastian: "guided has a little more space, make it the Manual
+            # default too"). Other instruments honour the stored field.
+            "edge_spacers": (self.edge_spacers
+                             or self.instrument in ("i1", "p3", "CM")),
             "patch_area_align": self.patch_area_align,
             "pscale": self.pscale,
             "sscale": self.sscale,
@@ -348,11 +355,24 @@ def default_recipe(instrument: str = "i1", paper: str = "A4", *, mode: str | Non
                    ) -> LayoutRecipe:
     """A sensible default recipe for *instrument*/*paper* (and optional *mode*)."""
     r = LayoutRecipe(instrument=instrument, paper=paper)
+    # ColorMunki / SpectroScan have no physical clip; the notes band is opt-in, so
+    # it defaults OFF for every mode (Sebastian). i1/p3 keep "notes" so that when
+    # their clip border is on it carries the record strip.
+    if instrument in ("CM", "SS"):
+        r.clip_content_mode = "off"
     if mode is not None:
         if instrument in ("i1", "p3"):
             r.clip_border = (mode == "clip")
         elif instrument == "CM":
             r.cm_density = {"freehand": 1, "high": 2, "extrahigh": 3}.get(mode, 1)
+            if mode == "extrahigh":
+                # Match Guided's triple-density defaults exactly (Sebastian): the
+                # engine-native dense ColorMunki strip uses 5 mm margins + border,
+                # clip off, and the centred patch block (the extra gap below the
+                # strip labels).
+                r.margin_top = r.margin_right = r.margin_bottom = r.margin_left = 5.0
+                r.border = 5.0
+                r.patch_area_align = "center-left"
         elif instrument == "SS":
             r.hflag = (mode == "hex")
     return r

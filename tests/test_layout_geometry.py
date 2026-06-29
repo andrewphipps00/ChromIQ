@@ -97,36 +97,46 @@ def test_colormunki_density_levels_increase_capacity():
     assert instruments.build("CM", hflag=True).rrsp == 13.7
 
 
-def test_colormunki_triple_density_is_i1_strip_layout_tagged_colormunki():
-    """ColorMunki triple density (extra-high, density=3) IS the proven i1Pro
-    strip layout — the engine builds it natively and stamps TARGET_INSTRUMENT
-    "X-Rite ColorMunki" itself, so no generate-as-i1-then-rename trickery is
-    needed (#93, Knut)."""
-    g3 = instruments.build("CM", density=3, pscale=1.3, border=5.0)
-    i1 = instruments.build("i1", nolpcbord=True, nolimit=True,
-                           pscale=1.3, border=5.0)
-    # Geometry == the i1 strip layout (patch size, spacers, leader, cap)…
-    assert (g3.pwid, g3.plen, g3.pspa, g3.lspa, g3.mxrowl) == \
-           (i1.pwid, i1.plen, i1.pspa, i1.lspa, i1.mxrowl)
-    # …but the CGATS instrument tag is the ColorMunki the user owns.
+def test_colormunki_extra_high_is_native_dense_colormunki():
+    """ColorMunki extra-high (density=3) is a NATIVE dense ColorMunki strip layout
+    — our engine makes the small (~10.4 mm) patches directly, with the ColorMunki
+    tag, NOT by borrowing the i1Pro geometry the old printtarg trick had to use
+    (#93, Knut/Sebastian)."""
+    g3 = instruments.build("CM", density=3, border=5.0)
+    assert g3.key == "CM"
     assert g3.target_name == instruments.TARGET_INSTRUMENT_NAME["CM"]
-    # Triple density always suppresses the clip border (-L) and lifts the
-    # strip-length cap (-P), regardless of what the caller passed.
-    assert g3.lbord == 0.0
-    assert instruments.build("CM", density=3, nolpcbord=False, nolimit=False).lbord == 0.0
+    # Small, readable patches packed densely (denser than the rig, density 2).
+    assert g3.pwid < instruments.build("CM", density=2).pwid
+    assert (geometry.patches_per_sheet(g3, *A4)
+            > geometry.patches_per_sheet(instruments.build("CM", density=2), *A4))
 
 
-def test_colormunki_density_inert_in_area_first_even_at_triple():
-    """Triple density is patch-first; in area-first the two area fields own the
-    grid, so density (incl. 3) must not switch to the strip layout (#93)."""
+def test_colormunki_extra_high_patch_size_is_scale_independent():
+    """Extra-high is a fixed maximum-density mode, so its auto patch size (and
+    hence the count) does NOT depend on the patch scale — Guided (which passes the
+    old 1.3 trick scale) and Manual (default 1.0) fill to the SAME count (#93)."""
+    a = instruments.build("CM", density=3, border=5.0, pscale=1.0)
+    b = instruments.build("CM", density=3, border=5.0, pscale=1.3)
+    assert (a.pwid, a.plen, a.pspa) == (b.pwid, b.plen, b.pspa)
+    A4L = (297.0, 210.0)
+    assert (geometry.patches_per_sheet(a, *A4L)
+            == geometry.patches_per_sheet(b, *A4L) == 324)
+
+
+def test_colormunki_density_in_area_first():
+    """In area-first the two area fields own the grid. Density 1 vs 2 (both the
+    ColorMunki grid) stay inert; extra-high (3) is a denser layout so it differs.
+    All stay tagged ColorMunki (no i1 borrow)."""
     def grid(d):
         g = instruments.geom_from_build_kwargs(
             {"instrument": "CM", "paper": "A4", "layout_mode": "area_first",
              "area_method": "by_width", "area_min_patch": 8.0, "density": d})
-        return geometry.patches_per_sheet(g, *A4), g.target_name
-    assert grid(1) == grid(2) == grid(3)
-    # tag stays ColorMunki (no strip-layout redirect leaking through)
-    assert grid(3)[1] == instruments.TARGET_INSTRUMENT_NAME["CM"]
+        return geometry.patches_per_sheet(g, *A4), g.key, g.target_name
+    assert grid(1)[:2] == grid(2)[:2]          # grid densities inert
+    assert grid(3)[1] == "CM"                  # native ColorMunki, not i1
+    assert grid(3)[0] != grid(1)[0]            # denser → count differs
+    # tag stays ColorMunki across all densities
+    assert grid(3)[2] == instruments.TARGET_INSTRUMENT_NAME["CM"]
 
 
 def test_clip_border_width_drives_lbord():
@@ -356,18 +366,6 @@ def test_area_first_fits_requested_grid():
     sq = grid(area_rows=40, area_ratio=1.0)[0]
     tall = grid(area_rows=40, area_ratio=2.0)[0]
     assert tall > sq
-
-
-def test_colormunki_density_inert_in_area_first():
-    """In area-first the two area fields define the grid, so ColorMunki density
-    has no effect on the result (Knut). After decoupling the stagger, density
-    only sets a base patch width that area-fit overrides."""
-    def grid(d):
-        g = instruments.geom_from_build_kwargs(
-            {"instrument": "CM", "paper": "A4", "layout_mode": "area_first",
-             "area_method": "by_width", "area_min_patch": 8.0, "density": d})
-        return geometry.patches_per_sheet(g, *A4), round(g.pwid, 3), round(g.plen, 3)
-    assert grid(1) == grid(2) == grid(3)
 
 
 def test_colormunki_stagger_offsets_odd_strips_and_reserves_space():

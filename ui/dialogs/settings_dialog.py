@@ -1300,6 +1300,8 @@ class SettingsDialog(QDialog):
         for code, label, _ in papers.list_papers(inst, for_engine=True):
             self._layout_paper.addItem(label, code)
         i = self._layout_paper.findData(prev_paper)
+        if i < 0:
+            i = self._layout_paper.findData("A4")   # sane default, not A2 (index 0)
         self._layout_paper.setCurrentIndex(i if i >= 0 else 0)
         self._layout_mode.clear()
         for key, label in self._layout_modes(inst):

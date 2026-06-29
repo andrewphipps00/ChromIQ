@@ -1,5 +1,30 @@
 # Changelog
 
+## v3.13.0-beta.21
+
+### 🔧 Changed
+- **ColorMunki “Extra-high density” is now a native ColorMunki layout** — no more
+  borrowing the i1Pro geometry. The engine makes the small, dense ColorMunki
+  patches directly, so the chart is a real ColorMunki target end to end. Its
+  patch size is fixed (a defined maximum-density mode), so Manual and Guided fill
+  to the **same** patch count.
+- **Manual Extra-high defaults now match Guided exactly** (5 mm margins, clip
+  border off, centred patch block) — including the strip-label-to-patch spacing.
+- **ColorMunki never caps the strip length** (it has no i1-style ruler), so
+  Manual no longer drops patches versus Guided.
+- **Clip border / notes band**: clip-border content (i1Pro / i1Pro 3 / ColorMunki
+  / SpectroScan) and the per-instrument clip toggles now behave consistently — the
+  clip-border content defaults to the notes box, and the ColorMunki/SpectroScan
+  notes band defaults **off**.
+
+### 🐛 Fixed
+- Turning the clip border **off** now restores the page margin instead of leaving
+  it stuck at the clip-border width (it no longer looks permanently reserved, and
+  ColorMunki/SpectroScan no longer showed a double border).
+- The Chart-Layout paper selector no longer defaults to **A2** — it falls back to
+  **A4** when the previous paper isn’t available, so the page size stops “jumping
+  back to A2”.
+
 ## v3.13.0-beta.20
 
 ### 🔧 Changed

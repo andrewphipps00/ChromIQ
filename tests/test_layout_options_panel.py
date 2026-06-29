@@ -242,6 +242,36 @@ def test_cm_ss_clip_enable_selector(app):
     assert p.clip_enable.currentData() == "on"
 
 
+def test_clip_border_floors_then_restores_margin(app):
+    """Turning the clip band ON floors the clip-side margin at the clip width
+    (clip-inside-margin); turning it OFF restores the margin the user had — it
+    must NOT stay stuck at the clip width (Knut/Sebastian, double-border bug)."""
+    from ui.dialogs.layout_options_panel import LayoutOptionsPanel
+    from workflow.layout_engine.presets import default_recipe
+    # ColorMunki, clip off, left margin 6, clip width 26.
+    p = LayoutOptionsPanel(with_selectors=True)
+    r = default_recipe("CM", "A4", mode="extrahigh")
+    r.margin_left = 6.0
+    r.clip_border_width_mm = 26.0
+    r.clip_content_mode = "off"
+    p.set_recipe(r)
+    assert p.margins["l"].value() == 6.0
+    p.clip_enable.setCurrentIndex(p.clip_enable.findData("on"))
+    assert p.margins["l"].value() == 26.0          # floored to clip width
+    p.clip_enable.setCurrentIndex(p.clip_enable.findData("off"))
+    assert p.margins["l"].value() == 6.0           # restored, not stuck at 26
+    # i1Pro via its Mode selector: same floor/restore on the clip-side margin.
+    r2 = default_recipe("i1", "A4", mode="clip")
+    r2.margin_left = 6.0
+    r2.clip_border_width_mm = 26.0
+    p.set_recipe(r2)
+    p.mode.setCurrentIndex(p.mode.findData("noclip"))
+    p.mode.setCurrentIndex(p.mode.findData("clip"))
+    assert p.margins["l"].value() == 26.0
+    p.mode.setCurrentIndex(p.mode.findData("noclip"))
+    assert p.margins["l"].value() == 6.0
+
+
 def test_mode_tooltip_is_instrument_specific(app):
     """The Mode ⓘ describes only the option the current instrument has, and the
     extra clip-border ⓘ shows only for CM/SS (no orphan tooltip on i1) (#93)."""

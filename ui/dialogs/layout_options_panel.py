@@ -111,6 +111,10 @@ class LayoutOptionsPanel(QWidget):
         # Per-spacer manual colour overrides {str(flat_idx): "#hex"} — set by
         # clicking spacers in the editor preview; carried in the recipe (#93).
         self._spacer_overrides: dict = {}
+        # The clip-side margin the user had before the clip band floored it, so it
+        # can be restored when the band is turned off (Knut/Sebastian); None = not
+        # currently floored. (key, value) e.g. ("l", 6.0).
+        self._saved_clip_margin: "tuple[str, float] | None" = None
         self._border: float = 6.0      # base margin (-m); preserved, no control
         self._inst = "i1"           # last-known instrument / clip state, for
         self._clip = True           # clip-border-width row visibility
@@ -207,6 +211,7 @@ class LayoutOptionsPanel(QWidget):
                 _c.setMinimumContentsLength(10)
             self.instr.currentIndexChanged.connect(self._on_instr_changed)
             self.paper.currentIndexChanged.connect(self._on_paper_changed)
+            self.mode.currentIndexChanged.connect(self._apply_mode_defaults)
             self.mode.currentIndexChanged.connect(self._emit)
             self.mode.currentIndexChanged.connect(self._update_clip_visibility)
             self._on_instr_changed()
@@ -1123,11 +1128,37 @@ class LayoutOptionsPanel(QWidget):
             self.cal_path_edit.setText(path or "")
 
     # ------------------------------------------------------------------
+    def _apply_mode_defaults(self, *_a) -> None:
+        """Seed the Guided-matching defaults when the user picks a mode that has
+        its own preset. ColorMunki Extra-high density mirrors Guided's triple
+        density exactly: 5 mm margins on every side (clip already defaults off for
+        CM). Skipped during load so a loaded recipe's own margins win (#93,
+        Sebastian)."""
+        if self._loading or self.mode is None or self.instr is None:
+            return
+        if (self.instr.currentData() == "CM"
+                and self.mode.currentData() == "extrahigh"):
+            self._loading = True
+            for k in ("t", "r", "b", "l"):
+                self.margins[k].setValue(5.0)
+            self._border = 5.0                       # base margin, = Guided
+            # Guided centres the patch block (the small extra gap below the strip
+            # labels Sebastian liked); match it here.
+            if hasattr(self, "patch_align"):
+                j = self.patch_align.findData("center-left")
+                if j >= 0:
+                    self.patch_align.setCurrentIndex(j)
+            self._loading = False
+            self._emit()
+
     def _on_instr_changed(self, *_a) -> None:
         from workflow.layout_engine import papers
         if self.instr is None:
             return
         self._loading = True
+        # New instrument = new clip context; forget any clip-floor restore point
+        # so it can't clobber the new instrument's margins (e.g. a mode preset).
+        self._saved_clip_margin = None
         inst = self.instr.currentData() or "i1"
         prev_paper = self.paper.currentData()
         self.paper.clear()
@@ -1135,6 +1166,12 @@ class LayoutOptionsPanel(QWidget):
             self.paper.addItem(label, code)
         self.paper.addItem(tr("Custom…"), "__custom__")
         i = self.paper.findData(prev_paper)
+        if i < 0:
+            # The engine paper list is ordered largest-first (A2 is index 0), which
+            # is a surprising default — fall back to A4 when the previous paper
+            # isn't available for the new instrument, not whatever sits at 0 (the
+            # "keeps jumping back to A2" report, Sebastian).
+            i = self.paper.findData("A4")
         self.paper.setCurrentIndex(i if i >= 0 else 0)
         prev_mode = self.mode.currentData()
         self.mode.clear()
@@ -1331,20 +1368,33 @@ class LayoutOptionsPanel(QWidget):
         return False
 
     def _sync_clip_margin_floor(self, *_a) -> None:
-        """The clip / notes band lives inside the clip-side page margin, so floor
-        that margin at the clip-border width and show it in the box — editable, so
-        the user can push the patches further in (Knut beta-13). Skipped while
-        "Use instrument margins" locks the margins."""
+        """The clip / notes band lives inside the clip-side page margin, so while
+        the band is ON floor that margin at the clip-border width and show it in
+        the box — editable, so the user can push the patches further in (Knut
+        beta-13). When the band is turned OFF, RESTORE the margin the user had
+        before it was floored (otherwise it stays stuck at the clip width and the
+        band looks permanently reserved — Knut/Sebastian). Skipped while "Use
+        instrument margins" locks the margins."""
         if self._loading or not (hasattr(self, "clip_width")
                                  and hasattr(self, "clip_side")):
             return
         if (hasattr(self, "use_instr_margins") and self.use_instr_margins.isChecked()):
             return
+        key = "r" if (self.clip_side.currentData() or "left") == "right" else "l"
         if not self._clip_band_active():
+            # Band off → give back the margin we floored when it went on.
+            saved = getattr(self, "_saved_clip_margin", None)
+            if saved is not None:
+                skey, sval = saved
+                self._saved_clip_margin = None
+                self.margins[skey].setValue(sval)     # fires its own _emit
             return
         clip_w = self.clip_width.value()
-        key = "r" if (self.clip_side.currentData() or "left") == "right" else "l"
         if self.margins[key].value() < clip_w:
+            # Remember the user's margin once, before the first floor, so it can be
+            # restored when the band is turned off again.
+            if getattr(self, "_saved_clip_margin", None) is None:
+                self._saved_clip_margin = (key, self.margins[key].value())
             self.margins[key].setValue(clip_w)        # fires its own _emit
 
     def _sync_layout_mode(self, *_a) -> None:
@@ -1799,6 +1849,9 @@ class LayoutOptionsPanel(QWidget):
 
     def set_recipe(self, r: LayoutRecipe) -> None:
         self._loading = True
+        # The loaded recipe's margins are authoritative; forget any clip-floor
+        # restore point from the previous chart so it can't clobber them.
+        self._saved_clip_margin = None
         if self.instr is not None:
             ii = self.instr.findData(r.instrument)
             self.instr.setCurrentIndex(ii if ii >= 0 else 0)

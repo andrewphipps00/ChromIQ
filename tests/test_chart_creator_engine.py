@@ -138,6 +138,37 @@ def test_engine_build_kwargs_mapping(tmp_path: Path) -> None:
         creator._engine_build_kwargs(ChartParams(instrument="CM", double_density=True))["density"] == 2
 
 
+def test_guided_and_manual_colormunki_extra_high_are_identical(tmp_path: Path) -> None:
+    """Manual's ColorMunki Extra-high defaults must build the EXACT same geometry
+    as Guided's triple density — same patch count AND the same strip-label-to-
+    patch spacing (Sebastian: "set the Manual defaults for this mode exactly to
+    what is used in Guided")."""
+    import dataclasses
+    from workflow.layout_engine import instruments, geometry, papers
+    from workflow.layout_engine.presets import default_recipe
+    creator = ChartCreator(_EngineRunner(), _MockFileManager(tmp_path / "p"),
+                           _EngineSettings())
+    # Guided seeds 5 mm margin, scale 1.3, no strip limit, clip off.
+    gkw = creator._engine_build_kwargs(
+        ChartParams(instrument="CM", paper="A4", triple_density=True,
+                    margin_mm=5.0, patch_scale=1.3, no_strip_limit=True))
+    mkw = default_recipe("CM", "A4", mode="extrahigh").build_kwargs()
+    mkw["instrument"], mkw["paper"] = "CM", "A4"
+    gg = instruments.geom_from_build_kwargs(gkw)
+    gm = instruments.geom_from_build_kwargs(mkw)
+    diffs = [f.name for f in dataclasses.fields(instruments.Geom)
+             if getattr(gg, f.name) != getattr(gm, f.name)]
+    assert not diffs, f"guided/manual geometry differs: {diffs}"
+    # Same count and same first-patch position (→ same label↔patch gap).
+    for dims in ((210.0, 297.0), (297.0, 210.0)):
+        cg = geometry.patches_per_sheet(gg, *dims)
+        assert cg == geometry.patches_per_sheet(gm, *dims)
+        lg = geometry.compute(gg, *dims, cg)
+        lm = geometry.compute(gm, *dims, cg)
+        assert (geometry.placement(gg, *dims, lg).y_of(0)
+                == geometry.placement(gm, *dims, lm).y_of(0))
+
+
 def test_engine_kwargs_uses_full_recipe(tmp_path: Path) -> None:
     from workflow.layout_engine.presets import LayoutRecipe
     creator = ChartCreator(_EngineRunner(), _MockFileManager(tmp_path / "p"),
