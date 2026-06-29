@@ -298,6 +298,20 @@ def test_spectroscan_hex_pokes_above_first_row():
     assert checked >= 1
 
 
+def test_branding_extra_text_uses_chosen_font():
+    """The extra text under the ChromIQ branding clip content honours the user's
+    chosen font, not the wordmark face (#93, Knut)."""
+    import numpy as np
+
+    def render(font):
+        img = raster.render_clip_strip("branding", width_px=160, height_px=1200,
+                                       dpi=200, text="Sample Lab",
+                                       font_family=font, ctx=None)
+        return np.asarray(img.convert("RGB"))
+
+    assert not np.array_equal(render("Inter"), render("JetBrains Mono"))
+
+
 def test_text_edge_mm_moves_bottom_text():
     """A larger 'text distance from edge' pushes the bottom sheet text further up
     from the page edge (#93, Knut: the text-distance parameter)."""

@@ -335,7 +335,7 @@ def render_clip_strip(mode: str, *, width_px: int, height_px: int, dpi: int,
 
     if mode == "branding":
         extra = [ln for ln in (text or "").splitlines() if ln.strip()]
-        overlay = _vwordmark(extra, width_px, height_px)
+        overlay = _vwordmark(extra, width_px, height_px, font_family)
         strip.paste(overlay, (0, 0), overlay)
         return strip
 
@@ -376,9 +376,12 @@ def _italic_tile(text: str, font, fill: tuple, stroke_w: int = 0,
     return sheared, base_y, (bbox[0] if bbox else 0)
 
 
-def _vwordmark(extra_lines: list[str], width_px: int, height_px: int) -> Image.Image:
+def _vwordmark(extra_lines: list[str], width_px: int, height_px: int,
+               font_family: str = "Inter") -> Image.Image:
     """The masthead "ChromIQ" wordmark — Instrument Serif, "Chrom" near-black,
-    "IQ" bold-italic in magenta — plus optional lines, read up the strip."""
+    "IQ" bold-italic in magenta — plus optional lines, read up the strip. The
+    optional lines use *font_family* (the user's chosen clip font), not the
+    wordmark face (#93, Knut)."""
     canvas = Image.new("RGBA", (max(1, height_px), max(1, width_px)), (0, 0, 0, 0))
     d = ImageDraw.Draw(canvas)
     n = 1 + len(extra_lines)
@@ -387,8 +390,9 @@ def _vwordmark(extra_lines: list[str], width_px: int, height_px: int) -> Image.I
     size = max(10, int(width_px * 0.55))
     for _ in range(40):
         f = _font(size, WORDMARK_FONT)
+        f_extra = _font(size, font_family)
         wm_w = d.textlength("Chrom", font=f) + d.textlength("IQ", font=f) * 1.25
-        widest = max([wm_w] + [d.textlength(l, font=f) for l in extra_lines])
+        widest = max([wm_w] + [d.textlength(l, font=f_extra) for l in extra_lines])
         if size * 1.25 * n <= width_px * 0.92 and widest <= height_px * 0.95:
             break
         size = int(size * 0.9)
@@ -416,8 +420,9 @@ def _vwordmark(extra_lines: list[str], width_px: int, height_px: int) -> Image.I
         canvas.paste(iq_tile,
                      (int(x + chrom_w + kern - iq_left), int(baseline - iq_base)),
                      iq_tile)
+        f_extra = _font(size, font_family)      # user's chosen clip font
         for i, ln in enumerate(extra_lines, start=1):
-            d.text((height_px / 2, cy + line_h * (i + 0.5)), ln, font=f,
+            d.text((height_px / 2, cy + line_h * (i + 0.5)), ln, font=f_extra,
                    fill=chrom_fill, anchor="mm")
     except Exception:  # pragma: no cover - default font without anchor
         d.text((x, baseline), "ChromIQ", font=f, fill=chrom_fill)
