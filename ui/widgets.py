@@ -28,6 +28,7 @@ from PyQt6.QtWidgets import (
     QStyleOptionFrame,
     QToolBar,
     QToolButton,
+    QVBoxLayout,
     QWidget,
 )
 
@@ -498,6 +499,64 @@ def reapply_input_stylesheet(root: QWidget) -> None:
     for cls in (QComboBox, QSpinBox, QDoubleSpinBox):
         for w in root.findChildren(cls):
             w.setStyleSheet(qss)
+
+
+class CollapsibleGroupBox(QGroupBox):
+    """A QGroupBox whose title is clickable to collapse / expand its contents.
+
+    Keeps the native framed look (border + embedded title) so it matches the
+    other sections; the title gains a ▸ / ▾ arrow and, when collapsed, the body
+    is hidden and the box shrinks to the title.
+
+    Put content on the ``.body`` widget — ``QGridLayout(group.body)`` etc. — not
+    on the group itself, so collapsing hides one container and each child keeps
+    its own intended visibility (mode logic may hide individual fields) (Knut:
+    collapsible Create-Chart sections)."""
+
+    def __init__(self, title: str = "", parent=None, *, collapsed: bool = False):
+        super().__init__("", parent)
+        self._base_title = title
+        self._collapsed = bool(collapsed)
+        self._outer = QVBoxLayout(self)
+        self._outer.setContentsMargins(0, 0, 0, 0)
+        self._outer.setSpacing(0)
+        self.body = QWidget(self)
+        self._outer.addWidget(self.body)
+        self._render_title()
+        self.body.setVisible(not self._collapsed)
+
+    def setTitle(self, title: str) -> None:        # noqa: N802 (Qt override)
+        self._base_title = title
+        self._render_title()
+
+    def _render_title(self) -> None:
+        super().setTitle(("▸ " if self._collapsed else "▾ ") + self._base_title)
+
+    def title(self) -> str:                        # noqa: N802 (Qt override)
+        return self._base_title
+
+    def _title_band(self) -> int:
+        return self.fontMetrics().height() + 10
+
+    def is_collapsed(self) -> bool:
+        return self._collapsed
+
+    def set_collapsed(self, collapsed: bool) -> None:
+        self._collapsed = bool(collapsed)
+        self._render_title()
+        self.body.setVisible(not self._collapsed)
+        self.updateGeometry()
+
+    def toggle(self) -> None:
+        self.set_collapsed(not self._collapsed)
+
+    def mousePressEvent(self, event) -> None:      # noqa: N802 (Qt override)
+        if event.button() == Qt.MouseButton.LeftButton \
+                and event.position().y() <= self._title_band():
+            self.toggle()
+            event.accept()
+            return
+        super().mousePressEvent(event)
 
 
 def _apply_groupbox_surface(gb: QGroupBox) -> None:

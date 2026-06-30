@@ -67,7 +67,7 @@ from ui.tab_header import TabHeader
 from ui.builtin_preset_popup import BuiltinPresetButton, BuiltinPresetPopup
 from ui.tiff_preview import TiffPreview
 from ui.tooltip_button import InfoDialog, TooltipButton
-from ui.widgets import NoScrollComboBox, NoScrollSpinBox, PatchGridButton, PrefixLockedLineEdit, icc_profile_paths, load_magenta_folder_icon, make_browse_button, open_file_dialog, set_folder_icon, set_preset_icon
+from ui.widgets import CollapsibleGroupBox, NoScrollComboBox, NoScrollSpinBox, PatchGridButton, PrefixLockedLineEdit, icc_profile_paths, load_magenta_folder_icon, make_browse_button, open_file_dialog, set_folder_icon, set_preset_icon
 from core.i18n import tr
 from workflow.i1profiler_export import EXTRA_INK, export_from_ti1, parse_ti1
 from workflow.i1profiler_import import import_to_ti1
@@ -1955,13 +1955,20 @@ class TabChart(QWidget):
                 lambda checked, t=tool: self._on_override_clicked(t, checked)
             )
 
-            basic_grp = QGroupBox(tr("Basic"), grp)
-            basic_layout = QVBoxLayout(basic_grp)
-            expert_grp = QGroupBox(tr("Expert Options"), grp)
-            expert_layout = QVBoxLayout(expert_grp)
+            # Collapsible sections (Knut): click the title to fold a frame away.
+            # Expert is collapsed by default; the targen Basic frame starts
+            # collapsed and auto-expands when "Edit patch recipe" is ticked
+            # (wired in _update_preset_locks), so a locked recipe stays tidy.
+            basic_grp = CollapsibleGroupBox(
+                tr("Basic"), grp, collapsed=(tool == "targen"))
+            basic_layout = QVBoxLayout(basic_grp.body)
+            expert_grp = CollapsibleGroupBox(tr("Expert Options"), grp,
+                                             collapsed=True)
+            expert_layout = QVBoxLayout(expert_grp.body)
             # Content widgets greyed out (not the override row) while locked.
             if tool == "targen":
                 self._manual_targen_content = [basic_grp, expert_grp]
+                self._manual_targen_basic_grp = basic_grp
             else:
                 self._manual_printtarg_content = [basic_grp, expert_grp]
 
@@ -5071,6 +5078,11 @@ class TabChart(QWidget):
             w.setEnabled(targen_unlocked)
         for w in self._manual_printtarg_content:
             w.setEnabled(printtarg_unlocked)
+        # Collapse the targen Basic frame while the recipe is locked (Edit patch
+        # recipe off) to save space; expand it when the user unlocks it (Knut).
+        _tbg = getattr(self, "_manual_targen_basic_grp", None)
+        if _tbg is not None:
+            _tbg.set_collapsed(not targen_unlocked)
 
     def _reset_override_checks(self) -> None:
         """Untick both override boxes without firing their pop-up.

@@ -18,7 +18,12 @@ from PyQt6.QtWidgets import (
 
 from core.i18n import tr
 from ui.tooltip_button import TooltipButton
-from ui.widgets import NoScrollComboBox, NoScrollDoubleSpinBox, NoScrollSpinBox
+from ui.widgets import (
+    CollapsibleGroupBox,
+    NoScrollComboBox,
+    NoScrollDoubleSpinBox,
+    NoScrollSpinBox,
+)
 from workflow.layout_engine.presets import LayoutRecipe
 
 # Sheet-text placeholders, filled in at build time by chart.build_chart with
@@ -317,8 +322,8 @@ class LayoutOptionsPanel(QWidget):
             return sb
 
         # ---- Layout strategy (patch-first vs area-first, #93 / Knut) ----
-        lg = QGroupBox(tr("Layout"), self)
-        lgg = QGridLayout(lg)
+        lg = CollapsibleGroupBox(tr("Layout"), self)                 # open
+        lgg = QGridLayout(lg.body)
         self.layout_mode = NoScrollComboBox(self)
         self.layout_mode.addItem(
             tr("Prioritise chart area, then fit patches to it"), "area_first")
@@ -443,8 +448,8 @@ class LayoutOptionsPanel(QWidget):
         v.addWidget(lg)
 
         # ---- Patches & spacers (2-column: label | control) ----
-        ps = QGroupBox(tr("Patches && spacers"), self)
-        g = QGridLayout(ps)
+        ps = CollapsibleGroupBox(tr("Patches && spacers"), self, collapsed=True)
+        g = QGridLayout(ps.body)
         self.pscale = scale()
         self.sscale = scale()
         self.spacer_mode = NoScrollComboBox(self)
@@ -587,8 +592,8 @@ class LayoutOptionsPanel(QWidget):
         v.addWidget(ps)
 
         # ---- Randomisation ----
-        rg = QGroupBox(tr("Randomisation"), self)
-        rgg = QGridLayout(rg)
+        rg = CollapsibleGroupBox(tr("Randomisation"), self, collapsed=True)
+        rgg = QGridLayout(rg.body)
         self.randomize_cb = QCheckBox(tr("Randomise patch order"), self)
         self.randomize_cb.setChecked(True)
         self.randomize_cb.toggled.connect(self._on_randomize_toggled)
@@ -745,8 +750,8 @@ class LayoutOptionsPanel(QWidget):
         self._on_rotation_changed()
 
         # ---- Page geometry ----
-        pg = QGroupBox(tr("Page geometry"), self)
-        gg = QGridLayout(pg)
+        pg = CollapsibleGroupBox(tr("Page geometry"), self)         # open
+        gg = QGridLayout(pg.body)
         self.margins = {k: small_mm(top=60.0) for k in ("t", "r", "b", "l")}
         # One row per edge (Top/Right/Bottom/Left), each with a live inch readout
         # — Knut's "list all 4 margins, mm and inch" (#93).
@@ -897,8 +902,8 @@ class LayoutOptionsPanel(QWidget):
         self._update_clip_visibility()
 
         # ---- Output ----
-        og = QGroupBox(tr("Output"), self)
-        ogg = QGridLayout(og)
+        og = CollapsibleGroupBox(tr("Output"), self, collapsed=True)
+        ogg = QGridLayout(og.body)
         self.bit_depth = NoScrollComboBox(self)
         self.bit_depth.addItem(tr("8-bit"), 8)
         self.bit_depth.addItem(tr("16-bit"), 16)
@@ -925,8 +930,8 @@ class LayoutOptionsPanel(QWidget):
         v.addWidget(og)
 
         # ---- Sheet text ----
-        st = QGroupBox(tr("Sheet text"), self)
-        stg = QGridLayout(st)
+        st = CollapsibleGroupBox(tr("Sheet text"), self, collapsed=True)
+        stg = QGridLayout(st.body)
         self.chart_text = QLineEdit(self)
         self.chart_text.setPlaceholderText(tr("e.g. {project} — {date}"))
         self.chart_text.textChanged.connect(self._emit)
@@ -1004,8 +1009,8 @@ class LayoutOptionsPanel(QWidget):
         self._update_text_preview()
 
         # ---- Clip-border content (i1/p3 clip mode) ----
-        self._clip_content_grp = QGroupBox(tr("Clip-border content"), self)
-        ccg = QGridLayout(self._clip_content_grp)
+        self._clip_content_grp = CollapsibleGroupBox(tr("Clip-border content"), self, collapsed=True)
+        ccg = QGridLayout(self._clip_content_grp.body)
         self.clip_content_mode = NoScrollComboBox(self)
         for k, lbl in (("off", tr("Off")), ("text", tr("Custom text")),
                        ("branding", tr("ChromIQ branding")),
@@ -1114,8 +1119,8 @@ class LayoutOptionsPanel(QWidget):
         self.cal_mode = self.cal_path_edit = None
         if with_calibration:
             from PyQt6.QtWidgets import QLineEdit, QPushButton
-            cg = QGroupBox(tr("Printer calibration"), self)
-            cgg = QGridLayout(cg)
+            cg = CollapsibleGroupBox(tr("Printer calibration"), self, collapsed=True)
+            cgg = QGridLayout(cg.body)
             cgg.addWidget(QLabel(tr("Mode:"), self), 0, 0)
             self.cal_mode = NoScrollComboBox(self)
             for k, lbl in (("off", tr("None")),
