@@ -1,5 +1,22 @@
 # Changelog
 
+## v3.13.0-beta.34
+
+### 🐛 Fixed
+- **Guided→Manual now reproduces the engine chart exactly.** With the ChromIQ
+  engine on, opening Manual after generating in Guided carried only the
+  instrument/paper, so Manual re-added a clip border you'd suppressed and the
+  patches sat closer to the strip labels. The full engine recipe Guided used
+  (clip-border suppression, margins, patch scale, density, edge spacers) now
+  carries into the Manual layout panel.
+
+### 🔧 Changed
+- Create Chart layout reorganised into collapsible **Basic** (Layout, Page
+  geometry, Randomisation) and **Expert Options** sections; the targen / printtarg
+  / ChromIQ-layout frames are collapsible (targen starts collapsed). Collapsed
+  frames drop their border so only the title line shows. The "Use the ChromIQ
+  layout engine" toggle moved above the printtarg section.
+
 ## v3.13.0-beta.33
 
 ### 🔧 Changed
