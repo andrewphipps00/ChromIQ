@@ -1,5 +1,12 @@
 # Changelog
 
+## v3.13.0-beta.37
+
+### 🔧 Changed
+- In the clip-border content section, the **image controls (path, rotate, scale,
+  move) are hidden unless the content type is "Imported image"** — less clutter
+  for the text / notes / branding modes.
+
 ## v3.13.0-beta.36
 
 ### 🐛 Fixed
