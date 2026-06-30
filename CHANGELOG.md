@@ -1,5 +1,13 @@
 # Changelog
 
+## v3.13.0-beta.36
+
+### 🐛 Fixed
+- Turning the i1 / i1Pro 3+ clip border **on** now defaults its content to the
+  notes box instead of "none" (so the record strip appears), matching the
+  ColorMunki/SpectroScan behaviour. A chart that deliberately keeps the clip
+  border on with no content is left as-is.
+
 ## v3.13.0-beta.35
 
 ### 🔧 Changed
