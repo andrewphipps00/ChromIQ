@@ -3168,9 +3168,12 @@ class TabChart(QWidget):
             if name:
                 self._set_manual_name_plain(name)
         # With the engine on, the layout panel (not the printtarg widgets) builds
-        # the Manual chart, so push the transferred instrument/paper/pages into it
-        # or the generated chart ignores them (Knut #9).
-        self._sync_engine_panel_after_transfer()
+        # the Manual chart, so load the FULL engine recipe Guided used into the
+        # panel — instrument, paper, pages AND clip-border suppression, margins,
+        # patch scale, density, edge spacers — or Manual silently rebuilds a
+        # different chart (Knut: clip border reappeared, patches too near the
+        # labels). Otherwise (engine off) just sync the canonical selection.
+        self._apply_guided_engine_recipe(p)
         self._refresh_manual_command_preview()
         if not quiet:
             self._log.appendPlainText(tr(
@@ -3325,6 +3328,33 @@ class TabChart(QWidget):
         if (getattr(p, "pages", None) is not None
                 and self._manual_pages_spin is not None):
             p.pages.setValue(int(self._manual_pages_spin.value()))
+
+    def _apply_guided_engine_recipe(self, guided_params) -> None:
+        """Load the FULL engine recipe a Guided chart used into the Manual layout
+        panel, so Manual reproduces it exactly (Knut bugfix B).
+
+        Guided builds engine charts from ``ChartCreator._engine_build_kwargs`` —
+        the same kwargs converted to a :class:`LayoutRecipe` here — so clip-border
+        suppression, margins, patch scale, density and edge spacers all carry, not
+        just instrument/paper. No-op when the engine is off (then the printtarg
+        widgets the transfer already set are what build the chart)."""
+        if not bool(self._settings.get("use_chromiq_layout_engine", False)):
+            return
+        panel = getattr(self, "_manual_layout_panel", None)
+        if panel is None:
+            return
+        try:
+            from workflow.layout_engine.presets import LayoutRecipe
+            kw = self._creator._engine_build_kwargs(guided_params)
+            recipe = LayoutRecipe.from_build_kwargs(kw)
+            panel.set_recipe(recipe)
+            if (getattr(panel, "pages", None) is not None
+                    and self._manual_pages_spin is not None):
+                panel.pages.setValue(int(self._manual_pages_spin.value()))
+        except Exception:  # noqa: BLE001 — never block the mode switch
+            log.warning("Guided→Manual engine-recipe transfer failed",
+                        exc_info=True)
+            self._sync_engine_panel_after_transfer()   # fall back to light sync
 
     def _on_guided_precond_toggled(self, checked: bool) -> None:
         self._guided_precond_path.setEnabled(checked)

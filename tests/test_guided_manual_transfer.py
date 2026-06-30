@@ -120,3 +120,28 @@ def test_engine_panel_follows_transfer(tab):
     assert panel.pages.value() == 2
     r = panel.get_recipe()
     assert r.instrument == "CM" and r.paper == "A4R"
+
+
+def test_engine_recipe_carries_clip_suppression_and_layout(tab):
+    """Post-Generate transfer loads the FULL engine recipe Guided used (not just
+    instrument/paper) — clip-border suppression, margins, scale, edge spacers —
+    so Manual reproduces the chart instead of re-adding a clip border (Knut)."""
+    tab._settings.set("use_chromiq_layout_engine", True)
+    tab._switch_mode("guided")
+    tab._instr_combo.setCurrentIndex(tab._instr_combo.findData("i1"))
+    tab._paper_combo.setCurrentIndex(tab._paper_combo.findData("A4"))
+    tab._lb_check.setChecked(True)            # disable left border → suppress clip
+    tab._guided_transfer_pending = True
+    tab._switch_mode("manual")
+    r = tab._manual_layout_panel.get_recipe()
+    assert r.clip_border is False             # suppressed, not re-added
+    assert r.clip_content_mode == "off"
+    assert r.edge_spacers is True             # guided brackets strips
+    # keep the left border → clip comes back on
+    tab._switch_mode("guided")
+    tab._lb_check.setChecked(False)
+    tab._guided_transfer_pending = True
+    tab._switch_mode("manual")
+    r2 = tab._manual_layout_panel.get_recipe()
+    assert r2.clip_border is True
+    assert r2.clip_content_mode == "notes"
