@@ -146,35 +146,34 @@ def derive_area_patch_size(kw: dict) -> tuple[float, float] | None:
         # "minimum", so it's a floor that grows, never a fixed under-fill).
         if min_w <= 0:
             min_w = default_w
+        # Default fill: fit as many strips as possible at the minimum, grow the
+        # patch width so they span the box, then set the height from the GROWN
+        # width via the height-% (the % references the stretched width, Knut) and
+        # grow it to fill the usable height — so a full chart fills both axes and
+        # keeps the requested patch aspect.
+        c = _cols_at(min_w)
+        if c > 0:
+            pw = _fit_columns(base, w_mm, h_mm, c, max_pw=avail_w)
+        h_min = (pw * ratio) if (pw is not None and ratio > 0) else (
+            (min_w * ratio) if ratio > 0 else (pw or min_w))
+        ph = max(_MIN_PATCH_MM, _rows_filling(_max_rows_at(h_min)))
+        # If the chart's patch count is FIXED and too small to fill the box at
+        # that size (a loaded patch set / live re-layout), size the patches UP so
+        # those patches fill the area instead of leaving a big gap — the box is
+        # law (Knut). Only when it would actually under-fill, so a full / auto-
+        # count chart keeps its aspect above.
         target = int(kw.get("area_target_count") or 0)
-        if target > 0:
-            # COUNT-AWARE fill (Knut: the margin box is law and must be FULLY
-            # filled): size the patches so this many fill the box. Choose a column
-            # count that balances the grid to the box and patch aspect, then size
-            # the patches to fill the width (those columns) AND the height (the
-            # rows that count needs) — so a fixed patch set fills the area even
-            # when the minimum width alone would leave a big gap on the right. The
-            # minimum width is a FLOOR: never go below it (cap the columns so the
-            # filled width stays ≥ the minimum).
-            import math
-            r_ = ratio if ratio > 0 else 1.0
-            cmax = _cols_at(min_w) or 1          # most columns that fit at the min
-            cols = max(1, min(cmax, round(
-                math.sqrt(target * r_ * avail_w / max(1e-6, arowl)))))
-            pw = _fit_columns(base, w_mm, h_mm, cols, max_pw=avail_w)
-            rows = max(1, math.ceil(target / cols))
-            ph = max(_MIN_PATCH_MM, _rows_filling(rows))
-        else:
-            # No fixed count (auto patch count): fit as many strips as possible at
-            # the minimum, then grow the patch width so they span the box; height
-            # follows from the GROWN width via the height-% and grows to fill the
-            # usable height — both dimensions fill the margin box (Knut).
-            c = _cols_at(min_w)
-            if c > 0:
-                pw = _fit_columns(base, w_mm, h_mm, c, max_pw=avail_w)
-            h_min = (pw * ratio) if (pw is not None and ratio > 0) else (
-                (min_w * ratio) if ratio > 0 else (pw or min_w))
-            ph = max(_MIN_PATCH_MM, _rows_filling(_max_rows_at(h_min)))
+        if target > 0 and pw is not None and ph is not None:
+            cap = max(1, _cols_at(pw)) * max(1, _max_rows_at(ph))
+            if target < cap * 0.97:
+                import math
+                r_ = ratio if ratio > 0 else 1.0
+                cmax = _cols_at(min_w) or 1
+                cols = max(1, min(cmax, round(
+                    math.sqrt(target * r_ * avail_w / max(1e-6, arowl)))))
+                pw = _fit_columns(base, w_mm, h_mm, cols, max_pw=avail_w)
+                rows = max(1, math.ceil(target / cols))
+                ph = max(_MIN_PATCH_MM, _rows_filling(rows))
     else:                                           # --- by_grid: columns / rows ---
         # Pinned dimensions size their patches to fill exactly that many; an "auto"
         # dimension picks a count that gives a REASONABLE patch size — the ratio-
