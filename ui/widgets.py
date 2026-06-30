@@ -545,6 +545,9 @@ class CollapsibleGroupBox(QGroupBox):
         self._collapsed = bool(collapsed)
         self._render_title()
         self.body.setVisible(not self._collapsed)
+        # Drop the box frame while collapsed so only the ▸ title line shows
+        # (no empty bordered box); restore the frame when expanded (Knut).
+        self.setFlat(self._collapsed)
         self.updateGeometry()
 
     def toggle(self) -> None:

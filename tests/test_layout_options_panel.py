@@ -230,13 +230,16 @@ def test_cm_ss_clip_enable_selector(app):
     p.instr.setCurrentIndex(p.instr.findData("CM"))
     assert p.clip_enable.isVisibleTo(p)
     assert p.clip_enable.currentData() == "off"          # default off
-    assert not p._clip_content_grp.isVisibleTo(p)        # group hidden when off
+    # The clip-content group lives in the (collapsed) Expert section now, so test
+    # its own shown/hidden state rather than isVisibleTo (which the collapsed
+    # ancestor would always make False).
+    assert p._clip_content_grp.isHidden()                # group hidden when off
     p.clip_enable.setCurrentIndex(p.clip_enable.findData("on"))
     assert p.clip_content_mode.currentData() == "notes"  # seeds a notes band
-    assert p._clip_content_grp.isVisibleTo(p)
+    assert not p._clip_content_grp.isHidden()
     p.clip_enable.setCurrentIndex(p.clip_enable.findData("off"))
     assert p.clip_content_mode.currentData() == "off"
-    assert not p._clip_content_grp.isVisibleTo(p)
+    assert p._clip_content_grp.isHidden()
     # set_recipe with a band on reflects in the selector
     p.set_recipe(LayoutRecipe(instrument="SS", paper="A4", clip_content_mode="notes"))
     assert p.clip_enable.currentData() == "on"

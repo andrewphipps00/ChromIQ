@@ -1909,20 +1909,25 @@ class TabChart(QWidget):
                "safe to switch back at any time."), inner))
         _eng_w = QWidget(inner)
         _eng_w.setLayout(_eng_row)
-        inner_layout.addWidget(_eng_w)
+        # Added to the layout inside the loop, just above the printtarg group (the
+        # engine REPLACES printtarg, so the toggle reads right there) (Knut).
 
         for tool, params in [
             ("targen",    self._params.get("targen", [])),
             ("printtarg", self._params.get("printtarg", [])),
         ]:
-            grp = QGroupBox(tr("{tool} parameters").format(tool=tool), inner)
+            # Outer section frame is collapsible (Knut). targen starts collapsed
+            # (most charts don't touch the patch recipe); printtarg starts open.
+            grp = CollapsibleGroupBox(
+                tr("{tool} parameters").format(tool=tool), inner,
+                collapsed=(tool == "targen"))
             # Keep a handle to the outer group (its inner content is greyed via
             # _manual_*_content while a preset locks the panel).
             if tool == "targen":
                 self._manual_targen_grp = grp
             else:
                 self._manual_printtarg_grp = grp
-            grp_layout = QVBoxLayout(grp)
+            grp_layout = QVBoxLayout(grp.body)
 
             # Override row — pinned at the top of the panel, hidden until a preset
             # that supplies a fixed patch set (ti1) or a fixed layout (prebuilt)
@@ -2183,6 +2188,8 @@ class TabChart(QWidget):
 
             grp_layout.addWidget(basic_grp)
             grp_layout.addWidget(expert_grp)
+            if tool == "printtarg":
+                inner_layout.addWidget(_eng_w)   # engine toggle above printtarg
             inner_layout.addWidget(grp)
 
         self._update_manual_lb_visibility()
@@ -2205,8 +2212,8 @@ class TabChart(QWidget):
         # ChromIQ layout panel (engine on): the full per-chart layout mirror,
         # replacing the printtarg controls. Hidden when the engine is off.
         from ui.dialogs.layout_options_panel import LayoutOptionsPanel
-        self._manual_layout_grp = QGroupBox(tr("ChromIQ layout"), inner)
-        _llg = QVBoxLayout(self._manual_layout_grp)
+        self._manual_layout_grp = CollapsibleGroupBox(tr("ChromIQ layout"), inner)
+        _llg = QVBoxLayout(self._manual_layout_grp.body)
         _llg.setContentsMargins(8, 8, 8, 8)
         self._manual_layout_panel = LayoutOptionsPanel(
             self._manual_layout_grp, with_selectors=True, with_calibration=True)

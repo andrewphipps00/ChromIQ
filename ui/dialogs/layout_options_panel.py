@@ -321,9 +321,24 @@ class LayoutOptionsPanel(QWidget):
             sb.valueChanged.connect(self._emit)
             return sb
 
+        # The layout groups are split into two collapsible sections (Knut): Basic
+        # (Layout, Page geometry, Randomisation) open by default, and Expert
+        # Options (Patches & spacers, Output, Sheet text, Clip-border content,
+        # Printer calibration) collapsed. Each group below is routed into one of
+        # these instead of straight onto the panel.
+        self._basic_frame = CollapsibleGroupBox(tr("Basic"), self)
+        self._expert_frame = CollapsibleGroupBox(
+            tr("Expert Options"), self, collapsed=True)
+        _basic_v = QVBoxLayout(self._basic_frame.body)
+        _basic_v.setContentsMargins(6, 6, 6, 6)
+        _expert_v = QVBoxLayout(self._expert_frame.body)
+        _expert_v.setContentsMargins(6, 6, 6, 6)
+        v.addWidget(self._basic_frame)
+        v.addWidget(self._expert_frame)
+
         # ---- Layout strategy (patch-first vs area-first, #93 / Knut) ----
-        lg = CollapsibleGroupBox(tr("Layout"), self)                 # open
-        lgg = QGridLayout(lg.body)
+        lg = QGroupBox(tr("Layout"), self)
+        lgg = QGridLayout(lg)
         self.layout_mode = NoScrollComboBox(self)
         self.layout_mode.addItem(
             tr("Prioritise chart area, then fit patches to it"), "area_first")
@@ -445,11 +460,11 @@ class LayoutOptionsPanel(QWidget):
             lgg.addWidget(self._clip_enable_lbl, 4, 0)
             lgg.addWidget(self.clip_enable, 4, 1)
             lgg.addWidget(self._clip_enable_tip, 4, 2)
-        v.addWidget(lg)
+        _basic_v.addWidget(lg)
 
         # ---- Patches & spacers (2-column: label | control) ----
-        ps = CollapsibleGroupBox(tr("Patches && spacers"), self, collapsed=True)
-        g = QGridLayout(ps.body)
+        ps = QGroupBox(tr("Patches && spacers"), self)
+        g = QGridLayout(ps)
         self.pscale = scale()
         self.sscale = scale()
         self.spacer_mode = NoScrollComboBox(self)
@@ -589,11 +604,11 @@ class LayoutOptionsPanel(QWidget):
                "top and bottom for the offset, so the patch count drops slightly. "
                "Leave off for a plain aligned grid."), self)
         g.addWidget(self._cm_stagger_tip, 11, 2)
-        v.addWidget(ps)
+        _expert_v.addWidget(ps)
 
         # ---- Randomisation ----
-        rg = CollapsibleGroupBox(tr("Randomisation"), self, collapsed=True)
-        rgg = QGridLayout(rg.body)
+        rg = QGroupBox(tr("Randomisation"), self)
+        rgg = QGridLayout(rg)
         self.randomize_cb = QCheckBox(tr("Randomise patch order"), self)
         self.randomize_cb.setChecked(True)
         self.randomize_cb.toggled.connect(self._on_randomize_toggled)
@@ -627,7 +642,7 @@ class LayoutOptionsPanel(QWidget):
                "identical chart), otherwise a fresh seed is drawn each time. "
                "Press New seed to draw one now; it's saved with the chart so you "
                "can always recreate it."), self), 2, 2)
-        v.addWidget(rg)
+        _basic_v.addWidget(rg)
         self._on_randomize_toggled(True)
 
         # ---- Strip indicators (detail widgets) ----
@@ -750,8 +765,8 @@ class LayoutOptionsPanel(QWidget):
         self._on_rotation_changed()
 
         # ---- Page geometry ----
-        pg = CollapsibleGroupBox(tr("Page geometry"), self)         # open
-        gg = QGridLayout(pg.body)
+        pg = QGroupBox(tr("Page geometry"), self)
+        gg = QGridLayout(pg)
         self.margins = {k: small_mm(top=60.0) for k in ("t", "r", "b", "l")}
         # One row per edge (Top/Right/Bottom/Left), each with a live inch readout
         # — Knut's "list all 4 margins, mm and inch" (#93).
@@ -894,16 +909,16 @@ class LayoutOptionsPanel(QWidget):
         # the core layout block, so they read together, with patches/spacers and
         # the rest below. pg is built after several other groups, so insert it just
         # after Layout rather than appending at the end.
-        _lg_idx = v.indexOf(lg)
+        _lg_idx = _basic_v.indexOf(lg)
         if _lg_idx >= 0:
-            v.insertWidget(_lg_idx + 1, pg)
+            _basic_v.insertWidget(_lg_idx + 1, pg)
         else:
-            v.addWidget(pg)
+            _basic_v.addWidget(pg)
         self._update_clip_visibility()
 
         # ---- Output ----
-        og = CollapsibleGroupBox(tr("Output"), self, collapsed=True)
-        ogg = QGridLayout(og.body)
+        og = QGroupBox(tr("Output"), self)
+        ogg = QGridLayout(og)
         self.bit_depth = NoScrollComboBox(self)
         self.bit_depth.addItem(tr("8-bit"), 8)
         self.bit_depth.addItem(tr("16-bit"), 16)
@@ -927,11 +942,11 @@ class LayoutOptionsPanel(QWidget):
                        "are lossless and shrink the file; “None” writes it "
                        "uncompressed (largest, most compatible). All keep the "
                        "exact colours."), self))
-        v.addWidget(og)
+        _expert_v.addWidget(og)
 
         # ---- Sheet text ----
-        st = CollapsibleGroupBox(tr("Sheet text"), self, collapsed=True)
-        stg = QGridLayout(st.body)
+        st = QGroupBox(tr("Sheet text"), self)
+        stg = QGridLayout(st)
         self.chart_text = QLineEdit(self)
         self.chart_text.setPlaceholderText(tr("e.g. {project} — {date}"))
         self.chart_text.textChanged.connect(self._emit)
@@ -1005,12 +1020,12 @@ class LayoutOptionsPanel(QWidget):
                "page margins; if a margin is too small for its text, the text "
                "overflows toward this line and a margin warning is shown."), self),
             5, 2)
-        v.addWidget(st)
+        _expert_v.addWidget(st)
         self._update_text_preview()
 
         # ---- Clip-border content (i1/p3 clip mode) ----
-        self._clip_content_grp = CollapsibleGroupBox(tr("Clip-border content"), self, collapsed=True)
-        ccg = QGridLayout(self._clip_content_grp.body)
+        self._clip_content_grp = QGroupBox(tr("Clip-border content"), self)
+        ccg = QGridLayout(self._clip_content_grp)
         self.clip_content_mode = NoScrollComboBox(self)
         for k, lbl in (("off", tr("Off")), ("text", tr("Custom text")),
                        ("branding", tr("ChromIQ branding")),
@@ -1113,14 +1128,14 @@ class LayoutOptionsPanel(QWidget):
         add_row(ccg, 7, tr("Clip area:"), self.clip_dims_label)
         add_row(ccg, 8, tr("Preview:"), self.clip_preview)
         ccg.addWidget(self.clip_export_btn, 9, 1)
-        v.addWidget(self._clip_content_grp)
+        _expert_v.addWidget(self._clip_content_grp)
 
         # ---- Calibration (per-chart; engine -K/-I) ----
         self.cal_mode = self.cal_path_edit = None
         if with_calibration:
             from PyQt6.QtWidgets import QLineEdit, QPushButton
-            cg = CollapsibleGroupBox(tr("Printer calibration"), self, collapsed=True)
-            cgg = QGridLayout(cg.body)
+            cg = QGroupBox(tr("Printer calibration"), self)
+            cgg = QGridLayout(cg)
             cgg.addWidget(QLabel(tr("Mode:"), self), 0, 0)
             self.cal_mode = NoScrollComboBox(self)
             for k, lbl in (("off", tr("None")),
@@ -1146,7 +1161,7 @@ class LayoutOptionsPanel(QWidget):
                    "records it without changing the patches; use this when your "
                    "printer or RIP already linearises on its own. Leave it on "
                    "“None” if you don't use a calibration."), self), 0, 2)
-            v.addWidget(cg)
+            _expert_v.addWidget(cg)
 
         # Match the compact input styling used throughout the Manual module
         # (app QSS targets #compact_input for the slim look + white bg).
