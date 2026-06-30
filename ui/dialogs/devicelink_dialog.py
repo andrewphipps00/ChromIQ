@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import QSize, Qt
 from PyQt6.QtGui import QGuiApplication
 from PyQt6.QtWidgets import (
     QCheckBox,
@@ -48,7 +48,10 @@ from ui.widgets import (
     CollapsibleGroupBox,
     NoScrollComboBox,
     confirm,
-    tint_dialog_primary,
+    icc_profile_paths,
+    load_folder_icon,
+    make_browse_button,
+    open_file_dialog,
 )
 from workflow.collink_runner import CollinkParams, CollinkRunner
 from workflow.icc_convert import NotConvertible, to_v2
@@ -140,8 +143,26 @@ class DeviceLinkDialog(_ToolDialogBase):
         # status-field fix intact).
         self._run_btn.setObjectName("primary")
         self.setStyleSheet(self.styleSheet() + neutral_controls_qss(SPEC_CYAN))
-        tint_dialog_primary(self, SPEC_CYAN)
+        self._style_primary_button()
         self._refresh()
+
+    def _style_primary_button(self) -> None:
+        """Cyan primary button that mirrors the Build Profile button: filled when
+        enabled, and — when the required fields aren't filled — a muted fill with
+        a cyan accent border so it reads as inactive but on-brand."""
+        light = resolve_mode(self._settings.get("appearance", "auto")) == "light"
+        c = SPEC_CYAN
+        r, g, b = int(c[1:3], 16), int(c[3:5], 16), int(c[5:7], 16)
+        hover = "#{:02x}{:02x}{:02x}".format(int(r * 0.82), int(g * 0.82), int(b * 0.82))
+        text   = "#ffffff" if light else "#0a0a0a"
+        dis_bg = "#e8e6e1" if light else "#1e1e1e"
+        dis_fg = "#a8a4a0" if light else "#484848"
+        self._run_btn.setStyleSheet(
+            f"QPushButton {{ background: {c}; border: 1px solid {c}; color: {text};"
+            f" font-weight: 700; }}"
+            f"QPushButton:hover {{ background: {hover}; border-color: {hover}; }}"
+            f"QPushButton:disabled {{ background: {dis_bg}; border: 1px solid {c};"
+            f" color: {dis_fg}; }}")
 
     # ------------------------------------------------------------------ UI
     def _file_row(self, layout: QVBoxLayout, placeholder: str, on_pick):
@@ -151,7 +172,7 @@ class DeviceLinkDialog(_ToolDialogBase):
         field.setReadOnly(True)
         field.setPlaceholderText(placeholder)
         row.addWidget(field, 1)
-        browse = QPushButton(tr("Browse…"), self)
+        browse = make_browse_button(self, tr("Browse…"), icon="folder_build")
         browse.clicked.connect(on_pick)
         row.addWidget(browse)
         layout.addLayout(row)
@@ -375,6 +396,16 @@ class DeviceLinkDialog(_ToolDialogBase):
             self, ext_hint=".icc", on_change=self._refresh,
             initial_dir=_initial_dir(self._settings, self.TOOL_KEY),
             initial_name="")
+        # Match the folder-icon browse buttons used elsewhere in this dialog
+        # (the shared _OutputRow ships a text "Browse…" button).
+        for b in self._output.findChildren(QPushButton):
+            if "Browse" in b.text():
+                b.setText("")
+                b.setObjectName("browse")
+                b.setFixedWidth(36)
+                b.setIcon(load_folder_icon("folder_build"))
+                b.setProperty("themed_folder_icon", "folder_build")
+                b.setIconSize(QSize(20, 20))
         form.addWidget(self._output)
 
     def _on_image_toggled(self, on: bool) -> None:
@@ -385,8 +416,23 @@ class DeviceLinkDialog(_ToolDialogBase):
         self._refresh()
 
     # --------------------------------------------------------------- pickers
+    def _browse_file(self, caption: str, name_filter: str, *,
+                     icc: bool = False, preview: bool = False) -> Path | None:
+        """Open ChromIQ's own file dialog with sidebar shortcuts. ``icc`` adds the
+        OS ICC/ICM profile folders; ``preview`` shows an image thumbnail pane."""
+        extra = tuple(icc_profile_paths()) if icc else ()
+        path = open_file_dialog(
+            self, caption, name_filter,
+            start_dir=str(_initial_dir(self._settings, self.TOOL_KEY)),
+            extra_paths=extra, preview=preview)
+        if not path:
+            return None
+        p = Path(path)
+        _remember_dir(self._settings, self.TOOL_KEY, p.parent)
+        return p
+
     def _pick_source(self) -> None:
-        p = self._pick_input_file(tr("Choose source profile"), _ICC_FILTER)
+        p = self._browse_file(tr("Choose source profile"), _ICC_FILTER, icc=True)
         if p:
             self._src_path = p
             self._src_field.setText(str(p))
@@ -394,24 +440,25 @@ class DeviceLinkDialog(_ToolDialogBase):
             self._refresh()
 
     def _pick_destination(self) -> None:
-        p = self._pick_input_file(tr("Choose printer profile"), _ICC_FILTER)
+        p = self._browse_file(tr("Choose printer profile"), _ICC_FILTER, icc=True)
         if p:
             self._set_destination(p)
 
     def _pick_abstract(self) -> None:
-        p = self._pick_input_file(tr("Choose abstract profile"), _ICC_FILTER)
+        p = self._browse_file(tr("Choose abstract profile"), _ICC_FILTER, icc=True)
         if p:
             self._abstract_path = p
             self._abstract_field.setText(str(p))
 
     def _pick_cal(self) -> None:
-        p = self._pick_input_file(tr("Choose calibration file"), _CAL_FILTER)
+        p = self._browse_file(tr("Choose calibration file"), _CAL_FILTER)
         if p:
             self._cal_path = p
             self._cal_field.setText(str(p))
 
     def _pick_image(self) -> None:
-        p = self._pick_input_file(tr("Choose image to optimise for"), _IMG_FILTER)
+        p = self._browse_file(tr("Choose image to optimise for"), _IMG_FILTER,
+                              preview=True)
         if p:
             self._image_path = p
             self._image_field.setText(str(p))

@@ -684,7 +684,9 @@ def icc_profile_paths() -> list[str]:
             str(home / "Library/ColorSync/Profiles"),
         ]
     if sys.platform.startswith("win"):
-        paths = [r"C:\Windows\System32\spool\drivers\color"]
+        # Honour %SystemRoot% — Windows is not always installed on C:.
+        win = os.environ.get("SystemRoot", r"C:\Windows")
+        paths = [str(Path(win) / "System32" / "spool" / "drivers" / "color")]
         local = os.environ.get("LOCALAPPDATA", "")
         if local:
             paths.append(str(Path(local) / "Microsoft" / "Windows" / "Color"))
@@ -692,7 +694,8 @@ def icc_profile_paths() -> list[str]:
     return [
         "/usr/share/color/icc",
         "/usr/local/share/color/icc",
-        str(home / ".color/icc"),
+        str(home / ".local/share/icc"),   # modern XDG per-user dir (colord/GNOME)
+        str(home / ".color/icc"),         # older Argyll/oyranos convention
     ]
 
 
