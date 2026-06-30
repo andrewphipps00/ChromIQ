@@ -34,6 +34,8 @@
   (If you deliberately change printtarg's margin while it's shown, that single
   value still applies to all four on return.)
 
+## v3.13.0-beta.45
+
 ### 🐛 Fixed
 - Area-first **"By columns / rows"**: a pinned *patches-per-strip* (rows) value
   on a float boundary rendered one row short, leaving a row-tall gap at the bottom
