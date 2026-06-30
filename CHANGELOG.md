@@ -1,5 +1,11 @@
 # Changelog
 
+## v3.13.0-beta.40
+
+### 🐛 Fixed
+- Patch-set editor: the **gap-size spinboxes showed no value** (the box was too
+  narrow for the digits after the arrows). Widened so the value is visible.
+
 ## v3.13.0-beta.39
 
 ### 🐛 Fixed
