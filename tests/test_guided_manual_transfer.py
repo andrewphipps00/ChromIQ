@@ -100,3 +100,23 @@ def test_switch_does_not_clobber_unrepresentable_paper(tab):
     tab._switch_mode("guided")          # Guided can't show A3 → keeps its own
     tab._switch_mode("manual")          # …so it can't overwrite Manual's A3
     assert _manual(tab, "printtarg", "-p") == "A3"
+
+
+def test_engine_panel_follows_transfer(tab):
+    """With the ChromIQ engine ON, a Manual chart is built from the layout panel,
+    not the printtarg widgets — so a Guided→Manual transfer must also push the
+    instrument/paper/pages into the panel, or the generated chart ignores them
+    (Knut #9)."""
+    tab._settings.set("use_chromiq_layout_engine", True)
+    tab._switch_mode("guided")
+    tab._instr_combo.setCurrentIndex(tab._instr_combo.findData("CM"))
+    tab._paper_combo.setCurrentIndex(tab._paper_combo.findData("A4R"))
+    tab._pages_spin.setValue(2)
+    tab._guided_transfer_pending = True
+    tab._switch_mode("manual")
+    panel = tab._manual_layout_panel
+    assert panel.instr.currentData() == "CM"
+    assert panel.paper.currentData() == "A4R"
+    assert panel.pages.value() == 2
+    r = panel.get_recipe()
+    assert r.instrument == "CM" and r.paper == "A4R"

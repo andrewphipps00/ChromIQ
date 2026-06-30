@@ -3153,6 +3153,10 @@ class TabChart(QWidget):
             name = name_edit.text().strip() if name_edit is not None else ""
             if name:
                 self._set_manual_name_plain(name)
+        # With the engine on, the layout panel (not the printtarg widgets) builds
+        # the Manual chart, so push the transferred instrument/paper/pages into it
+        # or the generated chart ignores them (Knut #9).
+        self._sync_engine_panel_after_transfer()
         self._refresh_manual_command_preview()
         if not quiet:
             self._log.appendPlainText(tr(
@@ -3289,7 +3293,24 @@ class TabChart(QWidget):
         if dst == "guided":
             self._update_patch_count()
         else:
+            self._sync_engine_panel_after_transfer()
             self._refresh_manual_command_preview()
+
+    def _sync_engine_panel_after_transfer(self) -> None:
+        """When the ChromIQ engine is on, a Manual chart is built from the engine
+        LAYOUT PANEL, not the printtarg -i/-p/-a/-m widgets. So after carrying
+        settings into Manual, push the canonical instrument / paper / pages into
+        the panel too — otherwise the panel keeps its old instrument and the
+        generated chart ignores what was transferred (Knut #9)."""
+        if not bool(self._settings.get("use_chromiq_layout_engine", False)):
+            return
+        p = getattr(self, "_manual_layout_panel", None)
+        if p is None:
+            return
+        self._sync_engine_panel_selection()      # instrument + paper → panel
+        if (getattr(p, "pages", None) is not None
+                and self._manual_pages_spin is not None):
+            p.pages.setValue(int(self._manual_pages_spin.value()))
 
     def _on_guided_precond_toggled(self, checked: bool) -> None:
         self._guided_precond_path.setEnabled(checked)
