@@ -3495,6 +3495,14 @@ class Ti2RelayoutDialog(QDialog):
             for k in keys:
                 QShortcut(QKeySequence(k), self._grid, activated=fn)
         lv.addWidget(self._grid, 1)
+        # Total patch count, right under the grid — so you can read it at a glance
+        # without turning on patch numbers and shrinking the swatches to find the
+        # last one (Knut). Updated from the live grid on every change.
+        self._grid_count_lbl = QLabel("", left)
+        self._grid_count_lbl.setStyleSheet(
+            "color: #b0b0b0; font-size: 11px; padding: 2px 2px;")
+        self._grid_count_lbl.setAlignment(Qt.AlignmentFlag.AlignRight)
+        lv.addWidget(self._grid_count_lbl, 0)
         # Status / info line sits under the patch grid (left column only), not
         # spanning the whole window. Auto-hides a few seconds after each message.
         self._status = _AutoHideLabel(left)
@@ -4548,6 +4556,7 @@ class Ti2RelayoutDialog(QDialog):
             it.setData(Qt.ItemDataRole.UserRole, tuple(rgb))
             it.setToolTip(f"#{i}  RGB {tuple(round(v) for v in rgb)}")
             self._grid.addItem(it)
+        self._update_grid_count()
 
     def _renumber(self) -> None:
         """Refresh #1..#N labels + tooltips (after drag-reorder or add/remove)."""
@@ -4560,8 +4569,18 @@ class Ti2RelayoutDialog(QDialog):
         # _renumber runs after every add / remove / append / reorder.
         self._refresh_info()
 
+    def _update_grid_count(self) -> None:
+        """Show the live total patch count under the swatch grid (Knut)."""
+        lbl = getattr(self, "_grid_count_lbl", None)
+        if lbl is None:
+            return
+        n = self._grid.count()
+        lbl.setText(tr("1 patch total") if n == 1
+                    else tr("{n} patches total").format(n=n))
+
     def _refresh_info(self) -> None:
         """Rewrite the header readout from the live grid count + chart flags."""
+        self._update_grid_count()
         if self._spec is None:
             return
         note = getattr(self, "_chart_note", "")

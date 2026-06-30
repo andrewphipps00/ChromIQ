@@ -4292,6 +4292,14 @@ class TabChart(QWidget):
             self._reset_override_checks()
             self._preset_del_btn.setEnabled(False)
             self._last_preset_index = index
+            # Built-in presets are printtarg-based (they predate the engine), so
+            # load them with the printtarg engine — otherwise the engine panel
+            # shows its own defaults (i1/A4) instead of the preset's real
+            # instrument/paper (Knut). Set BEFORE the dispatch so the engine→
+            # printtarg conversion runs first and the preset's values then win.
+            if getattr(self, "_manual_engine_check", None) is not None \
+                    and self._manual_engine_check.isChecked():
+                self._manual_engine_check.setChecked(False)
             if data == TC918_PRESET_KEY:
                 self._apply_tc918_preset(name)
             elif data in KNUT_PRESET_KEYS:
