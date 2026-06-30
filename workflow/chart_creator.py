@@ -890,15 +890,19 @@ class ChartCreator:
     # ChromIQ layout engine path (issue #93)
     # ------------------------------------------------------------------
     def _should_use_engine(self, params: "ChartParams") -> bool:
-        if not bool(self._settings.get("use_chromiq_layout_engine", False)):
-            return False
         if params.instrument not in ENGINE_INSTRUMENTS:
             return False
         # Clip-border *content* (ChromIQ clip style / left-clip info) is a later
         # engine phase — fall back to the printtarg path for those charts.
         if params.chromiq_clip_style or params.left_clip_info:
             return False
-        return True
+        # Guided mode always uses the engine: it reproduces printtarg's Guided
+        # geometry for every instrument/paper/option (verified 161/161, #93). The
+        # `use_chromiq_layout_engine` toggle now governs the MANUAL tab only, so
+        # the printtarg-based built-in presets keep their exact printtarg layout.
+        if not params.is_manual:
+            return True
+        return bool(self._settings.get("use_chromiq_layout_engine", False))
 
     def _engine_build_kwargs(self, params: "ChartParams") -> dict:
         spacer_mode = ("none" if params.no_spacers

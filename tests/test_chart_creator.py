@@ -107,7 +107,9 @@ def test_generate_writes_channels_sidecar(tmp_path: Path) -> None:
     creator, work_dir = _make_creator(tmp_path)
     finished: list[list[Path]] = []
     creator.generate(
-        ChartParams(target_name="mychart", device_type="2"),
+        # Guided always uses the engine now (#93); exercise the printtarg
+        # generation path (driven by the fake ArgyllRunner) via the Manual flow.
+        ChartParams(target_name="mychart", device_type="2", is_manual=True),
         on_line=lambda _: None,
         on_finish=lambda tiffs: finished.append(tiffs),
     )
@@ -313,7 +315,9 @@ def test_estimate_patches_routes_to_binary_search_on_spacer_extras(tmp_path: Pat
     creator._binary_search = fake_binary  # type: ignore[method-assign]
 
     # Baseline: no layout-affecting extras → fast lookup should still win.
-    p_default = ChartParams(instrument="i1", paper="A4", pages=1,
+    # Guided uses the engine's own capacity now (#93); the patch_db / binary-
+    # search routing under test is the Manual path, so these are is_manual=True.
+    p_default = ChartParams(instrument="i1", paper="A4", pages=1, is_manual=True,
                             patch_scale=1.0, margin_mm=6)
     n_default = creator.estimate_patches(p_default)
     assert not binary_called, "no extras → fast lookup expected"
@@ -322,7 +326,7 @@ def test_estimate_patches_routes_to_binary_search_on_spacer_extras(tmp_path: Pat
 
     # -A 0.5: layout-affecting extra → must route to binary search.
     binary_called.clear()
-    p_spacer = ChartParams(instrument="i1", paper="A4", pages=1,
+    p_spacer = ChartParams(instrument="i1", paper="A4", pages=1, is_manual=True,
                            patch_scale=1.0, margin_mm=6,
                            extra_printtarg_args="-A 0.5")
     assert creator.estimate_patches(p_spacer) == 123
@@ -330,7 +334,7 @@ def test_estimate_patches_routes_to_binary_search_on_spacer_extras(tmp_path: Pat
 
     # -n (no spacers): also layout-affecting.
     binary_called.clear()
-    p_nospacer = ChartParams(instrument="i1", paper="A4", pages=1,
+    p_nospacer = ChartParams(instrument="i1", paper="A4", pages=1, is_manual=True,
                              patch_scale=1.0, margin_mm=6,
                              extra_printtarg_args="-n")
     assert creator.estimate_patches(p_nospacer) == 123
@@ -338,7 +342,7 @@ def test_estimate_patches_routes_to_binary_search_on_spacer_extras(tmp_path: Pat
 
     # -A 1.0 (default value) and layout-neutral extras must NOT force binary.
     binary_called.clear()
-    p_neutral = ChartParams(instrument="i1", paper="A4", pages=1,
+    p_neutral = ChartParams(instrument="i1", paper="A4", pages=1, is_manual=True,
                             patch_scale=1.0, margin_mm=6,
                             extra_printtarg_args="-A 1.0 -Q 8")
     creator.estimate_patches(p_neutral)
@@ -530,7 +534,8 @@ def test_load_ti1_writes_channels_sidecar(tmp_path: Path) -> None:
     finished: list[list[Path]] = []
     creator.load_ti1_and_generate_preview(
         src_ti1,
-        ChartParams(target_name="imported", device_type="2"),
+        # Guided forces the engine (#93); the printtarg preview path is Manual.
+        ChartParams(target_name="imported", device_type="2", is_manual=True),
         on_line=lambda _: None,
         on_finish=lambda tiffs: finished.append(tiffs),
     )
@@ -639,7 +644,8 @@ def test_stamp_uses_chart_layout_line_for_ti1_origin(tmp_path: Path, monkeypatch
 
     creator._stamp_tiff_metadata(
         [tiff],
-        ChartParams(target_name=run.stem, device_type="2",
+        # Guided forces the engine (#93); the printtarg stamp branch is Manual.
+        ChartParams(target_name=run.stem, device_type="2", is_manual=True,
                     chart_layout_name="TC9.18", stamp_commands=True),
     )
     assert captured, "stamp_chart_metadata should have been called"
