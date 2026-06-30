@@ -1,5 +1,14 @@
 # Changelog
 
+## v3.13.0-beta.32
+
+### 🐛 Fixed
+- **Generating in Manual after Guided now uses the right settings.** With the
+  ChromIQ engine on, a Manual chart is built from the engine layout panel; the
+  Guided→Manual carry-over updated the printtarg fields but left the panel on its
+  old instrument/paper, so the generated chart was wrong. The instrument, paper
+  and pages now follow into the panel too.
+
 ## v3.13.0-beta.31
 
 ### 🐛 Fixed
