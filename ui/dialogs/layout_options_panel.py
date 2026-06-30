@@ -1090,8 +1090,9 @@ class LayoutOptionsPanel(QWidget):
                        "way."), self))
         add_row(ccg, 2, tr("Text:"), cell_fill(self.clip_text, self.clip_insert_btn))
         add_row(ccg, 3, tr("Font:"), self.clip_text_font)
-        add_row(ccg, 4, tr("Image:"), cell_fill(self.clip_image_path,
-                                                 self.clip_image_browse))
+        self._clip_image_row = add_row(
+            ccg, 4, tr("Image:"),
+            cell_fill(self.clip_image_path, self.clip_image_browse))
         # Image transform (rotate / scale / move) — applies to the imported image.
         self.clip_image_rotation = NoScrollSpinBox(self)
         self.clip_image_rotation.setRange(0, 359); self.clip_image_rotation.setSuffix("°")
@@ -1119,13 +1120,15 @@ class LayoutOptionsPanel(QWidget):
                                               (tr("Scale"), self.clip_image_scale))
         self._clip_image_move_w = _xform_row((tr("X"), self.clip_image_offx),
                                              (tr("Y"), self.clip_image_offy))
-        add_row(ccg, 5, tr("Image fit:"), self._clip_image_xform_w,
+        self._clip_image_fit_row = add_row(
+                ccg, 5, tr("Image fit:"), self._clip_image_xform_w,
                 tip=TooltipButton(
                     tr("Image fit"),
                     tr("Adjust the imported clip image: rotate (°), scale (% of the "
                        "fit-to-band size), and move it across (X) and along (Y) the "
                        "clip band, in mm."), self))
-        add_row(ccg, 6, tr("Image move (mm):"), self._clip_image_move_w)
+        self._clip_image_move_row = add_row(
+                ccg, 6, tr("Image move (mm):"), self._clip_image_move_w)
         add_row(ccg, 7, tr("Clip area:"), self.clip_dims_label)
         add_row(ccg, 8, tr("Preview:"), self.clip_preview)
         ccg.addWidget(self.clip_export_btn, 9, 1)
@@ -1321,11 +1324,15 @@ class LayoutOptionsPanel(QWidget):
         self.clip_text.setEnabled(custom_text)
         self.clip_insert_btn.setEnabled(custom_text)
         self.clip_text_font.setEnabled(font_modes)
-        self.clip_image_path.setEnabled(mode == "image")
-        self.clip_image_browse.setEnabled(mode == "image")
-        if hasattr(self, "_clip_image_xform_w"):
-            self._clip_image_xform_w.setEnabled(mode == "image")
-            self._clip_image_move_w.setEnabled(mode == "image")
+        # The image path / rotate / scale / move rows only make sense for an
+        # imported image, so HIDE them entirely unless "Imported image" is the
+        # content type (Knut), rather than just greying them out.
+        show_image = (mode == "image")
+        for row in (getattr(self, "_clip_image_row", None),
+                    getattr(self, "_clip_image_fit_row", None),
+                    getattr(self, "_clip_image_move_row", None)):
+            for w in (row or []):
+                w.setVisible(show_image)
 
     def _on_clip_content_changed(self, *_a) -> None:
         self._sync_clip_content_enabled()

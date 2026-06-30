@@ -361,3 +361,20 @@ def test_i1_clip_on_defaults_to_notes(app):
     p2.set_recipe(replace(default_recipe("i1", "A4"),
                           clip_border=True, clip_content_mode="off"))
     assert p2.clip_content_mode.currentData() == "off"
+
+
+def test_clip_image_rows_only_visible_for_image(app):
+    """Image path / rotate / scale / move are shown only when the clip content
+    type is 'Imported image' (Knut), not merely greyed out."""
+    from dataclasses import replace
+    from ui.dialogs.layout_options_panel import LayoutOptionsPanel
+    from workflow.layout_engine.presets import default_recipe
+    p = LayoutOptionsPanel(with_selectors=True)
+    rows = (p._clip_image_row, p._clip_image_fit_row, p._clip_image_move_row)
+    shown = lambda: [not w.isHidden() for row in rows for w in row]
+    p.set_recipe(replace(default_recipe("i1", "A4"), clip_content_mode="notes"))
+    assert not any(shown())
+    p.clip_content_mode.setCurrentIndex(p.clip_content_mode.findData("image"))
+    assert all(shown())
+    p.clip_content_mode.setCurrentIndex(p.clip_content_mode.findData("text"))
+    assert not any(shown())
