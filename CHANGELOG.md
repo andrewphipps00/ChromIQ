@@ -1,5 +1,15 @@
 # Changelog
 
+## v3.13.0-beta.33
+
+### 🔧 Changed
+- **Collapsible sections in Create Chart.** Click a frame's title (▾/▸) to fold
+  it away. In the ChromIQ layout panel, Layout and Page geometry start open and
+  the rest (Patches & spacers, Randomisation, Output, Sheet text, Clip-border
+  content, Printer calibration) start collapsed. The targen / printtarg Expert
+  frames start collapsed, and the targen Basic frame folds away while the recipe
+  is locked ("Edit patch recipe" off).
+
 ## v3.13.0-beta.32
 
 ### 🐛 Fixed
