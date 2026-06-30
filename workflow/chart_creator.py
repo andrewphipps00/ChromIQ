@@ -929,8 +929,15 @@ class ChartCreator:
             # blank (Manual already defaults to this via the recipe) (#93).
             kw["clip_content_mode"] = "off" if suppress else "notes"
         elif params.instrument == "CM":
-            kw["density"] = 3 if params.triple_density else (
+            density = 3 if params.triple_density else (
                 2 if params.double_density else 1)
+            kw["density"] = density
+            if density == 2:
+                # printtarg's ColorMunki double density (-h) inseparably couples
+                # the 13.7 mm rows with a half-patch row stagger; reproduce it so
+                # Guided matches printtarg. (The decoupled cm_stagger toggle stays
+                # a Manual-only extra.) (#93)
+                kw["cm_stagger"] = True
         elif params.instrument == "SS":
             kw["hflag"] = bool(params.double_density)   # hexagon patches
         return kw
