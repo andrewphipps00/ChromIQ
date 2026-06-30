@@ -123,6 +123,18 @@ def derive_area_patch_size(kw: dict) -> tuple[float, float] | None:
     def _max_rows_at(height: float) -> int:
         return max(1, int((arowl - ec * geom.pspa) / (height + geom.pspa)))
 
+    def _rows_filling_fit(n: int) -> float:
+        # _rows_filling gives the height that EXACTLY fills n rows, but float
+        # rounding can leave compute() one row short on the boundary (e.g. n=15 →
+        # 15.6000000001 → int(249/16.6)=14). Nudge the height down until n rows
+        # are guaranteed to fit, so a pinned/derived row count never loses a row.
+        h = _rows_filling(n)
+        for _ in range(40):
+            if _max_rows_at(h) >= n:
+                break
+            h -= 0.01
+        return h
+
     def _cols_at(width: float) -> int:
         # Columns a chart with this patch width would lay out across the page.
         try:
@@ -156,7 +168,7 @@ def derive_area_patch_size(kw: dict) -> tuple[float, float] | None:
             pw = _fit_columns(base, w_mm, h_mm, c, max_pw=avail_w)
         h_min = (pw * ratio) if (pw is not None and ratio > 0) else (
             (min_w * ratio) if ratio > 0 else (pw or min_w))
-        ph = max(_MIN_PATCH_MM, _rows_filling(_max_rows_at(h_min)))
+        ph = max(_MIN_PATCH_MM, _rows_filling_fit(_max_rows_at(h_min)))
         # If the chart's patch count is below one page's capacity, grow the
         # patches so they fill the area — the box is law (Knut). The height-% is a
         # MINIMUM: the patch height is never below width × % (`_floor_ph`); if a
@@ -168,7 +180,7 @@ def derive_area_patch_size(kw: dict) -> tuple[float, float] | None:
         def _floor_ph(pw_v: float) -> float:
             """Height that fills the most rows while staying ≥ the width-% floor."""
             fl = pw_v * ratio if (pw_v and ratio > 0) else _MIN_PATCH_MM
-            return max(_MIN_PATCH_MM, _rows_filling(_max_rows_at(fl)))
+            return max(_MIN_PATCH_MM, _rows_filling_fit(_max_rows_at(fl)))
 
         # Min-fill already respects the floor; clamp once more for safety.
         if pw is not None:
@@ -218,7 +230,7 @@ def derive_area_patch_size(kw: dict) -> tuple[float, float] | None:
         # the per-instrument "default size" reference) — then fills to that count
         # (Knut #93). Columns first, so rows-auto can use the resolved width.
         if rows > 0:
-            ph = max(_MIN_PATCH_MM, _rows_filling(rows))
+            ph = max(_MIN_PATCH_MM, _rows_filling_fit(rows))
         if cols > 0:
             pw = _fit_columns(base, w_mm, h_mm, cols, max_pw=avail_w)
         if cols <= 0:                               # columns auto → fill the width
@@ -228,7 +240,7 @@ def derive_area_patch_size(kw: dict) -> tuple[float, float] | None:
                 pw = _fit_columns(base, w_mm, h_mm, c, max_pw=avail_w)
         if rows <= 0:                               # rows auto → fill the height
             target_h = (pw * ratio) if (pw is not None and ratio > 0) else default_h
-            ph = max(_MIN_PATCH_MM, _rows_filling(_max_rows_at(target_h)))
+            ph = max(_MIN_PATCH_MM, _rows_filling_fit(_max_rows_at(target_h)))
 
     if pw is None and ph is not None:
         pw = ph / ratio if ratio > 0 else ph
@@ -238,7 +250,7 @@ def derive_area_patch_size(kw: dict) -> tuple[float, float] | None:
         # ratio/square height only as a floor — otherwise square patches leave a
         # gap at the bottom (#93, Knut beta-13).
         base_h = pw * ratio if ratio > 0 else pw
-        ph = max(_MIN_PATCH_MM, base_h, _rows_filling(_max_rows_at(base_h)))
+        ph = max(_MIN_PATCH_MM, base_h, _rows_filling_fit(_max_rows_at(base_h)))
     if pw is None or ph is None or pw <= 0 or ph <= 0:
         return None
     # Floor to 0.01 mm so rounding can't nudge the patch over the boundary and

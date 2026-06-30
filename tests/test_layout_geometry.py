@@ -730,3 +730,25 @@ def test_area_first_height_is_a_minimum_floor():
             assert ph >= floor - 0.05, (
                 f"ratio={ratio} n={n}: ph={ph:.2f} below floor {floor:.2f}")
             assert pw >= 7.0 - 0.1            # width also never below its minimum
+
+
+def test_area_first_by_grid_pinned_rows_render_exactly():
+    """A pinned 'patches per strip' (rows) must render EXACTLY that many rows — no
+    float-boundary one-short (Knut: 16 cols × 15 rows rendered 14 with a row-tall
+    gap; _rows_filling(15)=15.6000001 → int(249/16.6) floats to 14)."""
+    from workflow.layout_engine import area_fit
+    w, h = A4
+    for cols in (12, 16, 20):
+        for rows in range(8, 25):
+            kw = dict(instrument="i1", paper="A4", layout_mode="area_first",
+                      area_method="by_grid", area_cols=cols, area_rows=rows,
+                      area_ratio=1.0, spacer_on=True, edge_spacers=True,
+                      clip_border=True, clip_border_width=26.0,
+                      margins=(38.0, 9.0, 9.0, 26.0), area_target_count=546)
+            pw, ph = area_fit.derive_area_patch_size(kw)
+            g = instruments.geom_from_build_kwargs(
+                {**kw, "patch_w": pw, "patch_h": ph})
+            lay = geometry.compute(g, w, h, 546)
+            assert lay.steps_in_pass == rows, (
+                f"cols={cols} rows={rows}: rendered {lay.steps_in_pass} rows "
+                f"(ph={ph:.2f})")

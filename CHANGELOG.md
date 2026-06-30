@@ -1,5 +1,14 @@
 # Changelog
 
+## v3.13.0-beta.45
+
+### 🐛 Fixed
+- Area-first **"By columns / rows"**: a pinned *patches-per-strip* (rows) value
+  on a float boundary rendered one row short, leaving a row-tall gap at the bottom
+  (Knut: 16 cols × 15 rows drew only 14). The row-count fill now nudges off the
+  float boundary so the chart always renders exactly the pinned number of rows;
+  the same guard is applied to the auto/derived row paths.
+
 ## v3.13.0-beta.44
 
 ### 🐛 Fixed
