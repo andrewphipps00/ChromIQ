@@ -3405,31 +3405,29 @@ class Ti2RelayoutDialog(QDialog):
         _crow2.addWidget(self._show_gap_check)
         _crow2.addStretch(1)
         self._swatch_chrome.addLayout(_crow2)
-        # Gap size row: independent Horizontal / Vertical (px), editable only while
-        # "Show gap between patches" is on (Knut #93). 1–30 px, default 3 each.
+        # Gap size row: independent H / V, editable only while "Show gap between
+        # patches" is on (Knut #93). 1–30 px, default 3 each. The unit ("px") is
+        # in the row label so the spinboxes can stay narrow and not overflow /
+        # overlap the row (Knut beta.38).
         from ui.widgets import NoScrollSpinBox as _NSpin
         _crow3 = QHBoxLayout()
-        _crow3.setSpacing(8)
-        self._gap_lbl = QLabel(tr("Gap size:"), self)
+        _crow3.setSpacing(6)
+        self._gap_lbl = QLabel(tr("Gap (px):"), self)
         _crow3.addWidget(self._gap_lbl)
-        self._gap_h_lbl = QLabel(tr("Horizontal:"), self)
+        self._gap_h_lbl = QLabel(tr("H"), self)
         _crow3.addWidget(self._gap_h_lbl)
         self._gap_h_spin = _NSpin(self)
         self._gap_h_spin.setRange(1, 30)
         self._gap_h_spin.setValue(3)
-        self._gap_h_spin.setSuffix(" px")
-        # Wide enough that the two-digit value + " px" suffix + the up/down
-        # arrows all fit (the default width clipped " px" to " p").
-        self._gap_h_spin.setMinimumWidth(96)
+        self._gap_h_spin.setFixedWidth(58)        # 2 digits + arrows, no suffix
         self._gap_h_spin.valueChanged.connect(self._set_gap_sizes)
         _crow3.addWidget(self._gap_h_spin)
-        self._gap_v_lbl = QLabel(tr("Vertical:"), self)
+        self._gap_v_lbl = QLabel(tr("V"), self)
         _crow3.addWidget(self._gap_v_lbl)
         self._gap_v_spin = _NSpin(self)
         self._gap_v_spin.setRange(1, 30)
         self._gap_v_spin.setValue(3)
-        self._gap_v_spin.setSuffix(" px")
-        self._gap_v_spin.setMinimumWidth(96)
+        self._gap_v_spin.setFixedWidth(58)
         self._gap_v_spin.valueChanged.connect(self._set_gap_sizes)
         _crow3.addWidget(self._gap_v_spin)
         _crow3.addStretch(1)

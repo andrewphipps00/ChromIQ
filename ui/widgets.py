@@ -522,6 +522,14 @@ class CollapsibleGroupBox(QGroupBox):
         self._outer.setSpacing(0)
         self.body = QWidget(self)
         self._outer.addWidget(self.body)
+        # Bold the section title (incl. the arrow) so the header clearly reads as
+        # a clickable open/close control (Knut); keep the body at normal weight.
+        _tf = self.font()
+        _tf.setBold(True)
+        self.setFont(_tf)
+        _bf = QFont(_tf)
+        _bf.setBold(False)
+        self.body.setFont(_bf)
         self._render_title()
         self.body.setVisible(not self._collapsed)
 
@@ -530,7 +538,9 @@ class CollapsibleGroupBox(QGroupBox):
         self._render_title()
 
     def _render_title(self) -> None:
-        super().setTitle(("▸ " if self._collapsed else "▾ ") + self._base_title)
+        # Bigger, filled triangles (▶ / ▼) read far more clearly as an open/close
+        # affordance than the small ▸ / ▾ (Knut). A trailing space sets them off.
+        super().setTitle(("▶  " if self._collapsed else "▼  ") + self._base_title)
 
     def title(self) -> str:                        # noqa: N802 (Qt override)
         return self._base_title

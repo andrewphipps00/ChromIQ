@@ -157,18 +157,20 @@ def test_guided_and_manual_colormunki_extra_high_same_patch_geometry(tmp_path: P
     mkw = default_recipe("CM", "A4", mode="extrahigh").build_kwargs()
     mkw["instrument"], mkw["paper"] = "CM", "A4"
     gg = instruments.geom_from_build_kwargs(gkw)
-    gm = instruments.geom_from_build_kwargs(mkw)
-    # The only intended geometry difference is the layout-mode law flag.
+    # Patch-first parity: the dense ColorMunki patch SIZE is identical to Guided's
+    # (the readable native dense-strip geometry — 10.4 mm patches, same spacing).
+    gm_pf = instruments.geom_from_build_kwargs({**mkw, "layout_mode": "patch_first"})
     diffs = [f.name for f in dataclasses.fields(instruments.Geom)
-             if getattr(gg, f.name) != getattr(gm, f.name)]
-    assert diffs == ["margins_are_law"], f"unexpected geometry diff: {diffs}"
-    assert not gg.margins_are_law and gm.margins_are_law
-    # Same patch size, same row pitch (the readable dense ColorMunki strip).
-    assert (gg.pwid, gg.plen, gg.rrsp, gg.pspa) == (gm.pwid, gm.plen, gm.rrsp, gm.pspa)
-    # Area-first (Manual) fills the box → at least as many patches as Guided.
-    for dims in ((210.0, 297.0), (297.0, 210.0)):
-        assert (geometry.patches_per_sheet(gm, *dims)
-                >= geometry.patches_per_sheet(gg, *dims))
+             if getattr(gg, f.name) != getattr(gm_pf, f.name)]
+    assert diffs == [], f"unexpected geometry diff: {diffs}"
+    assert (gg.pwid, gg.plen, gg.rrsp, gg.pspa) == (gm_pf.pwid, gm_pf.plen,
+                                                    gm_pf.rrsp, gm_pf.pspa)
+    # Area-first (the Manual default) makes the margins law and FILLS the box: it
+    # takes the dense size as a MINIMUM width and derives the patch from there, so
+    # the width is at least the dense minimum (height follows the height-%) (Knut).
+    gm_af = instruments.geom_from_build_kwargs(mkw)
+    assert gm_af.margins_are_law and not gg.margins_are_law
+    assert gm_af.pwid >= gm_pf.pwid - 0.1
 
 
 def test_engine_kwargs_uses_full_recipe(tmp_path: Path) -> None:

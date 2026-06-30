@@ -2392,6 +2392,10 @@ class TabChart(QWidget):
                 panel.get_recipe(),
                 instrument=instr, paper=str(g("-p", "A4")),
                 pscale=float(g("-a", 1.0) or 1.0),
+                # The printtarg -m is an explicit margin, so carry it as an
+                # explicit engine margin (don't let "Use instrument margins"
+                # override it on the way in).
+                use_instrument_margins=False,
                 margin_top=margin, margin_right=margin,
                 margin_bottom=margin, margin_left=margin, border=margin,
                 nolimit=bool(g("-P", False)),

@@ -84,11 +84,10 @@ def derive_area_patch_size(kw: dict) -> tuple[float, float] | None:
         min_w = 0.0
     else:
         cols = rows = 0
-    # No-op (use the patch-first natural size) only when nothing drives the grid.
-    # by_grid always fills — even with both columns AND rows on auto it sizes the
-    # patches to the instrument's natural size and fills the box (Knut #93).
-    if cols <= 0 and rows <= 0 and min_w <= 0 and method != "by_grid":
-        return None
+    # Both methods always fill the box now (Knut): "Minimum patch width = auto"
+    # is not "don't fill" — it means "use the instrument's natural width as the
+    # minimum, then grow to fill", exactly like a typed value. (by_grid likewise
+    # always fills.) So area-first never falls back to the loose patch-first size.
     try:
         w_mm, h_mm = papers.dimensions_mm(kw.get("paper", "A4"))
     except Exception:
@@ -141,12 +140,22 @@ def derive_area_patch_size(kw: dict) -> tuple[float, float] | None:
     # ratio is HEIGHT:WIDTH (height = width * ratio); 0 = square. (The panel
     # shows it as "minimum patch height, % of width".)
     pw = ph = None
-    if min_w > 0:                                   # --- by_width: min width + % ---
-        h_min = (min_w * ratio) if ratio > 0 else min_w
-        ph = max(_MIN_PATCH_MM, _rows_filling(_max_rows_at(h_min)))
+    if method != "by_grid":                         # --- by_width: min width + % ---
+        # "auto" (no minimum typed) uses the instrument's natural width as the
+        # minimum, so it still grows to fill the box (Knut: the label says
+        # "minimum", so it's a floor that grows, never a fixed under-fill).
+        if min_w <= 0:
+            min_w = default_w
+        # Width grows to fill the usable width: fit as many strips as possible at
+        # the minimum, then grow the patch width so they span the box. Height then
+        # follows from the GROWN width via the height-%, and grows to fill the
+        # usable height — so both dimensions fill the margin box (Knut).
         c = _cols_at(min_w)
         if c > 0:
             pw = _fit_columns(base, w_mm, h_mm, c, max_pw=avail_w)
+        h_min = (pw * ratio) if (pw is not None and ratio > 0) else (
+            (min_w * ratio) if ratio > 0 else (pw or min_w))
+        ph = max(_MIN_PATCH_MM, _rows_filling(_max_rows_at(h_min)))
     else:                                           # --- by_grid: columns / rows ---
         # Pinned dimensions size their patches to fill exactly that many; an "auto"
         # dimension picks a count that gives a REASONABLE patch size — the ratio-

@@ -652,15 +652,21 @@ def test_edge_spacers_counted_in_realized_margins():
     measure to the spacer, not the patch — else the guides sit inside the edge
     spacers and they look like they overflow the margins (Knut #18)."""
     w, h = A4
-    base = dict(instrument="i1", paper="A4", layout_mode="area_first",
-                inter_patch=3.5, spacer_on=True, margins=(6.0, 6.0, 6.0, 6.0))
-    g_off = instruments.geom_from_build_kwargs({**base, "edge_spacers": False})
+    # Pin the patch size (patch-first) so edge-on vs edge-off compare the same
+    # block — the only difference is the bracket spacers.
+    base = dict(instrument="i1", paper="A4", layout_mode="patch_first",
+                patch_w=10.0, patch_h=10.0, inter_patch=3.5, spacer_on=True,
+                margins=(6.0, 6.0, 6.0, 6.0))
     g_on = instruments.geom_from_build_kwargs({**base, "edge_spacers": True})
-    lay_off = geometry.compute(g_off, w, h, 576)
+    g_off = instruments.geom_from_build_kwargs({**base, "edge_spacers": False})
     lay_on = geometry.compute(g_on, w, h, 576)
-    _, _, top_off, bot_off = geometry.realized_margins_mm(g_off, w, h, lay_off)
-    _, _, top_on, bot_on = geometry.realized_margins_mm(g_on, w, h, lay_on)
-    # With edge spacers on, the reported margins shrink by ~pspa on each end
-    # (the bracket spacers reach toward the page edge).
-    assert top_off - top_on == pytest.approx(g_on.pspa, abs=0.2)
-    assert bot_off - bot_on == pytest.approx(g_on.pspa, abs=0.2)
+    lay_off = geometry.compute(g_off, w, h, 576)
+    place_on = geometry.placement(g_on, w, h, lay_on)
+    place_off = geometry.placement(g_off, w, h, lay_off)
+    _, _, top_on, _ = geometry.realized_margins_mm(g_on, w, h, lay_on)
+    _, _, top_off, _ = geometry.realized_margins_mm(g_off, w, h, lay_off)
+    # Edge on: the realized top margin measures to the leading edge spacer, i.e.
+    # one pspa ABOVE the first patch — so the measured-margin guide includes it.
+    assert top_on == pytest.approx(place_on.y_of(0) - g_on.pspa, abs=0.2)
+    # Edge off: it measures to the first patch (no overhang).
+    assert top_off == pytest.approx(place_off.y_of(0), abs=0.2)

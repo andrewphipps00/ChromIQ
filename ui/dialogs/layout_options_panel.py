@@ -280,14 +280,16 @@ class LayoutOptionsPanel(QWidget):
             on its special ('auto'/'square') value."""
             inch = QLabel("", self)
             inch.setStyleSheet("color: #909090; font-size: 10px;")
-            inch.setMinimumWidth(42)
+            inch.setMinimumWidth(48)
 
             def _upd(*_a):
                 v = spin.value()
                 if spin.specialValueText() and v <= spin.minimum() + 1e-9:
                     inch.setText("")
                 else:
-                    inch.setText(f"{v / 25.4:.2f}″")
+                    # 3 decimals so a 0.1 mm change is visible in the inch readout
+                    # (Knut beta.38).
+                    inch.setText(f"{v / 25.4:.3f}″")
             spin.valueChanged.connect(_upd)
             _upd()
             box = QHBoxLayout(); box.setContentsMargins(0, 0, 0, 0); box.setSpacing(6)
@@ -519,14 +521,14 @@ class LayoutOptionsPanel(QWidget):
                     tr("Scales only the spacer thickness, leaving patch size "
                        "alone. 1.0 is standard; raise it for fatter gaps without "
                        "making the patches bigger."), self))
-        add_row(g, 5, tr("Inter-patch gap:"), self.inter_patch,
+        add_row(g, 5, tr("Inter-patch gap:"), mm_inch(self.inter_patch),
                 tip=TooltipButton(
                     tr("Inter-patch gap"),
                     tr("Makes the spacer between patches thicker, in mm — extra "
                        "blank separation along the strip. Usually 0; raise it only "
                        "if patches bleed into each other on your printer/paper."),
                     self))
-        add_row(g, 6, tr("Strip-indicator gap:"), self.sig,
+        add_row(g, 6, tr("Strip-indicator gap:"), mm_inch(self.sig),
                 tip=TooltipButton(
                     tr("Strip-indicator gap"),
                     tr("How far the strip's letter label sits below the top edge of "
@@ -534,7 +536,7 @@ class LayoutOptionsPanel(QWidget):
                        "distance at the very top; raising it slides them down, "
                        "toward the patches, to fine-tune where the labels print."),
                     self))
-        add_row(g, 7, tr("Strip gap (between strips):"), self.strip_gap,
+        add_row(g, 7, tr("Strip gap (between strips):"), mm_inch(self.strip_gap),
                 tip=TooltipButton(
                     tr("Strip gap"),
                     tr("Extra blank space added sideways between neighbouring "
@@ -842,7 +844,8 @@ class LayoutOptionsPanel(QWidget):
                        "the very edge, so keep a few mm here; the smallest of the "
                        "four also sets the instrument's leader/clip base."), self))
         gg.addWidget(self.clip_width_label, 2, 0, _Qt.AlignmentFlag.AlignRight)
-        gg.addWidget(self.clip_width, 2, 1)
+        self._clip_width_row = mm_inch(self.clip_width)   # spin + inch readout
+        gg.addWidget(self._clip_width_row, 2, 1)
         gg.addWidget(self.clip_width_tip, 2, 2)
         add_row(gg, 3, tr("Resolution:"), self.dpi,
                 tip=TooltipButton(
@@ -1305,7 +1308,9 @@ class LayoutOptionsPanel(QWidget):
         # i1Pro, whose group hides when its clip is off (#93).
         show_group = clip_mode or (is_band_inst and content_on)
         show_width = clip_mode or (is_band_inst and content_on)
-        for w in (self.clip_width_label, self.clip_width, self.clip_width_tip):
+        for w in (self.clip_width_label,
+                  getattr(self, "_clip_width_row", self.clip_width),
+                  self.clip_width_tip):
             w.setVisible(show_width)
         if hasattr(self, "_clip_content_grp"):
             self._clip_content_grp.setVisible(show_group)

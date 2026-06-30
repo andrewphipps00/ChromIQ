@@ -254,6 +254,7 @@ def test_clip_border_floors_then_restores_margin(app):
     # ColorMunki, clip off, left margin 6, clip width 26.
     p = LayoutOptionsPanel(with_selectors=True)
     r = default_recipe("CM", "A4", mode="extrahigh")
+    r.use_instrument_margins = False   # editable margins (the clip-floor applies)
     r.margin_left = 6.0
     r.clip_border_width_mm = 26.0
     r.clip_content_mode = "off"
@@ -265,6 +266,7 @@ def test_clip_border_floors_then_restores_margin(app):
     assert p.margins["l"].value() == 6.0           # restored, not stuck at 26
     # i1Pro via its Mode selector: same floor/restore on the clip-side margin.
     r2 = default_recipe("i1", "A4", mode="clip")
+    r2.use_instrument_margins = False
     r2.margin_left = 6.0
     r2.clip_border_width_mm = 26.0
     p.set_recipe(r2)
