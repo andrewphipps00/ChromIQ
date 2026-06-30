@@ -2015,6 +2015,9 @@ def open_tool_dialog(
     elif key == "softproof":
         from ui.dialogs.softproof_dialog import SoftproofDialog
         dlg = SoftproofDialog(runner, settings, parent)
+    elif key == "device_link":
+        from ui.dialogs.devicelink_dialog import DeviceLinkDialog
+        dlg = DeviceLinkDialog(runner, settings, parent)
     elif key == "translate":
         from ui.dialogs.translation_dialog import TranslationDialog
         dlg = TranslationDialog(settings, parent)
