@@ -3419,7 +3419,7 @@ class Ti2RelayoutDialog(QDialog):
         self._gap_h_spin = _NSpin(self)
         self._gap_h_spin.setRange(1, 30)
         self._gap_h_spin.setValue(3)
-        self._gap_h_spin.setFixedWidth(58)        # 2 digits + arrows, no suffix
+        self._gap_h_spin.setMinimumWidth(70)        # 2 digits + arrows, no suffix
         self._gap_h_spin.valueChanged.connect(self._set_gap_sizes)
         _crow3.addWidget(self._gap_h_spin)
         self._gap_v_lbl = QLabel(tr("V"), self)
@@ -3427,7 +3427,7 @@ class Ti2RelayoutDialog(QDialog):
         self._gap_v_spin = _NSpin(self)
         self._gap_v_spin.setRange(1, 30)
         self._gap_v_spin.setValue(3)
-        self._gap_v_spin.setFixedWidth(58)
+        self._gap_v_spin.setMinimumWidth(70)
         self._gap_v_spin.valueChanged.connect(self._set_gap_sizes)
         _crow3.addWidget(self._gap_v_spin)
         _crow3.addStretch(1)
