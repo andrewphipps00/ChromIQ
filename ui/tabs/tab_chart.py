@@ -2372,8 +2372,9 @@ class TabChart(QWidget):
 
     def _convert_printtarg_to_engine(self) -> None:
         """Engine OFF→ON: seed the engine layout panel from the printtarg widgets
-        the user had set, overriding only the shared fields and keeping the
-        panel's engine-only options (layout mode, columns, spacers…) (Knut #3)."""
+        the user had set, overriding the convertible fields and keeping the
+        panel's engine-only options (layout mode, columns, clip content…) (Knut
+        #3). The full field map is documented in _convert_engine_to_printtarg."""
         panel = getattr(self, "_manual_layout_panel", None)
         if panel is None:
             return
@@ -2382,29 +2383,62 @@ class TabChart(QWidget):
         try:
             from dataclasses import replace
             g = lambda f, d: self._manual_get("printtarg", f, d)
+            cur = panel.get_recipe()
             instr = str(g("-i", "i1"))
             suppress = bool(g("-L", True))           # -L = no left/clip border
             dd = bool(g("-h", False))
             td = (self._manual_td_check is not None
                   and self._manual_td_check.isChecked() and instr == "CM")
-            margin = float(g("-m", 6) or 6)
+            # Spacers: -n (none) wins, then -b (B&W), then -c / default (coloured).
+            spacer_mode = ("none" if bool(g("-n", False))
+                           else "bw" if bool(g("-b", False))
+                           else "colored")
+            preserve = bool(g("-r", False))          # -r = preserve order
+            # Only carry the seed as a FIXED seed when the user actually enabled
+            # the -R row (printtarg always has an internal default, but the engine
+            # "no fixed seed" state must survive a round-trip).
+            has_seed = self._manual_enabled("printtarg", "-R")
+            seed_val = int(g("-R", 1) or 1)
+            bit16 = bool(self._bit16_radio is not None
+                         and self._bit16_radio.isChecked())
+            disable_comp = bool(g("-C", False))      # -C = no TIFF compression
+
+            # Margins: printtarg carries ONE value, the engine has four. Only
+            # collapse to all-four when the user actually changed printtarg's
+            # margin since the last switch — otherwise keep the engine's own
+            # (possibly distinct) four so toggling back and forth never loses them
+            # (Knut: don't transfer the non-1:1 field when it would clobber).
+            cur_m = float(g("-m", 6) or 6)
+            snap_m = getattr(self, "_pt_margin_at_switch", None)
+            if snap_m is not None and int(round(cur_m)) == int(snap_m):
+                margins = dict(
+                    margin_top=cur.margin_top, margin_right=cur.margin_right,
+                    margin_bottom=cur.margin_bottom, margin_left=cur.margin_left,
+                    border=cur.border,
+                    use_instrument_margins=cur.use_instrument_margins)
+            else:
+                margins = dict(
+                    margin_top=cur_m, margin_right=cur_m, margin_bottom=cur_m,
+                    margin_left=cur_m, border=cur_m, use_instrument_margins=False)
+
             recipe = replace(
-                panel.get_recipe(),
+                cur,
                 instrument=instr, paper=str(g("-p", "A4")),
+                dpi=int(g("-t", 300) or 300),
                 pscale=float(g("-a", 1.0) or 1.0),
-                # The printtarg -m is an explicit margin, so carry it as an
-                # explicit engine margin (don't let "Use instrument margins"
-                # override it on the way in).
-                use_instrument_margins=False,
-                margin_top=margin, margin_right=margin,
-                margin_bottom=margin, margin_left=margin, border=margin,
                 nolimit=bool(g("-P", False)),
                 cm_density=(3 if td else 2 if dd else 1),
+                spacer_mode=spacer_mode, spacer_on=(spacer_mode != "none"),
+                randomize=(not preserve),
+                seed=(seed_val if (has_seed and not preserve) else None),
+                bit16=bit16,
+                compression=("none" if disable_comp else "lzw"),
                 clip_border=((not suppress) if instr in ("i1", "p3")
-                             else panel.get_recipe().clip_border),
+                             else cur.clip_border),
                 clip_content_mode=(("off" if suppress else "notes")
                                    if instr in ("i1", "p3")
-                                   else panel.get_recipe().clip_content_mode),
+                                   else cur.clip_content_mode),
+                **margins,
             )
             panel.set_recipe(recipe)
             if (getattr(panel, "pages", None) is not None
@@ -2414,9 +2448,16 @@ class TabChart(QWidget):
             log.warning("printtarg→engine conversion failed", exc_info=True)
 
     def _convert_engine_to_printtarg(self) -> None:
-        """Engine ON→OFF: write the engine panel's shared settings back onto the
-        printtarg widgets, so turning the engine off keeps the same instrument,
-        paper, margins, patch scale, clip border, density and strip-limit (#3)."""
+        """Engine ON→OFF: write the engine panel's settings back onto the
+        printtarg widgets so the layout survives the toggle (Knut #3). Field map
+        (both directions, inverse where noted):
+          -i ↔ Instrument        -p ↔ Paper            pages ↔ Pages
+          -t ↔ Resolution        -a ↔ Patch scale      -P ↔ Don't-limit-strip
+          -L ↔ Clip border (inv, i1/p3)   -r ↔ Randomise (inv)
+          -R ↔ fixed Seed        -C ↔ Compression (-C on ⇔ "none")
+          -n/-b/-c ↔ Spacers (none/bw/coloured)        bit radios ↔ Bit depth
+          -h + triple-density ↔ Density (1/2/3)
+          -m ↔ Margins (only when all four are equal — see below)."""
         panel = getattr(self, "_manual_layout_panel", None)
         if panel is None:
             return
@@ -2426,17 +2467,39 @@ class TabChart(QWidget):
             # defaults for -a/-m, so set those afterwards).
             self._set_manual_value("printtarg", "-i", r.instrument)
             self._set_manual_value("printtarg", "-p", r.paper)
+            self._set_manual_value("printtarg", "-t", int(r.dpi))
             self._set_manual_value("printtarg", "-a", round(float(r.pscale), 3))
-            self._set_manual_value("printtarg", "-m", int(round(r.margin_top)))
             self._set_manual_value("printtarg", "-P", bool(r.nolimit))
-            self._set_manual_value(
-                "printtarg", "-h", bool(r.cm_density == 2))
+            self._set_manual_value("printtarg", "-h", bool(r.cm_density == 2))
+            # Spacers (mutually exclusive flags).
+            self._set_manual_value("printtarg", "-n", r.spacer_mode == "none")
+            self._set_manual_value("printtarg", "-b", r.spacer_mode == "bw")
+            self._set_manual_value("printtarg", "-c", r.spacer_mode == "colored")
+            # Randomise / fixed seed.
+            self._set_manual_value("printtarg", "-r", not r.randomize)
+            if r.seed is not None:
+                self._set_manual_value("printtarg", "-R", int(r.seed))
+            # TIFF compression (-C disables it → engine "none").
+            self._set_manual_value("printtarg", "-C", r.compression == "none")
+            # Bit depth (the 8/16-bit radios live on the printtarg row).
+            if self._bit16_radio is not None and self._bit8_radio is not None:
+                (self._bit16_radio if r.bit16
+                 else self._bit8_radio).setChecked(True)
             self._set_manual_value(
                 "printtarg", "-L",
                 bool(r.instrument in ("i1", "p3") and not r.clip_border))
             if self._manual_td_check is not None:
                 self._manual_td_check.setChecked(
                     r.instrument == "CM" and r.cm_density == 3)
+            # Margins: only collapse the four engine margins onto printtarg's
+            # single -m when they're all equal (lossless). When they differ,
+            # leave printtarg's margin untouched so the distinct values survive a
+            # round-trip (restored on the way back). Record what we left -m at so
+            # the reverse conversion can tell whether the user changed it.
+            ms = (r.margin_top, r.margin_right, r.margin_bottom, r.margin_left)
+            if max(ms) - min(ms) < 0.5:
+                self._set_manual_value("printtarg", "-m", int(round(r.margin_top)))
+            self._pt_margin_at_switch = int(self._manual_get("printtarg", "-m", 6) or 6)
             if (self._manual_pages_spin is not None
                     and getattr(panel, "pages", None) is not None):
                 self._manual_pages_spin.setValue(int(panel.pages.value()))
@@ -3324,6 +3387,14 @@ class TabChart(QWidget):
                 v = pw.get_raw_value()
                 return v if v is not None else default
         return default
+
+    def _manual_enabled(self, tool: str, flag: str) -> bool:
+        """True when an expert flag's enable-checkbox is ticked (so it reaches the
+        command). Used to transfer a value only when the user actually set it."""
+        for pw in self._manual_widgets.get(tool, []):
+            if pw.flag == flag:
+                return bool(pw.is_enabled_by_user)
+        return False
 
     def _shared_get(self, tab: str) -> "dict[str, Any]":
         """Current value of every shared setting for *tab* ('guided'|'manual')."""

@@ -176,6 +176,56 @@ def test_engine_toggle_converts_settings_both_ways(tab):
     assert bool(_manual(tab, "printtarg", "-L")) is True  # clip off → -L on
 
 
+def test_engine_to_printtarg_transfers_all_fields(tab):
+    """Engine ON→OFF writes every convertible field onto the printtarg widgets
+    (Knut's full transfer spec: spacers, bit depth, compression, randomise/seed,
+    resolution, patch scale)."""
+    from dataclasses import replace
+    tab._settings.set("use_chromiq_layout_engine", False)
+    tab._switch_mode("manual")
+    tab._manual_engine_check.setChecked(True)                # OFF→ON inits panel
+    r = tab._manual_layout_panel.get_recipe()
+    tab._manual_layout_panel.set_recipe(replace(
+        r, instrument="i1", paper="329x483", pscale=0.85, dpi=297, bit16=True,
+        compression="none", randomize=False, seed=None, spacer_mode="bw",
+        margin_top=24, margin_right=24, margin_bottom=24, margin_left=24))
+    tab._manual_engine_check.setChecked(False)               # ON→OFF
+    assert _manual(tab, "printtarg", "-p") == "329x483"
+    assert abs(float(_manual(tab, "printtarg", "-a")) - 0.85) < 1e-6
+    assert int(_manual(tab, "printtarg", "-t")) == 297
+    assert bool(tab._bit16_radio.isChecked()) is True        # 16-bit
+    assert bool(_manual(tab, "printtarg", "-b")) is True     # B&W spacers
+    assert bool(_manual(tab, "printtarg", "-n")) is False
+    assert bool(_manual(tab, "printtarg", "-C")) is True     # compression none → -C
+    assert bool(_manual(tab, "printtarg", "-r")) is True     # randomise off → -r on
+    assert int(_manual(tab, "printtarg", "-m")) == 24
+
+
+def test_engine_toggle_preserves_distinct_margins_roundtrip(tab):
+    """Distinct engine margins must survive a toggle round-trip: printtarg has a
+    single margin, so collapsing 4→1→4 would lose them. They are kept unless the
+    user actually changes printtarg's margin while it's shown (Knut)."""
+    from dataclasses import replace
+    tab._settings.set("use_chromiq_layout_engine", False)
+    tab._switch_mode("manual")
+    tab._manual_engine_check.setChecked(True)                # OFF→ON
+    r = tab._manual_layout_panel.get_recipe()
+    tab._manual_layout_panel.set_recipe(replace(
+        r, margin_top=24, margin_right=9, margin_bottom=9, margin_left=26))
+    tab._manual_engine_check.setChecked(False)               # ON→OFF (no collapse)
+    tab._manual_engine_check.setChecked(True)                # OFF→ON again
+    r2 = tab._manual_layout_panel.get_recipe()
+    assert (r2.margin_top, r2.margin_right, r2.margin_bottom, r2.margin_left) \
+        == (24, 9, 9, 26)                                    # distinct values kept
+    # But if the user changes printtarg's -m in between, that single value wins.
+    tab._manual_engine_check.setChecked(False)
+    tab._set_manual_value("printtarg", "-m", 7)
+    tab._manual_engine_check.setChecked(True)
+    r3 = tab._manual_layout_panel.get_recipe()
+    assert (r3.margin_top, r3.margin_right, r3.margin_bottom, r3.margin_left) \
+        == (7, 7, 7, 7)
+
+
 def test_auto_preview_is_manual_only_and_persists(tab):
     """The auto-update-preview option is Manual-only (hidden + ignored in Guided)
     and its checkbox state is remembered (Knut)."""

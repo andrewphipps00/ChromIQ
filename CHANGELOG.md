@@ -1,6 +1,20 @@
 # Changelog
 
-## v3.13.0-beta.45
+## v3.13.0-beta.46
+
+### 🐛 Fixed
+- **Layout-engine ↔ printtarg setting transfer** now carries the full set of
+  shared options across the "Use the ChromIQ layout engine" toggle, in both
+  directions: instrument, paper, pages, resolution, patch scale, clip border,
+  density, spacers (none / B&W / coloured), bit depth, TIFF compression,
+  randomise on/off and the fixed seed — not just instrument/paper/margin/scale.
+- **Margins survive a toggle round-trip.** printtarg has a single margin while
+  the engine has four; the four are now only collapsed onto printtarg's `-m`
+  when they're all equal (lossless). When they differ, printtarg's margin is left
+  untouched and the distinct engine values are restored on the way back — so you
+  no longer lose, say, a 24 mm top / 9 mm sides setup by clicking the toggle.
+  (If you deliberately change printtarg's margin while it's shown, that single
+  value still applies to all four on return.)
 
 ### 🐛 Fixed
 - Area-first **"By columns / rows"**: a pinned *patches-per-strip* (rows) value
