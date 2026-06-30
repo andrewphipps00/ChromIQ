@@ -104,11 +104,18 @@ class DeviceLinkDialog(_ToolDialogBase):
         (tr("Punchy (saturation)"), "s"),
         (tr("Proof another device (absolute colorimetric)"), "a"),
     )
-    # (label, (src viewcond, dst viewcond))
-    _VIEWCONDS = (
-        (tr("Screen → print (typical room)"), ("mt", "pp")),
-        (tr("Screen → print (D50 viewing booth / critical)"), ("mt", "pc")),
-        (tr("Bright screen → print"), ("mb", "pp")),
+    # (label, collink -c code) — where the source images are viewed (a screen)
+    _SRC_VIEWCONDS = (
+        (tr("Monitor in a typical room (recommended)"), "mt"),
+        (tr("Bright monitor in a bright room"), "mb"),
+        (tr("Monitor in a darkened room"), "md"),
+    )
+    # (label, collink -d code) — where the finished print is viewed
+    _DST_VIEWCONDS = (
+        (tr("Normal indoor light (recommended)"), "pp"),
+        (tr("D50 viewing booth (critical)"), "pc"),
+        (tr("Print evaluation (CIE 116-1995)"), "pe"),
+        (tr("Print, partial mid-tone adaptation"), "pm"),
     )
     # (label, collink -q code)
     _QUALITIES = (
@@ -282,13 +289,36 @@ class DeviceLinkDialog(_ToolDialogBase):
             "intent dropdown no longer matters."),
             self._INTENTS)
 
-        self._view_combo = self._combo_row(
-            form, tr("Viewing conditions:"), tr("Viewing conditions"),
-            tr("Where the print will be looked at, so the colours are adapted to "
-            "that light. 'Typical room' suits normal indoor light; the 'D50 "
-            "viewing booth' option is for a colour-critical proofing booth. When in "
-            "doubt, leave it on the typical room."),
-            self._VIEWCONDS)
+        self._src_view_combo = self._combo_row(
+            form, tr("Screen viewing conditions:"), tr("Screen viewing conditions"),
+            tr("This tells the device-link how bright the room is where you look at "
+            "your images on screen, so it can match the print to what your eyes are "
+            "adapted to while editing.\n\n"
+            "• Monitor in a typical room — normal home or office lighting. This is "
+            "the safe default for most people.\n"
+            "• Bright monitor in a bright room — a daylight-bright workspace, or a "
+            "monitor turned up high.\n"
+            "• Monitor in a darkened room — a dim editing suite with the lights "
+            "down low.\n\n"
+            "If you're not sure, leave it on 'typical room' — the difference is "
+            "subtle and only matters for very precise work."),
+            self._SRC_VIEWCONDS)
+
+        self._dst_view_combo = self._combo_row(
+            form, tr("Print viewing conditions:"), tr("Print viewing conditions"),
+            tr("This tells the device-link the light your finished print will be "
+            "seen under, so its colours are adapted to that setting.\n\n"
+            "• Normal indoor light — everyday viewing on a wall or desk under "
+            "typical room lighting (the ISO 3664 P2 standard). The best default.\n"
+            "• D50 viewing booth (critical) — a colour-managed proofing booth set "
+            "to the D50 standard (ISO 3664 P1). Choose this when prints are judged "
+            "in a booth, e.g. exhibition or reproduction work.\n"
+            "• Print evaluation (CIE 116-1995) — an alternative standard print-"
+            "viewing setting, for matching that specification.\n"
+            "• Print, partial mid-tone adaptation — adapts the mid-tones only part "
+            "of the way; occasionally helps in critical colour-matching cases.\n\n"
+            "If in doubt, use 'Normal indoor light'."),
+            self._DST_VIEWCONDS)
 
         self._quality_combo = self._combo_row(
             form, tr("Quality:"), tr("Quality"),
@@ -564,7 +594,8 @@ class DeviceLinkDialog(_ToolDialogBase):
 
     def _run_collink(self, out: Path, src_gamut: Path | None) -> None:
         intent = self._intent_combo.currentData()
-        src_vc, dst_vc = self._view_combo.currentData()
+        src_vc = self._src_view_combo.currentData()
+        dst_vc = self._dst_view_combo.currentData()
         params = CollinkParams(
             src_path=self._src_v2, dst_path=self._dst_v2, out_path=out,
             intent=intent, src_viewcond=src_vc, dst_viewcond=dst_vc,
