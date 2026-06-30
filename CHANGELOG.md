@@ -1,5 +1,27 @@
 # Changelog
 
+## v3.13.0-beta.39
+
+### 🐛 Fixed
+- **Area-first "Minimum patch width = auto" now fills the chart area** like a
+  typed minimum (the label says *minimum*): it takes the instrument's natural
+  width as the floor and grows the patches to fill the usable width; the height
+  follows via the height-% and fills too — both dimensions fill the margin box.
+- **Built-in presets** (TC9.18, "by Pharmacist", Full-layout-setup) now load with
+  the printtarg engine, so the layout shows the preset's real instrument / paper /
+  orientation instead of the engine's defaults. Switch to the ChromIQ engine
+  afterwards to convert the settings.
+
+### 🔧 Changed
+- Collapsible section headers have **bigger ▶/▼ arrows and bold titles** so they
+  clearly read as open/close controls.
+- Inch readouts are now **3 decimals**, and added to the gap / clip-border-width
+  fields that were missing them.
+- **"Use instrument margins" defaults on** (a new chart respects the jig margins).
+- In Manual, the four targen **Auto** options default on.
+- Patch-set editor: **total patch count shown under the grid**; the gap-size row
+  is compact so it no longer overflows.
+
 ## v3.13.0-beta.38
 
 ### 🔧 Changed
