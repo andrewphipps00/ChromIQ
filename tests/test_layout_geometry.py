@@ -688,14 +688,22 @@ def test_area_first_fills_box_for_fixed_count():
         g = instruments.geom_from_build_kwargs({**kw, "patch_w": pw, "patch_h": ph})
         lay = geometry.compute(g, w, h, n)
         _, r, _, b = geometry.realized_margins_mm(g, w, h, lay)
-        return pw, r, b
+        return pw, r, b, lay.pages
     # 576 patches with min 7.5 → patches grow ABOVE the min to fill (Knut's
     # "even if it becomes 8.7 mm"); right/bottom land on the ~9 mm margins.
-    pw, r, b = fill(7.5, 576)
+    pw, r, b, _ = fill(7.5, 576)
     assert pw > 8.0                       # grew past the 7.5 minimum to fill
     assert r < 12.0 and b < 12.0         # fills to the margins, no big gap
-    # Fewer patches → bigger; more → smaller; both still fill.
-    assert fill(7.5, 300)[0] > fill(7.5, 576)[0] > fill(7.5, 900)[0]
-    for n in (300, 576, 900):
-        _, r, b = fill(7.5, n)
-        assert r < 12.0 and b < 14.0
+    # Fewer patches → bigger; both still fill. Every below-capacity count must
+    # fill BOTH axes on one page — including counts right at the capacity
+    # boundary (the granularity edge that used to leave a gap, Knut 600-of-644).
+    for n in (60, 100, 300, 500, 580, 600, 620, 640):
+        pwn, r, b, pages = fill(7.5, n)
+        assert pages == 1, f"{n} should fit one page"
+        assert r < 12.0 and b < 14.0, f"{n} left a gap: R={r:.1f} B={b:.1f}"
+        assert pwn >= 7.5 - 0.1            # never below the minimum
+    assert fill(7.5, 300)[0] > fill(7.5, 600)[0]   # fewer patches → bigger
+    # A count OVER one page does NOT shrink below the min — it overflows to more
+    # pages at the min-fill size (Knut: overflow, not shrink).
+    pw_over, _, _, pages_over = fill(7.5, 1600)
+    assert pages_over >= 2 and pw_over >= 7.5 - 0.1
