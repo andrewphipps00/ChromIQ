@@ -61,6 +61,11 @@ DEFAULTS: dict[str, Any] = {
     #   • Skip the right-margin command/notes stamp (its area is now off-page).
     # Outside those conditions the setting has no effect.
     "i1pro_chromiq_clip_style":  False,
+    # Auto-update the Create-Chart preview when a layout setting changes (only
+    # once a chart has been generated/loaded). Re-lays-out the existing patch set
+    # so it's fast (no targen), and suppresses the "room left on the last page"
+    # pop-up while on. Default off (opt-in).
+    "auto_update_preview":       False,
     # Step 2 — print
     "last_printer":              "",
     "print_input_slot":          "",

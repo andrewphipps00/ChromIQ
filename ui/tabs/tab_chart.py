@@ -1095,6 +1095,45 @@ class TabChart(QWidget):
         self._stack.addWidget(self._manual_panel)
         left_layout.addWidget(self._stack, stretch=1)
 
+        # Auto-update-preview toggle, just above Generate (it governs what happens
+        # after you've generated once). Manual mode only (Knut) — shown/hidden in
+        # _switch_mode; Guided has no layout panel to tune live.
+        self._auto_preview_row_w = QWidget(self)
+        auto_row = QHBoxLayout(self._auto_preview_row_w)
+        auto_row.setContentsMargins(0, 0, 0, 0)
+        self._auto_preview_check = QCheckBox(
+            tr("Auto-update preview when a layout setting changes"), self)
+        self._auto_preview_check.setChecked(
+            bool(self._settings.get("auto_update_preview", False)))
+        self._auto_preview_check.toggled.connect(self._on_auto_preview_toggled)
+        # Debounce: coalesce a burst of changes into one re-render.
+        self._auto_preview_timer = QTimer(self)
+        self._auto_preview_timer.setSingleShot(True)
+        self._auto_preview_timer.timeout.connect(self._auto_regenerate_preview)
+        self._last_auto_sig: str | None = None
+        auto_row.addWidget(self._auto_preview_check)
+        auto_row.addStretch()
+        auto_row.addWidget(TooltipButton(
+            tr("Auto-update preview"),
+            tr("When this is on, the chart preview refreshes by itself every time "
+               "you change a layout setting — margins, patch size, columns, "
+               "spacers, the clip border, and so on — so you can see the effect "
+               "immediately without clicking Generate Chart each time.\n\n"
+               "How it works:\n"
+               "• It only starts once you've generated (or loaded) a chart, so "
+               "there's always something to update.\n"
+               "• It re-uses the patches already in your chart and just re-lays "
+               "them out, so the refresh is quick — it does NOT pick new colours "
+               "or re-run the patch generator.\n"
+               "• While it's on, ChromIQ won't pop up the “there's a little room "
+               "left on the last page” reminder after each change — that would be "
+               "in the way when you're tuning the layout live. You can still open "
+               "the patch-set editor any time to add or remove patches.\n\n"
+               "Turn it off to go back to updating the preview only when you click "
+               "Generate Chart."), self))
+        left_layout.addWidget(self._auto_preview_row_w)
+        self._auto_preview_row_w.setVisible(False)   # Manual only (set in _switch_mode)
+
         # Bottom buttons
         btn_row = QHBoxLayout()
         self._generate_btn = QPushButton(tr("Generate Chart"), self)
@@ -1929,12 +1968,12 @@ class TabChart(QWidget):
                 self._manual_printtarg_grp = grp
             grp_layout = QVBoxLayout(grp.body)
 
-            # Override row — pinned at the top of the panel, hidden until a preset
-            # that supplies a fixed patch set (ti1) or a fixed layout (prebuilt)
-            # is active. Ticking it re-enables the greyed controls below. The
-            # checkbox stays enabled while its content is greyed because it lives
-            # outside the disabled content widgets (basic_grp / expert_grp).
-            override_row = QWidget(grp)
+            # Override row — pinned ABOVE the (collapsible) section frame so it
+            # stays visible even when the frame is collapsed (Knut). Hidden until a
+            # preset that supplies a fixed patch set (ti1) or a fixed layout
+            # (prebuilt) is active. Ticking it re-enables the greyed controls and
+            # expands the targen frame.
+            override_row = QWidget(inner)
             override_l = QHBoxLayout(override_row)
             override_l.setContentsMargins(0, 0, 0, 2)
             if tool == "targen":
@@ -1952,8 +1991,7 @@ class TabChart(QWidget):
             override_l.addWidget(ov_check)
             override_l.addStretch()
             override_l.addWidget(ov_tip)
-            override_row.setVisible(False)
-            grp_layout.addWidget(override_row)
+            override_row.setVisible(False)   # added to inner_layout below the loop
             ov_check.toggled.connect(self._update_preset_locks)
             ov_check.toggled.connect(self._refresh_manual_command_preview)
             ov_check.clicked.connect(
@@ -1964,8 +2002,7 @@ class TabChart(QWidget):
             # Expert is collapsed by default; the targen Basic frame starts
             # collapsed and auto-expands when "Edit patch recipe" is ticked
             # (wired in _update_preset_locks), so a locked recipe stays tidy.
-            basic_grp = CollapsibleGroupBox(
-                tr("Basic"), grp, collapsed=(tool == "targen"))
+            basic_grp = CollapsibleGroupBox(tr("Basic"), grp)
             basic_layout = QVBoxLayout(basic_grp.body)
             expert_grp = CollapsibleGroupBox(tr("Expert Options"), grp,
                                              collapsed=True)
@@ -2190,6 +2227,7 @@ class TabChart(QWidget):
             grp_layout.addWidget(expert_grp)
             if tool == "printtarg":
                 inner_layout.addWidget(_eng_w)   # engine toggle above printtarg
+            inner_layout.addWidget(override_row)  # override box above its frame
             inner_layout.addWidget(grp)
 
         self._update_manual_lb_visibility()
@@ -2415,6 +2453,10 @@ class TabChart(QWidget):
                 chk.blockSignals(True)
                 chk.setChecked(want)
                 chk.blockSignals(False)
+        # Any manual layout/recipe change routes through here, so this is the
+        # single hook for the live preview refresh (Knut, opt-in; guarded by a
+        # layout-signature check so it only fires on a real change).
+        self._maybe_schedule_auto_preview()
         if getattr(self, "_manual_info_lbl", None) is None:
             return
         try:
@@ -3165,6 +3207,9 @@ class TabChart(QWidget):
             self._manual_btn.setChecked(True)
         self._update_isis_preview_banner()
         self._refresh_name_prefix()     # apply the prefix to the now-active field
+        # Auto-update-preview is a Manual-only control (Knut).
+        if getattr(self, "_auto_preview_row_w", None) is not None:
+            self._auto_preview_row_w.setVisible(mode == "manual")
         # Keep the two tabs in step (Knut #9): carry the shared chart-defining
         # settings the user CHANGED in the tab they're leaving into the one they're
         # opening. Only changed fields move (snapshot-on-arrival / diff-on-leave),
@@ -4318,13 +4363,13 @@ class TabChart(QWidget):
             if self._manual_pages_spin is not None:
                 self._manual_pages_spin.setValue(int(s.get("manual_pages", 1)))
             if self._manual_auto_patches_check is not None:
-                auto_on = bool(s.get("manual_auto_patches", False))
+                auto_on = bool(s.get("manual_auto_patches", True))
                 self._manual_auto_patches_check.setChecked(auto_on)
                 self._on_auto_patches_toggled(auto_on)
             self._load_auto_neutral_states(
-                grey  = bool(s.get("manual_auto_grey",  False)),
-                white = bool(s.get("manual_auto_white", False)),
-                black = bool(s.get("manual_auto_black", False)),
+                grey  = bool(s.get("manual_auto_grey",  True)),
+                white = bool(s.get("manual_auto_white", True)),
+                black = bool(s.get("manual_auto_black", True)),
             )
             self._manual_left_clip_check.setChecked(
                 bool(s.get("chart_left_clip_info", False))
@@ -5201,11 +5246,13 @@ class TabChart(QWidget):
             w.setEnabled(targen_unlocked)
         for w in self._manual_printtarg_content:
             w.setEnabled(printtarg_unlocked)
-        # Collapse the targen Basic frame while the recipe is locked (Edit patch
-        # recipe off) to save space; expand it when the user unlocks it (Knut).
-        _tbg = getattr(self, "_manual_targen_basic_grp", None)
-        if _tbg is not None:
-            _tbg.set_collapsed(not targen_unlocked)
+        # When a preset locks the recipe, collapse the targen frame while it's
+        # locked and expand it the moment the user ticks "Edit patch recipe", so
+        # the now-editable controls come into view (Knut). Outside a lock the
+        # frame keeps its own collapsed-by-default / user-clicked state.
+        tgrp = getattr(self, "_manual_targen_grp", None)
+        if tgrp is not None and show_targen_cb:
+            tgrp.set_collapsed(not targen_unlocked)
 
     def _reset_override_checks(self) -> None:
         """Untick both override boxes without firing their pop-up.
@@ -6989,6 +7036,9 @@ class TabChart(QWidget):
             # offer to attach it.
             ti1 = tiffs[0].parent / f"{stem}.ti1"
             self._current_ti1_path = ti1 if ti1.is_file() else None
+            # Baseline the auto-preview signature to what we just rendered, so the
+            # refresh this generation triggers doesn't immediately re-render.
+            self._last_auto_sig = self._layout_signature()
             self._set_margin_chart(tiffs, ti2)
             # #79: arm the one-shot Guided→Manual transfer when this chart was
             # built in Guided mode, so opening Manual seeds the recipe used.
@@ -7416,6 +7466,78 @@ class TabChart(QWidget):
             log.debug("partial-last-page check skipped: %s", exc)
             return None
 
+    # ------------------------------------------------------------------
+    # Auto-update preview (Knut): live-refresh on layout changes
+    # ------------------------------------------------------------------
+    def _on_auto_preview_toggled(self, on: bool) -> None:
+        """Persist the auto-update-preview choice; confirm with the user the first
+        time they turn it on so they know what it does (Knut)."""
+        self._settings.set("auto_update_preview", bool(on))
+        if on:
+            InfoDialog(
+                tr("Auto-update preview is on"),
+                tr("From now on, the chart preview will refresh automatically "
+                   "whenever you change a layout setting — margins, patch size, "
+                   "columns, spacers, the clip border, and so on — once you've "
+                   "generated or loaded a chart.\n\n"
+                   "To keep it quick, ChromIQ re-lays-out the patches already in "
+                   "your chart; it does not pick new colours or re-run the patch "
+                   "generator. While this is on, the “there's a little room left "
+                   "on the last page” reminder is hidden so it doesn't interrupt "
+                   "you — you can still open the patch-set editor whenever you "
+                   "like to add or remove patches.\n\n"
+                   "Turn the option off any time to go back to refreshing the "
+                   "preview only when you click Generate Chart."),
+                self, min_width=560,
+            ).exec()
+        else:
+            self._auto_preview_timer.stop()
+
+    def _layout_signature(self) -> "str | None":
+        """A cheap fingerprint of the current layout settings, so the auto-preview
+        only re-renders when something actually changed (and the post-render
+        refresh doesn't loop)."""
+        try:
+            if (bool(self._settings.get("use_chromiq_layout_engine", False))
+                    and getattr(self, "_manual_layout_panel", None) is not None):
+                return repr(self._manual_layout_panel.get_recipe().to_dict())
+            return repr(self._printtarg_signature())
+        except Exception:  # noqa: BLE001
+            return None
+
+    def _maybe_schedule_auto_preview(self) -> None:
+        """Start the debounce timer to re-render the preview, if auto-update is on,
+        a chart already exists, nothing is running, and the layout actually
+        changed since the last render."""
+        if not bool(self._settings.get("auto_update_preview", False)):
+            return
+        # Manual mode only — ignored in Guided even if the option is on (Knut).
+        if self._current_mode() != "manual":
+            return
+        if self._runner.is_running:
+            return
+        ti1 = getattr(self, "_current_ti1_path", None)
+        if not (ti1 is not None and ti1.is_file()):
+            return
+        if self._layout_signature() == self._last_auto_sig:
+            return
+        self._auto_preview_timer.start(450)
+
+    def _auto_regenerate_preview(self) -> None:
+        """Re-lay-out the current chart's patch set with the current layout, to
+        refresh the preview live (Knut). Fast: no targen, same patches."""
+        if (self._runner.is_running
+                or self._current_mode() != "manual"
+                or not bool(self._settings.get("auto_update_preview", False))):
+            return
+        ti1 = getattr(self, "_current_ti1_path", None)
+        if not (ti1 is not None and ti1.is_file()):
+            return
+        # Record the signature we're about to render so the post-render refresh
+        # (same layout) doesn't immediately re-schedule another render.
+        self._last_auto_sig = self._layout_signature()
+        self._generate_from_ti1(ti1)
+
     def _maybe_warn_partial_last_page(self, ti2: Path) -> None:
         """If the patch set leaves a notably under-filled last page (or spilled
         onto a near-empty extra page), show a friendly heads-up with a button to
@@ -7427,6 +7549,10 @@ class TabChart(QWidget):
         "Auto patch count" on) the count is auto-filled to the page, so any small
         gap is just estimate rounding, not the user's choice — and Guided has no
         patch-set editor to point them at (Knut)."""
+        # While auto-update-preview is on, this reminder would interrupt every
+        # live layout tweak — suppress it (the user can still open the editor).
+        if bool(self._settings.get("auto_update_preview", False)):
+            return
         manual = (getattr(self, "_manual_btn", None) is not None
                   and self._manual_btn.isChecked())
         auto_count = (getattr(self, "_manual_auto_patches_check", None) is not None
@@ -7969,13 +8095,15 @@ class TabChart(QWidget):
         if self._manual_pages_spin is not None:
             self._manual_pages_spin.setValue(int(s.get("manual_pages", 1)))
         if self._manual_auto_patches_check is not None:
-            auto_on = bool(s.get("manual_auto_patches", False))
+            # All four targen-basic Auto options default ON (Knut): the patch
+            # count and neutral counts auto-fill unless the user opts out.
+            auto_on = bool(s.get("manual_auto_patches", True))
             self._manual_auto_patches_check.setChecked(auto_on)
             self._on_auto_patches_toggled(auto_on)
         self._load_auto_neutral_states(
-            grey  = bool(s.get("manual_auto_grey",  False)),
-            white = bool(s.get("manual_auto_white", False)),
-            black = bool(s.get("manual_auto_black", False)),
+            grey  = bool(s.get("manual_auto_grey",  True)),
+            white = bool(s.get("manual_auto_white", True)),
+            black = bool(s.get("manual_auto_black", True)),
         )
         # Restore manual triple-density. The toggle handler stashes the
         # current -a / -m / -P / -L widget values, so they need to reflect

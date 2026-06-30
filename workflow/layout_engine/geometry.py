@@ -337,14 +337,16 @@ def clip_area_mm(geom: Geom, paper_h_mm: float, paper_w_mm: float | None = None
 
     Returns ``(x, y, w, h)`` for the reserved left band — the whole zone from a
     small printer-safe inset out to the clip-border width (where the first patch
-    column begins), running from the top to the bottom margin — or ``None`` when
-    the instrument has no clip border.
+    column begins), running the FULL height of the page (only a small printer-safe
+    inset off the top and bottom edges) — or ``None`` when the instrument has no
+    clip border.
 
     The band spans the full clip zone (not just ``lbord`` after the patch
     margin): the patch margin only governs where PATCHES start, but the clip
     strip is white run-up the instrument grips, so its content uses the edge down
-    to ``CLIP_CONTENT_INSET_MM``. Otherwise a larger patch margin would needlessly
-    shrink the clip content (the Guided-vs-Manual size difference, #93).
+    to ``CLIP_CONTENT_INSET_MM``. It also runs the full page height rather than
+    being boxed in by the top/bottom patch margins (Knut), so the notes box / logo
+    can use the whole strip; only the printer-safe inset keeps it off the edges.
     """
     if geom.lbord <= 0:
         return None
@@ -354,13 +356,16 @@ def clip_area_mm(geom: Geom, paper_h_mm: float, paper_w_mm: float | None = None
     inset = min(getattr(geom, "text_edge_clip_mm", CLIP_CONTENT_INSET_MM),
                 clip_w * 0.2)
     width = max(0.0, clip_w - inset)
-    height = max(0.0, paper_h_mm - geom.margin_t - geom.margin_b)
+    # Full page height less the printer-safe inset top and bottom (Knut): the
+    # clip content is no longer bounded by the patch top/bottom margins.
+    v_inset = min(inset, paper_h_mm * 0.1)
+    height = max(0.0, paper_h_mm - 2.0 * v_inset)
     # Right-side band: mirror to the far edge (needs the paper width) (#93).
     if getattr(geom, "clip_side", "left") == "right" and paper_w_mm:
         x = paper_w_mm - clip_w
     else:
         x = inset
-    return (x, geom.margin_t, width, height)
+    return (x, v_inset, width, height)
 
 
 def clip_area_px(geom: Geom, paper_h_mm: float, dpi: int,

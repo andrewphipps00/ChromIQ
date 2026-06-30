@@ -162,8 +162,9 @@ def test_clip_area_only_when_clip_border():
     a10 = geometry.clip_area_mm(instruments.build("i1", border=10.0), 297.0)
     assert a6 is not None
     assert a6[0] == pytest.approx(inset)              # starts at the inset
+    assert a6[1] == pytest.approx(inset)              # full height: top inset only
     assert a6[2] == pytest.approx(26.0 - inset)       # full zone minus inset
-    assert a6[3] == pytest.approx(297.0 - 12.0)
+    assert a6[3] == pytest.approx(297.0 - 2.0 * inset)  # full page height − insets
     # a larger patch margin must NOT shrink the clip content any more (Guided
     # used to come out narrower than Manual).
     assert a10[2] == pytest.approx(a6[2])

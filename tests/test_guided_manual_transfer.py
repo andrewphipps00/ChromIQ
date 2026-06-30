@@ -174,3 +174,29 @@ def test_engine_toggle_converts_settings_both_ways(tab):
     assert _manual(tab, "printtarg", "-p") == "A4R"
     assert int(_manual(tab, "printtarg", "-m")) == 12
     assert bool(_manual(tab, "printtarg", "-L")) is True  # clip off → -L on
+
+
+def test_auto_preview_is_manual_only_and_persists(tab):
+    """The auto-update-preview option is Manual-only (hidden + ignored in Guided)
+    and its checkbox state is remembered (Knut)."""
+    tab._switch_mode("guided")
+    assert not tab._auto_preview_row_w.isVisibleTo(tab)
+    tab._switch_mode("manual")
+    assert tab._auto_preview_row_w.isVisibleTo(tab)
+    # default off; toggling persists to settings
+    assert tab._auto_preview_check.isChecked() is False
+    tab._settings.set("auto_update_preview", True)
+    # ignored in Guided even when on: scheduling is a no-op there
+    tab._switch_mode("guided")
+    tab._auto_preview_timer.stop()
+    tab._maybe_schedule_auto_preview()
+    assert not tab._auto_preview_timer.isActive()
+
+
+def test_targen_auto_options_default_on(tab):
+    """All four targen-basic Auto options default ON in Manual (Knut)."""
+    tab._switch_mode("manual")
+    assert tab._manual_auto_patches_check.isChecked() is True
+    assert tab._manual_auto_grey_check.isChecked() is True
+    assert tab._manual_auto_white_check.isChecked() is True
+    assert tab._manual_auto_black_check.isChecked() is True
