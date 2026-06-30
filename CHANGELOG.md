@@ -1,5 +1,16 @@
 # Changelog
 
+## v3.13.0-beta.41
+
+### 🐛 Fixed
+- **Area-first now always fills the patch area for the chart's patch count.** The
+  "minimum patch width" was being used like an exact size when the count was fixed
+  (a loaded patch set / live re-layout), leaving a big gap on the right/bottom.
+  Now the patches are sized so the whole margin box is filled — they grow above
+  the minimum as needed (e.g. 7.5 mm minimum with 576 patches → ~8.7 mm), and the
+  height follows the resulting width via the height-%. The minimum is a floor, not
+  a fixed value.
+
 ## v3.13.0-beta.40
 
 ### 🐛 Fixed
