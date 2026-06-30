@@ -1,5 +1,20 @@
 # Changelog
 
+## v3.13.0-beta.35
+
+### 🔧 Changed
+- **Guided mode always uses the ChromIQ engine** now (it reproduces printtarg's
+  Guided geometry exactly); the "Use the ChromIQ layout engine" toggle governs
+  the Manual tab only.
+- **Switching that Manual toggle converts your settings** between the printtarg
+  controls and the engine layout panel (instrument, paper, margins, patch scale,
+  clip border, density, strip-length limit), so the layout you set up isn't lost
+  when you flip it.
+- **Tab switching is tidier:** a plain Guided↔Manual switch carries only the
+  instrument and paper; the rest of the settings transfer when you actually
+  generate the chart (no more half-settings jumping between tabs).
+- ColorMunki double-density now staggers in Guided, matching printtarg's rig.
+
 ## v3.13.0-beta.34
 
 ### 🐛 Fixed
