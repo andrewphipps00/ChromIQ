@@ -339,3 +339,25 @@ def test_use_instrument_margins_fills_and_locks(app):
     # hidden when no lookup is wired
     bare = LayoutOptionsPanel(with_selectors=True)
     assert not bare.use_instr_margins.isVisibleTo(bare)
+
+
+def test_i1_clip_on_defaults_to_notes(app):
+    """Turning the i1/p3 clip border ON (its Mode combo) defaults the clip content
+    to the notes box, not 'none' — mirroring CM/SS. A loaded recipe that keeps the
+    clip border on with no content is left alone (Knut)."""
+    from dataclasses import replace
+    from ui.dialogs.layout_options_panel import LayoutOptionsPanel
+    from workflow.layout_engine.presets import default_recipe
+    p = LayoutOptionsPanel(with_selectors=True)
+    # chart made with the clip suppressed (content off), user turns it back on
+    p.set_recipe(replace(default_recipe("i1", "A4"),
+                         clip_border=False, clip_content_mode="off"))
+    p.mode.setCurrentIndex(p.mode.findData("clip"))
+    assert p.clip_content_mode.currentData() == "notes"
+    p.mode.setCurrentIndex(p.mode.findData("noclip"))
+    assert p.clip_content_mode.currentData() == "off"
+    # a deliberately content-less clip border survives loading unchanged
+    p2 = LayoutOptionsPanel(with_selectors=True)
+    p2.set_recipe(replace(default_recipe("i1", "A4"),
+                          clip_border=True, clip_content_mode="off"))
+    assert p2.clip_content_mode.currentData() == "off"

@@ -216,6 +216,7 @@ class LayoutOptionsPanel(QWidget):
             self.instr.currentIndexChanged.connect(self._on_instr_changed)
             self.paper.currentIndexChanged.connect(self._on_paper_changed)
             self.mode.currentIndexChanged.connect(self._apply_mode_defaults)
+            self.mode.currentIndexChanged.connect(self._sync_clip_content_for_mode)
             self.mode.currentIndexChanged.connect(self._emit)
             self.mode.currentIndexChanged.connect(self._update_clip_visibility)
             self._on_instr_changed()
@@ -1350,6 +1351,17 @@ class LayoutOptionsPanel(QWidget):
     def _on_clip_enable_changed(self, *_a) -> None:
         """The CM/SS clip-border On/Off selector drives the content on/off."""
         self.set_clip_enabled(self.clip_enable.currentData() == "on")
+
+    def _sync_clip_content_for_mode(self, *_a) -> None:
+        """i1 / i1Pro 3+ use the Mode combo as the clip-border On/Off switch.
+        Turning the clip border ON should default its content to the notes box
+        (not “none”), and clear it when OFF — mirroring the CM/SS clip-enable
+        behaviour (Knut). Skipped during load so a recipe that deliberately had
+        the clip border on with no content keeps it."""
+        if self._loading or self.instr is None or self.mode is None:
+            return
+        if self.instr.currentData() in ("i1", "p3"):
+            self.set_clip_enabled(self.mode.currentData() == "clip")
 
     def clip_enabled(self) -> bool:
         """Whether a clip / notes band is currently turned on (content set)."""
