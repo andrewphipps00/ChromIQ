@@ -1,5 +1,25 @@
 # Changelog
 
+## v3.13.0-beta.48
+
+### 🔧 Changed
+- **Device-link Tool polish:**
+  - Browse buttons now use the cyan folder icon (matching the rest of the app)
+    instead of a "Browse…" text button.
+  - Profile pickers add the OS ICC/ICM profile folders to the file-dialog
+    sidebar shortcuts; the image picker shows a thumbnail preview pane.
+  - **Viewing conditions** are now two separate dropdowns — *Screen* (monitor in
+    a typical / bright / darkened room) and *Print* (normal indoor light / D50
+    viewing booth / CIE 116-1995 / partial mid-tone adaptation) — each with a
+    plain-language explanation, replacing the three combined presets.
+  - The **Create device-link** button now shows an inactive state (muted fill
+    with a cyan accent border) until the required fields are filled.
+
+### 🐛 Fixed
+- File-dialog ICC profile sidebar shortcuts are now correct cross-platform:
+  honour `%SystemRoot%` on Windows (not a hardcoded `C:`) and include the modern
+  `~/.local/share/icc` per-user directory on Linux.
+
 ## v3.13.0-beta.47
 
 ### ➕ Added
