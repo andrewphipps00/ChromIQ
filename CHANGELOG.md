@@ -1,5 +1,12 @@
 # Changelog
 
+## v3.13.0-beta.42
+
+### 🐛 Fixed
+- Area-first fill refinement: a normal full chart now keeps the patch aspect you
+  set (e.g. 100% height stays roughly square); the grow-to-fill only steps in
+  when a fixed patch set would otherwise leave a gap.
+
 ## v3.13.0-beta.41
 
 ### 🐛 Fixed
