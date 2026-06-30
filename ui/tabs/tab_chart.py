@@ -2310,6 +2310,7 @@ class TabChart(QWidget):
         Persist the choice, keep the engine and the old printtarg ChromIQ
         clip-border mutually exclusive (the engine replaces the printtarg path),
         and refresh the manual UI so the right frame shows."""
+        was_on = bool(self._settings.get("use_chromiq_layout_engine", False))
         self._settings.set("use_chromiq_layout_engine", bool(on))
         if on:
             # Remember + clear the old ChromIQ clip-border so use_engine doesn't
@@ -2320,7 +2321,85 @@ class TabChart(QWidget):
         elif getattr(self, "_engine_clip_saved", False):
             self._settings.set("i1pro_chromiq_clip_style", True)
             self._engine_clip_saved = False
+        # Convert the shared layout settings across the toggle so the layout you
+        # dialled in on one side isn't lost on the other (Knut #3). Only the
+        # convertible fields move (instrument, paper, margins, patch scale, clip
+        # border, density, strip-limit); engine-only / printtarg-only options stay
+        # on their own side.
+        if on and not was_on:
+            self._convert_printtarg_to_engine()
+        elif was_on and not on:
+            self._convert_engine_to_printtarg()
         self._refresh_manual_command_preview()
+
+    def _convert_printtarg_to_engine(self) -> None:
+        """Engine OFF→ON: seed the engine layout panel from the printtarg widgets
+        the user had set, overriding only the shared fields and keeping the
+        panel's engine-only options (layout mode, columns, spacers…) (Knut #3)."""
+        panel = getattr(self, "_manual_layout_panel", None)
+        if panel is None:
+            return
+        if not self._manual_panel_inited:
+            self._init_manual_layout_panel()
+        try:
+            from dataclasses import replace
+            g = lambda f, d: self._manual_get("printtarg", f, d)
+            instr = str(g("-i", "i1"))
+            suppress = bool(g("-L", True))           # -L = no left/clip border
+            dd = bool(g("-h", False))
+            td = (self._manual_td_check is not None
+                  and self._manual_td_check.isChecked() and instr == "CM")
+            margin = float(g("-m", 6) or 6)
+            recipe = replace(
+                panel.get_recipe(),
+                instrument=instr, paper=str(g("-p", "A4")),
+                pscale=float(g("-a", 1.0) or 1.0),
+                margin_top=margin, margin_right=margin,
+                margin_bottom=margin, margin_left=margin, border=margin,
+                nolimit=bool(g("-P", False)),
+                cm_density=(3 if td else 2 if dd else 1),
+                clip_border=((not suppress) if instr in ("i1", "p3")
+                             else panel.get_recipe().clip_border),
+                clip_content_mode=(("off" if suppress else "notes")
+                                   if instr in ("i1", "p3")
+                                   else panel.get_recipe().clip_content_mode),
+            )
+            panel.set_recipe(recipe)
+            if (getattr(panel, "pages", None) is not None
+                    and self._manual_pages_spin is not None):
+                panel.pages.setValue(int(self._manual_pages_spin.value()))
+        except Exception:  # noqa: BLE001 — never block the toggle
+            log.warning("printtarg→engine conversion failed", exc_info=True)
+
+    def _convert_engine_to_printtarg(self) -> None:
+        """Engine ON→OFF: write the engine panel's shared settings back onto the
+        printtarg widgets, so turning the engine off keeps the same instrument,
+        paper, margins, patch scale, clip border, density and strip-limit (#3)."""
+        panel = getattr(self, "_manual_layout_panel", None)
+        if panel is None:
+            return
+        try:
+            r = panel.get_recipe()
+            # Instrument + paper first (changing -i cascades the instrument
+            # defaults for -a/-m, so set those afterwards).
+            self._set_manual_value("printtarg", "-i", r.instrument)
+            self._set_manual_value("printtarg", "-p", r.paper)
+            self._set_manual_value("printtarg", "-a", round(float(r.pscale), 3))
+            self._set_manual_value("printtarg", "-m", int(round(r.margin_top)))
+            self._set_manual_value("printtarg", "-P", bool(r.nolimit))
+            self._set_manual_value(
+                "printtarg", "-h", bool(r.cm_density == 2))
+            self._set_manual_value(
+                "printtarg", "-L",
+                bool(r.instrument in ("i1", "p3") and not r.clip_border))
+            if self._manual_td_check is not None:
+                self._manual_td_check.setChecked(
+                    r.instrument == "CM" and r.cm_density == 3)
+            if (self._manual_pages_spin is not None
+                    and getattr(panel, "pages", None) is not None):
+                self._manual_pages_spin.setValue(int(panel.pages.value()))
+        except Exception:  # noqa: BLE001 — never block the toggle
+            log.warning("engine→printtarg conversion failed", exc_info=True)
 
     def _refresh_manual_command_preview(self) -> None:
         """Rebuild the manual info label from the current ParameterWidget state.
@@ -3186,6 +3265,9 @@ class TabChart(QWidget):
     _SHARED_SETTINGS = ("instrument", "paper", "pages", "double_density",
                         "triple_density", "left_border", "no_strip_limit",
                         "precond")
+    # On a plain tab switch (no Generate) only these carry — the rest waits for
+    # the post-Generate transfer (Knut #2).
+    _SWITCH_CARRY_FIELDS = ("instrument", "paper")
 
     def _manual_get(self, tool: str, flag: str, default: Any) -> Any:
         for pw in self._manual_widgets.get(tool, []):
@@ -3303,7 +3385,11 @@ class TabChart(QWidget):
             return
         if not now:
             return
-        for field in self._SHARED_SETTINGS:
+        # A plain tab switch carries ONLY instrument + paper, so the two tabs
+        # agree on the device without the surprise of margins/density/etc. jumping
+        # across un-generated (Knut: full transfer happens on Generate). Snapshot/
+        # diff still guards against an unrepresentable paper clobbering the source.
+        for field in self._SWITCH_CARRY_FIELDS:
             new = now.get(field)
             if before is None or before.get(field) != new:
                 self._shared_set(dst, field, new)

@@ -77,16 +77,19 @@ def test_no_transfer_without_arming(tab):
     assert _manual(tab, "printtarg", "-p") == "A3"
 
 
-def test_switch_carries_changed_instrument_both_ways(tab):
-    """Editing a shared setting in one tab and switching carries it to the other
-    (Knut #9). Snapshot/diff means only what the user changed moves."""
+def test_switch_carries_instrument_paper_not_the_rest(tab):
+    """A plain tab switch (no Generate) carries ONLY instrument + paper, so the
+    tabs agree on the device; the rest (density etc.) waits for the post-Generate
+    transfer (Knut #2). Snapshot/diff = only what changed moves."""
     tab._switch_mode("guided")
     tab._instr_combo.setCurrentIndex(tab._instr_combo.findData("CM"))
+    tab._paper_combo.setCurrentIndex(tab._paper_combo.findData("A4R"))
     tab._dd_check.setChecked(True)
     tab._switch_mode("manual")
-    assert _manual(tab, "printtarg", "-i") == "CM"
-    assert bool(_manual(tab, "printtarg", "-h")) is True
-    # Now change it in Manual and switch back — Guided reflects it.
+    assert _manual(tab, "printtarg", "-i") == "CM"     # device carries
+    assert _manual(tab, "printtarg", "-p") == "A4R"
+    assert bool(_manual(tab, "printtarg", "-h")) is False  # density does NOT
+    # Manual→Guided also carries the device.
     tab._set_manual_value("printtarg", "-i", "p3")
     tab._switch_mode("guided")
     assert tab._instr_combo.currentData() == "p3"
@@ -145,3 +148,29 @@ def test_engine_recipe_carries_clip_suppression_and_layout(tab):
     r2 = tab._manual_layout_panel.get_recipe()
     assert r2.clip_border is True
     assert r2.clip_content_mode == "notes"
+
+
+def test_engine_toggle_converts_settings_both_ways(tab):
+    """Flipping the Manual engine toggle converts the shared layout settings
+    across the two representations, so the layout isn't lost (Knut #3)."""
+    from dataclasses import replace
+    tab._settings.set("use_chromiq_layout_engine", False)
+    tab._switch_mode("manual")
+    tab._set_manual_value("printtarg", "-i", "i1")
+    tab._set_manual_value("printtarg", "-p", "A4")
+    tab._set_manual_value("printtarg", "-m", 8)
+    tab._set_manual_value("printtarg", "-a", 0.9)
+    tab._set_manual_value("printtarg", "-L", False)      # clip border ON
+    tab._manual_engine_check.setChecked(True)            # OFF→ON
+    r = tab._manual_layout_panel.get_recipe()
+    assert r.instrument == "i1" and r.paper == "A4"
+    assert r.margin_top == 8.0 and r.pscale == 0.9
+    assert r.clip_border is True                          # -L off → clip on
+    # change the panel, toggle off → printtarg widgets follow
+    tab._manual_layout_panel.set_recipe(replace(
+        r, paper="A4R", margin_top=12, margin_right=12, margin_bottom=12,
+        margin_left=12, clip_border=False, pscale=1.1))
+    tab._manual_engine_check.setChecked(False)           # ON→OFF
+    assert _manual(tab, "printtarg", "-p") == "A4R"
+    assert int(_manual(tab, "printtarg", "-m")) == 12
+    assert bool(_manual(tab, "printtarg", "-L")) is True  # clip off → -L on
