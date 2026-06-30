@@ -51,6 +51,9 @@ def test_saved_tiff_colours_match_ti2_at_every_location(tmp_path):
     loc_dev = {p.loc: p.dev for p in spec.patches if p.loc}
     assert loc_dev, "no SAMPLE_LOC patches parsed from .ti2"
 
+    # build_chart sizes area-first patches to fill the box for the actual patch
+    # count, so recompute the geom with the same count or the rects diverge.
+    kw["area_target_count"] = len(spec.patches)
     geom = instruments.geom_from_build_kwargs(kw)
     w, h = papers.dimensions_mm("A4")
     rects = geometry.patch_rects_px(geom, w, h, res.layout, kw["dpi"],

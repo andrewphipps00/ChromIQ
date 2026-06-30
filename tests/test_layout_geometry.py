@@ -670,3 +670,32 @@ def test_edge_spacers_counted_in_realized_margins():
     assert top_on == pytest.approx(place_on.y_of(0) - g_on.pspa, abs=0.2)
     # Edge off: it measures to the first patch (no overhang).
     assert top_off == pytest.approx(place_off.y_of(0), abs=0.2)
+
+
+def test_area_first_fills_box_for_fixed_count():
+    """Area-first must FILL the margin box for the chart's actual patch count
+    (Knut: the box is law). A fixed count sizes the patches up/down so they fill —
+    the minimum width is only a floor, not an exact size that leaves a gap."""
+    from workflow.layout_engine import area_fit
+    w, h = A4
+    def fill(minw, n):
+        kw = dict(instrument="i1", paper="A4", layout_mode="area_first",
+                  area_method="by_width", area_min_patch=minw, area_ratio=1.0,
+                  spacer_on=True, edge_spacers=True, clip_border=True,
+                  clip_border_width=26.0, margins=(38.0, 9.0, 9.0, 26.0),
+                  area_target_count=n)
+        pw, ph = area_fit.derive_area_patch_size(kw)
+        g = instruments.geom_from_build_kwargs({**kw, "patch_w": pw, "patch_h": ph})
+        lay = geometry.compute(g, w, h, n)
+        _, r, _, b = geometry.realized_margins_mm(g, w, h, lay)
+        return pw, r, b
+    # 576 patches with min 7.5 → patches grow ABOVE the min to fill (Knut's
+    # "even if it becomes 8.7 mm"); right/bottom land on the ~9 mm margins.
+    pw, r, b = fill(7.5, 576)
+    assert pw > 8.0                       # grew past the 7.5 minimum to fill
+    assert r < 12.0 and b < 12.0         # fills to the margins, no big gap
+    # Fewer patches → bigger; more → smaller; both still fill.
+    assert fill(7.5, 300)[0] > fill(7.5, 576)[0] > fill(7.5, 900)[0]
+    for n in (300, 576, 900):
+        _, r, b = fill(7.5, n)
+        assert r < 12.0 and b < 14.0

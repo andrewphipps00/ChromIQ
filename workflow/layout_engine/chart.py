@@ -200,6 +200,10 @@ def build_chart(
         "area_method": area_method, "area_cols": area_cols,
         "area_rows": area_rows, "area_ratio": area_ratio,
         "area_min_patch": area_min_patch,
+        # The chart's actual patch count, so area-first sizes the patches to FILL
+        # the box with exactly this many (a fixed patch set still fills the area,
+        # not just packs at the minimum) (Knut). Ignored by patch-first.
+        "area_target_count": len(target.patches),
         "area_default_w": area_default_w, "area_default_h": area_default_h,
         "dpi": dpi, "draw_indicators": draw_indicators,
         "indicator_font": indicator_font, "indicator_size_mm": indicator_size_mm,
