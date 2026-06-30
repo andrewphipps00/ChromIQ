@@ -1,5 +1,21 @@
 # Changelog
 
+## v3.13.0-beta.38
+
+### 🔧 Changed
+- **Clip-border content now uses the full height of the page** (only a small
+  printer-safe inset off the top/bottom edges), instead of being boxed in by the
+  patch margins — so the notes box / logo can use the whole strip.
+- **"Edit patch recipe" moved above the targen frame** so it stays visible when
+  that frame is collapsed; ticking it expands the frame.
+- New **"Auto-update preview when a layout setting changes"** option in Manual
+  (remembered between sessions, with an info pop-up and ⓘ tooltip). Once you've
+  generated a chart, changing a layout setting re-renders the preview by itself —
+  it re-lays-out the existing patches (fast, no new colours) and hides the
+  "room left on the last page" reminder while on. Guided ignores it.
+- In Manual, the four targen **Auto** options (patch count, white, black, grey
+  steps) now default **on**.
+
 ## v3.13.0-beta.37
 
 ### 🔧 Changed
