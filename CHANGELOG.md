@@ -1,5 +1,13 @@
 # Changelog
 
+## v3.13.0-beta.43
+
+### 🐛 Fixed
+- Area-first now reliably **fills the patch area for any patch set below one
+  page's capacity** (including counts right at the capacity boundary that used to
+  leave a gap), and a set larger than one page **overflows to more pages at the
+  minimum size — never shrinks below the minimum**.
+
 ## v3.13.0-beta.42
 
 ### 🐛 Fixed
