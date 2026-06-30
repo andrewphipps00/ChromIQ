@@ -157,51 +157,59 @@ def derive_area_patch_size(kw: dict) -> tuple[float, float] | None:
         h_min = (pw * ratio) if (pw is not None and ratio > 0) else (
             (min_w * ratio) if ratio > 0 else (pw or min_w))
         ph = max(_MIN_PATCH_MM, _rows_filling(_max_rows_at(h_min)))
-        # If the chart's patch count FITS ON ONE PAGE but is too small to fill it
-        # at the min-fill size (a loaded patch set / live re-layout, or just fewer
-        # patches than the page holds), grow the patches so they fill the area —
-        # the box is law (Knut). The grow is a UNIFORM scale, so the height-%
-        # aspect set above is preserved, and it never goes below the minimum
-        # (scale ≥ 1). When the count needs MORE than one page, the min size stays
-        # and the chart overflows to further pages (compute() splits, last page
-        # partial) — it never shrinks below the minimum to cram onto one page.
+        # If the chart's patch count is below one page's capacity, grow the
+        # patches so they fill the area — the box is law (Knut). The height-% is a
+        # MINIMUM: the patch height is never below width × % (`_floor_ph`); if a
+        # grid would make it shorter, fewer/taller rows are used and the count
+        # overflows to more pages. The grow is only used when it keeps the SAME
+        # page count as the plain min-fill (never adds a page just to grow).
         target = int(kw.get("area_target_count") or 0)
+
+        def _floor_ph(pw_v: float) -> float:
+            """Height that fills the most rows while staying ≥ the width-% floor."""
+            fl = pw_v * ratio if (pw_v and ratio > 0) else _MIN_PATCH_MM
+            return max(_MIN_PATCH_MM, _rows_filling(_max_rows_at(fl)))
+
+        # Min-fill already respects the floor; clamp once more for safety.
+        if pw is not None:
+            ph = max(ph or 0.0, _floor_ph(pw))
         if target > 0 and pw is not None and ph is not None:
-            try:
-                # Capacity at the min-fill size in the SAME (area-first / law) mode
-                # the chart actually renders in — building from `base` (patch-
-                # first) under-counts by the furniture reserve and wrongly judged
-                # near-capacity counts as "over" (Knut: 600-of-644 left a gap).
-                g0 = instruments.geom_from_build_kwargs(
-                    {**kw, "patch_w": pw, "patch_h": ph})
-                cap0 = geometry.patches_per_sheet(g0, w_mm, h_mm)
-            except Exception:
-                cap0 = 0
-            if 0 < target < cap0:
-                # Pick a column × row grid that holds the count and is balanced to
-                # the box + patch aspect, then stretch the patches to span the box
-                # on both axes — so the count fills the area with the right shape.
-                # cols/rows ≈ balanced: cols·rows = N and cols/rows = ratio·W/H.
-                import math
-                r_ = ratio if ratio > 0 else 1.0
-                cmax = _cols_at(min_w) or 1            # most columns at the min
-                cols = max(1, min(cmax, round(
-                    math.sqrt(target * r_ * avail_w / max(1e-6, arowl)))))
-                rows = max(1, math.ceil(target / cols))
+            import math
+            cmax = _cols_at(min_w) or 1
+            # When the count FITS ON ONE PAGE, grow the patches so they fill it:
+            # try every column count from the max (smallest, min-width patches) down,
+            # fill the width with that many strips, then fill the height with exactly
+            # the rows the count needs — but never shorter than the width-% floor
+            # (cap the rows at the floor). Among the column counts that hold the whole
+            # count on a single page, pick the BIGGEST patch (most filled). This
+            # fills near-capacity counts a coarser column-only grow would leave
+            # gapped, while honouring the floor. A count that does NOT fit one page
+            # keeps the min-fill size and overflows to more pages, last page partial
+            # (Knut: overflow, not shrink — and don't shrink-to-balance either).
+            best = None                                # (-pw, pw, ph)
+            for cols in range(cmax, 0, -1):
+                if cols > target:                      # no empty trailing columns
+                    continue
                 _pw = _fit_columns(base, w_mm, h_mm, cols, max_pw=avail_w)
-                if _pw:
-                    pw = _pw
-                # Height fills `rows` rows. _rows_filling inverts compute()'s row
-                # formula, but float rounding can leave compute one row short —
-                # which would push a strip onto a second page. Nudge the height
-                # down until at least `rows` rows are guaranteed to fit, so the
-                # grid stays on one page (Knut: don't spill / leave a gap).
+                if not _pw:
+                    continue
+                rows_need = max(1, math.ceil(target / cols))
+                rows_floor = _max_rows_at(_pw * ratio) if ratio > 0 else rows_need
+                if cols * rows_floor < target:         # can't hold it on one page
+                    continue                           #   at the floor → skip (grow
+                rows = rows_need                       #   would force a 2nd page)
                 _ph = _rows_filling(rows)
+                # compute() can fall a row short on float rounding; nudge until the
+                # rows are guaranteed, so the grid doesn't spill onto a stray page.
                 for _ in range(40):
                     if _max_rows_at(_ph) >= rows:
                         break
                     _ph -= 0.02
-                ph = max(_MIN_PATCH_MM, _ph)
+                _ph = max(_MIN_PATCH_MM, _ph)
+                if best is None or -_pw < best[0]:
+                    best = (-_pw, _pw, _ph)
+            if best is not None:
+                pw, ph = best[1], best[2]
     else:                                           # --- by_grid: columns / rows ---
         # Pinned dimensions size their patches to fill exactly that many; an "auto"
         # dimension picks a count that gives a REASONABLE patch size — the ratio-

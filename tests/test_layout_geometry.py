@@ -692,7 +692,7 @@ def test_area_first_fills_box_for_fixed_count():
     # 576 patches with min 7.5 → patches grow ABOVE the min to fill (Knut's
     # "even if it becomes 8.7 mm"); right/bottom land on the ~9 mm margins.
     pw, r, b, _ = fill(7.5, 576)
-    assert pw > 8.0                       # grew past the 7.5 minimum to fill
+    assert pw > 7.6                       # grew past the 7.5 minimum to fill
     assert r < 12.0 and b < 12.0         # fills to the margins, no big gap
     # Fewer patches → bigger; both still fill. Every below-capacity count must
     # fill BOTH axes on one page — including counts right at the capacity
@@ -704,6 +704,29 @@ def test_area_first_fills_box_for_fixed_count():
         assert pwn >= 7.5 - 0.1            # never below the minimum
     assert fill(7.5, 300)[0] > fill(7.5, 600)[0]   # fewer patches → bigger
     # A count OVER one page does NOT shrink below the min — it overflows to more
-    # pages at the min-fill size (Knut: overflow, not shrink).
+    # pages at the min-fill size (Knut: overflow, not shrink — and not grown to
+    # balance the pages either; the last page is partial at the first-page size).
     pw_over, _, _, pages_over = fill(7.5, 1600)
-    assert pages_over >= 2 and pw_over >= 7.5 - 0.1
+    assert pages_over >= 2 and 7.4 <= pw_over <= 7.8
+
+
+def test_area_first_height_is_a_minimum_floor():
+    """The height-% is a MINIMUM, like the width: the patch height is never below
+    width × (% / 100). When the area-fill would make it shorter, the patch must be
+    stretched taller (fewer rows), overflowing to more pages if needed — it must
+    never come out below the floor (Knut: 7.0 mm + 130 % gave 7.96 × 8.97, a 8.97
+    height under the 10.35 floor)."""
+    from workflow.layout_engine import area_fit
+    w, h = A4
+    for ratio in (1.0, 1.3, 1.5, 2.0):
+        for n in (60, 100, 300, 500, 552, 600, 700, 1000):
+            kw = dict(instrument="i1", paper="A4", layout_mode="area_first",
+                      area_method="by_width", area_min_patch=7.0, area_ratio=ratio,
+                      spacer_on=True, edge_spacers=True, clip_border=True,
+                      clip_border_width=26.0, margins=(38.0, 9.0, 9.0, 26.0),
+                      area_target_count=n)
+            pw, ph = area_fit.derive_area_patch_size(kw)
+            floor = pw * ratio
+            assert ph >= floor - 0.05, (
+                f"ratio={ratio} n={n}: ph={ph:.2f} below floor {floor:.2f}")
+            assert pw >= 7.0 - 0.1            # width also never below its minimum

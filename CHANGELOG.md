@@ -1,5 +1,17 @@
 # Changelog
 
+## v3.13.0-beta.44
+
+### 🐛 Fixed
+- Area-first **"minimum patch height %" is now a true minimum**: the patch height
+  is never below `patch width × (% / 100)`. When filling the box would make the
+  patches shorter than that floor, they are stretched taller (fewer rows) and the
+  count overflows to more pages if needed — it never comes out under the set
+  height %. (Knut: 7.0 mm width + 130 % was producing 7.96 × 8.97 mm, an 8.97 mm
+  height below the 10.35 mm floor; it now fills on one page at the correct shape.)
+- Near-capacity counts that grew by columns alone could leave a wide right-edge
+  gap; the fill now spans both axes for every below-capacity count.
+
 ## v3.13.0-beta.43
 
 ### 🐛 Fixed
