@@ -1,5 +1,23 @@
 # Changelog
 
+## v3.13.0-beta.47
+
+### ➕ Added
+- **New Tool: "Create device-link profile"** (Tools menu). Builds an ICC
+  device-link from a source profile (sRGB, AdobeRGB, ProPhoto…) and your printer
+  profile, baking the gamut mapping in up front — apply it later in Photoshop's
+  *Convert to Profile* or a RIP for repeatable colour across a print series.
+  Wraps ArgyllCMS `collink`.
+  - Friendly presets for rendering style, viewing conditions and quality, with
+    an info (ⓘ) explanation on every option.
+  - **Expert section** (collapsible): optimise the mapping for one specific
+    image (via `tiffgamut`), abstract "tweak" profile, bake-in calibration,
+    3DLUT export (.cube / eeColor / MadVR), inverse-table gamut mode, and forced
+    white point.
+  - **ICC v4 sources are converted to v2 automatically** (Argyll only reads v2)
+    for standard matrix RGB profiles; the converted copy is a temp file removed
+    after the link is built. Non-convertible v4 profiles get a clear message.
+
 ## v3.13.0-beta.46
 
 ### 🐛 Fixed
