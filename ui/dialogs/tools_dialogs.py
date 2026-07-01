@@ -2024,6 +2024,9 @@ def open_tool_dialog(
     elif key == "scanner_target":
         from ui.dialogs.scanin_target_dialog import ScaninTargetDialog
         dlg = ScaninTargetDialog(settings, parent)
+    elif key == "scanner_profile":
+        from ui.dialogs.scanin_dialog import ScannerProfileDialog
+        dlg = ScannerProfileDialog(runner, settings, parent)
     elif key == "translate":
         from ui.dialogs.translation_dialog import TranslationDialog
         dlg = TranslationDialog(settings, parent)

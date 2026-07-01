@@ -82,6 +82,10 @@ class ScaninTargetDialog(_ToolDialogBase):
     def __init__(self, settings, parent: QWidget | None = None) -> None:
         super().__init__(settings, parent)
         self._ti3_path: Path | None = None
+        # Readable secondary-text colour (palette(mid) is too faint on the dialog
+        # background in both themes).
+        light = resolve_mode(settings.get("appearance", "auto")) == "light"
+        self._hint_color = "#4a4a4a" if light else "#b8b8b8"
         self._build_inputs()
         self._run_btn.setObjectName("primary")
         self.setStyleSheet(self.styleSheet() + neutral_controls_qss(SPEC_GREEN))
@@ -134,14 +138,14 @@ class ScaninTargetDialog(_ToolDialogBase):
 
         self._note = QLabel("", self)
         self._note.setWordWrap(True)
-        self._note.setStyleSheet("color: palette(mid); font-size: 12px;")
+        self._note.setStyleSheet(f"color: {self._hint_color}; font-size: 12px;")
         form.addWidget(self._note)
 
         out_note = QLabel(
             tr("The scanner files (.cht + .cie) are saved next to your chart. "
             "Multi-page charts get one .cht per page and a single .cie."), self)
         out_note.setWordWrap(True)
-        out_note.setStyleSheet("color: palette(mid); font-size: 12px;")
+        out_note.setStyleSheet(f"color: {self._hint_color}; font-size: 12px;")
         form.addWidget(out_note)
 
     # ------------------------------------------------------------------ pick
