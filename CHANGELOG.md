@@ -1,5 +1,29 @@
 # Changelog
 
+## v3.13.0-beta.61
+
+### ✨ Added
+- **Scanner profiling** — build an ICC profile for your **scanner** from a
+  printed ChromIQ chart, no dedicated target chart needed (#97, #98):
+  - After measuring, tick **"Also save scanner-profiling files for this chart"**
+    in the "All Stripes Read" dialog (or use **Tools ▸ Create scanner target**)
+    to write the chart's `.cht` + `.cie` — where each patch sits plus the real
+    colours the spectrophotometer measured. They rebuild automatically from
+    every finalised measurement, so they never go stale.
+  - **Tools ▸ Build scanner profile (from a scan)** — pick the measured chart
+    and a flatbed scan of the printed chart, drag four corners over the patch
+    area until the live green grid lines up, and ChromIQ runs `scanin` + `colprof`
+    to write a scanner profile next to the scan. Multi-page charts: one scan and
+    placement per page, combined into one profile. The help explains how to use
+    the resulting profile. Scanner outputs are named `-scanner` so they can never
+    overwrite the printer profile.
+
+### 🔧 Changed
+- Charts no longer write a `.cht` at creation time: a recognition template is
+  only meaningful paired with a *measured* `.cie` (the aim `.cie` was dropped in
+  beta.59), so both are now produced together from the measurement. Engine
+  charts only for now — inferring geometry for older/imported charts is planned.
+
 ## v3.13.0-beta.60
 
 ### 🐛 Fixed
