@@ -2236,5 +2236,6 @@
   "The images to run through the link. They should be in the link's source colour space (ChromIQ converts them for you when it knows that space). Add a whole set at once — each is processed the same way. TIFF and JPEG are supported.": "As imagens a passar pelo link. Devem estar no espaço de cor de origem do link (o ChromIQ converte-as por si quando conhece esse espaço). Adicione um conjunto inteiro de uma vez — cada uma é processada da mesma forma. TIFF e JPEG são suportados.",
   "[ERROR] cctiff failed — see messages above.": "[ERROR] cctiff falhou — veja as mensagens acima.",
   "⚠ This link's source colour space is unknown — make sure your images are already in it, or pick the source profile above.": "⚠ O espaço de cor de origem deste link é desconhecido — certifique-se de que as suas imagens já estão nele, ou escolha o perfil de origem acima.",
-  "✓ Source space known: images in a different space are converted into it automatically.": "✓ Espaço de origem conhecido: as imagens num espaço diferente são convertidas para ele automaticamente."
+  "✓ Source space known: images in a different space are converted into it automatically.": "✓ Espaço de origem conhecido: as imagens num espaço diferente são convertidas para ele automaticamente.",
+  "patches": "amostras"
 }

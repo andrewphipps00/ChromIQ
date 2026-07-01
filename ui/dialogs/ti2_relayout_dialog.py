@@ -1845,6 +1845,11 @@ class _NewChartDialog(QDialog):
         # patch target is a much bigger number than a page target (#93, user).
         from PyQt6.QtWidgets import QButtonGroup, QRadioButton
         self._gen_fill_to = _spin(1, 30000, 1000)        # patches target
+        # The fill box sits in a free row, not the grid column, so its wide range
+        # (up to 30000) would make it stick out past the first-column spinboxes
+        # above it. Cap it to the widest of those (the 1..500 image box) so it
+        # lines up (Knut). The count still fits typical fill targets.
+        self._gen_fill_to.setMaximumWidth(self._gen_image_n.sizeHint().width())
         self._gen_fill_pages = _spin(1, 99, 1)           # pages target
         self._gen_fill_unit_patches = QRadioButton(tr("patches:"), self._gen_panel)
         self._gen_fill_unit_pages = QRadioButton(tr("pages:"), self._gen_panel)
@@ -1861,11 +1866,16 @@ class _NewChartDialog(QDialog):
         # patches unit forced on) so the count plumbing keeps working.
         self._gen_fill_unit_pages.setVisible(False)
         self._gen_fill_pages.setVisible(False)
+        # The patches/pages radio pair is gone (pages removed); the generator only
+        # fills to a patch count. Keep the "patches" radio object (hidden, forced
+        # on) so the count plumbing below still reads it as checked, but show just
+        # the spinbox with a plain "patches" label to its right (Knut).
         self._gen_fill_unit_patches.setChecked(True)
+        self._gen_fill_unit_patches.setVisible(False)
         _fill_row = QHBoxLayout(); _fill_row.setContentsMargins(0, 0, 0, 0)
         _fill_row.setSpacing(6)
-        _fill_row.addWidget(self._gen_fill_unit_patches)
         _fill_row.addWidget(self._gen_fill_to)
+        _fill_row.addWidget(QLabel(tr("patches"), self._gen_panel))
         _fill_row.addStretch()
         _fill_w = QWidget(self._gen_panel); _fill_w.setLayout(_fill_row)
         self._gen_fill_count = _count_label()
@@ -2218,8 +2228,12 @@ class _NewChartDialog(QDialog):
         if not can_pages and self._gen_fill_unit_pages.isChecked():
             self._gen_fill_unit_patches.setChecked(True)
         pages_on = self._gen_fill_unit_pages.isChecked()
-        self._gen_fill_pages.setEnabled(can_pages and pages_on)
-        self._gen_fill_to.setEnabled(not pages_on)
+        fill_on = self._gen_fill.isChecked()
+        self._gen_fill_pages.setEnabled(can_pages and pages_on and fill_on)
+        # Also gate on the "Fill remaining gaps" checkbox — this runs after the
+        # per-row enable pass in _update_gen_counts, so without the check it would
+        # re-enable the spinbox even when the row is off (Knut).
+        self._gen_fill_to.setEnabled(not pages_on and fill_on)
 
     def _update_gen_counts(self, *_a) -> None:
         """Refresh each generator's patch count + the running total, and gate

@@ -2236,5 +2236,6 @@
   "The images to run through the link. They should be in the link's source colour space (ChromIQ converts them for you when it knows that space). Add a whole set at once — each is processed the same way. TIFF and JPEG are supported.": "リンクに通す画像です。リンクのソース色空間にあるべきです（ChromIQ はその色空間を把握していれば変換します）。一度にセット全体を追加してください — 各画像は同じ方法で処理されます。TIFF と JPEG に対応しています。",
   "[ERROR] cctiff failed — see messages above.": "[ERROR] cctiff が失敗しました — 上のメッセージを参照してください。",
   "⚠ This link's source colour space is unknown — make sure your images are already in it, or pick the source profile above.": "⚠ このリンクのソース色空間は不明です — 画像がすでにその色空間にあることを確認するか、上でソースプロファイルを選んでください。",
-  "✓ Source space known: images in a different space are converted into it automatically.": "✓ ソース色空間は既知: 別の色空間の画像は自動的にそれに変換されます。"
+  "✓ Source space known: images in a different space are converted into it automatically.": "✓ ソース色空間は既知: 別の色空間の画像は自動的にそれに変換されます。",
+  "patches": "パッチ"
 }

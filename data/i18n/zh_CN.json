@@ -2236,5 +2236,6 @@
   "The images to run through the link. They should be in the link's source colour space (ChromIQ converts them for you when it knows that space). Add a whole set at once — each is processed the same way. TIFF and JPEG are supported.": "要通过链接处理的图像。它们应位于链接的源色彩空间中（当 ChromIQ 知道该空间时会为你转换）。一次性添加一整组——每幅都以相同方式处理。支持 TIFF 和 JPEG。",
   "[ERROR] cctiff failed — see messages above.": "[ERROR] cctiff 失败——请查看上面的消息。",
   "⚠ This link's source colour space is unknown — make sure your images are already in it, or pick the source profile above.": "⚠ 此链接的源色彩空间未知——请确保你的图像已在其中，或在上方选择源配置文件。",
-  "✓ Source space known: images in a different space are converted into it automatically.": "✓ 源空间已知：处于不同空间的图像会自动转换到该空间。"
+  "✓ Source space known: images in a different space are converted into it automatically.": "✓ 源空间已知：处于不同空间的图像会自动转换到该空间。",
+  "patches": "色块"
 }

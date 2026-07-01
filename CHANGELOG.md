@@ -1,5 +1,13 @@
 # Changelog
 
+## v3.13.0-beta.60
+
+### 🐛 Fixed
+- Patch-set generator, "Fill remaining gaps": removed the leftover radio button
+  in front of "patches" (the pages option is gone), moved "patches" to the right
+  of the spinbox, matched the spinbox width to the other rows, and it's now
+  greyed out when "Fill remaining gaps" is unticked (light and dark).
+
 ## v3.13.0-beta.59
 
 ### 🔧 Changed

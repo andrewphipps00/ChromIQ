@@ -2236,5 +2236,6 @@
   "The images to run through the link. They should be in the link's source colour space (ChromIQ converts them for you when it knows that space). Add a whole set at once — each is processed the same way. TIFF and JPEG are supported.": "Bildene som skal kjøres gjennom lenken. De bør være i lenkens kildefargerom (ChromIQ konverterer dem for deg når den kjenner det rommet). Legg til et helt sett på én gang — hvert behandles på samme måte. TIFF og JPEG støttes.",
   "[ERROR] cctiff failed — see messages above.": "[ERROR] cctiff mislyktes — se meldingene ovenfor.",
   "⚠ This link's source colour space is unknown — make sure your images are already in it, or pick the source profile above.": "⚠ Kildefargerommet til denne lenken er ukjent — sørg for at bildene dine allerede er i det, eller velg kildeprofilen ovenfor.",
-  "✓ Source space known: images in a different space are converted into it automatically.": "✓ Kilderom kjent: bilder i et annet rom konverteres til det automatisk."
+  "✓ Source space known: images in a different space are converted into it automatically.": "✓ Kilderom kjent: bilder i et annet rom konverteres til det automatisk.",
+  "patches": "felt"
 }

@@ -2236,5 +2236,6 @@
   "The images to run through the link. They should be in the link's source colour space (ChromIQ converts them for you when it knows that space). Add a whole set at once — each is processed the same way. TIFF and JPEG are supported.": "Le immagini da far passare attraverso il link. Dovrebbero essere nello spazio colore sorgente del link (ChromIQ le converte per te quando conosce quello spazio). Aggiungi un intero set in una volta — ognuna viene trattata allo stesso modo. TIFF e JPEG sono supportati.",
   "[ERROR] cctiff failed — see messages above.": "[ERROR] cctiff non riuscito — vedi i messaggi sopra.",
   "⚠ This link's source colour space is unknown — make sure your images are already in it, or pick the source profile above.": "⚠ Lo spazio colore sorgente di questo link è sconosciuto — assicurati che le tue immagini siano già in esso, o scegli il profilo sorgente sopra.",
-  "✓ Source space known: images in a different space are converted into it automatically.": "✓ Spazio sorgente noto: le immagini in uno spazio diverso vengono convertite automaticamente in esso."
+  "✓ Source space known: images in a different space are converted into it automatically.": "✓ Spazio sorgente noto: le immagini in uno spazio diverso vengono convertite automaticamente in esso.",
+  "patches": "tasselli"
 }
