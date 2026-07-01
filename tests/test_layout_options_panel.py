@@ -201,20 +201,38 @@ def test_engine_info_line_from_recipe_reflects_recipe():
     assert "9×9 mm" not in s
 
 
-def test_colormunki_density_disabled_in_area_first(app):
-    """The Density selector is disabled for ColorMunki in area-first (it doesn't
-    define the grid there), but stays active for i1 clip / patch-first (#93,
-    Knut)."""
+def test_colormunki_density_hidden_in_area_first(app):
+    """The Density selector is HIDDEN for ColorMunki in area-first (it doesn't
+    define the grid there — hidden, not greyed, like the Calculation-method rows
+    in patch-first), but stays shown for i1 clip / patch-first (#93, Knut)."""
     from ui.dialogs.layout_options_panel import LayoutOptionsPanel
     p = LayoutOptionsPanel(with_selectors=True)
     p.show()
     p.instr.setCurrentIndex(p.instr.findData("CM"))
     p.layout_mode.setCurrentIndex(p.layout_mode.findData("patch_first"))
-    assert p.mode.isEnabled()                       # density matters patch-first
+    assert p.mode.isVisibleTo(p)                    # density matters patch-first
     p.layout_mode.setCurrentIndex(p.layout_mode.findData("area_first"))
-    assert not p.mode.isEnabled()                   # moot in area-first
+    assert not p.mode.isVisibleTo(p)               # moot in area-first → hidden
     p.instr.setCurrentIndex(p.instr.findData("i1"))
-    assert p.mode.isEnabled()                       # i1 clip still matters
+    assert p.mode.isVisibleTo(p)                    # i1 clip still matters
+
+
+def test_cm_stagger_lives_in_layout_frame(app):
+    """"Offset every second strip" is a layout option, so it sits in the Layout
+    frame (Basic), not Patches & spacers (Expert). CM-only visibility (Knut)."""
+    from ui.dialogs.layout_options_panel import LayoutOptionsPanel
+    from PyQt6.QtWidgets import QGroupBox
+    p = LayoutOptionsPanel(with_selectors=True)
+    p.show()
+    p.instr.setCurrentIndex(p.instr.findData("CM"))
+    assert p.cm_stagger_cb.isVisibleTo(p)          # shown for ColorMunki
+    # Its enclosing QGroupBox is the "Layout" frame, not "Patches & spacers".
+    box = p.cm_stagger_cb
+    while box is not None and not isinstance(box, QGroupBox):
+        box = box.parentWidget()
+    assert box is not None and box.title() == "Layout"
+    p.instr.setCurrentIndex(p.instr.findData("i1"))
+    assert not p.cm_stagger_cb.isVisibleTo(p)      # ColorMunki-only
 
 
 def test_cm_ss_clip_enable_selector(app):

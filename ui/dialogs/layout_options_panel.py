@@ -80,15 +80,16 @@ class LayoutOptionsPanel(QWidget):
                        "the Clip-border content section."))
         if inst == "CM":
             return (tr("Reading density"),
-                    tr("How densely the ColorMunki reads. “Hand-held” reads one "
-                       "patch at a time. “High density (rig)” needs the "
-                       "measuring-rig accessory and packs more patches per sheet. "
-                       "“Extra-high density” packs even more (a ChromIQ extension) "
-                       "— only use it if your patches stay large enough to read "
-                       "reliably (watch the warning).\n\n"
+                    tr("How densely the ColorMunki reads. “Hand-held” still reads "
+                       "whole strips — just a few large, widely-spaced patches — "
+                       "with no accessory needed. “High density (rig)” needs the "
+                       "measuring-rig accessory and packs far more patches per "
+                       "sheet. “Extra-high density” packs even more (a ChromIQ "
+                       "extension) — only use it if your patches stay large enough "
+                       "to read reliably (watch the warning).\n\n"
                        "Only available with “Prioritise patch size”: in "
                        "“Prioritise chart area” the patch size comes from the "
-                       "columns/rows you set, so Density is greyed out."))
+                       "columns/rows you set, so Density is hidden."))
         if inst == "SS":
             return (tr("Patch shape"),
                     tr("Rectangular or hexagonal patches. Hexagons tessellate "
@@ -467,6 +468,21 @@ class LayoutOptionsPanel(QWidget):
             lgg.addWidget(self._clip_enable_lbl, 4, 0)
             lgg.addWidget(self.clip_enable, 4, 1)
             lgg.addWidget(self._clip_enable_tip, 4, 2)
+        # "Offset every second strip" is a ColorMunki layout option (printtarg's
+        # rig stagger), so it belongs with the layout choices, not in Patches &
+        # spacers (Knut). CM-only — visibility is set per-instrument. Always placed
+        # (like Show strip indicators) so it shows in Settings too.
+        self.cm_stagger_cb = QCheckBox(tr("Offset every second strip"), self)
+        self.cm_stagger_cb.toggled.connect(self._emit)
+        self._cm_stagger_tip = TooltipButton(
+            tr("Offset every second strip"),
+            tr("ColorMunki only: shifts every second strip down by half a patch so "
+               "the columns interleave like a brick wall — matching ArgyllCMS "
+               "printtarg's measuring-rig layout. Reserves a little space at the "
+               "top and bottom for the offset, so the patch count drops slightly. "
+               "Leave off for a plain aligned grid."), self)
+        lgg.addWidget(self.cm_stagger_cb, 5, 1)
+        lgg.addWidget(self._cm_stagger_tip, 5, 2)
         _basic_v.addWidget(lg)
 
         # ---- Patches & spacers (2-column: label | control) ----
@@ -599,18 +615,6 @@ class LayoutOptionsPanel(QWidget):
                "doesn't reduce the patch count. Turn it on if you prefer the "
                "printtarg look or want an extra separator at the strip ends."),
             self), 10, 2)
-        # ColorMunki only: offset every second strip (printtarg's rig stagger).
-        self.cm_stagger_cb = QCheckBox(tr("Offset every second strip"), self)
-        self.cm_stagger_cb.toggled.connect(self._emit)
-        g.addWidget(self.cm_stagger_cb, 11, 1)
-        self._cm_stagger_tip = TooltipButton(
-            tr("Offset every second strip"),
-            tr("ColorMunki only: shifts every second strip down by half a patch so "
-               "the columns interleave like a brick wall — matching ArgyllCMS "
-               "printtarg's measuring-rig layout. Reserves a little space at the "
-               "top and bottom for the offset, so the patch count drops slightly. "
-               "Leave off for a plain aligned grid."), self)
-        g.addWidget(self._cm_stagger_tip, 11, 2)
         _expert_v.addWidget(ps)
 
         # ---- Randomisation ----
@@ -1535,15 +1539,17 @@ class LayoutOptionsPanel(QWidget):
         for w in self._area_row_cols + self._area_row_rows:
             w.setVisible(area and not by_width)
         # ColorMunki "Density" doesn't define an area-first grid (the area fields
-        # do), so disable it there so it doesn't imply otherwise (Knut). i1 clip
-        # and SS shape still affect the area, so they stay active.
+        # do), so HIDE the whole Density row there rather than greying it — same as
+        # the Calculation-method rows hidden in patch-first (Knut). i1 clip and SS
+        # shape still affect the area, so their Mode row stays.
         if self.mode is not None:
             inst = (self.instr.currentData() if self.instr is not None
                     else self._inst) or "i1"
             density_moot = (inst == "CM" and area)
-            self.mode.setEnabled(not density_moot)
-            if getattr(self, "_mode_lbl", None) is not None:
-                self._mode_lbl.setEnabled(not density_moot)
+            for w in (self.mode, getattr(self, "_mode_lbl", None),
+                      getattr(self, "_mode_tip", None)):
+                if w is not None:
+                    w.setVisible(not density_moot)
 
     def _browse_clip_image(self) -> None:
         from pathlib import Path

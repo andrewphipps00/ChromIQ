@@ -1,5 +1,16 @@
 # Changelog
 
+## v3.13.0-beta.50
+
+### 🔧 Changed
+- **ColorMunki Density** is now **hidden** (not greyed out) in "Prioritise chart
+  area" mode, where the columns/rows define the grid — matching how the
+  Calculation-method rows are hidden in "Prioritise patch size" (Knut).
+- **"Offset every second strip"** moved from *Patches & spacers* into the
+  **Layout** section, next to the other ColorMunki layout choices (Knut).
+- Corrected the Density tooltip: "Hand-held" still reads whole strips — just a
+  few large, widely-spaced patches — rather than "one patch at a time".
+
 ## v3.13.0-beta.49
 
 ### 🐛 Fixed
