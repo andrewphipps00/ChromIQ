@@ -95,9 +95,12 @@ def ink_colorspace_enum(n_channels: int) -> tuple[int, bool]:
 def parse_ti1(ti1_path: Path) -> Target:
     text = ti1_path.read_text(encoding="utf-8", errors="replace")
     lines = text.splitlines()
-    if not lines or lines[0].strip() != "CTI1":
-        first = lines[0] if lines else ""
-        raise ValueError(f"{ti1_path}: not a CTI1 file (first line: {first!r})")
+    # Accept both the CTI1 header targen writes and the generic CGATS.17 header
+    # the layout engine's ti1 reader/writer uses — the table below is parsed by
+    # field name either way, so both dialects are valid input here.
+    head = lines[0].strip() if lines else ""
+    if not (head == "CTI1" or head.startswith("CGATS")):
+        raise ValueError(f"{ti1_path}: not a CTI1/CGATS file (first line: {head!r})")
 
     color_rep = ""
     fmt_fields: list[str] = []

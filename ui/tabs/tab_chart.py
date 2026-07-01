@@ -7105,6 +7105,20 @@ class TabChart(QWidget):
             # self-describing. Read straight from the just-written .ti2 so it's
             # correct for every creation path (normal / prebuilt / from-.ti1).
             self._stamp_chart_meta(ti2)
+            # Always leave the hand-off sidecars in the run folder — the colour
+            # list, the i1Profiler pair and a .cie reference — so every generated
+            # chart is self-contained for users who profile elsewhere, not only
+            # the i1iSis flow (Knut). The .cht comes from the build itself
+            # (engine emit_cht / printtarg). Best-effort; RGB-only files skip
+            # themselves for CMYK charts.
+            try:
+                from workflow.chart_exports import write_sidecars
+                extras = write_sidecars(ti2.with_suffix(".ti1"), ti2,
+                                        ti2.parent, stem)
+                for e in extras:
+                    self._log.appendPlainText(f"wrote {e.name}")
+            except Exception:  # noqa: BLE001 — never block on the sidecars
+                log.warning("chart sidecar export failed", exc_info=True)
             # If this chart was laid out in fixed order (-r "Preserve Patch
             # Order", e.g. a pre-shuffled generate-colour-sets / editor-recipe
             # layout) but its colours are actually well mixed, upgrade the tag so

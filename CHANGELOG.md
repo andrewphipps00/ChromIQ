@@ -1,6 +1,22 @@
 # Changelog
 
-## v3.13.0-beta.56
+## v3.13.0-beta.57
+
+### 🐛 Fixed
+- The patch-set editor's **Apply / Save** again writes the hand-off files for
+  **engine** charts (it had only been doing so for printtarg charts): the colour
+  list (`-colours.txt`), the i1Profiler pair (`-i1profiler.txt` / `.pxf`) and now
+  a `.cie` reference.
+
+### ➕ Added
+- Every chart made from the **Create Chart** tab now always leaves those
+  hand-off files in the run folder — not just for the i1iSis flow — so a
+  generated chart is self-contained for profiling elsewhere.
+- Charts now also get a **`.cht`** recognition template and a **`.cie`**
+  reference (aim XYZ, read from the `.ti2` so it lines up with the `.cht`),
+  enabling a `scanin` flatbed read. The engine now emits the `.cht` by default;
+  printtarg already did. (The `.cie` values are the chart's aim colours, not
+  measurements; colour list and `.cie` are RGB-chart only.)
 
 ### ➕ Added
 - **New Tool: "Apply a device-link to an image".** Pushes your images through a

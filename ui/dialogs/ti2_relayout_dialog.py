@@ -6322,6 +6322,13 @@ class Ti2RelayoutDialog(QDialog):
                 i1_note = f"i1Profiler files: {pxf.stem}.txt/.pxf"
         except Exception as exc:  # noqa: BLE001
             log.warning("i1Profiler export during save failed: %s", exc)
+        # .cie reference (aim XYZ from the .ti2) — matches the printtarg .cht for
+        # a scanin flatbed read. Best-effort.
+        try:
+            from workflow.chart_exports import write_cie
+            write_cie(res.ti2, target / f"{name}.cie")
+        except Exception as exc:  # noqa: BLE001
+            log.warning(".cie export during save failed: %s", exc)
         tag_note = self._maybe_tag_randomised(res.ti2)
         msg = f"Saved {res.ti2.name} + {len(res.tiffs)} page(s) to {target}"
         if colour_note:
@@ -6345,7 +6352,8 @@ class Ti2RelayoutDialog(QDialog):
         # .ti1 to adopt (#93).
         self._engine_grid_ti1(target / f"{name}.ti1")
         result = le_chart.build_chart(str(target / f"{name}.ti1"), target / name,
-                                      project=name, **recipe.build_kwargs())
+                                      project=name, emit_cht=True,
+                                      **recipe.build_kwargs())
         # Fold the strip geometry + recipe into channels.json, mirroring the
         # Create Chart build (workflow.chart_creator._embed_layout_geometry).
         sidecar = target / f"{name}.channels.json"
@@ -6359,10 +6367,20 @@ class Ti2RelayoutDialog(QDialog):
         sidecar.write_text(json.dumps({"layout": layout}))
         if strips.exists():
             strips.unlink()
+        # Hand-off sidecars (colour list, i1Profiler pair, .cie reference) — the
+        # same set the printtarg save path writes, so an engine chart saved from
+        # the editor is just as self-contained (#93 regression fix). The .cht is
+        # written by build_chart above (emit_cht). Best-effort.
+        from workflow.chart_exports import write_sidecars
+        extras = write_sidecars(target / f"{name}.ti1", target / f"{name}.ti2",
+                                target, name)
         pages = len(result.tiff_paths or [])
-        return (f"Saved engine chart {name}.ti2 + {pages} page(s) to {target}\n"
-                f"ChromIQ layout engine · {recipe.instrument} · {recipe.paper} · "
-                f"seed {result.seed}")
+        msg = (f"Saved engine chart {name}.ti2 + {pages} page(s) to {target}\n"
+               f"ChromIQ layout engine · {recipe.instrument} · {recipe.paper} · "
+               f"seed {result.seed}")
+        if extras:
+            msg += "\nAlso wrote: " + ", ".join(sorted(e.name for e in extras))
+        return msg
 
     def _write_colour_values_file(self, path: Path, as_hex: bool = True) -> None:
         """Write the current patch program as a colour list (hex by default).

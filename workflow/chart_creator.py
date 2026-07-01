@@ -1033,7 +1033,7 @@ class ChartCreator:
             on_line(f"[ChromIQ layout engine] {_note}")
         try:
             result = le_chart.build_chart(
-                ti1, work_dir / stem, **engine_kwargs)
+                ti1, work_dir / stem, emit_cht=True, **engine_kwargs)
         except Exception as exc:  # noqa: BLE001 — surface any engine failure
             log.exception("ChromIQ layout engine failed")
             on_line(f"[ERROR] ChromIQ layout engine: {exc}")
