@@ -1,5 +1,16 @@
 # Changelog
 
+## v3.13.0-beta.52
+
+### ➕ Added
+- Device-link **Image-gamut detail** gains a **Custom…** option that reveals a
+  raw 0–100 spinner for tiffgamut's `-f` filter, alongside the named presets.
+
+### 🔧 Changed
+- Device-link **Add images… / Remove** buttons are now compact and no longer
+  crowd the control below them.
+- New strings translated into the 12 UI languages.
+
 ## v3.13.0-beta.51
 
 ### ➕ Added
