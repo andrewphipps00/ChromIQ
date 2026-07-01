@@ -1,9 +1,9 @@
-"""Hand-off sidecars written alongside every chart (colours / i1Profiler / .cie),
-plus the engine .cht (emit_cht). Regression for the editor engine-save path that
-used to skip these, and the Create Chart tab that only wrote them for i1iSis."""
+"""Hand-off sidecars written alongside every chart (colours / i1Profiler), plus
+the engine .cht (emit_cht). Regression for the editor engine-save path that used
+to skip these, and the Create Chart tab that only wrote them for i1iSis."""
 from pathlib import Path
 
-from workflow.chart_exports import write_cie, write_colours_txt, write_sidecars
+from workflow.chart_exports import write_colours_txt, write_sidecars
 
 _TI1 = (
     "CGATS.17\n\nNUMBER_OF_FIELDS 7\nBEGIN_DATA_FORMAT\n"
@@ -30,15 +30,6 @@ def test_emit_cht_writes_recognition_template(tmp_path):
     assert "BOXES" in cht.read_text() and "EXPECTED XYZ" in cht.read_text()
 
 
-def test_write_cie_from_ti2_has_loc_and_xyz(tmp_path):
-    _, ti2 = _build(tmp_path)
-    cie = write_cie(ti2, tmp_path / "chart.cie")
-    txt = cie.read_text()
-    assert "SAMPLE_LOC" in txt and "XYZ_X XYZ_Y XYZ_Z" in txt
-    # one data row per patch (4 real + engine padding), locations carried through
-    assert "BEGIN_DATA" in txt
-
-
 def test_write_colours_txt_rgb_only(tmp_path):
     ti1 = tmp_path / "c.ti1"
     ti1.write_text(_TI1, encoding="utf-8")
@@ -55,11 +46,12 @@ def test_write_colours_txt_rgb_only(tmp_path):
     assert write_colours_txt(cmyk, tmp_path / "k-colours.txt") is None
 
 
-def test_write_sidecars_writes_the_full_set(tmp_path):
-    ti1, ti2 = _build(tmp_path)
-    extras = write_sidecars(ti1, ti2, tmp_path, "chart")
+def test_write_sidecars_writes_colours_and_i1profiler(tmp_path):
+    ti1, _ti2 = _build(tmp_path)
+    extras = write_sidecars(ti1, tmp_path, "chart")
     names = {e.name for e in extras}
     assert names == {"chart-colours.txt", "chart-i1profiler.txt",
-                     "chart-i1profiler.pxf", "chart.cie"}
+                     "chart-i1profiler.pxf"}
     for n in names:
         assert (tmp_path / n).is_file()
+    assert not (tmp_path / "chart.cie").exists()   # .cie dropped for now

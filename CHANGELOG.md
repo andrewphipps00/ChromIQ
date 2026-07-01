@@ -1,5 +1,13 @@
 # Changelog
 
+## v3.13.0-beta.59
+
+### 🔧 Changed
+- Dropped the `.cie` sidecar added in beta.57: its values were the chart's *aim*
+  colours (sRGB-reconstructed), not measurements, so it didn't carry meaningful
+  data for a `.cie` (which is a measured reference). Charts still get the colour
+  list, the i1Profiler pair and the `.cht` recognition template.
+
 ## v3.13.0-beta.58
 
 ### 🐛 Fixed
