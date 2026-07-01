@@ -871,10 +871,14 @@ def open_files_dialog(
     start_dir: str = "",
     extra_path: str = "",
     extra_paths: tuple | list = (),
+    preview: bool = False,
 ) -> list[str]:
     """Multi-file variant of :func:`open_file_dialog`.
 
-    Returns the list of selected paths, or an empty list if cancelled.
+    Shares the same OS-correct sidebar shortcuts; when ``preview`` is True an
+    image thumbnail of the highlighted file is shown beside the list (for
+    picking images). Returns the list of selected paths, or an empty list if
+    cancelled.
     """
     dlg = QFileDialog(parent, title, start_dir or str(Path.home()))
     dlg.setOptions(QFileDialog.Option.DontUseNativeDialog)
@@ -886,6 +890,8 @@ def open_files_dialog(
         if exts:
             dlg.setProxyModel(_ExtensionFilterProxy(exts, dlg))
     dlg.setSidebarUrls(_sidebar_urls(extra_path, extra_paths))
+    if preview:
+        _attach_image_preview(dlg)
     if dlg.exec() == QFileDialog.DialogCode.Accepted:
         return list(dlg.selectedFiles())
     return []

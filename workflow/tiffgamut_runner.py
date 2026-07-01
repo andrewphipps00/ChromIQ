@@ -44,6 +44,15 @@ class TiffgamutParams:
     intent: str = "r"         # -i  r=relative (a profile's default works too)
     sres: float = 10.0        # -d  surface resolution (coarse = fast)
     filter_perc: float = 0.0  # -f  popularity filter %, 0 = off
+    # -p j → build the gamut in CIECAM02 Jab *appearance* space (not Lab) so it
+    # lines up with collink's perceptual gamut mapping. Argyll's documented
+    # image-dependent device-link workflow uses this (`tiffgamut -pj -cmt …`);
+    # the soft-proof overlay leaves it Lab, so it stays off by default.
+    appearance: bool = False
+    viewcond: str = ""        # -c  CIECAM02 viewing conditions (match collink -c)
+    # Build one shared gamut from a *set* of images (e.g. an exhibition series).
+    # When given, overrides image_path; tiffgamut takes them all as trailing args.
+    image_paths: list[Path] | None = None
 
 
 class TiffgamutRunner(QObject):
@@ -68,8 +77,10 @@ class TiffgamutRunner(QObject):
         if self._runner.is_running:
             self.error.emit(tr("Another process is already running."))
             return
-        if not params.image_path.exists():
-            self.error.emit(tr("Image file not found: {p}").format(p=params.image_path))
+        images = list(params.image_paths) if params.image_paths else [params.image_path]
+        missing = next((p for p in images if not p.exists()), None)
+        if missing is not None:
+            self.error.emit(tr("Image file not found: {p}").format(p=missing))
             return
         if not params.profile_path.exists():
             self.error.emit(tr("Source profile not found: {p}").format(p=params.profile_path))
@@ -88,7 +99,12 @@ class TiffgamutRunner(QObject):
             args += ["-f", f"{params.filter_perc:.0f}"]
         if params.intent:
             args += ["-i", params.intent]
-        args += ["-O", str(base), str(params.profile_path), str(params.image_path)]
+        if params.appearance:
+            args += ["-p", "j"]
+        if params.viewcond:
+            args += ["-c", params.viewcond]
+        args += ["-O", str(base), str(params.profile_path)]
+        args += [str(p) for p in images]
         log.info("tiffgamut: %s  [cwd=%s]", " ".join(args), work_dir)
 
         def _accumulate(line: str) -> None:

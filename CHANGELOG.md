@@ -1,5 +1,28 @@
 # Changelog
 
+## v3.13.0-beta.51
+
+### ➕ Added
+- **Device-link Tool — image-optimised gamut mapping (from backtomarfa's testing, #99):**
+  - **Optimise for specific images** now takes a *set* of images (add/remove
+    list) and builds one shared source gamut — map a whole exhibition series
+    identically, not just a single picture.
+  - New **Image-gamut detail** control (tiffgamut `-f` popularity filter) to
+    trade off holding the main colours' saturation vs. preserving every
+    gradation.
+  - The image gamut is now built in **CIECAM02 appearance space** (`-pj`) with
+    the link's own viewing conditions, so it actually lines up with the
+    perceptual gamut mapping — the reason a source-image gamut can now bite.
+  - **Rendering style** gains collink's finer gamut-mapping intents, including
+    **Luminance-preserving perceptual**, which often suits matte fine-art paper.
+
+### 🔧 Changed
+- Device-link help text now explains the Photoshop step in full: turn on
+  **Advanced** in *Convert to Profile* (device-links only appear there), pick it
+  under *Device Link*, and print with the printer's colour management off.
+- The loaded-images list is taller and shows just the file name (full path on hover).
+- All new device-link strings translated into the 12 UI languages.
+
 ## v3.13.0-beta.50
 
 ### 🔧 Changed

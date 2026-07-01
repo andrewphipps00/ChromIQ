@@ -25,6 +25,8 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QListWidget,
+    QListWidgetItem,
     QMessageBox,
     QPushButton,
     QVBoxLayout,
@@ -52,6 +54,7 @@ from ui.widgets import (
     load_folder_icon,
     make_browse_button,
     open_file_dialog,
+    open_files_dialog,
 )
 from workflow.collink_runner import CollinkParams, CollinkRunner
 from workflow.icc_convert import NotConvertible, to_v2
@@ -87,22 +90,43 @@ class DeviceLinkDialog(_ToolDialogBase):
         "2. Pick the destination — the printer profile you built in ChromIQ.\n"
         "3. Choose how colours outside the printer's range are mapped (the "
         "rendering style) and the viewing conditions.\n"
-        "4. Save the device-link, then in Photoshop use Edit → Convert to "
-        "Profile and choose it, or load it in your RIP.\n\n"
+        "4. Save the device-link, then in Photoshop open Edit → Convert to "
+        "Profile, switch on 'Advanced' (device-links only appear there), pick "
+        "yours under 'Device Link', and print with the printer's colour "
+        "management turned off. Or load it in your RIP.\n\n"
         "Tip: it pays off most when you reuse the same printer/ink/paper for many "
-        "images. For a one-off print the normal workflow is simpler."))
+        "images — especially on matte fine-art paper, where the standard "
+        "perceptual and relative intents are often unsatisfying. For a one-off "
+        "print the normal workflow is simpler."))
     DESCRIPTION = (
         tr("Create a fixed source→printer transform (an ICC device-link) with "
         "explicit gamut-mapping control, to apply in Photoshop's Convert to "
         "Profile or a RIP. Source profiles in ICC v4 are converted to v2 "
         "automatically (Argyll only reads v2)."))
 
-    # (label, collink -i code)
+    # (label, collink -i gamut-mapping intent code). The first four are the
+    # everyday choices; the rest are collink's finer gamut-mapping intents,
+    # exposed for expert use (e.g. 'lp' luminance-preserving perceptual, which
+    # often suits matte fine-art paper).
     _INTENTS = (
         (tr("Photographic (perceptual) — recommended"), "p"),
+        (tr("Luminance-preserving perceptual (matte paper)"), "lp"),
+        (tr("Perceptual appearance"), "pa"),
         (tr("Accurate colours (relative colorimetric)"), "r"),
+        (tr("Luminance-matched appearance"), "la"),
+        (tr("Saturation (smoother)"), "ms"),
         (tr("Punchy (saturation)"), "s"),
         (tr("Proof another device (absolute colorimetric)"), "a"),
+        (tr("Absolute, scaled to paper white"), "aw"),
+    )
+    # (label, tiffgamut -f popularity filter %). 0 = omit -f (keep every colour,
+    # gradations of even rare colours preserved). A lower % tightens the gamut
+    # around the image's popular colours, holding their saturation better.
+    _IMAGE_DETAIL = (
+        (tr("Favour the main colours (recommended)"), 80),
+        (tr("Preserve all gradations"), 0),
+        (tr("Balanced"), 90),
+        (tr("Strongly favour saturation"), 60),
     )
     # (label, collink -c code) — where the source images are viewed (a screen)
     _SRC_VIEWCONDS = (
@@ -139,7 +163,7 @@ class DeviceLinkDialog(_ToolDialogBase):
         self._dst_path: Path | None = None
         self._abstract_path: Path | None = None
         self._cal_path: Path | None = None
-        self._image_path: Path | None = None
+        self._image_paths: list[Path] = []
         self._temp_files: list[Path] = []
         self._build_inputs()
         self._autofill_destination()
@@ -284,9 +308,13 @@ class DeviceLinkDialog(_ToolDialogBase):
             "• Accurate keeps in-range colours exact and clips the rest — good for "
             "logos and spot colours.\n"
             "• Punchy favours vivid saturation.\n"
-            "• Proof reproduces another device's colours as-is, for proofing.\n\n"
+            "• Proof reproduces another device's colours as-is, for proofing.\n"
+            "• The remaining entries are collink's finer gamut-mapping intents. "
+            "Luminance-preserving perceptual is well worth a try on matte fine-art "
+            "paper, where the standard perceptual and relative intents often "
+            "disappoint.\n\n"
             "The choice is baked into the link — when you apply it in Photoshop the "
-            "intent dropdown no longer matters."),
+            "intent dropdown no longer matters (pick the link under any intent)."),
             self._INTENTS)
 
         self._src_view_combo = self._combo_row(
@@ -347,19 +375,53 @@ class DeviceLinkDialog(_ToolDialogBase):
         body.setContentsMargins(8, 8, 8, 8)
         body.setSpacing(10)
 
-        # 1 — per-image source gamut (runs tiffgamut before collink).
+        # 1 — per-image source gamut (runs tiffgamut before collink). Accepts a
+        # whole set of images (one shared gamut) and a popularity-filter detail.
         self._image_cb = self._check_row(
-            body, tr("Optimise the mapping for one specific image"),
-            tr("Optimise for a specific image"),
-            tr("Normally the link is built to fit the whole source colour space. "
-            "Tick this and choose an image, and ChromIQ measures the colours that "
-            "are actually in that picture and tunes the gamut mapping to them — so "
-            "the colours you care about get the most faithful treatment. Best when "
-            "you'll print one image (or a set with similar colours) many times."))
+            body, tr("Optimise the mapping for specific images"),
+            tr("Optimise for specific images"),
+            tr("Normally the link is built to fit the whole source colour space — "
+            "on a big space like ProPhoto that can over-compress and dull strong "
+            "colours. Tick this and add one or more images, and ChromIQ measures "
+            "the colours actually in them (in the same appearance space the "
+            "mapping uses) and tunes the link to those, so the colours you care "
+            "about get the most faithful treatment. Add a whole series (e.g. an "
+            "exhibition set) to map every image identically. Best when you'll "
+            "reprint the same pictures, or a set with similar colours."))
         self._image_cb.toggled.connect(self._on_image_toggled)
-        self._image_field = self._file_row(
-            body, tr("Pick the image to optimise for…"), self._pick_image)
-        self._image_field.setEnabled(False)
+
+        self._image_list = QListWidget(self)
+        self._image_list.setMaximumHeight(192)
+        self._image_list.setEnabled(False)
+        self._image_list.itemSelectionChanged.connect(self._on_image_selection)
+        body.addWidget(self._image_list)
+
+        img_btns = QHBoxLayout()
+        self._img_add = QPushButton(tr("Add images…"), self)
+        self._img_add.setIcon(load_folder_icon("folder_build"))
+        self._img_add.setIconSize(QSize(18, 18))
+        self._img_add.setEnabled(False)
+        self._img_add.clicked.connect(self._pick_images)
+        self._img_remove = QPushButton(tr("Remove"), self)
+        self._img_remove.setEnabled(False)
+        self._img_remove.clicked.connect(self._remove_selected_images)
+        img_btns.addWidget(self._img_add)
+        img_btns.addWidget(self._img_remove)
+        img_btns.addStretch(1)
+        body.addLayout(img_btns)
+
+        self._detail_combo = self._combo_row(
+            body, tr("Image-gamut detail:"), tr("Image-gamut detail"),
+            tr("How tightly the link hugs the colours in your images.\n\n"
+            "• Favour the main colours — tightens the gamut around the image's "
+            "popular colours so their saturation is held best (Argyll's suggested "
+            "starting point).\n"
+            "• Preserve all gradations — keeps even rarely-used colours, at the "
+            "cost of compressing the gamut more.\n\n"
+            "Only used when 'Optimise for specific images' is on. If unsure, leave "
+            "it on 'Favour the main colours'."),
+            self._IMAGE_DETAIL)
+        self._detail_combo.setEnabled(False)
 
         # 2 — abstract "tweak" profile.
         self._label_row(
@@ -439,10 +501,13 @@ class DeviceLinkDialog(_ToolDialogBase):
         form.addWidget(self._output)
 
     def _on_image_toggled(self, on: bool) -> None:
-        self._image_field.setEnabled(on)
+        self._image_list.setEnabled(on)
+        self._img_add.setEnabled(on)
+        self._detail_combo.setEnabled(on)
+        self._img_remove.setEnabled(on and bool(self._image_list.selectedItems()))
         if not on:
-            self._image_path = None
-            self._image_field.clear()
+            self._image_paths = []
+            self._image_list.clear()
         self._refresh()
 
     # --------------------------------------------------------------- pickers
@@ -486,13 +551,38 @@ class DeviceLinkDialog(_ToolDialogBase):
             self._cal_path = p
             self._cal_field.setText(str(p))
 
-    def _pick_image(self) -> None:
-        p = self._browse_file(tr("Choose image to optimise for"), _IMG_FILTER,
-                              preview=True)
-        if p:
-            self._image_path = p
-            self._image_field.setText(str(p))
+    def _pick_images(self) -> None:
+        """Add one or more images to the gamut set (ChromIQ's own picker, with the
+        OS image-folder sidebar shortcuts and a live preview pane)."""
+        paths = open_files_dialog(
+            self, tr("Choose images to optimise for"), _IMG_FILTER,
+            start_dir=str(_initial_dir(self._settings, self.TOOL_KEY)),
+            preview=True)
+        if not paths:
+            return
+        added = False
+        for s in paths:
+            p = Path(s)
+            if p not in self._image_paths:
+                self._image_paths.append(p)
+                # Show just the file name; keep the full path on the item so it
+                # survives look-ups (and the tooltip shows where it came from).
+                item = QListWidgetItem(p.name)
+                item.setData(Qt.ItemDataRole.UserRole, str(p))
+                item.setToolTip(str(p))
+                self._image_list.addItem(item)
+                added = True
+        if added:
+            _remember_dir(self._settings, self.TOOL_KEY, Path(paths[0]).parent)
             self._refresh()
+
+    def _remove_selected_images(self) -> None:
+        for item in self._image_list.selectedItems():
+            p = Path(item.data(Qt.ItemDataRole.UserRole))
+            if p in self._image_paths:
+                self._image_paths.remove(p)
+            self._image_list.takeItem(self._image_list.row(item))
+        self._refresh()
 
     def _set_destination(self, p: Path) -> None:
         self._dst_path = p
@@ -520,8 +610,12 @@ class DeviceLinkDialog(_ToolDialogBase):
             self._output._name_edit.setText(f"{self._dst_path.stem}-devicelink")
 
     # --------------------------------------------------------------- run
+    def _on_image_selection(self) -> None:
+        self._img_remove.setEnabled(
+            self._image_cb.isChecked() and bool(self._image_list.selectedItems()))
+
     def _can_run(self) -> bool:
-        if self._image_cb.isChecked() and self._image_path is None:
+        if self._image_cb.isChecked() and not self._image_paths:
             return False
         return (self._src_path is not None and self._dst_path is not None
                 and self._output.is_complete())
@@ -558,9 +652,9 @@ class DeviceLinkDialog(_ToolDialogBase):
             self._finish(False)
             return
 
-        # If optimising for an image, build its gamut first (tiffgamut), then
-        # link; otherwise go straight to collink.
-        if self._image_cb.isChecked() and self._image_path is not None:
+        # If optimising for images, build their shared gamut first (tiffgamut),
+        # then link; otherwise go straight to collink.
+        if self._image_cb.isChecked() and self._image_paths:
             self._build_image_gamut_then_link(out)
         else:
             self._run_collink(out, src_gamut=None)
@@ -588,8 +682,17 @@ class DeviceLinkDialog(_ToolDialogBase):
             self._temp_files.append(self._gam_path)
             self._run_collink(out, src_gamut=self._gam_path)
 
+        # Build the image gamut in CIECAM02 Jab appearance space (-pj) with the
+        # same source viewing conditions the link uses (-c), so it lines up with
+        # collink's perceptual gamut mapping; a popularity filter (-f) tightens
+        # it around the images' main colours. This is Argyll's documented
+        # image-dependent device-link recipe.
         tg.run(
-            TiffgamutParams(image_path=self._image_path, profile_path=self._src_v2),
+            TiffgamutParams(
+                image_path=self._image_paths[0], image_paths=self._image_paths,
+                profile_path=self._src_v2, intent="p", appearance=True,
+                viewcond=self._src_view_combo.currentData(),
+                filter_perc=float(self._detail_combo.currentData())),
             on_line=lambda ln: self._log_line(ln), on_finish=_on_done)
 
     def _run_collink(self, out: Path, src_gamut: Path | None) -> None:
