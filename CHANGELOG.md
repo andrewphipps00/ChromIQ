@@ -1,5 +1,13 @@
 # Changelog
 
+## v3.13.0-beta.53
+
+### 🐛 Fixed
+- **TIFF preview (Create Chart / Print / Measure):** the ‹ Prev / Next › page
+  buttons appeared active on a freshly-opened tab before any file was loaded —
+  the preview didn't apply its empty-state nav update until the first load or
+  clear. They now hide/disable immediately, matching the loaded behaviour.
+
 ## v3.13.0-beta.52
 
 ### ➕ Added

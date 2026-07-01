@@ -281,6 +281,10 @@ class TiffPreview(QWidget):
         self._refresh_timer.timeout.connect(self._update_display)
 
         self._build_ui()
+        # Reflect the empty state immediately: without this the Prev/Next buttons
+        # keep their default (visible + enabled) look on a freshly-opened tab
+        # until the first load/clear, so they appear active with no file loaded.
+        self._update_nav()
 
     # ------------------------------------------------------------------
     def set_appearance(self, mode: str) -> None:
