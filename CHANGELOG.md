@@ -1,5 +1,15 @@
 # Changelog
 
+## v3.13.0-beta.55
+
+### 🌍 Translated
+- The layout-engine UI — the Create Chart layout panel, the Chart Layout and
+  Instrument Limits settings tabs, the patch-set editor and the chart-layout
+  information panel, plus all their tooltips — is now **fully translated in all 12
+  languages** (German, Dutch, Spanish, French, Italian, Japanese, Norwegian,
+  Polish, Portuguese, Russian, Swedish, Simplified Chinese). Each language uses
+  ChromIQ's established terminology so the wording stays consistent across the app.
+
 ## v3.13.0-beta.54
 
 ### 🔧 Changed
