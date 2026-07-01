@@ -2021,6 +2021,9 @@ def open_tool_dialog(
     elif key == "devicelink_apply":
         from ui.dialogs.devicelink_apply_dialog import DeviceLinkApplyDialog
         dlg = DeviceLinkApplyDialog(runner, settings, parent)
+    elif key == "scanner_target":
+        from ui.dialogs.scanin_target_dialog import ScaninTargetDialog
+        dlg = ScaninTargetDialog(settings, parent)
     elif key == "translate":
         from ui.dialogs.translation_dialog import TranslationDialog
         dlg = TranslationDialog(settings, parent)

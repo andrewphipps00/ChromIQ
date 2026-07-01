@@ -1032,8 +1032,13 @@ class ChartCreator:
         for _note in getattr(self, "_threshold_notes", []):
             on_line(f"[ChromIQ layout engine] {_note}")
         try:
+            # No .cht at build time: a scan-recognition template is only useful
+            # paired with a *measured* .cie, so both are produced together after
+            # measurement (workflow.scanin_target, #97) — an aim-value .cht here
+            # would just be an orphaned half-target (its aim .cie was dropped in
+            # beta.59). The engine keeps the capability (emit_cht) for that flow.
             result = le_chart.build_chart(
-                ti1, work_dir / stem, emit_cht=True, **engine_kwargs)
+                ti1, work_dir / stem, **engine_kwargs)
         except Exception as exc:  # noqa: BLE001 — surface any engine failure
             log.exception("ChromIQ layout engine failed")
             on_line(f"[ERROR] ChromIQ layout engine: {exc}")

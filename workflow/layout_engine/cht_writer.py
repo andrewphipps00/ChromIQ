@@ -10,6 +10,7 @@ geometry — no image edge-detection heuristics (#93, Knut).
 Format (origin is **bottom-left, millimetres**, matching printtarg):
 
     BOXES <n>
+      F _ _ <x1> <y1> … <x4> <y4>                 # patch-area corners TL,TR,BR,BL
       X <loc> <loc> _ _ <w> <h> <xo> <yo> 0 0     # one per patch
     BOX_SHRINK <mm>
     REF_ROTATION 0.0
@@ -18,10 +19,11 @@ Format (origin is **bottom-left, millimetres**, matching printtarg):
     EXPECTED XYZ <n>
       <loc> <X> <Y> <Z>
 
-NOTE: this writes the exact geometry, but ``scanin`` registration normally also
-needs fiducial marks printed on the chart (printtarg's ``-s`` adds them); the
-engine does not draw fiducials yet, so a real scan test is still required before
-relying on scanner reading.
+The ``F`` line gives ``scanin -F`` four reference corners to map a manually
+placed marquee onto (#98) — the robust path since the engine prints no fiducial
+*marks* on the sheet. Auto-recognition (edge ticks + outer corners) is a
+convenience seed; a real scan test still validates registration before relying
+on scanner reading.
 """
 from __future__ import annotations
 
@@ -48,10 +50,36 @@ def _edge_list(positions_len: list[tuple[float, float]]) -> list[tuple[float, fl
     return [(m[0], m[1] / max_len, m[2] / max_cc) for m in merged]
 
 
-def build_cht_text(boxes: list[dict], expected: list[tuple[str, float, float, float]]) -> str:
+def fiducials_from_boxes(boxes: list[dict]) -> tuple[float, ...] | None:
+    """The four patch-area corners as ArgyllCMS fiducials, from the boxes'
+    bounding box (bottom-left mm). Order is **TL, TR, BR, BL** — the order the
+    user places them in ``scanin -F`` and the marquee draws them (#98). Returns
+    ``None`` for an empty box list."""
+    if not boxes:
+        return None
+    xmin = min(b["x"] for b in boxes)
+    xmax = max(b["x"] + b["w"] for b in boxes)
+    ymin = min(b["y"] for b in boxes)
+    ymax = max(b["y"] + b["h"] for b in boxes)
+    #     TL          TR          BR          BL
+    return (xmin, ymax, xmax, ymax, xmax, ymin, xmin, ymin)
+
+
+def build_cht_text(boxes: list[dict], expected: list[tuple[str, float, float, float]],
+                   emit_fiducials: bool = True) -> str:
     """Render the ``.cht`` text. *boxes* are ``{loc,x,y,w,h}`` in mm with a
-    bottom-left origin; *expected* is ``(loc, X, Y, Z)`` reference values."""
-    out: list[str] = ["", "", f"BOXES {len(boxes)}"]
+    bottom-left origin; *expected* is ``(loc, X, Y, Z)`` reference values.
+
+    When *emit_fiducials* (the default), an ``F`` box line carrying the four
+    patch-area corners (TL, TR, BR, BL) is prepended — it lets ``scanin -F``
+    register a scan from four manually-placed corners (#98). The ``F`` line is
+    itself a box, so it is included in the ``BOXES`` count, exactly as Argyll's
+    own reference ``.cht`` files do."""
+    fids = fiducials_from_boxes(boxes) if emit_fiducials else None
+    n_boxes = len(boxes) + (1 if fids else 0)
+    out: list[str] = ["", "", f"BOXES {n_boxes}"]
+    if fids:
+        out.append("  F _ _ " + " ".join(f"{v:f}" for v in fids))
     mins = 1e6
     for b in boxes:
         out.append("  X {loc} {loc} _ _ {w:f} {h:f} {x:f} {y:f} 0 0".format(
@@ -100,7 +128,8 @@ def boxes_from_patch_rects(patch_rects: list[dict], paper_h_mm: float, dpi: int,
 
 
 def write_cht(path: str | Path, boxes: list[dict],
-              expected: list[tuple[str, float, float, float]]) -> Path:
+              expected: list[tuple[str, float, float, float]],
+              emit_fiducials: bool = True) -> Path:
     p = Path(path)
-    p.write_text(build_cht_text(boxes, expected), encoding="utf-8")
+    p.write_text(build_cht_text(boxes, expected, emit_fiducials), encoding="utf-8")
     return p

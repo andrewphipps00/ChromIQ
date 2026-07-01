@@ -51,9 +51,68 @@ from ui.widgets import ElidingLabel, NoScrollComboBox, NoScrollDoubleSpinBox, No
 
 _TAB_COLOR = "#56d6a5"  # Measure tab accent
 from ui.styles import SPEC_GREEN, TAB_COLORS
+
+
+def make_scanner_target_row(parent, checked: bool):
+    """The opt-in "save scanner-profiling files" checkbox for the 'All Stripes
+    Read' dialog, as a bordered row (checkbox + ⓘ + one-line helper).
+
+    Shared by the real dialog and the render harness so they can't drift. Ticking
+    it flags the chart so ChromIQ (re)builds its ``.cht`` + ``.cie`` from the
+    measurement whenever it's finalised — letting you profile a **scanner** from
+    the same chart later, with no reprint (#97). Returns ``(row_widget,
+    checkbox)``; only shown for engine charts."""
+    from PyQt6.QtCore import Qt
+    from PyQt6.QtGui import QPalette
+    from PyQt6.QtWidgets import (
+        QApplication, QCheckBox, QFrame, QHBoxLayout, QLabel, QVBoxLayout)
+
+    app = QApplication.instance()
+    dark = (app is not None
+            and app.palette().color(QPalette.ColorRole.Window).lightness() < 128)
+    # Readable secondary text on the green-tinted card — a muted green that keeps
+    # clear contrast in both themes (palette(mid) washed out on the tint).
+    hint_color = "#a6e3ca" if dark else "#2f6b52"
+    tint_bg    = "rgba(86,214,165,0.13)" if dark else "rgba(86,214,165,0.10)"
+
+    row = QFrame(parent)
+    row.setObjectName("scannerTargetRow")
+    row.setStyleSheet(
+        "#scannerTargetRow { border: 1px solid rgba(86,214,165,0.55);"
+        f" border-radius: 6px; background: {tint_bg}; }}")
+    outer = QVBoxLayout(row)
+    outer.setContentsMargins(12, 8, 12, 10)
+    outer.setSpacing(2)
+
+    top = QHBoxLayout()
+    top.setSpacing(8)
+    cb = QCheckBox(tr("Also save scanner-profiling files for this chart"), row)
+    cb.setChecked(checked)
+    top.addWidget(cb)
+    top.addStretch(1)
+    top.addWidget(TooltipButton(
+        tr("Reuse this chart to profile a scanner"),
+        tr("Saves two small extra files (.cht + .cie) alongside your chart. "
+        "Later, you can build a colour profile for your scanner from this exact "
+        "chart — no need to print or measure anything again: you just scan the "
+        "printed chart, and ChromIQ compares your scanner's view against the "
+        "real colours the spectrophotometer measured here.\n\n"
+        "Leave this off if you're only profiling your printer. You can always "
+        "turn it on later from Tools ▸ Create scanner target."),
+        row, min_width=460, color=_TAB_COLOR),
+        0, Qt.AlignmentFlag.AlignVCenter)
+    outer.addLayout(top)
+
+    hint = QLabel(tr("For scanning the printed chart on a flatbed to profile "
+                     "your scanner — not needed for printer profiling."), row)
+    hint.setWordWrap(True)
+    hint.setStyleSheet(f"color: {hint_color}; font-size: 12px;")
+    outer.addWidget(hint)
+    return row, cb
 from workflow.average_runner import AverageParams, AverageRunner
 from workflow.measure_manager import MeasureManager, MeasureParams
 from workflow.ti3_analysis import mark_verification_ti3
+from workflow.scanin_target import is_engine_geometry
 from ui.tiff_preview import TiffPreview
 from core.i18n import tr
 
@@ -574,6 +633,11 @@ class TabMeasure(QWidget):
 
         self._manager.stripe_changed.connect(self._on_stripe_changed)
         self._manager.all_stripes_done.connect(self._on_all_stripes_done)
+        # Opt-in scanner target: (re)build .cht + .cie from every finalised
+        # measurement when the chart is flagged for it (#97). measure_finished
+        # carries the final .ti3 in every proceed-to-build case (normal, cal/
+        # guided, and both averaging exits), so one connection covers them all.
+        self.measure_finished.connect(self._maybe_build_scanner_target)
         self._manager.calibration_prompt.connect(self._on_calibration_prompt)
         self._manager.calibration_done.connect(self._on_calibration_done)
         self._manager.strip_error.connect(self._on_strip_error)
@@ -3516,6 +3580,19 @@ class TabMeasure(QWidget):
         msg.setWordWrap(True)
         layout.addWidget(msg)
 
+        # Opt-in scanner-target checkbox — offered for a profiling read of an
+        # engine chart (not calibration), so the user can later profile a scanner
+        # from this same chart (#97). Ticking it flags the run; the .cht/.cie are
+        # (re)built from the measurement once it's finalised.
+        scanner_cb = None
+        scanner_run = (Run.for_dir(self._ti1_path.parent)
+                       if self._ti1_path is not None else None)
+        if (scanner_run is not None and not is_cal
+                and is_engine_geometry(scanner_run.chart_channels_json)):
+            row, scanner_cb = make_scanner_target_row(
+                dlg, scanner_run.load_meta().scanner_target_enabled)
+            layout.addWidget(row)
+
         # Manual button row so Re-read / Continue sits on the left and the
         # primary "Build Profile / Create Calibration File" sits on the right —
         # QDialogButtonBox auto-orders by platform (Accept-left on Windows),
@@ -3542,7 +3619,15 @@ class TabMeasure(QWidget):
         layout.addLayout(btn_row)
 
         tint_dialog_primary(dlg, _TAB_COLOR)
-        if dlg.exec() == QDialog.DialogCode.Accepted:
+        accepted = dlg.exec() == QDialog.DialogCode.Accepted
+        # Persist the scanner-target preference regardless of Re-read vs Build —
+        # it's a per-chart choice, applied when the .ti3 is finalised.
+        if scanner_cb is not None and scanner_run is not None:
+            meta = scanner_run.load_meta()
+            if meta.scanner_target_enabled != scanner_cb.isChecked():
+                meta.scanner_target_enabled = scanner_cb.isChecked()
+                scanner_run.save_meta(meta)
+        if accepted:
             self._auto_proceed = True
             self._manager.send_key("d")
             self._arm_key_watchdog()
@@ -3640,6 +3725,17 @@ class TabMeasure(QWidget):
             method_row.addWidget(method_combo, 1)
             layout.addLayout(method_row)
 
+        # Opt-in scanner-target checkbox (engine charts only) — same as the
+        # classic dialog; the averaging path is always a profiling read.
+        scanner_cb = None
+        scanner_run = (Run.for_dir(self._ti1_path.parent)
+                       if self._ti1_path is not None else None)
+        if (scanner_run is not None
+                and is_engine_geometry(scanner_run.chart_channels_json)):
+            row, scanner_cb = make_scanner_target_row(
+                dlg, scanner_run.load_meta().scanner_target_enabled)
+            layout.addWidget(row)
+
         choice = {"action": "average" if in_set else "build"}
 
         def _pick(action: str) -> None:
@@ -3672,6 +3768,12 @@ class TabMeasure(QWidget):
 
         tint_dialog_primary(dlg, _TAB_COLOR)
         dlg.exec()
+
+        if scanner_cb is not None and scanner_run is not None:
+            meta = scanner_run.load_meta()
+            if meta.scanner_target_enabled != scanner_cb.isChecked():
+                meta.scanner_target_enabled = scanner_cb.isChecked()
+                scanner_run.save_meta(meta)
 
         action = choice["action"]
         method = "mean"
@@ -4064,6 +4166,36 @@ class TabMeasure(QWidget):
             )
         self._auto_proceed = False
         self._log.ensureCursorVisible()
+
+    def _maybe_build_scanner_target(self, ti3: Path) -> None:
+        """When the chart is flagged for it (the 'All Stripes Read' checkbox),
+        (re)build its ``.cht`` + ``.cie`` from the just-finalised measurement so
+        the scanner target always reflects the latest read (#97).
+
+        Best-effort: an engine-only, opt-in feature that must never disrupt the
+        profiling flow. Silently skips non-engine charts, un-flagged runs, and
+        partial/mismatched reads (which raise :class:`ScaninTargetError`)."""
+        try:
+            run = Run.for_dir(Path(ti3).parent)
+            if not run.load_meta().scanner_target_enabled:
+                return
+            if not is_engine_geometry(run.chart_channels_json):
+                return
+            from workflow.scanin_target import (
+                ScaninTargetError, build_scanin_target_from_paths)
+            try:
+                res = build_scanin_target_from_paths(
+                    run.chart_channels_json, run.measurement_ti3,
+                    run.dir / run.stem)
+            except ScaninTargetError:
+                return   # e.g. a partial read → not every patch measured yet
+            self._log.appendPlainText(
+                "\n" + tr("[OK] Scanner files (.cht + .cie) saved for {n} patches "
+                          "— scan the printed chart, then use Tools ▸ Create "
+                          "scanner target to build a scanner profile."
+                          ).format(n=res.n_patches))
+        except Exception:  # noqa: BLE001 — never let this break measurement
+            log.exception("Scanner-target build failed (non-fatal)")
 
     # ------------------------------------------------------------------
     # Read again & average  (docs/dev_averaging.md)

@@ -1,6 +1,11 @@
-"""Hand-off sidecars written alongside every chart (colours / i1Profiler), plus
-the engine .cht (emit_cht). Regression for the editor engine-save path that used
-to skip these, and the Create Chart tab that only wrote them for i1iSis."""
+"""Hand-off sidecars written alongside every chart (colours / i1Profiler).
+Regression for the editor engine-save path that used to skip these, and the
+Create Chart tab that only wrote them for i1iSis.
+
+The engine keeps the ``emit_cht`` *capability* (exercised here), but production
+charts no longer write a ``.cht`` at build time — a recognition template is only
+meaningful paired with a *measured* ``.cie``, so both are produced together from
+the measured ``.ti3`` after measurement (workflow.scanin_target, #97)."""
 from pathlib import Path
 
 from workflow.chart_exports import write_colours_txt, write_sidecars

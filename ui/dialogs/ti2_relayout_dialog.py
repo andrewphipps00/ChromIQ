@@ -6359,7 +6359,7 @@ class Ti2RelayoutDialog(QDialog):
         # .ti1 to adopt (#93).
         self._engine_grid_ti1(target / f"{name}.ti1")
         result = le_chart.build_chart(str(target / f"{name}.ti1"), target / name,
-                                      project=name, emit_cht=True,
+                                      project=name,
                                       **recipe.build_kwargs())
         # Fold the strip geometry + recipe into channels.json, mirroring the
         # Create Chart build (workflow.chart_creator._embed_layout_geometry).
@@ -6376,8 +6376,9 @@ class Ti2RelayoutDialog(QDialog):
             strips.unlink()
         # Hand-off sidecars (colour list + i1Profiler pair) — the same set the
         # printtarg save path writes, so an engine chart saved from the editor is
-        # just as self-contained (#93 regression fix). The .cht is written by
-        # build_chart above (emit_cht). Best-effort.
+        # just as self-contained (#93 regression fix). No .cht here: the scanner
+        # target (.cht + .cie) is produced from the *measured* .ti3 after
+        # measurement (workflow.scanin_target, #97). Best-effort.
         from workflow.chart_exports import write_sidecars
         extras = write_sidecars(target / f"{name}.ti1", target, name)
         pages = len(result.tiff_paths or [])

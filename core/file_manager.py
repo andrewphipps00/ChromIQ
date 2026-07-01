@@ -108,6 +108,10 @@ class RunMeta:
     averaging_enabled: bool = False
     averaging_method: str = "mean"
     averaging_read_count: int = 0
+    # Opt-in: keep scanner-recognition files (.cht + .cie) for this chart, rebuilt
+    # from the measurement whenever it's finalised (#97). Off unless the user ticks
+    # the "All Stripes Read" checkbox; only meaningful for engine charts.
+    scanner_target_enabled: bool = False
     preconditioning_source_run: str | None = None
     # Set to "merged.ti3" when a refinement merge ran; otherwise the canonical
     # measurement carries the (project-name) chart stem.
