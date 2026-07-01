@@ -2018,6 +2018,9 @@ def open_tool_dialog(
     elif key == "device_link":
         from ui.dialogs.devicelink_dialog import DeviceLinkDialog
         dlg = DeviceLinkDialog(runner, settings, parent)
+    elif key == "devicelink_apply":
+        from ui.dialogs.devicelink_apply_dialog import DeviceLinkApplyDialog
+        dlg = DeviceLinkApplyDialog(runner, settings, parent)
     elif key == "translate":
         from ui.dialogs.translation_dialog import TranslationDialog
         dlg = TranslationDialog(settings, parent)

@@ -767,12 +767,23 @@ class DeviceLinkDialog(_ToolDialogBase):
             tr("Building device-link → {name}").format(name=out.name))
 
         def _on_finish(code: int) -> None:
-            self._cleanup_temps()
             if code == 0 and out.exists():
+                # Drop a portable "source space" sidecar next to the link (a copy
+                # of the v2 source profile) so the "Apply device-link" tool knows
+                # what colour space the link expects and can convert images into
+                # it. Done before _cleanup_temps, since _src_v2 may be a tempfile.
+                try:
+                    import shutil
+                    shutil.copyfile(self._src_v2, out.with_name(out.stem + ".source.icc"))
+                except OSError:
+                    pass
+                self._settings.set("devicelink_last_link", str(out))
+                self._cleanup_temps()
                 self._log.appendPlainText(tr("[OK] Wrote {path}").format(path=out))
                 _remember_dir(self._settings, self.TOOL_KEY, out.parent)
                 self._finish(True)
             else:
+                self._cleanup_temps()
                 fail = self._collink.primary_failure()
                 msg = fail[1] if fail else tr("collink failed — see messages above.")
                 self._log.appendPlainText(f"[ERROR] {msg}")

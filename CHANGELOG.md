@@ -1,5 +1,28 @@
 # Changelog
 
+## v3.13.0-beta.56
+
+### ➕ Added
+- **New Tool: "Apply a device-link to an image".** Pushes your images through a
+  device-link with `cctiff` and saves a **printer-ready TIFF** next to each
+  (`<name>-printready.tif`) — already in the printer's own colours, no profile
+  attached. Print it **raw** (the way charts are printed, driver colour
+  management off) or load it in a RIP. This sidesteps the driver double-managing
+  the link's output (the cause of "orange" prints on some Canon drivers), and it
+  never touches the print pipeline so it works cross-platform.
+  - **Source-space auto-fix:** the "Create device-link" tool now drops a small
+    `.source.icc` sidecar next to each link, so the Apply tool knows the space
+    the link expects. When an image is in a *different* space it is converted
+    into the link's source first (v4 embedded profiles transcoded to v2) — so
+    results are correct even if the image wasn't already in the link's source
+    space. Third-party links without a sidecar fall back to a clear warning.
+  - Multi-image, image preview, amber (print-family) accent, ⓘ per option.
+
+### 🔧 Changed
+- Built device-links now record their source colour space (a `.source.icc`
+  sidecar) and are remembered as the "last link" for one-click auto-fill.
+- All new strings translated into the 12 UI languages.
+
 ## v3.13.0-beta.55
 
 ### 🌍 Translated

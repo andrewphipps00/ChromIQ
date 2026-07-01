@@ -59,6 +59,7 @@ _ENTRIES: tuple[ToolEntry, ...] = (
     ToolEntry("ti3_info",     tr("Inspect a measurement")),
     ToolEntry("softproof",    tr("Soft-proof / check an image")),
     ToolEntry("device_link",  tr("Create device-link profile")),
+    ToolEntry("devicelink_apply", tr("Apply a device-link to an image")),
     ToolEntry("translate",    tr("Translate / edit language")),
 )
 
