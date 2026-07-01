@@ -543,7 +543,7 @@
   "Custom text": "Custom text",
   "Custom text:": "Custom text:",
   "Custom: {name}": "Własny: {name}",
-  "Custom…": "Custom…",
+  "Custom…": "Niestandardowe…",
   "Cyan": "Cyjan",
   "DPI:": "DPI:",
   "Dark": "Ciemny",
@@ -2194,7 +2194,6 @@
   "Choose images to optimise for": "Wybierz obrazy do optymalizacji",
   "Favour the main colours (recommended)": "Preferuj główne kolory (zalecane)",
   "How colours that fall outside the printer's range are handled.\n\n• Photographic (perceptual) gently squeezes the whole picture so relationships between colours stay natural — the best default for photos.\n• Accurate keeps in-range colours exact and clips the rest — good for logos and spot colours.\n• Punchy favours vivid saturation.\n• Proof reproduces another device's colours as-is, for proofing.\n• The remaining entries are collink's finer gamut-mapping intents. Luminance-preserving perceptual is well worth a try on matte fine-art paper, where the standard perceptual and relative intents often disappoint.\n\nThe choice is baked into the link — when you apply it in Photoshop the intent dropdown no longer matters (pick the link under any intent).": "Jak traktowane są kolory wykraczające poza zakres drukarki.\n\n• Fotograficzny (percepcyjny) delikatnie ściska cały obraz, aby relacje między kolorami pozostały naturalne — najlepszy domyślny wybór do zdjęć.\n• Wierny utrzymuje kolory w zakresie dokładne i przycina resztę — dobry do logo i kolorów dodatkowych.\n• Mocny sprzyja żywemu nasyceniu.\n• Symulacja odtwarza kolory innego urządzenia bez zmian, do prób.\n• Pozostałe pozycje to dokładniejsze sposoby mapowania gamutu w collink. „Percepcyjny z zachowaniem luminancji” warto wypróbować na matowym papierze artystycznym, gdzie zwykłe sposoby percepcyjny i względny często rozczarowują.\n\nWybór jest wpisany w link — gdy zastosujesz go w Photoshopie, lista sposobu odwzorowania nie ma już znaczenia (wybierz link przy dowolnym sposobie).",
-  "How tightly the link hugs the colours in your images.\n\n• Favour the main colours — tightens the gamut around the image's popular colours so their saturation is held best (Argyll's suggested starting point).\n• Preserve all gradations — keeps even rarely-used colours, at the cost of compressing the gamut more.\n\nOnly used when 'Optimise for specific images' is on. If unsure, leave it on 'Favour the main colours'.": "Jak ciasno link trzyma się kolorów Twoich obrazów.\n\n• Preferuj główne kolory — zacieśnia gamut wokół częstych kolorów obrazu, aby najlepiej utrzymać ich nasycenie (punkt wyjścia sugerowany przez Argyll).\n• Zachowaj wszystkie przejścia — zachowuje nawet rzadko używane kolory, kosztem silniejszej kompresji gamutu.\n\nUżywane tylko, gdy „Optymalizuj pod konkretne obrazy” jest włączone. W razie wątpliwości zostaw „Preferuj główne kolory”.",
   "Image-gamut detail": "Szczegółowość gamutu obrazu",
   "Image-gamut detail:": "Szczegółowość gamutu obrazu:",
   "Luminance-matched appearance": "Wygląd dopasowany luminancją",
@@ -2205,5 +2204,7 @@
   "Perceptual appearance": "Wygląd percepcyjny",
   "Preserve all gradations": "Zachowaj wszystkie przejścia",
   "Saturation (smoother)": "Nasycenie (łagodniejsze)",
-  "Strongly favour saturation": "Mocno preferuj nasycenie"
+  "Strongly favour saturation": "Mocno preferuj nasycenie",
+  "How tightly the link hugs the colours in your images.\n\n• Favour the main colours — tightens the gamut around the image's popular colours so their saturation is held best (Argyll's suggested starting point).\n• Preserve all gradations — keeps even rarely-used colours, at the cost of compressing the gamut more.\n• Custom — set the exact popularity filter yourself (0–100).\n\nOnly used when 'Optimise for specific images' is on. If unsure, leave it on 'Favour the main colours'.": "Jak ciasno link trzyma się kolorów Twoich obrazów.\n\n• Preferuj główne kolory — zacieśnia gamut wokół częstych kolorów obrazu, aby najlepiej utrzymać ich nasycenie (punkt wyjścia sugerowany przez Argyll).\n• Zachowaj wszystkie przejścia — zachowuje nawet rzadko używane kolory, kosztem silniejszej kompresji gamutu.\n• Niestandardowe — ustaw filtr popularności samodzielnie (0–100).\n\nUżywane tylko, gdy „Optymalizuj pod konkretne obrazy” jest włączone. W razie wątpliwości zostaw „Preferuj główne kolory”.",
+  "Exact popularity filter — 0 keeps every colour; a lower value favours the main colours' saturation.": "Dokładny filtr popularności — 0 zachowuje każdy kolor; niższa wartość preferuje nasycenie głównych kolorów."
 }

@@ -543,7 +543,7 @@
   "Custom text": "Custom text",
   "Custom text:": "Custom text:",
   "Custom: {name}": "Свой: {name}",
-  "Custom…": "Custom…",
+  "Custom…": "Пользовательское…",
   "Cyan": "Голубой",
   "DPI:": "DPI:",
   "Dark": "Тёмная",
@@ -2194,7 +2194,6 @@
   "Choose images to optimise for": "Выбрать изображения для оптимизации",
   "Favour the main colours (recommended)": "Предпочесть основные цвета (рекомендуется)",
   "How colours that fall outside the printer's range are handled.\n\n• Photographic (perceptual) gently squeezes the whole picture so relationships between colours stay natural — the best default for photos.\n• Accurate keeps in-range colours exact and clips the rest — good for logos and spot colours.\n• Punchy favours vivid saturation.\n• Proof reproduces another device's colours as-is, for proofing.\n• The remaining entries are collink's finer gamut-mapping intents. Luminance-preserving perceptual is well worth a try on matte fine-art paper, where the standard perceptual and relative intents often disappoint.\n\nThe choice is baked into the link — when you apply it in Photoshop the intent dropdown no longer matters (pick the link under any intent).": "Как обрабатываются цвета, выходящие за пределы диапазона принтера.\n\n• Фотографический (перцепционный) мягко сжимает всё изображение, чтобы соотношения между цветами оставались естественными, — лучший вариант по умолчанию для фотографий.\n• Точный сохраняет цвета в диапазоне точными и отсекает остальное — хорошо для логотипов и плашечных цветов.\n• Насыщенный отдаёт предпочтение живой насыщенности.\n• Проба воспроизводит цвета другого устройства как есть, для цветопробы.\n• Остальные пункты — это более тонкие методы отображения гамута в collink. «Перцепционный с сохранением светлоты» стоит попробовать на матовой художественной бумаге, где обычные перцепционный и относительный методы часто разочаровывают.\n\nВыбор «запекается» в линк — при применении в Photoshop список метода преобразования уже не имеет значения (выбирайте линк при любом методе).",
-  "How tightly the link hugs the colours in your images.\n\n• Favour the main colours — tightens the gamut around the image's popular colours so their saturation is held best (Argyll's suggested starting point).\n• Preserve all gradations — keeps even rarely-used colours, at the cost of compressing the gamut more.\n\nOnly used when 'Optimise for specific images' is on. If unsure, leave it on 'Favour the main colours'.": "Насколько плотно линк повторяет цвета ваших изображений.\n\n• Предпочесть основные цвета — стягивает гамут вокруг частых цветов изображения, чтобы лучше сохранить их насыщенность (рекомендуемая Argyll отправная точка).\n• Сохранить все градации — сохраняет даже редко используемые цвета ценой более сильного сжатия гамута.\n\nИспользуется, только когда включено «Оптимизировать под определённые изображения». Если не уверены, оставьте «Предпочесть основные цвета».",
   "Image-gamut detail": "Детальность гамута изображения",
   "Image-gamut detail:": "Детальность гамута изображения:",
   "Luminance-matched appearance": "Вид с подстройкой светлоты",
@@ -2205,5 +2204,7 @@
   "Perceptual appearance": "Перцепционный вид",
   "Preserve all gradations": "Сохранить все градации",
   "Saturation (smoother)": "Насыщенность (мягче)",
-  "Strongly favour saturation": "Сильно предпочесть насыщенность"
+  "Strongly favour saturation": "Сильно предпочесть насыщенность",
+  "How tightly the link hugs the colours in your images.\n\n• Favour the main colours — tightens the gamut around the image's popular colours so their saturation is held best (Argyll's suggested starting point).\n• Preserve all gradations — keeps even rarely-used colours, at the cost of compressing the gamut more.\n• Custom — set the exact popularity filter yourself (0–100).\n\nOnly used when 'Optimise for specific images' is on. If unsure, leave it on 'Favour the main colours'.": "Насколько плотно линк повторяет цвета ваших изображений.\n\n• Предпочесть основные цвета — стягивает гамут вокруг частых цветов изображения, чтобы лучше сохранить их насыщенность (рекомендуемая Argyll отправная точка).\n• Сохранить все градации — сохраняет даже редко используемые цвета ценой более сильного сжатия гамута.\n• Пользовательское — задайте фильтр по популярности сами (0–100).\n\nИспользуется, только когда включено «Оптимизировать под определённые изображения». Если не уверены, оставьте «Предпочесть основные цвета».",
+  "Exact popularity filter — 0 keeps every colour; a lower value favours the main colours' saturation.": "Точный фильтр по популярности — 0 сохраняет каждый цвет; меньшее значение предпочитает насыщенность основных цветов."
 }

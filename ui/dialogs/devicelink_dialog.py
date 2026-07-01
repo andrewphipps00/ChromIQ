@@ -49,6 +49,7 @@ from ui.tooltip_button import TooltipButton
 from ui.widgets import (
     CollapsibleGroupBox,
     NoScrollComboBox,
+    NoScrollSpinBox,
     confirm,
     icc_profile_paths,
     load_folder_icon,
@@ -122,11 +123,14 @@ class DeviceLinkDialog(_ToolDialogBase):
     # (label, tiffgamut -f popularity filter %). 0 = omit -f (keep every colour,
     # gradations of even rare colours preserved). A lower % tightens the gamut
     # around the image's popular colours, holding their saturation better.
+    # -1 = "Custom…", which reveals a raw 0–100 spinner.
+    _CUSTOM_DETAIL = -1
     _IMAGE_DETAIL = (
         (tr("Favour the main colours (recommended)"), 80),
         (tr("Preserve all gradations"), 0),
         (tr("Balanced"), 90),
         (tr("Strongly favour saturation"), 60),
+        (tr("Custom…"), -1),
     )
     # (label, collink -c code) — where the source images are viewed (a screen)
     _SRC_VIEWCONDS = (
@@ -396,13 +400,21 @@ class DeviceLinkDialog(_ToolDialogBase):
         self._image_list.itemSelectionChanged.connect(self._on_image_selection)
         body.addWidget(self._image_list)
 
+        # Compact buttons: the app-wide `QPushButton { min-height: 28px }` beats a
+        # setFixedHeight(), and #compact_input (min-height:0) lets them collapse to
+        # a sliver. Force an exact height via a per-widget stylesheet (min == max),
+        # keeping the themed background/border from the app-wide QPushButton rule.
+        _COMPACT_BTN = "QPushButton { min-height: 24px; max-height: 24px; padding: 2px 12px; }"
         img_btns = QHBoxLayout()
+        img_btns.setContentsMargins(0, 2, 0, 6)   # gap to the detail row below
         self._img_add = QPushButton(tr("Add images…"), self)
+        self._img_add.setStyleSheet(_COMPACT_BTN)
         self._img_add.setIcon(load_folder_icon("folder_build"))
-        self._img_add.setIconSize(QSize(18, 18))
+        self._img_add.setIconSize(QSize(14, 14))
         self._img_add.setEnabled(False)
         self._img_add.clicked.connect(self._pick_images)
         self._img_remove = QPushButton(tr("Remove"), self)
+        self._img_remove.setStyleSheet(_COMPACT_BTN)
         self._img_remove.setEnabled(False)
         self._img_remove.clicked.connect(self._remove_selected_images)
         img_btns.addWidget(self._img_add)
@@ -410,18 +422,37 @@ class DeviceLinkDialog(_ToolDialogBase):
         img_btns.addStretch(1)
         body.addLayout(img_btns)
 
-        self._detail_combo = self._combo_row(
-            body, tr("Image-gamut detail:"), tr("Image-gamut detail"),
+        # Detail = presets + a "Custom…" entry that reveals a raw 0–100 spinner.
+        detail_row = QHBoxLayout()
+        detail_row.addWidget(QLabel(tr("Image-gamut detail:"), self))
+        self._detail_combo = NoScrollComboBox(self)
+        for text, data in self._IMAGE_DETAIL:
+            self._detail_combo.addItem(text, data)
+        self._detail_combo.currentIndexChanged.connect(self._on_detail_changed)
+        detail_row.addWidget(self._detail_combo, 1)
+        self._detail_spin = NoScrollSpinBox(self)
+        self._detail_spin.setRange(0, 100)
+        self._detail_spin.setSuffix(" %")
+        self._detail_spin.setFixedWidth(78)
+        self._detail_spin.setToolTip(
+            tr("Exact popularity filter — 0 keeps every colour; a lower value "
+               "favours the main colours' saturation."))
+        detail_row.addWidget(self._detail_spin)
+        detail_row.addWidget(self._tip(
+            tr("Image-gamut detail"),
             tr("How tightly the link hugs the colours in your images.\n\n"
             "• Favour the main colours — tightens the gamut around the image's "
             "popular colours so their saturation is held best (Argyll's suggested "
             "starting point).\n"
             "• Preserve all gradations — keeps even rarely-used colours, at the "
-            "cost of compressing the gamut more.\n\n"
+            "cost of compressing the gamut more.\n"
+            "• Custom — set the exact popularity filter yourself (0–100).\n\n"
             "Only used when 'Optimise for specific images' is on. If unsure, leave "
-            "it on 'Favour the main colours'."),
-            self._IMAGE_DETAIL)
+            "it on 'Favour the main colours'."), 500), 0,
+            Qt.AlignmentFlag.AlignVCenter)
+        body.addLayout(detail_row)
         self._detail_combo.setEnabled(False)
+        self._on_detail_changed()
 
         # 2 — abstract "tweak" profile.
         self._label_row(
@@ -504,11 +535,27 @@ class DeviceLinkDialog(_ToolDialogBase):
         self._image_list.setEnabled(on)
         self._img_add.setEnabled(on)
         self._detail_combo.setEnabled(on)
+        self._detail_spin.setEnabled(
+            on and self._detail_combo.currentData() == self._CUSTOM_DETAIL)
         self._img_remove.setEnabled(on and bool(self._image_list.selectedItems()))
         if not on:
             self._image_paths = []
             self._image_list.clear()
         self._refresh()
+
+    def _on_detail_changed(self) -> None:
+        """Reveal the raw spinner only for 'Custom…'; otherwise mirror the preset's
+        value in the (disabled) spinner so the effective filter is always visible."""
+        custom = self._detail_combo.currentData() == self._CUSTOM_DETAIL
+        self._detail_spin.setEnabled(custom and self._image_cb.isChecked())
+        if not custom:
+            self._detail_spin.blockSignals(True)
+            self._detail_spin.setValue(int(self._detail_combo.currentData()))
+            self._detail_spin.blockSignals(False)
+
+    def _detail_filter_perc(self) -> float:
+        d = self._detail_combo.currentData()
+        return float(self._detail_spin.value() if d == self._CUSTOM_DETAIL else d)
 
     # --------------------------------------------------------------- pickers
     def _browse_file(self, caption: str, name_filter: str, *,
@@ -692,7 +739,7 @@ class DeviceLinkDialog(_ToolDialogBase):
                 image_path=self._image_paths[0], image_paths=self._image_paths,
                 profile_path=self._src_v2, intent="p", appearance=True,
                 viewcond=self._src_view_combo.currentData(),
-                filter_perc=float(self._detail_combo.currentData())),
+                filter_perc=self._detail_filter_perc()),
             on_line=lambda ln: self._log_line(ln), on_finish=_on_done)
 
     def _run_collink(self, out: Path, src_gamut: Path | None) -> None:
