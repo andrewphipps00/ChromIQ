@@ -317,6 +317,9 @@ class DeviceLinkDialog(_ToolDialogBase):
             "Luminance-preserving perceptual is well worth a try on matte fine-art "
             "paper, where the standard perceptual and relative intents often "
             "disappoint.\n\n"
+            "Note: perceptual and its variants can nudge very saturated colours — "
+            "magenta especially — a few degrees warmer to keep gradations smooth; "
+            "if a hue must stay exact, choose Accurate colours.\n\n"
             "The choice is baked into the link — when you apply it in Photoshop the "
             "intent dropdown no longer matters (pick the link under any intent)."),
             self._INTENTS)

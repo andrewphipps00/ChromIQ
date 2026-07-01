@@ -1,5 +1,18 @@
 # Changelog
 
+## v3.13.0-beta.54
+
+### 🔧 Changed
+- **Device-link Rendering-style help** now notes that perceptual (and its
+  variants) can nudge very saturated colours — magenta especially — a few
+  degrees to keep gradations smooth, and points hue-critical work to *Accurate
+  colours*. (From backtomarfa's #99 measurements: the hue shift is Argyll's
+  perceptual gamut mapping, not a ChromIQ defect, and is fully intent-selectable.)
+- **Built profiles are now self-identifying:** colprof is always given a
+  manufacturer (`ChromIQ`) and model (the profile description), so the device-ID
+  tags are populated. A device-link built from a ChromIQ profile then carries a
+  proper profile-sequence (`pseq`) instead of a blank/placeholder entry.
+
 ## v3.13.0-beta.53
 
 ### 🐛 Fixed
