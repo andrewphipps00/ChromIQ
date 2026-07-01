@@ -1,5 +1,13 @@
 # Changelog
 
+## v3.13.0-beta.49
+
+### 🐛 Fixed
+- **Settings → Chart Layout:** the "Show strip indicators" checkbox was drawn on
+  top of the "Basic" section header (overlapping text) because it wasn't placed in
+  the layout when the panel has no built-in selectors. It now sits correctly as a
+  row in the Layout group, matching the Create Chart panel.
+
 ## v3.13.0-beta.48
 
 ### 🔧 Changed

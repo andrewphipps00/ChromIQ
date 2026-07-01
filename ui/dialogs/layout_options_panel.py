@@ -450,13 +450,17 @@ class LayoutOptionsPanel(QWidget):
                        "size it was designed to read — then fills the height to "
                        "that count."), self))
         lgg.addWidget(self._area_fields_w, 1, 0, 1, 3)
-        # Mode (density / clip mode / shape), "Show strip indicators" and the
-        # CM/SS Clip-border toggle live at the bottom of the Layout frame
-        # (Knut #93), grouped with the layout choices rather than up in the
-        # instrument selectors. Strip indicators sit just above Clip border.
+        # "Show strip indicators" is a layout option (not a selector), so it is
+        # ALWAYS placed here — otherwise, when the panel has no built-in selectors
+        # (e.g. the Settings → Chart Layout tab), the checkbox was created but
+        # never added to a layout and floated at the panel's top-left, overlapping
+        # the "Basic" frame header (Knut).
+        lgg.addWidget(self.show_indicators, 2, 1)
+        lgg.addWidget(self._show_indicators_tip, 2, 2)
+        # Mode (density / clip mode / shape) and the CM/SS Clip-border toggle are
+        # SELECTORS, so they only appear when the panel owns them (#93); in
+        # Settings the same selectors are provided by the tab itself.
         if getattr(self, "mode", None) is not None:
-            lgg.addWidget(self.show_indicators, 2, 1)
-            lgg.addWidget(self._show_indicators_tip, 2, 2)
             lgg.addWidget(self._mode_lbl, 3, 0)
             lgg.addWidget(self.mode, 3, 1)
             lgg.addWidget(self._mode_tip, 3, 2)
