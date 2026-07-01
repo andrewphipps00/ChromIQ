@@ -1,5 +1,12 @@
 # Changelog
 
+## v3.13.0-beta.58
+
+### 🐛 Fixed
+- Renaming a project now also renames its chart hand-off sidecars — the colour
+  list (`-colours.txt`), the `.cie` reference and the `.cht` template — so a
+  renamed project stays self-consistent (the i1Profiler pair already followed).
+
 ## v3.13.0-beta.57
 
 ### 🐛 Fixed

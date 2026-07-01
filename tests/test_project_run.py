@@ -503,6 +503,11 @@ def test_project_rename_fixes_stems_manifest_and_readme(tmp_path: Path) -> None:
     cal.ti3.write_text("CALTI3")
     proj.ensure_exports_dir()
     (proj.exports_dir / "Old-i1profiler.pxf").write_text("PXF")
+    # Chart hand-off sidecars carry the stem too and must follow the rename.
+    run.chart_cht.write_text("CHT")
+    (run.dir / "Old.cie").write_text("CIE")
+    (run.dir / "Old-colours.txt").write_text("#ffffff")
+    (run.dir / "Old-i1profiler.txt").write_text("TXT")
     # A user's own file that merely starts with the stem must NOT be renamed.
     (proj.root / "Old-notes.txt").write_text("keep me")
 
@@ -521,8 +526,14 @@ def test_project_rename_fixes_stems_manifest_and_readme(tmp_path: Path) -> None:
     assert proj.calibration.cal_path.name == "New-cal.cal"
     assert proj.calibration.ti3.name == "New-cal.ti3"
     assert (proj.exports_dir / "New-i1profiler.pxf").exists()
+    # Hand-off sidecars followed the rename.
+    assert run.chart_cht.name == "New.cht" and run.chart_cht.exists()
+    assert (run.dir / "New.cie").exists()
+    assert (run.dir / "New-colours.txt").exists()
+    assert (run.dir / "New-i1profiler.txt").exists()
     # Old-stem files are gone; the user's note is untouched.
     assert not (run.dir / "Old.ti1").exists()
+    assert not (run.dir / "Old-colours.txt").exists()
     assert (moved / "Old-notes.txt").read_text() == "keep me"
     # Manifest + README reflect the new name.
     manifest = json.loads(proj.manifest_path.read_text())
