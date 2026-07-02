@@ -104,6 +104,59 @@ _SCANIN_ERROR_PATTERNS: list[tuple[re.Pattern[str], str, str]] = [
     (re.compile(r"error opening read file '([^']+)'", re.IGNORECASE),
      "open_failed",
      "Couldn't open '{0}'. Check the scan file exists and is readable."),
+
+    # --- reference-file (.cht / .cie) failures ----------------------------
+    # These files are written (and pre-validated) by ChromIQ, so in normal use
+    # they can't be malformed — but a corrupted/edited file, a mismatched
+    # .cht+.cie pair, or a writer regression would otherwise surface as a raw
+    # Argyll dump. Collapse the many CGATS complaints into two clear messages.
+    #
+    # Bucket A — the scanner files are damaged / incomplete (malformed CTI2,
+    # empty tables, missing COLOR_REP / SAMPLE_ID / SAMPLE_LOC, unresolvable
+    # sample or location). scanin.c L623-882, L1126-1210.
+    (re.compile(
+        r"isn't a CTI2 format file"
+        r"|doesn't contain at least one table"
+        r"|doesn't (?:contain any data sets|contain any|have any)"
+        r"|(?:has no|no) sets of data"
+        r"|doesn't contain keyword COLOR_REPS?"
+        r"|keyword COLOR_REPS? has unknown value"
+        r"|doesn't contain field SAMPLE_(?:ID|LOC)"
+        r"|[Ff]ield SAMPLE_(?:ID|LOC) is wrong type"
+        r"|Couldn't find (?:sample|location) '[^']*'",
+        re.IGNORECASE),
+     "reference_damaged",
+     "This chart's scanner files (.cht + .cie) look damaged or incomplete. "
+     "Recreate them with Tools ▸ Create scanner target, then try again."),
+
+    # Bucket B — the .cht/.cie don't match this chart's measurement: different
+    # patch count, mismatched patch IDs/device values, or a different device
+    # space (e.g. a .cht from one chart paired with another's .cie).
+    # scanin.c L691, L957-970.
+    (re.compile(
+        r"[Dd]ifferent number of patches"
+        r"|field id's don't match at patch"
+        r"|device values .*don't match at patch"
+        r"|has different device space",
+        re.IGNORECASE),
+     "reference_mismatch",
+     "The scanner files don't match this chart's measurement (different "
+     "patches or device type). Recreate them from this chart's own "
+     "measurement with Tools ▸ Create scanner target."),
+
+    # Bucket C — a generic CGATS read/write failure on a reference or output
+    # file (permission, disk, truncation). scanin.c L596-799, L1165.
+    (re.compile(r"CGATS file .*read error|[Ww]rite error to|Can't open file",
+                re.IGNORECASE),
+     "reference_io",
+     "Couldn't read or write one of the scanner files. Check the files exist "
+     "and the folder is writable, then try again."),
+
+    # Out of memory on a very large scan. scanin.c L521, L976.
+    (re.compile(r"Malloc failed|Unable to allocate", re.IGNORECASE),
+     "out_of_memory",
+     "Ran out of memory while processing the scan. Try scanning the chart at a "
+     "lower resolution (300–600 dpi is plenty)."),
 ]
 
 

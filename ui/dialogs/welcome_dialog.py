@@ -453,6 +453,32 @@ WORKFLOWS: list[dict] = [
                 "you can poke around freely without changing anything.")),
         ],
     },
+    {
+        "key": "scanner_profile",
+        "title": tr("Profile my scanner"),
+        "subtitle": tr("Reuse a measured chart to colour-profile a flatbed scanner."),
+        "steps": [
+            (3, tr("Print and measure a ChromIQ chart as usual, and keep its "
+                "scanner files: after measuring, tick “Also save "
+                "scanner-profiling files for this chart” in the All Stripes Read "
+                "or Profile Quality Assessment window — or run Tools ▸ Create "
+                "scanner target on any measured chart. This writes the chart's "
+                ".cht + .cie files.")),
+            (3, tr("Scan the printed chart on the scanner you want to profile as "
+                "a plain RGB TIFF, with the scanner's own auto-correction and "
+                "colour management turned OFF.")),
+            (3, tr("Open Tools ▸ Build scanner profile. Pick the measured chart "
+                "and the scan, drag the four corners over the patch area until "
+                "the green grid lines up with the real patches, and build. "
+                "ChromIQ runs scanin + colprof and writes a scanner ICC profile "
+                "next to the scan. Multi-page charts: one scan and placement per "
+                "page, combined into one profile.")),
+            (3, tr("For the best quality when you mainly scan your own "
+                "colour-managed prints, print a fresh chart through your normal "
+                "print workflow, measure THAT sheet, and profile from it — its "
+                "colours then match what you actually scan."), True),
+        ],
+    },
 ]
 
 
@@ -757,6 +783,26 @@ class WorkflowIcon(QWidget):
             v = verts[1]
             p.drawEllipse(int(v[0] - 5), int(v[1] - 5), 10, 10)
 
+        elif self._key == "scanner_profile":
+            # Flatbed scanner: bed rectangle, an accent scan bar, content lines
+            margin = 16
+            top = margin + 6
+            h = s - 2 * margin - 12
+            p.setPen(QPen(fg, stroke))
+            p.setBrush(QColor(0, 0, 0, 0))
+            p.drawRoundedRect(margin, top, s - 2 * margin, h, 6, 6)
+            inner = margin + 10
+            # Accent scan bar (the moving light) near the top of the bed
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(accent)
+            p.drawRoundedRect(inner, top + 12, s - 2 * inner, 6, 2, 2)
+            # Two content lines below it
+            p.setPen(QPen(fg, stroke))
+            for k in range(2):
+                y = top + 30 + k * 12
+                x1 = s - inner - (12 if k == 1 else 0)
+                p.drawLine(inner, y, x1, y)
+
         p.end()
 
 
@@ -1033,20 +1079,23 @@ class WelcomeDialog(QDialog):
         grid.setContentsMargins(0, 8, 12, 16)
         grid.setHorizontalSpacing(14)
         grid.setVerticalSpacing(14)
+        # 3-column grid. Full rows fill left-to-right; a partial final row is
+        # centred (1 card → middle column; 2 cards → cols 0 and 2). Works for any
+        # card count — a full last row (e.g. 9 cards) is just three clean rows.
         n_cards = len(WORKFLOWS)
-        last_row_count = n_cards - 6 if n_cards > 6 else 0
+        rem = n_cards % 3
+        full_count = n_cards - rem
+        last_row = full_count // 3
         for i, wf in enumerate(WORKFLOWS):
             card = WorkflowCard(wf, grid_host)
             card.clicked.connect(self._on_card_clicked)
             self._cards.append(card)
-            if i < 6:
+            if i < full_count:
                 grid.addWidget(card, i // 3, i % 3)
-            elif last_row_count == 1:
-                # Solo extra card — centre column of the third row.
-                grid.addWidget(card, 2, 1)
-            else:
-                # Two extra cards — sit at cols 0 and 2, leaving col 1 empty.
-                grid.addWidget(card, 2, 0 if i == 6 else 2)
+            elif rem == 1:
+                grid.addWidget(card, last_row, 1)
+            else:  # rem == 2 → cols 0 and 2, leaving the middle empty
+                grid.addWidget(card, last_row, 0 if i == full_count else 2)
 
         # Uniform tile height that fits the tallest translated card at the
         # narrowest card width the minimum dialog size allows (~205px of

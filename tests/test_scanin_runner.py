@@ -60,3 +60,45 @@ def test_error_parsing_recognition_and_depth():
     # the friendly text for the first failure mentions re-placing the corners
     key, msg = r.primary_failure()
     assert key == "recognition_failed" and "corners" in msg.lower()
+
+
+# Exact messages copied from Argyll 3.5.0 scanin/scanin.c, each mapped to the
+# friendly bucket it should collapse into.
+def _first_key(*lines):
+    r = ScaninRunner(runner=None)
+    for ln in lines:
+        r._scan_line(ln)
+    fail = r.primary_failure()
+    return fail[0] if fail else None
+
+
+def test_reference_damaged_messages():
+    for ln in (
+        "Input file 'chart.cie' isn't a CTI2 format file",
+        "Input file 'chart.cie' doesn't contain at least one table",
+        "Input file 'chart.cie' doesn't contain any data sets",
+        "Input file 'chart.cie' doesn't contain keyword COLOR_REP",
+        "Input file 'chart.cie' keyword COLOR_REP has unknown value",
+        "Input file 'chart.cie' doesn't contain field SAMPLE_ID",
+        "Input file 'chart.cie' Field SAMPLE_LOC is wrong type",
+        "Couldn't find location 'A1' in 'chart.cie'",
+        "Couldn't find sample 'A1' in 'chart.ti3'",
+    ):
+        assert _first_key(ln) == "reference_damaged", ln
+
+
+def test_reference_mismatch_messages():
+    for ln in (
+        "Different number of patches in 'x.ti3' (10) to expected(12)",
+        "'a.cie' and 'b.ti3' field id's don't match at patch 3",
+        "'a.cie' and 'b.ti3' device values (1.0 2.0) don't match at patch 3 4",
+        "File 'a.cie' has different device space to 'b.ti3'",
+    ):
+        assert _first_key(ln) == "reference_mismatch", ln
+
+
+def test_reference_io_and_oom_messages():
+    assert _first_key("CGATS file 'x.cie' read error : unexpected EOF") == "reference_io"
+    assert _first_key("Write error to 'out.ti3' : disk full") == "reference_io"
+    assert _first_key("Unable to allocate scanrd object") == "out_of_memory"
+    assert _first_key("Malloc failed!") == "out_of_memory"

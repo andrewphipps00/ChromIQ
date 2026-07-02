@@ -56,6 +56,27 @@ def _chart_base(ti3: Path) -> Path:
     return ti3.with_name(stem)
 
 
+# Shared "which chart should I use?" guidance, appended to both scanner tool
+# dialogs' ⓘ help. Defined once so the two dialogs share a single catalog key.
+WHICH_CHART_HELP = tr(
+    "Which chart makes the best scanner profile?\n\n"
+    "The reference colours always come from your spectrophotometer "
+    "measurement, so the profile is correct as long as you scan the very sheet "
+    "you measured. The choice is only about how well the target matches what "
+    "you'll actually scan:\n\n"
+    "• Reuse the chart you already measured (no reprint) — free, correct, and "
+    "ideal for general use and most photographers. Printed without colour "
+    "management, it actually spans your printer's full gamut.\n\n"
+    "• Print a fresh chart through your normal colour-managed workflow — the "
+    "same paper and settings you use for real prints — then measure THAT sheet "
+    "and scan it. This is best when you mainly scan your own colour-managed "
+    "prints, because the target then matches the exact colours and rendering "
+    "you produce. You must measure the reprint: you can't reuse the earlier "
+    "measurement for a different sheet.\n\n"
+    "Whichever you choose, match the paper and finish (glossy vs. matte) to "
+    "what you'll scan.")
+
+
 class ScaninTargetDialog(_ToolDialogBase):
     TOOL_KEY    = "scanner_target"
     TITLE       = tr("Create scanner target")
@@ -75,7 +96,8 @@ class ScaninTargetDialog(_ToolDialogBase):
         "'Build scanner profile' — ArgyllCMS's scanin reads the scan against "
         "these files, and colprof turns that into your scanner's ICC profile.\n\n"
         "Works for charts created with ChromIQ's layout engine, which knows each "
-        "patch's exact position. (Support for older or imported charts is planned.)")
+        "patch's exact position. (Support for older or imported charts is planned.)"
+    ) + "\n\n───────────────\n" + WHICH_CHART_HELP
     DESCRIPTION = tr(
         "Turn a measured chart into scanner-recognition files (.cht + .cie) so you "
         "can profile a scanner from the same chart.")

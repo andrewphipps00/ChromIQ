@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont, QIcon
 from PyQt6.QtWidgets import (
+    QApplication,
     QCheckBox,
     QDialog,
     QDialogButtonBox,
@@ -1486,6 +1487,23 @@ class TabCheckRefine(QWidget):
                 dlg, scanner_run.load_meta().scanner_target_enabled,
                 accent=_TAB_COLOR, hint_light="#5a3fc0", hint_dark="#cabfff")
             layout.addWidget(scanner_row)
+
+            # Weigh up the two ways to make a scanner target, so that right after
+            # a printer profiling the user knows reuse is fine but a colour-managed
+            # reprint is more accurate for scanning their own prints (Knut, #97).
+            from PyQt6.QtGui import QPalette
+            _dark = QApplication.palette().color(
+                QPalette.ColorRole.Window).lightness() < 128
+            scanner_tip = QLabel(
+                tr("This saves scanner files from the chart you just measured — "
+                   "great for general use. For the most accurate scanner profile "
+                   "of your own colour-managed prints, print a fresh chart through "
+                   "your normal print workflow and measure it too."),
+                dlg)
+            scanner_tip.setWordWrap(True)
+            scanner_tip.setStyleSheet(
+                f"color: {'#b8b8b8' if _dark else '#4a4a4a'}; font-size: 11px;")
+            layout.addWidget(scanner_tip)
 
         # Buttons — laid out individually with stretches between each so they
         # spread evenly across the dialog width regardless of how many are shown.

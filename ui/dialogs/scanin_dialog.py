@@ -27,6 +27,7 @@ from ui.dialogs.tools_dialogs import (
     _ToolDialogBase, _initial_dir, _remember_dir, neutral_controls_qss)
 from ui.scan_grid_marquee import GridSpec, ScanGridMarquee
 from ui.styles import SPEC_GREEN
+from ui.dialogs.scanin_target_dialog import WHICH_CHART_HELP
 from ui.theme import resolve_mode
 from ui.tooltip_button import TooltipButton
 from ui.widgets import NoScrollComboBox, make_browse_button, open_file_dialog
@@ -93,7 +94,8 @@ class ScannerProfileDialog(_ToolDialogBase):
         "• It's most accurate for media like the paper you profiled; rescan a "
         "chart on very different paper (e.g. glossy vs. matte) if you switch.\n"
         "• A scanner profile characterises the scanner — it does not sharpen or "
-        "retouch; it just makes the colours faithful.")
+        "retouch; it just makes the colours faithful."
+    ) + "\n\n───────────────\n" + WHICH_CHART_HELP
     DESCRIPTION = tr(
         "Turn a scan of a measured chart into a colour profile for your scanner.")
 

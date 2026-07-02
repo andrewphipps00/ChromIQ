@@ -1,5 +1,29 @@
 # Changelog
 
+## v3.13.0-beta.64
+
+### ✨ Added
+- **Scanner profiling: guidance on which chart to use.** The scanner-tool help
+  (Create scanner target / Build scanner profile) and a note in the **Profile
+  Quality Assessment** window now weigh up the two options: reuse the chart you
+  already measured (free, correct, ideal for general use) vs. print a fresh
+  chart through your normal colour-managed workflow and measure it (most
+  accurate when you mainly scan your own colour-managed prints). The reference
+  colours always come from your measurement, so either is correct — the choice
+  is about how well the target matches what you'll scan.
+- **New "Profile my scanner" card** in the Welcome / help window, walking through
+  measure → keep scanner files → scan → build.
+
+### 🐛 Fixed
+- **Clearer scanin failures.** ChromIQ now recognises Argyll's reference-file
+  errors (a damaged or hand-edited `.cht`/`.cie`, a mismatched pair, or an
+  out-of-memory on a huge scan) and shows a plain-language message —
+  *"recreate the scanner files"* — instead of a raw error dump.
+
+### 🌍 Translated
+- The new scanner-help, Welcome card, and assessment-note strings, in all 12
+  languages.
+
 ## v3.13.0-beta.63
 
 ### ✨ Added
