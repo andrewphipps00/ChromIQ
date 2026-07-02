@@ -2247,7 +2247,6 @@
   "MEASURE · SCANNER TARGET": "測定 · スキャナーターゲット",
   "Pick the chart's measurement (.ti3)…": "チャートの測定を選択（.ti3）…",
   "Create scanner target": "スキャナーターゲットを作成",
-  "Scanner files for {n} patches on {pages} page(s) saved next to your chart. Scan the printed chart, then use 'Build scanner profile'.": "{n} パッチ・{pages} ページ分のスキャナー用ファイルをチャートの隣に保存しました。印刷したチャートをスキャンし、「スキャナープロファイルを作成」を使ってください。",
   "✓ Ready — scanner files will be written as {stem}.cht / .cie.": "✓ 準備完了 — スキャナー用ファイルは {stem}.cht / .cie として書き出されます。",
   "Saves two small extra files (.cht + .cie) alongside your chart. Later, you can build a colour profile for your scanner from this exact chart — no need to print or measure anything again: you just scan the printed chart, and ChromIQ compares your scanner's view against the real colours the spectrophotometer measured here.\n\nLeave this off if you're only profiling your printer. You can always turn it on later from Tools ▸ Create scanner target.": "チャートの隣に 2 つの小さな追加ファイル（.cht + .cie）を保存します。後で、まさにこのチャートからスキャナーのカラープロファイルを作成できます — 印刷や測定をやり直す必要はありません。印刷したチャートをスキャンするだけで、ChromIQ がスキャナーの見え方を、ここで分光測色計が測定した実際の色と比較します。\n\nプリンターだけをプロファイルするならオフのままで構いません。後からいつでも ツール ▸ スキャナーターゲットを作成 で有効にできます。",
   "For scanning the printed chart on a flatbed to profile your scanner — not needed for printer profiling.": "印刷したチャートをフラットベッドスキャナーでスキャンしてスキャナーをプロファイルするためのものです — プリンターのプロファイルには不要です。",
@@ -2267,7 +2266,6 @@
   "Pick the scan for this page (TIFF)…": "このページのスキャンを選択（TIFF）…",
   "Page:": "ページ:",
   "Build scanner profile (from a scan)": "スキャナープロファイルを作成（スキャンから）",
-  "✓ Ready — {n} patches on {p} page(s).": "✓ 準備完了 — {p} ページに {n} パッチ。",
   "Choose the measured chart": "測定済みチャートを選択",
   "Build scanner profile": "スキャナープロファイルを作成",
   "Reading page {n} from the scan…": "スキャンからページ {n} を読み取り中…",
@@ -2285,5 +2283,11 @@
   "⚠ ChromIQ doesn't have this chart's patch positions. Recreate the chart in a current ChromIQ version to enable scanner files.": "⚠ ChromIQ はこのチャートのパッチ位置を把握していません。スキャナー用ファイルを有効にするには、最新の ChromIQ でチャートを作り直してください。",
   "Confirm": "確認",
   "Average all reads && build →": "全読み取りを平均化して作成 →",
-  "Clear && Print": "クリアして印刷"
+  "Clear && Print": "クリアして印刷",
+  "Chart patch set editor": "チャートパッチセットエディター",
+  "Scanner files for {n} patches on one page saved next to your chart. Scan the printed chart, then use 'Build scanner profile'.": "{n} パッチ・1 ページ分のスキャナー用ファイルをチャートの隣に保存しました。印刷したチャートをスキャンし、「スキャナープロファイルを作成」を使ってください。",
+  "Scanner files for {n} patches on {pages} pages saved next to your chart. Scan the printed chart, then use 'Build scanner profile'.": "{n} パッチ・{pages} ページ分のスキャナー用ファイルをチャートの隣に保存しました。印刷したチャートをスキャンし、「スキャナープロファイルを作成」を使ってください。",
+  "✓ Ready — {n} patches on one page.": "✓ 準備完了 — 1 ページに {n} パッチ。",
+  "✓ Ready — {n} patches on {p} pages.": "✓ 準備完了 — {p} ページに {n} パッチ。",
+  "Welcome! This is where you build the PATCH SET for your chart — the collection of little colour squares (we call each one a \"patch\") that will be measured. You choose which colours are in the set, what order they're in, and you can recolour, add or remove them.\n\nThe page LAYOUT — which instrument and paper, the strips, spacers, margins and sizing — is set over in the Create Chart tab. Here you only shape the patch set itself; when you apply it, Create Chart lays it out for you. That keeps layout in one place and this window simple.\n\nDon't worry — you can't break anything here. Nothing is printed or measured until you choose to.\n\nTwo areas to know about:\n\n• The patch grid fills most of the window: every colour is a small square. This is your workbench — drag squares around to reorder them, click to select, and recolour or add and remove patches. The order you see here is the order they'll be measured in. Use the controls above the grid to show or hide the patch numbers and the gaps between swatches.\n\n• The controls on the right let you add or remove patches, generate whole colour sets, recolour a selection, and save.\n\nA typical session goes: load a patch set or start a new one, arrange and recolour the patches, then Apply / Save to send the set back to the Create Chart tab (or Save As to export it).\n\nOne handy thing happens automatically: when you save, ChromIQ checks whether your colours are well mixed and, if they are, marks the set so your instrument may read each strip in either direction. You only have to get involved for tricky, structured sets — see the force-randomised-tag option in the controls for more.": "ようこそ！ここではチャートのパッチセットを作ります — 測定される小さな色の四角（一つひとつを「パッチ」と呼びます）の集まりです。どの色をどの順番でセットに入れるかを決め、色の変更、追加、削除ができます。\n\nページのレイアウト — 使用する測定器と用紙、ストリップ、スペーサー、余白、サイズ — は「チャート作成」タブで設定します。ここで形を決めるのはパッチセットそのものだけです。適用すると「チャート作成」がレイアウトを行います。レイアウトは一か所にまとまり、このウィンドウはシンプルなままです。\n\nご安心ください — ここで何かを壊すことはできません。あなたが選ぶまで、印刷も測定も行われません。\n\n知っておきたい 2 つのエリア：\n\n• パッチグリッドはウィンドウの大部分を占めます。色はそれぞれ小さな四角です。ここがあなたの作業台です — 四角をドラッグして並べ替え、クリックして選択し、色の変更やパッチの追加・削除ができます。ここで見えている順番が、測定される順番です。グリッド上部のコントロールで、パッチ番号やスウォッチ間の隙間の表示／非表示を切り替えられます。\n\n• 右側のコントロールでは、パッチの追加・削除、色セット全体の生成、選択部分の色変更、保存ができます。\n\n典型的な流れ：パッチセットを読み込むか新規に始め、パッチを並べて色を調整し、「適用 / 保存」でセットを「チャート作成」タブへ送り返します（「名前を付けて保存」でエクスポートもできます）。\n\n便利なことが 1 つ自動で行われます：保存時に ChromIQ は色が十分に混ざっているかを確認し、混ざっていればセットに印を付けて、測定器が各ストリップを双方向に読めるようにします。あなたが関わる必要があるのは、構造的で扱いの難しいセットのときだけです — 詳しくはコントロールにあるランダム化タグの強制オプションをご覧ください。"
 }

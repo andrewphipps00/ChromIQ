@@ -260,8 +260,10 @@ class ScannerProfileDialog(_ToolDialogBase):
             n_patches = len(self._layout["patches"])
         else:
             n_patches = len(self._layout.get("locs") or [])
-        self._chart_note.setText(tr(
-            "✓ Ready — {n} patches on {p} page(s)."
+        self._chart_note.setText((
+            tr("✓ Ready — {n} patches on one page.")
+            if len(self._pages) == 1 else
+            tr("✓ Ready — {n} patches on {p} pages.")
         ).format(n=n_patches, p=len(self._pages)))
         self._page_widget.setVisible(len(self._pages) > 1)
         self._page_combo.blockSignals(True)

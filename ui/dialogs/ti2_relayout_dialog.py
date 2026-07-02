@@ -3306,8 +3306,8 @@ class Ti2RelayoutDialog(QDialog):
                                  QSizePolicy.Policy.Preferred)
         src.addWidget(self._info)
         src.addWidget(_magenta_tip(
-            "Chart patch set editor",
-            "Welcome! This is where you build the PATCH SET for your chart — the "
+            tr("Chart patch set editor"),
+            tr("Welcome! This is where you build the PATCH SET for your chart — the "
             "collection of little colour squares (we call each one a \"patch\") that "
             "will be measured. You choose which colours are in the set, what order "
             "they're in, and you can recolour, add or remove them.\n\n"
@@ -3333,7 +3333,7 @@ class Ti2RelayoutDialog(QDialog):
             "whether your colours are well mixed and, if they are, marks the set "
             "so your instrument may read each strip in either direction. You only "
             "have to get involved for tricky, structured sets — see the "
-            "force-randomised-tag option in the controls for more.",
+            "force-randomised-tag option in the controls for more."),
             self, min_width=560))
         outer.addLayout(src)
 

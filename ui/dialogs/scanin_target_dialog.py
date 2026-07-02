@@ -195,9 +195,12 @@ class ScaninTargetDialog(_ToolDialogBase):
         for p in res.cht_paths:
             self._log.appendPlainText(tr("[OK] Wrote {path}").format(path=p))
         self._log.appendPlainText(tr("[OK] Wrote {path}").format(path=res.cie_path))
-        self._log.appendPlainText(tr(
-            "Scanner files for {n} patches on {pages} page(s) saved next to your "
-            "chart. Scan the printed chart, then use 'Build scanner profile'."
+        self._log.appendPlainText((
+            tr("Scanner files for {n} patches on one page saved next to your "
+               "chart. Scan the printed chart, then use 'Build scanner profile'.")
+            if res.n_pages == 1 else
+            tr("Scanner files for {n} patches on {pages} pages saved next to your "
+               "chart. Scan the printed chart, then use 'Build scanner profile'.")
         ).format(n=res.n_patches, pages=res.n_pages))
         _remember_dir(self._settings, self.TOOL_KEY, self._ti3_path.parent)
         self._finish(True)

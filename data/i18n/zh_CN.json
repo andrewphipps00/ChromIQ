@@ -2247,7 +2247,6 @@
   "MEASURE · SCANNER TARGET": "测量 · 扫描仪标板",
   "Pick the chart's measurement (.ti3)…": "选择色卡的测量数据（.ti3）…",
   "Create scanner target": "创建扫描仪标板",
-  "Scanner files for {n} patches on {pages} page(s) saved next to your chart. Scan the printed chart, then use 'Build scanner profile'.": "已将 {n} 个色块、{pages} 页的扫描仪文件保存在色卡旁边。扫描打印好的色卡，然后使用「构建扫描仪配置文件」。",
   "✓ Ready — scanner files will be written as {stem}.cht / .cie.": "✓ 就绪 — 扫描仪文件将写出为 {stem}.cht / .cie。",
   "Saves two small extra files (.cht + .cie) alongside your chart. Later, you can build a colour profile for your scanner from this exact chart — no need to print or measure anything again: you just scan the printed chart, and ChromIQ compares your scanner's view against the real colours the spectrophotometer measured here.\n\nLeave this off if you're only profiling your printer. You can always turn it on later from Tools ▸ Create scanner target.": "在色卡旁边额外保存两个小文件（.cht + .cie）。之后你就能用这张色卡为扫描仪构建色彩配置文件 — 无需再次打印或测量：只需扫描打印好的色卡，ChromIQ 会将扫描仪看到的结果与分光光度计在这里测得的真实颜色进行比较。\n\n如果只为打印机制作配置文件，请保持关闭。之后随时可以通过 工具 ▸ 创建扫描仪标板 开启。",
   "For scanning the printed chart on a flatbed to profile your scanner — not needed for printer profiling.": "用于在平板扫描仪上扫描打印好的色卡，为扫描仪制作配置文件 — 打印机配置无需此项。",
@@ -2267,7 +2266,6 @@
   "Pick the scan for this page (TIFF)…": "选择此页的扫描件（TIFF）…",
   "Page:": "页:",
   "Build scanner profile (from a scan)": "构建扫描仪配置文件（从扫描件）",
-  "✓ Ready — {n} patches on {p} page(s).": "✓ 就绪 — {p} 页共 {n} 个色块。",
   "Choose the measured chart": "选择已测量的色卡",
   "Build scanner profile": "构建扫描仪配置文件",
   "Reading page {n} from the scan…": "正在从扫描件读取第 {n} 页…",
@@ -2285,5 +2283,11 @@
   "⚠ ChromIQ doesn't have this chart's patch positions. Recreate the chart in a current ChromIQ version to enable scanner files.": "⚠ ChromIQ 没有这张色卡的色块位置信息。请在最新版 ChromIQ 中重新创建色卡，以启用扫描仪文件。",
   "Confirm": "确认",
   "Average all reads && build →": "平均所有读取并生成 →",
-  "Clear && Print": "清空并打印"
+  "Clear && Print": "清空并打印",
+  "Chart patch set editor": "色卡色块集编辑器",
+  "Scanner files for {n} patches on one page saved next to your chart. Scan the printed chart, then use 'Build scanner profile'.": "已将 {n} 个色块、1 页的扫描仪文件保存在色卡旁边。扫描打印好的色卡，然后使用「构建扫描仪配置文件」。",
+  "Scanner files for {n} patches on {pages} pages saved next to your chart. Scan the printed chart, then use 'Build scanner profile'.": "已将 {n} 个色块、{pages} 页的扫描仪文件保存在色卡旁边。扫描打印好的色卡，然后使用「构建扫描仪配置文件」。",
+  "✓ Ready — {n} patches on one page.": "✓ 就绪 — 1 页共 {n} 个色块。",
+  "✓ Ready — {n} patches on {p} pages.": "✓ 就绪 — {p} 页共 {n} 个色块。",
+  "Welcome! This is where you build the PATCH SET for your chart — the collection of little colour squares (we call each one a \"patch\") that will be measured. You choose which colours are in the set, what order they're in, and you can recolour, add or remove them.\n\nThe page LAYOUT — which instrument and paper, the strips, spacers, margins and sizing — is set over in the Create Chart tab. Here you only shape the patch set itself; when you apply it, Create Chart lays it out for you. That keeps layout in one place and this window simple.\n\nDon't worry — you can't break anything here. Nothing is printed or measured until you choose to.\n\nTwo areas to know about:\n\n• The patch grid fills most of the window: every colour is a small square. This is your workbench — drag squares around to reorder them, click to select, and recolour or add and remove patches. The order you see here is the order they'll be measured in. Use the controls above the grid to show or hide the patch numbers and the gaps between swatches.\n\n• The controls on the right let you add or remove patches, generate whole colour sets, recolour a selection, and save.\n\nA typical session goes: load a patch set or start a new one, arrange and recolour the patches, then Apply / Save to send the set back to the Create Chart tab (or Save As to export it).\n\nOne handy thing happens automatically: when you save, ChromIQ checks whether your colours are well mixed and, if they are, marks the set so your instrument may read each strip in either direction. You only have to get involved for tricky, structured sets — see the force-randomised-tag option in the controls for more.": "欢迎！在这里为色卡构建色块集 — 即将被测量的小色块方格集合（每一个我们称为「色块」）。你可以决定集合中包含哪些颜色、顺序如何，还可以重新着色、添加或删除它们。\n\n页面布局 — 使用哪种仪器和纸张、色条、间隔条、边距和尺寸 — 在“创建色卡”标签页中设置。这里只塑造色块集本身；应用后由“创建色卡”为你完成排版。这样布局集中在一处，此窗口也保持简洁。\n\n别担心 — 在这里不会弄坏任何东西。在你决定之前，不会打印或测量任何内容。\n\n需要了解的两个区域：\n\n• 色块网格占据窗口的大部分：每种颜色都是一个小方块。这是你的工作台 — 拖动方块重新排序，点击选择，重新着色或添加、删除色块。这里看到的顺序就是测量顺序。用网格上方的控件可以显示或隐藏色块编号以及色样之间的间隙。\n\n• 右侧的控件用于添加或删除色块、生成整套颜色集、为所选内容重新着色以及保存。\n\n典型的操作流程：载入一个色块集或新建一个，排列并调整色块颜色，然后用「应用 / 保存」把集合送回“创建色卡”标签页（或用「另存为」导出）。\n\n有一件实用的事会自动发生：保存时 ChromIQ 会检查颜色是否混合均匀，如果是，就会给集合打上标记，让仪器可以双向读取每个色条。只有棘手的结构化集合才需要你介入 — 详见控件中的强制随机化标记选项。"
 }
