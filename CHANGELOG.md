@@ -1,5 +1,30 @@
 # Changelog
 
+## v3.13.0-beta.63
+
+### ✨ Added
+- **Save scanner-profiling files from the Check & Refine step too** — the
+  **Profile Quality Assessment** dialog now offers the same **"Also save
+  scanner-profiling files for this chart"** checkbox as the measurement dialog
+  (shown only for charts ChromIQ has the geometry for). Tick it and whichever
+  button you press — **Confirm**, **Install Profile**, **Use as
+  Pre-conditioning**, or **Guide Me Through Refinement** — writes the chart's
+  `.cht` + `.cie` from the measurement you just assessed. The dialog's former
+  **Close** button is now labelled **Confirm**.
+
+### 🐛 Fixed
+- Two buttons were dropping their **"&"** — **"Average all reads & build"** and
+  **"Clear & Print"** rendered as *"Average all reads build"* / *"Clear Print"*
+  because Qt treated the ampersand as a keyboard-shortcut marker. They now read
+  correctly.
+- Dark mode: removed a stray dark box behind the scanner-profiling checkbox
+  label so the card's tint shows through cleanly.
+
+### 🌍 Translated
+- Full 12-language translations of the scanner-profiling strings (#97, #98).
+- Wrapped the layout-editor masthead tooltip for translation and split the
+  page-count messages into proper singular/plural forms.
+
 ## v3.13.0-beta.62
 
 ### ✨ Added
