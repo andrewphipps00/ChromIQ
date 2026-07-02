@@ -175,6 +175,7 @@ DEFAULTS: dict[str, Any] = {
     # generated preview, compare to per-(instrument, paper+orientation) minimum
     # thresholds, and flag violations for jig/rig users.
     "margin_inspector_show":     True,    # show the "Measured from Preview" frame
+    "layout_info_show":          True,    # show the "Chart layout information" panel
     "margin_violation_notify":   True,    # warn when a measured margin < threshold
     "margin_guides_show":        False,   # dotted threshold guide lines on preview
     "margin_measured_guides_show": False,  # long dotted lines at the measured margins

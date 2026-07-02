@@ -1202,6 +1202,8 @@ class TabChart(QWidget):
             bool(self._settings.get("margin_measured_guides_show", False)))
         self._margin_panel.setVisible(
             bool(self._settings.get("margin_inspector_show", True)))
+        self._layout_info_panel.setVisible(
+            bool(self._settings.get("layout_info_show", True)))
         # Connect only after the initial state is restored, so building the UI
         # can't trigger a measure pass.
         self._margin_panel.guides_toggled.connect(self._on_margin_guides_toggled)
@@ -7219,6 +7221,10 @@ class TabChart(QWidget):
         panel = getattr(self, "_layout_info_panel", None)
         if panel is None:
             return
+        show = bool(self._settings.get("layout_info_show", True))
+        panel.setVisible(show)
+        if not show:
+            return
         tiffs = getattr(self, "_margin_tiffs", None)
         ti2 = getattr(self, "_margin_ti2", None)
         if not tiffs or not ti2:
@@ -7522,8 +7528,9 @@ class TabChart(QWidget):
         return (instr, paper, mode)
 
     def refresh_margin_inspector_settings(self) -> None:
-        """Re-read margin-inspector settings after the Preferences dialog closes
-        (visibility, notify, thresholds may have changed)."""
+        """Re-read the Create-Chart preview-panel settings after the Preferences
+        dialog closes (margin-inspector visibility, notify, thresholds, and the
+        Chart-layout-information panel's visibility may have changed)."""
         panel = getattr(self, "_margin_panel", None)
         if panel is not None:
             panel.set_guides_checked(
@@ -7531,6 +7538,7 @@ class TabChart(QWidget):
             panel.set_measured_guides_checked(
                 bool(self._settings.get("margin_measured_guides_show", False)))
         self._update_margin_inspector()
+        self._update_layout_info()
 
     def _partial_last_page_blank(self, ti2: Path) -> "int | None":
         """Engine charts only: the number of unused patch slots on the last page

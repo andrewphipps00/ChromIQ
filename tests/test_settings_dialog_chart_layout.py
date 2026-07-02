@@ -158,6 +158,32 @@ def test_indicator_style_settings_round_trip(_app, tmp_path):
     assert st.get("strip_label_offset_mm") == 2.0
 
 
+def test_layout_info_show_toggle_round_trip(_app, tmp_path):
+    """The "Show the Chart layout information panel" toggle defaults to on,
+    loads from settings, and persists through save (sibling of the existing
+    "Measured from Preview" toggle)."""
+    import core.preset_store as ps
+    from ui.dialogs.settings_dialog import SettingsDialog
+    with mock.patch.object(ps, "presets_dir", lambda: Path(tmp_path)):
+        st = _FakeSettings()
+        dlg = SettingsDialog(st, None)
+        try:
+            assert dlg._layout_info_show_check.isChecked() is True   # default on
+            dlg._layout_info_show_check.setChecked(False)
+            dlg._save_and_close()
+        finally:
+            dlg.deleteLater()
+    assert st.get("layout_info_show") is False
+
+    # Reopen with it off → the checkbox reflects the saved state.
+    with mock.patch.object(ps, "presets_dir", lambda: Path(tmp_path)):
+        dlg2 = SettingsDialog(_FakeSettings(layout_info_show=False), None)
+        try:
+            assert dlg2._layout_info_show_check.isChecked() is False
+        finally:
+            dlg2.deleteLater()
+
+
 def test_apply_indicator_style_overlays_recipe():
     """AppSettings.apply_indicator_style overlays the global styling onto a recipe
     (used to seed fresh charts; presets keep their own styling)."""

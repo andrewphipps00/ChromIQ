@@ -1,5 +1,13 @@
 # Changelog
 
+## v3.13.0-beta.65
+
+### ✨ Added
+- **Show/hide the "Chart layout information" panel.** Settings now has a toggle
+  for the Create Chart layout-info panel, alongside the existing "Measured from
+  Preview" toggle — so you can hide either preview panel under the chart. Takes
+  effect immediately.
+
 ## v3.13.0-beta.64
 
 ### ✨ Added

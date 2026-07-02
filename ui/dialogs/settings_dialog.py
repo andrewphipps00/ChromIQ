@@ -826,10 +826,16 @@ class SettingsDialog(QDialog):
         # ---- behaviour checkboxes ----
         self._margin_show_check = QCheckBox(
             tr("Show the “Measured from Preview” frame in Create Chart"), self)
+        # Sibling toggle for the other Create-Chart preview panel, kept next to
+        # the "Measured from Preview" one since they sit side by side under the
+        # preview (Knut, #93).
+        self._layout_info_show_check = QCheckBox(
+            tr("Show the “Chart layout information” panel in Create Chart"), self)
         self._margin_notify_check = QCheckBox(
             tr("Notify when a measured margin is below its threshold"), self)
         self._margin_show_check.toggled.connect(self._sync_margin_notify_enabled)
         v.addWidget(self._margin_show_check)
+        v.addWidget(self._layout_info_show_check)
         v.addWidget(self._margin_notify_check)
 
         # ---- combo selectors ----
@@ -1056,6 +1062,7 @@ class SettingsDialog(QDialog):
         # Margin inspector behaviour checkboxes (the per-combo table is loaded
         # into the tab's own working copy in _build_margin_thresholds_tab).
         self._margin_show_check.setChecked(bool(s.get("margin_inspector_show", True)))
+        self._layout_info_show_check.setChecked(bool(s.get("layout_info_show", True)))
         self._margin_notify_check.setChecked(bool(s.get("margin_violation_notify", True)))
         self._sync_margin_notify_enabled()
 
@@ -1617,6 +1624,7 @@ class SettingsDialog(QDialog):
         # Margin inspector: behaviour flags + the per-combo threshold table.
         self._commit_margin_combo()   # flush the currently-shown combo's edits
         s.set("margin_inspector_show",     self._margin_show_check.isChecked())
+        s.set("layout_info_show",          self._layout_info_show_check.isChecked())
         s.set("margin_violation_notify",   self._margin_notify_check.isChecked())
         from core.settings import serialize_margin_thresholds
         s.set("margin_thresholds", serialize_margin_thresholds(self._margin_table))
