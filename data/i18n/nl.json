@@ -219,7 +219,6 @@
   "Auto-update preview when a layout setting changes": "Voorbeeld automatisch bijwerken als een indelingsinstelling wijzigt",
   "Available when a Refine_Strips_<name>.txt file exists next\nto your .ti2 file.\n\nThat file is created automatically by the Check && Refine\ntab after a quality check. It lists the strips with the\nhighest colour errors, sorted worst-first.\n\nWhen active, the app navigates chartread to each of those\nstrips automatically — you only need to scan them.": "Beschikbaar wanneer er een Refine_Strips_<naam>.txt-bestand naast\nje .ti2-bestand staat.\n\nDat bestand wordt automatisch gemaakt door het tabblad\n‘Controleren && verfijnen’ na een kwaliteitscontrole. Het somt de\nstroken met de grootste kleurfouten op, slechtste eerst.\n\nIs dit actief, dan stuurt de app chartread automatisch naar elk van\ndie stroken — jij hoeft ze alleen nog te scannen.",
   "Average": "Middelen",
-  "Average all reads & build →": "Alle metingen middelen & maken →",
   "Average cast": "Gemiddelde zweem",
   "Average error split by colour direction (and the neutrals). It shows where the profile is weakest — for example a high blue number means blues are the hardest for this paper-and-ink.": "De gemiddelde fout opgesplitst per kleurrichting (en de neutralen). Het laat zien waar het profiel het zwakst is — een hoog getal bij blauw betekent bijvoorbeeld dat blauwtinten het lastigst zijn voor deze combinatie van papier en inkt.",
   "Average leftover chroma on the greys after correction, measured {basis}. Under ~1 is excellent; lower is better.": "De gemiddelde resterende chroma op de grijzen na correctie, gemeten {basis}. Onder ~1 is uitstekend; lager is beter.",
@@ -408,7 +407,6 @@
   "ChromIQ-style refinement process": "Verfijningsproces in ChromIQ-stijl",
   "Clear": "Wissen",
   "Clear\nPrint Queue": "Wachtrij\nlegen",
-  "Clear & Print": "Legen & afdrukken",
   "Clear comparison profile": "Vergelijkingsprofiel verwijderen",
   "Clear monitor profile": "Monitorprofiel wissen",
   "Clear the spacer selection": "Scheidingslijn-selectie opheffen",
@@ -2284,5 +2282,8 @@
   "MEASURE · SCANNER PROFILE": "METEN · SCANNERPROFIEL",
   "ScanIn couldn't read this page.": "ScanIn kon deze pagina niet lezen.",
   "[OK] Scanner profile saved: {p}": "[OK] Scannerprofiel opgeslagen: {p}",
-  "⚠ ChromIQ doesn't have this chart's patch positions. Recreate the chart in a current ChromIQ version to enable scanner files.": "⚠ ChromIQ kent de meetveldposities van deze kaart niet. Maak de kaart opnieuw in een actuele ChromIQ-versie om scannerbestanden mogelijk te maken."
+  "⚠ ChromIQ doesn't have this chart's patch positions. Recreate the chart in a current ChromIQ version to enable scanner files.": "⚠ ChromIQ kent de meetveldposities van deze kaart niet. Maak de kaart opnieuw in een actuele ChromIQ-versie om scannerbestanden mogelijk te maken.",
+  "Confirm": "Bevestigen",
+  "Average all reads && build →": "Alle metingen middelen && maken →",
+  "Clear && Print": "Legen && afdrukken"
 }

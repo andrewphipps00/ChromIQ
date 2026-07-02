@@ -219,7 +219,6 @@
   "Auto-update preview when a layout setting changes": "Aggiorna anteprima quando cambia un'impostazione di layout",
   "Available when a Refine_Strips_<name>.txt file exists next\nto your .ti2 file.\n\nThat file is created automatically by the Check && Refine\ntab after a quality check. It lists the strips with the\nhighest colour errors, sorted worst-first.\n\nWhen active, the app navigates chartread to each of those\nstrips automatically — you only need to scan them.": "Disponibile quando un file Refine_Strips_<nome>.txt si trova\naccanto al tuo file .ti2.\n\nQuel file viene creato automaticamente dalla scheda Verifica &&\naffina dopo un controllo qualità. Elenca le strisce con gli errori\ndi colore più alti, ordinate dalla peggiore.\n\nQuando è attivo, l'app porta chartread automaticamente su ciascuna\ndi quelle strisce — devi solo scansionarle.",
   "Average": "Media",
-  "Average all reads & build →": "Media tutte le letture & crea →",
   "Average cast": "Dominante media",
   "Average error split by colour direction (and the neutrals). It shows where the profile is weakest — for example a high blue number means blues are the hardest for this paper-and-ink.": "L’errore medio suddiviso per direzione di colore (e i neutri). Mostra dove il profilo è più debole — un numero alto sul blu significa ad esempio che i blu sono i più difficili per questa coppia carta-inchiostro.",
   "Average leftover chroma on the greys after correction, measured {basis}. Under ~1 is excellent; lower is better.": "Il croma residuo medio sui grigi dopo la correzione, misurato {basis}. Sotto ~1 è eccellente; più basso è meglio.",
@@ -408,7 +407,6 @@
   "ChromIQ-style refinement process": "Processo di affinamento in stile ChromIQ",
   "Clear": "Pulisci",
   "Clear\nPrint Queue": "Svuota coda\ndi stampa",
-  "Clear & Print": "Svuota e stampa",
   "Clear comparison profile": "Rimuovi profilo di confronto",
   "Clear monitor profile": "Rimuovi profilo monitor",
   "Clear the spacer selection": "Deseleziona gli spaziatori",
@@ -2284,5 +2282,8 @@
   "MEASURE · SCANNER PROFILE": "MISURA · PROFILO SCANNER",
   "ScanIn couldn't read this page.": "ScanIn non è riuscito a leggere questa pagina.",
   "[OK] Scanner profile saved: {p}": "[OK] Profilo scanner salvato: {p}",
-  "⚠ ChromIQ doesn't have this chart's patch positions. Recreate the chart in a current ChromIQ version to enable scanner files.": "⚠ ChromIQ non conosce le posizioni dei tasselli di questo grafico. Ricrea il grafico in una versione recente di ChromIQ per abilitare i file per lo scanner."
+  "⚠ ChromIQ doesn't have this chart's patch positions. Recreate the chart in a current ChromIQ version to enable scanner files.": "⚠ ChromIQ non conosce le posizioni dei tasselli di questo grafico. Ricrea il grafico in una versione recente di ChromIQ per abilitare i file per lo scanner.",
+  "Confirm": "Conferma",
+  "Average all reads && build →": "Media tutte le letture && crea →",
+  "Clear && Print": "Svuota e stampa"
 }

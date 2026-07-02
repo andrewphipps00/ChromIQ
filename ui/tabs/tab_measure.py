@@ -53,7 +53,9 @@ _TAB_COLOR = "#56d6a5"  # Measure tab accent
 from ui.styles import SPEC_GREEN, TAB_COLORS
 
 
-def make_scanner_target_row(parent, checked: bool):
+def make_scanner_target_row(parent, checked: bool, *, accent: str = "#56d6a5",
+                            hint_light: str = "#2f6b52",
+                            hint_dark: str = "#a6e3ca"):
     """The opt-in "save scanner-profiling files" checkbox for the 'All Stripes
     Read' dialog, as a bordered row (checkbox + ⓘ + one-line helper).
 
@@ -61,7 +63,13 @@ def make_scanner_target_row(parent, checked: bool):
     it flags the chart so ChromIQ (re)builds its ``.cht`` + ``.cie`` from the
     measurement whenever it's finalised — letting you profile a **scanner** from
     the same chart later, with no reprint (#97). Returns ``(row_widget,
-    checkbox)``; only shown for engine charts."""
+    checkbox)``; only shown for engine charts.
+
+    ``accent`` tints the card border/fill and the ⓘ; ``hint_light``/``hint_dark``
+    are the readable helper-text colours per theme (see
+    [[feedback_readability_light_dark]]). Defaults are the scanner-family green —
+    the Check & Refine assessment dialog overrides them with its violet accent so
+    the card matches the dialog it lives in."""
     from PyQt6.QtCore import Qt
     from PyQt6.QtGui import QPalette
     from PyQt6.QtWidgets import (
@@ -70,16 +78,23 @@ def make_scanner_target_row(parent, checked: bool):
     app = QApplication.instance()
     dark = (app is not None
             and app.palette().color(QPalette.ColorRole.Window).lightness() < 128)
-    # Readable secondary text on the green-tinted card — a muted green that keeps
+    # Readable secondary text on the tinted card — a muted accent that keeps
     # clear contrast in both themes (palette(mid) washed out on the tint).
-    hint_color = "#a6e3ca" if dark else "#2f6b52"
-    tint_bg    = "rgba(86,214,165,0.13)" if dark else "rgba(86,214,165,0.10)"
+    hint_color = hint_dark if dark else hint_light
+    r, g, b    = (int(accent[i:i + 2], 16) for i in (1, 3, 5))
+    tint_a     = "0.13" if dark else "0.10"
+    tint_bg    = f"rgba({r},{g},{b},{tint_a})"
 
     row = QFrame(parent)
     row.setObjectName("scannerTargetRow")
+    # The checkbox/label must be transparent so the card tint shows through —
+    # without this the QCheckBox paints its own opaque base colour (a black box
+    # behind the label in dark mode).
     row.setStyleSheet(
-        "#scannerTargetRow { border: 1px solid rgba(86,214,165,0.55);"
-        f" border-radius: 6px; background: {tint_bg}; }}")
+        f"#scannerTargetRow {{ border: 1px solid rgba({r},{g},{b},0.55);"
+        f" border-radius: 6px; background: {tint_bg}; }}"
+        " #scannerTargetRow QCheckBox, #scannerTargetRow QLabel"
+        " { background: transparent; }")
     outer = QVBoxLayout(row)
     outer.setContentsMargins(12, 8, 12, 10)
     outer.setSpacing(2)
@@ -99,7 +114,7 @@ def make_scanner_target_row(parent, checked: bool):
         "real colours the spectrophotometer measured here.\n\n"
         "Leave this off if you're only profiling your printer. You can always "
         "turn it on later from Tools ▸ Create scanner target."),
-        row, min_width=460, color=_TAB_COLOR),
+        row, min_width=460, color=accent),
         0, Qt.AlignmentFlag.AlignVCenter)
     outer.addLayout(top)
 
@@ -3749,7 +3764,7 @@ class TabMeasure(QWidget):
             last_btn.clicked.connect(lambda: _pick("use_last"))
             again_btn = QPushButton(tr("Measure again to average"), dlg)
             again_btn.clicked.connect(lambda: _pick("again"))
-            avg_btn = QPushButton(tr("Average all reads & build →"), dlg)
+            avg_btn = QPushButton(tr("Average all reads && build →"), dlg)
             avg_btn.setObjectName("primary")
             avg_btn.clicked.connect(lambda: _pick("average"))
             for b in (last_btn, again_btn, avg_btn):
@@ -4341,7 +4356,7 @@ class TabMeasure(QWidget):
             again_btn.clicked.connect(lambda: _pick("again"))
             last_btn = QPushButton(tr("Use last read only"), dlg)
             last_btn.clicked.connect(lambda: _pick("use_last"))
-            avg_btn = QPushButton(tr("Average all reads & build →"), dlg)
+            avg_btn = QPushButton(tr("Average all reads && build →"), dlg)
             avg_btn.setObjectName("primary")
             avg_btn.clicked.connect(lambda: _pick("average"))
             for b in (again_btn, last_btn, avg_btn):

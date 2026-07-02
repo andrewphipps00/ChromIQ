@@ -219,7 +219,6 @@
   "Auto-update preview when a layout setting changes": "Uppdatera förhandsvisning när en layoutinställning ändras",
   "Available when a Refine_Strips_<name>.txt file exists next\nto your .ti2 file.\n\nThat file is created automatically by the Check && Refine\ntab after a quality check. It lists the strips with the\nhighest colour errors, sorted worst-first.\n\nWhen active, the app navigates chartread to each of those\nstrips automatically — you only need to scan them.": "Tillgängligt när en Refine_Strips_<namn>.txt-fil ligger bredvid\ndin .ti2-fil.\n\nDen filen skapas automatiskt av fliken Granska && förbättra efter\nen kvalitetskontroll. Den listar remsorna med högst färgfel,\nsorterade värst först.\n\nNär detta är aktivt navigerar appen chartread till var och en av\nde remsorna automatiskt — du behöver bara skanna dem.",
   "Average": "Medelvärdesbilda",
-  "Average all reads & build →": "Medelvärdesbilda alla & bygg →",
   "Average cast": "Genomsnittlig färgstick",
   "Average error split by colour direction (and the neutrals). It shows where the profile is weakest — for example a high blue number means blues are the hardest for this paper-and-ink.": "Det genomsnittliga felet uppdelat per färgriktning (och de neutrala). Det visar var profilen är svagast — ett högt tal för blått betyder till exempel att blå toner är svårast för denna kombination av papper och bläck.",
   "Average leftover chroma on the greys after correction, measured {basis}. Under ~1 is excellent; lower is better.": "Den genomsnittliga kvarvarande kroman på gråtonerna efter korrigering, mätt {basis}. Under ~1 är utmärkt; lägre är bättre.",
@@ -408,7 +407,6 @@
   "ChromIQ-style refinement process": "Förbättringsprocess i ChromIQ-stil",
   "Clear": "Rensa",
   "Clear\nPrint Queue": "Rensa\nutskriftskö",
-  "Clear & Print": "Rensa & skriv ut",
   "Clear comparison profile": "Ta bort jämförelseprofil",
   "Clear monitor profile": "Rensa skärmprofil",
   "Clear the spacer selection": "Avmarkera mellanfälten",
@@ -2284,5 +2282,8 @@
   "MEASURE · SCANNER PROFILE": "MÄTNING · SKANNERPROFIL",
   "ScanIn couldn't read this page.": "ScanIn kunde inte läsa denna sida.",
   "[OK] Scanner profile saved: {p}": "[OK] Skannerprofil sparad: {p}",
-  "⚠ ChromIQ doesn't have this chart's patch positions. Recreate the chart in a current ChromIQ version to enable scanner files.": "⚠ ChromIQ känner inte till fältpositionerna för detta diagram. Skapa om diagrammet i en aktuell ChromIQ-version för att aktivera skannerfiler."
+  "⚠ ChromIQ doesn't have this chart's patch positions. Recreate the chart in a current ChromIQ version to enable scanner files.": "⚠ ChromIQ känner inte till fältpositionerna för detta diagram. Skapa om diagrammet i en aktuell ChromIQ-version för att aktivera skannerfiler.",
+  "Confirm": "Bekräfta",
+  "Average all reads && build →": "Medelvärdesbilda alla && bygg →",
+  "Clear && Print": "Rensa && skriv ut"
 }

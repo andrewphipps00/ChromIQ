@@ -219,7 +219,6 @@
   "Auto-update preview when a layout setting changes": "Oppdater forhåndsvisning når en oppsettsinnstilling endres",
   "Available when a Refine_Strips_<name>.txt file exists next\nto your .ti2 file.\n\nThat file is created automatically by the Check && Refine\ntab after a quality check. It lists the strips with the\nhighest colour errors, sorted worst-first.\n\nWhen active, the app navigates chartread to each of those\nstrips automatically — you only need to scan them.": "Tilgjengelig når en Refine_Strips_<navn>.txt-fil ligger ved\nsiden av .ti2-filen din.\n\nDen filen lages automatisk av fanen Sjekk && forbedre etter en\nkvalitetssjekk. Den lister stripene med høyest fargefeil,\nsortert verst først.\n\nNår dette er aktivt, navigerer appen chartread til hver av de\nstripene automatisk — du trenger bare å skanne dem.",
   "Average": "Midle",
-  "Average all reads & build →": "Midle alle avlesninger & bygg →",
   "Average cast": "Snitt-fargestikk",
   "Average error split by colour direction (and the neutrals). It shows where the profile is weakest — for example a high blue number means blues are the hardest for this paper-and-ink.": "Den gjennomsnittlige feilen fordelt på fargeretning (og de nøytrale). Den viser hvor profilen er svakest — et høyt tall for blått betyr for eksempel at blåtoner er vanskeligst for denne kombinasjonen av papir og blekk.",
   "Average leftover chroma on the greys after correction, measured {basis}. Under ~1 is excellent; lower is better.": "Den gjennomsnittlige gjenværende kromaen på gråtonene etter korrigering, målt {basis}. Under ~1 er utmerket; lavere er bedre.",
@@ -408,7 +407,6 @@
   "ChromIQ-style refinement process": "Forbedringsprosess i ChromIQ-stil",
   "Clear": "Tøm",
   "Clear\nPrint Queue": "Tøm\nutskriftskø",
-  "Clear & Print": "Tøm & skriv ut",
   "Clear comparison profile": "Fjern sammenligningsprofil",
   "Clear monitor profile": "Fjern skjermprofil",
   "Clear the spacer selection": "Opphev skillefelt-utvalget",
@@ -2284,5 +2282,8 @@
   "MEASURE · SCANNER PROFILE": "MÅLING · SKANNERPROFIL",
   "ScanIn couldn't read this page.": "ScanIn kunne ikke lese denne siden.",
   "[OK] Scanner profile saved: {p}": "[OK] Skannerprofil lagret: {p}",
-  "⚠ ChromIQ doesn't have this chart's patch positions. Recreate the chart in a current ChromIQ version to enable scanner files.": "⚠ ChromIQ kjenner ikke feltposisjonene til dette kartet. Lag kartet på nytt i en oppdatert ChromIQ-versjon for å aktivere skannerfiler."
+  "⚠ ChromIQ doesn't have this chart's patch positions. Recreate the chart in a current ChromIQ version to enable scanner files.": "⚠ ChromIQ kjenner ikke feltposisjonene til dette kartet. Lag kartet på nytt i en oppdatert ChromIQ-versjon for å aktivere skannerfiler.",
+  "Confirm": "Bekreft",
+  "Average all reads && build →": "Midle alle avlesninger && bygg →",
+  "Clear && Print": "Tøm && skriv ut"
 }

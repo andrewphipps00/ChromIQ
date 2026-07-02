@@ -219,7 +219,6 @@
   "Auto-update preview when a layout setting changes": "レイアウト設定の変更時にプレビューを自動更新",
   "Available when a Refine_Strips_<name>.txt file exists next\nto your .ti2 file.\n\nThat file is created automatically by the Check && Refine\ntab after a quality check. It lists the strips with the\nhighest colour errors, sorted worst-first.\n\nWhen active, the app navigates chartread to each of those\nstrips automatically — you only need to scan them.": ".ti2 ファイルの隣に Refine_Strips_<name>.txt がある場合に\n使用できます。\n\nこのファイルは品質チェック後に検証と改良タブが自動的に作成\nします。色誤差の大きいストリップを悪い順に列挙したものです。\n\n有効になると、アプリが chartread をそれらのストリップへ\n自動的にナビゲートします — あなたはスキャンするだけです。",
   "Average": "平均化",
-  "Average all reads & build →": "全読み取りを平均化して作成 →",
   "Average cast": "平均の色かぶり",
   "Average error split by colour direction (and the neutrals). It shows where the profile is weakest — for example a high blue number means blues are the hardest for this paper-and-ink.": "色方向（および中性色）ごとに分けた平均誤差です。プロファイルが最も弱い箇所を示します——たとえば青の数値が高ければ、この用紙とインクでは青が最も難しいという意味です。",
   "Average leftover chroma on the greys after correction, measured {basis}. Under ~1 is excellent; lower is better.": "補正後のグレーに残る平均彩度で、{basis}で測定します。約1未満なら優秀、低いほど良好です。",
@@ -408,7 +407,6 @@
   "ChromIQ-style refinement process": "ChromIQ式改良プロセス",
   "Clear": "クリア",
   "Clear\nPrint Queue": "印刷キューを\nクリア",
-  "Clear & Print": "クリアして印刷",
   "Clear comparison profile": "比較プロファイルを解除",
   "Clear monitor profile": "モニタープロファイルをクリア",
   "Clear the spacer selection": "スペーサーの選択を解除",
@@ -2284,5 +2282,8 @@
   "MEASURE · SCANNER PROFILE": "測定 · スキャナープロファイル",
   "ScanIn couldn't read this page.": "ScanIn はこのページを読み取れませんでした。",
   "[OK] Scanner profile saved: {p}": "[OK] スキャナープロファイルを保存しました: {p}",
-  "⚠ ChromIQ doesn't have this chart's patch positions. Recreate the chart in a current ChromIQ version to enable scanner files.": "⚠ ChromIQ はこのチャートのパッチ位置を把握していません。スキャナー用ファイルを有効にするには、最新の ChromIQ でチャートを作り直してください。"
+  "⚠ ChromIQ doesn't have this chart's patch positions. Recreate the chart in a current ChromIQ version to enable scanner files.": "⚠ ChromIQ はこのチャートのパッチ位置を把握していません。スキャナー用ファイルを有効にするには、最新の ChromIQ でチャートを作り直してください。",
+  "Confirm": "確認",
+  "Average all reads && build →": "全読み取りを平均化して作成 →",
+  "Clear && Print": "クリアして印刷"
 }

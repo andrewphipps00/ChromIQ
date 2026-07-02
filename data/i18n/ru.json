@@ -219,7 +219,6 @@
   "Auto-update preview when a layout setting changes": "Обновлять предпросмотр при изменении параметра раскладки",
   "Available when a Refine_Strips_<name>.txt file exists next\nto your .ti2 file.\n\nThat file is created automatically by the Check && Refine\ntab after a quality check. It lists the strips with the\nhighest colour errors, sorted worst-first.\n\nWhen active, the app navigates chartread to each of those\nstrips automatically — you only need to scan them.": "Доступно, когда рядом с файлом .ti2 есть файл\nRefine_Strips_<имя>.txt.\n\nЭтот файл автоматически создаёт вкладка «Проверка и\nдоводка» после проверки качества. В нём перечислены полосы\nс наибольшими цветовыми ошибками, худшие первыми.\n\nКогда включено, приложение само переводит chartread к\nкаждой из этих полос — вам остаётся только сканировать.",
   "Average": "Усреднить",
-  "Average all reads & build →": "Усреднить все чтения и собрать →",
   "Average cast": "Средний оттенок",
   "Average error split by colour direction (and the neutrals). It shows where the profile is weakest — for example a high blue number means blues are the hardest for this paper-and-ink.": "Средняя ошибка с разбивкой по направлениям цвета (и нейтралям). Показывает, где профиль слабее всего — например, высокое значение для синего означает, что синие сложнее всего для этой пары бумага–чернила.",
   "Average leftover chroma on the greys after correction, measured {basis}. Under ~1 is excellent; lower is better.": "Средняя остаточная насыщенность серых после коррекции, измеренная {basis}. Менее ~1 — отлично; ниже — лучше.",
@@ -408,7 +407,6 @@
   "ChromIQ-style refinement process": "Процесс доводки в стиле ChromIQ",
   "Clear": "Очистить",
   "Clear\nPrint Queue": "Очистить\nочередь",
-  "Clear & Print": "Очистить и печатать",
   "Clear comparison profile": "Убрать профиль сравнения",
   "Clear monitor profile": "Очистить профиль монитора",
   "Clear the spacer selection": "Снять выделение разделителей",
@@ -2284,5 +2282,8 @@
   "MEASURE · SCANNER PROFILE": "ИЗМЕРЕНИЕ · ПРОФИЛЬ СКАНЕРА",
   "ScanIn couldn't read this page.": "ScanIn не смог прочитать эту страницу.",
   "[OK] Scanner profile saved: {p}": "[OK] Профиль сканера сохранён: {p}",
-  "⚠ ChromIQ doesn't have this chart's patch positions. Recreate the chart in a current ChromIQ version to enable scanner files.": "⚠ ChromIQ не знает позиции патчей этой мишени. Создайте мишень заново в актуальной версии ChromIQ, чтобы включить файлы для сканера."
+  "⚠ ChromIQ doesn't have this chart's patch positions. Recreate the chart in a current ChromIQ version to enable scanner files.": "⚠ ChromIQ не знает позиции патчей этой мишени. Создайте мишень заново в актуальной версии ChromIQ, чтобы включить файлы для сканера.",
+  "Confirm": "Подтвердить",
+  "Average all reads && build →": "Усреднить все чтения и собрать →",
+  "Clear && Print": "Очистить и печатать"
 }

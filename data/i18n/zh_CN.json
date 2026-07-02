@@ -219,7 +219,6 @@
   "Auto-update preview when a layout setting changes": "布局设置更改时自动更新预览",
   "Available when a Refine_Strips_<name>.txt file exists next\nto your .ti2 file.\n\nThat file is created automatically by the Check && Refine\ntab after a quality check. It lists the strips with the\nhighest colour errors, sorted worst-first.\n\nWhen active, the app navigates chartread to each of those\nstrips automatically — you only need to scan them.": "当 .ti2 文件旁存在 Refine_Strips_<name>.txt 文件时可用。\n\n该文件由检查与优化标签页在质量检查后自动创建，列出\n颜色误差最大的色条，按最差在前排序。\n\n启用时，应用会自动让chartread逐条导航到这些色条 —\n你只需要扫描它们。",
   "Average": "平均",
-  "Average all reads & build →": "平均所有读取并生成 →",
   "Average cast": "平均偏色",
   "Average error split by colour direction (and the neutrals). It shows where the profile is weakest — for example a high blue number means blues are the hardest for this paper-and-ink.": "按颜色方向（以及中性色）拆分的平均误差。它显示配置文件最弱的地方——例如蓝色数值高，表示对这套纸张与墨水而言蓝色最难。",
   "Average leftover chroma on the greys after correction, measured {basis}. Under ~1 is excellent; lower is better.": "校正后灰色上残留的平均彩度，以{basis}测量。低于约 1 为优秀；越低越好。",
@@ -408,7 +407,6 @@
   "ChromIQ-style refinement process": "ChromIQ式优化流程",
   "Clear": "清除",
   "Clear\nPrint Queue": "清空\n打印队列",
-  "Clear & Print": "清空并打印",
   "Clear comparison profile": "清除对比配置文件",
   "Clear monitor profile": "清除显示器配置文件",
   "Clear the spacer selection": "清除间隔条选择",
@@ -2284,5 +2282,8 @@
   "MEASURE · SCANNER PROFILE": "测量 · 扫描仪配置文件",
   "ScanIn couldn't read this page.": "ScanIn 无法读取此页。",
   "[OK] Scanner profile saved: {p}": "[OK] 扫描仪配置文件已保存: {p}",
-  "⚠ ChromIQ doesn't have this chart's patch positions. Recreate the chart in a current ChromIQ version to enable scanner files.": "⚠ ChromIQ 没有这张色卡的色块位置信息。请在最新版 ChromIQ 中重新创建色卡，以启用扫描仪文件。"
+  "⚠ ChromIQ doesn't have this chart's patch positions. Recreate the chart in a current ChromIQ version to enable scanner files.": "⚠ ChromIQ 没有这张色卡的色块位置信息。请在最新版 ChromIQ 中重新创建色卡，以启用扫描仪文件。",
+  "Confirm": "确认",
+  "Average all reads && build →": "平均所有读取并生成 →",
+  "Clear && Print": "清空并打印"
 }

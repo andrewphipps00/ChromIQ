@@ -219,7 +219,6 @@
   "Auto-update preview when a layout setting changes": "Atualizar pré-visualização ao mudar uma definição de disposição",
   "Available when a Refine_Strips_<name>.txt file exists next\nto your .ti2 file.\n\nThat file is created automatically by the Check && Refine\ntab after a quality check. It lists the strips with the\nhighest colour errors, sorted worst-first.\n\nWhen active, the app navigates chartread to each of those\nstrips automatically — you only need to scan them.": "Disponível quando existe um ficheiro Refine_Strips_<name>.txt ao\nlado do ficheiro .ti2.\n\nEsse ficheiro é criado automaticamente pelo separador Verificar e\nrefinar após uma verificação de qualidade. Lista as tiras com os\nmaiores erros de cor, ordenadas das piores para as melhores.\n\nQuando ativo, a aplicação navega o chartread automaticamente até\ncada uma dessas tiras — só precisa de as digitalizar.",
   "Average": "Promediar",
-  "Average all reads & build →": "Promediar leituras e criar →",
   "Average cast": "Dominante média",
   "Average error split by colour direction (and the neutrals). It shows where the profile is weakest — for example a high blue number means blues are the hardest for this paper-and-ink.": "O erro médio dividido por direção de cor (e os neutros). Mostra onde o perfil é mais fraco — por exemplo, um número alto no azul significa que os azuis são os mais difíceis para esta combinação de papel e tinta.",
   "Average leftover chroma on the greys after correction, measured {basis}. Under ~1 is excellent; lower is better.": "O croma residual médio nos cinzentos após a correção, medido {basis}. Abaixo de ~1 é excelente; mais baixo é melhor.",
@@ -408,7 +407,6 @@
   "ChromIQ-style refinement process": "Refinamento ao estilo ChromIQ",
   "Clear": "Limpar",
   "Clear\nPrint Queue": "Limpar\na fila",
-  "Clear & Print": "Limpar e imprimir",
   "Clear comparison profile": "Remover perfil de comparação",
   "Clear monitor profile": "Limpar perfil do monitor",
   "Clear the spacer selection": "Limpar a seleção de separadores",
@@ -2284,5 +2282,8 @@
   "MEASURE · SCANNER PROFILE": "MEDIR · PERFIL DE SCANNER",
   "ScanIn couldn't read this page.": "O ScanIn não conseguiu ler esta página.",
   "[OK] Scanner profile saved: {p}": "[OK] Perfil de scanner guardado: {p}",
-  "⚠ ChromIQ doesn't have this chart's patch positions. Recreate the chart in a current ChromIQ version to enable scanner files.": "⚠ O ChromIQ não conhece as posições das amostras desta carta. Volte a criar a carta numa versão atual do ChromIQ para ativar os ficheiros de scanner."
+  "⚠ ChromIQ doesn't have this chart's patch positions. Recreate the chart in a current ChromIQ version to enable scanner files.": "⚠ O ChromIQ não conhece as posições das amostras desta carta. Volte a criar a carta numa versão atual do ChromIQ para ativar os ficheiros de scanner.",
+  "Confirm": "Confirmar",
+  "Average all reads && build →": "Promediar leituras e criar →",
+  "Clear && Print": "Limpar e imprimir"
 }

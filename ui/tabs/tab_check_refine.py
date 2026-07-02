@@ -48,6 +48,7 @@ from ui.ti2_loader import has_spectral_data, instrument_label, is_colormunki, re
 _TAB_COLOR = "#9f82ff"  # Check & Refine tab accent
 from ui.styles import SPEC_VIOLET, TAB_COLORS
 from workflow.profile_builder import _profile_dir as _get_profile_dir
+from workflow.scanin_target import has_scanner_geometry
 from workflow.profcheck_runner import (
     REFINE_DE_THRESHOLD,
     REFINE_START_OVER_RATIO,
@@ -1463,6 +1464,29 @@ class TabCheckRefine(QWidget):
             precond_desc.setStyleSheet("color: #b0b0b0; font-size: 11px;")
             layout.addWidget(precond_desc)
 
+        # Scanner-target opt-in (engine/printtarg charts only) — same feature as
+        # the measure tab's "All Stripes Read" dialog. Ticking it (re)builds this
+        # chart's .cht + .cie from the measurement so the same printed chart can
+        # profile a scanner later, whichever action the user picks below (#97/#98).
+        scanner_run = None
+        scanner_cb = None
+        try:
+            if self._ti3_path is not None:
+                candidate = Run.for_dir(self._ti3_path.parent)
+                if has_scanner_geometry(candidate.chart_channels_json):
+                    scanner_run = candidate
+        except Exception:  # noqa: BLE001 — never block the assessment dialog
+            scanner_run = None
+        if scanner_run is not None:
+            from ui.tabs.tab_measure import make_scanner_target_row
+            # Tint the card with this tab's violet accent (not the scanner-family
+            # green) so it matches the dialog it lives in; readable helper colours
+            # per theme (see readability requirement).
+            scanner_row, scanner_cb = make_scanner_target_row(
+                dlg, scanner_run.load_meta().scanner_target_enabled,
+                accent=_TAB_COLOR, hint_light="#5a3fc0", hint_dark="#cabfff")
+            layout.addWidget(scanner_row)
+
         # Buttons — laid out individually with stretches between each so they
         # spread evenly across the dialog width regardless of how many are shown.
         _install_labels = {
@@ -1472,8 +1496,26 @@ class TabCheckRefine(QWidget):
             "Needs Work": tr("Install Profile Anyway"),
         }
 
-        close_btn = QPushButton(tr("Close"), dlg)
-        close_btn.clicked.connect(dlg.reject)
+        # Renamed "Close" → "Confirm": on any action (this one included) a ticked
+        # scanner checkbox writes the .cht + .cie before the dialog closes.
+        def _persist_and_build_scanner() -> None:
+            if scanner_cb is None or scanner_run is None:
+                return
+            meta = scanner_run.load_meta()
+            if meta.scanner_target_enabled != scanner_cb.isChecked():
+                meta.scanner_target_enabled = scanner_cb.isChecked()
+                scanner_run.save_meta(meta)
+            if scanner_cb.isChecked():
+                self._build_scanner_target(scanner_run, self._ti3_path)
+
+        confirm_btn = QPushButton(tr("Confirm"), dlg)
+
+        def _on_confirm() -> None:
+            _persist_and_build_scanner()
+            dlg.reject()
+
+        confirm_btn.clicked.connect(_on_confirm)
+        close_btn = confirm_btn
 
         install_btn: QPushButton | None = None
         if self._icc_path:
@@ -1511,6 +1553,7 @@ class TabCheckRefine(QWidget):
             ti3 = self._ti3_path
 
             def _on_guide():
+                _persist_and_build_scanner()
                 dlg.accept()
                 self.guide_refinement_requested.emit(ti3, strips_file)
 
@@ -1521,6 +1564,7 @@ class TabCheckRefine(QWidget):
 
             def _on_install():
                 try:
+                    _persist_and_build_scanner()
                     profile_dir = _get_profile_dir()
                     profile_dir.mkdir(parents=True, exist_ok=True)
                     # Install under the project name (Run.stem), so the system
@@ -1541,6 +1585,7 @@ class TabCheckRefine(QWidget):
             icc_for_precond = self._icc_path
 
             def _on_precond():
+                _persist_and_build_scanner()
                 dlg.accept()
                 self.preconditioning_requested.emit(icc_for_precond)
 
@@ -1548,6 +1593,32 @@ class TabCheckRefine(QWidget):
 
         tint_dialog_primary(dlg, _TAB_COLOR)
         dlg.exec()
+
+    def _build_scanner_target(self, run: Run, ti3: Path | None) -> None:
+        """(Re)build the chart's ``.cht`` + ``.cie`` from this assessed
+        measurement, so the same printed chart can profile a scanner later
+        (#97/#98). Triggered by the opt-in checkbox in the quality-assessment
+        dialog, for whichever action the user then takes.
+
+        Best-effort and engine/printtarg-only: it must never disturb the
+        check/refine flow. Silently skips non-engine charts and
+        partial/mismatched reads (which raise :class:`ScaninTargetError`)."""
+        try:
+            source_ti3 = ti3 if ti3 is not None else run.measurement_ti3
+            from workflow.scanin_target import (
+                ScaninTargetError, build_scanin_target_from_paths)
+            try:
+                res = build_scanin_target_from_paths(
+                    run.chart_channels_json, source_ti3, run.dir / run.stem)
+            except ScaninTargetError:
+                return   # e.g. a partial read → not every patch measured yet
+            self._log.appendPlainText(
+                "\n" + tr("[OK] Scanner files (.cht + .cie) saved for {n} patches "
+                          "— scan the printed chart, then use Tools ▸ Create "
+                          "scanner target to build a scanner profile."
+                          ).format(n=res.n_patches))
+        except Exception:  # noqa: BLE001 — never let this break the assessment
+            log.exception("Scanner-target build failed (non-fatal)")
 
     # ------------------------------------------------------------------
     # Param collection
