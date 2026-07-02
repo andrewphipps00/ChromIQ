@@ -322,6 +322,20 @@ def _paper_code_known(code: str) -> bool:
     return code in PAPER_LABELS
 
 
+def _unchecked_indicator_css(settings) -> str:
+    """Border + fill for an UNCHECKED radio indicator, as explicit per-theme
+    colours. The editor's scoped stylesheets used palette(mid)/palette(base),
+    which renders the ring nearly invisible in dark mode — the checkboxes
+    stay readable because they keep the app-wide QSS's indicator border, so
+    match those tokens exactly (dark: styles.BORDER_HI on BG_INPUT; light:
+    light_styles.LM_BORDER_HI on LM_BG_INPUT)."""
+    from ui.theme import resolve_mode
+    light = resolve_mode(
+        settings.get("appearance", "auto") if settings else "auto") == "light"
+    return ("border: 1px solid #b0aba4; background: #ffffff;" if light
+            else "border: 1px solid #4a4a4a; background: #1f1f1f;")
+
+
 def _qcolor(rgb: tuple[float, float, float]) -> QColor:
     return QColor(*(max(0, min(255, round(v / 100 * 255))) for v in rgb))
 
@@ -666,8 +680,8 @@ class _PreviewLabel(QLabel):
 # New-chart setup
 # ---------------------------------------------------------------------------
 class _NewChartDialog(QDialog):
-    """New-chart setup: source (blank / targen seed / pasted colours) plus the
-    printtarg layout knobs that affect rendering."""
+    """New-chart setup: source (targen seed / pasted colours / generated
+    sets) plus the printtarg layout knobs that affect rendering."""
 
     def __init__(self, bin_dir: Path, settings=None,
                  parent: QWidget | None = None,
@@ -724,9 +738,7 @@ class _NewChartDialog(QDialog):
             "• Instrument & Paper — which measuring device you'll use and what "
             "paper you'll print on. ChromIQ uses these to lay the patches out in a "
             "way your device can read, at the right page size.\n\n"
-            "• Patches — how to fill the chart to begin with. There are four ways:\n"
-            "    – Blank canvas — start empty and add every colour by hand in the "
-            "editor.\n"
+            "• Patches — how to fill the chart to begin with. There are three ways:\n"
             "    – Seed from targen — enter a number and let ChromIQ spread that "
             "many colours evenly across the whole colour range. A great all-round "
             "starting point you can then rearrange.\n"
@@ -979,7 +991,6 @@ class _NewChartDialog(QDialog):
         # --- Source ---------------------------------------------------------
         src_box = QGroupBox(tr("Patches"), self)
         sl = QVBoxLayout(src_box)
-        self._mode_blank = QRadioButton(tr("Blank canvas (add patches by hand)"), src_box)
         self._mode_seed = QRadioButton(tr("Seed from targen (optimised patch set)"), src_box)
         self._mode_paste = QRadioButton(tr("Paste colour values (or load a file)"), src_box)
         self._mode_seed.setChecked(True)
@@ -994,7 +1005,6 @@ class _NewChartDialog(QDialog):
         seed_row.addWidget(self._count)
         seed_row.addStretch(1)
         sl.addLayout(seed_row)
-        sl.addWidget(self._mode_blank)
         sl.addWidget(self._mode_paste)
         paste_indent = QVBoxLayout()
         paste_indent.setContentsMargins(22, 0, 0, 0)
@@ -1027,7 +1037,7 @@ class _NewChartDialog(QDialog):
 
         # Enable/disable subcontrols by mode
         self._mode_seed.toggled.connect(lambda on: self._count.setEnabled(on))
-        for r in (self._mode_blank, self._mode_seed, self._mode_paste,
+        for r in (self._mode_seed, self._mode_paste,
                   self._mode_generate):
             r.toggled.connect(self._refresh_source_widgets)
         self._refresh_source_widgets()
@@ -1335,8 +1345,7 @@ class _NewChartDialog(QDialog):
 
     def _collect_gen_state(self) -> dict:
         mode = ("generate" if self._mode_generate.isChecked() else
-                "paste" if self._mode_paste.isChecked() else
-                "blank" if self._mode_blank.isChecked() else "seed")
+                "paste" if self._mode_paste.isChecked() else "seed")
         return {
             "mode": mode,
             **self._collect_gen_sets(),
@@ -1417,8 +1426,10 @@ class _NewChartDialog(QDialog):
             (self._bd_16 if lo["bit16"] else self._bd_8).setChecked(True)
 
         self._apply_gen_sets(st)
+        # "blank" (the removed Blank-canvas mode) is deliberately absent: a
+        # saved state or preset that carries it keeps the current selection.
         radio = {"generate": self._mode_generate, "paste": self._mode_paste,
-                 "blank": self._mode_blank, "seed": self._mode_seed}.get(
+                 "seed": self._mode_seed}.get(
                      st.get("mode"))
         if radio is not None:
             radio.setChecked(True)
@@ -2128,12 +2139,12 @@ class _NewChartDialog(QDialog):
             /* This dialog sets its own stylesheet, which drops the app-wide
                round radio geometry — so re-declare the base indicator round
                (border-radius = half ⇒ circle), else a checked radio draws as a
-               magenta square. Checkboxes keep their square tick. */
+               magenta square. Checkboxes keep their square tick. Explicit
+               per-theme colours, not palette(mid): see _unchecked_indicator_css. */
             QRadioButton::indicator {{
                 width: 14px; height: 14px;
-                border: 1px solid palette(mid);
+                {_unchecked_indicator_css(self._settings)}
                 border-radius: 8px;
-                background: palette(base);
             }}
             QRadioButton::indicator:checked {{
                 background: {SPEC_MAGENTA}; border-color: {SPEC_MAGENTA};
@@ -3658,12 +3669,12 @@ class Ti2RelayoutDialog(QDialog):
             /* This dialog sets its own stylesheet, which drops the app-wide
                round radio geometry — so re-declare the base indicator round
                (border-radius = half ⇒ circle), else a checked radio draws as a
-               magenta square. Checkboxes keep their square tick. */
+               magenta square. Checkboxes keep their square tick. Explicit
+               per-theme colours, not palette(mid): see _unchecked_indicator_css. */
             QRadioButton::indicator {{
                 width: 14px; height: 14px;
-                border: 1px solid palette(mid);
+                {_unchecked_indicator_css(self._settings)}
                 border-radius: 8px;
-                background: palette(base);
             }}
             QRadioButton::indicator:checked {{
                 background: {SPEC_MAGENTA}; border-color: {SPEC_MAGENTA};

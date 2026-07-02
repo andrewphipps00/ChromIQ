@@ -1,5 +1,19 @@
 # Changelog
 
+## v3.13.0-beta.66
+
+### ✨ Changed
+- **"Blank canvas" removed from the New patch set window.** The patch-set
+  editor itself is the blank canvas — start with any source and add, remove
+  or recolour patches there. Saved setups and presets that carried the old
+  mode simply keep the current selection.
+
+### 🐛 Fixed
+- **Unchecked radio buttons are visible in dark mode again.** In the patch-set
+  editor and its New patch set / Add patches windows the unselected ring used
+  a palette colour that disappeared on the dark background; it now uses the
+  same explicit border colours as the checkboxes in both light and dark mode.
+
 ## v3.13.0-beta.65
 
 ### ✨ Added
