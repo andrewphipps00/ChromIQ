@@ -340,7 +340,8 @@ out*, the **chart layout editor** (Tools → **Edit / create chart layout**) is 
 complete design surface:
 
 - **Start from anything** — load an existing `.ti2`, pull in the chart you just
-  made on the Create Chart tab, or begin from a blank canvas.
+  made on the Create Chart tab, or build a fresh patch set from a targen seed,
+  pasted colours or the colour-set generators.
 - **Rearrange freely** — move patches and whole strips with Front / Up / Down /
   Back, and see the printed sheet redraw in a live, multi-page preview.
 - **Recolour patches and spacers** — set or nudge patch colours, edit the spacer
