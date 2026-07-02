@@ -12,7 +12,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/01-create-chart-guided-dark.png" alt="ChromIQ — Create Chart tab with a full A4 test chart in the preview" width="900">
+  <img src="docs/title.png" alt="ChromIQ — Create Chart tab with a full A4 test chart in the preview" width="900">
 </p>
 
 ChromIQ is a free, open-source desktop app that builds custom **ICC printer
