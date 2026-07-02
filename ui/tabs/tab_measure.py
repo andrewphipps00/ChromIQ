@@ -112,7 +112,7 @@ def make_scanner_target_row(parent, checked: bool):
 from workflow.average_runner import AverageParams, AverageRunner
 from workflow.measure_manager import MeasureManager, MeasureParams
 from workflow.ti3_analysis import mark_verification_ti3
-from workflow.scanin_target import is_engine_geometry
+from workflow.scanin_target import has_scanner_geometry
 from ui.tiff_preview import TiffPreview
 from core.i18n import tr
 
@@ -3588,7 +3588,7 @@ class TabMeasure(QWidget):
         scanner_run = (Run.for_dir(self._ti1_path.parent)
                        if self._ti1_path is not None else None)
         if (scanner_run is not None and not is_cal
-                and is_engine_geometry(scanner_run.chart_channels_json)):
+                and has_scanner_geometry(scanner_run.chart_channels_json)):
             row, scanner_cb = make_scanner_target_row(
                 dlg, scanner_run.load_meta().scanner_target_enabled)
             layout.addWidget(row)
@@ -3731,7 +3731,7 @@ class TabMeasure(QWidget):
         scanner_run = (Run.for_dir(self._ti1_path.parent)
                        if self._ti1_path is not None else None)
         if (scanner_run is not None
-                and is_engine_geometry(scanner_run.chart_channels_json)):
+                and has_scanner_geometry(scanner_run.chart_channels_json)):
             row, scanner_cb = make_scanner_target_row(
                 dlg, scanner_run.load_meta().scanner_target_enabled)
             layout.addWidget(row)
@@ -4179,7 +4179,7 @@ class TabMeasure(QWidget):
             run = Run.for_dir(Path(ti3).parent)
             if not run.load_meta().scanner_target_enabled:
                 return
-            if not is_engine_geometry(run.chart_channels_json):
+            if not has_scanner_geometry(run.chart_channels_json):
                 return
             from workflow.scanin_target import (
                 ScaninTargetError, build_scanin_target_from_paths)

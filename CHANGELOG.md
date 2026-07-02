@@ -1,6 +1,6 @@
 # Changelog
 
-## v3.13.0-beta.61
+## v3.13.0-beta.62
 
 ### ✨ Added
 - **Scanner profiling** — build an ICC profile for your **scanner** from a
@@ -17,12 +17,16 @@
     placement per page, combined into one profile. The help explains how to use
     the resulting profile. Scanner outputs are named `-scanner` so they can never
     overwrite the printer profile.
+  - Works for both layout-engine charts **and** printtarg / preset charts: at
+    creation ChromIQ captures printtarg's exact `.cht` geometry (a fast,
+    seed-independent re-run) after verifying it against the chart's own `.ti2`,
+    so it's correct or simply absent — never wrong (#8). Charts made in older
+    versions show an honest "recreate the chart to enable scanner files" note.
 
 ### 🔧 Changed
 - Charts no longer write a `.cht` at creation time: a recognition template is
   only meaningful paired with a *measured* `.cie` (the aim `.cie` was dropped in
-  beta.59), so both are now produced together from the measurement. Engine
-  charts only for now — inferring geometry for older/imported charts is planned.
+  beta.59), so both are now produced together from the measurement.
 
 ## v3.13.0-beta.60
 

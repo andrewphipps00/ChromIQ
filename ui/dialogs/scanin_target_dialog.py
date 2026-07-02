@@ -39,6 +39,7 @@ from ui.widgets import make_browse_button, open_file_dialog
 from workflow.scanin_target import (
     ScaninTargetError,
     build_scanin_target_from_paths,
+    has_scanner_geometry,
 )
 
 log = get_logger(__name__)
@@ -167,14 +168,14 @@ class ScaninTargetDialog(_ToolDialogBase):
             return
         base = _chart_base(self._ti3_path)
         channels = base.with_name(base.name + ".channels.json")
-        if channels.is_file():
+        if has_scanner_geometry(channels):
             self._note.setText(tr(
                 "✓ Ready — scanner files will be written as {stem}.cht / .cie."
             ).format(stem=base.name))
         else:
             self._note.setText(tr(
-                "⚠ No layout sidecar found next to this measurement — scanner "
-                "files need a chart created with ChromIQ's layout engine."))
+                "⚠ ChromIQ doesn't have this chart's patch positions. Recreate the "
+                "chart in a current ChromIQ version to enable scanner files."))
 
     # ------------------------------------------------------------------ run
     def _can_run(self) -> bool:

@@ -144,6 +144,66 @@ def test_real_engine_geometry_end_to_end(tmp_path):
     assert "  F _ _ " in res.cht_paths[0].read_text()
 
 
+# --- printtarg charts: stored .cht geometry captured at creation (#8) ----------
+
+def _printtarg_cht(locs):
+    """A minimal printtarg-style .cht text: an F fiducial, a D marker box, and one
+    X box per patch loc (the shape captured from real printtarg -s output)."""
+    lines = ["IT8.7/1", "", f"BOXES {len(locs) + 2}",
+             "  F _ _ 10 10 100 10 100 200 10 200",
+             "  D MARK0 MARK0 _ _ 8 1 46 270 0 0"]
+    for i, loc in enumerate(locs):
+        lines.append(f"  X {loc} {loc} _ _ 8 8 20 {20 + i * 10} 0 0")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _printtarg_channels(tmp_path, pages_locs):
+    cht_pages = [_printtarg_cht(locs) for locs in pages_locs]
+    all_locs = sorted({l for locs in pages_locs for l in locs})
+    doc = {"ink_channels": ["R", "G", "B"],
+           "layout": {"engine": "printtarg", "cht_pages": cht_pages, "locs": all_locs}}
+    p = tmp_path / "chart.channels.json"
+    p.write_text(json.dumps(doc))
+    return p, cht_pages
+
+
+def test_printtarg_writes_stored_cht_verbatim_plus_cie(tmp_path):
+    ch, pages = _printtarg_channels(tmp_path, [["A1", "A2"]])
+    ti3 = _ti3(tmp_path, [("A1", 100, 100, 100, 95, 100, 108),
+                          ("A2", 100, 0, 0, 41, 21, 2)])
+    res = ST.build_scanin_target_from_paths(ch, ti3, tmp_path / "chart")
+    assert res.n_pages == 1 and res.n_patches == 2
+    # .cht is the captured printtarg text, byte-for-byte (its own units/fiducials)
+    assert res.cht_paths[0].read_text() == pages[0]
+    assert "  F _ _ 10 10 " in res.cht_paths[0].read_text()
+    # .cie is the measured reference
+    assert "A2 41.000000 21.000000 2.000000" in res.cie_path.read_text()
+
+
+def test_printtarg_multipage_one_cht_per_page(tmp_path):
+    ch, _ = _printtarg_channels(tmp_path, [["A1", "A2"], ["B1", "B2"]])
+    ti3 = _ti3(tmp_path, [("A1", 1, 1, 1, 9, 9, 9), ("A2", 2, 2, 2, 8, 8, 8),
+                          ("B1", 3, 3, 3, 7, 7, 7), ("B2", 4, 4, 4, 6, 6, 6)])
+    res = ST.build_scanin_target_from_paths(ch, ti3, tmp_path / "chart")
+    assert res.n_pages == 2
+    assert sorted(p.name for p in res.cht_paths) == ["chart_01.cht", "chart_02.cht"]
+    assert " X A1 A1 " in (tmp_path / "chart_01.cht").read_text()
+    assert " X B1 B1 " in (tmp_path / "chart_02.cht").read_text()
+
+
+def test_printtarg_unmeasured_patch_raises(tmp_path):
+    ch, _ = _printtarg_channels(tmp_path, [["A1", "A2"]])
+    ti3 = _ti3(tmp_path, [("A1", 100, 100, 100, 95, 100, 108)])   # A2 missing
+    with pytest.raises(ST.GeometryMismatch):
+        ST.build_scanin_target_from_paths(ch, ti3, tmp_path / "chart")
+
+
+def test_cht_x_box_locs_skips_f_and_d_boxes():
+    locs = ST._cht_x_box_locs(_printtarg_cht(["A1", "A2", "B3"]))
+    assert locs == ["A1", "A2", "B3"]   # F and D MARK0 skipped
+
+
 def test_is_engine_geometry_gate(tmp_path):
     """The offer-gate: True for an engine chart (even before any .ti3 exists),
     False for non-engine / missing sidecars. Never raises."""

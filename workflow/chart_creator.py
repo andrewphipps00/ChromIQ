@@ -1132,6 +1132,7 @@ class ChartCreator:
             if self._pending_params.triple_density:
                 self._patch_ti2_instrument(work_dir, stem)
             self._write_channel_sidecar(work_dir, stem, self._pending_params)
+            self._capture_scanner_cht(work_dir, stem, self._pending_params)
             self._stamp_tiff_metadata(tiffs, self._pending_params)
 
         if on_finish:
@@ -1280,6 +1281,73 @@ class ChartCreator:
             log.debug("Wrote channel sidecar %s: %s", sidecar.name, channels)
         except Exception as exc:
             log.warning("Could not write channel sidecar: %s", exc)
+
+    def _capture_scanner_cht(self, work_dir: Path, stem: str,
+                             params: "ChartParams") -> None:
+        """Best-effort: capture printtarg's exact ``.cht`` geometry for this chart
+        and store it in ``channels.json`` so a scanner target can be built later
+        (#8), including for printtarg/preset charts that have no engine geometry.
+
+        Re-runs printtarg with ``-s`` on the chart's own ``.ti1`` in a temp dir.
+        printtarg's ``.cht`` is **seed-independent** (it encodes loc→position,
+        which the random patch assignment doesn't touch — verified), so it matches
+        the printed sheet regardless of randomisation; a low render DPI keeps it
+        fast. We only persist it after checking its patch locs against the chart's
+        own ``.ti2`` — correct-or-absent, never silently wrong. Never raises into
+        the caller."""
+        import json
+        import shutil
+        import subprocess
+        import tempfile
+
+        try:
+            ti1 = work_dir / f"{stem}.ti1"
+            if not ti1.is_file():
+                return
+            from core.resource_path import argyll_binary
+            bin_dir = Path(self._settings.get("argyll_bin_path",
+                                              "/Applications/Argyll/bin"))
+            pt = bin_dir / argyll_binary("printtarg")
+            if not pt.exists():
+                return
+            # Same layout args, but a temp basename, a fast low render DPI (the
+            # .cht is in device-independent points), and -s to emit the .cht.
+            args = [a for a in self._build_printtarg_args(params)
+                    if not (a.startswith("-t") or a.startswith("-T"))]
+            args[-1] = "cap"                       # swap the chart stem
+            cmd = [str(pt), "-s", "-t72", *args]
+            with tempfile.TemporaryDirectory(prefix="chromiq_cht_") as td:
+                tdp = Path(td)
+                shutil.copy(ti1, tdp / "cap.ti1")
+                subprocess.run(cmd, cwd=td, capture_output=True, text=True,
+                               timeout=120)
+                pages = [c.read_text(encoding="utf-8")
+                         for c in sorted(tdp.glob("cap*.cht"))]
+            if not pages:
+                log.warning("Scanner .cht capture produced no file for %s", stem)
+                return
+            # Verify the captured geometry against the chart's own .ti2.
+            from workflow.scanin_target import _cht_x_box_locs
+            from workflow.ti3_analysis import parse_ti3
+            ti2 = work_dir / f"{stem}.ti2"
+            ti2_locs = set(parse_ti3(ti2).sample_locs) if ti2.is_file() else set()
+            cht_locs: set[str] = set()
+            for text in pages:
+                cht_locs |= set(_cht_x_box_locs(text))
+            if ti2_locs and cht_locs != ti2_locs:
+                log.warning("Scanner .cht capture loc mismatch for %s (%d vs %d) "
+                            "— not stored", stem, len(cht_locs), len(ti2_locs))
+                return
+            sidecar = work_dir / f"{stem}.channels.json"
+            doc = json.loads(sidecar.read_text()) if sidecar.exists() else {}
+            doc["layout"] = {"engine": "printtarg", "cht_pages": pages,
+                             "locs": sorted(cht_locs)}
+            sidecar.write_text(json.dumps(doc))
+            log.info("Captured scanner .cht geometry for %s: %d page(s), %d patches",
+                     stem, len(pages), len(cht_locs))
+        except Exception as exc:  # noqa: BLE001 — best-effort, never break creation
+            log.warning("Scanner .cht capture failed for %s (non-fatal): %s",
+                        stem, exc)
 
     # ------------------------------------------------------------------
     # Arg builders

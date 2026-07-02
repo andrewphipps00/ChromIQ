@@ -33,7 +33,7 @@ from ui.widgets import NoScrollComboBox, make_browse_button, open_file_dialog
 from workflow.profile_builder import ProfileBuilder, ProfileParams
 from workflow.scanin_runner import ScaninParams, ScaninRunner
 from workflow.scanin_target import (
-    ScaninTargetError, build_scanin_target_from_paths, is_engine_geometry)
+    ScaninTargetError, build_scanin_target_from_paths, has_scanner_geometry)
 
 log = get_logger(__name__)
 
@@ -234,7 +234,7 @@ class ScannerProfileDialog(_ToolDialogBase):
         self._corners.clear()
         base = _chart_base(ti3)
         channels = base.with_name(base.name + ".channels.json")
-        if not is_engine_geometry(channels):
+        if not has_scanner_geometry(channels):
             self._layout = None
             self._pages = []
             self._chart_note.setText(tr(
@@ -243,7 +243,11 @@ class ScannerProfileDialog(_ToolDialogBase):
             self._refresh()
             return
         self._layout = json.loads(channels.read_text())["layout"]
-        self._pages = sorted({int(p.get("page", 0)) for p in self._layout["patches"]})
+        if self._layout.get("patches"):                     # engine chart
+            self._pages = sorted({int(p.get("page", 0))
+                                  for p in self._layout["patches"]})
+        else:                                               # printtarg chart
+            self._pages = list(range(len(self._layout.get("cht_pages", [1]))))
         # Ensure the .cht/.cie exist (build from the measurement if missing).
         try:
             build_scanin_target_from_paths(channels, ti3, base)
@@ -252,9 +256,13 @@ class ScannerProfileDialog(_ToolDialogBase):
             self._layout = None
             self._refresh()
             return
+        if self._layout.get("patches"):
+            n_patches = len(self._layout["patches"])
+        else:
+            n_patches = len(self._layout.get("locs") or [])
         self._chart_note.setText(tr(
             "✓ Ready — {n} patches on {p} page(s)."
-        ).format(n=len(self._layout["patches"]), p=len(self._pages)))
+        ).format(n=n_patches, p=len(self._pages)))
         self._page_widget.setVisible(len(self._pages) > 1)
         self._page_combo.blockSignals(True)
         self._page_combo.clear()
@@ -269,7 +277,11 @@ class ScannerProfileDialog(_ToolDialogBase):
         if self._layout is None:
             return
         pg = self._page
-        patches = [p for p in self._layout["patches"] if int(p.get("page", 0)) == pg]
+        # Engine charts have exact per-patch rects → draw the grid overlay.
+        # printtarg charts carry only a captured .cht (its own units/origin); the
+        # grid overlay for those is a validated follow-up, so show corners only.
+        patches = [p for p in self._layout.get("patches", [])
+                   if int(p.get("page", 0)) == pg]
         self._marquee.set_grid(GridSpec.from_patches(patches))
         scan = self._scans.get(pg)
         self._scan_field.setText(str(scan) if scan else "")

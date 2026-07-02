@@ -678,3 +678,49 @@ def test_stamp_uses_targen_line_for_fresh_chart(tmp_path: Path, monkeypatch) -> 
     lines = captured[0]
     assert any(l.startswith("targen ") for l in lines)
     assert not any(l.startswith("Chart layout ") for l in lines)
+
+
+# --- scanner .cht geometry capture at creation (#8) ----------------------------
+import subprocess as _subprocess
+
+from core.resource_path import argyll_binary as _argyll_binary
+
+_ARGYLL_BIN = Path("/Applications/Argyll/bin")
+_PRINTTARG = _ARGYLL_BIN / _argyll_binary("printtarg")
+_TARGEN = _ARGYLL_BIN / _argyll_binary("targen")
+
+
+@pytest.mark.skipif(not (_PRINTTARG.exists() and _TARGEN.exists()),
+                    reason="ArgyllCMS not installed at /Applications/Argyll/bin")
+def test_capture_scanner_cht_stores_verified_printtarg_geometry(tmp_path: Path) -> None:
+    """_capture_scanner_cht re-runs printtarg -s and, after checking the captured
+    patch locs against the chart's own .ti2, stores the .cht page(s) in
+    channels.json under an engine="printtarg" layout (#8)."""
+    creator, _ = _make_creator(tmp_path)
+    stem = creator._file_mgr.chart_stem(cal_target=False)
+    run_dir = creator._file_mgr.cwd_for_chart(cal_target=False)
+
+    # Real targen + printtarg so a genuine <stem>.ti1 + .ti2 exist to capture from.
+    _subprocess.run([str(_TARGEN), "-d3", "-f40", stem], cwd=run_dir,
+                    check=True, capture_output=True)
+    _subprocess.run([str(_PRINTTARG), "-ii1", "-pA4", stem], cwd=run_dir,
+                    check=True, capture_output=True)
+    (run_dir / f"{stem}.channels.json").write_text(
+        json.dumps({"ink_channels": ["R", "G", "B"]}))
+
+    creator._capture_scanner_cht(
+        run_dir, stem, ChartParams(instrument="i1", paper="A4", is_manual=True))
+
+    doc = json.loads((run_dir / f"{stem}.channels.json").read_text())
+    assert doc["ink_channels"] == ["R", "G", "B"]        # existing data preserved
+    layout = doc["layout"]
+    assert layout["engine"] == "printtarg" and layout["cht_pages"]
+    assert all("BOXES" in t for t in layout["cht_pages"])
+
+    from workflow.ti3_analysis import parse_ti3
+    ti2_locs = set(parse_ti3(run_dir / f"{stem}.ti2").sample_locs)
+    assert set(layout["locs"]) == ti2_locs               # verified against the .ti2
+
+    # The stored geometry is directly consumable by the scanner-target builder.
+    from workflow import scanin_target as ST
+    assert ST.has_scanner_geometry(run_dir / f"{stem}.channels.json")
