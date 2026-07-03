@@ -1,5 +1,14 @@
 # Changelog
 
+## v3.13.0-beta.77
+
+### ✨ Changed
+- **Setup guidance now lives on the field it's about.** The scan/photo field's ⓘ
+  in Build scanner or camera profile now includes the full scanner **and** camera
+  setup help inline — how to turn the device's colour management off, scanning
+  resolution tips, and camera lighting/exposure — instead of pointing you up to
+  the main ⓘ. (Knut: put the relevant help on the relevant control.)
+
 ## v3.13.0-beta.76
 
 ### ✨ Changed

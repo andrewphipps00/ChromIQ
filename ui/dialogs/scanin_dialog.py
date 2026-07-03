@@ -517,13 +517,16 @@ class ScannerProfileDialog(_ToolDialogBase):
             tr("Scan or photo of the target (TIFF):"), tr("Scan or photo"),
             tr("Your capture of the target on the device you want to profile: a "
             "scan from a scanner, or a photo from a camera. Save it as a plain "
-            "RGB TIFF, with the device's own colour correction turned off (see "
-            "the ⓘ at the top for exactly which settings, for both scanners and "
-            "cameras).\n\n"
+            "RGB TIFF, with the device's own colour correction turned off — the "
+            "exact settings for scanners and cameras are further down in this "
+            "note.\n\n"
             "Multi-page ChromIQ charts: switch pages with the Page selector and "
             "load each page's capture. To reduce noise you can also add several "
             "captures of the same sheet and let ChromIQ average them — see “Add "
-            "another scan to average” below.")))
+            "another scan to average” below.")
+            + "\n\n───────────────\n" + SCAN_SETUP_HELP
+            + "\n\n───────────────\n" + SCANNING_TIPS_HELP
+            + "\n\n───────────────\n" + CAMERA_HELP))
         row2 = QHBoxLayout()
         self._scan_field = QLineEdit(self)
         self._scan_field.setReadOnly(True)
