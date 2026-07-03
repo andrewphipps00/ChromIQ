@@ -1,5 +1,16 @@
 # Changelog
 
+## v3.13.0-beta.88
+
+### 🔧 Changed
+- **Friendlier, fuller reading-options help.** Rewrote the tooltips for the reading
+  options — Correct perspective, Save a diagnostic image, "Match rectarg preview",
+  and "Use fiducial marks" — in plain, beginner-facing language that says what each
+  does, when to use it, and what to expect, leaving no open questions. Also fixed
+  the patch-sample-area tip to say 50% (the current default).
+- **Pop-out "Done" button is now green** (the scanner/measure accent) instead of the
+  global blue — the pop-out is its own window and didn't inherit the dialog accent.
+
 ## v3.13.0-beta.87
 
 ### ✅ Tests / demo scan (Knut)

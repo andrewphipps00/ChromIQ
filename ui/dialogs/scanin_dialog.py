@@ -594,13 +594,17 @@ class ScannerProfileDialog(_ToolDialogBase):
 
         form.addLayout(self._labelled(
             tr("Patch sample area:"), tr("Patch sample area"),
-            tr("How much of each patch scanin reads — the filled green inner "
-            "square on the grid above.\n\n"
-            "It samples the centre of every patch and ignores the edges, where "
-            "ink bleeds, a border shows, or placement is slightly off. 60% is a "
-            "safe default. Lower it if your patches are small or the grid isn't "
-            "perfectly aligned; raise it for large, cleanly-printed patches to "
-            "average over more of each colour.")))
+            tr("How much of each patch ChromIQ reads — shown as the filled green "
+            "inner square inside every cell of the grid above.\n\n"
+            "It always reads the middle of a patch and leaves the edges out, "
+            "because the edges are where ink can bleed, a thin border may show, or "
+            "the grid may sit a hair off. Reading only the clean centre keeps the "
+            "measured colour honest.\n\n"
+            "50% is a safe default. Lower it (a smaller square) if your patches are "
+            "small or the grid isn't perfectly aligned, so you stay well clear of "
+            "the edges. Raise it (a bigger square) only for large, cleanly-printed "
+            "patches with the grid sitting exactly right, to average over more of "
+            "each colour for a touch less noise.")))
         row_sa = QHBoxLayout()
         self._sample_area = NoScrollSpinBox(self)
         self._sample_area.setRange(20, 100)
@@ -624,28 +628,59 @@ class ScannerProfileDialog(_ToolDialogBase):
         opts.addStretch(1)
         opts.addWidget(self._tip(
             tr("Reading options"),
-            tr("Correct perspective compensates for a slightly skewed scan (keep "
-            "it on). The diagnostic image saves a copy of the scan with the "
-            "patches ChromIQ read drawn on it, so you can check the alignment "
-            "if the profile looks off.")), 0, Qt.AlignmentFlag.AlignVCenter)
+            tr("Two settings for how ChromIQ reads the patches from your scan.\n\n"
+            "• Correct perspective — leave this on (it's on by default). Almost "
+            "every scan or photo is very slightly skewed, and this lets ChromIQ "
+            "read the patch area as a gently four-cornered shape instead of "
+            "insisting on a perfect rectangle. That way the grid still lands on "
+            "the patches even if the sheet wasn't perfectly square to the scanner "
+            "or camera. There's no downside to leaving it on — only turn it off if "
+            "you're certain the scan is geometrically perfect.\n\n"
+            "• Save a diagnostic image — after reading, ChromIQ writes a copy of "
+            "your scan with the patches it actually read drawn on top, right next "
+            "to the scan file. Open that image to check the grid landed correctly: "
+            "each drawn marker should sit squarely on its colour. It's the very "
+            "first thing to look at if a profile comes out wrong, and it costs "
+            "nothing but a little disk space — so it's worth leaving on while "
+            "you're getting your placement right.")), 0,
+            Qt.AlignmentFlag.AlignVCenter)
         form.addLayout(opts)
 
         grid_opts = QHBoxLayout()
         self._match_rectarg = QCheckBox(
             tr("Match rectarg preview (patches touching)"), self)
         self._match_rectarg.setToolTip(tr(
-            "Off (default): the grid uses each patch's true spacing — correct for a "
-            "real scan of a gapped target (SpyderChecker, QPcard, CMP …). Turn it on "
-            "only to line the grid up with a gapless rectarg-rendered test image, "
-            "where the patches are drawn touching."))
+            "Leave this OFF for normal scanning — it's only for testing against "
+            "rectarg's own preview images.\n\n"
+            "Some targets — the SpyderChecker, QPcard and CMP charts, for example — "
+            "have small gaps between their patches. ChromIQ keeps those gaps, which "
+            "is exactly right when you scan the real, physical sheet, and the grid "
+            "will sit perfectly on it.\n\n"
+            "The rectarg tool, though, draws its preview images with the patches "
+            "touching (no gaps), so the grid can't line up with one of those "
+            "pictures. Turn this on only when you're checking the reading against a "
+            "rectarg preview image: it closes the gaps to match that gapless "
+            "drawing, for both the on-screen grid and the actual read. For a scan "
+            "of your own target, leave it off so the spacing stays true to the "
+            "real sheet."))
         self._match_rectarg.toggled.connect(self._rebuild_std_grid)
         self._use_fiducials_cb = QCheckBox(
             tr("Use fiducial marks in the .cht as reference"), self)
         self._use_fiducials_cb.setToolTip(tr(
-            "When the .cht defines registration marks distinct from the patch block, "
-            "frame the grid by those marks — you then place the four corners on the "
-            "fiducials instead of the patch area. Not available when the chosen "
-            "target has no separate fiducials."))
+            "Chooses what the four corners you drag should line up with.\n\n"
+            "Off (default): you place the corners on the patch area itself — the "
+            "outer edges of the block of colour patches. This is the simplest way "
+            "and it works for every target.\n\n"
+            "On: some targets print small registration marks — little crosses or "
+            "L-shapes, called fiducials — a short distance outside the patches, and "
+            "their exact positions are stored in the target's recognition file. "
+            "Switch this on to place the corners on those marks instead; ChromIQ "
+            "then works out where the patches sit relative to them. Use it if your "
+            "target has clear fiducials and you find them easier to aim at than the "
+            "patch corners.\n\n"
+            "It stays switched off (and briefly flashes) for targets that don't "
+            "define separate fiducials — there's nothing extra to line up with, so "
+            "the patch area is used."))
         self._use_fiducials_cb.toggled.connect(self._on_fiducial_toggled)
         grid_opts.addWidget(self._match_rectarg)
         grid_opts.addSpacing(24)
@@ -1025,10 +1060,19 @@ class ScannerProfileDialog(_ToolDialogBase):
                          "build the profile in the main window."), self._popout)
         note.setStyleSheet("color:#8a8a8a; font-size:11px;")
         done = QPushButton(tr("Done"), self._popout)
-        done.setObjectName("primary")
         done.clicked.connect(self._popout.close)
-        for _b in (rot, rst, done):
+        for _b in (rot, rst):
             _b.setStyleSheet(_COMPACT_BTN)
+        # The pop-out is its own window, so it doesn't inherit the dialog's green
+        # accent — the global "primary" style would make Done blue. Paint it green
+        # (the scanner/measure family colour) explicitly.
+        done.setStyleSheet(
+            "QPushButton {"
+            f"  background: {SPEC_GREEN}; color: #08130e; border: none;"
+            "   border-radius: 6px; padding: 3px 22px; min-height: 0;"
+            "   font-size: 11px; font-weight: 600; }"
+            "QPushButton:hover { background: #6fe0b6; }"
+            "QPushButton:pressed { background: #45b98d; }")
         bar.addWidget(rot)
         bar.addWidget(rst)
         bar.addStretch(1)
