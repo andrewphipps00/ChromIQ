@@ -1,5 +1,15 @@
 # Changelog
 
+## v3.13.0-beta.76
+
+### ✨ Changed
+- **The Tools menu is grouped by task** — Measurements, Charts & patch sets,
+  Scanner & camera, i1Profiler interchange, Profiles, Language — with section
+  headers, instead of one long flat list. Easier to scan for the tool you want.
+
+### 🌍 Translated
+- Group headers staged as English placeholders (full translation pass at GA).
+
 ## v3.13.0-beta.75
 
 ### ✨ Added
