@@ -832,14 +832,14 @@ class ScannerProfileDialog(_ToolDialogBase):
         try the files without their own scan (Knut)."""
         cht = self._target_combo.currentData()
         if not cht:
-            self._log.append(tr("Pick a bundled target above first."))
+            self._log.appendPlainText(tr("Pick a bundled target above first."))
             return
         from core.preset_store import reveal_in_file_manager
         from workflow.standard_targets import make_test_scan
         out = Path.home() / "ChromIQ" / "scanner-test-targets"
         try:
             tif, ref = make_test_scan(Path(cht), out)
-            self._log.append(tr(
+            self._log.appendPlainText(tr(
                 "Wrote a known-good test scan and reference for this target:\n"
                 "  {tif}\n  {ref}\n"
                 "Load the .tif as the scan and the .cie as the reference to try the "
@@ -847,7 +847,7 @@ class ScannerProfileDialog(_ToolDialogBase):
                     tif=tif, ref=ref, cht=cht))
             reveal_in_file_manager(out)
         except Exception as exc:  # noqa: BLE001
-            self._log.append(tr("Couldn't prepare test files: {e}").format(e=exc))
+            self._log.appendPlainText(tr("Couldn't prepare test files: {e}").format(e=exc))
             reveal_in_file_manager(Path(cht).parent)
 
     def _pick_cht(self) -> None:
@@ -1051,7 +1051,7 @@ class ScannerProfileDialog(_ToolDialogBase):
         if not ready:
             # Don't fail silently — Knut hit a dead Browse button because his .ti3
             # wasn't a ChromIQ engine chart. Say what to do, in the status box.
-            self._log.append(tr(
+            self._log.appendPlainText(tr(
                 "⚠ Choose your target first, then the scan. Under “A chart I made "
                 "in ChromIQ”, pick the .ti3 of a chart you built here (it needs its "
                 ".channels.json alongside). An older .ti3 from a plain scanin run "

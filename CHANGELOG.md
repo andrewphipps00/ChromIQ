@@ -1,5 +1,13 @@
 # Changelog
 
+## v3.13.0-beta.85
+
+### 🐛 Fixed
+- **"Test files…" crashed instead of running.** The handler wrote to the log with
+  ``.append()``, but that log is a ``QPlainTextEdit`` (no such method) — so it threw
+  every click. Now uses ``appendPlainText`` (and fixed one other stray call on the
+  same widget). Guarded with a regression test.
+
 ## v3.13.0-beta.84
 
 ### ✨ Scanner reading grid — part 2 (Knut)
