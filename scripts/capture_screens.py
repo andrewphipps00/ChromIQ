@@ -153,11 +153,16 @@ def show_tab(win, key: str) -> None:
 
 
 def pump(ms: int) -> None:
-    """Spin the event loop for ~ms so async work (profcheck, WebGL) progresses."""
+    """Spin the event loop for ~ms so async work (profcheck, WebGL) progresses.
+    Also flush DeferredDelete events — plain processEvents() doesn't, so widgets
+    cleared via deleteLater() (e.g. the old printer-options box on a printer
+    switch) would otherwise stay painted behind the rebuilt rows in a grab."""
     import time
+    from PyQt6.QtCore import QEvent
     end = time.time() + ms / 1000.0
     while time.time() < end:
         QApplication.processEvents()
+        QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
         time.sleep(0.02)
 
 
@@ -321,6 +326,7 @@ def scene_list():
         win._tab_print.apply_native_dialog_mode()
         win._tab_print.load_tiffs(list(engine_preview()["tif"]))
         _pick_printer(win)
+        pump(1200)
         show_tab(win, "print")
 
     def print_postscript(app, win):
@@ -330,6 +336,7 @@ def scene_list():
         win._tab_print.apply_native_dialog_mode()
         win._tab_print.load_tiffs(list(engine_preview()["tif"]))
         _pick_printer(win)
+        pump(1200)
         show_tab(win, "print")
 
     def measure_guided(app, win):
