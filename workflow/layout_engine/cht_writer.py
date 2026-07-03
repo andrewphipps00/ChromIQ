@@ -73,10 +73,13 @@ def build_cht_text(boxes: list[dict], expected: list[tuple[str, float, float, fl
     When *emit_fiducials* (the default), an ``F`` box line carrying the four
     patch-area corners (TL, TR, BR, BL) is prepended — it lets ``scanin -F``
     register a scan from four manually-placed corners (#98). The ``F`` line is
-    itself a box, so it is included in the ``BOXES`` count, exactly as Argyll's
-    own reference ``.cht`` files do."""
+    **not** included in the ``BOXES`` count: ArgyllCMS ``scanin`` skips the
+    fiducial line without counting it (verified against ``scanrd.c`` and by a
+    real ``scanin`` read — an over-count makes it abort with "More BOXes than
+    declared"), exactly as Argyll's own reference ``.cht`` files do (e.g.
+    ``it8.cht``'s ``BOXES 290`` covers its X/Y/D boxes but not its ``F`` line)."""
     fids = fiducials_from_boxes(boxes) if emit_fiducials else None
-    n_boxes = len(boxes) + (1 if fids else 0)
+    n_boxes = len(boxes)
     out: list[str] = ["", "", f"BOXES {n_boxes}"]
     if fids:
         out.append("  F _ _ " + " ".join(f"{v:f}" for v in fids))

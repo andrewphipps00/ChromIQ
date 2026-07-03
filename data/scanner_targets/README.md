@@ -12,13 +12,22 @@ physical target (batch-specific, so it can't be bundled).
 ArgyllCMS already ships `.cht` files for these targets in its `ref/` folder, and
 ChromIQ falls back to those. But several of Argyll's shipped files had incorrect
 **fiducial (`F`) coordinates**, which broke registration. The versions here are
-**Knut Georg Larsson's corrected files**, released with his **rectarg** project
-and verified to recreate each target correctly. ChromIQ prefers these over the
-copies in Argyll's `ref/` when the names match.
+**Knut Georg Larsson's corrected files**, released with his **rectarg** project.
+ChromIQ prefers these over the copies in Argyll's `ref/` when the names match.
 
-Corrected targets: HutchColor HCT, LaserSoft DCPro, QPcard 202, SpyderChecker,
-SpyderChecker 24, CMP Digital Target-4. (ISO 12641-2 is included unchanged for
-completeness/robustness.)
+Bundled (each **validated end-to-end** through real `scanin -F` → `colprof`,
+avg ΔE ≈ 0.1–2.3):
+
+- **HutchColor HCT** — `Hutchcolor.cht`
+- **LaserSoft ISO 12641-2** — `ISO12641_2_1.cht`
+- **LaserSoft DCPro** — `LaserSoftDCPro.cht`
+
+Only files that pass that validation are bundled. Some other rectarg example
+`.cht` (QPcard 202, SpyderChecker, SpyderChecker 24, CMP Digital Target-4) render
+correctly in rectarg but do **not** register correctly with ArgyllCMS `scanin`
+(their box pitch doesn't match the patch positions, or their `EXPECTED` list is
+inconsistent), so they are intentionally **not** bundled — for those targets
+ChromIQ falls back to Argyll's own `ref/` copy.
 
 ## Credit & licence
 

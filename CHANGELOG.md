@@ -1,5 +1,27 @@
 # Changelog
 
+## v3.13.0-beta.72
+
+### 🐛 Fixed
+- **Scanner targets built from a ChromIQ chart are now readable by scanin.** The
+  `.cht` writer counted the fiducial (`F`) line in its `BOXES` total, but
+  ArgyllCMS `scanin` does not count it — so every engine-chart scanner target was
+  one box over and `scanin` aborted with "More BOXes than declared". Found by a
+  new hardware-free test that generates targets and reads them back; fixed the
+  count (matching Argyll's own `.cht`).
+- **Dropped four broken bundled targets.** beta.71 bundled `.cht` files whose
+  corrected copies (QPcard 202, SpyderChecker, SpyderChecker 24, CMP Digital
+  Target-4) turned out to misregister with `scanin` (tiny box pitch / undersized
+  fiducial / inconsistent EXPECTED list). ChromIQ now bundles only the three that
+  validate end-to-end (HutchColor, LaserSoft ISO 12641-2, LaserSoft DCPro) and
+  falls back to Argyll's own — correct — `ref/` copies for the rest.
+
+### 🧪 Internal
+- New guarded end-to-end tests: self-made targets across many layouts, and each
+  target rendered from its own geometry, driven through the real `scanin -F` and
+  checked patch-by-patch. These validate registration with no hardware and caught
+  the `BOXES` bug above.
+
 ## v3.13.0-beta.71
 
 ### ✨ Added

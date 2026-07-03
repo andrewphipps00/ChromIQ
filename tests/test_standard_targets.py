@@ -14,11 +14,14 @@ class _S:
     def get(self, k, d=None): return self._s.get(k, d)
 
 
-def test_bundle_present_and_nonempty():
+# Only the .cht that pass real scanin registration are bundled (Knut #2).
+_BUNDLED = {"Hutchcolor", "ISO12641_2_1", "LaserSoftDCPro"}
+
+
+def test_bundle_present_and_validated_set():
     d = bundled_targets_dir()
     assert d is not None and d.is_dir()
-    chts = list(d.glob("*.cht"))
-    assert len(chts) >= 6, "expected the corrected .cht set to be bundled"
+    assert {p.stem for p in d.glob("*.cht")} == _BUNDLED
     # Licence + attribution ship alongside the GPLv3 files.
     assert (d / "LICENSE").is_file() and (d / "README.md").is_file()
 
@@ -27,7 +30,7 @@ def test_bundle_listed_even_without_argyll_ref(tmp_path):
     # No Argyll ref/ available → the dropdown still lists the bundled targets.
     targets = list_standard_targets(_S(argyll_bin_path=str(tmp_path / "bin")))
     stems = {p.stem for _, p in targets}
-    assert {"Hutchcolor", "LaserSoftDCPro", "SpyderChecker24"} <= stems
+    assert _BUNDLED <= stems
 
 
 def test_bundled_cht_preferred_over_argyll_ref(tmp_path):
