@@ -127,7 +127,12 @@ def test_standard_mode_execute_uses_chosen_cht_and_reference(_app, tmp_path):
         jobs = dlg._jobs
         assert jobs[0]["kind"] == "scanin"
         p = jobs[0]["params"]
-        assert p.cht == cht and p.cie == ref and p.scan_tif == scan
+        # At the default 60% sample area the dialog hands scanin a sample-adjusted
+        # sibling .cht (BOX_SHRINK rewritten) — never the read-only bundled file —
+        # while the reference and scan are untouched.
+        assert p.cht == scan.parent / "it8-sample.cht" and p.cht.is_file()
+        assert "BOX_SHRINK" in p.cht.read_text()
+        assert p.cie == ref and p.scan_tif == scan
         assert jobs[-1]["kind"] == "colprof"
         # Profile base sits next to the scan (→ <scan>-scanner.ti3/.icc).
         assert jobs[-1]["base"] == scan.parent / scan.stem

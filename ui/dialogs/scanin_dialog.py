@@ -33,7 +33,8 @@ from ui.styles import SPEC_GREEN
 from ui.dialogs.scanin_target_dialog import WHICH_CHART_HELP, WHICH_CHART_CAMERA_NOTE
 from ui.theme import resolve_mode
 from ui.tooltip_button import TooltipButton
-from ui.widgets import NoScrollComboBox, make_browse_button, open_file_dialog
+from ui.widgets import (NoScrollComboBox, NoScrollSpinBox, make_browse_button,
+                        open_file_dialog)
 from workflow.profile_builder import ProfileBuilder, ProfileParams
 from workflow.scanin_runner import ScaninParams, ScaninRunner
 from workflow.ti3_average import Ti3AverageError, average_scanner_ti3
@@ -526,9 +527,9 @@ class ScannerProfileDialog(_ToolDialogBase):
         self._scan_field.setReadOnly(True)
         self._scan_field.setPlaceholderText(tr("Pick the scan or photo (TIFF)…"))
         row2.addWidget(self._scan_field, 1)
-        b2 = make_browse_button(self, tr("Browse…"), icon="folder_measure")
-        b2.clicked.connect(self._pick_scan)
-        row2.addWidget(b2)
+        self._scan_browse = make_browse_button(self, tr("Browse…"), icon="folder_measure")
+        self._scan_browse.clicked.connect(self._pick_scan)
+        row2.addWidget(self._scan_browse)
         form.addLayout(row2)
 
         self._marquee = ScanGridMarquee(self)
@@ -539,6 +540,26 @@ class ScannerProfileDialog(_ToolDialogBase):
             "grid sits on the real patches. ChromIQ then reads each patch and "
             "builds the profile.")))
 
+        form.addLayout(self._labelled(
+            tr("Patch sample area:"), tr("Patch sample area"),
+            tr("How much of each patch scanin reads — the filled green inner "
+            "square on the grid above.\n\n"
+            "It samples the centre of every patch and ignores the edges, where "
+            "ink bleeds, a border shows, or placement is slightly off. 60% is a "
+            "safe default. Lower it if your patches are small or the grid isn't "
+            "perfectly aligned; raise it for large, cleanly-printed patches to "
+            "average over more of each colour.")))
+        row_sa = QHBoxLayout()
+        self._sample_area = NoScrollSpinBox(self)
+        self._sample_area.setRange(20, 100)
+        self._sample_area.setValue(60)
+        self._sample_area.setSuffix(" %")
+        self._sample_area.valueChanged.connect(
+            lambda v: self._marquee.set_sample_fraction(v / 100.0))
+        row_sa.addWidget(self._sample_area, 1)
+        row_sa.addStretch(1)
+        form.addLayout(row_sa)
+
         self._build_shot_bar(form)
 
         opts = QHBoxLayout()
@@ -546,6 +567,7 @@ class ScannerProfileDialog(_ToolDialogBase):
         self._perspective.setChecked(True)
         self._diag = QCheckBox(tr("Save a diagnostic image of what was read"), self)
         opts.addWidget(self._perspective)
+        opts.addSpacing(24)
         opts.addWidget(self._diag)
         opts.addStretch(1)
         opts.addWidget(self._tip(
@@ -783,10 +805,17 @@ class ScannerProfileDialog(_ToolDialogBase):
 
     # ------------------------------------------------------------------ scan
     def _pick_scan(self) -> None:
-        if self._standard_mode():
-            if self._std_cht is None:
-                return
-        elif self._layout is None:
+        ready = (self._std_cht is not None if self._standard_mode()
+                 else self._layout is not None)
+        if not ready:
+            # Don't fail silently — Knut hit a dead Browse button because his .ti3
+            # wasn't a ChromIQ engine chart. Say what to do, in the status box.
+            self._log.append(tr(
+                "⚠ Choose your target first, then the scan. Under “A chart I made "
+                "in ChromIQ”, pick the .ti3 of a chart you built here (it needs its "
+                ".channels.json alongside). An older .ti3 from a plain scanin run "
+                "won't work — for a bought target, switch to “A standard target I "
+                "own” above and load its .cht."))
             return
         path = open_file_dialog(self, tr("Choose the scan"), _SCAN_FILTER,
                                 start_dir=str(_initial_dir(self._settings, self.TOOL_KEY)))
@@ -820,6 +849,21 @@ class ScannerProfileDialog(_ToolDialogBase):
                else base.parent / f"{base.name}_{pg + 1:02d}.cht")
         return cht, base.with_suffix(".cie")
 
+    def _apply_sample_area(self, cht: Path, frac: float, base: Path) -> Path:
+        """Write a sibling ``.cht`` whose ``BOX_SHRINK`` samples *frac* of each
+        patch (Knut's patch-sample-area control), and hand scanin that copy. The
+        bundled/original file is never modified. Full-area needs no change."""
+        if frac >= 0.999:
+            return cht
+        from workflow.scanin_runner import cht_with_sample_area
+        try:
+            new_text = cht_with_sample_area(cht.read_text(errors="ignore"), frac)
+        except OSError:
+            return cht
+        dst = base.parent / f"{cht.stem}-sample.cht"
+        dst.write_text(new_text)
+        return dst
+
     def _execute(self) -> None:
         self._capture_current_corners()
         self._log.clear()
@@ -832,10 +876,12 @@ class ScannerProfileDialog(_ToolDialogBase):
             pages = self._pages
             base = _chart_base(self._ti3)
 
+        frac = self._sample_area.value() / 100.0
         self._jobs = []
         page_ti3s: list[Path] = []
         for pg in pages:
             cht, cie = self._files_for_page(pg, base)
+            cht = self._apply_sample_area(cht, frac, base)
             shots = [s for s in self._page_shots(pg) if s["path"]]
             shot_ti3s: list[Path] = []
             for k, s in enumerate(shots):

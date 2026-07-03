@@ -1,5 +1,22 @@
 # Changelog
 
+## v3.13.0-beta.74
+
+### ✨ Added
+- **Patch sample area control** (Build scanner or camera profile). A spinbox
+  under the grid sets how much of each patch scanin reads — shown live as a
+  filled green inner square inside every patch cell. It samples the centre and
+  ignores the edges (ink bleed, borders, slight misalignment); 60% by default.
+
+### 🐛 Fixed
+- **The scan "Browse…" button no longer looks dead.** If the chosen `.ti3` isn't
+  a ChromIQ layout-engine chart (e.g. an old file from a plain scanin run, with
+  no `.channels.json`), clicking Browse now explains what to pick — or to switch
+  to "A standard target I own" — in the status box, instead of doing nothing.
+
+### 🌍 Translated
+- New UI strings staged as English placeholders (full translation pass at GA).
+
 ## v3.13.0-beta.73
 
 ### ✨ Changed

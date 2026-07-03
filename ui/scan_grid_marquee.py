@@ -74,8 +74,10 @@ class GridSpec:
         …). Patch boxes are normalised into the chart's **fiducial** frame — the
         same four points the user places the quad on and that ``scanin -F``
         registers against — so the overlay lands where ``scanin`` will read.
-        The chart's ``BOX_SHRINK`` is applied, so the grid shows the actual read
-        zone. Returns an empty spec if the file lacks the four fiducials."""
+        The rects are the **full** patch boxes; the sampled sub-area is drawn
+        from the marquee's sample fraction (Knut's "patch sample area" control),
+        not baked in here. Returns an empty spec if the file lacks the four
+        fiducials."""
         from workflow.cht_parser import ChtParseError, parse_cht
         try:
             geom = parse_cht(text)
@@ -86,11 +88,10 @@ class GridSpec:
         # fiducials are (TL, TR, BR, BL) in cht units → invert unit→fiducial to
         # get fiducial→unit-square, then map every box corner into [0,1].
         h_inv = np.linalg.inv(unit_quad_homography(geom.fiducials))
-        s = geom.box_shrink
         rects: list[tuple[float, float, float, float]] = []
         for b in geom.patches:
-            u1, v1 = apply_h(h_inv, b.x1 + s, b.y1 + s)
-            u2, v2 = apply_h(h_inv, b.x2 - s, b.y2 - s)
+            u1, v1 = apply_h(h_inv, b.x1, b.y1)
+            u2, v2 = apply_h(h_inv, b.x2, b.y2)
             rects.append((min(u1, u2), min(v1, v2), abs(u2 - u1), abs(v2 - v1)))
         return cls(rects)
 
@@ -111,6 +112,7 @@ class ScanGridMarquee(QWidget):
         self._pix: QPixmap | None = None
         self._img_w = self._img_h = 0
         self._grid = GridSpec([])
+        self._sample_frac = 0.6      # fraction of each patch AREA that scanin reads
         # Quad corners in IMAGE pixels, order TL, TR, BR, BL.
         self._corners: list[list[float]] = []
         self._drag = -1
@@ -127,6 +129,12 @@ class ScanGridMarquee(QWidget):
 
     def set_grid(self, grid: GridSpec) -> None:
         self._grid = grid
+        self.update()
+
+    def set_sample_fraction(self, frac: float) -> None:
+        """Fraction (0–1) of each patch's AREA that scanin samples — drawn as an
+        inner rectangle inside every patch cell so the read zone is visible."""
+        self._sample_frac = max(0.05, min(1.0, float(frac)))
         self.update()
 
     def _reset_corners(self) -> None:
@@ -193,14 +201,24 @@ class ScanGridMarquee(QWidget):
         if not self._grid.rects or len(self._corners) != 4:
             return
         h = unit_quad_homography(self._corners)
-        pen = QPen(QColor(86, 214, 165, 150))
-        pen.setWidthF(1.0)
-        p.setPen(pen)
+        lin = self._sample_frac ** 0.5            # area frac → per-side scale
+        inset = (1.0 - lin) / 2.0
+        outline = QPen(QColor(86, 214, 165, 90))  # full patch cell — faint
+        outline.setWidthF(1.0)
+        sample = QPen(QColor(86, 214, 165, 220))  # sampled sub-area — solid
+        sample.setWidthF(1.4)
+        fill = QColor(86, 214, 165, 40)
         for (u, v, w, hh) in self._grid.rects:
-            pts = [apply_h(h, u, v), apply_h(h, u + w, v),
-                   apply_h(h, u + w, v + hh), apply_h(h, u, v + hh)]
-            wpts = [self._to_widget(x, y) for x, y in pts]
-            p.drawPolygon(*wpts)
+            p.setPen(outline)
+            p.setBrush(Qt.BrushStyle.NoBrush)
+            p.drawPolygon(*[self._to_widget(*apply_h(h, x, y)) for x, y in
+                            ((u, v), (u + w, v), (u + w, v + hh), (u, v + hh))])
+            iu, iv, iw, ih = u + w * inset, v + hh * inset, w * lin, hh * lin
+            p.setPen(sample)
+            p.setBrush(fill)
+            p.drawPolygon(*[self._to_widget(*apply_h(h, x, y)) for x, y in
+                            ((iu, iv), (iu + iw, iv), (iu + iw, iv + ih), (iu, iv + ih))])
+        p.setBrush(Qt.BrushStyle.NoBrush)
 
     def _draw_quad(self, p: QPainter) -> None:
         if len(self._corners) != 4:

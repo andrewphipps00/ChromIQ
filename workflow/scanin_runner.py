@@ -39,6 +39,41 @@ log = get_logger(__name__)
 # Corner order scanin -F expects, matching the .cht F line and the marquee.
 CORNER_ORDER = ("top-left", "top-right", "bottom-right", "bottom-left")
 
+_BOX_LINE = re.compile(r"^\s*[XY]\s+\S+\s+\S+\s+\S+\s+\S+\s+"
+                       r"([\d.]+)\s+([\d.]+)\s", re.MULTILINE)
+_SHRINK_LINE = re.compile(r"^(\s*BOX_SHRINK\s+)([\d.]+)", re.MULTILINE)
+
+
+def sample_area_box_shrink(cht_text: str, frac: float) -> float | None:
+    """The ``BOX_SHRINK`` (cht units, per side) that makes scanin read *frac* of
+    each patch's AREA. A patch of side *B* sampled at area fraction *f* keeps an
+    inner square of side ``B·√f``, i.e. a per-side shrink of ``B·(1−√f)/2``.
+    *B* is the median box side across the chart (exact for a uniform grid, which
+    every standard target is). Returns ``None`` for full-area (≥1) or no boxes."""
+    frac = max(0.05, min(1.0, float(frac)))
+    if frac >= 0.999:
+        return 0.0
+    sides: list[float] = []
+    for w, h in _BOX_LINE.findall(cht_text):
+        sides += [float(w), float(h)]
+    if not sides:
+        return None
+    sides.sort()
+    b = sides[len(sides) // 2]                      # median side
+    return round(b * (1.0 - frac ** 0.5) / 2.0, 3)
+
+
+def cht_with_sample_area(cht_text: str, frac: float) -> str:
+    """Return *cht_text* with its ``BOX_SHRINK`` set for sample-area *frac*.
+    Unchanged if the fraction implies no usable shrink or the file has no boxes."""
+    shrink = sample_area_box_shrink(cht_text, frac)
+    if shrink is None:
+        return cht_text
+    if _SHRINK_LINE.search(cht_text):
+        return _SHRINK_LINE.sub(lambda m: f"{m.group(1)}{shrink:.3f}", cht_text, count=1)
+    # No BOX_SHRINK line — insert one after the last box line.
+    return cht_text.rstrip() + f"\n\nBOX_SHRINK {shrink:.3f}\n"
+
 
 def _fmt_corners(corners: list[tuple[float, float]]) -> str:
     """``x1,y1,x2,y2,x3,y3,x4,y4`` from four (x, y) image-pixel corners."""
