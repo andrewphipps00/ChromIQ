@@ -1,5 +1,13 @@
 # Changelog
 
+## v3.13.0-beta.78
+
+### 🌍 Translated
+- Translated this beta cycle's new UI strings into all 12 languages — the patch
+  sample-area control and its help, the marquee zoom / pan / rotate / pop-out
+  controls, the "choose your target first" guidance, and the grouped Tools-menu
+  headers.
+
 ## v3.13.0-beta.77
 
 ### ✨ Changed
