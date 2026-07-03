@@ -20,7 +20,7 @@ from dataclasses import dataclass
 
 import numpy as np
 from PyQt6.QtCore import QPointF, QRectF, Qt, pyqtSignal
-from PyQt6.QtGui import QColor, QImage, QPainter, QPen, QPixmap
+from PyQt6.QtGui import QColor, QImage, QPainter, QPen, QPixmap, QTransform
 from PyQt6.QtWidgets import QWidget
 
 
@@ -97,6 +97,8 @@ class GridSpec:
 
 
 _HANDLE_R = 8         # corner handle radius (screen px)
+_HANDLE_OFFSET = 26   # handles sit this far OUTSIDE the true corner (screen px)
+_HANDLE_DIRS = ((-1, -1), (1, -1), (1, 1), (-1, 1))   # TL, TR, BR, BL, outward
 _ACCENT = QColor("#56d6a5")
 
 
@@ -109,22 +111,62 @@ class ScanGridMarquee(QWidget):
         super().__init__(parent)
         self.setMinimumSize(360, 300)
         self.setMouseTracking(True)
-        self._pix: QPixmap | None = None
-        self._img_w = self._img_h = 0
+        self._img: QImage | None = None      # original, unrotated
+        self._pix: QPixmap | None = None      # rotated, for display
+        self._rotation = 0                    # 0/90/180/270, applied to _img
+        self._img_w = self._img_h = 0         # dims of the (rotated) image
         self._grid = GridSpec([])
         self._sample_frac = 0.6      # fraction of each patch AREA that scanin reads
         # Quad corners in IMAGE pixels, order TL, TR, BR, BL.
         self._corners: list[list[float]] = []
         self._drag = -1
-        # View transform (fit-to-view): image px → widget px is scale*(p)+offset.
-        self._scale = 1.0
-        self._ox = self._oy = 0.0
+        # View transform: image px → widget px is (fit_scale·zoom)·p + fit_off + pan.
+        self._scale = 1.0                     # fit-to-view scale
+        self._ox = self._oy = 0.0             # fit-to-view offset
+        self._zoom = 1.0                      # user zoom on top of the fit (≥1)
+        self._pan = [0.0, 0.0]                # user pan, widget px
+        self._panning = False
+        self._pan_ref: tuple[float, float, float, float] | None = None
+        self._allow_plain_wheel = False       # popped-out: plain wheel zooms too
+        self.setMouseTracking(True)
 
     # ---------------------------------------------------------------- data
     def set_image(self, img: QImage) -> None:
+        self._img = img
+        self._rotation = 0
+        self._rebuild_pixmap()
+        self._reset_view()
+        self._reset_corners()
+        self.update()
+
+    def _rebuild_pixmap(self) -> None:
+        if self._img is None or self._img.isNull():
+            self._pix = None
+            self._img_w = self._img_h = 0
+            return
+        img = self._img
+        if self._rotation:
+            img = img.transformed(QTransform().rotate(self._rotation))
         self._pix = QPixmap.fromImage(img)
         self._img_w, self._img_h = img.width(), img.height()
-        self._reset_corners()
+
+    def _reset_view(self) -> None:
+        """Back to fit-to-view (zoom 1, no pan)."""
+        self._zoom = 1.0
+        self._pan = [0.0, 0.0]
+        self.update()
+
+    def rotate_90(self) -> None:
+        """Rotate the loaded scan 90° clockwise (for a sideways capture). Any
+        placed corners rotate with it so the grid stays put."""
+        if self._img is None:
+            return
+        h = self._img_h                                  # height before rotating
+        self._corners = [[h - c[1], c[0]] for c in self._corners]
+        self._rotation = (self._rotation + 90) % 360
+        self._rebuild_pixmap()
+        self._reset_view()
+        self.changed.emit()
         self.update()
 
     def set_grid(self, grid: GridSpec) -> None:
@@ -136,6 +178,11 @@ class ScanGridMarquee(QWidget):
         inner rectangle inside every patch cell so the read zone is visible."""
         self._sample_frac = max(0.05, min(1.0, float(frac)))
         self.update()
+
+    def set_wheel_zoom(self, on: bool) -> None:
+        """When True (the popped-out window), a plain scroll wheel zooms;
+        otherwise only Ctrl/Cmd+wheel zooms, so a plain wheel scrolls the dialog."""
+        self._allow_plain_wheel = bool(on)
 
     def _reset_corners(self) -> None:
         """Seed the quad inset ~8% from the image edges (a sensible starting box
@@ -170,11 +217,12 @@ class ScanGridMarquee(QWidget):
         self._oy = (ah - self._img_h * self._scale) / 2
 
     def _to_widget(self, x: float, y: float) -> QPointF:
-        return QPointF(self._ox + x * self._scale, self._oy + y * self._scale)
+        s = self._scale * self._zoom
+        return QPointF(self._ox + self._pan[0] + x * s, self._oy + self._pan[1] + y * s)
 
     def _to_image(self, x: float, y: float) -> tuple[float, float]:
-        s = self._scale or 1.0
-        return (x - self._ox) / s, (y - self._oy) / s
+        s = (self._scale * self._zoom) or 1.0
+        return (x - self._ox - self._pan[0]) / s, (y - self._oy - self._pan[1]) / s
 
     # ---------------------------------------------------------------- paint
     def resizeEvent(self, e) -> None:  # noqa: N802
@@ -190,8 +238,9 @@ class ScanGridMarquee(QWidget):
                        "Load a scan of the printed chart")
             return
         self._recompute_fit()
-        target = QRectF(self._ox, self._oy, self._img_w * self._scale,
-                        self._img_h * self._scale)
+        s = self._scale * self._zoom
+        target = QRectF(self._ox + self._pan[0], self._oy + self._pan[1],
+                        self._img_w * s, self._img_h * s)
         p.drawPixmap(target, self._pix, QRectF(self._pix.rect()))
         p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         self._draw_grid(p)
@@ -220,17 +269,34 @@ class ScanGridMarquee(QWidget):
                             ((iu, iv), (iu + iw, iv), (iu + iw, iv + ih), (iu, iv + ih))])
         p.setBrush(Qt.BrushStyle.NoBrush)
 
+    def _handle_pos(self, i: int) -> QPointF:
+        """The i-th grab handle, offset OUTSIDE the true corner along the diagonal
+        so the big circle never hides the corner patch you're aiming at."""
+        c = self._to_widget(*self._corners[i])
+        dx, dy = _HANDLE_DIRS[i]
+        return QPointF(c.x() + dx * _HANDLE_OFFSET, c.y() + dy * _HANDLE_OFFSET)
+
     def _draw_quad(self, p: QPainter) -> None:
         if len(self._corners) != 4:
             return
         pen = QPen(_ACCENT)
         pen.setWidthF(2.0)
         p.setPen(pen)
+        p.setBrush(Qt.BrushStyle.NoBrush)
         wc = [self._to_widget(*c) for c in self._corners]
         p.drawPolygon(*wc)
-        p.setBrush(_ACCENT)
-        for pt in wc:
-            p.drawEllipse(pt, _HANDLE_R, _HANDLE_R)
+        conn = QPen(_ACCENT)
+        conn.setStyle(Qt.PenStyle.DotLine)
+        conn.setWidthF(1.2)
+        for i, c in enumerate(wc):
+            hp = self._handle_pos(i)
+            p.setPen(conn)                       # 45° dotted line to the corner
+            p.setBrush(Qt.BrushStyle.NoBrush)
+            p.drawLine(c, hp)
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(_ACCENT)
+            p.drawEllipse(hp, _HANDLE_R, _HANDLE_R)
+        p.setBrush(Qt.BrushStyle.NoBrush)
 
     def _is_dark(self) -> bool:
         return self.palette().color(self.backgroundRole()).lightness() < 128
@@ -241,20 +307,53 @@ class ScanGridMarquee(QWidget):
             return
         pos = e.position()
         self._drag = -1
-        for i, c in enumerate(self._corners):
-            if (self._to_widget(*c) - pos).manhattanLength() <= _HANDLE_R * 2.2:
+        for i in range(len(self._corners)):
+            if (self._handle_pos(i) - pos).manhattanLength() <= _HANDLE_R * 2.4:
                 self._drag = i
                 break
+        if self._drag < 0:                       # empty space → pan the view
+            self._panning = True
+            self._pan_ref = (pos.x(), pos.y(), self._pan[0], self._pan[1])
+            self.setCursor(Qt.CursorShape.ClosedHandCursor)
 
     def mouseMoveEvent(self, e) -> None:  # noqa: N802
-        if self._drag < 0:
-            return
-        x, y = self._to_image(e.position().x(), e.position().y())
-        x = max(0.0, min(self._img_w, x))
-        y = max(0.0, min(self._img_h, y))
-        self._corners[self._drag] = [x, y]
-        self.changed.emit()
-        self.update()
+        pos = e.position()
+        if self._drag >= 0:
+            dx, dy = _HANDLE_DIRS[self._drag]    # handle is offset — move the corner
+            x, y = self._to_image(pos.x() - dx * _HANDLE_OFFSET,
+                                  pos.y() - dy * _HANDLE_OFFSET)
+            x = max(0.0, min(self._img_w, x))
+            y = max(0.0, min(self._img_h, y))
+            self._corners[self._drag] = [x, y]
+            self.changed.emit()
+            self.update()
+        elif self._panning and self._pan_ref is not None:
+            sx, sy, px, py = self._pan_ref
+            self._pan = [px + (pos.x() - sx), py + (pos.y() - sy)]
+            self.update()
 
     def mouseReleaseEvent(self, e) -> None:  # noqa: N802
         self._drag = -1
+        self._panning = False
+        self.unsetCursor()
+
+    def mouseDoubleClickEvent(self, e) -> None:  # noqa: N802
+        self._reset_view()                       # snap back to fit-to-view
+
+    def wheelEvent(self, e) -> None:  # noqa: N802
+        zoom_it = self._allow_plain_wheel or bool(
+            e.modifiers() & (Qt.KeyboardModifier.ControlModifier
+                             | Qt.KeyboardModifier.MetaModifier))
+        if self._pix is None or not zoom_it:
+            e.ignore()                       # plain wheel → let the dialog scroll
+            return
+        pos = e.position()
+        ix, iy = self._to_image(pos.x(), pos.y())
+        self._zoom = max(1.0, min(16.0, self._zoom * (1.0015 ** e.angleDelta().y())))
+        if self._zoom <= 1.0:
+            self._pan = [0.0, 0.0]               # fit → recentre
+        else:                                    # keep point under cursor fixed
+            s = self._scale * self._zoom
+            self._pan = [pos.x() - self._ox - ix * s, pos.y() - self._oy - iy * s]
+        self.update()
+        e.accept()

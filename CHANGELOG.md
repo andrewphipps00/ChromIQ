@@ -1,5 +1,21 @@
 # Changelog
 
+## v3.13.0-beta.75
+
+### ✨ Added
+- **Much easier grid placement** in Build scanner or camera profile. The marquee
+  view is bigger, and you can now **zoom** (Ctrl/Cmd + scroll) and **pan** (drag),
+  **Rotate 90°** a sideways scan, **Reset view**, and **Pop out** the grid into a
+  large separate window (with its own Rotate / Reset controls and a Done button —
+  you still build the profile back in the main window). Plain scroll keeps
+  scrolling the dialog.
+- **Corner handles now sit *outside* the patch area**, each joined to its true
+  corner by a 45° dotted line, so the grab circle never hides the corner patch
+  you're aiming at.
+
+### 🌍 Translated
+- New UI strings staged as English placeholders (full translation pass at GA).
+
 ## v3.13.0-beta.74
 
 ### ✨ Added

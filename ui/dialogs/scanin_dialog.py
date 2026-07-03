@@ -21,8 +21,8 @@ from pathlib import Path
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QImage
 from PyQt6.QtWidgets import (
-    QApplication, QButtonGroup, QCheckBox, QHBoxLayout, QLabel, QLineEdit,
-    QPushButton, QRadioButton, QVBoxLayout, QWidget)
+    QApplication, QButtonGroup, QCheckBox, QDialog, QHBoxLayout, QLabel,
+    QLineEdit, QPushButton, QRadioButton, QVBoxLayout, QWidget)
 
 from core.i18n import tr
 from core.logger import get_logger
@@ -48,6 +48,8 @@ _TI3_FILTER = "Measured chart (*.ti3);;All files (*)"
 _SCAN_FILTER = "Scans (*.tif *.tiff);;All files (*)"
 _CHT_FILTER = "Chart recognition (*.cht);;All files (*)"
 _REF_FILTER = "Target reference (*.cie *.txt *.ti3 *.cxf);;All files (*)"
+# Compact button — a per-widget rule beats the app-wide 28px min-height.
+_COMPACT_BTN = "QPushButton { padding: 2px 12px; min-height: 0; font-size: 11px; }"
 
 # Scanner-side capture settings (folded from Knut's VueScan/ArgyllCMS guide).
 # Kept as its own key so the large HELP block above stays stable — only this
@@ -533,12 +535,40 @@ class ScannerProfileDialog(_ToolDialogBase):
         form.addLayout(row2)
 
         self._marquee = ScanGridMarquee(self)
-        self._marquee.setMinimumHeight(320)
-        form.addWidget(self._marquee)
+        self._marquee.setMinimumHeight(460)
+        self._marquee_box = QVBoxLayout()
+        self._marquee_box.setContentsMargins(0, 0, 0, 0)
+        self._marquee_box.addWidget(self._marquee)
+        self._marquee_placeholder = QLabel(
+            tr("The grid is open in a separate window."), self)
+        self._marquee_placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._marquee_placeholder.setMinimumHeight(120)
+        self._marquee_placeholder.setVisible(False)
+        self._marquee_box.addWidget(self._marquee_placeholder)
+        form.addLayout(self._marquee_box)
+
+        ctl = QHBoxLayout()
+        self._rotate_btn = QPushButton(tr("⟳ Rotate 90°"), self)
+        self._rotate_btn.clicked.connect(self._marquee.rotate_90)
+        self._reset_btn = QPushButton(tr("Reset view"), self)
+        self._reset_btn.clicked.connect(self._marquee._reset_view)
+        self._popout_btn = QPushButton(tr("⤢ Pop out for a bigger view"), self)
+        self._popout_btn.clicked.connect(self._toggle_popout)
+        for _b in (self._rotate_btn, self._reset_btn, self._popout_btn):
+            _b.setStyleSheet(_COMPACT_BTN)
+        ctl.addWidget(self._rotate_btn)
+        ctl.addWidget(self._reset_btn)
+        ctl.addStretch(1)
+        ctl.addWidget(self._popout_btn)
+        form.addLayout(ctl)
+
         form.addWidget(self._hint_label(tr(
             "Drag the four corners onto the target's patch area until the green "
             "grid sits on the real patches. ChromIQ then reads each patch and "
             "builds the profile.")))
+        form.addWidget(self._hint_label(tr(
+            "Scroll to zoom · drag the image to pan · double-click to reset the "
+            "view. Use Rotate for a sideways scan, or Pop out for a bigger view.")))
 
         form.addLayout(self._labelled(
             tr("Patch sample area:"), tr("Patch sample area"),
@@ -804,6 +834,68 @@ class ScannerProfileDialog(_ToolDialogBase):
             self._std_note.setText(msg)
 
     # ------------------------------------------------------------------ scan
+    def _toggle_popout(self) -> None:
+        """Open the grid in a separate, resizable window for a bigger view — or
+        dock it back. The same marquee moves between the two windows, so the
+        placement, zoom and rotation are preserved. The pop-out carries its own
+        Rotate / Reset controls and a Done button; you build the profile back in
+        the main window (placement is kept automatically)."""
+        if getattr(self, "_popout", None) is not None:
+            self._popout.close()
+            return
+        self._popout = QDialog(self)
+        self._popout.setWindowTitle(tr("Place the grid — bigger view"))
+        self._popout.setModal(False)
+        v = QVBoxLayout(self._popout)
+        v.setContentsMargins(10, 10, 10, 10)
+        v.setSpacing(8)
+        self._marquee_box.removeWidget(self._marquee)
+        self._marquee.set_wheel_zoom(True)       # plain scroll zooms in the pop-out
+        v.addWidget(self._marquee, 1)
+        bar = QHBoxLayout()
+        rot = QPushButton(tr("⟳ Rotate 90°"), self._popout)
+        rot.clicked.connect(self._marquee.rotate_90)
+        rst = QPushButton(tr("Reset view"), self._popout)
+        rst.clicked.connect(self._marquee._reset_view)
+        note = QLabel(tr("Placement is saved automatically — click Done, then "
+                         "build the profile in the main window."), self._popout)
+        note.setStyleSheet("color:#8a8a8a; font-size:11px;")
+        done = QPushButton(tr("Done"), self._popout)
+        done.setObjectName("primary")
+        done.clicked.connect(self._popout.close)
+        for _b in (rot, rst, done):
+            _b.setStyleSheet(_COMPACT_BTN)
+        bar.addWidget(rot)
+        bar.addWidget(rst)
+        bar.addStretch(1)
+        bar.addWidget(note)
+        bar.addStretch(1)
+        bar.addWidget(done)
+        v.addLayout(bar)
+        self._marquee_placeholder.setVisible(True)
+        self._popout_btn.setText(tr("⤢ Dock back"))
+        self._rotate_btn.setEnabled(False)
+        self._reset_btn.setEnabled(False)
+        self._popout.resize(1200, 940)
+        self._popout.finished.connect(lambda _=0: self._dock_marquee())
+        self._popout.show()
+        self._popout.raise_()
+        self._popout.activateWindow()
+
+    def _dock_marquee(self) -> None:
+        pop = getattr(self, "_popout", None)
+        if pop is None:
+            return
+        self._marquee.setParent(None)            # detach from the pop-out layout
+        self._marquee.set_wheel_zoom(False)
+        self._marquee_box.insertWidget(0, self._marquee)
+        self._marquee_placeholder.setVisible(False)
+        self._popout_btn.setText(tr("⤢ Pop out for a bigger view"))
+        self._rotate_btn.setEnabled(True)
+        self._reset_btn.setEnabled(True)
+        self._popout = None
+        pop.deleteLater()
+
     def _pick_scan(self) -> None:
         ready = (self._std_cht is not None if self._standard_mode()
                  else self._layout is not None)
