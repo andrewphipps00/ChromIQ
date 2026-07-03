@@ -1,5 +1,18 @@
 # Changelog
 
+## v3.13.0-beta.87
+
+### ✅ Tests / demo scan (Knut)
+- **Demo-scan colours now span dark→light in a scrambled order** (`demo_patch_color`:
+  golden-ratio hue + bit-reversed lightness). Neighbouring patches differ a lot
+  (min RGB distance 114 of ~441), so if the reading grid slipped onto a neighbour
+  cell the colour it picked up would be very different — turning the demo into a
+  real **misalignment detector** instead of one a smooth gradient could hide.
+- **The scanin self-check now covers every supported target.** `make_test_scan`
+  generates a known-colour scan + matching reference from each bundled target's own
+  geometry, and the test reads them all back through the real `scanin` (asserting
+  <3/100 error) — no need to ship large rendered images; the geometry is the truth.
+
 ## v3.13.0-beta.86
 
 ### 🔧 Changed

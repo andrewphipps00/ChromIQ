@@ -84,22 +84,21 @@ def test_bundled_target_registers_at_scale(name, scale, tmp_path):
     assert worst < 6.0, f"{name} @ {scale}×: misregistered (worst {worst:.1f}/100)"
 
 
-@pytest.mark.parametrize("name", ["it8Wolf.cht", "SpyderChecker.cht", "CMP_Digital_Target-4.cht"])
+@pytest.mark.parametrize("name", _TARGETS)   # every supported target
 def test_make_test_scan_reads_back(name, tmp_path):
     """The "Try with a demo scan" generator (make_test_scan) — the exact files the
-    button loads — reads back its known colours through the real scanin. Knut's
-    suggested end-to-end check that the demo is genuinely valid (covers a
-    contiguous IT8 and two gapped targets, via the contiguous cht)."""
-    import colorsys
-    from workflow.standard_targets import make_test_scan
-    from workflow.cht_parser import cht_contiguous
+    button loads — reads back its known colours through the real scanin, for EVERY
+    bundled target (contiguous and gapped). Knut's end-to-end check: the demo
+    doubles as a scanin self-check. Its colours span dark→light in a scrambled
+    order (demo_patch_color), so a grid that slipped onto a neighbour cell would
+    read a very different colour and fail — a real misalignment detector."""
+    from workflow.standard_targets import make_test_scan, demo_patch_color
 
     cht_path = bundled_targets_dir() / name
     tif, cie = make_test_scan(cht_path, tmp_path)
     g = parse_cht(cht_path.read_text(errors="ignore"))
     n = len(g.patches)
-    expected = {b.name: [c * 100 for c in
-                         colorsys.hsv_to_rgb((i / max(n, 1)) % 1.0, 0.55, 0.92)]
+    expected = {b.name: [c / 2.55 for c in demo_patch_color(i, n)]  # 0..255 → 0..100
                 for i, b in enumerate(g.patches)}
     minx = min(b.x1 for b in g.patches); maxx = max(b.x2 for b in g.patches)
     miny = min(b.y1 for b in g.patches); maxy = max(b.y2 for b in g.patches)

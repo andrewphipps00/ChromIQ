@@ -104,12 +104,30 @@ def list_standard_targets(settings) -> list[tuple[str, Path]]:
     return ordered
 
 
+def demo_patch_color(i: int, n: int) -> tuple[int, int, int]:
+    """Colour for patch *i* of *n* in the demo scan. Deliberately spans dark→light
+    with strongly-scrambled neighbours (golden-ratio hue + bit-reversed value), so
+    that if the reading grid slips onto a neighbouring cell the colour it picks up
+    is very different — turning the demo into a real misalignment detector rather
+    than one that smooth gradients could hide (Knut). Deterministic."""
+    import colorsys
+    phi = 0.6180339887498949
+    rev, f, k = 0.0, 0.5, i + 1                 # van der Corput (bit-reversal)
+    while k > 0:
+        rev += (k & 1) * f
+        k >>= 1
+        f *= 0.5
+    h = (i * phi) % 1.0                          # consecutive hues far apart
+    v = 0.16 + 0.80 * rev                        # wide, scrambled lightness
+    s = 0.55 + 0.40 * ((i * phi * 2.0) % 1.0)
+    return tuple(int(round(c * 255)) for c in colorsys.hsv_to_rgb(h, s, v))
+
+
 def make_test_scan(cht_path, out_dir):
     """Render a known-good test scan (``.tif``) + reference (``.cie``) from a
     target's ``.cht``, so the reading grid can be tried without hardware. Each
     patch is a distinct solid colour; a correctly-placed grid reads them exactly.
     Returns ``(tif_path, cie_path)``."""
-    import colorsys
     from pathlib import Path as _P
     from PIL import Image
     from workflow.cht_parser import parse_cht
@@ -125,7 +143,7 @@ def make_test_scan(cht_path, out_dir):
            'SAMPLE_ID XYZ_X XYZ_Y XYZ_Z', 'END_DATA_FORMAT',
            f'NUMBER_OF_SETS {len(boxes)}', 'BEGIN_DATA']
     for i, b in enumerate(boxes):
-        r, g, bl = (int(c * 255) for c in colorsys.hsv_to_rgb((i / max(len(boxes), 1)) % 1.0, 0.55, 0.92))
+        r, g, bl = demo_patch_color(i, len(boxes))
         x0 = int((b.x1 - minx) * scale + margin); y0 = int((b.y1 - miny) * scale + margin)
         x1 = int((b.x2 - minx) * scale + margin); y1 = int((b.y2 - miny) * scale + margin)
         draw.rectangle([x0, y0, x1 - 1, y1 - 1], fill=(r, g, bl))
