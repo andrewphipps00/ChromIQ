@@ -1,5 +1,30 @@
 # Changelog
 
+## v3.13.0-beta.68
+
+### ✨ Changed
+- **Scanner profiling now covers cameras too.** ArgyllCMS reads camera and
+  scanner targets the same way, so the same tools profile a digital camera from
+  a photo of a target:
+  - **"Build scanner profile" is now "Build scanner or camera profile"** and
+    **"Create scanner target" is now "Create scanner or camera target"**, in the
+    Tools menu, the Welcome guide and the window titles.
+  - Wording is device-neutral throughout ("scan or photo of the target"), with a
+    new **"Profiling a camera"** help section covering the capture that matters
+    (even light, shoot raw/flat, fill the frame, keep Matrix for small targets).
+  - The **"Also save scanner-profiling files"** option (All Stripes Read /
+    Profile Quality Assessment) now explains the files it saves work for
+    profiling a **camera** as well — photograph the printed chart instead of
+    scanning it.
+  - The help's "which chart" guidance gains a **"Does this apply to a camera?"**
+    note: same core idea, but a camera profile is tied to the **light** you
+    shoot under (a printed chart suits flat repro work; a ready-made ColorChecker
+    is easier for general photography).
+
+### 🌍 Translated
+- All the new and reworded scanner/camera strings translated across the twelve
+  languages.
+
 ## v3.13.0-beta.67
 
 ### ✨ Added

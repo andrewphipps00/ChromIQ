@@ -455,24 +455,32 @@ WORKFLOWS: list[dict] = [
     },
     {
         "key": "scanner_profile",
-        "title": tr("Profile my scanner"),
-        "subtitle": tr("Reuse a measured chart to colour-profile a flatbed scanner."),
+        "title": tr("Profile my scanner or camera"),
+        "subtitle": tr("Colour-profile a scanner or a camera — from a chart you "
+                       "measured, or a standard target you own."),
         "steps": [
             (3, tr("Print and measure a ChromIQ chart as usual, and keep its "
-                "scanner files: after measuring, tick “Also save "
+                "recognition files: after measuring, tick “Also save "
                 "scanner-profiling files for this chart” in the All Stripes Read "
                 "or Profile Quality Assessment window — or run Tools ▸ Create "
-                "scanner target on any measured chart. This writes the chart's "
-                ".cht + .cie files.")),
+                "scanner or camera target on any measured chart. This writes the "
+                "chart's .cht + .cie files.")),
             (3, tr("Scan the printed chart on the scanner you want to profile as "
                 "a plain RGB TIFF, with the scanner's own auto-correction and "
                 "colour management turned OFF.")),
-            (3, tr("Open Tools ▸ Build scanner profile. Pick the measured chart "
-                "and the scan, drag the four corners over the patch area until "
-                "the green grid lines up with the real patches, and build. "
-                "ChromIQ runs scanin + colprof and writes a scanner ICC profile "
-                "next to the scan. Multi-page charts: one scan and placement per "
-                "page, combined into one profile.")),
+            (3, tr("Open Tools ▸ Build scanner or camera profile. Pick the "
+                "measured chart and the scan, drag the four corners over the "
+                "patch area until the green grid lines up with the real patches, "
+                "and build. ChromIQ runs scanin + colprof and writes an ICC "
+                "profile next to the scan. Multi-page charts: place each page's "
+                "scan (and, if you like, several scans per page to average), all "
+                "combined into one profile.")),
+            (3, tr("No ChromIQ chart — or profiling a camera? In Build scanner "
+                "or camera profile choose “A standard target I own”, pick your "
+                "target type (IT8, X-Rite ColorChecker, LaserSoft…) and load the "
+                "reference data file that came with it, then scan the target — or "
+                "photograph it for a camera. Everything else is the same. See the "
+                "window's ⓘ for how to capture a camera shot."), True),
             (3, tr("For the best quality when you mainly scan your own "
                 "colour-managed prints, print a fresh chart through your normal "
                 "print workflow, measure THAT sheet, and profile from it — its "

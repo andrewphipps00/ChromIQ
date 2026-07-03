@@ -1,4 +1,4 @@
-"""Tools → "Build scanner profile" — profile a scanner from a printed chart (#98).
+"""Tools → "Build scanner or camera profile" — profile a scanner or camera (#98).
 
 Workflow: pick a **measured** ChromIQ chart and a **scan** of the printed chart,
 drag the four corners over the patch area (a live grid confirms the fit), and
@@ -30,7 +30,7 @@ from ui.dialogs.tools_dialogs import (
     _ToolDialogBase, _initial_dir, _remember_dir, neutral_controls_qss)
 from ui.scan_grid_marquee import GridSpec, ScanGridMarquee
 from ui.styles import SPEC_GREEN
-from ui.dialogs.scanin_target_dialog import WHICH_CHART_HELP
+from ui.dialogs.scanin_target_dialog import WHICH_CHART_HELP, WHICH_CHART_CAMERA_NOTE
 from ui.theme import resolve_mode
 from ui.tooltip_button import TooltipButton
 from ui.widgets import NoScrollComboBox, make_browse_button, open_file_dialog
@@ -89,6 +89,28 @@ SCANNING_TIPS_HELP = tr(
     "is one sheet, read from one scan) — just scan it once, or a few times to "
     "average.")
 
+# Camera profiling — same engine as scanning, so a photo of a target works too.
+CAMERA_HELP = tr(
+    "Profiling a camera\n\n"
+    "This tool works for a digital camera too, not just a scanner — ArgyllCMS "
+    "reads camera and scanner targets the same way. Use the “standard target” "
+    "mode with a camera target (an X-Rite ColorChecker, IT8, and so on), and "
+    "wherever ChromIQ says “scan”, a photo of the target works just the same.\n\n"
+    "For a camera the capture matters more than the software:\n\n"
+    "• Even light. A camera profile is only valid for the light you shot under, "
+    "so light the target flatly and evenly — no glare or hot-spots — under the "
+    "lighting you'll actually use (daylight, studio strobe, and so on).\n"
+    "• Shoot flat. Photograph raw and convert with a neutral, linear setting — "
+    "no creative white balance, tone curve, contrast or sharpening — then export "
+    "a plain TIFF. That's the camera version of turning a scanner's correction "
+    "off.\n"
+    "• Fill the frame square-on, so the target is flat and undistorted.\n"
+    "• Keep the profile type on Matrix for a small target like a 24-patch "
+    "ColorChecker; a LUT needs a many-patch target.\n\n"
+    "The profile applies to that camera under that light. A camera isn't a "
+    "colorimeter, so treat it as a very good approximation — great for consistent "
+    "studio or repro work, less so across mixed lighting.")
+
 
 def _chart_base(ti3: Path) -> Path:
     stem = ti3.stem
@@ -99,56 +121,71 @@ def _chart_base(ti3: Path) -> Path:
 
 class ScannerProfileDialog(_ToolDialogBase):
     TOOL_KEY    = "scanner_profile"
-    TITLE       = tr("Build scanner profile")
-    EYEBROW     = tr("MEASURE · SCANNER PROFILE")
+    TITLE       = tr("Build scanner or camera profile")
+    EYEBROW     = tr("MEASURE · SCANNER / CAMERA PROFILE")
     ACCENT      = SPEC_GREEN
-    RUN_LABEL   = tr("Build scanner profile")
+    RUN_LABEL   = tr("Build scanner or camera profile")
     MIN_WIDTH   = 760
     SCROLLABLE_CONTENT = True    # tall (mode toggle + inputs + marquee + averaging)
 
     HELP = tr(
-        "Profiles your scanner from a printed ChromIQ chart — no target-chart "
-        "purchase needed.\n\n"
-        "1. Print and measure a chart as usual, and keep its scanner files "
-        "(.cht + .cie) — tick 'Also save scanner-profiling files' after "
-        "measuring, or use Tools ▸ Create scanner target.\n"
-        "2. Scan the printed chart on the scanner you want to profile, as a "
-        "plain RGB TIFF, with the scanner's own auto-correction and colour "
-        "management turned OFF.\n"
-        "3. Here: pick the measured chart and the scan, drag the four corners "
-        "over the patch area until the green grid lines up with the real "
-        "patches, and click Build scanner profile.\n\n"
-        "ChromIQ compares how your scanner saw each patch against the real "
-        "measured colours and writes a scanner ICC profile next to the scan. "
-        "Multi-page charts: pick each page's scan and place its grid.\n\n"
+        "Builds an ICC colour profile for a scanner or a digital camera, from a "
+        "target whose true colours are known. Once built, the profile tells any "
+        "colour-managed program how your device really sees colour, so scans and "
+        "photos come out accurate instead of dull or colour-cast.\n\n"
+        "There are two ways to provide the target — choose one at the top of the "
+        "window:\n\n"
+        "• A chart you made in ChromIQ. Print and measure a chart as usual and "
+        "keep its scanner files (.cht + .cie) — tick 'Also save "
+        "scanner-profiling files' after measuring, or use Tools ▸ Create scanner "
+        "or camera target. Nothing extra to buy: ChromIQ already knows every "
+        "patch's real colour.\n"
+        "• A standard target you own. A bought reflective target such as an IT8 "
+        "(for example Wolf Faust), an X-Rite ColorChecker or a LaserSoft target. "
+        "Pick its type from the list and load the reference data file that came "
+        "with it (.cie / .txt).\n\n"
+        "Then capture the target on the device you want to profile — scan it, or "
+        "for a camera photograph it — as a plain RGB TIFF, with the device's own "
+        "colour correction turned OFF. Load it here, drag the four corners over "
+        "the patch area until the green grid sits on the real patches, and click "
+        "Build scanner or camera profile. ChromIQ compares how your device saw "
+        "each patch against the true colours and writes the ICC profile next to "
+        "your capture.\n\n"
+        "The sections below cover, in order: the best way to capture the target, "
+        "averaging several captures for less noise, profiling a camera, and "
+        "which target to use.\n\n"
         "───────────────\n"
-        "Using your scanner profile\n\n"
-        "The profile tells any colour-managed program how your scanner sees "
-        "colour, so your scans come out accurate instead of dull or colour-cast "
-        "— great for digitising prints, artwork and photos so they match the "
-        "original.\n\n"
+        "Using your profile\n\n"
+        "The profile makes your scans or photos come out accurate — great for "
+        "digitising prints, artwork and photos, or for repeatable studio and "
+        "repro work, so the result matches the original.\n\n"
         "Two common ways to use it:\n\n"
         "• In your scanner software (VueScan, SilverFast, Epson Scan, etc.): "
         "set this .icc file as the scanner's input / ICC profile, and choose a "
         "working space such as sRGB or Adobe RGB as the output. New scans are "
         "then corrected automatically.\n\n"
-        "• In Photoshop or another editor: scan with correction OFF, open the "
-        "scan, then Assign Profile ▸ this scanner profile (so the app knows how "
-        "the scanner saw the colours), and Convert to Profile ▸ your working "
-        "space (e.g. sRGB or Adobe RGB). The colours now match the original.\n\n"
+        "• In Photoshop or another editor (this is also the route for camera "
+        "photos): open the scan or photo — captured with correction OFF — then "
+        "Assign Profile ▸ this profile (so the app knows how your device saw the "
+        "colours), and Convert to Profile ▸ your working space (e.g. sRGB or "
+        "Adobe RGB). The colours now match the original.\n\n"
         "Good to know:\n"
-        "• The profile is specific to this scanner and the settings you scanned "
-        "with — keep the scanner's brightness / auto-correction OFF, the same as "
-        "when you scanned the chart, or the profile won't fit.\n"
-        "• It's most accurate for media like the paper you profiled; rescan a "
-        "chart on very different paper (e.g. glossy vs. matte) if you switch.\n"
-        "• A scanner profile characterises the scanner — it does not sharpen or "
+        "• The profile is specific to this device and the settings you captured "
+        "with. Keep the scanner's auto-correction off — or the camera's lighting "
+        "and raw settings the same — exactly as when you captured the target, or "
+        "the profile won't fit.\n"
+        "• A scanner profile is most accurate for media like the paper you "
+        "profiled; a camera profile is tied to the light you shot under.\n"
+        "• The profile characterises the device — it does not sharpen or "
         "retouch; it just makes the colours faithful."
     ) + "\n\n───────────────\n" + SCANNING_TIPS_HELP \
       + "\n\n───────────────\n" + SCAN_SETUP_HELP \
-      + "\n\n───────────────\n" + WHICH_CHART_HELP
+      + "\n\n───────────────\n" + CAMERA_HELP \
+      + "\n\n───────────────\n" + WHICH_CHART_HELP \
+      + "\n\n───────────────\n" + WHICH_CHART_CAMERA_NOTE
     DESCRIPTION = tr(
-        "Turn a scan of a measured chart into a colour profile for your scanner.")
+        "Turn a scan or photo of a target into a colour profile for your "
+        "scanner or camera.")
 
     def __init__(self, runner, settings, parent: QWidget | None = None) -> None:
         super().__init__(settings, parent)
@@ -460,18 +497,20 @@ class ScannerProfileDialog(_ToolDialogBase):
         self._build_standard_inputs(form)
 
         form.addLayout(self._labelled(
-            tr("Scan of the printed chart (TIFF):"), tr("Scan"),
-            tr("A scan of the target on the scanner you want to profile, saved as "
-            "a plain RGB TIFF with the scanner's own colour correction turned "
-            "off.\n\n"
+            tr("Scan or photo of the target (TIFF):"), tr("Scan or photo"),
+            tr("Your capture of the target on the device you want to profile: a "
+            "scan from a scanner, or a photo from a camera. Save it as a plain "
+            "RGB TIFF, with the device's own colour correction turned off (see "
+            "the ⓘ at the top for exactly which settings, for both scanners and "
+            "cameras).\n\n"
             "Multi-page ChromIQ charts: switch pages with the Page selector and "
-            "pick each page's scan. To cut noise you can also add several scans "
-            "of the same sheet and let ChromIQ average them — see “Add "
+            "load each page's capture. To reduce noise you can also add several "
+            "captures of the same sheet and let ChromIQ average them — see “Add "
             "another scan to average” below.")))
         row2 = QHBoxLayout()
         self._scan_field = QLineEdit(self)
         self._scan_field.setReadOnly(True)
-        self._scan_field.setPlaceholderText(tr("Pick the scan for this page (TIFF)…"))
+        self._scan_field.setPlaceholderText(tr("Pick the scan or photo (TIFF)…"))
         row2.addWidget(self._scan_field, 1)
         b2 = make_browse_button(self, tr("Browse…"), icon="folder_measure")
         b2.clicked.connect(self._pick_scan)
@@ -482,7 +521,7 @@ class ScannerProfileDialog(_ToolDialogBase):
         self._marquee.setMinimumHeight(320)
         form.addWidget(self._marquee)
         form.addWidget(self._hint_label(tr(
-            "Drag the four corners onto the printed patch area until the green "
+            "Drag the four corners onto the target's patch area until the green "
             "grid sits on the real patches. ChromIQ then reads each patch and "
             "builds the profile.")))
 

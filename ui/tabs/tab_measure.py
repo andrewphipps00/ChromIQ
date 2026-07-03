@@ -106,20 +106,24 @@ def make_scanner_target_row(parent, checked: bool, *, accent: str = "#56d6a5",
     top.addWidget(cb)
     top.addStretch(1)
     top.addWidget(TooltipButton(
-        tr("Reuse this chart to profile a scanner"),
+        tr("Reuse this chart to profile a scanner or camera"),
         tr("Saves two small extra files (.cht + .cie) alongside your chart. "
-        "Later, you can build a colour profile for your scanner from this exact "
-        "chart — no need to print or measure anything again: you just scan the "
-        "printed chart, and ChromIQ compares your scanner's view against the "
-        "real colours the spectrophotometer measured here.\n\n"
+        "Later, you can build a colour profile for your scanner — or your "
+        "camera — from this exact chart, with no need to print or measure "
+        "anything again. You just scan the printed chart (or photograph it with "
+        "a camera), and ChromIQ compares how your device saw each patch against "
+        "the real colours the spectrophotometer measured here.\n\n"
+        "So the same two files work for both: scan the chart to profile a "
+        "scanner, or photograph it to profile a camera.\n\n"
         "Leave this off if you're only profiling your printer. You can always "
-        "turn it on later from Tools ▸ Create scanner target."),
+        "turn it on later from Tools ▸ Create scanner or camera target."),
         row, min_width=460, color=accent),
         0, Qt.AlignmentFlag.AlignVCenter)
     outer.addLayout(top)
 
-    hint = QLabel(tr("For scanning the printed chart on a flatbed to profile "
-                     "your scanner — not needed for printer profiling."), row)
+    hint = QLabel(tr("For scanning — or photographing — the printed chart to "
+                     "profile your scanner or camera; not needed for printer "
+                     "profiling."), row)
     hint.setWordWrap(True)
     hint.setStyleSheet(f"color: {hint_color}; font-size: 12px;")
     outer.addWidget(hint)

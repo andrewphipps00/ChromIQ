@@ -77,30 +77,55 @@ WHICH_CHART_HELP = tr(
     "what you'll scan.")
 
 
+# Camera counterpart to the "which chart" guidance above — the core idea is the
+# same, but a camera cares about light, not paper. Kept as its own key so the
+# shared block above stays stable.
+WHICH_CHART_CAMERA_NOTE = tr(
+    "Does this apply to a camera?\n\n"
+    "The main idea is the same: the reference colours come from your "
+    "measurement, so any chart you measure and then photograph is correct. But "
+    "a camera profile depends far more on the light than on the paper, so a few "
+    "things change:\n\n"
+    "• A printed chart suits flat, copy-style work — artwork, documents, "
+    "repro — photographed under even, controlled light. The profile then "
+    "describes your camera under that light.\n\n"
+    "• Match the light, not the finish. For a scanner you match the paper you'll "
+    "scan; for a camera, light the chart evenly with the light you'll actually "
+    "shoot under, because the profile is tied to that light.\n\n"
+    "• For general photography, a ready-made camera target (such as an X-Rite "
+    "ColorChecker) is usually easier — load it under 'A standard target I own' "
+    "in Build scanner or camera profile, and see that window's 'Profiling a "
+    "camera' section for how to shoot it.")
+
+
 class ScaninTargetDialog(_ToolDialogBase):
     TOOL_KEY    = "scanner_target"
-    TITLE       = tr("Create scanner target")
-    EYEBROW     = tr("MEASURE · SCANNER TARGET")
+    TITLE       = tr("Create scanner or camera target")
+    EYEBROW     = tr("MEASURE · SCANNER / CAMERA TARGET")
     ACCENT      = SPEC_GREEN
-    RUN_LABEL   = tr("Create scanner files")
+    RUN_LABEL   = tr("Create the files")
     MIN_WIDTH   = 640
 
     HELP = tr(
         "Builds two small files from a chart you've already measured, so you can "
-        "later profile a scanner from that same chart — no need to print or "
-        "measure anything again.\n\n"
+        "later profile a scanner — or a camera — from that same chart, with no "
+        "need to print or measure anything again.\n\n"
         "• <chart>.cht — where each patch sits on the page.\n"
         "• <chart>.cie — the real colours the spectrophotometer measured.\n\n"
         "Pick the chart's measurement (its .ti3); the two files are saved next to "
-        "the chart. Then scan the printed chart on your scanner and use "
-        "'Build scanner profile' — ArgyllCMS's scanin reads the scan against "
-        "these files, and colprof turns that into your scanner's ICC profile.\n\n"
+        "the chart. Then capture the printed chart on the device you want to "
+        "profile — scan it on a scanner, or photograph it with a camera — and use "
+        "'Build scanner or camera profile'. ArgyllCMS's scanin reads your capture "
+        "against these files, and colprof turns that into the device's ICC "
+        "profile. The same two files work for both: scan the chart to profile a "
+        "scanner, or photograph it to profile a camera.\n\n"
         "Works for charts created with ChromIQ's layout engine, which knows each "
         "patch's exact position. (Support for older or imported charts is planned.)"
-    ) + "\n\n───────────────\n" + WHICH_CHART_HELP
+    ) + "\n\n───────────────\n" + WHICH_CHART_HELP \
+      + "\n\n───────────────\n" + WHICH_CHART_CAMERA_NOTE
     DESCRIPTION = tr(
-        "Turn a measured chart into scanner-recognition files (.cht + .cie) so you "
-        "can profile a scanner from the same chart.")
+        "Turn a measured chart into recognition files (.cht + .cie) so you can "
+        "profile a scanner or a camera from the same chart.")
 
     def __init__(self, settings, parent: QWidget | None = None) -> None:
         super().__init__(settings, parent)
@@ -165,7 +190,8 @@ class ScaninTargetDialog(_ToolDialogBase):
         form.addWidget(self._note)
 
         out_note = QLabel(
-            tr("The scanner files (.cht + .cie) are saved next to your chart. "
+            tr("The recognition files (.cht + .cie) are saved next to your chart, "
+            "and work for profiling either a scanner or a camera from it. "
             "Multi-page charts get one .cht per page and a single .cie."), self)
         out_note.setWordWrap(True)
         out_note.setStyleSheet(f"color: {self._hint_color}; font-size: 12px;")
@@ -192,12 +218,12 @@ class ScaninTargetDialog(_ToolDialogBase):
         channels = base.with_name(base.name + ".channels.json")
         if has_scanner_geometry(channels):
             self._note.setText(tr(
-                "✓ Ready — scanner files will be written as {stem}.cht / .cie."
+                "✓ Ready — recognition files will be written as {stem}.cht / .cie."
             ).format(stem=base.name))
         else:
             self._note.setText(tr(
                 "⚠ ChromIQ doesn't have this chart's patch positions. Recreate the "
-                "chart in a current ChromIQ version to enable scanner files."))
+                "chart in a current ChromIQ version to enable recognition files."))
 
     # ------------------------------------------------------------------ run
     def _can_run(self) -> bool:
@@ -218,11 +244,13 @@ class ScaninTargetDialog(_ToolDialogBase):
             self._log.appendPlainText(tr("[OK] Wrote {path}").format(path=p))
         self._log.appendPlainText(tr("[OK] Wrote {path}").format(path=res.cie_path))
         self._log.appendPlainText((
-            tr("Scanner files for {n} patches on one page saved next to your "
-               "chart. Scan the printed chart, then use 'Build scanner profile'.")
+            tr("Recognition files for {n} patches on one page saved next to your "
+               "chart. Scan or photograph the printed chart, then use 'Build "
+               "scanner or camera profile'.")
             if res.n_pages == 1 else
-            tr("Scanner files for {n} patches on {pages} pages saved next to your "
-               "chart. Scan the printed chart, then use 'Build scanner profile'.")
+            tr("Recognition files for {n} patches on {pages} pages saved next to "
+               "your chart. Scan or photograph the printed chart, then use 'Build "
+               "scanner or camera profile'.")
         ).format(n=res.n_patches, pages=res.n_pages))
         _remember_dir(self._settings, self.TOOL_KEY, self._ti3_path.parent)
         self._finish(True)

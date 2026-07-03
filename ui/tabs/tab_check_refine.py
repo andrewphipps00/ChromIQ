@@ -1495,10 +1495,12 @@ class TabCheckRefine(QWidget):
             _dark = QApplication.palette().color(
                 QPalette.ColorRole.Window).lightness() < 128
             scanner_tip = QLabel(
-                tr("This saves scanner files from the chart you just measured — "
-                   "great for general use. For the most accurate scanner profile "
-                   "of your own colour-managed prints, print a fresh chart through "
-                   "your normal print workflow and measure it too."),
+                tr("This saves recognition files from the chart you just measured "
+                   "— great for general use, and they work for profiling a scanner "
+                   "or a camera (scan the printed chart, or photograph it). For the "
+                   "most accurate scanner profile of your own colour-managed "
+                   "prints, print a fresh chart through your normal print workflow "
+                   "and measure it too."),
                 dlg)
             scanner_tip.setWordWrap(True)
             scanner_tip.setStyleSheet(
