@@ -50,8 +50,30 @@ class GridSpec:
     """Normalised patch rectangles for the overlay, derived from the chart's
     exact geometry. Each rect is ``(u, v, w, h)`` in [0,1] with a **top-left**
     origin (the chart's bottom-left mm already flipped), so it maps straight
-    through the quad homography."""
+    through the quad homography. *aspect* is the patch block's width/height, so
+    the marquee can seed a starting quad of the right shape."""
     rects: list[tuple[float, float, float, float]]
+    aspect: float = 1.0
+    ncols: int = 0        # set when the boxes form ONE regular contiguous grid,
+    nrows: int = 0        # so the overlay can replicate rectarg's integer edges
+
+    @staticmethod
+    def _regular(patches, sw, sh, x0, y0) -> tuple[int, int]:
+        """If every box is the same size and they tile a full contiguous
+        ncols×nrows grid (rectarg's model), return (ncols, nrows); else (0, 0)."""
+        xl = sorted({round((getattr(p, "x1", None) if hasattr(p, "x1")
+                            else p["x"]), 2) for p in patches})
+        yt = sorted({round((getattr(p, "y1", None) if hasattr(p, "y1")
+                            else p["y"]), 2) for p in patches})
+        nc, nr = len(xl), len(yt)
+        if nc * nr != len(patches) or nc < 2 or nr < 2:
+            return 0, 0
+        # uniform column / row spacing?
+        dxs = [xl[i + 1] - xl[i] for i in range(nc - 1)]
+        dys = [yt[i + 1] - yt[i] for i in range(nr - 1)]
+        if max(dxs) - min(dxs) > 0.02 * sw or max(dys) - min(dys) > 0.02 * sh:
+            return 0, 0
+        return nc, nr
 
     @classmethod
     def from_patches(cls, patches: list[dict]) -> "GridSpec":
@@ -66,7 +88,8 @@ class GridSpec:
         sw, sh = (x1 - x0) or 1.0, (y1 - y0) or 1.0
         rects = [((p["x"] - x0) / sw, (p["y"] - y0) / sh, p["w"] / sw, p["h"] / sh)
                  for p in patches]
-        return cls(rects)
+        nc, nr = cls._regular(patches, sw, sh, x0, y0)
+        return cls(rects, aspect=sw / sh, ncols=nc, nrows=nr)
 
     @classmethod
     def from_cht(cls, text: str) -> "GridSpec":
@@ -92,8 +115,10 @@ class GridSpec:
         ys = [b.y1 for b in geom.patches] + [b.y2 for b in geom.patches]
         x0, x1, y0, y1 = min(xs), max(xs), min(ys), max(ys)
         sw, sh = (x1 - x0) or 1.0, (y1 - y0) or 1.0
+        nc, nr = cls._regular(geom.patches, sw, sh, x0, y0)
         return cls([((b.x1 - x0) / sw, (b.y1 - y0) / sh,
-                     (b.x2 - b.x1) / sw, (b.y2 - b.y1) / sh) for b in geom.patches])
+                     (b.x2 - b.x1) / sw, (b.y2 - b.y1) / sh) for b in geom.patches],
+                   aspect=sw / sh, ncols=nc, nrows=nr)
 
 
 _HANDLE_R = 8         # corner handle radius (screen px)
@@ -127,8 +152,11 @@ class ScanGridMarquee(QWidget):
         self._pan = [0.0, 0.0]                # user pan, widget px
         self._panning = False
         self._pan_ref: tuple[float, float, float, float] | None = None
+        self._moving = False                  # dragging the whole grid to reposition
+        self._move_ref: tuple | None = None
         self._allow_plain_wheel = False       # popped-out: plain wheel zooms too
         self.setMouseTracking(True)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)   # for ⌘/Ctrl +/- zoom
 
     # ---------------------------------------------------------------- data
     def set_image(self, img: QImage) -> None:
@@ -136,8 +164,28 @@ class ScanGridMarquee(QWidget):
         self._rotation = 0
         self._rebuild_pixmap()
         self._reset_view()
-        self._reset_corners()
+        self._seed_corners()
         self.update()
+
+    def _seed_corners(self) -> None:
+        """Starting quad: a centred rectangle matching the patch block's aspect
+        ratio at ~90% of the image, so it's already the right shape to nudge onto
+        the target — not a blind inset. Falls back to a plain inset when there's
+        no grid to take an aspect from."""
+        if not self._grid.rects or not self._img_w or not self._img_h:
+            self._reset_corners()
+            return
+        iw, ih = float(self._img_w), float(self._img_h)
+        ar = self._grid.aspect or (iw / ih)
+        aw, ah = iw * 0.90, ih * 0.90
+        if aw / ah > ar:
+            h = ah; w = h * ar
+        else:
+            w = aw; h = w / ar
+        cx, cy = iw / 2.0, ih / 2.0
+        self._corners = [[cx - w / 2, cy - h / 2], [cx + w / 2, cy - h / 2],
+                         [cx + w / 2, cy + h / 2], [cx - w / 2, cy + h / 2]]
+        self.changed.emit()
 
     def _rebuild_pixmap(self) -> None:
         if self._img is None or self._img.isNull():
@@ -171,6 +219,8 @@ class ScanGridMarquee(QWidget):
 
     def set_grid(self, grid: GridSpec) -> None:
         self._grid = grid
+        if self._pix is not None:            # target changed with a scan loaded
+            self._seed_corners()
         self.update()
 
     def set_sample_fraction(self, frac: float) -> None:
@@ -246,6 +296,21 @@ class ScanGridMarquee(QWidget):
         self._draw_grid(p)
         self._draw_quad(p)
 
+    @staticmethod
+    def _rectarg_edges(total_px: float, n: int) -> list[float]:
+        """rectarg's integer-pixel column/row edges, normalised to [0,1]: each
+        cell is floor(total/n) px, the leftover pixels going to the FIRST cells.
+        Replicated so the overlay lines up exactly with a rectarg-rendered image
+        (its cells aren't perfectly uniform at low dpi)."""
+        import math
+        base = int(math.floor(total_px / n))
+        rem = int(round(total_px - base * n))
+        edges = [0]
+        for i in range(n):
+            edges.append(edges[-1] + base + (1 if i < rem else 0))
+        tot = edges[-1] or 1
+        return [e / tot for e in edges]
+
     def _draw_grid(self, p: QPainter) -> None:
         if not self._grid.rects or len(self._corners) != 4:
             return
@@ -257,7 +322,23 @@ class ScanGridMarquee(QWidget):
         sample = QPen(QColor(86, 214, 165, 220))  # sampled sub-area — solid
         sample.setWidthF(1.4)
         fill = QColor(86, 214, 165, 40)
-        for (u, v, w, hh) in self._grid.rects:
+
+        # Build the list of full-cell (u, v, w, hh) rects. For a single regular
+        # grid, replicate rectarg's exact integer edges at the placed quad's
+        # pixel size; otherwise fall back to each box's own rect.
+        nc, nr = self._grid.ncols, self._grid.nrows
+        if nc and nr:
+            c = self._corners
+            wpx = ((c[1][0] - c[0][0]) ** 2 + (c[1][1] - c[0][1]) ** 2) ** 0.5
+            hpx = ((c[3][0] - c[0][0]) ** 2 + (c[3][1] - c[0][1]) ** 2) ** 0.5
+            ue = self._rectarg_edges(wpx, nc)
+            ve = self._rectarg_edges(hpx, nr)
+            cells = [(ue[i], ve[j], ue[i + 1] - ue[i], ve[j + 1] - ve[j])
+                     for j in range(nr) for i in range(nc)]
+        else:
+            cells = self._grid.rects
+
+        for (u, v, w, hh) in cells:
             p.setPen(outline)
             p.setBrush(Qt.BrushStyle.NoBrush)
             p.drawPolygon(*[self._to_widget(*apply_h(h, x, y)) for x, y in
@@ -311,10 +392,29 @@ class ScanGridMarquee(QWidget):
             if (self._handle_pos(i) - pos).manhattanLength() <= _HANDLE_R * 2.4:
                 self._drag = i
                 break
-        if self._drag < 0:                       # empty space → pan the view
+        if self._drag >= 0:
+            return
+        if len(self._corners) == 4 and self._point_in_quad(pos):
+            self._moving = True                  # inside the grid → move the whole grid
+            ix, iy = self._to_image(pos.x(), pos.y())
+            self._move_ref = (ix, iy, [c[:] for c in self._corners])
+            self.setCursor(Qt.CursorShape.SizeAllCursor)
+        else:                                    # outside → pan the image
             self._panning = True
             self._pan_ref = (pos.x(), pos.y(), self._pan[0], self._pan[1])
             self.setCursor(Qt.CursorShape.ClosedHandCursor)
+
+    def _point_in_quad(self, pos) -> bool:
+        pts = [self._to_widget(*c) for c in self._corners]
+        inside = False
+        n = len(pts)
+        for i in range(n):
+            xi, yi = pts[i].x(), pts[i].y()
+            xj, yj = pts[i - 1].x(), pts[i - 1].y()
+            if ((yi > pos.y()) != (yj > pos.y())) and \
+               (pos.x() < (xj - xi) * (pos.y() - yi) / (yj - yi + 1e-9) + xi):
+                inside = not inside
+        return inside
 
     def mouseMoveEvent(self, e) -> None:  # noqa: N802
         pos = e.position()
@@ -327,6 +427,13 @@ class ScanGridMarquee(QWidget):
             self._corners[self._drag] = [x, y]
             self.changed.emit()
             self.update()
+        elif self._moving and self._move_ref is not None:
+            ix, iy = self._to_image(pos.x(), pos.y())
+            ox, oy, ref = self._move_ref
+            dx, dy = ix - ox, iy - oy
+            self._corners = [[c[0] + dx, c[1] + dy] for c in ref]
+            self.changed.emit()
+            self.update()
         elif self._panning and self._pan_ref is not None:
             sx, sy, px, py = self._pan_ref
             self._pan = [px + (pos.x() - sx), py + (pos.y() - sy)]
@@ -335,7 +442,32 @@ class ScanGridMarquee(QWidget):
     def mouseReleaseEvent(self, e) -> None:  # noqa: N802
         self._drag = -1
         self._panning = False
+        self._moving = False
         self.unsetCursor()
+
+    def keyPressEvent(self, e) -> None:  # noqa: N802
+        if e.modifiers() & (Qt.KeyboardModifier.ControlModifier
+                            | Qt.KeyboardModifier.MetaModifier):
+            if e.key() in (Qt.Key.Key_Plus, Qt.Key.Key_Equal):
+                self._zoom_at_centre(1.25); return
+            if e.key() in (Qt.Key.Key_Minus, Qt.Key.Key_Underscore):
+                self._zoom_at_centre(0.8); return
+            if e.key() == Qt.Key.Key_0:
+                self._reset_view(); return
+        super().keyPressEvent(e)
+
+    def _zoom_at_centre(self, factor: float) -> None:
+        if self._pix is None:
+            return
+        cx, cy = self.width() / 2.0, self.height() / 2.0
+        ix, iy = self._to_image(cx, cy)
+        self._zoom = max(1.0, min(16.0, self._zoom * factor))
+        if self._zoom <= 1.0:
+            self._pan = [0.0, 0.0]
+        else:
+            s = self._scale * self._zoom
+            self._pan = [cx - self._ox - ix * s, cy - self._oy - iy * s]
+        self.update()
 
     def mouseDoubleClickEvent(self, e) -> None:  # noqa: N802
         self._reset_view()                       # snap back to fit-to-view

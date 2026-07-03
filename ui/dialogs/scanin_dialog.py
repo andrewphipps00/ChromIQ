@@ -331,6 +331,14 @@ class ScannerProfileDialog(_ToolDialogBase):
         self._target_combo.addItem(tr("Other… (choose a .cht file)"), "")
         self._target_combo.currentIndexChanged.connect(self._on_target_changed)
         trow.addWidget(self._target_combo, 1)
+        self._reveal_btn = QPushButton(tr("Test files…"), self)
+        self._reveal_btn.setStyleSheet(_COMPACT_BTN)
+        self._reveal_btn.setToolTip(tr(
+            "Generate a known-good test scan + reference for this target and reveal "
+            "them in your file manager, so you can try the reading grid without "
+            "your own scan (and see where the bundled recognition file lives)."))
+        self._reveal_btn.clicked.connect(self._reveal_target_files)
+        trow.addWidget(self._reveal_btn)
         v.addLayout(trow)
 
         # Custom .cht browse (only when "Other…" is selected).
@@ -570,8 +578,10 @@ class ScannerProfileDialog(_ToolDialogBase):
             "grid sits on the real patches. ChromIQ then reads each patch and "
             "builds the profile.")))
         form.addWidget(self._hint_label(tr(
-            "Scroll to zoom · drag the image to pan · double-click to reset the "
-            "view. Use Rotate for a sideways scan, or Pop out for a bigger view.")))
+            "Drag inside the grid to move it · drag a corner to reshape it · drag "
+            "the background to pan · scroll (or ⌘/Ctrl + scroll) to zoom, also "
+            "⌘/Ctrl +/− and ⌘/Ctrl + 0 to reset · double-click resets the view. "
+            "Rotate handles a sideways scan; Pop out gives a bigger view.")))
 
         form.addLayout(self._labelled(
             tr("Patch sample area:"), tr("Patch sample area"),
@@ -745,11 +755,36 @@ class ScannerProfileDialog(_ToolDialogBase):
         data = self._target_combo.currentData()
         other = not data
         self._cht_row_w.setVisible(other)
+        self._reveal_btn.setEnabled(not other)
         if other:
             txt = self._cht_field.text()
             self._set_std_target(Path(txt) if txt else None)
         else:
             self._set_std_target(Path(data))
+
+    def _reveal_target_files(self) -> None:
+        """Write a known-good test scan + reference for the selected target and
+        reveal them (and point at the bundled .cht) — so a user can locate and
+        try the files without their own scan (Knut)."""
+        cht = self._target_combo.currentData()
+        if not cht:
+            self._log.append(tr("Pick a bundled target above first."))
+            return
+        from core.preset_store import reveal_in_file_manager
+        from workflow.standard_targets import make_test_scan
+        out = Path.home() / "ChromIQ" / "scanner-test-targets"
+        try:
+            tif, ref = make_test_scan(Path(cht), out)
+            self._log.append(tr(
+                "Wrote a known-good test scan and reference for this target:\n"
+                "  {tif}\n  {ref}\n"
+                "Load the .tif as the scan and the .cie as the reference to try the "
+                "grid. The bundled recognition file is:\n  {cht}").format(
+                    tif=tif, ref=ref, cht=cht))
+            reveal_in_file_manager(out)
+        except Exception as exc:  # noqa: BLE001
+            self._log.append(tr("Couldn't prepare test files: {e}").format(e=exc))
+            reveal_in_file_manager(Path(cht).parent)
 
     def _pick_cht(self) -> None:
         path = open_file_dialog(self, tr("Choose a .cht recognition file"),

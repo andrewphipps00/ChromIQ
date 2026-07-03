@@ -1,5 +1,31 @@
 # Changelog
 
+## v3.13.0-beta.80
+
+### 🐛 Fixed
+- **The reading grid now matches rectarg's reconstruction exactly.** For a regular
+  target grid (ISO 12641, DCPro, …) the overlay replicates rectarg's integer-pixel
+  column/row edges (each cell `floor(total/n)` px, the remainder into the first
+  cells) at the placed quad's pixel size — eliminating the accumulating
+  misalignment against a rectarg-rendered image. Multi-area targets (an IT8's GS
+  strip) fall back to per-box.
+- **The starting quad matches the target's aspect ratio** instead of a blind 8%
+  inset, so it's already the right shape to nudge onto the patches.
+
+### ✨ Added / Changed
+- **Move / pan / zoom the grid view.** Drag *inside* the grid to move the whole
+  selection; drag the *background* to pan; scroll or ⌘/Ctrl + scroll to zoom, plus
+  ⌘/Ctrl +/− and ⌘/Ctrl + 0 (or double-click) to reset — with a help line spelling
+  it out.
+- **Two IT8 targets** in the dropdown: **ISO 12641‑1 — Wolf Faust** and
+  **ISO 12641‑2 — LaserSoft Advanced**, both bundled with corrected geometry.
+- **"Test files…" button** (standard-target mode): writes a known-good test scan +
+  reference for the chosen target and reveals them, so you can try the grid with
+  no hardware and find where the bundled recognition file lives.
+
+### 🌍 Translated
+- New UI strings staged as English placeholders (full pass to follow).
+
 ## v3.13.0-beta.79
 
 ### 🐛 Fixed
