@@ -4,8 +4,10 @@ Workflow: pick a **measured** ChromIQ chart and a **scan** of the printed chart,
 drag the four corners over the patch area (a live grid confirms the fit), and
 ChromIQ runs ``scanin`` (manual ``-F`` registration + perspective) to read the
 scan against the chart's measured colours, then ``colprof`` to build the scanner
-ICC. Multi-page charts: one scan + placement per page; the reads are combined
-before profiling.
+ICC. Multi-page charts get a scan (or several) placed per page; several scans of
+a page are averaged, then the pages are combined before profiling. It can also
+profile from a standard target the user owns (IT8, ColorChecker, …) via its
+Argyll ``.cht`` + the target's own reference file.
 
 Needs the chart's ``.cht`` + ``.cie`` (built by "Create scanner target" / the
 measure-tab checkbox); this tool builds them on the fly if they're missing but
@@ -19,7 +21,8 @@ from pathlib import Path
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QImage
 from PyQt6.QtWidgets import (
-    QCheckBox, QHBoxLayout, QLabel, QLineEdit, QVBoxLayout, QWidget)
+    QButtonGroup, QCheckBox, QHBoxLayout, QLabel, QLineEdit, QPushButton,
+    QRadioButton, QVBoxLayout, QWidget)
 
 from core.i18n import tr
 from core.logger import get_logger
@@ -33,13 +36,58 @@ from ui.tooltip_button import TooltipButton
 from ui.widgets import NoScrollComboBox, make_browse_button, open_file_dialog
 from workflow.profile_builder import ProfileBuilder, ProfileParams
 from workflow.scanin_runner import ScaninParams, ScaninRunner
+from workflow.ti3_average import Ti3AverageError, average_scanner_ti3
 from workflow.scanin_target import (
     ScaninTargetError, build_scanin_target_from_paths, has_scanner_geometry)
+from workflow.standard_targets import list_standard_targets
 
 log = get_logger(__name__)
 
 _TI3_FILTER = "Measured chart (*.ti3);;All files (*)"
 _SCAN_FILTER = "Scans (*.tif *.tiff);;All files (*)"
+_CHT_FILTER = "Chart recognition (*.cht);;All files (*)"
+_REF_FILTER = "Target reference (*.cie *.txt *.ti3);;All files (*)"
+
+# Scanner-side capture settings (folded from Knut's VueScan/ArgyllCMS guide).
+# Kept as its own key so the large HELP block above stays stable — only this
+# short section needs (re-)translating when the wording changes.
+SCAN_SETUP_HELP = tr(
+    "How to scan the chart for a good profile\n\n"
+    "The profile can only be as faithful as the scan, so capture the chart flat "
+    "and unaltered:\n\n"
+    "• Colour: turn OFF every automatic correction — no colour balance, no "
+    "auto-levels or curves, no sharpening, and no scanner ICC profile applied. "
+    "(In VueScan: Colour balance = None, curves left at their defaults, "
+    "brightness = 1.)\n"
+    "• Depth & format: 48-bit RGB (16 bit per channel), saved as an "
+    "uncompressed TIFF.\n"
+    "• Resolution: 300–600 ppi is plenty for a patch chart. For best quality, "
+    "scan higher (e.g. 2400 ppi) and let the software downsample — averaging "
+    "pixels lowers noise.\n"
+    "• Multiple samples: if your scanner software can average several passes "
+    "per scan, turn it on to reduce noise further.\n"
+    "• Placement: clean the glass and the chart, lay it flat and square, and "
+    "crop to the patch area.\n\n"
+    "Scan the same way every time. The profile describes your scanner at these "
+    "settings, so changing them later means it no longer fits.")
+
+# Consolidated workflow tips: averaging, multi-page charts, and standard targets.
+SCANNING_TIPS_HELP = tr(
+    "Getting the best result\n\n"
+    "• Average several scans. Scanning the same sheet two or three times and "
+    "averaging the reads cancels out the random noise every scanner adds, for a "
+    "cleaner profile. Pick your first scan and place its four corners, then use "
+    "“Add another scan to average” for each extra scan — each keeps its own "
+    "placement, so it's fine if the sheet shifted a little. Pick how they're "
+    "combined under “Combine repeated scans by”.\n\n"
+    "• Multi-page ChromIQ charts. When a chart spans several pages, a Page "
+    "selector appears. Pick and place each page's scan in turn — and you can add "
+    "several scans per page too. ChromIQ averages each page's scans, then builds "
+    "one profile from all the pages together.\n\n"
+    "• A standard target is a single sheet. A bought IT8, ColorChecker or "
+    "similar target has no pages (even a two-area target like the Wolf Faust IT8 "
+    "is one sheet, read from one scan) — just scan it once, or a few times to "
+    "average.")
 
 
 def _chart_base(ti3: Path) -> Path:
@@ -56,6 +104,7 @@ class ScannerProfileDialog(_ToolDialogBase):
     ACCENT      = SPEC_GREEN
     RUN_LABEL   = tr("Build scanner profile")
     MIN_WIDTH   = 760
+    SCROLLABLE_CONTENT = True    # tall (mode toggle + inputs + marquee + averaging)
 
     HELP = tr(
         "Profiles your scanner from a printed ChromIQ chart — no target-chart "
@@ -95,7 +144,9 @@ class ScannerProfileDialog(_ToolDialogBase):
         "chart on very different paper (e.g. glossy vs. matte) if you switch.\n"
         "• A scanner profile characterises the scanner — it does not sharpen or "
         "retouch; it just makes the colours faithful."
-    ) + "\n\n───────────────\n" + WHICH_CHART_HELP
+    ) + "\n\n───────────────\n" + SCANNING_TIPS_HELP \
+      + "\n\n───────────────\n" + SCAN_SETUP_HELP \
+      + "\n\n───────────────\n" + WHICH_CHART_HELP
     DESCRIPTION = tr(
         "Turn a scan of a measured chart into a colour profile for your scanner.")
 
@@ -108,9 +159,15 @@ class ScannerProfileDialog(_ToolDialogBase):
         self._layout: dict | None = None
         self._pages: list[int] = []
         self._page = 0
-        self._scans: dict[int, Path] = {}
-        self._corners: dict[int, list[tuple[float, float]]] = {}
+        # Per page, a list of "shots" — one or more scans of the same page, each
+        # with its own corner placement — averaged before profiling (#98 ask 1c).
+        self._shots: dict[int, list[dict]] = {}
+        self._shot_idx = 0
         self._jobs: list[dict] = []
+        # Standard-target (own IT8 / ColorChecker) mode state.
+        self._std_cht: Path | None = None
+        self._std_ref: Path | None = None
+        self._std_grid = None
         light = resolve_mode(settings.get("appearance", "auto")) == "light"
         self._hint = "#4a4a4a" if light else "#b8b8b8"
         self._build_inputs()
@@ -149,10 +206,39 @@ class ScannerProfileDialog(_ToolDialogBase):
         lbl.setStyleSheet(f"color:{self._hint}; font-size:12px;")
         return lbl
 
-    def _build_inputs(self) -> None:
-        form = self._content
+    def _standard_mode(self) -> bool:
+        return self._mode_standard.isChecked()
 
-        form.addLayout(self._labelled(
+    def _build_mode_selector(self, form) -> None:
+        row = QHBoxLayout()
+        self._mode_group = QButtonGroup(self)
+        self._mode_chromiq = QRadioButton(tr("A chart I made in ChromIQ"), self)
+        self._mode_standard = QRadioButton(
+            tr("A standard target I own (IT8, ColorChecker…)"), self)
+        self._mode_chromiq.setChecked(True)
+        self._mode_group.addButton(self._mode_chromiq)
+        self._mode_group.addButton(self._mode_standard)
+        row.addWidget(self._mode_chromiq)
+        row.addWidget(self._mode_standard)
+        row.addStretch(1)
+        row.addWidget(self._tip(
+            tr("Which source?"),
+            tr("Two ways to profile a scanner:\n\n"
+            "• A chart I made in ChromIQ — print and measure a chart, then scan "
+            "the print. ChromIQ already knows its exact patch colours.\n\n"
+            "• A standard target I own — a bought reflective target such as a "
+            "Wolf Faust IT8, LaserSoft or X-Rite ColorChecker. Pick its type and "
+            "the reference data file that came with your target (.cie / .txt), "
+            "then scan it. No printing or measuring needed.")),
+            0, Qt.AlignmentFlag.AlignVCenter)
+        form.addLayout(row)
+        self._mode_chromiq.toggled.connect(self._on_mode_changed)
+
+    def _build_chromiq_inputs(self, form) -> None:
+        self._chromiq_box = QWidget(self)
+        v = QVBoxLayout(self._chromiq_box)
+        v.setContentsMargins(0, 0, 0, 0)
+        v.addLayout(self._labelled(
             tr("Measured chart (.ti3):"), tr("Measured chart"),
             tr("The chart you printed and measured, whose printed copy you're "
             "scanning. Pick its .ti3. ChromIQ uses the chart's exact layout + "
@@ -165,9 +251,9 @@ class ScannerProfileDialog(_ToolDialogBase):
         b = make_browse_button(self, tr("Browse…"), icon="folder_measure")
         b.clicked.connect(self._pick_chart)
         row.addWidget(b)
-        form.addLayout(row)
+        v.addLayout(row)
         self._chart_note = self._hint_label("")
-        form.addWidget(self._chart_note)
+        v.addWidget(self._chart_note)
 
         # Page selector (multi-page charts only)
         self._page_row = QHBoxLayout()
@@ -179,13 +265,209 @@ class ScannerProfileDialog(_ToolDialogBase):
         self._page_widget = QWidget(self)
         self._page_widget.setLayout(self._page_row)
         self._page_widget.setVisible(False)
-        form.addWidget(self._page_widget)
+        v.addWidget(self._page_widget)
+        form.addWidget(self._chromiq_box)
+
+    def _build_standard_inputs(self, form) -> None:
+        self._standard_box = QWidget(self)
+        v = QVBoxLayout(self._standard_box)
+        v.setContentsMargins(0, 0, 0, 0)
+        v.addLayout(self._labelled(
+            tr("Target type:"), tr("Target type"),
+            tr("Pick the target you're holding. The list is every standard "
+            "scanner target ArgyllCMS knows how to read — Wolf Faust and other "
+            "IT8 charts, LaserSoft, the X-Rite ColorCheckers, and more. Choosing "
+            "the right one lets ChromIQ lay its reading grid exactly over your "
+            "target's patches.\n\n"
+            "If your target isn't in the list, choose “Other…” and point ChromIQ "
+            "at its own layout file (a .cht that came with the target or from "
+            "ArgyllCMS).")))
+        trow = QHBoxLayout()
+        self._target_combo = NoScrollComboBox(self)
+        for name, path in list_standard_targets(self._settings):
+            self._target_combo.addItem(name, str(path))
+        self._target_combo.addItem(tr("Other… (choose a .cht file)"), "")
+        self._target_combo.currentIndexChanged.connect(self._on_target_changed)
+        trow.addWidget(self._target_combo, 1)
+        v.addLayout(trow)
+
+        # Custom .cht browse (only when "Other…" is selected).
+        self._cht_row = QHBoxLayout()
+        self._cht_field = QLineEdit(self)
+        self._cht_field.setReadOnly(True)
+        self._cht_field.setPlaceholderText(tr("Pick a .cht recognition file…"))
+        self._cht_row.addWidget(self._cht_field, 1)
+        bc = make_browse_button(self, tr("Browse…"), icon="folder_measure")
+        bc.clicked.connect(self._pick_cht)
+        self._cht_row.addWidget(bc)
+        self._cht_row_w = QWidget(self)
+        self._cht_row_w.setLayout(self._cht_row)
+        self._cht_row_w.setVisible(False)
+        v.addWidget(self._cht_row_w)
+
+        v.addLayout(self._labelled(
+            tr("Target reference data (.cie / .txt):"), tr("Reference data"),
+            tr("The colour data file that came with your physical target — it "
+            "lists the true colour of every patch (Wolf Faust ships a .txt, "
+            "LaserSoft a converted .cie). This is specific to your target's "
+            "batch and can't be bundled, so point ChromIQ at your copy.")))
+        rrow = QHBoxLayout()
+        self._ref_field = QLineEdit(self)
+        self._ref_field.setReadOnly(True)
+        self._ref_field.setPlaceholderText(tr("Pick the target's reference data…"))
+        rrow.addWidget(self._ref_field, 1)
+        br = make_browse_button(self, tr("Browse…"), icon="folder_measure")
+        br.clicked.connect(self._pick_ref)
+        rrow.addWidget(br)
+        v.addLayout(rrow)
+        self._std_note = self._hint_label("")
+        v.addWidget(self._std_note)
+
+        form.addWidget(self._standard_box)
+        self._standard_box.setVisible(False)
+
+    def _build_shot_bar(self, form) -> None:
+        """Add-a-scan controls + averaging method (shown once a page has ≥2
+        scans) — averaging repeated scans of a page cuts scanner noise."""
+        row = QHBoxLayout()
+        self._shot_combo = NoScrollComboBox(self)
+        self._shot_combo.currentIndexChanged.connect(self._on_shot_changed)
+        self._shot_combo.setVisible(False)
+        row.addWidget(self._shot_combo)
+        # Compact height — a per-widget rule beats the app-wide 28px min-height.
+        _compact_btn = ("QPushButton { padding: 2px 12px; min-height: 0;"
+                        " font-size: 11px; }")
+        self._add_shot_btn = QPushButton(tr("＋ Add another scan to average"), self)
+        self._add_shot_btn.clicked.connect(self._add_shot)
+        self._add_shot_btn.setStyleSheet(_compact_btn)
+        row.addWidget(self._add_shot_btn)
+        self._remove_shot_btn = QPushButton(tr("Remove this scan"), self)
+        self._remove_shot_btn.clicked.connect(self._remove_shot)
+        self._remove_shot_btn.setStyleSheet(_compact_btn)
+        self._remove_shot_btn.setVisible(False)
+        row.addWidget(self._remove_shot_btn)
+        row.addStretch(1)
+        row.addWidget(self._tip(
+            tr("Averaging several scans"),
+            tr("Scanning the same sheet more than once and averaging the results "
+            "smooths out the random noise every scanner adds, giving a cleaner, "
+            "more accurate profile. Two or three scans is usually plenty.\n\n"
+            "How to do it: pick your first scan above and place its four corners, "
+            "then click “Add another scan to average”, pick the next scan, and "
+            "place its corners too. Use the “Scan 1 / Scan 2 …” box to switch "
+            "between them. Each scan keeps its own placement, so it's fine if the "
+            "sheet shifted a little on the glass between scans.\n\n"
+            "When you build, ChromIQ reads every scan, averages each patch, and "
+            "profiles from the result. (For a multi-page ChromIQ chart, scans are "
+            "averaged separately within each page.)")),
+            0, Qt.AlignmentFlag.AlignVCenter)
+        form.addLayout(row)
+
+        self._avg_row = QHBoxLayout()
+        self._avg_row.addWidget(QLabel(tr("Combine repeated scans by:"), self))
+        self._avg_method = NoScrollComboBox(self)
+        self._avg_method.addItem(tr("Mean (simple average)"), "mean")
+        self._avg_method.addItem(tr("Geometric mean (robust to an odd scan)"), "geomean")
+        self._avg_method.addItem(tr("Trimmed mean (drop highest & lowest)"), "trimmed")
+        self._avg_row.addWidget(self._avg_method)
+        self._avg_row.addStretch(1)
+        self._avg_row.addWidget(self._tip(
+            tr("Averaging method"),
+            tr("How repeated scans of a page are combined into one reading per "
+            "patch:\n\n"
+            "• Mean — the plain average. A good default.\n\n"
+            "• Geometric mean — multiplies the readings and takes the root; a "
+            "single unusually bright or dark scan pulls the result less than the "
+            "plain mean. A good choice for scans.\n\n"
+            "• Trimmed mean — throws away the highest and lowest reading of each "
+            "patch, then averages the rest. Needs at least three scans; best when "
+            "one scan might be off.")), 0, Qt.AlignmentFlag.AlignVCenter)
+        self._avg_row_w = QWidget(self)
+        self._avg_row_w.setLayout(self._avg_row)
+        self._avg_row_w.setVisible(False)
+        form.addWidget(self._avg_row_w)
+
+    # ------------------------------------------------------------------ shots
+    def _page_shots(self, pg: int | None = None) -> list[dict]:
+        pg = self._page if pg is None else pg
+        return self._shots.setdefault(pg, [{"path": None, "corners": None}])
+
+    def _cur_shot(self) -> dict:
+        shots = self._page_shots()
+        if self._shot_idx >= len(shots):
+            self._shot_idx = 0
+        return shots[self._shot_idx]
+
+    def _page_ready(self, pg: int) -> bool:
+        return any(s["path"] for s in self._page_shots(pg))
+
+    def _reset_shots(self) -> None:
+        self._shots.clear()
+        self._shot_idx = 0
+
+    def _sync_shot_view(self) -> None:
+        """Show the current shot's scan + placement in the marquee."""
+        shot = self._cur_shot()
+        scan = shot["path"]
+        self._scan_field.setText(str(scan) if scan else "")
+        if scan and Path(scan).is_file():
+            self._marquee.set_image(QImage(str(scan)))
+            if shot["corners"]:
+                self._marquee.set_corners(shot["corners"])
+        else:
+            self._marquee.set_image(QImage())
+        self._refresh_shot_bar()
+        self._refresh()
+
+    def _refresh_shot_bar(self) -> None:
+        shots = self._page_shots()
+        self._shot_combo.blockSignals(True)
+        self._shot_combo.clear()
+        for i in range(len(shots)):
+            self._shot_combo.addItem(tr("Scan {n}").format(n=i + 1), i)
+        self._shot_combo.setCurrentIndex(min(self._shot_idx, len(shots) - 1))
+        self._shot_combo.blockSignals(False)
+        multi = len(shots) > 1
+        self._shot_combo.setVisible(multi)
+        self._remove_shot_btn.setVisible(multi)
+        self._avg_row_w.setVisible(multi)
+
+    def _add_shot(self) -> None:
+        self._capture_current_corners()
+        self._page_shots().append({"path": None, "corners": None})
+        self._shot_idx = len(self._page_shots()) - 1
+        self._sync_shot_view()
+
+    def _remove_shot(self) -> None:
+        shots = self._page_shots()
+        if len(shots) <= 1:
+            return
+        del shots[self._shot_idx]
+        self._shot_idx = min(self._shot_idx, len(shots) - 1)
+        self._sync_shot_view()
+
+    def _on_shot_changed(self, idx: int) -> None:
+        if idx < 0:
+            return
+        self._capture_current_corners()
+        self._shot_idx = idx
+        self._sync_shot_view()
+
+    def _build_inputs(self) -> None:
+        form = self._content
+        self._build_mode_selector(form)
+        self._build_chromiq_inputs(form)
+        self._build_standard_inputs(form)
 
         form.addLayout(self._labelled(
             tr("Scan of the printed chart (TIFF):"), tr("Scan"),
-            tr("A scan of the printed chart on the scanner you want to profile, "
-            "saved as a plain RGB TIFF. For a multi-page chart, pick each page's "
-            "scan under its Page number.")))
+            tr("A scan of the target on the scanner you want to profile, saved as "
+            "a plain RGB TIFF with the scanner's own colour correction turned "
+            "off.\n\n"
+            "Multi-page ChromIQ charts: switch pages with the Page selector and "
+            "pick each page's scan. To cut noise you can also add several scans "
+            "of the same sheet and let ChromIQ average them — see “Add "
+            "another scan to average” below.")))
         row2 = QHBoxLayout()
         self._scan_field = QLineEdit(self)
         self._scan_field.setReadOnly(True)
@@ -204,6 +486,8 @@ class ScannerProfileDialog(_ToolDialogBase):
             "grid sits on the real patches. ChromIQ then reads each patch and "
             "builds the profile.")))
 
+        self._build_shot_bar(form)
+
         opts = QHBoxLayout()
         self._perspective = QCheckBox(tr("Correct perspective (slightly skewed scan)"), self)
         self._perspective.setChecked(True)
@@ -219,6 +503,27 @@ class ScannerProfileDialog(_ToolDialogBase):
             "if the profile looks off.")), 0, Qt.AlignmentFlag.AlignVCenter)
         form.addLayout(opts)
 
+        form.addLayout(self._labelled(
+            tr("Profile type:"), tr("Profile type"),
+            tr("How the scanner profile models colour.\n\n"
+            "• Matrix — a small, robust profile (a matrix with per-channel "
+            "curves). The most common choice for scanners: forgiving of noise "
+            "and few patches, and enough for faithful colour. Recommended.\n\n"
+            "• LUT — medium / high quality — a look-up-table profile that can "
+            "follow the scanner more closely. Use it when you have a chart with "
+            "many patches and clean, repeatable scans; high is finer but needs "
+            "the best data or it just fits the noise.")))
+        row3 = QHBoxLayout()
+        self._ptype = NoScrollComboBox(self)
+        # data = (colprof -a algorithm, -q quality). "s" (shaper+matrix) keeps the
+        # previous default output exactly under the friendly "Matrix" label.
+        self._ptype.addItem(tr("Matrix (recommended)"), ("s", "m"))
+        self._ptype.addItem(tr("LUT — medium quality"), ("x", "m"))
+        self._ptype.addItem(tr("LUT — high quality"), ("x", "h"))
+        row3.addWidget(self._ptype, 1)
+        row3.addStretch(1)
+        form.addLayout(row3)
+
     # ------------------------------------------------------------------ chart
     def _pick_chart(self) -> None:
         path = open_file_dialog(self, tr("Choose the measured chart"), _TI3_FILTER,
@@ -232,8 +537,7 @@ class ScannerProfileDialog(_ToolDialogBase):
         self._ti3 = ti3
         self._ti3_field.setText(str(ti3))
         _remember_dir(self._settings, self.TOOL_KEY, ti3.parent)
-        self._scans.clear()
-        self._corners.clear()
+        self._reset_shots()
         base = _chart_base(ti3)
         channels = base.with_name(base.name + ".channels.json")
         if not has_scanner_geometry(channels):
@@ -274,6 +578,7 @@ class ScannerProfileDialog(_ToolDialogBase):
             self._page_combo.addItem(tr("Page {n}").format(n=pg + 1), pg)
         self._page_combo.blockSignals(False)
         self._page = self._pages[0] if self._pages else 0
+        self._shot_idx = 0
         self._load_page_grid()
         self._refresh()
 
@@ -281,71 +586,196 @@ class ScannerProfileDialog(_ToolDialogBase):
         if self._layout is None:
             return
         pg = self._page
-        # Engine charts have exact per-patch rects → draw the grid overlay.
-        # printtarg charts carry only a captured .cht (its own units/origin); the
-        # grid overlay for those is a validated follow-up, so show corners only.
+        # Engine charts have exact per-patch rects; printtarg charts carry a
+        # captured .cht per page — both render a grid overlay (the .cht is parsed
+        # into the fiducial frame just like a standard target).
         patches = [p for p in self._layout.get("patches", [])
                    if int(p.get("page", 0)) == pg]
-        self._marquee.set_grid(GridSpec.from_patches(patches))
-        scan = self._scans.get(pg)
-        self._scan_field.setText(str(scan) if scan else "")
-        if scan and scan.is_file():
-            self._marquee.set_image(QImage(str(scan)))
-            # Restore this page's saved corner placement (set_image reset it).
-            if pg in self._corners:
-                self._marquee.set_corners(self._corners[pg])
+        if patches:
+            self._marquee.set_grid(GridSpec.from_patches(patches))
         else:
-            self._marquee.set_image(QImage())
+            cht_pages = self._layout.get("cht_pages") or []
+            self._marquee.set_grid(
+                GridSpec.from_cht(cht_pages[pg]) if 0 <= pg < len(cht_pages)
+                else GridSpec([]))
+        self._sync_shot_view()
 
     def _on_page_changed(self, idx: int) -> None:
         self._capture_current_corners()
         if 0 <= idx < len(self._pages):
             self._page = self._pages[idx]
+            self._shot_idx = 0
             self._load_page_grid()
 
     def _capture_current_corners(self) -> None:
         if self._marquee.has_placement():
-            self._corners[self._page] = self._marquee.corners_image_px()
+            self._cur_shot()["corners"] = self._marquee.corners_image_px()
+
+    # ------------------------------------------------------------- mode/standard
+    def _on_mode_changed(self, _checked: bool = False) -> None:
+        std = self._standard_mode()
+        self._chromiq_box.setVisible(not std)
+        self._standard_box.setVisible(std)
+        self._reset_shots()
+        self._scan_field.setText("")
+        self._marquee.set_image(QImage())
+        if std:
+            self._pages = [0]
+            self._page = 0
+            self._page_widget.setVisible(False)
+            self._on_target_changed()
+        else:
+            self._std_grid = None
+            if self._layout is not None:
+                self._load_page_grid()
+            else:
+                self._marquee.set_grid(GridSpec([]))
+        self._refresh_shot_bar()
+        self._refresh()
+
+    def _on_target_changed(self, _idx: int = 0) -> None:
+        data = self._target_combo.currentData()
+        other = not data
+        self._cht_row_w.setVisible(other)
+        if other:
+            txt = self._cht_field.text()
+            self._set_std_target(Path(txt) if txt else None)
+        else:
+            self._set_std_target(Path(data))
+
+    def _pick_cht(self) -> None:
+        path = open_file_dialog(self, tr("Choose a .cht recognition file"),
+                                _CHT_FILTER,
+                                start_dir=str(_initial_dir(self._settings, self.TOOL_KEY)))
+        if not path:
+            return
+        self._cht_field.setText(path)
+        _remember_dir(self._settings, self.TOOL_KEY, Path(path).parent)
+        self._set_std_target(Path(path))
+
+    def _pick_ref(self) -> None:
+        path = open_file_dialog(self, tr("Choose the target reference data"),
+                                _REF_FILTER,
+                                start_dir=str(_initial_dir(self._settings, self.TOOL_KEY)))
+        if not path:
+            return
+        self._std_ref = Path(path)
+        self._ref_field.setText(path)
+        _remember_dir(self._settings, self.TOOL_KEY, Path(path).parent)
+        self._update_std_note()
+        self._refresh()
+
+    def _set_std_target(self, cht: Path | None) -> None:
+        self._std_cht = cht
+        if cht is None or not cht.is_file():
+            self._std_grid = None
+            self._marquee.set_grid(GridSpec([]))
+        else:
+            try:
+                self._std_grid = GridSpec.from_cht(cht.read_text(errors="ignore"))
+            except OSError:
+                self._std_grid = GridSpec([])
+            self._marquee.set_grid(self._std_grid)
+            # Changing the target only swaps the grid; the loaded scan and its
+            # placement stay, so nothing to re-apply here.
+        self._update_std_note()
+        self._refresh()
+
+    def _update_std_note(self) -> None:
+        if self._std_cht is None:
+            self._std_note.setText("")
+            return
+        n = len(self._std_grid.rects) if self._std_grid else 0
+        if n == 0:
+            self._std_note.setText(tr(
+                "⚠ Couldn't read this target's patch grid from the .cht."))
+        elif self._std_ref is None:
+            self._std_note.setText(tr(
+                "✓ {n} patches. Now choose the reference data file that came "
+                "with your target.").format(n=n))
+        else:
+            self._std_note.setText(tr(
+                "✓ Ready — {n} patches, reference loaded. Scan the target and "
+                "place the corners on its registration marks.").format(n=n))
 
     # ------------------------------------------------------------------ scan
     def _pick_scan(self) -> None:
-        if self._layout is None:
+        if self._standard_mode():
+            if self._std_cht is None:
+                return
+        elif self._layout is None:
             return
         path = open_file_dialog(self, tr("Choose the scan"), _SCAN_FILTER,
                                 start_dir=str(_initial_dir(self._settings, self.TOOL_KEY)))
         if not path:
             return
-        self._scans[self._page] = Path(path)
+        self._cur_shot()["path"] = Path(path)
         self._scan_field.setText(path)
         _remember_dir(self._settings, self.TOOL_KEY, Path(path).parent)
         self._marquee.set_image(QImage(path))
+        if self._cur_shot()["corners"]:
+            self._marquee.set_corners(self._cur_shot()["corners"])
+        self._refresh_shot_bar()
         self._refresh()
 
     # ------------------------------------------------------------------ run
     def _can_run(self) -> bool:
+        if self._standard_mode():
+            return (self._std_cht is not None and self._std_ref is not None
+                    and self._std_grid is not None and bool(self._std_grid.rects)
+                    and self._page_ready(0))
         return self._layout is not None and bool(self._pages) and all(
-            self._scans.get(pg) is not None for pg in self._pages)
+            self._page_ready(pg) for pg in self._pages)
+
+    def _files_for_page(self, pg: int, base: Path) -> tuple[Path, Path]:
+        """The (.cht, reference) pair for page *pg*: the chosen standard target,
+        or the chart's own per-page .cht + .cie."""
+        if self._standard_mode():
+            return self._std_cht, self._std_ref
+        single = len(self._pages) == 1
+        cht = (base.with_suffix(".cht") if single
+               else base.parent / f"{base.name}_{pg + 1:02d}.cht")
+        return cht, base.with_suffix(".cie")
 
     def _execute(self) -> None:
         self._capture_current_corners()
         self._log.clear()
-        base = _chart_base(self._ti3)
-        single = len(self._pages) == 1
-        page_ti3s: list[Path] = []
+        method = self._avg_method.currentData() or "mean"
+        if self._standard_mode():
+            pages = [0]
+            first = next(s["path"] for s in self._page_shots(0) if s["path"])
+            base = first.parent / first.stem
+        else:
+            pages = self._pages
+            base = _chart_base(self._ti3)
+
         self._jobs = []
-        for pg in self._pages:
-            scan = self._scans[pg]
-            cht = (base.with_suffix(".cht") if single
-                   else base.parent / f"{base.name}_{pg + 1:02d}.cht")
-            cie = base.with_suffix(".cie")
-            corners = self._corners.get(pg)
-            diag = (scan.with_name(scan.stem + "-diag.tif")
-                    if self._diag.isChecked() else None)
-            params = ScaninParams(scan, cht, cie, corners=corners,
-                                  perspective=self._perspective.isChecked(), diag=diag)
-            page_ti3s.append(params.out_ti3)
-            self._jobs.append({"kind": "scanin", "params": params,
-                               "label": tr("Reading page {n} from the scan…").format(n=pg + 1)})
+        page_ti3s: list[Path] = []
+        for pg in pages:
+            cht, cie = self._files_for_page(pg, base)
+            shots = [s for s in self._page_shots(pg) if s["path"]]
+            shot_ti3s: list[Path] = []
+            for k, s in enumerate(shots):
+                scan = s["path"]
+                diag = (scan.with_name(scan.stem + "-diag.tif")
+                        if self._diag.isChecked() and k == 0 else None)
+                params = ScaninParams(
+                    scan, cht, cie, corners=s["corners"],
+                    perspective=self._perspective.isChecked(), diag=diag,
+                    out_name=f"{base.name}-p{pg + 1}s{k + 1}-scanner.ti3")
+                shot_ti3s.append(params.out_ti3)
+                self._jobs.append({"kind": "scanin", "params": params,
+                                   "label": (tr("Reading scan {k} of page {n}…")
+                                             if len(shots) > 1 else
+                                             tr("Reading page {n} from the scan…"))
+                                   .format(k=k + 1, n=pg + 1)})
+            if len(shot_ti3s) > 1:
+                avg = base.parent / f"{base.name}-p{pg + 1}-avg.ti3"
+                self._jobs.append({"kind": "average", "ti3s": shot_ti3s,
+                                   "out": avg, "method": method})
+                page_ti3s.append(avg)
+            else:
+                page_ti3s.append(shot_ti3s[0])
         self._jobs.append({"kind": "colprof", "ti3s": page_ti3s, "base": base})
         self._run_job(0)
 
@@ -366,6 +796,16 @@ class ScannerProfileDialog(_ToolDialogBase):
                 self._run_job(i + 1)
 
             self._scanin.run(job["params"], on_line=self._log_line, on_finish=_done)
+        elif job["kind"] == "average":
+            self._log.appendPlainText(
+                tr("Averaging {n} scans of this page…").format(n=len(job["ti3s"])))
+            try:
+                average_scanner_ti3(job["ti3s"], job["out"], method=job["method"])
+            except (Ti3AverageError, OSError) as exc:
+                self._log.appendPlainText(f"[ERROR] {exc}")
+                self._finish(False)
+                return
+            self._run_job(i + 1)
         else:
             self._build_profile(job["ti3s"], job["base"])
 
@@ -378,8 +818,9 @@ class ScannerProfileDialog(_ToolDialogBase):
             self._finish(False)
             return
         self._log.appendPlainText(tr("Building the scanner profile…"))
+        alg, quality = self._ptype.currentData() or ("s", "m")
         params = ProfileParams(
-            ti3_path=combined, algorithm="s", quality="m",
+            ti3_path=combined, algorithm=alg, quality=quality,
             description=f"{base.name} scanner", manufacturer="ChromIQ",
             model=f"{base.name} scanner")
 

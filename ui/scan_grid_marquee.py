@@ -68,6 +68,32 @@ class GridSpec:
                  for p in patches]
         return cls(rects)
 
+    @classmethod
+    def from_cht(cls, text: str) -> "GridSpec":
+        """Build from *any* Argyll ``.cht`` (standard IT8 targets, ColorChecker,
+        …). Patch boxes are normalised into the chart's **fiducial** frame — the
+        same four points the user places the quad on and that ``scanin -F``
+        registers against — so the overlay lands where ``scanin`` will read.
+        The chart's ``BOX_SHRINK`` is applied, so the grid shows the actual read
+        zone. Returns an empty spec if the file lacks the four fiducials."""
+        from workflow.cht_parser import ChtParseError, parse_cht
+        try:
+            geom = parse_cht(text)
+        except ChtParseError:
+            return cls([])
+        if len(geom.fiducials) != 4:
+            return cls([])
+        # fiducials are (TL, TR, BR, BL) in cht units → invert unit→fiducial to
+        # get fiducial→unit-square, then map every box corner into [0,1].
+        h_inv = np.linalg.inv(unit_quad_homography(geom.fiducials))
+        s = geom.box_shrink
+        rects: list[tuple[float, float, float, float]] = []
+        for b in geom.patches:
+            u1, v1 = apply_h(h_inv, b.x1 + s, b.y1 + s)
+            u2, v2 = apply_h(h_inv, b.x2 - s, b.y2 - s)
+            rects.append((min(u1, u2), min(v1, v2), abs(u2 - u1), abs(v2 - v1)))
+        return cls(rects)
+
 
 _HANDLE_R = 8         # corner handle radius (screen px)
 _ACCENT = QColor("#56d6a5")

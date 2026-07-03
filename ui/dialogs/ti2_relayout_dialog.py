@@ -3420,12 +3420,21 @@ class Ti2RelayoutDialog(QDialog):
         # so the set can be viewed as a whole like in i1Profiler (Knut #93).
         _crow2 = QHBoxLayout()
         _crow2.setSpacing(12)
+        # These two live in the swatch-grid chrome, outside the magenta-scoped
+        # controls panel, so they'd fall back to the app-wide cyan indicator —
+        # give them the editor's magenta accent to match the rest of the dialog.
+        _cb_magenta = (
+            f"QCheckBox::indicator:checked {{ background: {SPEC_MAGENTA};"
+            f" border-color: {SPEC_MAGENTA}; }}"
+            f"QCheckBox::indicator:hover {{ border-color: {SPEC_MAGENTA}; }}")
         self._show_numbers_check = QCheckBox(tr("Show patch number"), self)
         self._show_numbers_check.setChecked(True)
+        self._show_numbers_check.setStyleSheet(_cb_magenta)
         self._show_numbers_check.toggled.connect(self._set_show_numbers)
         _crow2.addWidget(self._show_numbers_check)
         self._show_gap_check = QCheckBox(tr("Show gap between patches"), self)
         self._show_gap_check.setChecked(True)
+        self._show_gap_check.setStyleSheet(_cb_magenta)
         self._show_gap_check.toggled.connect(self._set_show_gap)
         _crow2.addWidget(self._show_gap_check)
         _crow2.addStretch(1)

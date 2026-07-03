@@ -1,5 +1,42 @@
 # Changelog
 
+## v3.13.0-beta.67
+
+### ✨ Added
+- **Profile your scanner from a standard target you own.** Build scanner profile
+  now has a second mode: choose a bought reflective target (Wolf Faust and other
+  IT8 charts, LaserSoft, the X-Rite ColorCheckers, and every other target
+  ArgyllCMS ships), point ChromIQ at the reference data file that came with it
+  (.cie / .txt), scan it, and build — no ChromIQ chart, printing or measuring
+  needed. ChromIQ reads the target's layout straight from its Argyll `.cht`.
+- **Average several scans for a cleaner profile.** Scan the same sheet a few
+  times and ChromIQ averages the reads to cancel out scanner noise. Add scans
+  with "Add another scan to average" — each keeps its own corner placement —
+  and pick how they combine: **Mean**, **Geometric mean** (robust to an odd
+  scan) or **Trimmed mean**. Multi-page charts average within each page, then
+  build one profile from all pages.
+- **Choose the scanner profile type** — **Matrix** (recommended), **LUT medium**
+  or **LUT high** — instead of a fixed setting.
+- **A live grid for every target.** The alignment grid is now rebuilt from the
+  chart's `.cht` (verified against all of Argyll's standard targets, including
+  two-area targets like the Wolf Faust IT8), so it lines up on standard targets
+  and older printtarg charts too.
+- **More scanner help.** Scan-setup guidance (flat, colour-managed-off capture)
+  and a "Getting the best result" walkthrough covering averaging, multi-page
+  charts and standard targets.
+
+### ✨ Changed
+- **The Build scanner profile window scrolls** with a soft edge fade so it fits
+  smaller screens — Build and Close stay pinned in view.
+
+### 🐛 Fixed
+- **Patch-set editor accent.** The "Show patch number" and "Show gap between
+  patches" checkboxes now use the editor's magenta accent instead of the
+  app-wide cyan, in both light and dark mode.
+
+### 🌍 Translated
+- All new scanner-profiling strings translated across the twelve languages.
+
 ## v3.13.0-beta.66
 
 ### ✨ Changed

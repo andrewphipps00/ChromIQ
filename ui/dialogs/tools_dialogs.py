@@ -44,6 +44,7 @@ from PyQt6.QtWidgets import (
 
 from core.i18n import tr
 from core.logger import get_logger
+from ui.fade_scroll import FadeScrollArea
 from ui.styles import BG_INPUT, BORDER, SPEC_GREEN, SPEC_MAGENTA, SPEC_VIOLET, TEXT_MAIN
 from ui.theme import resolve_mode
 from ui.tab_header import dialog_masthead
@@ -222,6 +223,7 @@ class _ToolDialogBase(QDialog):
     HELP: str       = ""    # extended ⓘ popup text; falls back to DESCRIPTION
     RUN_LABEL: str  = tr("Run")
     MIN_WIDTH: int  = 620
+    SCROLLABLE_CONTENT: bool = False   # tall dialogs opt in (scroll + edge fade)
 
     def __init__(self, settings: "AppSettings", parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -265,10 +267,27 @@ class _ToolDialogBase(QDialog):
         sep.setFrameShadow(QFrame.Shadow.Sunken)
         inner.addWidget(sep)
 
-        # Subclasses populate this area with their input rows.
+        # Subclasses populate this area with their input rows. Tall dialogs opt
+        # into SCROLLABLE_CONTENT: the input rows go inside a fade-edged scroll
+        # area (log + buttons stay pinned below), so the window fits small
+        # screens without hiding Run/Close.
         self._content = QVBoxLayout()
         self._content.setSpacing(10)
-        inner.addLayout(self._content)
+        if self.SCROLLABLE_CONTENT:
+            cw = QWidget()
+            cw.setLayout(self._content)
+            self._scroll = FadeScrollArea(self, surface="dialog")
+            self._scroll.set_appearance(resolve_mode(settings.get("appearance", "auto")))
+            self._scroll.setWidgetResizable(True)
+            self._scroll.setWidget(cw)
+            self._scroll.setFrameShape(QFrame.Shape.NoFrame)
+            self._scroll.setHorizontalScrollBarPolicy(
+                Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+            self._scroll.setMinimumHeight(200)
+            inner.addWidget(self._scroll, 1)
+        else:
+            self._scroll = None
+            inner.addLayout(self._content)
 
         # Log / status area
         self._log = QPlainTextEdit(self)
