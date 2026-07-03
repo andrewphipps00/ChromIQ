@@ -1,5 +1,30 @@
 # Changelog
 
+## v3.13.0-beta.70
+
+### ✨ Added
+- **Standard-target reference files convert themselves.** When you load a bought
+  target's reference data in Build scanner or camera profile, ChromIQ now takes
+  whatever format it came in and prepares it for you — no command line:
+  - Ready-to-use **.cie / .txt / .ti3** (Wolf Faust, HutchColor, LaserSoft
+    DCPro…) are used as-is.
+  - An **X-Rite .cxf** (LaserSoft ISO 12641-2 targets) is converted with Argyll's
+    `cxf2ti3`.
+  - A **raw or spectral .txt** (CMP Digital Target measurements) is converted with
+    `txt2ti3` + `spec2cie`.
+  The converted copy goes to a temporary folder, so your download is untouched.
+
+### 🧪 Internal
+- **Hardware-free end-to-end test of the scanner/camera pipeline.** A new guarded
+  test drives the real `scanin -F` → `colprof` chain against standard target
+  reference images (using ChromIQ's own `.cht` parser to place the marquee
+  corners) and asserts a healthy profile ΔE across the Wolf Faust, HutchColor and
+  LaserSoft (ISO 12641-2 + DCPro) targets — validating registration with no
+  printer or scanner.
+
+### 🌍 Translated
+- The new reference-format strings translated across the twelve languages.
+
 ## v3.13.0-beta.69
 
 ### 🐛 Fixed

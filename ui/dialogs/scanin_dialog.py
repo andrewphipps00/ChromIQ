@@ -21,8 +21,8 @@ from pathlib import Path
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QImage
 from PyQt6.QtWidgets import (
-    QButtonGroup, QCheckBox, QHBoxLayout, QLabel, QLineEdit, QPushButton,
-    QRadioButton, QVBoxLayout, QWidget)
+    QApplication, QButtonGroup, QCheckBox, QHBoxLayout, QLabel, QLineEdit,
+    QPushButton, QRadioButton, QVBoxLayout, QWidget)
 
 from core.i18n import tr
 from core.logger import get_logger
@@ -46,7 +46,7 @@ log = get_logger(__name__)
 _TI3_FILTER = "Measured chart (*.ti3);;All files (*)"
 _SCAN_FILTER = "Scans (*.tif *.tiff);;All files (*)"
 _CHT_FILTER = "Chart recognition (*.cht);;All files (*)"
-_REF_FILTER = "Target reference (*.cie *.txt *.ti3);;All files (*)"
+_REF_FILTER = "Target reference (*.cie *.txt *.ti3 *.cxf);;All files (*)"
 
 # Scanner-side capture settings (folded from Knut's VueScan/ArgyllCMS guide).
 # Kept as its own key so the large HELP block above stays stable — only this
@@ -205,6 +205,8 @@ class ScannerProfileDialog(_ToolDialogBase):
         self._std_cht: Path | None = None
         self._std_ref: Path | None = None
         self._std_grid = None
+        self._convert_tmp: Path | None = None   # scratch for converted references
+        self._ref_converted_note = ""           # set when a .cxf/.txt was converted
         light = resolve_mode(settings.get("appearance", "auto")) == "light"
         self._hint = "#4a4a4a" if light else "#b8b8b8"
         self._build_inputs()
@@ -343,11 +345,23 @@ class ScannerProfileDialog(_ToolDialogBase):
         v.addWidget(self._cht_row_w)
 
         v.addLayout(self._labelled(
-            tr("Target reference data (.cie / .txt):"), tr("Reference data"),
+            tr("Target reference data (.cie / .txt / .cxf):"), tr("Reference data"),
             tr("The colour data file that came with your physical target — it "
-            "lists the true colour of every patch (Wolf Faust ships a .txt, "
-            "LaserSoft a converted .cie). This is specific to your target's "
-            "batch and can't be bundled, so point ChromIQ at your copy.")))
+            "lists the true colour of every patch. It's specific to your "
+            "target's exact batch, so it can't be bundled; point ChromIQ at your "
+            "own copy (the file you downloaded from the maker, or that came on "
+            "the disc with the target).\n\n"
+            "You don't need to prepare it — ChromIQ takes whatever format your "
+            "target came in and converts it for you if needed:\n\n"
+            "• Ready to use (used as-is): a .cie, .txt or .ti3 that already lists "
+            "XYZ or Lab colour — for example Wolf Faust IT8, HutchColor HCT or "
+            "LaserSoft DCPro.\n"
+            "• An X-Rite .cxf (for example LaserSoft's ISO 12641-2 targets): "
+            "ChromIQ converts it automatically.\n"
+            "• A raw or spectral .txt (for example the Christophe Métairie CMP "
+            "Digital Target measurements): ChromIQ converts it automatically too.\n\n"
+            "Any conversion is written to a temporary folder, so your original "
+            "download is never changed.")))
         rrow = QHBoxLayout()
         self._ref_field = QLineEdit(self)
         self._ref_field.setReadOnly(True)
@@ -692,15 +706,43 @@ class ScannerProfileDialog(_ToolDialogBase):
         _remember_dir(self._settings, self.TOOL_KEY, Path(path).parent)
         self._set_std_target(Path(path))
 
+    def _convert_dir(self) -> Path:
+        if self._convert_tmp is None:
+            import tempfile
+            self._convert_tmp = Path(tempfile.mkdtemp(prefix="chromiq-ref-"))
+        return self._convert_tmp
+
     def _pick_ref(self) -> None:
         path = open_file_dialog(self, tr("Choose the target reference data"),
                                 _REF_FILTER,
                                 start_dir=str(_initial_dir(self._settings, self.TOOL_KEY)))
         if not path:
             return
-        self._std_ref = Path(path)
-        self._ref_field.setText(path)
-        _remember_dir(self._settings, self.TOOL_KEY, Path(path).parent)
+        p = Path(path)
+        _remember_dir(self._settings, self.TOOL_KEY, p.parent)
+        from workflow.reference_convert import (
+            ReferenceConvertError, ReferenceKind, classify_reference,
+            convert_reference)
+        self._ref_converted_note = ""
+        if classify_reference(p) is ReferenceKind.DIRECT:
+            self._std_ref = p
+        else:
+            # A .cxf or raw/spectral .txt — convert it with Argyll for the user.
+            self._std_note.setText(tr("Converting {name} to a reference file…")
+                                   .format(name=p.name))
+            QApplication.processEvents()
+            try:
+                self._std_ref = convert_reference(
+                    p, self._settings.get("argyll_bin_path", ""), self._convert_dir())
+            except ReferenceConvertError as exc:
+                self._std_ref = None
+                self._ref_field.setText("")
+                self._std_note.setText(f"⚠ {exc}")
+                self._refresh()
+                return
+            self._ref_converted_note = tr(
+                "Converted “{name}” to a reference ChromIQ can read.").format(name=p.name)
+        self._ref_field.setText(str(p))
         self._update_std_note()
         self._refresh()
 
@@ -733,9 +775,11 @@ class ScannerProfileDialog(_ToolDialogBase):
                 "✓ {n} patches. Now choose the reference data file that came "
                 "with your target.").format(n=n))
         else:
-            self._std_note.setText(tr(
-                "✓ Ready — {n} patches, reference loaded. Scan the target and "
-                "place the corners on its registration marks.").format(n=n))
+            msg = tr("✓ Ready — {n} patches, reference loaded. Scan the target "
+                     "and place the corners on its registration marks.").format(n=n)
+            if self._ref_converted_note:
+                msg += "  " + self._ref_converted_note
+            self._std_note.setText(msg)
 
     # ------------------------------------------------------------------ scan
     def _pick_scan(self) -> None:
