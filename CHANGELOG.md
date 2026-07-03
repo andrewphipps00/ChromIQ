@@ -1,5 +1,26 @@
 # Changelog
 
+## v3.13.0-beta.73
+
+### ✨ Changed
+- **Scanner/camera targets now key off the patch-area corners, not fiducial
+  marks.** The real printed targets have no fiducial marks — just the patch grid —
+  so every bundled recognition file now sets its reference (`F` line) to the
+  patch-area bounding box. You place the reading grid on the **visible corners of
+  the patch block**, and it registers the same at any scan resolution.
+- **Four more targets, corrected and shipped.** QPcard 202, SpyderChecker,
+  SpyderChecker 24 and CMP Digital Target-4 — previously dropped because their
+  supplied files misregistered (box pitch too small, undersized fiducial, or a bad
+  `EXPECTED` list) — are rebuilt onto the patch-area-corner convention with correct
+  box geometry. The bundle is now seven targets (HutchColor, LaserSoft ISO
+  12641-2, LaserSoft DCPro, QPcard 202, SpyderChecker, SpyderChecker 24, CMP
+  Digital Target-4).
+
+### 🧪 Internal
+- New test drives the real `scanin -F` over every bundled target at 100 / 200 /
+  300 dpi using the patch-area corners, and checks each patch reads back from the
+  right place (`tests/test_scanner_multidpi.py`).
+
 ## v3.13.0-beta.72
 
 ### 🐛 Fixed

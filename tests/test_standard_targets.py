@@ -15,7 +15,8 @@ class _S:
 
 
 # Only the .cht that pass real scanin registration are bundled (Knut #2).
-_BUNDLED = {"Hutchcolor", "ISO12641_2_1", "LaserSoftDCPro"}
+_BUNDLED = {"Hutchcolor", "ISO12641_2_1", "LaserSoftDCPro",
+            "QPcard_202", "SpyderChecker", "SpyderChecker24", "CMP_Digital_Target-4"}
 
 
 def test_bundle_present_and_validated_set():
