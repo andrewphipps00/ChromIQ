@@ -1,5 +1,19 @@
 # Changelog
 
+## v3.13.0-beta.71
+
+### ✨ Added
+- **Corrected standard-target recognition files, bundled.** ChromIQ now ships a
+  set of scanner/camera target `.cht` files with **fixed fiducial coordinates**
+  (HutchColor HCT, LaserSoft DCPro, QPcard 202, SpyderChecker, SpyderChecker 24,
+  CMP Digital Target-4). Several of the copies ArgyllCMS ships had wrong fiducial
+  positions that broke registration on those targets; the bundled files —
+  Knut Georg Larsson's corrected versions from the **rectarg** project — fix it.
+  The "standard target" list in Build scanner or camera profile now prefers these
+  over the copies in Argyll's `ref/`. Geometry only (no colours); your target's
+  own reference file still supplies the true patch colours. Bundled under GPLv3
+  with credit — see `data/scanner_targets/README.md`.
+
 ## v3.13.0-beta.70
 
 ### ✨ Added

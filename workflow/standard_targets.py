@@ -12,6 +12,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from core.resource_path import resource_path
+
 # Friendly names for the well-known targets (filename stem → display). Anything
 # not listed falls back to its stem. Ordered-priority list decides the combo
 # order (most common scanner targets first).
@@ -63,18 +65,32 @@ def argyll_ref_dir(settings) -> Path | None:
     return ref if ref.is_dir() else None
 
 
+def bundled_targets_dir() -> Path | None:
+    """ChromIQ's bundled ``data/scanner_targets`` — Knut Larsson's corrected
+    ``.cht`` files (see that folder's README). Preferred over Argyll's ``ref/``
+    because several of Argyll's shipped files had wrong fiducial coordinates."""
+    d = resource_path("data/scanner_targets")
+    return d if d.is_dir() else None
+
+
 def display_name(cht: Path) -> str:
     return _FRIENDLY.get(cht.stem, cht.stem)
 
 
 def list_standard_targets(settings) -> list[tuple[str, Path]]:
-    """``(display_name, cht_path)`` for every standard target ``.cht`` Argyll
-    ships, common flatbed targets first, then the rest alphabetically. Empty if
-    Argyll's ``ref/`` can't be found."""
+    """``(display_name, cht_path)`` for every standard target ``.cht`` available,
+    common flatbed targets first, then the rest alphabetically. Sources are
+    ChromIQ's bundled corrected ``.cht`` (preferred) merged with the user's
+    Argyll ``ref/`` (fallback), deduplicated by filename stem."""
+    by_stem: dict[str, Path] = {}
     ref = argyll_ref_dir(settings)
-    if ref is None:
+    if ref is not None:
+        by_stem.update({p.stem: p for p in ref.glob("*.cht")})
+    bundled = bundled_targets_dir()
+    if bundled is not None:                       # bundled corrected files win
+        by_stem.update({p.stem: p for p in bundled.glob("*.cht")})
+    if not by_stem:
         return []
-    by_stem = {p.stem: p for p in ref.glob("*.cht")}
     ordered: list[tuple[str, Path]] = []
     seen: set[str] = set()
     for stem in _ORDER:
