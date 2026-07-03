@@ -50,6 +50,39 @@ A = A_DIR / "Canon-Pro300-CanonSG-i1Pro"
 
 A_TIF = sorted(A_DIR.glob("*.tif"))
 A_TI2 = A.with_suffix(".ti2")
+
+_ENGINE: dict = {}
+
+
+def engine_preview() -> dict:
+    """A NEW layout-engine i1Pro chart WITH the clip-border notes band, for the
+    Create / Print previews — the seeded project's own chart is an old-engine
+    printtarg sheet. Cached; falls back to the project chart on any error."""
+    if _ENGINE:
+        return _ENGINE
+    try:
+        import shutil
+        import subprocess
+        from workflow.layout_engine import chart as le_chart
+        stem = A_DIR / "runs" / "run1" / "engine-preview"
+        ti1 = stem.with_suffix(".ti1")
+        # The project's own .ti1 is only 210 patches — too few to fill an i1Pro A4.
+        # Make a fresh ~500-patch set so the strips fill the whole page.
+        if not ti1.exists():
+            targen = shutil.which("targen") or "/opt/homebrew/bin/targen"
+            subprocess.run([targen, "-d2", "-e4", "-f500", str(stem)],
+                           check=True, capture_output=True)
+        res = le_chart.build_chart(
+            str(ti1), stem, instrument="i1", paper="A4", dpi=200,
+            randomize=True, clip_content_mode="notes",
+            clip_text="Canon PRO-300  ·  Canon SG  ·  i1Pro")
+        _ENGINE["tif"] = res.tiff_paths
+        _ENGINE["ti2"] = res.ti2_path
+    except Exception as e:  # noqa: BLE001
+        log(f"engine preview build failed, using project chart: {e}")
+        _ENGINE["tif"] = A_TIF
+        _ENGINE["ti2"] = A_TI2
+    return _ENGINE
 A_TI3 = A.with_suffix(".ti3")
 A_ICC = A.with_suffix(".icc")
 # Compare profile for the gamut-compare shot: ArgyllCMS's ClayRGB1998 (AdobeRGB)
@@ -136,16 +169,16 @@ def seed(win) -> None:
     try:
         t["chart"]._target_name_edit.setText(A_NAME)
         t["chart"]._manual_target_name_edit.setText(A_NAME)
-        t["chart"]._preview.load_tiff(A_TIF)
+        t["chart"]._preview.load_tiff(engine_preview()["tif"])
     except Exception as e:
         log(f"chart seed: {e}")
     try:
-        t["print"].load_tiffs(list(A_TIF))
-        t["print"].set_ti2_path(A_TI2)
+        t["print"].load_tiffs(list(engine_preview()["tif"]))
+        t["print"].set_ti2_path(engine_preview()["ti2"])
     except Exception as e:
         log(f"print seed: {e}")
     try:
-        t["measure"].set_ti1_path(A_TI2)
+        t["measure"].set_ti1_path(engine_preview()["ti2"])
     except Exception as e:
         log(f"measure seed: {e}")
     try:
@@ -255,7 +288,7 @@ def scene_list():
     def create_guided(app, win):
         win._tab_chart._switch_mode("guided")
         win._tab_chart._target_name_edit.setText(A_NAME)
-        win._tab_chart._preview.load_tiff(A_TIF)
+        win._tab_chart._preview.load_tiff(engine_preview()["tif"])
         show_tab(win, "chart")
 
     def create_manual(app, win):
@@ -268,15 +301,26 @@ def scene_list():
             win._tab_chart._manual_paper_pw.set_value("A4")
         except Exception as e:
             log(f"manual instr/paper: {e}")
-        win._tab_chart._preview.load_tiff(A_TIF)
+        win._tab_chart._preview.load_tiff(engine_preview()["tif"])
         show_tab(win, "chart")
+
+    def _pick_printer(win):
+        # Prefer a native-driver printer matching the project over a driverless
+        # one (the shot shouldn't show the Canon G6000 AirPrint queue).
+        cb = win._tab_print._printer_combo
+        for want in ("Canon_PRO_300_series", "EPSON_ET_8550"):
+            idx = cb.findData(want)
+            if idx >= 0:
+                cb.setCurrentIndex(idx)
+                return
 
     def print_native_dialog(app, win):
         # macOS default: print through the native OS dialog (with the driver's
         # colour controls locked off). This is the path most users see.
         win._settings.set("use_native_print_dialog", True)
         win._tab_print.apply_native_dialog_mode()
-        win._tab_print.load_tiffs(list(A_TIF))
+        win._tab_print.load_tiffs(list(engine_preview()["tif"]))
+        _pick_printer(win)
         show_tab(win, "print")
 
     def print_postscript(app, win):
@@ -284,17 +328,18 @@ def scene_list():
         # automatically, no OS dialog).
         win._settings.set("use_native_print_dialog", False)
         win._tab_print.apply_native_dialog_mode()
-        win._tab_print.load_tiffs(list(A_TIF))
+        win._tab_print.load_tiffs(list(engine_preview()["tif"]))
+        _pick_printer(win)
         show_tab(win, "print")
 
     def measure_guided(app, win):
         win._tab_measure._switch_mode("guided")
-        win._tab_measure.set_ti1_path(A_TI2)
+        win._tab_measure.set_ti1_path(engine_preview()["ti2"])
         show_tab(win, "measure")
 
     def measure_manual(app, win):
         win._tab_measure._switch_mode("manual")
-        win._tab_measure.set_ti1_path(A_TI2)
+        win._tab_measure.set_ti1_path(engine_preview()["ti2"])
         show_tab(win, "measure")
 
     def profile_guided(app, win):
