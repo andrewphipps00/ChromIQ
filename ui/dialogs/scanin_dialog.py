@@ -628,6 +628,29 @@ class ScannerProfileDialog(_ToolDialogBase):
             "if the profile looks off.")), 0, Qt.AlignmentFlag.AlignVCenter)
         form.addLayout(opts)
 
+        grid_opts = QHBoxLayout()
+        self._match_rectarg = QCheckBox(
+            tr("Match rectarg preview (patches touching)"), self)
+        self._match_rectarg.setToolTip(tr(
+            "Off (default): the grid uses each patch's true spacing — correct for a "
+            "real scan of a gapped target (SpyderChecker, QPcard, CMP …). Turn it on "
+            "only to line the grid up with a gapless rectarg-rendered test image, "
+            "where the patches are drawn touching."))
+        self._match_rectarg.toggled.connect(self._rebuild_std_grid)
+        self._use_fiducials_cb = QCheckBox(
+            tr("Use fiducial marks in the .cht as reference"), self)
+        self._use_fiducials_cb.setToolTip(tr(
+            "When the .cht defines registration marks distinct from the patch block, "
+            "frame the grid by those marks — you then place the four corners on the "
+            "fiducials instead of the patch area. Not available when the chosen "
+            "target has no separate fiducials."))
+        self._use_fiducials_cb.toggled.connect(self._on_fiducial_toggled)
+        grid_opts.addWidget(self._match_rectarg)
+        grid_opts.addSpacing(24)
+        grid_opts.addWidget(self._use_fiducials_cb)
+        grid_opts.addStretch(1)
+        form.addLayout(grid_opts)
+
         form.addLayout(self._labelled(
             tr("Profile type:"), tr("Profile type"),
             tr("How the scanner profile models colour.\n\n"
@@ -735,6 +758,40 @@ class ScannerProfileDialog(_ToolDialogBase):
     def _capture_current_corners(self) -> None:
         if self._marquee.has_placement():
             self._cur_shot()["corners"] = self._marquee.corners_image_px()
+
+    # -------------------------------------------------- remembered placement
+    def _target_key(self) -> str | None:
+        """A stable key for the current target, so its last grid placement can be
+        restored next session. Standard targets key on the .cht stem; ChromIQ
+        charts key on the chart stem."""
+        if self._standard_mode():
+            return f"std:{self._std_cht.stem}" if self._std_cht else None
+        return f"chart:{self._ti3.stem}" if self._ti3 else None
+
+    def _save_placement(self) -> None:
+        """Store the current grid as fractions of the image size, keyed by target,
+        so it can be reused on a future scan of the same target at any resolution."""
+        key = self._target_key()
+        w, h = self._marquee.image_size()
+        if not key or not w or not h or not self._marquee.has_placement():
+            return
+        norm = [[x / w, y / h] for x, y in self._marquee.corners_image_px()]
+        places = dict(self._settings.get("scanin_grid_placements", {}) or {})
+        places[key] = norm
+        self._settings.set("scanin_grid_placements", places)
+
+    def _restore_placement(self) -> bool:
+        """Apply the remembered placement for this target to the loaded image
+        (scaled to its size). Returns True if one was applied."""
+        key = self._target_key()
+        w, h = self._marquee.image_size()
+        if not key or not w or not h:
+            return False
+        norm = (self._settings.get("scanin_grid_placements", {}) or {}).get(key)
+        if not norm or len(norm) != 4:
+            return False
+        self._marquee.set_corners([(fx * w, fy * h) for fx, fy in norm])
+        return True
 
     # ------------------------------------------------------------- mode/standard
     def _on_mode_changed(self, _checked: bool = False) -> None:
@@ -845,19 +902,63 @@ class ScannerProfileDialog(_ToolDialogBase):
 
     def _set_std_target(self, cht: Path | None) -> None:
         self._std_cht = cht
+        if not self._fiducials_available() and self._use_fiducials_cb.isChecked():
+            self._use_fiducials_cb.setChecked(False)   # new target has no fiducials
         if cht is None or not cht.is_file():
             self._std_grid = None
             self._marquee.set_grid(GridSpec([]))
         else:
-            try:
-                self._std_grid = GridSpec.from_cht(cht.read_text(errors="ignore"))
-            except OSError:
-                self._std_grid = GridSpec([])
-            self._marquee.set_grid(self._std_grid)
+            self._rebuild_std_grid()
             # Changing the target only swaps the grid; the loaded scan and its
             # placement stay, so nothing to re-apply here.
         self._update_std_note()
         self._refresh()
+
+    def _rebuild_std_grid(self) -> None:
+        """(Re)build the standard-target grid from the current .cht with the two
+        framing options applied, keeping the current scan's placement."""
+        if not self._standard_mode() or self._std_cht is None:
+            return
+        self._capture_current_corners()
+        try:
+            self._std_grid = GridSpec.from_cht(
+                self._std_cht.read_text(errors="ignore"),
+                contiguous=self._match_rectarg.isChecked(),
+                use_fiducials=self._use_fiducials_cb.isChecked())
+        except OSError:
+            self._std_grid = GridSpec([])
+        self._marquee.set_grid(self._std_grid)
+        if self._cur_shot()["corners"]:               # set_grid re-seeds — restore
+            self._marquee.set_corners(self._cur_shot()["corners"])
+
+    def _fiducials_available(self) -> bool:
+        if not self._standard_mode() or self._std_cht is None:
+            return False
+        from ui.scan_grid_marquee import cht_has_fiducials
+        try:
+            return cht_has_fiducials(self._std_cht.read_text(errors="ignore"))
+        except OSError:
+            return False
+
+    def _on_fiducial_toggled(self, checked: bool) -> None:
+        if checked and not self._fiducials_available():
+            self._blink_widget(self._use_fiducials_cb)   # "not available" feedback
+            self._use_fiducials_cb.blockSignals(True)
+            self._use_fiducials_cb.setChecked(False)
+            self._use_fiducials_cb.blockSignals(False)
+            return
+        self._rebuild_std_grid()
+
+    def _blink_widget(self, w) -> None:
+        """Flash a widget red twice to say "can't enable that" (Knut)."""
+        from PyQt6.QtCore import QTimer
+        orig = w.styleSheet()
+        seq = ["QCheckBox{color:#d9534f;}", orig] * 2
+        def step(i: int = 0) -> None:
+            if i < len(seq):
+                w.setStyleSheet(seq[i])
+                QTimer.singleShot(200, lambda: step(i + 1))
+        step()
 
     def _update_std_note(self) -> None:
         if self._std_cht is None:
@@ -967,6 +1068,8 @@ class ScannerProfileDialog(_ToolDialogBase):
         self._marquee.set_image(QImage(path))
         if self._cur_shot()["corners"]:
             self._marquee.set_corners(self._cur_shot()["corners"])
+        elif self._restore_placement():          # reuse last session's placement
+            self._cur_shot()["corners"] = self._marquee.corners_image_px()
         self._refresh_shot_bar()
         self._refresh()
 
@@ -989,6 +1092,21 @@ class ScannerProfileDialog(_ToolDialogBase):
                else base.parent / f"{base.name}_{pg + 1:02d}.cht")
         return cht, base.with_suffix(".cie")
 
+    def _apply_contiguous(self, cht: Path, base: Path) -> Path:
+        """When "Match rectarg preview" is on, hand scanin a .cht whose patches use
+        rectarg's contiguous positions — so the read (and the diagnostic image)
+        line up with a gapless rectarg-rendered image. Bundled file untouched."""
+        if not (self._standard_mode() and self._match_rectarg.isChecked()):
+            return cht
+        from workflow.cht_parser import cht_contiguous
+        try:
+            new_text = cht_contiguous(cht.read_text(errors="ignore"))
+        except OSError:
+            return cht
+        dst = base.parent / f"{cht.stem}-contig.cht"
+        dst.write_text(new_text)
+        return dst
+
     def _apply_sample_area(self, cht: Path, frac: float, base: Path) -> Path:
         """Write a sibling ``.cht`` whose ``BOX_SHRINK`` samples *frac* of each
         patch (Knut's patch-sample-area control), and hand scanin that copy. The
@@ -1006,12 +1124,25 @@ class ScannerProfileDialog(_ToolDialogBase):
 
     def _execute(self) -> None:
         self._capture_current_corners()
+        self._save_placement()                   # remember this target's grid
         self._log.clear()
         method = self._avg_method.currentData() or "mean"
         if self._standard_mode():
             pages = [0]
             first = next(s["path"] for s in self._page_shots(0) if s["path"])
             base = first.parent / first.stem
+            # Keep the result folder self-contained: drop the reference .cie (a
+            # converted one otherwise lives in a temp dir) next to the scan +
+            # outputs, so everything for this profile sits together (Knut).
+            if self._std_ref is not None:
+                dest = base.parent / self._std_ref.name
+                try:
+                    if self._std_ref.resolve() != dest.resolve():
+                        import shutil
+                        shutil.copy2(self._std_ref, dest)
+                        self._std_ref = dest
+                except OSError:
+                    pass
         else:
             pages = self._pages
             base = _chart_base(self._ti3)
@@ -1021,6 +1152,7 @@ class ScannerProfileDialog(_ToolDialogBase):
         page_ti3s: list[Path] = []
         for pg in pages:
             cht, cie = self._files_for_page(pg, base)
+            cht = self._apply_contiguous(cht, base)
             cht = self._apply_sample_area(cht, frac, base)
             shots = [s for s in self._page_shots(pg) if s["path"]]
             shot_ti3s: list[Path] = []

@@ -45,6 +45,38 @@ def apply_h(h: np.ndarray, u: float, v: float) -> tuple[float, float]:
     return float(p[0] / p[2]), float(p[1] / p[2])
 
 
+def _fiducial_bbox(geom) -> tuple[float, float, float, float] | None:
+    """Bounding box (x0, x1, y0, y1) of the ``.cht`` fiducial corners, or None if
+    the file defines none."""
+    f = getattr(geom, "fiducials", None)
+    if not f or len(f) < 4:
+        return None
+    xs = [p[0] for p in f]
+    ys = [p[1] for p in f]
+    return min(xs), max(xs), min(ys), max(ys)
+
+
+def cht_has_fiducials(text: str) -> bool:
+    """True if the ``.cht`` defines fiducial marks that sit meaningfully off the
+    patch block, so framing by fiducials differs from framing by the patches.
+    ChromIQ's bundled files set ``F`` to the patch bbox (no difference → False);
+    Argyll's originals with real registration marks return True."""
+    from workflow.cht_parser import ChtParseError, parse_cht
+    try:
+        geom = parse_cht(text)
+    except ChtParseError:
+        return False
+    fb = _fiducial_bbox(geom)
+    if fb is None or not geom.patches:
+        return False
+    xs = [b.x1 for b in geom.patches] + [b.x2 for b in geom.patches]
+    ys = [b.y1 for b in geom.patches] + [b.y2 for b in geom.patches]
+    px0, px1, py0, py1 = min(xs), max(xs), min(ys), max(ys)
+    span = max(px1 - px0, py1 - py0) or 1.0
+    diff = abs(fb[0] - px0) + abs(fb[1] - px1) + abs(fb[2] - py0) + abs(fb[3] - py1)
+    return diff > 0.03 * span
+
+
 @dataclass
 class GridSpec:
     """Normalised patch rectangles for the overlay, derived from the chart's
@@ -92,32 +124,45 @@ class GridSpec:
         return cls(rects, aspect=sw / sh, ncols=nc, nrows=nr)
 
     @classmethod
-    def from_cht(cls, text: str) -> "GridSpec":
+    def from_cht(cls, text: str, *, contiguous: bool = False,
+                 use_fiducials: bool = False) -> "GridSpec":
         """Build from *any* Argyll ``.cht`` (standard IT8 targets, ColorChecker,
         …). Boxes are normalised into the **total patch-area bounding box** — the
         union of *every* patch box across *all* areas — so the grid always covers
         the whole patch block, including multiple sub-areas (e.g. an IT8's GS
         greyscale strip). This matches how rectarg computes a target's extent
         (from the patch-area lines, not the fiducials); the ``.cht`` ``D`` line is
-        "overall chart dimensions, not used", and the ``F`` fiducials can sit
-        off the patch block. The user places the four corners on that same patch
-        block. The rects are the **full** patch boxes; the sampled sub-area is
-        drawn from the marquee's sample fraction (the "patch sample area"
-        control), not baked in here."""
-        from workflow.cht_parser import ChtParseError, parse_cht
+        "overall chart dimensions, not used". The user places the four corners on
+        that same patch block.
+
+        *contiguous* re-places patches with rectarg's touching model (pitch =
+        tile) so a gapped target lines up with a rectarg-rendered image.
+        *use_fiducials* frames the grid by the ``.cht`` ``F`` fiducial marks
+        instead of the patch block (so the four corners go on the registration
+        marks), when the file defines fiducials distinct from the patch block."""
+        from workflow.cht_parser import ChtBox, ChtParseError, contiguous_boxes, parse_cht
         try:
             geom = parse_cht(text)
         except ChtParseError:
             return cls([])
         if not geom.patches:
             return cls([])
-        xs = [b.x1 for b in geom.patches] + [b.x2 for b in geom.patches]
-        ys = [b.y1 for b in geom.patches] + [b.y2 for b in geom.patches]
-        x0, x1, y0, y1 = min(xs), max(xs), min(ys), max(ys)
+        if contiguous:
+            boxes = [ChtBox(b.name, *nb) for b, nb
+                     in zip(geom.patches, contiguous_boxes(geom.patches))]
+        else:
+            boxes = geom.patches
+        xs = [b.x1 for b in boxes] + [b.x2 for b in boxes]
+        ys = [b.y1 for b in boxes] + [b.y2 for b in boxes]
+        frame = _fiducial_bbox(geom) if use_fiducials else None
+        if frame is not None:
+            x0, x1, y0, y1 = frame
+        else:
+            x0, x1, y0, y1 = min(xs), max(xs), min(ys), max(ys)
         sw, sh = (x1 - x0) or 1.0, (y1 - y0) or 1.0
-        nc, nr = cls._regular(geom.patches, sw, sh, x0, y0)
+        nc, nr = cls._regular(boxes, sw, sh, x0, y0)
         return cls([((b.x1 - x0) / sw, (b.y1 - y0) / sh,
-                     (b.x2 - b.x1) / sw, (b.y2 - b.y1) / sh) for b in geom.patches],
+                     (b.x2 - b.x1) / sw, (b.y2 - b.y1) / sh) for b in boxes],
                    aspect=sw / sh, ncols=nc, nrows=nr)
 
 
@@ -258,6 +303,12 @@ class ScanGridMarquee(QWidget):
         """The four quad corners in image pixels (TL, TR, BR, BL) — feeds
         ``scanin -F``."""
         return [(c[0], c[1]) for c in self._corners]
+
+    def image_size(self) -> tuple[int, int]:
+        """(width, height) of the loaded (rotated) image, or (0, 0) if none —
+        lets the dialog store a placement as fractions and restore it at any
+        resolution."""
+        return self._img_w, self._img_h
 
     def set_corners(self, corners: list[tuple[float, float]]) -> None:
         """Restore a saved placement (image px, TL/TR/BR/BL) — used to keep each

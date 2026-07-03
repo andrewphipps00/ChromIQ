@@ -168,3 +168,69 @@ def n_expanded(geom: ChtGeometry) -> int:
     """Total boxes expanded (patches + diagnostics) — compares with the declared
     ``BOXES n`` header, the ground-truth self-check."""
     return len(geom.patches) + geom.n_diag
+
+
+def _remap_contiguous(starts_sizes: dict) -> dict:
+    """One axis: map each patch start to a new start so within-area gaps close to
+    touching (pitch = tile). A jump larger than half the median tile marks a new
+    area, which keeps its original start (so the gap *between* areas is preserved,
+    exactly as rectarg draws it)."""
+    import statistics
+    items = sorted(starts_sizes.items())
+    med = statistics.median([s for _, s in items]) or 1.0
+    out: dict = {}
+    prev_new_end = prev_orig_end = None
+    for pos, size in items:
+        if prev_orig_end is None:
+            npos = pos                                   # first patch keeps its start
+        elif pos - prev_orig_end > 0.5 * med:            # gap → new area, keep start
+            npos = pos
+        else:                                            # within area → contiguous
+            npos = prev_new_end
+        out[pos] = npos
+        prev_new_end = npos + size
+        prev_orig_end = pos + size
+    return out
+
+
+def contiguous_boxes(patches: list[ChtBox]) -> list[tuple[float, float, float, float]]:
+    """Re-place patches with rectarg's contiguous model (pitch = tile, gaps closed
+    within each area). Separable per axis; sizes unchanged. Returns new
+    ``(x1, y1, x2, y2)`` per patch in the same order — matches how rectarg renders
+    a *gapped* target (SpyderChecker, QPcard, CMP …)."""
+    xsize: dict = {}
+    ysize: dict = {}
+    for b in patches:
+        xsize.setdefault(round(b.x1, 3), b.x2 - b.x1)
+        ysize.setdefault(round(b.y1, 3), b.y2 - b.y1)
+    xmap, ymap = _remap_contiguous(xsize), _remap_contiguous(ysize)
+    out = []
+    for b in patches:
+        nx, ny = xmap[round(b.x1, 3)], ymap[round(b.y1, 3)]
+        out.append((nx, ny, nx + (b.x2 - b.x1), ny + (b.y2 - b.y1)))
+    return out
+
+
+def cht_contiguous(text: str) -> str:
+    """Rewrite a per-patch ``.cht`` so patch positions use rectarg's contiguous
+    model — hand this to ``scanin`` when the "match rectarg preview" toggle is on,
+    so the diagnostic lines up with a rectarg-rendered image of a gapped target."""
+    geom = parse_cht(text)
+    remap = {(round(b.x1, 3), round(b.y1, 3)): nb
+             for b, nb in zip(geom.patches, contiguous_boxes(geom.patches))}
+    out = []
+    for line in text.splitlines():
+        p = line.split()
+        if len(p) >= 9 and p[0] in ("X", "Y"):
+            try:
+                key = (round(float(p[7]), 3), round(float(p[8]), 3))
+            except ValueError:
+                out.append(line)
+                continue
+            nb = remap.get(key)
+            if nb is not None:
+                p[7], p[8] = f"{nb[0]:.3f}", f"{nb[1]:.3f}"
+                out.append(" ".join(p))
+                continue
+        out.append(line)
+    return "\n".join(out) + "\n"

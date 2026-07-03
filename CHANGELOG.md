@@ -1,5 +1,22 @@
 # Changelog
 
+## v3.13.0-beta.84
+
+### ✨ Scanner reading grid — part 2 (Knut)
+- **Remembers your placement.** When you build a profile, the grid position is
+  stored per target (as fractions of the image), and restored the next time you
+  scan that target — at any resolution. "Reset grid" returns to the computed default.
+- **"Use fiducial marks in the .cht as reference"** — frame the grid by the .cht's
+  registration marks (place the corners on the fiducials) when the target defines
+  them. It flashes and stays off for targets without separate fiducials.
+- **"Match rectarg preview (patches touching)"** — for *gapped* targets
+  (SpyderChecker, QPcard, CMP …), whose real spacing leaves gaps ChromIQ honours
+  by default. Turn it on to line the grid **and** the scanin read up with a gapless
+  rectarg-rendered test image (patches re-placed at pitch = tile, exactly as
+  rectarg draws them). Off by default — the default stays correct for real scans.
+- **Self-contained result folder** — the reference .cie is copied next to the scan
+  and outputs on build, so everything for a profile sits together.
+
 ## v3.13.0-beta.83
 
 ### ✨ Scanner reading grid — placement controls (Knut)

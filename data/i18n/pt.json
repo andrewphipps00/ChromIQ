@@ -2363,5 +2363,9 @@
   "Couldn't prepare test files: {e}": "Não foi possível preparar os ficheiros de teste: {e}",
   "Generate a known-good test scan + reference for this target and reveal them in your file manager, so you can try the reading grid without your own scan (and see where the bundled recognition file lives).": "Gera uma digitalização de teste fiável + referência para este alvo e mostra-as no gestor de ficheiros, para experimentar a grelha sem a tua própria digitalização (e ver onde está o ficheiro de reconhecimento incluído).",
   "Re-centre the reading grid at the size computed from this target — use it if the grid has drifted off-screen (e.g. after loading an image at a different resolution).": "Re-centre the reading grid at the size computed from this target — use it if the grid has drifted off-screen (e.g. after loading an image at a different resolution).",
-  "Reset grid": "Reset grid"
+  "Reset grid": "Reset grid",
+  "When the .cht defines registration marks distinct from the patch block, frame the grid by those marks — you then place the four corners on the fiducials instead of the patch area. Not available when the chosen target has no separate fiducials.": "When the .cht defines registration marks distinct from the patch block, frame the grid by those marks — you then place the four corners on the fiducials instead of the patch area. Not available when the chosen target has no separate fiducials.",
+  "Off (default): the grid uses each patch's true spacing — correct for a real scan of a gapped target (SpyderChecker, QPcard, CMP …). Turn it on only to line the grid up with a gapless rectarg-rendered test image, where the patches are drawn touching.": "Off (default): the grid uses each patch's true spacing — correct for a real scan of a gapped target (SpyderChecker, QPcard, CMP …). Turn it on only to line the grid up with a gapless rectarg-rendered test image, where the patches are drawn touching.",
+  "Match rectarg preview (patches touching)": "Match rectarg preview (patches touching)",
+  "Use fiducial marks in the .cht as reference": "Use fiducial marks in the .cht as reference"
 }
