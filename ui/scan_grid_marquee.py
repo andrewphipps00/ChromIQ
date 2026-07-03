@@ -141,7 +141,7 @@ class ScanGridMarquee(QWidget):
         self._rotation = 0                    # 0/90/180/270, applied to _img
         self._img_w = self._img_h = 0         # dims of the (rotated) image
         self._grid = GridSpec([])
-        self._sample_frac = 0.6      # fraction of each patch AREA that scanin reads
+        self._sample_frac = 0.5      # fraction of each patch AREA that scanin reads
         # Quad corners in IMAGE pixels, order TL, TR, BR, BL.
         self._corners: list[list[float]] = []
         self._drag = -1

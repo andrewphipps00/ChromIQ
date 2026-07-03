@@ -595,7 +595,7 @@ class ScannerProfileDialog(_ToolDialogBase):
         row_sa = QHBoxLayout()
         self._sample_area = NoScrollSpinBox(self)
         self._sample_area.setRange(20, 100)
-        self._sample_area.setValue(60)
+        self._sample_area.setValue(50)
         self._sample_area.setSuffix(" %")
         self._sample_area.valueChanged.connect(
             lambda v: self._marquee.set_sample_fraction(v / 100.0))

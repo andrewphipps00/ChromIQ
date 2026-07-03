@@ -119,7 +119,8 @@ def make_test_scan(cht_path, out_dir):
     miny = min(b.y1 for b in boxes); maxy = max(b.y2 for b in boxes)
     scale = 1500.0 / max(maxx - minx, maxy - miny, 1.0); margin = 80
     W = int((maxx - minx) * scale + 2 * margin); H = int((maxy - miny) * scale + 2 * margin)
-    img = Image.new("RGB", (W, H), (236, 236, 236)); px = img.load()
+    from PIL import ImageDraw
+    img = Image.new("RGB", (W, H), (236, 236, 236)); draw = ImageDraw.Draw(img)
     cie = ['CGATS.17', 'KEYWORD "SAMPLE_LOC"', 'NUMBER_OF_FIELDS 4', 'BEGIN_DATA_FORMAT',
            'SAMPLE_ID XYZ_X XYZ_Y XYZ_Z', 'END_DATA_FORMAT',
            f'NUMBER_OF_SETS {len(boxes)}', 'BEGIN_DATA']
@@ -127,9 +128,7 @@ def make_test_scan(cht_path, out_dir):
         r, g, bl = (int(c * 255) for c in colorsys.hsv_to_rgb((i / max(len(boxes), 1)) % 1.0, 0.55, 0.92))
         x0 = int((b.x1 - minx) * scale + margin); y0 = int((b.y1 - miny) * scale + margin)
         x1 = int((b.x2 - minx) * scale + margin); y1 = int((b.y2 - miny) * scale + margin)
-        for y in range(y0, y1):
-            for x in range(x0, x1):
-                px[x, y] = (r, g, bl)
+        draw.rectangle([x0, y0, x1 - 1, y1 - 1], fill=(r, g, bl))
         cie.append(f"{b.name} {r / 2.55 * 0.95:.3f} {g / 2.55:.3f} {bl / 2.55 * 1.09:.3f}")
     cie += ['END_DATA', '']
     tif = out_dir / f"{cht_path.stem}-test.tif"; ref = out_dir / f"{cht_path.stem}-test.cie"

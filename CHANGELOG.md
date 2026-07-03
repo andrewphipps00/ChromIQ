@@ -1,5 +1,16 @@
 # Changelog
 
+## v3.13.0-beta.82
+
+### 🐛 Fixed
+- **"Test files…" now responds instantly.** It rendered the test scan pixel-by-
+  pixel in Python (freezing the UI for many seconds on a big target); it now uses
+  `ImageDraw` and is effectively instant.
+
+### 🔧 Changed
+- **Default patch sample area is now 50%** (was 60%). 60% of the *area* is ~77% of
+  the *side*, which looked too close to the patch edges; 50% pulls the read zone in.
+
 ## v3.13.0-beta.81
 
 ### 🌍 Translated
