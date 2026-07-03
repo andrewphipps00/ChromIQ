@@ -30,6 +30,7 @@ TAB_FOLDERS: dict[str, str] = {
     "measure":       "Measure",
     "build_profile": "Build Profile",
     "check_refine":  "Check & Refine",
+    "chart_layout":  "Chart Layout",
 }
 
 # QSettings keys previously used to hold each tab's preset dict. Read once
@@ -40,6 +41,9 @@ LEGACY_KEYS: dict[str, str] = {
     "build_profile": "manual2_profile_presets",
     "check_refine":  "manual2_check_presets",
 }
+
+# Layout-engine presets (issue #93) have no legacy QSettings key — they were
+# file-based from the start.
 
 
 def tab_dir(tab: str) -> Path:

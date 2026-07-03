@@ -44,22 +44,49 @@ class ToolEntry:
     label: str
 
 
-_ENTRIES: tuple[ToolEntry, ...] = (
-    ToolEntry("spot_read",     tr("Read single patches")),
-    ToolEntry("ti2_relayout",  tr("Edit / create chart layout")),
-    ToolEntry("patch_cube",   tr("Show patch distribution (3D)")),
-    ToolEntry("average",      tr("Average measurements")),
-    ToolEntry("merge",        tr("Merge measurements")),
-    ToolEntry("ti1_to_i1p",   tr("Convert TI1 → i1Profiler")),
-    ToolEntry("i1p_to_ti3",   tr("Convert i1Profiler → TI3")),
-    ToolEntry("i1p_to_ti1",   tr("Convert i1Profiler → TI1")),
-    ToolEntry("verify_profile", tr("Verify a profile (independent check)")),
-    ToolEntry("verify",       tr("Verify against reference")),
-    ToolEntry("profile_info", tr("Inspect a profile")),
-    ToolEntry("ti3_info",     tr("Inspect a measurement")),
-    ToolEntry("softproof",    tr("Soft-proof / check an image")),
-    ToolEntry("translate",    tr("Translate / edit language")),
+# Tools grouped by task (Knut) — headers are non-clickable; alphabetical-ish
+# order within each group follows the workflow.
+_GROUPS: tuple[tuple[str, tuple[ToolEntry, ...]], ...] = (
+    (tr("Measurements"), (
+        ToolEntry("spot_read",  tr("Read single patches")),
+        ToolEntry("average",    tr("Average measurements")),
+        ToolEntry("merge",      tr("Merge measurements")),
+        ToolEntry("ti3_info",   tr("Inspect a measurement")),
+    )),
+    (tr("Charts & patch sets"), (
+        ToolEntry("ti2_relayout", tr("Edit / create chart patch set")),
+        ToolEntry("patch_cube",   tr("Show patch distribution (3D)")),
+    )),
+    (tr("Scanner & camera"), (
+        ToolEntry("scanner_target",  tr("Create scanner or camera target (.cht + .cie)")),
+        ToolEntry("scanner_profile", tr("Build scanner or camera profile (from a scan or photo)")),
+    )),
+    (tr("i1Profiler interchange"), (
+        ToolEntry("ti1_to_i1p", tr("Convert TI1 → i1Profiler")),
+        ToolEntry("i1p_to_ti3", tr("Convert i1Profiler → TI3")),
+        ToolEntry("i1p_to_ti1", tr("Convert i1Profiler → TI1")),
+    )),
+    (tr("Profiles"), (
+        ToolEntry("profile_info",   tr("Inspect a profile")),
+        ToolEntry("verify_profile", tr("Verify a profile (independent check)")),
+        ToolEntry("verify",         tr("Verify against reference")),
+        ToolEntry("device_link",    tr("Create device-link profile")),
+        ToolEntry("devicelink_apply", tr("Apply a device-link to an image")),
+        ToolEntry("softproof",      tr("Soft-proof / check an image")),
+    )),
+    (tr("Language"), (
+        ToolEntry("translate", tr("Translate / edit language")),
+    )),
 )
+
+# Flat display model: ("header", label) or ("tool", ToolEntry), in order.
+_ROWS: tuple[tuple[str, object], ...] = tuple(
+    row
+    for header, entries in _GROUPS
+    for row in ((("header", header),) + tuple(("tool", e) for e in entries))
+)
+_ENTRIES: tuple[ToolEntry, ...] = tuple(
+    e for _, entries in _GROUPS for e in entries)
 
 
 class ToolsPopup(QWidget):
@@ -71,6 +98,8 @@ class ToolsPopup(QWidget):
     TAIL_H      = 9     # height of the tail (sticks up above the panel)
     CORNER_R    = 10
     ROW_H       = 36
+    HEADER_H    = 24    # non-clickable group header row
+    GROUP_GAP   = 8     # extra space above each header (except the first)
     H_PAD       = 18    # horizontal padding inside the panel
     V_PAD       = 8     # vertical padding above the first / below the last row
     PANEL_MARGIN = 12   # transparent space around panel for the drop shadow
@@ -119,7 +148,17 @@ class ToolsPopup(QWidget):
         inner = 2 * (6 + 12)
         panel_w = math.ceil(text_w) + inner + self.H_PAD
         panel_w = max(panel_w, 240)
-        panel_h = len(_ENTRIES) * self.ROW_H + 2 * self.V_PAD
+        content = 0
+        first = True
+        for kind, _payload in _ROWS:
+            if kind == "header":
+                if not first:
+                    content += self.GROUP_GAP
+                content += self.HEADER_H
+            else:
+                content += self.ROW_H
+            first = False
+        panel_h = content + 2 * self.V_PAD
         w = panel_w + 2 * self.PANEL_MARGIN
         h = panel_h + 2 * self.PANEL_MARGIN + self.TAIL_H
         self.setFixedSize(w, h)
@@ -132,10 +171,24 @@ class ToolsPopup(QWidget):
             self.height() - 2 * self.PANEL_MARGIN - self.TAIL_H,
         )
 
-    def _row_rect(self, index: int) -> QRect:
+    def _rows(self) -> list[tuple[str, object, QRect]]:
+        """Laid-out display rows: ``(kind, payload, rect)`` where kind is
+        ``"header"`` (payload = label) or ``"tool"`` (payload = ToolEntry)."""
         panel = self._panel_rect()
-        top = panel.top() + self.V_PAD + index * self.ROW_H
-        return QRect(panel.left() + 6, top, panel.width() - 12, self.ROW_H)
+        out: list[tuple[str, object, QRect]] = []
+        y = panel.top() + self.V_PAD
+        first = True
+        for kind, payload in _ROWS:
+            if kind == "header":
+                if not first:
+                    y += self.GROUP_GAP
+                h = self.HEADER_H
+            else:
+                h = self.ROW_H
+            out.append((kind, payload, QRect(panel.left() + 6, y, panel.width() - 12, h)))
+            y += h
+            first = False
+        return out
 
     # ------------------------------------------------------------------
     def show_under(self, anchor: QWidget) -> None:
@@ -210,9 +263,22 @@ class ToolsPopup(QWidget):
         p.setBrush(Qt.BrushStyle.NoBrush)
         p.drawPath(bubble)
 
-        # Rows
-        for i, entry in enumerate(_ENTRIES):
-            row = self._row_rect(i)
+        # Rows (grouped: muted uppercase headers, hoverable tool rows)
+        header_font = QFont(self.font())
+        header_font.setPixelSize(10)
+        header_font.setBold(True)
+        header_color = QColor(pal["text"])
+        header_color.setAlpha(120)
+        for i, (kind, payload, row) in enumerate(self._rows()):
+            if kind == "header":
+                p.setPen(header_color)
+                p.setFont(header_font)
+                p.drawText(
+                    QRect(row.left() + 12, row.top(), row.width() - 24, row.height()),
+                    int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignBottom),
+                    str(payload).upper(),
+                )
+                continue
             if i == self._hover_index:
                 p.setBrush(QColor(pal["hover_bg"]))
                 p.setPen(Qt.PenStyle.NoPen)
@@ -220,13 +286,12 @@ class ToolsPopup(QWidget):
                 text_color = pal["text_hover"]
             else:
                 text_color = pal["text"]
-
             p.setPen(QColor(text_color))
             p.setFont(self.font())
             p.drawText(
                 QRect(row.left() + 12, row.top(), row.width() - 24, row.height()),
                 int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter),
-                entry.label,
+                payload.label,
             )
 
         p.end()
@@ -236,8 +301,8 @@ class ToolsPopup(QWidget):
         """Index of the row under ``pt``; -1 over gaps or the transparent margin
         to either side of the panel (so a row never highlights when the cursor is
         level with it but outside the bubble)."""
-        for i in range(len(_ENTRIES)):
-            if self._row_rect(i).contains(pt):
+        for i, (kind, _payload, rect) in enumerate(self._rows()):
+            if kind == "tool" and rect.contains(pt):
                 return i
         return -1
 
@@ -280,6 +345,8 @@ class ToolsPopup(QWidget):
         idx = self._index_at(pt)
         if idx < 0:
             return
-        key = _ENTRIES[idx].key
+        kind, payload, _rect = self._rows()[idx]
+        if kind != "tool":
+            return
         self.close()
-        self.selected.emit(key)
+        self.selected.emit(payload.key)

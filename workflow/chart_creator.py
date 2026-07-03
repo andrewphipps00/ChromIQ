@@ -106,6 +106,10 @@ _PRINTTARG_ERROR_PATTERNS: list[tuple[re.Pattern[str], str, str]] = [
 ]
 
 
+# Instruments the ChromIQ layout engine can lay out itself (issue #93).
+ENGINE_INSTRUMENTS = {"i1", "p3", "CM", "SS"}
+
+
 def _chromiq_clip_active(p: "ChartParams") -> bool:
     """True when ChromIQ-style clipping border applies to this chart.
 
@@ -467,6 +471,14 @@ class ChartParams:
     # with stem ``calibration``). When False, writes to the project's current
     # run folder with stem ``chart``. See ``FileManager.cwd_for_chart``.
     cal_target: bool = False
+
+    # ChromIQ layout engine (issue #93): the full per-chart layout recipe from
+    # the Manual/editor LayoutOptionsPanel. When set (engine on), the engine
+    # builds from this (instrument/paper taken from the fields above) instead of
+    # the ChartParams-derived basics. engine_cal_* attach a printer .cal (-K/-I).
+    layout_recipe: "object | None" = None
+    engine_cal_path: str | None = None
+    engine_apply_cal: bool = False
     # When True, the .icc/.ti3 from a prior session in the same working folder
     # are renamed to pre_*.icc/pre_*.ti3 instead of being overwritten on the
     # following measure / colprof runs. Set by the guided tab when the user
@@ -618,6 +630,15 @@ class ChartCreator:
         progress_cb: Callable[[str], None] | None = None,
     ) -> int:
         """Return max patches for the given params (fast lookup or binary search)."""
+        # ChromIQ layout engine: when active it owns the packing, so the auto
+        # count is its own capacity × pages (not the printtarg DB / binary search).
+        eng = self._engine_total_patches(params)
+        if eng is not None:
+            if progress_cb:
+                progress_cb(f"ChromIQ layout engine: {eng} patches "
+                            f"({params.pages} page(s))")
+            return eng
+
         triple = params.triple_density and params.instrument == "CM"
         # The patch_db only covers the headline layout knobs (-a, -m, -L, -P,
         # -h). Anything else that influences capacity (-A spacer scale, -n
@@ -680,6 +701,19 @@ class ChartCreator:
         stem = run.stem
         dest = run.chart_ti1
         dest.write_bytes(ti1_bytes)
+
+        # ChromIQ layout engine: when enabled, lay the loaded patches out with the
+        # engine instead of printtarg — otherwise a loaded preset / built-in chart
+        # silently ignored the engine (columns / patch width / notes box did
+        # nothing) because this path always ran printtarg (#93). The .ti1 is
+        # already in place, so the engine builds from it just like the targen path.
+        if self._should_use_engine(params):
+            self._pending_on_finish = on_finish
+            self._pending_on_line = on_line
+            self._matched_errors = []
+            self._matched_warnings = []
+            self._run_engine(params, work_dir, on_line)
+            return
 
         pt_args = self._build_printtarg_args(params)
         log.debug("printtarg args (from ti1): %s", pt_args)
@@ -827,6 +861,13 @@ class ChartCreator:
                 self._pending_on_finish([])
             return
 
+        # ChromIQ layout engine (issue #93): when enabled (and the chart isn't
+        # using a printtarg-only clip-content feature), build the chart in-process
+        # instead of running printtarg. targen has already produced the .ti1.
+        if self._should_use_engine(params):
+            self._run_engine(params, work_dir, on_line)
+            return
+
         pt_args = self._build_printtarg_args(params)
         log.info("printtarg args: %s", pt_args)
 
@@ -844,6 +885,218 @@ class ChartCreator:
                 self._file_mgr.chart_stem(cal_target=params.cal_target),
             ),
         )
+
+    # ------------------------------------------------------------------
+    # ChromIQ layout engine path (issue #93)
+    # ------------------------------------------------------------------
+    def _should_use_engine(self, params: "ChartParams") -> bool:
+        if params.instrument not in ENGINE_INSTRUMENTS:
+            return False
+        # Clip-border *content* (ChromIQ clip style / left-clip info) is a later
+        # engine phase — fall back to the printtarg path for those charts.
+        if params.chromiq_clip_style or params.left_clip_info:
+            return False
+        # Guided mode always uses the engine: it reproduces printtarg's Guided
+        # geometry for every instrument/paper/option (verified 161/161, #93). The
+        # `use_chromiq_layout_engine` toggle now governs the MANUAL tab only, so
+        # the printtarg-based built-in presets keep their exact printtarg layout.
+        if not params.is_manual:
+            return True
+        return bool(self._settings.get("use_chromiq_layout_engine", False))
+
+    def _engine_build_kwargs(self, params: "ChartParams") -> dict:
+        spacer_mode = ("none" if params.no_spacers
+                       else "bw" if params.bw_spacers else "colored")
+        kw: dict = dict(
+            instrument=params.instrument,
+            paper=params.paper,
+            dpi=int(params.tiff_dpi or 300),
+            randomize=not params.no_randomise,
+            spacer_on=not params.no_spacers,
+            spacer_mode=spacer_mode,
+            bit16=bool(params.tiff_16bit),
+            pscale=float(params.patch_scale or 1.0),
+            sscale=float(params.spacer_scale or 1.0),
+            border=float(params.margin_mm),
+            nolimit=bool(params.no_strip_limit),
+        )
+        # Guided/basic path: bracket each strip with a leading + trailing spacer
+        # for the strip-reader instruments (i1Pro / i1Pro 3+ / ColorMunki), so the
+        # instrument always starts and ends a strip on a spacer (#93).
+        if params.instrument in ("i1", "p3", "CM"):
+            kw["edge_spacers"] = True
+        if params.instrument in ("i1", "p3"):
+            suppress = _effective_suppress_lb(params)
+            kw["nolpcbord"] = suppress
+            # Guided/basic path (no layout recipe): when the i1/p3 clip border is
+            # kept, fill it with the ChromIQ notes record instead of leaving it
+            # blank (Manual already defaults to this via the recipe) (#93).
+            kw["clip_content_mode"] = "off" if suppress else "notes"
+        elif params.instrument == "CM":
+            density = 3 if params.triple_density else (
+                2 if params.double_density else 1)
+            kw["density"] = density
+            if density == 2:
+                # printtarg's ColorMunki double density (-h) inseparably couples
+                # the 13.7 mm rows with a half-patch row stagger; reproduce it so
+                # Guided matches printtarg. (The decoupled cm_stagger toggle stays
+                # a Manual-only extra.) (#93)
+                kw["cm_stagger"] = True
+        elif params.instrument == "SS":
+            kw["hflag"] = bool(params.double_density)   # hexagon patches
+        return kw
+
+    def _engine_total_patches(self, params: "ChartParams") -> int | None:
+        """Patches the engine fits across all pages (capacity × pages), or None.
+
+        Used to drive the targen ``-f`` count in Guided and Manual-auto so the
+        chart fills the page(s) under the engine's own packing.
+        """
+        if not self._should_use_engine(params):
+            return None
+        try:
+            from workflow.layout_engine import geometry, instruments, papers
+            kw = self._engine_kwargs(params)
+            geom = instruments.geom_from_build_kwargs(kw)
+            w_mm, h_mm = papers.dimensions_mm(kw["paper"])
+            per_sheet = geometry.patches_per_sheet(geom, w_mm, h_mm)
+            return per_sheet * max(1, int(params.pages))
+        except Exception as exc:  # noqa: BLE001
+            log.warning("engine patch estimate failed: %s", exc)
+            return None
+
+    def _engine_kwargs(self, params: "ChartParams") -> dict:
+        """build_chart kwargs: the full layout recipe when set, else the basics.
+
+        With a recipe (Manual/editor LayoutOptionsPanel) every layout option
+        takes effect; instrument/paper come from the ChartParams, and a printer
+        calibration (-K/-I) is attached when chosen.
+        """
+        if params.layout_recipe is not None and hasattr(params.layout_recipe, "build_kwargs"):
+            kw = params.layout_recipe.build_kwargs()
+            kw["instrument"] = params.instrument
+            kw["paper"] = params.paper
+            kw["project"] = params.target_name   # {project} → profile name
+            if params.engine_cal_path:
+                kw["cal_path"] = params.engine_cal_path
+                kw["apply_cal"] = bool(params.engine_apply_cal)
+            # The per-edge margin boxes are ALWAYS the law (Knut, new model): the
+            # engine never silently raises them to meet instrument-margin minimums.
+            # "Use instrument margins" only pre-fills the boxes once in the UI;
+            # going below an instrument minimum is allowed and merely flagged as a
+            # violation in the Measured-from-Preview panel. So no build-time clamp.
+            self._threshold_notes = []
+            return kw
+        # Guided mode has no editable margin boxes and no "Use instrument
+        # margins" toggle, so the jig-safety threshold clamp is intentionally
+        # NOT applied here. Clamping pinned the patch count regardless of the
+        # clip-border / strip-cap toggles (the thresholds dominated), which the
+        # user asked to revert: Guided behaves like before the #93 threshold
+        # feature. Mirrors the Guided capacity estimate in
+        # tab_chart._engine_geom (thresholds=None) so count and chart agree.
+        self._threshold_notes = []
+        return self._engine_build_kwargs(params)
+
+    def _apply_margin_thresholds(self, kw: dict) -> dict:
+        """Raise the layout's margins so the patch area meets the user's margin
+        thresholds for this instrument/paper combo (#93). No-op when the combo
+        has no thresholds. Records any adjustments in ``_threshold_notes`` for
+        the build log. Applied at this one point so the capacity estimate
+        (_engine_total_patches) and the real render agree."""
+        self._threshold_notes: list[str] = []
+        try:
+            from core.settings import thresholds_for_combo
+            from workflow.layout_engine import margins_fit, papers
+            w_mm, h_mm = papers.dimensions_mm(kw.get("paper", "A4"))
+            thr = thresholds_for_combo(
+                self._settings.get_margin_thresholds(), kw.get("instrument", "i1"),
+                w_mm, h_mm)
+            kw, notes = margins_fit.clamp_margins_to_thresholds(kw, thr)
+            self._threshold_notes = notes
+        except Exception as exc:  # noqa: BLE001 — never block generation on this
+            log.warning("margin-threshold clamp skipped: %s", exc)
+        return kw
+
+    def _run_engine(
+        self,
+        params: "ChartParams",
+        work_dir: Path,
+        on_line: Callable[[str], None],
+    ) -> None:
+        from workflow.layout_engine import chart as le_chart
+
+        stem = self._file_mgr.chart_stem(cal_target=params.cal_target)
+        ti1 = work_dir / f"{stem}.ti1"
+        on_line("[ChromIQ layout engine] building chart from the targen .ti1…")
+        engine_kwargs = self._engine_kwargs(params)
+        for _note in getattr(self, "_threshold_notes", []):
+            on_line(f"[ChromIQ layout engine] {_note}")
+        try:
+            # No .cht at build time: a scan-recognition template is only useful
+            # paired with a *measured* .cie, so both are produced together after
+            # measurement (workflow.scanin_target, #97) — an aim-value .cht here
+            # would just be an orphaned half-target (its aim .cie was dropped in
+            # beta.59). The engine keeps the capability (emit_cht) for that flow.
+            result = le_chart.build_chart(
+                ti1, work_dir / stem, **engine_kwargs)
+        except Exception as exc:  # noqa: BLE001 — surface any engine failure
+            log.exception("ChromIQ layout engine failed")
+            on_line(f"[ERROR] ChromIQ layout engine: {exc}")
+            if self._pending_on_finish:
+                self._pending_on_finish([])
+            return
+
+        on_line(
+            f"[ChromIQ layout engine] {result.layout.total_patches} patches "
+            f"({result.layout.steps_in_pass}×{result.layout.passes}), "
+            f"{result.layout.pages} page(s), random start {result.seed}")
+        if result.low_contrast_passes:
+            on_line(f"[ChromIQ layout engine] note: low patch/spacer contrast in "
+                    f"{len(result.low_contrast_passes)} strip(s)")
+
+        tiffs = sorted(result.tiff_paths or [])
+        if tiffs and self._pending_params is not None:
+            self._write_channel_sidecar(work_dir, stem, self._pending_params)
+            self._embed_layout_geometry(work_dir, stem, result, params)
+            self._stamp_tiff_metadata(tiffs, self._pending_params)
+
+        if self._pending_on_finish:
+            self._pending_on_finish(tiffs)
+
+    def _embed_layout_geometry(self, work_dir: Path, stem: str, result,
+                               params: "ChartParams") -> None:
+        """Fold the engine's strip/patch geometry + recipe into channels.json.
+
+        The Measure-tab highlighter reads this for exact, guess-free strip
+        recognition; the recipe enables the Create Chart ⇄ editor round-trip.
+        """
+        import json
+        sidecar = work_dir / f"{stem}.channels.json"
+        strips = work_dir / f"{stem}.strips.json"
+        try:
+            doc = json.loads(sidecar.read_text()) if sidecar.exists() else {}
+            layout = json.loads(strips.read_text()) if strips.exists() else {}
+            layout["engine"] = "chromiq"      # explicit marker: a ChromIQ-engine chart
+            layout["engine_version"] = 1
+            layout["seed"] = result.seed
+            layout["color_rep"] = result.color_rep
+            # Persist the FULL recipe so loading / preset-creation / built-in
+            # presets can reconstruct the exact engine layout (round-trip).
+            if params.layout_recipe is not None and hasattr(params.layout_recipe, "to_dict"):
+                layout["recipe"] = params.layout_recipe.to_dict()
+            else:
+                # Store a real recipe (not raw build kwargs) so reloading doesn't
+                # lose fields like clip_border (which kwargs spell as nolpcbord)
+                # and the editor reproduces the exact layout (#93).
+                from workflow.layout_engine.presets import LayoutRecipe
+                layout["recipe"] = LayoutRecipe.from_build_kwargs(
+                    self._engine_build_kwargs(params)).to_dict()
+            doc["layout"] = layout
+            sidecar.write_text(json.dumps(doc))
+            if strips.exists():
+                strips.unlink()   # geometry now lives in channels.json
+        except Exception as exc:  # noqa: BLE001
+            log.warning("Could not embed layout geometry: %s", exc)
 
     def _printtarg_done(
         self,
@@ -879,6 +1132,7 @@ class ChartCreator:
             if self._pending_params.triple_density:
                 self._patch_ti2_instrument(work_dir, stem)
             self._write_channel_sidecar(work_dir, stem, self._pending_params)
+            self._capture_scanner_cht(work_dir, stem, self._pending_params)
             self._stamp_tiff_metadata(tiffs, self._pending_params)
 
         if on_finish:
@@ -943,9 +1197,14 @@ class ChartCreator:
                 cmd_lines.append("targen " + " ".join(
                     _shorten_argv_for_stamp(self._build_targen_args(params, patch_count))
                 ))
-            cmd_lines.append("printtarg " + " ".join(
-                _shorten_argv_for_stamp(self._build_printtarg_args(params))
-            ))
+            if self._should_use_engine(params):
+                # The ChromIQ layout engine replaces printtarg, so stamping a
+                # printtarg command would be a lie — name the engine instead.
+                cmd_lines.append("ChromIQ layout engine")
+            else:
+                cmd_lines.append("printtarg " + " ".join(
+                    _shorten_argv_for_stamp(self._build_printtarg_args(params))
+                ))
             cmd_lines.append(f"ChromIQ {APP_VERSION}")
 
         if not chromiq_clip:
@@ -1022,6 +1281,73 @@ class ChartCreator:
             log.debug("Wrote channel sidecar %s: %s", sidecar.name, channels)
         except Exception as exc:
             log.warning("Could not write channel sidecar: %s", exc)
+
+    def _capture_scanner_cht(self, work_dir: Path, stem: str,
+                             params: "ChartParams") -> None:
+        """Best-effort: capture printtarg's exact ``.cht`` geometry for this chart
+        and store it in ``channels.json`` so a scanner target can be built later
+        (#8), including for printtarg/preset charts that have no engine geometry.
+
+        Re-runs printtarg with ``-s`` on the chart's own ``.ti1`` in a temp dir.
+        printtarg's ``.cht`` is **seed-independent** (it encodes loc→position,
+        which the random patch assignment doesn't touch — verified), so it matches
+        the printed sheet regardless of randomisation; a low render DPI keeps it
+        fast. We only persist it after checking its patch locs against the chart's
+        own ``.ti2`` — correct-or-absent, never silently wrong. Never raises into
+        the caller."""
+        import json
+        import shutil
+        import subprocess
+        import tempfile
+
+        try:
+            ti1 = work_dir / f"{stem}.ti1"
+            if not ti1.is_file():
+                return
+            from core.resource_path import argyll_binary
+            bin_dir = Path(self._settings.get("argyll_bin_path",
+                                              "/Applications/Argyll/bin"))
+            pt = bin_dir / argyll_binary("printtarg")
+            if not pt.exists():
+                return
+            # Same layout args, but a temp basename, a fast low render DPI (the
+            # .cht is in device-independent points), and -s to emit the .cht.
+            args = [a for a in self._build_printtarg_args(params)
+                    if not (a.startswith("-t") or a.startswith("-T"))]
+            args[-1] = "cap"                       # swap the chart stem
+            cmd = [str(pt), "-s", "-t72", *args]
+            with tempfile.TemporaryDirectory(prefix="chromiq_cht_") as td:
+                tdp = Path(td)
+                shutil.copy(ti1, tdp / "cap.ti1")
+                subprocess.run(cmd, cwd=td, capture_output=True, text=True,
+                               timeout=120)
+                pages = [c.read_text(encoding="utf-8")
+                         for c in sorted(tdp.glob("cap*.cht"))]
+            if not pages:
+                log.warning("Scanner .cht capture produced no file for %s", stem)
+                return
+            # Verify the captured geometry against the chart's own .ti2.
+            from workflow.scanin_target import _cht_x_box_locs
+            from workflow.ti3_analysis import parse_ti3
+            ti2 = work_dir / f"{stem}.ti2"
+            ti2_locs = set(parse_ti3(ti2).sample_locs) if ti2.is_file() else set()
+            cht_locs: set[str] = set()
+            for text in pages:
+                cht_locs |= set(_cht_x_box_locs(text))
+            if ti2_locs and cht_locs != ti2_locs:
+                log.warning("Scanner .cht capture loc mismatch for %s (%d vs %d) "
+                            "— not stored", stem, len(cht_locs), len(ti2_locs))
+                return
+            sidecar = work_dir / f"{stem}.channels.json"
+            doc = json.loads(sidecar.read_text()) if sidecar.exists() else {}
+            doc["layout"] = {"engine": "printtarg", "cht_pages": pages,
+                             "locs": sorted(cht_locs)}
+            sidecar.write_text(json.dumps(doc))
+            log.info("Captured scanner .cht geometry for %s: %d page(s), %d patches",
+                     stem, len(pages), len(cht_locs))
+        except Exception as exc:  # noqa: BLE001 — best-effort, never break creation
+            log.warning("Scanner .cht capture failed for %s (non-fatal): %s",
+                        stem, exc)
 
     # ------------------------------------------------------------------
     # Arg builders
@@ -1119,6 +1445,9 @@ class ChartCreator:
     # ------------------------------------------------------------------
 
     def _lookup_patches(self, p: ChartParams) -> int:
+        eng = self._engine_total_patches(p)
+        if eng is not None:
+            return eng
         eff_lb = _effective_suppress_lb(p)
         triple = p.triple_density and p.instrument == "CM"
         layout_extras = _extra_printtarg_affects_layout(p.extra_printtarg_args)

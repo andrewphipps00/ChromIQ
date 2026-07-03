@@ -277,10 +277,13 @@ class ProfileBuilder:
             args += [f"-V{p.dark_emphasis:.1f}"]
         if p.gamut_src:
             args += ["-s", p.gamut_src]
-        if p.manufacturer:
-            args += ["-A", p.manufacturer]
-        if p.model:
-            args += ["-M", p.model]
+        # Always stamp a manufacturer + model description so the profile is
+        # self-identifying: colprof writes these as the 'dmnd'/'dmdd' device-ID
+        # tags, which a device-link then copies into its profile-sequence ('pseq')
+        # — otherwise that entry is left blank ("placeholder"). Falls back to
+        # "ChromIQ" / the profile description when the caller hasn't set them.
+        args += ["-A", p.manufacturer or "ChromIQ"]
+        args += ["-M", p.model or desc]
         if p.copyright:
             args += ["-C", p.copyright]
         if p.illuminant:

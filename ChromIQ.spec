@@ -86,6 +86,7 @@ a = Analysis(
         ('assets',           'assets'),
         ('data/parameters.yaml', 'data'),
         ('data/i18n',        'data/i18n'),
+        ('data/scanner_targets', 'data/scanner_targets'),
         (certifi_where, 'certifi'),
         *_ic_datas,
         *_we_datas,

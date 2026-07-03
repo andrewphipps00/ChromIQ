@@ -125,7 +125,7 @@ class MarginInspectorPanel(QGroupBox):
         checks = QVBoxLayout()
         checks.setSpacing(2)
         self._guide_check = QCheckBox(
-            tr("Show margin threshold guide lines on preview (dotted lines)"), self)
+            tr("Show instrument-margin guide lines on preview (dotted lines)"), self)
         self._guide_check.toggled.connect(self.guides_toggled.emit)
         checks.addWidget(self._guide_check)
         self._measured_check = QCheckBox(
@@ -156,12 +156,12 @@ class MarginInspectorPanel(QGroupBox):
                "ruler or jig. If a margin is below its minimum, that row turns "
                "red and a short warning appears; when everything is fine you'll "
                "see a friendly green 'Margins: OK'.\n\n"
-               "You decide those minimums yourself: open Preferences → Margin "
-               "Thresholds and set them for each instrument and paper size (the "
+               "You decide those minimums yourself: open Preferences → Instrument "
+               "Margins and set them for each instrument and paper size (the "
                "starting values are sensible defaults you can adjust to your own "
                "ruler). They’re only a helpful warning — you can always go ahead "
                "and print anyway.\n\n"
-               "Seeing it on the preview: tick 'Show margin threshold guide "
+               "Seeing it on the preview: tick 'Show instrument-margin guide "
                "lines on preview' to draw each minimum as a dotted line right on "
                "the chart — black where the margin is fine, red on any edge "
                "that's too tight. A patch area that stays inside all four dotted "
@@ -212,13 +212,15 @@ class MarginInspectorPanel(QGroupBox):
         thresholds_defined: bool,
         notify: bool,
         thresholds: dict | None = None,
+        text_warnings: "list[str] | None" = None,
     ) -> None:
         """Show ``report``'s margins and the pass/fail status.
 
         ``thresholds_defined`` is False when no thresholds exist for the chart's
         combo (status is then a neutral note, not green/red). ``notify`` mirrors
         the Settings flag — when False the status line is suppressed entirely
-        (margins still shown).
+        (margins still shown). ``text_warnings`` are extra messages (e.g. a margin
+        too small for its label/text band) shown with the margin status (#93).
         """
         if report is None:
             self.show_placeholder()
@@ -263,32 +265,35 @@ class MarginInspectorPanel(QGroupBox):
             self._striplen_in.setText("—")
 
         self._update_status(violations, thresholds_defined=thresholds_defined,
-                            notify=notify)
+                            notify=notify, text_warnings=text_warnings)
 
     # ------------------------------------------------------------------
     def _update_status(
         self, violations: list[Violation], *,
         thresholds_defined: bool, notify: bool,
+        text_warnings: "list[str] | None" = None,
     ) -> None:
         if not notify:
             self._status.setVisible(False)
             return
         self._status.setVisible(True)
-        if not thresholds_defined:
-            self._status.setText(tr(
-                "No margin thresholds set for this instrument and paper size."))
-            self._status.setStyleSheet("color: #909090; font-size: 11px;")
-            return
-        if not violations:
-            self._status.setText(tr("Margins: OK"))
-            self._status.setStyleSheet(
-                "color: #4fc27a; font-size: 15px; font-weight: 700;")
-            return
-        lines = [
+        text_warnings = list(text_warnings or [])
+        margin_lines = [
             tr("⚠ {edge} margin {measured:.1f} mm is below the {threshold:.0f} mm minimum")
             .format(edge=tr(v.edge), measured=v.measured_mm, threshold=v.threshold_mm)
             for v in violations
-        ]
-        self._status.setText("\n".join(lines))
+        ] if thresholds_defined else []
+        lines = margin_lines + text_warnings
+        if lines:                                       # something to warn about
+            self._status.setText("\n".join(lines))
+            self._status.setStyleSheet(
+                "color: #e0564b; font-size: 14px; font-weight: 700;")
+            return
+        if not thresholds_defined:
+            self._status.setText(tr(
+                "No instrument margins set for this instrument and paper size."))
+            self._status.setStyleSheet("color: #909090; font-size: 11px;")
+            return
+        self._status.setText(tr("Margins: OK"))
         self._status.setStyleSheet(
-            "color: #e0564b; font-size: 14px; font-weight: 700;")
+            "color: #4fc27a; font-size: 15px; font-weight: 700;")

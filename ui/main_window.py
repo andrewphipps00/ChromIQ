@@ -111,6 +111,9 @@ class MainWindow(QMainWindow):
             GradientOverlay(TAB_COLORS[_i], parent=_target)
 
         self._tab_chart.chart_finished.connect(self._on_chart_generated)
+        # "Last page not full" hint → open the patch-set editor on the current chart.
+        self._tab_chart.edit_patch_set_requested.connect(
+            lambda: self._launch_tool("ti2_relayout"))
         self._tab_chart.target_started.connect(self._tab_profile.clear_files)
         self._tab_chart.target_started.connect(self._tab_check.clear_files)
         self._tab_measure.measure_finished.connect(self._on_measure_done)
@@ -621,7 +624,12 @@ class MainWindow(QMainWindow):
         margin_combo = None
         if hasattr(self._tab_chart, "current_margin_combo"):
             margin_combo = self._tab_chart.current_margin_combo()
-        dlg = SettingsDialog(self._settings, self, margin_combo=margin_combo)
+        # Preselect the Chart Layout tab to the same instrument/paper/mode (#93).
+        layout_combo = None
+        if hasattr(self._tab_chart, "current_layout_combo"):
+            layout_combo = self._tab_chart.current_layout_combo()
+        dlg = SettingsDialog(self._settings, self, margin_combo=margin_combo,
+                             layout_combo=layout_combo)
         dlg.exec()
         self._check_argyll_binaries()
         self._apply_calibration_mode()

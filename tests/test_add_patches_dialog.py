@@ -336,9 +336,9 @@ def test_live_preview_pushes_existing_plus_new(qapp):
     assert pushed_existing == existing
 
 
-def test_live_preview_shows_existing_only_outside_generate_mode(qapp):
-    """In single-colour mode the panel shows just the existing patches (empty
-    generated set), not a stale generated view."""
+def test_live_preview_follows_single_colour_mode(qapp):
+    """In single-colour mode the cube previews the colour being added (not a
+    stale generated view, and no longer empty) (#96)."""
     existing = [(10.0, 10.0, 10.0)]
     dlg = _AddPatchesDialog(_FakeSettings(), existing_patches=existing)
     dlg._add_mode_single.setChecked(True)             # not generating
@@ -347,7 +347,7 @@ def test_live_preview_shows_existing_only_outside_generate_mode(qapp):
     dlg._cube_shown = True                            # preview unfolded
     dlg._do_push_live_preview()
     program, pushed_existing = dlg._cube_panel.pushed
-    assert program == []
+    assert program == [dlg._single_rgb]               # the colour being added
     assert pushed_existing == existing
 
 
@@ -665,3 +665,31 @@ def test_builtin_recipes_listed_in_load_setup_pulldown(qapp):
     assert starred, "no built-in recipes surfaced in the pulldown"
     # Each carries a real recipe dict.
     assert all(isinstance(recipes[k], dict) and recipes[k] for k in starred)
+
+
+def test_fill_to_pages_target(qapp, tmp_path):
+    """'fill to N pages' multiplies by the engine's capacity per page; disabled
+    when the engine is off (#93)."""
+    from pathlib import Path
+    from workflow.layout_engine import geometry, instruments, papers
+    from workflow.layout_engine.presets import default_recipe
+    s = _FakeSettings(); s.set("use_chromiq_layout_engine", True)
+    rec = default_recipe("i1", "A4", mode="clip")
+    d = _NewChartDialog(tmp_path, s, initial_recipe=rec.to_dict())
+    per = d._engine_cap_per_page()
+    assert per > 0
+    d._gen_fill_to.setValue(900)        # patches spin
+    d._gen_fill_pages.setValue(2)       # pages spin (separate)
+    # patches mode → the patches spin
+    d._gen_fill_unit_patches.setChecked(True)
+    assert d._effective_fill_target() == 900
+    # pages mode → pages spin × capacity
+    d._gen_fill_unit_pages.setChecked(True)
+    assert d._effective_fill_target() == 2 * per
+
+    # engine off → no per-page capacity, 'pages' toggle disabled + reverts
+    s.set("use_chromiq_layout_engine", False)
+    assert d._engine_cap_per_page() == 0
+    d._sync_fill_unit()
+    assert d._gen_fill_unit_patches.isChecked()
+    assert not d._gen_fill_unit_pages.isEnabled()

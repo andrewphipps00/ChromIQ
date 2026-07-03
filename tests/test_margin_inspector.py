@@ -256,3 +256,42 @@ def test_blank_page_returns_none(tmp_path):
     Image.fromarray(np.full((600, 400, 3), 255, np.uint8)).save(blank, dpi=(300, 300))
     assert measure_margins(blank, dpi=300) is None
     assert _patch_area_bbox(np.full((600, 400, 3), 255, np.uint8)) is None
+
+
+def test_measure_from_engine_exact_geometry(tmp_path):
+    """Engine charts report EXACT margins / patch width from channels.json, so a
+    Strip gap (which inflates the strip pitch) no longer corrupts the reading the
+    way image detection did (#93, Knut). 300 dpi, A4, two strips of 8 mm patches
+    with a wide pitch (patch 8 mm but 14 mm apart)."""
+    import json
+    from workflow.margin_inspector import measure_from_engine
+    mm = 300 / 25.4
+    def px(v):
+        return round(v * mm)
+    # two strips, patches 8 mm wide, 14 mm apart (pitch != width), 26 mm left clip
+    rects = []
+    for col, x_mm in enumerate((26.0, 40.0)):
+        for row in range(5):
+            rects.append({"page": 0, "x": px(x_mm), "y": px(20.0 + row * 9.0),
+                          "w": px(8.0), "h": px(8.0)})
+    doc = {"layout": {"engine": "chromiq", "dpi": 300, "paper_mm": [210.0, 297.0],
+                      "patches": rects, "recipe": {"instrument": "i1"}}}
+    sc = tmp_path / "chart.channels.json"
+    sc.write_text(json.dumps(doc))
+    out = measure_from_engine(sc, 0)
+    assert out is not None
+    report, ruler = out
+    assert abs(report.left_mm - 26.0) < 0.2          # clip border, exact
+    assert abs(report.strip_width_mm - 8.0) < 0.2    # patch WIDTH, not the pitch
+    assert abs(report.top_mm - 20.0) < 0.2
+    assert ruler == 240.0                             # i1Pro ruler for the warning
+
+
+def test_measure_from_engine_skips_printtarg_charts(tmp_path):
+    """A non-engine (printtarg) channels.json returns None so the caller falls
+    back to image measurement (#93)."""
+    import json
+    from workflow.margin_inspector import measure_from_engine
+    sc = tmp_path / "p.channels.json"
+    sc.write_text(json.dumps({"ink_channels": ["r", "g", "b"]}))
+    assert measure_from_engine(sc, 0) is None

@@ -845,7 +845,7 @@ class TabPrint(QWidget):
             + tr("Stuck jobs can block new print jobs from being processed.\n"
                  "Clear them before printing?")
         )
-        clear_btn  = dlg.addButton(tr("Clear & Print"),  QMessageBox.ButtonRole.AcceptRole)
+        clear_btn  = dlg.addButton(tr("Clear && Print"),  QMessageBox.ButtonRole.AcceptRole)
         dlg.addButton(tr("Print Anyway"), QMessageBox.ButtonRole.DestructiveRole)
         cancel_btn = dlg.addButton(QMessageBox.StandardButton.Cancel)
         dlg.setDefaultButton(clear_btn)

@@ -108,6 +108,10 @@ class RunMeta:
     averaging_enabled: bool = False
     averaging_method: str = "mean"
     averaging_read_count: int = 0
+    # Opt-in: keep scanner-recognition files (.cht + .cie) for this chart, rebuilt
+    # from the measurement whenever it's finalised (#97). Off unless the user ticks
+    # the "All Stripes Read" checkbox; only meaningful for engine charts.
+    scanner_target_enabled: bool = False
     preconditioning_source_run: str | None = None
     # Set to "merged.ti3" when a refinement merge ran; otherwise the canonical
     # measurement carries the (project-name) chart stem.
@@ -611,11 +615,12 @@ class Project:
             return
 
         # Only rename files shaped like a ChromIQ artefact for this stem:
-        #   <stem>[-cal|-i1profiler][_NN].<ext...>
+        #   <stem>[-cal|-i1profiler|-colours][_NN].<ext...>
         # so a user's own "<stem>-notes.txt" is left untouched, and structural
-        # files (project.json, meta.json, the README) never match.
+        # files (project.json, meta.json, the README) never match. The bare
+        # extensions (.ti1/.ti2/.cht/.cie/…) match via the trailing \.[\w.]+$.
         protected = {self.MANIFEST, self.README, "meta.json"}
-        tail_re = re.compile(r"(-cal|-i1profiler)?(_\d+)?\.[\w.]+$")
+        tail_re = re.compile(r"(-cal|-i1profiler|-colours)?(_\d+)?\.[\w.]+$")
 
         for f in sorted(self._root.rglob("*")):
             if not f.is_file() or f.name in protected:

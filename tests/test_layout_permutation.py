@@ -1,0 +1,45 @@
+"""Tests for the reproducible shuffle + index-label generator."""
+from workflow.layout_engine import permutation as perm
+
+
+def test_alpha_label_odometer():
+    assert perm.alpha_label(1) == "A"
+    assert perm.alpha_label(26) == "Z"
+    assert perm.alpha_label(27) == "AA"
+    assert perm.alpha_label(52) == "AZ"
+    assert perm.alpha_label(53) == "BA"
+    assert perm.alpha_label(702) == "ZZ"
+    assert perm.alpha_label(703) == "AAA"
+
+
+def test_make_labeller():
+    assert perm.make_labeller("A-Z, A-Z")(2) == "B"
+    assert perm.make_labeller("1-999")(5) == "5"
+    assert perm.make_labeller("0-9,@-9,@-9;1-999")(12) == "12"
+
+
+def test_location_label_grid():
+    # 21 steps per pass: slot 0 -> A1, slot 20 -> A21, slot 21 -> B1.
+    assert perm.location_label(0, 21) == "A1"
+    assert perm.location_label(20, 21) == "A21"
+    assert perm.location_label(21, 21) == "B1"
+    # custom numeric strip + alpha patch
+    assert perm.location_label(0, 21, strip_pattern="1-999", patch_pattern="A-Z") == "1A"
+
+
+def test_permutation_reproducible():
+    a = perm.location_permutation(63, 42)
+    b = perm.location_permutation(63, 42)
+    assert a == b                                   # same seed -> same layout
+    assert a != perm.location_permutation(63, 7)    # different seed -> different
+    assert sorted(a) == list(range(63))             # a true permutation
+
+
+def test_no_randomize_is_identity():
+    assert perm.location_permutation(10, 999, randomize=False) == list(range(10))
+
+
+def test_preview():
+    head, last = perm.preview(63, 21, count=3)
+    assert head == ["A1", "A2", "A3"]
+    assert last == "C21"      # slot 62 -> strip 2 (C), pos 20 (21)

@@ -1,6 +1,1470 @@
 # Changelog
 
+## v3.13.0-beta.81
+
+### 🌍 Translated
+- Translated beta.80's new strings into all 12 languages (test-files control and
+  message, the move/zoom help line, Scan N).
+
+## v3.13.0-beta.80
+
+### 🐛 Fixed
+- **The reading grid now matches rectarg's reconstruction exactly.** For a regular
+  target grid (ISO 12641, DCPro, …) the overlay replicates rectarg's integer-pixel
+  column/row edges (each cell `floor(total/n)` px, the remainder into the first
+  cells) at the placed quad's pixel size — eliminating the accumulating
+  misalignment against a rectarg-rendered image. Multi-area targets (an IT8's GS
+  strip) fall back to per-box.
+- **The starting quad matches the target's aspect ratio** instead of a blind 8%
+  inset, so it's already the right shape to nudge onto the patches.
+
+### ✨ Added / Changed
+- **Move / pan / zoom the grid view.** Drag *inside* the grid to move the whole
+  selection; drag the *background* to pan; scroll or ⌘/Ctrl + scroll to zoom, plus
+  ⌘/Ctrl +/− and ⌘/Ctrl + 0 (or double-click) to reset — with a help line spelling
+  it out.
+- **Two IT8 targets** in the dropdown: **ISO 12641‑1 — Wolf Faust** and
+  **ISO 12641‑2 — LaserSoft Advanced**, both bundled with corrected geometry.
+- **"Test files…" button** (standard-target mode): writes a known-good test scan +
+  reference for the chosen target and reveals them, so you can try the grid with
+  no hardware and find where the bundled recognition file lives.
+
+### 🌍 Translated
+- New UI strings staged as English placeholders (full pass to follow).
+
+## v3.13.0-beta.79
+
+### 🐛 Fixed
+- **The scanner/camera reading grid now spans the whole patch block.** It is
+  normalised into the **total patch-area bounding box** — the union of every
+  patch box across all areas — so it always covers the complete target,
+  including multiple sub-areas like an IT8's greyscale (GS) strip, and no longer
+  depends on where the fiducial marks sit. This matches how rectarg derives a
+  target's extent from its patch-area lines (the `.cht` `D` line is "overall
+  chart dimensions, not used"). You place the four corners on that same patch
+  block.
+
+## v3.13.0-beta.78
+
+### 🌍 Translated
+- Translated this beta cycle's new UI strings into all 12 languages — the patch
+  sample-area control and its help, the marquee zoom / pan / rotate / pop-out
+  controls, the "choose your target first" guidance, and the grouped Tools-menu
+  headers.
+
+## v3.13.0-beta.77
+
+### ✨ Changed
+- **Setup guidance now lives on the field it's about.** The scan/photo field's ⓘ
+  in Build scanner or camera profile now includes the full scanner **and** camera
+  setup help inline — how to turn the device's colour management off, scanning
+  resolution tips, and camera lighting/exposure — instead of pointing you up to
+  the main ⓘ. (Knut: put the relevant help on the relevant control.)
+
+## v3.13.0-beta.76
+
+### ✨ Changed
+- **The Tools menu is grouped by task** — Measurements, Charts & patch sets,
+  Scanner & camera, i1Profiler interchange, Profiles, Language — with section
+  headers, instead of one long flat list. Easier to scan for the tool you want.
+
+### 🌍 Translated
+- Group headers staged as English placeholders (full translation pass at GA).
+
+## v3.13.0-beta.75
+
+### ✨ Added
+- **Much easier grid placement** in Build scanner or camera profile. The marquee
+  view is bigger, and you can now **zoom** (Ctrl/Cmd + scroll) and **pan** (drag),
+  **Rotate 90°** a sideways scan, **Reset view**, and **Pop out** the grid into a
+  large separate window (with its own Rotate / Reset controls and a Done button —
+  you still build the profile back in the main window). Plain scroll keeps
+  scrolling the dialog.
+- **Corner handles now sit *outside* the patch area**, each joined to its true
+  corner by a 45° dotted line, so the grab circle never hides the corner patch
+  you're aiming at.
+
+### 🌍 Translated
+- New UI strings staged as English placeholders (full translation pass at GA).
+
+## v3.13.0-beta.74
+
+### ✨ Added
+- **Patch sample area control** (Build scanner or camera profile). A spinbox
+  under the grid sets how much of each patch scanin reads — shown live as a
+  filled green inner square inside every patch cell. It samples the centre and
+  ignores the edges (ink bleed, borders, slight misalignment); 60% by default.
+
+### 🐛 Fixed
+- **The scan "Browse…" button no longer looks dead.** If the chosen `.ti3` isn't
+  a ChromIQ layout-engine chart (e.g. an old file from a plain scanin run, with
+  no `.channels.json`), clicking Browse now explains what to pick — or to switch
+  to "A standard target I own" — in the status box, instead of doing nothing.
+
+### 🌍 Translated
+- New UI strings staged as English placeholders (full translation pass at GA).
+
+## v3.13.0-beta.73
+
+### ✨ Changed
+- **Scanner/camera targets now key off the patch-area corners, not fiducial
+  marks.** The real printed targets have no fiducial marks — just the patch grid —
+  so every bundled recognition file now sets its reference (`F` line) to the
+  patch-area bounding box. You place the reading grid on the **visible corners of
+  the patch block**, and it registers the same at any scan resolution.
+- **Four more targets, corrected and shipped.** QPcard 202, SpyderChecker,
+  SpyderChecker 24 and CMP Digital Target-4 — previously dropped because their
+  supplied files misregistered (box pitch too small, undersized fiducial, or a bad
+  `EXPECTED` list) — are rebuilt onto the patch-area-corner convention with correct
+  box geometry. The bundle is now seven targets (HutchColor, LaserSoft ISO
+  12641-2, LaserSoft DCPro, QPcard 202, SpyderChecker, SpyderChecker 24, CMP
+  Digital Target-4).
+
+### 🧪 Internal
+- New test drives the real `scanin -F` over every bundled target at 100 / 200 /
+  300 dpi using the patch-area corners, and checks each patch reads back from the
+  right place (`tests/test_scanner_multidpi.py`).
+
+## v3.13.0-beta.72
+
+### 🐛 Fixed
+- **Scanner targets built from a ChromIQ chart are now readable by scanin.** The
+  `.cht` writer counted the fiducial (`F`) line in its `BOXES` total, but
+  ArgyllCMS `scanin` does not count it — so every engine-chart scanner target was
+  one box over and `scanin` aborted with "More BOXes than declared". Found by a
+  new hardware-free test that generates targets and reads them back; fixed the
+  count (matching Argyll's own `.cht`).
+- **Dropped four broken bundled targets.** beta.71 bundled `.cht` files whose
+  corrected copies (QPcard 202, SpyderChecker, SpyderChecker 24, CMP Digital
+  Target-4) turned out to misregister with `scanin` (tiny box pitch / undersized
+  fiducial / inconsistent EXPECTED list). ChromIQ now bundles only the three that
+  validate end-to-end (HutchColor, LaserSoft ISO 12641-2, LaserSoft DCPro) and
+  falls back to Argyll's own — correct — `ref/` copies for the rest.
+
+### 🧪 Internal
+- New guarded end-to-end tests: self-made targets across many layouts, and each
+  target rendered from its own geometry, driven through the real `scanin -F` and
+  checked patch-by-patch. These validate registration with no hardware and caught
+  the `BOXES` bug above.
+
+## v3.13.0-beta.71
+
+### ✨ Added
+- **Corrected standard-target recognition files, bundled.** ChromIQ now ships a
+  set of scanner/camera target `.cht` files with **fixed fiducial coordinates**
+  (HutchColor HCT, LaserSoft DCPro, QPcard 202, SpyderChecker, SpyderChecker 24,
+  CMP Digital Target-4). Several of the copies ArgyllCMS ships had wrong fiducial
+  positions that broke registration on those targets; the bundled files —
+  Knut Georg Larsson's corrected versions from the **rectarg** project — fix it.
+  The "standard target" list in Build scanner or camera profile now prefers these
+  over the copies in Argyll's `ref/`. Geometry only (no colours); your target's
+  own reference file still supplies the true patch colours. Bundled under GPLv3
+  with credit — see `data/scanner_targets/README.md`.
+
+## v3.13.0-beta.70
+
+### ✨ Added
+- **Standard-target reference files convert themselves.** When you load a bought
+  target's reference data in Build scanner or camera profile, ChromIQ now takes
+  whatever format it came in and prepares it for you — no command line:
+  - Ready-to-use **.cie / .txt / .ti3** (Wolf Faust, HutchColor, LaserSoft
+    DCPro…) are used as-is.
+  - An **X-Rite .cxf** (LaserSoft ISO 12641-2 targets) is converted with Argyll's
+    `cxf2ti3`.
+  - A **raw or spectral .txt** (CMP Digital Target measurements) is converted with
+    `txt2ti3` + `spec2cie`.
+  The converted copy goes to a temporary folder, so your download is untouched.
+
+### 🧪 Internal
+- **Hardware-free end-to-end test of the scanner/camera pipeline.** A new guarded
+  test drives the real `scanin -F` → `colprof` chain against standard target
+  reference images (using ChromIQ's own `.cht` parser to place the marquee
+  corners) and asserts a healthy profile ΔE across the Wolf Faust, HutchColor and
+  LaserSoft (ISO 12641-2 + DCPro) targets — validating registration with no
+  printer or scanner.
+
+### 🌍 Translated
+- The new reference-format strings translated across the twelve languages.
+
+## v3.13.0-beta.69
+
+### 🐛 Fixed
+- **Consistent camera wording in two more spots.** The Profile Quality
+  Assessment tip now adds a note that, for a **camera**, accuracy depends on the
+  light you shoot under rather than a reprint (pointing to "Profiling a camera").
+  And the status line logged after saving a chart's scanner files now names the
+  right tool — **Build scanner or camera profile** — and mentions photographing
+  the chart, not just scanning it.
+
+### 🌍 Translated
+- The two updated strings translated across the twelve languages.
+
+## v3.13.0-beta.68
+
+### ✨ Changed
+- **Scanner profiling now covers cameras too.** ArgyllCMS reads camera and
+  scanner targets the same way, so the same tools profile a digital camera from
+  a photo of a target:
+  - **"Build scanner profile" is now "Build scanner or camera profile"** and
+    **"Create scanner target" is now "Create scanner or camera target"**, in the
+    Tools menu, the Welcome guide and the window titles.
+  - Wording is device-neutral throughout ("scan or photo of the target"), with a
+    new **"Profiling a camera"** help section covering the capture that matters
+    (even light, shoot raw/flat, fill the frame, keep Matrix for small targets).
+  - The **"Also save scanner-profiling files"** option (All Stripes Read /
+    Profile Quality Assessment) now explains the files it saves work for
+    profiling a **camera** as well — photograph the printed chart instead of
+    scanning it.
+  - The help's "which chart" guidance gains a **"Does this apply to a camera?"**
+    note: same core idea, but a camera profile is tied to the **light** you
+    shoot under (a printed chart suits flat repro work; a ready-made ColorChecker
+    is easier for general photography).
+
+### 🌍 Translated
+- All the new and reworded scanner/camera strings translated across the twelve
+  languages.
+
+## v3.13.0-beta.67
+
+### ✨ Added
+- **Profile your scanner from a standard target you own.** Build scanner profile
+  now has a second mode: choose a bought reflective target (Wolf Faust and other
+  IT8 charts, LaserSoft, the X-Rite ColorCheckers, and every other target
+  ArgyllCMS ships), point ChromIQ at the reference data file that came with it
+  (.cie / .txt), scan it, and build — no ChromIQ chart, printing or measuring
+  needed. ChromIQ reads the target's layout straight from its Argyll `.cht`.
+- **Average several scans for a cleaner profile.** Scan the same sheet a few
+  times and ChromIQ averages the reads to cancel out scanner noise. Add scans
+  with "Add another scan to average" — each keeps its own corner placement —
+  and pick how they combine: **Mean**, **Geometric mean** (robust to an odd
+  scan) or **Trimmed mean**. Multi-page charts average within each page, then
+  build one profile from all pages.
+- **Choose the scanner profile type** — **Matrix** (recommended), **LUT medium**
+  or **LUT high** — instead of a fixed setting.
+- **A live grid for every target.** The alignment grid is now rebuilt from the
+  chart's `.cht` (verified against all of Argyll's standard targets, including
+  two-area targets like the Wolf Faust IT8), so it lines up on standard targets
+  and older printtarg charts too.
+- **More scanner help.** Scan-setup guidance (flat, colour-managed-off capture)
+  and a "Getting the best result" walkthrough covering averaging, multi-page
+  charts and standard targets.
+
+### ✨ Changed
+- **The Build scanner profile window scrolls** with a soft edge fade so it fits
+  smaller screens — Build and Close stay pinned in view.
+
+### 🐛 Fixed
+- **Patch-set editor accent.** The "Show patch number" and "Show gap between
+  patches" checkboxes now use the editor's magenta accent instead of the
+  app-wide cyan, in both light and dark mode.
+
+### 🌍 Translated
+- All new scanner-profiling strings translated across the twelve languages.
+
+## v3.13.0-beta.66
+
+### ✨ Changed
+- **"Blank canvas" removed from the New patch set window.** The patch-set
+  editor itself is the blank canvas — start with any source and add, remove
+  or recolour patches there. Saved setups and presets that carried the old
+  mode simply keep the current selection.
+
+### 🐛 Fixed
+- **Unchecked radio buttons are visible in dark mode again.** In the patch-set
+  editor and its New patch set / Add patches windows the unselected ring used
+  a palette colour that disappeared on the dark background; it now uses the
+  same explicit border colours as the checkboxes in both light and dark mode.
+
+## v3.13.0-beta.65
+
+### ✨ Added
+- **Show/hide the "Chart layout information" panel.** Settings now has a toggle
+  for the Create Chart layout-info panel, alongside the existing "Measured from
+  Preview" toggle — so you can hide either preview panel under the chart. Takes
+  effect immediately.
+
+## v3.13.0-beta.64
+
+### ✨ Added
+- **Scanner profiling: guidance on which chart to use.** The scanner-tool help
+  (Create scanner target / Build scanner profile) and a note in the **Profile
+  Quality Assessment** window now weigh up the two options: reuse the chart you
+  already measured (free, correct, ideal for general use) vs. print a fresh
+  chart through your normal colour-managed workflow and measure it (most
+  accurate when you mainly scan your own colour-managed prints). The reference
+  colours always come from your measurement, so either is correct — the choice
+  is about how well the target matches what you'll scan.
+- **New "Profile my scanner" card** in the Welcome / help window, walking through
+  measure → keep scanner files → scan → build.
+
+### 🐛 Fixed
+- **Clearer scanin failures.** ChromIQ now recognises Argyll's reference-file
+  errors (a damaged or hand-edited `.cht`/`.cie`, a mismatched pair, or an
+  out-of-memory on a huge scan) and shows a plain-language message —
+  *"recreate the scanner files"* — instead of a raw error dump.
+
+### 🌍 Translated
+- The new scanner-help, Welcome card, and assessment-note strings, in all 12
+  languages.
+
+## v3.13.0-beta.63
+
+### ✨ Added
+- **Save scanner-profiling files from the Check & Refine step too** — the
+  **Profile Quality Assessment** dialog now offers the same **"Also save
+  scanner-profiling files for this chart"** checkbox as the measurement dialog
+  (shown only for charts ChromIQ has the geometry for). Tick it and whichever
+  button you press — **Confirm**, **Install Profile**, **Use as
+  Pre-conditioning**, or **Guide Me Through Refinement** — writes the chart's
+  `.cht` + `.cie` from the measurement you just assessed. The dialog's former
+  **Close** button is now labelled **Confirm**.
+
+### 🐛 Fixed
+- Two buttons were dropping their **"&"** — **"Average all reads & build"** and
+  **"Clear & Print"** rendered as *"Average all reads build"* / *"Clear Print"*
+  because Qt treated the ampersand as a keyboard-shortcut marker. They now read
+  correctly.
+- Dark mode: removed a stray dark box behind the scanner-profiling checkbox
+  label so the card's tint shows through cleanly.
+
+### 🌍 Translated
+- Full 12-language translations of the scanner-profiling strings (#97, #98).
+- Wrapped the layout-editor masthead tooltip for translation and split the
+  page-count messages into proper singular/plural forms.
+
+## v3.13.0-beta.62
+
+### ✨ Added
+- **Scanner profiling** — build an ICC profile for your **scanner** from a
+  printed ChromIQ chart, no dedicated target chart needed (#97, #98):
+  - After measuring, tick **"Also save scanner-profiling files for this chart"**
+    in the "All Stripes Read" dialog (or use **Tools ▸ Create scanner target**)
+    to write the chart's `.cht` + `.cie` — where each patch sits plus the real
+    colours the spectrophotometer measured. They rebuild automatically from
+    every finalised measurement, so they never go stale.
+  - **Tools ▸ Build scanner profile (from a scan)** — pick the measured chart
+    and a flatbed scan of the printed chart, drag four corners over the patch
+    area until the live green grid lines up, and ChromIQ runs `scanin` + `colprof`
+    to write a scanner profile next to the scan. Multi-page charts: one scan and
+    placement per page, combined into one profile. The help explains how to use
+    the resulting profile. Scanner outputs are named `-scanner` so they can never
+    overwrite the printer profile.
+  - Works for both layout-engine charts **and** printtarg / preset charts: at
+    creation ChromIQ captures printtarg's exact `.cht` geometry (a fast,
+    seed-independent re-run) after verifying it against the chart's own `.ti2`,
+    so it's correct or simply absent — never wrong (#8). Charts made in older
+    versions show an honest "recreate the chart to enable scanner files" note.
+
+### 🔧 Changed
+- Charts no longer write a `.cht` at creation time: a recognition template is
+  only meaningful paired with a *measured* `.cie` (the aim `.cie` was dropped in
+  beta.59), so both are now produced together from the measurement.
+
+## v3.13.0-beta.60
+
+### 🐛 Fixed
+- Patch-set generator, "Fill remaining gaps": removed the leftover radio button
+  in front of "patches" (the pages option is gone), moved "patches" to the right
+  of the spinbox, matched the spinbox width to the other rows, and it's now
+  greyed out when "Fill remaining gaps" is unticked (light and dark).
+
+## v3.13.0-beta.59
+
+### 🔧 Changed
+- Dropped the `.cie` sidecar added in beta.57: its values were the chart's *aim*
+  colours (sRGB-reconstructed), not measurements, so it didn't carry meaningful
+  data for a `.cie` (which is a measured reference). Charts still get the colour
+  list, the i1Profiler pair and the `.cht` recognition template.
+
+## v3.13.0-beta.58
+
+### 🐛 Fixed
+- Renaming a project now also renames its chart hand-off sidecars — the colour
+  list (`-colours.txt`), the `.cie` reference and the `.cht` template — so a
+  renamed project stays self-consistent (the i1Profiler pair already followed).
+
+## v3.13.0-beta.57
+
+### 🐛 Fixed
+- The patch-set editor's **Apply / Save** again writes the hand-off files for
+  **engine** charts (it had only been doing so for printtarg charts): the colour
+  list (`-colours.txt`), the i1Profiler pair (`-i1profiler.txt` / `.pxf`) and now
+  a `.cie` reference.
+
+### ➕ Added
+- Every chart made from the **Create Chart** tab now always leaves those
+  hand-off files in the run folder — not just for the i1iSis flow — so a
+  generated chart is self-contained for profiling elsewhere.
+- Charts now also get a **`.cht`** recognition template and a **`.cie`**
+  reference (aim XYZ, read from the `.ti2` so it lines up with the `.cht`),
+  enabling a `scanin` flatbed read. The engine now emits the `.cht` by default;
+  printtarg already did. (The `.cie` values are the chart's aim colours, not
+  measurements; colour list and `.cie` are RGB-chart only.)
+
+### ➕ Added
+- **New Tool: "Apply a device-link to an image".** Pushes your images through a
+  device-link with `cctiff` and saves a **printer-ready TIFF** next to each
+  (`<name>-printready.tif`) — already in the printer's own colours, no profile
+  attached. Print it **raw** (the way charts are printed, driver colour
+  management off) or load it in a RIP. This sidesteps the driver double-managing
+  the link's output (the cause of "orange" prints on some Canon drivers), and it
+  never touches the print pipeline so it works cross-platform.
+  - **Source-space auto-fix:** the "Create device-link" tool now drops a small
+    `.source.icc` sidecar next to each link, so the Apply tool knows the space
+    the link expects. When an image is in a *different* space it is converted
+    into the link's source first (v4 embedded profiles transcoded to v2) — so
+    results are correct even if the image wasn't already in the link's source
+    space. Third-party links without a sidecar fall back to a clear warning.
+  - Multi-image, image preview, amber (print-family) accent, ⓘ per option.
+
+### 🔧 Changed
+- Built device-links now record their source colour space (a `.source.icc`
+  sidecar) and are remembered as the "last link" for one-click auto-fill.
+- All new strings translated into the 12 UI languages.
+
+## v3.13.0-beta.55
+
+### 🌍 Translated
+- The layout-engine UI — the Create Chart layout panel, the Chart Layout and
+  Instrument Limits settings tabs, the patch-set editor and the chart-layout
+  information panel, plus all their tooltips — is now **fully translated in all 12
+  languages** (German, Dutch, Spanish, French, Italian, Japanese, Norwegian,
+  Polish, Portuguese, Russian, Swedish, Simplified Chinese). Each language uses
+  ChromIQ's established terminology so the wording stays consistent across the app.
+
+## v3.13.0-beta.54
+
+### 🔧 Changed
+- **Device-link Rendering-style help** now notes that perceptual (and its
+  variants) can nudge very saturated colours — magenta especially — a few
+  degrees to keep gradations smooth, and points hue-critical work to *Accurate
+  colours*. (From backtomarfa's #99 measurements: the hue shift is Argyll's
+  perceptual gamut mapping, not a ChromIQ defect, and is fully intent-selectable.)
+- **Built profiles are now self-identifying:** colprof is always given a
+  manufacturer (`ChromIQ`) and model (the profile description), so the device-ID
+  tags are populated. A device-link built from a ChromIQ profile then carries a
+  proper profile-sequence (`pseq`) instead of a blank/placeholder entry.
+
+## v3.13.0-beta.53
+
+### 🐛 Fixed
+- **TIFF preview (Create Chart / Print / Measure):** the ‹ Prev / Next › page
+  buttons appeared active on a freshly-opened tab before any file was loaded —
+  the preview didn't apply its empty-state nav update until the first load or
+  clear. They now hide/disable immediately, matching the loaded behaviour.
+
+## v3.13.0-beta.52
+
+### ➕ Added
+- Device-link **Image-gamut detail** gains a **Custom…** option that reveals a
+  raw 0–100 spinner for tiffgamut's `-f` filter, alongside the named presets.
+
+### 🔧 Changed
+- Device-link **Add images… / Remove** buttons are now compact and no longer
+  crowd the control below them.
+- New strings translated into the 12 UI languages.
+
+## v3.13.0-beta.51
+
+### ➕ Added
+- **Device-link Tool — image-optimised gamut mapping (from backtomarfa's testing, #99):**
+  - **Optimise for specific images** now takes a *set* of images (add/remove
+    list) and builds one shared source gamut — map a whole exhibition series
+    identically, not just a single picture.
+  - New **Image-gamut detail** control (tiffgamut `-f` popularity filter) to
+    trade off holding the main colours' saturation vs. preserving every
+    gradation.
+  - The image gamut is now built in **CIECAM02 appearance space** (`-pj`) with
+    the link's own viewing conditions, so it actually lines up with the
+    perceptual gamut mapping — the reason a source-image gamut can now bite.
+  - **Rendering style** gains collink's finer gamut-mapping intents, including
+    **Luminance-preserving perceptual**, which often suits matte fine-art paper.
+
+### 🔧 Changed
+- Device-link help text now explains the Photoshop step in full: turn on
+  **Advanced** in *Convert to Profile* (device-links only appear there), pick it
+  under *Device Link*, and print with the printer's colour management off.
+- The loaded-images list is taller and shows just the file name (full path on hover).
+- All new device-link strings translated into the 12 UI languages.
+
+## v3.13.0-beta.50
+
+### 🔧 Changed
+- **ColorMunki Density** is now **hidden** (not greyed out) in "Prioritise chart
+  area" mode, where the columns/rows define the grid — matching how the
+  Calculation-method rows are hidden in "Prioritise patch size" (Knut).
+- **"Offset every second strip"** moved from *Patches & spacers* into the
+  **Layout** section, next to the other ColorMunki layout choices (Knut).
+- Corrected the Density tooltip: "Hand-held" still reads whole strips — just a
+  few large, widely-spaced patches — rather than "one patch at a time".
+
+## v3.13.0-beta.49
+
+### 🐛 Fixed
+- **Settings → Chart Layout:** the "Show strip indicators" checkbox was drawn on
+  top of the "Basic" section header (overlapping text) because it wasn't placed in
+  the layout when the panel has no built-in selectors. It now sits correctly as a
+  row in the Layout group, matching the Create Chart panel.
+
+## v3.13.0-beta.48
+
+### 🔧 Changed
+- **Device-link Tool polish:**
+  - Browse buttons now use the cyan folder icon (matching the rest of the app)
+    instead of a "Browse…" text button.
+  - Profile pickers add the OS ICC/ICM profile folders to the file-dialog
+    sidebar shortcuts; the image picker shows a thumbnail preview pane.
+  - **Viewing conditions** are now two separate dropdowns — *Screen* (monitor in
+    a typical / bright / darkened room) and *Print* (normal indoor light / D50
+    viewing booth / CIE 116-1995 / partial mid-tone adaptation) — each with a
+    plain-language explanation, replacing the three combined presets.
+  - The **Create device-link** button now shows an inactive state (muted fill
+    with a cyan accent border) until the required fields are filled.
+
+### 🐛 Fixed
+- File-dialog ICC profile sidebar shortcuts are now correct cross-platform:
+  honour `%SystemRoot%` on Windows (not a hardcoded `C:`) and include the modern
+  `~/.local/share/icc` per-user directory on Linux.
+
+## v3.13.0-beta.47
+
+### ➕ Added
+- **New Tool: "Create device-link profile"** (Tools menu). Builds an ICC
+  device-link from a source profile (sRGB, AdobeRGB, ProPhoto…) and your printer
+  profile, baking the gamut mapping in up front — apply it later in Photoshop's
+  *Convert to Profile* or a RIP for repeatable colour across a print series.
+  Wraps ArgyllCMS `collink`.
+  - Friendly presets for rendering style, viewing conditions and quality, with
+    an info (ⓘ) explanation on every option.
+  - **Expert section** (collapsible): optimise the mapping for one specific
+    image (via `tiffgamut`), abstract "tweak" profile, bake-in calibration,
+    3DLUT export (.cube / eeColor / MadVR), inverse-table gamut mode, and forced
+    white point.
+  - **ICC v4 sources are converted to v2 automatically** (Argyll only reads v2)
+    for standard matrix RGB profiles; the converted copy is a temp file removed
+    after the link is built. Non-convertible v4 profiles get a clear message.
+
+## v3.13.0-beta.46
+
+### 🐛 Fixed
+- **Layout-engine ↔ printtarg setting transfer** now carries the full set of
+  shared options across the "Use the ChromIQ layout engine" toggle, in both
+  directions: instrument, paper, pages, resolution, patch scale, clip border,
+  density, spacers (none / B&W / coloured), bit depth, TIFF compression,
+  randomise on/off and the fixed seed — not just instrument/paper/margin/scale.
+- **Margins survive a toggle round-trip.** printtarg has a single margin while
+  the engine has four; the four are now only collapsed onto printtarg's `-m`
+  when they're all equal (lossless). When they differ, printtarg's margin is left
+  untouched and the distinct engine values are restored on the way back — so you
+  no longer lose, say, a 24 mm top / 9 mm sides setup by clicking the toggle.
+  (If you deliberately change printtarg's margin while it's shown, that single
+  value still applies to all four on return.)
+
+## v3.13.0-beta.45
+
+### 🐛 Fixed
+- Area-first **"By columns / rows"**: a pinned *patches-per-strip* (rows) value
+  on a float boundary rendered one row short, leaving a row-tall gap at the bottom
+  (Knut: 16 cols × 15 rows drew only 14). The row-count fill now nudges off the
+  float boundary so the chart always renders exactly the pinned number of rows;
+  the same guard is applied to the auto/derived row paths.
+
+## v3.13.0-beta.44
+
+### 🐛 Fixed
+- Area-first **"minimum patch height %" is now a true minimum**: the patch height
+  is never below `patch width × (% / 100)`. When filling the box would make the
+  patches shorter than that floor, they are stretched taller (fewer rows) and the
+  count overflows to more pages if needed — it never comes out under the set
+  height %. (Knut: 7.0 mm width + 130 % was producing 7.96 × 8.97 mm, an 8.97 mm
+  height below the 10.35 mm floor; it now fills on one page at the correct shape.)
+- Near-capacity counts that grew by columns alone could leave a wide right-edge
+  gap; the fill now spans both axes for every below-capacity count.
+
+## v3.13.0-beta.43
+
+### 🐛 Fixed
+- Area-first now reliably **fills the patch area for any patch set below one
+  page's capacity** (including counts right at the capacity boundary that used to
+  leave a gap), and a set larger than one page **overflows to more pages at the
+  minimum size — never shrinks below the minimum**.
+
+## v3.13.0-beta.42
+
+### 🐛 Fixed
+- Area-first fill refinement: a normal full chart now keeps the patch aspect you
+  set (e.g. 100% height stays roughly square); the grow-to-fill only steps in
+  when a fixed patch set would otherwise leave a gap.
+
+## v3.13.0-beta.41
+
+### 🐛 Fixed
+- **Area-first now always fills the patch area for the chart's patch count.** The
+  "minimum patch width" was being used like an exact size when the count was fixed
+  (a loaded patch set / live re-layout), leaving a big gap on the right/bottom.
+  Now the patches are sized so the whole margin box is filled — they grow above
+  the minimum as needed (e.g. 7.5 mm minimum with 576 patches → ~8.7 mm), and the
+  height follows the resulting width via the height-%. The minimum is a floor, not
+  a fixed value.
+
+## v3.13.0-beta.40
+
+### 🐛 Fixed
+- Patch-set editor: the **gap-size spinboxes showed no value** (the box was too
+  narrow for the digits after the arrows). Widened so the value is visible.
+
+## v3.13.0-beta.39
+
+### 🐛 Fixed
+- **Area-first "Minimum patch width = auto" now fills the chart area** like a
+  typed minimum (the label says *minimum*): it takes the instrument's natural
+  width as the floor and grows the patches to fill the usable width; the height
+  follows via the height-% and fills too — both dimensions fill the margin box.
+- **Built-in presets** (TC9.18, "by Pharmacist", Full-layout-setup) now load with
+  the printtarg engine, so the layout shows the preset's real instrument / paper /
+  orientation instead of the engine's defaults. Switch to the ChromIQ engine
+  afterwards to convert the settings.
+
+### 🔧 Changed
+- Collapsible section headers have **bigger ▶/▼ arrows and bold titles** so they
+  clearly read as open/close controls.
+- Inch readouts are now **3 decimals**, and added to the gap / clip-border-width
+  fields that were missing them.
+- **"Use instrument margins" defaults on** (a new chart respects the jig margins).
+- In Manual, the four targen **Auto** options default on.
+- Patch-set editor: **total patch count shown under the grid**; the gap-size row
+  is compact so it no longer overflows.
+
+## v3.13.0-beta.38
+
+### 🔧 Changed
+- **Clip-border content now uses the full height of the page** (only a small
+  printer-safe inset off the top/bottom edges), instead of being boxed in by the
+  patch margins — so the notes box / logo can use the whole strip.
+- **"Edit patch recipe" moved above the targen frame** so it stays visible when
+  that frame is collapsed; ticking it expands the frame.
+- New **"Auto-update preview when a layout setting changes"** option in Manual
+  (remembered between sessions, with an info pop-up and ⓘ tooltip). Once you've
+  generated a chart, changing a layout setting re-renders the preview by itself —
+  it re-lays-out the existing patches (fast, no new colours) and hides the
+  "room left on the last page" reminder while on. Guided ignores it.
+- In Manual, the four targen **Auto** options (patch count, white, black, grey
+  steps) now default **on**.
+
+## v3.13.0-beta.37
+
+### 🔧 Changed
+- In the clip-border content section, the **image controls (path, rotate, scale,
+  move) are hidden unless the content type is "Imported image"** — less clutter
+  for the text / notes / branding modes.
+
+## v3.13.0-beta.36
+
+### 🐛 Fixed
+- Turning the i1 / i1Pro 3+ clip border **on** now defaults its content to the
+  notes box instead of "none" (so the record strip appears), matching the
+  ColorMunki/SpectroScan behaviour. A chart that deliberately keeps the clip
+  border on with no content is left as-is.
+
+## v3.13.0-beta.35
+
+### 🔧 Changed
+- **Guided mode always uses the ChromIQ engine** now (it reproduces printtarg's
+  Guided geometry exactly); the "Use the ChromIQ layout engine" toggle governs
+  the Manual tab only.
+- **Switching that Manual toggle converts your settings** between the printtarg
+  controls and the engine layout panel (instrument, paper, margins, patch scale,
+  clip border, density, strip-length limit), so the layout you set up isn't lost
+  when you flip it.
+- **Tab switching is tidier:** a plain Guided↔Manual switch carries only the
+  instrument and paper; the rest of the settings transfer when you actually
+  generate the chart (no more half-settings jumping between tabs).
+- ColorMunki double-density now staggers in Guided, matching printtarg's rig.
+
+## v3.13.0-beta.34
+
+### 🐛 Fixed
+- **Guided→Manual now reproduces the engine chart exactly.** With the ChromIQ
+  engine on, opening Manual after generating in Guided carried only the
+  instrument/paper, so Manual re-added a clip border you'd suppressed and the
+  patches sat closer to the strip labels. The full engine recipe Guided used
+  (clip-border suppression, margins, patch scale, density, edge spacers) now
+  carries into the Manual layout panel.
+
+### 🔧 Changed
+- Create Chart layout reorganised into collapsible **Basic** (Layout, Page
+  geometry, Randomisation) and **Expert Options** sections; the targen / printtarg
+  / ChromIQ-layout frames are collapsible (targen starts collapsed). Collapsed
+  frames drop their border so only the title line shows. The "Use the ChromIQ
+  layout engine" toggle moved above the printtarg section.
+
+## v3.13.0-beta.33
+
+### 🔧 Changed
+- **Collapsible sections in Create Chart.** Click a frame's title (▾/▸) to fold
+  it away. In the ChromIQ layout panel, Layout and Page geometry start open and
+  the rest (Patches & spacers, Randomisation, Output, Sheet text, Clip-border
+  content, Printer calibration) start collapsed. The targen / printtarg Expert
+  frames start collapsed, and the targen Basic frame folds away while the recipe
+  is locked ("Edit patch recipe" off).
+
+## v3.13.0-beta.32
+
+### 🐛 Fixed
+- **Generating in Manual after Guided now uses the right settings.** With the
+  ChromIQ engine on, a Manual chart is built from the engine layout panel; the
+  Guided→Manual carry-over updated the printtarg fields but left the panel on its
+  old instrument/paper, so the generated chart was wrong. The instrument, paper
+  and pages now follow into the panel too.
+
+## v3.13.0-beta.31
+
+### 🐛 Fixed
+- **#18 — edge spacers no longer appear to overflow the margins.** The bracket
+  (edge) spacers print one gap-thickness above the first patch and below the
+  last, but the measured margins / guide lines were measured to the patches
+  only, so the spacers sat outside the purple guide lines (worse with a larger
+  inter-patch gap). The measured margins now include the edge-spacer overhang,
+  so the guides match what prints.
+- **Duplicate engine toggle removed** — "Use the ChromIQ layout engine" was
+  showing twice in Create Chart → Manual (above both the targen and printtarg
+  sections). Now shown once.
+
+### 🔧 Changed
+- **Strip-indicator styling moved to Settings → Chart Layout** (font, size,
+  bold/italic, rotation, alignment, label offset, underline) as the default for
+  new charts; Create Chart keeps just a "Show strip indicators" checkbox in the
+  Layout frame, above Clip border. Saved presets still carry and restore their
+  own styling.
+- **Guided ↔ Manual now stay in sync.** Changing a shared setting (instrument,
+  paper, pages, double/triple density, left border, strip limit, pre-conditioning)
+  in one tab carries it to the other when you switch — without overwriting a
+  setting the other tab can't represent.
+- **Default Patch Sizes table removed** — the area-first "auto" column/row count
+  aims for the instrument's natural patch size, explained in the columns/rows
+  help. (Simpler; no separate table to keep.)
+- Create Chart layout panel: **Page geometry now sits directly under Layout**.
+- Editor: the **gap-size spinboxes** are wider so "30 px" and the arrows fit.
+
+## v3.13.0-beta.30
+
+### 🐛 Fixed
+- **Multi-page engine charts report the right strip count per page** — the
+  on-screen "strips / patches this page" now matches the preview and the estimate,
+  and chartread segments the pages correctly (PASSES_IN_STRIPS2 was a single
+  wrong number).
+
+### 🔧 Changed
+- **Patch-set editor swatch grid:** when "Show gap between patches" is on you can
+  set the **Horizontal and Vertical gap** independently (1–30 px); selected
+  patches get a pink border so the selection is visible even with numbers and gaps
+  off; horizontal and vertical gaps are equal by default.
+- **Create Chart layout panel reorg:** the Layout frame sits above Page geometry;
+  "Max strip length", "Chart offset" and "Don't cap strip length" are hidden in
+  "Prioritise chart area" (they don't apply there); Mode (ColorMunki Density /
+  i1 clip / SpectroScan shape) and the Clip-border toggle moved into the Layout
+  frame for better grouping.
+- Tooltip/help clarifications: ColorMunki Density notes it's greyed in area-first;
+  the Default Patch Sizes help describes the natural-size basis (and no longer
+  implies a hard "stretch cap"); the generator's per-set ⓘ icons align.
+
+## v3.13.0-beta.29
+
+### 🔧 Changed
+- **Applying an edited patch set now keeps your Create Chart layout.** The editor
+  hands back only the patch set; Create Chart re-lays it out with the
+  instrument / paper / margins / patch size set there (the patch set is fixed,
+  the layout stays fully editable). This also fixes the case where an applied set
+  wasn't randomised — "Randomise patch order" now takes effect.
+
+### 🐛 Fixed / wording
+- Patch-set editor help + the Apply/Save dialog now say "patch set" (not "chart
+  layout"); the Inter-patch gap and Strip-indicator gap tooltips describe what
+  they actually do; the Default Patch Sizes help explains the natural-size basis
+  with example sizes.
+
+## v3.13.0-beta.28
+
+### 🐛 Fixed
+- **The “last page not full” hint no longer pops up in Guided mode** (or in Manual
+  with Auto patch count), where the count is filled to the page automatically and
+  there's no patch-set to edit. It now appears only in Manual with a fixed patch
+  count, and its wording is friendlier — it explains you can add a few patches or
+  remove a few, and that the page layout stays as you set it.
+
+## v3.13.0-beta.27
+
+### 🐛 Fixed
+- **Engine chart generation crashed in beta.26** (`build_chart() got an
+  unexpected keyword argument 'area_default_w'`). The Default-Patch-Sizes value
+  threaded into the build is now accepted by the engine. Regression test added.
+
+## v3.13.0-beta.26
+
+### ➕ Added
+- **Settings → Default Patch Sizes** — an editable table of the patch
+  width/height the area-first “auto” column/row count aims for, per instrument,
+  paper and orientation (with a help ⓘ), so auto patches come out a sensible,
+  readable size for the instrument.
+- **Strip-length limit** in Settings → **Instrument Limits** — a configurable
+  per-combo maximum strip length; the Create Chart preview warns when a strip is
+  longer (0 = use the instrument's built-in ruler).
+- A **“last page not full” hint** after generating: when the patch set leaves a
+  notably under-filled last page (or a near-empty extra page), a message offers an
+  **“Edit patch set…”** button that opens the patch-set editor — it never auto-
+  fills or trims for you.
+
+### 🔧 Changed
+- The **“Instrument Margins”** settings tab is renamed **“Instrument Limits”** (it
+  now holds both the margin minimums and the strip-length limit).
+
+## v3.13.0-beta.25
+
+### 🔧 Changed
+- **The New Patch Set window is now generator-only.** The whole layout ("Chart")
+  frame — instrument, paper, clip border, density — and the printtarg “Layout
+  options” are gone; layout is set in the Create Chart tab. The window builds the
+  patch set only (seed from targen, blank, paste/load, Generate colour sets), and
+  the “fill to pages” option is replaced by “fill to N patches”.
+
+## v3.13.0-beta.24
+
+The chart editor is now fully a **patch-set editor** (Knut's review).
+
+### 🔧 Changed
+- **All layout editing removed from the editor.** The printtarg/engine layout
+  panels are gone — layout is done in Create Chart, and a chart keeps the layout
+  it was opened with. The dead controls went too: Update preview, Shuffle (the
+  Create Chart Manual tab handles randomisation), “Highlight selected in preview”,
+  and the Patches/Spacers mode radios.
+- **Consistent “patch set” wording.** Masthead “Chart Patch Set · Editor”, Load /
+  New **patch set** buttons and dialog, and rewritten help.
+- **Editor layout tidied.** The swatch-size slider, the Show-patch-number /
+  Show-gap toggles and the ⓘ moved to the top of the right column (ⓘ in the
+  corner); the action buttons now line up with the bottom of the swatch grid;
+  Apply / Save + Close share the column width; and the right column sits the same
+  small distance from the window edge as the swatch on the left.
+
+## v3.13.0-beta.23
+
+Big engine + editor rework from Knut's feedback.
+
+### 🐛 Fixed
+- **Area-first now fills the whole patch area.** “Prioritise chart area” sizes the
+  patches to fill the margin box instead of leaving a large empty band at the
+  bottom; the minimum patch width / height-% are true minimums that grow to fill.
+  By-columns/rows with a dimension on “auto” fills at a sensible patch size too.
+- **Strip labels never sit behind the patches.** When the top margin is too small
+  the labels slide toward the page edge (and a warning shows) instead of being
+  covered by the first patch row.
+- **Correct preview measurements.** The “Measured from Preview” numbers (margins,
+  patch width, strip length) now come from the engine’s exact geometry, fixing the
+  wrong patch width and the corruption when a strip gap was added.
+
+### 🔧 Changed
+- **“Margins are the law” is tied to area-first**, not “Use instrument margins”.
+  The margin box is always authoritative; going below an instrument minimum is
+  allowed and only flagged as a warning (no silent clamping).
+- **The layout-engine on/off switch moved to the Create Chart tab**, above the
+  layout panel; the old printtarg i1Pro options moved to the Chart Layout settings
+  tab (greyed when the engine is on). Paper & Pages now sit under Instrument.
+- **Loading a Manual preset selects the engine it was made with** (printtarg
+  presets load with the printtarg engine).
+- **The chart editor is now a patch-set editor.** The middle layout preview and
+  all layout controls are gone — layout is done in Create Chart — so the swatch
+  grid fills the window, with Show-patch-number / Show-gap toggles and a smaller
+  minimum swatch size. Renamed throughout to “patch set”.
+
+### ➕ Added
+- **“Patches (this page)”** readout, and a warning when a strip is longer than the
+  instrument’s ruler.
+
+## v3.13.0-beta.22
+
+### 🐛 Fixed
+- **Layout engine and ChromIQ-style clip border no longer conflict.** With both
+  enabled the engine silently fell back to the old printtarg path (so the Manual
+  tab never showed the layout panel and the engine looked dead — mostly on
+  Windows). The two settings are now mutually exclusive: turning the engine on
+  disables and remembers the clip border, turning it off restores it, and an
+  existing both-on configuration self-heals the next time Settings is opened.
+
+## v3.13.0-beta.21
+
+### 🔧 Changed
+- **ColorMunki “Extra-high density” is now a native ColorMunki layout** — no more
+  borrowing the i1Pro geometry. The engine makes the small, dense ColorMunki
+  patches directly, so the chart is a real ColorMunki target end to end. Its
+  patch size is fixed (a defined maximum-density mode), so Manual and Guided fill
+  to the **same** patch count.
+- **Manual Extra-high defaults now match Guided exactly** (5 mm margins, clip
+  border off, centred patch block) — including the strip-label-to-patch spacing.
+- **ColorMunki never caps the strip length** (it has no i1-style ruler), so
+  Manual no longer drops patches versus Guided.
+- **Clip border / notes band**: clip-border content (i1Pro / i1Pro 3 / ColorMunki
+  / SpectroScan) and the per-instrument clip toggles now behave consistently — the
+  clip-border content defaults to the notes box, and the ColorMunki/SpectroScan
+  notes band defaults **off**.
+
+### 🐛 Fixed
+- Turning the clip border **off** now restores the page margin instead of leaving
+  it stuck at the clip-border width (it no longer looks permanently reserved, and
+  ColorMunki/SpectroScan no longer showed a double border).
+- The Chart-Layout paper selector no longer defaults to **A2** — it falls back to
+  **A4** when the previous paper isn’t available, so the page size stops “jumping
+  back to A2”.
+
+## v3.13.0-beta.20
+
+### 🔧 Changed
+- **ColorMunki “Extra-high density” now uses the proven i1Pro strip layout.**
+  This is the mode that replaces the old triple-density trick. The engine builds
+  the dense strip layout (clip border suppressed, strip-length cap lifted) and
+  tags the chart as a ColorMunki directly — no more generating an i1Pro chart
+  and rewriting the measurement file afterwards. The clip-border / strip-cap
+  toggles and your patch scale / margin still apply. Density stays inert in
+  area-first mode (the area fields define that grid).
+
+## v3.13.0-beta.19
+
+### 🔧 Changed
+- **Guided mode no longer clamps to the margin thresholds.** For some
+  instrument/paper combos (notably i1Pro · A4 portrait) the jig thresholds
+  dominated the layout, so **Suppress left clip border** and **Don't limit strip
+  length** changed the chart but not the patch count. Guided now behaves like
+  before the threshold feature — those toggles affect the count again, and the
+  layout matches printtarg's default reserves. The custom Margin-Thresholds
+  safety still applies in Manual mode with **Use instrument margins** on.
+
+## v3.13.0-beta.18
+
+### 🔧 Changed
+- **"Margins are the law" is now opt-in.** Knut's exact-margin behaviour (patch
+  area = the margin box, no hidden instrument leader/trailer, strip labels at the
+  page edge) applies only when **Use instrument margins** is on. With it off the
+  engine uses the original printtarg-style layout, so the default matches
+  printtarg again.
+- **Use instrument margins**: the ⓘ aligns with the other tooltips, and
+  unticking it **restores the margins you had** before ticking.
+- Below the preview, a warning now appears if a margin is too small for its
+  strip-label / sheet-text band (law mode).
+
+### ✨ New
+- **Clip-border image: rotate / scale / move.** The imported clip image can be
+  rotated, scaled (1–50000 % of the fit-to-band size) and moved (X/Y in mm), with
+  a live preview that stays smooth on big images (full resolution is used at
+  generation).
+- The **Browse** buttons (printer calibration and clip image) now use ChromIQ's
+  own file dialog — sidebar shortcuts, and an image thumbnail preview.
+- The **clip "ChromIQ branding"** extra text uses your chosen font.
+
+### 🔧 Fixed
+- **ColorMunki Density** is disabled in area-first layouts (the area fields define
+  the grid there).
+
+## v3.13.0-beta.17
+
+More of Knut's decisions implemented.
+
+### 🔧 Changed
+- **The page margins are now the law.** The patch area is exactly the margin box
+  you set — the engine no longer adds a hidden instrument leader/trailer or a
+  label/text reserve on top, so charts pack more patches than before (and more
+  than ArgyllCMS printtarg would). If a margin is too small for your jig, the
+  instrument-margin warning still flags it. Strip labels, sheet text and the
+  clip notes live **inside** the margins.
+- **Strip labels sit at the page edge** (4 mm by default), not floating above
+  the patches.
+
+### ✨ New
+- **"Text distance from edge"** is now three independent values — **Top** (strip
+  labels), **Bottom** (sheet text) and **Clip** (notes band) — each 4 mm by
+  default, in the Sheet text section.
+- The **ChromIQ branding** clip content's extra text uses your chosen font.
+- **ColorMunki Density** is disabled in area-first layouts (the area fields define
+  the grid there).
+
+## v3.13.0-beta.16
+
+### 🔧 Fixed
+- **Patch size in the Chart-layout panel** now shows 2 decimals, and the
+  estimate-vs-on-screen highlight no longer flags a sub-pixel (≤0.15 mm)
+  difference between the exact target size and the pixel-snapped rendered size —
+  so a derived size like 7.34 mm reads honestly instead of looking like a 7.3 vs
+  7.4 mismatch.
+
+## v3.13.0-beta.15
+
+### 🔧 Fixed
+- **Chart-layout “estimate” now tracks the patch size again.** With *Auto patch
+  count* on, changing the minimum patch width (or other sizing) updates the
+  estimated total/rows/columns/pages instead of sticking on the last generated
+  chart’s count. (The generated chart was already correct.)
+
+## v3.13.0-beta.14
+
+Big batch of layout-engine fixes from Knut's beta-13 testing.
+
+### 🔧 Changed / fixed
+- **Loading a preset then enabling the engine now carries Instrument and Paper
+  across** to the ChromIQ layout panel, so the margins, the “Use instrument
+  margins” lookup and Preferences all use the combo you actually selected.
+- **Your margin boxes are authoritative again** — the engine no longer silently
+  raises them to the instrument minimums on every generate. The minimums apply
+  only when “Use instrument margins” is ticked.
+- **The clip border now sits *inside* the page margin** instead of being added on
+  top: turning it on copies the clip width into the margin box (editable), and
+  the patches start at that margin.
+- **Area-first “by columns/rows” fills the page** — with rows on auto the patches
+  grow down so the last row reaches the bottom margin.
+- The **layout-info “estimate”** column now lays out the on-screen chart’s real
+  patch count under your current settings (correct pages/total).
+- **“Text distance from edge”** is now an adjustable setting (Sheet text).
+- The engine’s **instrument names match the printtarg list** (i1Pro / i1Pro 2 /
+  i1Pro 3, ColorMunki / i1Studio / ColorChecker Studio, …).
+
+### ✨ New
+- **SpectroScan** now renders real interlocking **hexagons** (and the left column
+  isn’t clipped), and labels the grid 2-D: **column letters + row numbers**.
+- **ColorMunki “offset every second strip”** — printtarg’s measuring-rig brick
+  layout, as its own option (independent of density).
+- **ColorMunki / SpectroScan clip-border On/Off** selector, matching the i1Pro.
+- The editor’s **“Pages”** spin fills the new page from the patch generator, now
+  with the same guaranteed minimum patch spacing as the generator.
+- The engine can emit an ArgyllCMS **`.cht`** recognition file (opt-in).
+
+### ⚠️ Known / pending
+- A few vertical-margin details (patch-area top exactly at the margin, strip
+  labels 4 mm above the patches) depend on a pending decision about overriding
+  the instrument’s physical run-off; unchanged for now.
+- ColorMunki extra-high (triple) density still under-counts with the engine.
+
+## v3.13.0-beta.13
+
+Final round of layout-engine refinements from testing.
+
+### ✨ New
+- **“Use instrument margins” checkbox.** Tick it and the four page margins fill
+  from your instrument’s margin thresholds and lock — so the patch area always
+  clears the jig — and re-fill when you change instrument or paper.
+
+### 🔧 Changed
+- **New charts align the patch block to the top-left by default** (was
+  centre-left). Existing presets and saved defaults keep their own setting.
+- **Sheet text now sits 4 mm from the paper edge** (was 1.5 mm), so it can’t be
+  clipped by the printer’s unprintable border.
+
+## v3.13.0-beta.12
+
+More layout-engine refinements from testing.
+
+### ✨ New
+- **Area-first “minimum patch size” mode.** Set the smallest patch your
+  instrument can read, leave Strips/Rows on “auto”, and ChromIQ fits the most
+  patches at that size and grows them to fill the area — the densest readable
+  chart with no counting (a Patch shape ratio controls how they grow). Pin
+  columns/rows instead when you want exact control.
+- Area-first now shows **only the fields that choice needs** (the patch size /
+  scale and patch-area-alignment rows are hidden when not used); margins and
+  clip-border width stay, since they define the area.
+
+### 🔧 Changed
+- **Clip-border content (Notes box) is now the same size in Guided and Manual.**
+  It uses the full clip strip from a small fixed inset, so a larger page margin
+  no longer shrinks the notes text.
+- **Guided mode** now fills a kept i1Pro/i1Pro 3+ clip border with the Notes box
+  and brackets each strip with edge spacers (i1Pro / i1Pro 3+ / ColorMunki).
+
+### ⚠️ Known issue
+- **ColorMunki “extra-high (triple) density” with the new layout engine is
+  wrong** — it currently produces *fewer* patches than double density. Use
+  double density (or printtarg) for ColorMunki extra-high charts until this is
+  fixed.
+
+## v3.13.0-beta.11
+
+Follow-up tweaks to the layout engine from testing.
+
+### ✨ New
+- **Chart layout information now shows patch size** (width × height), and the
+  panel has separate **on screen** / **estimate** columns with steady, aligned
+  widths so the numbers no longer shuffle as values change.
+
+### 🔧 Changed
+- **“Prioritise chart area” is now the default layout mode.** With columns/rows
+  left on “auto” it fills the page just like before, so default charts are
+  unchanged — but the area fields are right there when you want to pin a grid.
+- The Chart layout estimate now refreshes immediately when you switch between
+  Guided and Manual.
+
+## v3.13.0-beta.10
+
+A big round of layout-engine improvements from Knut's testing feedback.
+
+### ✨ New
+- **Two ways to lay out a chart.** A new **Create layout** choice in the engine's
+  Layout section: **Prioritise patch size** (the old behaviour — you set the
+  patch size and it fits as many as it can) or **Prioritise chart area** — you
+  say how many strips (columns) and/or patches per strip (rows) you want and
+  ChromIQ sizes the patches so the grid fills the usable area, so the patches
+  reach the margins evenly. Only the fields each choice needs are shown.
+- **Patch area alignment.** Place the whole patch block where you want it within
+  the page — top-left, centre, bottom-right, and the rest.
+- **Redesigned clip-border “Notes box”, now the default.** The left strip now
+  prints a tidy record: chart facts filled in automatically (patches,
+  instrument, paper, page, profile name, date) plus labelled lines to hand-write
+  the printer, ink set, paper and media settings. It scales with the clip width
+  and gives more writing room on larger sheets.
+- **Chart layout information panel** next to “Measured from Preview”: total
+  patches, patches per strip, strips and pages — with separate **on screen** and
+  **estimate** columns, so after loading a chart and changing a setting you can
+  see both what's printed and what re-generating would produce (changed values
+  turn amber). The estimate shows even before you create the chart.
+
+### 🔧 Changed
+- **The layout engine now honours your margin thresholds.** If a chart would land
+  inside the minimum margin you set (Preferences → Margin Thresholds), the engine
+  widens that margin automatically — so i1Pro charts meet the run-up the ruler
+  needs out of the box.
+- The **Chart Layout** preferences tab now opens on the instrument/paper you're
+  working with in Create Chart (so a saved preset is visible, not seemingly lost).
+
+### 🐛 Fixed
+- Removed a 1-pixel paper gap that could appear between a patch and its spacer.
+- The Create Chart info box now reflects the engine's real settings (clip border,
+  custom patch size, per-edge margins, paper orientation).
+
+**Note for testers:** if you saved engine **defaults** before this build, your
+saved clip-content and alignment values stay as they were until you re-save —
+new charts pick up the new defaults (e.g. the Notes box).
+
+## v3.13.0-beta.9
+
+Fixes two layout-engine issues found in testing.
+
+### 🐛 Fixed
+- **Create Chart → Manual info box now shows the engine's real settings.** When
+  the layout engine is on, the summary read from the old printtarg controls
+  instead of the engine, so it could show the clip border as "off" when it was
+  on, `patch ×0.95` even with a custom patch width/height set, and a single
+  `margin 10 mm` when the four edges differed. It now reads straight from the
+  active layout, shows per-edge margins and the custom patch size, and prints
+  the paper **with its orientation** (e.g. `A4 landscape`) — in both the engine
+  line and the "Layout preset:" line.
+- **Removed a 1-pixel paper gap between a patch and its spacer.** At certain
+  patch scales (e.g. ×0.95 at 300 dpi) a thin white line could appear between a
+  patch and the colour spacer below it on every other row. Rows are now tiled
+  seamlessly.
+
+## v3.13.0-beta.8
+
+Simplifies colour loading based on testing: reflective scan-target (CIE) files
+and the experimental "stretch to fill the cube" option are removed.
+
+### 🔧 Changed
+- **Loading colours now accepts device-RGB files only** — Argyll `.ti1` / `.ti2`
+  / `.ti3` / CGATS and plain hex/RGB lists, in New chart, Add and the editor's
+  Load chart. **CIE reference files (XYZ/LAB) are no longer read**: a reflective
+  scan target's colours can't be turned into a full-range chart layout in a
+  meaningful way, so the **"Stretch colours to fill the RGB cube" option is
+  gone** too. A CIE file now shows a clear "not supported" message.
+  - **Want colours that span the whole RGB cube?** Use **Generate colour sets →
+    3D cube / Saturated edges** — those place patches at the cube's faces and
+    corners by construction, which is exactly what stretching a scan target
+    could never do.
+- **Removed the editor's "Append from file…" button** — it duplicated **Add →
+  Load colours from a file**. ("Load Chart" is unchanged.)
+
+## v3.13.0-beta.7
+
+Layout-engine flexibility & fixes from testing — more paper sizes, friendlier
+on-sheet text, tidier strip labels, and two persistence/preview bug fixes.
+
+### ✨ New / changed
+- **Portrait A2 / A3 / A3+** are now offered by the layout engine on the strip
+  readers (i1 / i1Pro3+) — the engine packs them itself, so it isn't bound by
+  printtarg's landscape-only capacity preference.
+- **The page-label column is gone and its ~5 mm reclaimed for patches** (i1/A4
+  now fits 462 vs printtarg's 441). The page number lives in the on-sheet text
+  instead, via a new **`{page}`** placeholder ("page 1/3").
+- **On-sheet placeholders now read in plain language:** `{instrument}` → "i1Pro3+",
+  `{paper}` → "A4 landscape", `{patchcount}` → "576 patches", `{seed}` → "seed
+  1234", `{dpi}` → "300 dpi", `{project}` → the printer-profile name. The Insert
+  menu, tooltip and live preview all match.
+- **Strip labels now sit flush under the top margin** (the band is still sized to
+  the real label — font, size, rotation, multi-letter). New **Label offset** lets
+  you nudge them; new **Strip gap** widens the space between strips.
+
+### 🐛 Fixed
+- **"Save as Defaults" now keeps every ChromIQ-engine option** (paper, margins,
+  indicators, strip gap, label offset, …). They were being reset on restart.
+- **Adding patches to an empty chart in the editor now shows a preview** built
+  from the current engine settings (the right pane stayed blank before).
+
+### 📝 Notes
+- Non-German engine strings remain English placeholders pending translation
+  before 3.13.0 final.
+
+## v3.13.0-beta.6
+
+Refines the "stretch to fill the cube" option from Knut's testing — it now lives
+only where it belongs (New chart / Add), and the 3D cube shows it immediately.
+
+### ✨ Changed
+- **The "Stretch colours to fill the RGB cube" option is now only in the New
+  chart and Add windows**, as a non-destructive checkbox — turn it on/off and
+  the 3D cube updates live; nothing is committed until you press Create / Add.
+  The button that was in the Edit Chart window has been **removed**.
+- **Edit Chart → Load chart no longer opens CIE reference files.** Load those in
+  New chart or Add, where the fill-the-cube toggle lives. Device-RGB charts
+  (`.ti1` / `.ti2` / `.ti3` / CGATS) still load in the editor as before.
+- **The live 3D cube now opens automatically when you load colours from a
+  file**, so the distribution — and the effect of the stretch toggle — is
+  visible right away instead of hidden behind the (collapsed) preview.
+
+### 📝 Notes
+- This follows from studying Argyll's `scanin`: a `.cie` reference holds only
+  colorimetry (XYZ/LAB) — the device RGB in scanner profiling comes from the
+  *scanned image*, never computed from CIE. Faithful loading shows a reflective
+  target's real (gamut-limited) shape; the stretch is a deliberate layout-reuse
+  transform. See the discussion in #96.
+- Open follow-ups before 3.13.0 final are unchanged: translations of the new
+  strings, real-hardware print+measure verification, multi-strip instruments,
+  and the planned scanner-target workflow (#95 / #97 / #98).
+- Thanks again to **Knut Georg Larsson**.
+
+## v3.13.0-beta.5
+
+Refines how reference-colour files load (from Knut's testing), with a new
+fill-the-cube option for reusing them as chart layouts.
+
+### ✨ New / changed
+- **Loaded reference colours are now faithful by default.** CIE files describe
+  real reflective targets, so their colours are reconstructed colorimetrically
+  (matching Argyll rectarg's "display" intent exactly) — the 3D cube shows the
+  target's real, gamut-limited shape and the white sits at its true value. (This
+  replaces beta-4's media-relative stretch, which forced the white to screen
+  white.)
+- **"Stretch colours to fill the RGB cube"** — an optional, non-colorimetric
+  per-channel stretch for when you want to *reuse* a reference chart's colours as
+  a fresh full-range layout:
+  - in the **Edit / create chart layout** editor, a button next to Darken /
+    Lighten (undoable, so you can compare faithful vs stretched in the 3D
+    distribution),
+  - and as a checkbox in the **New chart "Load from file…"** and **Add "Load
+    colours from a file"** windows, which live-updates the 3D cube.
+  Each has a tooltip noting it changes the colours (no longer colour-accurate).
+
+### 📝 Notes
+- Open follow-ups before 3.13.0 final are unchanged: translations of the new
+  strings, real-hardware print+measure verification, multi-strip instruments,
+  and the planned scanner-target workflow (#95 / #97 / #98).
+- Thanks to **Knut Georg Larsson** for the detailed testing and the sample files.
+
+## v3.13.0-beta.4
+
+Fixes and polish for the colour-file loading added in beta-3, from Knut's
+testing with real scanner-target files.
+
+### 🐛 Fixed
+- **Loaded reference colours are no longer dim / squeezed.** CIE files describe
+  reflective targets whose media white sits well below a perfect white (e.g.
+  Hutchcolor ≈ 77%), so rendering them *absolutely* made everything look dark
+  and the 3D cube collapse toward a gamut shape. Loading is now **media-relative**
+  by default — the target's white maps to display white, so the colours fill the
+  cube and read naturally.
+- **The live 3D cube now reflects pasted / loaded / single colours**, not only
+  the generated sets. (Seed-from-targen is still previewed only after generating.)
+- **"Blank canvas" clears the preview** (and *Update preview* now works on an
+  empty chart) instead of leaving the previous chart's image behind.
+- **The New chart / Add window no longer slips behind the editor** after the
+  file dialog closes.
+- **Colours loaded into the Add window are de-duplicated** (near-identical ones
+  spaced apart) so they don't run together and hurt readability.
+
+### ✨ New / changed
+- **Custom spacer colours** gained **white and black** swatches (5 accents → 7),
+  giving the engine a strong high-contrast separator against very light or very
+  dark patches.
+- The spacer-colour pickers now use ChromIQ's own colour dialog (hex + RGB/HSV),
+  matching the rest of the app, instead of the OS colour panel.
+- Dark-mode standard tabs (Settings) now match the roomier light-mode tabs.
+
+### 📝 Notes
+- Open follow-ups before 3.13.0 final are unchanged from beta-3: translations of
+  the new strings, real-hardware print+measure verification, multi-strip
+  instruments, and the planned scanner-target workflow (#95 / #97 / #98).
+- Thanks again to **Knut Georg Larsson** for the detailed testing and sample
+  files.
+
+## v3.13.0-beta.3
+
+A small follow-up beta: **load existing colour sets from files** (the first step
+toward the scanner-target workflow Knut proposed), plus polish and a correctness
+guarantee for the layout engine.
+
+### ✨ New
+- **Load colours from a file** — CIE reference files (`.cie` / `.txt` carrying
+  XYZ and/or LAB, e.g. SpyderChecker, QPcard, Wolf Faust IT8, Hutchcolor,
+  LaserSoft) as well as Argyll `.ti1` / `.ti2` / `.ti3` / `.cgats` and plain
+  hex/RGB lists. CIE files (no device values) are reconstructed to approximate
+  device sRGB so they can be laid out and analysed in the 3D cube. Available in:
+  - the **Edit / create chart layout** editor's **Load chart** button,
+  - the **New chart** window's "Load from file…",
+  - the **Add** window (new "Load colours from a file" option — previously you
+    had to create a whole new chart to add colours from a file).
+
+### 🎨 Polish
+- Dark-mode standard tabs (the Settings dialog) now match the roomier light-mode
+  tabs, so the two themes are consistent.
+
+### 🔒 Reliability
+- Added an end-to-end test that a generated chart's **saved TIFF carries the
+  exact device colour the `.ti2` records at every patch location** — i.e. what
+  gets printed is what `chartread` expects (verified across a randomised chart).
+- CI: the x86_64 DMG step now retries `hdiutil convert` (it flaked on beta-2).
+
+### 📝 Notes / still to do before 3.13.0 final
+- The engine is **beta** and **off by default**.
+- **Translations:** the new Chart-Layout / engine / file-loading strings are
+  English placeholders in the non-German catalogs — to be translated before final.
+- **Hardware verification:** print + measure on real i1Pro / i1Pro 3 /
+  ColorMunki / SpectroScan hardware — the gate to GA.
+- **CIE colour reconstruction is approximate** (D50→D65→sRGB, gamut-clamped) —
+  fine for layout/analysis, not a colour-managed proof; D65-referenced files
+  (e.g. SpyderChecker) shift slightly.
+- **Multi-strip instruments (DTP41/51):** denser multi-strip layout not done yet.
+- **Scanner workflow (planned, #97 / #98):** generate `.cht` + `.cie` from a
+  `.ti3`, then drive ArgyllCMS `scanin` + `colprof` for a full scanner→printer
+  roundtrip. `.ti1/.ti2/.ti3/.cie` loading (this release, #96) is the first step.
+- Deferred: DeviceN/Separation PDF output for wide-gamut / CMYK+N.
+
+Thanks again to **Knut Georg Larsson** for the detailed feature designs (#96–#98)
+and the example target files.
+
+## v3.13.0-beta.2
+
+The second **ChromIQ layout engine** beta. It delivers the big beta-1 "coming
+next" item — full layout-engine support in the **Edit / create chart layout**
+editor — plus much smarter capacity handling and a round of polish. Still
+**opt-in** (Settings → Chart Layout) and off by default.
+
+### ✨ New
+- **Engine in the chart editor.** Opening an engine chart shows every setting it
+  was made with, updates the preview live as you edit, and carries your changes
+  back to Create Chart. The **New chart** and **Add** windows respect the engine
+  too: the printtarg knobs are replaced by the engine's, with a Chart section for
+  the layout choices that change capacity (clip border on/off, *Don't cap strip
+  length*, ColorMunki density) and a live **"≈ N fit one page"** hint.
+- **Select patches in the preview.** Click or drag a marquee over the preview to
+  select patches (Shift to add, Alt to remove) — the same as printtarg charts.
+- **Multi-page navigation** (Page ◀ ▶) for engine charts in the editor preview.
+- **Seeded Shuffle.** Editor charts start un-randomised; **Shuffle** reuses the
+  same patches and randomises with a fresh, recorded seed.
+- **Rotated-label alignment.** For 90° / 270° strip indicators, choose Left /
+  Centered / Right; *Left* (default) keeps the first letter on a fixed line so a
+  two-letter label grows away from the patches instead of creeping toward them.
+- **Optional edge spacers** — bracket each strip with a leading + trailing
+  spacer like printtarg (off by default).
+
+### 🎯 Smarter packing (capacity now matches what's drawn)
+- The patches-per-page count now accounts for **everything that uses space**:
+  clip-border width, the strip-indicator gap, the real strip-label band
+  (indicator size / font / rotation), the underline, the bottom sheet text and
+  the command stamp. Charts no longer silently overflow, and the count is right.
+- **Reclaim space you're not using:** turning strip labels off, or choosing a
+  small indicator font, frees that space for more patches. With edge spacers
+  **off** (the default), the engine also reclaims the strip-end gaps printtarg
+  leaves — packing **denser than printtarg**, most at larger spacer widths.
+- The editor preview of a loaded chart now matches the printed chart exactly
+  (it was showing a second, different randomisation).
+
+### 🎨 Polish
+- Scroll **fade gradients** now actually render on the editor's controls panel
+  and the New chart / Add / Settings windows; the Settings tabs share one warm
+  background (the General / Margin tabs were stark white in light mode).
+- The checked Patches/Spacers selector is round again (was a magenta square).
+- The Settings window opens taller; the branding "IQ" uses the real Instrument
+  Serif italic; assorted editor layout/scroll fixes.
+
+### 📝 Notes / still to do before 3.13.0 final
+- The engine is **beta** and **off by default** — printtarg remains the default
+  and fallback.
+- **Translations:** the new Chart-Layout / engine strings are English
+  placeholders in the non-German catalogs — they'll be translated before final.
+- **Hardware verification:** print + measure on real i1Pro / i1Pro 3 /
+  ColorMunki / SpectroScan hardware is still pending and is the gate to GA.
+- **Multi-strip instruments (DTP41/51):** denser multi-strip layout isn't
+  implemented yet.
+- A future idea (deferred): emit charts as DeviceN/Separation PDF for
+  wide-gamut / CMYK+N profiling.
+
+## v3.13.0-beta.1
+
+The first beta of the **ChromIQ layout engine** — an optional, built-in
+replacement for ArgyllCMS printtarg that lays out your charts itself. It's
+**off by default** (Settings → Chart Layout); printing and measuring existing
+charts are unaffected, so it's safe to try and switch back at any time.
+
+### ✨ New
+- **ChromIQ layout engine (opt-in).** When enabled, ChromIQ builds the chart
+  TIFF and `.ti2` itself for the i1Pro / i1Pro 3 / ColorMunki / SpectroScan,
+  packing patches efficiently and putting useful content where printtarg leaves
+  blank space. Full per-instrument × paper × mode defaults live in
+  Settings → Chart Layout, and every option is mirrored in the Create Chart
+  Manual module.
+- **Per-chart layout control.** Patch size & scale, spacer colour/width/scale,
+  inter-patch and strip-indicator gaps, independent page margins, resolution,
+  max strip length, chart offset, strip/patch label patterns, 8/16-bit and
+  compression — each with a friendly tooltip.
+- **Strip indicators.** Choose the label font (bundled + every system font),
+  size (auto-fit), bold/italic; an optional rule under the labels (one
+  continuous 5-segment ChromIQ-accent bar, a per-strip accent cycle, or black)
+  with adjustable thickness and distance.
+- **Randomisation.** Randomise patch order (default), enter or generate a fixed
+  seed for a reproducible layout, or turn randomisation off.
+- **Sheet text.** Print custom text in the bottom margin with
+  `{project}/{date}/{paper}/{instrument}/{patchcount}/{pages}/{seed}/{dpi}`
+  placeholders (an "Insert ▾" menu and a live preview), plus an optional
+  one-line layout-summary stamp.
+- **Clip-border content editor (i1/p3).** Fill the reserved left clip strip with
+  custom text, the ChromIQ branding wordmark, a hand-writing notes box, or an
+  imported logo — with an adjustable clip width, a live rotated preview, and an
+  "Export template (PNG + PDF)" at the exact clip size to design a graphic
+  elsewhere.
+- **Reproducible & self-documenting.** The randomisation seed is stored with the
+  chart; the command stamp records `targen` + the engine (not a misleading
+  printtarg line).
+- **Saveable like printtarg.** Every engine option saves as a default and inside
+  the Create Chart named presets, with the same workflow as the printtarg
+  options.
+
+### ⏭️ Coming next
+- **Layout-engine support in the Edit / create chart layout editor:** opening an
+  engine chart will show all its settings, update the preview live as you edit,
+  and carry your changes back to Create Chart. Tracked in #93.
+
+### 📝 Notes
+- The engine is **beta** and **off by default** — printtarg remains the default
+  and the fallback.
+- Non-German UI translations for the new Chart-Layout strings are pending and
+  will land before a final release.
+
 ## v3.12.1
+
+### 🔧 Changed
+- **A chart's layout is now kept consistent across its two records.** A chart
+  carries its printtarg layout both as the Create Chart manual settings (Set A)
+  and inside its creation recipe (Set B, used to reload the New chart / Add
+  windows). These could drift — e.g. a triple-density preset whose recipe said
+  one scale while its printtarg block said another. Now, whenever a chart is
+  generated or saved as a preset, Set B's layout block (scale, margin, spacers,
+  `-L`/`-P`, double/triple density, DPI, bit depth) is re-synced from the layout
+  the chart was actually built with, so the two can't disagree. The generators,
+  colour-set settings, source mode and patch count stay frozen as "what was used
+  at creation". (#92)
+
+## v3.12.1-beta.1
 
 ### 🔧 Changed
 - **A chart's layout is now kept consistent across its two records.** A chart

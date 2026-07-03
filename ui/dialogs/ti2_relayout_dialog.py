@@ -36,6 +36,7 @@ from PyQt6.QtWidgets import (
 from core.logger import get_logger
 from core.strip_utils import parse_passes_per_page
 from ui.styles import SPEC_AMBER, SPEC_MAGENTA, TAB_COLORS
+from ui.fade_scroll import FadeScrollArea
 from ui.gradient_overlay import GradientOverlay
 from ui.tab_header import SpectrumStripe as _SpectrumStripe, TabHeader
 from ui.tooltip_button import TooltipButton
@@ -321,6 +322,20 @@ def _paper_code_known(code: str) -> bool:
     return code in PAPER_LABELS
 
 
+def _unchecked_indicator_css(settings) -> str:
+    """Border + fill for an UNCHECKED radio indicator, as explicit per-theme
+    colours. The editor's scoped stylesheets used palette(mid)/palette(base),
+    which renders the ring nearly invisible in dark mode — the checkboxes
+    stay readable because they keep the app-wide QSS's indicator border, so
+    match those tokens exactly (dark: styles.BORDER_HI on BG_INPUT; light:
+    light_styles.LM_BORDER_HI on LM_BG_INPUT)."""
+    from ui.theme import resolve_mode
+    light = resolve_mode(
+        settings.get("appearance", "auto") if settings else "auto") == "light"
+    return ("border: 1px solid #b0aba4; background: #ffffff;" if light
+            else "border: 1px solid #4a4a4a; background: #1f1f1f;")
+
+
 def _qcolor(rgb: tuple[float, float, float]) -> QColor:
     return QColor(*(max(0, min(255, round(v / 100 * 255))) for v in rgb))
 
@@ -409,50 +424,67 @@ class _RegenWorker(QThread):
 
 class _SwatchDelegate(QStyledItemDelegate):
     """Paint a swatch (icon) above a Menlo-styled patch number, inside the
-    grid cell sized by :meth:`sizeHint`."""
+    grid cell sized by :meth:`sizeHint`.
+
+    The gap between swatches is independently settable per axis (h_gap / v_gap,
+    px) and is the cell's trailing margin, so the grid's own spacing stays 0 and
+    horizontal == vertical when both are equal (Knut #93). Selection is shown as a
+    pink border around the swatch so it's visible even with numbers + gaps off.
+    """
 
     LABEL_H = 16
-    H_PAD = 6
-    V_PAD = 4
+    _SEL = QColor(255, 69, 115)         # SPEC_MAGENTA-ish selection pink
 
     def __init__(self, parent=None, swatch_size: int = _SWATCH) -> None:
         super().__init__(parent)
         self.swatch_size = swatch_size
+        self.show_label = True          # "Show patch number" (Knut #93)
+        self.h_gap = 3                  # px between swatches across / down
+        self.v_gap = 3
 
     def paint(self, painter, opt, idx) -> None:
         painter.save()
-        if opt.state & QStyle.StateFlag.State_Selected:
-            painter.fillRect(opt.rect, QColor(255, 69, 115, 110))
-
         icon = idx.data(Qt.ItemDataRole.DecorationRole)
         text = idx.data(Qt.ItemDataRole.DisplayRole) or ""
-
         rect = opt.rect
         size = self.swatch_size
-        cx = rect.x() + (rect.width() - size) // 2
-        cy = rect.y() + self.V_PAD
+        selected = bool(opt.state & QStyle.StateFlag.State_Selected)
+        # Swatch sits at the cell's top-left; the gap is the trailing margin.
+        sx, sy = rect.x(), rect.y()
+        swatch = QRect(sx, sy, size, size)
         if isinstance(icon, QIcon) and not icon.isNull():
-            icon.paint(painter, QRect(cx, cy, size, size))
-
-        f = QFont("Menlo")
-        f.setPixelSize(10)
-        painter.setFont(f)
-        text_color = (opt.palette.color(opt.palette.ColorRole.HighlightedText)
-                      if opt.state & QStyle.StateFlag.State_Selected
-                      else opt.palette.color(opt.palette.ColorRole.Text))
-        painter.setPen(text_color)
-        text_rect = QRect(rect.x(), cy + size + 2,
-                          rect.width(), self.LABEL_H)
-        painter.drawText(
-            text_rect,
-            int(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop),
-            text,
-        )
+            icon.paint(painter, swatch)
+        if selected:
+            # A pink border (and a faint pink wash) marks selection — visible even
+            # when numbers + gaps are off and the swatches touch (Knut #93).
+            painter.fillRect(swatch, QColor(255, 69, 115, 70))
+            from PyQt6.QtGui import QPen
+            pen = QPen(self._SEL)
+            pen.setWidth(2)
+            painter.setPen(pen)
+            painter.drawRect(swatch.adjusted(1, 1, -1, -1))
+        if self.show_label:
+            f = QFont("Menlo")
+            f.setPixelSize(10)
+            painter.setFont(f)
+            text_color = (opt.palette.color(opt.palette.ColorRole.HighlightedText)
+                          if selected
+                          else opt.palette.color(opt.palette.ColorRole.Text))
+            painter.setPen(text_color)
+            text_rect = QRect(sx, sy + size + 2, size, self.LABEL_H)
+            painter.drawText(
+                text_rect,
+                int(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop),
+                text,
+            )
         painter.restore()
 
     def sizeHint(self, opt, idx) -> QSize:
-        return QSize(self.swatch_size + 2 * self.H_PAD,
-                     self.swatch_size + self.V_PAD + self.LABEL_H + 2)
+        # Cell = swatch + trailing gap (+ label row when numbers are shown). The
+        # grid's spacing is 0, so the gap here IS the visible inter-swatch gap.
+        label = (self.LABEL_H + 2) if self.show_label else 0
+        return QSize(self.swatch_size + self.h_gap,
+                     self.swatch_size + label + self.v_gap)
 
 
 # ---------------------------------------------------------------------------
@@ -644,79 +676,18 @@ class _PreviewLabel(QLabel):
 # ---------------------------------------------------------------------------
 # Right-panel scroll area with a top/bottom fade gradient.
 # ---------------------------------------------------------------------------
-class _FadeScrollArea(QScrollArea):
-    """QScrollArea that paints translucent fade strips at the top + bottom
-    edges so the user can see content continues out of view.
-
-    The fades only render when there's actually content above/below — at
-    the top they vanish when scrolled to the top, etc. The dialog colour
-    bleeds the fade into the surrounding panel.
-
-    We install an event filter on the viewport to draw AFTER the child
-    widget paints (QScrollArea's own paintEvent fires only on frame
-    repaints, not on scroll). The vertical scroll bar's valueChanged
-    triggers a viewport update so the fades refresh as the user scrolls.
-    """
-
-    _FADE_PX = 18
-
-    def __init__(self, parent=None) -> None:
-        super().__init__(parent)
-        self.verticalScrollBar().valueChanged.connect(
-            lambda _v: self.viewport().update()
-        )
-        self.viewport().installEventFilter(self)
-
-    def eventFilter(self, obj, ev):  # noqa: N802
-        if obj is self.viewport() and ev.type() == ev.Type.Paint:
-            # Let the viewport draw its child widget first, then overlay
-            # the fade strips on top.
-            res = super().eventFilter(obj, ev)
-            self._paint_fades(self.viewport())
-            return res
-        return super().eventFilter(obj, ev)
-
-    def _paint_fades(self, vp) -> None:
-        bar = self.verticalScrollBar()
-        if bar is None or bar.maximum() == 0:
-            return
-        from PyQt6.QtGui import QLinearGradient
-        w, h = vp.width(), vp.height()
-        if w <= 0 or h <= 0:
-            return
-        p = QPainter(vp)
-        p.setRenderHint(QPainter.RenderHint.Antialiasing, False)
-        # Sample the dialog background (one level up) so the fade matches
-        # whatever theme is active.
-        bg = (self.parentWidget() or self).palette().color(
-            self.backgroundRole())
-        clear  = QColor(bg.red(), bg.green(), bg.blue(), 0)
-        opaque = QColor(bg.red(), bg.green(), bg.blue(), 235)
-        if bar.value() > 0:
-            grad = QLinearGradient(0, 0, 0, self._FADE_PX)
-            grad.setColorAt(0.0, opaque)
-            grad.setColorAt(1.0, clear)
-            p.fillRect(0, 0, w, self._FADE_PX, grad)
-        if bar.value() < bar.maximum():
-            grad = QLinearGradient(0, h - self._FADE_PX, 0, h)
-            grad.setColorAt(0.0, clear)
-            grad.setColorAt(1.0, opaque)
-            p.fillRect(0, h - self._FADE_PX, w, self._FADE_PX, grad)
-        p.end()
-
-
 # ---------------------------------------------------------------------------
 # New-chart setup
 # ---------------------------------------------------------------------------
 class _NewChartDialog(QDialog):
-    """New-chart setup: source (blank / targen seed / pasted colours) plus the
-    printtarg layout knobs that affect rendering."""
+    """New-chart setup: source (targen seed / pasted colours / generated
+    sets) plus the printtarg layout knobs that affect rendering."""
 
     def __init__(self, bin_dir: Path, settings=None,
                  parent: QWidget | None = None,
                  initial_recipe: dict | None = None) -> None:
         super().__init__(parent)
-        self.setWindowTitle(tr("New chart"))
+        self.setWindowTitle(tr("New patch set"))
         self.setMinimumWidth(620)
         self._bin_dir = bin_dir
         self._settings = settings
@@ -730,6 +701,12 @@ class _NewChartDialog(QDialog):
         self.result_program: list[tuple] | None = None
         self.result_options: R.LayoutOptions | None = None
         self.result_basename: str = "chart"
+        # Engine layout-mode the user picked in the Chart section (only
+        # meaningful when the engine is on); the editor applies these to the
+        # new chart's recipe (#93).
+        self.result_engine_clip: bool = True
+        self.result_engine_nocap: bool = False
+        self.result_engine_density: int = 1
         # Magenta accents on checked / focused state — same scoped rules
         # as the parent dialog so the New-chart dialog matches it instead
         # of falling back to the app-wide cyan.
@@ -748,12 +725,12 @@ class _NewChartDialog(QDialog):
         # ``outer`` below), so the 3D-cube preview starts beneath it.
         head.setContentsMargins(16, 12, 16, 0)
         head.addWidget(TabHeader(
-            tr("NEW CHART · SETUP"), tr("Set up your chart"),
+            tr("NEW PATCH SET · SETUP"), tr("Set up your patch set"),
             SPEC_MAGENTA, self), 0, Qt.AlignmentFlag.AlignVCenter)
         GradientOverlay(SPEC_MAGENTA, parent=self, alpha=15, height=95, on_top=False)
         head.addStretch(1)
         head.addWidget(_magenta_tip(
-            tr("New chart"),
+            tr("New patch set"),
             tr("Let's start a brand-new chart. You only need to make a few quick "
             "choices here — once you're done, the chart opens in the editor where "
             "you can arrange and fine-tune everything.\n\n"
@@ -761,9 +738,7 @@ class _NewChartDialog(QDialog):
             "• Instrument & Paper — which measuring device you'll use and what "
             "paper you'll print on. ChromIQ uses these to lay the patches out in a "
             "way your device can read, at the right page size.\n\n"
-            "• Patches — how to fill the chart to begin with. There are four ways:\n"
-            "    – Blank canvas — start empty and add every colour by hand in the "
-            "editor.\n"
+            "• Patches — how to fill the chart to begin with. There are three ways:\n"
             "    – Seed from targen — enter a number and let ChromIQ spread that "
             "many colours evenly across the whole colour range. A great all-round "
             "starting point you can then rearrange.\n"
@@ -954,12 +929,68 @@ class _NewChartDialog(QDialog):
         cg.setColumnStretch(1, 1)
         cg.setColumnStretch(3, 1)
         self._paper.currentIndexChanged.connect(self._on_paper_changed)
-        lay.addWidget(chart_box)
+
+        # --- Engine layout mode (Chart section) -----------------------------
+        # When the ChromIQ engine is on, a few layout choices that change how
+        # many patches fit a page belong here in the Chart section (the
+        # printtarg "Layout options" group below is hidden). Strip readers get
+        # clip-border on/off + uncapped strip length; the ColorMunki gets the
+        # density dropdown (freehand / rig / highest) (#93).
+        self._engine_on = bool(
+            self._settings is not None
+            and self._settings.get("use_chromiq_layout_engine", False))
+        self._engine_mode_row = QWidget(chart_box)
+        em = QHBoxLayout(self._engine_mode_row)
+        em.setContentsMargins(0, 0, 0, 0)
+        em.setSpacing(12)
+        self._eng_clip = QCheckBox(tr("Clip border"), self._engine_mode_row)
+        self._eng_clip.setChecked(True)
+        self._eng_clip.setToolTip(tr("i1Pro / 3+ only. Reserve the left edge of "
+                                     "each strip for the clip-on border the "
+                                     "instrument needs to find the strip. Turn "
+                                     "off to free that space for patches."))
+        self._eng_nocap = QCheckBox(tr("Don't cap strip length"), self._engine_mode_row)
+        self._eng_nocap.setToolTip(tr("i1Pro / 3+ only. Let a strip run the full "
+                                      "height of the page instead of being "
+                                      "limited to one instrument pass."))
+        self._eng_density_lbl = QLabel(tr("Density:"), self._engine_mode_row)
+        self._eng_density = NoScrollComboBox(self._engine_mode_row)
+        self._eng_density.addItem(tr("Freehand"), 1)
+        self._eng_density.addItem(tr("Rig (high density)"), 2)
+        self._eng_density.addItem(tr("Highest density"), 3)
+        self._eng_density.setToolTip(tr("ColorMunki only. Freehand spaces strips "
+                                        "for hand-held reading; the higher "
+                                        "densities pack more strips per page for "
+                                        "use with a guide rig."))
+        _as_compact(self._eng_density)
+        em.addWidget(self._eng_clip)
+        em.addWidget(self._eng_nocap)
+        em.addWidget(self._eng_density_lbl)
+        em.addWidget(self._eng_density)
+        em.addStretch(1)
+        cg.addWidget(self._engine_mode_row, 2, 0, 1, 4)
+        # How many patches fit one page with the current instrument / paper /
+        # mode. Lives in the Chart section and uses a theme-aware colour so it
+        # reads in both light and dark mode.
+        self._engine_cap_hint = QLabel("", chart_box)
+        self._engine_cap_hint.setStyleSheet(
+            "color: palette(text); font-size: 11px; font-style: italic;")
+        cg.addWidget(self._engine_cap_hint, 3, 0, 1, 4)
+        self._engine_mode_row.setVisible(self._engine_on)
+        self._engine_cap_hint.setVisible(self._engine_on)
+        self._eng_clip.toggled.connect(self._update_engine_cap_hint)
+        self._eng_nocap.toggled.connect(self._update_engine_cap_hint)
+        self._eng_density.currentIndexChanged.connect(self._update_engine_cap_hint)
+        # The whole "Chart" (layout) frame is removed from the New Patch Set
+        # window (Knut #93): instrument / paper / clip / density / pages are layout
+        # concerns owned by the Create Chart tab. The widgets stay constructed
+        # (hidden, defaulting to i1 / A4) so the patch-set result still carries a
+        # placeholder spec — Create Chart applies the real layout on apply.
+        chart_box.setVisible(False)
 
         # --- Source ---------------------------------------------------------
         src_box = QGroupBox(tr("Patches"), self)
         sl = QVBoxLayout(src_box)
-        self._mode_blank = QRadioButton(tr("Blank canvas (add patches by hand)"), src_box)
         self._mode_seed = QRadioButton(tr("Seed from targen (optimised patch set)"), src_box)
         self._mode_paste = QRadioButton(tr("Paste colour values (or load a file)"), src_box)
         self._mode_seed.setChecked(True)
@@ -974,7 +1005,6 @@ class _NewChartDialog(QDialog):
         seed_row.addWidget(self._count)
         seed_row.addStretch(1)
         sl.addLayout(seed_row)
-        sl.addWidget(self._mode_blank)
         sl.addWidget(self._mode_paste)
         paste_indent = QVBoxLayout()
         paste_indent.setContentsMargins(22, 0, 0, 0)
@@ -997,6 +1027,7 @@ class _NewChartDialog(QDialog):
         paste_indent.addLayout(paste_btns)
         sl.addLayout(paste_indent)
         self._paste_edit.textChanged.connect(self._update_paste_count)
+        self._paste_edit.textChanged.connect(self._do_push_live_preview)  # cube (#96)
 
         # Generate colour sets — combinable generators (#37). Each ticked set
         # contributes its patches, concatenated top-to-bottom into the program.
@@ -1006,7 +1037,7 @@ class _NewChartDialog(QDialog):
 
         # Enable/disable subcontrols by mode
         self._mode_seed.toggled.connect(lambda on: self._count.setEnabled(on))
-        for r in (self._mode_blank, self._mode_seed, self._mode_paste,
+        for r in (self._mode_seed, self._mode_paste,
                   self._mode_generate):
             r.toggled.connect(self._refresh_source_widgets)
         self._refresh_source_widgets()
@@ -1101,10 +1132,20 @@ class _NewChartDialog(QDialog):
         # Triple ↔ Double mutual exclusion + triple-density preset apply
         self._cb_td.toggled.connect(self._on_td_toggled)
         self._cb_h.toggled.connect(self._on_dd_toggled)
+        self._cb_L.toggled.connect(self._update_engine_cap_hint)  # clip affects capacity
         # Initial visibility for the conditional rows
         self._instr.currentIndexChanged.connect(self._refresh_instr_widgets)
         self._refresh_instr_widgets()
-        lay.addWidget(opt_box)
+        # The printtarg "Layout options" are removed too (Knut #93): this window
+        # builds a PATCH SET only; the page layout is set in the Create Chart tab.
+        # Kept constructed (hidden) so the result still carries placeholder values.
+        opt_box.setVisible(False)
+        _eng_note = QLabel(tr("This window builds a patch set. The page layout "
+                              "(instrument, paper, margins, spacers…) is set in "
+                              "the Create Chart tab."), self)
+        _eng_note.setWordWrap(True)
+        _eng_note.setStyleSheet("color: palette(mid); font-size: 11px;")
+        lay.addWidget(_eng_note)
 
         btns = QHBoxLayout()
         restore = QPushButton(tr("Restore defaults"), self)
@@ -1123,7 +1164,10 @@ class _NewChartDialog(QDialog):
         btns.addWidget(ok)
         btns.addWidget(cancel)
 
-        scroll = QScrollArea(self)
+        scroll = FadeScrollArea(self, surface="dialog")
+        from ui.theme import resolve_mode
+        scroll.set_appearance(resolve_mode(
+            (self._settings.get("appearance", "auto") if self._settings else "auto")))
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
         scroll.setWidget(content)
@@ -1301,8 +1345,7 @@ class _NewChartDialog(QDialog):
 
     def _collect_gen_state(self) -> dict:
         mode = ("generate" if self._mode_generate.isChecked() else
-                "paste" if self._mode_paste.isChecked() else
-                "blank" if self._mode_blank.isChecked() else "seed")
+                "paste" if self._mode_paste.isChecked() else "seed")
         return {
             "mode": mode,
             **self._collect_gen_sets(),
@@ -1383,8 +1426,10 @@ class _NewChartDialog(QDialog):
             (self._bd_16 if lo["bit16"] else self._bd_8).setChecked(True)
 
         self._apply_gen_sets(st)
+        # "blank" (the removed Blank-canvas mode) is deliberately absent: a
+        # saved state or preset that carries it keeps the current selection.
         radio = {"generate": self._mode_generate, "paste": self._mode_paste,
-                 "blank": self._mode_blank, "seed": self._mode_seed}.get(
+                 "seed": self._mode_seed}.get(
                      st.get("mode"))
         if radio is not None:
             radio.setChecked(True)
@@ -1806,11 +1851,48 @@ class _NewChartDialog(QDialog):
                                   "chart reaches the size you set, evenly and "
                                   "without repeating. 'Fill to' is the target "
                                   "total patch count."))
-        self._gen_fill_to = _spin(1, 30000, 1000)
+        # Fill target: to a patch count OR (with the engine) to a page count —
+        # two mutually exclusive toggles, each with its OWN spinbox, because a
+        # patch target is a much bigger number than a page target (#93, user).
+        from PyQt6.QtWidgets import QButtonGroup, QRadioButton
+        self._gen_fill_to = _spin(1, 30000, 1000)        # patches target
+        # The fill box sits in a free row, not the grid column, so its wide range
+        # (up to 30000) would make it stick out past the first-column spinboxes
+        # above it. Cap it to the widest of those (the 1..500 image box) so it
+        # lines up (Knut). The count still fits typical fill targets.
+        self._gen_fill_to.setMaximumWidth(self._gen_image_n.sizeHint().width())
+        self._gen_fill_pages = _spin(1, 99, 1)           # pages target
+        self._gen_fill_unit_patches = QRadioButton(tr("patches:"), self._gen_panel)
+        self._gen_fill_unit_pages = QRadioButton(tr("pages:"), self._gen_panel)
+        self._gen_fill_unit_patches.setChecked(True)
+        self._gen_fill_unit_grp = QButtonGroup(self._gen_panel)
+        self._gen_fill_unit_grp.setExclusive(True)
+        self._gen_fill_unit_grp.addButton(self._gen_fill_unit_patches)
+        self._gen_fill_unit_grp.addButton(self._gen_fill_unit_pages)
+        self._gen_fill_unit_grp.buttonToggled.connect(self._update_gen_counts)
+        self._gen_fill_pages.valueChanged.connect(self._update_gen_counts)
+        # "Fill to pages" is removed from the generator (Knut #93): pages are a
+        # layout concern owned by the Create Chart tab, so the patch-set generator
+        # only fills to a PATCH COUNT. The pages widgets stay constructed (hidden,
+        # patches unit forced on) so the count plumbing keeps working.
+        self._gen_fill_unit_pages.setVisible(False)
+        self._gen_fill_pages.setVisible(False)
+        # The patches/pages radio pair is gone (pages removed); the generator only
+        # fills to a patch count. Keep the "patches" radio object (hidden, forced
+        # on) so the count plumbing below still reads it as checked, but show just
+        # the spinbox with a plain "patches" label to its right (Knut).
+        self._gen_fill_unit_patches.setChecked(True)
+        self._gen_fill_unit_patches.setVisible(False)
+        _fill_row = QHBoxLayout(); _fill_row.setContentsMargins(0, 0, 0, 0)
+        _fill_row.setSpacing(6)
+        _fill_row.addWidget(self._gen_fill_to)
+        _fill_row.addWidget(QLabel(tr("patches"), self._gen_panel))
+        _fill_row.addStretch()
+        _fill_w = QWidget(self._gen_panel); _fill_w.setLayout(_fill_row)
         self._gen_fill_count = _count_label()
         gg.addWidget(self._gen_fill, 15, 0)
         gg.addWidget(QLabel(tr("fill to:")), 15, 1)
-        gg.addWidget(self._gen_fill_to, 15, 2)
+        gg.addWidget(_fill_w, 15, 2, 1, 5)
         gg.addWidget(self._gen_fill_count, 15, 7)
 
         # A per-set ⓘ icon (col 8) opens the set's explanation in its own little
@@ -1837,9 +1919,12 @@ class _NewChartDialog(QDialog):
             (15, self._gen_fill,  tr("Fill remaining gaps")),
         )
         for row, cb, title in row_tips:
+            # Top-align the ⓘ so every set's icon lines up on the first row even
+            # when a row is taller (the "From image" row has a Load-image button) —
+            # AlignCenter put the From-image ⓘ lower than the rest (Knut #93).
             gg.addWidget(
                 _magenta_tip(title, cb.toolTip(), self._gen_panel, min_width=360),
-                row, 8, Qt.AlignmentFlag.AlignCenter)
+                row, 8, Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
 
         # The counts all live in one column (7), so they stay left-aligned in a
         # tidy column for every set. Greys' extra "offset:" control sits in cols
@@ -2051,6 +2136,16 @@ class _NewChartDialog(QDialog):
                 background: {SPEC_MAGENTA}; border-color: {SPEC_MAGENTA};
             }}
             QCheckBox::indicator:hover {{ border-color: {SPEC_MAGENTA}; }}
+            /* This dialog sets its own stylesheet, which drops the app-wide
+               round radio geometry — so re-declare the base indicator round
+               (border-radius = half ⇒ circle), else a checked radio draws as a
+               magenta square. Checkboxes keep their square tick. Explicit
+               per-theme colours, not palette(mid): see _unchecked_indicator_css. */
+            QRadioButton::indicator {{
+                width: 14px; height: 14px;
+                {_unchecked_indicator_css(self._settings)}
+                border-radius: 8px;
+            }}
             QRadioButton::indicator:checked {{
                 background: {SPEC_MAGENTA}; border-color: {SPEC_MAGENTA};
             }}
@@ -2058,9 +2153,11 @@ class _NewChartDialog(QDialog):
                magenta :checked fill wins over Qt's disabled greying, so an
                unselected panel (e.g. "Generate colour sets") still showed bright
                ticks. The two-state selector outranks the single :checked rule. */
-            QCheckBox::indicator:checked:disabled,
-            QRadioButton::indicator:checked:disabled {{
+            QCheckBox::indicator:checked:disabled {{
                 background: #4a4a4a; border-color: #4a4a4a;
+            }}
+            QRadioButton::indicator:checked:disabled {{
+                background: #4a4a4a; border-color: #4a4a4a; border-radius: 8px;
             }}
             QLineEdit:focus, QComboBox:focus,
             QSpinBox:focus, QDoubleSpinBox:focus {{
@@ -2084,6 +2181,70 @@ class _NewChartDialog(QDialog):
         subclasses that reuse the panel under a different control (e.g. the
         editor's Add dialog) override this."""
         return self._mode_generate.isChecked()
+
+    def _engine_cap_per_page(self) -> int:
+        """Patches the engine fits on one sheet for this dialog's layout, or 0
+        when the engine is off / not resolvable. Bases the layout on the main
+        editor's recipe (``_initial_recipe`` — the user's "settings from the main
+        editor") and applies this dialog's instrument/paper/mode when present.
+        Shared by the capacity hint and the 'fill to N pages' target (#93)."""
+        if not (self._settings is not None
+                and bool(self._settings.get("use_chromiq_layout_engine", False))):
+            return 0
+        try:
+            from workflow.layout_engine import geometry, instruments, papers
+            from workflow.layout_engine.presets import default_recipe, LayoutRecipe
+            rec = (LayoutRecipe.from_dict(self._initial_recipe)
+                   if isinstance(self._initial_recipe, dict) else None)
+            instr_w = getattr(self, "_instr", None)
+            paper_w = getattr(self, "_paper", None)
+            if instr_w is not None and paper_w is not None:
+                eng = {"i1": "i1", "3p": "p3", "CM": "CM"}.get(instr_w.currentData())
+                paper = paper_w.currentData()
+            elif rec is not None:
+                eng, paper = rec.instrument, rec.paper
+            else:
+                return 0
+            if eng is None or paper in (None, "custom"):
+                return 0
+            if rec is None:
+                rec = default_recipe(eng, paper)
+            rec.instrument, rec.paper = eng, paper
+            if eng == "CM" and getattr(self, "_eng_density", None) is not None:
+                rec.cm_density = int(self._eng_density.currentData() or 1)
+            elif eng in ("i1", "p3") and getattr(self, "_eng_clip", None) is not None:
+                rec.clip_border = self._eng_clip.isChecked()
+                rec.nolimit = self._eng_nocap.isChecked()
+            geom = instruments.geom_from_build_kwargs(rec.build_kwargs())
+            w_mm, h_mm = papers.dimensions_mm(paper)
+            return geometry.patches_per_sheet(geom, w_mm, h_mm)
+        except Exception:
+            return 0
+
+    def _effective_fill_target(self) -> int:
+        """The fill target as a patch count: the patches spin in 'patches' mode,
+        or the pages spin × engine capacity-per-page in 'pages' mode (#93)."""
+        if self._gen_fill_unit_pages.isChecked():
+            per = self._engine_cap_per_page()
+            if per > 0:
+                return int(self._gen_fill_pages.value()) * per
+        return int(self._gen_fill_to.value())
+
+    def _sync_fill_unit(self) -> None:
+        """'pages' fill only makes sense with the engine — disable the 'pages'
+        toggle (falling back to 'patches') when the engine can't size a page;
+        grey the spinbox of whichever unit isn't active."""
+        can_pages = self._engine_cap_per_page() > 0
+        self._gen_fill_unit_pages.setEnabled(can_pages)
+        if not can_pages and self._gen_fill_unit_pages.isChecked():
+            self._gen_fill_unit_patches.setChecked(True)
+        pages_on = self._gen_fill_unit_pages.isChecked()
+        fill_on = self._gen_fill.isChecked()
+        self._gen_fill_pages.setEnabled(can_pages and pages_on and fill_on)
+        # Also gate on the "Fill remaining gaps" checkbox — this runs after the
+        # per-row enable pass in _update_gen_counts, so without the check it would
+        # re-enable the spinbox even when the row is off (Knut).
+        self._gen_fill_to.setEnabled(not pages_on and fill_on)
 
     def _update_gen_counts(self, *_a) -> None:
         """Refresh each generator's patch count + the running total, and gate
@@ -2151,8 +2312,9 @@ class _NewChartDialog(QDialog):
             total += wb_n
         # Fill remaining gaps tops the whole chart (existing + sets + white/black)
         # up to its target, so it's counted last.
+        self._sync_fill_unit()
         fill_n = G.fill_gaps_count(total + len(self._existing_patches),
-                                   self._gen_fill_to.value())
+                                   self._effective_fill_target())
         self._gen_fill_count.setText(_patches_label(fill_n))
         if self._gen_fill.isChecked():
             total += fill_n
@@ -2212,7 +2374,7 @@ class _NewChartDialog(QDialog):
         # it's sparse and avoiding everything already chosen (#51).
         if self._gen_fill.isChecked():
             seed = self._existing_patches + program
-            program.extend(G.fill_gaps(seed, self._gen_fill_to.value()))
+            program.extend(G.fill_gaps(seed, self._effective_fill_target()))
         return program
 
     # -- live 3D-cube preview (embedded panel) ----------------------------
@@ -2386,11 +2548,38 @@ class _NewChartDialog(QDialog):
         if self._existing_patches:
             self._gen_after_total.setText(tr("Chart after adding: {label}").format(
                 label=_patches_label(len(self._existing_patches) + len(additions))))
-        # The cube shows what's actually being added — nothing when generate is
-        # off (you're adding no sets), the additions otherwise.
-        program = additions if self._gen_sets_active() else []
+        # The cube shows whatever the *active* source mode would contribute —
+        # pasted/loaded colours and the single Add colour too, not only the
+        # generated sets (#96).
+        program = self._live_preview_program(additions)
         if getattr(self, "_cube_panel", None) is not None and self._cube_shown:
             self._cube_panel.set_program(program, self._existing_patches)
+
+    def _live_preview_program(self, additions: list) -> list:
+        """The colours the current source mode would add, for the live 3D cube.
+
+        Paste / "load from file" → the parsed colours; Add's single colour or
+        loaded file → those; generated sets → the additions. Seed-from-targen
+        isn't previewed (it needs a targen run, too slow to do live). (#96)
+        """
+        pm = getattr(self, "_mode_paste", None)
+        if pm is not None and pm.isChecked():
+            return R.parse_color_values(self._paste_edit.toPlainText())
+        sm = getattr(self, "_add_mode_single", None)
+        if sm is not None and sm.isChecked():
+            return [self._single_rgb]
+        fm = getattr(self, "_add_mode_file", None)
+        if fm is not None and fm.isChecked():
+            return list(getattr(self, "_loaded_add_program", []))
+        return additions if self._gen_sets_active() else []
+
+    def _ensure_cube_shown(self) -> None:
+        """Unfold the live 3D cube if it's collapsed — called after loading
+        colours from a file so the distribution is visible immediately, not
+        hidden behind the fold (#96)."""
+        btn = getattr(self, "_fold_btn", None)
+        if btn is not None and not btn.isChecked():
+            btn.setChecked(True)   # fires _on_fold_toggled → re-pushes the cube
 
     def showEvent(self, ev) -> None:  # noqa: N802
         super().showEvent(ev)
@@ -2452,6 +2641,7 @@ class _NewChartDialog(QDialog):
         self._count.setEnabled(self._mode_seed.isChecked())
         self._paste_edit.setEnabled(self._mode_paste.isChecked())
         self._update_gen_counts()
+        self._do_push_live_preview()   # the cube follows the active mode (#96)
 
     def _refresh_spacer_scale_enabled(self, *_a) -> None:
         """Disable Spacer scale (-A) when "None" is the spacer choice —
@@ -2462,6 +2652,16 @@ class _NewChartDialog(QDialog):
         """Show the custom W/H row only when "Custom" is the selection."""
         self._paper_custom_row.setVisible(
             self._paper.currentData() == "custom")
+        self._update_engine_cap_hint()
+
+    def _update_engine_cap_hint(self, *_a) -> None:
+        """Show how many patches fit one page (engine layout) for the current
+        instrument/paper/mode — only when the engine is active (#93)."""
+        hint = getattr(self, "_engine_cap_hint", None)
+        if hint is None:
+            return
+        cap = self._engine_cap_per_page()
+        hint.setText(tr("≈ {n} fit one page").format(n=cap) if cap > 0 else "")
 
     def _refresh_instr_widgets(self) -> None:
         """Show/hide instrument-conditional options.
@@ -2486,11 +2686,20 @@ class _NewChartDialog(QDialog):
         if not is_cm:
             self._cb_h.setChecked(False)
             self._cb_td.setChecked(False)
+        # Engine layout-mode controls (Chart section): clip / no-cap for strip
+        # readers, density dropdown for the ColorMunki.
+        if getattr(self, "_engine_on", False):
+            self._eng_clip.setVisible(is_strip)
+            self._eng_nocap.setVisible(is_strip)
+            self._eng_density_lbl.setVisible(is_cm)
+            self._eng_density.setVisible(is_cm)
+        self._update_engine_cap_hint()
 
     def _on_dd_toggled(self, on: bool) -> None:
         """Toggling double density off triple density (mutual exclusion)."""
         if on and self._cb_td.isChecked():
             self._cb_td.setChecked(False)
+        self._update_engine_cap_hint()
 
     def _on_td_toggled(self, on: bool) -> None:
         """Apply / undo the triple-density preset on the layout widgets.
@@ -2526,6 +2735,7 @@ class _NewChartDialog(QDialog):
             if "P" in stash:
                 self._cb_P.setChecked(bool(stash["P"]))
             self._td_stash = None
+        self._update_engine_cap_hint()
 
     def _update_paste_count(self) -> None:
         parsed = R.parse_color_values(self._paste_edit.toPlainText())
@@ -2533,16 +2743,30 @@ class _NewChartDialog(QDialog):
                                     if parsed else "")
 
     def _load_paste_file(self) -> None:
-        path = open_file_dialog(self, "Load colour values",
-                                "Text files (*.txt *.csv *.tsv);;All files (*)",
-                                start_dir=str(Path.home()))
+        path = open_file_dialog(
+            self, "Load colour values",
+            "Colour files (*.txt *.ti1 *.ti2 *.ti3 *.cgats *.csv *.tsv);;"
+            "All files (*)", start_dir=str(Path.home()))
         if not path:
             return
+        self.raise_(); self.activateWindow()   # keep above the editor (#96)
+        # Parse device-RGB CGATS files (ti1/ti2/ti3/cgats) and plain hex/RGB
+        # lists. CIE reference files (XYZ/LAB) aren't supported (#96).
         try:
-            self._paste_edit.setPlainText(Path(path).read_text(errors="ignore"))
-            self._mode_paste.setChecked(True)
-        except OSError as exc:
+            prog = R.load_colour_file(Path(path))
+        except Exception as exc:  # noqa: BLE001 — surface the parser's message
             QMessageBox.warning(self, tr("Could not read file"), str(exc))
+            return
+        if not prog:
+            QMessageBox.warning(self, tr("No colours"),
+                                tr("No colour values were found in that file."))
+            return
+        # Write the parsed 0..100 RGB into the paste box (its parser reads them
+        # back unchanged — a white patch pins the 0..100 scale).
+        self._paste_edit.setPlainText(
+            "\n".join(f"{r:.4f} {g:.4f} {b:.4f}" for r, g, b in prog))
+        self._mode_paste.setChecked(True)
+        self._ensure_cube_shown()   # reveal the distribution right away (#96)
 
     def _on_ok(self) -> None:
         paper_code = self._paper.currentData() or self._paper.currentText()
@@ -2607,6 +2831,9 @@ class _NewChartDialog(QDialog):
         # No name is asked for here any more — the real name is chosen at
         # Save & apply time. Keep the neutral "chart" placeholder basename.
         self.result_basename = "chart"
+        self.result_engine_clip = self._eng_clip.isChecked()
+        self.result_engine_nocap = self._eng_nocap.isChecked()
+        self.result_engine_density = int(self._eng_density.currentData() or 1)
         self._save_gen_state()   # remember these choices for next time
         self.accept()
 
@@ -2678,6 +2905,33 @@ class _AddPatchesDialog(_NewChartDialog):
         single_row.addStretch(1)
         lay.addLayout(single_row)
 
+        # Load colours from a file — CGATS (ti1/ti2/ti3/cgats), CIE reference
+        # (XYZ/LAB) or a plain hex/RGB list — so a set can be added from a file
+        # without having to create a whole new chart (#96).
+        self._add_mode_file = QRadioButton(tr("Load colours from a file"), self)
+        grp.addButton(self._add_mode_file)
+        lay.addWidget(self._add_mode_file)
+        self._loaded_add_program: list = []
+        file_row = QHBoxLayout()
+        file_row.setContentsMargins(22, 0, 0, 0)
+        self._add_file_btn = QPushButton(tr("Choose file…"), self)
+        self._add_file_btn.setObjectName("compact_input")
+        self._add_file_btn.clicked.connect(self._load_add_file)
+        self._add_file_status = QLabel("", self)
+        self._add_file_status.setStyleSheet("color: #888;")
+        file_row.addWidget(self._add_file_btn)
+        file_row.addWidget(self._add_file_status)
+        file_row.addStretch(1)
+        file_row.addWidget(_magenta_tip(
+            tr("Load colours from a file"),
+            tr("Add the colours from an existing file to this chart. Works with "
+               "Argyll measurement / target files (.ti1, .ti2, .ti3, .cgats) that "
+               "carry device-RGB values, and plain lists of hex or RGB values. "
+               "Near-duplicate colours are automatically spaced apart so the "
+               "chart still reads reliably."), self))
+        lay.addLayout(file_row)
+        self._add_mode_file.toggled.connect(self._refresh_add_mode)
+
         lay.addWidget(self._add_mode_gen)
         lay.addLayout(self._build_generate_panel(content))
         self._add_mode_single.toggled.connect(self._refresh_add_mode)
@@ -2703,7 +2957,10 @@ class _AddPatchesDialog(_NewChartDialog):
         btns.addWidget(ok)
         btns.addWidget(cancel)
 
-        scroll = QScrollArea(self)
+        scroll = FadeScrollArea(self, surface="dialog")
+        from ui.theme import resolve_mode
+        scroll.set_appearance(resolve_mode(
+            (self._settings.get("appearance", "auto") if self._settings else "auto")))
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
         scroll.setWidget(content)
@@ -2756,6 +3013,38 @@ class _AddPatchesDialog(_NewChartDialog):
 
     def _refresh_add_mode(self, *_a) -> None:
         self._update_gen_counts()
+        self._do_push_live_preview()   # the cube follows the active mode (#96)
+
+    def _load_add_file(self) -> None:
+        path = open_file_dialog(
+            self, "Load colours",
+            "Colour files (*.txt *.ti1 *.ti2 *.ti3 *.cgats *.csv *.tsv);;"
+            "All files (*)", start_dir=str(Path.home()))
+        if not path:
+            return
+        self.raise_(); self.activateWindow()   # keep above the editor (#96)
+        try:
+            prog = R.load_colour_file(Path(path))
+        except Exception as exc:  # noqa: BLE001 — surface the parser's message
+            QMessageBox.warning(self, tr("Could not read file"), str(exc))
+            return
+        if not prog:
+            QMessageBox.warning(self, tr("No colours"),
+                                tr("No colour values were found in that file."))
+            return
+        # Space out near-duplicate colours so the chart still reads — a loaded
+        # set can repeat or run similar colours together (#96).
+        try:
+            prog = G.deduplicate(prog)
+        except Exception as exc:  # noqa: BLE001 — keep the raw set if dedupe fails
+            log.warning("deduplicate loaded colours failed: %s", exc)
+        self._loaded_add_program = prog
+        self._add_mode_file.setChecked(True)
+        self._add_file_status.setText(
+            tr("1 colour loaded") if len(prog) == 1
+            else tr("{n} colours loaded").format(n=len(prog)))
+        self._ensure_cube_shown()      # reveal the distribution right away (#96)
+        self._do_push_live_preview()   # show the loaded colours in the cube (#96)
 
     def _paint_single_swatch(self) -> None:
         r, g, b = (max(0, min(255, round(c / 100 * 255)))
@@ -2777,12 +3066,21 @@ class _AddPatchesDialog(_NewChartDialog):
                             c.blue() / 255 * 100)
         self._paint_single_swatch()
         self._add_mode_single.setChecked(True)
+        self._do_push_live_preview()   # show the picked colour in the cube (#96)
 
     def _apply_gen_sets_and_refresh(self, st: dict) -> None:
         self._apply_gen_sets(st)
         self._update_gen_counts()
 
     def _on_add(self) -> None:
+        if self._add_mode_file.isChecked():
+            if not self._loaded_add_program:
+                QMessageBox.warning(self, tr("No file"),
+                                    tr("Choose a colour file to add first."))
+                return
+            self.result_program = list(self._loaded_add_program)
+            self.accept()
+            return
         if self._add_mode_gen.isChecked():
             program = self._build_generated_program()
             if not program:
@@ -2858,7 +3156,7 @@ class Ti2RelayoutDialog(QDialog):
         # the UI is built (end of __init__).
         self._initial_chart = initial_chart
         self._bin_dir = Path(settings.get("argyll_bin_path", "/Applications/Argyll/bin"))
-        self.setWindowTitle(tr("Edit / create chart layout"))
+        self.setWindowTitle(tr("Edit / create chart patch set"))
         # Wider default so the printtarg-options column doesn't clip its
         # row labels ("Margin (mm):", "Spacer -A:") or its combo content
         # ("A4 (210 × 297 mm) Portrait") on first open.
@@ -2870,6 +3168,27 @@ class Ti2RelayoutDialog(QDialog):
         # threaded from the New chart dialog, or loaded from meta.json — so it
         # can be re-persisted on save and reloaded into New chart / Add.
         self._chart_recipe: dict | None = None
+        # The chart's ChromIQ-engine recipe (from channels.json) when it was
+        # built by the engine — drives the engine layout panel (#93).
+        self._engine_recipe = None
+        self._engine_panel = None
+        self._engine_panel_grp = None
+        # True only when a chart was LOADED from disk without an engine recipe
+        # (a printtarg chart) — then the editor stays printtarg even if the
+        # engine setting is on. A new/from-scratch chart follows the setting.
+        self._loaded_printtarg_chart = False
+        self._engine_ti1: "Path | None" = None     # patch data for engine preview
+        # Guards the live "Pages" spin against re-entrancy while we sync its
+        # value to the rendered page count (#93).
+        self._syncing_pages = False
+        self._engine_spacer_rects: list = []        # spacer hit-boxes (preview dpi)
+        self._engine_patch_rects: dict = {}         # (page,slot) -> rect dict
+        self._engine_slots: list = []               # grid index -> slot
+        # Debounced engine preview: re-render via the engine after the last edit.
+        self._engine_preview_timer = QTimer(self)
+        self._engine_preview_timer.setSingleShot(True)
+        self._engine_preview_timer.setInterval(450)
+        self._engine_preview_timer.timeout.connect(self._do_engine_preview)
         # Snapshot of the chart's content (patches + spacers + layout knobs) as
         # last saved / loaded-from-disk. Compared against the live signature to
         # tell whether there are unsaved edits to warn about on Close (#49). A
@@ -2877,6 +3196,7 @@ class Ti2RelayoutDialog(QDialog):
         self._saved_sig: object = object()
         self._palette: list[tuple] | None = None       # native spacer palette
         self._regen: R.RegenResult | None = None
+        self._engine_tiffs: list = []                   # engine-rendered pages
         self._page = 0                                  # previewed page index
         self._spacers: list = []                        # current-page Spacer list
         # Per-page spacer segmentation cache (page -> Spacer list). Filled
@@ -2928,6 +3248,7 @@ class Ti2RelayoutDialog(QDialog):
 
         self._build_ui()
         self._refresh_enabled()
+        self._refresh_engine_panel_visible()   # initial engine-vs-printtarg state
 
         # Pre-load the Create Chart tab's current chart, ready to edit (#45).
         # Deferred to the event loop so the window is shown first and the
@@ -2952,14 +3273,14 @@ class Ti2RelayoutDialog(QDialog):
         # headers (uppercase eyebrow + large serif title), in the editor's
         # magenta accent.
         src.addWidget(TabHeader(
-            tr("CHART LAYOUT · EDITOR"), tr("Design your chart"),
+            tr("CHART PATCH SET · EDITOR"), tr("Arrange and recolour your patches"),
             SPEC_MAGENTA, self), 0, Qt.AlignmentFlag.AlignVCenter)
         GradientOverlay(SPEC_MAGENTA, parent=self, alpha=15, height=95, on_top=False)
         src.addSpacing(16)
-        load_btn = QPushButton(tr("Load chart…"), self)
-        load_btn.setToolTip(tr("Load a chart from a .ti2 file."))
+        load_btn = QPushButton(tr("Load patch set…"), self)
+        load_btn.setToolTip(tr("Load a patch set from a .ti2 / .ti1 file."))
         load_btn.clicked.connect(self._load_ti2)
-        new_btn = QPushButton(tr("New chart…"), self)
+        new_btn = QPushButton(tr("New patch set…"), self)
         new_btn.clicked.connect(self._new_chart)
         src.addWidget(new_btn, 0, Qt.AlignmentFlag.AlignVCenter)
         src.addWidget(load_btn, 0, Qt.AlignmentFlag.AlignVCenter)
@@ -2996,35 +3317,34 @@ class Ti2RelayoutDialog(QDialog):
                                  QSizePolicy.Policy.Preferred)
         src.addWidget(self._info)
         src.addWidget(_magenta_tip(
-            "Chart layout editor",
-            "Welcome! This is where you design the test chart you'll print and "
-            "then measure. A chart is just a page full of little colour squares "
-            "(we call each one a \"patch\"). You can start a brand-new chart or "
-            "open one you already have, rearrange and recolour the patches however "
-            "you like, and save a ready-to-print chart when you're happy.\n\n"
+            tr("Chart patch set editor"),
+            tr("Welcome! This is where you build the PATCH SET for your chart — the "
+            "collection of little colour squares (we call each one a \"patch\") that "
+            "will be measured. You choose which colours are in the set, what order "
+            "they're in, and you can recolour, add or remove them.\n\n"
+            "The page LAYOUT — which instrument and paper, the strips, spacers, "
+            "margins and sizing — is set over in the Create Chart tab. Here you only "
+            "shape the patch set itself; when you apply it, Create Chart lays it out "
+            "for you. That keeps layout in one place and this window simple.\n\n"
             "Don't worry — you can't break anything here. Nothing is printed or "
-            "measured until you choose to, and you can preview every change first.\n\n"
-            "There are three areas to know about:\n\n"
-            "• The patch grid on the left shows every colour as a small square. "
-            "This is your workbench: drag squares around to reorder them, click to "
-            "select, and recolour or add and remove patches. The order you see "
-            "here is the order they'll be printed in.\n\n"
-            "• The preview in the middle is a live picture of the actual printed "
-            "page. It redraws as you edit, so you always see what will really come "
-            "out of the printer — strips, spacers, margins and all. If the chart "
-            "needs more than one page, little Page ◀ ▶ buttons appear.\n\n"
-            "• The controls on the right let you pick whether you're editing "
-            "patches or the spacer squares between them, and adjust how the page is "
-            "laid out (which instrument and paper, spacer style, sizing, margin, "
-            "resolution). This is also where you save.\n\n"
-            "A typical session goes: load a chart or start a new one, arrange and "
-            "recolour the patches, glance at the preview, then Save. The file you "
-            "save is exactly what you print and then read in on the Measure tab.\n\n"
+            "measured until you choose to.\n\n"
+            "Two areas to know about:\n\n"
+            "• The patch grid fills most of the window: every colour is a small "
+            "square. This is your workbench — drag squares around to reorder them, "
+            "click to select, and recolour or add and remove patches. The order you "
+            "see here is the order they'll be measured in. Use the controls above "
+            "the grid to show or hide the patch numbers and the gaps between "
+            "swatches.\n\n"
+            "• The controls on the right let you add or remove patches, generate "
+            "whole colour sets, recolour a selection, and save.\n\n"
+            "A typical session goes: load a patch set or start a new one, arrange "
+            "and recolour the patches, then Apply / Save to send the set back to "
+            "the Create Chart tab (or Save As to export it).\n\n"
             "One handy thing happens automatically: when you save, ChromIQ checks "
-            "whether your colours are well mixed and, if they are, marks the chart "
+            "whether your colours are well mixed and, if they are, marks the set "
             "so your instrument may read each strip in either direction. You only "
-            "have to get involved for tricky, structured layouts — see the "
-            "\"Force randomised tag\" option in the controls for more.",
+            "have to get involved for tricky, structured sets — see the "
+            "force-randomised-tag option in the controls for more."),
             self, min_width=560))
         outer.addLayout(src)
 
@@ -3039,11 +3359,21 @@ class Ti2RelayoutDialog(QDialog):
         lv = QVBoxLayout(left)
         lv.setContentsMargins(0, 0, 0, 0)
         lv.setSpacing(6)
-        top = QHBoxLayout()
-        top.addWidget(QLabel(tr("Swatch size:")))
-        top.addSpacing(20)
-        self._size_slider = QSlider(Qt.Orientation.Horizontal, left)
-        self._size_slider.setRange(24, 96)
+        # Swatch chrome — the size slider, the show-number / show-gap toggles and
+        # the patch-grid ⓘ. Built here but placed at the TOP of the RIGHT column
+        # (below), so the Patches frame lines up with the top of the swatch grid
+        # and the ⓘ sits in the right-most corner (Knut #93). Two compact rows so
+        # it fits the narrow controls column. Widgets are parented to the dialog
+        # so they reparent cleanly when the layout is added to the right column.
+        self._swatch_chrome = QVBoxLayout()
+        self._swatch_chrome.setContentsMargins(0, 0, 0, 0)
+        self._swatch_chrome.setSpacing(4)
+        _crow1 = QHBoxLayout()
+        _crow1.setSpacing(8)
+        _crow1.addWidget(QLabel(tr("Swatch size:"), self))
+        self._size_slider = QSlider(Qt.Orientation.Horizontal, self)
+        # Min lowered to 8 px so the whole patch set fits on screen at once (Knut).
+        self._size_slider.setRange(8, 96)
         self._size_slider.setValue(_SWATCH)
         self._size_slider.valueChanged.connect(self._set_swatch_size)
         # Same recipe as the Gamut viewer's opacity / saturation sliders
@@ -3061,14 +3391,12 @@ class Ti2RelayoutDialog(QDialog):
             f"QSlider::sub-page:horizontal {{ background: {SPEC_MAGENTA};"
             " border-radius: 2px; }"
         )
-        self._size_slider.setFixedWidth(220)
-        top.addWidget(self._size_slider)
-        top.addStretch(1)
-        top.addWidget(_magenta_tip(
+        _crow1.addWidget(self._size_slider, 1)
+        _crow1.addWidget(_magenta_tip(
             "Patch grid",
             "This is your main workspace. Every little square is one colour patch "
-            "from your chart, and the order you see — reading left to right, top to "
-            "bottom — is exactly the order they'll be printed in.\n\n"
+            "in your set, and the order you see — reading left to right, top to "
+            "bottom — is exactly the order they'll be measured in.\n\n"
             "Here's everything you can do:\n\n"
             "• Move patches around. Just drag a square (or several at once) to a "
             "new spot — a magenta line shows where it will land when you let go. "
@@ -3076,21 +3404,68 @@ class Ti2RelayoutDialog(QDialog):
             "the arrow keys, or press F to send them to the very front and L to the "
             "very end.\n\n"
             "• Pick patches. Click a square to select it, hold Shift or Ctrl to "
-            "select more, or drag a box around several. If you turn on \"Highlight "
-            "selected in preview\", the patches you pick here light up in the "
-            "preview too (and the other way round), so it's easy to see where each "
-            "one sits on the page.\n\n"
+            "select more, or drag a box around several.\n\n"
             "• Change a colour. Select one or more patches, then use \"Set colour "
             "of selection…\" over in the Patches controls to give them a new "
             "colour.\n\n"
             "• Add or remove. The Patches controls also let you add fresh patches "
             "or delete the ones you've selected.\n\n"
-            "And don't worry about the \"Swatch size\" slider next to this button — "
-            "it only changes how big the squares look on your screen. It makes no "
-            "difference at all to the printed chart.",
+            "The controls above adjust how the grid looks — the swatch size, and "
+            "whether the patch numbers and the gaps between swatches are shown. "
+            "None of that changes the printed chart; the page layout is set in the "
+            "Create Chart tab.",
             self, min_width=520))
-        top.addSpacing(10)
-        lv.addLayout(top)
+        self._swatch_chrome.addLayout(_crow1)
+        # Show/hide the patch number under each swatch, and the gaps between them,
+        # so the set can be viewed as a whole like in i1Profiler (Knut #93).
+        _crow2 = QHBoxLayout()
+        _crow2.setSpacing(12)
+        # These two live in the swatch-grid chrome, outside the magenta-scoped
+        # controls panel, so they'd fall back to the app-wide cyan indicator —
+        # give them the editor's magenta accent to match the rest of the dialog.
+        _cb_magenta = (
+            f"QCheckBox::indicator:checked {{ background: {SPEC_MAGENTA};"
+            f" border-color: {SPEC_MAGENTA}; }}"
+            f"QCheckBox::indicator:hover {{ border-color: {SPEC_MAGENTA}; }}")
+        self._show_numbers_check = QCheckBox(tr("Show patch number"), self)
+        self._show_numbers_check.setChecked(True)
+        self._show_numbers_check.setStyleSheet(_cb_magenta)
+        self._show_numbers_check.toggled.connect(self._set_show_numbers)
+        _crow2.addWidget(self._show_numbers_check)
+        self._show_gap_check = QCheckBox(tr("Show gap between patches"), self)
+        self._show_gap_check.setChecked(True)
+        self._show_gap_check.setStyleSheet(_cb_magenta)
+        self._show_gap_check.toggled.connect(self._set_show_gap)
+        _crow2.addWidget(self._show_gap_check)
+        _crow2.addStretch(1)
+        self._swatch_chrome.addLayout(_crow2)
+        # Gap size row: independent H / V, editable only while "Show gap between
+        # patches" is on (Knut #93). 1–30 px, default 3 each. The unit ("px") is
+        # in the row label so the spinboxes can stay narrow and not overflow /
+        # overlap the row (Knut beta.38).
+        from ui.widgets import NoScrollSpinBox as _NSpin
+        _crow3 = QHBoxLayout()
+        _crow3.setSpacing(6)
+        self._gap_lbl = QLabel(tr("Gap (px):"), self)
+        _crow3.addWidget(self._gap_lbl)
+        self._gap_h_lbl = QLabel(tr("H"), self)
+        _crow3.addWidget(self._gap_h_lbl)
+        self._gap_h_spin = _NSpin(self)
+        self._gap_h_spin.setRange(1, 30)
+        self._gap_h_spin.setValue(3)
+        self._gap_h_spin.setMinimumWidth(70)        # 2 digits + arrows, no suffix
+        self._gap_h_spin.valueChanged.connect(self._set_gap_sizes)
+        _crow3.addWidget(self._gap_h_spin)
+        self._gap_v_lbl = QLabel(tr("V"), self)
+        _crow3.addWidget(self._gap_v_lbl)
+        self._gap_v_spin = _NSpin(self)
+        self._gap_v_spin.setRange(1, 30)
+        self._gap_v_spin.setValue(3)
+        self._gap_v_spin.setMinimumWidth(70)
+        self._gap_v_spin.valueChanged.connect(self._set_gap_sizes)
+        _crow3.addWidget(self._gap_v_spin)
+        _crow3.addStretch(1)
+        self._swatch_chrome.addLayout(_crow3)
         # It isn't obvious the swatches can be rearranged, so spell it out right
         # above the grid (Knut's suggestion) where it's always visible — the full
         # story stays in the ⓘ. (Below the grid it gets squeezed by the list.)
@@ -3124,7 +3499,7 @@ class Ti2RelayoutDialog(QDialog):
         self._grid.setDropIndicatorShown(False)
         self._grid.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
         self._grid.setIconSize(QSize(_SWATCH, _SWATCH))
-        self._grid.setSpacing(3)
+        self._grid.setSpacing(0)        # gap is the delegate's per-cell trailing margin
         self._delegate = _SwatchDelegate(self._grid, _SWATCH)
         self._grid.setItemDelegate(self._delegate)
         self._grid.setGridSize(self._delegate.sizeHint(None, None))
@@ -3154,11 +3529,22 @@ class Ti2RelayoutDialog(QDialog):
             for k in keys:
                 QShortcut(QKeySequence(k), self._grid, activated=fn)
         lv.addWidget(self._grid, 1)
+        # Total patch count, right under the grid — so you can read it at a glance
+        # without turning on patch numbers and shrinking the swatches to find the
+        # last one (Knut). Updated from the live grid on every change.
+        self._grid_count_lbl = QLabel("", left)
+        self._grid_count_lbl.setStyleSheet(
+            "color: #b0b0b0; font-size: 11px; padding: 2px 2px;")
+        self._grid_count_lbl.setAlignment(Qt.AlignmentFlag.AlignRight)
+        lv.addWidget(self._grid_count_lbl, 0)
         # Status / info line sits under the patch grid (left column only), not
         # spanning the whole window. Auto-hides a few seconds after each message.
         self._status = _AutoHideLabel(left)
         self._status.setStyleSheet("color: #888;")
-        lv.addWidget(self._status)
+        # The status line moves to a full-width row UNDER the body (added after
+        # the body, below) so the swatch grid fills the left column to its bottom
+        # edge — letting the right column's action buttons line up with the bottom
+        # of the swatch grid (Knut #93).
         split.addWidget(left)
 
         # Middle: preview + page navigation
@@ -3203,10 +3589,14 @@ class Ti2RelayoutDialog(QDialog):
         pbl.addStretch(1)
         self._page_bar.setVisible(False)
         midv.addWidget(self._page_bar)
-        split.addWidget(mid)
-        split.setSizes([520, 520])
+        # The middle layout preview is GONE from the editor (Knut #93): layout is
+        # done in Create Chart, so the editor is a pure patch-set tool and the
+        # swatch grid fills the whole left/middle area. `mid` + self._preview are
+        # still constructed (kept off-screen) so the chart still renders for
+        # save/apply and the many methods that reference the preview keep working.
+        mid.setParent(self)
+        mid.setVisible(False)
         split.setStretchFactor(0, 1)
-        split.setStretchFactor(1, 1)
 
         # Right: controls — OUTSIDE the splitter so it sits flush at the right
         # edge with no jumpy "phantom" pane between it and the window border.
@@ -3222,7 +3612,10 @@ class Ti2RelayoutDialog(QDialog):
         body.setSpacing(8)
         body.addWidget(split, 1)
         controls = self._build_controls()
-        ctrl_scroll = _FadeScrollArea(self)
+        ctrl_scroll = FadeScrollArea(self, surface="dialog")
+        from ui.theme import resolve_mode
+        ctrl_scroll.set_appearance(
+            resolve_mode(self._settings.get("appearance", "auto")))
         ctrl_scroll.setWidget(controls)
         ctrl_scroll.setWidgetResizable(True)
         ctrl_scroll.setHorizontalScrollBarPolicy(
@@ -3237,15 +3630,26 @@ class Ti2RelayoutDialog(QDialog):
         # pinned so they're always reachable on short windows.
         right = QWidget(self)
         # Match the panel's fixed width (+ scrollbar gutter) so the column
-        # sits flush at the window edge without overflow.
-        right.setFixedWidth(controls.width() + 14)
+        # sits flush at the window edge without overflow. Stored so the engine
+        # panel (wider than the printtarg knobs) can widen the whole column,
+        # not just the inner panel — otherwise the scroll area stays narrow and
+        # the engine panel scrolls horizontally (#93).
+        self._right_pane = right
+        right.setFixedWidth(controls.width() + 4)   # tight scrollbar gutter (symmetric margins)
         rv = QVBoxLayout(right)
         rv.setContentsMargins(0, 0, 0, 0)
         rv.setSpacing(6)
+        # Swatch chrome (size slider + toggles + ⓘ) sits at the TOP of the right
+        # column so the Patches frame below it lines up with the top of the swatch
+        # grid and the ⓘ is in the right-most corner (Knut #93).
+        rv.addLayout(self._swatch_chrome, 0)
         rv.addWidget(ctrl_scroll, 1)
         rv.addWidget(self._build_action_bar(right), 0)
         body.addWidget(right, 0)
         outer.addLayout(body, 1)
+        # Full-width status line under the body (moved out of the left column so the
+        # swatch grid reaches the bottom edge — see split.addWidget(left)).
+        outer.addWidget(self._status)
 
     def _build_controls(self) -> QWidget:
         panel = QWidget(self)
@@ -3254,6 +3658,7 @@ class Ti2RelayoutDialog(QDialog):
         # open. Bump beyond 320 also gives custom-paper W/H spinboxes
         # room to breathe.
         panel.setFixedWidth(360)
+        self._controls_panel = panel
         # Container stylesheet — the only reliable way to shrink button
         # height ([[feedback_qt_button_sizing]]: setMinimumHeight on the
         # button itself is overridden by Qt's compound-widget CSS). Magenta
@@ -3270,6 +3675,16 @@ class Ti2RelayoutDialog(QDialog):
                 background: {SPEC_MAGENTA}; border-color: {SPEC_MAGENTA};
             }}
             QCheckBox::indicator:hover {{ border-color: {SPEC_MAGENTA}; }}
+            /* This dialog sets its own stylesheet, which drops the app-wide
+               round radio geometry — so re-declare the base indicator round
+               (border-radius = half ⇒ circle), else a checked radio draws as a
+               magenta square. Checkboxes keep their square tick. Explicit
+               per-theme colours, not palette(mid): see _unchecked_indicator_css. */
+            QRadioButton::indicator {{
+                width: 14px; height: 14px;
+                {_unchecked_indicator_css(self._settings)}
+                border-radius: 8px;
+            }}
             QRadioButton::indicator:checked {{
                 background: {SPEC_MAGENTA}; border-color: {SPEC_MAGENTA};
             }}
@@ -3277,9 +3692,11 @@ class Ti2RelayoutDialog(QDialog):
                magenta :checked fill wins over Qt's disabled greying, so an
                unselected panel (e.g. "Generate colour sets") still showed bright
                ticks. The two-state selector outranks the single :checked rule. */
-            QCheckBox::indicator:checked:disabled,
-            QRadioButton::indicator:checked:disabled {{
+            QCheckBox::indicator:checked:disabled {{
                 background: #4a4a4a; border-color: #4a4a4a;
+            }}
+            QRadioButton::indicator:checked:disabled {{
+                background: #4a4a4a; border-color: #4a4a4a; border-radius: 8px;
             }}
             QLineEdit:focus, QComboBox:focus,
             QSpinBox:focus, QDoubleSpinBox:focus {{
@@ -3311,7 +3728,11 @@ class Ti2RelayoutDialog(QDialog):
         self._mode_patches.toggled.connect(self._on_mode_change)
         mb.addWidget(self._mode_patches)
         mb.addWidget(self._mode_spacers)
-        v.addWidget(mode_box)
+        # The Patches/Spacers mode frame is removed from the editor (Knut #93):
+        # with layout done in Create Chart there are no editor spacers to edit, so
+        # the editor is always in patches mode. Kept constructed (hidden) so the
+        # patches-mode logic that reads these radios keeps working.
+        mode_box.setVisible(False)
 
         # printtarg options — all the knobs the New chart dialog exposes,
         # editable on an already-loaded chart. Mirrors LayoutOptions; each
@@ -3520,7 +3941,11 @@ class Ti2RelayoutDialog(QDialog):
             "• clicking or marquee-dragging on the preview selects them on "
             "the left"))
         self._hl_patches.toggled.connect(self._on_patch_highlight_toggled)
-        pb.addWidget(self._hl_patches)
+        # "Highlight selected in preview" is gone — there's no preview to
+        # highlight into now (Knut #93). Kept unchecked + hidden so the highlight
+        # branches that read it simply stay off.
+        self._hl_patches.setChecked(False)
+        self._hl_patches.setVisible(False)
         set_col = QPushButton(tr("Set colour of selection…"), self._patch_box)
         set_col.clicked.connect(self._set_patch_colour)
         pb.addWidget(set_col)
@@ -3545,13 +3970,6 @@ class Ti2RelayoutDialog(QDialog):
         addrem.addWidget(rem_b)
         pb.addLayout(addrem)
         combine = QHBoxLayout()
-        append_b = QPushButton(tr("Append from file…"), self._patch_box)
-        append_b.setToolTip(
-            tr("Load another patch set (.ti2 / .ti1 / .ti3 / CGATS .txt / "
-            "i1Profiler .pxf / .pwxf) and add its colours to the start or end "
-            "of this chart — an easy way to combine sets. RGB only."))
-        append_b.clicked.connect(self._append_from_file)
-        combine.addWidget(append_b)
         view3d_b = QPushButton(tr("3D distribution…"), self._patch_box)
         view3d_b.setToolTip(
             tr("Show the patch set as a rotatable 3D RGB cube so you can see how "
@@ -3624,6 +4042,25 @@ class Ti2RelayoutDialog(QDialog):
         # of the "Patches / Spacers" target mode above).
         v.addWidget(self._pt_box)
 
+        # ChromIQ layout engine: the full engine layout panel, shown in place of
+        # the printtarg knobs when the chart was built by the engine (or the
+        # engine is active). Seeded from the chart's recipe on load (#93).
+        from ui.dialogs.layout_options_panel import LayoutOptionsPanel
+        self._engine_panel = LayoutOptionsPanel(
+            panel, with_selectors=True, with_calibration=True)
+        self._engine_panel.changed.connect(self._engine_preview_timer.start)
+        # Live "Pages": editing it fills patches (via the generator) up to that
+        # many full pages, so the new page isn't left empty (#93, Knut).
+        if self._engine_panel.pages is not None:
+            self._engine_panel.pages.valueChanged.connect(
+                self._on_engine_pages_changed)
+        self._engine_panel_grp = QGroupBox(tr("ChromIQ layout"), panel)
+        _eg = QVBoxLayout(self._engine_panel_grp)
+        _eg.setContentsMargins(8, 8, 8, 8)
+        _eg.addWidget(self._engine_panel)
+        v.addWidget(self._engine_panel_grp)
+        self._engine_panel_grp.setVisible(False)
+
         # Actions
         v.addStretch(1)
 
@@ -3692,20 +4129,16 @@ class Ti2RelayoutDialog(QDialog):
         # "Update preview" shares its row with "Shuffle" — each takes half the
         # width so the preview button is a little smaller and the randomiser
         # sits right beside it.
-        top_row = QHBoxLayout()
-        top_row.setSpacing(6)
+        # "Update preview" and "Shuffle" are gone from the editor (Knut #93): there
+        # is no preview to update, and randomisation is handled in the Create Chart
+        # Manual tab. Kept constructed (hidden) so the busy/enable plumbing that
+        # references them keeps working.
         self._preview_btn = QPushButton(tr("Update preview"), bar)
         self._preview_btn.clicked.connect(lambda: self._regenerate(save_to=None))
-        top_row.addWidget(self._preview_btn, 1)
+        self._preview_btn.setVisible(False)
         self._shuffle_btn = QPushButton(tr("Shuffle"), bar)
-        self._shuffle_btn.setToolTip(
-            tr("Randomise the patch order. Mixing up a structured set (a smooth "
-            "ramp or an RGB grid) so neighbouring strips read differently is "
-            "what lets a chart be safely read in either direction — it also "
-            "unlocks the “tag as randomised” option on Save."))
         self._shuffle_btn.clicked.connect(self._randomise_patches)
-        top_row.addWidget(self._shuffle_btn, 1)
-        bv.addLayout(top_row)
+        self._shuffle_btn.setVisible(False)
         save_row = QHBoxLayout()
         save_row.setSpacing(6)
         # "Apply / Save" is the headline action (#70, Knut). It opens a small
@@ -3728,14 +4161,19 @@ class Ti2RelayoutDialog(QDialog):
             "this layout — or Save As to export the full chart to a folder you "
             "pick, without leaving the editor."))
         self._apply_btn.clicked.connect(self._save_and_apply)
-        save_row.addWidget(self._apply_btn)
         self._close_btn = QPushButton(tr("Close"), bar)
         self._close_btn.setToolTip(
             tr("Close the editor without saving. If the layout has unsaved "
             "changes you'll be asked to confirm first; “Apply / Save…” "
             "keeps your work."))
         self._close_btn.clicked.connect(self._on_close_clicked)
-        save_row.addWidget(self._close_btn)
+        # Both buttons share the column width equally so Close doesn't spill past
+        # the controls' right edge (Knut #93).
+        for _b in (self._apply_btn, self._close_btn):
+            _b.setSizePolicy(QSizePolicy.Policy.Expanding,
+                             _b.sizePolicy().verticalPolicy())
+        save_row.addWidget(self._apply_btn, 1)
+        save_row.addWidget(self._close_btn, 1)
         bv.addLayout(save_row)
         return bar
 
@@ -3756,19 +4194,54 @@ class Ti2RelayoutDialog(QDialog):
         return f
 
     # -- source -------------------------------------------------------------
+    def _refresh_engine_panel_visible(self) -> None:
+        """Show the engine layout panel when the chart was built by the engine
+        (or the engine is active), hiding the printtarg layout group.
+
+        The panel UI is built in a later stage; until then this is a guarded
+        no-op so the engine-recipe load path is safe. The loaded recipe lives in
+        ``self._engine_recipe`` either way (#93).
+        """
+        # Layout editing is removed from the editor (Knut #93): it's a pure
+        # patch-set tool, so BOTH layout groups (the printtarg knobs and the
+        # ChromIQ engine panel) stay hidden. The chart keeps whatever layout it
+        # was opened with — Create Chart owns the layout — and the hidden widgets
+        # still hold those values so the chart renders and saves unchanged through
+        # the round-trip.
+        if self._engine_panel_grp is not None:
+            self._engine_panel_grp.setVisible(False)
+        if getattr(self, "_pt_box", None) is not None:
+            self._pt_box.setVisible(False)
+        # Narrower controls column now that the wide engine panel never shows.
+        if getattr(self, "_controls_panel", None) is not None:
+            self._controls_panel.setFixedWidth(360)
+        if getattr(self, "_right_pane", None) is not None:
+            # Tight scrollbar gutter so the right column's content sits the same
+            # small distance from the window edge as the swatch frame on the left
+            # (Knut #93 — symmetric margins).
+            self._right_pane.setFixedWidth(360 + 4)
+
     def _load_ti2(self) -> None:
         start = (self._settings.get("custom_output_path", "")
                  or str(Path.home() / "ChromIQ"))
-        path = open_file_dialog(self, "Load chart",
-                                "Argyll chart (*.ti2)", start_dir=start)
+        path = open_file_dialog(
+            self, "Load chart",
+            "Charts & colour files (*.ti2 *.ti1 *.ti3 *.cgats *.txt);;"
+            "All files (*)", start_dir=start)
         if not path:
             return
         self._load_chart_from(Path(path))
 
     def _load_chart_from(self, path: Path) -> bool:
         """Load a ``.ti2`` (+ its sibling ``meta.json`` layout knobs, if any)
-        into the editor. Shared by the Load .ti2 button and the open-time
-        pre-load from the Create Chart tab (#45). Returns True on success."""
+        into the editor. Shared by the Load chart button and the open-time
+        pre-load from the Create Chart tab (#45). Returns True on success.
+
+        A non-``.ti2`` device-RGB file (ti1 / ti3 / cgats / list) loads its
+        colours into a new editable chart instead. CIE reference files are not
+        accepted here — load them via New chart / Add (#96)."""
+        if path.suffix.lower() != ".ti2":
+            return self._load_colour_chart_from(path)
         try:
             spec = R.ChartSpec.from_ti2(path)
             program = R.default_program(spec)
@@ -3790,7 +4263,63 @@ class Ti2RelayoutDialog(QDialog):
         # The chart's creation recipe (if it carries one) — so New chart / Add
         # reopen with this design rather than the app-wide last-used state.
         self._chart_recipe = R.load_editor_recipe(path)
+        # If this chart was built by the ChromIQ layout engine, load the exact
+        # engine recipe from its channels.json so the engine panel can show all
+        # the settings it was created with (#93).
+        from workflow.layout_engine.presets import LayoutRecipe
+        self._engine_recipe = LayoutRecipe.from_channels_json(
+            path.with_suffix(".channels.json"))
+        _t1 = path.with_suffix(".ti1")
+        self._engine_ti1 = _t1 if _t1.is_file() else None
+        # A loaded chart with no engine recipe is a printtarg chart → stay
+        # printtarg even if the engine setting is on (preserve its real layout).
+        self._loaded_printtarg_chart = self._engine_recipe is None
+        if self._engine_recipe is not None and self._engine_panel is not None:
+            # The grid is loaded in the chart's final SHEET order (ChartSpec.
+            # from_ti2 sorts by SAMPLE_LOC), i.e. it already IS the randomised
+            # layout. So the preview must render it as-is — re-applying the
+            # original seed would randomise a second time, showing a different
+            # layout than the printed chart and than the grid (#93). Mark the
+            # working recipe un-randomised; the grid preserves the randomisation,
+            # and Shuffle re-randomises on demand.
+            self._engine_recipe.randomize = False
+            self._engine_panel.set_recipe(self._engine_recipe)
+        self._refresh_engine_panel_visible()
         self._set_chart(spec, program, note, is_saved=True)
+        return True
+
+    def _load_colour_chart_from(self, path: Path) -> bool:
+        """Load a device-RGB colours file (ti1 / ti3 / cgats / hex list) as a new
+        editable chart — default instrument/paper, following the engine setting
+        like a from-scratch chart, so the colours can be relaid out and analysed
+        in the 3D cube. CIE reference files (XYZ/LAB only) aren't supported (#96)."""
+        try:
+            program = R.load_colour_file(path)
+        except Exception as exc:  # noqa: BLE001 — surface the parser's message
+            QMessageBox.warning(self, tr("Could not load chart"), str(exc))
+            return False
+        if not program:
+            QMessageBox.warning(self, tr("Could not load chart"),
+                                tr("No colour values were found in that file."))
+            return False
+        self._options = R.LayoutOptions()
+        self._basename = path.stem or "chart"
+        self._chart_recipe = None
+        self._engine_recipe = None
+        self._engine_ti1 = None
+        self._loaded_printtarg_chart = False   # follow the engine setting
+        spec = R.ChartSpec.new("i1", "A4")
+        if (bool(self._settings.get("use_chromiq_layout_engine", False))
+                and self._engine_panel is not None):
+            from workflow.layout_engine.presets import default_recipe
+            try:
+                rec = default_recipe("i1", spec.paper_flag)
+                rec.randomize = False
+                self._engine_panel.set_recipe(rec)
+            except Exception as exc:  # noqa: BLE001
+                log.warning("seed engine panel for loaded colours failed: %s", exc)
+        self._refresh_engine_panel_visible()
+        self._set_chart(spec, program, f"Loaded {path.name}")
         return True
 
     def _new_chart(self) -> None:
@@ -3804,7 +4333,31 @@ class Ti2RelayoutDialog(QDialog):
             self._options = dlg.result_options
         self._basename = dlg.result_basename or "chart"
         self._chart_recipe = dlg.result_recipe
-        self._set_chart(dlg.result_spec, dlg.result_program or [], "New chart")
+        # A new from-scratch chart follows the engine setting (not a loaded
+        # printtarg chart). Seed the engine panel's instrument/paper from it.
+        self._engine_recipe = None
+        self._engine_ti1 = None
+        self._loaded_printtarg_chart = False
+        spec = dlg.result_spec
+        if (bool(self._settings.get("use_chromiq_layout_engine", False))
+                and self._engine_panel is not None):
+            from workflow.layout_engine.presets import default_recipe
+            inst = "i1" if spec.instrument_flag in ("i1", "3p") else spec.instrument_flag
+            try:
+                rec = default_recipe(inst, spec.paper_flag)
+                rec.randomize = False   # editor charts start un-randomised; Shuffle randomises
+                # Carry the layout mode chosen in the New chart window's Chart
+                # section into the recipe so the editor opens with it (#93).
+                if inst == "CM":
+                    rec.cm_density = int(getattr(dlg, "result_engine_density", 1))
+                else:
+                    rec.clip_border = bool(getattr(dlg, "result_engine_clip", True))
+                    rec.nolimit = bool(getattr(dlg, "result_engine_nocap", False))
+                self._engine_panel.set_recipe(rec)
+            except Exception as exc:  # noqa: BLE001
+                log.warning("seed engine panel for new chart failed: %s", exc)
+        self._refresh_engine_panel_visible()
+        self._set_chart(spec, dlg.result_program or [], "New chart")
 
     def _set_chart(self, spec: R.ChartSpec, program: list[tuple], note: str,
                    *, is_saved: bool = False) -> None:
@@ -3838,11 +4391,20 @@ class Ti2RelayoutDialog(QDialog):
         self._suppress_undo = False
         self._reset_undo()
         # Auto-render the initial preview so the user sees the chart
-        # immediately instead of having to click "Update preview" first.
+        # immediately instead of having to click "Update preview" first. Use the
+        # engine when it's active (a from-scratch / engine chart), else printtarg
+        # — mirroring _schedule_auto_refresh, so a new engine chart previews via
+        # the engine instead of silently doing nothing (#93).
         if program:
             self._status.setText(tr("Rendering initial preview…"))
-            self._regenerate(save_to=None)
+            if self._engine_active():
+                self._engine_preview_timer.start()
+            else:
+                self._regenerate(save_to=None)
         else:
+            # Blank canvas: drop any preview left over from a previous chart so
+            # the empty grid and the preview agree (#96).
+            self._clear_preview()
             self._status.setText(tr("Empty chart — add patches, then preview."))
 
     # -- unsaved-change tracking (#49) -------------------------------------
@@ -4008,7 +4570,12 @@ class Ti2RelayoutDialog(QDialog):
     def _schedule_auto_refresh(self) -> None:
         """Restart the debounced preview timer (called from user edit hooks)."""
         if self._spec is not None and self._grid.count() > 0:
-            self._auto_timer.start()
+            # Engine charts re-render via the engine (from the edited grid),
+            # not printtarg — so grid edits update the engine preview (#93).
+            if self._engine_active():
+                self._engine_preview_timer.start()
+            else:
+                self._auto_timer.start()
         # Nearly every edit funnels through here (reorder/remove via _after_drag,
         # add/recolour/options/paper/palette directly), so it's the natural place
         # to note an undo step. Spacer paint and palette-reset bypass it and call
@@ -4023,6 +4590,7 @@ class Ti2RelayoutDialog(QDialog):
             it.setData(Qt.ItemDataRole.UserRole, tuple(rgb))
             it.setToolTip(f"#{i}  RGB {tuple(round(v) for v in rgb)}")
             self._grid.addItem(it)
+        self._update_grid_count()
 
     def _renumber(self) -> None:
         """Refresh #1..#N labels + tooltips (after drag-reorder or add/remove)."""
@@ -4035,8 +4603,18 @@ class Ti2RelayoutDialog(QDialog):
         # _renumber runs after every add / remove / append / reorder.
         self._refresh_info()
 
+    def _update_grid_count(self) -> None:
+        """Show the live total patch count under the swatch grid (Knut)."""
+        lbl = getattr(self, "_grid_count_lbl", None)
+        if lbl is None:
+            return
+        n = self._grid.count()
+        lbl.setText(tr("1 patch total") if n == 1
+                    else tr("{n} patches total").format(n=n))
+
     def _refresh_info(self) -> None:
         """Rewrite the header readout from the live grid count + chart flags."""
+        self._update_grid_count()
         if self._spec is None:
             return
         note = getattr(self, "_chart_note", "")
@@ -4062,6 +4640,35 @@ class Ti2RelayoutDialog(QDialog):
             it.setIcon(_swatch_icon(it.data(Qt.ItemDataRole.UserRole), size))
         self._grid.scheduleDelayedItemsLayout()
 
+    def _set_show_numbers(self, on: bool) -> None:
+        """Toggle the patch-number label under each swatch (Knut #93)."""
+        self._delegate.show_label = bool(on)
+        self._reflow_grid()
+
+    def _set_show_gap(self, on: bool) -> None:
+        """Toggle the gaps between swatches; the H/V spinboxes drive the size when
+        on, and they're greyed when off (Knut #93)."""
+        for w in (getattr(self, "_gap_lbl", None), getattr(self, "_gap_h_lbl", None),
+                  getattr(self, "_gap_h_spin", None), getattr(self, "_gap_v_lbl", None),
+                  getattr(self, "_gap_v_spin", None)):
+            if w is not None:
+                w.setEnabled(bool(on))
+        self._set_gap_sizes()
+
+    def _set_gap_sizes(self, *_a) -> None:
+        """Apply the Horizontal / Vertical gap (px) to the swatch grid — 0 when
+        "Show gap between patches" is off (Knut #93)."""
+        on = (getattr(self, "_show_gap_check", None) is not None
+              and self._show_gap_check.isChecked())
+        self._delegate.h_gap = self._gap_h_spin.value() if on else 0
+        self._delegate.v_gap = self._gap_v_spin.value() if on else 0
+        self._reflow_grid()
+
+    def _reflow_grid(self) -> None:
+        self._grid.setGridSize(self._delegate.sizeHint(None, None))
+        self._grid.scheduleDelayedItemsLayout()
+        self._grid.viewport().update()
+
     def _grid_item(self, rgb: tuple) -> QListWidgetItem:
         """Build a grid item for one RGB patch (icon + UserRole payload)."""
         it = QListWidgetItem(_swatch_icon(rgb, self._swatch_size), "")
@@ -4080,11 +4687,28 @@ class Ti2RelayoutDialog(QDialog):
         extra = dlg.result_program
         if self._spec is None:
             # Nothing loaded yet — seed a fresh blank chart from the added
-            # patches (there's nothing to append to). _set_chart renders the
-            # initial preview; plain grid edits don't, since _schedule_auto_
-            # refresh needs a spec.
-            self._set_chart(R.ChartSpec.new("i1", "A4"), list(extra),
-                            tr("New chart"))
+            # patches (there's nothing to append to). Set up the engine panel the
+            # way a from-scratch chart does (mirroring _load_colour_chart_from),
+            # so when the engine is on _set_chart renders the initial preview via
+            # the engine instead of leaving the right pane blank (#93).
+            spec = R.ChartSpec.new("i1", "A4")
+            self._options = R.LayoutOptions()
+            self._basename = "chart"
+            self._chart_recipe = None
+            self._engine_recipe = None
+            self._engine_ti1 = None
+            self._loaded_printtarg_chart = False   # follow the engine setting
+            if (bool(self._settings.get("use_chromiq_layout_engine", False))
+                    and self._engine_panel is not None):
+                from workflow.layout_engine.presets import default_recipe
+                try:
+                    rec = default_recipe("i1", spec.paper_flag)
+                    rec.randomize = False
+                    self._engine_panel.set_recipe(rec)
+                except Exception as exc:  # noqa: BLE001
+                    log.warning("seed engine panel for added patches failed: %s", exc)
+            self._refresh_engine_panel_visible()
+            self._set_chart(spec, list(extra), tr("New chart"))
             return
         if len(extra) == 1:
             # A single hand-picked colour goes straight on the end (no prompt).
@@ -4198,50 +4822,11 @@ class Ti2RelayoutDialog(QDialog):
             return extra
         return None
 
-    def _append_from_file(self) -> None:
-        """Combine another patch set into this chart (start or end).
-
-        Parses any supported RGB patch file via
-        :func:`workflow.ti2_relayout.load_rgb_program`, asks whether to place
-        the new colours at the start or the end, splices them into the grid,
-        and re-previews. RGB-only — non-RGB sources surface the parser's error.
-        """
-        if self._spec is None:
-            self._status.setText(tr("Load or create a chart first."))
-            return
-        start = (self._settings.get("custom_output_path", "")
-                 or str(Path.home() / "ChromIQ"))
-        patterns = " ".join(f"*{s}" for s in R.LOADABLE_PATCH_SUFFIXES)
-        path = open_file_dialog(
-            self, "Append patches from file",
-            f"Patch sets ({patterns});;All files (*)", start_dir=start)
-        if not path:
-            return
-        try:
-            extra = R.load_rgb_program(Path(path))
-        except Exception as exc:  # noqa: BLE001 — show the parser's message
-            QMessageBox.warning(self, tr("Could not load patches"), str(exc))
-            return
-        if not extra:
-            QMessageBox.warning(self, tr("No patches"),
-                                tr("No RGB patches found in {name}.").format(
-                                    name=Path(path).name))
-            return
-
-        n = len(extra)
-        if n == 1:
-            ready = tr("1 colour from “{name}” is ready to add."
-                       ).format(name=Path(path).name)
-        else:
-            ready = tr("{n} colours from “{name}” are ready to add."
-                       ).format(n=n, name=Path(path).name)
-        self._place_patches_into_grid(extra, ready)
-
     def _place_patches_into_grid(self, extra: list[tuple], ready: str) -> None:
         """Ask whether to add *extra* RGB patches at the start or the end of the
         chart, splice them in, and re-preview. ``ready`` is the lead sentence of
-        the prompt (it names where the colours came from). Shared by "Add…"
-        (generated sets) and "Append from file…"."""
+        the prompt (it names where the colours came from). Used by "Add…"
+        (generated sets)."""
         box = QMessageBox(self)
         box.setWindowTitle(tr("Add the new colours"))
         box.setIcon(QMessageBox.Icon.NoIcon)
@@ -4314,6 +4899,20 @@ class Ti2RelayoutDialog(QDialog):
         stays, only its position moves. Useful for breaking up a structured
         set so each strip reads distinctly (see the "tag as randomised" gate).
         """
+        # Engine chart: keep the same patches (.ti1) and randomise via the engine
+        # seed — turn randomisation on, draw a fresh fixed seed (so it's shown and
+        # reproducible), and re-render. No grid reorder (#93).
+        if self._engine_active():
+            from workflow.layout_engine.permutation import pick_seed
+            seed = pick_seed()
+            p = self._engine_panel
+            p.randomize_cb.setChecked(True)
+            p.fixed_seed_cb.setChecked(True)
+            p.seed_spin.setValue(seed)        # emits changed → engine re-renders
+            self._status.setText(
+                tr("Shuffled with seed {s}.").format(s=seed))
+            self._note_edit()
+            return
         import random
         program = self._program_from_grid()
         if len(program) < 2:
@@ -4833,9 +5432,30 @@ class Ti2RelayoutDialog(QDialog):
 
 
     # -- regeneration / preview --------------------------------------------
+    def _clear_preview(self) -> None:
+        """Drop any shown preview (e.g. when the chart becomes empty) so a stale
+        image doesn't linger over an empty grid (#96)."""
+        self._full_pixmap = None
+        self._base_pixmap = None
+        self._engine_tiffs = []
+        self._regen = None
+        self._page = 0
+        self._spacers = []
+        self._sel_spacers.clear()
+        if hasattr(self, "_spacer_cache"):
+            self._spacer_cache.clear()
+        self._update_page_nav()
+        self._preview.clear()
+        self._preview.setText(tr("Preview will appear here."))
+
     def _regenerate(self, save_to: Path | None) -> None:
         if self._spec is None or self._grid.count() == 0:
-            self._status.setText(tr("Load or create a chart first."))
+            # Empty chart: clear any leftover preview rather than leaving a stale
+            # image (Update preview must "take" even with nothing to draw) (#96).
+            self._clear_preview()
+            self._status.setText(
+                tr("Empty chart — add patches, then preview.")
+                if self._spec is not None else tr("Load or create a chart first."))
             return
         if self._worker is not None and self._worker.isRunning():
             return
@@ -4884,6 +5504,11 @@ class Ti2RelayoutDialog(QDialog):
             self._status.setText(tr("Render failed."))
             return
         self._regen = result
+        # Engine charts: the printtarg regen seeds page nav / save, but the
+        # accurate picture is the engine's own render — show that instead (#93).
+        if self._engine_active():
+            self._do_engine_preview()
+            return
         # New render → previous per-page spacer segmentations + patch geometry
         # are stale. Both are now recomputed lazily for the visited page (#44).
         self._spacer_cache.clear()
@@ -4910,6 +5535,19 @@ class Ti2RelayoutDialog(QDialog):
 
     def _show_page(self, page: int) -> None:
         """Switch the preview to ``page``: detect its spacers (cached), redraw."""
+        # Engine chart: flip between the rendered engine pages. The patch
+        # highlight overlay is already keyed by (page, slot), so re-showing the
+        # page's TIFF and refreshing redraws the right outlines (#93).
+        if self._engine_active():
+            tiffs = getattr(self, "_engine_tiffs", [])
+            n = len(tiffs)
+            if n == 0:
+                return
+            self._page = max(0, min(page, n - 1))
+            self._sel_spacers.clear()
+            self._update_page_nav()
+            self._show_image(tiffs[self._page])
+            return
         if self._regen is None:
             return
         n = len(self._regen.tiffs)
@@ -4969,7 +5607,10 @@ class Ti2RelayoutDialog(QDialog):
         return [int(x0 + i * col_w) for i in range(1, n)]
 
     def _update_page_nav(self) -> None:
-        n = len(self._regen.tiffs) if self._regen else 0
+        if self._engine_active():
+            n = len(getattr(self, "_engine_tiffs", []))
+        else:
+            n = len(self._regen.tiffs) if self._regen else 0
         self._page_bar.setVisible(n > 1)
         if n > 1:
             self._page_label.setText(
@@ -4997,6 +5638,137 @@ class Ti2RelayoutDialog(QDialog):
                 src = painted
             show_path = painted
         self._show_image(show_path)
+
+    def _engine_active(self) -> bool:
+        # Active when the engine panel is showing (engine chart loaded, or the
+        # engine setting is on for a new/from-scratch chart) and there's a chart
+        # to render. The .ti1 is derived from the grid, so _engine_ti1 isn't
+        # required. A loaded printtarg chart keeps printtarg (handled in
+        # _refresh_engine_panel_visible) so its real no-clip layout shows.
+        return (self._engine_panel_grp is not None
+                and not self._engine_panel_grp.isHidden()
+                and self._spec is not None)
+
+    def _engine_grid_ti1(self, out_path: Path) -> Path:
+        """Write the current grid program as a .ti1 at *out_path* for the engine.
+
+        Falls back to the loaded chart's .ti1 if the grid isn't usable. Lets the
+        engine render/save reflect patch edits made in the grid (#93)."""
+        try:
+            if self._spec is not None and self._grid.count() > 0:
+                R.write_ti1(self._spec, self._program_from_grid(), out_path)
+                return out_path
+        except Exception as exc:  # noqa: BLE001 — fall back to the original .ti1
+            log.warning("engine grid .ti1 synth failed: %s", exc)
+        import shutil
+        if self._engine_ti1 is not None and Path(self._engine_ti1).is_file():
+            shutil.copy(self._engine_ti1, out_path)
+        return out_path
+
+    @staticmethod
+    def _engine_geom_from_recipe(recipe):
+        """Build the engine Geom + paper mm for *recipe* (for spacer geometry)."""
+        from workflow.layout_engine import instruments, papers
+        geom = instruments.geom_from_build_kwargs(recipe.build_kwargs())
+        w_mm, h_mm = papers.dimensions_mm(recipe.paper)
+        return geom, w_mm, h_mm
+
+    def _engine_cap_per_page(self) -> int:
+        """Patches the engine fits on one sheet for the editor's current recipe,
+        or 0 when not resolvable. Used by the live "Pages" fill (#93)."""
+        try:
+            from workflow.layout_engine import geometry
+            recipe = self._engine_panel.get_recipe()
+            geom, w_mm, h_mm = self._engine_geom_from_recipe(recipe)
+            return geometry.patches_per_sheet(geom, w_mm, h_mm)
+        except Exception:  # noqa: BLE001 — best-effort
+            return 0
+
+    def _on_engine_pages_changed(self, value: int) -> None:
+        """The editor's live "Pages" spin: top the chart up with generated
+        patches so it fills *value* whole pages, then re-render. Only grows the
+        chart (lowering Pages never deletes patches); fires only for real user
+        edits of an engine chart (#93, Knut)."""
+        if self._syncing_pages or not self._engine_active():
+            return
+        cap = self._engine_cap_per_page()
+        if cap <= 0:
+            self._engine_preview_timer.start()
+            return
+        existing = self._program_from_grid()
+        target = max(1, int(value)) * cap
+        n_add = target - len(existing)
+        if n_add > 0:
+            fresh = G.fill_gaps(existing, target)
+            # Same hard minimum-distance guarantee the New-chart generator and the
+            # Add-patches "fill the gaps" flow apply: nudge any added patch that
+            # still lands within _GEN_MIN_DIST of an existing one so every filled
+            # patch is meaningfully distinct, not just spread (Knut, #93/#78).
+            fresh = G.enforce_min_distance(fresh, _GEN_MIN_DIST, existing=existing)
+            for rgb in fresh:
+                self._grid.addItem(self._grid_item(rgb))
+            self._renumber()
+            self._status.setText(
+                tr("Filled to {p} pages — added {n} patches. Updating preview…")
+                .format(p=int(value), n=len(fresh)))
+        self._engine_preview_timer.start()
+
+    def _sync_pages_spin(self, pages: int) -> None:
+        """Show the actually-rendered page count in the Pages spin without
+        re-triggering the fill (#93)."""
+        sp = getattr(self._engine_panel, "pages", None)
+        if sp is None or sp.value() == pages or pages < 1:
+            return
+        self._syncing_pages = True
+        sp.blockSignals(True)
+        sp.setValue(min(pages, sp.maximum()))
+        sp.blockSignals(False)
+        self._syncing_pages = False
+
+    def _do_engine_preview(self) -> None:
+        """Render the current engine recipe to a temp page and show it as the
+        preview — the live, engine-accurate picture for an engine chart (#93)."""
+        if not self._engine_active():
+            return
+        try:
+            from workflow.layout_engine import chart as le_chart
+            recipe = self._engine_panel.get_recipe()
+            kw = recipe.build_kwargs()
+            kw["dpi"] = min(int(kw.get("dpi") or 150), 150)   # fast preview
+            stem = Path(self._preview_tmp.name) / "_engine_preview"
+            # Render from a .ti1 derived from the CURRENT grid, so reordering /
+            # recolouring / adding patches updates the engine preview live (#93).
+            ti1 = self._engine_grid_ti1(stem.with_suffix(".ti1"))
+            result = le_chart.build_chart(str(ti1), stem, **kw)
+            tiffs = result.tiff_paths or []
+            if tiffs:
+                # Keep the rendered pages so Page ◀ ▶ can flip between them, the
+                # same as the printtarg preview does (#93).
+                self._engine_tiffs = list(tiffs)
+                if self._page >= len(tiffs):
+                    self._page = 0
+                self._show_image(tiffs[self._page])
+                self._update_page_nav()
+                self._sync_pages_spin(len(tiffs))   # keep "Pages" truthful (#93)
+                # Cache spacer rects at the preview DPI so a preview click maps
+                # to the spacer the engine will recolour (#93).
+                from workflow.layout_engine import geometry, permutation
+                geom, w_mm, h_mm = self._engine_geom_from_recipe(recipe)
+                self._engine_spacer_rects = geometry.spacer_rects_px(
+                    geom, w_mm, h_mm, result.layout, kw["dpi"])
+                # Patch rects (per slot) + the grid-index→slot permutation, so
+                # the "Highlight selected" overlay can outline the right patches.
+                pr = geometry.patch_rects_px(geom, w_mm, h_mm, result.layout,
+                                             kw["dpi"], recipe.strip_pattern,
+                                             recipe.patch_pattern)
+                self._engine_patch_rects = {(d["page"], d["slot"]): d for d in pr}
+                self._engine_slots = permutation.location_permutation(
+                    result.layout.total_patches, result.seed, recipe.randomize)
+                self._status.setText(tr("Engine preview · {n} patches · seed {s}")
+                                     .format(n=result.layout.total_patches,
+                                             s=result.seed))
+        except Exception as exc:  # noqa: BLE001 — preview is best-effort
+            log.warning("engine preview failed: %s", exc)
 
     def _show_image(self, path: Path) -> None:
         pm = QPixmap(str(path))
@@ -5082,6 +5854,25 @@ class Ti2RelayoutDialog(QDialog):
                                int((x1 - x0 + 1) * s) + 2,
                                int((y1 - y0 + 1) * s) + 2)
             p.end()
+        elif (self._mode_patches.isChecked() and self._hl_patches.isChecked()
+                and self._engine_active()):
+            # Engine chart: outline selected grid patches using the engine's own
+            # patch rects, mapping grid index → slot via the seeded permutation.
+            sel = [self._grid.row(it) for it in self._grid.selectedItems()]
+            p = QPainter(pm)
+            p.setRenderHint(QPainter.RenderHint.Antialiasing, False)
+            p.setBrush(QColor(255, 69, 115, 120))
+            p.setPen(QPen(QColor(SPEC_MAGENTA), 2))
+            s = self._preview_scale
+            for i in sel:
+                if i < 0 or i >= len(self._engine_slots):
+                    continue
+                d = self._engine_patch_rects.get((self._page, self._engine_slots[i]))
+                if d is None:
+                    continue
+                p.drawRect(int(d["x"] * s) + B - 1, int(d["y"] * s) + B - 1,
+                           int(d["w"] * s) + 2, int(d["h"] * s) + 2)
+            p.end()
         elif (self._mode_patches.isChecked()
                 and self._hl_patches.isChecked()
                 and self._regen is not None):
@@ -5105,6 +5896,10 @@ class Ti2RelayoutDialog(QDialog):
         self._preview.set_base_pixmap(pm)
 
     def _on_patch_highlight_toggled(self, on: bool) -> None:
+        # Engine charts have exact patch geometry already — just redraw.
+        if self._engine_active():
+            self._refresh_preview()
+            return
         # Turning highlight on needs the B&W twin for patch geometry, which the
         # fast Patches-mode preview skips (#44); render it now if it's missing.
         # Otherwise just redraw to show / clear the overlay.
@@ -5116,9 +5911,8 @@ class Ti2RelayoutDialog(QDialog):
     def _on_grid_selection_changed(self) -> None:
         # Cheap no-op unless we're showing the patch overlay; otherwise just
         # repaint with the new selection.
-        if (self._mode_patches.isChecked()
-                and self._hl_patches.isChecked()
-                and self._regen is not None):
+        if (self._mode_patches.isChecked() and self._hl_patches.isChecked()
+                and (self._regen is not None or self._engine_active())):
             self._refresh_preview()
 
     def _patch_geom_for_page(self, page: int) -> dict:
@@ -5147,6 +5941,42 @@ class Ti2RelayoutDialog(QDialog):
                 return sid
         return None
 
+    def _engine_slot_to_grid(self) -> dict:
+        """slot → grid-row index (inverse of the seeded permutation), so a
+        preview hit on a patch maps back to its row in the editor grid (#93)."""
+        return {slot: i for i, slot in enumerate(self._engine_slots)}
+
+    def _engine_patch_at(self, ix: float, iy: float) -> int | None:
+        """Grid row of the engine patch under (ix, iy) on the current page."""
+        if not self._engine_patch_rects or not self._engine_slots:
+            return None
+        s2g = self._engine_slot_to_grid()
+        for (pg, slot), d in self._engine_patch_rects.items():
+            if pg != self._page:
+                continue
+            if (d["x"] <= ix <= d["x"] + d["w"]
+                    and d["y"] <= iy <= d["y"] + d["h"]):
+                gi = s2g.get(slot)
+                if gi is not None and 0 <= gi < self._grid.count():
+                    return gi
+        return None
+
+    def _engine_patches_in_rect(self, ix0, iy0, ix1, iy1) -> list[int]:
+        """Grid rows of every engine patch the rectangle touches (current page)."""
+        if not self._engine_patch_rects or not self._engine_slots:
+            return []
+        s2g = self._engine_slot_to_grid()
+        out: list[int] = []
+        for (pg, slot), d in self._engine_patch_rects.items():
+            if pg != self._page:
+                continue
+            x0, y0, x1, y1 = d["x"], d["y"], d["x"] + d["w"], d["y"] + d["h"]
+            if not (x1 < ix0 or x0 > ix1 or y1 < iy0 or y0 > iy1):
+                gi = s2g.get(slot)
+                if gi is not None and 0 <= gi < self._grid.count():
+                    out.append(gi)
+        return out
+
     def _select_patches_by_ids(
         self, sids: list[int], *, extend: bool, remove: bool = False,
     ) -> None:
@@ -5161,6 +5991,25 @@ class Ti2RelayoutDialog(QDialog):
             row = sid - 1
             if 0 <= row < self._grid.count():
                 self._grid.item(row).setSelected(not remove)
+
+    def _engine_spacer_click(self, ix: float, iy: float, mods) -> None:
+        """Recolour (or, with Alt, reset) the engine spacer under the click."""
+        hit = None
+        for r in self._engine_spacer_rects:
+            if (r["page"] == self._page and r["x"] <= ix <= r["x"] + r["w"]
+                    and r["y"] <= iy <= r["y"] + r["h"]):
+                hit = r
+                break
+        if hit is None:
+            return
+        if mods & Qt.KeyboardModifier.AltModifier:        # Alt-click clears it
+            self._engine_panel.set_spacer_override(hit["flat"], None)
+            return
+        col = QColorDialog.getColor(
+            QColor("#000000"), self, tr("Spacer colour"),
+            QColorDialog.ColorDialogOption.DontUseNativeDialog)
+        if col.isValid():
+            self._engine_panel.set_spacer_override(hit["flat"], col.name())
 
     def _label_to_image(self, p: QPoint) -> tuple[float, float] | None:
         """Map a label-coord click to deliverable image pixels (or None).
@@ -5223,16 +6072,23 @@ class Ti2RelayoutDialog(QDialog):
                 else tr("{n} spacers selected.").format(n=n_sp))
             return
 
-        # Patches mode (+ highlight): marquee picks patches into the grid.
-        if not (self._hl_patches.isChecked() and self._regen is not None):
+        # Patches mode (+ highlight): marquee picks patches into the grid — for
+        # printtarg charts and engine charts alike (#93).
+        if not self._hl_patches.isChecked():
             return
-        geom = self._patch_geom_for_page(self._page)
-        if not geom:
+        if self._engine_active():
+            touched_p = [gi + 1 for gi in
+                         self._engine_patches_in_rect(ix0, iy0, ix1, iy1)]
+        elif self._regen is not None:
+            geom = self._patch_geom_for_page(self._page)
+            if not geom:
+                return
+            touched_p = [
+                sid for sid, (x0, y0, x1, y1) in geom.items()
+                if not (x1 < ix0 or x0 > ix1 or y1 < iy0 or y0 > iy1)
+            ]
+        else:
             return
-        touched_p = [
-            sid for sid, (x0, y0, x1, y1) in geom.items()
-            if not (x1 < ix0 or x0 > ix1 or y1 < iy0 or y0 > iy1)
-        ]
         if is_alt:
             if touched_p:
                 self._select_patches_by_ids(touched_p, extend=True, remove=True)
@@ -5273,6 +6129,10 @@ class Ti2RelayoutDialog(QDialog):
         if mapped is None:
             return
         ix, iy = mapped
+        # Engine chart + Spacers mode: click a spacer to recolour it (#93).
+        if self._engine_active() and self._mode_spacers.isChecked():
+            self._engine_spacer_click(ix, iy, mods)
+            return
         is_alt   = bool(mods & Qt.KeyboardModifier.AltModifier)
         is_shift = bool(mods & (Qt.KeyboardModifier.ShiftModifier
                                 | Qt.KeyboardModifier.ControlModifier
@@ -5303,10 +6163,18 @@ class Ti2RelayoutDialog(QDialog):
                 else tr("{n} spacers selected.").format(n=n_sp))
             return
 
-        # Patches mode (+ highlight): click maps to the grid selection.
-        if not (self._hl_patches.isChecked() and self._regen is not None):
+        # Patches mode (+ highlight): click maps to the grid selection — for both
+        # printtarg charts (_regen geometry) and engine charts (_engine_patch
+        # rects via the seeded permutation) (#93).
+        if not self._hl_patches.isChecked():
             return
-        sid = self._patch_at(ix, iy)
+        if self._engine_active():
+            gi = self._engine_patch_at(ix, iy)
+            sid = (gi + 1) if gi is not None else None
+        elif self._regen is not None:
+            sid = self._patch_at(ix, iy)
+        else:
+            return
         if sid is None:
             if not (is_alt or is_shift):
                 self._grid.clearSelection()
@@ -5445,6 +6313,13 @@ class Ti2RelayoutDialog(QDialog):
         best-effort and never abort the save.
         """
         target.mkdir(parents=True, exist_ok=True)
+        # Engine charts: render the deliverable with the ChromIQ engine using the
+        # current panel recipe, so the saved chart matches the engine layout and
+        # carries its recipe (in channels.json) for the carry-back to Create
+        # Chart. Grid patch edits aren't re-fed to the engine — engine charts are
+        # laid out from their .ti1 (#93).
+        if self._engine_active():
+            return self._write_engine_chart_into(target, name)
         # regenerate straight into the target, then bake per-spacer paint into pages
         res = R.regenerate(self._spec, self._program_from_grid(), target,
                            self._bin_dir,
@@ -5491,6 +6366,47 @@ class Ti2RelayoutDialog(QDialog):
             msg += f"\nprinttarg added {pad} patch(es) to complete the last strip."
         if tag_note:
             msg += "\n" + tag_note
+        return msg
+
+    def _write_engine_chart_into(self, target: Path, name: str) -> str:
+        """Render the deliverable via the ChromIQ engine into *target* and embed
+        the recipe in channels.json (so Create Chart can adopt it) (#93)."""
+        import json
+        from workflow.layout_engine import chart as le_chart
+        recipe = self._engine_panel.get_recipe()
+        # Write the (possibly edited) grid as the chart's .ti1 into the target,
+        # so the saved chart reflects edits AND _import_applied_chart finds a
+        # .ti1 to adopt (#93).
+        self._engine_grid_ti1(target / f"{name}.ti1")
+        result = le_chart.build_chart(str(target / f"{name}.ti1"), target / name,
+                                      project=name,
+                                      **recipe.build_kwargs())
+        # Fold the strip geometry + recipe into channels.json, mirroring the
+        # Create Chart build (workflow.chart_creator._embed_layout_geometry).
+        sidecar = target / f"{name}.channels.json"
+        strips = target / f"{name}.strips.json"
+        layout = json.loads(strips.read_text()) if strips.exists() else {}
+        layout["engine"] = "chromiq"
+        layout["engine_version"] = 1
+        layout["seed"] = result.seed
+        layout["color_rep"] = result.color_rep
+        layout["recipe"] = recipe.to_dict()
+        sidecar.write_text(json.dumps({"layout": layout}))
+        if strips.exists():
+            strips.unlink()
+        # Hand-off sidecars (colour list + i1Profiler pair) — the same set the
+        # printtarg save path writes, so an engine chart saved from the editor is
+        # just as self-contained (#93 regression fix). No .cht here: the scanner
+        # target (.cht + .cie) is produced from the *measured* .ti3 after
+        # measurement (workflow.scanin_target, #97). Best-effort.
+        from workflow.chart_exports import write_sidecars
+        extras = write_sidecars(target / f"{name}.ti1", target, name)
+        pages = len(result.tiff_paths or [])
+        msg = (f"Saved engine chart {name}.ti2 + {pages} page(s) to {target}\n"
+               f"ChromIQ layout engine · {recipe.instrument} · {recipe.paper} · "
+               f"seed {result.seed}")
+        if extras:
+            msg += "\nAlso wrote: " + ", ".join(sorted(e.name for e in extras))
         return msg
 
     def _write_colour_values_file(self, path: Path, as_hex: bool = True) -> None:
@@ -5611,7 +6527,7 @@ class Ti2RelayoutDialog(QDialog):
         from here.
         """
         dlg = QDialog(self)
-        dlg.setWindowTitle(tr("Apply or save this chart layout"))
+        dlg.setWindowTitle(tr("Apply or save this patch set"))
         dlg.setMinimumWidth(580)
         lay = QVBoxLayout(dlg)
         lay.setContentsMargins(24, 20, 24, 16)

@@ -66,3 +66,20 @@ def test_falls_back_to_selected_preset_when_no_generator(tab, monkeypatch):
     assert name == "Bar"
     assert from_gen is False
     assert run is True
+
+
+def test_loading_printtarg_preset_selects_printtarg_engine(tab):
+    """#93 (Knut): a Manual preset is printtarg-made (no layout_recipe), so
+    selecting it must switch the layout engine OFF — otherwise the ChromIQ engine
+    would render it and the preview is wrong."""
+    tab._settings.set("use_chromiq_layout_engine", True)
+    tab._manual_engine_check.setChecked(True)
+    assert tab._manual_engine_check.isChecked()
+    presets = {"MyChart-A4": {"auto_run": False, "attached_ti1": False}}
+    tab._save_presets_to_settings(presets)
+    tab._populate_preset_combo(presets, select_name="MyChart-A4")
+    idx = tab._preset_combo.findData("MyChart-A4")
+    assert idx > 0
+    tab._on_preset_selected(idx)
+    assert tab._manual_engine_check.isChecked() is False
+    assert bool(tab._settings.get("use_chromiq_layout_engine")) is False

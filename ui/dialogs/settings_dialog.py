@@ -56,12 +56,18 @@ from core.i18n import tr
 
 class SettingsDialog(QDialog):
     def __init__(self, settings: "AppSettings", parent: QWidget | None = None,
-                 *, margin_combo: "tuple[str, str, str] | None" = None) -> None:
+                 *, margin_combo: "tuple[str, str, str] | None" = None,
+                 layout_combo: "tuple[str, str, str] | None" = None) -> None:
         super().__init__(parent)
         self._settings = settings
         # (instrument label, paper name, orientation) to preselect on the
         # Margin Thresholds tab (#80); None → the pulldowns' first entries.
         self._initial_margin_combo = margin_combo
+        # (engine instrument, paper code, mode) to preselect on the Chart
+        # Layout tab so it opens on the combination the user is editing in
+        # Create Chart — otherwise it always resets to i1/A4 and a preset saved
+        # under any other combination looks lost (#93). None → first entries.
+        self._initial_layout_combo = layout_combo
         self._update_checker: UpdateChecker | None = None
         self.setWindowTitle(tr("ChromIQ Preferences"))
         self.setWindowFlags(
@@ -75,7 +81,12 @@ class SettingsDialog(QDialog):
         # "Request a Feature…" button — fit the real sizeHint instead.
         _w = max(1040, self.sizeHint().width())
         self.setMinimumWidth(_w)
-        self.resize(_w, self.sizeHint().height())
+        # Open (and floor) ~50% taller than the bare sizeHint: now that each tab
+        # scrolls, the natural hint is short, which left a lot of the content
+        # hidden behind a scrollbar. A taller floor shows more at a glance.
+        _h = int(self.sizeHint().height() * 1.5)
+        self.setMinimumHeight(_h)
+        self.resize(_w, _h)
 
     # ------------------------------------------------------------------
 
@@ -238,7 +249,11 @@ class SettingsDialog(QDialog):
         ))
         i1g.addLayout(i1_clip_row)
 
-        layout.addWidget(i1pro_grp)
+        # These are printtarg (old-engine) i1Pro options; they live on the Chart
+        # Layout tab now and are greyed when the ChromIQ engine is active, since
+        # they have no effect then (Knut #93). Built here (widgets referenced by
+        # load/save), re-homed in _build_chart_layout_tab.
+        self._i1pro_grp = i1pro_grp
 
         # ---- Neutral patches ----
         neutral_grp = QGroupBox(tr("Neutral Patches"), self)
@@ -664,8 +679,10 @@ class SettingsDialog(QDialog):
         layout.addWidget(appearance_grp)
         layout.addStretch()
 
-        self._tabs.addTab(general_page, tr("General"))
-        self._tabs.addTab(self._build_margin_thresholds_tab(), tr("Margin Thresholds"))
+        self._tabs.addTab(self._scroll_wrap(general_page), tr("General"))
+        self._tabs.addTab(self._scroll_wrap(self._build_margin_thresholds_tab()),
+                          tr("Instrument Limits"))
+        self._tabs.addTab(self._build_chart_layout_tab(), tr("Chart Layout"))
 
         # ---- About / Updates (below the tabs) ----
         credit1 = QLabel(tr("ChromIQ v{APP_VERSION} · Created by Sebastian Reiprich").format(APP_VERSION=APP_VERSION), self)
@@ -760,18 +777,19 @@ class SettingsDialog(QDialog):
 
         intro_row = QHBoxLayout()
         intro = QLabel(tr(
-            "Warn when a generated chart's measured page margins fall below the "
-            "minimum needed for your measuring ruler / jig. Values are minimums "
-            "in millimetres (paper edge → patch area), in the printed (preview) "
-            "orientation. These are editable starting points — adjust them to "
-            "your own rig."), self)
+            "Limits for your measuring ruler / jig, per instrument, paper and "
+            "orientation: the minimum page margins (mm, paper edge → patch area, "
+            "in the printed orientation) and the maximum strip length. The Create "
+            "Chart preview warns when a chart goes outside these. Editable starting "
+            "points — adjust them to your own rig."), self)
         intro.setWordWrap(True)
         intro.setStyleSheet("color: #909090; font-size: 11px;")
         intro_row.addWidget(intro, stretch=1)
         intro_row.addWidget(TooltipButton(
-            tr("About margin thresholds"),
-            tr("Here you decide how much blank white paper a chart should have "
-               "around its patches, so it's comfortable to measure.\n\n"
+            tr("About instrument limits"),
+            tr("These are your INSTRUMENT margins (not printer margins): how much "
+               "blank white paper a chart should have around its patches so it's "
+               "comfortable to measure.\n\n"
                "Why it matters: many spectrophotometers (i1Pro, ColorMunki…) are "
                "slid by hand along the chart, usually in a ruler or holder (a "
                "'jig' or 'rig'). If the patches sit too close to the edge of the "
@@ -808,10 +826,16 @@ class SettingsDialog(QDialog):
         # ---- behaviour checkboxes ----
         self._margin_show_check = QCheckBox(
             tr("Show the “Measured from Preview” frame in Create Chart"), self)
+        # Sibling toggle for the other Create-Chart preview panel, kept next to
+        # the "Measured from Preview" one since they sit side by side under the
+        # preview (Knut, #93).
+        self._layout_info_show_check = QCheckBox(
+            tr("Show the “Chart layout information” panel in Create Chart"), self)
         self._margin_notify_check = QCheckBox(
             tr("Notify when a measured margin is below its threshold"), self)
         self._margin_show_check.toggled.connect(self._sync_margin_notify_enabled)
         v.addWidget(self._margin_show_check)
+        v.addWidget(self._layout_info_show_check)
         v.addWidget(self._margin_notify_check)
 
         # ---- combo selectors ----
@@ -854,6 +878,29 @@ class SettingsDialog(QDialog):
             self._margin_fields[key] = sb
             grid.addWidget(sb, 1, col)
         v.addLayout(grid)
+
+        # ---- strip-length limit (the instrument's ruler / jig max, mm) ----
+        # Configurable per combo (Knut #93). The Create Chart preview warns when a
+        # strip is longer than this. 0 = use the instrument's built-in ruler.
+        ruler_row = QHBoxLayout()
+        ruler_row.addWidget(QLabel(tr("Strip length limit:"), self))
+        self._margin_ruler = NoScrollDoubleSpinBox(self)
+        self._margin_ruler.setRange(0, 2000)
+        self._margin_ruler.setDecimals(0)
+        self._margin_ruler.setSingleStep(10)
+        self._margin_ruler.setSuffix(" mm")
+        self._margin_ruler.setSpecialValueText(tr("instrument default"))
+        self._margin_ruler.valueChanged.connect(self._on_margin_field_changed)
+        ruler_row.addWidget(self._margin_ruler)
+        ruler_row.addWidget(TooltipButton(
+            tr("Strip length limit"),
+            tr("The longest a single strip of patches may be (mm) before the "
+               "Create Chart preview warns it won't fit your instrument's ruler / "
+               "jig. Set per instrument, paper and orientation. Leave at "
+               "“instrument default” to use the device's built-in ruler length "
+               "(e.g. ~240 mm for the i1Pro)."), self))
+        ruler_row.addStretch(1)
+        v.addLayout(ruler_row)
 
         # Restore-defaults button: re-seed the whole table to the shipped
         # defaults. Needed because changing the built-in defaults between
@@ -909,6 +956,10 @@ class SettingsDialog(QDialog):
                 sb.setValue(round(float(entry.get(key, 0)), 1))
             except (TypeError, ValueError):
                 sb.setValue(0.0)
+        try:
+            self._margin_ruler.setValue(round(float(entry.get("ruler", 0) or 0), 0))
+        except (TypeError, ValueError):
+            self._margin_ruler.setValue(0.0)
         self._loading_margin_combo = False
 
     def _restore_default_margin_thresholds(self) -> None:
@@ -936,11 +987,14 @@ class SettingsDialog(QDialog):
         key = self._current_margin_key()
         vals = {k: sb.value() for k, sb in self._margin_fields.items()}
         desc = self._margin_desc.text().strip()
-        if not any(vals.values()) and not desc:
+        ruler = self._margin_ruler.value() if getattr(self, "_margin_ruler", None) else 0
+        if not any(vals.values()) and not desc and not ruler:
             self._margin_table.pop(key, None)
             return
         entry = {k: v for k, v in vals.items()}
         entry["desc"] = desc
+        if ruler:
+            entry["ruler"] = ruler
         self._margin_table[key] = entry
 
     def _sync_margin_notify_enabled(self) -> None:
@@ -975,9 +1029,20 @@ class SettingsDialog(QDialog):
         i1pro_key = str(s.get("i1pro_default_preset", I1PRO_DEFAULT_PRESET_KEY))
         idx = self._i1pro_preset_combo.findData(i1pro_key)
         self._i1pro_preset_combo.setCurrentIndex(idx if idx >= 0 else 0)
-        self._chromiq_clip_check.setChecked(
-            bool(s.get("i1pro_chromiq_clip_style", False))
-        )
+        # Clip-border vs. layout engine are mutually exclusive — the engine
+        # replaces the printtarg path, so the old ChromIQ clip-border can't be on
+        # with it. The engine toggle now lives in Create Chart, so this dialog
+        # enforces the rule from the *stored* setting on open: with the engine on,
+        # force the clip-border off + disabled and remember its stored state.
+        clip_on = bool(s.get("i1pro_chromiq_clip_style", False))
+        if bool(s.get("use_chromiq_layout_engine", False)):
+            self._clip_saved_state = clip_on
+            self._chromiq_clip_check.setChecked(False)
+            self._chromiq_clip_check.setEnabled(False)
+        else:
+            self.__dict__.pop("_clip_saved_state", None)
+            self._chromiq_clip_check.setChecked(clip_on)
+            self._chromiq_clip_check.setEnabled(True)
         self._grey_ref_spin.setValue(int(s.get("grey_ramp_reference", 560)))
         # Appearance: capture current value so Cancel can revert any live preview.
         current = str(s.get("appearance", "auto"))
@@ -997,6 +1062,7 @@ class SettingsDialog(QDialog):
         # Margin inspector behaviour checkboxes (the per-combo table is loaded
         # into the tab's own working copy in _build_margin_thresholds_tab).
         self._margin_show_check.setChecked(bool(s.get("margin_inspector_show", True)))
+        self._layout_info_show_check.setChecked(bool(s.get("layout_info_show", True)))
         self._margin_notify_check.setChecked(bool(s.get("margin_violation_notify", True)))
         self._sync_margin_notify_enabled()
 
@@ -1064,6 +1130,478 @@ class SettingsDialog(QDialog):
                 apply_appearance(app, self.parent(), original)
         super().reject()
 
+    # ------------------------------------------------------------------
+    # Chart Layout tab (ChromIQ layout engine, issue #93)
+    # ------------------------------------------------------------------
+    # Labels mirror the printtarg -i combobox (data/parameters.yaml), so the
+    # engine and printtarg show the same instrument names (Knut). Codes unchanged.
+    _LAYOUT_INSTRUMENTS = [
+        ("i1", "i1Pro / i1Pro 2 / i1Pro 3"), ("p3", "i1Pro 3 Plus"),
+        ("CM", "ColorMunki / i1Studio / ColorChecker Studio"),
+        ("SS", "SpectroScan (flatbed)"), ("41", "DTP41"), ("51", "DTP51"),
+    ]
+
+    @staticmethod
+    def _layout_modes(inst: str) -> list[tuple[str, str]]:
+        # Share the engine panel's options so the two stay in sync (#93).
+        from ui.dialogs.layout_options_panel import LayoutOptionsPanel
+        return LayoutOptionsPanel.modes_for(inst)
+
+    def _build_chart_layout_tab(self) -> QWidget:
+        from core.preset_store import load_presets
+        from workflow.layout_engine.presets import PresetStore
+
+        page = QWidget()
+        v = QVBoxLayout(page)
+        v.setSpacing(10)
+        v.setContentsMargins(12, 12, 12, 12)
+
+        # The engine ON/OFF toggle moved to the Create Chart tab (above the
+        # ChromIQ layout frame) so it's easy to switch engines per chart/preset
+        # (Knut #93). It's kept here as a hidden widget purely so the existing
+        # load/save plumbing keeps working; this tab now just edits the per-combo
+        # DEFAULTS the engine uses.
+        self._layout_engine_check = QCheckBox(self)
+        self._layout_engine_check.setVisible(False)
+        self._layout_engine_check.setChecked(
+            bool(self._settings.get("use_chromiq_layout_engine", False)))
+        moved_note = QLabel(tr(
+            "The ChromIQ layout engine is switched on or off in the Create Chart "
+            "tab, above the layout panel. Here you set the default layout each "
+            "instrument and paper starts from."), self)
+        moved_note.setWordWrap(True)
+        moved_note.setStyleSheet("color: #909090; font-size: 11px;")
+        v.addWidget(moved_note)
+
+        # Everything below the master toggle lives in a body widget that is
+        # greyed out (controls AND their labels) when the engine is off.
+        self._layout_body = QWidget(self)
+        v.addWidget(self._layout_body)
+        v = QVBoxLayout(self._layout_body)
+        v.setSpacing(10)
+        v.setContentsMargins(0, 0, 0, 0)
+
+        intro_row = QHBoxLayout()
+        intro = QLabel(tr(
+            "Default chart layout per instrument and paper. Pick a combination "
+            "above; its values below are the starting point Create Chart uses, "
+            "which you can still tweak per chart. Presets are saved as files you "
+            "can back up or share."), self)
+        intro.setWordWrap(True)
+        intro.setStyleSheet("color: #909090; font-size: 11px;")
+        intro_row.addWidget(intro, stretch=1)
+        intro_row.addWidget(TooltipButton(
+            tr("About chart layout"),
+            tr("This tab holds your DEFAULT chart layouts. Every combination of "
+               "Instrument + Paper + Mode has its own saved set of values — so "
+               "your i1Pro on A4 can differ from your ColorMunki on A3, and each "
+               "remembers what you set.\n\n"
+               "How to use it:\n"
+               "• Pick an Instrument, a Paper size and a Mode at the top.\n"
+               "• Adjust the patch and page settings below. The green line shows "
+               "roughly how many patches fit on one sheet with those settings.\n"
+               "• These are starting points: when you make a chart in Create "
+               "Chart, it begins from these values and you can still tweak that "
+               "one chart without changing the defaults here.\n\n"
+               "What “Mode” means depends on the instrument — for the i1Pro it is "
+               "whether a left clip border is printed; for the ColorMunki it is "
+               "the reading density (hand-held vs the measuring rig); for the "
+               "SpectroScan it is rectangular vs hexagonal patches. Each mode "
+               "keeps its own preset.\n\n"
+               "Your presets are saved as ordinary files (one per combination), "
+               "so you can back them up, copy them between computers, or share "
+               "them: use “Open presets folder”, or “Export…” / “Import…”. "
+               "“Restore factory defaults” returns every combination to the "
+               "values ChromIQ shipped with."),
+            self))
+        v.addLayout(intro_row)
+
+        # working preset store (file-backed, like the manual-tab presets)
+        self._layout_store = PresetStore.from_named_dict(
+            load_presets("chart_layout", self._settings))
+        self._loading_layout = False
+
+        # ---- selectors ----
+        sel = QGridLayout()
+        sel.addWidget(QLabel(tr("Instrument:"), self), 0, 0)
+        self._layout_instr = NoScrollComboBox(self)
+        for key, label in self._LAYOUT_INSTRUMENTS:
+            self._layout_instr.addItem(label, key)
+        sel.addWidget(self._layout_instr, 0, 1)
+        sel.addWidget(QLabel(tr("Paper:"), self), 0, 2)
+        self._layout_paper = NoScrollComboBox(self)
+        sel.addWidget(self._layout_paper, 0, 3)
+        self._layout_mode_lbl = QLabel(tr("Mode:"), self)
+        sel.addWidget(self._layout_mode_lbl, 1, 0)
+        self._layout_mode = NoScrollComboBox(self)
+        sel.addWidget(self._layout_mode, 1, 1)
+        from ui.dialogs.layout_options_panel import LayoutOptionsPanel
+        self._layout_mode_tip = TooltipButton(
+            *LayoutOptionsPanel.mode_tooltip_for("i1"), self)
+        sel.addWidget(self._layout_mode_tip, 1, 2)
+        # Clip-border On/Off for CM/SS — same extra selector as Create Chart, so
+        # the toggle is reachable here too (Knut, #93). i1/p3 use their Mode row.
+        self._layout_clip_enable_lbl = QLabel(tr("Clip border:"), self)
+        sel.addWidget(self._layout_clip_enable_lbl, 2, 0)
+        self._layout_clip_enable = NoScrollComboBox(self)
+        self._layout_clip_enable.addItem(tr("Off — more patches"), "off")
+        self._layout_clip_enable.addItem(tr("On"), "on")
+        sel.addWidget(self._layout_clip_enable, 2, 1)
+        sel.setColumnStretch(1, 1)
+        sel.setColumnStretch(3, 1)
+        v.addLayout(sel)
+
+        # ---- layout options (the SAME shared panel as Create Chart Manual,
+        # so Settings defaults and per-chart edits can't drift) ----
+        from ui.dialogs.layout_options_panel import LayoutOptionsPanel
+        self._layout_panel = LayoutOptionsPanel(self)
+        self._layout_panel.changed.connect(self._on_layout_field_changed)
+        v.addWidget(self._layout_panel)
+
+        self._layout_calc = QLabel("", self)
+        self._layout_calc.setWordWrap(True)
+        self._layout_calc.setStyleSheet("color: #1a8f3c; font-weight: 600;")
+        v.addWidget(self._layout_calc)
+
+        # ---- buttons ----
+        btns = QHBoxLayout()
+        reset_btn = QPushButton(tr("Restore factory defaults"), self)
+        reset_btn.clicked.connect(self._restore_layout_defaults)
+        folder_btn = QPushButton(tr("Open presets folder"), self)
+        folder_btn.clicked.connect(self._open_layout_presets_folder)
+        export_btn = QPushButton(tr("Export…"), self)
+        export_btn.clicked.connect(self._export_layout_presets)
+        import_btn = QPushButton(tr("Import…"), self)
+        import_btn.clicked.connect(self._import_layout_presets)
+        for b in (reset_btn, folder_btn, export_btn, import_btn):
+            btns.addWidget(b)
+        btns.addStretch()
+        v.addLayout(btns)
+
+        # ---- Strip indicator style (global; applies to all new charts) ----
+        # The per-chart styling controls moved here from Create Chart (Knut #93):
+        # font / size / style / rotation / alignment / offset / underline. These
+        # are app-wide defaults for new charts; a saved preset still carries (and
+        # restores) its own styling.
+        v.addWidget(self._build_indicator_style_group())
+        v.addStretch()
+
+        # ---- wiring ----
+        self._layout_instr.currentIndexChanged.connect(self._on_layout_instr_changed)
+        self._layout_paper.currentIndexChanged.connect(self._load_layout_combo)
+        self._layout_mode.currentIndexChanged.connect(self._load_layout_combo)
+        self._layout_clip_enable.currentIndexChanged.connect(
+            self._on_layout_clip_enable_changed)
+        # panel.changed (wired above) drives _on_layout_field_changed
+
+        # The defaults editor is always available now (the engine toggle moved to
+        # Create Chart). The engine ⇄ old-clip-border mutual exclusion is applied
+        # from the setting in _load_settings (and enforced live at the Create Chart
+        # toggle), so nothing to gate here.
+        self._on_layout_instr_changed()      # populate paper+mode for the default
+        self._preselect_layout_combo()       # then jump to the active combo (#93)
+
+        # Re-home the printtarg (old-engine) i1Pro options here, greyed when the
+        # ChromIQ engine is active (they have no effect then) (Knut #93).
+        if getattr(self, "_i1pro_grp", None) is not None:
+            engine_on = bool(self._settings.get("use_chromiq_layout_engine", False))
+            self._i1pro_grp.setEnabled(not engine_on)
+            self._i1pro_grp.setTitle(tr("i1Pro Chart Defaults (printtarg engine)"))
+            page.layout().addWidget(self._i1pro_grp)
+        return self._scroll_wrap(page)
+
+    # Underline-mode options shared with the Create Chart panel (key → label),
+    # so the two stay in sync (Knut #93).
+    _UNDERLINE_MODES = (
+        ("off", "Off"), ("segments", "Coloured (5 segments)"),
+        ("cycle", "Coloured (per strip)"), ("black", "Black"),
+    )
+
+    def _build_indicator_style_group(self) -> QWidget:
+        """Global strip-indicator styling (font/size/style/rotation/alignment/
+        offset/underline) — moved out of the per-chart panel (Knut #93). Wired to
+        the ``strip_indicator_*`` / ``strip_underline_*`` settings keys; saved in
+        ``_save``. Used as the default styling for new charts."""
+        s = self._settings
+        grp = QGroupBox(tr("Strip indicator style (all new charts)"), self)
+        g = QGridLayout(grp)
+        g.setHorizontalSpacing(8)
+        g.setVerticalSpacing(6)
+
+        intro = QLabel(tr(
+            "How the per-strip letter labels (A, B, C…) look on every new chart. "
+            "Saved presets keep their own styling."), self)
+        intro.setWordWrap(True)
+        intro.setStyleSheet("color: #909090; font-size: 11px;")
+        g.addWidget(intro, 0, 0, 1, 4)
+
+        # Font + size + bold/italic.
+        g.addWidget(QLabel(tr("Font:"), self), 1, 0)
+        self._isty_font = NoScrollComboBox(self)
+        # Reuse the panel's font list so the choices match Create Chart exactly.
+        self._layout_panel._populate_font_combo(self._isty_font)
+        g.addWidget(self._isty_font, 1, 1)
+        self._isty_size = NoScrollDoubleSpinBox(self)
+        self._isty_size.setRange(0.0, 20.0)
+        self._isty_size.setDecimals(1)
+        self._isty_size.setSingleStep(0.5)
+        self._isty_size.setSuffix(" mm")
+        self._isty_size.setSpecialValueText(tr("auto"))
+        g.addWidget(self._isty_size, 1, 2)
+        sty_row = QHBoxLayout()
+        self._isty_bold = QCheckBox(tr("Bold"), self)
+        self._isty_italic = QCheckBox(tr("Italic"), self)
+        sty_row.addWidget(self._isty_bold)
+        sty_row.addWidget(self._isty_italic)
+        sty_row.addStretch()
+        _styw = QWidget(self)
+        _styw.setLayout(sty_row)
+        g.addWidget(_styw, 1, 3)
+
+        # Rotation + alignment.
+        g.addWidget(QLabel(tr("Rotation:"), self), 2, 0)
+        self._isty_rotation = NoScrollComboBox(self)
+        for _deg in (0, 90, 180, 270):
+            self._isty_rotation.addItem(f"{_deg}°", _deg)
+        g.addWidget(self._isty_rotation, 2, 1)
+        g.addWidget(QLabel(tr("Alignment:"), self), 2, 2)
+        self._isty_align = NoScrollComboBox(self)
+        for _k, _lbl in (("left", tr("Left")), ("center", tr("Centered")),
+                         ("right", tr("Right"))):
+            self._isty_align.addItem(_lbl, _k)
+        g.addWidget(self._isty_align, 2, 3)
+
+        # Label offset.
+        g.addWidget(QLabel(tr("Label offset:"), self), 3, 0)
+        self._isty_offset = NoScrollDoubleSpinBox(self)
+        self._isty_offset.setRange(-50.0, 50.0)
+        self._isty_offset.setDecimals(1)
+        self._isty_offset.setSingleStep(0.5)
+        self._isty_offset.setSuffix(" mm")
+        g.addWidget(self._isty_offset, 3, 1)
+
+        # Underline mode + thickness + distance.
+        g.addWidget(QLabel(tr("Underline:"), self), 4, 0)
+        self._isty_underline = NoScrollComboBox(self)
+        for _k, _lbl in self._UNDERLINE_MODES:
+            self._isty_underline.addItem(tr(_lbl), _k)
+        g.addWidget(self._isty_underline, 4, 1)
+        g.addWidget(QLabel(tr("Line thickness:"), self), 4, 2)
+        self._isty_ul_thick = NoScrollDoubleSpinBox(self)
+        self._isty_ul_thick.setRange(0.1, 5.0)
+        self._isty_ul_thick.setDecimals(1)
+        self._isty_ul_thick.setSingleStep(0.1)
+        self._isty_ul_thick.setSuffix(" mm")
+        g.addWidget(self._isty_ul_thick, 4, 3)
+        g.addWidget(QLabel(tr("Line distance:"), self), 5, 2)
+        self._isty_ul_gap = NoScrollDoubleSpinBox(self)
+        self._isty_ul_gap.setRange(0.0, 20.0)
+        self._isty_ul_gap.setDecimals(1)
+        self._isty_ul_gap.setSingleStep(0.5)
+        self._isty_ul_gap.setSuffix(" mm")
+        g.addWidget(self._isty_ul_gap, 5, 3)
+        g.setColumnStretch(1, 1)
+
+        # ---- load current values ----
+        _fi = self._isty_font.findData(s.get("strip_indicator_font"))
+        self._isty_font.setCurrentIndex(_fi if _fi >= 0 else 0)
+        self._isty_size.setValue(float(s.get("strip_indicator_size_mm")))
+        self._isty_bold.setChecked(bool(s.get("strip_indicator_bold")))
+        self._isty_italic.setChecked(bool(s.get("strip_indicator_italic")))
+        _ri = self._isty_rotation.findData(int(s.get("strip_indicator_rotation")))
+        self._isty_rotation.setCurrentIndex(_ri if _ri >= 0 else 0)
+        _ai = self._isty_align.findData(s.get("strip_indicator_align"))
+        self._isty_align.setCurrentIndex(_ai if _ai >= 0 else 0)
+        self._isty_offset.setValue(float(s.get("strip_label_offset_mm")))
+        _ui = self._isty_underline.findData(s.get("strip_underline_mode"))
+        self._isty_underline.setCurrentIndex(_ui if _ui >= 0 else 0)
+        self._isty_ul_thick.setValue(float(s.get("strip_underline_thickness_mm")))
+        self._isty_ul_gap.setValue(float(s.get("strip_underline_gap_mm")))
+        return grp
+
+    def _save_indicator_style(self) -> None:
+        """Persist the global strip-indicator styling controls."""
+        if getattr(self, "_isty_font", None) is None:
+            return
+        s = self._settings
+        s.set("strip_indicator_font", self._isty_font.currentData() or "JetBrains Mono")
+        s.set("strip_indicator_size_mm", float(self._isty_size.value()))
+        s.set("strip_indicator_bold", self._isty_bold.isChecked())
+        s.set("strip_indicator_italic", self._isty_italic.isChecked())
+        s.set("strip_indicator_rotation", int(self._isty_rotation.currentData() or 0))
+        s.set("strip_indicator_align", self._isty_align.currentData() or "left")
+        s.set("strip_label_offset_mm", float(self._isty_offset.value()))
+        s.set("strip_underline_mode", self._isty_underline.currentData() or "off")
+        s.set("strip_underline_thickness_mm", float(self._isty_ul_thick.value()))
+        s.set("strip_underline_gap_mm", float(self._isty_ul_gap.value()))
+
+    def _preselect_layout_combo(self) -> None:
+        """Select the instrument/paper/mode the user is editing in Create Chart,
+        so a preset saved under that combination is visible on open (#93)."""
+        combo = self._initial_layout_combo
+        if not combo:
+            return
+        inst, paper, mode = combo
+        i = self._layout_instr.findData(inst)
+        if i >= 0 and i != self._layout_instr.currentIndex():
+            self._layout_instr.setCurrentIndex(i)   # repopulates paper+mode, loads
+        elif i >= 0:
+            self._on_layout_instr_changed()         # same instrument: refresh lists
+        j = self._layout_paper.findData(paper)
+        if j >= 0:
+            self._layout_paper.setCurrentIndex(j)   # fires _load_layout_combo
+        k = self._layout_mode.findData(mode)
+        if k >= 0:
+            self._layout_mode.setCurrentIndex(k)    # fires _load_layout_combo
+
+    def _scroll_wrap(self, page: QWidget) -> QWidget:
+        """Wrap a settings tab in a fading scroll area so every tab scrolls and
+        shares the same backdrop (the tab pane is white, but a scroll area's
+        viewport follows the window tint — so wrapping all tabs keeps them
+        consistent) and gets the top/bottom fade the rest of the app uses."""
+        from ui.fade_scroll import FadeScrollArea
+        from ui.theme import resolve_mode
+        scroll = FadeScrollArea(self, surface="dialog")
+        scroll.set_appearance(resolve_mode(self._settings.get("appearance", "auto")))
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(FadeScrollArea.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setWidget(page)
+        return scroll
+
+    def _on_layout_instr_changed(self) -> None:
+        from workflow.layout_engine import papers
+        self._loading_layout = True
+        inst = self._layout_instr.currentData() or "i1"
+        prev_paper = self._layout_paper.currentData()
+        self._layout_paper.clear()
+        for code, label, _ in papers.list_papers(inst, for_engine=True):
+            self._layout_paper.addItem(label, code)
+        i = self._layout_paper.findData(prev_paper)
+        if i < 0:
+            i = self._layout_paper.findData("A4")   # sane default, not A2 (index 0)
+        self._layout_paper.setCurrentIndex(i if i >= 0 else 0)
+        self._layout_mode.clear()
+        for key, label in self._layout_modes(inst):
+            self._layout_mode.addItem(label, key)
+        from ui.dialogs.layout_options_panel import LayoutOptionsPanel
+        self._layout_mode_lbl.setText(LayoutOptionsPanel.mode_label_for(inst))
+        self._layout_mode_tip.set_content(*LayoutOptionsPanel.mode_tooltip_for(inst))
+        # The extra clip-border On/Off selector is for CM/SS only.
+        is_band = inst in ("CM", "SS")
+        self._layout_clip_enable.setVisible(is_band)
+        self._layout_clip_enable_lbl.setVisible(is_band)
+        self._loading_layout = False
+        self._load_layout_combo()
+
+    def _layout_selection(self) -> tuple[str, str, str]:
+        return (self._layout_instr.currentData() or "i1",
+                self._layout_paper.currentData() or "A4",
+                self._layout_mode.currentData() or "default")
+
+    def _load_layout_combo(self) -> None:
+        inst, paper, mode = self._layout_selection()
+        recipe = self._layout_store.get(inst, paper, mode)
+        self._loading_layout = True
+        self._layout_panel.set_recipe(recipe)
+        # Mirror the loaded clip state into the CM/SS On/Off selector.
+        i = self._layout_clip_enable.findData(
+            "on" if self._layout_panel.clip_enabled() else "off")
+        self._layout_clip_enable.setCurrentIndex(i if i >= 0 else 0)
+        self._loading_layout = False
+        self._update_layout_calc()
+
+    def _on_layout_clip_enable_changed(self) -> None:
+        if self._loading_layout:
+            return
+        self._layout_panel.set_clip_enabled(
+            self._layout_clip_enable.currentData() == "on")
+        # set_clip_enabled flips the panel's content mode → panel.changed →
+        # _on_layout_field_changed persists it; nothing more to do here.
+
+    def _recipe_from_fields(self):
+        from workflow.layout_engine.presets import default_recipe
+        inst, paper, mode = self._layout_selection()
+        r = default_recipe(inst, paper, mode=mode)   # sets mode flags from selectors
+        return self._layout_panel.apply_to_recipe(r)
+
+    def _on_layout_field_changed(self, *_a) -> None:
+        if self._loading_layout:
+            return
+        self._layout_store.set(self._recipe_from_fields())
+        self._update_layout_calc()
+
+    def _update_layout_calc(self) -> None:
+        from workflow.layout_engine import geometry, instruments, papers, preflight
+        try:
+            r = self._recipe_from_fields()
+            geom = instruments.geom_from_build_kwargs(r.build_kwargs())
+            w_mm, h_mm = papers.dimensions_mm(r.paper)
+            cap = geometry.patches_per_sheet(geom, w_mm, h_mm)
+            layout = geometry.compute(geom, w_mm, h_mm, cap)
+            rep = preflight.check(geom, layout)
+            msgs = [(e, True) for e in rep.errors] + [(w, False) for w in rep.warnings]
+            usable = h_mm - geom.margin_t - geom.margin_b
+            if r.max_strip_mm and r.max_strip_mm > usable:
+                msgs.append((tr("max strip length exceeds the usable page "
+                                "length (~{u:.0f} mm)").format(u=usable), False))
+            iw = preflight.indicator_width_warning(
+                geom, r.dpi, font=r.indicator_font, size_mm=r.indicator_size_mm,
+                show=r.show_strip_indicators)
+            if iw:
+                msgs.append((iw, False))
+            html = ("<span style='color:#1a8f3c;font-weight:600'>"
+                    + tr("≈ {n} patches per sheet").format(n=cap) + "</span>")
+            for txt, is_err in msgs:
+                colour = "#e05252" if is_err else "#c47f17"
+                html += f"<br><span style='color:{colour}'>⚠ {txt}</span>"
+            self._layout_calc.setText(html)
+        except geometry.LayoutError as exc:
+            self._layout_calc.setText(
+                f"<span style='color:#e05252'>⚠ {exc}</span>")
+        except Exception:
+            self._layout_calc.setText("—")
+
+    def _restore_layout_defaults(self) -> None:
+        from workflow.layout_engine.presets import PresetStore
+        self._layout_store = PresetStore()   # empty → get() returns shipped defaults
+        self._load_layout_combo()
+
+    def _open_layout_presets_folder(self) -> None:
+        from core.preset_store import reveal_in_file_manager, tab_dir
+        reveal_in_file_manager(tab_dir("chart_layout"))
+
+    def _export_layout_presets(self) -> None:
+        import json
+        path, _ = QFileDialog.getSaveFileName(
+            self, tr("Export layout presets"),
+            str(Path.home() / "chromiq-layout-presets.json"),
+            tr("JSON files (*.json)"))
+        if not path:
+            return
+        Path(path).write_text(
+            json.dumps(self._layout_store.as_named_dict(), indent=2),
+            encoding="utf-8")
+
+    def _import_layout_presets(self) -> None:
+        import json
+        path, _ = QFileDialog.getOpenFileName(
+            self, tr("Import layout presets"), str(Path.home()),
+            tr("JSON files (*.json)"))
+        if not path:
+            return
+        try:
+            data = json.loads(Path(path).read_text(encoding="utf-8"))
+        except Exception as exc:
+            log.warning("layout preset import failed: %s", exc)
+            return
+        if isinstance(data, dict):
+            from workflow.layout_engine.presets import LayoutRecipe
+            for k, vdict in data.items():
+                if isinstance(vdict, dict):
+                    self._layout_store.set(LayoutRecipe.from_dict(vdict))
+            self._load_layout_combo()
+
     def _save_and_close(self) -> None:
         s = self._settings
         s.set("argyll_bin_path",       self._argyll_edit.text().strip())
@@ -1086,9 +1624,16 @@ class SettingsDialog(QDialog):
         # Margin inspector: behaviour flags + the per-combo threshold table.
         self._commit_margin_combo()   # flush the currently-shown combo's edits
         s.set("margin_inspector_show",     self._margin_show_check.isChecked())
+        s.set("layout_info_show",          self._layout_info_show_check.isChecked())
         s.set("margin_violation_notify",   self._margin_notify_check.isChecked())
         from core.settings import serialize_margin_thresholds
         s.set("margin_thresholds", serialize_margin_thresholds(self._margin_table))
+        # Global strip-indicator styling (Knut #93): defaults for new charts.
+        self._save_indicator_style()
+        # ChromIQ layout engine (issue #93): toggle + file-backed presets.
+        s.set("use_chromiq_layout_engine", self._layout_engine_check.isChecked())
+        from core.preset_store import save_presets
+        save_presets("chart_layout", self._layout_store.as_named_dict())
         log.info("Settings saved")
         self.accept()
 

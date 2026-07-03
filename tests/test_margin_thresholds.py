@@ -103,3 +103,19 @@ def test_multiple_edges_and_missing_keys():
 
 def test_blank_string_threshold_ignored():
     assert check_violations(_report(L=1.0), {"L": "", "R": 11}) == []
+
+
+# --- strip-length limit (#16) ----------------------------------------------
+# (The Default Patch Sizes table was removed — Knut #93: the instrument's natural
+# patch size is a sufficient auto target on its own, so no user-facing table.)
+
+def test_strip_length_limit_round_trip(tmp_path):
+    from PyQt6.QtCore import QSettings
+    from core.settings import thresholds_for_combo
+    s = AppSettings()
+    s._qs = QSettings(str(tmp_path / "t.ini"), QSettings.Format.IniFormat)
+    table = s.get_margin_thresholds()
+    table[margin_combo_key("i1Pro", "A4", "Portrait")]["ruler"] = 200.0
+    s.set_margin_thresholds(table)
+    entry = thresholds_for_combo(s.get_margin_thresholds(), "i1", 210.0, 297.0)
+    assert entry is not None and entry.get("ruler") == 200.0

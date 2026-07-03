@@ -67,7 +67,7 @@ from ui.tab_header import TabHeader
 from ui.builtin_preset_popup import BuiltinPresetButton, BuiltinPresetPopup
 from ui.tiff_preview import TiffPreview
 from ui.tooltip_button import InfoDialog, TooltipButton
-from ui.widgets import NoScrollComboBox, NoScrollSpinBox, PatchGridButton, PrefixLockedLineEdit, icc_profile_paths, load_magenta_folder_icon, make_browse_button, open_file_dialog, set_folder_icon, set_preset_icon
+from ui.widgets import CollapsibleGroupBox, NoScrollComboBox, NoScrollSpinBox, PatchGridButton, PrefixLockedLineEdit, icc_profile_paths, load_magenta_folder_icon, make_browse_button, open_file_dialog, set_folder_icon, set_preset_icon
 from core.i18n import tr
 from workflow.i1profiler_export import EXTRA_INK, export_from_ti1, parse_ti1
 from workflow.i1profiler_import import import_to_ti1
@@ -830,6 +830,9 @@ class TabChart(QWidget):
     # uses it to skip routing TIFFs/TI2 to the Print and Measure tabs.
     chart_finished  = pyqtSignal(object, object, bool)
     target_started  = pyqtSignal()
+    # Asks the host to open the Edit / Create Chart Patch Set editor on the
+    # current chart (from the "last page not full" hint, #93, Knut).
+    edit_patch_set_requested = pyqtSignal()
 
     def __init__(
         self,
@@ -1092,6 +1095,45 @@ class TabChart(QWidget):
         self._stack.addWidget(self._manual_panel)
         left_layout.addWidget(self._stack, stretch=1)
 
+        # Auto-update-preview toggle, just above Generate (it governs what happens
+        # after you've generated once). Manual mode only (Knut) — shown/hidden in
+        # _switch_mode; Guided has no layout panel to tune live.
+        self._auto_preview_row_w = QWidget(self)
+        auto_row = QHBoxLayout(self._auto_preview_row_w)
+        auto_row.setContentsMargins(0, 0, 0, 0)
+        self._auto_preview_check = QCheckBox(
+            tr("Auto-update preview when a layout setting changes"), self)
+        self._auto_preview_check.setChecked(
+            bool(self._settings.get("auto_update_preview", False)))
+        self._auto_preview_check.toggled.connect(self._on_auto_preview_toggled)
+        # Debounce: coalesce a burst of changes into one re-render.
+        self._auto_preview_timer = QTimer(self)
+        self._auto_preview_timer.setSingleShot(True)
+        self._auto_preview_timer.timeout.connect(self._auto_regenerate_preview)
+        self._last_auto_sig: str | None = None
+        auto_row.addWidget(self._auto_preview_check)
+        auto_row.addStretch()
+        auto_row.addWidget(TooltipButton(
+            tr("Auto-update preview"),
+            tr("When this is on, the chart preview refreshes by itself every time "
+               "you change a layout setting — margins, patch size, columns, "
+               "spacers, the clip border, and so on — so you can see the effect "
+               "immediately without clicking Generate Chart each time.\n\n"
+               "How it works:\n"
+               "• It only starts once you've generated (or loaded) a chart, so "
+               "there's always something to update.\n"
+               "• It re-uses the patches already in your chart and just re-lays "
+               "them out, so the refresh is quick — it does NOT pick new colours "
+               "or re-run the patch generator.\n"
+               "• While it's on, ChromIQ won't pop up the “there's a little room "
+               "left on the last page” reminder after each change — that would be "
+               "in the way when you're tuning the layout live. You can still open "
+               "the patch-set editor any time to add or remove patches.\n\n"
+               "Turn it off to go back to updating the preview only when you click "
+               "Generate Chart."), self))
+        left_layout.addWidget(self._auto_preview_row_w)
+        self._auto_preview_row_w.setVisible(False)   # Manual only (set in _switch_mode)
+
         # Bottom buttons
         btn_row = QHBoxLayout()
         self._generate_btn = QPushButton(tr("Generate Chart"), self)
@@ -1143,14 +1185,25 @@ class TabChart(QWidget):
         self._margin_tiffs: list[Path] = []
         self._margin_ti2: Path | None = None
         from ui.margin_inspector_panel import MarginInspectorPanel
+        from ui.chart_layout_info_panel import ChartLayoutInfoPanel
         self._margin_panel = MarginInspectorPanel(right)
-        right_layout.addWidget(self._margin_panel)
+        # Chart layout info (patch count, grid, pages) beside the margin readout
+        # so it's no longer buried in the log (Knut, #93).
+        self._layout_info_panel = ChartLayoutInfoPanel(right)
+        _info_row = QHBoxLayout()
+        _info_row.setContentsMargins(0, 0, 0, 0)
+        _info_row.setSpacing(8)
+        _info_row.addWidget(self._margin_panel, stretch=3)
+        _info_row.addWidget(self._layout_info_panel, stretch=2)
+        right_layout.addLayout(_info_row)
         self._margin_panel.set_guides_checked(
             bool(self._settings.get("margin_guides_show", False)))
         self._margin_panel.set_measured_guides_checked(
             bool(self._settings.get("margin_measured_guides_show", False)))
         self._margin_panel.setVisible(
             bool(self._settings.get("margin_inspector_show", True)))
+        self._layout_info_panel.setVisible(
+            bool(self._settings.get("layout_info_show", True)))
         # Connect only after the initial state is restored, so building the UI
         # can't trigger a measure pass.
         self._margin_panel.guides_toggled.connect(self._on_margin_guides_toggled)
@@ -1159,6 +1212,7 @@ class TabChart(QWidget):
         # Re-measure when the user pages through a multi-page chart so the
         # inspector + guides always describe the page on screen (#83).
         self._preview.page_changed.connect(lambda _i: self._update_margin_inspector())
+        self._preview.page_changed.connect(lambda _i: self._update_layout_info())
 
         splitter.addWidget(right)
         splitter.setStretchFactor(0, 1)
@@ -1869,25 +1923,59 @@ class TabChart(QWidget):
         self._manual_td_row: QWidget | None = None
         self._td_saved_layout: dict | None = None
 
+        # Engine toggle lives HERE now (moved out of Settings, Knut #93): above the
+        # targen/printtarg groups so switching engines per chart/preset is easy. It
+        # decides whether the layout below is the printtarg controls or the ChromIQ
+        # layout panel. Created ONCE, before the per-tool loop — building it inside
+        # the loop added it twice (once per tool), so the toggle appeared above both
+        # targen and printtarg.
+        _eng_row = QHBoxLayout()
+        self._manual_engine_check = QCheckBox(
+            tr("Use the ChromIQ layout engine instead of printtarg"), inner)
+        self._manual_engine_check.setChecked(
+            bool(self._settings.get("use_chromiq_layout_engine", False)))
+        self._manual_engine_check.toggled.connect(self._on_manual_engine_toggled)
+        _eng_row.addWidget(self._manual_engine_check)
+        _eng_row.addStretch()
+        _eng_row.addWidget(TooltipButton(
+            tr("ChromIQ layout engine"),
+            tr("When ON, ChromIQ builds your test charts itself instead of "
+               "calling ArgyllCMS printtarg. The engine packs the colour "
+               "patches more efficiently, can put useful information where "
+               "printtarg leaves blank space, and lets you fully customise the "
+               "layout below per instrument and paper.\n\n"
+               "When OFF the chart is made by printtarg exactly as before. This "
+               "switch only affects how charts are CREATED; printing and "
+               "measuring existing charts always work the same way, so it is "
+               "safe to switch back at any time."), inner))
+        _eng_w = QWidget(inner)
+        _eng_w.setLayout(_eng_row)
+        # Added to the layout inside the loop, just above the printtarg group (the
+        # engine REPLACES printtarg, so the toggle reads right there) (Knut).
+
         for tool, params in [
             ("targen",    self._params.get("targen", [])),
             ("printtarg", self._params.get("printtarg", [])),
         ]:
-            grp = QGroupBox(tr("{tool} parameters").format(tool=tool), inner)
+            # Outer section frame is collapsible (Knut). targen starts collapsed
+            # (most charts don't touch the patch recipe); printtarg starts open.
+            grp = CollapsibleGroupBox(
+                tr("{tool} parameters").format(tool=tool), inner,
+                collapsed=(tool == "targen"))
             # Keep a handle to the outer group (its inner content is greyed via
             # _manual_*_content while a preset locks the panel).
             if tool == "targen":
                 self._manual_targen_grp = grp
             else:
                 self._manual_printtarg_grp = grp
-            grp_layout = QVBoxLayout(grp)
+            grp_layout = QVBoxLayout(grp.body)
 
-            # Override row — pinned at the top of the panel, hidden until a preset
-            # that supplies a fixed patch set (ti1) or a fixed layout (prebuilt)
-            # is active. Ticking it re-enables the greyed controls below. The
-            # checkbox stays enabled while its content is greyed because it lives
-            # outside the disabled content widgets (basic_grp / expert_grp).
-            override_row = QWidget(grp)
+            # Override row — pinned ABOVE the (collapsible) section frame so it
+            # stays visible even when the frame is collapsed (Knut). Hidden until a
+            # preset that supplies a fixed patch set (ti1) or a fixed layout
+            # (prebuilt) is active. Ticking it re-enables the greyed controls and
+            # expands the targen frame.
+            override_row = QWidget(inner)
             override_l = QHBoxLayout(override_row)
             override_l.setContentsMargins(0, 0, 0, 2)
             if tool == "targen":
@@ -1905,21 +1993,26 @@ class TabChart(QWidget):
             override_l.addWidget(ov_check)
             override_l.addStretch()
             override_l.addWidget(ov_tip)
-            override_row.setVisible(False)
-            grp_layout.addWidget(override_row)
+            override_row.setVisible(False)   # added to inner_layout below the loop
             ov_check.toggled.connect(self._update_preset_locks)
             ov_check.toggled.connect(self._refresh_manual_command_preview)
             ov_check.clicked.connect(
                 lambda checked, t=tool: self._on_override_clicked(t, checked)
             )
 
-            basic_grp = QGroupBox(tr("Basic"), grp)
-            basic_layout = QVBoxLayout(basic_grp)
-            expert_grp = QGroupBox(tr("Expert Options"), grp)
-            expert_layout = QVBoxLayout(expert_grp)
+            # Collapsible sections (Knut): click the title to fold a frame away.
+            # Expert is collapsed by default; the targen Basic frame starts
+            # collapsed and auto-expands when "Edit patch recipe" is ticked
+            # (wired in _update_preset_locks), so a locked recipe stays tidy.
+            basic_grp = CollapsibleGroupBox(tr("Basic"), grp)
+            basic_layout = QVBoxLayout(basic_grp.body)
+            expert_grp = CollapsibleGroupBox(tr("Expert Options"), grp,
+                                             collapsed=True)
+            expert_layout = QVBoxLayout(expert_grp.body)
             # Content widgets greyed out (not the override row) while locked.
             if tool == "targen":
                 self._manual_targen_content = [basic_grp, expert_grp]
+                self._manual_targen_basic_grp = basic_grp
             else:
                 self._manual_printtarg_content = [basic_grp, expert_grp]
 
@@ -2091,6 +2184,7 @@ class TabChart(QWidget):
                 # param_label carries the right per-theme colour AND a :disabled
                 # rule, so it greys when a preset locks the printtarg panel.
                 pages_lbl.setObjectName("param_label")
+                self._manual_pages_lbl = pages_lbl
                 pages_row_l.addWidget(pages_lbl)
                 self._manual_pages_spin = NoScrollSpinBox(pages_row_w)
                 self._manual_pages_spin.setObjectName("compact_input")
@@ -2133,6 +2227,9 @@ class TabChart(QWidget):
 
             grp_layout.addWidget(basic_grp)
             grp_layout.addWidget(expert_grp)
+            if tool == "printtarg":
+                inner_layout.addWidget(_eng_w)   # engine toggle above printtarg
+            inner_layout.addWidget(override_row)  # override box above its frame
             inner_layout.addWidget(grp)
 
         self._update_manual_lb_visibility()
@@ -2151,6 +2248,67 @@ class TabChart(QWidget):
         self._cal_target_check.toggled.connect(self._on_cal_target_toggled)
         # Cal-target prefix changes the displayed name — refresh the preview too.
         self._cal_target_check.toggled.connect(self._refresh_manual_command_preview)
+
+        # ChromIQ layout panel (engine on): the full per-chart layout mirror,
+        # replacing the printtarg controls. Hidden when the engine is off.
+        from ui.dialogs.layout_options_panel import LayoutOptionsPanel
+        self._manual_layout_grp = CollapsibleGroupBox(tr("ChromIQ layout"), inner)
+        _llg = QVBoxLayout(self._manual_layout_grp.body)
+        _llg.setContentsMargins(8, 8, 8, 8)
+        self._manual_layout_panel = LayoutOptionsPanel(
+            self._manual_layout_grp, with_selectors=True, with_calibration=True)
+        # Let the panel's "Use instrument margins" checkbox read the user's
+        # Instrument-Margins thresholds for the current combo (#93, Knut).
+        self._manual_layout_panel.set_threshold_lookup(self._combo_thresholds)
+        # Keep the engine panel's instrument/paper and the canonical Manual
+        # selection (printtarg -i/-p) in step, so loading a preset then enabling
+        # the engine carries Instrument/Paper across and the threshold lookup +
+        # Preferences preselect use the right combo (#93, Knut beta-13).
+        if self._manual_layout_panel.instr is not None:
+            self._manual_layout_panel.instr.currentIndexChanged.connect(
+                self._sync_manual_selection_from_panel)
+        if self._manual_layout_panel.paper is not None:
+            self._manual_layout_panel.paper.currentIndexChanged.connect(
+                self._sync_manual_selection_from_panel)
+        self._manual_layout_panel.changed.connect(self._refresh_manual_command_preview)
+        _llg.addWidget(self._manual_layout_panel)
+        inner_layout.addWidget(self._manual_layout_grp)
+        self._manual_layout_grp.setVisible(False)
+        self._manual_panel_inited = False
+        self._syncing_manual_sel = False
+        # Treat the engine's start-of-session state as "already settled" so the
+        # first preview render isn't seen as an off→on toggle (which would pull
+        # the printtarg default over a restored saved recipe at startup) (#93).
+        self._engine_was_active = bool(
+            self._settings.get("use_chromiq_layout_engine", False))
+
+        # Layout-engine preset bar (issue #93): shown only when the ChromIQ
+        # layout engine is active. Summarises the active preset (instrument ×
+        # paper × mode), flags when the current settings differ from it, and
+        # lets the user reset to / update that preset, or edit the defaults.
+        self._manual_preset_bar = QWidget(inner)
+        _pbar = QHBoxLayout(self._manual_preset_bar)
+        _pbar.setContentsMargins(0, 0, 0, 0)
+        _pbar.setSpacing(6)
+        self._manual_preset_reset_btn = QPushButton(
+            tr("Reset to preset"), self._manual_preset_bar)
+        self._manual_preset_reset_btn.clicked.connect(self._reset_manual_to_preset)
+        self._manual_preset_update_btn = QPushButton(
+            tr("Update preset"), self._manual_preset_bar)
+        self._manual_preset_update_btn.clicked.connect(self._update_manual_preset)
+        self._manual_preset_edit_btn = QPushButton(
+            tr("Edit defaults…"), self._manual_preset_bar)
+        self._manual_preset_edit_btn.clicked.connect(self._edit_layout_defaults)
+        # Buttons fill the panel width equally (full labels fit) with reduced
+        # height. A stylesheet sets the height because a global QSS min-height
+        # overrides setFixedHeight/setMinimumHeight (see Qt-button-sizing note).
+        for _b in (self._manual_preset_reset_btn, self._manual_preset_update_btn,
+                   self._manual_preset_edit_btn):
+            _b.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+            _b.setStyleSheet("QPushButton { min-height: 16px; padding: 3px 10px; }")
+            _pbar.addWidget(_b, 1)
+        inner_layout.addWidget(self._manual_preset_bar)
+        self._manual_preset_bar.setVisible(False)
 
         # Live command preview — mirrors the guided info box but reflects the
         # actual targen / printtarg args the workflow will build from the
@@ -2187,11 +2345,187 @@ class TabChart(QWidget):
         layout.addWidget(scroll)
         return w
 
+    def _on_manual_engine_toggled(self, on: bool) -> None:
+        """The engine toggle moved from Settings to Create Chart (Knut #93).
+        Persist the choice, keep the engine and the old printtarg ChromIQ
+        clip-border mutually exclusive (the engine replaces the printtarg path),
+        and refresh the manual UI so the right frame shows."""
+        was_on = bool(self._settings.get("use_chromiq_layout_engine", False))
+        self._settings.set("use_chromiq_layout_engine", bool(on))
+        if on:
+            # Remember + clear the old ChromIQ clip-border so use_engine doesn't
+            # silently collapse back to the printtarg path (chart_creator).
+            if self._settings.get("i1pro_chromiq_clip_style", False):
+                self._engine_clip_saved = True
+                self._settings.set("i1pro_chromiq_clip_style", False)
+        elif getattr(self, "_engine_clip_saved", False):
+            self._settings.set("i1pro_chromiq_clip_style", True)
+            self._engine_clip_saved = False
+        # Convert the shared layout settings across the toggle so the layout you
+        # dialled in on one side isn't lost on the other (Knut #3). Only the
+        # convertible fields move (instrument, paper, margins, patch scale, clip
+        # border, density, strip-limit); engine-only / printtarg-only options stay
+        # on their own side.
+        if on and not was_on:
+            self._convert_printtarg_to_engine()
+        elif was_on and not on:
+            self._convert_engine_to_printtarg()
+        self._refresh_manual_command_preview()
+
+    def _convert_printtarg_to_engine(self) -> None:
+        """Engine OFF→ON: seed the engine layout panel from the printtarg widgets
+        the user had set, overriding the convertible fields and keeping the
+        panel's engine-only options (layout mode, columns, clip content…) (Knut
+        #3). The full field map is documented in _convert_engine_to_printtarg."""
+        panel = getattr(self, "_manual_layout_panel", None)
+        if panel is None:
+            return
+        if not self._manual_panel_inited:
+            self._init_manual_layout_panel()
+        try:
+            from dataclasses import replace
+            g = lambda f, d: self._manual_get("printtarg", f, d)
+            cur = panel.get_recipe()
+            instr = str(g("-i", "i1"))
+            suppress = bool(g("-L", True))           # -L = no left/clip border
+            dd = bool(g("-h", False))
+            td = (self._manual_td_check is not None
+                  and self._manual_td_check.isChecked() and instr == "CM")
+            # Spacers: -n (none) wins, then -b (B&W), then -c / default (coloured).
+            spacer_mode = ("none" if bool(g("-n", False))
+                           else "bw" if bool(g("-b", False))
+                           else "colored")
+            preserve = bool(g("-r", False))          # -r = preserve order
+            # Only carry the seed as a FIXED seed when the user actually enabled
+            # the -R row (printtarg always has an internal default, but the engine
+            # "no fixed seed" state must survive a round-trip).
+            has_seed = self._manual_enabled("printtarg", "-R")
+            seed_val = int(g("-R", 1) or 1)
+            bit16 = bool(self._bit16_radio is not None
+                         and self._bit16_radio.isChecked())
+            disable_comp = bool(g("-C", False))      # -C = no TIFF compression
+
+            # Margins: printtarg carries ONE value, the engine has four. Only
+            # collapse to all-four when the user actually changed printtarg's
+            # margin since the last switch — otherwise keep the engine's own
+            # (possibly distinct) four so toggling back and forth never loses them
+            # (Knut: don't transfer the non-1:1 field when it would clobber).
+            cur_m = float(g("-m", 6) or 6)
+            snap_m = getattr(self, "_pt_margin_at_switch", None)
+            if snap_m is not None and int(round(cur_m)) == int(snap_m):
+                margins = dict(
+                    margin_top=cur.margin_top, margin_right=cur.margin_right,
+                    margin_bottom=cur.margin_bottom, margin_left=cur.margin_left,
+                    border=cur.border,
+                    use_instrument_margins=cur.use_instrument_margins)
+            else:
+                margins = dict(
+                    margin_top=cur_m, margin_right=cur_m, margin_bottom=cur_m,
+                    margin_left=cur_m, border=cur_m, use_instrument_margins=False)
+
+            recipe = replace(
+                cur,
+                instrument=instr, paper=str(g("-p", "A4")),
+                dpi=int(g("-t", 300) or 300),
+                pscale=float(g("-a", 1.0) or 1.0),
+                nolimit=bool(g("-P", False)),
+                cm_density=(3 if td else 2 if dd else 1),
+                spacer_mode=spacer_mode, spacer_on=(spacer_mode != "none"),
+                randomize=(not preserve),
+                seed=(seed_val if (has_seed and not preserve) else None),
+                bit16=bit16,
+                compression=("none" if disable_comp else "lzw"),
+                clip_border=((not suppress) if instr in ("i1", "p3")
+                             else cur.clip_border),
+                clip_content_mode=(("off" if suppress else "notes")
+                                   if instr in ("i1", "p3")
+                                   else cur.clip_content_mode),
+                **margins,
+            )
+            panel.set_recipe(recipe)
+            if (getattr(panel, "pages", None) is not None
+                    and self._manual_pages_spin is not None):
+                panel.pages.setValue(int(self._manual_pages_spin.value()))
+        except Exception:  # noqa: BLE001 — never block the toggle
+            log.warning("printtarg→engine conversion failed", exc_info=True)
+
+    def _convert_engine_to_printtarg(self) -> None:
+        """Engine ON→OFF: write the engine panel's settings back onto the
+        printtarg widgets so the layout survives the toggle (Knut #3). Field map
+        (both directions, inverse where noted):
+          -i ↔ Instrument        -p ↔ Paper            pages ↔ Pages
+          -t ↔ Resolution        -a ↔ Patch scale      -P ↔ Don't-limit-strip
+          -L ↔ Clip border (inv, i1/p3)   -r ↔ Randomise (inv)
+          -R ↔ fixed Seed        -C ↔ Compression (-C on ⇔ "none")
+          -n/-b/-c ↔ Spacers (none/bw/coloured)        bit radios ↔ Bit depth
+          -h + triple-density ↔ Density (1/2/3)
+          -m ↔ Margins (only when all four are equal — see below)."""
+        panel = getattr(self, "_manual_layout_panel", None)
+        if panel is None:
+            return
+        try:
+            r = panel.get_recipe()
+            # Instrument + paper first (changing -i cascades the instrument
+            # defaults for -a/-m, so set those afterwards).
+            self._set_manual_value("printtarg", "-i", r.instrument)
+            self._set_manual_value("printtarg", "-p", r.paper)
+            self._set_manual_value("printtarg", "-t", int(r.dpi))
+            self._set_manual_value("printtarg", "-a", round(float(r.pscale), 3))
+            self._set_manual_value("printtarg", "-P", bool(r.nolimit))
+            self._set_manual_value("printtarg", "-h", bool(r.cm_density == 2))
+            # Spacers (mutually exclusive flags).
+            self._set_manual_value("printtarg", "-n", r.spacer_mode == "none")
+            self._set_manual_value("printtarg", "-b", r.spacer_mode == "bw")
+            self._set_manual_value("printtarg", "-c", r.spacer_mode == "colored")
+            # Randomise / fixed seed.
+            self._set_manual_value("printtarg", "-r", not r.randomize)
+            if r.seed is not None:
+                self._set_manual_value("printtarg", "-R", int(r.seed))
+            # TIFF compression (-C disables it → engine "none").
+            self._set_manual_value("printtarg", "-C", r.compression == "none")
+            # Bit depth (the 8/16-bit radios live on the printtarg row).
+            if self._bit16_radio is not None and self._bit8_radio is not None:
+                (self._bit16_radio if r.bit16
+                 else self._bit8_radio).setChecked(True)
+            self._set_manual_value(
+                "printtarg", "-L",
+                bool(r.instrument in ("i1", "p3") and not r.clip_border))
+            if self._manual_td_check is not None:
+                self._manual_td_check.setChecked(
+                    r.instrument == "CM" and r.cm_density == 3)
+            # Margins: only collapse the four engine margins onto printtarg's
+            # single -m when they're all equal (lossless). When they differ,
+            # leave printtarg's margin untouched so the distinct values survive a
+            # round-trip (restored on the way back). Record what we left -m at so
+            # the reverse conversion can tell whether the user changed it.
+            ms = (r.margin_top, r.margin_right, r.margin_bottom, r.margin_left)
+            if max(ms) - min(ms) < 0.5:
+                self._set_manual_value("printtarg", "-m", int(round(r.margin_top)))
+            self._pt_margin_at_switch = int(self._manual_get("printtarg", "-m", 6) or 6)
+            if (self._manual_pages_spin is not None
+                    and getattr(panel, "pages", None) is not None):
+                self._manual_pages_spin.setValue(int(panel.pages.value()))
+        except Exception:  # noqa: BLE001 — never block the toggle
+            log.warning("engine→printtarg conversion failed", exc_info=True)
+
     def _refresh_manual_command_preview(self) -> None:
         """Rebuild the manual info label from the current ParameterWidget state.
 
         Mirrors workflow/chart_creator.py:_build_targen_args /
         _build_printtarg_args so the preview matches exactly what runs."""
+        # Keep the Create-Chart engine checkbox in step with the setting (a preset
+        # load or engine switch can change it elsewhere) without re-firing toggled.
+        chk = getattr(self, "_manual_engine_check", None)
+        if chk is not None:
+            want = bool(self._settings.get("use_chromiq_layout_engine", False))
+            if chk.isChecked() != want:
+                chk.blockSignals(True)
+                chk.setChecked(want)
+                chk.blockSignals(False)
+        # Any manual layout/recipe change routes through here, so this is the
+        # single hook for the live preview refresh (Knut, opt-in; guarded by a
+        # layout-signature check so it only fires on a real change).
+        self._maybe_schedule_auto_preview()
         if getattr(self, "_manual_info_lbl", None) is None:
             return
         try:
@@ -2271,6 +2605,30 @@ class TabChart(QWidget):
             pt_args += shlex.split(p.extra_printtarg_args)
         pt_args.append(self._preview_target_name("manual"))
 
+        # When the ChromIQ layout engine is active it replaces printtarg for the
+        # generate path, so the preview shows what the engine will build.
+        from workflow.chart_creator import ENGINE_INSTRUMENTS
+        use_engine = (
+            bool(self._settings.get("use_chromiq_layout_engine", False))
+            and p.instrument in ENGINE_INSTRUMENTS
+            and not (p.chromiq_clip_style or p.left_clip_info))
+
+        def _layout_cmd() -> str:
+            if use_engine:
+                # The engine recipe panel — not the printtarg widgets — is the
+                # source of truth in Manual mode, so summarise the recipe (#93).
+                if getattr(self, "_manual_layout_panel", None) is not None:
+                    try:
+                        return self._engine_info_line_from_recipe(
+                            self._current_layout_recipe())
+                    except Exception:
+                        pass
+                return self._engine_info_line(
+                    p.instrument, p.paper, p.tiff_dpi, dd=p.double_density,
+                    td=triple, eff_lb=(p.disable_left_border or force_l),
+                    nsl=p.no_strip_limit, pscale=p.patch_scale, margin=p.margin_mm)
+            return f"printtarg {' '.join(pt_args)}"
+
         pages = (
             self._manual_pages_spin.value()
             if self._manual_pages_spin is not None else 1
@@ -2319,7 +2677,7 @@ class TabChart(QWidget):
                        "Builds a fresh chart from your settings — the patches "
                        "will NOT match the preset.").format(notes=" · ".join(notes))
                     + f"\ntargen {' '.join(targen_args)}"
-                    + f"\nprinttarg {' '.join(pt_args)}"
+                    + f"\n{_layout_cmd()}"
                 )
             elif printtarg_changed:
                 info = (
@@ -2372,10 +2730,228 @@ class TabChart(QWidget):
                     tr("Manual mode — your current configuration ({notes}):").format(
                         notes=" · ".join(notes))
                     + f"\ntargen {' '.join(targen_args)}"
-                    + f"\nprinttarg {' '.join(pt_args)}"
+                    + f"\n{_layout_cmd()}"
                 )
+        # Engine on: the printtarg layout group is replaced by the layout panel.
+        if getattr(self, "_manual_layout_grp", None) is not None:
+            if use_engine and not self._manual_panel_inited:
+                self._init_manual_layout_panel()
+            # On the off→on transition, carry the current Manual instrument/paper
+            # (e.g. from a just-loaded preset) into the engine panel (#93, Knut).
+            if use_engine and not getattr(self, "_engine_was_active", False):
+                self._sync_engine_panel_selection()
+            self._engine_was_active = use_engine
+            self._manual_layout_grp.setVisible(use_engine)
+        if getattr(self, "_manual_printtarg_grp", None) is not None:
+            self._manual_printtarg_grp.setVisible(not use_engine)
+        # The command stamp covers targen + the layout engine when it's active
+        # (no printtarg). Relabel it, and default it off the first time the
+        # engine becomes active — the stamp is most useful for the printtarg
+        # command line, less so for the engine.
+        if getattr(self, "_manual_stamp_cmd_check", None) is not None:
+            self._manual_stamp_cmd_check.setText(
+                tr("Stamp targen and layout-engine info on the chart") if use_engine
+                else tr("Stamp targen and printtarg commands on the chart"))
+            if getattr(self, "_stamp_engine_state", None) != use_engine:
+                self._stamp_engine_state = use_engine
+                self._manual_stamp_cmd_check.setChecked(not use_engine)
+        status = self._layout_preset_status() if use_engine else None
+        if status is not None:
+            summary, modified = status
+            info += "\n" + summary + ("   " + tr("● modified") if modified else "")
         self._manual_info_lbl.setText(info)
+        self._refresh_manual_preset_bar(use_engine, status)
         self._refresh_name_prefix()     # keep the name field plain (no prefix)
+
+        # Live layout-info estimate (Manual + engine). Runs even with a chart on
+        # screen so the "estimate" column tracks the current settings (#93).
+        manual_active = (self._manual_btn is not None
+                         and self._manual_btn.isChecked())
+        if manual_active and getattr(self, "_layout_info_panel", None) is not None:
+            if use_engine and getattr(self, "_manual_layout_panel", None) is not None:
+                try:
+                    from workflow.layout_engine import instruments
+                    r = self._current_layout_recipe()
+                    # Margin boxes are ALWAYS the law now (Knut, new model): the
+                    # render never clamps to instrument minimums, so the estimate
+                    # mustn't either, or the two would disagree. Below-minimum is
+                    # only flagged as a violation in the inspector.
+                    geom = instruments.geom_from_build_kwargs(r.build_kwargs())
+                    pages_req = (self._manual_pages_spin.value()
+                                 if self._manual_pages_spin is not None else 1)
+                    # Use the on-screen chart's fixed patch count ONLY when the
+                    # count is fixed (Auto patch count OFF). With Auto ON the count
+                    # is a capacity-fill that changes with the patch size, so let
+                    # the estimate recompute it (npat=None) — otherwise the estimate
+                    # sticks on the stale generated count when you change e.g. the
+                    # minimum patch width (#93, Knut beta-14 regression).
+                    _auto = (self._manual_auto_patches_check is not None
+                             and self._manual_auto_patches_check.isChecked())
+                    self._predict_layout_info(
+                        geom, r.paper, pages_req,
+                        npat=None if _auto else self._onscreen_patch_total())
+                except Exception:
+                    self._layout_info_panel.clear_estimate()
+            else:
+                self._layout_info_panel.clear_estimate()
+
+    # ------------------------------------------------------------------
+    # Layout-engine per-chart preset bar (issue #93)
+    # ------------------------------------------------------------------
+    def _layout_store(self):
+        from core.preset_store import load_presets
+        from workflow.layout_engine.presets import PresetStore
+        return PresetStore.from_named_dict(load_presets("chart_layout", self._settings))
+
+    def _init_manual_layout_panel(self) -> None:
+        """Seed the layout panel (first time the engine is shown in Manual).
+
+        Prefer the recipe saved by "Save as Defaults" (every engine option,
+        incl. paper, restored verbatim); otherwise fall back to the active
+        per-(instrument/paper/mode) preset for the current selection (#93)."""
+        self._manual_panel_inited = True
+        saved = self._settings.get("manual_engine_recipe", None)
+        if isinstance(saved, dict):
+            from workflow.layout_engine.presets import LayoutRecipe
+            try:
+                self._manual_layout_panel.set_recipe(LayoutRecipe.from_dict(saved))
+                return
+            except Exception as exc:  # noqa: BLE001 — fall back to the preset
+                log.warning("restore engine layout defaults failed: %s", exc)
+        inst, paper, mode = self._manual_layout_panel.selection()
+        store = self._layout_store()
+        recipe = store.get(inst, paper, mode)
+        # A fresh default (no stored preset for this combo) takes its strip-
+        # indicator styling from the app-wide Settings defaults; a stored preset
+        # keeps the styling it was saved with (Knut #93).
+        if not store.has(inst, paper, mode):
+            recipe = self._settings.apply_indicator_style(recipe)
+        self._manual_layout_panel.set_recipe(recipe)
+
+    def _sync_engine_panel_selection(self) -> None:
+        """Seed the engine layout panel's instrument/paper from the canonical
+        Manual selection (printtarg -i/-p) — so enabling the engine after loading
+        a preset carries Instrument and Paper into the ChromIQ frame, and the
+        threshold lookup / Preferences preselect use the right combo (#93, Knut
+        beta-13). Run only on the off→on transition; after that the panel is the
+        source and the reverse mirror keeps printtarg in step."""
+        p = getattr(self, "_manual_layout_panel", None)
+        if p is None or p.instr is None or p.paper is None:
+            return
+        if getattr(self, "_syncing_manual_sel", False):
+            return
+        eng = {"3p": "p3"}.get(self._active_instrument_flag(),
+                               self._active_instrument_flag())
+        if eng not in ("i1", "p3", "CM", "SS"):
+            eng = "i1"
+        paper = self._active_paper_code() or "A4"
+        self._syncing_manual_sel = True
+        try:
+            ii = p.instr.findData(eng)
+            if ii >= 0 and p.instr.currentIndex() != ii:
+                p.instr.setCurrentIndex(ii)          # rebuilds the paper list
+            pi = p.paper.findData(paper)
+            if pi >= 0:
+                p.paper.setCurrentIndex(pi)
+        finally:
+            self._syncing_manual_sel = False
+
+    def _sync_manual_selection_from_panel(self, *_a) -> None:
+        """Reverse of :meth:`_sync_engine_panel_selection`: mirror the engine
+        panel's instrument/paper back onto the printtarg -i/-p widgets, so the
+        margin/layout Preferences preselect and naming follow what the engine
+        panel shows (#93, Knut beta-13)."""
+        p = getattr(self, "_manual_layout_panel", None)
+        if (p is None or p.instr is None
+                or getattr(self, "_syncing_manual_sel", False)
+                or getattr(p, "_loading", False)):
+            return
+        eng = p.instr.currentData() or "i1"
+        paper = p.paper.currentData() or "A4"
+        flag = {"p3": "3p"}.get(eng, eng)
+        self._syncing_manual_sel = True
+        try:
+            for pw in self._manual_widgets.get("printtarg", []):
+                if pw.flag == "-i":
+                    pw.set_value(flag)
+                elif pw.flag == "-p":
+                    pw.set_value(paper)
+        finally:
+            self._syncing_manual_sel = False
+
+    def _current_layout_recipe(self):
+        """The LayoutRecipe from the engine layout panel."""
+        return self._manual_layout_panel.get_recipe()
+
+    @staticmethod
+    def _layout_recipe_values(r) -> dict:
+        """The comparable value fields of a recipe (ignores seed / chart text)."""
+        d = r.to_dict()
+        d.pop("seed", None)
+        d.pop("chart_text", None)
+        return d
+
+    def _layout_preset_status(self):
+        """``(summary, modified)`` for the active layout preset, or None."""
+        try:
+            cur = self._current_layout_recipe()
+            preset = self._layout_store().get(cur.instrument, cur.paper, cur.mode())
+        except Exception:
+            return None
+        modified = (self._layout_recipe_values(cur)
+                    != self._layout_recipe_values(preset))
+        from workflow.layout_engine import papers
+        summary = tr("Layout preset: {i} · {p} · {m}").format(
+            i=cur.instrument, p=papers.friendly_label(cur.paper), m=cur.mode())
+        return summary, modified
+
+    def _refresh_manual_preset_bar(self, use_engine: bool, status=None) -> None:
+        bar = getattr(self, "_manual_preset_bar", None)
+        if bar is None:
+            return
+        bar.setVisible(use_engine)
+        if not use_engine:
+            return
+        modified = bool(status[1]) if status else False
+        self._manual_preset_reset_btn.setEnabled(modified)
+        self._manual_preset_update_btn.setEnabled(modified)
+
+    def _reset_manual_to_preset(self) -> None:
+        try:
+            cur = self._current_layout_recipe()
+            preset = self._layout_store().get(cur.instrument, cur.paper, cur.mode())
+        except Exception as exc:
+            log.warning("reset-to-preset failed: %s", exc)
+            return
+        self._manual_layout_panel.set_recipe(preset)
+        self._refresh_manual_command_preview()
+
+    def _update_manual_preset(self) -> None:
+        from core.preset_store import save_presets
+        try:
+            store = self._layout_store()
+            store.set(self._current_layout_recipe())
+            save_presets("chart_layout", store.as_named_dict())
+        except Exception as exc:
+            log.warning("update-preset failed: %s", exc)
+            return
+        self._refresh_manual_command_preview()
+
+    def _edit_layout_defaults(self) -> None:
+        """Open Settings on the Chart Layout tab, preselected to the layout the
+        user is editing here (#93)."""
+        from ui.dialogs.settings_dialog import SettingsDialog
+        dlg = SettingsDialog(self._settings, self,
+                             margin_combo=self.current_margin_combo(),
+                             layout_combo=self.current_layout_combo())
+        tabs = getattr(dlg, "_tabs", None)
+        if tabs is not None:
+            for i in range(tabs.count()):
+                if tabs.tabText(i) == tr("Chart Layout"):
+                    tabs.setCurrentIndex(i)
+                    break
+        dlg.exec()
+        self._refresh_manual_command_preview()
 
     # ------------------------------------------------------------------
     # Helpers
@@ -2689,6 +3265,7 @@ class TabChart(QWidget):
             return {}
 
     def _switch_mode(self, mode: str) -> None:
+        prev = self._current_mode()     # capture BEFORE the stack changes
         if mode == "guided":
             self._stack.setCurrentIndex(0)
             self._guided_btn.setChecked(True)
@@ -2699,17 +3276,49 @@ class TabChart(QWidget):
             self._manual_btn.setChecked(True)
         self._update_isis_preview_banner()
         self._refresh_name_prefix()     # apply the prefix to the now-active field
-        # #79: when a chart was just generated in Guided mode and the user opens
-        # Manual, seed the Manual panel with the exact recipe that produced it,
-        # so they can edit the settings used. One-shot (consumed here) so later
-        # manual edits aren't clobbered by toggling modes back and forth.
-        if mode == "manual" and getattr(self, "_guided_transfer_pending", False):
-            self._guided_transfer_pending = False
-            self._transfer_guided_to_manual()
+        # Auto-update-preview is a Manual-only control (Knut).
+        if getattr(self, "_auto_preview_row_w", None) is not None:
+            self._auto_preview_row_w.setVisible(mode == "manual")
+        # Keep the two tabs in step (Knut #9): carry the shared chart-defining
+        # settings the user CHANGED in the tab they're leaving into the one they're
+        # opening. Only changed fields move (snapshot-on-arrival / diff-on-leave),
+        # so a setting the destination can't represent — e.g. an A3 paper Guided
+        # doesn't offer — is never "changed" there and so can never clobber the
+        # other tab on the way back. The post-generate #79 path still does the full
+        # exact-recipe seed.
+        if prev != mode and not getattr(self, "_mode_transfer_active", False):
+            self._mode_transfer_active = True
+            try:
+                if mode == "manual" and getattr(self, "_guided_transfer_pending", False):
+                    # #79: a chart was just generated in Guided — seed Manual with
+                    # the EXACT recipe that produced it (incl. scale/margin), once.
+                    self._guided_transfer_pending = False
+                    self._transfer_guided_to_manual()
+                else:
+                    self._carry_shared_settings(prev, mode)
+            finally:
+                self._mode_transfer_active = False
+        # Snapshot the now-active tab's shared settings so the next switch can tell
+        # what the user changed while it was open.
+        self._snapshot_shared_settings(mode)
+        # Refresh the now-active mode's predictors so the patch count and the
+        # Chart-layout-information estimate describe the mode on screen (#93) —
+        # each predictor is guarded by active mode, so the just-hidden one stops
+        # updating and the newly-shown one takes over.
+        if mode == "guided":
+            self._update_patch_count()
+        else:
+            self._refresh_manual_command_preview()
 
-    def _transfer_guided_to_manual(self) -> None:
-        """Seed the Manual panel from the Guided settings that produced the
-        chart now in the preview (#79). Best-effort: never blocks a mode switch."""
+    def _transfer_guided_to_manual(self, quiet: bool = False) -> None:
+        """Seed the Manual panel from the Guided settings.
+
+        *quiet* = the plain tab-switch sync (Knut #9): carry only the shared
+        chart-defining fields and leave Manual's patch count and custom
+        scale/margin alone (changing -i below still cascades the instrument
+        defaults). Without *quiet* it's the post-generation #79 transfer, which
+        reproduces the EXACT generated chart (scale, margin, Auto count) and logs.
+        Best-effort: never blocks a mode switch."""
         try:
             p = self._collect_guided()
         except Exception:
@@ -2722,16 +3331,15 @@ class TabChart(QWidget):
         self._set_manual_value("printtarg", "-p", p.paper)
         if self._manual_pages_spin is not None:
             self._manual_pages_spin.setValue(int(p.pages))
-        # targen inputs. Patch count mirrors Guided's Auto (which also drives the
-        # neutral counts), so the Manual recipe reproduces the same chart.
         self._set_manual_value("targen", "-d", str(p.device_type))
         self._set_manual_value("targen", "-G", bool(p.good_mode))
-        if self._manual_auto_patches_check is not None:
-            self._manual_auto_patches_check.setChecked(True)
-        # printtarg layout — after -i so the instrument-default cascade can't
-        # overwrite these.
-        self._set_manual_value("printtarg", "-a", round(float(p.patch_scale), 3))
-        self._set_manual_value("printtarg", "-m", int(p.margin_mm))
+        if not quiet:
+            # Reproduce the exact generated chart: mirror Guided's Auto count
+            # (which drives the neutral counts) and its derived scale/margin.
+            if self._manual_auto_patches_check is not None:
+                self._manual_auto_patches_check.setChecked(True)
+            self._set_manual_value("printtarg", "-a", round(float(p.patch_scale), 3))
+            self._set_manual_value("printtarg", "-m", int(p.margin_mm))
         self._set_manual_value("printtarg", "-h", bool(p.double_density))
         self._set_manual_value("printtarg", "-P", bool(p.no_strip_limit))
         self._set_manual_value("printtarg", "-L", bool(p.disable_left_border))
@@ -2746,14 +3354,215 @@ class TabChart(QWidget):
                     self._set_manual_value("targen", "-c", toks[i + 1])
         except ValueError:
             pass
-        # Printer profile name.
-        name_edit = getattr(self, "_target_name_edit", None)
-        name = name_edit.text().strip() if name_edit is not None else ""
-        if name:
-            self._set_manual_name_plain(name)
+        if not quiet:
+            # Printer profile name + a one-time confirmation.
+            name_edit = getattr(self, "_target_name_edit", None)
+            name = name_edit.text().strip() if name_edit is not None else ""
+            if name:
+                self._set_manual_name_plain(name)
+        # With the engine on, the layout panel (not the printtarg widgets) builds
+        # the Manual chart, so load the FULL engine recipe Guided used into the
+        # panel — instrument, paper, pages AND clip-border suppression, margins,
+        # patch scale, density, edge spacers — or Manual silently rebuilds a
+        # different chart (Knut: clip border reappeared, patches too near the
+        # labels). Otherwise (engine off) just sync the canonical selection.
+        self._apply_guided_engine_recipe(p)
         self._refresh_manual_command_preview()
-        self._log.appendPlainText(
-            tr("Guided settings copied to Manual mode — edit and regenerate as needed."))
+        if not quiet:
+            self._log.appendPlainText(tr(
+                "Guided settings copied to Manual mode — edit and regenerate as "
+                "needed."))
+
+    # Shared chart-defining settings both tabs express (Knut #9). Each is read /
+    # written per tab below; only the ones the user CHANGED in the tab being left
+    # are carried, so a value the other tab can't represent never clobbers it.
+    _SHARED_SETTINGS = ("instrument", "paper", "pages", "double_density",
+                        "triple_density", "left_border", "no_strip_limit",
+                        "precond")
+    # On a plain tab switch (no Generate) only these carry — the rest waits for
+    # the post-Generate transfer (Knut #2).
+    _SWITCH_CARRY_FIELDS = ("instrument", "paper")
+
+    def _manual_get(self, tool: str, flag: str, default: Any) -> Any:
+        for pw in self._manual_widgets.get(tool, []):
+            if pw.flag == flag:
+                v = pw.get_raw_value()
+                return v if v is not None else default
+        return default
+
+    def _manual_enabled(self, tool: str, flag: str) -> bool:
+        """True when an expert flag's enable-checkbox is ticked (so it reaches the
+        command). Used to transfer a value only when the user actually set it."""
+        for pw in self._manual_widgets.get(tool, []):
+            if pw.flag == flag:
+                return bool(pw.is_enabled_by_user)
+        return False
+
+    def _shared_get(self, tab: str) -> "dict[str, Any]":
+        """Current value of every shared setting for *tab* ('guided'|'manual')."""
+        if tab == "guided":
+            precond = (self._guided_precond_path.text().strip()
+                       if self._guided_precond_check.isChecked() else "")
+            return {
+                "instrument": self._instr_combo.currentData(),
+                "paper": self._paper_combo.currentData(),
+                "pages": int(self._pages_spin.value()),
+                "double_density": self._dd_check.isChecked(),
+                "triple_density": self._td_check.isChecked(),
+                "left_border": self._lb_check.isChecked(),
+                "no_strip_limit": self._nsl_check.isChecked(),
+                "precond": precond,
+            }
+        # manual
+        toks = []
+        try:
+            toks = shlex.split(str(self._manual_get("targen", "-c", "") or ""))
+        except ValueError:
+            toks = []
+        precond = toks[0] if toks else str(self._manual_get("targen", "-c", "") or "")
+        td = (self._manual_td_check is not None
+              and self._manual_td_check.isChecked())
+        return {
+            "instrument": str(self._manual_get("printtarg", "-i", "i1")),
+            "paper": str(self._manual_get("printtarg", "-p", "A4")),
+            "pages": (int(self._manual_pages_spin.value())
+                      if self._manual_pages_spin is not None else 1),
+            "double_density": bool(self._manual_get("printtarg", "-h", False)),
+            "triple_density": bool(td),
+            "left_border": bool(self._manual_get("printtarg", "-L", True)),
+            "no_strip_limit": bool(self._manual_get("printtarg", "-P", False)),
+            "precond": precond,
+        }
+
+    def _shared_set(self, tab: str, field: str, value: Any) -> None:
+        """Apply one shared setting to *tab*. Skips quietly when the tab can't
+        represent the value (e.g. a paper Guided doesn't offer) so it never gets
+        clobbered to a wrong value."""
+        if tab == "guided":
+            if field == "instrument":
+                i = self._instr_combo.findData(value)
+                if i >= 0:
+                    self._instr_combo.setCurrentIndex(i)
+            elif field == "paper":
+                i = self._paper_combo.findData(value)
+                if i < 0:                       # try a same-dimensions guided code
+                    dims = _PAPER_MM.get(value)
+                    if dims:
+                        for k in range(self._paper_combo.count()):
+                            if _PAPER_MM.get(self._paper_combo.itemData(k)) == dims:
+                                i = k
+                                break
+                if i >= 0:
+                    self._paper_combo.setCurrentIndex(i)
+            elif field == "pages":
+                self._pages_spin.setValue(int(value))
+            elif field == "double_density":
+                self._dd_check.setChecked(bool(value))
+            elif field == "triple_density":
+                self._td_check.setChecked(bool(value))
+            elif field == "left_border":
+                self._lb_check.setChecked(bool(value))
+            elif field == "no_strip_limit":
+                self._nsl_check.setChecked(bool(value))
+            elif field == "precond":
+                self._guided_precond_path.setText(str(value or ""))
+                self._guided_precond_check.setChecked(bool(value))
+        else:  # manual (a superset of guided's options)
+            if field == "instrument":
+                self._set_manual_value("printtarg", "-i", value)
+            elif field == "paper":
+                self._set_manual_value("printtarg", "-p", value)
+            elif field == "pages":
+                if self._manual_pages_spin is not None:
+                    self._manual_pages_spin.setValue(int(value))
+            elif field == "double_density":
+                self._set_manual_value("printtarg", "-h", bool(value))
+            elif field == "triple_density":
+                if self._manual_td_check is not None:
+                    self._manual_td_check.setChecked(bool(value))
+            elif field == "left_border":
+                self._set_manual_value("printtarg", "-L", bool(value))
+            elif field == "no_strip_limit":
+                self._set_manual_value("printtarg", "-P", bool(value))
+            elif field == "precond":
+                self._set_manual_value("targen", "-c", str(value or ""))
+
+    def _snapshot_shared_settings(self, tab: str) -> None:
+        """Remember *tab*'s shared settings as they are now, so the next switch
+        can tell which ones the user changed while it was open."""
+        try:
+            snaps = self.__dict__.setdefault("_shared_snapshots", {})
+            snaps[tab] = self._shared_get(tab)
+        except Exception:  # noqa: BLE001 — never block a mode switch
+            log.debug("shared-settings snapshot skipped", exc_info=True)
+
+    def _carry_shared_settings(self, src: str, dst: str) -> None:
+        """Carry the shared settings the user CHANGED in *src* into *dst* (#9)."""
+        try:
+            snaps = getattr(self, "_shared_snapshots", {})
+            before = snaps.get(src)
+            now = self._shared_get(src)
+        except Exception:  # noqa: BLE001
+            log.debug("Guided↔Manual transfer skipped", exc_info=True)
+            return
+        if not now:
+            return
+        # A plain tab switch carries ONLY instrument + paper, so the two tabs
+        # agree on the device without the surprise of margins/density/etc. jumping
+        # across un-generated (Knut: full transfer happens on Generate). Snapshot/
+        # diff still guards against an unrepresentable paper clobbering the source.
+        for field in self._SWITCH_CARRY_FIELDS:
+            new = now.get(field)
+            if before is None or before.get(field) != new:
+                self._shared_set(dst, field, new)
+        if dst == "guided":
+            self._update_patch_count()
+        else:
+            self._sync_engine_panel_after_transfer()
+            self._refresh_manual_command_preview()
+
+    def _sync_engine_panel_after_transfer(self) -> None:
+        """When the ChromIQ engine is on, a Manual chart is built from the engine
+        LAYOUT PANEL, not the printtarg -i/-p/-a/-m widgets. So after carrying
+        settings into Manual, push the canonical instrument / paper / pages into
+        the panel too — otherwise the panel keeps its old instrument and the
+        generated chart ignores what was transferred (Knut #9)."""
+        if not bool(self._settings.get("use_chromiq_layout_engine", False)):
+            return
+        p = getattr(self, "_manual_layout_panel", None)
+        if p is None:
+            return
+        self._sync_engine_panel_selection()      # instrument + paper → panel
+        if (getattr(p, "pages", None) is not None
+                and self._manual_pages_spin is not None):
+            p.pages.setValue(int(self._manual_pages_spin.value()))
+
+    def _apply_guided_engine_recipe(self, guided_params) -> None:
+        """Load the FULL engine recipe a Guided chart used into the Manual layout
+        panel, so Manual reproduces it exactly (Knut bugfix B).
+
+        Guided builds engine charts from ``ChartCreator._engine_build_kwargs`` —
+        the same kwargs converted to a :class:`LayoutRecipe` here — so clip-border
+        suppression, margins, patch scale, density and edge spacers all carry, not
+        just instrument/paper. No-op when the engine is off (then the printtarg
+        widgets the transfer already set are what build the chart)."""
+        if not bool(self._settings.get("use_chromiq_layout_engine", False)):
+            return
+        panel = getattr(self, "_manual_layout_panel", None)
+        if panel is None:
+            return
+        try:
+            from workflow.layout_engine.presets import LayoutRecipe
+            kw = self._creator._engine_build_kwargs(guided_params)
+            recipe = LayoutRecipe.from_build_kwargs(kw)
+            panel.set_recipe(recipe)
+            if (getattr(panel, "pages", None) is not None
+                    and self._manual_pages_spin is not None):
+                panel.pages.setValue(int(self._manual_pages_spin.value()))
+        except Exception:  # noqa: BLE001 — never block the mode switch
+            log.warning("Guided→Manual engine-recipe transfer failed",
+                        exc_info=True)
+            self._sync_engine_panel_after_transfer()   # fall back to light sync
 
     def _on_guided_precond_toggled(self, checked: bool) -> None:
         self._guided_precond_path.setEnabled(checked)
@@ -3125,6 +3934,14 @@ class TabChart(QWidget):
         """
         if self._manual_pages_spin is not None:
             self._manual_pages_spin.setEnabled(checked)
+        # Grey the "Pages:" label too (not just the spin) — with Auto off the
+        # user has set an exact patch count, so the page count is fixed (#93).
+        if getattr(self, "_manual_pages_lbl", None) is not None:
+            self._manual_pages_lbl.setEnabled(checked)
+        # Same for the engine layout panel's own Pages control (shown when the
+        # ChromIQ engine is on), which is a separate widget.
+        if getattr(self, "_manual_layout_panel", None) is not None:
+            self._manual_layout_panel.set_pages_enabled(checked)
         if self._manual_f_pw is None or self._manual_f_pw._control is None:
             return
         spin = self._manual_f_pw._control
@@ -3548,6 +4365,14 @@ class TabChart(QWidget):
             self._reset_override_checks()
             self._preset_del_btn.setEnabled(False)
             self._last_preset_index = index
+            # Built-in presets are printtarg-based (they predate the engine), so
+            # load them with the printtarg engine — otherwise the engine panel
+            # shows its own defaults (i1/A4) instead of the preset's real
+            # instrument/paper (Knut). Set BEFORE the dispatch so the engine→
+            # printtarg conversion runs first and the preset's values then win.
+            if getattr(self, "_manual_engine_check", None) is not None \
+                    and self._manual_engine_check.isChecked():
+                self._manual_engine_check.setChecked(False)
             if data == TC918_PRESET_KEY:
                 self._apply_tc918_preset(name)
             elif data in KNUT_PRESET_KEYS:
@@ -3623,13 +4448,13 @@ class TabChart(QWidget):
             if self._manual_pages_spin is not None:
                 self._manual_pages_spin.setValue(int(s.get("manual_pages", 1)))
             if self._manual_auto_patches_check is not None:
-                auto_on = bool(s.get("manual_auto_patches", False))
+                auto_on = bool(s.get("manual_auto_patches", True))
                 self._manual_auto_patches_check.setChecked(auto_on)
                 self._on_auto_patches_toggled(auto_on)
             self._load_auto_neutral_states(
-                grey  = bool(s.get("manual_auto_grey",  False)),
-                white = bool(s.get("manual_auto_white", False)),
-                black = bool(s.get("manual_auto_black", False)),
+                grey  = bool(s.get("manual_auto_grey",  True)),
+                white = bool(s.get("manual_auto_white", True)),
+                black = bool(s.get("manual_auto_black", True)),
             )
             self._manual_left_clip_check.setChecked(
                 bool(s.get("chart_left_clip_info", False))
@@ -3644,6 +4469,15 @@ class TabChart(QWidget):
             presets = self._load_presets_from_settings()
             pdata = presets.get(name, {})
             self._restore_user_preset(pdata)
+            # Load the preset with the engine it was made with (Knut #93): a
+            # Manual preset stores printtarg widget values (no layout_recipe), so
+            # select the printtarg engine — otherwise the ChromIQ engine would try
+            # to render it and the preview is wrong. The restored -i/-p widgets
+            # then drive the (correct) instrument & paper. An engine preset (future
+            # layout_recipe) would instead switch the engine on.
+            if getattr(self, "_manual_engine_check", None) is not None:
+                has_recipe = isinstance(pdata, dict) and bool(pdata.get("layout_recipe"))
+                self._manual_engine_check.setChecked(has_recipe)
             # Carry the preset's stored New-chart recipe (Set B), if any, so a
             # chart generated from it reopens in the editor with this design
             # pre-loaded into New chart / Add (#70, Knut follow-up).
@@ -3734,6 +4568,28 @@ class TabChart(QWidget):
                 self._manual_td_check.setChecked(td_on)
             finally:
                 self._suppress_td_override = False
+        # Auto-match the engine toggle to what the preset actually contains, so
+        # the shown controls reflect the preset (engine panel vs printtarg). A
+        # preset carries "layout_recipe" iff it was saved with the engine on;
+        # old/printtarg presets lack it → engine off. Shareable + back-compat
+        # (the flag lives in the preset file, not local state) (#93). Toggle and
+        # refresh FIRST so the engine panel is built before we seed it (the
+        # build reseeds from the store, which would clobber the preset recipe).
+        lr = data.get("layout_recipe")
+        engine_on = isinstance(lr, dict) and bool(lr)
+        if bool(self._settings.get("use_chromiq_layout_engine", False)) != engine_on:
+            self._settings.set("use_chromiq_layout_engine", engine_on)
+        if engine_on:
+            self._refresh_manual_command_preview()   # swap groups + init panel
+            if getattr(self, "_manual_layout_panel", None) is not None:
+                from workflow.layout_engine.presets import LayoutRecipe
+                self._manual_layout_panel.set_recipe(LayoutRecipe.from_dict(lr))
+                # The recipe carries its own instrument/paper — mirror them onto
+                # the printtarg -i/-p so Preferences preselect + naming follow the
+                # loaded engine preset (set_recipe suppresses the live mirror) (#93).
+                self._sync_manual_selection_from_panel()
+        else:
+            self._refresh_manual_command_preview()   # show printtarg controls
 
     def _preset_save_prefill(self) -> tuple[str, bool, bool, bool]:
         """Initial (name, auto_run, attach, from_generator) for the Save Preset
@@ -4014,6 +4870,14 @@ class TabChart(QWidget):
         capture["triple_density"] = bool(
             self._manual_td_check is not None and self._manual_td_check.isChecked()
         )
+        # ChromIQ layout engine: store the full layout recipe (minus the per-chart
+        # seed) so a named preset carries the engine options too, exactly like it
+        # carries the printtarg ones (#93). Only when the engine is active.
+        if (getattr(self, "_manual_layout_panel", None) is not None
+                and bool(self._settings.get("use_chromiq_layout_engine", False))):
+            from dataclasses import replace
+            capture["layout_recipe"] = replace(
+                self._manual_layout_panel.get_recipe(), seed=None).to_dict()
         (_prefill_name, prefill_run, prefill_attach,
          prefilled_from_target) = self._preset_save_prefill()
         # A patch set can only be attached if one is currently loaded.
@@ -4467,6 +5331,13 @@ class TabChart(QWidget):
             w.setEnabled(targen_unlocked)
         for w in self._manual_printtarg_content:
             w.setEnabled(printtarg_unlocked)
+        # When a preset locks the recipe, collapse the targen frame while it's
+        # locked and expand it the moment the user ticks "Edit patch recipe", so
+        # the now-editable controls come into view (Knut). Outside a lock the
+        # frame keeps its own collapsed-by-default / user-clicked state.
+        tgrp = getattr(self, "_manual_targen_grp", None)
+        if tgrp is not None and show_targen_cb:
+            tgrp.set_collapsed(not targen_unlocked)
 
     def _reset_override_checks(self) -> None:
         """Untick both override boxes without firing their pop-up.
@@ -4895,35 +5766,52 @@ class TabChart(QWidget):
             self._leave_prebuilt()
         if self._reflected_active:
             self._leave_reflected()
-        self._applied_active = True
-        self._applied_src_dir = src_dir
-        self._applied_stem = name
-        self._reset_override_checks()
-        # Seed the printtarg panel from what the editor laid the chart out with,
-        # so an unlock-and-edit starts from the right state and — even while
-        # locked — the panel shows the chosen layout. Instrument + paper come
-        # from the .ti2; the rest (patch scale, margin, spacers, density, DPI,
-        # bit depth, -L/-P) come from the editor's meta.json LayoutOptions.
+        # Create Chart OWNS the layout (Knut #93): applying takes only the editor's
+        # PATCH SET (the .ti1) and lays it out with the layout currently set here —
+        # it never changes your instrument / paper / margins / patch size. So we
+        # adopt the .ti1 as the patch source (the same mechanism a bundled-.ti1
+        # preset uses: patch set fixed, layout fully editable) and regenerate. We
+        # do NOT seed or lock the editor's layout, and the layout panels stay live.
+        self._applied_active = False
+        ti1 = src_dir / f"{name}.ti1"
+        if not ti1.is_file():
+            log.warning("Applied patch set has no .ti1: %s", ti1)
+            return False
+        import shutil
         try:
-            from workflow.ti2_relayout import ChartSpec, load_editor_meta
-            ti2 = src_dir / f"{name}.ti2"
-            spec = ChartSpec.from_ti2(ti2)
-            self._set_manual_value("printtarg", "-i", spec.instrument_flag)
-            self._set_manual_value("printtarg", "-p", spec.paper_flag)
-            meta = load_editor_meta(ti2)
-            if meta is not None:
-                self._seed_manual_printtarg_from_layout(meta[0])
-        except Exception as exc:  # noqa: BLE001 — seeding is best-effort
-            log.warning("Could not seed printtarg layout from applied chart: %s", exc)
-        # Never overwrite the user's profile name — only seed it when the field
-        # is empty so a brand-new Create Chart session still gets a sensible name.
+            dest = self._file_mgr.working_dir() / "edited_patch_set.ti1"
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(ti1, dest)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("Could not stage the edited patch set: %s", exc)
+            return False
+        self._preset_ti1_path = dest
+        self._preset_ti1_targen_sig = self._targen_signature()
+        # Never overwrite the user's profile name — only seed it when empty.
         self._ensure_profile_name(name)
-        # Baselines for the Generate-time change detection, taken after seeding.
-        self._applied_targen_sig = self._targen_signature()
-        self._applied_printtarg_sig = self._printtarg_signature()
-        self._update_preset_locks()      # grey both panels
-        self._import_applied_chart()     # overwrite the current run's chart
+        self._reset_override_checks()
+        self._update_preset_locks()
+        # Lay the patch set out NOW with the current Create Chart layout.
+        self._generate_from_ti1(dest)
         return True
+
+    def _carry_engine_recipe_from(self, channels_json) -> None:
+        """Carry an adopted chart's engine recipe back into Create Chart (#93).
+
+        If *channels_json* holds a ChromIQ-engine recipe, turn the engine on and
+        seed the Manual engine panel so the options chosen in the editor come
+        back here; otherwise make sure the engine is off so the printtarg seeding
+        shows. Best-effort — never blocks adopting the chart.
+        """
+        try:
+            from workflow.layout_engine.presets import LayoutRecipe
+            eng = LayoutRecipe.from_channels_json(channels_json)
+            self._settings.set("use_chromiq_layout_engine", eng is not None)
+            self._refresh_manual_command_preview()
+            if eng is not None and getattr(self, "_manual_layout_panel", None) is not None:
+                self._manual_layout_panel.set_recipe(eng)
+        except Exception as exc:  # noqa: BLE001 — carry-back is best-effort
+            log.warning("Could not carry engine recipe back from editor: %s", exc)
 
     def _import_applied_chart(self, add_new_run: bool = False) -> None:
         """Copy the applied editor chart's files into the current run and load it.
@@ -4976,6 +5864,11 @@ class TabChart(QWidget):
             shutil.copy(src_ti1, run.chart_ti1)
             if src_ti2.is_file():
                 shutil.copy(src_ti2, run.chart_ti2)
+            # Engine charts carry a channels.json (engine marker + recipe + strip
+            # geometry); copy it so the run reads as an engine chart (#93).
+            _src_ch = src_ti1.with_suffix(".channels.json")
+            if _src_ch.is_file():
+                shutil.copy(_src_ch, run.chart_channels_json)
             tiffs: list[Path] = []
             for i, src_tif in enumerate(src_tiffs, start=1):
                 dest = work_dir / f"{run.stem}_{i:02d}.tif"
@@ -5086,6 +5979,11 @@ class TabChart(QWidget):
             shutil.copy(src_ti1, run.chart_ti1)
             if src_ti2.is_file():
                 shutil.copy(src_ti2, run.chart_ti2)
+            # Engine charts carry a channels.json (engine marker + recipe + strip
+            # geometry); copy it so the run reads as an engine chart (#93).
+            _src_ch = src_ti1.with_suffix(".channels.json")
+            if _src_ch.is_file():
+                shutil.copy(_src_ch, run.chart_channels_json)
             tiffs: list[Path] = []
             for i, src_tif in enumerate(src_tiffs, start=1):
                 dest = work_dir / f"{run.stem}_{i:02d}.tif"
@@ -5198,6 +6096,127 @@ class TabChart(QWidget):
     # Patch count display
     # ------------------------------------------------------------------
 
+    def _combo_thresholds(self, instr: str, paper: str):
+        """The user's margin-threshold minimums for an engine instrument + paper,
+        or None — so the live patch count honours the same minimums the engine
+        enforces at generation (#93)."""
+        try:
+            from core.settings import thresholds_for_combo
+            from workflow.layout_engine import papers
+            w_mm, h_mm = papers.dimensions_mm(paper)
+            return thresholds_for_combo(
+                self._settings.get_margin_thresholds(), instr, w_mm, h_mm)
+        except Exception:
+            return None
+
+    def _engine_geom(self, instr: str, paper: str, *, dd: bool, td: bool,
+                     eff_lb: bool, nsl: bool, pscale: float, margin: float):
+        """Build a layout-engine Geom from the guided/manual effective values,
+        with the user's margin thresholds enforced (so the count matches what
+        the engine will actually build, #93)."""
+        from workflow.layout_engine import instruments
+        kw: dict = dict(instrument=instr, paper=paper, spacer_on=True,
+                        pscale=float(pscale),
+                        margins=(float(margin),) * 4, border=float(margin),
+                        nolimit=bool(nsl))
+        if instr in ("i1", "p3"):
+            kw["nolpcbord"] = bool(eff_lb)
+        elif instr == "CM":
+            kw["density"] = 3 if td else (2 if dd else 1)
+        elif instr == "SS":
+            kw["hflag"] = bool(dd)
+        # Guided mode has no margin boxes and no "Use instrument margins"
+        # recipe toggle, so the jig-safety threshold clamp is NOT applied here.
+        # It would pin the patch count regardless of the clip-border / strip-cap
+        # toggles (the thresholds dominate). Mirrors chart_creator's Guided
+        # generation path so the estimate matches the real render.
+        return instruments.geom_from_build_kwargs(kw, thresholds=None)
+
+    def _engine_capacity(self, instr: str, paper: str, *, dd: bool, td: bool,
+                         eff_lb: bool, nsl: bool, pscale: float, margin: float):
+        """Patches per sheet from the ChromIQ engine (None if it can't lay out)."""
+        try:
+            from workflow.layout_engine import geometry, papers
+            geom = self._engine_geom(instr, paper, dd=dd, td=td, eff_lb=eff_lb,
+                                     nsl=nsl, pscale=pscale, margin=margin)
+            w_mm, h_mm = papers.dimensions_mm(paper)
+            return geometry.patches_per_sheet(geom, w_mm, h_mm)
+        except Exception:
+            return None
+
+    def _engine_info_line(self, instr: str, paper: str, dpi: int, *, dd: bool,
+                          td: bool, eff_lb: bool, nsl: bool, pscale: float,
+                          margin: float) -> str:
+        """One-line description of what the ChromIQ engine will build.
+
+        Used by Guided mode, where the engine runs on fixed settings derived
+        from the instrument/paper (not from an editable recipe). Manual mode
+        has a live recipe panel — see :meth:`_engine_info_line_from_recipe`."""
+        bits = [tr("ChromIQ layout engine"), instr, paper, f"{dpi} dpi",
+                tr("margin {mm:g} mm").format(mm=margin)]
+        if abs(pscale - 1.0) > 0.01:
+            bits.append(tr("patch ×{s:.2f}").format(s=pscale))
+        if instr in ("i1", "p3"):
+            bits.append(tr("clip border off") if eff_lb else tr("clip border on"))
+        if instr == "CM":
+            bits.append({3: tr("extra-high density"), 2: tr("high density")}.get(
+                3 if td else (2 if dd else 1), tr("hand-held")))
+        if instr == "SS" and dd:
+            bits.append(tr("hexagonal"))
+        if nsl:
+            bits.append(tr("no strip-length cap"))
+        return " · ".join(bits)
+
+    @staticmethod
+    def _engine_info_line_from_recipe(r) -> str:
+        """One-line summary of what the engine will build, read straight from
+        the live layout recipe (Manual mode's source of truth).
+
+        The printtarg widgets do NOT drive the engine here, so the info box has
+        to reflect the recipe's own margins / patch size / clip border / etc.,
+        otherwise it shows stale printtarg values (#93)."""
+        from workflow.layout_engine import papers
+        bits = [tr("ChromIQ layout engine"), r.instrument,
+                papers.friendly_label(r.paper), f"{r.dpi} dpi"]
+        # Margins — collapse to one value when all four agree, else show them.
+        m = (r.margin_top, r.margin_right, r.margin_bottom, r.margin_left)
+        if len(set(m)) == 1:
+            bits.append(tr("margin {mm:g} mm").format(mm=m[0]))
+        else:
+            bits.append(tr("margins {t:g}/{r:g}/{b:g}/{l:g} mm").format(
+                t=m[0], r=m[1], b=m[2], l=m[3]))
+        # Layout strategy: area-first shows the target grid (patches are derived);
+        # patch-first shows the explicit size or scale.
+        if getattr(r, "layout_mode", "patch_first") == "area_first":
+            if getattr(r, "area_method", "by_width") == "by_grid":
+                _c = r.area_cols or tr("auto")
+                _rr = r.area_rows or tr("auto")
+                bits.append(tr("area-fit {c}×{r}").format(c=_c, r=_rr))
+            elif r.area_min_patch_mm > 0:
+                bits.append(tr("area-fit ≥{mm:g} mm").format(
+                    mm=r.area_min_patch_mm))
+            else:
+                bits.append(tr("area-fit"))
+        elif r.patch_w_mm > 0 and r.patch_h_mm > 0:
+            bits.append(tr("patch {w:g}×{h:g} mm").format(
+                w=r.patch_w_mm, h=r.patch_h_mm))
+        elif abs(r.pscale - 1.0) > 0.01:
+            bits.append(tr("patch ×{s:.2f}").format(s=r.pscale))
+        if r.instrument in ("i1", "p3"):
+            bits.append(tr("clip border on") if r.clip_border
+                        else tr("clip border off"))
+        if r.instrument == "CM":
+            bits.append({3: tr("extra-high density"), 2: tr("high density")}.get(
+                r.cm_density, tr("hand-held")))
+        if r.instrument == "SS" and r.hflag:
+            bits.append(tr("hexagonal"))
+        if r.nolimit:
+            bits.append(tr("no strip-length cap"))
+        # Patch-area alignment, only when it differs from the default.
+        if (r.patch_area_align or "top-left") != "top-left":
+            bits.append(tr("align {a}").format(a=r.patch_area_align))
+        return " · ".join(bits)
+
     def _update_patch_count(self) -> None:
         instr  = self._instr_combo.currentData() or "i1"
         paper  = self._paper_combo.currentData() or "A4"
@@ -5233,9 +6252,15 @@ class TabChart(QWidget):
             eff_margin = INSTRUMENT_DEFAULT_MARGIN.get(instr, 6)
             eff_scale = 1.0
 
-        per_sheet = query_patches(instr, paper, dd, suppress_lb=eff_lb,
-                                  margin_mm=eff_margin, patch_scale=eff_scale,
-                                  triple_density=td, no_strip_limit=nsl_eff)
+        engine_on = bool(self._settings.get("use_chromiq_layout_engine", False))
+        if engine_on:
+            per_sheet = self._engine_capacity(
+                instr, paper, dd=dd, td=td, eff_lb=eff_lb, nsl=nsl_eff,
+                pscale=eff_scale, margin=eff_margin)
+        else:
+            per_sheet = query_patches(instr, paper, dd, suppress_lb=eff_lb,
+                                      margin_mm=eff_margin, patch_scale=eff_scale,
+                                      triple_density=td, no_strip_limit=nsl_eff)
         if per_sheet is not None:
             total = per_sheet * pages
             self._predicted_patch_count = total   # for the Suggest-name button (#62)
@@ -5248,6 +6273,20 @@ class TabChart(QWidget):
             self._predicted_patch_count = None
             self._patch_count_lbl.setText("?")
             self._patch_detail_lbl.setText(tr("CUSTOM LAYOUT"))
+
+        # Live layout-info estimate (Guided + engine). Runs even with a chart on
+        # screen, so its "estimate" column tracks the current settings while the
+        # "on screen" column keeps the generated chart's real numbers (#93).
+        guided_active = not (self._manual_btn is not None
+                             and self._manual_btn.isChecked())
+        if guided_active and getattr(self, "_layout_info_panel", None) is not None:
+            if engine_on:
+                geom = self._engine_geom(instr, paper, dd=dd, td=td, eff_lb=eff_lb,
+                                         nsl=nsl_eff, pscale=eff_scale,
+                                         margin=eff_margin)
+                self._predict_layout_info(geom, paper, pages)
+            else:
+                self._layout_info_panel.clear_estimate()
 
         # Hidden-defaults info label (values mirror _collect_guided logic).
         # The base is fixed (no settings UI exposes it); reading it from settings
@@ -5296,12 +6335,21 @@ class TabChart(QWidget):
         grey_flag = "-n" if (precond_active and precond_path) else "-g"
 
         target_name = self._preview_target_name("guided")
-        info = (
-            tr("Guided mode applies these fixed settings:")
-            + f"\ntargen -d2 -G -e{wp} -B{bp} {grey_flag}{grey_steps}{precond_line} {target_name}\n"
-            f"printtarg -i{preview_instr} -p{paper} -t{dpi} {scale_flag}{lb_flag}{dd_flag}{margin_flag}{strip_flag}{target_name}"
-            f"{recommendation}"
-        )
+        targen_line = (f"targen -d2 -G -e{wp} -B{bp} "
+                       f"{grey_flag}{grey_steps}{precond_line} {target_name}")
+        if engine_on:
+            layout_line = self._engine_info_line(
+                instr, paper, dpi, dd=dd, td=td, eff_lb=eff_lb, nsl=nsl_eff,
+                pscale=eff_scale, margin=eff_margin)
+            info = (tr("Guided mode applies these fixed settings:")
+                    + f"\n{targen_line}\n{layout_line}{recommendation}")
+        else:
+            info = (
+                tr("Guided mode applies these fixed settings:")
+                + f"\n{targen_line}\n"
+                f"printtarg -i{preview_instr} -p{paper} -t{dpi} {scale_flag}{lb_flag}{dd_flag}{margin_flag}{strip_flag}{target_name}"
+                f"{recommendation}"
+            )
         if hasattr(self, "_guided_info_lbl"):
             self._guided_info_lbl.setText(info)
 
@@ -6059,6 +7107,18 @@ class TabChart(QWidget):
             # self-describing. Read straight from the just-written .ti2 so it's
             # correct for every creation path (normal / prebuilt / from-.ti1).
             self._stamp_chart_meta(ti2)
+            # Always leave the hand-off sidecars in the run folder — the colour
+            # list and the i1Profiler pair — so every generated chart is
+            # self-contained for users who profile elsewhere, not only the i1iSis
+            # flow (Knut). The .cht comes from the build itself (engine emit_cht /
+            # printtarg). Best-effort; the colour list skips CMYK charts.
+            try:
+                from workflow.chart_exports import write_sidecars
+                extras = write_sidecars(ti2.with_suffix(".ti1"), ti2.parent, stem)
+                for e in extras:
+                    self._log.appendPlainText(f"wrote {e.name}")
+            except Exception:  # noqa: BLE001 — never block on the sidecars
+                log.warning("chart sidecar export failed", exc_info=True)
             # If this chart was laid out in fixed order (-r "Preserve Patch
             # Order", e.g. a pre-shuffled generate-colour-sets / editor-recipe
             # layout) but its colours are actually well mixed, upgrade the tag so
@@ -6066,10 +7126,16 @@ class TabChart(QWidget):
             # layout editor does on save. No-op for the common case (printtarg
             # randomises by default → already RANDOM_START).
             self._maybe_autotag_randomised(ti2)
+            # If the patch set leaves a notably under-filled last page (or spilled
+            # onto a near-empty extra page), offer to edit the patch set (#93, Knut).
+            self._maybe_warn_partial_last_page(ti2)
             # Remember the .ti1 backing this chart so the Save Preset dialog can
             # offer to attach it.
             ti1 = tiffs[0].parent / f"{stem}.ti1"
             self._current_ti1_path = ti1 if ti1.is_file() else None
+            # Baseline the auto-preview signature to what we just rendered, so the
+            # refresh this generation triggers doesn't immediately re-render.
+            self._last_auto_sig = self._layout_signature()
             self._set_margin_chart(tiffs, ti2)
             # #79: arm the one-shot Guided→Manual transfer when this chart was
             # built in Guided mode, so opening Manual seeds the recipe used.
@@ -6102,6 +7168,112 @@ class TabChart(QWidget):
         self._margin_tiffs = list(tiffs or [])
         self._margin_ti2 = ti2 if (ti2 and Path(ti2).is_file()) else None
         self._update_margin_inspector()
+        self._update_layout_info()
+
+    def _onscreen_patch_total(self) -> "int | None":
+        """Patch count of the chart currently in the preview (its .ti2
+        NUMBER_OF_SETS), or None when nothing is generated. Lets the estimate lay
+        out the SAME patches the on-screen chart has under the current settings,
+        instead of a capacity-fill (#93, Knut beta-13: estimate pages were wrong
+        for a loaded chart)."""
+        ti2 = getattr(self, "_margin_ti2", None)
+        if not ti2 or not getattr(self, "_margin_tiffs", None):
+            return None
+        try:
+            import re
+            m = re.search(r"NUMBER_OF_SETS\s+(\d+)",
+                          Path(ti2).read_text(errors="replace"))
+            return int(m.group(1)) if m else None
+        except Exception:
+            return None
+
+    def _predict_layout_info(self, geom, paper: str, pages_req: int,
+                             npat: "int | None" = None) -> None:
+        """Fill the Chart-layout-information panel with the engine's predicted
+        grid (#93). With *npat* (the on-screen chart's patch count) the SAME
+        patches are laid out under the current settings; otherwise a capacity-
+        filled layout of *pages_req* pages is shown (the auto-count prediction)."""
+        panel = getattr(self, "_layout_info_panel", None)
+        if panel is None:
+            return
+        try:
+            from workflow.layout_engine import geometry, papers
+            w_mm, h_mm = papers.dimensions_mm(paper)
+            per_sheet = geometry.patches_per_sheet(geom, w_mm, h_mm)
+            if not per_sheet:
+                panel.show_placeholder()
+                return
+            total = npat if npat else per_sheet * max(1, pages_req)
+            lay = geometry.compute(geom, w_mm, h_mm, total)
+            rows = lay.steps_in_pass
+            n0 = min(lay.total_patches, lay.patches_per_page)
+            cols = (n0 + rows - 1) // rows if rows else 0
+            panel.set_estimate(total=lay.total_patches, rows=rows, cols=cols,
+                               pages=lay.pages, patch_w=geom.pwid, patch_h=geom.plen,
+                               page_patches=n0)
+        except Exception:
+            panel.clear_estimate()
+
+    def _update_layout_info(self) -> None:
+        """Fill the on-screen column of the Chart-layout-information panel from
+        the previewed chart's .ti2 (patch count, strip grid) + page TIFFs (#93).
+        The estimate column is driven separately by the live predictors."""
+        panel = getattr(self, "_layout_info_panel", None)
+        if panel is None:
+            return
+        show = bool(self._settings.get("layout_info_show", True))
+        panel.setVisible(show)
+        if not show:
+            return
+        tiffs = getattr(self, "_margin_tiffs", None)
+        ti2 = getattr(self, "_margin_ti2", None)
+        if not tiffs or not ti2:
+            panel.clear_actual()
+            return
+        try:
+            import re
+            from core.strip_utils import parse_passes_per_page
+            txt = Path(ti2).read_text(errors="replace")
+            total = int(re.search(r"NUMBER_OF_SETS\s+(\d+)", txt).group(1))
+            _m = re.search(r'STEPS_IN_PASS\s+"?(\d+)"?', txt)
+            rows = int(_m.group(1)) if _m else 0
+            passes = parse_passes_per_page(ti2) or []
+            idx = self._preview.current_page()
+            if not (0 <= idx < len(passes)):
+                idx = 0
+            cols = passes[idx] if passes else 0
+            pw, ph = self._chart_patch_size_mm(ti2)
+            # Patches on the SHOWN page: full passes are `rows` tall; the chart's
+            # last pass may be partial, so cap by the remaining count (#93, Knut).
+            before = rows * sum(passes[:idx]) if passes else 0
+            page_patches = (min(rows * cols, total - before)
+                            if rows and cols else None)
+            panel.set_actual(total=total, rows=rows, cols=cols, pages=len(tiffs),
+                             patch_w=pw, patch_h=ph, page_patches=page_patches)
+        except Exception:
+            panel.clear_actual()
+
+    @staticmethod
+    def _chart_patch_size_mm(ti2: "Path") -> "tuple[float, float]":
+        """Patch (width, height) in mm of the previewed chart, from its engine
+        ``channels.json`` patch rects (px → mm). (0, 0) for printtarg charts /
+        when unavailable (#93)."""
+        try:
+            import json
+            sidecar = Path(ti2).with_suffix(".channels.json")
+            if not sidecar.is_file():
+                return (0.0, 0.0)
+            doc = json.loads(sidecar.read_text())
+            layout = doc.get("layout") or {}
+            rects = layout.get("patches") or []
+            recipe = layout.get("recipe") or {}
+            dpi = float(recipe.get("dpi") or 300)
+            if not rects or dpi <= 0:
+                return (0.0, 0.0)
+            r0 = rects[0]
+            return (r0["w"] * 25.4 / dpi, r0["h"] * 25.4 / dpi)
+        except Exception:
+            return (0.0, 0.0)
 
     def _update_margin_inspector(self) -> None:
         panel = getattr(self, "_margin_panel", None)
@@ -6134,8 +7306,23 @@ class TabChart(QWidget):
         idx = self._preview.current_page()
         if not (0 <= idx < len(self._margin_tiffs)):
             idx = 0
-        report = measure_margins(self._margin_tiffs[idx], dpi=dpi,
-                                 ti2_path=self._margin_ti2)
+        # Engine charts: report EXACT margins/patch size from the recorded
+        # geometry (channels.json) instead of detecting them from the image —
+        # the image detector mis-reads the patch width as the strip pitch and a
+        # large Strip gap corrupts the detected margins (#93, Knut). Falls back to
+        # image measurement for printtarg charts.
+        self._ruler_over_mm = None
+        _geom_ruler = None
+        report = None
+        if self._margin_ti2 is not None:
+            from workflow.margin_inspector import measure_from_engine
+            ch = Path(self._margin_ti2).with_suffix(".channels.json")
+            eng = measure_from_engine(ch, idx) if ch.is_file() else None
+            if eng is not None:
+                report, _geom_ruler = eng
+        if report is None:
+            report = measure_margins(self._margin_tiffs[idx], dpi=dpi,
+                                     ti2_path=self._margin_ti2)
         if report is None:
             panel.show_placeholder()
             self._preview.set_margin_guides(None)
@@ -6151,12 +7338,33 @@ class TabChart(QWidget):
             key = margin_combo_key(instr_label, paper_name, orient)
             thresholds = self._settings.get_margin_thresholds().get(key)
 
+        # Strip-length (ruler) limit: the per-combo value configured in
+        # Settings → Instrument Limits wins; else the instrument's built-in ruler
+        # reported by the engine geometry (#93, Knut). Warn when the strip is over.
+        _eff_ruler = _geom_ruler
+        try:
+            _cfg = float((thresholds or {}).get("ruler") or 0.0)
+            if _cfg > 0:
+                _eff_ruler = _cfg
+        except (TypeError, ValueError):
+            pass
+        if (_eff_ruler and report.strip_length_mm is not None
+                and report.strip_length_mm > _eff_ruler + 0.5):
+            self._ruler_over_mm = _eff_ruler
+
         violations = check_violations(report, thresholds)
+        warns = self._engine_text_overflow_warnings()
+        if getattr(self, "_ruler_over_mm", None):
+            warns = list(warns) + [tr(
+                "⚠ Strip length {len:.0f} mm exceeds the {ruler:.0f} mm "
+                "instrument ruler — the strip may not fit your jig").format(
+                    len=report.strip_length_mm or 0.0, ruler=self._ruler_over_mm)]
         panel.update_report(
             report, violations,
             thresholds_defined=bool(thresholds),
             notify=bool(self._settings.get("margin_violation_notify", True)),
             thresholds=thresholds,
+            text_warnings=warns,
         )
         self._refresh_margin_guides(report, thresholds, violations)
         self._refresh_measured_guides(report)
@@ -6177,6 +7385,39 @@ class TabChart(QWidget):
             guides.append(("h", report.top_mm / ph))
             guides.append(("h", 1.0 - report.bottom_mm / ph))
         self._preview.set_measured_guides(guides or None)
+
+    def _engine_text_overflow_warnings(self) -> "list[str]":
+        """Warnings for when a page margin is too small to hold the text band that
+        side carries (margins are the law, so the text overflows toward the page
+        edge — flag it below the preview, by the margin violations) (#93, Knut).
+        Engine-Manual only; empty otherwise."""
+        warns: list[str] = []
+        try:
+            manual = (self._manual_btn is not None and self._manual_btn.isChecked())
+            if not (manual and getattr(self, "_manual_layout_panel", None) is not None
+                    and bool(self._settings.get("use_chromiq_layout_engine", False))):
+                return warns
+            r = self._current_layout_recipe()
+            # The text-overflow warning only applies in "margins are law" mode,
+            # which is now AREA-FIRST (Knut #93): there the label/text lives inside
+            # the margin, so a too-small margin overflows toward the page edge. In
+            # patch-first the band is reserved above/below the patches — no overflow.
+            if r.layout_mode != "area_first":
+                return warns
+            from workflow.layout_engine import instruments
+            geom = instruments.geom_from_build_kwargs(r.build_kwargs())
+            lab = geom.label_band_mm if geom.label_band_mm >= 0 else geom.txhisl
+            if r.show_strip_indicators and lab > 0 and \
+                    r.margin_top + 0.05 < r.text_edge_top_mm + lab:
+                warns.append(tr("⚠ Top margin is too small for the strip labels — "
+                                "they overflow toward the page edge."))
+            nlines = (1 if r.chart_text else 0) + (1 if r.stamp_command else 0)
+            if nlines and r.margin_bottom + 0.05 < r.text_edge_mm + 4.2 * nlines:
+                warns.append(tr("⚠ Bottom margin is too small for the sheet text — "
+                                "it overflows toward the page edge."))
+        except Exception:  # noqa: BLE001 — never block the inspector on this
+            pass
+        return warns
 
     def _refresh_margin_guides(self, report, thresholds, violations) -> None:
         """Push dotted threshold guide lines to the preview (or clear them)."""
@@ -6259,9 +7500,37 @@ class TabChart(QWidget):
         orient = "Landscape" if dims[0] > dims[1] else "Portrait"
         return (instr_label, paper_name, orient)
 
+    def current_layout_combo(self) -> "tuple[str, str, str] | None":
+        """The (engine instrument, paper code, layout mode) the Chart Layout tab
+        should preselect (#93), mirroring :meth:`current_margin_combo`. Follows
+        the live engine recipe in Manual when present, else the active
+        instrument + paper selection — so Preferences opens on what the user is
+        editing, instead of always resetting to i1/A4 (which made a preset saved
+        under any other combination look lost)."""
+        try:
+            if (self._manual_btn is not None and self._manual_btn.isChecked()
+                    and getattr(self, "_manual_layout_panel", None) is not None):
+                r = self._current_layout_recipe()
+                return (r.instrument, r.paper, r.mode())
+        except Exception:
+            pass
+        instr = {"3p": "p3"}.get(self._active_instrument_flag(),
+                                 self._active_instrument_flag())
+        if instr not in ("i1", "p3", "CM", "SS"):
+            instr = "i1"
+        paper = self._active_paper_code() or "A4"
+        try:
+            from workflow.layout_engine.presets import default_recipe
+            mode = default_recipe(instr, paper).mode()
+        except Exception:
+            mode = "clip" if instr in ("i1", "p3") else (
+                "freehand" if instr == "CM" else "flat")
+        return (instr, paper, mode)
+
     def refresh_margin_inspector_settings(self) -> None:
-        """Re-read margin-inspector settings after the Preferences dialog closes
-        (visibility, notify, thresholds may have changed)."""
+        """Re-read the Create-Chart preview-panel settings after the Preferences
+        dialog closes (margin-inspector visibility, notify, thresholds, and the
+        Chart-layout-information panel's visibility may have changed)."""
         panel = getattr(self, "_margin_panel", None)
         if panel is not None:
             panel.set_guides_checked(
@@ -6269,6 +7538,159 @@ class TabChart(QWidget):
             panel.set_measured_guides_checked(
                 bool(self._settings.get("margin_measured_guides_show", False)))
         self._update_margin_inspector()
+        self._update_layout_info()
+
+    def _partial_last_page_blank(self, ti2: Path) -> "int | None":
+        """Engine charts only: the number of unused patch slots on the last page
+        when that's at least one full empty strip (so a notable under-fill or a
+        near-empty overflow page), else None. Pure so it's unit-testable (#93)."""
+        try:
+            from workflow.layout_engine.presets import LayoutRecipe
+            from workflow.layout_engine import instruments, geometry, papers
+            ch = Path(ti2).with_suffix(".channels.json")
+            rec = LayoutRecipe.from_channels_json(ch)
+            if rec is None:
+                return None                  # printtarg chart — no engine layout
+            m = re.search(r"NUMBER_OF_SETS\s+(\d+)",
+                          Path(ti2).read_text(errors="replace"))
+            if not m:
+                return None
+            total = int(m.group(1))
+            geom = instruments.geom_from_build_kwargs(rec.build_kwargs())
+            w_mm, h_mm = papers.dimensions_mm(rec.paper)
+            per = geometry.patches_per_sheet(geom, w_mm, h_mm)
+            if per <= 0 or total <= 0:
+                return None
+            lay = geometry.compute(geom, w_mm, h_mm, total)
+            steps = lay.steps_in_pass or 1
+            blank = per - (total - (lay.pages - 1) * per)
+            return blank if blank >= steps else None
+        except Exception as exc:  # noqa: BLE001
+            log.debug("partial-last-page check skipped: %s", exc)
+            return None
+
+    # ------------------------------------------------------------------
+    # Auto-update preview (Knut): live-refresh on layout changes
+    # ------------------------------------------------------------------
+    def _on_auto_preview_toggled(self, on: bool) -> None:
+        """Persist the auto-update-preview choice; confirm with the user the first
+        time they turn it on so they know what it does (Knut)."""
+        self._settings.set("auto_update_preview", bool(on))
+        if on:
+            InfoDialog(
+                tr("Auto-update preview is on"),
+                tr("From now on, the chart preview will refresh automatically "
+                   "whenever you change a layout setting — margins, patch size, "
+                   "columns, spacers, the clip border, and so on — once you've "
+                   "generated or loaded a chart.\n\n"
+                   "To keep it quick, ChromIQ re-lays-out the patches already in "
+                   "your chart; it does not pick new colours or re-run the patch "
+                   "generator. While this is on, the “there's a little room left "
+                   "on the last page” reminder is hidden so it doesn't interrupt "
+                   "you — you can still open the patch-set editor whenever you "
+                   "like to add or remove patches.\n\n"
+                   "Turn the option off any time to go back to refreshing the "
+                   "preview only when you click Generate Chart."),
+                self, min_width=560,
+            ).exec()
+        else:
+            self._auto_preview_timer.stop()
+
+    def _layout_signature(self) -> "str | None":
+        """A cheap fingerprint of the current layout settings, so the auto-preview
+        only re-renders when something actually changed (and the post-render
+        refresh doesn't loop)."""
+        try:
+            if (bool(self._settings.get("use_chromiq_layout_engine", False))
+                    and getattr(self, "_manual_layout_panel", None) is not None):
+                return repr(self._manual_layout_panel.get_recipe().to_dict())
+            return repr(self._printtarg_signature())
+        except Exception:  # noqa: BLE001
+            return None
+
+    def _maybe_schedule_auto_preview(self) -> None:
+        """Start the debounce timer to re-render the preview, if auto-update is on,
+        a chart already exists, nothing is running, and the layout actually
+        changed since the last render."""
+        if not bool(self._settings.get("auto_update_preview", False)):
+            return
+        # Manual mode only — ignored in Guided even if the option is on (Knut).
+        if self._current_mode() != "manual":
+            return
+        if self._runner.is_running:
+            return
+        ti1 = getattr(self, "_current_ti1_path", None)
+        if not (ti1 is not None and ti1.is_file()):
+            return
+        if self._layout_signature() == self._last_auto_sig:
+            return
+        self._auto_preview_timer.start(450)
+
+    def _auto_regenerate_preview(self) -> None:
+        """Re-lay-out the current chart's patch set with the current layout, to
+        refresh the preview live (Knut). Fast: no targen, same patches."""
+        if (self._runner.is_running
+                or self._current_mode() != "manual"
+                or not bool(self._settings.get("auto_update_preview", False))):
+            return
+        ti1 = getattr(self, "_current_ti1_path", None)
+        if not (ti1 is not None and ti1.is_file()):
+            return
+        # Record the signature we're about to render so the post-render refresh
+        # (same layout) doesn't immediately re-schedule another render.
+        self._last_auto_sig = self._layout_signature()
+        self._generate_from_ti1(ti1)
+
+    def _maybe_warn_partial_last_page(self, ti2: Path) -> None:
+        """If the patch set leaves a notably under-filled last page (or spilled
+        onto a near-empty extra page), show a friendly heads-up with a button to
+        open the patch-set editor so the user can fill or trim the set (Knut #93).
+        We don't auto-fill or guess — over/under-fill can equally mean patches
+        should be removed.
+
+        Only in Manual mode with a FIXED patch count: in Guided (and Manual with
+        "Auto patch count" on) the count is auto-filled to the page, so any small
+        gap is just estimate rounding, not the user's choice — and Guided has no
+        patch-set editor to point them at (Knut)."""
+        # While auto-update-preview is on, this reminder would interrupt every
+        # live layout tweak — suppress it (the user can still open the editor).
+        if bool(self._settings.get("auto_update_preview", False)):
+            return
+        manual = (getattr(self, "_manual_btn", None) is not None
+                  and self._manual_btn.isChecked())
+        auto_count = (getattr(self, "_manual_auto_patches_check", None) is not None
+                      and self._manual_auto_patches_check.isChecked())
+        if not manual or auto_count:
+            return
+        blank = self._partial_last_page_blank(ti2)
+        if not blank:
+            return
+        try:
+            from PyQt6.QtWidgets import QMessageBox
+            box = QMessageBox(self)
+            box.setIcon(QMessageBox.Icon.Information)
+            box.setWindowTitle(tr("There's a little room left on the last page"))
+            box.setText(tr(
+                "Your patch set doesn't quite fill the last page — there's space "
+                "for about {n} more patches.\n\n"
+                "That's perfectly fine to print as it is; the empty area is just "
+                "blank paper. If you'd rather have a tidy, completely full page, "
+                "you have two easy options in the patch-set editor:\n\n"
+                "• Add a few more patches to fill the gap, or\n"
+                "• Remove a few so the set ends neatly on the previous page.\n\n"
+                "The page layout itself — instrument, paper, margins and patch "
+                "size — stays exactly as you've set it here in Create Chart; only "
+                "the colours in the set change. Click “Edit patch set…” to open "
+                "the editor now, or “OK” to keep the chart as it is."
+            ).format(n=blank))
+            edit_btn = box.addButton(tr("Edit patch set…"),
+                                     QMessageBox.ButtonRole.ActionRole)
+            box.addButton(QMessageBox.StandardButton.Ok)
+            box.exec()
+            if box.clickedButton() is edit_btn:
+                self.edit_patch_set_requested.emit()
+        except Exception as exc:  # noqa: BLE001 — never block on this hint
+            log.debug("partial-last-page check skipped: %s", exc)
 
     def _maybe_autotag_randomised(self, ti2: Path) -> None:
         """Upgrade a fixed-order (CHART_ID) chart to RANDOM_START when its layout
@@ -6420,6 +7842,16 @@ class TabChart(QWidget):
         if self._manual_td_check is not None:
             s.set("manual_printtarg__triple_density",
                   self._manual_td_check.isChecked())
+        # Persist the full ChromIQ layout-engine recipe so every engine option
+        # (paper, margins, indicators, strip gap, label offset, …) survives a
+        # restart — _init_manual_layout_panel restores it. Without this, only the
+        # printtarg widgets above were saved and the engine panel reset (#93).
+        if getattr(self, "_manual_layout_panel", None) is not None:
+            try:
+                s.set("manual_engine_recipe",
+                      self._current_layout_recipe().to_dict())
+            except Exception as exc:  # noqa: BLE001 — don't fail the whole save
+                log.warning("save engine layout defaults failed: %s", exc)
         log.info("Chart defaults saved")
         self._log.appendPlainText("Current settings saved as defaults.")
         self._log.ensureCursorVisible()
@@ -6588,6 +8020,22 @@ class TabChart(QWidget):
         p.chromiq_clip_style   = bool(self._settings.get("i1pro_chromiq_clip_style", False))
         p.is_manual            = True
 
+        # ChromIQ layout engine on: the layout panel is the source of truth for
+        # the chart layout. Take instrument/paper + the full recipe + calibration
+        # from it (the printtarg layout widgets are hidden), so every panel option
+        # takes effect.
+        if (getattr(self, "_manual_layout_panel", None) is not None
+                and bool(self._settings.get("use_chromiq_layout_engine", False))):
+            recipe = self._manual_layout_panel.get_recipe()
+            p.instrument = recipe.instrument
+            p.paper = recipe.paper
+            p.tiff_dpi = recipe.dpi
+            p.pages = self._manual_layout_panel.get_pages()
+            p.layout_recipe = recipe
+            cal_path, apply_cal = self._manual_layout_panel.cal_settings()
+            p.engine_cal_path = cal_path
+            p.engine_apply_cal = apply_cal
+
         # Auto -e / -B / -g substitution. For the live preview we use a
         # cheap patch_db estimate when -f itself is auto; the real
         # estimate_patches() value is re-applied in _on_generate.
@@ -6750,13 +8198,15 @@ class TabChart(QWidget):
         if self._manual_pages_spin is not None:
             self._manual_pages_spin.setValue(int(s.get("manual_pages", 1)))
         if self._manual_auto_patches_check is not None:
-            auto_on = bool(s.get("manual_auto_patches", False))
+            # All four targen-basic Auto options default ON (Knut): the patch
+            # count and neutral counts auto-fill unless the user opts out.
+            auto_on = bool(s.get("manual_auto_patches", True))
             self._manual_auto_patches_check.setChecked(auto_on)
             self._on_auto_patches_toggled(auto_on)
         self._load_auto_neutral_states(
-            grey  = bool(s.get("manual_auto_grey",  False)),
-            white = bool(s.get("manual_auto_white", False)),
-            black = bool(s.get("manual_auto_black", False)),
+            grey  = bool(s.get("manual_auto_grey",  True)),
+            white = bool(s.get("manual_auto_white", True)),
+            black = bool(s.get("manual_auto_black", True)),
         )
         # Restore manual triple-density. The toggle handler stashes the
         # current -a / -m / -P / -L widget values, so they need to reflect

@@ -498,3 +498,73 @@ def test_recolour_patch_lands_in_regenerated_ti2(ti2: Path, tmp_path: Path):
     # printtarg snaps to 8-bit, so allow a tolerance of one code (~0.4/100).
     assert any(all(abs(a - b) <= 0.4 for a, b in zip(p.dev, (20.0, 80.0, 75.0)))
                for p in new.patches)
+
+
+def test_engine_chart_reloads_in_sheet_order_renders_identically(tmp_path):
+    """A randomised engine chart, reloaded into the editor (grid = .ti2 SHEET
+    order), must re-render pixel-identically when treated as un-randomised — the
+    grid already IS the randomised layout, so re-applying the seed would show a
+    different chart than printed (#93)."""
+    import random
+    from workflow.layout_engine import chart as le_chart
+    from workflow.layout_engine.presets import default_recipe
+    from PIL import Image
+
+    src = R.ChartSpec.new("i1", "A4")
+    random.seed(7)
+    prog = [(random.random() * 100, random.random() * 100, random.random() * 100)
+            for _ in range(200)]
+    src_ti1 = tmp_path / "src.ti1"
+    R.write_ti1(src, prog, src_ti1)
+
+    # original chart, randomised with a fixed seed (like the Create Chart tab)
+    rec = default_recipe("i1", "A4"); rec.randomize = True; rec.seed = 4242
+    kw = rec.build_kwargs(); kw["dpi"] = 150
+    # Same project on both so the notes strip (on by default; its profile name
+    # comes from the output stem) doesn't make the pages differ — this test is
+    # about patch-grid identity, not the notes content.
+    kw["project"] = "Profile"
+    orig = le_chart.build_chart(str(src_ti1), tmp_path / "orig", **kw)
+    orig_img = np.asarray(Image.open(orig.tiff_paths[0]))
+
+    # editor load: grid comes from the .ti2 in SAMPLE_LOC sheet order
+    spec = R.ChartSpec.from_ti2(tmp_path / "orig.ti2")
+    grid_ti1 = tmp_path / "grid.ti1"
+    R.write_ti1(spec, R.default_program(spec), grid_ti1)
+
+    # the editor renders the loaded grid un-randomised (the fix)
+    rec2 = default_recipe("i1", "A4"); rec2.randomize = False
+    kw2 = rec2.build_kwargs(); kw2["dpi"] = 150
+    kw2["project"] = "Profile"
+    reloaded = le_chart.build_chart(str(grid_ti1), tmp_path / "reload", **kw2)
+    reload_img = np.asarray(Image.open(reloaded.tiff_paths[0]))
+
+    assert np.array_equal(orig_img, reload_img)
+    # and re-applying the seed on the sheet-order grid would NOT match (the bug)
+    bad = le_chart.build_chart(str(grid_ti1), tmp_path / "bad", **kw)
+    assert not np.array_equal(orig_img, np.asarray(Image.open(bad.tiff_paths[0])))
+
+
+def test_load_colour_file_ti1_device_values(tmp_path):
+    """Device-RGB CGATS (ti1) load via the existing loader, values preserved."""
+    R.write_ti1(R.ChartSpec.new("i1", "A4"),
+                [(100.0, 0.0, 0.0), (0.0, 50.0, 100.0)], tmp_path / "s.ti1")
+    prog = R.load_colour_file(tmp_path / "s.ti1")
+    assert (100.0, 0.0, 0.0) in [tuple(round(v, 3) for v in p) for p in prog]
+
+
+def test_load_colour_file_plain_hex(tmp_path):
+    p = tmp_path / "list.txt"; p.write_text("#ff0000\n#00ff00\n0,0,255\n")
+    prog = R.load_colour_file(p)
+    assert len(prog) == 3
+
+
+def test_load_colour_file_rejects_cie(tmp_path):
+    """CIE reference files (XYZ/LAB only, no device values) are not supported —
+    they raise a clear ValueError pointing the user elsewhere (#96)."""
+    cie = ("NUMBER_OF_FIELDS 4\nBEGIN_DATA_FORMAT\nSAMPLE_ID XYZ_X XYZ_Y XYZ_Z\n"
+           "END_DATA_FORMAT\nBEGIN_DATA\nA1\t95\t100\t108\nA2\t0\t0\t0\n"
+           "END_DATA\n")
+    p = tmp_path / "ref.cie"; p.write_text(cie)
+    with pytest.raises(ValueError, match="CIE reference"):
+        R.load_colour_file(p)

@@ -108,6 +108,26 @@ QTabWidget {{
 QTabBar {{
     background: {BG_PANEL};
 }}
+/* Standard tab bars (e.g. the Settings dialog) — match the roomier light-mode
+   tabs so dark isn't smaller. SpectrumTabBar paints itself, so it ignores this. */
+QTabBar::tab {{
+    background: {BG_WIDGET};
+    color: {TEXT_DIM};
+    padding: 9px 20px;
+    border: 1px solid {BORDER};
+    border-bottom: 2px solid transparent;
+    border-top-left-radius: 4px;
+    border-top-right-radius: 4px;
+    min-width: 130px;
+}}
+QTabBar::tab:selected {{
+    background: {BG_PANEL};
+    color: {TEXT_MAIN};
+}}
+QTabBar::tab:hover:!selected {{
+    background: #303030;
+    color: {TEXT_MAIN};
+}}
 
 /* ---- Buttons ------------------------------------------------------ */
 QPushButton {{

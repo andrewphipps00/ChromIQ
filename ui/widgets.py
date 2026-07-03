@@ -28,6 +28,7 @@ from PyQt6.QtWidgets import (
     QStyleOptionFrame,
     QToolBar,
     QToolButton,
+    QVBoxLayout,
     QWidget,
 )
 
@@ -500,6 +501,77 @@ def reapply_input_stylesheet(root: QWidget) -> None:
             w.setStyleSheet(qss)
 
 
+class CollapsibleGroupBox(QGroupBox):
+    """A QGroupBox whose title is clickable to collapse / expand its contents.
+
+    Keeps the native framed look (border + embedded title) so it matches the
+    other sections; the title gains a ▸ / ▾ arrow and, when collapsed, the body
+    is hidden and the box shrinks to the title.
+
+    Put content on the ``.body`` widget — ``QGridLayout(group.body)`` etc. — not
+    on the group itself, so collapsing hides one container and each child keeps
+    its own intended visibility (mode logic may hide individual fields) (Knut:
+    collapsible Create-Chart sections)."""
+
+    def __init__(self, title: str = "", parent=None, *, collapsed: bool = False):
+        super().__init__("", parent)
+        self._base_title = title
+        self._collapsed = bool(collapsed)
+        self._outer = QVBoxLayout(self)
+        self._outer.setContentsMargins(0, 0, 0, 0)
+        self._outer.setSpacing(0)
+        self.body = QWidget(self)
+        self._outer.addWidget(self.body)
+        # Bold the section title (incl. the arrow) so the header clearly reads as
+        # a clickable open/close control (Knut); keep the body at normal weight.
+        _tf = self.font()
+        _tf.setBold(True)
+        self.setFont(_tf)
+        _bf = QFont(_tf)
+        _bf.setBold(False)
+        self.body.setFont(_bf)
+        self._render_title()
+        self.body.setVisible(not self._collapsed)
+
+    def setTitle(self, title: str) -> None:        # noqa: N802 (Qt override)
+        self._base_title = title
+        self._render_title()
+
+    def _render_title(self) -> None:
+        # Bigger, filled triangles (▶ / ▼) read far more clearly as an open/close
+        # affordance than the small ▸ / ▾ (Knut). A trailing space sets them off.
+        super().setTitle(("▶  " if self._collapsed else "▼  ") + self._base_title)
+
+    def title(self) -> str:                        # noqa: N802 (Qt override)
+        return self._base_title
+
+    def _title_band(self) -> int:
+        return self.fontMetrics().height() + 10
+
+    def is_collapsed(self) -> bool:
+        return self._collapsed
+
+    def set_collapsed(self, collapsed: bool) -> None:
+        self._collapsed = bool(collapsed)
+        self._render_title()
+        self.body.setVisible(not self._collapsed)
+        # Drop the box frame while collapsed so only the ▸ title line shows
+        # (no empty bordered box); restore the frame when expanded (Knut).
+        self.setFlat(self._collapsed)
+        self.updateGeometry()
+
+    def toggle(self) -> None:
+        self.set_collapsed(not self._collapsed)
+
+    def mousePressEvent(self, event) -> None:      # noqa: N802 (Qt override)
+        if event.button() == Qt.MouseButton.LeftButton \
+                and event.position().y() <= self._title_band():
+            self.toggle()
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+
 def _apply_groupbox_surface(gb: QGroupBox) -> None:
     """Paint the GroupBox surface via QPalette + autoFillBackground instead
     of QSS. The QSS rule `QGroupBox { background: ... }` causes Qt's
@@ -612,7 +684,9 @@ def icc_profile_paths() -> list[str]:
             str(home / "Library/ColorSync/Profiles"),
         ]
     if sys.platform.startswith("win"):
-        paths = [r"C:\Windows\System32\spool\drivers\color"]
+        # Honour %SystemRoot% — Windows is not always installed on C:.
+        win = os.environ.get("SystemRoot", r"C:\Windows")
+        paths = [str(Path(win) / "System32" / "spool" / "drivers" / "color")]
         local = os.environ.get("LOCALAPPDATA", "")
         if local:
             paths.append(str(Path(local) / "Microsoft" / "Windows" / "Color"))
@@ -620,7 +694,8 @@ def icc_profile_paths() -> list[str]:
     return [
         "/usr/share/color/icc",
         "/usr/local/share/color/icc",
-        str(home / ".color/icc"),
+        str(home / ".local/share/icc"),   # modern XDG per-user dir (colord/GNOME)
+        str(home / ".color/icc"),         # older Argyll/oyranos convention
     ]
 
 
@@ -796,10 +871,14 @@ def open_files_dialog(
     start_dir: str = "",
     extra_path: str = "",
     extra_paths: tuple | list = (),
+    preview: bool = False,
 ) -> list[str]:
     """Multi-file variant of :func:`open_file_dialog`.
 
-    Returns the list of selected paths, or an empty list if cancelled.
+    Shares the same OS-correct sidebar shortcuts; when ``preview`` is True an
+    image thumbnail of the highlighted file is shown beside the list (for
+    picking images). Returns the list of selected paths, or an empty list if
+    cancelled.
     """
     dlg = QFileDialog(parent, title, start_dir or str(Path.home()))
     dlg.setOptions(QFileDialog.Option.DontUseNativeDialog)
@@ -811,6 +890,8 @@ def open_files_dialog(
         if exts:
             dlg.setProxyModel(_ExtensionFilterProxy(exts, dlg))
     dlg.setSidebarUrls(_sidebar_urls(extra_path, extra_paths))
+    if preview:
+        _attach_image_preview(dlg)
     if dlg.exec() == QFileDialog.DialogCode.Accepted:
         return list(dlg.selectedFiles())
     return []

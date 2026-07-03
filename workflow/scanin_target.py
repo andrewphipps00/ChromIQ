@@ -1,0 +1,212 @@
+"""Build a **scanner-recognition target** (``.cht`` + ``.cie``) from a measured
+chart, so ArgyllCMS ``scanin`` can read the printed chart off a flatbed scan and
+``colprof`` can turn that into a scanner input profile (#97).
+
+The two halves and how they line up:
+
+* ``.cht`` (:mod:`~workflow.layout_engine.cht_writer`) — *where* every patch
+  sits on the page, per page, plus an ``F`` fiducial line for ``scanin -F``.
+  Geometry comes from the engine's exact ``channels.json["layout"]["patches"]``
+  (top-left px), flipped to the ``.cht``'s bottom-left mm.
+* ``.cie`` (:mod:`~workflow.layout_engine.cie_writer`) — *what colour* every
+  patch truly is, the **measured** XYZ from the run's ``.ti3``.
+
+Both are keyed by the patch **loc** (``A01`` …): the ``.cht`` box loc, the
+``.cie`` ``SAMPLE_ID`` and the ``.ti3`` ``SAMPLE_LOC`` are one and the same
+because they all come from the engine's single permutation. We *assert* that
+alignment and fail loudly rather than let ``scanin`` misregister silently.
+
+Multi-page charts get one ``.cht`` **per page** (``<stem>_01.cht`` …) and a
+single whole-chart ``.cie`` (a superset the per-page ``.cht`` indexes into).
+
+This module needs only data ChromIQ already holds — the engine geometry and the
+measurement — so it never calls an Argyll binary. It requires an **engine**
+chart (an exact ``layout`` block); inferring geometry for older/printtarg charts
+from the ``.ti2`` is a separate, validated follow-up (#97 item 7). The ``.cie``
+half, by contrast, works from *any* measured ``.ti3``.
+"""
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass
+from pathlib import Path
+
+from workflow.layout_engine import cht_writer, cie_writer
+from workflow.ti3_analysis import Ti3Data, parse_ti3
+
+
+class ScaninTargetError(ValueError):
+    """Base for scanner-target build failures (all carry a user-facing message)."""
+
+
+class NotAnEngineChart(ScaninTargetError):
+    """The chart has no exact engine geometry, so a trustworthy ``.cht`` can't be
+    built from it yet (older / imported / printtarg chart — see #97 item 7)."""
+
+
+class GeometryMismatch(ScaninTargetError):
+    """The measured ``.ti3`` doesn't line up with the chart geometry (a patch is
+    missing a measurement, or vice-versa) — refuse rather than misregister."""
+
+
+@dataclass
+class ScaninTargetResult:
+    cht_paths: list[Path]      # one per page
+    cie_path: Path
+    n_patches: int
+    n_pages: int
+
+
+def _load_scanner_layout(channels_json: str | Path) -> dict:
+    """Return the ``layout`` block for a chart ChromIQ can build a scanner target
+    from — either an **engine** chart (``engine=="chromiq"`` with exact
+    ``patches``) or a **printtarg** chart whose exact ``.cht`` geometry was
+    captured at creation (``engine=="printtarg"`` with ``cht_pages``). Raises
+    :class:`NotAnEngineChart` otherwise."""
+    p = Path(channels_json)
+    if not p.is_file():
+        raise NotAnEngineChart(
+            "This chart has no layout sidecar, so ChromIQ doesn't know where its "
+            "patches sit. Measure a chart created with ChromIQ and its scanner "
+            "files can be built from it.")
+    try:
+        layout = json.loads(p.read_text()).get("layout") or {}
+    except (OSError, ValueError) as exc:
+        raise NotAnEngineChart(f"Couldn't read the chart layout: {exc}") from exc
+    engine = layout.get("engine")
+    if engine == "chromiq" and layout.get("patches") and "dpi" in layout \
+            and "paper_mm" in layout:
+        return layout
+    if engine == "printtarg" and layout.get("cht_pages"):
+        return layout
+    raise NotAnEngineChart(
+        "ChromIQ doesn't have this chart's exact patch positions, so it can't "
+        "build scanner files from it. Recreate the chart in a current ChromIQ "
+        "version and this will work automatically.")
+
+
+# Back-compat alias (older callers / tests).
+_load_engine_layout = _load_scanner_layout
+
+
+def _cht_x_box_locs(cht_text: str) -> list[str]:
+    """The patch (``X``) box locations of a printtarg ``.cht`` — its ``F``
+    fiducial and ``D`` marker/ID boxes are skipped."""
+    return [ln.split()[1] for ln in cht_text.splitlines()
+            if ln.strip().startswith("X ")]
+
+
+def _check_measured(geom_locs: list[str], data: Ti3Data) -> None:
+    """Assert every geometry loc has a measurement (the loc-alignment guarantee),
+    raising :class:`GeometryMismatch` on a duplicate or an unmeasured patch."""
+    geom_set = set(geom_locs)
+    if len(geom_set) != len(geom_locs):
+        raise GeometryMismatch("The chart geometry has duplicate patch locations.")
+    missing = geom_set - set(data.sample_locs)
+    if missing:
+        raise GeometryMismatch(
+            f"{len(missing)} chart patch(es) have no measurement — the .ti3 "
+            f"doesn't match this chart (e.g. {sorted(missing)[:3]}). Re-measure "
+            "the whole chart before building scanner files.")
+
+
+def build_scanin_target_from_paths(channels_json: str | Path, ti3_path: str | Path,
+                                   out_base: str | Path) -> ScaninTargetResult:
+    """Core worker: from a chart's ``channels.json`` + a measured ``.ti3``, write
+    per-page ``<out_base>[_NN].cht`` and one ``<out_base>.cie``. *out_base* is a
+    path without extension (e.g. ``run.dir / run.stem``). Overwrites any existing
+    pair, so it always reflects the latest measurement. Handles both engine and
+    printtarg charts (:func:`_load_scanner_layout`).
+    """
+    layout = _load_scanner_layout(channels_json)
+    data: Ti3Data = parse_ti3(ti3_path)
+    out_base = Path(out_base)
+    if layout.get("engine") == "printtarg":
+        return _build_from_printtarg(layout, data, out_base)
+
+    patches: list[dict] = layout["patches"]
+    dpi = int(layout["dpi"])
+    paper_h_mm = float(layout["paper_mm"][1])
+    measured = {loc: (float(x), float(y), float(z))
+                for loc, (x, y, z) in zip(data.sample_locs, data.xyz)}
+    geom_locs = [p["loc"] for p in patches]
+    _check_measured(geom_locs, data)
+
+    pages = sorted({int(p.get("page", 0)) for p in patches})
+    single = len(pages) == 1
+    cht_paths: list[Path] = []
+    for pg in pages:
+        boxes = cht_writer.boxes_from_patch_rects(patches, paper_h_mm, dpi, page=pg)
+        expected = [(b["loc"], *measured[b["loc"]]) for b in boxes]
+        cht = (out_base.with_suffix(".cht") if single
+               else out_base.parent / f"{out_base.name}_{pg + 1:02d}.cht")
+        cht_paths.append(cht_writer.write_cht(cht, boxes, expected))
+
+    cie_path = cie_writer.write_cie(out_base.with_suffix(".cie"), data,
+                                    descriptor=out_base.name)
+    return ScaninTargetResult(cht_paths=cht_paths, cie_path=cie_path,
+                              n_patches=len(geom_locs), n_pages=len(pages))
+
+
+def _build_from_printtarg(layout: dict, data: Ti3Data,
+                          out_base: Path) -> ScaninTargetResult:
+    """Write the stored printtarg ``.cht`` page(s) verbatim (exact geometry +
+    fiducials, captured at creation) and build the measured ``.cie``. The stored
+    ``.cht`` is seed-independent geometry, so it matches the printed sheet; we
+    still assert its locs against the measurement."""
+    cht_pages: list[str] = layout["cht_pages"]
+    geom_locs: list[str] = []
+    for text in cht_pages:
+        geom_locs += _cht_x_box_locs(text)
+    _check_measured(geom_locs, data)
+
+    single = len(cht_pages) == 1
+    cht_paths: list[Path] = []
+    for i, text in enumerate(cht_pages):
+        cht = (out_base.with_suffix(".cht") if single
+               else out_base.parent / f"{out_base.name}_{i + 1:02d}.cht")
+        cht.write_text(text, encoding="utf-8")
+        cht_paths.append(cht)
+    cie_path = cie_writer.write_cie(out_base.with_suffix(".cie"), data,
+                                    descriptor=out_base.name)
+    return ScaninTargetResult(cht_paths=cht_paths, cie_path=cie_path,
+                              n_patches=len(set(geom_locs)), n_pages=len(cht_pages))
+
+
+def build_scanin_target(run) -> ScaninTargetResult:
+    """Build the scanner target for a :class:`~core.file_manager.Run` — reads its
+    chart geometry (``chart_channels_json``) + measurement (``measurement_ti3``)
+    and writes the pair next to the chart (``<stem>.cht`` / ``<stem>.cie``)."""
+    ti3 = run.measurement_ti3
+    if not Path(ti3).is_file():
+        raise ScaninTargetError(
+            "This chart hasn't been measured yet — measure it first, then ChromIQ "
+            "can build scanner files from the measurement.")
+    return build_scanin_target_from_paths(run.chart_channels_json, ti3,
+                                          Path(run.dir) / run.stem)
+
+
+def has_scanner_geometry(channels_json: str | Path) -> bool:
+    """True if ChromIQ has this chart's exact patch geometry (engine ``patches``
+    *or* a captured printtarg ``.cht``) — the gate for *offering* the
+    scanner-target option (the ``.ti3`` need not exist yet, so it can be shown
+    right after measuring, before the file is finalised). Never raises."""
+    try:
+        _load_scanner_layout(channels_json)
+    except ScaninTargetError:
+        return False
+    return True
+
+
+# Back-compat alias — the gate now covers printtarg charts too, not just engine.
+is_engine_geometry = has_scanner_geometry
+
+
+def can_build_scanin_target(run) -> bool:
+    """True if *run* is an engine chart with a measurement — the gate for showing
+    the checkbox / enabling the Tool. Never raises."""
+    try:
+        _load_engine_layout(run.chart_channels_json)
+    except ScaninTargetError:
+        return False
+    return Path(run.measurement_ti3).is_file()

@@ -559,6 +559,34 @@ def load_rgb_program(path: Path) -> list[tuple[float, float, float]]:
     return [(p.r, p.g, p.b) for p in patches]
 
 
+def load_colour_file(path: Path) -> list[tuple[float, float, float]]:
+    """Load a **device-RGB** colour file into a 0..100 RGB program.
+
+    Accepts device-RGB CGATS / CxF (ti1 / ti2 / ti3 / cgats / txt / pxf, via
+    :func:`load_rgb_program`) and a plain hex / RGB value list. Raises
+    ``ValueError`` if nothing usable is found. CIE reference files (XYZ / LAB
+    only, no device values) are **not** supported — for full-cube coverage use
+    the colour-set generators instead (#96).
+    """
+    path = Path(path)
+    try:
+        prog = load_rgb_program(path)
+        if prog:
+            return prog
+    except Exception:  # noqa: BLE001 — fall through to the plain value list
+        pass
+    text = path.read_text(errors="ignore")
+    vals = parse_color_values(text)
+    if vals:
+        return vals
+    if re.search(r"\b(XYZ_X|LAB_L)\b", text):
+        raise ValueError(
+            f"{path.name}: this is a CIE reference file (XYZ / LAB only), which "
+            "isn't supported. Load a device-RGB chart (.ti1 / .ti2 / .ti3 / "
+            "CGATS) or a hex / RGB list instead.")
+    raise ValueError(f"{path.name}: no usable colour values found.")
+
+
 def seed_from_targen(
     bin_dir: Path,
     n_patches: int,
