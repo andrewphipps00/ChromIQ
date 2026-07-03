@@ -1,5 +1,23 @@
 # Changelog
 
+## v3.13.0-beta.86
+
+### 🔧 Changed
+- **"Test files…" → "Try with a demo scan", and it now auto-loads.** The button was
+  confusing — it opened a Finder window on a synthetic rainbow image that looked
+  like an unknown "target". It now **loads** the generated demo scan + its matching
+  reference straight into the dialog and says clearly, in the log, that this is a
+  practice image drawn from the recognition file (each patch a flat colour), **not**
+  a real target — and that a real profile needs your own scan + the reference that
+  came with your physical target. (The bundled `.cht` files live in
+  `data/scanner_targets/`; a target's `.cie` reference is vendor-specific and isn't
+  bundled.)
+
+### ✅ Tests
+- The demo generator (`make_test_scan`) is now exercised end-to-end: its known
+  colours are read back through the real `scanin` for a contiguous IT8 and two
+  gapped targets (Knut's suggestion — the demo doubles as a scanin self-check).
+
 ## v3.13.0-beta.85
 
 ### 🐛 Fixed

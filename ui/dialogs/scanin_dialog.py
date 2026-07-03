@@ -331,12 +331,14 @@ class ScannerProfileDialog(_ToolDialogBase):
         self._target_combo.addItem(tr("Other… (choose a .cht file)"), "")
         self._target_combo.currentIndexChanged.connect(self._on_target_changed)
         trow.addWidget(self._target_combo, 1)
-        self._reveal_btn = QPushButton(tr("Test files…"), self)
+        self._reveal_btn = QPushButton(tr("Try with a demo scan"), self)
         self._reveal_btn.setStyleSheet(_COMPACT_BTN)
         self._reveal_btn.setToolTip(tr(
-            "Generate a known-good test scan + reference for this target and reveal "
-            "them in your file manager, so you can try the reading grid without "
-            "your own scan (and see where the bundled recognition file lives)."))
+            "Loads a synthetic practice scan of this target — each patch a flat "
+            "colour, drawn from the recognition file — plus its matching reference, "
+            "so you can try placing the grid and building a profile with no scanner. "
+            "It is NOT a real target: for a real profile, load your own scan and the "
+            "reference that came with your physical target instead."))
         self._reveal_btn.clicked.connect(self._reveal_target_files)
         trow.addWidget(self._reveal_btn)
         v.addLayout(trow)
@@ -827,28 +829,44 @@ class ScannerProfileDialog(_ToolDialogBase):
             self._set_std_target(Path(data))
 
     def _reveal_target_files(self) -> None:
-        """Write a known-good test scan + reference for the selected target and
-        reveal them (and point at the bundled .cht) — so a user can locate and
-        try the files without their own scan (Knut)."""
+        """Generate a synthetic demo scan + matching reference from the selected
+        target's ``.cht`` and load them into the dialog, so the grid (and the whole
+        read → build) can be tried with no hardware. It is a practice image (each
+        patch a flat colour), NOT a real target scan — the same known-colour pair
+        the automated tests use to confirm scanin reads correctly."""
         cht = self._target_combo.currentData()
         if not cht:
             self._log.appendPlainText(tr("Pick a bundled target above first."))
             return
-        from core.preset_store import reveal_in_file_manager
         from workflow.standard_targets import make_test_scan
         out = Path.home() / "ChromIQ" / "scanner-test-targets"
         try:
             tif, ref = make_test_scan(Path(cht), out)
-            self._log.appendPlainText(tr(
-                "Wrote a known-good test scan and reference for this target:\n"
-                "  {tif}\n  {ref}\n"
-                "Load the .tif as the scan and the .cie as the reference to try the "
-                "grid. The bundled recognition file is:\n  {cht}").format(
-                    tif=tif, ref=ref, cht=cht))
-            reveal_in_file_manager(out)
         except Exception as exc:  # noqa: BLE001
-            self._log.appendPlainText(tr("Couldn't prepare test files: {e}").format(e=exc))
-            reveal_in_file_manager(Path(cht).parent)
+            self._log.appendPlainText(
+                tr("Couldn't prepare the demo scan: {e}").format(e=exc))
+            return
+        self._cur_shot()["path"] = tif                 # load the demo scan
+        self._scan_field.setText(str(tif))
+        self._marquee.set_image(QImage(str(tif)))
+        if self._cur_shot()["corners"]:
+            self._marquee.set_corners(self._cur_shot()["corners"])
+        elif self._restore_placement():
+            self._cur_shot()["corners"] = self._marquee.corners_image_px()
+        self._std_ref = ref                            # load its matching reference
+        self._ref_field.setText(str(ref))
+        self._ref_converted_note = ""
+        self._update_std_note()
+        self._refresh_shot_bar()
+        self._refresh()
+        self._log.appendPlainText(tr(
+            "Loaded a demo scan + reference to practise on. This is a synthetic "
+            "image ChromIQ drew from the target's recognition file — each patch a "
+            "flat colour — NOT a real target. Place the grid and Build to see the "
+            "read work end-to-end.\n"
+            "For a real profile, load your own scan (.tif) and the reference "
+            "(.cie) that came with your physical target instead. The bundled "
+            "recognition file is:\n  {cht}").format(cht=cht))
 
     def _pick_cht(self) -> None:
         path = open_file_dialog(self, tr("Choose a .cht recognition file"),

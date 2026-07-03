@@ -209,12 +209,12 @@ def test_multipage_multiscan_pipeline(_app):
         dlg.deleteLater()
 
 
-def test_reveal_target_files_writes_and_reveals(_app, tmp_path, monkeypatch):
-    """The "Test files…" button generates a test scan + reference from the chosen
-    bundled target and reveals them — regression for the QPlainTextEdit.append
-    crash (the log widget has no .append; must be appendPlainText)."""
+def test_demo_scan_button_loads_files(_app, tmp_path, monkeypatch):
+    """"Try with a demo scan" generates a test scan + reference from the chosen
+    target and LOADS them into the scan/reference fields — regression for the
+    QPlainTextEdit.append crash (the log has no .append; must be appendPlainText)
+    and for the auto-load behaviour that replaced the confusing Finder pop-up."""
     from pathlib import Path
-    import core.preset_store as ps
     import workflow.standard_targets as st
 
     dlg = _dialog(_app)
@@ -222,14 +222,14 @@ def test_reveal_target_files_writes_and_reveals(_app, tmp_path, monkeypatch):
     dlg._on_mode_changed()
     dlg._set_std_target(Path("data/scanner_targets/it8Wolf.cht").resolve())
 
-    revealed = {}
-    monkeypatch.setattr(ps, "reveal_in_file_manager", lambda p: revealed.setdefault("p", p))
-    # write into a temp dir, not the real ~/ChromIQ
-    real = st.make_test_scan
+    real = st.make_test_scan            # write into a temp dir, not real ~/ChromIQ
     monkeypatch.setattr(st, "make_test_scan", lambda cht, _out: real(cht, tmp_path))
 
-    dlg._reveal_target_files()   # must not raise
+    dlg._reveal_target_files()          # must not raise
 
-    assert (tmp_path / "it8Wolf-test.tif").is_file()
-    assert (tmp_path / "it8Wolf-test.cie").is_file()
-    assert "it8Wolf" in dlg._log.toPlainText()
+    tif, cie = tmp_path / "it8Wolf-test.tif", tmp_path / "it8Wolf-test.cie"
+    assert tif.is_file() and cie.is_file()
+    assert dlg._scan_field.text() == str(tif)      # auto-loaded as the scan
+    assert dlg._ref_field.text() == str(cie)       # …and the reference
+    assert dlg._std_ref == cie
+    assert "demo scan" in dlg._log.toPlainText()
