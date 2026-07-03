@@ -1,5 +1,11 @@
 # Changelog
 
+## v3.13.0-beta.81
+
+### 🌍 Translated
+- Translated beta.80's new strings into all 12 languages (test-files control and
+  message, the move/zoom help line, Scan N).
+
 ## v3.13.0-beta.80
 
 ### 🐛 Fixed
