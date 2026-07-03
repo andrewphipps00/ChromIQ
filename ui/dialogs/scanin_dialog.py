@@ -563,12 +563,19 @@ class ScannerProfileDialog(_ToolDialogBase):
         self._rotate_btn.clicked.connect(self._marquee.rotate_90)
         self._reset_btn = QPushButton(tr("Reset view"), self)
         self._reset_btn.clicked.connect(self._marquee._reset_view)
+        self._reset_grid_btn = QPushButton(tr("Reset grid"), self)
+        self._reset_grid_btn.setToolTip(tr(
+            "Re-centre the reading grid at the size computed from this target — use "
+            "it if the grid has drifted off-screen (e.g. after loading an image at a "
+            "different resolution)."))
+        self._reset_grid_btn.clicked.connect(self._marquee.reset_selection_grid)
         self._popout_btn = QPushButton(tr("⤢ Pop out for a bigger view"), self)
         self._popout_btn.clicked.connect(self._toggle_popout)
-        for _b in (self._rotate_btn, self._reset_btn, self._popout_btn):
+        for _b in (self._rotate_btn, self._reset_btn, self._reset_grid_btn, self._popout_btn):
             _b.setStyleSheet(_COMPACT_BTN)
         ctl.addWidget(self._rotate_btn)
         ctl.addWidget(self._reset_btn)
+        ctl.addWidget(self._reset_grid_btn)
         ctl.addStretch(1)
         ctl.addWidget(self._popout_btn)
         form.addLayout(ctl)
@@ -914,6 +921,7 @@ class ScannerProfileDialog(_ToolDialogBase):
         self._popout_btn.setText(tr("⤢ Dock back"))
         self._rotate_btn.setEnabled(False)
         self._reset_btn.setEnabled(False)
+        self._reset_grid_btn.setEnabled(False)
         self._popout.resize(1200, 940)
         self._popout.finished.connect(lambda _=0: self._dock_marquee())
         self._popout.show()
@@ -931,6 +939,8 @@ class ScannerProfileDialog(_ToolDialogBase):
         self._popout_btn.setText(tr("⤢ Pop out for a bigger view"))
         self._rotate_btn.setEnabled(True)
         self._reset_btn.setEnabled(True)
+        self._reset_grid_btn.setEnabled(True)
+        self._marquee._reset_view()              # main view returns fully zoomed-out
         self._popout = None
         pop.deleteLater()
 

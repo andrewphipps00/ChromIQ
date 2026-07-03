@@ -2361,5 +2361,7 @@
   "Test files…": "Testfiler…",
   "Pick a bundled target above first.": "Välj först ett medföljande mål ovan.",
   "Couldn't prepare test files: {e}": "Kunde inte förbereda testfiler: {e}",
-  "Generate a known-good test scan + reference for this target and reveal them in your file manager, so you can try the reading grid without your own scan (and see where the bundled recognition file lives).": "Skapar en känd bra testskanning + referens för detta mål och visar dem i filhanteraren, så att du kan prova rutnätet utan en egen skanning (och se var den medföljande igenkänningsfilen finns)."
+  "Generate a known-good test scan + reference for this target and reveal them in your file manager, so you can try the reading grid without your own scan (and see where the bundled recognition file lives).": "Skapar en känd bra testskanning + referens för detta mål och visar dem i filhanteraren, så att du kan prova rutnätet utan en egen skanning (och se var den medföljande igenkänningsfilen finns).",
+  "Re-centre the reading grid at the size computed from this target — use it if the grid has drifted off-screen (e.g. after loading an image at a different resolution).": "Re-centre the reading grid at the size computed from this target — use it if the grid has drifted off-screen (e.g. after loading an image at a different resolution).",
+  "Reset grid": "Reset grid"
 }

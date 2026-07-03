@@ -2361,5 +2361,7 @@
   "Test files…": "Archivos de prueba…",
   "Pick a bundled target above first.": "Elige primero un objetivo incluido arriba.",
   "Couldn't prepare test files: {e}": "No se pudieron preparar los archivos de prueba: {e}",
-  "Generate a known-good test scan + reference for this target and reveal them in your file manager, so you can try the reading grid without your own scan (and see where the bundled recognition file lives).": "Genera un escaneo de prueba fiable + referencia para este objetivo y los muestra en el explorador de archivos, para probar la cuadrícula sin tu propio escaneo (y ver dónde está el archivo de reconocimiento incluido)."
+  "Generate a known-good test scan + reference for this target and reveal them in your file manager, so you can try the reading grid without your own scan (and see where the bundled recognition file lives).": "Genera un escaneo de prueba fiable + referencia para este objetivo y los muestra en el explorador de archivos, para probar la cuadrícula sin tu propio escaneo (y ver dónde está el archivo de reconocimiento incluido).",
+  "Re-centre the reading grid at the size computed from this target — use it if the grid has drifted off-screen (e.g. after loading an image at a different resolution).": "Re-centre the reading grid at the size computed from this target — use it if the grid has drifted off-screen (e.g. after loading an image at a different resolution).",
+  "Reset grid": "Reset grid"
 }

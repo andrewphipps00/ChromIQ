@@ -124,6 +124,8 @@ class GridSpec:
 _HANDLE_R = 8         # corner handle radius (screen px)
 _HANDLE_OFFSET = 26   # handles sit this far OUTSIDE the true corner (screen px)
 _HANDLE_DIRS = ((-1, -1), (1, -1), (1, 1), (-1, 1))   # TL, TR, BR, BL, outward
+_SIDE_PAIRS = ((0, 1), (1, 2), (2, 3), (3, 0))   # top, right, bottom, left (corner idx)
+_SIDE_R = 6           # mid-side handle radius (moves the whole edge, parallel)
 _ACCENT = QColor("#56d6a5")
 
 
@@ -154,6 +156,8 @@ class ScanGridMarquee(QWidget):
         self._pan_ref: tuple[float, float, float, float] | None = None
         self._moving = False                  # dragging the whole grid to reposition
         self._move_ref: tuple | None = None
+        self._side_drag = -1                  # dragging a mid-side handle (edge)
+        self._side_ref: tuple | None = None
         self._allow_plain_wheel = False       # popped-out: plain wheel zooms too
         self.setMouseTracking(True)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)   # for ⌘/Ctrl +/- zoom
@@ -163,6 +167,14 @@ class ScanGridMarquee(QWidget):
         self._img = img
         self._rotation = 0
         self._rebuild_pixmap()
+        self._reset_view()
+        self._seed_corners()
+        self.update()
+
+    def reset_selection_grid(self) -> None:
+        """Re-seed the quad from the chart geometry at the current image size — the
+        "Reset Selection Grid" button. Recovers a placement that flew off-screen
+        (e.g. after loading a different-resolution image)."""
         self._reset_view()
         self._seed_corners()
         self.update()
@@ -357,6 +369,22 @@ class ScanGridMarquee(QWidget):
         dx, dy = _HANDLE_DIRS[i]
         return QPointF(c.x() + dx * _HANDLE_OFFSET, c.y() + dy * _HANDLE_OFFSET)
 
+    def _side_handle_pos(self, i: int) -> QPointF:
+        """Midpoint handle of side *i*, offset OUTWARD (perpendicular) — drag it to
+        move that whole edge parallel, without touching two corners."""
+        import math
+        a, b = _SIDE_PAIRS[i]
+        ca = self._to_widget(*self._corners[a]); cb = self._to_widget(*self._corners[b])
+        mx, my = (ca.x() + cb.x()) / 2, (ca.y() + cb.y()) / 2
+        ex, ey = cb.x() - ca.x(), cb.y() - ca.y()
+        L = math.hypot(ex, ey) or 1.0
+        px, py = -ey / L, ex / L                 # perpendicular
+        cx = sum(self._to_widget(*c).x() for c in self._corners) / 4
+        cy = sum(self._to_widget(*c).y() for c in self._corners) / 4
+        if (mx + px - cx) ** 2 + (my + py - cy) ** 2 < (mx - px - cx) ** 2 + (my - py - cy) ** 2:
+            px, py = -px, -py                    # point away from the centre
+        return QPointF(mx + px * _HANDLE_OFFSET, my + py * _HANDLE_OFFSET)
+
     def _draw_quad(self, p: QPainter) -> None:
         if len(self._corners) != 4:
             return
@@ -377,6 +405,16 @@ class ScanGridMarquee(QWidget):
             p.setPen(Qt.PenStyle.NoPen)
             p.setBrush(_ACCENT)
             p.drawEllipse(hp, _HANDLE_R, _HANDLE_R)
+        for i in range(4):                       # mid-side handles (move an edge)
+            a, b = _SIDE_PAIRS[i]
+            mid = QPointF((wc[a].x() + wc[b].x()) / 2, (wc[a].y() + wc[b].y()) / 2)
+            sp = self._side_handle_pos(i)
+            p.setPen(conn)
+            p.setBrush(Qt.BrushStyle.NoBrush)
+            p.drawLine(mid, sp)
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(_ACCENT)
+            p.drawEllipse(sp, _SIDE_R, _SIDE_R)
         p.setBrush(Qt.BrushStyle.NoBrush)
 
     def _is_dark(self) -> bool:
@@ -387,13 +425,25 @@ class ScanGridMarquee(QWidget):
         if self._pix is None:
             return
         pos = e.position()
+        if e.button() == Qt.MouseButton.MiddleButton:   # middle drag always pans
+            self._panning = True
+            self._pan_ref = (pos.x(), pos.y(), self._pan[0], self._pan[1])
+            self.setCursor(Qt.CursorShape.ClosedHandCursor)
+            return
         self._drag = -1
+        self._side_drag = -1
         for i in range(len(self._corners)):
             if (self._handle_pos(i) - pos).manhattanLength() <= _HANDLE_R * 2.4:
                 self._drag = i
-                break
-        if self._drag >= 0:
-            return
+                return
+        if len(self._corners) == 4:              # mid-side handle → move that edge
+            for i in range(4):
+                if (self._side_handle_pos(i) - pos).manhattanLength() <= _SIDE_R * 2.8:
+                    self._side_drag = i
+                    ix, iy = self._to_image(pos.x(), pos.y())
+                    self._side_ref = (ix, iy, [c[:] for c in self._corners])
+                    self.setCursor(Qt.CursorShape.SizeAllCursor)
+                    return
         if len(self._corners) == 4 and self._point_in_quad(pos):
             self._moving = True                  # inside the grid → move the whole grid
             ix, iy = self._to_image(pos.x(), pos.y())
@@ -427,6 +477,16 @@ class ScanGridMarquee(QWidget):
             self._corners[self._drag] = [x, y]
             self.changed.emit()
             self.update()
+        elif self._side_drag >= 0 and self._side_ref is not None:
+            ix, iy = self._to_image(pos.x(), pos.y())
+            ox, oy, ref = self._side_ref
+            dx, dy = ix - ox, iy - oy            # translate both corners of the edge
+            a, b = _SIDE_PAIRS[self._side_drag]
+            self._corners = [c[:] for c in ref]
+            self._corners[a] = [ref[a][0] + dx, ref[a][1] + dy]
+            self._corners[b] = [ref[b][0] + dx, ref[b][1] + dy]
+            self.changed.emit()
+            self.update()
         elif self._moving and self._move_ref is not None:
             ix, iy = self._to_image(pos.x(), pos.y())
             ox, oy, ref = self._move_ref
@@ -441,6 +501,7 @@ class ScanGridMarquee(QWidget):
 
     def mouseReleaseEvent(self, e) -> None:  # noqa: N802
         self._drag = -1
+        self._side_drag = -1
         self._panning = False
         self._moving = False
         self.unsetCursor()

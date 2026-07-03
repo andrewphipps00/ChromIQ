@@ -1,5 +1,18 @@
 # Changelog
 
+## v3.13.0-beta.83
+
+### ✨ Scanner reading grid — placement controls (Knut)
+- **Mid-side handles.** Each edge now has a centre handle — drag it to move that
+  whole side parallel, instead of nudging two corners to keep an edge straight.
+- **Middle-mouse always pans.** Press the middle button and drag to pan the image
+  from anywhere, even while zoomed in over the grid (no need to zoom out first).
+- **"Reset grid" button.** Re-centres the reading grid at the size computed from
+  the target — recovers a placement that drifted off-screen (e.g. after loading an
+  image at a different resolution).
+- **Pop-out returns zoomed-out.** Docking the bigger-view window back now resets the
+  main view to fully zoomed-out and centred.
+
 ## v3.13.0-beta.82
 
 ### 🐛 Fixed
