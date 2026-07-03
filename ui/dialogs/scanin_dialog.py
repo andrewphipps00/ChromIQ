@@ -21,8 +21,8 @@ from pathlib import Path
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QImage
 from PyQt6.QtWidgets import (
-    QApplication, QButtonGroup, QCheckBox, QDialog, QHBoxLayout, QLabel,
-    QLineEdit, QPushButton, QRadioButton, QVBoxLayout, QWidget)
+    QApplication, QButtonGroup, QCheckBox, QDialog, QGridLayout, QHBoxLayout,
+    QLabel, QLineEdit, QPushButton, QRadioButton, QVBoxLayout, QWidget)
 
 from core.i18n import tr
 from core.logger import get_logger
@@ -618,14 +618,15 @@ class ScannerProfileDialog(_ToolDialogBase):
 
         self._build_shot_bar(form)
 
-        opts = QHBoxLayout()
+        opts = QGridLayout()
+        opts.setHorizontalSpacing(24)
+        opts.setVerticalSpacing(6)
         self._perspective = QCheckBox(tr("Correct perspective (slightly skewed scan)"), self)
         self._perspective.setChecked(True)
         self._diag = QCheckBox(tr("Save a diagnostic image of what was read"), self)
-        opts.addWidget(self._perspective)
-        opts.addSpacing(24)
-        opts.addWidget(self._diag)
-        opts.addStretch(1)
+        opts.addWidget(self._perspective, 0, 0)
+        opts.addWidget(self._diag, 0, 1)
+        opts.setColumnStretch(2, 1)
         opts.addWidget(self._tip(
             tr("Reading options"),
             tr("Two settings for how ChromIQ reads the patches from your scan.\n\n"
@@ -642,27 +643,23 @@ class ScannerProfileDialog(_ToolDialogBase):
             "each drawn marker should sit squarely on its colour. It's the very "
             "first thing to look at if a profile comes out wrong, and it costs "
             "nothing but a little disk space — so it's worth leaving on while "
-            "you're getting your placement right.")), 0,
+            "you're getting your placement right.")), 0, 3, 2, 1,
             Qt.AlignmentFlag.AlignVCenter)
-        form.addLayout(opts)
 
-        grid_opts = QHBoxLayout()
         self._match_rectarg = QCheckBox(
             tr("Match rectarg preview (patches touching)"), self)
         self._match_rectarg.setToolTip(tr(
-            "Leave this OFF for normal scanning — it's only for testing against "
-            "rectarg's own preview images.\n\n"
-            "Some targets — the SpyderChecker, QPcard and CMP charts, for example — "
-            "have small gaps between their patches. ChromIQ keeps those gaps, which "
-            "is exactly right when you scan the real, physical sheet, and the grid "
-            "will sit perfectly on it.\n\n"
-            "The rectarg tool, though, draws its preview images with the patches "
-            "touching (no gaps), so the grid can't line up with one of those "
-            "pictures. Turn this on only when you're checking the reading against a "
-            "rectarg preview image: it closes the gaps to match that gapless "
-            "drawing, for both the on-screen grid and the actual read. For a scan "
-            "of your own target, leave it off so the spacing stays true to the "
-            "real sheet."))
+            "A verification aid — leave it OFF unless you're lining the grid up "
+            "with a rectarg preview image.\n\n"
+            "A few targets (the SpyderChecker, QPcard 202 and SpyderChecker 24) "
+            "record a read box a little smaller than the spacing between their "
+            "patches. rectarg's own preview images draw those patches touching. "
+            "With this off, the grid uses the file's spacing; with it on, ChromIQ "
+            "lays the patches out touching to match a rectarg preview, for both the "
+            "on-screen grid and the actual read.\n\n"
+            "For most targets it makes no difference. Which spacing is right for a "
+            "real, physical scan of those few targets is still being confirmed, so "
+            "for now switch it on only to check against a rectarg image."))
         self._match_rectarg.toggled.connect(self._rebuild_std_grid)
         self._use_fiducials_cb = QCheckBox(
             tr("Use fiducial marks in the .cht as reference"), self)
@@ -682,11 +679,9 @@ class ScannerProfileDialog(_ToolDialogBase):
             "define separate fiducials — there's nothing extra to line up with, so "
             "the patch area is used."))
         self._use_fiducials_cb.toggled.connect(self._on_fiducial_toggled)
-        grid_opts.addWidget(self._match_rectarg)
-        grid_opts.addSpacing(24)
-        grid_opts.addWidget(self._use_fiducials_cb)
-        grid_opts.addStretch(1)
-        form.addLayout(grid_opts)
+        opts.addWidget(self._match_rectarg, 1, 0)      # same grid → columns align
+        opts.addWidget(self._use_fiducials_cb, 1, 1)
+        form.addLayout(opts)
 
         form.addLayout(self._labelled(
             tr("Profile type:"), tr("Profile type"),

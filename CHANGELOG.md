@@ -1,5 +1,16 @@
 # Changelog
 
+## v3.13.0-beta.89
+
+### 🔧 Changed
+- **Reading-options checkboxes now line up.** The four checkboxes (Correct
+  perspective, Save diagnostic image, Match rectarg preview, Use fiducial marks)
+  share one grid, so their two columns align (Knut).
+- **Honest "Match rectarg preview" help.** Reworded to say plainly what it does and
+  that which spacing is right for a real physical scan of the few affected targets
+  (SpyderChecker, QPcard 202, SpyderChecker 24) is still being confirmed — pending
+  a real-target scan.
+
 ## v3.13.0-beta.88
 
 ### 🔧 Changed
