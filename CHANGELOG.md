@@ -1,5 +1,17 @@
 # Changelog
 
+## v3.13.0-beta.79
+
+### 🐛 Fixed
+- **The scanner/camera reading grid now spans the whole patch block.** It is
+  normalised into the **total patch-area bounding box** — the union of every
+  patch box across all areas — so it always covers the complete target,
+  including multiple sub-areas like an IT8's greyscale (GS) strip, and no longer
+  depends on where the fiducial marks sit. This matches how rectarg derives a
+  target's extent from its patch-area lines (the `.cht` `D` line is "overall
+  chart dimensions, not used"). You place the four corners on that same patch
+  block.
+
 ## v3.13.0-beta.78
 
 ### 🌍 Translated

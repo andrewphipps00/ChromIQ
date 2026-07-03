@@ -71,29 +71,29 @@ class GridSpec:
     @classmethod
     def from_cht(cls, text: str) -> "GridSpec":
         """Build from *any* Argyll ``.cht`` (standard IT8 targets, ColorChecker,
-        …). Patch boxes are normalised into the chart's **fiducial** frame — the
-        same four points the user places the quad on and that ``scanin -F``
-        registers against — so the overlay lands where ``scanin`` will read.
-        The rects are the **full** patch boxes; the sampled sub-area is drawn
-        from the marquee's sample fraction (Knut's "patch sample area" control),
-        not baked in here. Returns an empty spec if the file lacks the four
-        fiducials."""
+        …). Boxes are normalised into the **total patch-area bounding box** — the
+        union of *every* patch box across *all* areas — so the grid always covers
+        the whole patch block, including multiple sub-areas (e.g. an IT8's GS
+        greyscale strip). This matches how rectarg computes a target's extent
+        (from the patch-area lines, not the fiducials); the ``.cht`` ``D`` line is
+        "overall chart dimensions, not used", and the ``F`` fiducials can sit
+        off the patch block. The user places the four corners on that same patch
+        block. The rects are the **full** patch boxes; the sampled sub-area is
+        drawn from the marquee's sample fraction (the "patch sample area"
+        control), not baked in here."""
         from workflow.cht_parser import ChtParseError, parse_cht
         try:
             geom = parse_cht(text)
         except ChtParseError:
             return cls([])
-        if len(geom.fiducials) != 4:
+        if not geom.patches:
             return cls([])
-        # fiducials are (TL, TR, BR, BL) in cht units → invert unit→fiducial to
-        # get fiducial→unit-square, then map every box corner into [0,1].
-        h_inv = np.linalg.inv(unit_quad_homography(geom.fiducials))
-        rects: list[tuple[float, float, float, float]] = []
-        for b in geom.patches:
-            u1, v1 = apply_h(h_inv, b.x1, b.y1)
-            u2, v2 = apply_h(h_inv, b.x2, b.y2)
-            rects.append((min(u1, u2), min(v1, v2), abs(u2 - u1), abs(v2 - v1)))
-        return cls(rects)
+        xs = [b.x1 for b in geom.patches] + [b.x2 for b in geom.patches]
+        ys = [b.y1 for b in geom.patches] + [b.y2 for b in geom.patches]
+        x0, x1, y0, y1 = min(xs), max(xs), min(ys), max(ys)
+        sw, sh = (x1 - x0) or 1.0, (y1 - y0) or 1.0
+        return cls([((b.x1 - x0) / sw, (b.y1 - y0) / sh,
+                     (b.x2 - b.x1) / sw, (b.y2 - b.y1) / sh) for b in geom.patches])
 
 
 _HANDLE_R = 8         # corner handle radius (screen px)
