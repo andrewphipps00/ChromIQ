@@ -1500,7 +1500,9 @@ class TabCheckRefine(QWidget):
                    "or a camera (scan the printed chart, or photograph it). For the "
                    "most accurate scanner profile of your own colour-managed "
                    "prints, print a fresh chart through your normal print workflow "
-                   "and measure it too."),
+                   "and measure it too. (For a camera, accuracy depends on the "
+                   "light you shoot under rather than a reprint — see “Profiling a "
+                   "camera” in the Build window.)"),
                 dlg)
             scanner_tip.setWordWrap(True)
             scanner_tip.setStyleSheet(
@@ -1633,9 +1635,9 @@ class TabCheckRefine(QWidget):
             except ScaninTargetError:
                 return   # e.g. a partial read → not every patch measured yet
             self._log.appendPlainText(
-                "\n" + tr("[OK] Scanner files (.cht + .cie) saved for {n} patches "
-                          "— scan the printed chart, then use Tools ▸ Create "
-                          "scanner target to build a scanner profile."
+                "\n" + tr("[OK] Recognition files (.cht + .cie) saved for {n} "
+                          "patches — scan or photograph the printed chart, then "
+                          "use Tools ▸ Build scanner or camera profile."
                           ).format(n=res.n_patches))
         except Exception:  # noqa: BLE001 — never let this break the assessment
             log.exception("Scanner-target build failed (non-fatal)")

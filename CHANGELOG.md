@@ -1,5 +1,18 @@
 # Changelog
 
+## v3.13.0-beta.69
+
+### 🐛 Fixed
+- **Consistent camera wording in two more spots.** The Profile Quality
+  Assessment tip now adds a note that, for a **camera**, accuracy depends on the
+  light you shoot under rather than a reprint (pointing to "Profiling a camera").
+  And the status line logged after saving a chart's scanner files now names the
+  right tool — **Build scanner or camera profile** — and mentions photographing
+  the chart, not just scanning it.
+
+### 🌍 Translated
+- The two updated strings translated across the twelve languages.
+
 ## v3.13.0-beta.68
 
 ### ✨ Changed

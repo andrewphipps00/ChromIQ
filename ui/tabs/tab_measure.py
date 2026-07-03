@@ -4209,9 +4209,9 @@ class TabMeasure(QWidget):
             except ScaninTargetError:
                 return   # e.g. a partial read → not every patch measured yet
             self._log.appendPlainText(
-                "\n" + tr("[OK] Scanner files (.cht + .cie) saved for {n} patches "
-                          "— scan the printed chart, then use Tools ▸ Create "
-                          "scanner target to build a scanner profile."
+                "\n" + tr("[OK] Recognition files (.cht + .cie) saved for {n} "
+                          "patches — scan or photograph the printed chart, then "
+                          "use Tools ▸ Build scanner or camera profile."
                           ).format(n=res.n_patches))
         except Exception:  # noqa: BLE001 — never let this break measurement
             log.exception("Scanner-target build failed (non-fatal)")
