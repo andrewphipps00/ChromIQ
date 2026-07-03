@@ -395,9 +395,14 @@ def capture_dialogs(app, win) -> None:
                 base = win.grab()
                 dlg = self.grab()
                 painter = QPainter(base)
-                painter.fillRect(base.rect(), QColor(0, 0, 0, 120))
+                # The real app does NOT dim the window behind a modal, so composite
+                # the dialog straight over it. A hairline drop shadow just lifts the
+                # dialog off the background without the (inaccurate) dark overlay.
                 x = (base.width() - dlg.width()) // 2
                 y = (base.height() - dlg.height()) // 2
+                for i, a in ((8, 22), (4, 34), (2, 46)):
+                    painter.fillRect(x - i, y - i, dlg.width() + 2 * i,
+                                     dlg.height() + 2 * i, QColor(0, 0, 0, a))
                 painter.drawPixmap(x, y, dlg)
                 painter.end()
                 out = DOCS / f"{name}-{theme}.png"
@@ -466,6 +471,10 @@ def main() -> int:
     settings.set("chart_instrument", "i1")
     settings.set("chart_paper", "A4")
     apply_appearance(app, None, "dark")
+    # Clean marketing shots: the masthead shows APP_VERSION, so drop the
+    # "-beta.N" suffix here (MainWindow reads it at construction).
+    import core.version as _ver
+    _ver.APP_VERSION = _ver.APP_VERSION.split("-")[0]
     win = MainWindow(settings)
 
     # True full screen: frameless window covering the whole display. widget.grab()
