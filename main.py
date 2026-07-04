@@ -117,6 +117,11 @@ def main() -> int:
     app.setOrganizationName("ChromIQ")
     app.setApplicationDisplayName("ChromIQ — Printer Profiling")
 
+    # Silence the cosmetic QtWebEngine/Chromium teardown warnings printed on the
+    # crash-safe os._exit path (see core.qt_message_filter / core.webengine_shutdown).
+    from core.qt_message_filter import install_qt_message_filter
+    install_qt_message_filter(app)
+
     try:
         for font_path in resource_path("assets/fonts").glob("*.ttf"):
             QFontDatabase.addApplicationFont(str(font_path))
