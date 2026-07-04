@@ -26,14 +26,15 @@ import os
 import re
 import shutil
 import subprocess
-import tempfile
 from pathlib import Path
 
 import pytest
 
 from workflow.cht_parser import parse_cht
 
-_BIN = Path(os.environ.get("CHROMIQ_ARGYLL_BIN", "/Applications/Argyll/bin"))
+from tests.argyll_env import argyll_tool  # noqa: E402
+_SCANIN = argyll_tool("scanin")
+_COLPROF = argyll_tool("colprof")
 _EXAMPLES = Path(os.environ.get(
     "CHROMIQ_SCANNER_EXAMPLES", "/tmp/rectarg_src/Example cht and cie files"))
 
@@ -46,8 +47,7 @@ _TARGETS = {
 }
 
 pytestmark = pytest.mark.skipif(
-    not ((_BIN / "scanin").exists() and (_BIN / "colprof").exists()
-         and _EXAMPLES.is_dir()),
+    not (_SCANIN and _COLPROF and _EXAMPLES.is_dir()),
     reason="ArgyllCMS binaries or rectarg example targets not present")
 
 
@@ -105,14 +105,14 @@ def test_target_marquee_scanin_colprof_e2e(folder_name, max_avg_de, tmp_path):
     shutil.copy(cht, tmp_path / "r.cht")
     shutil.copy(ref, tmp_path / ref.name)
     r = subprocess.run(
-        [str(_BIN / "scanin"), "-v", "-p", "-F", fstr, "-dipn",
+        [_SCANIN, "-v", "-p", "-F", fstr, "-dipn",
          "s.tif", "r.cht", ref.name, "d.tif"],
         cwd=tmp_path, capture_output=True, text=True)
     assert (tmp_path / "s.ti3").is_file(), \
         f"{folder_name}: scanin -F produced no .ti3:\n{r.stderr[-400:]}"
 
     c = subprocess.run(
-        [str(_BIN / "colprof"), "-v", "-D", "t", "-as", "s"],
+        [_COLPROF, "-v", "-D", "t", "-as", "s"],
         cwd=tmp_path, capture_output=True, text=True)
     assert (tmp_path / "s.icc").is_file(), \
         f"{folder_name}: colprof made no profile:\n{c.stderr[-400:]}"

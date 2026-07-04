@@ -9,22 +9,20 @@ Guarded on ArgyllCMS ``scanin`` + Pillow.
 """
 from __future__ import annotations
 
-import os
 import subprocess
-import tempfile
-from pathlib import Path
 
 import pytest
 
 from workflow.standard_targets import bundled_targets_dir
 from workflow.cht_parser import parse_cht
 
-_BIN = Path(os.environ.get("CHROMIQ_ARGYLL_BIN", "/Applications/Argyll/bin"))
+from tests.argyll_env import argyll_tool  # noqa: E402
+_SCANIN = argyll_tool("scanin")
 PIL = pytest.importorskip("PIL")
 from PIL import Image  # noqa: E402
 
 pytestmark = pytest.mark.skipif(
-    not (_BIN / "scanin").exists(), reason="ArgyllCMS scanin not present")
+    _SCANIN is None, reason="ArgyllCMS scanin not present")
 
 _TARGETS = sorted(p.name for p in bundled_targets_dir().glob("*.cht"))
 _M = 40
@@ -70,7 +68,7 @@ def _worst(cht_text, scale, tmp_path):
             f"NUMBER_OF_SETS {len(boxes)}", "BEGIN_DATA"]
            + [f"{b[0]} 40 40 40" for b in boxes] + ["END_DATA", ""])
     (tmp_path / "ref.cie").write_text("\n".join(cie))
-    r = subprocess.run([str(_BIN / "scanin"), "-v", "-p", "-F", fstr,
+    r = subprocess.run([_SCANIN, "-v", "-p", "-F", fstr,
                         "s.tif", "r.cht", "ref.cie"], cwd=tmp_path,
                        capture_output=True, text=True)
     assert (tmp_path / "s.ti3").is_file(), f"scanin failed:\n{r.stderr[-300:]}"
@@ -123,7 +121,7 @@ def test_make_test_scan_reads_back(name, tmp_path):
     # make_test_scan draws patches at their true (gapped) positions, so read with
     # the same cht — contiguous re-placement would MISread a gapped demo.
     (tmp_path / "r.cht").write_text(_patchbox_cht(cht_path.read_text(errors="ignore")))
-    subprocess.run([str(_BIN / "scanin"), "-v", "-p", "-F", fstr,
+    subprocess.run([_SCANIN, "-v", "-p", "-F", fstr,
                     tif.name, "r.cht", cie.name], cwd=tmp_path,
                    capture_output=True, text=True)
     ti3 = tif.with_suffix(".ti3")
@@ -150,8 +148,8 @@ def test_sanitized_ti3_builds_a_profile(tmp_path):
     patch + zeros the STDEV, and colprof then builds a valid profile."""
     from workflow.standard_targets import make_test_scan
     from workflow.scanin_runner import sanitize_ti3
-    colprof = _BIN / "colprof"
-    if not colprof.exists():
+    colprof = argyll_tool("colprof")
+    if colprof is None:
         pytest.skip("colprof not present")
     cht = bundled_targets_dir() / "it8Wolf.cht"
     tif, cie = make_test_scan(cht, tmp_path)
@@ -164,7 +162,7 @@ def test_sanitized_ti3_builds_a_profile(tmp_path):
     fstr = ",".join(f"{v:.1f}" for xy in
                     [(m, m), (m + W, m), (m + W, m + H), (m, m + H)] for v in xy)
     (tmp_path / "r.cht").write_text(cht.read_text())
-    subprocess.run([str(_BIN / "scanin"), "-p", "-dipn", "-F", fstr,
+    subprocess.run([_SCANIN, "-p", "-dipn", "-F", fstr,
                     tif.name, "r.cht", cie.name], cwd=tmp_path,
                    capture_output=True, text=True)
     ti3 = tif.with_suffix(".ti3")
@@ -176,11 +174,17 @@ def test_sanitized_ti3_builds_a_profile(tmp_path):
     (tmp_path / "bad.ti3").write_text("\n".join(lines) + "\n")
     subprocess.run([str(colprof), "-as", "bad"], cwd=tmp_path,
                    capture_output=True, text=True)
-    assert not (tmp_path / "bad.icc").exists(), "colprof should reject the raw nan .ti3"
+    # colprof writes .icc, or .icm on Windows — check both so the assertion is
+    # real on every platform (the app resolves it the same robust way).
+    def _profile(stem: str):
+        return next((p for p in (tmp_path / f"{stem}.icc", tmp_path / f"{stem}.icm")
+                     if p.is_file()), None)
+    assert _profile("bad") is None, "colprof should reject the raw nan .ti3"
     clean, zeroed, dropped = sanitize_ti3("\n".join(lines) + "\n")
     assert dropped == 1 and zeroed == 1
     (tmp_path / "clean.ti3").write_text(clean)
     subprocess.run([str(colprof), "-as", "clean"], cwd=tmp_path,
                    capture_output=True, text=True)
-    icc = tmp_path / "clean.icc"
-    assert icc.is_file() and icc.stat().st_size > 1000, "sanitized .ti3 should build a profile"
+    icc = _profile("clean")
+    assert icc is not None and icc.stat().st_size > 1000, \
+        "sanitized .ti3 should build a profile"

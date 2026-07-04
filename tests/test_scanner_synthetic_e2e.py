@@ -14,19 +14,17 @@ Skipped unless ArgyllCMS ``scanin`` and Pillow are available.
 """
 from __future__ import annotations
 
-import os
 import subprocess
-import tempfile
-from pathlib import Path
 
 import pytest
 
-_BIN = Path(os.environ.get("CHROMIQ_ARGYLL_BIN", "/Applications/Argyll/bin"))
+from tests.argyll_env import argyll_tool  # noqa: E402
+_SCANIN = argyll_tool("scanin")
 PIL = pytest.importorskip("PIL")
 from PIL import Image  # noqa: E402
 
 pytestmark = pytest.mark.skipif(
-    not (_BIN / "scanin").exists(), reason="ArgyllCMS scanin not present")
+    _SCANIN is None, reason="ArgyllCMS scanin not present")
 
 _MARGIN = 60
 
@@ -88,7 +86,7 @@ def _worst_read_error(patches, tmp_path):
     img.save(tmp_path / "s.tif")
     (tmp_path / "r.cht").write_text(cht)
     (tmp_path / "ref.cie").write_text(_cie(patches))
-    r = subprocess.run([str(_BIN / "scanin"), "-v", "-p", "-F", fstr,
+    r = subprocess.run([_SCANIN, "-v", "-p", "-F", fstr,
                         "s.tif", "r.cht", "ref.cie"],
                        cwd=tmp_path, capture_output=True, text=True)
     ti3 = tmp_path / "s.ti3"
@@ -141,7 +139,7 @@ def _worst_from_cht(cht_text, tmp_path):
             f"NUMBER_OF_SETS {len(boxes)}", "BEGIN_DATA"]
            + [f"{b.name} 20 20 20" for b in boxes] + ["END_DATA", ""])
     (tmp_path / "ref.cie").write_text("\n".join(cie))
-    r = subprocess.run([str(_BIN / "scanin"), "-v", "-p", "-F", fstr,
+    r = subprocess.run([_SCANIN, "-v", "-p", "-F", fstr,
                         "s.tif", "r.cht", "ref.cie"], cwd=tmp_path,
                        capture_output=True, text=True)
     assert (tmp_path / "s.ti3").is_file(), \
@@ -162,10 +160,11 @@ def _worst_from_cht(cht_text, tmp_path):
     return worst
 
 
-_REF = Path("/Applications/Argyll/ref")
+from tests.argyll_env import argyll_ref_dir  # noqa: E402
+_REF = argyll_ref_dir()
 
 
-@pytest.mark.skipif(not _REF.is_dir(), reason="Argyll ref/ not present")
+@pytest.mark.skipif(_REF is None, reason="Argyll ref/ not present")
 @pytest.mark.parametrize("name", [
     "QPcard_202", "SpyderChecker", "SpyderChecker24", "CMP_Digital_Target-4"])
 def test_argyll_ref_target_is_self_consistent(name, tmp_path):

@@ -12,8 +12,9 @@ from workflow.cht_parser import (
     ChtParseError, expand_range, n_expanded, parse_cht)
 
 # The 25 .cht files ship with Argyll; located next to the configured bin dir.
-_ARGYLL_REF = Path("/Applications/Argyll/ref")
-_CHT_FILES = sorted(_ARGYLL_REF.glob("*.cht")) if _ARGYLL_REF.is_dir() else []
+from tests.argyll_env import argyll_ref_dir
+_ARGYLL_REF = argyll_ref_dir()
+_CHT_FILES = sorted(_ARGYLL_REF.glob("*.cht")) if _ARGYLL_REF else []
 
 
 def test_expand_range_numeric_alpha_gs_prefixed():
@@ -47,6 +48,8 @@ def test_every_cht_has_four_fiducials(cht: Path):
 def test_wolf_faust_it8_two_patch_areas():
     """it8.cht = a 22×12 main grid (A01..L22) + a 24-cell greyscale strip
     (GS00..GS23) = 288 colour patches, two distinct areas."""
+    if _ARGYLL_REF is None:
+        pytest.skip("Argyll ref/ not present")
     cht = _ARGYLL_REF / "it8.cht"
     if not cht.is_file():
         pytest.skip("it8.cht not present")

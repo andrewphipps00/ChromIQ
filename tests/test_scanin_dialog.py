@@ -16,6 +16,13 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PyQt6.QtWidgets import QApplication  # noqa: E402
 
 from core.settings import DEFAULTS  # noqa: E402
+from tests.argyll_env import argyll_ref_dir  # noqa: E402
+
+
+def _it8():
+    """Path to Argyll's bundled it8.cht (cross-platform), or None."""
+    ref = argyll_ref_dir()
+    return (ref / "it8.cht") if ref else None
 
 
 @pytest.fixture(scope="module")
@@ -55,10 +62,9 @@ def test_profile_type_options_and_mapping(_app):
 def test_gridspec_from_cht_it8(_app):
     """GridSpec.from_cht parses a standard IT8 .cht into normalised patch rects
     in the fiducial frame (288 patches; missing fiducials → empty)."""
-    from pathlib import Path
     from ui.scan_grid_marquee import GridSpec
-    cht = Path("/Applications/Argyll/ref/it8.cht")
-    if not cht.is_file():
+    cht = _it8()
+    if cht is None or not cht.is_file():
         import pytest as _pt
         _pt.skip("it8.cht not present")
     g = GridSpec.from_cht(cht.read_text(errors="ignore"))
@@ -80,8 +86,8 @@ def test_profile_type_high_selects_xh(_app):
 
 
 def _has_it8():
-    from pathlib import Path
-    return Path("/Applications/Argyll/ref/it8.cht").is_file()
+    cht = _it8()
+    return cht is not None and cht.is_file()
 
 
 def test_standard_mode_lists_targets_and_loads_grid(_app):
@@ -108,7 +114,6 @@ def test_standard_mode_execute_uses_chosen_cht_and_reference(_app, tmp_path):
     if not _has_it8():
         import pytest as _pt
         _pt.skip("Argyll ref/ not present")
-    from pathlib import Path
     dlg = _dialog(_app)
     try:
         dlg._mode_standard.setChecked(True)
@@ -116,7 +121,7 @@ def test_standard_mode_execute_uses_chosen_cht_and_reference(_app, tmp_path):
         scan.write_bytes(b"II*\0")                       # placeholder file
         ref = tmp_path / "R123.txt"
         ref.write_text("dummy reference")
-        cht = Path("/Applications/Argyll/ref/it8.cht")
+        cht = _it8()
         dlg._set_std_target(cht)
         dlg._std_ref = ref
         dlg._cur_shot()["path"] = scan
@@ -150,11 +155,10 @@ def test_multi_scan_averaging_pipeline(_app, tmp_path):
     if not _has_it8():
         import pytest as _pt
         _pt.skip("Argyll ref/ not present")
-    from pathlib import Path
     dlg = _dialog(_app)
     try:
         dlg._mode_standard.setChecked(True)
-        dlg._set_std_target(Path("/Applications/Argyll/ref/it8.cht"))
+        dlg._set_std_target(_it8())
         dlg._std_ref = tmp_path / "ref.txt"
         dlg._std_ref.write_text("x")
         s1 = tmp_path / "s1.tif"; s1.write_bytes(b"II*\0")
