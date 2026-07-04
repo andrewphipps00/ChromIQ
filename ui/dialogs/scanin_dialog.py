@@ -1287,24 +1287,28 @@ class ScannerProfileDialog(_ToolDialogBase):
         otherwise make colprof reject the whole .ti3 (a common Windows crash)."""
         from workflow.scanin_runner import sanitize_ti3
         try:
-            clean, n = sanitize_ti3(ti3.read_text(errors="ignore"))
+            clean, zeroed, dropped = sanitize_ti3(ti3.read_text(errors="ignore"))
         except OSError:
             return
-        if n:
-            try:
-                ti3.write_text(clean)
-            except OSError:
-                return
-            msg = (tr(
-                "Note: 1 unreadable value from a patch that didn't read cleanly was "
-                "set to zero so the profile can still build. If the profile looks "
-                "off, re-check the grid covers every patch inside the image.")
-                if n == 1 else tr(
-                "Note: {n} unreadable values from patches that didn't read cleanly "
-                "were set to zero so the profile can still build. If the profile "
-                "looks off, re-check the grid covers every patch inside the "
-                "image.").format(n=n))
+        if not (zeroed or dropped):
+            return
+        try:
+            ti3.write_text(clean)
+        except OSError:
+            return
+        if dropped:
+            msg = (tr("Note: 1 patch that didn't read (no usable pixels) was left "
+                      "out so the profile can still build — re-check the grid "
+                      "covers every patch inside the image.")
+                   if dropped == 1 else tr(
+                      "Note: {n} patches that didn't read (no usable pixels) were "
+                      "left out so the profile can still build — re-check the grid "
+                      "covers every patch inside the image.").format(n=dropped))
             self._log.appendPlainText(msg)
+        if zeroed:
+            self._log.appendPlainText(tr(
+                "Note: some patches had an undefined noise figure; it was set to "
+                "zero (no effect on the measured colour)."))
 
     def _build_profile(self, page_ti3s: list[Path], base: Path) -> None:
         # Combine multi-page reads into one .ti3, then colprof → scanner ICC.

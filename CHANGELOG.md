@@ -1,5 +1,17 @@
 # Changelog
 
+## v3.13.0-beta.95
+
+### 🐛 Fixed — cleaner .ti3 recovery from unreadable patches
+- The scanner-`.ti3` sanitiser (beta.93) is now smarter about *how* it recovers a
+  degenerate patch. A patch whose actual **colour value** (device `RGB` / reference
+  `XYZ`) couldn't be read is now **dropped** from the read (and `NUMBER_OF_SETS`
+  updated) instead of zero-filled — so it can't become a false "reads as black"
+  point that would distort the profile. A bad **noise figure** (`STDEV`) *alone* is
+  still just set to 0 (no effect on the measured colour). Verified end-to-end:
+  `colprof` rejects the raw nan file but builds a valid profile from the sanitised
+  one.
+
 ## v3.13.0-beta.94
 
 ### 🔧 Changed — scan arrow on engine charts without strip labels

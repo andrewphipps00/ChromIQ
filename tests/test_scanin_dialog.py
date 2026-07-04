@@ -235,22 +235,27 @@ def test_demo_scan_button_loads_files(_app, tmp_path, monkeypatch):
     assert "demo scan" in dlg._log.toPlainText()
 
 
-def test_sanitize_ti3_fixes_nan_and_windows_inf():
-    """scanin's nan/inf (incl. Windows 1.#IND / -1.#INF) in real columns become 0
-    so colprof doesn't reject the whole .ti3 — regression for the Windows
+def test_sanitize_ti3_zeros_stdev_and_drops_bad_reads():
+    """A bad STDEV (nan/inf, incl. Windows 1.#IND) is zeroed; a bad *value*
+    (RGB/XYZ) drops the whole patch (so it can't become a false 'reads as black'
+    point) and NUMBER_OF_SETS is updated. Regression for the Windows
     'Field STDEV_B … non-quoted char string' crash."""
     from workflow.scanin_runner import sanitize_ti3
-    ti3 = ("CGATS.17\nBEGIN_DATA_FORMAT\nSAMPLE_ID RGB_R STDEV_G STDEV_B\n"
-           "END_DATA_FORMAT\nBEGIN_DATA\n"
-           "1 50.1 0.3 nan\n2 20.0 1.#IND00 -1.#INF\n3 80.0 0.2 0.4\n"
+    ti3 = ("CGATS.17\nNUMBER_OF_FIELDS 4\nBEGIN_DATA_FORMAT\n"
+           "SAMPLE_ID RGB_R STDEV_G STDEV_B\nEND_DATA_FORMAT\nNUMBER_OF_SETS 4\n"
+           "BEGIN_DATA\n"
+           "1 50.1 0.3 nan\n"          # bad STDEV -> zeroed
+           "2 20.0 1.#IND00 0.2\n"     # bad STDEV (Windows) -> zeroed
+           "3 nan 0.1 0.2\n"           # bad VALUE (RGB_R) -> patch dropped
+           "4 80.0 0.2 0.4\n"
            "END_DATA\n")
-    clean, n = sanitize_ti3(ti3)
-    assert n == 3
-    for line in clean.splitlines():
-        if line[:1].isdigit():
-            for tok in line.split()[1:]:
-                float(tok)                     # every real column now parses
-    # untouched file returns identity
-    assert sanitize_ti3(clean)[1] == 0
-    # SAMPLE_ID strings are never touched
-    assert clean.splitlines()[5].split()[0] == "1"
+    clean, zeroed, dropped = sanitize_ti3(ti3)
+    assert (zeroed, dropped) == (2, 1)
+    data = [ln for ln in clean.splitlines() if ln[:1].isdigit() and "DATA" not in ln]
+    ids = [ln.split()[0] for ln in data]
+    assert ids == ["1", "2", "4"]              # patch 3 dropped
+    assert "NUMBER_OF_SETS 3" in clean         # count updated
+    for ln in data:
+        for tok in ln.split()[1:]:
+            float(tok)                         # every real column parses
+    assert sanitize_ti3(clean) == (clean, 0, 0)   # idempotent

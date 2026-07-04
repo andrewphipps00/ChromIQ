@@ -78,13 +78,27 @@ def cht_with_sample_area(cht_text: str, frac: float) -> str:
 _TI3_STR_FIELDS = {"SAMPLE_ID", "SAMPLE_LOC", "SAMPLE_NAME"}
 
 
-def sanitize_ti3(text: str) -> tuple[str, int]:
-    """Replace non-real values (``nan``, ``inf``, and Windows' ``1.#IND`` /
-    ``1.#QNAN`` / ``-1.#INF`` forms) in the real-typed columns of a scanner
-    ``.ti3`` with ``0``. scanin emits these for a degenerate patch read (e.g. a
-    box that caught too few pixels), and colprof's strict CGATS parser then
-    refuses the *whole* file (``Field 'STDEV_B' … is 'non-quoted char string'``).
-    Returns ``(new_text, n_fixed)``; the text is unchanged when nothing is wrong."""
+def _ti3_bad(tok: str) -> bool:
+    """True if a token isn't a finite real — nan/inf and Windows' ``1.#IND`` /
+    ``1.#QNAN`` / ``-1.#INF`` forms (which fail ``float()``)."""
+    try:
+        v = float(tok)
+        return v != v or v in (float("inf"), float("-inf"))
+    except ValueError:
+        return True
+
+
+def sanitize_ti3(text: str) -> tuple[str, int, int]:
+    """Make a scanner ``.ti3`` safe for colprof when scanin wrote non-real values
+    for a degenerate patch read (colprof otherwise rejects the *whole* file:
+    ``Field 'STDEV_B' … is 'non-quoted char string'``).
+
+    A bad ``STDEV_*`` (a patch read fine but its variance is undefined — e.g. a
+    single-pixel box) is set to ``0``. A bad **value** column (``RGB_*``/``XYZ_*``/
+    ``LAB_*`` — the box caught no usable pixels, so there's no real reading) makes
+    the whole patch **dropped** instead of zero-filled, so it can't become a false
+    "reads as black" tie point in the profile; ``NUMBER_OF_SETS`` is updated to
+    match. Returns ``(new_text, n_zeroed, n_dropped)``; unchanged when clean."""
     lines = text.splitlines()
     try:
         fi = next(i for i, ln in enumerate(lines) if ln.strip() == "BEGIN_DATA_FORMAT")
@@ -92,29 +106,38 @@ def sanitize_ti3(text: str) -> tuple[str, int]:
         db = next(i for i, ln in enumerate(lines) if ln.strip() == "BEGIN_DATA")
         de = next(i for i, ln in enumerate(lines) if ln.strip() == "END_DATA")
     except (StopIteration, IndexError):
-        return text, 0
-    numeric = [c for c, f in enumerate(fields) if f not in _TI3_STR_FIELDS]
-    fixed = 0
+        return text, 0, 0
+    stdev_cols = [c for c, f in enumerate(fields) if f.upper().startswith("STDEV")]
+    value_cols = [c for c, f in enumerate(fields)
+                  if f not in _TI3_STR_FIELDS and not f.upper().startswith("STDEV")]
+    zeroed = dropped = 0
+    out_rows: list[str] = []
     for li in range(db + 1, de):
-        toks = lines[li].split()
+        raw = lines[li]
+        toks = raw.split()
         if len(toks) != len(fields):
+            out_rows.append(raw)                       # leave odd lines alone
+            continue
+        if any(_ti3_bad(toks[c]) for c in value_cols):
+            dropped += 1                               # no real reading → drop
             continue
         changed = False
-        for c in numeric:
-            try:
-                v = float(toks[c])
-                bad = v != v or v in (float("inf"), float("-inf"))
-            except ValueError:
-                bad = True                      # e.g. Windows "1.#IND00"
-            if bad:
+        for c in stdev_cols:
+            if _ti3_bad(toks[c]):
                 toks[c] = "0"
+                zeroed += 1
                 changed = True
-                fixed += 1
-        if changed:
-            lines[li] = " ".join(toks)
-    if not fixed:
-        return text, 0
-    return "\n".join(lines) + ("\n" if text.endswith("\n") else ""), fixed
+        out_rows.append(" ".join(toks) if changed else raw)
+    if not zeroed and not dropped:
+        return text, 0, 0
+    new = lines[:db + 1] + out_rows + lines[de:]
+    if dropped:                                        # keep NUMBER_OF_SETS honest
+        kept = len(out_rows)
+        for i, ln in enumerate(new):
+            if ln.strip().upper().startswith("NUMBER_OF_SETS"):
+                new[i] = f"NUMBER_OF_SETS {kept}"
+                break
+    return "\n".join(new) + ("\n" if text.endswith("\n") else ""), zeroed, dropped
 
 
 def _fmt_corners(corners: list[tuple[float, float]]) -> str:

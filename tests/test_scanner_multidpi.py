@@ -128,3 +128,45 @@ def test_make_test_scan_reads_back(name, tmp_path):
         read = [float(t[k]) for k in ri]
         worst = max(worst, max(abs(a - b) for a, b in zip(read, expected[t[ni].strip('"')])))
     assert worst < 3.0, f"{name}: demo scan misread (worst {worst:.1f}/100)"
+
+
+def test_sanitized_ti3_builds_a_profile(tmp_path):
+    """End-to-end (Nelson's Windows crash): a scanner .ti3 with an injected bad
+    value + bad STDEV makes colprof fail raw, but sanitize_ti3 drops the bad-read
+    patch + zeros the STDEV, and colprof then builds a valid profile."""
+    from workflow.standard_targets import make_test_scan
+    from workflow.scanin_runner import sanitize_ti3
+    colprof = _BIN / "colprof"
+    if not colprof.exists():
+        pytest.skip("colprof not present")
+    cht = bundled_targets_dir() / "it8Wolf.cht"
+    tif, cie = make_test_scan(cht, tmp_path)
+    g = parse_cht(cht.read_text())
+    xs = [b.x1 for b in g.patches] + [b.x2 for b in g.patches]
+    ys = [b.y1 for b in g.patches] + [b.y2 for b in g.patches]
+    minx, maxx, miny, maxy = min(xs), max(xs), min(ys), max(ys)
+    sc = 1500.0 / max(maxx - minx, maxy - miny, 1.0); m = 80
+    W, H = (maxx - minx) * sc, (maxy - miny) * sc
+    fstr = ",".join(f"{v:.1f}" for xy in
+                    [(m, m), (m + W, m), (m + W, m + H), (m, m + H)] for v in xy)
+    (tmp_path / "r.cht").write_text(cht.read_text())
+    subprocess.run([str(_BIN / "scanin"), "-p", "-dipn", "-F", fstr,
+                    tif.name, "r.cht", cie.name], cwd=tmp_path,
+                   capture_output=True, text=True)
+    ti3 = tif.with_suffix(".ti3")
+    assert ti3.is_file(), "scanin produced no .ti3"
+    lines = ti3.read_text().splitlines()
+    db = next(i for i, ln in enumerate(lines) if ln.strip() == "BEGIN_DATA")
+    r = lines[db + 3].split(); r[4] = "1.#IND00"; lines[db + 3] = " ".join(r)   # RGB_R
+    r = lines[db + 6].split(); r[-1] = "nan"; lines[db + 6] = " ".join(r)       # STDEV_B
+    (tmp_path / "bad.ti3").write_text("\n".join(lines) + "\n")
+    subprocess.run([str(colprof), "-as", "bad"], cwd=tmp_path,
+                   capture_output=True, text=True)
+    assert not (tmp_path / "bad.icc").exists(), "colprof should reject the raw nan .ti3"
+    clean, zeroed, dropped = sanitize_ti3("\n".join(lines) + "\n")
+    assert dropped == 1 and zeroed == 1
+    (tmp_path / "clean.ti3").write_text(clean)
+    subprocess.run([str(colprof), "-as", "clean"], cwd=tmp_path,
+                   capture_output=True, text=True)
+    icc = tmp_path / "clean.icc"
+    assert icc.is_file() and icc.stat().st_size > 1000, "sanitized .ti3 should build a profile"
