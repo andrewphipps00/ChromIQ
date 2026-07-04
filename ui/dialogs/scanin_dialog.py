@@ -646,21 +646,6 @@ class ScannerProfileDialog(_ToolDialogBase):
             "you're getting your placement right.")), 0, 3, 2, 1,
             Qt.AlignmentFlag.AlignVCenter)
 
-        self._match_rectarg = QCheckBox(
-            tr("Match rectarg preview (patches touching)"), self)
-        self._match_rectarg.setToolTip(tr(
-            "A verification aid — leave it OFF unless you're lining the grid up "
-            "with a rectarg preview image.\n\n"
-            "A few targets (the SpyderChecker, QPcard 202 and SpyderChecker 24) "
-            "record a read box a little smaller than the spacing between their "
-            "patches. rectarg's own preview images draw those patches touching. "
-            "With this off, the grid uses the file's spacing; with it on, ChromIQ "
-            "lays the patches out touching to match a rectarg preview, for both the "
-            "on-screen grid and the actual read.\n\n"
-            "For most targets it makes no difference. Which spacing is right for a "
-            "real, physical scan of those few targets is still being confirmed, so "
-            "for now switch it on only to check against a rectarg image."))
-        self._match_rectarg.toggled.connect(self._rebuild_std_grid)
         self._use_fiducials_cb = QCheckBox(
             tr("Use fiducial marks in the .cht as reference"), self)
         self._use_fiducials_cb.setToolTip(tr(
@@ -679,8 +664,7 @@ class ScannerProfileDialog(_ToolDialogBase):
             "define separate fiducials — there's nothing extra to line up with, so "
             "the patch area is used."))
         self._use_fiducials_cb.toggled.connect(self._on_fiducial_toggled)
-        opts.addWidget(self._match_rectarg, 1, 0)      # same grid → columns align
-        opts.addWidget(self._use_fiducials_cb, 1, 1)
+        opts.addWidget(self._use_fiducials_cb, 1, 0)
         form.addLayout(opts)
 
         form.addLayout(self._labelled(
@@ -971,7 +955,6 @@ class ScannerProfileDialog(_ToolDialogBase):
         try:
             self._std_grid = GridSpec.from_cht(
                 self._std_cht.read_text(errors="ignore"),
-                contiguous=self._match_rectarg.isChecked(),
                 use_fiducials=self._use_fiducials_cb.isChecked())
         except OSError:
             self._std_grid = GridSpec([])
@@ -1149,21 +1132,6 @@ class ScannerProfileDialog(_ToolDialogBase):
                else base.parent / f"{base.name}_{pg + 1:02d}.cht")
         return cht, base.with_suffix(".cie")
 
-    def _apply_contiguous(self, cht: Path, base: Path) -> Path:
-        """When "Match rectarg preview" is on, hand scanin a .cht whose patches use
-        rectarg's contiguous positions — so the read (and the diagnostic image)
-        line up with a gapless rectarg-rendered image. Bundled file untouched."""
-        if not (self._standard_mode() and self._match_rectarg.isChecked()):
-            return cht
-        from workflow.cht_parser import cht_contiguous
-        try:
-            new_text = cht_contiguous(cht.read_text(errors="ignore"))
-        except OSError:
-            return cht
-        dst = base.parent / f"{cht.stem}-contig.cht"
-        dst.write_text(new_text)
-        return dst
-
     def _apply_sample_area(self, cht: Path, frac: float, base: Path) -> Path:
         """Write a sibling ``.cht`` whose ``BOX_SHRINK`` samples *frac* of each
         patch (Knut's patch-sample-area control), and hand scanin that copy. The
@@ -1209,7 +1177,6 @@ class ScannerProfileDialog(_ToolDialogBase):
         page_ti3s: list[Path] = []
         for pg in pages:
             cht, cie = self._files_for_page(pg, base)
-            cht = self._apply_contiguous(cht, base)
             cht = self._apply_sample_area(cht, frac, base)
             shots = [s for s in self._page_shots(pg) if s["path"]]
             shot_ti3s: list[Path] = []

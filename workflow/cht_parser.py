@@ -211,6 +211,30 @@ def contiguous_boxes(patches: list[ChtBox]) -> list[tuple[float, float, float, f
     return out
 
 
+def to_rectarg_geometry(text: str) -> str:
+    """Rewrite a bundled ``.cht`` to rectarg's geometry: patches contiguous at the
+    ``tile`` pitch, the ``F`` line set to the patch-area bounding box (so scanin's
+    ``-F`` maps the same frame the marquee places its corners on), and BOX_SHRINK
+    widened to leave a read margin now that patches touch. A no-op in effect for
+    files already contiguous (tile==pitch)."""
+    import re
+    new = cht_contiguous(text)
+    g = parse_cht(new)
+    minx = min(b.x1 for b in g.patches); maxx = max(b.x2 for b in g.patches)
+    miny = min(b.y1 for b in g.patches); maxy = max(b.y2 for b in g.patches)
+    fline = ("  F _ _ %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f"
+             % (minx, miny, maxx, miny, maxx, maxy, minx, maxy))
+    new = re.sub(r'^\s*F .*$', fline, new, count=1, flags=re.M)
+    tile = min(g.patches[0].x2 - g.patches[0].x1, g.patches[0].y2 - g.patches[0].y1)
+    shrink = round(tile * 0.12, 2)
+    if re.search(r'^\s*BOX_SHRINK', new, flags=re.M):
+        new = re.sub(r'^\s*BOX_SHRINK.*$', "BOX_SHRINK %.2f" % shrink, new,
+                     count=1, flags=re.M)
+    else:
+        new = new.rstrip() + "\n\nBOX_SHRINK %.2f\n" % shrink
+    return new
+
+
 def cht_contiguous(text: str) -> str:
     """Rewrite a per-patch ``.cht`` so patch positions use rectarg's contiguous
     model — hand this to ``scanin`` when the "match rectarg preview" toggle is on,

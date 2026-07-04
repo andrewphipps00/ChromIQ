@@ -1,5 +1,24 @@
 # Changelog
 
+## v3.13.0-beta.90
+
+### 🐛 Fixed — scanner-target geometry (Knut)
+- **SpyderChecker, QPcard 202 and SpyderChecker 24 now align — grid *and* scanin
+  diagnostic.** Their bundled `.cht` came from Argyll's `ref/`, which *spaces* the
+  patches (pitch = `xi`); but rectarg and the real targets place them **contiguous
+  (pitch = `tile`)**. Decoding the format with Knut: the last number pair on a
+  patch-area line is the post-fiducial offset, **not** the patch pitch. Regenerated
+  those three files at the correct contiguous pitch, with the `F` line set to the
+  patch-area bounding box so scanin's `-F` maps the exact frame the marquee places
+  its corners on (so the read no longer drifts from the on-screen grid). The other
+  five targets were already correct.
+
+### 🔧 Removed
+- **"Match rectarg preview (patches touching)" checkbox.** It only existed to work
+  around the wrong geometry above; now that the geometry is right by default, it's
+  gone. The reading options are just Correct perspective, Save diagnostic image,
+  and Use fiducial marks.
+
 ## v3.13.0-beta.89
 
 ### 🔧 Changed
