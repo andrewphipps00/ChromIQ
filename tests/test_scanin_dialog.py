@@ -75,6 +75,19 @@ def test_gridspec_from_cht_it8(_app):
     assert GridSpec.from_cht("not a cht").rects == []
 
 
+def test_gridspec_carries_fiducial_frame(_app):
+    """The consolidated geometry: from_cht returns the grid AND the fiducial frame
+    in one normalised space (extends outside [0,1] since fiducials wrap the
+    patches) — driving the on-screen frame and the scanin -F from one source."""
+    from pathlib import Path
+    from ui.scan_grid_marquee import GridSpec
+    g = GridSpec.from_cht(Path("data/scanner_targets/CMP_Digital_Target-4.cht").read_text())
+    assert g.fiducial_rect is not None
+    u0, v0, u1, v1 = g.fiducial_rect
+    assert u0 < 0 and v0 < 0 and u1 > 1 and v1 > 1
+    assert GridSpec.from_cht("not a cht").fiducial_rect is None
+
+
 def test_extrapolate_to_fiducials_derives_marks_from_patch_quad(_app):
     """The unified fix: the marquee is aligned to the patch bbox; ON derives the
     scanin -F by extrapolating that quad out to the fiducial frame (so it lands on

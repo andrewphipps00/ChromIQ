@@ -129,6 +129,11 @@ class GridSpec:
     aspect: float = 1.0
     ncols: int = 0        # set when the boxes form ONE regular contiguous grid,
     nrows: int = 0        # so the overlay can replicate rectarg's integer edges
+    fiducial_rect: tuple[float, float, float, float] | None = None
+    # ^ the .cht fiducial frame (u0, v0, u1, v1) in the SAME patch-bbox-normalised
+    #   space as ``rects`` (so it maps through the same quad homography); extends
+    #   outside [0,1] since fiducials sit around the patches. One geometry drives
+    #   the grid, the on-screen fiducial frame, and the scanin -F derivation.
 
     @staticmethod
     def _regular(patches, sw, sh, x0, y0) -> tuple[int, int]:
@@ -165,20 +170,15 @@ class GridSpec:
         return cls(rects, aspect=sw / sh, ncols=nc, nrows=nr)
 
     @classmethod
-    def from_cht(cls, text: str, *, use_fiducials: bool = False) -> "GridSpec":
-        """Build from *any* Argyll ``.cht`` (standard IT8 targets, ColorChecker,
-        …). Boxes are normalised into the **total patch-area bounding box** — the
-        union of *every* patch box across *all* areas — so the grid always covers
-        the whole patch block, including multiple sub-areas (e.g. an IT8's GS
-        greyscale strip). This matches how rectarg computes a target's extent
-        (from the patch-area lines, not the fiducials); the ``.cht`` ``D`` line is
-        "overall chart dimensions, not used". The user places the four corners on
-        that same patch block.
-
-        *use_fiducials* frames the grid by the ``.cht``'s fiducial-mark frame (the
-        ``# CHROMIQ_FIDUCIALS`` marker) instead of the patch block, so the four
-        corners go on the registration marks — when the file defines fiducials
-        distinct from the patch block."""
+    def from_cht(cls, text: str) -> "GridSpec":
+        """Build from *any* Argyll ``.cht`` — the **one** geometry every standard
+        target (bundled and "Other") goes through. Boxes are normalised into the
+        **total patch-area bounding box** (the union of every patch box across all
+        areas, e.g. an IT8's GS greyscale strip) — the reliable, always-visible
+        reference the user aligns the four corners to. ``fiducial_rect`` carries
+        the ``.cht``'s ``F``-line frame in the *same* normalised space, so the
+        on-screen fiducial frame and the scanin ``-F`` derivation
+        (:func:`extrapolate_to_fiducials`) share this single source of truth."""
         from workflow.cht_parser import ChtParseError, parse_cht
         try:
             geom = parse_cht(text)
@@ -189,16 +189,16 @@ class GridSpec:
         boxes = geom.patches
         xs = [b.x1 for b in boxes] + [b.x2 for b in boxes]
         ys = [b.y1 for b in boxes] + [b.y2 for b in boxes]
-        frame = fiducial_frame(text) if use_fiducials else None
-        if frame is not None:
-            x0, x1, y0, y1 = frame
-        else:
-            x0, x1, y0, y1 = min(xs), max(xs), min(ys), max(ys)
+        x0, x1, y0, y1 = min(xs), max(xs), min(ys), max(ys)
         sw, sh = (x1 - x0) or 1.0, (y1 - y0) or 1.0
         nc, nr = cls._regular(boxes, sw, sh, x0, y0)
+        fr = fiducial_frame(text)                 # (left, right, top, bottom) cht units
+        fid = (None if fr is None else
+               ((fr[0] - x0) / sw, (fr[2] - y0) / sh,
+                (fr[1] - x0) / sw, (fr[3] - y0) / sh))
         return cls([((b.x1 - x0) / sw, (b.y1 - y0) / sh,
                      (b.x2 - b.x1) / sw, (b.y2 - b.y1) / sh) for b in boxes],
-                   aspect=sw / sh, ncols=nc, nrows=nr)
+                   aspect=sw / sh, ncols=nc, nrows=nr, fiducial_rect=fid)
 
 
 _HANDLE_R = 8         # corner handle radius (screen px)
@@ -223,6 +223,7 @@ class ScanGridMarquee(QWidget):
         self._rotation = 0                    # 0/90/180/270, applied to _img
         self._img_w = self._img_h = 0         # dims of the (rotated) image
         self._grid = GridSpec([])
+        self._show_fiducials = False # draw the .cht fiducial frame around the patches
         self._sample_frac = 0.5      # fraction of each patch AREA that scanin reads
         # Quad corners in IMAGE pixels, order TL, TR, BR, BL.
         self._corners: list[list[float]] = []
@@ -313,6 +314,12 @@ class ScanGridMarquee(QWidget):
         self._grid = grid
         if self._pix is not None:            # target changed with a scan loaded
             self._seed_corners()
+        self.update()
+
+    def set_show_fiducials(self, show: bool) -> None:
+        """Show/hide the ``.cht`` fiducial frame drawn around the patch grid (the
+        band the scanin ``-F`` extrapolates to when "Use fiducial marks" is on)."""
+        self._show_fiducials = bool(show)
         self.update()
 
     def reframe(self, mL: float, mT: float, mR: float, mB: float,
@@ -469,6 +476,20 @@ class ScanGridMarquee(QWidget):
             p.drawPolygon(*[self._to_widget(*apply_h(h, x, y)) for x, y in
                             ((iu, iv), (iu + iw, iv), (iu + iw, iv + ih), (iu, iv + ih))])
         p.setBrush(Qt.BrushStyle.NoBrush)
+
+        # Fiducial frame — the band the scanin -F extrapolates to when "Use
+        # fiducial marks" is on. Drawn OUTSIDE the patch grid (its rect extends
+        # past [0,1]) so the selection frame is visible while the corners stay on
+        # the patches. Same homography as the grid → one geometry, one placement.
+        fr = self._grid.fiducial_rect
+        if self._show_fiducials and fr is not None:
+            u0, v0, u1, v1 = fr
+            fpen = QPen(QColor(86, 214, 165, 210))
+            fpen.setWidthF(1.6)
+            fpen.setStyle(Qt.PenStyle.DashLine)
+            p.setPen(fpen)
+            p.drawPolygon(*[self._to_widget(*apply_h(h, x, y)) for x, y in
+                            ((u0, v0), (u1, v0), (u1, v1), (u0, v1))])
 
     def _handle_pos(self, i: int) -> QPointF:
         """The i-th grab handle, offset OUTSIDE the true corner along the diagonal

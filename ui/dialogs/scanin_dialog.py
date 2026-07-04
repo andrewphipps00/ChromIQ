@@ -665,18 +665,20 @@ class ScannerProfileDialog(_ToolDialogBase):
         self._use_fiducials_cb = QCheckBox(
             tr("Use fiducial marks in the .cht as reference"), self)
         self._use_fiducials_cb.setToolTip(tr(
-            "You always drag the four corners onto the patch area — the outer edges "
-            "of the block of colour patches. That's the reliable reference and it "
-            "works for every target.\n\n"
-            "This option only changes the reference ChromIQ hands the reader:\n\n"
-            "Off (default): the reader is anchored to the patch area you aligned.\n\n"
-            "On: it's anchored to the target's fiducial marks — small registration "
-            "crosses just outside the patches, whose exact positions are stored in "
-            "the recognition file. ChromIQ works out where those marks are from your "
-            "patch alignment, so you still just line up the patches. Both settings "
-            "place the grid identically.\n\n"
-            "It stays off (and briefly flashes) for targets that define no separate "
-            "fiducials."))
+            "How ChromIQ lines the reading grid up with your scan.\n\n"
+            "Either way, you drag the four corners onto the patch area — the block "
+            "of colour squares. It's the easiest thing to aim at and it works for "
+            "every target, so you never have to hunt for anything smaller.\n\n"
+            "Off (default): the grid is placed straight from where you put the four "
+            "corners.\n\n"
+            "On: ChromIQ also draws the target's fiducial marks — the little "
+            "registration crosses printed just outside the patches — and lines the "
+            "grid up with those instead. It figures out where the marks are from "
+            "the corners you placed, so you still only line up the patches. The grid "
+            "ends up in exactly the same place either way, so switch it on only if "
+            "you like seeing the marks.\n\n"
+            "The box turns itself off (with a quick flash) for targets that don't "
+            "have separate fiducial marks — there's nothing extra to show."))
         self._use_fiducials_cb.toggled.connect(self._on_fiducial_toggled)
         opts.addWidget(self._use_fiducials_cb, 1, 0)
         form.addLayout(opts)
@@ -974,6 +976,7 @@ class ScannerProfileDialog(_ToolDialogBase):
         except OSError:
             self._std_grid = GridSpec([])
         self._marquee.set_grid(self._std_grid)
+        self._marquee.set_show_fiducials(self._use_fiducials_cb.isChecked())
         if self._cur_shot()["corners"]:               # set_grid re-seeds — restore
             self._marquee.set_corners(self._cur_shot()["corners"])
 
@@ -993,8 +996,9 @@ class ScannerProfileDialog(_ToolDialogBase):
             self._use_fiducials_cb.setChecked(False)
             self._use_fiducials_cb.blockSignals(False)
             return
-        # The marquee stays on the patch grid; toggling only changes how the
-        # scanin -F is derived at build time, so nothing to reframe here.
+        # The marquee stays on the patch grid; toggling only draws the fiducial
+        # frame and changes how the scanin -F is derived at build time.
+        self._marquee.set_show_fiducials(checked)
         self._update_std_note()
 
     def _reframe_marquee(self, to_fiducial: bool) -> None:
