@@ -1,5 +1,17 @@
 # Changelog
 
+## v3.13.0-beta.101
+
+### 🐛 Fixed — "Use fiducial marks" now aligns correctly (all targets)
+- With **Use fiducial marks ON**, the reading grid could come out the wrong size on
+  targets whose fiducials sit a little outside the patches (LaserSoft Advanced,
+  LaserSoft DCPro, CMP) — because it asked you to place the corners on marks the
+  scan doesn't clearly show. Now you **always line up the four corners on the patch
+  block** (the reliable, always-visible reference), and ChromIQ **derives** the
+  reference for the reader from that one alignment — the patch area when off, the
+  target's fiducial frame when on. **Both settings now place the grid identically**,
+  so on is as reliable as off. Verified on every bundled target.
+
 ## v3.13.0-beta.100
 
 ### 🐛 Fixed — scanner/camera targets now register correctly (incl. CMP)
