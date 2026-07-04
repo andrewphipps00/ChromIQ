@@ -1323,7 +1323,7 @@ class ScannerProfileDialog(_ToolDialogBase):
         params = ProfileParams(
             ti3_path=combined, algorithm=alg, quality=quality,
             description=f"{base.name} scanner", manufacturer="ChromIQ",
-            model=f"{base.name} scanner")
+            model=f"{base.name} scanner", verbose=True)   # show colprof's output
 
         def _done(code: int) -> None:
             icc = combined.with_suffix(".icc")

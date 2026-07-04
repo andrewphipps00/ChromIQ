@@ -1,5 +1,13 @@
 # Changelog
 
+## v3.13.0-beta.97
+
+### 🔧 Changed — scanner profile build now runs colprof verbosely
+- The scanner/camera profile build now passes **`colprof -v`**, so its progress and
+  any error are shown in the log. Without it, colprof is **silent on success**,
+  which made a failure indistinguishable from "no output" (Nelson). Now a build
+  either prints **"Profile done"** or the exact reason it stopped.
+
 ## v3.13.0-beta.96
 
 ### 🐛 Fixed — the real colprof error is no longer hidden

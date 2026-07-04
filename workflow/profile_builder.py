@@ -118,6 +118,7 @@ class ProfileParams:
     copyright: str = ""
     no_input_shaper: bool = False
     no_output_shaper: bool = False
+    verbose: bool = False        # pass colprof -v (progress + errors visible)
     extra_args: str = ""
     # Color science
     illuminant: str = ""
@@ -273,6 +274,8 @@ class ProfileBuilder:
 
     def _build_args(self, p: ProfileParams) -> list[str]:
         args: list[str] = []
+        if p.verbose:
+            args.append("-v")        # colprof prints progress + any error
         desc = p.description or p.ti3_path.stem
         args += ["-D", desc]
         args.append(f"-a{p.algorithm}")
