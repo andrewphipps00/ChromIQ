@@ -75,6 +75,48 @@ def cht_with_sample_area(cht_text: str, frac: float) -> str:
     return cht_text.rstrip() + f"\n\nBOX_SHRINK {shrink:.3f}\n"
 
 
+_TI3_STR_FIELDS = {"SAMPLE_ID", "SAMPLE_LOC", "SAMPLE_NAME"}
+
+
+def sanitize_ti3(text: str) -> tuple[str, int]:
+    """Replace non-real values (``nan``, ``inf``, and Windows' ``1.#IND`` /
+    ``1.#QNAN`` / ``-1.#INF`` forms) in the real-typed columns of a scanner
+    ``.ti3`` with ``0``. scanin emits these for a degenerate patch read (e.g. a
+    box that caught too few pixels), and colprof's strict CGATS parser then
+    refuses the *whole* file (``Field 'STDEV_B' … is 'non-quoted char string'``).
+    Returns ``(new_text, n_fixed)``; the text is unchanged when nothing is wrong."""
+    lines = text.splitlines()
+    try:
+        fi = next(i for i, ln in enumerate(lines) if ln.strip() == "BEGIN_DATA_FORMAT")
+        fields = lines[fi + 1].split()
+        db = next(i for i, ln in enumerate(lines) if ln.strip() == "BEGIN_DATA")
+        de = next(i for i, ln in enumerate(lines) if ln.strip() == "END_DATA")
+    except (StopIteration, IndexError):
+        return text, 0
+    numeric = [c for c, f in enumerate(fields) if f not in _TI3_STR_FIELDS]
+    fixed = 0
+    for li in range(db + 1, de):
+        toks = lines[li].split()
+        if len(toks) != len(fields):
+            continue
+        changed = False
+        for c in numeric:
+            try:
+                v = float(toks[c])
+                bad = v != v or v in (float("inf"), float("-inf"))
+            except ValueError:
+                bad = True                      # e.g. Windows "1.#IND00"
+            if bad:
+                toks[c] = "0"
+                changed = True
+                fixed += 1
+        if changed:
+            lines[li] = " ".join(toks)
+    if not fixed:
+        return text, 0
+    return "\n".join(lines) + ("\n" if text.endswith("\n") else ""), fixed
+
+
 def _fmt_corners(corners: list[tuple[float, float]]) -> str:
     """``x1,y1,x2,y2,x3,y3,x4,y4`` from four (x, y) image-pixel corners."""
     if len(corners) != 4:

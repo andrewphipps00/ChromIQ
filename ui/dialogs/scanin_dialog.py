@@ -1265,6 +1265,7 @@ class ScannerProfileDialog(_ToolDialogBase):
                     self._log.appendPlainText(f"[ERROR] {msg}")
                     self._finish(False)
                     return
+                self._sanitize_scanner_ti3(job["params"].out_ti3)
                 self._run_job(i + 1)
 
             self._scanin.run(job["params"], on_line=self._log_line, on_finish=_done)
@@ -1280,6 +1281,30 @@ class ScannerProfileDialog(_ToolDialogBase):
             self._run_job(i + 1)
         else:
             self._build_profile(job["ti3s"], job["base"])
+
+    def _sanitize_scanner_ti3(self, ti3: Path) -> None:
+        """Fix nan/inf values scanin can write for degenerate patches, which would
+        otherwise make colprof reject the whole .ti3 (a common Windows crash)."""
+        from workflow.scanin_runner import sanitize_ti3
+        try:
+            clean, n = sanitize_ti3(ti3.read_text(errors="ignore"))
+        except OSError:
+            return
+        if n:
+            try:
+                ti3.write_text(clean)
+            except OSError:
+                return
+            msg = (tr(
+                "Note: 1 unreadable value from a patch that didn't read cleanly was "
+                "set to zero so the profile can still build. If the profile looks "
+                "off, re-check the grid covers every patch inside the image.")
+                if n == 1 else tr(
+                "Note: {n} unreadable values from patches that didn't read cleanly "
+                "were set to zero so the profile can still build. If the profile "
+                "looks off, re-check the grid covers every patch inside the "
+                "image.").format(n=n))
+            self._log.appendPlainText(msg)
 
     def _build_profile(self, page_ti3s: list[Path], base: Path) -> None:
         # Combine multi-page reads into one .ti3, then colprof → scanner ICC.

@@ -233,3 +233,24 @@ def test_demo_scan_button_loads_files(_app, tmp_path, monkeypatch):
     assert dlg._ref_field.text() == str(cie)       # …and the reference
     assert dlg._std_ref == cie
     assert "demo scan" in dlg._log.toPlainText()
+
+
+def test_sanitize_ti3_fixes_nan_and_windows_inf():
+    """scanin's nan/inf (incl. Windows 1.#IND / -1.#INF) in real columns become 0
+    so colprof doesn't reject the whole .ti3 — regression for the Windows
+    'Field STDEV_B … non-quoted char string' crash."""
+    from workflow.scanin_runner import sanitize_ti3
+    ti3 = ("CGATS.17\nBEGIN_DATA_FORMAT\nSAMPLE_ID RGB_R STDEV_G STDEV_B\n"
+           "END_DATA_FORMAT\nBEGIN_DATA\n"
+           "1 50.1 0.3 nan\n2 20.0 1.#IND00 -1.#INF\n3 80.0 0.2 0.4\n"
+           "END_DATA\n")
+    clean, n = sanitize_ti3(ti3)
+    assert n == 3
+    for line in clean.splitlines():
+        if line[:1].isdigit():
+            for tok in line.split()[1:]:
+                float(tok)                     # every real column now parses
+    # untouched file returns identity
+    assert sanitize_ti3(clean)[1] == 0
+    # SAMPLE_ID strings are never touched
+    assert clean.splitlines()[5].split()[0] == "1"

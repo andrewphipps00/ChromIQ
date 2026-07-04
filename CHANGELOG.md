@@ -1,5 +1,16 @@
 # Changelog
 
+## v3.13.0-beta.93
+
+### 🐛 Fixed — scanner-profile build crash (Nelson, Windows)
+- **A patch that didn't read cleanly no longer aborts the whole profile.** When
+  scanin can't read a patch (e.g. a box that caught too few pixels) it writes
+  nan/inf for that patch's numbers — on Windows as `1.#IND` / `-1.#INF` — and
+  colprof's strict CGATS parser then rejected the **entire** `.ti3`
+  (*"Field 'STDEV_B' … is 'non-quoted char string'"*). ChromIQ now sanitises
+  scanin's `.ti3` (those values become 0) before colprof, so the profile builds,
+  with a note to re-check the grid covers every patch if the result looks off.
+
 ## v3.13.0-beta.92
 
 ### ✨ Changed — "Use fiducial marks" now visibly adds the band (Knut)
