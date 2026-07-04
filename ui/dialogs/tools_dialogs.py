@@ -304,6 +304,7 @@ class _ToolDialogBase(QDialog):
         self._run_btn.setDefault(True)
         self._run_btn.clicked.connect(self._on_run_clicked)
         self._close_btn.clicked.connect(self.reject)
+        self._button_box = bb          # subclasses may add ActionRole buttons
         inner.addWidget(bb)
 
         # Highlight checkboxes, focused inputs and combos with the same neutral

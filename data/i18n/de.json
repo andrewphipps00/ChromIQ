@@ -2369,5 +2369,7 @@
   "Note: {n} patches that didn't read (no usable pixels) were left out so the profile can still build — re-check the grid covers every patch inside the image.": "Note: {n} patches that didn't read (no usable pixels) were left out so the profile can still build — re-check the grid covers every patch inside the image.",
   "Note: some patches had an undefined noise figure; it was set to zero (no effect on the measured colour).": "Note: some patches had an undefined noise figure; it was set to zero (no effect on the measured colour).",
   "(colprof produced no output)": "(colprof produced no output)",
-  "Building the profile failed. colprof said:": "Building the profile failed. colprof said:"
+  "Building the profile failed. colprof said:": "Building the profile failed. colprof said:",
+  "Open the folder containing the scanner/camera profile just built, so you can install it as your device's input profile.": "Open the folder containing the scanner/camera profile just built, so you can install it as your device's input profile.",
+  "Reveal profile": "Reveal profile"
 }

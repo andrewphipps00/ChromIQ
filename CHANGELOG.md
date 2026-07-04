@@ -1,5 +1,13 @@
 # Changelog
 
+## v3.13.0-beta.98
+
+### ✨ Added — "Reveal profile" button
+- After a scanner/camera profile builds, a **"Reveal profile"** button appears in
+  the dialog and opens the folder containing the new `.icc` — so it's easy to find
+  and install (ChromIQ doesn't auto-install scanner profiles; they're saved next to
+  the scan). Hidden until a profile has been built.
+
 ## v3.13.0-beta.97
 
 ### 🔧 Changed — scanner profile build now runs colprof verbosely

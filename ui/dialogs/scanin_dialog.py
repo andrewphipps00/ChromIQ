@@ -21,8 +21,8 @@ from pathlib import Path
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QImage
 from PyQt6.QtWidgets import (
-    QApplication, QButtonGroup, QCheckBox, QDialog, QGridLayout, QHBoxLayout,
-    QLabel, QLineEdit, QPushButton, QRadioButton, QVBoxLayout, QWidget)
+    QApplication, QButtonGroup, QCheckBox, QDialog, QDialogButtonBox, QGridLayout,
+    QHBoxLayout, QLabel, QLineEdit, QPushButton, QRadioButton, QVBoxLayout, QWidget)
 
 from core.i18n import tr
 from core.logger import get_logger
@@ -214,9 +214,25 @@ class ScannerProfileDialog(_ToolDialogBase):
         self._hint = "#4a4a4a" if light else "#b8b8b8"
         self._build_inputs()
         self._run_btn.setObjectName("primary")
+        # "Reveal profile" — shown after a successful build so the .icc is easy to
+        # find (ChromIQ doesn't auto-install scanner profiles). Hidden until then.
+        self._last_profile: Path | None = None
+        self._reveal_btn = self._button_box.addButton(
+            tr("Reveal profile"), QDialogButtonBox.ButtonRole.ActionRole)
+        self._reveal_btn.setToolTip(tr(
+            "Open the folder containing the scanner/camera profile just built, so "
+            "you can install it as your device's input profile."))
+        self._reveal_btn.clicked.connect(self._reveal_profile)
+        self._reveal_btn.setVisible(False)
         self.setStyleSheet(self.styleSheet() + neutral_controls_qss(SPEC_GREEN))
         self._style_primary_button()
         self._refresh()
+
+    def _reveal_profile(self) -> None:
+        if self._last_profile is None:
+            return
+        from core.preset_store import reveal_in_file_manager
+        reveal_in_file_manager(self._last_profile.parent)
 
     def _style_primary_button(self) -> None:
         c = SPEC_GREEN
@@ -1343,6 +1359,9 @@ class ScannerProfileDialog(_ToolDialogBase):
             self._log.appendPlainText(tr(
                 "Install it as your scanner's input profile. Use the diagnostic "
                 "image (if you saved one) to check the patches were read correctly."))
+            self._last_profile = icc
+            self._reveal_btn.setVisible(True)     # let the user find the .icc
+            self._reveal_btn.setEnabled(True)
             self._finish(True)
 
         self._profiler.build(params, on_line=self._log_line, on_finish=_done)
