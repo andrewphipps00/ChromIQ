@@ -1,5 +1,15 @@
 # Changelog
 
+## v3.13.0-beta.102
+
+### ✨ Scanner: fiducial frame drawn on screen + one shared geometry
+- Turning on **Use fiducial marks** now **draws the fiducial frame** (a dashed
+  outline) around the patch grid, so you can see the registration band while your
+  four corners stay on the easy-to-aim patch block. Both targets and the "Other"
+  option go through **one shared geometry** now — the grid, the on-screen frame,
+  and the reader's alignment all come from the same calculation.
+- The fiducial-marks tooltip is rewritten in plain language.
+
 ## v3.13.0-beta.101
 
 ### 🐛 Fixed — "Use fiducial marks" now aligns correctly (all targets)
