@@ -1,5 +1,17 @@
 # Changelog
 
+## v3.13.0-beta.99
+
+### 🐛 Fixed — scanner build no longer cries failure on a good profile
+- colprof can **exit non-zero *after* it has written a valid profile** (seen on
+  Windows, right after "Profile done"), and on Windows it may write **`.icm`**
+  rather than `.icc`. Either could make ChromIQ report **"Building the profile
+  failed"** and hide the result — even though a perfectly good scanner profile was
+  sitting next to the scan (Nelson: avg err 3.77 ΔE, proper white point). The build
+  now **trusts the profile on disk over the exit code**, resolving it with the same
+  robust `.icc`/`.icm` lookup the printer builder uses, so a successful build always
+  reports success, prints the path, and shows the **Reveal profile** button.
+
 ## v3.13.0-beta.98
 
 ### ✨ Added — "Reveal profile" button

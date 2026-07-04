@@ -1342,8 +1342,13 @@ class ScannerProfileDialog(_ToolDialogBase):
             model=f"{base.name} scanner", verbose=True)   # show colprof's output
 
         def _done(code: int) -> None:
-            icc = combined.with_suffix(".icc")
-            if code != 0 or not icc.exists():
+            # Resolve the profile the same robust way the printer builder does:
+            # colprof writes .icc OR .icm (Windows) and may append rather than
+            # replace the extension. Trust a valid profile on disk over colprof's
+            # exit code — on Windows it can exit non-zero *after* "Profile done",
+            # which used to make ChromIQ cry failure and hide the profile (Nelson).
+            icc = self._profiler.expected_icc_path(params)
+            if not (icc.exists() and icc.stat().st_size > 1000):
                 fail = self._profiler.primary_failure()
                 if fail:
                     self._log.appendPlainText(f"[ERROR] {fail[1]}")
