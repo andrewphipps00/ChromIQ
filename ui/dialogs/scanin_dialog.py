@@ -1175,22 +1175,28 @@ class ScannerProfileDialog(_ToolDialogBase):
         return cht, base.with_suffix(".cie")
 
     def _apply_fiducial_frame(self, cht: Path, base: Path) -> Path:
-        """When "Use fiducial marks" is on, hand scanin a .cht whose F line is the
-        target's fiducial frame (from the # CHROMIQ_FIDUCIALS marker) instead of
-        the patch-area bbox — so scanin's -F maps the marks the user placed the
-        corners on. Default (off) leaves the file's patch-area F untouched."""
-        if not (self._standard_mode() and self._use_fiducials_cb.isChecked()):
-            return cht
+        """The bundled ``.cht``'s ``F`` line is the real fiducial marks. When "Use
+        fiducial marks" is ON, hand scanin that file unchanged — the user placed
+        the marquee corners on the marks, and ``-F`` maps them to the ``F`` line.
+        When OFF, rewrite ``F`` to the patch-area bounding box, so ``-F`` maps the
+        corners the user placed on the patch grid instead."""
+        if not self._standard_mode() or self._use_fiducials_cb.isChecked():
+            return cht                              # ON (or engine): F already right
         import re
-        from ui.scan_grid_marquee import fiducial_frame
+        from workflow.cht_parser import ChtParseError, parse_cht
         txt = cht.read_text(errors="ignore")
-        fr = fiducial_frame(txt)
-        if fr is None:
+        try:
+            geom = parse_cht(txt)
+        except ChtParseError:
             return cht
-        x0, x1, y0, y1 = fr
+        if not geom.patches:
+            return cht
+        xs = [b.x1 for b in geom.patches] + [b.x2 for b in geom.patches]
+        ys = [b.y1 for b in geom.patches] + [b.y2 for b in geom.patches]
+        x0, x1, y0, y1 = min(xs), max(xs), min(ys), max(ys)
         fline = ("  F _ _ %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f"
                  % (x0, y0, x1, y0, x1, y1, x0, y1))
-        dst = base.parent / f"{cht.stem}-fid.cht"
+        dst = base.parent / f"{cht.stem}-patchbox.cht"
         dst.write_text(re.sub(r'(?m)^\s*F .*$', fline, txt, count=1))
         return dst
 

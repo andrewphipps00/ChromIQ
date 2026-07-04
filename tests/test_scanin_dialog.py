@@ -7,6 +7,7 @@ and that the default keeps the previous output (shaper+matrix, medium)."""
 from __future__ import annotations
 
 import os
+import re
 
 import pytest
 
@@ -129,9 +130,11 @@ def test_standard_mode_execute_uses_chosen_cht_and_reference(_app, tmp_path):
         p = jobs[0]["params"]
         # At the default 60% sample area the dialog hands scanin a sample-adjusted
         # sibling .cht (BOX_SHRINK rewritten) — never the read-only bundled file —
-        # while the reference and scan are untouched.
-        assert p.cht == scan.parent / "it8-sample.cht" and p.cht.is_file()
-        assert "BOX_SHRINK" in p.cht.read_text()
+        # while the reference and scan are untouched. With "Use fiducial marks" off
+        # the F line is first rewritten to the patch bbox (…-patchbox…).
+        assert p.cht.parent == scan.parent and p.cht.name.endswith("-sample.cht")
+        assert p.cht.is_file() and "BOX_SHRINK" in p.cht.read_text()
+        assert re.search(r"(?m)^\s*F .*$", p.cht.read_text())   # patch-bbox F line
         assert p.cie == ref and p.scan_tif == scan
         assert jobs[-1]["kind"] == "colprof"
         # Profile base sits next to the scan (→ <scan>-scanner.ti3/.icc).

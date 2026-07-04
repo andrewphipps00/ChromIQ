@@ -46,27 +46,26 @@ def apply_h(h: np.ndarray, u: float, v: float) -> tuple[float, float]:
     return float(p[0] / p[2]), float(p[1] / p[2])
 
 
-_FID_MARKER = re.compile(
-    r"(?mi)^#\s*CHROMIQ_FIDUCIALS\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)")
+_FLINE = re.compile(r"(?m)^\s*F\s+_\s+_\s+" + r"\s+".join([r"([-\d.]+)"] * 8))
 
 
 def fiducial_frame(text: str) -> tuple[float, float, float, float] | None:
-    """The registration-mark frame ``(x0, x1, y0, y1)`` baked into a ChromIQ
-    bundled ``.cht`` as a ``# CHROMIQ_FIDUCIALS left top right bottom`` marker
-    (computed from the target's rectarg geometry), or None if the file has none.
-    The marker carries the *real* fiducial positions; the ``F`` line stays the
-    patch-area bbox so the default scanin path is unchanged."""
-    m = _FID_MARKER.search(text)
+    """The registration-mark frame ``(x0, x1, y0, y1)`` = (left, right, top,
+    bottom) from the ``.cht``'s real ``F`` line — the four fiducial marks
+    (``F _ _ x0 y0 x1 y1 x2 y2 x3 y3``, clockwise from top-left). None if absent.
+    This is the box the marquee handles sit on in *fiducial* mode; scanin ``-F``
+    maps its four corners to these coordinates."""
+    m = _FLINE.search(text)
     if not m:
         return None
-    left, top, right, bottom = (float(g) for g in m.groups())
-    return left, right, top, bottom
+    v = [float(g) for g in m.groups()]
+    xs, ys = v[0::2], v[1::2]
+    return min(xs), max(xs), min(ys), max(ys)
 
 
 def cht_has_fiducials(text: str) -> bool:
-    """True if the ``.cht`` carries a fiducial-mark frame distinct from the patch
-    block, so framing by fiducials differs from framing by the patches. Bundled
-    files with a ``# CHROMIQ_FIDUCIALS`` marker return True; the rest False."""
+    """True if the ``.cht``'s fiducial (``F``) frame is distinct from the patch
+    block, so framing by fiducials differs from framing by the patches."""
     fr = fiducial_frame(text)
     if fr is None:
         return False

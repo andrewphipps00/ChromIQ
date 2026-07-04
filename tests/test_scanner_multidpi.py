@@ -30,6 +30,20 @@ _TARGETS = sorted(p.name for p in bundled_targets_dir().glob("*.cht"))
 _M = 40
 
 
+def _patchbox_cht(text):
+    """Rewrite the cht's F line to the patch bounding box — the OFF / patch-frame
+    mode the demo scan and patch-corner placement use (the bundled F line is the
+    real fiducial marks, which sit outside the rendered patch area)."""
+    import re
+    g = parse_cht(text)
+    xs = [b.x1 for b in g.patches] + [b.x2 for b in g.patches]
+    ys = [b.y1 for b in g.patches] + [b.y2 for b in g.patches]
+    x0, x1, y0, y1 = min(xs), max(xs), min(ys), max(ys)
+    fl = ("  F _ _ %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f"
+          % (x0, y0, x1, y0, x1, y1, x0, y1))
+    return re.sub(r"(?m)^\s*F .*$", fl, text, count=1)
+
+
 def _worst(cht_text, scale, tmp_path):
     g = parse_cht(cht_text)
     boxes = [(b.name, b.x1, b.y1, b.x2, b.y2) for b in g.patches]
@@ -50,7 +64,7 @@ def _worst(cht_text, scale, tmp_path):
                (maxx*scale+off[0], maxy*scale+off[1]), (minx*scale+off[0], maxy*scale+off[1])]
     fstr = ",".join(f"{v:.1f}" for xy in corners for v in xy)
     img.save(tmp_path / "s.tif")
-    (tmp_path / "r.cht").write_text(cht_text)
+    (tmp_path / "r.cht").write_text(_patchbox_cht(cht_text))
     cie = (["CGATS.17", "NUMBER_OF_FIELDS 4", "BEGIN_DATA_FORMAT",
             "SAMPLE_ID XYZ_X XYZ_Y XYZ_Z", "END_DATA_FORMAT",
             f"NUMBER_OF_SETS {len(boxes)}", "BEGIN_DATA"]
@@ -108,7 +122,7 @@ def test_make_test_scan_reads_back(name, tmp_path):
     fstr = ",".join(f"{v:.1f}" for xy in corners for v in xy)
     # make_test_scan draws patches at their true (gapped) positions, so read with
     # the same cht — contiguous re-placement would MISread a gapped demo.
-    (tmp_path / "r.cht").write_text(cht_path.read_text(errors="ignore"))
+    (tmp_path / "r.cht").write_text(_patchbox_cht(cht_path.read_text(errors="ignore")))
     subprocess.run([str(_BIN / "scanin"), "-v", "-p", "-F", fstr,
                     tif.name, "r.cht", cie.name], cwd=tmp_path,
                    capture_output=True, text=True)
