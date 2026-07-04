@@ -1,5 +1,19 @@
 # Changelog
 
+## v3.13.0-beta.100
+
+### 🐛 Fixed — scanner/camera targets now register correctly (incl. CMP)
+- The bundled scanner-target recognition files (`.cht`) have been **regenerated to
+  match rectarg exactly** — correct patch positions, the **real fiducial marks**,
+  and patch names built with rectarg's own label logic (alpha-first, `2A1`/`GS`/
+  Excel-alpha, padding-tolerant). Previously the **CMP Digital Target-4** failed in
+  scanin entirely, and other targets could misregister because ChromIQ's grid
+  disagreed with the printed sheet. **All 8 targets now read back 100 % of their
+  patches through scanin**, so a scanner/camera profile builds from any of them.
+- "Use fiducial marks" now maps correctly: **on** uses the target's real fiducial
+  marks; **off** frames by the patch block — so the reading grid lines up whether
+  or not you use the marks.
+
 ## v3.13.0-beta.99
 
 ### 🐛 Fixed — scanner build no longer cries failure on a good profile
