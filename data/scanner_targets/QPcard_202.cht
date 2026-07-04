@@ -1,6 +1,7 @@
 # ChromIQ scanner/camera target — F line is the PATCH-AREA bounding box
 # (TL,TR,BR,BL); place the marquee on the visible corners of the patch grid.
 
+# CHROMIQ_FIDUCIALS 25.00 10.00 541.00 390.00
 BOXES 35
   F _ _ 45.00 30.00 521.00 30.00 521.00 370.00 45.00 370.00
 X A1 A1 _ _ 68.000 68.000 45.000 30.000 0 0

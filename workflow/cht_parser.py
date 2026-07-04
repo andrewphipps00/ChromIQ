@@ -115,9 +115,14 @@ def _alpha_seq(start: str, end: str) -> list[str]:
 
 
 # ---------------------------------------------------------------- parse
-def parse_cht(text: str) -> ChtGeometry:
+def parse_cht(text: str, rectarg: bool = False) -> ChtGeometry:
     """Parse a ``.cht`` file's ``BOXES`` section. Raises :class:`ChtParseError`
-    if no boxes are found."""
+    if no boxes are found.
+
+    With ``rectarg=True`` the last number pair on a patch-area line is read as
+    rectarg's post-fiducial offset (patches contiguous at the ``tile`` pitch);
+    otherwise it's Argyll's ``xi/yi`` pitch. Use rectarg mode to read an original
+    rectarg range ``.cht`` (see docs/dev — Argyll and rectarg disagree)."""
     geom = ChtGeometry()
     m = re.search(r"(?mi)^\s*BOXES\s+(\d+)", text)
     if m:
@@ -140,10 +145,11 @@ def parse_cht(text: str) -> ChtGeometry:
 
         xnames = expand_range(xfix1, xfix2)
         ynames = expand_range(yfix1, yfix2)
+        px, py = (w, h) if rectarg else (xi, yi)     # patch pitch
         for j, yn in enumerate(ynames):
-            row_y = oy + j * yi
+            row_y = oy + j * py
             for i, xn in enumerate(xnames):
-                x = ox + i * xi
+                x = ox + i * px
                 if xn == "_":
                     name = yn
                 elif yn == "_":

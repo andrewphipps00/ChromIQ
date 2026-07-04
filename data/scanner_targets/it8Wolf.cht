@@ -1,5 +1,6 @@
 # ChromIQ Wolf Faust IT8 / ISO 12641-1 — F line = patch-area bounding box
 
+# CHROMIQ_FIDUCIALS 1.00 1.00 616.00 358.50
 BOXES 288
   F _ _ 1.00 26.62 616.00 26.62 616.00 411.75 1.00 411.75
   X A01 A01 _ _ 25.625 25.625 26.625 26.625 0 0

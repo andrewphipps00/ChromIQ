@@ -1,5 +1,19 @@
 # Changelog
 
+## v3.13.0-beta.91
+
+### ✨ Added — "Use fiducial marks" now works (Knut)
+- The **"Use fiducial marks in the .cht"** checkbox is now functional for the
+  bundled targets. Each bundled `.cht` carries a fiducial-mark frame — computed
+  from the target's **rectarg** geometry (patch-area corners expanded by
+  `pre − pre_f` top-left and `post` bottom-right, per Knut's spec) — stored as a
+  `# CHROMIQ_FIDUCIALS` marker. With it **on**, the reading grid frames to the
+  registration marks, so you place the four corners on the **fiducials** instead of
+  the patch-area corners — for both the on-screen grid **and** the scanin read
+  (scanin's `-F` is handed the fiducial frame). **Off** (default) uses the patch
+  area, unchanged. The checkbox now enables for every bundled target that defines
+  fiducials distinct from its patch block.
+
 ## v3.13.0-beta.90
 
 ### 🐛 Fixed — scanner-target geometry (Knut)

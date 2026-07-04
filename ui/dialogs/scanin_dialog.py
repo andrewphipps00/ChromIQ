@@ -1132,6 +1132,26 @@ class ScannerProfileDialog(_ToolDialogBase):
                else base.parent / f"{base.name}_{pg + 1:02d}.cht")
         return cht, base.with_suffix(".cie")
 
+    def _apply_fiducial_frame(self, cht: Path, base: Path) -> Path:
+        """When "Use fiducial marks" is on, hand scanin a .cht whose F line is the
+        target's fiducial frame (from the # CHROMIQ_FIDUCIALS marker) instead of
+        the patch-area bbox — so scanin's -F maps the marks the user placed the
+        corners on. Default (off) leaves the file's patch-area F untouched."""
+        if not (self._standard_mode() and self._use_fiducials_cb.isChecked()):
+            return cht
+        import re
+        from ui.scan_grid_marquee import fiducial_frame
+        txt = cht.read_text(errors="ignore")
+        fr = fiducial_frame(txt)
+        if fr is None:
+            return cht
+        x0, x1, y0, y1 = fr
+        fline = ("  F _ _ %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f"
+                 % (x0, y0, x1, y0, x1, y1, x0, y1))
+        dst = base.parent / f"{cht.stem}-fid.cht"
+        dst.write_text(re.sub(r'(?m)^\s*F .*$', fline, txt, count=1))
+        return dst
+
     def _apply_sample_area(self, cht: Path, frac: float, base: Path) -> Path:
         """Write a sibling ``.cht`` whose ``BOX_SHRINK`` samples *frac* of each
         patch (Knut's patch-sample-area control), and hand scanin that copy. The
@@ -1177,6 +1197,7 @@ class ScannerProfileDialog(_ToolDialogBase):
         page_ti3s: list[Path] = []
         for pg in pages:
             cht, cie = self._files_for_page(pg, base)
+            cht = self._apply_fiducial_frame(cht, base)
             cht = self._apply_sample_area(cht, frac, base)
             shots = [s for s in self._page_shots(pg) if s["path"]]
             shot_ti3s: list[Path] = []

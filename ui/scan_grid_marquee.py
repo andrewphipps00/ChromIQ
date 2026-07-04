@@ -16,6 +16,7 @@ The homography (unit square → the user's quad) is a pure function
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 import numpy as np
@@ -45,36 +46,43 @@ def apply_h(h: np.ndarray, u: float, v: float) -> tuple[float, float]:
     return float(p[0] / p[2]), float(p[1] / p[2])
 
 
-def _fiducial_bbox(geom) -> tuple[float, float, float, float] | None:
-    """Bounding box (x0, x1, y0, y1) of the ``.cht`` fiducial corners, or None if
-    the file defines none."""
-    f = getattr(geom, "fiducials", None)
-    if not f or len(f) < 4:
+_FID_MARKER = re.compile(
+    r"(?mi)^#\s*CHROMIQ_FIDUCIALS\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)")
+
+
+def fiducial_frame(text: str) -> tuple[float, float, float, float] | None:
+    """The registration-mark frame ``(x0, x1, y0, y1)`` baked into a ChromIQ
+    bundled ``.cht`` as a ``# CHROMIQ_FIDUCIALS left top right bottom`` marker
+    (computed from the target's rectarg geometry), or None if the file has none.
+    The marker carries the *real* fiducial positions; the ``F`` line stays the
+    patch-area bbox so the default scanin path is unchanged."""
+    m = _FID_MARKER.search(text)
+    if not m:
         return None
-    xs = [p[0] for p in f]
-    ys = [p[1] for p in f]
-    return min(xs), max(xs), min(ys), max(ys)
+    left, top, right, bottom = (float(g) for g in m.groups())
+    return left, right, top, bottom
 
 
 def cht_has_fiducials(text: str) -> bool:
-    """True if the ``.cht`` defines fiducial marks that sit meaningfully off the
-    patch block, so framing by fiducials differs from framing by the patches.
-    ChromIQ's bundled files set ``F`` to the patch bbox (no difference → False);
-    Argyll's originals with real registration marks return True."""
+    """True if the ``.cht`` carries a fiducial-mark frame distinct from the patch
+    block, so framing by fiducials differs from framing by the patches. Bundled
+    files with a ``# CHROMIQ_FIDUCIALS`` marker return True; the rest False."""
+    fr = fiducial_frame(text)
+    if fr is None:
+        return False
     from workflow.cht_parser import ChtParseError, parse_cht
     try:
         geom = parse_cht(text)
     except ChtParseError:
         return False
-    fb = _fiducial_bbox(geom)
-    if fb is None or not geom.patches:
+    if not geom.patches:
         return False
     xs = [b.x1 for b in geom.patches] + [b.x2 for b in geom.patches]
     ys = [b.y1 for b in geom.patches] + [b.y2 for b in geom.patches]
     px0, px1, py0, py1 = min(xs), max(xs), min(ys), max(ys)
     span = max(px1 - px0, py1 - py0) or 1.0
-    diff = abs(fb[0] - px0) + abs(fb[1] - px1) + abs(fb[2] - py0) + abs(fb[3] - py1)
-    return diff > 0.03 * span
+    diff = abs(fr[0] - px0) + abs(fr[1] - px1) + abs(fr[2] - py0) + abs(fr[3] - py1)
+    return diff > 0.02 * span
 
 
 @dataclass
@@ -124,8 +132,7 @@ class GridSpec:
         return cls(rects, aspect=sw / sh, ncols=nc, nrows=nr)
 
     @classmethod
-    def from_cht(cls, text: str, *, contiguous: bool = False,
-                 use_fiducials: bool = False) -> "GridSpec":
+    def from_cht(cls, text: str, *, use_fiducials: bool = False) -> "GridSpec":
         """Build from *any* Argyll ``.cht`` (standard IT8 targets, ColorChecker,
         …). Boxes are normalised into the **total patch-area bounding box** — the
         union of *every* patch box across *all* areas — so the grid always covers
@@ -135,26 +142,21 @@ class GridSpec:
         "overall chart dimensions, not used". The user places the four corners on
         that same patch block.
 
-        *contiguous* re-places patches with rectarg's touching model (pitch =
-        tile) so a gapped target lines up with a rectarg-rendered image.
-        *use_fiducials* frames the grid by the ``.cht`` ``F`` fiducial marks
-        instead of the patch block (so the four corners go on the registration
-        marks), when the file defines fiducials distinct from the patch block."""
-        from workflow.cht_parser import ChtBox, ChtParseError, contiguous_boxes, parse_cht
+        *use_fiducials* frames the grid by the ``.cht``'s fiducial-mark frame (the
+        ``# CHROMIQ_FIDUCIALS`` marker) instead of the patch block, so the four
+        corners go on the registration marks — when the file defines fiducials
+        distinct from the patch block."""
+        from workflow.cht_parser import ChtParseError, parse_cht
         try:
             geom = parse_cht(text)
         except ChtParseError:
             return cls([])
         if not geom.patches:
             return cls([])
-        if contiguous:
-            boxes = [ChtBox(b.name, *nb) for b, nb
-                     in zip(geom.patches, contiguous_boxes(geom.patches))]
-        else:
-            boxes = geom.patches
+        boxes = geom.patches
         xs = [b.x1 for b in boxes] + [b.x2 for b in boxes]
         ys = [b.y1 for b in boxes] + [b.y2 for b in boxes]
-        frame = _fiducial_bbox(geom) if use_fiducials else None
+        frame = fiducial_frame(text) if use_fiducials else None
         if frame is not None:
             x0, x1, y0, y1 = frame
         else:
