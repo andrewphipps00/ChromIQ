@@ -63,6 +63,40 @@ def fiducial_frame(text: str) -> tuple[float, float, float, float] | None:
     return min(xs), max(xs), min(ys), max(ys)
 
 
+def extrapolate_to_fiducials(
+        corners: list[tuple[float, float]], text: str
+) -> list[tuple[float, float]] | None:
+    """Map a **patch-grid-aligned** marquee quad (four image-pixel corners, order
+    TL, TR, BR, BL) out to the ``.cht``'s **fiducial frame**, so scanin ``-F``
+    (whose ``.cht`` ``F`` line is the fiducials) receives corners on the marks —
+    *derived* from the reliable patch alignment rather than placed by hand on
+    marks the display image may not even show. Returns None if the file has no
+    distinct fiducials or can't be parsed. This is what makes "Use fiducial marks"
+    ON as reliable as OFF: one patch alignment, two consistent ``-F`` derivations."""
+    if len(corners) != 4:
+        return None
+    fr = fiducial_frame(text)
+    if fr is None:
+        return None
+    from workflow.cht_parser import ChtParseError, parse_cht
+    try:
+        geom = parse_cht(text)
+    except ChtParseError:
+        return None
+    if not geom.patches:
+        return None
+    xs = [b.x1 for b in geom.patches] + [b.x2 for b in geom.patches]
+    ys = [b.y1 for b in geom.patches] + [b.y2 for b in geom.patches]
+    px0, px1, py0, py1 = min(xs), max(xs), min(ys), max(ys)
+    fx0, fx1, fy0, fy1 = fr                       # left, right, top, bottom
+    if px1 == px0 or py1 == py0:
+        return None
+    h = unit_quad_homography(corners)             # unit square (patch bbox) → quad
+    def img(fx: float, fy: float) -> tuple[float, float]:
+        return apply_h(h, (fx - px0) / (px1 - px0), (fy - py0) / (py1 - py0))
+    return [img(fx0, fy0), img(fx1, fy0), img(fx1, fy1), img(fx0, fy1)]
+
+
 def cht_has_fiducials(text: str) -> bool:
     """True if the ``.cht``'s fiducial (``F``) frame is distinct from the patch
     block, so framing by fiducials differs from framing by the patches."""

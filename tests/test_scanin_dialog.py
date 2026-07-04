@@ -75,6 +75,30 @@ def test_gridspec_from_cht_it8(_app):
     assert GridSpec.from_cht("not a cht").rects == []
 
 
+def test_extrapolate_to_fiducials_derives_marks_from_patch_quad(_app):
+    """The unified fix: the marquee is aligned to the patch bbox; ON derives the
+    scanin -F by extrapolating that quad out to the fiducial frame (so it lands on
+    the marks without the user placing them). Grows outward by the exact ratio."""
+    from pathlib import Path
+    from ui.scan_grid_marquee import extrapolate_to_fiducials, fiducial_frame
+    from workflow.cht_parser import parse_cht
+    txt = Path("data/scanner_targets/ISO12641_2_1.cht").read_text()
+    g = parse_cht(txt); fr = fiducial_frame(txt)              # left,right,top,bottom
+    xs = [b.x1 for b in g.patches] + [b.x2 for b in g.patches]
+    ys = [b.y1 for b in g.patches] + [b.y2 for b in g.patches]
+    px0, px1, py0, py1 = min(xs), max(xs), min(ys), max(ys)
+    quad = [(px0*2, py0*2), (px1*2, py0*2), (px1*2, py1*2), (px0*2, py1*2)]  # patch @2x
+    out = extrapolate_to_fiducials(quad, txt)
+    assert out is not None
+    # extrapolated corners = the fiducial frame at the same 2x mapping
+    assert abs(out[0][0] - fr[0]*2) < 1 and abs(out[0][1] - fr[2]*2) < 1
+    assert abs(out[2][0] - fr[1]*2) < 1 and abs(out[2][1] - fr[3]*2) < 1
+    # …and it grew outward past the patch quad (fiducials sit outside the patches)
+    assert out[0][0] < quad[0][0] and out[2][0] > quad[2][0]
+    assert extrapolate_to_fiducials(quad, "not a cht") is None
+    assert extrapolate_to_fiducials([(0, 0)], txt) is None    # need four corners
+
+
 def test_profile_type_high_selects_xh(_app):
     dlg = _dialog(_app)
     try:

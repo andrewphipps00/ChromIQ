@@ -665,20 +665,18 @@ class ScannerProfileDialog(_ToolDialogBase):
         self._use_fiducials_cb = QCheckBox(
             tr("Use fiducial marks in the .cht as reference"), self)
         self._use_fiducials_cb.setToolTip(tr(
-            "Chooses what the four corners you drag should line up with.\n\n"
-            "Off (default): you place the corners on the patch area itself — the "
-            "outer edges of the block of colour patches. This is the simplest way "
-            "and it works for every target.\n\n"
-            "On: some targets print small registration marks — little crosses or "
-            "L-shapes, called fiducials — a short distance outside the patches, and "
-            "their exact positions are stored in the target's recognition file. "
-            "Switch this on to place the corners on those marks instead; ChromIQ "
-            "then works out where the patches sit relative to them. Use it if your "
-            "target has clear fiducials and you find them easier to aim at than the "
-            "patch corners.\n\n"
-            "It stays switched off (and briefly flashes) for targets that don't "
-            "define separate fiducials — there's nothing extra to line up with, so "
-            "the patch area is used."))
+            "You always drag the four corners onto the patch area — the outer edges "
+            "of the block of colour patches. That's the reliable reference and it "
+            "works for every target.\n\n"
+            "This option only changes the reference ChromIQ hands the reader:\n\n"
+            "Off (default): the reader is anchored to the patch area you aligned.\n\n"
+            "On: it's anchored to the target's fiducial marks — small registration "
+            "crosses just outside the patches, whose exact positions are stored in "
+            "the recognition file. ChromIQ works out where those marks are from your "
+            "patch alignment, so you still just line up the patches. Both settings "
+            "place the grid identically.\n\n"
+            "It stays off (and briefly flashes) for targets that define no separate "
+            "fiducials."))
         self._use_fiducials_cb.toggled.connect(self._on_fiducial_toggled)
         opts.addWidget(self._use_fiducials_cb, 1, 0)
         form.addLayout(opts)
@@ -963,15 +961,16 @@ class ScannerProfileDialog(_ToolDialogBase):
         self._refresh()
 
     def _rebuild_std_grid(self) -> None:
-        """(Re)build the standard-target grid from the current .cht with the two
-        framing options applied, keeping the current scan's placement."""
+        """(Re)build the standard-target grid from the current .cht. The marquee
+        **always** frames the patch block (the reliable, always-visible reference);
+        the "Use fiducial marks" option no longer changes the grid — it only
+        changes how scanin's ``-F`` is derived from this one alignment
+        (:meth:`_scanin_corners`). Keeps the current scan's placement."""
         if not self._standard_mode() or self._std_cht is None:
             return
         self._capture_current_corners()
         try:
-            self._std_grid = GridSpec.from_cht(
-                self._std_cht.read_text(errors="ignore"),
-                use_fiducials=self._use_fiducials_cb.isChecked())
+            self._std_grid = GridSpec.from_cht(self._std_cht.read_text(errors="ignore"))
         except OSError:
             self._std_grid = GridSpec([])
         self._marquee.set_grid(self._std_grid)
@@ -994,10 +993,9 @@ class ScannerProfileDialog(_ToolDialogBase):
             self._use_fiducials_cb.setChecked(False)
             self._use_fiducials_cb.blockSignals(False)
             return
-        self._rebuild_std_grid()
-        self._reframe_marquee(checked)                   # grow/shrink to the marks
-        if self._marquee.has_placement():
-            self._cur_shot()["corners"] = self._marquee.corners_image_px()
+        # The marquee stays on the patch grid; toggling only changes how the
+        # scanin -F is derived at build time, so nothing to reframe here.
+        self._update_std_note()
 
     def _reframe_marquee(self, to_fiducial: bool) -> None:
         """Grow the marquee out to the fiducial marks (or back to the patch area),
@@ -1174,6 +1172,23 @@ class ScannerProfileDialog(_ToolDialogBase):
                else base.parent / f"{base.name}_{pg + 1:02d}.cht")
         return cht, base.with_suffix(".cie")
 
+    def _scanin_corners(self, corners, orig_cht: Path):
+        """Turn the patch-grid-aligned marquee quad into scanin's ``-F`` corners.
+        With "Use fiducial marks" ON (standard mode) extrapolate the quad out to
+        the fiducial frame (matching the on-disk ``F`` line kept by
+        :meth:`_apply_fiducial_frame`); OFF returns the quad unchanged (its ``F``
+        was rewritten to the patch bbox). One alignment, two consistent frames —
+        so ON and OFF land the grid identically. *orig_cht* is read only in ON."""
+        if not (corners and self._standard_mode()
+                and self._use_fiducials_cb.isChecked()):
+            return corners
+        from ui.scan_grid_marquee import extrapolate_to_fiducials
+        try:
+            text = orig_cht.read_text(errors="ignore")
+        except OSError:
+            return corners
+        return extrapolate_to_fiducials(corners, text) or corners
+
     def _apply_fiducial_frame(self, cht: Path, base: Path) -> Path:
         """The bundled ``.cht``'s ``F`` line is the real fiducial marks. When "Use
         fiducial marks" is ON, hand scanin that file unchanged — the user placed
@@ -1244,8 +1259,8 @@ class ScannerProfileDialog(_ToolDialogBase):
         self._jobs = []
         page_ti3s: list[Path] = []
         for pg in pages:
-            cht, cie = self._files_for_page(pg, base)
-            cht = self._apply_fiducial_frame(cht, base)
+            orig_cht, cie = self._files_for_page(pg, base)   # pre-rewrite (fiducials)
+            cht = self._apply_fiducial_frame(orig_cht, base)
             cht = self._apply_sample_area(cht, frac, base)
             shots = [s for s in self._page_shots(pg) if s["path"]]
             shot_ti3s: list[Path] = []
@@ -1254,7 +1269,8 @@ class ScannerProfileDialog(_ToolDialogBase):
                 diag = (scan.with_name(scan.stem + "-diag.tif")
                         if self._diag.isChecked() and k == 0 else None)
                 params = ScaninParams(
-                    scan, cht, cie, corners=s["corners"],
+                    scan, cht, cie,
+                    corners=self._scanin_corners(s["corners"], orig_cht),
                     perspective=self._perspective.isChecked(), diag=diag,
                     out_name=f"{base.name}-p{pg + 1}s{k + 1}-scanner.ti3")
                 shot_ti3s.append(params.out_ti3)
