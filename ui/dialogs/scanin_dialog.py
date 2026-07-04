@@ -1329,8 +1329,14 @@ class ScannerProfileDialog(_ToolDialogBase):
             icc = combined.with_suffix(".icc")
             if code != 0 or not icc.exists():
                 fail = self._profiler.primary_failure()
-                self._log.appendPlainText(
-                    f"[ERROR] {fail[1] if fail else tr('Building the profile failed — see messages above.')}")
+                if fail:
+                    self._log.appendPlainText(f"[ERROR] {fail[1]}")
+                else:
+                    # No recognised pattern — show what colprof actually said, so
+                    # the reason is never hidden behind "see messages above".
+                    raw = self._profiler.last_output()
+                    self._log.appendPlainText(f"[ERROR] {tr('Building the profile failed. colprof said:')}")
+                    self._log.appendPlainText(raw or tr("(colprof produced no output)"))
                 self._finish(False)
                 return
             self._log.appendPlainText(tr("[OK] Scanner profile saved: {p}").format(p=icc))

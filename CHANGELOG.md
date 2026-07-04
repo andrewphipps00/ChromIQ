@@ -1,5 +1,15 @@
 # Changelog
 
+## v3.13.0-beta.96
+
+### 🐛 Fixed — the real colprof error is no longer hidden
+- When building a scanner/camera profile fails, ChromIQ now prints **colprof's
+  actual last output** instead of the unhelpful *"failed — see messages above"*
+  (there was often nothing above it). So if a build fails, you can see exactly what
+  colprof objected to. Pairs with beta.95's fix that drops unreadable-value patches
+  rather than zero-filling them — together, a scanner profile that used to fail
+  silently now either builds or tells you precisely why.
+
 ## v3.13.0-beta.95
 
 ### 🐛 Fixed — cleaner .ti3 recovery from unreadable patches

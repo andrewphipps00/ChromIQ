@@ -196,6 +196,14 @@ class ProfileBuilder:
         dialog by key (e.g. "fwa_no_uv") or fall back to a generic dialog."""
         return self._matched_errors[0] if self._matched_errors else None
 
+    def last_output(self, n: int = 12) -> str:
+        """The last *n* non-blank, non-progress lines colprof printed — shown when
+        a build fails without a recognised error pattern, so the real reason
+        (whatever colprof actually said) is never swallowed."""
+        lines = [ln.rstrip() for ln in self._last_log.splitlines()
+                 if ln.strip() and not ln.rstrip().endswith("%")]
+        return "\n".join(lines[-n:])
+
     def captured_warnings(self) -> list[tuple[str, str]]:
         """Structured warnings captured during the most recent run."""
         return list(self._matched_warnings)
