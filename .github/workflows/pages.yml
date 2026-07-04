@@ -1,0 +1,39 @@
+name: Deploy docs to Pages
+
+# Publishes the docs/ folder (the landing page) to GitHub Pages, but ONLY when
+# docs/ actually changes — so a normal code push no longer triggers (or flakily
+# fails) a Pages deploy. Replaces the built-in "deploy from a branch" mode.
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "docs/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+# Least privilege needed to publish to Pages via the official actions.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never run two deploys at once; let an in-flight one finish.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+      - id: deployment
+        uses: actions/deploy-pages@v4
