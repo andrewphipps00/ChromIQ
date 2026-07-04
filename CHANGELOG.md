@@ -1,5 +1,14 @@
 # Changelog
 
+## v3.13.0-beta.94
+
+### 🔧 Changed — scan arrow on engine charts without strip labels
+- On a ChromIQ-engine chart that has **no strip labels**, the measure-tab scan
+  arrow now floats with its **tip just above the patch area**, instead of hanging
+  from a label band that isn't there. Charts **with** strip labels (and printtarg
+  charts) keep the arrow hanging directly under the labels, printtarg-style. The
+  engine sidecar now records the rendered label-band bottom so the anchor is exact.
+
 ## v3.13.0-beta.93
 
 ### 🐛 Fixed — scanner-profile build crash (Nelson, Windows)

@@ -307,9 +307,20 @@ def _detect_stripe_rects(tiff_path: Path) -> list[QRect]:
 def engine_strip_rects_from_sidecar(sidecar: Path, n_pages: int):
     """Per-page strip rects from a ChromIQ-engine chart's ``channels.json``.
 
-    Returns ``(per_page_rects, counts)`` (rects in TIFF-pixel space, the same
-    space the image detectors use), or ``None`` when there's no usable engine
-    ``layout`` block or it doesn't cover every loaded page (issue #93).
+    Returns ``(per_page_rects, counts, arrow_mode)`` (rects in TIFF-pixel
+    space, the same space the image detectors use), or ``None`` when there's
+    no usable engine ``layout`` block or it doesn't cover every loaded page
+    (issue #93).
+
+    The rect top doubles as the scan-arrow anchor. Charts WITH strip labels
+    store the rendered label-band bottom (``label_band_bottom_px``); the rect
+    is grown up to that line so the arrow hangs directly under the labels,
+    printtarg-style, with ``arrow_mode`` "base" (arrow points down from the
+    anchor). Charts WITHOUT labels have no band to hang from, so the rect
+    keeps the patch-area top and ``arrow_mode`` "tip" makes the preview float
+    the arrow with its tip a tiny gap above the patches. Older sidecars
+    (no band key) keep the legacy patch-top/"base" behaviour, except when
+    their stored recipe says indicators were off — then "tip" is safe too.
     """
     import json
     if n_pages < 1 or not sidecar.is_file():
@@ -323,18 +334,31 @@ def engine_strip_rects_from_sidecar(sidecar: Path, n_pages: int):
     strips = layout.get("strips") or []
     if not strips:
         return None
+    band_bot = layout.get("label_band_bottom_px")
+    if isinstance(band_bot, (int, float)) and not isinstance(band_bot, bool):
+        band_bot = int(band_bot)
+        arrow_mode = "base"
+    else:
+        band_bot = None
+        recipe = layout.get("recipe") or {}
+        labels_off = ("label_band_bottom_px" in layout
+                      or recipe.get("draw_indicators") is False)
+        arrow_mode = "tip" if labels_off else "base"
     per_page: list[list[QRect]] = [[] for _ in range(n_pages)]
     try:
         for s in strips:
             pg = int(s["page"])
             if 0 <= pg < n_pages:
-                per_page[pg].append(
-                    QRect(int(s["x"]), int(s["y"]), int(s["w"]), int(s["h"])))
+                x, y, w, h = int(s["x"]), int(s["y"]), int(s["w"]), int(s["h"])
+                if band_bot is not None and band_bot < y:
+                    h += y - band_bot
+                    y = band_bot
+                per_page[pg].append(QRect(x, y, w, h))
     except (KeyError, TypeError, ValueError):
         return None
     if any(not p for p in per_page):
         return None
-    return per_page, [len(p) for p in per_page]
+    return per_page, [len(p) for p in per_page], arrow_mode
 
 
 def _detect_uniform_stripe_rects(tiff_path: Path, n_strips: int) -> list[QRect]:
@@ -597,6 +621,7 @@ class TabMeasure(QWidget):
         # even on multi-page charts whose last page is partly empty.
         self._page_stripe_rects: list[list[QRect]] = []
         self._strips_per_page: list[int] = []
+        self._stripe_arrow_mode = "base"
         self._chartread_opts: list[_ChartreadOption] = []
         # ChromIQ-style refinement: this run's preconditioning.ti3, if any
         # (the pre-conditioning profile's measurement data, seeded by
@@ -1981,6 +2006,7 @@ class TabMeasure(QWidget):
         self._tiff_pages = []
         self._page_stripe_rects = []
         self._strips_per_page = []
+        self._stripe_arrow_mode = "base"
         self._preview.clear()
         self._update_resume_availability()
         self._settings.set("session_ti1_path", "")
@@ -2415,6 +2441,7 @@ class TabMeasure(QWidget):
         """
         self._page_stripe_rects = []
         self._strips_per_page = []
+        self._stripe_arrow_mode = "base"
         if not self._tiff_pages:
             return
 
@@ -2423,10 +2450,11 @@ class TabMeasure(QWidget):
         # detection. This is the solid path for engine-generated charts.
         engine = self._engine_stripe_rects()
         if engine is not None:
-            per_page, counts = engine
+            per_page, counts, arrow_mode = engine
             self._page_stripe_rects = per_page
             self._strips_per_page = counts
-            self._preview.set_stripe_rects(per_page[0])
+            self._stripe_arrow_mode = arrow_mode
+            self._preview.set_stripe_rects(per_page[0], arrow_mode)
             return
 
         # PASSES_IN_STRIPS2 lives only in the .ti2, but _ti1_path can hold either
@@ -4522,7 +4550,7 @@ class TabMeasure(QWidget):
             self._log.appendPlainText(msg)
             log.warning(msg)  # also goes to chromiq.log file
 
-        self._preview.set_stripe_rects(rects)
+        self._preview.set_stripe_rects(rects, self._stripe_arrow_mode)
         if 0 <= page < n_pages:
             self._preview.show_page(page)
         self._preview.highlight_stripe(local_idx)

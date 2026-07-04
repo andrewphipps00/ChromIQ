@@ -624,6 +624,10 @@ def _render_notes_strip(width_px: int, height_px: int, dpi: int,
 class RenderResult:
     images: list[Image.Image]
     low_contrast_passes: list[int]   # global pass indices flagged by the guard
+    # Bottom of the rendered strip-label band (labels + underline) in page px,
+    # or None when indicators are off. The measure-tab scan arrow hangs from
+    # this line, printtarg-style; without it the arrow floats above the patches.
+    label_band_bottom_px: int | None = None
 
 
 def _hexagon_points(x0: int, y0: int, w: int, ph: int, step: int):
@@ -753,6 +757,10 @@ def render_pages(
     # offset (mm) nudges the labels up (negative, toward the top margin) or down,
     # together with their underline (#93).
     _lbl_top = px(place.leader_top + strip_label_offset_mm)
+    _band_bottom = None
+    if draw_indicators:
+        _band_bottom = _lbl_top + label_band_h + \
+            ((ul_gap + ul_th) if underline_on else 0)
 
     def _resolve_with(t: str, ctx: dict) -> str:
         try:
@@ -936,7 +944,8 @@ def render_pages(
         images.append(img)
 
     flagged = contrast.low_contrast_passes(rgb_by_slot, steps)
-    return RenderResult(images=images, low_contrast_passes=flagged)
+    return RenderResult(images=images, low_contrast_passes=flagged,
+                        label_band_bottom_px=_band_bottom)
 
 
 def export_clip_template(out_base: str | Path, *, width_px: int, height_px: int,

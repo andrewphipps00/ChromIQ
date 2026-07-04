@@ -256,6 +256,7 @@ class TiffPreview(QWidget):
         self._active_stripe: int = -1
         self._bidirectional: bool = False
         self._stripe_rects: list[QRect] = []
+        self._stripe_arrow_mode: str = "base"
         self._pixmap: QPixmap | None = None
         self._frame_color = QColor(Qt.GlobalColor.white)   # the margin around the image
         # Opt-in zoom/pan (soft-proof tool). Off elsewhere so the measure-tab
@@ -361,6 +362,7 @@ class TiffPreview(QWidget):
         self._current = 0
         self._active_stripe = -1
         self._stripe_rects = []
+        self._stripe_arrow_mode = "base"
         if not preserve_view:       # a fresh image starts fit-to-window
             self._zoom = 1.0
             self._pan = QPointF(0.0, 0.0)
@@ -514,9 +516,17 @@ class TiffPreview(QWidget):
         self._bidirectional = enabled
         self._schedule_refresh()
 
-    def set_stripe_rects(self, rects: list[QRect]) -> None:
-        """Provide precomputed pixel rects for each stripe on current page."""
+    def set_stripe_rects(self, rects: list[QRect],
+                         arrow_mode: str = "base") -> None:
+        """Provide precomputed pixel rects for each stripe on current page.
+
+        *arrow_mode* "base" draws the scan arrow pointing down FROM the rect
+        top (the anchor is a label-band bottom — printtarg charts and engine
+        charts with strip labels). "tip" floats the arrow ABOVE the rect top
+        with its tip a tiny gap over the patches — engine charts without
+        strip labels, where there is no label band to hang from."""
         self._stripe_rects = rects
+        self._stripe_arrow_mode = arrow_mode
 
     def show_page(self, index: int) -> None:
         """Switch to page by index and repaint."""
@@ -533,6 +543,7 @@ class TiffPreview(QWidget):
         self._active_stripe = -1
         self._bidirectional = False
         self._stripe_rects = []
+        self._stripe_arrow_mode = "base"
         self._pixmap = None
         self._ink_channels = None
         self._img_label.setText(tr("No preview"))
@@ -763,14 +774,22 @@ class TiffPreview(QWidget):
                 r   = self._stripe_rects[self._active_stripe]
                 # Convert device-pixel coords → logical coords for painter
                 x   = r.x()     * sx / dpr + B
-                y   = r.y()     * sy / dpr + B + 3
                 rw  = max(1.0, r.width() * sx / dpr + 2.0 / dpr)
                 cx  = x + rw / 2
                 arrow_h = 20  # logical pixels — constant visual size on all displays
                 path = QPainterPath()
-                path.moveTo(cx - rw / 2, y)
-                path.lineTo(cx + rw / 2, y)
-                path.lineTo(cx, y + arrow_h)
+                if self._stripe_arrow_mode == "tip":
+                    # No label band to hang from: float the arrow so its tip
+                    # ends a tiny gap above the patch area (= the rect top).
+                    y = r.y() * sy / dpr + B - 3
+                    path.moveTo(cx - rw / 2, y - arrow_h)
+                    path.lineTo(cx + rw / 2, y - arrow_h)
+                    path.lineTo(cx, y)
+                else:
+                    y = r.y() * sy / dpr + B + 3
+                    path.moveTo(cx - rw / 2, y)
+                    path.lineTo(cx + rw / 2, y)
+                    path.lineTo(cx, y + arrow_h)
                 path.closeSubpath()
                 painter.fillPath(path, QColor("#56d6a5"))
 
