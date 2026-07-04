@@ -1,5 +1,16 @@
 # Changelog
 
+## v3.13.0-beta.92
+
+### ✨ Changed — "Use fiducial marks" now visibly adds the band (Knut)
+- Ticking **"Use fiducial marks"** now **grows the selection quad outward to the
+  registration marks** — adding the fiducial band around the patch grid — and
+  un-ticking shrinks it back, keeping the patches on the same spot. Before, it only
+  changed the internal framing, which was invisible for most targets (only Wolf
+  Faust's large frame difference showed). Now every target with fiducials visibly
+  reframes when you toggle the box. The corner-move uses the quad homography, so it
+  works on a skewed placement too.
+
 ## v3.13.0-beta.91
 
 ### ✨ Added — "Use fiducial marks" now works (Knut)

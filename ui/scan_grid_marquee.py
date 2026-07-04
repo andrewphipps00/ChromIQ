@@ -282,6 +282,28 @@ class ScanGridMarquee(QWidget):
             self._seed_corners()
         self.update()
 
+    def reframe(self, mL: float, mT: float, mR: float, mB: float,
+                pw: float, ph: float, to_fiducial: bool) -> None:
+        """Grow (or shrink) the quad by a fiducial band, keeping the patches on
+        the same image spot. Margins ``mL/mT/mR/mB`` and patch size ``pw/ph`` are
+        in .cht units. Going *to* fiducials, the current quad frames the patch
+        area and the corners move OUT to the marks; coming back they move IN. Uses
+        the quad homography, so it works on a skewed placement too."""
+        if len(self._corners) != 4 or pw <= 0 or ph <= 0:
+            return
+        h = unit_quad_homography([(c[0], c[1]) for c in self._corners])
+        if to_fiducial:                          # current quad = patch area → grow
+            pts = [(-mL / pw, -mT / ph), (1 + mR / pw, -mT / ph),
+                   (1 + mR / pw, 1 + mB / ph), (-mL / pw, 1 + mB / ph)]
+        else:                                    # current quad = fiducials → shrink
+            fw, fh = mL + pw + mR, mT + ph + mB
+            a, b = mL / fw, (mL + pw) / fw
+            c, d = mT / fh, (mT + ph) / fh
+            pts = [(a, c), (b, c), (b, d), (a, d)]
+        self._corners = [list(apply_h(h, u, v)) for u, v in pts]
+        self.changed.emit()
+        self.update()
+
     def set_sample_fraction(self, frac: float) -> None:
         """Fraction (0–1) of each patch's AREA that scanin samples — drawn as an
         inner rectangle inside every patch cell so the read zone is visible."""

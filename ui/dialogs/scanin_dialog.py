@@ -979,6 +979,32 @@ class ScannerProfileDialog(_ToolDialogBase):
             self._use_fiducials_cb.blockSignals(False)
             return
         self._rebuild_std_grid()
+        self._reframe_marquee(checked)                   # grow/shrink to the marks
+        if self._marquee.has_placement():
+            self._cur_shot()["corners"] = self._marquee.corners_image_px()
+
+    def _reframe_marquee(self, to_fiducial: bool) -> None:
+        """Grow the marquee out to the fiducial marks (or back to the patch area),
+        keeping the patches on the same image spot — so ticking the box visibly
+        adds the fiducial band around the patch grid."""
+        if self._std_cht is None:
+            return
+        from ui.scan_grid_marquee import fiducial_frame
+        from workflow.cht_parser import ChtParseError, parse_cht
+        txt = self._std_cht.read_text(errors="ignore")
+        fr = fiducial_frame(txt)
+        if fr is None:
+            return
+        try:
+            g = parse_cht(txt)
+        except ChtParseError:
+            return
+        xs = [b.x1 for b in g.patches] + [b.x2 for b in g.patches]
+        ys = [b.y1 for b in g.patches] + [b.y2 for b in g.patches]
+        px0, px1, py0, py1 = min(xs), max(xs), min(ys), max(ys)
+        fx0, fx1, fy0, fy1 = fr
+        self._marquee.reframe(px0 - fx0, py0 - fy0, fx1 - px1, fy1 - py1,
+                              px1 - px0, py1 - py0, to_fiducial)
 
     def _blink_widget(self, w) -> None:
         """Flash a widget red twice to say "can't enable that" (Knut)."""
