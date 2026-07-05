@@ -753,3 +753,60 @@ def test_printer_checkbox_sits_above_chart_row(_app):
         assert dlg._page_widget.parent() is not None
     finally:
         dlg.deleteLater()
+
+
+def test_printer_mode_hides_averaging_and_says_first_scan_wins(_app, tmp_path):
+    """Printer mode reads one scan per page — the averaging affordances hide
+    (extra shots were silently ignored before), and a run with leftover extra
+    shots says so in the log (Knut's question)."""
+    from pathlib import Path as P
+    dlg = _dialog(_app)
+    try:
+        dlg._ti3 = tmp_path / "mychart.ti2"
+        (tmp_path / "mychart.ti2").write_text("CTI2\n")
+        dlg._layout = {"patches": [{"page": 0}]}
+        dlg._pages = [0]
+        shots = dlg._page_shots(0)
+        shots.clear()
+        for k in (1, 2):
+            (tmp_path / f"s{k}.tif").write_bytes(b"II*\0")
+            shots.append({"path": tmp_path / f"s{k}.tif",
+                          "corners": [(0, 0), (9, 0), (9, 9), (0, 9)]})
+        dlg._printer_cb.setChecked(True)
+        assert not dlg._add_shot_btn.isVisibleTo(dlg)
+        assert not dlg._avg_row_w.isVisibleTo(dlg)
+        dlg._printer_scan_profile = tmp_path / "scanner.icc"
+        dlg._run_job = lambda i: None
+        dlg._execute_printer(tmp_path / "mychart", 0.9)
+        assert "first scan of each page" in dlg._log.toPlainText()
+        # Scanner mode gets the button back.
+        dlg._printer_cb.setChecked(False)
+        assert dlg._add_shot_btn.isVisibleTo(dlg)
+    finally:
+        dlg.deleteLater()
+
+
+def test_busy_bar_shows_steps_and_stops_on_finish(_app, tmp_path):
+    """The busy bar (Knut: 'nothing moves for a long time') names the running
+    step and disappears when the run ends."""
+    from pathlib import Path as P
+    dlg = _dialog(_app)
+    try:
+        dlg._ti3 = P("/tmp/proj/mychart.ti3")
+        dlg._layout = {"patches": [{"page": 0}]}
+        dlg._pages = [0]
+        shots = dlg._page_shots(0)
+        shots.clear()
+        shots.append({"path": P("/tmp/proj/s1.tif"),
+                      "corners": [(0, 0), (9, 0), (9, 9), (0, 9)]})
+        dlg._set_busy(True)
+        assert dlg._busy_bar.isVisibleTo(dlg)
+        scan_runs = []
+        dlg._scanin.run = lambda params, on_line, on_finish: scan_runs.append(params)
+        dlg._execute()
+        assert "Step 1 of 2" in dlg._busy_bar._label
+        dlg._finish(True)
+        assert not dlg._busy_bar.isVisibleTo(dlg)
+        assert not dlg._busy_tick.isActive()
+    finally:
+        dlg.deleteLater()
