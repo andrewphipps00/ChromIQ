@@ -998,11 +998,11 @@ class ScannerProfileDialog(_ToolDialogBase):
                 return
             else:
                 self._reject_chart(tr(
-                    "⚠ No chart layout found: “{name}” has no usable "
-                    ".channels.json next to it. That sidecar is written when "
-                    "ChromIQ creates the chart — pick the chart inside its "
-                    "original folder (or copy the .channels.json along with "
-                    "it).").format(name=base.name + ".channels.json"))
+                    "⚠ No chart layout found: the chart “{name}” has no "
+                    ".channels.json with usable geometry next to it. ChromIQ "
+                    "writes that sidecar when it creates a chart — pick the "
+                    "chart inside its original folder (or copy the "
+                    ".channels.json along with it).").format(name=base.name))
                 return
         if not ref.is_file():
             self._reject_chart(tr(

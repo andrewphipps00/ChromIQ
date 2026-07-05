@@ -1,5 +1,17 @@
 # Changelog
 
+## v3.13.0-beta.112
+
+### ✨ New
+- Printer profiling from a scan now works with charts made outside ChromIQ
+  (#105). A new "Chart geometry (.cht)" row in the scanner tool's printer mode
+  takes the per-page .cht files printtarg wrote for the chart — pick the .ti2,
+  then the .cht page files, and the chart loads like any ChromIQ chart (grid
+  overlay, page selector, scanner-as-instrument reading). The picked pages are
+  verified against the chart's .ti2 patch by patch, so a wrong or missing page
+  is caught before anything is read. For ChromIQ charts the row simply notes
+  that the geometry comes with the chart.
+
 ## v3.13.0-beta.111
 
 ### 🐛 Fixes
