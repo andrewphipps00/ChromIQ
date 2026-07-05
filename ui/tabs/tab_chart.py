@@ -559,10 +559,10 @@ KNUT_PRESETS: list[_Ti1Preset] = [
     # management, scanned on a flatbed, then read via Tools → "Build scanner or
     # camera profile" with "Profile my printer from this scan". The recipes are
     # Knut's exported presets verbatim (only the paper differs between the two).
-    # Slug stays "landscape" (shipped identity, never change); Knut renamed
-    # the chart itself to Portrait in the #107 refresh.
+    # Knut's #107 refresh FILE said "Portrait", but both charts are laid out
+    # on rotated (landscape) sheets — the name stays truthful (Basti).
     _Ti1Preset("scanner_a4_3430p_1page_landscape",
-               "A4-3430p-1page-Portrait-w4.0mm" + KNUT_SCANNER_SUFFIX,
+               "A4-3430p-1page-Landscape-w4.0mm" + KNUT_SCANNER_SUFFIX,
                "SS", "A4R", 1.0, 4, 1,
                ti1_asset=f"{_KNUT_SCANNER_DIR}/a4/chart.ti1", patches=3430,
                white=2, black=2, tiff_16bit=False, suffix=KNUT_SCANNER_SUFFIX,

@@ -1386,7 +1386,13 @@ class SettingsDialog(QDialog):
         self._isty_size.setSingleStep(0.5)
         self._isty_size.setSuffix(" mm")
         self._isty_size.setSpecialValueText(tr("auto"))
-        g.addWidget(self._isty_size, 1, 2)
+        _size_wrap = QWidget(self)
+        _size_row = QHBoxLayout(_size_wrap)
+        _size_row.setContentsMargins(0, 0, 0, 0)
+        _size_row.setSpacing(6)
+        _size_row.addWidget(QLabel(tr("Size:"), self))
+        _size_row.addWidget(self._isty_size)
+        g.addWidget(_size_wrap, 1, 2)
         sty_row = QHBoxLayout()
         self._isty_bold = QCheckBox(tr("Bold"), self)
         self._isty_italic = QCheckBox(tr("Italic"), self)
@@ -1605,6 +1611,31 @@ class SettingsDialog(QDialog):
         from workflow.layout_engine.presets import PresetStore
         self._layout_store = PresetStore()   # empty → get() returns shipped defaults
         self._load_layout_combo()
+        self._reset_indicator_style_widgets()
+
+    def _reset_indicator_style_widgets(self) -> None:
+        """Reset the strip-indicator style group to the shipped defaults.
+
+        Part of this page's "Restore factory defaults" — a user who picked an
+        unfortunate label font/size had no way back, because the reset only
+        covered the layout combos (#108 follow-up). Saved on OK like any edit."""
+        if getattr(self, "_isty_font", None) is None:
+            return
+        from core.settings import DEFAULTS
+        _fi = self._isty_font.findData(DEFAULTS["strip_indicator_font"])
+        self._isty_font.setCurrentIndex(_fi if _fi >= 0 else 0)
+        self._isty_size.setValue(float(DEFAULTS["strip_indicator_size_mm"]))
+        self._isty_bold.setChecked(bool(DEFAULTS["strip_indicator_bold"]))
+        self._isty_italic.setChecked(bool(DEFAULTS["strip_indicator_italic"]))
+        _ri = self._isty_rotation.findData(int(DEFAULTS["strip_indicator_rotation"]))
+        self._isty_rotation.setCurrentIndex(_ri if _ri >= 0 else 0)
+        _ai = self._isty_align.findData(DEFAULTS["strip_indicator_align"])
+        self._isty_align.setCurrentIndex(_ai if _ai >= 0 else 0)
+        self._isty_offset.setValue(float(DEFAULTS["strip_label_offset_mm"]))
+        _ui = self._isty_underline.findData(DEFAULTS["strip_underline_mode"])
+        self._isty_underline.setCurrentIndex(_ui if _ui >= 0 else 0)
+        self._isty_ul_thick.setValue(float(DEFAULTS["strip_underline_thickness_mm"]))
+        self._isty_ul_gap.setValue(float(DEFAULTS["strip_underline_gap_mm"]))
 
     def _open_layout_presets_folder(self) -> None:
         from core.preset_store import reveal_in_file_manager, tab_dir

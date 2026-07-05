@@ -199,3 +199,28 @@ def test_apply_indicator_style_overlays_recipe():
     assert r.indicator_rotation == 270
     assert r.underline_mode == "black"
     assert set(INDICATOR_STYLE_KEYS) <= set(vars(r))
+
+
+def test_restore_layout_defaults_resets_indicator_style(_app, tmp_path):
+    """"Restore factory defaults" on the Chart Layout page also resets the
+    strip-indicator style group — a user with an unfortunate label font/size
+    had no way back before (#108 follow-up)."""
+    import core.preset_store as ps
+    from ui.dialogs.settings_dialog import SettingsDialog
+    with mock.patch.object(ps, "presets_dir", lambda: Path(tmp_path)):
+        st = _FakeSettings(**{"strip_indicator_font": "Inter",
+                              "strip_indicator_size_mm": 0.5,
+                              "strip_indicator_bold": True})
+        dlg = SettingsDialog(st, None)
+        try:
+            assert dlg._isty_size.value() == 0.5
+            dlg._restore_layout_defaults()
+            assert dlg._isty_font.currentData() == DEFAULTS["strip_indicator_font"]
+            assert dlg._isty_size.value() == DEFAULTS["strip_indicator_size_mm"]
+            assert dlg._isty_bold.isChecked() is bool(
+                DEFAULTS["strip_indicator_bold"])
+            dlg._save_and_close()
+        finally:
+            dlg.deleteLater()
+    assert st.get("strip_indicator_font") == DEFAULTS["strip_indicator_font"]
+    assert st.get("strip_indicator_size_mm") == DEFAULTS["strip_indicator_size_mm"]
