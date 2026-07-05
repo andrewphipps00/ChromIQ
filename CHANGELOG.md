@@ -1,5 +1,30 @@
 # Changelog
 
+## v3.13.0-beta.114
+
+### 🐛 Fixes
+- Scanner/camera profile tool: scans from real scanners (16-bit, high dpi)
+  showed no preview — their decoded size exceeds Qt's image memory limit, so
+  the marquee stayed empty and the grid couldn't be aligned, leading to
+  misaligned partial reads (#108). Previews now load regardless of size and
+  bit depth, and a scan that truly can't be decoded says so instead of
+  leaving the view blank. scanin's "not all sample values have been filled"
+  is surfaced as a clear per-page warning.
+- Strip labels: the automatic label size no longer shrinks below 1.5 mm when a
+  wide font meets a narrow-patch chart — labels could become so small they
+  looked switched off. "Restore factory defaults" in Settings → Chart Layout
+  now also resets the strip-label style (font, size, rotation, underline …),
+  and the size box there finally has a label.
+- The A4 Scanner built-in preset is named …-Landscape-… again (the beta.113
+  note saying "Portrait" followed a misnamed file — both scanner charts are
+  laid out on rotated, landscape sheets).
+
+### ✨ Improvements
+- Scanner/camera profile tool: the "Profile my printer from this scan" switch
+  now sits at the top of the chart section (it changes the fields below it),
+  and the Page selector sits directly above the scan it switches, with a
+  "one scan per page — k of n picked" counter (#108).
+
 ## v3.13.0-beta.113
 
 ### ✨ New
