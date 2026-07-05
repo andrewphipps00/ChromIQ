@@ -178,6 +178,7 @@ INDICATOR_LETTER_SPACING = 0.12
 # Auto-sized multi-letter labels fill only this fraction of the strip width, so
 # the inter-indicator gap exceeds the intra-letter gap (#93).
 INDICATOR_FIT_FRAC = 0.80
+INDICATOR_MIN_LEGIBLE_MM = 1.5   # auto-size floor — smaller is unreadable in print
 
 
 def _draw_indicator(draw, cx: int, top: int, text: str, font, spacing_px: int) -> None:
@@ -241,7 +242,14 @@ def effective_indicator_size_mm(geom, dpi: int, font: str, size_mm: float) -> fl
     # the gap BETWEEN indicators stays larger than the gap between the two
     # letters of one indicator (otherwise "AA AB" reads as "A AA B"). (#93)
     avail = geom.pwid * INDICATOR_FIT_FRAC
-    return target if widest2 <= avail else target * avail / widest2
+    if widest2 <= avail:
+        return target
+    # Never shrink below legibility: with a wide proportional font on a
+    # narrow-patch chart the fit collapsed to a fraction of a millimetre —
+    # labels so small a user thought they were switched off (#108 follow-up).
+    # A slightly-too-wide label beats an invisible one; the preflight
+    # too-wide warning still tells the user why.
+    return max(min(target, INDICATOR_MIN_LEGIBLE_MM), target * avail / widest2)
 
 
 def _furniture_reserves_mm(geom, kw: dict) -> tuple[float, float]:

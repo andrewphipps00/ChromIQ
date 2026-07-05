@@ -131,6 +131,32 @@ def _user_profile_dir() -> Path:
     return Path.home() / ".local" / "share" / "color" / "icc"
 
 
+def _load_scan_qimage(path) -> "QImage":
+    """Load a scan for the marquee, robust to real scanner output (#108).
+
+    A plain ``QImage(path)`` silently returns null for images whose decoded
+    size exceeds Qt's allocation limit (256 MB — a 16-bit A4 scan at 600 dpi
+    is over it), which left the marquee empty so the grid could never be
+    aligned. Lift the limit; if Qt still can't decode the format, fall back to
+    Pillow and convert to 8-bit RGB (the on-screen preview doesn't need more).
+    """
+    from PyQt6.QtGui import QImageReader
+    reader = QImageReader(str(path))
+    reader.setAllocationLimit(0)
+    img = reader.read()
+    if not img.isNull():
+        return img
+    try:
+        from PIL import Image
+        from PIL.ImageQt import ImageQt
+        with Image.open(path) as im:
+            return QImage(ImageQt(im.convert("RGB"))).copy()
+    except Exception:  # noqa: BLE001 — the caller shows the empty-marquee state
+        log.warning("could not load scan preview %s (Qt: %s)",
+                    path, reader.errorString())
+        return QImage()
+
+
 def _chart_base(ti3: Path) -> Path:
     stem = ti3.stem
     if stem.endswith("-verify"):
@@ -350,6 +376,69 @@ class ScannerProfileDialog(_ToolDialogBase):
         self._chromiq_box = QWidget(self)
         v = QVBoxLayout(self._chromiq_box)
         v.setContentsMargins(0, 0, 0, 0)
+        # The printer-mode switch sits FIRST: it changes the labels and fields
+        # below it (".ti3" vs ".ti2", the .cht row, the scanner profile), so it
+        # must be seen before them (Knut, #108).
+        # --- Printer-profile mode: use the scanner as the measuring instrument ---
+        self._printer_cb = QCheckBox(
+            tr("Profile my printer from this scan (scanner as the instrument)"), self)
+        # Help lives only behind the ⓘ (click to open) — no hover tooltip on the
+        # checkbox itself.
+        _pr_help = tr(
+            "Turn this on to build a profile for your PRINTER from this scan — using "
+            "your flat-bed scanner in place of a spectrophotometer — instead of a "
+            "profile for the scanner itself.\n\n"
+            "How it works: you print one of your own ChromIQ charts, scan the print, "
+            "and ChromIQ reads the patches and measures their colour through a "
+            "scanner profile you made earlier. That gives colprof what it needs to "
+            "build a printer profile — no spectrophotometer required.\n\n"
+            "What you need first: a profile for THIS scanner. Build one in the normal "
+            "scanner mode from a bought target (an IT8 or LaserSoft sheet). The "
+            "printer profile is only as good as that scanner profile, so make a solid "
+            "one first — and note the chicken-and-egg: profile the scanner off a "
+            "bought target, then use it to profile the printer.\n\n"
+            "Honest expectations: a scanner-based printer profile is great for "
+            "clearing colour casts and making everyday prints look better, but it "
+            "won't match a profile made with a real spectrophotometer. For critical "
+            "or proofing work, a spectro is still the way.")
+        self._printer_cb.toggled.connect(self._on_printer_toggled)
+        # An always-visible ⓘ next to the checkbox opens the help on click.
+        _pr_row = QHBoxLayout()
+        _pr_row.addWidget(self._printer_cb)
+        _pr_row.addStretch(1)
+        _pr_row.addWidget(self._tip(tr("Printer profile from a scan"), _pr_help),
+                          0, Qt.AlignmentFlag.AlignVCenter)
+        v.addLayout(_pr_row)
+
+        self._printer_box = QWidget(self)
+        pv = QVBoxLayout(self._printer_box)
+        pv.setContentsMargins(22, 0, 0, 2)
+        # Same labelled-field pattern as the other rows: an always-visible ⓘ that
+        # carries the extensive help (a plain hover tooltip left no visible cue).
+        pv.addLayout(self._labelled(
+            tr("Scanner profile (.icc):"), tr("Scanner profile"),
+            tr("The profile for THIS scanner that ChromIQ uses to turn the scanned "
+            "colours into real, measured colour — the step that makes the printer "
+            "profile trustworthy.\n\n"
+            "You built this earlier in the normal scanner mode: scan a bought target "
+            "(an IT8 or LaserSoft sheet), press Build, and you get a scanner .icc. "
+            "Pick that file here.\n\n"
+            "Without it, the scan would be raw scanner colour — carrying the "
+            "scanner's own cast — and the printer profile would come out wrong. "
+            "That's why it's required for this mode.")))
+        prow = QHBoxLayout()
+        self._printer_prof_field = QLineEdit(self)
+        self._printer_prof_field.setReadOnly(True)
+        self._printer_prof_field.setPlaceholderText(
+            tr("Pick the scanner profile you built earlier…"))
+        prow.addWidget(self._printer_prof_field, 1)
+        pb = make_browse_button(self, tr("Browse…"), icon="folder_measure")
+        pb.clicked.connect(self._pick_scanner_profile)
+        prow.addWidget(pb)
+        pv.addLayout(prow)
+        self._printer_box.setVisible(False)
+        v.addWidget(self._printer_box)
+
         _chart_row = QHBoxLayout()
         self._chart_label = QLabel(tr("Measured chart (.ti3):"), self)
         _chart_row.addWidget(self._chart_label)
@@ -427,71 +516,18 @@ class ScannerProfileDialog(_ToolDialogBase):
         self._page_combo = NoScrollComboBox(self)
         self._page_combo.currentIndexChanged.connect(self._on_page_changed)
         self._page_row.addWidget(self._page_combo)
+        # Every page needs its own capture — say so, and count what's still
+        # missing (Knut, #108).
+        self._page_hint = self._hint_label("")
+        self._page_row.addWidget(self._page_hint)
         self._page_row.addStretch(1)
         self._page_widget = QWidget(self)
         self._page_widget.setLayout(self._page_row)
         self._page_widget.setVisible(False)
-        v.addWidget(self._page_widget)
+        # Added to the shared form in _build_inputs, directly above the scan
+        # field — picking a page changes which scan is shown, so the two belong
+        # together (Knut, #108).
 
-        # --- Printer-profile mode: use the scanner as the measuring instrument ---
-        self._printer_cb = QCheckBox(
-            tr("Profile my printer from this scan (scanner as the instrument)"), self)
-        # Help lives only behind the ⓘ (click to open) — no hover tooltip on the
-        # checkbox itself.
-        _pr_help = tr(
-            "Turn this on to build a profile for your PRINTER from this scan — using "
-            "your flat-bed scanner in place of a spectrophotometer — instead of a "
-            "profile for the scanner itself.\n\n"
-            "How it works: you print one of your own ChromIQ charts, scan the print, "
-            "and ChromIQ reads the patches and measures their colour through a "
-            "scanner profile you made earlier. That gives colprof what it needs to "
-            "build a printer profile — no spectrophotometer required.\n\n"
-            "What you need first: a profile for THIS scanner. Build one in the normal "
-            "scanner mode from a bought target (an IT8 or LaserSoft sheet). The "
-            "printer profile is only as good as that scanner profile, so make a solid "
-            "one first — and note the chicken-and-egg: profile the scanner off a "
-            "bought target, then use it to profile the printer.\n\n"
-            "Honest expectations: a scanner-based printer profile is great for "
-            "clearing colour casts and making everyday prints look better, but it "
-            "won't match a profile made with a real spectrophotometer. For critical "
-            "or proofing work, a spectro is still the way.")
-        self._printer_cb.toggled.connect(self._on_printer_toggled)
-        # An always-visible ⓘ next to the checkbox opens the help on click.
-        _pr_row = QHBoxLayout()
-        _pr_row.addWidget(self._printer_cb)
-        _pr_row.addStretch(1)
-        _pr_row.addWidget(self._tip(tr("Printer profile from a scan"), _pr_help),
-                          0, Qt.AlignmentFlag.AlignVCenter)
-        v.addLayout(_pr_row)
-
-        self._printer_box = QWidget(self)
-        pv = QVBoxLayout(self._printer_box)
-        pv.setContentsMargins(22, 0, 0, 2)
-        # Same labelled-field pattern as the other rows: an always-visible ⓘ that
-        # carries the extensive help (a plain hover tooltip left no visible cue).
-        pv.addLayout(self._labelled(
-            tr("Scanner profile (.icc):"), tr("Scanner profile"),
-            tr("The profile for THIS scanner that ChromIQ uses to turn the scanned "
-            "colours into real, measured colour — the step that makes the printer "
-            "profile trustworthy.\n\n"
-            "You built this earlier in the normal scanner mode: scan a bought target "
-            "(an IT8 or LaserSoft sheet), press Build, and you get a scanner .icc. "
-            "Pick that file here.\n\n"
-            "Without it, the scan would be raw scanner colour — carrying the "
-            "scanner's own cast — and the printer profile would come out wrong. "
-            "That's why it's required for this mode.")))
-        prow = QHBoxLayout()
-        self._printer_prof_field = QLineEdit(self)
-        self._printer_prof_field.setReadOnly(True)
-        self._printer_prof_field.setPlaceholderText(
-            tr("Pick the scanner profile you built earlier…"))
-        prow.addWidget(self._printer_prof_field, 1)
-        pb = make_browse_button(self, tr("Browse…"), icon="folder_measure")
-        pb.clicked.connect(self._pick_scanner_profile)
-        prow.addWidget(pb)
-        pv.addLayout(prow)
-        self._printer_box.setVisible(False)
-        v.addWidget(self._printer_box)
         form.addWidget(self._chromiq_box)
 
     def _build_standard_inputs(self, form) -> None:
@@ -659,7 +695,7 @@ class ScannerProfileDialog(_ToolDialogBase):
         scan = shot["path"]
         self._scan_field.setText(str(scan) if scan else "")
         if scan and Path(scan).is_file():
-            self._marquee.set_image(QImage(str(scan)))
+            self._marquee.set_image(_load_scan_qimage(scan))
             if shot["corners"]:
                 self._marquee.set_corners(shot["corners"])
         else:
@@ -679,6 +715,12 @@ class ScannerProfileDialog(_ToolDialogBase):
         self._shot_combo.setVisible(multi)
         self._remove_shot_btn.setVisible(multi)
         self._avg_row_w.setVisible(multi)
+        if len(self._pages) > 1:
+            done = sum(1 for pg in self._pages
+                       if any(sh["path"] for sh in self._page_shots(pg)))
+            self._page_hint.setText(
+                tr("one scan per page — {k} of {n} picked").format(
+                    k=done, n=len(self._pages)))
 
     def _add_shot(self) -> None:
         self._capture_current_corners()
@@ -707,6 +749,8 @@ class ScannerProfileDialog(_ToolDialogBase):
         self._build_chromiq_inputs(form)
         self._build_standard_inputs(form)
 
+        # Page selector directly above the scan it switches (Knut, #108).
+        form.addWidget(self._page_widget)
         form.addLayout(self._labelled(
             tr("Scan or photo of the target (TIFF):"), tr("Scan or photo"),
             tr("Your capture of the target on the device you want to profile: a "
@@ -1294,7 +1338,7 @@ class ScannerProfileDialog(_ToolDialogBase):
             return
         self._cur_shot()["path"] = tif                 # load the demo scan
         self._scan_field.setText(str(tif))
-        self._marquee.set_image(QImage(str(tif)))
+        self._marquee.set_image(_load_scan_qimage(tif))
         if self._cur_shot()["corners"]:
             self._marquee.set_corners(self._cur_shot()["corners"])
         elif self._restore_placement():
@@ -1588,7 +1632,15 @@ class ScannerProfileDialog(_ToolDialogBase):
         self._cur_shot()["path"] = Path(path)
         self._scan_field.setText(path)
         _remember_dir(self._settings, self.TOOL_KEY, Path(path).parent)
-        self._marquee.set_image(QImage(path))
+        img = _load_scan_qimage(path)
+        self._marquee.set_image(img)
+        if img.isNull():
+            # Never leave the user staring at an empty marquee without a word —
+            # without a preview the grid can't be aligned (#108).
+            self._log.appendPlainText(tr(
+                "⚠ This scan couldn't be decoded for the preview, so the grid "
+                "can't be aligned on it. Re-save the scan as an 8-bit TIFF (or "
+                "PNG) and pick it again."))
         if self._cur_shot()["corners"]:
             self._marquee.set_corners(self._cur_shot()["corners"])
         elif self._restore_placement():          # reuse last session's placement
@@ -1776,6 +1828,15 @@ class ScannerProfileDialog(_ToolDialogBase):
         if job["kind"] == "scanin":
             self._log.appendPlainText(job["label"])
 
+            unfilled = []
+
+            def _watch(line: str) -> None:
+                # scanin keeps going after this, but the read is partial — buried
+                # in the -v noise Knut only noticed via the bad diagnostics (#108).
+                if "Not all sample values have been filled" in line:
+                    unfilled.append(line)
+                self._log_line(line)
+
             def _done(code: int, i=i, job=job) -> None:
                 fail = self._scanin.primary_failure()
                 if code != 0 or fail is not None or not job["params"].out_ti3.exists():
@@ -1783,11 +1844,18 @@ class ScannerProfileDialog(_ToolDialogBase):
                     self._log.appendPlainText(f"[ERROR] {msg}")
                     self._finish(False)
                     return
+                if unfilled:
+                    self._log.appendPlainText(tr(
+                        "⚠ Not every patch on this page could be read — the grid "
+                        "placement is probably off. Check the diagnostic image "
+                        "(if saved), realign the grid on this page's scan and "
+                        "build again; a profile from a partial read will be "
+                        "wrong."))
                 if not job["params"].is_printer:     # printer .ti3 is accumulated;
                     self._sanitize_scanner_ti3(job["params"].out_ti3)  # sanitize at end
                 self._run_job(i + 1)
 
-            self._scanin.run(job["params"], on_line=self._log_line, on_finish=_done)
+            self._scanin.run(job["params"], on_line=_watch, on_finish=_done)
         elif job["kind"] == "average":
             self._log.appendPlainText(
                 tr("Averaging {n} scans of this page…").format(n=len(job["ti3s"])))

@@ -684,3 +684,72 @@ def test_byo_state_resets_on_new_chart_pick(_app, tmp_path):
         assert dlg._byo_field.text() == ""
     finally:
         dlg.deleteLater()
+
+
+# ---------------------------------------------------------------------------
+# #108 — scan previews must survive real scanner output
+# ---------------------------------------------------------------------------
+
+def test_load_scan_qimage_survives_allocation_limit(_app, tmp_path):
+    """Qt silently nulls images whose decode exceeds its allocation limit —
+    Knut's 16-bit A4 scans at 600 dpi. The loader lifts the limit (#108)."""
+    from PyQt6.QtGui import QImage, QImageReader
+    import ui.dialogs.scanin_dialog as M
+    img = QImage(800, 600, QImage.Format.Format_RGBX64)   # 3.8 MB decoded
+    img.fill(0xFFFF0000)
+    p = tmp_path / "scan16.tif"
+    assert img.save(str(p))
+    old = QImageReader.allocationLimit()
+    QImageReader.setAllocationLimit(1)          # force the failure mode
+    try:
+        assert QImage(str(p)).isNull()          # the old code path: empty marquee
+        loaded = M._load_scan_qimage(p)
+        assert not loaded.isNull()
+        assert loaded.width() == 800
+    finally:
+        QImageReader.setAllocationLimit(old)
+
+
+def test_page_hint_counts_picked_scans(_app, tmp_path):
+    """Multi-page charts show "one scan per page — k of n picked" so a missing
+    page is obvious before Build (#108)."""
+    from pathlib import Path as P
+    dlg = _dialog(_app)
+    try:
+        dlg._ti3 = P("/tmp/proj/mychart.ti3")
+        dlg._layout = {"patches": [{"page": 0}, {"page": 1}]}
+        dlg._pages = [0, 1]
+        dlg._refresh_shot_bar()
+        assert "0 of 2" in dlg._page_hint.text()
+        dlg._page_shots(0).clear()
+        dlg._page_shots(0).append({"path": P("/tmp/proj/s1.tif"),
+                                   "corners": None})
+        dlg._refresh_shot_bar()
+        assert "1 of 2" in dlg._page_hint.text()
+    finally:
+        dlg.deleteLater()
+
+
+def test_printer_checkbox_sits_above_chart_row(_app):
+    """The printer-mode switch changes the labels/fields below it, so it must
+    come first in the ChromIQ box (Knut, #108)."""
+    dlg = _dialog(_app)
+    try:
+        v = dlg._chromiq_box.layout()
+        def _index_of(w):
+            for i in range(v.count()):
+                item = v.itemAt(i)
+                if item.widget() is w:
+                    return i
+                lay = item.layout()
+                if lay is not None:
+                    for j in range(lay.count()):
+                        if lay.itemAt(j).widget() is w:
+                            return i
+            return -1
+        assert _index_of(dlg._printer_cb) < _index_of(dlg._chart_label)
+        # The page selector moved out to the shared form, above the scan field.
+        assert _index_of(dlg._page_widget) == -1
+        assert dlg._page_widget.parent() is not None
+    finally:
+        dlg.deleteLater()

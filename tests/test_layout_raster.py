@@ -642,3 +642,21 @@ def test_notes_clip_strip_renders_and_scales():
     img = raster.render_clip_strip("notes", width_px=200, height_px=2000,
                                    dpi=200, font_family="Inter")
     assert (np.asarray(img.convert("L")) < 128).any()
+
+
+def test_auto_indicator_size_never_collapses_below_legibility():
+    """#108 follow-up: a wide proportional font on a narrow-patch chart used to
+    shrink the auto label size to a fraction of a millimetre — so small a user
+    thought the labels were off. The auto fit now floors at
+    INDICATOR_MIN_LEGIBLE_MM (while an explicit size is honoured verbatim)."""
+    from types import SimpleNamespace
+    from workflow.layout_engine import raster
+
+    geom = SimpleNamespace(txhisl=3.0, pwid=4.0)   # 4 mm patches (Scanner-style)
+    eff = raster.effective_indicator_size_mm(geom, 300, "Inter", 0.0)
+    assert eff >= raster.INDICATOR_MIN_LEGIBLE_MM
+    # Explicit sizes are the user's call, even tiny ones.
+    assert raster.effective_indicator_size_mm(geom, 300, "Inter", 0.4) == 0.4
+    # Roomy strips keep the full instrument text height (no floor inflation).
+    wide = SimpleNamespace(txhisl=3.0, pwid=40.0)
+    assert raster.effective_indicator_size_mm(wide, 300, "Inter", 0.0) == 3.0
