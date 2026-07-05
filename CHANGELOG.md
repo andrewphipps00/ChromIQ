@@ -1,5 +1,15 @@
 # Changelog
 
+## v3.13.0-beta.120
+
+### 🐛 Fixes
+- The scan-geometry mismatch message now names the verified cause and the
+  remedy: charts packed to the last few percent of page capacity paginate
+  differently in printtarg's scan mode (measured: ColorMunki double density
+  diverges at patch scale 0.91–0.93, matches again at 0.90 and below; i1Pro
+  and plain ColorMunki never diverge). Reduce the Patch Size Scale slightly
+  and regenerate, and the chart carries scan geometry after all (Knut).
+
 ## v3.13.0-beta.119
 
 ### ✨ Improvements
