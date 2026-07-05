@@ -830,6 +830,12 @@ class ScannerProfileDialog(_ToolDialogBase):
         std = self._standard_mode()
         self._chromiq_box.setVisible(not std)
         self._standard_box.setVisible(std)
+        # ChromIQ charts carry no fiducial marks, so hide the option and force it
+        # off — the same align-the-patches / derive-the-F process is used either
+        # way. (Shows again automatically for standard targets that have marks.)
+        self._use_fiducials_cb.setVisible(std)
+        if not std:
+            self._use_fiducials_cb.setChecked(False)
         self._reset_shots()
         self._scan_field.setText("")
         self._marquee.set_image(QImage())
