@@ -1,5 +1,12 @@
 # Changelog
 
+## v3.13.0-beta.103
+
+### ✨ Scanner: fiducial option hidden for ChromIQ charts
+- In **A chart I made in ChromIQ** mode the **Use fiducial marks** checkbox is now
+  hidden (ChromIQ charts print no fiducial marks), and the same align-the-patches
+  process is used as for standard targets.
+
 ## v3.13.0-beta.102
 
 ### ✨ Scanner: fiducial frame drawn on screen + one shared geometry
