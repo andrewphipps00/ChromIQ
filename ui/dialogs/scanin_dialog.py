@@ -118,6 +118,19 @@ CAMERA_HELP = tr(
     "studio or repro work, less so across mixed lighting.")
 
 
+def _user_profile_dir() -> Path:
+    """The per-user colour-profile folder programs read (Nelson): ColorSync on
+    macOS, the spool color store on Windows, colord's per-user dir elsewhere."""
+    import os
+    import sys
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "ColorSync" / "Profiles"
+    if sys.platform == "win32":
+        return (Path(os.environ.get("SystemRoot", r"C:\Windows"))
+                / "System32" / "spool" / "drivers" / "color")
+    return Path.home() / ".local" / "share" / "color" / "icc"
+
+
 def _chart_base(ti3: Path) -> Path:
     stem = ti3.stem
     if stem.endswith("-verify"):
@@ -203,6 +216,7 @@ class ScannerProfileDialog(_ToolDialogBase):
         self._layout: dict | None = None
         self._printer_scan_profile: Path | None = None   # scanner ICC for printer mode
         self._chart_measured = False   # loaded chart has a real .ti3 (not just .ti2)
+        self._chart_reject_reason: str | None = None  # why the last pick failed (#101)
         self._pages: list[int] = []
         self._page = 0
         # Per page, a list of "shots" — one or more scans of the same page, each
@@ -230,6 +244,17 @@ class ScannerProfileDialog(_ToolDialogBase):
             "you can install it as your device's input profile."))
         self._reveal_btn.clicked.connect(self._reveal_profile)
         self._reveal_btn.setVisible(False)
+        # "Install profile" — copy the built .icc into the user's colour-profile
+        # folder so apps can pick it from their profile lists (Nelson).
+        self._install_btn = self._button_box.addButton(
+            tr("Install profile"), QDialogButtonBox.ButtonRole.ActionRole)
+        self._install_btn.setToolTip(tr(
+            "Copy the profile just built into your user colour-profile folder "
+            "({dir}), where colour-managed programs look for profiles. Restart "
+            "a program to see it in its lists.").format(
+                dir=str(_user_profile_dir())))
+        self._install_btn.clicked.connect(self._install_profile)
+        self._install_btn.setVisible(False)
         self.setStyleSheet(self.styleSheet() + neutral_controls_qss(SPEC_GREEN))
         self._style_primary_button()
         self._refresh()
@@ -239,6 +264,24 @@ class ScannerProfileDialog(_ToolDialogBase):
             return
         from core.preset_store import reveal_in_file_manager
         reveal_in_file_manager(self._last_profile.parent)
+
+    def _install_profile(self) -> None:
+        if self._last_profile is None:
+            return
+        import shutil
+        dest_dir = _user_profile_dir()
+        try:
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            dest = dest_dir / self._last_profile.name
+            shutil.copy2(self._last_profile, dest)
+        except OSError as exc:
+            self._log.appendPlainText(
+                f"[ERROR] {tr('Installing the profile failed: {e}').format(e=exc)}")
+            return
+        self._log.appendPlainText(
+            tr("[OK] Profile installed: {p}").format(p=dest))
+        self._log.appendPlainText(tr(
+            "Colour-managed programs list it after they restart."))
 
     def _style_primary_button(self) -> None:
         c = SPEC_GREEN
@@ -794,8 +837,65 @@ class ScannerProfileDialog(_ToolDialogBase):
         row3.addWidget(self._ptype, 1)
         row3.addStretch(1)
         form.addLayout(row3)
+        # Optional profile name (Nelson): without it the .icc inherits the
+        # chart / target scan's name, which reads like a paper profile — let the
+        # user call it e.g. "Epson ET-8550 scanner" instead.
+        row4 = QHBoxLayout()
+        row4.addWidget(QLabel(tr("Profile name:")))
+        self._prof_name = QLineEdit(self)
+        self._prof_name.setPlaceholderText(
+            tr("optional — otherwise named after the chart / target"))
+        row4.addWidget(self._prof_name, 1)
+        row4.addWidget(self._tip(
+            tr("Profile name"),
+            tr("What the finished profile is called — both the .icc file and "
+               "the name colour-managed programs show in their profile lists.\n\n"
+               "Left empty, the profile inherits the name of the chart or "
+               "target scan it was built from (e.g. a paper name), which is "
+               "easy to mistake for a printer profile later. Give it a name "
+               "that says what it is, like “Epson ET-8550 scanner”.")))
+        form.addLayout(row4)
+
+    def _custom_profile_stem(self) -> str | None:
+        """The user-chosen profile name as a filesystem-safe stem, or None."""
+        import re as _re
+        raw = self._prof_name.text().strip()
+        if not raw:
+            return None
+        return _re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", raw).strip(". ") or None
+
+    def _apply_profile_name(self, ti3: Path) -> tuple[Path, str | None]:
+        """Honour the optional profile name (Nelson): colprof names the .icc
+        after its .ti3, so copy *ti3* to ``<name>.ti3`` and return it together
+        with the description to embed. Returns (*ti3*, None) when no name was
+        given — the caller keeps its defaults."""
+        stem = self._custom_profile_stem()
+        if not stem:
+            return ti3, None
+        named = ti3.with_name(stem + ".ti3")
+        if named != ti3:
+            import shutil
+            try:
+                shutil.copy2(ti3, named)
+            except OSError as exc:
+                self._log.appendPlainText(
+                    f"[WARN] {tr('Could not apply the profile name: {e}').format(e=exc)}")
+                return ti3, self._prof_name.text().strip()
+            ti3 = named
+        return ti3, self._prof_name.text().strip()
 
     # ------------------------------------------------------------------ chart
+    def _reject_chart(self, reason: str) -> None:
+        """Reject the picked chart with *reason* shown in BOTH the chart note
+        and the status log — Knut picked a chart, missed the small note, and
+        only hit a generic dead-Browse message much later (#101)."""
+        self._layout = None
+        self._pages = []
+        self._chart_reject_reason = reason
+        self._chart_note.setText(reason)
+        self._log.appendPlainText(reason)
+        self._refresh()
+
     def _pick_chart(self) -> None:
         if self._printer_mode():
             title, flt = tr("Choose the chart you printed"), _CHART_FILTER
@@ -809,33 +909,47 @@ class ScannerProfileDialog(_ToolDialogBase):
 
     def _set_chart(self, picked: Path) -> None:
         import json
-        # Prefer the measured .ti3; fall back to the chart's .ti2 (aim values) so a
-        # chart you only PRINTED can still be used for a printer profile. Both files
-        # exist for engine and printtarg charts; both carry loc + RGB + XYZ.
+        # Honour the file the user actually picked (#101): auto-preferring a
+        # sibling .ti3 silently swapped Knut's explicit .ti2 pick for an
+        # unrelated scanner .ti3 that happened to share the folder — the field
+        # then showed a file he never chose. Only when the picked file itself
+        # isn't a chart table (e.g. a "-verify" pick) fall back to the measured
+        # .ti3, then the .ti2 (aim values) — a chart you only PRINTED still
+        # works for a printer profile; both carry loc + RGB + XYZ.
         base = _chart_base(picked)
         ti3, ti2 = base.with_suffix(".ti3"), base.with_suffix(".ti2")
-        ref = ti3 if ti3.is_file() else ti2
-        self._chart_measured = ti3.is_file()
+        if (picked.suffix.lower() in (".ti2", ".ti3") and picked.is_file()
+                and picked.stem == base.name):     # not a "-verify" alias pick
+            ref = picked
+        else:
+            ref = ti3 if ti3.is_file() else ti2
+        self._chart_measured = ref.suffix.lower() == ".ti3" and ref.is_file()
         self._ti3 = ref
         self._ti3_field.setText(str(ref))
         _remember_dir(self._settings, self.TOOL_KEY, picked.parent)
         self._reset_shots()
         channels = base.with_name(base.name + ".channels.json")
         if not has_scanner_geometry(channels):
-            self._layout = None
-            self._pages = []
-            self._chart_note.setText(tr(
-                "⚠ Not a layout-engine chart — scanner profiling needs a chart "
-                "created with ChromIQ's layout engine."))
-            self._refresh()
-            return
+            # Recovery (#101): the sidecar may not share the picked file's stem
+            # (e.g. only some files were copied out of a run folder, or renamed).
+            # If the folder holds exactly one usable .channels.json, take it —
+            # a mispairing is still caught later by the loc-alignment check.
+            cands = [c for c in sorted(base.parent.glob("*.channels.json"))
+                     if has_scanner_geometry(c)]
+            if len(cands) == 1:
+                channels = cands[0]
+            else:
+                self._reject_chart(tr(
+                    "⚠ No chart layout found: “{name}” has no usable "
+                    ".channels.json next to it. That sidecar is written when "
+                    "ChromIQ creates the chart — pick the chart inside its "
+                    "original folder (or copy the .channels.json along with "
+                    "it).").format(name=base.name + ".channels.json"))
+                return
         if not ref.is_file():
-            self._layout = None
-            self._pages = []
-            self._chart_note.setText(tr(
+            self._reject_chart(tr(
                 "⚠ This chart has no .ti3 or .ti2 next to it, so ChromIQ can't read "
                 "its patch values."))
-            self._refresh()
             return
         self._layout = json.loads(channels.read_text())["layout"]
         if self._layout.get("patches"):                     # engine chart
@@ -847,10 +961,10 @@ class ScannerProfileDialog(_ToolDialogBase):
         try:
             build_scanin_target_from_paths(channels, ref, base)
         except ScaninTargetError as exc:
-            self._chart_note.setText(f"⚠ {exc}")
             self._layout = None
-            self._refresh()
+            self._reject_chart(f"⚠ {exc}")
             return
+        self._chart_reject_reason = None             # pick accepted (#101)
         if self._layout.get("patches"):
             n_patches = len(self._layout["patches"])
         else:
@@ -1294,13 +1408,32 @@ class ScannerProfileDialog(_ToolDialogBase):
                  else self._layout is not None)
         if not ready:
             # Don't fail silently — Knut hit a dead Browse button because his .ti3
-            # wasn't a ChromIQ engine chart. Say what to do, in the status box.
-            self._log.appendPlainText(tr(
-                "⚠ Choose your target first, then the scan. Under “A chart I made "
-                "in ChromIQ”, pick the .ti3 of a chart you built here (it needs its "
-                ".channels.json alongside). An older .ti3 from a plain scanin run "
-                "won't work — for a bought target, switch to “A standard target I "
-                "own” above and load its .cht."))
+            # wasn't a ChromIQ engine chart. Say what to do, in the status box —
+            # matching the active mode (the old text demanded a .ti3 even in
+            # printer mode, where the .ti2 is the right file, #101) and repeating
+            # why a picked chart was rejected instead of a generic hint.
+            if self._chart_reject_reason and not self._standard_mode():
+                self._log.appendPlainText(tr(
+                    "⚠ The chart you picked can't be used — fix that first, then "
+                    "choose the scan. The problem was:"))
+                self._log.appendPlainText(self._chart_reject_reason)
+            elif self._standard_mode():
+                self._log.appendPlainText(tr(
+                    "⚠ Choose your target first, then the scan: load the "
+                    "target's .cht reference file above."))
+            elif self._printer_mode():
+                self._log.appendPlainText(tr(
+                    "⚠ Choose your chart first, then the scan: pick the .ti2 of "
+                    "the chart you printed (ChromIQ wrote it, with its "
+                    ".channels.json, into the chart's folder when you created "
+                    "the chart)."))
+            else:
+                self._log.appendPlainText(tr(
+                    "⚠ Choose your target first, then the scan. Under “A chart I "
+                    "made in ChromIQ”, pick the .ti3 of a chart you built here (it "
+                    "needs its .channels.json alongside). An older .ti3 from a "
+                    "plain scanin run won't work — for a bought target, switch to "
+                    "“A standard target I own” above and load its .cht."))
             return
         path = open_file_dialog(self, tr("Choose the scan"), _SCAN_FILTER,
                                 start_dir=str(_initial_dir(self._settings, self.TOOL_KEY)))
@@ -1464,8 +1597,11 @@ class ScannerProfileDialog(_ToolDialogBase):
                 # rounded rectarg image lines up), then fiducial-frame + sample-area.
                 cht = self._prepare_scanin_cht(orig_cht, s["corners"], frac, base,
                                                f"p{pg + 1}s{k + 1}")
+                # One diag per scan, named after the scan itself — with averaging
+                # you want to check EVERY shot's alignment, not just the first
+                # (#102). Distinct scan stems keep the files from colliding.
                 diag = (scan.with_name(scan.stem + "-diag.tif")
-                        if self._diag.isChecked() and k == 0 else None)
+                        if self._diag.isChecked() else None)
                 params = ScaninParams(
                     scan, cht, cie,
                     corners=self._scanin_corners(s["corners"], orig_cht),
@@ -1557,8 +1693,10 @@ class ScannerProfileDialog(_ToolDialogBase):
             s = shots[0]                             # one scan per page in printer mode
             cht = self._prepare_scanin_cht(orig_cht, s["corners"], frac, base,
                                            f"printer-p{pg + 1}")
+            # A diag per page scan (each page is its own image), not just the
+            # first — every page's alignment is worth checking (#102).
             diag = (s["path"].with_name(s["path"].stem + "-diag.tif")
-                    if self._diag.isChecked() and first_page else None)
+                    if self._diag.isChecked() else None)
             params = ScaninParams(
                 s["path"], cht,
                 corners=self._scanin_corners(s["corners"], orig_cht),
@@ -1579,10 +1717,12 @@ class ScannerProfileDialog(_ToolDialogBase):
         ti3 = pbase.with_suffix(".ti3")
         self._sanitize_scanner_ti3(ti3)              # once, on the accumulated .ti3
         self._log.appendPlainText(tr("Building the printer profile…"))
+        ti3, custom = self._apply_profile_name(ti3)
         params = ProfileParams(
             ti3_path=ti3, algorithm="l", quality="m",
-            description=f"{base.name} (scanner-measured)", manufacturer="ChromIQ",
-            model=base.name, verbose=True)
+            description=custom or f"{base.name} (scanner-measured)",
+            manufacturer="ChromIQ",
+            model=custom or base.name, verbose=True)
 
         def _done(code: int) -> None:
             icc = self._profiler.expected_icc_path(params)
@@ -1605,6 +1745,8 @@ class ScannerProfileDialog(_ToolDialogBase):
             self._last_profile = icc
             self._reveal_btn.setVisible(True)
             self._reveal_btn.setEnabled(True)
+            self._install_btn.setVisible(True)
+            self._install_btn.setEnabled(True)
             self._finish(True)
 
         self._profiler.build(params, on_line=self._log_line, on_finish=_done)
@@ -1647,10 +1789,12 @@ class ScannerProfileDialog(_ToolDialogBase):
             return
         self._log.appendPlainText(tr("Building the scanner profile…"))
         alg, quality = self._ptype.currentData() or ("s", "m")
+        combined, custom = self._apply_profile_name(combined)
+        desc = custom or f"{base.name} scanner"
         params = ProfileParams(
             ti3_path=combined, algorithm=alg, quality=quality,
-            description=f"{base.name} scanner", manufacturer="ChromIQ",
-            model=f"{base.name} scanner", verbose=True)   # show colprof's output
+            description=desc, manufacturer="ChromIQ",
+            model=desc, verbose=True)                     # show colprof's output
 
         def _done(code: int) -> None:
             # Resolve the profile the same robust way the printer builder does:
@@ -1678,6 +1822,8 @@ class ScannerProfileDialog(_ToolDialogBase):
             self._last_profile = icc
             self._reveal_btn.setVisible(True)     # let the user find the .icc
             self._reveal_btn.setEnabled(True)
+            self._install_btn.setVisible(True)
+            self._install_btn.setEnabled(True)
             self._finish(True)
 
         self._profiler.build(params, on_line=self._log_line, on_finish=_done)

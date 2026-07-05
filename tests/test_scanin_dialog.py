@@ -322,3 +322,244 @@ def test_sanitize_ti3_zeros_stdev_and_drops_bad_reads():
         for tok in ln.split()[1:]:
             float(tok)                         # every real column parses
     assert sanitize_ti3(clean) == (clean, 0, 0)   # idempotent
+
+
+# ---------------------------------------------------------------------------
+# #102 — one diagnostic image PER SCAN, not just the first
+# ---------------------------------------------------------------------------
+
+def test_every_scan_gets_its_own_diag_image(_app):
+    """Five scans of one page with the diagnostic option on → five scanin jobs,
+    each writing its own <scan>-diag.tif (Knut got only one, #102). Exactly the
+    per-scan alignment check averaging is for."""
+    from pathlib import Path
+    dlg = _dialog(_app)
+    try:
+        dlg._ti3 = Path("/tmp/proj/mychart.ti3")
+        dlg._layout = {"patches": [{"page": 0}]}
+        dlg._pages = [0]
+        shots = dlg._page_shots(0)
+        shots.clear()
+        for k in range(5):
+            shots.append({"path": Path(f"/tmp/proj/scan{k + 1}.tif"),
+                          "corners": [(0, 0), (9, 0), (9, 9), (0, 9)]})
+        dlg._diag.setChecked(True)
+        dlg._run_job = lambda i: None
+        dlg._execute()
+        scanins = [j for j in dlg._jobs if j["kind"] == "scanin"]
+        assert len(scanins) == 5
+        diags = [j["params"].diag for j in scanins]
+        assert all(d is not None for d in diags)
+        assert len(set(diags)) == 5                      # one per scan, distinct
+        assert diags[2].name == "scan3-diag.tif"         # named after its scan
+    finally:
+        dlg.deleteLater()
+
+
+def test_diag_off_writes_none(_app):
+    from pathlib import Path
+    dlg = _dialog(_app)
+    try:
+        dlg._ti3 = Path("/tmp/proj/mychart.ti3")
+        dlg._layout = {"patches": [{"page": 0}]}
+        dlg._pages = [0]
+        shots = dlg._page_shots(0)
+        shots.clear()
+        for k in range(2):
+            shots.append({"path": Path(f"/tmp/proj/scan{k + 1}.tif"),
+                          "corners": [(0, 0), (9, 0), (9, 9), (0, 9)]})
+        dlg._diag.setChecked(False)
+        dlg._run_job = lambda i: None
+        dlg._execute()
+        assert all(j["params"].diag is None
+                   for j in dlg._jobs if j["kind"] == "scanin")
+    finally:
+        dlg.deleteLater()
+
+
+def test_printer_mode_diag_on_every_page(_app, tmp_path):
+    """Printer mode, two pages, diag on → both pages' scanin jobs write a diag
+    (only page 1 got one before, #102)."""
+    from pathlib import Path
+    dlg = _dialog(_app)
+    try:
+        base = tmp_path / "mychart"
+        (tmp_path / "mychart.ti2").write_text("CTI2\n")
+        dlg._ti3 = tmp_path / "mychart.ti2"
+        dlg._layout = {"patches": [{"page": 0}, {"page": 1}]}
+        dlg._pages = [0, 1]
+        dlg._printer_cb.setChecked(True)
+        dlg._printer_scan_profile = tmp_path / "scanner.icc"
+        for pg in (0, 1):
+            shots = dlg._page_shots(pg)
+            shots.clear()
+            shots.append({"path": tmp_path / f"page{pg + 1}.tif",
+                          "corners": [(0, 0), (9, 0), (9, 9), (0, 9)]})
+            (tmp_path / f"page{pg + 1}.tif").write_bytes(b"II*\0")
+        dlg._diag.setChecked(True)
+        dlg._run_job = lambda i: None
+        dlg._execute_printer(base, 0.9)
+        scanins = [j for j in dlg._jobs if j["kind"] == "scanin"]
+        assert len(scanins) == 2
+        assert all(j["params"].diag is not None for j in scanins)
+        assert scanins[0]["params"].diag.name == "page1-diag.tif"
+        assert scanins[1]["params"].diag.name == "page2-diag.tif"
+    finally:
+        dlg.deleteLater()
+
+
+# ---------------------------------------------------------------------------
+# #101 — rejected chart picks must be loud, and the Browse hint mode-aware
+# ---------------------------------------------------------------------------
+
+def _engine_channels(path, locs, dpi=300, paper=(210.0, 297.0), patch_px=118):
+    """Write a minimal but valid engine channels.json for *locs*."""
+    import json
+    patches = [{"loc": loc, "page": 0, "x": 100 + i * (patch_px + 10),
+                "y": 100, "w": patch_px, "h": patch_px}
+               for i, loc in enumerate(locs)]
+    path.write_text(json.dumps({"layout": {
+        "engine": "chromiq", "engine_version": 1, "dpi": dpi,
+        "paper_mm": list(paper), "patches": patches}}))
+
+
+def _tiny_ti2(path, locs):
+    rows = "\n".join(
+        f'{i + 1} "{loc}" {v:.1f} {v:.1f} {v:.1f} {v * 0.9:.2f} {v * 0.95:.2f} {v * 0.8:.2f}'
+        for i, (loc, v) in enumerate(zip(locs, (0.0, 50.0, 100.0, 25.0))))
+    path.write_text(f"""CTI2
+
+DESCRIPTOR "t"
+TARGET_INSTRUMENT "X-Rite ColorMunki"
+COLOR_REP "iRGB"
+
+NUMBER_OF_FIELDS 8
+BEGIN_DATA_FORMAT
+SAMPLE_ID SAMPLE_LOC RGB_R RGB_G RGB_B XYZ_X XYZ_Y XYZ_Z
+END_DATA_FORMAT
+
+NUMBER_OF_SETS {len(locs)}
+BEGIN_DATA
+{rows}
+END_DATA
+""")
+
+
+def test_chart_without_sidecar_is_rejected_loudly(_app, tmp_path):
+    """Picking a .ti2 with no .channels.json anywhere → the reason lands in the
+    chart note AND the status log, and the scan Browse repeats it instead of
+    the old generic .ti3 hint (#101)."""
+    locs = ["A1", "A2", "A3", "A4"]
+    _tiny_ti2(tmp_path / "mychart.ti2", locs)
+    dlg = _dialog(_app)
+    try:
+        dlg._printer_cb.setChecked(True)
+        dlg._set_chart(tmp_path / "mychart.ti2")
+        assert dlg._layout is None
+        assert dlg._chart_reject_reason
+        assert ".channels.json" in dlg._chart_note.text()
+        assert ".channels.json" in dlg._log.toPlainText()
+        n = len(dlg._log.toPlainText())
+        dlg._pick_scan()                       # dead Browse repeats the reason
+        tail = dlg._log.toPlainText()[n:]
+        assert "can't be used" in tail and ".channels.json" in tail
+        assert ".ti3" not in tail              # no stale wrong-file hint
+    finally:
+        dlg.deleteLater()
+
+
+def test_sidecar_found_by_folder_fallback(_app, tmp_path):
+    """A .ti2 whose sidecar doesn't share its stem (files copied/renamed) still
+    loads when the folder holds exactly one usable .channels.json (#101)."""
+    locs = ["A1", "A2", "A3", "A4"]
+    _tiny_ti2(tmp_path / "renamed-copy.ti2", locs)
+    _engine_channels(tmp_path / "original.channels.json", locs)
+    dlg = _dialog(_app)
+    try:
+        dlg._printer_cb.setChecked(True)
+        dlg._set_chart(tmp_path / "renamed-copy.ti2")
+        assert dlg._layout is not None
+        assert dlg._chart_reject_reason is None
+        assert "4 patches" in dlg._chart_note.text()
+    finally:
+        dlg.deleteLater()
+
+
+def test_matching_sidecar_still_wins(_app, tmp_path):
+    """The exact-stem sidecar is preferred; the fallback only fires when it's
+    missing (#101)."""
+    locs = ["A1", "A2", "A3", "A4"]
+    _tiny_ti2(tmp_path / "mychart.ti2", locs)
+    _engine_channels(tmp_path / "mychart.channels.json", locs)
+    dlg = _dialog(_app)
+    try:
+        dlg._printer_cb.setChecked(True)
+        dlg._set_chart(tmp_path / "mychart.ti2")
+        assert dlg._layout is not None and dlg._chart_reject_reason is None
+    finally:
+        dlg.deleteLater()
+
+
+# ---------------------------------------------------------------------------
+# Nelson — name the profile yourself + install it for the user
+# ---------------------------------------------------------------------------
+
+def test_profile_name_renames_ti3_and_description(_app, tmp_path):
+    """A chosen profile name drives the .icc file name (via the .ti3 stem
+    colprof names it after) and the embedded description."""
+    dlg = _dialog(_app)
+    try:
+        src = tmp_path / "Moab_Satin_240-p1s1-scanner.ti3"
+        src.write_text("CTI3\n")
+        dlg._prof_name.setText("Epson ET-8550 scanner")
+        ti3, desc = dlg._apply_profile_name(src)
+        assert ti3.name == "Epson ET-8550 scanner.ti3"
+        assert ti3.is_file()
+        assert desc == "Epson ET-8550 scanner"
+        # Empty field → untouched, defaults kept.
+        dlg._prof_name.setText("")
+        ti3, desc = dlg._apply_profile_name(src)
+        assert ti3 == src and desc is None
+        # Filesystem-hostile characters are stripped from the stem only.
+        dlg._prof_name.setText('bad/name: "scanner?"')
+        ti3, desc = dlg._apply_profile_name(src)
+        assert "/" not in ti3.name and ":" not in ti3.name
+        assert desc == 'bad/name: "scanner?"'
+    finally:
+        dlg.deleteLater()
+
+
+def test_install_profile_copies_into_user_dir(_app, tmp_path, monkeypatch):
+    import ui.dialogs.scanin_dialog as M
+    dest_dir = tmp_path / "ColorSync" / "Profiles"
+    monkeypatch.setattr(M, "_user_profile_dir", lambda: dest_dir)
+    dlg = _dialog(_app)
+    try:
+        icc = tmp_path / "Epson ET-8550 scanner.icc"
+        icc.write_bytes(b"\0" * 2048)
+        dlg._last_profile = icc
+        dlg._install_profile()
+        assert (dest_dir / icc.name).is_file()
+        assert "installed" in dlg._log.toPlainText().lower()
+    finally:
+        dlg.deleteLater()
+
+
+def test_explicit_ti2_pick_is_not_swapped_for_sibling_ti3(_app, tmp_path):
+    """Knut picked Printer.ti2 but the field showed Printer.ti3 — an unrelated
+    scanner .ti3 sharing the folder was silently preferred (#101). The picked
+    file wins; the sibling only backs a '-verify' style indirect pick."""
+    locs = ["A1", "A2", "A3", "A4"]
+    _tiny_ti2(tmp_path / "Printer.ti2", locs)
+    (tmp_path / "Printer.ti3").write_text("CTI3\n")   # stale plain-scanin ti3
+    _engine_channels(tmp_path / "Printer.channels.json", locs)
+    dlg = _dialog(_app)
+    try:
+        dlg._printer_cb.setChecked(True)
+        dlg._set_chart(tmp_path / "Printer.ti2")
+        assert dlg._ti3 == tmp_path / "Printer.ti2"   # the pick, not the swap
+        assert "Printer.ti2" in dlg._ti3_field.text()
+        assert dlg._chart_measured is False
+        assert dlg._layout is not None                # loads fine off the .ti2
+    finally:
+        dlg.deleteLater()
