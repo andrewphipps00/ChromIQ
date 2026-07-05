@@ -170,6 +170,7 @@ class ScannerProfileDialog(_ToolDialogBase):
     EYEBROW     = tr("MEASURE · SCANNER / CAMERA PROFILE")
     ACCENT      = SPEC_GREEN
     RUN_LABEL   = tr("Build scanner or camera profile")
+    BUSY_BAR_IDLE_LABEL = tr("Ready")   # always-visible bar; animates while running
     MIN_WIDTH   = 760
     SCROLLABLE_CONTENT = True    # tall (mode toggle + inputs + marquee + averaging)
 

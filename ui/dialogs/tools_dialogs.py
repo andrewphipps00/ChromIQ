@@ -225,6 +225,9 @@ class _ToolDialogBase(QDialog):
     RUN_LABEL: str  = tr("Run")
     MIN_WIDTH: int  = 620
     SCROLLABLE_CONTENT: bool = False   # tall dialogs opt in (scroll + edge fade)
+    # Set to a short idle label (e.g. tr("Ready")) to show an always-visible
+    # spectrum busy bar above the log, animated only while a run is under way.
+    BUSY_BAR_IDLE_LABEL: str | None = None
 
     def __init__(self, settings: "AppSettings", parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -290,12 +293,16 @@ class _ToolDialogBase(QDialog):
             self._scroll = None
             inner.addLayout(self._content)
 
-        # Busy indicator: an animated spectrum bar + ticking elapsed time above
-        # the log, shown while a run is under way — external tools can stay
-        # silent for a long time and the window looked frozen (Knut).
-        self._busy_bar = SpectrumSegmentsBar(self)
-        self._busy_bar.setVisible(False)
-        inner.addWidget(self._busy_bar)
+        # Busy indicator (opt-in via BUSY_BAR_IDLE_LABEL): an always-visible
+        # spectrum bar above the log, animated only while a run is under way —
+        # external tools can stay silent for a long time and the window looked
+        # frozen (Knut). Mirrors the Build Profile tab's bar.
+        self._busy_bar = None
+        if self.BUSY_BAR_IDLE_LABEL is not None:
+            self._busy_bar = SpectrumSegmentsBar(self)
+            self._busy_bar.set_label(self.BUSY_BAR_IDLE_LABEL, "")
+            self._busy_bar.set_value(0)
+            inner.addWidget(self._busy_bar)
         self._busy_note = ""
         self._busy_started = 0.0
         self._busy_tick = QTimer(self)
@@ -442,7 +449,8 @@ class _ToolDialogBase(QDialog):
     def _set_busy(self, busy: bool) -> None:
         self._run_btn.setEnabled(not busy and self._can_run())
         self._close_btn.setEnabled(not busy)
-        self._busy_bar.setVisible(busy)
+        if self._busy_bar is None:
+            return
         if busy:
             import time
             self._busy_started = time.monotonic()
@@ -455,12 +463,16 @@ class _ToolDialogBase(QDialog):
             self._busy_tick.stop()
             self._busy_bar.stop()
             self._busy_note = ""
+            self._busy_bar.set_value(0)
+            self._busy_bar.set_label(self.BUSY_BAR_IDLE_LABEL, "")
             self.unsetCursor()
 
     def _set_busy_note(self, note: str, fraction: float | None = None) -> None:
         """Name the running step (and optionally its 0..1 position in the whole
         run) on the busy bar — e.g. "Step 2 of 6 — Reading page 2…"."""
         self._busy_note = note
+        if self._busy_bar is None:
+            return
         if fraction is not None:
             self._busy_bar.set_value(fraction)
         self._update_busy_label()
