@@ -1,5 +1,24 @@
 # Changelog
 
+## v3.13.0-beta.117
+
+### 🐛 Fixes
+- Printer profiling from a scanned chart with its own printtarg .cht files:
+  the patch grid finally lands where you place it (#108). Two geometry bugs
+  compounded — the corners were mapped to printtarg's fiducial frame (which
+  sits ~7 mm outside the patch area) instead of the patch area the marquee is
+  aligned on, and printtarg's wider first column was flattened onto equal
+  cells both on screen and in the file scanin reads. Charts with non-uniform
+  patch grids now keep their true geometry everywhere.
+
+### ✨ New
+- Misalignment safety net: after the scans are read for a printer profile,
+  ChromIQ compares every patch against the chart's aim values and warns when
+  more than 10% differ by ΔE over 15 — a misaligned grid or a scan that
+  doesn't belong to the chart, caught before the profile is built (Knut).
+- The scan view can zoom out to 90% of the fit, so the grid's corner handles
+  stay reachable on borderless full-page scans.
+
 ## v3.13.0-beta.116
 
 ### ✨ Improvements
