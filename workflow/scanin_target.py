@@ -96,6 +96,70 @@ def _cht_x_box_locs(cht_text: str) -> list[str]:
             if ln.strip().startswith("X ")]
 
 
+def layout_from_cht_files(cht_paths: list, ref_path: str | Path) -> dict:
+    """A printtarg-shaped layout block from user-supplied ``.cht`` page files,
+    validated against the chart's ``.ti2``/``.ti3`` (#105).
+
+    For charts made outside ChromIQ (e.g. a manual ``printtarg -s`` run) there
+    is no ``channels.json`` — but printtarg's own per-page ``.cht`` files carry
+    the exact geometry. This builds the same ``{"engine": "printtarg",
+    "cht_pages": …, "locs": …}`` dict the creation-time capture stores, so the
+    whole downstream pipeline (grid overlay, per-page ``.cht``, scanin) treats
+    the chart like a captured one. Pages follow the order of *cht_paths* (sort
+    by filename before calling — printtarg numbers them ``_01 … _NN``).
+
+    Raises :class:`ScaninTargetError` when a file isn't a patch ``.cht``, when
+    pages overlap, or when the combined patch locations don't exactly cover the
+    reference — a wrong or missing page would silently profile from partial
+    data otherwise.
+    """
+    texts: list[str] = []
+    geom_locs: list[str] = []
+    for p in cht_paths:
+        p = Path(p)
+        try:
+            text = p.read_text(errors="ignore")
+        except OSError as exc:
+            raise ScaninTargetError(f"Couldn't read “{p.name}”: {exc}") from exc
+        locs = _cht_x_box_locs(text)
+        if not locs:
+            raise ScaninTargetError(
+                f"“{p.name}” has no patch (X) boxes — it doesn't look like a "
+                "printtarg/scanin .cht file.")
+        texts.append(text)
+        geom_locs += locs
+    data: Ti3Data = parse_ti3(ref_path)
+    geom_set, ref_set = set(geom_locs), set(data.sample_locs)
+    if len(geom_set) != len(geom_locs):
+        raise ScaninTargetError(
+            "The .cht files overlap — the same patch location appears on more "
+            "than one page. Pick each page's .cht exactly once.")
+    missing = ref_set - geom_set
+    if missing:
+        raise ScaninTargetError(
+            f"The .cht files don't cover the whole chart: {len(missing)} "
+            f"patch(es) of the reference have no box (e.g. "
+            f"{sorted(missing)[:3]}). Did you pick every page's .cht?")
+    extra = geom_set - ref_set
+    if extra:
+        raise ScaninTargetError(
+            f"The .cht files don't belong to this chart: {len(extra)} box(es) "
+            f"have no patch in the reference (e.g. {sorted(extra)[:3]}). Pick "
+            "the .cht files printtarg wrote for exactly this chart.")
+    return {"engine": "printtarg", "cht_pages": texts, "locs": geom_locs}
+
+
+def build_scanin_target_from_cht_files(cht_paths: list, ref_path: str | Path,
+                                       out_base: str | Path):
+    """One-call worker for user-supplied ``.cht`` pages (#105): validate them
+    against the reference (:func:`layout_from_cht_files`), then write the
+    per-page ``<out_base>[_NN].cht`` + ``<out_base>.cie`` exactly like the
+    captured-printtarg path. Returns ``(layout, ScaninTargetResult)``."""
+    layout = layout_from_cht_files(cht_paths, ref_path)
+    res = _build_from_printtarg(layout, parse_ti3(ref_path), Path(out_base))
+    return layout, res
+
+
 def _check_measured(geom_locs: list[str], data: Ti3Data) -> None:
     """Assert every geometry loc has a measurement (the loc-alignment guarantee),
     raising :class:`GeometryMismatch` on a duplicate or an unmeasured patch."""

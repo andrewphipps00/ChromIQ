@@ -217,6 +217,11 @@ class ScannerProfileDialog(_ToolDialogBase):
         self._printer_scan_profile: Path | None = None   # scanner ICC for printer mode
         self._chart_measured = False   # loaded chart has a real .ti3 (not just .ti2)
         self._chart_reject_reason: str | None = None  # why the last pick failed (#101)
+        # Bring-your-own-.cht (#105): a printer-mode chart without channels.json
+        # waits here for the user to pick printtarg's per-page .cht files.
+        self._byo_awaiting = False
+        self._byo_base: Path | None = None
+        self._byo_ref: Path | None = None
         self._pages: list[int] = []
         self._page = 0
         # Per page, a list of "shots" — one or more scans of the same page, each
@@ -376,6 +381,45 @@ class ScannerProfileDialog(_ToolDialogBase):
         v.addLayout(row)
         self._chart_note = self._hint_label("")
         v.addWidget(self._chart_note)
+
+        # Chart geometry (.cht) — printer mode only (#105). ChromIQ charts carry
+        # their geometry in channels.json; a chart made outside ChromIQ (e.g. a
+        # manual `printtarg -s` run) instead supplies printtarg's own per-page
+        # .cht files here.
+        self._byo_row_w = QWidget(self)
+        _byo_v = QVBoxLayout(self._byo_row_w)
+        _byo_v.setContentsMargins(0, 0, 0, 0)
+        _byo_head = QHBoxLayout()
+        _byo_head.addWidget(QLabel(tr("Chart geometry (.cht):"), self))
+        _byo_head.addStretch(1)
+        _byo_head.addWidget(self._tip(
+            tr("Chart geometry (.cht)"),
+            tr("Where ChromIQ learns the exact position of every patch on the "
+               "printed sheet.\n\n"
+               "For a chart made in ChromIQ there's nothing to do — the "
+               "geometry is stored with the chart (its .channels.json), and "
+               "this row just says so.\n\n"
+               "For a chart you made outside ChromIQ (for example with "
+               "printtarg on the command line), pick the .cht file(s) that "
+               "printtarg wrote next to your chart — one per page, e.g. "
+               "chart_01.cht … chart_05.cht. Select all pages in one go. "
+               "ChromIQ checks that the boxes match the chart's .ti2 exactly, "
+               "so a wrong or missing page is caught before anything is "
+               "read.")), 0, Qt.AlignmentFlag.AlignVCenter)
+        _byo_v.addLayout(_byo_head)
+        _byo_row = QHBoxLayout()
+        self._byo_field = QLineEdit(self)
+        self._byo_field.setReadOnly(True)
+        self._byo_field.setPlaceholderText(
+            tr("provided by the chart (.channels.json)"))
+        _byo_row.addWidget(self._byo_field, 1)
+        self._byo_btn = make_browse_button(self, tr("Browse…"),
+                                           icon="folder_measure")
+        self._byo_btn.clicked.connect(self._pick_byo_cht)
+        _byo_row.addWidget(self._byo_btn)
+        _byo_v.addLayout(_byo_row)
+        self._byo_row_w.setVisible(False)          # printer mode only
+        v.addWidget(self._byo_row_w)
 
         # Page selector (multi-page charts only)
         self._page_row = QHBoxLayout()
@@ -936,6 +980,7 @@ class ScannerProfileDialog(_ToolDialogBase):
         self._ti3_field.setText(str(ref))
         _remember_dir(self._settings, self.TOOL_KEY, picked.parent)
         self._reset_shots()
+        self._reset_byo_cht()               # a fresh chart pick starts over (#105)
         channels = base.with_name(base.name + ".channels.json")
         if not has_scanner_geometry(channels):
             # Recovery (#101): the sidecar may not share the picked file's stem
@@ -946,6 +991,11 @@ class ScannerProfileDialog(_ToolDialogBase):
                      if has_scanner_geometry(c)]
             if len(cands) == 1:
                 channels = cands[0]
+            elif self._printer_mode() and ref.is_file():
+                # No sidecar at all, but printer mode can take the chart's own
+                # printtarg .cht page files instead (#105, Knut's manual charts).
+                self._await_byo_cht(base, ref)
+                return
             else:
                 self._reject_chart(tr(
                     "⚠ No chart layout found: “{name}” has no usable "
@@ -960,11 +1010,6 @@ class ScannerProfileDialog(_ToolDialogBase):
                 "its patch values."))
             return
         self._layout = json.loads(channels.read_text())["layout"]
-        if self._layout.get("patches"):                     # engine chart
-            self._pages = sorted({int(p.get("page", 0))
-                                  for p in self._layout["patches"]})
-        else:                                               # printtarg chart
-            self._pages = list(range(len(self._layout.get("cht_pages", [1]))))
         # Build the .cht/.cie from the reference (measured .ti3, or .ti2 aim values).
         try:
             build_scanin_target_from_paths(channels, ref, base)
@@ -972,16 +1017,35 @@ class ScannerProfileDialog(_ToolDialogBase):
             self._layout = None
             self._reject_chart(f"⚠ {exc}")
             return
-        self._chart_reject_reason = None             # pick accepted (#101)
-        if self._layout.get("patches"):
+        self._chart_geometry_ready()
+
+    def _chart_geometry_ready(self) -> None:
+        """Shared success tail of a chart pick: the layout is set and its
+        .cht/.cie were written — announce it, fill the page selector and show
+        the grid. Used by the channels.json path and the BYO-.cht path (#105)."""
+        if self._layout.get("patches"):                     # engine chart
+            self._pages = sorted({int(p.get("page", 0))
+                                  for p in self._layout["patches"]})
             n_patches = len(self._layout["patches"])
-        else:
+        else:                                               # printtarg chart
+            self._pages = list(range(len(self._layout.get("cht_pages", [1]))))
             n_patches = len(self._layout.get("locs") or [])
+        self._chart_reject_reason = None             # pick accepted (#101)
         if not self._chart_measured:
-            self._chart_note.setText(tr(
-                "✓ {n} patches. This chart hasn't been measured — tick “Profile my "
-                "printer from this scan” below to build a printer profile from it "
-                "(no spectrophotometer needed).").format(n=n_patches))
+            if self._printer_mode():
+                # Printer mode is already on — point at the next step instead
+                # of asking to tick the checkbox again (#105).
+                self._chart_note.setText((
+                    tr("✓ {n} patches on one page — pick the scan of the "
+                       "printed chart below.")
+                    if len(self._pages) == 1 else
+                    tr("✓ {n} patches on {p} pages — pick each page's scan "
+                       "below.")).format(n=n_patches, p=len(self._pages)))
+            else:
+                self._chart_note.setText(tr(
+                    "✓ {n} patches. This chart hasn't been measured — tick “Profile my "
+                    "printer from this scan” below to build a printer profile from it "
+                    "(no spectrophotometer needed).").format(n=n_patches))
         else:
             self._chart_note.setText((
                 tr("✓ Ready — {n} patches on one page.")
@@ -998,6 +1062,68 @@ class ScannerProfileDialog(_ToolDialogBase):
         self._shot_idx = 0
         self._load_page_grid()
         self._refresh()
+
+    # ---------------------------------------------- bring-your-own .cht (#105)
+    def _reset_byo_cht(self) -> None:
+        self._byo_awaiting = False
+        self._byo_base = None
+        self._byo_ref = None
+        self._byo_field.clear()
+        self._byo_field.setPlaceholderText(
+            tr("provided by the chart (.channels.json)"))
+
+    def _await_byo_cht(self, base: Path, ref: Path) -> None:
+        """Printer mode, chart without channels.json: hold the pick and ask for
+        printtarg's per-page .cht files instead of rejecting (#105)."""
+        self._layout = None
+        self._pages = []
+        self._byo_awaiting = True
+        self._byo_base = base
+        self._byo_ref = ref
+        msg = tr(
+            "This chart wasn't made by ChromIQ (no .channels.json) — that's "
+            "fine for a printer profile: pick the .cht page file(s) printtarg "
+            "wrote for it under “Chart geometry (.cht)” below.")
+        self._chart_reject_reason = "⚠ " + msg
+        self._chart_note.setText("⚠ " + msg)
+        self._log.appendPlainText("⚠ " + msg)
+        self._byo_field.setPlaceholderText(
+            tr("pick the chart's .cht page file(s)…"))
+        self._refresh()
+
+    def _pick_byo_cht(self) -> None:
+        from PyQt6.QtWidgets import QFileDialog
+        if not self._byo_awaiting or self._byo_base is None:
+            self._log.appendPlainText(tr(
+                "⚠ This chart already carries its geometry (.channels.json) — "
+                "there is nothing to pick. The .cht row is only used for "
+                "charts made outside ChromIQ."))
+            return
+        paths, _ = QFileDialog.getOpenFileNames(
+            self, tr("Pick the chart's .cht page file(s)"),
+            str(self._byo_base.parent),
+            tr("Chart geometry (*.cht);;All files (*)"))
+        if not paths:
+            return
+        cht_paths = sorted(Path(p) for p in paths)   # printtarg numbers _01…_NN
+        from workflow.scanin_target import build_scanin_target_from_cht_files
+        try:
+            layout, res = build_scanin_target_from_cht_files(
+                cht_paths, self._byo_ref, self._byo_base)
+        except ScaninTargetError as exc:
+            self._byo_field.clear()
+            self._reject_chart(f"⚠ {exc}")
+            # Stay in the awaiting state so another pick can succeed.
+            self._byo_awaiting = True
+            return
+        self._byo_field.setText(", ".join(p.name for p in cht_paths))
+        self._byo_awaiting = False
+        self._layout = layout
+        self._log.appendPlainText(tr(
+            "✓ Chart geometry loaded from {n} .cht file(s) — {p} patches "
+            "verified against the chart.").format(n=len(cht_paths),
+                                                  p=res.n_patches))
+        self._chart_geometry_ready()
 
     def _load_page_grid(self) -> None:
         if self._layout is None:
@@ -1101,6 +1227,8 @@ class ScannerProfileDialog(_ToolDialogBase):
 
     def _on_printer_toggled(self, checked: bool) -> None:
         self._printer_box.setVisible(checked)
+        # The Chart-geometry (.cht) row only matters in printer mode (#105).
+        self._byo_row_w.setVisible(checked)
         # In printer mode the chart's .ti2 is enough (no measurement needed), so the
         # picker asks for the chart you printed rather than a measured .ti3.
         self._chart_label.setText(
@@ -1108,6 +1236,12 @@ class ScannerProfileDialog(_ToolDialogBase):
         self._ti3_field.setPlaceholderText(
             tr("Pick the chart you printed (.ti2)…") if checked else
             tr("Pick the measured chart (.ti3)…"))
+        # Ticking printer mode AFTER a sidecar-less chart was picked (and thus
+        # rejected) re-evaluates it, so the BYO-.cht offer appears without
+        # re-picking the chart (#105). Nothing to lose: the layout is unset.
+        if (checked and self._layout is None and not self._byo_awaiting
+                and self._ti3 is not None and Path(self._ti3).is_file()):
+            self._set_chart(Path(self._ti3))
         # Leave the profile-type selector enabled so its tooltip stays readable
         # (Qt hides tooltips on disabled widgets). Its *quality* is honoured for the
         # printer profile; the Matrix/LUT choice isn't (a printer profile is always
@@ -1420,7 +1554,11 @@ class ScannerProfileDialog(_ToolDialogBase):
             # matching the active mode (the old text demanded a .ti3 even in
             # printer mode, where the .ti2 is the right file, #101) and repeating
             # why a picked chart was rejected instead of a generic hint.
-            if self._chart_reject_reason and not self._standard_mode():
+            if self._byo_awaiting and self._printer_mode():
+                self._log.appendPlainText(tr(
+                    "⚠ Pick the chart's .cht page file(s) first — the “Chart "
+                    "geometry (.cht)” row above — then choose the scan."))
+            elif self._chart_reject_reason and not self._standard_mode():
                 self._log.appendPlainText(tr(
                     "⚠ The chart you picked can't be used — fix that first, then "
                     "choose the scan. The problem was:"))

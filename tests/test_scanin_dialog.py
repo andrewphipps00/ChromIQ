@@ -446,15 +446,18 @@ END_DATA
 
 
 def test_chart_without_sidecar_is_rejected_loudly(_app, tmp_path):
-    """Picking a .ti2 with no .channels.json anywhere → the reason lands in the
-    chart note AND the status log, and the scan Browse repeats it instead of
-    the old generic .ti3 hint (#101)."""
+    """Picking a chart with no .channels.json anywhere → the reason lands in
+    the chart note AND the status log, and the scan Browse repeats it instead
+    of the old generic hint (#101). (In printer mode a sidecar-less .ti2 now
+    enters the BYO-.cht flow instead — see the #105 tests — so this drives the
+    scanner-profile mode, where it stays a hard reject.)"""
     locs = ["A1", "A2", "A3", "A4"]
     _tiny_ti2(tmp_path / "mychart.ti2", locs)
+    (tmp_path / "mychart.ti3").write_text("CTI3\n")   # "measured", no sidecar
     dlg = _dialog(_app)
     try:
-        dlg._printer_cb.setChecked(True)
-        dlg._set_chart(tmp_path / "mychart.ti2")
+        assert not dlg._printer_cb.isChecked()        # scanner-profile mode
+        dlg._set_chart(tmp_path / "mychart.ti3")
         assert dlg._layout is None
         assert dlg._chart_reject_reason
         assert ".channels.json" in dlg._chart_note.text()
@@ -463,7 +466,6 @@ def test_chart_without_sidecar_is_rejected_loudly(_app, tmp_path):
         dlg._pick_scan()                       # dead Browse repeats the reason
         tail = dlg._log.toPlainText()[n:]
         assert "can't be used" in tail and ".channels.json" in tail
-        assert ".ti3" not in tail              # no stale wrong-file hint
     finally:
         dlg.deleteLater()
 
@@ -561,5 +563,124 @@ def test_explicit_ti2_pick_is_not_swapped_for_sibling_ti3(_app, tmp_path):
         assert "Printer.ti2" in dlg._ti3_field.text()
         assert dlg._chart_measured is False
         assert dlg._layout is not None                # loads fine off the .ti2
+    finally:
+        dlg.deleteLater()
+
+
+# ---------------------------------------------------------------------------
+# #105 — printer mode accepts a chart's own printtarg .cht files
+# ---------------------------------------------------------------------------
+
+def _tiny_cht(path, locs, origin_x=10.0):
+    """A minimal printtarg-style .cht page holding an X box per loc."""
+    xlines = "\n".join(
+        f"X {loc} {origin_x + i * 12:.1f} 10.0 10.0 10.0"
+        for i, loc in enumerate(locs))
+    path.write_text(f"""BOXES {len(locs)}
+F _ _ 0.0 0.0 100.0 0.0 100.0 40.0 0.0 40.0
+{xlines}
+
+BOX_SHRINK 2.0
+""")
+
+
+def test_byo_cht_flow_loads_chart_without_sidecar(_app, tmp_path):
+    """Printer mode + a chart made outside ChromIQ (no .channels.json): the
+    pick enters the awaiting state instead of rejecting, and supplying the
+    per-page .cht files loads the layout, pages and grid (#105)."""
+    locs = ["A1", "A2", "A3", "A4"]
+    _tiny_ti2(tmp_path / "Printer.ti2", locs)
+    _tiny_cht(tmp_path / "Printer_01.cht", locs[:2])
+    _tiny_cht(tmp_path / "Printer_02.cht", locs[2:])
+    dlg = _dialog(_app)
+    try:
+        dlg._printer_cb.setChecked(True)
+        assert dlg._byo_row_w.isVisibleTo(dlg)
+        dlg._set_chart(tmp_path / "Printer.ti2")
+        assert dlg._byo_awaiting and dlg._layout is None
+        assert ".channels.json" in dlg._chart_note.text()
+        # Dead scan-Browse points at the .cht row, not a generic hint.
+        n = len(dlg._log.toPlainText())
+        dlg._pick_scan()
+        assert "Chart geometry" in dlg._log.toPlainText()[n:]
+        # Supply the pages (stub only the file dialog).
+        from PyQt6.QtWidgets import QFileDialog
+        chts = [str(tmp_path / "Printer_01.cht"), str(tmp_path / "Printer_02.cht")]
+        orig = QFileDialog.getOpenFileNames
+        QFileDialog.getOpenFileNames = staticmethod(lambda *a, **k: (chts, ""))
+        try:
+            dlg._pick_byo_cht()
+        finally:
+            QFileDialog.getOpenFileNames = orig
+        assert not dlg._byo_awaiting
+        assert dlg._layout["engine"] == "printtarg"
+        assert dlg._pages == [0, 1]
+        assert dlg._chart_reject_reason is None
+        # The per-page .cht + .cie were written next to the chart for scanin.
+        assert (tmp_path / "Printer.cie").is_file()
+        assert (tmp_path / "Printer_01.cht").is_file()
+        # And the printer run wires each page to its own written .cht.
+        for pg in (0, 1):
+            shots = dlg._page_shots(pg)
+            shots.clear()
+            shots.append({"path": tmp_path / f"scan{pg + 1}.tif",
+                          "corners": [(0, 0), (9, 0), (9, 9), (0, 9)]})
+            (tmp_path / f"scan{pg + 1}.tif").write_bytes(b"II*\0")
+        dlg._printer_scan_profile = tmp_path / "scanner.icc"
+        dlg._run_job = lambda i: None
+        dlg._execute_printer(tmp_path / "Printer", 0.9)
+        scanins = [j for j in dlg._jobs if j["kind"] == "scanin"]
+        assert len(scanins) == 2
+    finally:
+        dlg.deleteLater()
+
+
+def test_byo_cht_wrong_pages_rejected_but_retryable(_app, tmp_path):
+    """A wrong/missing .cht page fails loudly with the coverage error and the
+    awaiting state survives, so a corrected pick can still succeed (#105)."""
+    locs = ["A1", "A2", "A3", "A4"]
+    _tiny_ti2(tmp_path / "Printer.ti2", locs)
+    _tiny_cht(tmp_path / "Printer_01.cht", locs[:2])   # page 2 missing
+    dlg = _dialog(_app)
+    try:
+        dlg._printer_cb.setChecked(True)
+        dlg._set_chart(tmp_path / "Printer.ti2")
+        from PyQt6.QtWidgets import QFileDialog
+        orig = QFileDialog.getOpenFileNames
+        QFileDialog.getOpenFileNames = staticmethod(
+            lambda *a, **k: ([str(tmp_path / "Printer_01.cht")], ""))
+        try:
+            dlg._pick_byo_cht()
+        finally:
+            QFileDialog.getOpenFileNames = orig
+        assert dlg._layout is None
+        assert dlg._byo_awaiting                      # retry stays possible
+        assert "cover" in dlg._chart_reject_reason
+    finally:
+        dlg.deleteLater()
+
+
+def test_byo_state_resets_on_new_chart_pick(_app, tmp_path):
+    """Picking a proper ChromIQ chart after a BYO one clears the awaiting state
+    and the .cht field (#105)."""
+    locs = ["A1", "A2", "A3", "A4"]
+    _tiny_ti2(tmp_path / "outside.ti2", locs)
+    _tiny_ti2(tmp_path / "chromiq.ti2", locs)
+    _engine_channels(tmp_path / "chromiq.channels.json", locs)
+    dlg = _dialog(_app)
+    try:
+        dlg._printer_cb.setChecked(True)
+        dlg._set_chart(tmp_path / "outside.ti2")
+        # note: the single usable sidecar in the folder belongs to chromiq —
+        # the #101 folder fallback adopts it only when the locs align, which
+        # they do here, so use a folder without any sidecar for the BYO leg.
+        sub = tmp_path / "loose"; sub.mkdir()
+        _tiny_ti2(sub / "outside.ti2", locs)
+        dlg._set_chart(sub / "outside.ti2")
+        assert dlg._byo_awaiting
+        dlg._set_chart(tmp_path / "chromiq.ti2")
+        assert not dlg._byo_awaiting
+        assert dlg._layout is not None
+        assert dlg._byo_field.text() == ""
     finally:
         dlg.deleteLater()

@@ -228,3 +228,66 @@ def test_overwrite_reflects_latest_measurement(tmp_path):
     cie = res.cie_path.read_text()
     assert "95.000000 100.000000 108.000000" in cie
     assert "50.000000 50.000000 50.000000" not in cie
+
+
+# ---------------------------------------------------------------------------
+# #105 — layout from user-supplied printtarg .cht page files
+# ---------------------------------------------------------------------------
+
+def _cht_file(tmp_path, name, locs):
+    xlines = "".join(f"X {loc} {10 + i * 12:.1f} 10.0 10.0 10.0\n"
+                     for i, loc in enumerate(locs))
+    p = tmp_path / name
+    p.write_text(f"BOXES {len(locs)}\n"
+                 "F _ _ 0.0 0.0 100.0 0.0 100.0 40.0 0.0 40.0\n"
+                 f"{xlines}\nBOX_SHRINK 2.0\n")
+    return p
+
+
+def test_layout_from_cht_files_multipage(tmp_path):
+    ti3 = _ti3(tmp_path, [("A01", 0, 0, 0, 0, 0, 0),
+                          ("A02", 50, 50, 50, 20, 20, 20),
+                          ("B01", 100, 100, 100, 95, 100, 108)])
+    p1 = _cht_file(tmp_path, "c_01.cht", ["A01", "A02"])
+    p2 = _cht_file(tmp_path, "c_02.cht", ["B01"])
+    lay = ST.layout_from_cht_files([p1, p2], ti3)
+    assert lay["engine"] == "printtarg"
+    assert len(lay["cht_pages"]) == 2
+    assert lay["locs"] == ["A01", "A02", "B01"]   # page order preserved
+
+
+def test_layout_from_cht_files_validation(tmp_path):
+    ti3 = _ti3(tmp_path, [("A01", 0, 0, 0, 0, 0, 0),
+                          ("A02", 50, 50, 50, 20, 20, 20)])
+    full = _cht_file(tmp_path, "full.cht", ["A01", "A02"])
+    # Missing coverage (a page forgotten).
+    partial = _cht_file(tmp_path, "partial.cht", ["A01"])
+    with pytest.raises(ST.ScaninTargetError, match="cover"):
+        ST.layout_from_cht_files([partial], ti3)
+    # Foreign chart (boxes the reference doesn't have).
+    foreign = _cht_file(tmp_path, "foreign.cht", ["A01", "A02", "Z99"])
+    with pytest.raises(ST.ScaninTargetError, match="belong"):
+        ST.layout_from_cht_files([foreign], ti3)
+    # The same page picked twice.
+    with pytest.raises(ST.ScaninTargetError, match="overlap"):
+        ST.layout_from_cht_files([full, full], ti3)
+    # Not a .cht at all.
+    junk = tmp_path / "junk.cht"
+    junk.write_text("hello\n")
+    with pytest.raises(ST.ScaninTargetError, match="patch"):
+        ST.layout_from_cht_files([junk], ti3)
+
+
+def test_build_scanin_target_from_cht_files_writes_pair(tmp_path):
+    ti3 = _ti3(tmp_path, [("A01", 0, 0, 0, 0, 0, 0),
+                          ("A02", 50, 50, 50, 20, 20, 20),
+                          ("B01", 100, 100, 100, 95, 100, 108)])
+    p1 = _cht_file(tmp_path, "c_01.cht", ["A01", "A02"])
+    p2 = _cht_file(tmp_path, "c_02.cht", ["B01"])
+    lay, res = ST.build_scanin_target_from_cht_files([p1, p2], ti3,
+                                                     tmp_path / "chart")
+    assert res.n_pages == 2 and res.n_patches == 3
+    assert [p.name for p in res.cht_paths] == ["chart_01.cht", "chart_02.cht"]
+    assert res.cie_path.is_file()
+    # The written pages are the user's files verbatim.
+    assert (tmp_path / "chart_01.cht").read_text() == p1.read_text()
