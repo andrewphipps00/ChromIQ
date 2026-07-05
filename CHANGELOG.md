@@ -1,5 +1,14 @@
 # Changelog
 
+## v3.13.0-beta.110
+
+### 🐛 Fixes
+- Light mode: radio buttons (e.g. the "chart I made / standard target" chooser
+  in the scanner window) rendered a broken square when selected and vanished on
+  hover. The light theme was missing its `QRadioButton::indicator` rule, so a
+  dialog's neutral-accent override half-styled the control. Added the rule
+  (mirrors the dark theme) — radios are now round and consistent in both themes.
+
 ## v3.13.0-beta.109
 
 ### 🌍 Translations complete again
