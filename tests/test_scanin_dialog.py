@@ -917,23 +917,23 @@ BEGIN_DATA
 END_DATA
 """)
 
+    from ui.dialogs.scanin_dialog import misaligned_share
+
     aims = [(20 + i * 3.0, 20 + i * 3.0, 20 + i * 3.0) for i in range(20)]
     _write(tmp_path / "chart.ti2", aims)
-    dlg = _dialog(_app)
-    try:
-        # Aligned: reads == aims → quiet.
-        _write(tmp_path / "good.ti3", aims)
-        dlg._warn_if_misaligned(tmp_path / "good.ti3", tmp_path / "chart.ti2")
-        assert "Alignment check" not in dlg._log.toPlainText()
-        # Scrambled: a third of the patches read a very different colour.
-        bad = list(aims)
-        for i in range(0, 20, 3):
-            bad[i] = (90.0, 20.0, 5.0)
-        _write(tmp_path / "bad.ti3", bad)
-        dlg._warn_if_misaligned(tmp_path / "bad.ti3", tmp_path / "chart.ti2")
-        assert "Alignment check" in dlg._log.toPlainText()
-    finally:
-        dlg.deleteLater()
+    # Aligned: reads == aims → quiet (0 patches past the ΔE gate).
+    _write(tmp_path / "good.ti3", aims)
+    n, big = misaligned_share(tmp_path / "good.ti3", tmp_path / "chart.ti2")
+    assert n == 20 and big == 0
+    # Scrambled: a third of the patches read a very different colour → over
+    # the >10% warning threshold. (Round 4: the finding now also gates
+    # colprof behind a modal — see test_scan_alignment_checks.py.)
+    bad = list(aims)
+    for i in range(0, 20, 3):
+        bad[i] = (90.0, 20.0, 5.0)
+    _write(tmp_path / "bad.ti3", bad)
+    n, big = misaligned_share(tmp_path / "bad.ti3", tmp_path / "chart.ti2")
+    assert n == 20 and big / n > 0.10
 
 
 def test_page_count_mismatch_geometry_is_rejected(_app, tmp_path):

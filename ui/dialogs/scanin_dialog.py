@@ -16,6 +16,7 @@ non-native pickers, readable helper text in both themes.
 """
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from PyQt6.QtCore import Qt
@@ -164,6 +165,94 @@ def _chart_base(ti3: Path) -> Path:
     return ti3.with_name(stem)
 
 
+def _plain_id(sid: str) -> str:
+    """``H01`` → ``H1``: scanin zero-pads sample IDs on output; the chart's
+    ``.ti2`` rows and layout locs don't."""
+    m = re.match(r"([A-Za-z]+)0*(\d+)$", sid)
+    return (m.group(1) + m.group(2)) if m else sid
+
+
+def page_ids_from_cht(cht: Path) -> set[str] | None:
+    """The (plain) sample IDs of the patches a page's ``.cht`` reads — the
+    subset of the chart that one scan can legitimately fill. ``None`` if the
+    file can't be parsed."""
+    from workflow.cht_parser import ChtParseError, parse_cht
+    try:
+        geom = parse_cht(cht.read_text(errors="ignore"))
+    except (OSError, ChtParseError):
+        return None
+    return {_plain_id(b.name) for b in geom.patches} or None
+
+
+def misaligned_share(ti3: Path, ti2: Path,
+                     ids: set[str] | None = None) -> tuple[int, int]:
+    """``(patches compared, patches with ΔE76 > 15)`` between what the scanner
+    read (through its profile) and the chart's aim values, optionally
+    restricted to the *ids* one page fills. Each side is normalised to its own
+    brightest patch, so exposure / paper-white scale differences don't count
+    as colour error. Printer drift moves colours too, but structuredly and
+    mostly within bounds; ΔE76 > 15 on a large share flags a scrambled patch
+    assignment (misplaced grid, wrong scan), not an uncalibrated printer."""
+    from workflow.icc_info import xyz_to_lab
+    from workflow.ti3_analysis import parse_ti3
+    got = parse_ti3(ti3)
+    aim = parse_ti3(ti2)
+    aim_by_id = {_plain_id(s): x for s, x in zip(aim.sample_ids, aim.xyz)}
+    # A page's .cht names patches by LOC ("H1"); a printer-mode .ti3/.ti2 pair
+    # is keyed by numeric SAMPLE_ID with the loc in SAMPLE_LOC — translate so
+    # *ids* restricts correctly under either keying.
+    loc_of = {_plain_id(s): _plain_id(l.strip('"'))
+              for s, l in zip(aim.sample_ids, aim.sample_locs)}
+    got_w = max(y for _x, y, _z in got.xyz) or 1.0
+    aim_w = max(y for _x, y, _z in aim_by_id.values()) or 1.0
+    n = big = 0
+    for sid, g in zip(got.sample_ids, got.xyz):
+        sid = _plain_id(sid)
+        a = aim_by_id.get(sid)
+        if a is None or (ids is not None
+                         and sid not in ids and loc_of.get(sid) not in ids):
+            continue
+        gl = xyz_to_lab(tuple(c * 100.0 / got_w for c in g))
+        al = xyz_to_lab(tuple(c * 100.0 / aim_w for c in a))
+        de = sum((x - y) ** 2 for x, y in zip(gl, al)) ** 0.5
+        n += 1
+        big += de > 15.0
+    return n, big
+
+
+def scan_reference_correlation(ti3: Path) -> float | None:
+    """Spearman rank correlation between the scan's RGB luminance and the
+    reference Y in a scanner-mode ``.ti3`` (RGB = what the scanner saw, XYZ =
+    the chart's known colours). Scanner response is monotone, so an aligned
+    read correlates strongly (a real measured ChromIQ chart lands ≈ 0.9; a
+    synthetic render ≈ 1.0) even on an unprofiled scanner; a misplaced grid
+    scrambles the pairing toward 0 (Knut's flipped pages: 0.00–0.33, #108).
+    ``None`` when the file can't be parsed or is too small to judge."""
+    from workflow.ti3_analysis import Ti3ParseError, parse_ti3
+    try:
+        t = parse_ti3(ti3)
+    except (OSError, Ti3ParseError, ValueError):
+        return None
+    if t.rgb is None or len(t.rgb) < 8:
+        return None
+    lum = [0.2126 * r + 0.7152 * g + 0.0722 * b for r, g, b in t.rgb]
+    y = [v for _x, v, _z in t.xyz]
+
+    def _ranks(v: list[float]) -> list[float]:
+        order = sorted(range(len(v)), key=lambda i: v[i])
+        r = [0.0] * len(v)
+        for pos, i in enumerate(order):
+            r[i] = float(pos)
+        return r
+
+    ra, rb = _ranks(lum), _ranks(y)
+    n = len(ra)
+    ma, mb = sum(ra) / n, sum(rb) / n
+    num = sum((a - ma) * (b - mb) for a, b in zip(ra, rb))
+    den = (sum((a - ma) ** 2 for a in ra) * sum((b - mb) ** 2 for b in rb)) ** 0.5
+    return num / den if den else None
+
+
 class ScannerProfileDialog(_ToolDialogBase):
     TOOL_KEY    = "scanner_profile"
     TITLE       = tr("Build scanner or camera profile")
@@ -243,6 +332,7 @@ class ScannerProfileDialog(_ToolDialogBase):
         self._layout: dict | None = None
         self._printer_scan_profile: Path | None = None   # scanner ICC for printer mode
         self._chart_measured = False   # loaded chart has a real .ti3 (not just .ti2)
+        self._align_warnings: list[str] = []   # per-page misalignment findings
         self._chart_reject_reason: str | None = None  # why the last pick failed (#101)
         # Bring-your-own-.cht (#105): a printer-mode chart without channels.json
         # waits here for the user to pick printtarg's per-page .cht files.
@@ -516,6 +606,7 @@ class ScannerProfileDialog(_ToolDialogBase):
 
         # Page selector (multi-page charts only)
         self._page_row = QHBoxLayout()
+        self._page_row.setContentsMargins(0, 0, 0, 0)
         self._page_row.addWidget(QLabel(tr("Page:"), self))
         self._page_combo = NoScrollComboBox(self)
         self._page_combo.currentIndexChanged.connect(self._on_page_changed)
@@ -567,7 +658,19 @@ class ScannerProfileDialog(_ToolDialogBase):
         trow.addWidget(self._reveal_btn)
         v.addLayout(trow)
 
-        # Custom .cht browse (only when "Other…" is selected).
+        # Custom .cht browse (only when "Other…" is selected). Labelled like
+        # every other file row, and margin-free so its field lines up with
+        # them on both sides (Knut, #108: it sat indented and unlabelled).
+        self._cht_row_w = QWidget(self)
+        _cht_v = QVBoxLayout(self._cht_row_w)
+        _cht_v.setContentsMargins(0, 0, 0, 0)
+        _cht_v.addLayout(self._labelled(
+            tr("Target layout file (.cht):"), tr("Target layout file"),
+            tr("The recognition file that describes where every patch sits on "
+               "your target — ArgyllCMS calls it a .cht file. It usually comes "
+               "with the target's software, or from ArgyllCMS's ref folder.\n\n"
+               "Pick the one made for your exact target type; ChromIQ lays its "
+               "reading grid from it.")))
         self._cht_row = QHBoxLayout()
         self._cht_field = QLineEdit(self)
         self._cht_field.setReadOnly(True)
@@ -576,8 +679,7 @@ class ScannerProfileDialog(_ToolDialogBase):
         bc = make_browse_button(self, tr("Browse…"), icon="folder_measure")
         bc.clicked.connect(self._pick_cht)
         self._cht_row.addWidget(bc)
-        self._cht_row_w = QWidget(self)
-        self._cht_row_w.setLayout(self._cht_row)
+        _cht_v.addLayout(self._cht_row)
         self._cht_row_w.setVisible(False)
         v.addWidget(self._cht_row_w)
 
@@ -830,8 +932,23 @@ class ScannerProfileDialog(_ToolDialogBase):
             "⌘/Ctrl +/− and ⌘/Ctrl + 0 to reset · double-click resets the view. "
             "Rotate handles a sideways scan; Pop out gives a bigger view.")))
 
-        form.addLayout(self._labelled(
-            tr("Patch sample area:"), tr("Patch sample area"),
+        # Inline label + control, sharing one label column with "Profile
+        # type:" / "Profile name:" below (Basti: the control belongs NEXT to
+        # its name, not under it, and the three should line up).
+        self._sa_label = QLabel(tr("Patch sample area:"), self)
+        row_sa = QHBoxLayout()
+        row_sa.addWidget(self._sa_label)
+        self._sample_area = NoScrollSpinBox(self)
+        self._sample_area.setRange(20, 100)
+        self._sample_area.setValue(50)
+        self._sample_area.setSuffix(" %")
+        self._sample_area.setMinimumWidth(110)
+        self._sample_area.valueChanged.connect(
+            lambda v: self._marquee.set_sample_fraction(v / 100.0))
+        row_sa.addWidget(self._sample_area)
+        row_sa.addStretch(1)
+        row_sa.addWidget(self._tip(
+            tr("Patch sample area"),
             tr("How much of each patch ChromIQ reads — shown as the filled green "
             "inner square inside every cell of the grid above.\n\n"
             "It always reads the middle of a patch and leaves the edges out, "
@@ -842,16 +959,7 @@ class ScannerProfileDialog(_ToolDialogBase):
             "small or the grid isn't perfectly aligned, so you stay well clear of "
             "the edges. Raise it (a bigger square) only for large, cleanly-printed "
             "patches with the grid sitting exactly right, to average over more of "
-            "each colour for a touch less noise.")))
-        row_sa = QHBoxLayout()
-        self._sample_area = NoScrollSpinBox(self)
-        self._sample_area.setRange(20, 100)
-        self._sample_area.setValue(50)
-        self._sample_area.setSuffix(" %")
-        self._sample_area.valueChanged.connect(
-            lambda v: self._marquee.set_sample_fraction(v / 100.0))
-        row_sa.addWidget(self._sample_area, 1)
-        row_sa.addStretch(1)
+            "each colour for a touch less noise.")), 0, Qt.AlignmentFlag.AlignVCenter)
         form.addLayout(row_sa)
 
         self._build_shot_bar(form)
@@ -915,17 +1023,9 @@ class ScannerProfileDialog(_ToolDialogBase):
         opts.addWidget(self._use_fiducials_cb, 1, 0)
         form.addLayout(opts)
 
-        form.addLayout(self._labelled(
-            tr("Profile type:"), tr("Profile type"),
-            tr("How the scanner profile models colour.\n\n"
-            "• Matrix — a small, robust profile (a matrix with per-channel "
-            "curves). The most common choice for scanners: forgiving of noise "
-            "and few patches, and enough for faithful colour. Recommended.\n\n"
-            "• LUT — medium / high quality — a look-up-table profile that can "
-            "follow the scanner more closely. Use it when you have a chart with "
-            "many patches and clean, repeatable scans; high is finer but needs "
-            "the best data or it just fits the noise.")))
+        self._pt_label = QLabel(tr("Profile type:"), self)
         row3 = QHBoxLayout()
+        row3.addWidget(self._pt_label)
         self._ptype = NoScrollComboBox(self)
         # data = (colprof -a algorithm, -q quality). "s" (shaper+matrix) keeps the
         # previous default output exactly under the friendly "Matrix" label.
@@ -933,13 +1033,24 @@ class ScannerProfileDialog(_ToolDialogBase):
         self._ptype.addItem(tr("LUT — medium quality"), ("x", "m"))
         self._ptype.addItem(tr("LUT — high quality"), ("x", "h"))
         row3.addWidget(self._ptype, 1)
-        row3.addStretch(1)
+        row3.addWidget(self._tip(
+            tr("Profile type"),
+            tr("How the scanner profile models colour.\n\n"
+            "• Matrix — a small, robust profile (a matrix with per-channel "
+            "curves). The most common choice for scanners: forgiving of noise "
+            "and few patches, and enough for faithful colour. Recommended.\n\n"
+            "• LUT — medium / high quality — a look-up-table profile that can "
+            "follow the scanner more closely. Use it when you have a chart with "
+            "many patches and clean, repeatable scans; high is finer but needs "
+            "the best data or it just fits the noise.")), 0,
+            Qt.AlignmentFlag.AlignVCenter)
         form.addLayout(row3)
         # Optional profile name (Nelson): without it the .icc inherits the
         # chart / target scan's name, which reads like a paper profile — let the
         # user call it e.g. "Epson ET-8550 scanner" instead.
         row4 = QHBoxLayout()
-        row4.addWidget(QLabel(tr("Profile name:")))
+        self._pn_label = QLabel(tr("Profile name:"), self)
+        row4.addWidget(self._pn_label)
         self._prof_name = QLineEdit(self)
         self._prof_name.setPlaceholderText(
             tr("optional — otherwise named after the chart / target"))
@@ -961,6 +1072,12 @@ class ScannerProfileDialog(_ToolDialogBase):
                "scanner or camera profile, or, when “Profile my printer from "
                "this scan” is ticked, the printer profile.")))
         form.addLayout(row4)
+        # One shared label column → the spinbox, combo and name field all
+        # start at the same x (Basti, #108 follow-up).
+        _labels = (self._sa_label, self._pt_label, self._pn_label)
+        _w = max(l.sizeHint().width() for l in _labels) + 8
+        for _l in _labels:
+            _l.setFixedWidth(_w)
 
     def _custom_profile_stem(self) -> str | None:
         """The user-chosen profile name as a filesystem-safe stem, or None."""
@@ -1750,32 +1867,24 @@ class ScannerProfileDialog(_ToolDialogBase):
         Otherwise rewrite ``F`` to the patch-area bounding box, so ``-F`` maps
         the corners the user placed on the patch grid instead.
 
-        The rewrite runs for ChromIQ-chart mode too (#108): an engine chart's
-        ``F`` already IS the patch bbox (the rewrite is a no-op), but a
-        user-supplied printtarg ``-s`` .cht carries real corner marks OUTSIDE
-        the patch area — Knut's charts have them 7 mm out on three sides, so
-        skipping the rewrite compressed the whole grid downward."""
+        The rewrite runs for ChromIQ-chart mode too (#108): a user-supplied
+        printtarg ``-s`` .cht carries real corner marks OUTSIDE the patch
+        area — Knut's charts have them 7 mm out on three sides, so skipping
+        the rewrite compressed the whole grid downward. The rewrite keeps the
+        original F's corner ORDER (engine charts are y-up, standard charts
+        y-down — a fixed order vertically mirrored engine reads, #108)."""
         if self._standard_mode() and self._use_fiducials_cb.isChecked():
             return cht                # ON: corners were placed on the real marks
-        import re
-        from workflow.cht_parser import ChtParseError, parse_cht
+        from workflow.scanin_runner import cht_with_patchbox_fiducials
         try:
             txt = cht.read_text(errors="ignore")
         except OSError:
             return cht
-        try:
-            geom = parse_cht(txt)
-        except ChtParseError:
+        new = cht_with_patchbox_fiducials(txt)
+        if new == txt:
             return cht
-        if not geom.patches:
-            return cht
-        xs = [b.x1 for b in geom.patches] + [b.x2 for b in geom.patches]
-        ys = [b.y1 for b in geom.patches] + [b.y2 for b in geom.patches]
-        x0, x1, y0, y1 = min(xs), max(xs), min(ys), max(ys)
-        fline = ("  F _ _ %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f"
-                 % (x0, y0, x1, y0, x1, y1, x0, y1))
         dst = base.parent / f"{cht.stem}-patchbox.cht"
-        dst.write_text(re.sub(r'(?m)^\s*F .*$', fline, txt, count=1))
+        dst.write_text(new)
         return dst
 
     def _apply_sample_area(self, cht: Path, frac: float, base: Path) -> Path:
@@ -1797,6 +1906,7 @@ class ScannerProfileDialog(_ToolDialogBase):
         self._capture_current_corners()
         self._save_placement()                   # remember this target's grid
         self._log.clear()
+        self._align_warnings = []                # per-page misalignment findings
         method = self._avg_method.currentData() or "mean"
         if self._standard_mode():
             pages = [0]
@@ -1846,6 +1956,8 @@ class ScannerProfileDialog(_ToolDialogBase):
                     out_name=f"{base.name}-p{pg + 1}s{k + 1}-scanner.ti3")
                 shot_ti3s.append(params.out_ti3)
                 self._jobs.append({"kind": "scanin", "params": params,
+                                   "page": pg + 1, "shot": k + 1,
+                                   "nshots": len(shots),
                                    "label": (tr("Reading scan {k} of page {n}…")
                                              if len(shots) > 1 else
                                              tr("Reading page {n} from the scan…"))
@@ -1886,7 +1998,12 @@ class ScannerProfileDialog(_ToolDialogBase):
                     self._log.appendPlainText(f"[ERROR] {msg}")
                     self._finish(False)
                     return
-                if unfilled:
+                # In printer mode each page fills only its own share of the
+                # accumulated .ti3, so scanin reports "Not all sample values
+                # have been filled" on every page but the last even when all
+                # is well (#108) — only the final page's report means real gaps.
+                if unfilled and not (job["params"].is_printer
+                                     and not job.get("final")):
                     self._log.appendPlainText(tr(
                         "⚠ Not every patch on this page could be read — the grid "
                         "placement is probably off. Check the diagnostic image "
@@ -1895,6 +2012,7 @@ class ScannerProfileDialog(_ToolDialogBase):
                         "wrong."))
                 if not job["params"].is_printer:     # printer .ti3 is accumulated;
                     self._sanitize_scanner_ti3(job["params"].out_ti3)  # sanitize at end
+                self._check_page_alignment(job)
                 self._run_job(i + 1)
 
             self._scanin.run(job["params"], on_line=_watch, on_finish=_done)
@@ -1972,58 +2090,103 @@ class ScannerProfileDialog(_ToolDialogBase):
                 scan_profile=self._printer_scan_profile, pbase=pbase,
                 accumulate=not first_page)
             self._jobs.append({"kind": "scanin", "params": params,
+                               "page": pg + 1,
                                "label": tr("Reading page {n} for the printer "
                                            "profile…").format(n=pg + 1)})
             first_page = False
         if not self._jobs:
             self._finish(False)
             return
+        self._jobs[-1]["final"] = True      # last page: the .ti3 must be complete
         self._jobs.append({"kind": "colprof_printer", "pbase": pbase, "base": base})
         self._run_job(0)
 
-    def _warn_if_misaligned(self, ti3: Path, ti2: Path) -> None:
-        """Knut's misalignment sanity check (#108): compare what the scanner
-        read (through its profile) against the chart's aim values, patch by
-        patch. A misplaced grid — or a scan of the wrong chart — scrambles the
-        assignment, so a large share of patches lands far off. Printer drift
-        moves colours too, but structuredly and mostly within bounds; the
-        thresholds (ΔE76 > 15 on more than 10% of patches) flag scrambles, not
-        an uncalibrated printer. Warning only — the build continues."""
+    def _check_page_alignment(self, job: dict) -> None:
+        """Knut's misalignment sanity check (#108), per page — so the warning
+        names the scan to fix. Printer mode: compare the page's patches (the
+        IDs its .cht reads) in the accumulated .ti3 against the chart's aim
+        values — ΔE76 > 15 on more than 10% of them means a scrambled patch
+        assignment, not an uncalibrated printer. Scanner mode: the reference
+        is what the .ti3 itself pairs the read with, so ΔE is trivially small
+        there — instead rank-correlate the scan's luminance with the
+        reference Y (:func:`scan_reference_correlation`). Findings are logged
+        AND collected in ``_align_warnings``; before colprof runs the user
+        gets a modal choice — his misaligned build sailed through as one ⚠
+        line buried in colprof's -v output."""
         try:
-            from workflow.icc_info import xyz_to_lab
-            from workflow.ti3_analysis import parse_ti3
-            got = parse_ti3(ti3)
-            aim = parse_ti3(ti2)
-            aim_by_id = dict(zip(aim.sample_ids, aim.xyz))
-            # Normalise each side to its own brightest patch, so exposure /
-            # paper-white scale differences don't count as colour error.
-            got_w = max(y for _x, y, _z in got.xyz) or 1.0
-            aim_w = max(y for _x, y, _z in aim_by_id.values()) or 1.0
-            n = big = 0
-            for sid, g in zip(got.sample_ids, got.xyz):
-                a = aim_by_id.get(sid)
-                if a is None:
-                    continue
-                gl = xyz_to_lab(tuple(c * 100.0 / got_w for c in g))
-                al = xyz_to_lab(tuple(c * 100.0 / aim_w for c in a))
-                de = sum((x - y) ** 2 for x, y in zip(gl, al)) ** 0.5
-                n += 1
-                big += de > 15.0
-            if n and big / n > 0.10:
-                self._log.appendPlainText(tr(
-                    "⚠ Alignment check: {p}% of the patches read very "
-                    "differently from what the chart asked the printer to "
-                    "print (ΔE over 15). The grid was probably misaligned on "
-                    "a scan — or a scan doesn't belong to this chart. Check "
-                    "the diagnostic images before trusting this profile."
-                ).format(p=round(100 * big / n)))
+            p = job["params"]
+            if p.is_printer:
+                n, big = misaligned_share(
+                    p.out_ti3, p.pbase.with_suffix(".ti2"),
+                    ids=page_ids_from_cht(p.cht))
+                if n and big / n > 0.10:
+                    msg = tr(
+                        "Page {n}: {p}% of its patches read very differently "
+                        "from what the chart asked the printer to print "
+                        "(ΔE over 15) — the grid is probably misaligned on "
+                        "this page's scan.").format(
+                            n=job.get("page", 1), p=round(100 * big / n))
+                    self._log.appendPlainText("⚠ " + msg)
+                    self._align_warnings.append(msg)
+                return
+            rho = scan_reference_correlation(p.out_ti3)
+            if rho is not None and rho < 0.5:
+                msg = (tr("Page {n} (scan {k}): what the scanner read doesn't "
+                          "line up with the chart's colours — the grid is "
+                          "probably misaligned on this scan.")
+                       if job.get("nshots", 1) > 1 else
+                       tr("Page {n}: what the scanner read doesn't line up "
+                          "with the chart's colours — the grid is probably "
+                          "misaligned on this page's scan.")).format(
+                    n=job.get("page", 1), k=job.get("shot", 1))
+                self._log.appendPlainText("⚠ " + msg)
+                self._align_warnings.append(msg)
         except Exception:  # noqa: BLE001 — a sanity check must never block
             log.warning("misalignment check failed", exc_info=True)
+
+    def _confirm_despite_misalignment(self) -> bool:
+        """Modal stop before colprof when a page failed the alignment check —
+        a profile from a scrambled read is garbage, and a log line alone is
+        overlooked (#108). Returns True to build anyway."""
+        from PyQt6.QtWidgets import QMessageBox
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Warning)
+        box.setWindowTitle(tr("Scan doesn't match the chart"))
+        box.setText(tr("The alignment check failed:"))
+        box.setInformativeText(
+            "\n\n".join("• " + w for w in self._align_warnings) + "\n\n" + tr(
+                "Check the flagged page's diagnostic image (if saved), realign "
+                "the grid on its scan and build again. A profile built from "
+                "this read will be wrong."))
+        stop = box.addButton(tr("Stop"), QMessageBox.ButtonRole.RejectRole)
+        box.addButton(tr("Build anyway"), QMessageBox.ButtonRole.AcceptRole)
+        box.setDefaultButton(stop)
+        box.exec()
+        if box.clickedButton() is stop:
+            self._log.appendPlainText(tr(
+                "Stopped — realign the flagged page's grid and build again."))
+            self._finish(False)
+            return False
+        return True
 
     def _build_printer_profile(self, pbase: Path, base: Path) -> None:
         ti3 = pbase.with_suffix(".ti3")
         self._sanitize_scanner_ti3(ti3)              # once, on the accumulated .ti3
-        self._warn_if_misaligned(ti3, base.with_suffix(".ti2"))
+        if not self._align_warnings:
+            # Per-page checks found nothing (or couldn't run — e.g. an
+            # unparseable BYO .cht): one whole-chart pass as the safety net.
+            try:
+                n, big = misaligned_share(ti3, base.with_suffix(".ti2"))
+                if n and big / n > 0.10:
+                    self._align_warnings.append(tr(
+                        "{p}% of the patches read very differently from what "
+                        "the chart asked the printer to print (ΔE over 15) — "
+                        "a grid was probably misaligned, or a scan doesn't "
+                        "belong to this chart.").format(p=round(100 * big / n)))
+            except Exception:  # noqa: BLE001 — a sanity check must never block
+                log.warning("misalignment check failed", exc_info=True)
+        if self._align_warnings and not self._confirm_despite_misalignment():
+            return
         self._log.appendPlainText(tr("Building the printer profile…"))
         ti3, custom = self._apply_profile_name(ti3)
         params = ProfileParams(
@@ -2089,6 +2252,8 @@ class ScannerProfileDialog(_ToolDialogBase):
 
     def _build_profile(self, page_ti3s: list[Path], base: Path) -> None:
         # Combine multi-page reads into one .ti3, then colprof → scanner ICC.
+        if self._align_warnings and not self._confirm_despite_misalignment():
+            return
         try:
             combined = self._combine_ti3(page_ti3s, base)
         except OSError as exc:

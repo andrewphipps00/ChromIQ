@@ -75,6 +75,47 @@ def cht_with_sample_area(cht_text: str, frac: float) -> str:
     return cht_text.rstrip() + f"\n\nBOX_SHRINK {shrink:.3f}\n"
 
 
+def cht_with_patchbox_fiducials(cht_text: str) -> str:
+    """Rewrite the ``F`` line so the fiducials sit on the patch-area bounding
+    box — **preserving the original corner order**. Each existing fiducial is
+    replaced by the bbox corner nearest to it, so the frame shrinks (or grows)
+    onto the patch area without changing its orientation.
+
+    That orientation matters: scanin's ``-F`` pairs the marquee corners
+    (passed image-style, first = top-left) with the ``F`` corners *by
+    position in the line*. Engine charts write their ``F`` in bottom-left-
+    origin mm (first corner = ymax = physically top); rectarg/Argyll charts
+    use image-style y-down (first corner = ymin = top). A rewrite that emits
+    a fixed corner order is right for one convention and **vertically mirrors
+    the grid** for the other — which scrambled every engine-chart scanner
+    read into per-strip reversed patches while looking perfectly aligned
+    (#108: positions stay inside the patch area, only the labels flip).
+
+    Unchanged when there is no ``F`` line or no patch boxes. If the existing
+    fiducials don't map 1:1 onto distinct bbox corners (degenerate frame),
+    the y-down image-style order is used — the convention of every standard
+    target this fallback could apply to."""
+    from workflow.cht_parser import ChtParseError, parse_cht
+    try:
+        geom = parse_cht(cht_text)
+    except ChtParseError:
+        return cht_text
+    if not geom.patches or not re.search(r"(?m)^\s*F .*$", cht_text):
+        return cht_text
+    xs = [b.x1 for b in geom.patches] + [b.x2 for b in geom.patches]
+    ys = [b.y1 for b in geom.patches] + [b.y2 for b in geom.patches]
+    x0, x1, y0, y1 = min(xs), max(xs), min(ys), max(ys)
+    bbox = [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
+    corners = bbox                                   # image-style fallback
+    if len(geom.fiducials) == 4:
+        nearest = [min(bbox, key=lambda c, f=f: (c[0] - f[0]) ** 2 + (c[1] - f[1]) ** 2)
+                   for f in geom.fiducials]
+        if len(set(nearest)) == 4:
+            corners = nearest
+    fline = "  F _ _ " + " ".join(f"{x:.2f} {y:.2f}" for x, y in corners)
+    return re.sub(r"(?m)^\s*F .*$", fline, cht_text, count=1)
+
+
 _TI3_STR_FIELDS = {"SAMPLE_ID", "SAMPLE_LOC", "SAMPLE_NAME"}
 
 

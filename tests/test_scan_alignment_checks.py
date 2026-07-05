@@ -1,0 +1,207 @@
+"""Misalignment detection + the F-orientation fix (#108, Knut round 4).
+
+Knut deliberately misaligned one page's grid and built anyway: the ΔE check
+printed one ⚠ line buried in colprof's -v output, scanner mode had no check at
+all, and — the real find — every engine-chart scanner read was scrambled even
+when perfectly aligned: the patch-bbox ``F`` rewrite emitted a fixed corner
+order (right for y-down standard charts, a vertical mirror for y-up engine
+charts), reversing every strip while every box still landed on a patch.
+"""
+from __future__ import annotations
+
+import os
+
+import pytest
+
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+from PyQt6.QtWidgets import QApplication, QMessageBox  # noqa: E402
+
+from core.settings import DEFAULTS  # noqa: E402
+from workflow.layout_engine.cht_writer import build_cht_text  # noqa: E402
+from workflow.scanin_runner import cht_with_patchbox_fiducials  # noqa: E402
+
+
+@pytest.fixture(scope="module")
+def _app():
+    return QApplication.instance() or QApplication([])
+
+
+class _FakeSettings:
+    def __init__(self, **overrides):
+        self._store = {**DEFAULTS, **overrides}
+
+    def get(self, key, default=None):
+        return self._store.get(key, default)
+
+    def set(self, key, value):
+        self._store[key] = value
+
+
+def _f_corners(cht_text: str) -> list[tuple[float, float]]:
+    import re
+    m = re.search(r"(?m)^\s*F _ _ (.*)$", cht_text)
+    v = [float(t) for t in m.group(1).split()]
+    return [(v[i], v[i + 1]) for i in range(0, 8, 2)]
+
+
+def _engine_cht(marks_outside: float = 0.0) -> str:
+    """A y-up (bottom-left-origin) engine-style cht: strip A runs A1 (top,
+    y=90) → A3 (bottom, y=10), like every ChromIQ engine chart."""
+    boxes = [{"loc": f"A{i + 1}", "x": 10.0, "y": 90.0 - i * 40.0,
+              "w": 20.0, "h": 20.0} for i in range(3)]
+    txt = build_cht_text(boxes, [(b["loc"], 20.0, 20.0, 20.0) for b in boxes])
+    if marks_outside:
+        c = _f_corners(txt)
+        moved = [(x + (marks_outside if x > 15 else -marks_outside),
+                  y + (marks_outside if y > 60 else -marks_outside))
+                 for x, y in c]
+        line = "  F _ _ " + " ".join(f"{x:f} {y:f}" for x, y in moved)
+        import re
+        txt = re.sub(r"(?m)^\s*F .*$", line, txt, count=1)
+    return txt
+
+
+def _downwards_cht() -> str:
+    """A y-down (image-style) standard-target cht, F in TL,TR,BR,BL order the
+    way rectarg/Argyll write it (first corner = ymin = physically top)."""
+    return "\n".join([
+        "", "", "BOXES 4",
+        "  F _ _ 5 5 105 5 105 55 5 55",
+        "  X P1 P1 _ _ 40 40 10 10 0 0",
+        "  X P2 P2 _ _ 40 40 60 10 0 0",
+        "", "BOX_SHRINK 3", "", "REF_ROTATION 0.0", "",
+        "XLIST 0", "", "YLIST 0", "", "",
+        "EXPECTED XYZ 2", "  P1 20 20 20", "  P2 20 20 20", ""])
+
+
+def test_patchbox_rewrite_preserves_yup_orientation():
+    """The #108 regression: an engine cht's F starts at the TOP corner
+    (ymax in its y-up coords) — the patch-bbox rewrite must keep it there,
+    not emit the y-down fixed order that mirrors the grid."""
+    old = _f_corners(_engine_cht())
+    new = _f_corners(cht_with_patchbox_fiducials(_engine_cht()))
+    assert old[0][1] == max(c[1] for c in old)          # engine F: TL first
+    assert new[0][1] == max(c[1] for c in new), \
+        "F corner order flipped — every strip reads reversed (#108)"
+    # x order preserved too (TL, TR, BR, BL).
+    assert new[0][0] < new[1][0] and new[3][0] < new[2][0]
+
+
+def test_patchbox_rewrite_preserves_ydown_orientation():
+    new = _f_corners(cht_with_patchbox_fiducials(_downwards_cht()))
+    # Standard chart: first corner stays the ymin (top-of-image) one, and the
+    # frame is now the patch bbox (10..100 / 10..50).
+    assert new[0] == (10.0, 10.0) and new[2] == (100.0, 50.0)
+
+
+def test_patchbox_rewrite_snaps_outside_marks_without_flip():
+    """printtarg -s marks sit OUTSIDE the patch area; each must snap to the
+    nearest bbox corner, keeping the frame's orientation."""
+    new = _f_corners(cht_with_patchbox_fiducials(_engine_cht(marks_outside=7.0)))
+    assert new[0][1] == max(c[1] for c in new)          # still top-first
+    assert new[0][0] == min(c[0] for c in new)
+    xs = sorted({x for x, _ in new}); ys = sorted({y for _, y in new})
+    assert xs == [10.0, 30.0] and ys == [10.0, 110.0]   # exactly the bbox now
+
+
+def test_patchbox_rewrite_no_f_line_unchanged():
+    txt = "\n".join(l for l in _engine_cht().splitlines()
+                    if not l.strip().startswith("F "))
+    assert cht_with_patchbox_fiducials(txt) == txt
+
+
+def _write_cgats(path, fields, rows):
+    path.write_text("\n".join(
+        ["CGATS.17", f"NUMBER_OF_FIELDS {len(fields)}", "BEGIN_DATA_FORMAT",
+         " ".join(fields), "END_DATA_FORMAT", f"NUMBER_OF_SETS {len(rows)}",
+         "BEGIN_DATA"] + [" ".join(str(v) for v in r) for r in rows]
+        + ["END_DATA", ""]))
+
+
+def test_misaligned_share_translates_page_locs(tmp_path, _app):
+    """Printer-mode .ti3/.ti2 are keyed by numeric SAMPLE_ID with the loc in
+    SAMPLE_LOC; a page's .cht gives locs — the share must restrict correctly
+    and flag only the scrambled page."""
+    from ui.dialogs.scanin_dialog import misaligned_share
+    ti2 = tmp_path / "c.ti2"; ti3 = tmp_path / "c.ti3"
+    f2 = ["SAMPLE_ID", "SAMPLE_LOC", "RGB_R", "RGB_G", "RGB_B",
+          "XYZ_X", "XYZ_Y", "XYZ_Z"]
+    aims = [[i + 1, f'"{s}{n}"', 50, 50, 50, 10 * i, 10 * i, 10 * i]
+            for i, (s, n) in enumerate((s, n) for s in "AB" for n in range(1, 6))]
+    _write_cgats(ti2, f2, aims)
+    got = [r[:5] + ([90 - v for v in r[5:]] if str(r[1]).startswith('"A')
+                    else r[5:]) for r in [list(r) for r in aims]]
+    _write_cgats(ti3, f2, got)                     # page A scrambled, B exact
+    n, big = misaligned_share(ti3, ti2, ids={f"A{i}" for i in range(1, 6)})
+    assert n == 5 and big >= 4                     # page A flagged
+    n, big = misaligned_share(ti3, ti2, ids={f"B{i}" for i in range(1, 6)})
+    assert (n, big) == (5, 0)                      # page B clean
+
+
+def test_scan_reference_correlation_separates(tmp_path, _app):
+    from ui.dialogs.scanin_dialog import scan_reference_correlation
+    f = ["SAMPLE_ID", "RGB_R", "RGB_G", "RGB_B", "XYZ_X", "XYZ_Y", "XYZ_Z"]
+    n = 24
+    good = [[f"P{i + 1}", 4 * i, 4 * i, 4 * i, 3 * i, 3 * i + 1, 3 * i]
+            for i in range(n)]
+    t = tmp_path / "good.ti3"; _write_cgats(t, f, good)
+    assert scan_reference_correlation(t) > 0.9
+    bad = [r[:4] + good[(i * 7 + 3) % n][4:] for i, r in enumerate(good)]
+    t2 = tmp_path / "bad.ti3"; _write_cgats(t2, f, bad)
+    assert scan_reference_correlation(t2) < 0.5
+
+
+def test_page_ids_from_cht_strips_padding(tmp_path, _app):
+    from ui.dialogs.scanin_dialog import page_ids_from_cht
+    p = tmp_path / "p.cht"
+    p.write_text(_engine_cht().replace("A1 A1", "A01 A01"))
+    assert page_ids_from_cht(p) == {"A1", "A2", "A3"}
+
+
+def test_check_page_alignment_flags_and_logs(tmp_path, _app):
+    """Drive the real per-page hook with a scrambled scanner-page .ti3: it must
+    log a ⚠ AND collect the finding for the pre-colprof modal."""
+    from ui.dialogs.scanin_dialog import ScannerProfileDialog
+    from workflow.scanin_runner import ScaninParams
+    f = ["SAMPLE_ID", "RGB_R", "RGB_G", "RGB_B", "XYZ_X", "XYZ_Y", "XYZ_Z"]
+    n = 24
+    rows = [[f"P{i + 1}", 4 * i, 4 * i, 4 * i,
+             *([3 * ((i * 7 + 3) % n)] * 3)] for i in range(n)]
+    scan = tmp_path / "scan.tif"; scan.touch()
+    _write_cgats(tmp_path / "scan-scanner.ti3", f, rows)
+    dlg = ScannerProfileDialog(object(), _FakeSettings())
+    try:
+        job = {"params": ScaninParams(scan, tmp_path / "x.cht"), "page": 2}
+        dlg._check_page_alignment(job)
+        assert len(dlg._align_warnings) == 1
+        assert "Page 2" in dlg._align_warnings[0]
+        assert "⚠" in dlg._log.toPlainText()
+    finally:
+        dlg.deleteLater()
+
+
+@pytest.mark.parametrize("press_stop", [True, False])
+def test_confirm_despite_misalignment(press_stop, _app, monkeypatch):
+    """The modal gate: Stop (the default) aborts the build; Build anyway
+    continues. Only the blocking exec edge is stubbed — the real handler,
+    buttons and _finish path run."""
+    from ui.dialogs.scanin_dialog import ScannerProfileDialog
+    dlg = ScannerProfileDialog(object(), _FakeSettings())
+    try:
+        dlg._align_warnings = ["Page 1: scrambled"]
+        finished = []
+        monkeypatch.setattr(dlg, "_finish", lambda ok: finished.append(ok))
+
+        def _exec(box):
+            (box.defaultButton() if press_stop
+             else next(b for b in box.buttons()
+                       if b is not box.defaultButton())).click()
+            return 0
+
+        monkeypatch.setattr(QMessageBox, "exec", _exec)
+        proceed = dlg._confirm_despite_misalignment()
+        assert proceed is (not press_stop)
+        assert finished == ([False] if press_stop else [])
+    finally:
+        dlg.deleteLater()
