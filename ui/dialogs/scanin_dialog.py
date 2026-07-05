@@ -350,6 +350,9 @@ class ScannerProfileDialog(_ToolDialogBase):
 
     def _build_mode_selector(self, form) -> None:
         row = QHBoxLayout()
+        # Name the choice the radios make — without it the two options read as
+        # floating statements (Knut, #108 follow-up).
+        row.addWidget(QLabel(tr("Create profile using:"), self))
         self._mode_group = QButtonGroup(self)
         self._mode_chromiq = QRadioButton(tr("A chart I made in ChromIQ"), self)
         self._mode_standard = QRadioButton(
