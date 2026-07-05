@@ -1,5 +1,12 @@
 # Changelog
 
+## v3.13.0-beta.106
+
+### 🌍 Translations
+- The scanner/camera-profile strings — labels, notes and the extensive tooltips
+  (sample area, fiducial marks, Reading options, demo scan) — are now translated
+  in all 12 languages; the catalogs are complete again.
+
 ## v3.13.0-beta.105
 
 ### ✨ Scanner: complete "Reading options" help
