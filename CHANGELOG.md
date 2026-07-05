@@ -1,5 +1,11 @@
 # Changelog
 
+## v3.13.0-beta.105
+
+### ✨ Scanner: complete "Reading options" help
+- The **Reading options** help now covers all three checkboxes — it was missing a
+  friendly explanation of **Use fiducial marks** (and wrongly said "two settings").
+
 ## v3.13.0-beta.104
 
 ### 🐛 Scanner: interior grid alignment on rounded targets (Hutchcolor)
