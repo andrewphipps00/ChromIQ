@@ -1,5 +1,36 @@
 # Changelog
 
+## v3.13.0-beta.111
+
+### 🐛 Fixes
+- Create Chart / layout editor: charts built with the ChromIQ layout engine
+  lost their New-patch-set creation recipe end-to-end (#100) — the editor's
+  engine save wrote no meta.json, the Apply/Overwrite hand-off dropped the
+  recipe, the preset save overwrote its instrument/paper/layout from the hidden
+  printtarg widgets, and the "Fill remaining space: pages" unit was never
+  saved. Presets made from engine charts now reload their full design into the
+  New Patch Set window (auto-load and "Load setup from preset").
+- Scanner/camera profile tool: picking a chart honoured a sibling .ti3 over the
+  .ti2 you actually chose, and a rejected chart only updated a small note while
+  the scan Browse button later showed a generic (and in printer mode wrong)
+  hint (#101). The picked file now wins, rejections land in the status log with
+  the concrete reason, the Browse hint matches the mode, and a chart whose
+  .channels.json was renamed/copied is found via the folder's single sidecar.
+- Scanner/camera profile tool: with several scans averaged, only the first got
+  a diagnostic image (#102) — every scan now writes its own <scan>-diag.tif.
+
+### ✨ New
+- New "Scanner" group of built-in presets (Create Chart → Manual, dropdown and
+  ★ overlay): Knut's two flatbed-scanner printer-profiling charts (A4 3430
+  patches / US-Letter 3250 patches, 4 mm patch grid, 1 page). Print without
+  colour management, scan on a flatbed, then profile the printer via Tools →
+  "Build scanner or camera profile".
+- Scanner/camera profile tool: optional "Profile name" field — name the
+  finished .icc (file and embedded description) yourself, e.g.
+  "Epson ET-8550 scanner", instead of inheriting the chart/target name — and an
+  "Install profile" button that copies it into your user colour-profile folder
+  (ColorSync on macOS).
+
 ## v3.13.0-beta.110
 
 ### 🐛 Fixes

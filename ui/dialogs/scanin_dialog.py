@@ -848,12 +848,20 @@ class ScannerProfileDialog(_ToolDialogBase):
         row4.addWidget(self._prof_name, 1)
         row4.addWidget(self._tip(
             tr("Profile name"),
-            tr("What the finished profile is called — both the .icc file and "
-               "the name colour-managed programs show in their profile lists.\n\n"
-               "Left empty, the profile inherits the name of the chart or "
-               "target scan it was built from (e.g. a paper name), which is "
-               "easy to mistake for a printer profile later. Give it a name "
-               "that says what it is, like “Epson ET-8550 scanner”.")))
+            tr("The name of the finished profile — used for the .icc file "
+               "itself and for the name colour-managed programs (Photoshop, "
+               "your scanning software, the printer driver…) show in their "
+               "profile lists.\n\n"
+               "You can leave this empty: the profile is then named after the "
+               "chart or target scan it was built from. That works, but a name "
+               "like “Moab_Satin_240gsm” is easy to mistake for a paper or "
+               "printer profile later. A name that says what the profile "
+               "actually is — “Epson ET-8550 scanner”, or “Brother MFC-9460 "
+               "plain paper” for a printer profile — keeps your profile list "
+               "understandable years from now.\n\n"
+               "The name applies to whichever profile this window builds: the "
+               "scanner or camera profile, or, when “Profile my printer from "
+               "this scan” is ticked, the printer profile.")))
         form.addLayout(row4)
 
     def _custom_profile_stem(self) -> str | None:
