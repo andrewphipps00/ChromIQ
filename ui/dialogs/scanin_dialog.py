@@ -187,8 +187,9 @@ class ScannerProfileDialog(_ToolDialogBase):
       + "\n\n───────────────\n" + WHICH_CHART_HELP \
       + "\n\n───────────────\n" + WHICH_CHART_CAMERA_NOTE
     DESCRIPTION = tr(
-        "Turn a scan or photo of a target into a colour profile for your "
-        "scanner or camera.")
+        "Turn a scan or photo of a target into a colour profile for your scanner "
+        "or camera — or, from a scan of a chart you printed, a profile for your "
+        "printer (using the scanner as the measuring instrument).")
 
     def __init__(self, runner, settings, parent: QWidget | None = None) -> None:
         super().__init__(settings, parent)
@@ -197,6 +198,7 @@ class ScannerProfileDialog(_ToolDialogBase):
         self._profiler = ProfileBuilder(runner)
         self._ti3: Path | None = None
         self._layout: dict | None = None
+        self._printer_scan_profile: Path | None = None   # scanner ICC for printer mode
         self._pages: list[int] = []
         self._page = 0
         # Per page, a list of "shots" — one or more scans of the same page, each
@@ -324,6 +326,66 @@ class ScannerProfileDialog(_ToolDialogBase):
         self._page_widget.setLayout(self._page_row)
         self._page_widget.setVisible(False)
         v.addWidget(self._page_widget)
+
+        # --- Printer-profile mode: use the scanner as the measuring instrument ---
+        self._printer_cb = QCheckBox(
+            tr("Profile my printer from this scan (scanner as the instrument)"), self)
+        # Help lives only behind the ⓘ (click to open) — no hover tooltip on the
+        # checkbox itself.
+        _pr_help = tr(
+            "Turn this on to build a profile for your PRINTER from this scan — using "
+            "your flat-bed scanner in place of a spectrophotometer — instead of a "
+            "profile for the scanner itself.\n\n"
+            "How it works: you print one of your own ChromIQ charts, scan the print, "
+            "and ChromIQ reads the patches and measures their colour through a "
+            "scanner profile you made earlier. That gives colprof what it needs to "
+            "build a printer profile — no spectrophotometer required.\n\n"
+            "What you need first: a profile for THIS scanner. Build one in the normal "
+            "scanner mode from a bought target (an IT8 or LaserSoft sheet). The "
+            "printer profile is only as good as that scanner profile, so make a solid "
+            "one first — and note the chicken-and-egg: profile the scanner off a "
+            "bought target, then use it to profile the printer.\n\n"
+            "Honest expectations: a scanner-based printer profile is great for "
+            "clearing colour casts and making everyday prints look better, but it "
+            "won't match a profile made with a real spectrophotometer. For critical "
+            "or proofing work, a spectro is still the way.")
+        self._printer_cb.toggled.connect(self._on_printer_toggled)
+        # An always-visible ⓘ next to the checkbox opens the help on click.
+        _pr_row = QHBoxLayout()
+        _pr_row.addWidget(self._printer_cb)
+        _pr_row.addStretch(1)
+        _pr_row.addWidget(self._tip(tr("Printer profile from a scan"), _pr_help),
+                          0, Qt.AlignmentFlag.AlignVCenter)
+        v.addLayout(_pr_row)
+
+        self._printer_box = QWidget(self)
+        pv = QVBoxLayout(self._printer_box)
+        pv.setContentsMargins(22, 0, 0, 2)
+        # Same labelled-field pattern as the other rows: an always-visible ⓘ that
+        # carries the extensive help (a plain hover tooltip left no visible cue).
+        pv.addLayout(self._labelled(
+            tr("Scanner profile (.icc):"), tr("Scanner profile"),
+            tr("The profile for THIS scanner that ChromIQ uses to turn the scanned "
+            "colours into real, measured colour — the step that makes the printer "
+            "profile trustworthy.\n\n"
+            "You built this earlier in the normal scanner mode: scan a bought target "
+            "(an IT8 or LaserSoft sheet), press Build, and you get a scanner .icc. "
+            "Pick that file here.\n\n"
+            "Without it, the scan would be raw scanner colour — carrying the "
+            "scanner's own cast — and the printer profile would come out wrong. "
+            "That's why it's required for this mode.")))
+        prow = QHBoxLayout()
+        self._printer_prof_field = QLineEdit(self)
+        self._printer_prof_field.setReadOnly(True)
+        self._printer_prof_field.setPlaceholderText(
+            tr("Pick the scanner profile you built earlier…"))
+        prow.addWidget(self._printer_prof_field, 1)
+        pb = make_browse_button(self, tr("Browse…"), icon="folder_measure")
+        pb.clicked.connect(self._pick_scanner_profile)
+        prow.addWidget(pb)
+        pv.addLayout(prow)
+        self._printer_box.setVisible(False)
+        v.addWidget(self._printer_box)
         form.addWidget(self._chromiq_box)
 
     def _build_standard_inputs(self, form) -> None:
@@ -860,8 +922,40 @@ class ScannerProfileDialog(_ToolDialogBase):
                 self._load_page_grid()
             else:
                 self._marquee.set_grid(GridSpec([]))
+        # Printer mode is only meaningful with a ChromIQ chart (needs its .ti2).
+        self._printer_cb.setVisible(not std)
+        if std:
+            self._printer_cb.setChecked(False)
         self._refresh_shot_bar()
         self._refresh()
+
+    def _printer_mode(self) -> bool:
+        """True when building a PRINTER profile from this scan (scanner as the
+        instrument) — only offered for a ChromIQ chart, which carries the .ti2."""
+        return not self._standard_mode() and self._printer_cb.isChecked()
+
+    def _on_printer_toggled(self, checked: bool) -> None:
+        self._printer_box.setVisible(checked)
+        # Leave the profile-type selector enabled so its tooltip stays readable
+        # (Qt hides tooltips on disabled widgets). Its *quality* is honoured for the
+        # printer profile; the Matrix/LUT choice isn't (a printer profile is always
+        # a LUT) — see _build_printer_profile.
+        self._run_btn.setText(
+            tr("Build printer profile") if checked else
+            tr("Build scanner or camera profile"))
+        self._refresh()
+
+    def _pick_scanner_profile(self) -> None:
+        from PyQt6.QtWidgets import QFileDialog
+        start = str(self._printer_scan_profile.parent) if self._printer_scan_profile \
+            else self._settings.get("tools_last_dir_scanner_profile", "")
+        p, _ = QFileDialog.getOpenFileName(
+            self, tr("Pick the scanner profile (.icc) you built earlier"),
+            start, tr("ICC profiles (*.icc *.icm)"))
+        if p:
+            self._printer_scan_profile = Path(p)
+            self._printer_prof_field.setText(p)
+            self._refresh()
 
     def _on_target_changed(self, _idx: int = 0) -> None:
         data = self._target_combo.currentData()
@@ -1179,6 +1273,8 @@ class ScannerProfileDialog(_ToolDialogBase):
             return (self._std_cht is not None and self._std_ref is not None
                     and self._std_grid is not None and bool(self._std_grid.rects)
                     and self._page_ready(0))
+        if self._printer_mode() and self._printer_scan_profile is None:
+            return False                         # printer mode needs a scanner ICC
         return self._layout is not None and bool(self._pages) and all(
             self._page_ready(pg) for pg in self._pages)
 
@@ -1301,6 +1397,9 @@ class ScannerProfileDialog(_ToolDialogBase):
             base = _chart_base(self._ti3)
 
         frac = self._sample_area.value() / 100.0
+        if self._printer_mode():
+            self._execute_printer(base, frac)
+            return
         self._jobs = []
         page_ti3s: list[Path] = []
         for pg in pages:
@@ -1350,7 +1449,8 @@ class ScannerProfileDialog(_ToolDialogBase):
                     self._log.appendPlainText(f"[ERROR] {msg}")
                     self._finish(False)
                     return
-                self._sanitize_scanner_ti3(job["params"].out_ti3)
+                if not job["params"].is_printer:     # printer .ti3 is accumulated;
+                    self._sanitize_scanner_ti3(job["params"].out_ti3)  # sanitize at end
                 self._run_job(i + 1)
 
             self._scanin.run(job["params"], on_line=self._log_line, on_finish=_done)
@@ -1364,8 +1464,98 @@ class ScannerProfileDialog(_ToolDialogBase):
                 self._finish(False)
                 return
             self._run_job(i + 1)
+        elif job["kind"] == "colprof_printer":
+            self._build_printer_profile(job["pbase"], job["base"])
         else:
             self._build_profile(job["ti3s"], job["base"])
+
+    def _execute_printer(self, base: Path, frac: float) -> None:
+        """Printer profile from a scanned ChromIQ chart: ``scanin -c/-ca`` converts
+        each page's patches to real colour through the scanner profile and reads the
+        chart's ``<base>.ti2`` (printer device values), accumulating one
+        ``<pbase>.ti3``; then colprof builds a printer profile from it. The flat-bed
+        scanner is the measuring instrument."""
+        import shutil
+        chart_ti2 = base.with_suffix(".ti2")
+        if not chart_ti2.is_file():
+            self._log.appendPlainText(tr(
+                "[ERROR] This chart has no .ti2 (the printer values it was printed "
+                "with) next to its .ti3, so a printer profile can't be built from it."))
+            self._finish(False)
+            return
+        first = next((s["path"] for pg in self._pages
+                      for s in self._page_shots(pg) if s["path"]), None)
+        if first is None:
+            self._finish(False)
+            return
+        pbase = first.parent / f"{base.name}-printer"
+        try:
+            shutil.copy2(chart_ti2, pbase.with_suffix(".ti2"))
+        except OSError as exc:
+            self._log.appendPlainText(f"[ERROR] {exc}")
+            self._finish(False)
+            return
+        self._jobs = []
+        first_page = True
+        for pg in self._pages:
+            orig_cht, _ = self._files_for_page(pg, base)
+            shots = [s for s in self._page_shots(pg) if s["path"]]
+            if not shots:
+                continue
+            s = shots[0]                             # one scan per page in printer mode
+            cht = self._prepare_scanin_cht(orig_cht, s["corners"], frac, base,
+                                           f"printer-p{pg + 1}")
+            diag = (s["path"].with_name(s["path"].stem + "-diag.tif")
+                    if self._diag.isChecked() and first_page else None)
+            params = ScaninParams(
+                s["path"], cht,
+                corners=self._scanin_corners(s["corners"], orig_cht),
+                perspective=self._perspective.isChecked(), diag=diag,
+                scan_profile=self._printer_scan_profile, pbase=pbase,
+                accumulate=not first_page)
+            self._jobs.append({"kind": "scanin", "params": params,
+                               "label": tr("Reading page {n} for the printer "
+                                           "profile…").format(n=pg + 1)})
+            first_page = False
+        if not self._jobs:
+            self._finish(False)
+            return
+        self._jobs.append({"kind": "colprof_printer", "pbase": pbase, "base": base})
+        self._run_job(0)
+
+    def _build_printer_profile(self, pbase: Path, base: Path) -> None:
+        ti3 = pbase.with_suffix(".ti3")
+        self._sanitize_scanner_ti3(ti3)              # once, on the accumulated .ti3
+        self._log.appendPlainText(tr("Building the printer profile…"))
+        params = ProfileParams(
+            ti3_path=ti3, algorithm="l", quality="m",
+            description=f"{base.name} (scanner-measured)", manufacturer="ChromIQ",
+            model=base.name, verbose=True)
+
+        def _done(code: int) -> None:
+            icc = self._profiler.expected_icc_path(params)
+            if not (icc.exists() and icc.stat().st_size > 1000):
+                fail = self._profiler.primary_failure()
+                if fail:
+                    self._log.appendPlainText(f"[ERROR] {fail[1]}")
+                else:
+                    raw = self._profiler.last_output()
+                    self._log.appendPlainText(
+                        f"[ERROR] {tr('Building the profile failed. colprof said:')}")
+                    self._log.appendPlainText(raw or tr("(colprof produced no output)"))
+                self._finish(False)
+                return
+            self._log.appendPlainText(tr("[OK] Printer profile saved: {p}").format(p=icc))
+            self._log.appendPlainText(tr(
+                "Install it as your printer's profile. The measurement (.ti3) sits "
+                "next to it — load that in the Build Profile tab if you want to "
+                "fine-tune the printer profile (intents, quality, …)."))
+            self._last_profile = icc
+            self._reveal_btn.setVisible(True)
+            self._reveal_btn.setEnabled(True)
+            self._finish(True)
+
+        self._profiler.build(params, on_line=self._log_line, on_finish=_done)
 
     def _sanitize_scanner_ti3(self, ti3: Path) -> None:
         """Fix nan/inf values scanin can write for degenerate patches, which would

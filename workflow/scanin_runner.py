@@ -179,6 +179,34 @@ def scanin_args(scan_tif: Path, cht: Path, cie: Path,
     return args
 
 
+def scanin_printer_args(scan_tif: Path, cht: Path, scan_profile: Path, pbase: Path,
+                        corners: list[tuple[float, float]] | None = None,
+                        perspective: bool = True, diag: Path | None = None,
+                        verbose: bool = True, accumulate: bool = False) -> list[str]:
+    """Build the ``scanin -c`` argument list for **printer-profile** mode.
+
+    Instead of profiling the scanner, this turns the scan into a *printer*
+    measurement: it reads ``<pbase>.ti2`` (the chart's printer device values) and,
+    converting each scanned patch to real colour through *scan_profile* (a scanner
+    ICC the user built earlier), writes ``<pbase>.ti3`` — which colprof turns into
+    a printer profile. The flat-bed scanner acts as the measuring instrument.
+    ``scanin -c [opts] input.tif recog.cht scanprofile.icc pbase [diag.tif]``."""
+    args: list[str] = []
+    if verbose:
+        args.append("-v")
+    args.append("-ca" if accumulate else "-c")   # -ca adds a page to an existing .ti3
+    if corners is not None:
+        args += ["-F", _fmt_corners(corners)]
+    if perspective:
+        args.append("-p")
+    if diag is not None:
+        args.append("-dipn")
+    args += [str(scan_tif), str(cht), str(scan_profile), str(pbase)]
+    if diag is not None:
+        args.append(str(diag))
+    return args
+
+
 # scanin failure messages → (key, friendly text). Line refs: scanin/scanin.c.
 _SCANIN_ERROR_PATTERNS: list[tuple[re.Pattern[str], str, str]] = [
     (re.compile(r"Scanin failed with code", re.IGNORECASE),
@@ -266,7 +294,7 @@ class ScaninParams:
 
     scan_tif: Path
     cht: Path
-    cie: Path
+    cie: Path | None = None
     corners: list[tuple[float, float]] | None = None   # None = auto-recognise
     perspective: bool = True
     diag: Path | None = None
@@ -274,6 +302,15 @@ class ScaninParams:
     # Distinct output name (via -O) so the scanner .ti3 can never collide with the
     # chart's own <stem>.ti3 / printer profile. Defaults to "<scan>-scanner.ti3".
     out_name: str | None = None
+    # Printer-profile mode (scanin -c): convert the scan to real colour through a
+    # scanner ICC and read <pbase>.ti2 → write <pbase>.ti3 (a printer measurement).
+    scan_profile: Path | None = None
+    pbase: Path | None = None
+    accumulate: bool = False           # printer mode: -ca adds this page to <pbase>.ti3
+
+    @property
+    def is_printer(self) -> bool:
+        return self.scan_profile is not None and self.pbase is not None
 
     @property
     def _out_name(self) -> str:
@@ -281,8 +318,10 @@ class ScaninParams:
 
     @property
     def out_ti3(self) -> Path:
-        """The scanner ``.ti3`` scanin writes — ``<scan>-scanner.ti3`` next to
-        the scan (never the chart's own ``<stem>.ti3``)."""
+        """The ``.ti3`` scanin writes: in printer mode ``<pbase>.ti3``; otherwise
+        the scanner ``<scan>-scanner.ti3`` (never the chart's own ``<stem>.ti3``)."""
+        if self.is_printer:
+            return self.pbase.with_suffix(".ti3")
         return self.scan_tif.parent / self._out_name
 
 
@@ -322,5 +361,9 @@ class ScaninRunner:
         return self._last_log
 
     def _build_args(self, p: ScaninParams) -> list[str]:
+        if p.is_printer:
+            return scanin_printer_args(p.scan_tif, p.cht, p.scan_profile, p.pbase,
+                                       p.corners, p.perspective, p.diag,
+                                       accumulate=p.accumulate)
         return scanin_args(p.scan_tif, p.cht, p.cie, p.corners, p.perspective,
                            p.diag, p.robust_mean, out_name=p._out_name)

@@ -1,5 +1,17 @@
 # Changelog
 
+## v3.13.0-beta.107
+
+### 🖨️ Profile your printer with a scanner (Knut)
+- The scanner/camera-profile window can now build a profile for your **printer**
+  from a scan of a chart you printed — using a flat-bed scanner in place of a
+  spectrophotometer. Tick "Profile my printer from this scan", point it at the
+  scanner profile you built earlier, and ChromIQ runs `scanin -c` (converting the
+  scan to real colour through that scanner profile) and colprof to produce the
+  printer profile. No spectro required.
+- Help lives behind the ⓘ icons (click to open), and every string is translated
+  in all 12 languages.
+
 ## v3.13.0-beta.106
 
 ### 🌍 Translations
