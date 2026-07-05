@@ -40,3 +40,32 @@ def test_grid_from_patches_normalises_to_unit_square():
 
 def test_grid_empty_is_safe():
     assert GridSpec.from_patches([]).rects == []
+
+
+def test_grid_is_derived_from_cht_boxes_for_every_bundled_target(qapp):
+    """Knut's demand (#108): the selection grid must be built dynamically from
+    the .cht box data — every bundled standard target's on-screen rects must
+    match its parsed .cht boxes one for one (position, width, height), with no
+    hard-wired shapes anywhere."""
+    from pathlib import Path
+    from core.resource_path import resource_path
+    from ui.scan_grid_marquee import GridSpec
+    from workflow.cht_parser import parse_cht
+
+    cht_dir = resource_path("data/scanner_targets")
+    chts = sorted(Path(cht_dir).glob("*.cht"))
+    assert len(chts) >= 8, f"expected the bundled targets, found {len(chts)}"
+    for f in chts:
+        text = f.read_text(errors="ignore")
+        geom = parse_cht(text)
+        g = GridSpec.from_cht(text)
+        assert len(g.rects) == len(geom.patches), f.name
+        xs = [b.x1 for b in geom.patches] + [b.x2 for b in geom.patches]
+        ys = [b.y1 for b in geom.patches] + [b.y2 for b in geom.patches]
+        x0, y0 = min(xs), min(ys)
+        sw, sh = (max(xs) - x0) or 1.0, (max(ys) - y0) or 1.0
+        for rect, box in zip(g.rects, geom.patches):
+            assert abs(rect[0] - (box.x1 - x0) / sw) < 1e-9, f.name
+            assert abs(rect[1] - (box.y1 - y0) / sh) < 1e-9, f.name
+            assert abs(rect[2] - (box.x2 - box.x1) / sw) < 1e-9, f.name
+            assert abs(rect[3] - (box.y2 - box.y1) / sh) < 1e-9, f.name

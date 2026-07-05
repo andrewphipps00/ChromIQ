@@ -1061,6 +1061,25 @@ class ScannerProfileDialog(_ToolDialogBase):
                 "its patch values."))
             return
         self._layout = json.loads(channels.read_text())["layout"]
+        # A stored printtarg capture whose page count differs from the printed
+        # chart is wrong by construction (printtarg -s re-lays some chart
+        # types out, e.g. ColorMunki double density) — reject it honestly
+        # instead of showing a grid that can never match the scan (#108).
+        if self._layout.get("engine") == "printtarg":
+            stored = len(self._layout.get("cht_pages") or [])
+            tifs = sorted(base.parent.glob(f"{base.name}_*.tif"))
+            printed = len(tifs) or (1 if base.with_suffix(".tif").is_file() else 0)
+            if stored and printed and stored != printed:
+                self._layout = None
+                self._reject_chart(tr(
+                    "⚠ This chart's stored scan geometry doesn't match the "
+                    "chart: {g} recognition page(s) for {t} printed page(s). "
+                    "printtarg lays some chart types (e.g. ColorMunki double "
+                    "density) out differently in scan mode, so their geometry "
+                    "can't be captured. Recreate the chart with the ChromIQ "
+                    "layout engine to profile it from a scan.").format(
+                        g=stored, t=printed))
+                return
         # Build the .cht/.cie from the reference (measured .ti3, or .ti2 aim values).
         try:
             build_scanin_target_from_paths(channels, ref, base)

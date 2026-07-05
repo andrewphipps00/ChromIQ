@@ -428,3 +428,22 @@ def test_fill_unit_pages_round_trips(qapp, monkeypatch):
     d3 = _NewChartDialog(Path("/x"), s, initial_recipe=legacy)
     assert d3._gen_fill_unit_patches.isChecked()
     assert not d3._gen_fill_unit_pages.isChecked()
+
+
+def test_rename_refreshes_inmemory_chart_paths(qapp, tmp_path):
+    """#108 batch (Basti): after Rename in the target-change dialog, the Print
+    tab still held the old absolute TIFF paths and printing failed with "no
+    such file". _refresh_after_rename re-pushes the renamed run's files."""
+    tab, fm = _chart_tab(tmp_path)
+    fm.set_target_name("OldName")
+    run = fm.project().current_run()
+    run.ensure_dir()
+    (run.dir / f"{run.stem}_01.tif").write_bytes(b"II*\0")
+    fm.rename_existing_project("OldName", "NewName")
+    got = []
+    tab.chart_finished.connect(lambda t, ti2, ext: got.append((t, ti2)))
+    tab._refresh_after_rename("NewName")
+    assert got, "chart_finished must be re-emitted after a rename"
+    tiffs, ti2 = got[0]
+    assert all("NewName" in str(p) for p in tiffs)
+    assert tab._last_target_name == "NewName"
