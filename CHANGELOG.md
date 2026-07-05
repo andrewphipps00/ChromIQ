@@ -1,5 +1,13 @@
 # Changelog
 
+## v3.13.0-beta.109
+
+### 🌍 Translations complete again
+- The new "use the operating system's file browser" setting (label + its long
+  help) and the leftover density / "Punchy" options are now translated in all 12
+  languages — the catalogs are complete (only genuine cognates remain identical
+  to English).
+
 ## v3.13.0-beta.108
 
 ### 🖨️ Printer profiling works from a chart you only *printed* (Knut)
