@@ -21,7 +21,7 @@ import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QGuiApplication
 from PyQt6.QtWidgets import (
     QButtonGroup,
@@ -45,6 +45,7 @@ from PyQt6.QtWidgets import (
 from core.i18n import tr
 from core.logger import get_logger
 from ui.fade_scroll import FadeScrollArea
+from ui.spectrum_progress import SpectrumSegmentsBar
 from ui.styles import BG_INPUT, BORDER, SPEC_GREEN, SPEC_MAGENTA, SPEC_VIOLET, TEXT_MAIN
 from ui.theme import resolve_mode
 from ui.tab_header import dialog_masthead
@@ -289,6 +290,18 @@ class _ToolDialogBase(QDialog):
             self._scroll = None
             inner.addLayout(self._content)
 
+        # Busy indicator: an animated spectrum bar + ticking elapsed time above
+        # the log, shown while a run is under way — external tools can stay
+        # silent for a long time and the window looked frozen (Knut).
+        self._busy_bar = SpectrumSegmentsBar(self)
+        self._busy_bar.setVisible(False)
+        inner.addWidget(self._busy_bar)
+        self._busy_note = ""
+        self._busy_started = 0.0
+        self._busy_tick = QTimer(self)
+        self._busy_tick.setInterval(1000)
+        self._busy_tick.timeout.connect(self._update_busy_label)
+
         # Log / status area
         self._log = QPlainTextEdit(self)
         self._log.setReadOnly(True)
@@ -429,6 +442,35 @@ class _ToolDialogBase(QDialog):
     def _set_busy(self, busy: bool) -> None:
         self._run_btn.setEnabled(not busy and self._can_run())
         self._close_btn.setEnabled(not busy)
+        self._busy_bar.setVisible(busy)
+        if busy:
+            import time
+            self._busy_started = time.monotonic()
+            self._busy_bar.reset()
+            self._update_busy_label()
+            self._busy_bar.start()
+            self._busy_tick.start()
+            self.setCursor(Qt.CursorShape.BusyCursor)
+        else:
+            self._busy_tick.stop()
+            self._busy_bar.stop()
+            self._busy_note = ""
+            self.unsetCursor()
+
+    def _set_busy_note(self, note: str, fraction: float | None = None) -> None:
+        """Name the running step (and optionally its 0..1 position in the whole
+        run) on the busy bar — e.g. "Step 2 of 6 — Reading page 2…"."""
+        self._busy_note = note
+        if fraction is not None:
+            self._busy_bar.set_value(fraction)
+        self._update_busy_label()
+
+    def _update_busy_label(self) -> None:
+        import time
+        secs = int(time.monotonic() - self._busy_started)
+        self._busy_bar.set_label(
+            self._busy_note or tr("Working…"),
+            tr("{n} s — still working").format(n=secs) if secs >= 3 else "")
 
     def _finish(self, success: bool) -> None:
         self._set_busy(False)

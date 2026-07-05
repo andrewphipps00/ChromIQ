@@ -712,9 +712,15 @@ class ScannerProfileDialog(_ToolDialogBase):
         self._shot_combo.setCurrentIndex(min(self._shot_idx, len(shots) - 1))
         self._shot_combo.blockSignals(False)
         multi = len(shots) > 1
-        self._shot_combo.setVisible(multi)
+        printer = self._printer_mode()
+        # Printer mode reads ONE scan per page (the pages accumulate into a
+        # single .ti3) — extra shots were silently ignored, so don't offer to
+        # add them there (Knut's question; per-page averaging for printer mode
+        # would be its own feature).
+        self._add_shot_btn.setVisible(not printer)
+        self._shot_combo.setVisible(multi and not printer)
         self._remove_shot_btn.setVisible(multi)
-        self._avg_row_w.setVisible(multi)
+        self._avg_row_w.setVisible(multi and not printer)
         if len(self._pages) > 1:
             done = sum(1 for pg in self._pages
                        if any(sh["path"] for sh in self._page_shots(pg)))
@@ -1273,6 +1279,7 @@ class ScannerProfileDialog(_ToolDialogBase):
         self._printer_box.setVisible(checked)
         # The Chart-geometry (.cht) row only matters in printer mode (#105).
         self._byo_row_w.setVisible(checked)
+        self._refresh_shot_bar()   # averaging affordances hide in printer mode
         # In printer mode the chart's .ti2 is enough (no measurement needed), so the
         # picker asks for the chart you printed rather than a measured .ti3.
         self._chart_label.setText(
@@ -1825,8 +1832,11 @@ class ScannerProfileDialog(_ToolDialogBase):
         if i >= len(self._jobs):
             return
         job = self._jobs[i]
+        total = len(self._jobs)
+        step = tr("Step {k} of {n}").format(k=i + 1, n=total)
         if job["kind"] == "scanin":
             self._log.appendPlainText(job["label"])
+            self._set_busy_note(f"{step} — {job['label']}", fraction=i / total)
 
             unfilled = []
 
@@ -1857,8 +1867,9 @@ class ScannerProfileDialog(_ToolDialogBase):
 
             self._scanin.run(job["params"], on_line=_watch, on_finish=_done)
         elif job["kind"] == "average":
-            self._log.appendPlainText(
-                tr("Averaging {n} scans of this page…").format(n=len(job["ti3s"])))
+            _avg = tr("Averaging {n} scans of this page…").format(n=len(job["ti3s"]))
+            self._log.appendPlainText(_avg)
+            self._set_busy_note(f"{step} — {_avg}", fraction=i / total)
             try:
                 average_scanner_ti3(job["ti3s"], job["out"], method=job["method"])
             except (Ti3AverageError, OSError) as exc:
@@ -1867,8 +1878,14 @@ class ScannerProfileDialog(_ToolDialogBase):
                 return
             self._run_job(i + 1)
         elif job["kind"] == "colprof_printer":
+            self._set_busy_note(
+                f"{step} — " + tr("Building the printer profile…"),
+                fraction=i / total)
             self._build_printer_profile(job["pbase"], job["base"])
         else:
+            self._set_busy_note(
+                f"{step} — " + tr("Building the scanner profile…"),
+                fraction=i / total)
             self._build_profile(job["ti3s"], job["base"])
 
     def _execute_printer(self, base: Path, frac: float) -> None:
@@ -1898,6 +1915,11 @@ class ScannerProfileDialog(_ToolDialogBase):
             self._finish(False)
             return
         self._jobs = []
+        if any(sum(1 for sh in self._page_shots(pg) if sh["path"]) > 1
+               for pg in self._pages):
+            self._log.appendPlainText(tr(
+                "Note: averaging isn't used for a printer profile — only the "
+                "first scan of each page is read."))
         first_page = True
         for pg in self._pages:
             orig_cht, _ = self._files_for_page(pg, base)
