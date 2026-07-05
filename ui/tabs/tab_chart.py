@@ -559,8 +559,10 @@ KNUT_PRESETS: list[_Ti1Preset] = [
     # management, scanned on a flatbed, then read via Tools → "Build scanner or
     # camera profile" with "Profile my printer from this scan". The recipes are
     # Knut's exported presets verbatim (only the paper differs between the two).
+    # Slug stays "landscape" (shipped identity, never change); Knut renamed
+    # the chart itself to Portrait in the #107 refresh.
     _Ti1Preset("scanner_a4_3430p_1page_landscape",
-               "A4-3430p-1page-Landscape-w4.0mm" + KNUT_SCANNER_SUFFIX,
+               "A4-3430p-1page-Portrait-w4.0mm" + KNUT_SCANNER_SUFFIX,
                "SS", "A4R", 1.0, 4, 1,
                ti1_asset=f"{_KNUT_SCANNER_DIR}/a4/chart.ti1", patches=3430,
                white=2, black=2, tiff_16bit=False, suffix=KNUT_SCANNER_SUFFIX,
@@ -589,9 +591,9 @@ KNUT_PRESET_KEYS = frozenset(KNUT_PRESETS_BY_KEY)
 # fallback; no shipped family relies on it any more).
 def _recipe_display_key(p: "_Ti1Preset") -> str:
     """The name a preset's recipe is filed under in a shared recipes.json —
-    instrument label + the preset's name without its family suffix."""
-    instr = "i1Pro" if p.instrument == _KNUT_I1 else "ColorMunki"
-    return f"{instr} {p.name.replace(p.suffix, '').strip()}"
+    group label (instrument, or "Scanner" for that family, #107) + the
+    preset's name without its family suffix."""
+    return f"{p.display_group} {p.name.replace(p.suffix, '').strip()}"
 
 
 def _load_shared_wg_recipes() -> dict:

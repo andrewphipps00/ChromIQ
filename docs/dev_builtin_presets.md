@@ -33,9 +33,10 @@ Built-ins now come in **three kinds**:
    the engine setting is on). `group="Scanner"` files the row under its own
    dropdown/overlay header instead of an instrument group (`display_group`).
    targen is greyed like kind 2; the engine layout panel stays editable.
-   Assets live under `assets/charts/knut/rgb/scanner/<paper>/chart.ti1`; no
-   `recipe.json` sidecar (the charts are denser than any New-chart recipe can
-   regenerate). Tests: `tests/test_scanner_builtin_presets.py`.
+   Assets live under `assets/charts/knut/rgb/scanner/<paper>/chart.ti1`, each
+   with a `recipe.json` sidecar (the full New-chart design, #107) so the
+   presets appear in "Load setup from preset" and seed the editor's New Patch
+   Set window. Tests: `tests/test_scanner_builtin_presets.py`.
 
 All kinds grey one or both parameter panels while active, with override
 checkboxes to unlock them — see **Panel locks + override checkboxes** below.
