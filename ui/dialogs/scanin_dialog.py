@@ -45,6 +45,9 @@ from workflow.standard_targets import list_standard_targets
 log = get_logger(__name__)
 
 _TI3_FILTER = "Measured chart (*.ti3);;All files (*)"
+# Printer mode reads the chart's device + aim values from its .ti2, so a chart you
+# only PRINTED (never measured) is fine — accept either file.
+_CHART_FILTER = "Chart you printed (*.ti2 *.ti3);;All files (*)"
 _SCAN_FILTER = "Scans (*.tif *.tiff);;All files (*)"
 _CHT_FILTER = "Chart recognition (*.cht);;All files (*)"
 _REF_FILTER = "Target reference (*.cie *.txt *.ti3 *.cxf);;All files (*)"
@@ -199,6 +202,7 @@ class ScannerProfileDialog(_ToolDialogBase):
         self._ti3: Path | None = None
         self._layout: dict | None = None
         self._printer_scan_profile: Path | None = None   # scanner ICC for printer mode
+        self._chart_measured = False   # loaded chart has a real .ti3 (not just .ti2)
         self._pages: list[int] = []
         self._page = 0
         # Per page, a list of "shots" — one or more scans of the same page, each
@@ -298,11 +302,26 @@ class ScannerProfileDialog(_ToolDialogBase):
         self._chromiq_box = QWidget(self)
         v = QVBoxLayout(self._chromiq_box)
         v.setContentsMargins(0, 0, 0, 0)
-        v.addLayout(self._labelled(
-            tr("Measured chart (.ti3):"), tr("Measured chart"),
-            tr("The chart you printed and measured, whose printed copy you're "
-            "scanning. Pick its .ti3. ChromIQ uses the chart's exact layout + "
-            "measured colours to read the scan.")))
+        _chart_row = QHBoxLayout()
+        self._chart_label = QLabel(tr("Measured chart (.ti3):"), self)
+        _chart_row.addWidget(self._chart_label)
+        _chart_row.addStretch(1)
+        _chart_row.addWidget(self._tip(
+            tr("Which chart to read"),
+            tr("Which chart your scan is of.\n\n"
+            "• For a scanner or camera profile — pick a chart you have already "
+            "MEASURED (its .ti3). ChromIQ compares the chart's known, measured "
+            "colours with how your device saw them, and builds the profile from the "
+            "difference.\n\n"
+            "• For a printer profile (the “Profile my printer from this scan” tick "
+            "below) — you can pick a chart you simply PRINTED, even if you never "
+            "measured it. Pick its .ti2 — the file ChromIQ wrote when it created the "
+            "chart, holding the exact colour values it sent to the printer. This time "
+            "the scanner does the measuring, so no spectrophotometer reading is "
+            "needed.\n\n"
+            "Both files live in the chart's own folder, next to the chart image."),
+            ), 0, Qt.AlignmentFlag.AlignVCenter)
+        v.addLayout(_chart_row)
         row = QHBoxLayout()
         self._ti3_field = QLineEdit(self)
         self._ti3_field.setReadOnly(True)
@@ -778,19 +797,29 @@ class ScannerProfileDialog(_ToolDialogBase):
 
     # ------------------------------------------------------------------ chart
     def _pick_chart(self) -> None:
-        path = open_file_dialog(self, tr("Choose the measured chart"), _TI3_FILTER,
+        if self._printer_mode():
+            title, flt = tr("Choose the chart you printed"), _CHART_FILTER
+        else:
+            title, flt = tr("Choose the measured chart"), _TI3_FILTER
+        path = open_file_dialog(self, title, flt,
                                 start_dir=str(_initial_dir(self._settings, self.TOOL_KEY)))
         if not path:
             return
         self._set_chart(Path(path))
 
-    def _set_chart(self, ti3: Path) -> None:
+    def _set_chart(self, picked: Path) -> None:
         import json
-        self._ti3 = ti3
-        self._ti3_field.setText(str(ti3))
-        _remember_dir(self._settings, self.TOOL_KEY, ti3.parent)
+        # Prefer the measured .ti3; fall back to the chart's .ti2 (aim values) so a
+        # chart you only PRINTED can still be used for a printer profile. Both files
+        # exist for engine and printtarg charts; both carry loc + RGB + XYZ.
+        base = _chart_base(picked)
+        ti3, ti2 = base.with_suffix(".ti3"), base.with_suffix(".ti2")
+        ref = ti3 if ti3.is_file() else ti2
+        self._chart_measured = ti3.is_file()
+        self._ti3 = ref
+        self._ti3_field.setText(str(ref))
+        _remember_dir(self._settings, self.TOOL_KEY, picked.parent)
         self._reset_shots()
-        base = _chart_base(ti3)
         channels = base.with_name(base.name + ".channels.json")
         if not has_scanner_geometry(channels):
             self._layout = None
@@ -800,15 +829,23 @@ class ScannerProfileDialog(_ToolDialogBase):
                 "created with ChromIQ's layout engine."))
             self._refresh()
             return
+        if not ref.is_file():
+            self._layout = None
+            self._pages = []
+            self._chart_note.setText(tr(
+                "⚠ This chart has no .ti3 or .ti2 next to it, so ChromIQ can't read "
+                "its patch values."))
+            self._refresh()
+            return
         self._layout = json.loads(channels.read_text())["layout"]
         if self._layout.get("patches"):                     # engine chart
             self._pages = sorted({int(p.get("page", 0))
                                   for p in self._layout["patches"]})
         else:                                               # printtarg chart
             self._pages = list(range(len(self._layout.get("cht_pages", [1]))))
-        # Ensure the .cht/.cie exist (build from the measurement if missing).
+        # Build the .cht/.cie from the reference (measured .ti3, or .ti2 aim values).
         try:
-            build_scanin_target_from_paths(channels, ti3, base)
+            build_scanin_target_from_paths(channels, ref, base)
         except ScaninTargetError as exc:
             self._chart_note.setText(f"⚠ {exc}")
             self._layout = None
@@ -818,11 +855,17 @@ class ScannerProfileDialog(_ToolDialogBase):
             n_patches = len(self._layout["patches"])
         else:
             n_patches = len(self._layout.get("locs") or [])
-        self._chart_note.setText((
-            tr("✓ Ready — {n} patches on one page.")
-            if len(self._pages) == 1 else
-            tr("✓ Ready — {n} patches on {p} pages.")
-        ).format(n=n_patches, p=len(self._pages)))
+        if not self._chart_measured:
+            self._chart_note.setText(tr(
+                "✓ {n} patches. This chart hasn't been measured — tick “Profile my "
+                "printer from this scan” below to build a printer profile from it "
+                "(no spectrophotometer needed).").format(n=n_patches))
+        else:
+            self._chart_note.setText((
+                tr("✓ Ready — {n} patches on one page.")
+                if len(self._pages) == 1 else
+                tr("✓ Ready — {n} patches on {p} pages.")
+            ).format(n=n_patches, p=len(self._pages)))
         self._page_widget.setVisible(len(self._pages) > 1)
         self._page_combo.blockSignals(True)
         self._page_combo.clear()
@@ -936,6 +979,13 @@ class ScannerProfileDialog(_ToolDialogBase):
 
     def _on_printer_toggled(self, checked: bool) -> None:
         self._printer_box.setVisible(checked)
+        # In printer mode the chart's .ti2 is enough (no measurement needed), so the
+        # picker asks for the chart you printed rather than a measured .ti3.
+        self._chart_label.setText(
+            tr("Chart you printed (.ti2):") if checked else tr("Measured chart (.ti3):"))
+        self._ti3_field.setPlaceholderText(
+            tr("Pick the chart you printed (.ti2)…") if checked else
+            tr("Pick the measured chart (.ti3)…"))
         # Leave the profile-type selector enabled so its tooltip stays readable
         # (Qt hides tooltips on disabled widgets). Its *quality* is honoured for the
         # printer profile; the Matrix/LUT choice isn't (a printer profile is always
@@ -1275,6 +1325,8 @@ class ScannerProfileDialog(_ToolDialogBase):
                     and self._page_ready(0))
         if self._printer_mode() and self._printer_scan_profile is None:
             return False                         # printer mode needs a scanner ICC
+        if not self._printer_mode() and not self._chart_measured:
+            return False                         # a scanner profile needs a real .ti3
         return self._layout is not None and bool(self._pages) and all(
             self._page_ready(pg) for pg in self._pages)
 

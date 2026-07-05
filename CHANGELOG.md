@@ -1,5 +1,16 @@
 # Changelog
 
+## v3.13.0-beta.108
+
+### 🖨️ Printer profiling works from a chart you only *printed* (Knut)
+- The printer-profile mode no longer needs a measured `.ti3`. Tick "Profile my
+  printer from this scan" and the chart picker accepts the chart you **printed**
+  (its `.ti2`) — ChromIQ reads the device values + aim colours straight from it,
+  so no spectrophotometer reading is required anywhere in the loop. Works for
+  both engine and printtarg charts (both write a `.ti2`).
+- The picker label + help switch to match the mode, scanner mode still requires a
+  real measurement, and every new string is translated in all 12 languages.
+
 ## v3.13.0-beta.107
 
 ### 🖨️ Profile your printer with a scanner (Knut)
