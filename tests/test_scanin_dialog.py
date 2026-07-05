@@ -934,3 +934,28 @@ END_DATA
         assert "Alignment check" in dlg._log.toPlainText()
     finally:
         dlg.deleteLater()
+
+
+def test_page_count_mismatch_geometry_is_rejected(_app, tmp_path):
+    """#108 (Knut's Test-Creating-2-page-Target): printtarg -s re-lays some
+    chart types out — the stored capture had 3 pages for a 2-page chart, so the
+    grid could never match. Such geometry is rejected with the reason."""
+    import json
+    locs = ["A1", "A2", "A3", "A4"]
+    _tiny_ti2(tmp_path / "chart.ti2", locs)
+    cht = ("BOXES 2\n  F _ _ 0 0 50 0 50 50 0 50\n"
+           "  X A1 A1 _ _ 7 7 10 10 0 0\n  X A2 A2 _ _ 7 7 20 10 0 0\n")
+    (tmp_path / "chart.channels.json").write_text(json.dumps({"layout": {
+        "engine": "printtarg", "cht_pages": [cht, cht, cht],
+        "locs": ["A1", "A2"] * 3}}))
+    for i in (1, 2):                                # printed chart: 2 pages
+        (tmp_path / f"chart_{i:02d}.tif").write_bytes(b"II*\0")
+    dlg = _dialog(_app)
+    try:
+        dlg._printer_cb.setChecked(True)
+        dlg._set_chart(tmp_path / "chart.ti2")
+        assert dlg._layout is None
+        assert "3 recognition page(s) for 2 printed page(s)" \
+            in dlg._chart_note.text()
+    finally:
+        dlg.deleteLater()

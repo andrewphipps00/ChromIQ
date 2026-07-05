@@ -6649,10 +6649,30 @@ class TabChart(QWidget):
             except (OSError, FileExistsError, FileNotFoundError) as exc:
                 # Fall back to a fresh target rather than blocking the user.
                 log.warning("Project rename failed (%s); creating fresh instead", exc)
+            else:
+                self._refresh_after_rename(new_name)
         elif action == TargetChangeAction.DELETE:
             self._file_mgr.delete_project_folder(old_name)
         # KEEP: leave the old folder; set_target_name creates the fresh one.
         return True
+
+    def _refresh_after_rename(self, new_name: str) -> None:
+        """Re-push the renamed run's files to every tab holding absolute paths.
+
+        The rename moves the whole project folder and fixes the file stems, but
+        the chart preview here and the Print tab still hold the OLD paths in
+        memory — printing right after a rename failed with "no such file"
+        (Basti, #108 batch). Best-effort: never blocks the rename itself."""
+        try:
+            self._file_mgr.set_target_name(new_name)
+            run = self._file_mgr.project().current_run()
+            tiffs = run.chart_tiffs()
+            if tiffs:
+                self._preview.load_tiff(tiffs)
+                self.chart_finished.emit(tiffs, run.chart_ti2, False)
+            self._last_target_name = new_name
+        except Exception:  # noqa: BLE001 — refresh must never block the rename
+            log.warning("post-rename path refresh failed", exc_info=True)
 
     def _on_generate(self) -> None:
         if self._runner.is_running:

@@ -66,8 +66,10 @@ def _load_scanner_layout(channels_json: str | Path) -> dict:
     p = Path(channels_json)
     if not p.is_file():
         raise NotAnEngineChart(
-            "This chart has no layout sidecar, so ChromIQ doesn't know where its "
-            "patches sit. Measure a chart created with ChromIQ and its scanner "
+            "This chart has no layout sidecar, so ChromIQ doesn't know where "
+            "its patches sit. ChromIQ looks for <chart>.channels.json next to "
+            "the file you pick — the names must match, as saved when the chart "
+            "was created. Measure a chart created with ChromIQ and its scanner "
             "files can be built from it.")
     try:
         layout = json.loads(p.read_text()).get("layout") or {}
