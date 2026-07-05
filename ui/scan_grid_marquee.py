@@ -139,8 +139,15 @@ def rectarg_align_cht(text: str, wpx: float, hpx: float) -> str:
     sw, sh = (x1 - x0) or 1.0, (y1 - y0) or 1.0
     dxs = [xl[i + 1] - xl[i] for i in range(nc - 1)]
     dys = [yt[i + 1] - yt[i] for i in range(nr - 1)]
-    if max(dxs) - min(dxs) > 0.02 * sw or max(dys) - min(dys) > 0.02 * sh:
+    # Same pitch-relative uniformity rule as GridSpec._grid_structure (#108):
+    # non-uniform charts (printtarg's wider first column) keep their true boxes.
+    if (max(dxs) - min(dxs) > 0.1 * min(dxs)
+            or max(dys) - min(dys) > 0.1 * min(dys)):
         return text                                # not a uniform grid
+    bws = sorted({round(b.x2 - b.x1, 2) for b in boxes})
+    bhs = sorted({round(b.y2 - b.y1, 2) for b in boxes})
+    if bws[-1] - bws[0] > 0.05 * bws[-1] or bhs[-1] - bhs[0] > 0.05 * bhs[-1]:
+        return text
     xi = {v: i for i, v in enumerate(xl)}; yi = {v: i for i, v in enumerate(yt)}
     ue, ve = rectarg_edges(wpx, nc), rectarg_edges(hpx, nr)
     newpos = {}
@@ -231,8 +238,19 @@ class GridSpec:
             return 0, 0, None
         dxs = [xl[i + 1] - xl[i] for i in range(nc - 1)]
         dys = [yt[i + 1] - yt[i] for i in range(nr - 1)]
-        if max(dxs) - min(dxs) > 0.02 * sw or max(dys) - min(dys) > 0.02 * sh:
+        # Tolerance relative to the PITCH, not the whole span — a 2%-of-span
+        # test waved through printtarg's wider first column (10.5 vs 7 mm on a
+        # 262 mm chart), forcing 962 boxes onto equal cells (#108).
+        if (max(dxs) - min(dxs) > 0.1 * min(dxs)
+                or max(dys) - min(dys) > 0.1 * min(dys)):
             return 0, 0, None          # not uniform (e.g. a whole column missing)
+        # Equal cells also require equal BOX sizes (#108).
+        def gw(p): return round((p.x2 - p.x1) if hasattr(p, "x1") else p["w"], 2)
+        def gh(p): return round((p.y2 - p.y1) if hasattr(p, "y1") else p["h"], 2)
+        ws = sorted({gw(p) for p in patches})
+        hs = sorted({gh(p) for p in patches})
+        if ws[-1] - ws[0] > 0.05 * ws[-1] or hs[-1] - hs[0] > 0.05 * hs[-1]:
+            return 0, 0, None
         xi = {v: i for i, v in enumerate(xl)}
         yi = {v: i for i, v in enumerate(yt)}
         return nc, nr, [(xi[gx(p)], yi[gy(p)]) for p in patches]
@@ -722,8 +740,11 @@ class ScanGridMarquee(QWidget):
             return
         cx, cy = self.width() / 2.0, self.height() / 2.0
         ix, iy = self._to_image(cx, cy)
-        self._zoom = max(1.0, min(16.0, self._zoom * factor))
-        if self._zoom <= 1.0:
+        # Floor below the exact fit (0.9): on a borderless full-page scan the
+        # corner handles sit outside the image and were unreachable at fit
+        # zoom — Knut had to pan for every corner (#108).
+        self._zoom = max(0.9, min(16.0, self._zoom * factor))
+        if self._zoom <= 0.9 + 1e-9:
             self._pan = [0.0, 0.0]
         else:
             s = self._scale * self._zoom
@@ -742,7 +763,7 @@ class ScanGridMarquee(QWidget):
             return
         pos = e.position()
         ix, iy = self._to_image(pos.x(), pos.y())
-        self._zoom = max(1.0, min(16.0, self._zoom * (1.0015 ** e.angleDelta().y())))
+        self._zoom = max(0.9, min(16.0, self._zoom * (1.0015 ** e.angleDelta().y())))
         if self._zoom <= 1.0:
             self._pan = [0.0, 0.0]               # fit → recentre
         else:                                    # keep point under cursor fixed

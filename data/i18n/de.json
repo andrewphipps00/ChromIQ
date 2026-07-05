@@ -2428,5 +2428,6 @@
   "Step {k} of {n}": "Schritt {k} von {n}",
   "Working…": "Arbeitet …",
   "{n} s — still working": "{n} s — arbeitet noch",
-  "Ready": "Bereit"
+  "Ready": "Bereit",
+  "⚠ Alignment check: {p}% of the patches read very differently from what the chart asked the printer to print (ΔE over 15). The grid was probably misaligned on a scan — or a scan doesn't belong to this chart. Check the diagnostic images before trusting this profile.": "⚠ Ausrichtungsprüfung: {p}% der Messfelder wurden deutlich anders gelesen, als das Testchart dem Drucker vorgegeben hat (ΔE über 15). Vermutlich saß das Raster auf einem Scan falsch — oder ein Scan gehört nicht zu diesem Testchart. Prüfe die Diagnosebilder, bevor du diesem Profil vertraust."
 }

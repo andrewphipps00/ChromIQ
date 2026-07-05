@@ -1722,16 +1722,25 @@ class ScannerProfileDialog(_ToolDialogBase):
         return extrapolate_to_fiducials(corners, text) or corners
 
     def _apply_fiducial_frame(self, cht: Path, base: Path) -> Path:
-        """The bundled ``.cht``'s ``F`` line is the real fiducial marks. When "Use
+        """The ``.cht``'s ``F`` line is the real fiducial marks. When "Use
         fiducial marks" is ON, hand scanin that file unchanged — the user placed
         the marquee corners on the marks, and ``-F`` maps them to the ``F`` line.
-        When OFF, rewrite ``F`` to the patch-area bounding box, so ``-F`` maps the
-        corners the user placed on the patch grid instead."""
-        if not self._standard_mode() or self._use_fiducials_cb.isChecked():
-            return cht                              # ON (or engine): F already right
+        Otherwise rewrite ``F`` to the patch-area bounding box, so ``-F`` maps
+        the corners the user placed on the patch grid instead.
+
+        The rewrite runs for ChromIQ-chart mode too (#108): an engine chart's
+        ``F`` already IS the patch bbox (the rewrite is a no-op), but a
+        user-supplied printtarg ``-s`` .cht carries real corner marks OUTSIDE
+        the patch area — Knut's charts have them 7 mm out on three sides, so
+        skipping the rewrite compressed the whole grid downward."""
+        if self._standard_mode() and self._use_fiducials_cb.isChecked():
+            return cht                # ON: corners were placed on the real marks
         import re
         from workflow.cht_parser import ChtParseError, parse_cht
-        txt = cht.read_text(errors="ignore")
+        try:
+            txt = cht.read_text(errors="ignore")
+        except OSError:
+            return cht
         try:
             geom = parse_cht(txt)
         except ChtParseError:
@@ -1950,9 +1959,49 @@ class ScannerProfileDialog(_ToolDialogBase):
         self._jobs.append({"kind": "colprof_printer", "pbase": pbase, "base": base})
         self._run_job(0)
 
+    def _warn_if_misaligned(self, ti3: Path, ti2: Path) -> None:
+        """Knut's misalignment sanity check (#108): compare what the scanner
+        read (through its profile) against the chart's aim values, patch by
+        patch. A misplaced grid — or a scan of the wrong chart — scrambles the
+        assignment, so a large share of patches lands far off. Printer drift
+        moves colours too, but structuredly and mostly within bounds; the
+        thresholds (ΔE76 > 15 on more than 10% of patches) flag scrambles, not
+        an uncalibrated printer. Warning only — the build continues."""
+        try:
+            from workflow.icc_info import xyz_to_lab
+            from workflow.ti3_analysis import parse_ti3
+            got = parse_ti3(ti3)
+            aim = parse_ti3(ti2)
+            aim_by_id = dict(zip(aim.sample_ids, aim.xyz))
+            # Normalise each side to its own brightest patch, so exposure /
+            # paper-white scale differences don't count as colour error.
+            got_w = max(y for _x, y, _z in got.xyz) or 1.0
+            aim_w = max(y for _x, y, _z in aim_by_id.values()) or 1.0
+            n = big = 0
+            for sid, g in zip(got.sample_ids, got.xyz):
+                a = aim_by_id.get(sid)
+                if a is None:
+                    continue
+                gl = xyz_to_lab(tuple(c * 100.0 / got_w for c in g))
+                al = xyz_to_lab(tuple(c * 100.0 / aim_w for c in a))
+                de = sum((x - y) ** 2 for x, y in zip(gl, al)) ** 0.5
+                n += 1
+                big += de > 15.0
+            if n and big / n > 0.10:
+                self._log.appendPlainText(tr(
+                    "⚠ Alignment check: {p}% of the patches read very "
+                    "differently from what the chart asked the printer to "
+                    "print (ΔE over 15). The grid was probably misaligned on "
+                    "a scan — or a scan doesn't belong to this chart. Check "
+                    "the diagnostic images before trusting this profile."
+                ).format(p=round(100 * big / n)))
+        except Exception:  # noqa: BLE001 — a sanity check must never block
+            log.warning("misalignment check failed", exc_info=True)
+
     def _build_printer_profile(self, pbase: Path, base: Path) -> None:
         ti3 = pbase.with_suffix(".ti3")
         self._sanitize_scanner_ti3(ti3)              # once, on the accumulated .ti3
+        self._warn_if_misaligned(ti3, base.with_suffix(".ti2"))
         self._log.appendPlainText(tr("Building the printer profile…"))
         ti3, custom = self._apply_profile_name(ti3)
         params = ProfileParams(

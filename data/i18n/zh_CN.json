@@ -2428,5 +2428,6 @@
   "Step {k} of {n}": "Step {k} of {n}",
   "Working…": "Working…",
   "{n} s — still working": "{n} s — still working",
-  "Ready": "就绪"
+  "Ready": "就绪",
+  "⚠ Alignment check: {p}% of the patches read very differently from what the chart asked the printer to print (ΔE over 15). The grid was probably misaligned on a scan — or a scan doesn't belong to this chart. Check the diagnostic images before trusting this profile.": "⚠ Alignment check: {p}% of the patches read very differently from what the chart asked the printer to print (ΔE over 15). The grid was probably misaligned on a scan — or a scan doesn't belong to this chart. Check the diagnostic images before trusting this profile."
 }

@@ -818,3 +818,119 @@ def test_busy_bar_always_visible_animated_only_while_running(_app, tmp_path):
         assert dlg._busy_bar._label == dlg.BUSY_BAR_IDLE_LABEL
     finally:
         dlg.deleteLater()
+
+
+# ---------------------------------------------------------------------------
+# #108 round 2 — user-supplied printtarg .cht alignment (Knut's ΔE>20 case)
+# ---------------------------------------------------------------------------
+
+_PRINTTARG_CHT = """BOXES 6
+  F _ _ 10.25 10.25 66.75 10.25 66.75 34.75 10.25 34.75
+  X A1 A1 _ _ 10.5 7.0 17.5 17.5 0 0
+  X A2 A2 _ _ 10.5 7.0 17.5 24.5 0 0
+  X B1 B1 _ _ 7.0 7.0 28.0 17.5 0 0
+  X B2 B2 _ _ 7.0 7.0 28.0 24.5 0 0
+  X C1 C1 _ _ 7.0 7.0 35.0 17.5 0 0
+  X C2 C2 _ _ 7.0 7.0 35.0 24.5 0 0
+
+BOX_SHRINK 2.0
+"""
+
+
+def test_chromiq_mode_rewrites_f_to_patch_bbox(_app, tmp_path):
+    """#108: a printtarg -s .cht carries real fiducial marks OUTSIDE the patch
+    area. The user aligns the marquee on the patches, so the cht handed to
+    scanin must carry F = the patch bbox — skipping that rewrite compressed
+    Knut's grid downward (bottom row right, everything above shifted)."""
+    src = tmp_path / "Printer_01.cht"
+    src.write_text(_PRINTTARG_CHT)
+    dlg = _dialog(_app)
+    try:
+        assert not dlg._standard_mode()          # ChromIQ-chart mode
+        out = dlg._prepare_scanin_cht(src, [(0, 0), (99, 0), (99, 49), (0, 49)],
+                                      1.0, tmp_path / "Printer", "t")
+        fline = next(l for l in out.read_text().splitlines()
+                     if l.strip().startswith("F "))
+        nums = [float(v) for v in fline.split()[3:]]
+        # Patch bbox: x 17.5..42.0, y 17.5..31.5 — not the outer 10.25..66.75.
+        assert nums[0] == 17.5 and nums[1] == 17.5
+        assert nums[2] == 42.0 and nums[5] == 31.5
+    finally:
+        dlg.deleteLater()
+
+
+def test_nonuniform_printtarg_grid_keeps_true_boxes(_app):
+    """#108: printtarg's first column is wider (10.5 vs 7 mm). The uniform-grid
+    fast path must reject it — on screen (per-box overlay) AND in the cht
+    scanin reads (no rectarg integer-edge rewrite)."""
+    from ui.scan_grid_marquee import GridSpec, rectarg_align_cht
+    g = GridSpec.from_cht(_PRINTTARG_CHT)
+    assert len(g.rects) == 6
+    assert g.ncols == 0                          # per-box mode
+    widths = sorted({round(r[2], 3) for r in g.rects})
+    assert len(widths) == 2                      # the wide column survives
+    assert rectarg_align_cht(_PRINTTARG_CHT, 5000, 2500) == _PRINTTARG_CHT
+    # A truly uniform grid still gets the fast path.
+    uniform = _PRINTTARG_CHT.replace("10.5 7.0", "7.0 7.0").replace(
+        "X A1 A1 _ _ 7.0 7.0 17.5", "X A1 A1 _ _ 7.0 7.0 21.0").replace(
+        "X A2 A2 _ _ 7.0 7.0 17.5", "X A2 A2 _ _ 7.0 7.0 21.0")
+    gu = GridSpec.from_cht(uniform)
+    assert gu.ncols > 0
+
+
+def test_marquee_can_zoom_out_below_fit(_app):
+    """#108: the corner handles sit outside the patch area — on a borderless
+    full-page scan they were unreachable at fit zoom. 10% zoom-out is allowed."""
+    from PyQt6.QtGui import QImage
+    from ui.scan_grid_marquee import ScanGridMarquee
+    m = ScanGridMarquee()
+    img = QImage(200, 100, QImage.Format.Format_RGB32)
+    img.fill(0xFFFFFFFF)
+    m.set_image(img)
+    m.resize(400, 300)
+    m._zoom_at_centre(0.5)                       # try to zoom far out
+    assert abs(m._zoom - 0.9) < 1e-9             # clamped at 90%, not 100%
+    m._reset_view()
+    assert m._zoom == 1.0
+
+
+def test_misalignment_warning_fires_on_scrambled_read(_app, tmp_path):
+    """#108: Knut's misaligned build produced ΔE>20 silently. The sanity check
+    compares the scanner read against the chart aims and warns when >10% of
+    patches are >ΔE15 off; an aligned read stays quiet."""
+    locs = [f"P{i}" for i in range(1, 21)]
+
+    def _write(path, vals):
+        rows = "\n".join(
+            f'{i + 1} "{loc}" 50.0 50.0 50.0 {x:.2f} {y:.2f} {z:.2f}'
+            for i, (loc, (x, y, z)) in enumerate(zip(locs, vals)))
+        path.write_text(f"""CTI3
+
+KEYWORD "SAMPLE_LOC"
+NUMBER_OF_FIELDS 8
+BEGIN_DATA_FORMAT
+SAMPLE_ID SAMPLE_LOC RGB_R RGB_G RGB_B XYZ_X XYZ_Y XYZ_Z
+END_DATA_FORMAT
+NUMBER_OF_SETS {len(locs)}
+BEGIN_DATA
+{rows}
+END_DATA
+""")
+
+    aims = [(20 + i * 3.0, 20 + i * 3.0, 20 + i * 3.0) for i in range(20)]
+    _write(tmp_path / "chart.ti2", aims)
+    dlg = _dialog(_app)
+    try:
+        # Aligned: reads == aims → quiet.
+        _write(tmp_path / "good.ti3", aims)
+        dlg._warn_if_misaligned(tmp_path / "good.ti3", tmp_path / "chart.ti2")
+        assert "Alignment check" not in dlg._log.toPlainText()
+        # Scrambled: a third of the patches read a very different colour.
+        bad = list(aims)
+        for i in range(0, 20, 3):
+            bad[i] = (90.0, 20.0, 5.0)
+        _write(tmp_path / "bad.ti3", bad)
+        dlg._warn_if_misaligned(tmp_path / "bad.ti3", tmp_path / "chart.ti2")
+        assert "Alignment check" in dlg._log.toPlainText()
+    finally:
+        dlg.deleteLater()
