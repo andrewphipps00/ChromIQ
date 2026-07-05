@@ -1,5 +1,18 @@
 # Changelog
 
+## v3.13.0-beta.115
+
+### ✨ Improvements
+- Tools windows now show a live busy indicator while an external tool runs —
+  the animated spectrum bar with a ticking elapsed-seconds readout and a busy
+  mouse cursor. The scanner tool also names the current step ("Step 2 of 6 —
+  Reading page 2 for the printer profile…") and fills the bar across the whole
+  run, so long silent scanin/colprof stretches no longer look like a freeze.
+- Printer-from-scan mode no longer offers "Add another scan to average":
+  it reads exactly one scan per page, and extra scans were silently ignored.
+  A run that still carries extras says so in the status log. (Real per-page
+  averaging for printer profiles may come later as its own feature.)
+
 ## v3.13.0-beta.114
 
 ### 🐛 Fixes
