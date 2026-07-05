@@ -1,5 +1,16 @@
 # Changelog
 
+## v3.13.0-beta.104
+
+### 🐛 Scanner: interior grid alignment on rounded targets (Hutchcolor)
+- On targets with **gaps** in the grid (e.g. Hutchcolor), the reading grid's inner
+  columns/rows could look off-centre on a rectarg image even when the corners lined
+  up — because those images round patch sizes unevenly and the gapped grid was
+  placed uniformly. The marquee **and** scanin now place every patch on rectarg's
+  exact integer edges (the same calculation full grids already used), so the whole
+  grid — corners *and* interior — lines up. Reads were already clean; this fixes
+  how it looks and unifies the two calculations.
+
 ## v3.13.0-beta.103
 
 ### ✨ Scanner: fiducial option hidden for ChromIQ charts
