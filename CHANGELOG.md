@@ -1,5 +1,22 @@
 # Changelog
 
+## v3.13.0-beta.118
+
+### 🐛 Fixes
+- Scanner profiling: ColorMunki double-density charts stored a wrong
+  scan-geometry capture — printtarg lays them out differently in scan mode
+  (2 printed pages became 3 recognition pages), so the selection grid could
+  never match the scan (#108). Bad captures are now discarded at creation,
+  and already-stored mismatched geometry is rejected with the concrete
+  reason instead of a grid that can't fit. A new test pins that every
+  bundled standard target's selection grid equals its .cht boxes exactly.
+- Renaming a project via the generate-time chooser left the Print tab
+  holding the old file paths — printing then failed with "no such file"
+  until the chart was regenerated. All tabs now pick up the renamed paths
+  immediately.
+- The scanner-target tool's "no patch positions" message now names the
+  exact file it looks for (<chart>.channels.json next to the picked file).
+
 ## v3.13.0-beta.117
 
 ### 🐛 Fixes
