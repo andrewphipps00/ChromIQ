@@ -2427,5 +2427,6 @@
   "Note: averaging isn't used for a printer profile — only the first scan of each page is read.": "Hinweis: Für ein Druckerprofil wird nicht gemittelt — nur der erste Scan jeder Seite wird gelesen.",
   "Step {k} of {n}": "Schritt {k} von {n}",
   "Working…": "Arbeitet …",
-  "{n} s — still working": "{n} s — arbeitet noch"
+  "{n} s — still working": "{n} s — arbeitet noch",
+  "Ready": "Bereit"
 }

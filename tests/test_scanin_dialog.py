@@ -786,12 +786,19 @@ def test_printer_mode_hides_averaging_and_says_first_scan_wins(_app, tmp_path):
         dlg.deleteLater()
 
 
-def test_busy_bar_shows_steps_and_stops_on_finish(_app, tmp_path):
-    """The busy bar (Knut: 'nothing moves for a long time') names the running
-    step and disappears when the run ends."""
+def test_busy_bar_always_visible_animated_only_while_running(_app, tmp_path):
+    """The busy bar (Knut: 'nothing moves for a long time') is a fixture of the
+    scanner tool like the Build Profile tab's bar: always visible, idle label
+    when nothing runs, step label + animation only during a run — and only this
+    tool opts in (the base default has no bar)."""
     from pathlib import Path as P
+    from ui.dialogs.tools_dialogs import _ToolDialogBase
+    assert _ToolDialogBase.BUSY_BAR_IDLE_LABEL is None   # other tools: no bar
     dlg = _dialog(_app)
     try:
+        assert dlg._busy_bar is not None
+        assert dlg._busy_bar.isVisibleTo(dlg)            # visible while idle
+        assert not dlg._busy_tick.isActive()             # …but not animated
         dlg._ti3 = P("/tmp/proj/mychart.ti3")
         dlg._layout = {"patches": [{"page": 0}]}
         dlg._pages = [0]
@@ -800,13 +807,14 @@ def test_busy_bar_shows_steps_and_stops_on_finish(_app, tmp_path):
         shots.append({"path": P("/tmp/proj/s1.tif"),
                       "corners": [(0, 0), (9, 0), (9, 9), (0, 9)]})
         dlg._set_busy(True)
-        assert dlg._busy_bar.isVisibleTo(dlg)
+        assert dlg._busy_tick.isActive()                 # animating
         scan_runs = []
         dlg._scanin.run = lambda params, on_line, on_finish: scan_runs.append(params)
         dlg._execute()
         assert "Step 1 of 2" in dlg._busy_bar._label
         dlg._finish(True)
-        assert not dlg._busy_bar.isVisibleTo(dlg)
-        assert not dlg._busy_tick.isActive()
+        assert dlg._busy_bar.isVisibleTo(dlg)            # still visible…
+        assert not dlg._busy_tick.isActive()             # …but idle again
+        assert dlg._busy_bar._label == dlg.BUSY_BAR_IDLE_LABEL
     finally:
         dlg.deleteLater()

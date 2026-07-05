@@ -2427,5 +2427,6 @@
   "Note: averaging isn't used for a printer profile — only the first scan of each page is read.": "Note: averaging isn't used for a printer profile — only the first scan of each page is read.",
   "Step {k} of {n}": "Step {k} of {n}",
   "Working…": "Working…",
-  "{n} s — still working": "{n} s — still working"
+  "{n} s — still working": "{n} s — still working",
+  "Ready": "Prêt"
 }
