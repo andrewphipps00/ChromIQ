@@ -46,6 +46,21 @@ def apply_h(h: np.ndarray, u: float, v: float) -> tuple[float, float]:
     return float(p[0] / p[2]), float(p[1] / p[2])
 
 
+def rectarg_edges(total_px: float, n: int) -> list[float]:
+    """rectarg's integer-pixel column/row edges, normalised to [0,1]: each cell is
+    ``floor(total/n)`` px, the leftover pixels going to the FIRST cells. Shared by
+    the on-screen grid AND the scanin ``.cht`` so both line up exactly with a
+    rectarg-rendered image (whose cells aren't perfectly uniform at low dpi)."""
+    import math
+    base = int(math.floor(total_px / n))
+    rem = int(round(total_px - base * n))
+    edges = [0.0]
+    for i in range(n):
+        edges.append(edges[-1] + base + (1 if i < rem else 0))
+    tot = edges[-1] or 1.0
+    return [e / tot for e in edges]
+
+
 _FLINE = re.compile(r"(?m)^\s*F\s+_\s+_\s+" + r"\s+".join([r"([-\d.]+)"] * 8))
 
 
@@ -97,6 +112,65 @@ def extrapolate_to_fiducials(
     return [img(fx0, fy0), img(fx1, fy0), img(fx1, fy1), img(fx0, fy1)]
 
 
+def rectarg_align_cht(text: str, wpx: float, hpx: float) -> str:
+    """Reposition a per-patch ``.cht`` so each box sits on rectarg's **integer-pixel
+    edges** for a patch area of *wpx*×*hpx* pixels — the SAME edges the on-screen
+    grid draws. This lines the interior columns/rows up with a rounded rectarg
+    image (whose inner cells aren't evenly spaced) instead of drifting between the
+    pinned corners. Returns the text unchanged if the boxes aren't a uniform
+    (gaps-allowed) grid or the file can't be parsed. XLIST/YLIST are regenerated
+    to match. Shared by scanin so the diagnostic matches the marquee exactly."""
+    from workflow.cht_parser import ChtParseError, parse_cht
+    try:
+        boxes = parse_cht(text).patches
+    except ChtParseError:
+        return text
+    if not boxes or wpx <= 0 or hpx <= 0:
+        return text
+    def gx(b): return round(b.x1, 2)
+    def gy(b): return round(b.y1, 2)
+    xl = sorted({gx(b) for b in boxes}); yt = sorted({gy(b) for b in boxes})
+    nc, nr = len(xl), len(yt)
+    if nc < 2 or nr < 2 or wpx < nc or hpx < nr:    # too small to round meaningfully
+        return text
+    xs = [b.x1 for b in boxes] + [b.x2 for b in boxes]
+    ys = [b.y1 for b in boxes] + [b.y2 for b in boxes]
+    x0, x1, y0, y1 = min(xs), max(xs), min(ys), max(ys)
+    sw, sh = (x1 - x0) or 1.0, (y1 - y0) or 1.0
+    dxs = [xl[i + 1] - xl[i] for i in range(nc - 1)]
+    dys = [yt[i + 1] - yt[i] for i in range(nr - 1)]
+    if max(dxs) - min(dxs) > 0.02 * sw or max(dys) - min(dys) > 0.02 * sh:
+        return text                                # not a uniform grid
+    xi = {v: i for i, v in enumerate(xl)}; yi = {v: i for i, v in enumerate(yt)}
+    ue, ve = rectarg_edges(wpx, nc), rectarg_edges(hpx, nr)
+    newpos = {}
+    xset, yset = set(), set()
+    for b in boxes:
+        ci, ri = xi[gx(b)], yi[gy(b)]
+        nx, nx2 = x0 + ue[ci] * sw, x0 + ue[ci + 1] * sw
+        ny, ny2 = y0 + ve[ri] * sh, y0 + ve[ri + 1] * sh
+        newpos[b.name] = (nx, ny, nx2 - nx, ny2 - ny)
+        xset |= {round(nx, 3), round(nx2, 3)}; yset |= {round(ny, 3), round(ny2, 3)}
+    out, i, lines = [], 0, text.splitlines()
+    while i < len(lines):
+        p = lines[i].split()
+        if p[:1] in (["XLIST"], ["YLIST"]):        # drop old lists (regenerate below)
+            i += 1
+            while i < len(lines) and lines[i].split() and lines[i].split()[0][:1] in "0123456789-.":
+                i += 1
+            continue
+        if p[:1] == ["X"] and len(p) >= 11 and p[1] in newpos:
+            nx, ny, w, hh = newpos[p[1]]
+            out.append(f"  X {p[1]} {p[2]} {p[3]} {p[4]} {w:g} {hh:g} {nx:g} {ny:g} 0 0")
+        else:
+            out.append(lines[i])
+        i += 1
+    out.append(f"XLIST {len(xset)}"); out += [f"  {x:g} {sh:g} 1.0" for x in sorted(xset)]
+    out.append(f"YLIST {len(yset)}"); out += [f"  {y:g} {sw:g} 1.0" for y in sorted(yset)]
+    out.append("")
+    return "\n".join(out)
+
+
 def cht_has_fiducials(text: str) -> bool:
     """True if the ``.cht``'s fiducial (``F``) frame is distinct from the patch
     block, so framing by fiducials differs from framing by the patches."""
@@ -127,8 +201,14 @@ class GridSpec:
     the marquee can seed a starting quad of the right shape."""
     rects: list[tuple[float, float, float, float]]
     aspect: float = 1.0
-    ncols: int = 0        # set when the boxes form ONE regular contiguous grid,
-    nrows: int = 0        # so the overlay can replicate rectarg's integer edges
+    ncols: int = 0        # set when the boxes sit on a uniformly-spaced grid (gaps
+    nrows: int = 0        # allowed) → the overlay replicates rectarg's integer edges
+    cells: list[tuple[int, int]] | None = None
+    # ^ per-patch (col, row) index into the ncols×nrows grid, parallel to ``rects``.
+    #   Set whenever the grid is uniformly spaced — including GAPPED grids like
+    #   Hutchcolor (528 of a 29×22 grid) — so the interior columns/rows can be
+    #   placed on rectarg's exact integer edges instead of drifting off a
+    #   rounded image between the (pinned) corners.
     fiducial_rect: tuple[float, float, float, float] | None = None
     # ^ the .cht fiducial frame (u0, v0, u1, v1) in the SAME patch-bbox-normalised
     #   space as ``rects`` (so it maps through the same quad homography); extends
@@ -136,22 +216,26 @@ class GridSpec:
     #   the grid, the on-screen fiducial frame, and the scanin -F derivation.
 
     @staticmethod
-    def _regular(patches, sw, sh, x0, y0) -> tuple[int, int]:
-        """If every box is the same size and they tile a full contiguous
-        ncols×nrows grid (rectarg's model), return (ncols, nrows); else (0, 0)."""
-        xl = sorted({round((getattr(p, "x1", None) if hasattr(p, "x1")
-                            else p["x"]), 2) for p in patches})
-        yt = sorted({round((getattr(p, "y1", None) if hasattr(p, "y1")
-                            else p["y"]), 2) for p in patches})
+    def _grid_structure(patches, sw, sh):
+        """(ncols, nrows, cells) if the boxes sit on a uniformly-spaced grid —
+        **gaps allowed** (Hutchcolor is 528 of a 29×22 grid) — where *cells* is the
+        per-patch ``(col, row)`` index; else ``(0, 0, None)``. Uniform spacing +
+        indices let the overlay place the interior on rectarg's integer edges even
+        when the grid isn't full, so it lines up with a rounded rectarg image."""
+        def gx(p): return round(p.x1 if hasattr(p, "x1") else p["x"], 2)
+        def gy(p): return round(p.y1 if hasattr(p, "y1") else p["y"], 2)
+        xl = sorted({gx(p) for p in patches})
+        yt = sorted({gy(p) for p in patches})
         nc, nr = len(xl), len(yt)
-        if nc * nr != len(patches) or nc < 2 or nr < 2:
-            return 0, 0
-        # uniform column / row spacing?
+        if nc < 2 or nr < 2:
+            return 0, 0, None
         dxs = [xl[i + 1] - xl[i] for i in range(nc - 1)]
         dys = [yt[i + 1] - yt[i] for i in range(nr - 1)]
         if max(dxs) - min(dxs) > 0.02 * sw or max(dys) - min(dys) > 0.02 * sh:
-            return 0, 0
-        return nc, nr
+            return 0, 0, None          # not uniform (e.g. a whole column missing)
+        xi = {v: i for i, v in enumerate(xl)}
+        yi = {v: i for i, v in enumerate(yt)}
+        return nc, nr, [(xi[gx(p)], yi[gy(p)]) for p in patches]
 
     @classmethod
     def from_patches(cls, patches: list[dict]) -> "GridSpec":
@@ -166,8 +250,8 @@ class GridSpec:
         sw, sh = (x1 - x0) or 1.0, (y1 - y0) or 1.0
         rects = [((p["x"] - x0) / sw, (p["y"] - y0) / sh, p["w"] / sw, p["h"] / sh)
                  for p in patches]
-        nc, nr = cls._regular(patches, sw, sh, x0, y0)
-        return cls(rects, aspect=sw / sh, ncols=nc, nrows=nr)
+        nc, nr, cells = cls._grid_structure(patches, sw, sh)
+        return cls(rects, aspect=sw / sh, ncols=nc, nrows=nr, cells=cells)
 
     @classmethod
     def from_cht(cls, text: str) -> "GridSpec":
@@ -191,14 +275,14 @@ class GridSpec:
         ys = [b.y1 for b in boxes] + [b.y2 for b in boxes]
         x0, x1, y0, y1 = min(xs), max(xs), min(ys), max(ys)
         sw, sh = (x1 - x0) or 1.0, (y1 - y0) or 1.0
-        nc, nr = cls._regular(boxes, sw, sh, x0, y0)
+        nc, nr, cells = cls._grid_structure(boxes, sw, sh)
         fr = fiducial_frame(text)                 # (left, right, top, bottom) cht units
         fid = (None if fr is None else
                ((fr[0] - x0) / sw, (fr[2] - y0) / sh,
                 (fr[1] - x0) / sw, (fr[3] - y0) / sh))
         return cls([((b.x1 - x0) / sw, (b.y1 - y0) / sh,
                      (b.x2 - b.x1) / sw, (b.y2 - b.y1) / sh) for b in boxes],
-                   aspect=sw / sh, ncols=nc, nrows=nr, fiducial_rect=fid)
+                   aspect=sw / sh, ncols=nc, nrows=nr, cells=cells, fiducial_rect=fid)
 
 
 _HANDLE_R = 8         # corner handle radius (screen px)
@@ -423,21 +507,6 @@ class ScanGridMarquee(QWidget):
         self._draw_grid(p)
         self._draw_quad(p)
 
-    @staticmethod
-    def _rectarg_edges(total_px: float, n: int) -> list[float]:
-        """rectarg's integer-pixel column/row edges, normalised to [0,1]: each
-        cell is floor(total/n) px, the leftover pixels going to the FIRST cells.
-        Replicated so the overlay lines up exactly with a rectarg-rendered image
-        (its cells aren't perfectly uniform at low dpi)."""
-        import math
-        base = int(math.floor(total_px / n))
-        rem = int(round(total_px - base * n))
-        edges = [0]
-        for i in range(n):
-            edges.append(edges[-1] + base + (1 if i < rem else 0))
-        tot = edges[-1] or 1
-        return [e / tot for e in edges]
-
     def _draw_grid(self, p: QPainter) -> None:
         if not self._grid.rects or len(self._corners) != 4:
             return
@@ -450,18 +519,20 @@ class ScanGridMarquee(QWidget):
         sample.setWidthF(1.4)
         fill = QColor(86, 214, 165, 40)
 
-        # Build the list of full-cell (u, v, w, hh) rects. For a single regular
-        # grid, replicate rectarg's exact integer edges at the placed quad's
-        # pixel size; otherwise fall back to each box's own rect.
-        nc, nr = self._grid.ncols, self._grid.nrows
-        if nc and nr:
+        # Build the list of full-cell (u, v, w, hh) rects. When the boxes sit on a
+        # uniform grid (gaps allowed), place EACH box on rectarg's exact integer
+        # edges for its (col, row) at the placed quad's pixel size — so the interior
+        # lines up with a rounded rectarg image, not just the pinned corners.
+        # Otherwise fall back to each box's own rect.
+        nc, nr, idx = self._grid.ncols, self._grid.nrows, self._grid.cells
+        if nc and nr and idx:
             c = self._corners
             wpx = ((c[1][0] - c[0][0]) ** 2 + (c[1][1] - c[0][1]) ** 2) ** 0.5
             hpx = ((c[3][0] - c[0][0]) ** 2 + (c[3][1] - c[0][1]) ** 2) ** 0.5
-            ue = self._rectarg_edges(wpx, nc)
-            ve = self._rectarg_edges(hpx, nr)
-            cells = [(ue[i], ve[j], ue[i + 1] - ue[i], ve[j + 1] - ve[j])
-                     for j in range(nr) for i in range(nc)]
+            ue = rectarg_edges(wpx, nc)
+            ve = rectarg_edges(hpx, nr)
+            cells = [(ue[ci], ve[ri], ue[ci + 1] - ue[ci], ve[ri + 1] - ve[ri])
+                     for (ci, ri) in idx]
         else:
             cells = self._grid.rects
 

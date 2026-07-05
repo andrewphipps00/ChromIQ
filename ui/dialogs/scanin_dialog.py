@@ -1182,6 +1182,31 @@ class ScannerProfileDialog(_ToolDialogBase):
                else base.parent / f"{base.name}_{pg + 1:02d}.cht")
         return cht, base.with_suffix(".cie")
 
+    def _prepare_scanin_cht(self, orig_cht: Path, corners, frac: float,
+                            base: Path, tag: str) -> Path:
+        """The cht scanin reads for one scan: (1) reposition the boxes onto
+        rectarg's integer edges for this scan's patch-area pixel size, so the
+        interior lines up with a rounded rectarg image the same way the on-screen
+        grid does; (2) fiducial-frame; (3) sample-area. One shared calculation for
+        the marquee and scanin. Falls back to the original layout if the boxes
+        aren't a uniform grid or the scan is too small to round."""
+        cht = orig_cht
+        try:
+            text = orig_cht.read_text(errors="ignore")
+        except OSError:
+            text = None
+        if text is not None and corners and len(corners) == 4:
+            import math
+            wpx = math.hypot(corners[1][0] - corners[0][0], corners[1][1] - corners[0][1])
+            hpx = math.hypot(corners[3][0] - corners[0][0], corners[3][1] - corners[0][1])
+            from ui.scan_grid_marquee import rectarg_align_cht
+            aligned = rectarg_align_cht(text, wpx, hpx)
+            if aligned != text:
+                cht = base.parent / f"{orig_cht.stem}-{tag}-aligned.cht"
+                cht.write_text(aligned)
+        cht = self._apply_fiducial_frame(cht, base)
+        return self._apply_sample_area(cht, frac, base)
+
     def _scanin_corners(self, corners, orig_cht: Path):
         """Turn the patch-grid-aligned marquee quad into scanin's ``-F`` corners.
         With "Use fiducial marks" ON (standard mode) extrapolate the quad out to
@@ -1270,12 +1295,14 @@ class ScannerProfileDialog(_ToolDialogBase):
         page_ti3s: list[Path] = []
         for pg in pages:
             orig_cht, cie = self._files_for_page(pg, base)   # pre-rewrite (fiducials)
-            cht = self._apply_fiducial_frame(orig_cht, base)
-            cht = self._apply_sample_area(cht, frac, base)
             shots = [s for s in self._page_shots(pg) if s["path"]]
             shot_ti3s: list[Path] = []
             for k, s in enumerate(shots):
                 scan = s["path"]
+                # Per-scan cht: align the interior to THIS scan's pixel size (so a
+                # rounded rectarg image lines up), then fiducial-frame + sample-area.
+                cht = self._prepare_scanin_cht(orig_cht, s["corners"], frac, base,
+                                               f"p{pg + 1}s{k + 1}")
                 diag = (scan.with_name(scan.stem + "-diag.tif")
                         if self._diag.isChecked() and k == 0 else None)
                 params = ScaninParams(

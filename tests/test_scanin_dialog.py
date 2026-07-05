@@ -75,6 +75,25 @@ def test_gridspec_from_cht_it8(_app):
     assert GridSpec.from_cht("not a cht").rects == []
 
 
+def test_gapped_grid_uses_rectarg_edges(_app):
+    """A gapped grid (Hutchcolor, 528 of a 29×22 grid) now reports its col/row
+    structure so the interior can be placed on rectarg's integer edges — and
+    rectarg_align_cht widens the first columns (leftover pixels), matching a
+    rounded rectarg image the same way the marquee does."""
+    from pathlib import Path
+    from ui.scan_grid_marquee import GridSpec, rectarg_align_cht
+    from workflow.cht_parser import parse_cht
+    txt = Path("data/scanner_targets/Hutchcolor.cht").read_text()
+    g = GridSpec.from_cht(txt)
+    assert g.ncols == 29 and g.nrows == 22 and g.cells is not None
+    assert len(g.cells) == len(g.rects)
+    ga = parse_cht(rectarg_align_cht(txt, 2237.0, 1688.0))
+    xs = sorted({round(b.x1, 3) for b in ga.patches})
+    assert (xs[1] - xs[0]) > (xs[10] - xs[9])          # first columns wider
+    assert rectarg_align_cht(txt, 5, 5) == txt          # too small → unchanged
+    assert rectarg_align_cht("not a cht", 2000, 2000) == "not a cht"
+
+
 def test_gridspec_carries_fiducial_frame(_app):
     """The consolidated geometry: from_cht returns the grid AND the fiducial frame
     in one normalised space (extends outside [0,1] since fiducials wrap the
