@@ -957,5 +957,6 @@ def test_page_count_mismatch_geometry_is_rejected(_app, tmp_path):
         assert dlg._layout is None
         assert "3 recognition page(s) for 2 printed page(s)" \
             in dlg._chart_note.text()
+        assert "Patch Size Scale" in dlg._chart_note.text()
     finally:
         dlg.deleteLater()

@@ -1326,11 +1326,13 @@ class ChartCreator:
             if not pages:
                 log.warning("Scanner .cht capture produced no file for %s", stem)
                 return
-            # printtarg's scan mode (-s) re-lays some chart types out — a
-            # ColorMunki double-density chart paginates 2 pages plain but 3
-            # with -s (#108, Knut's Test-Creating-2-page-Target). A capture
-            # whose page count differs from the printed chart is wrong by
-            # construction: discard it (correct-or-absent, never silently off).
+            # printtarg's scan mode (-s) needs slightly more room per page,
+            # so a chart packed to the last few percent of capacity paginates
+            # differently with -s (verified: CM double density at -a0.91–0.93
+            # spills 2→3 pages; ≤0.90 matches again; i1/CM-plain never diverge
+            # — #108, Knut). A capture whose page count differs from the
+            # printed chart is wrong by construction: discard it
+            # (correct-or-absent, never silently off).
             printed = len(sorted(work_dir.glob(f"{stem}_*.tif")))
             if printed == 0 and (work_dir / f"{stem}.tif").is_file():
                 printed = 1
