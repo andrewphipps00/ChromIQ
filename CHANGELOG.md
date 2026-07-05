@@ -1,5 +1,12 @@
 # Changelog
 
+## v3.13.0-beta.119
+
+### ✨ Improvements
+- Scanner/camera profile tool: the target-source choice at the top is now
+  labelled "Create profile using:" so the two options read as one decision
+  (Knut).
+
 ## v3.13.0-beta.118
 
 ### 🐛 Fixes
