@@ -224,6 +224,34 @@ _TOOLTIP_BODY_CAL = (
 )
 
 
+def _align_form_labels(panel: QWidget) -> None:
+    """Give every form row's leading label one shared width, so the combos /
+    fields / file boxes all start at the same column instead of hugging their
+    own label's length (Knut, #108: "make them look more orderly").
+
+    A row is any QHBoxLayout whose first item is a QLabel or a text-bearing
+    QCheckBox (the metadata rows use the checkbox AS the label) followed
+    directly by a control widget. Header rows (label + stretch + ⓘ) aren't
+    touched — their second item is a spacer, not a widget."""
+    from PyQt6.QtWidgets import QCheckBox, QHBoxLayout
+    leaders: list[QWidget] = []
+    for box in panel.findChildren(QHBoxLayout):
+        if box.count() < 2:
+            continue
+        w0, w1 = box.itemAt(0).widget(), box.itemAt(1).widget()
+        if w1 is None:                       # stretch/spacer → a header row
+            continue
+        if isinstance(w0, QLabel) and w0.text().endswith(":"):
+            leaders.append(w0)
+        elif isinstance(w0, QCheckBox) and w0.text().endswith(":"):
+            leaders.append(w0)
+    if not leaders:
+        return
+    col = max(w.sizeHint().width() for w in leaders) + 8
+    for w in leaders:
+        w.setFixedWidth(col)
+
+
 class TabProfile(QWidget):
     """Step 4: build and install ICC profile from .ti3 measurements."""
 
@@ -383,6 +411,8 @@ class TabProfile(QWidget):
         self._stack = QStackedWidget(colprof_container)
         self._guided_panel = self._make_guided_panel()
         self._manual_panel = self._make_manual_panel()
+        _align_form_labels(self._guided_panel)
+        _align_form_labels(self._manual_panel)
         self._stack.addWidget(self._guided_panel)
         self._stack.addWidget(self._manual_panel)
         cc.addWidget(self._stack, stretch=1)

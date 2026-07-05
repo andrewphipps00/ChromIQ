@@ -487,6 +487,42 @@ WORKFLOWS: list[dict] = [
                 "colours then match what you actually scan."), True),
         ],
     },
+    {
+        "key": "printer_from_scan",
+        "title": tr("Profile my printer with a flatbed scanner"),
+        "subtitle": tr("No spectrophotometer? A profiled scanner can measure "
+                       "your chart and build the printer profile."),
+        "steps": [
+            (3, tr("First profile your scanner — it's about to become your "
+                "measuring instrument. Follow the “Profile my scanner or "
+                "camera” workflow once (from a measured ChromIQ chart or a "
+                "standard target you own); the scanner profile is reused for "
+                "every printer profile you build this way.")),
+            (1, tr("On the Create Chart tab, create a chart for your printer "
+                "and paper. A ChromIQ layout-engine chart is ideal — its patch "
+                "geometry travels with the chart, so the reading grid knows "
+                "exactly where every patch sits.")),
+            (2, tr("Print the chart from the Print Chart tab as usual, with "
+                "driver colour management OFF. You do NOT measure it — the "
+                "scanner will do that.")),
+            (3, tr("Scan every printed page on your profiled scanner as a "
+                "plain RGB TIFF, with the scanner's auto-correction and colour "
+                "management turned OFF — the same settings you profiled it "
+                "with.")),
+            (3, tr("Open Tools ▸ Build scanner or camera profile and tick "
+                "“Profile my printer from this scan”. Pick your scanner "
+                "profile, the chart you printed (its .ti2), and each page's "
+                "scan; drag the four corners so the grid lines up with the "
+                "patches on every page, then build. ChromIQ reads the patches "
+                "through the scanner profile and writes a printer ICC "
+                "profile.")),
+            (3, tr("Save the diagnostic image and take any alignment warning "
+                "seriously — a misplaced grid reads the wrong patches and "
+                "ruins the profile. And keep expectations honest: a flatbed "
+                "is a fine everyday instrument, but not a spectrophotometer."),
+             True),
+        ],
+    },
 ]
 
 
@@ -791,8 +827,10 @@ class WorkflowIcon(QWidget):
             v = verts[1]
             p.drawEllipse(int(v[0] - 5), int(v[1] - 5), 10, 10)
 
-        elif self._key == "scanner_profile":
-            # Flatbed scanner: bed rectangle, an accent scan bar, content lines
+        elif self._key in ("scanner_profile", "printer_from_scan"):
+            # Flatbed scanner: bed rectangle, an accent scan bar, content lines.
+            # printer_from_scan: the content is a patch grid instead of lines —
+            # the scanner is reading a chart, not a photo.
             margin = 16
             top = margin + 6
             h = s - 2 * margin - 12
@@ -804,12 +842,22 @@ class WorkflowIcon(QWidget):
             p.setPen(Qt.PenStyle.NoPen)
             p.setBrush(accent)
             p.drawRoundedRect(inner, top + 12, s - 2 * inner, 6, 2, 2)
-            # Two content lines below it
-            p.setPen(QPen(fg, stroke))
-            for k in range(2):
-                y = top + 30 + k * 12
-                x1 = s - inner - (12 if k == 1 else 0)
-                p.drawLine(inner, y, x1, y)
+            if self._key == "printer_from_scan":
+                # 4x2 patch grid under the bar
+                p.setPen(QPen(fg, 1.6))
+                p.setBrush(QColor(0, 0, 0, 0))
+                gw = (s - 2 * inner - 6) / 4
+                for r_ in range(2):
+                    for c_ in range(4):
+                        p.drawRect(int(inner + c_ * (gw + 2)),
+                                   int(top + 28 + r_ * 14), int(gw), 10)
+            else:
+                # Two content lines below it
+                p.setPen(QPen(fg, stroke))
+                for k in range(2):
+                    y = top + 30 + k * 12
+                    x1 = s - inner - (12 if k == 1 else 0)
+                    p.drawLine(inner, y, x1, y)
 
         p.end()
 

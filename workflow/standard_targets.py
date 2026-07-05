@@ -132,20 +132,44 @@ def make_test_scan(cht_path, out_dir):
     from PIL import Image
     from workflow.cht_parser import parse_cht
     cht_path = _P(cht_path); out_dir = _P(out_dir); out_dir.mkdir(parents=True, exist_ok=True)
-    boxes = parse_cht(cht_path.read_text(errors="ignore")).patches
+    text = cht_path.read_text(errors="ignore")
+    boxes = parse_cht(text).patches
     minx = min(b.x1 for b in boxes); maxx = max(b.x2 for b in boxes)
     miny = min(b.y1 for b in boxes); maxy = max(b.y2 for b in boxes)
     scale = 1500.0 / max(maxx - minx, maxy - miny, 1.0); margin = 80
     W = int((maxx - minx) * scale + 2 * margin); H = int((maxy - miny) * scale + 2 * margin)
     from PIL import ImageDraw
     img = Image.new("RGB", (W, H), (236, 236, 236)); draw = ImageDraw.Draw(img)
+    # Uniform grids render on rectarg's INTEGER cell edges — the same edges the
+    # marquee overlay and the aligned scanin .cht use. Truncating each box's
+    # float position separately drifted up to a pixel per cell against those
+    # edges mid-grid (the corners stay pinned), so the demo scan itself looked
+    # misaligned under the grid (Knut, #108 round 4).
+    cell_edges = None
+    from ui.scan_grid_marquee import GridSpec   # deferred: demo-scan path only
+    grid = GridSpec.from_cht(text)
+    if grid.ncols and grid.nrows and grid.cells:
+        def _int_edges(total: float, n: int) -> list[int]:
+            base = int(total // n); rem = int(round(total - base * n))
+            e = [0]
+            for i in range(n):
+                e.append(e[-1] + base + (1 if i < rem else 0))
+            return e
+        cell_edges = (_int_edges((maxx - minx) * scale, grid.ncols),
+                      _int_edges((maxy - miny) * scale, grid.nrows), grid.cells)
     cie = ['CGATS.17', 'KEYWORD "SAMPLE_LOC"', 'NUMBER_OF_FIELDS 4', 'BEGIN_DATA_FORMAT',
            'SAMPLE_ID XYZ_X XYZ_Y XYZ_Z', 'END_DATA_FORMAT',
            f'NUMBER_OF_SETS {len(boxes)}', 'BEGIN_DATA']
     for i, b in enumerate(boxes):
         r, g, bl = demo_patch_color(i, len(boxes))
-        x0 = int((b.x1 - minx) * scale + margin); y0 = int((b.y1 - miny) * scale + margin)
-        x1 = int((b.x2 - minx) * scale + margin); y1 = int((b.y2 - miny) * scale + margin)
+        if cell_edges is not None:
+            xe, ye, cells = cell_edges
+            ci, ri = cells[i]
+            x0 = margin + xe[ci]; x1 = margin + xe[ci + 1]
+            y0 = margin + ye[ri]; y1 = margin + ye[ri + 1]
+        else:
+            x0 = int((b.x1 - minx) * scale + margin); y0 = int((b.y1 - miny) * scale + margin)
+            x1 = int((b.x2 - minx) * scale + margin); y1 = int((b.y2 - miny) * scale + margin)
         draw.rectangle([x0, y0, x1 - 1, y1 - 1], fill=(r, g, bl))
         cie.append(f"{b.name} {r / 2.55 * 0.95:.3f} {g / 2.55:.3f} {bl / 2.55 * 1.09:.3f}")
     cie += ['END_DATA', '']
