@@ -1197,7 +1197,8 @@ class _NewChartDialog(QDialog):
     # New-chart sessions (attribute = "_gen_<name>").
     _GEN_CHECKS = ("cube", "corners", "spirals", "skin", "blues", "greens",
                    "sunrises", "flamingos", "neutral", "nearneutral", "edges",
-                   "hs", "pastel", "image", "whiteblack", "fill", "unique")
+                   "hs", "pastel", "image", "whiteblack", "fill", "unique",
+                   "fill_unit_pages")
     _GEN_SPINS = ("cube_n", "corners_edge", "spirals_end", "spirals_reach",
                   "skin_n", "skin_ranges", "blues_n", "blues_layers",
                   "greens_n", "greens_layers", "sunrises_n", "sunrises_layers",
@@ -1206,7 +1207,7 @@ class _NewChartDialog(QDialog):
                   "nearneutral_off",
                   "edges_n", "edges_faces", "hs_n", "hs_reach",
                   "pastel_n", "pastel_layers", "image_n", "whiteblack_n",
-                  "fill_to")
+                  "fill_to", "fill_pages")
     # Factory defaults — what "Restore defaults" resets the whole window to
     # (also the fresh-install state). Must mirror the inline widget defaults.
     # Covers the source mode, chart instrument/paper, the seed count, every
@@ -1227,7 +1228,7 @@ class _NewChartDialog(QDialog):
                "flamingos": True, "neutral": True, "nearneutral": True,
                "edges": False, "hs": False,
                "pastel": False, "image": False, "whiteblack": False,
-               "fill": False, "unique": True},
+               "fill": False, "unique": True, "fill_unit_pages": False},
         "sp": {"cube_n": 8, "corners_edge": 2, "spirals_end": 8,
                "spirals_reach": 16,
                "skin_n": 8, "skin_ranges": 3, "blues_n": 64,
@@ -1239,7 +1240,7 @@ class _NewChartDialog(QDialog):
                "edges_n": 1,
                "edges_faces": 0, "hs_n": 24, "hs_reach": 16, "pastel_n": 24,
                "pastel_layers": 2, "image_n": 24, "whiteblack_n": 1,
-               "fill_to": 1000},
+               "fill_to": 1000, "fill_pages": 1},
     }
 
     def _spacer_mode(self) -> str:
@@ -1342,6 +1343,13 @@ class _NewChartDialog(QDialog):
                 # unticked — never enabled from the factory default, which is *on*
                 # for several sets (Knut). Factory-reset passes a full dict.
                 w.setChecked(bool(cb.get(n, False)))
+        # fill_unit_pages is one radio of a mutex: unchecking it above leaves
+        # neither unit selected, so set its "patches" sibling to the complement
+        # (absent in old recipes → patches, the pre-#100 behaviour).
+        pages_w = getattr(self, "_gen_fill_unit_pages", None)
+        patches_w = getattr(self, "_gen_fill_unit_patches", None)
+        if pages_w is not None and patches_w is not None:
+            patches_w.setChecked(not pages_w.isChecked())
 
     def _collect_gen_state(self) -> dict:
         mode = ("generate" if self._mode_generate.isChecked() else
@@ -4961,12 +4969,18 @@ class Ti2RelayoutDialog(QDialog):
         if not isinstance(rec, dict) or self._options is None:
             return
         o = self._options
-        # Shared Set-A → Set-B layout mapping (#92), so the editor and the Create
-        # Chart tab keep a recipe's layout in step the exact same way.
-        rec["layout"] = R.recipe_layout_from_options(o)
-        if self._spec is not None:
-            rec["instr"] = self._spec.instrument_flag
-            rec["paper"] = self._spec.paper_flag
+        # Engine charts skip the layout/identity sync: their real layout is the
+        # engine recipe (channels.json), while self._options / self._spec mirror
+        # printtarg-era knobs that didn't produce the chart — syncing from those
+        # would overwrite the design's own values (#100). The realised-patch-count
+        # refresh below still applies.
+        if not self._engine_active():
+            # Shared Set-A → Set-B layout mapping (#92), so the editor and the
+            # Create Chart tab keep a recipe's layout in step the exact same way.
+            rec["layout"] = R.recipe_layout_from_options(o)
+            if self._spec is not None:
+                rec["instr"] = self._spec.instrument_flag
+                rec["paper"] = self._spec.paper_flag
         if rec.get("mode") == "generate" and isinstance(rec.get("sp"), dict):
             try:
                 n = len(self._program_from_grid())
@@ -6401,6 +6415,16 @@ class Ti2RelayoutDialog(QDialog):
         # measurement (workflow.scanin_target, #97). Best-effort.
         from workflow.chart_exports import write_sidecars
         extras = write_sidecars(target / f"{name}.ti1", target, name)
+        # Write meta.json with the creation recipe (Set B), like the printtarg
+        # save path does — without it an engine chart saved or applied from
+        # here loses its New-patch-set design, so the Create Chart tab can't
+        # carry it into presets and the editor can't reload it (#100). The
+        # recipe stays as created (sync_layout=False): the chart's real layout
+        # is the engine recipe in channels.json, not self._options.
+        self._reconcile_recipe_with_chart()
+        R.save_editor_meta(target / f"{name}.ti2", self._spec,
+                           self._options or R.LayoutOptions(), name,
+                           recipe=self._chart_recipe, sync_layout=False)
         pages = len(result.tiff_paths or [])
         msg = (f"Saved engine chart {name}.ti2 + {pages} page(s) to {target}\n"
                f"ChromIQ layout engine · {recipe.instrument} · {recipe.paper} · "

@@ -104,6 +104,7 @@ def test_reconcile_recipe_updates_stale_layout_and_fill_to():
                                  triple_density=False, dpi=200),
         _spec=R.ChartSpec.new("i1", "A4"),
         _program_from_grid=lambda: [("p",)] * 484,
+        _engine_active=lambda: False,     # printtarg chart → full #92 sync
     )
     Ti2RelayoutDialog._reconcile_recipe_with_chart(ns)
     assert recipe["layout"]["patch_scale"] == 1.0     # was 1.15
@@ -118,5 +119,6 @@ def test_reconcile_recipe_noop_without_recipe():
     # A chart with no stored recipe (loaded from a recipe-less file) is fine.
     ns = SimpleNamespace(_chart_recipe=None, _options=R.LayoutOptions(),
                          _spec=R.ChartSpec.new("i1", "A4"),
-                         _program_from_grid=lambda: [])
+                         _program_from_grid=lambda: [],
+                         _engine_active=lambda: False)
     Ti2RelayoutDialog._reconcile_recipe_with_chart(ns)  # must not raise

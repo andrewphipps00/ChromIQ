@@ -262,3 +262,167 @@ def test_dropdown_select_applies_recipe(qapp, monkeypatch):
     idx = d._preset_setup_combo.findData("p")
     d._on_preset_setup_selected(idx)
     assert d._gen_cube_n.value() == 5               # recipe applied
+
+
+# ---------------------------------------------------------------------------
+# #100 — recipe persistence with the ChromIQ layout engine
+# ---------------------------------------------------------------------------
+
+_ENGINE_RECIPE = {
+    "mode": "generate",
+    "cb": {"cube": True, "corners": True, "fill": True,
+           "fill_unit_pages": True},
+    "sp": {"cube_n": 9, "fill_to": 1200, "fill_pages": 2},
+    "instr": "i1", "paper": "A4",
+    "layout": {"spacer_mode": "colored", "margin": 6},
+}
+
+
+def test_save_editor_meta_no_sync_keeps_recipe_verbatim():
+    """#100: sync_layout=False stores the recipe exactly as given — an
+    engine-built chart must not have its layout / instrument / paper rewritten
+    from printtarg-era options that didn't produce it."""
+    with tempfile.TemporaryDirectory() as tmp:
+        ti2 = Path(tmp) / "chart.ti2"
+        ti2.write_text("")
+        spec = R.ChartSpec.new("CM", "A3")           # deliberately different
+        opts = R.LayoutOptions(margin_mm=12, patch_scale=1.3)
+        R.save_editor_meta(ti2, spec, opts, "c", recipe=_ENGINE_RECIPE,
+                           sync_layout=False)
+        assert R.load_editor_recipe(ti2) == _ENGINE_RECIPE
+
+
+def _engine_editor(qapp, tmp_path):
+    """A layout editor in engine mode with a tiny grid (see
+    test_editor_pages_fill.py for the pattern)."""
+    from PyQt6.QtCore import QSettings
+    import ui.dialogs.ti2_relayout_dialog as M
+    from core.argyll_runner import ArgyllRunner
+    from core.settings import AppSettings
+    s = AppSettings()
+    s._qs = QSettings(str(tmp_path / "s.ini"), QSettings.Format.IniFormat)
+    s.set("use_chromiq_layout_engine", True)
+    ed = M.Ti2RelayoutDialog(ArgyllRunner(s), s)
+    ti2 = tmp_path / "chart.ti2"
+    ti2.write_text(
+        'CTI2\n\nORIGINATOR "test"\nTARGET_INSTRUMENT "GretagMacbeth i1 Pro"\n'
+        'COLOR_REP "iRGB"\nPAPER_SIZE "210.0x297.0"\n'
+        'APPROX_WHITE_POINT "95.1 100.0 108.8"\n\nNUMBER_OF_FIELDS 8\n'
+        'BEGIN_DATA_FORMAT\nSAMPLE_ID SAMPLE_LOC RGB_R RGB_G RGB_B XYZ_X XYZ_Y '
+        'XYZ_Z\nEND_DATA_FORMAT\n\nNUMBER_OF_SETS 3\nBEGIN_DATA\n'
+        '1 "A1" 100.0 100.0 100.0 95.1 100.0 108.8\n'
+        '2 "A2" 0.0 0.0 0.0 0.0 0.0 0.0\n'
+        '3 "A3" 100.0 0.0 0.0 41.2 21.3 1.9\nEND_DATA\n')
+    ed._spec = R.ChartSpec.from_ti2(ti2)
+    ed._engine_panel_grp.setVisible(True)
+    from workflow.layout_engine.presets import default_recipe
+    rec = default_recipe("i1", "A4")
+    rec.randomize = False
+    ed._engine_panel.set_recipe(rec)
+    for rgb in ((100.0, 100.0, 100.0), (0.0, 0.0, 0.0), (50.0, 50.0, 50.0)):
+        ed._grid.addItem(ed._grid_item(rgb))
+    assert ed._engine_active()
+    return ed
+
+
+def test_engine_editor_save_writes_recipe_meta(qapp, tmp_path):
+    """#100 (bug 1 root cause): the engine save path must write meta.json with
+    the creation recipe, like the printtarg path — Save As / Apply staging
+    otherwise hand over a chart without its New-patch-set design."""
+    ed = _engine_editor(qapp, tmp_path)
+    ed._chart_recipe = dict(_ENGINE_RECIPE, sp=dict(_ENGINE_RECIPE["sp"]))
+    target = tmp_path / "out"
+    target.mkdir()          # _write_chart_into (the real caller) creates it
+    ed._write_engine_chart_into(target, "mychart")
+    loaded = R.load_editor_recipe(target / "mychart.ti2")
+    assert loaded is not None
+    # Design frozen (no printtarg-widget sync) …
+    assert loaded["cb"] == _ENGINE_RECIPE["cb"]
+    assert loaded["instr"] == "i1" and loaded["paper"] == "A4"
+    assert loaded["layout"] == _ENGINE_RECIPE["layout"]
+    # … except fill_to, refreshed to the realised patch count (#92 reconcile).
+    assert loaded["sp"]["fill_to"] == 3
+
+
+def test_apply_external_chart_carries_staging_recipe(qapp, tmp_path, monkeypatch):
+    """#100 (bug 2 root cause): the Create Chart "Overwrite" apply must pick up
+    the staged chart's recipe so the regenerated run (and presets saved from
+    it) keep the design — it used to null _pending_editor_recipe."""
+    tab, fm = _chart_tab(tmp_path)
+    staging = tmp_path / "staging"
+    staging.mkdir()
+    (staging / "c.ti1").write_text("x")
+    ti2 = staging / "c.ti2"
+    ti2.write_text("")
+    R.save_editor_meta(ti2, R.ChartSpec.new("i1", "A4"), R.LayoutOptions(),
+                       "c", recipe=_ENGINE_RECIPE, sync_layout=False)
+    calls = []
+    monkeypatch.setattr(tab, "_generate_from_ti1", lambda p: calls.append(p))
+    assert tab.apply_external_chart(staging, "c") is True
+    assert tab._pending_editor_recipe == _ENGINE_RECIPE
+    assert calls, "apply must regenerate from the staged .ti1"
+
+
+def test_preset_capture_recipe_frozen_when_engine_on(qapp, tmp_path):
+    """#100: with the engine active the preset save must not "sync" the recipe
+    from the hidden printtarg widgets (that stamped i1/A4 into engine charts)."""
+    tab, _fm = _chart_tab(tmp_path)
+    tab._settings.set("use_chromiq_layout_engine", True)
+    assert tab._recipe_synced_to_manual(_ENGINE_RECIPE) == _ENGINE_RECIPE
+    tab._settings.set("use_chromiq_layout_engine", False)
+    synced = tab._recipe_synced_to_manual(dict(_ENGINE_RECIPE))
+    assert synced["layout"] != _ENGINE_RECIPE["layout"]   # printtarg sync ran
+
+
+def test_stamp_chart_meta_engine_chart_recipe_stays_frozen(qapp, tmp_path,
+                                                           monkeypatch):
+    """#100: stamping a run built by the engine must store the pending recipe
+    verbatim — the #92 layout sync only applies to printtarg-built charts."""
+    import json
+    from workflow.chart_creator import ChartParams
+    tab, fm = _chart_tab(tmp_path)
+    tab._pending_editor_recipe = dict(_ENGINE_RECIPE)
+    fm.set_target_name("EngineChart")
+    run = fm.project().current_run()
+
+    class _Spec:
+        instrument_flag = "SS"
+        paper_flag = "A4R"
+    monkeypatch.setattr(R.ChartSpec, "from_ti2", staticmethod(lambda p: _Spec()))
+    tab._last_params = ChartParams()
+    ti2 = run.dir / f"{run.stem}.ti2"
+    ti2.write_text("x")
+    # Engine marker: a channels.json whose layout block carries the recipe.
+    ti2.with_suffix(".channels.json").write_text(json.dumps({
+        "layout": {"engine": "chromiq", "engine_version": 1,
+                   "recipe": {"instrument": "SS", "paper": "A4R"}}}))
+    tab._stamp_chart_meta(ti2)
+    assert R.load_editor_recipe(ti2) == _ENGINE_RECIPE
+
+
+def test_fill_unit_pages_round_trips(qapp, monkeypatch):
+    """#100: the "Fill remaining space" unit (patches vs pages) and the page
+    count are part of the recipe — a fill-2-pages design must not reload as
+    fill-to-N-patches."""
+    s = _FakeSettings()
+    s.set("use_chromiq_layout_engine", True)
+    monkeypatch.setattr(_NewChartDialog, "_engine_cap_per_page", lambda self: 100)
+    d = _NewChartDialog(Path("/x"), s)
+    d._mode_generate.setChecked(True)
+    d._gen_fill.setChecked(True)
+    d._gen_fill_unit_pages.setChecked(True)
+    d._gen_fill_pages.setValue(2)
+    st = d._collect_gen_state()
+    assert st["cb"]["fill_unit_pages"] is True
+    assert st["sp"]["fill_pages"] == 2
+
+    reopened = _NewChartDialog(Path("/x"), s, initial_recipe=st)
+    assert reopened._gen_fill_unit_pages.isChecked()
+    assert reopened._gen_fill_pages.value() == 2
+    # An old recipe without the keys loads as the pre-#100 default: patches.
+    legacy = {k: v for k, v in st.items()}
+    legacy["cb"] = {k: v for k, v in st["cb"].items() if k != "fill_unit_pages"}
+    legacy["sp"] = {k: v for k, v in st["sp"].items() if k != "fill_pages"}
+    d3 = _NewChartDialog(Path("/x"), s, initial_recipe=legacy)
+    assert d3._gen_fill_unit_patches.isChecked()
+    assert not d3._gen_fill_unit_pages.isChecked()

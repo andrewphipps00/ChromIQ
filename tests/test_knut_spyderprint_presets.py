@@ -72,11 +72,13 @@ def _fmt_scale(v: float) -> str:
 # ---------------------------------------------------------------------------
 
 def test_registry_shape():
-    # Only the 15 "Full layout setup" presets remain — the 17 shared-.ti1
-    # "TC9.18+Spyderprint Grays" presets were removed in #89.
-    assert len(KNUT_PRESETS) == 15
-    assert len(KNUT_PRESET_KEYS) == 15  # all keys unique
+    # The 15 "Full layout setup" presets (#63; the 17 shared-.ti1
+    # "TC9.18+Spyderprint Grays" presets were removed in #89) plus the two
+    # engine-built Scanner charts (#100).
+    assert len(KNUT_PRESETS) == 17
+    assert len(KNUT_PRESET_KEYS) == 17  # all keys unique
     assert sum(1 for p in KNUT_PRESETS if p.slug.startswith("fls_")) == 15
+    assert sum(1 for p in KNUT_PRESETS if p.slug.startswith("scanner_")) == 2
     assert KNUT_PRESET_KEYS <= BUILTIN_PRESET_KEYS
     assert all(p.combo_label in BUILTIN_PRESET_LABELS for p in KNUT_PRESETS)
     # every preset is reachable from a dropdown/overlay group
@@ -109,6 +111,8 @@ def test_keys_are_stable_sentinels():
 @pytest.mark.parametrize("key", sorted(KNUT_PRESET_KEYS))
 def test_seeded_command_matches_recipe(qapp, settings, key):
     p = KNUT_PRESETS_BY_KEY[key]
+    if p.layout_recipe is not None:
+        pytest.skip("engine-built preset (Scanner family) — printtarg not used")
     tab = _make_tab(qapp, settings)
     tab._seed_knut_preset(key)
     args = _printtarg_args(tab)

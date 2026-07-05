@@ -13,7 +13,7 @@ mechanism works end-to-end and how to add, rename, or re-file one.
 > `_generate_from_ti1` wiring from git history — `_generate_from_ti1` itself is
 > still present (it backs the *user* preset "attach a .ti1" feature).
 
-Built-ins now come in **two kinds**:
+Built-ins now come in **three kinds**:
 
 1. **prebuilt-files** (the ten "by Pharmacist" charts) — a complete, ready-made
    target is bundled and just copied into the run; **no targen/printtarg**.
@@ -23,8 +23,21 @@ Built-ins now come in **two kinds**:
    set is fixed) but **printtarg stays editable** so you can re-layout it; only one
    small `.ti1` ships instead of 17 sets of page TIFFs. An "Edit patch recipe"
    override checkbox can unlock targen (→ a fresh, different patch set).
+3. **ti1 → layout engine** (the two "Scanner" charts by Knut, #100) — the same
+   `_Ti1Preset` machinery as kind 2, but the row sets `layout_recipe`
+   (a full `LayoutRecipe.to_dict()`): selecting it turns the ChromIQ layout
+   engine **on** (`_on_preset_selected` flips the engine checkbox to match the
+   preset kind before dispatching), `_seed_knut_preset` seeds the Manual layout
+   panel from the recipe instead of the printtarg widgets, and the bundled
+   `.ti1` builds through the engine (`_generate_from_ti1` routes there while
+   the engine setting is on). `group="Scanner"` files the row under its own
+   dropdown/overlay header instead of an instrument group (`display_group`).
+   targen is greyed like kind 2; the engine layout panel stays editable.
+   Assets live under `assets/charts/knut/rgb/scanner/<paper>/chart.ti1`; no
+   `recipe.json` sidecar (the charts are denser than any New-chart recipe can
+   regenerate). Tests: `tests/test_scanner_builtin_presets.py`.
 
-Both kinds grey one or both parameter panels while active, with override
+All kinds grey one or both parameter panels while active, with override
 checkboxes to unlock them — see **Panel locks + override checkboxes** below.
 
 The prebuilt-files kind is described first.

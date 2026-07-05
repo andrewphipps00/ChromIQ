@@ -288,6 +288,42 @@ _KNUT_I1, _KNUT_CM = "i1", "CM"
 KNUT_FLS_SUFFIX = " · Full layout setup"
 _KNUT_FLS_DIR = "assets/charts/knut/rgb/fulllayout"
 
+# Knut's Scanner family (#100): engine-built charts for flatbed-scanner printer
+# profiling. One shared LayoutRecipe (his exported preset, verbatim) — only the
+# paper differs between the A4 and Letter rows. randomize=False + seed=None keeps
+# the printed layout identical to Knut's originals; patch order doesn't matter
+# for scanin (the .cht fiducials locate every patch).
+KNUT_SCANNER_SUFFIX = " · Profile printer with scanner"
+_KNUT_SCANNER_DIR = "assets/charts/knut/rgb/scanner"
+_KNUT_SCANNER_RECIPE: dict = {
+    "instrument": "SS", "paper": "A4R", "dpi": 300,
+    "randomize": False, "seed": None, "hflag": False,
+    "cm_density": 1, "cm_stagger": False,
+    "spacer_on": True, "spacer_mode": "colored", "spacer_palette": [],
+    "spacer_overrides": {}, "edge_spacers": False,
+    "patch_area_align": "top-left", "pscale": 1.0, "sscale": 1.0,
+    "border": 6.0, "margin_top": 8.0, "margin_right": 4.0,
+    "margin_bottom": 4.0, "margin_left": 4.0,
+    "use_instrument_margins": False,
+    "patch_w_mm": 0.0, "patch_h_mm": 0.0,
+    "layout_mode": "area_first", "area_method": "by_width",
+    "area_cols": 0, "area_rows": 0, "area_ratio": 1.0,
+    "area_min_patch_mm": 4.0,
+    "spacer_width_mm": 0.0, "inter_patch_mm": 0.0, "strip_gap_mm": 0.0,
+    "max_strip_mm": 0.0, "strip_indicator_gap_mm": 0.0,
+    "offset_x_mm": 0.0, "offset_y_mm": 0.0,
+    "compression": "lzw", "show_strip_indicators": True,
+    "indicator_font": "JetBrains Mono", "indicator_align": "left",
+    "underline_mode": "off", "underline_thickness_mm": 0.5,
+    "underline_gap_mm": 0.5,
+    "chart_text_font": "Inter", "text_edge_mm": 4.0,
+    "text_edge_top_mm": 4.0, "text_edge_clip_mm": 4.0,
+    "clip_border": True, "clip_border_width_mm": 26.0, "clip_side": "left",
+    "clip_content_mode": "off", "clip_text_font": "Inter",
+    "clip_image_scale": 100.0,
+    "strip_pattern": "A-Z, A-Z", "patch_pattern": "0-9,@-9,@-9;1-999",
+}
+
 
 # Pulls a "-w<number>mm" patch-width token (e.g. "-w11.5mm") out of a name.
 _WIDTH_TOKEN_RE = re.compile(r"-w\d+(?:\.\d+)?mm")
@@ -345,24 +381,34 @@ class _Ti1Preset:
     no_randomise: bool = False          # printtarg -r (False = randomise, the default)
     tiff_16bit: bool = True             # 16-bit TIFF (→ -T)
     suffix: str = KNUT_SUFFIX           # family name tail (stripped for target name)
+    # Scanner family (#100) extensions: an engine-built preset carries the full
+    # ChromIQ layout-engine recipe (LayoutRecipe.to_dict()); selecting it turns
+    # the engine on and seeds the layout panel instead of the printtarg widgets.
+    layout_recipe: dict | None = None   # engine recipe → engine-built preset
+    group: str = ""                     # dropdown/overlay group ("" → by instrument)
 
     @property
     def key(self) -> str:
         return f"__chromiq_knut_{self.slug}__"
 
     @property
+    def display_group(self) -> str:
+        """Group header in the dropdown + overlay — an explicit family group
+        ("Scanner") or, classically, the instrument the chart targets."""
+        return self.group or ("i1Pro" if self.instrument == _KNUT_I1
+                              else "ColorMunki")
+
+    @property
     def combo_label(self) -> str:
-        instr = "i1Pro" if self.instrument == _KNUT_I1 else "ColorMunki"
-        return f"★  {instr} · {self.name}  ·  built-in"
+        return f"★  {self.display_group} · {self.name}  ·  built-in"
 
     @property
     def overlay_label(self) -> str:
-        return self.name  # the overlay already groups by instrument
+        return self.name  # the overlay already groups by instrument / family
 
     @property
     def default_target_name(self) -> str:
-        instr = "i1Pro" if self.instrument == _KNUT_I1 else "ColorMunki"
-        return _sortable_builtin_name(instr, self.name, self.suffix)
+        return _sortable_builtin_name(self.display_group, self.name, self.suffix)
 
 
 # Named printtarg page sizes in mm (only those the presets use); custom sizes are
@@ -506,6 +552,27 @@ KNUT_PRESETS: list[_Ti1Preset] = [
     _Ti1Preset("fls_i1pro_a4_924p_2pages_portrait_nature_focus", "A4-924p-2pages-Portrait-w7.5mm-Nature Focus" + KNUT_FLS_SUFFIX,
                _KNUT_I1, "A4", 0.98, 10, 2,
                ti1_asset=f"{_KNUT_FLS_DIR}/fls_i1pro_a4_924p_2pages_portrait_nature_focus/chart.ti1", patches=924, white=9, black=8, no_strip_limit=False, suppress_left_clip=False, tiff_16bit=False, suffix=KNUT_FLS_SUFFIX),
+
+    # Scanner family (#100) — Knut's flatbed-scanner printer-profiling charts.
+    # Engine-built (the layout_recipe drives the ChromIQ layout engine, not
+    # printtarg): a dense 4 mm SpectroScan-style grid, printed without colour
+    # management, scanned on a flatbed, then read via Tools → "Build scanner or
+    # camera profile" with "Profile my printer from this scan". The recipes are
+    # Knut's exported presets verbatim (only the paper differs between the two).
+    _Ti1Preset("scanner_a4_3430p_1page_landscape",
+               "A4-3430p-1page-Landscape-w4.0mm" + KNUT_SCANNER_SUFFIX,
+               "SS", "A4R", 1.0, 4, 1,
+               ti1_asset=f"{_KNUT_SCANNER_DIR}/a4/chart.ti1", patches=3430,
+               white=2, black=2, tiff_16bit=False, suffix=KNUT_SCANNER_SUFFIX,
+               group="Scanner",
+               layout_recipe=dict(_KNUT_SCANNER_RECIPE, paper="A4R")),
+    _Ti1Preset("scanner_letter_3250p_1page_landscape",
+               "Letter-3250p-1page-Landscape-w4.0mm" + KNUT_SCANNER_SUFFIX,
+               "SS", "LetterR", 1.0, 4, 1,
+               ti1_asset=f"{_KNUT_SCANNER_DIR}/letter/chart.ti1", patches=3250,
+               white=2, black=2, tiff_16bit=False, suffix=KNUT_SCANNER_SUFFIX,
+               group="Scanner",
+               layout_recipe=dict(_KNUT_SCANNER_RECIPE, paper="LetterR")),
 ]
 KNUT_PRESETS_BY_KEY: dict[str, _Ti1Preset] = {p.key: p for p in KNUT_PRESETS}
 KNUT_PRESET_KEYS = frozenset(KNUT_PRESETS_BY_KEY)
@@ -600,9 +667,9 @@ BUILTIN_PRESET_LABELS = frozenset({
 # the same paper keep their registry order (e.g. 2-page before 3-page).
 _KNUT_GROUP_ENTRIES = {
     grp: [(p.combo_label, p.overlay_label, p.key)
-          for p in sorted((q for q in KNUT_PRESETS if q.instrument == instr),
+          for p in sorted((q for q in KNUT_PRESETS if q.display_group == grp),
                           key=lambda q: _paper_sort_key(q.paper))]
-    for grp, instr in (("ColorMunki", _KNUT_CM), ("i1Pro", _KNUT_I1))
+    for grp in ("ColorMunki", "i1Pro", "Scanner")
 }
 BUILTIN_PRESET_GROUPS: list[tuple[str, list[tuple[str, str, str]]]] = [
     ("ColorMunki", [
@@ -621,6 +688,11 @@ BUILTIN_PRESET_GROUPS: list[tuple[str, list[tuple[str, str, str]]]] = [
         (TC918EG_LETTER_PRESET_LABEL, "Letter-1160p-2pages TC9.18 extended greys by Pharmacist", TC918EG_LETTER_PRESET_KEY),
         (EXT1944_LETTER_PRESET_LABEL, "Letter-1944p-3pages extended target by Pharmacist", EXT1944_LETTER_PRESET_KEY),
         *_KNUT_GROUP_ENTRIES["i1Pro"],
+    ]),
+    # Scanner family (#100): engine-built charts for flatbed-scanner printer
+    # profiling — its own group, since no spectrophotometer is involved.
+    ("Scanner", [
+        *_KNUT_GROUP_ENTRIES["Scanner"],
     ]),
 ]
 
@@ -4244,6 +4316,22 @@ class TabChart(QWidget):
     def _knut_tooltip(key: str) -> str:
         """Tooltip for a ti1 → printtarg built-in preset (TC9.18 or Full layout setup)."""
         p = KNUT_PRESETS_BY_KEY[key]
+        if p.layout_recipe is not None:
+            # Engine preset (Scanner family, #100).
+            rec = p.layout_recipe
+            return (
+                "Built-in chart — cannot be deleted.\n"
+                f"Loads the bundled {p.patches}-patch set and lays it out with "
+                f"the ChromIQ layout engine\n"
+                f"({rec.get('paper', p.paper)}, {p.pages}-page, "
+                f"{rec.get('area_min_patch_mm', 4):g} mm patches).\n"
+                "Print it WITHOUT colour management, scan it on a flatbed "
+                "scanner, then use\n"
+                "Tools → “Build scanner or camera profile” with “Profile my "
+                "printer from this scan”.\n"
+                "Creates the target right away; the patch set stays fixed but "
+                "you can adjust\nany layout setting and regenerate."
+            )
         instr = "i1Pro" if p.instrument == _KNUT_I1 else "ColorMunki (double density)"
         family = ("TC9.18 + Spyderprint-greys" if p.suffix == KNUT_SUFFIX
                   else "Full layout setup")
@@ -4365,14 +4453,18 @@ class TabChart(QWidget):
             self._reset_override_checks()
             self._preset_del_btn.setEnabled(False)
             self._last_preset_index = index
-            # Built-in presets are printtarg-based (they predate the engine), so
-            # load them with the printtarg engine — otherwise the engine panel
-            # shows its own defaults (i1/A4) instead of the preset's real
-            # instrument/paper (Knut). Set BEFORE the dispatch so the engine→
-            # printtarg conversion runs first and the preset's values then win.
+            # Load each built-in with the engine it was made with: most are
+            # printtarg-based (they predate the engine), but the Scanner family
+            # carries a layout_recipe and needs the ChromIQ engine ON so the
+            # recipe drives the layout (#100). Set BEFORE the dispatch so the
+            # engine↔printtarg conversion runs first and the preset's values
+            # then win — otherwise the layout panel would show leftovers
+            # instead of the preset's real instrument/paper (Knut).
+            _kp = KNUT_PRESETS_BY_KEY.get(data)
+            engine_builtin = _kp is not None and _kp.layout_recipe is not None
             if getattr(self, "_manual_engine_check", None) is not None \
-                    and self._manual_engine_check.isChecked():
-                self._manual_engine_check.setChecked(False)
+                    and self._manual_engine_check.isChecked() != engine_builtin:
+                self._manual_engine_check.setChecked(engine_builtin)
             if data == TC918_PRESET_KEY:
                 self._apply_tc918_preset(name)
             elif data in KNUT_PRESET_KEYS:
@@ -5055,6 +5147,12 @@ class TabChart(QWidget):
         generators, colour-set params, source mode and patch count stay frozen as
         "what was used at creation". Falls back to the recipe unchanged if the
         manual params can't be read."""
+        # Engine charts: the printtarg widgets didn't produce the chart (the
+        # engine recipe did, and the preset carries it as layout_recipe), so
+        # syncing from them would stamp unrelated instrument/paper/layout values
+        # into the recipe (#100). Keep it exactly as created.
+        if bool(self._settings.get("use_chromiq_layout_engine", False)):
+            return recipe
         try:
             from workflow.ti2_relayout import recipe_layout_from_options
             opts = _layout_options_from_params(self._collect_params())
@@ -5500,6 +5598,29 @@ class TabChart(QWidget):
             self._on_auto_patches_toggled(False)
         self._load_auto_neutral_states(grey=False, white=False, black=False)
 
+        if p.layout_recipe is not None:
+            # Engine preset (Scanner family, #100): the ChromIQ layout engine
+            # lays the bundled patch set out, so seed the layout panel with the
+            # preset's recipe instead of the (hidden) printtarg widgets. The
+            # engine toggle is already on (_on_preset_selected sets it before
+            # dispatching here).
+            if getattr(self, "_manual_layout_panel", None) is not None:
+                from workflow.layout_engine.presets import LayoutRecipe
+                self._manual_layout_panel.set_recipe(
+                    LayoutRecipe.from_dict(p.layout_recipe))
+                self._manual_layout_panel.set_pages(p.pages)
+            if self._bit16_radio is not None and self._bit8_radio is not None:
+                (self._bit16_radio if p.tiff_16bit
+                 else self._bit8_radio).setChecked(True)
+            # Descriptive targen values (the bundled .ti1 is the real source).
+            self._set_manual_value("targen", "-f", p.patches)
+            self._set_manual_value("targen", "-e", p.white)
+            self._set_manual_value("targen", "-B", p.black)
+            if self._manual_pages_spin is not None:
+                self._manual_pages_spin.setValue(p.pages)
+            self._ensure_profile_name(target_name or p.default_target_name)
+            return
+
         # Instrument first — it drives -h visibility and the per-instrument
         # default margin; we set the margin explicitly afterwards so ours wins.
         self._set_manual_value("printtarg", "-i", p.instrument)
@@ -5759,9 +5880,14 @@ class TabChart(QWidget):
         # in the Save-Preset name suggestion (_loaded_ti1_patch_count checks
         # _builtin_ti1_path before _current_ti1_path) — Knut's 1168-vs-1575 bug.
         self._builtin_ti1_path = None
-        # The applied chart's recipe rides in the editor meta.json we overlay
-        # below — don't also inject a stale preset recipe here.
-        self._pending_editor_recipe = None
+        # Carry the applied chart's creation recipe (Set B) along: the editor
+        # writes it into the staging folder's meta.json, and only this pending
+        # slot gets it into the regenerated run's meta.json (_stamp_chart_meta).
+        # Without it the New-patch-set design is lost on apply, so presets saved
+        # from the run can't reload it into the editor (#100).
+        from workflow.ti2_relayout import load_editor_recipe
+        rec = load_editor_recipe(src_dir / f"{name}.ti2")
+        self._pending_editor_recipe = rec if isinstance(rec, dict) and rec else None
         if self._prebuilt_active:
             self._leave_prebuilt()
         if self._reflected_active:
@@ -7754,9 +7880,16 @@ class TabChart(QWidget):
                 # chart carries it into meta.json; None preserves any existing
                 # recipe and never invents one for plain targen charts (#70).
                 # save_editor_meta reconciles the recipe's layout to these opts,
-                # so Set A and Set B never disagree on what was built (#92).
+                # so Set A and Set B never disagree on what was built (#92) —
+                # except for engine-built charts, whose real layout is the
+                # engine recipe in channels.json, not these printtarg-derived
+                # opts: their creation recipe stays as created (#100).
+                from workflow.layout_engine.presets import LayoutRecipe
+                is_engine = LayoutRecipe.from_channels_json(
+                    ti2.with_suffix(".channels.json")) is not None
                 save_editor_meta(ti2, spec, opts, run.stem,
-                                 recipe=self._pending_editor_recipe)
+                                 recipe=self._pending_editor_recipe,
+                                 sync_layout=not is_engine)
             else:
                 meta = run.load_meta()
                 meta.instrument = spec.instrument_flag
