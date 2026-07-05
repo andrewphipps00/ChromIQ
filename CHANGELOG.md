@@ -1,5 +1,22 @@
 # Changelog
 
+## v3.13.0-beta.113
+
+### ✨ New
+- The two Scanner built-in presets now carry Knut's updated patch sets (#107) —
+  same sizes (A4 3430 patches / US-Letter 3250 patches, 4 mm grid, one page)
+  with redesigned content: a denser RGB cube, spirals, skin tones, the
+  blues/greens/sunrises/flamingos colour families, a 64-step neutral ramp,
+  near-neutrals, saturated edges, a hue–saturation ring, pastels and
+  white/black anchor patches. Each preset also ships its complete New-chart
+  design, so it appears under "Load setup from preset" in the New Patch Set
+  window and seeds the editor when a chart made from it is reopened. The A4
+  chart is now named …-Portrait-… to match Knut's updated original.
+
+### 🐛 Fixes
+- "Load setup from preset" listed the Scanner charts' designs under a wrong
+  "ColorMunki" label — they now file under "Scanner".
+
 ## v3.13.0-beta.112
 
 ### ✨ New
