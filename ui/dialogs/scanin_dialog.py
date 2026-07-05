@@ -645,7 +645,7 @@ class ScannerProfileDialog(_ToolDialogBase):
         opts.setColumnStretch(2, 1)
         opts.addWidget(self._tip(
             tr("Reading options"),
-            tr("Two settings for how ChromIQ reads the patches from your scan.\n\n"
+            tr("How ChromIQ reads the patches from your scan.\n\n"
             "• Correct perspective — leave this on (it's on by default). Almost "
             "every scan or photo is very slightly skewed, and this lets ChromIQ "
             "read the patch area as a gently four-cornered shape instead of "
@@ -659,7 +659,17 @@ class ScannerProfileDialog(_ToolDialogBase):
             "each drawn marker should sit squarely on its colour. It's the very "
             "first thing to look at if a profile comes out wrong, and it costs "
             "nothing but a little disk space — so it's worth leaving on while "
-            "you're getting your placement right.")), 0, 3, 2, 1,
+            "you're getting your placement right.\n\n"
+            "• Use fiducial marks — shown only for standard targets that print "
+            "small registration crosses just outside the patch block. Either way "
+            "you line the four corners up on the patches themselves — the easy, "
+            "always-visible reference. With it off, the reading is placed straight "
+            "from those corners; with it on, ChromIQ also draws the crosses and "
+            "anchors to them, working out where they are from your corner placement "
+            "(so you still just line up the patches). It puts the grid in exactly "
+            "the same spot, so turn it on only if you find the marks handy to see. "
+            "It hides automatically for ChromIQ-made charts, which print no marks.")),
+            0, 3, 2, 1,
             Qt.AlignmentFlag.AlignVCenter)
 
         self._use_fiducials_cb = QCheckBox(
