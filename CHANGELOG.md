@@ -1,5 +1,13 @@
 # Changelog
 
+## v3.13.0-beta.116
+
+### ✨ Improvements
+- The busy indicator now lives only in the scanner/camera profile tool and,
+  like the Build Profile tab's bar, is always visible — "Ready" while idle,
+  animated with the current step and elapsed seconds only while a run is
+  under way.
+
 ## v3.13.0-beta.115
 
 ### ✨ Improvements
