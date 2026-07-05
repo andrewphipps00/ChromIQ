@@ -783,6 +783,18 @@ def _style_file_dialog_toolbar(dlg: QFileDialog) -> None:
         grip.hide()
 
 
+def _prefer_native_dialogs() -> bool:
+    """User preference: use the OS-native file dialogs instead of ChromIQ's
+    themed one (Settings → Behaviour). Native is much faster to populate on
+    Windows, but — being the OS's own dialog — it can't carry our custom sidebar
+    shortcuts or the injected image-preview pane, so those are skipped when on."""
+    try:
+        from core.settings import AppSettings
+        return bool(AppSettings().get("use_native_file_dialogs", False))
+    except Exception:
+        return False
+
+
 def open_file_dialog(
     parent: QWidget,
     title: str,
@@ -796,22 +808,28 @@ def open_file_dialog(
 
     Non-matching files are hidden when name_filter is set. When ``preview`` is
     True, an image thumbnail of the highlighted file is shown beside the list
-    (for picking images).
+    (for picking images). With the native-dialogs setting on, the OS dialog is
+    used instead (its own Quick Access + preview pane; our custom sidebar and
+    preview don't apply).
 
     Returns the selected file path, or an empty string if cancelled.
     """
+    native = _prefer_native_dialogs()
     dlg = QFileDialog(parent, title, start_dir or str(Path.home()))
-    dlg.setOptions(QFileDialog.Option.DontUseNativeDialog)
-    _style_file_dialog_toolbar(dlg)
+    if not native:
+        dlg.setOption(QFileDialog.Option.DontUseNativeDialog)
+        _style_file_dialog_toolbar(dlg)
     dlg.setFileMode(QFileDialog.FileMode.ExistingFile)
     if name_filter:
         dlg.setNameFilter(name_filter)
-        exts = _parse_extensions(name_filter)
-        if exts:
-            dlg.setProxyModel(_ExtensionFilterProxy(exts, dlg))
-    dlg.setSidebarUrls(_sidebar_urls(extra_path, extra_paths))
-    if preview:
-        _attach_image_preview(dlg)
+        if not native:
+            exts = _parse_extensions(name_filter)
+            if exts:
+                dlg.setProxyModel(_ExtensionFilterProxy(exts, dlg))
+    if not native:
+        dlg.setSidebarUrls(_sidebar_urls(extra_path, extra_paths))
+        if preview:
+            _attach_image_preview(dlg)
     if dlg.exec() == QFileDialog.DialogCode.Accepted:
         files = dlg.selectedFiles()
         return files[0] if files else ""
@@ -880,18 +898,22 @@ def open_files_dialog(
     picking images). Returns the list of selected paths, or an empty list if
     cancelled.
     """
+    native = _prefer_native_dialogs()
     dlg = QFileDialog(parent, title, start_dir or str(Path.home()))
-    dlg.setOptions(QFileDialog.Option.DontUseNativeDialog)
-    _style_file_dialog_toolbar(dlg)
+    if not native:
+        dlg.setOption(QFileDialog.Option.DontUseNativeDialog)
+        _style_file_dialog_toolbar(dlg)
     dlg.setFileMode(QFileDialog.FileMode.ExistingFiles)
     if name_filter:
         dlg.setNameFilter(name_filter)
-        exts = _parse_extensions(name_filter)
-        if exts:
-            dlg.setProxyModel(_ExtensionFilterProxy(exts, dlg))
-    dlg.setSidebarUrls(_sidebar_urls(extra_path, extra_paths))
-    if preview:
-        _attach_image_preview(dlg)
+        if not native:
+            exts = _parse_extensions(name_filter)
+            if exts:
+                dlg.setProxyModel(_ExtensionFilterProxy(exts, dlg))
+    if not native:
+        dlg.setSidebarUrls(_sidebar_urls(extra_path, extra_paths))
+        if preview:
+            _attach_image_preview(dlg)
     if dlg.exec() == QFileDialog.DialogCode.Accepted:
         return list(dlg.selectedFiles())
     return []
@@ -919,16 +941,19 @@ def save_file_dialog(
         start_dir, default_name = str(p.parent), p.name
     else:
         start_dir, default_name = str(Path.home()), ""
+    native = _prefer_native_dialogs()
     dlg = QFileDialog(parent, title, start_dir)
-    dlg.setOptions(QFileDialog.Option.DontUseNativeDialog)
-    _style_file_dialog_toolbar(dlg)
+    if not native:
+        dlg.setOption(QFileDialog.Option.DontUseNativeDialog)
+        _style_file_dialog_toolbar(dlg)
     dlg.setFileMode(QFileDialog.FileMode.AnyFile)
     dlg.setAcceptMode(QFileDialog.AcceptMode.AcceptSave)
     if name_filter:
         dlg.setNameFilter(name_filter)
     if default_name:
         dlg.selectFile(default_name)
-    dlg.setSidebarUrls(_sidebar_urls(extra_path, extra_paths))
+    if not native:
+        dlg.setSidebarUrls(_sidebar_urls(extra_path, extra_paths))
     if dlg.exec() == QFileDialog.DialogCode.Accepted:
         files = dlg.selectedFiles()
         return files[0] if files else ""
@@ -945,17 +970,18 @@ def open_dir_dialog(
 
     Returns the selected directory path, or an empty string if cancelled.
     """
+    native = _prefer_native_dialogs()
     dlg = QFileDialog(parent, title, start_dir or str(Path.home()))
-    dlg.setOptions(
-        QFileDialog.Option.DontUseNativeDialog | QFileDialog.Option.ShowDirsOnly
-    )
-    _style_file_dialog_toolbar(dlg)
+    dlg.setOption(QFileDialog.Option.ShowDirsOnly, True)
     dlg.setFileMode(QFileDialog.FileMode.Directory)
-    import sys as _sys
-    urls = _sidebar_urls(extra_path)
-    if _sys.platform == "darwin":
-        urls.append(QUrl.fromLocalFile("/Applications"))
-    dlg.setSidebarUrls(urls)
+    if not native:
+        dlg.setOption(QFileDialog.Option.DontUseNativeDialog, True)
+        _style_file_dialog_toolbar(dlg)
+        import sys as _sys
+        urls = _sidebar_urls(extra_path)
+        if _sys.platform == "darwin":
+            urls.append(QUrl.fromLocalFile("/Applications"))
+        dlg.setSidebarUrls(urls)
     if dlg.exec() == QFileDialog.DialogCode.Accepted:
         dirs = dlg.selectedFiles()
         return dirs[0] if dirs else ""

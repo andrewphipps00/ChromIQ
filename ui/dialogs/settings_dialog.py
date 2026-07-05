@@ -377,6 +377,43 @@ class SettingsDialog(QDialog):
             min_width=560,
         )
 
+        self._native_files_check = QCheckBox(
+            tr("Use the operating system's file browser"), self
+        )
+        native_files_tip = TooltipButton(
+            tr("Use the Operating System's File Browser"),
+            tr("Whenever ChromIQ needs you to pick a file or folder — a chart "
+            "image, a measurement, a profile, a place to save something — it opens "
+            "a file browser. This setting chooses WHICH browser you get.\n\n"
+            "When OFF (the default), ChromIQ uses its own built-in file browser. "
+            "It matches the app's light/dark theme, adds handy shortcuts down the "
+            "left side that jump straight to the folders for the job at hand, and — "
+            "when you're choosing an image — shows a live preview of the "
+            "highlighted picture on the right.\n\n"
+            "When ON, ChromIQ instead opens the SAME file browser you already know "
+            "from the rest of your computer — Windows File Explorer's Open window "
+            "on Windows, Finder's on a Mac.\n\n"
+            "Why you might want to turn this on:\n\n"
+            "  • Speed. On Windows the built-in browser can be slow to fill in a "
+            "folder — you may see nothing, or just one item, for several seconds "
+            "before the rest appear. The operating system's own browser shows "
+            "everything instantly.\n"
+            "  • Familiarity. It's the exact window you use everywhere else, with "
+            "your usual Quick Access / favourites and sorting (for example "
+            "\"most recent first\").\n\n"
+            "The trade-off:\n\n"
+            "  • ChromIQ's job-specific shortcuts on the left and its built-in "
+            "image preview are part of ITS browser, so they aren't shown in the "
+            "operating system's one — that window has its own Quick Access list "
+            "and its own preview pane instead (in Explorer, turn on the Preview "
+            "pane from the View menu).\n\n"
+            "Nothing else changes: the same files are offered either way, and you "
+            "can switch back at any time. This only affects how the browser "
+            "windows look — not your charts, measurements, or profiles."),
+            self,
+            min_width=620,
+        )
+
         self._update_notify_check = QCheckBox(
             tr("Check for updates on startup"), self
         )
@@ -573,6 +610,7 @@ class SettingsDialog(QDialog):
             _bh_cell(self._restore_session_check, restore_session_tip),
             _bh_cell(self._update_notify_check, update_notify_tip),
             _bh_cell(self._themed_colors_check, themed_colors_tip),
+            _bh_cell(self._native_files_check, native_files_tip),
             _bh_cell(self._cal_mode_check, cal_tip),
             _bh_cell(self._chromiq_refine_check, refine_tip),
             _bh_cell(self._averaging_check, averaging_tip),
@@ -1018,6 +1056,7 @@ class SettingsDialog(QDialog):
         self._restore_session_check.setChecked(bool(s.get("restore_last_session", False)))
         self._update_notify_check.setChecked(bool(s.get("update_notify", True)))
         self._themed_colors_check.setChecked(bool(s.get("gamut_themed_colors", True)))
+        self._native_files_check.setChecked(bool(s.get("use_native_file_dialogs", False)))
         self._cal_mode_check.setChecked(bool(s.get("calibration_mode", False)))
         self._chromiq_refine_check.setChecked(bool(s.get("chromiq_refinement", False)))
         self._averaging_check.setChecked(bool(s.get("averaging_enabled", False)))
@@ -1610,6 +1649,7 @@ class SettingsDialog(QDialog):
         s.set("restore_last_session",      self._restore_session_check.isChecked())
         s.set("update_notify",             self._update_notify_check.isChecked())
         s.set("gamut_themed_colors",       self._themed_colors_check.isChecked())
+        s.set("use_native_file_dialogs",   self._native_files_check.isChecked())
         s.set("calibration_mode",          self._cal_mode_check.isChecked())
         s.set("chromiq_refinement",        self._chromiq_refine_check.isChecked())
         s.set("averaging_enabled",         self._averaging_check.isChecked())

@@ -161,6 +161,11 @@ DEFAULTS: dict[str, Any] = {
     "restore_last_session":      False,
     "appearance":                "auto",   # "light" | "dark" | "auto"
     "language":                  "en",     # ISO code; applied on restart (core/i18n.py)
+    # When True, file open/save/folder pickers use the OS-native dialog instead
+    # of ChromIQ's themed one. Native is much faster to populate on Windows, but
+    # it's the OS's own dialog: it can't carry ChromIQ's custom sidebar shortcuts
+    # or the built-in image-preview pane (Qt/OS limitation — see ui/widgets.py).
+    "use_native_file_dialogs":   False,
     "show_welcome_dialog":       True,
     "window_maximized":          False,
     "window_fullscreen":         False,
