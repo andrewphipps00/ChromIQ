@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from PyQt6.QtCore import QEvent, QModelIndex, QObject, QRect, QRectF, QSize, QSortFilterProxyModel, Qt, QUrl
-from PyQt6.QtGui import QColor, QFont, QIcon, QPainter, QPalette, QPixmap, QTextCursor
+from PyQt6.QtGui import QColor, QFont, QIcon, QPainter, QPainterPath, QPalette, QPen, QPixmap, QTextCursor
 
 from core.i18n import tr
 from PyQt6.QtWidgets import (
@@ -1273,6 +1273,65 @@ def replace_log_line(
 
 
 @dataclass
+
+class ImageFileButton(QToolButton):
+    """A small painted image-file glyph (frame + mountains + sun) in a given
+    accent colour — sibling of :class:`PatchGridButton`, used for "load a
+    TIFF image to print raw" on the Print Chart tab (#117, Knut)."""
+
+    FRAC = 0.60
+
+    def __init__(self, color: str, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._color = color
+        self.setObjectName("tooltip_btn")
+        self.setFixedSize(QSize(40, 40))
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._hover = False
+
+    def set_appearance(self, mode: str) -> None:
+        pass
+
+    def enterEvent(self, event) -> None:  # noqa: N802
+        self._hover = True
+        self.update()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event) -> None:  # noqa: N802
+        self._hover = False
+        self.update()
+        super().leaveEvent(event)
+
+    def paintEvent(self, ev) -> None:  # noqa: N802
+        super().paintEvent(ev)
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        side = min(self.width(), self.height()) * self.FRAC
+        x0 = (self.width() - side) / 2.0
+        y0 = (self.height() - side) / 2.0
+        color = QColor(self._color)
+        if not self._hover:
+            color.setAlpha(230)
+        pen = QPen(color)
+        pen.setWidthF(1.6)
+        p.setPen(pen)
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawRoundedRect(QRectF(x0, y0, side, side), 2.0, 2.0)
+        # mountains
+        path = QPainterPath()
+        path.moveTo(x0 + side * 0.10, y0 + side * 0.82)
+        path.lineTo(x0 + side * 0.38, y0 + side * 0.45)
+        path.lineTo(x0 + side * 0.55, y0 + side * 0.65)
+        path.lineTo(x0 + side * 0.72, y0 + side * 0.38)
+        path.lineTo(x0 + side * 0.90, y0 + side * 0.82)
+        p.drawPath(path)
+        # sun
+        p.setBrush(color)
+        p.setPen(Qt.PenStyle.NoPen)
+        r = side * 0.10
+        p.drawEllipse(QRectF(x0 + side * 0.20, y0 + side * 0.16, 2 * r, 2 * r))
+        p.end()
+
 class GatedOption:
     """An option disabled when a tab's instrument/data gate is active.
 

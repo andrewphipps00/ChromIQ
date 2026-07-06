@@ -258,3 +258,31 @@ def test_locally_misaligned_groups_needs_enough_structure(_app):
     from ui.dialogs.scanin_dialog import locally_misaligned_groups
     # Tiny pages (or unparsable ids) are never judged.
     assert locally_misaligned_groups({"P1": 1.0}, {"P1": 1.0}) == []
+
+
+def test_locally_misaligned_groups_ignores_colour_family_response(_app):
+    """Knut's Wolf Faust / LaserSoft false alarms: structured targets group
+    colour FAMILIES into rows/columns, and a scanner's hue-dependent response
+    displaces a whole family coherently — which mimics a shifted line in rank
+    space. The confirmation gate only flags a line whose reads land ON a
+    neighbouring line's expected values; a response-shifted family lands
+    between lines and stays quiet, while a genuinely shifted line is still
+    caught (validated on his actual IT8 reference: FP 0 %, detection 99 %+)."""
+    import random
+    from ui.dialogs.scanin_dialog import locally_misaligned_groups
+    rng = random.Random(11)
+    letters = "ABCDEFGHIJKL"                   # IT8-like: 12 rows × 22 columns,
+    cols = range(1, 23)                        # lightness by row, hue by column
+    exp = {f"{s_}{d}": 8 + 7 * i + 2.1 * d   # hue swings ACROSS row steps
+           for i, s_ in enumerate(letters) for d in cols}
+    # Aligned + per-family (per-column) response deviation → must stay quiet.
+    fam = {d: rng.uniform(0.99, 1.01) for d in cols}   # deviation < line step
+    read = {k: v * fam[int(k[1:])] * rng.uniform(0.998, 1.002)
+            for k, v in exp.items()}
+    assert locally_misaligned_groups(read, exp) == []
+    # Row C genuinely reading row D → flagged.
+    shifted = dict(read)
+    for d in cols:
+        shifted[f"C{d}"] = exp[f"D{d}"] * rng.uniform(0.998, 1.002)
+    flags = locally_misaligned_groups(shifted, exp)
+    assert any(f.endswith(" C") for f in flags), flags

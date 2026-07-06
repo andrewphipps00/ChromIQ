@@ -261,11 +261,30 @@ class TabPrint(QWidget):
                "Open a chart you already created (its .ti2 file) and\n"
                "load it so you can print it again."))
         self._load_btn.clicked.connect(self._on_load_ti2)
+        # "Load image" (#117, Knut): print ANY TIFF through ChromIQ's raw,
+        # colour-management-free pipeline — charts made by other tools, test
+        # images. Print-only: measuring still needs the chart's .ti2.
+        from ui.widgets import ImageFileButton
+        self._load_image_btn = ImageFileButton(SPEC_AMBER, left)
+        self._load_image_btn.setToolTip(
+            tr("Load image (TIFF).\n"
+               "Open any TIFF — for example a chart made by another tool — "
+               "and print it exactly like a chart: without colour "
+               "management.\n"
+               "Printing only: to MEASURE a chart afterwards, load its .ti2 "
+               "with the grid button instead, so ChromIQ knows its patches."))
+        self._load_image_btn.clicked.connect(self._on_load_image)
+        _trailing = QWidget(left)
+        _tl = QHBoxLayout(_trailing)
+        _tl.setContentsMargins(0, 0, 0, 0)
+        _tl.setSpacing(6)
+        _tl.addWidget(self._load_image_btn)
+        _tl.addWidget(self._load_btn)
         self._header = TabHeader(
             tr("STEP 02 · PRINT CHART"), tr("Print test chart"), "#ffb42d", left,
             tooltip_title=_initial_tt_title,
             tooltip_body=_initial_tt_body,
-            trailing_widget=self._load_btn,
+            trailing_widget=_trailing,
         )
         ll.addWidget(self._header)
 
@@ -734,6 +753,30 @@ class TabPrint(QWidget):
             self.load_tiffs(tiffs)
         else:
             self._set_status("No TIFF files found matching the selected .ti2 file.")
+
+    def _on_load_image(self) -> None:
+        """#117 (Knut): print any TIFF raw. Deliberately print-only — the
+        measuring workflow needs the chart's own .ti2 (grid button), and a
+        bare image can't provide patch geometry."""
+        from ui.widgets import open_files_dialog
+        paths = open_files_dialog(
+            self, tr("Select TIFF image(s) to print"),
+            "TIFF images (*.tif *.tiff)",
+            extra_path=self._settings.get("custom_output_path", ""),
+            preview=True,
+        )
+        if not paths:
+            return
+        # A foreign image invalidates the loaded chart context downstream
+        # (Profile / Check tabs) — same as loading a different chart.
+        if self._current_ti2 is not None:
+            self._current_ti2 = None
+            self.ti2_replaced.emit()
+        self.load_tiffs([Path(p) for p in paths])
+        self._set_status(tr(
+            "Image loaded for printing (no colour management). To measure a "
+            "chart afterwards, load its .ti2 with the grid button — an image "
+            "alone carries no patch geometry."))
 
     def _on_print_current(self) -> None:
         if not self._preview._pages:

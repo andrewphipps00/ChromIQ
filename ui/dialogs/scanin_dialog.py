@@ -278,16 +278,53 @@ def locally_misaligned_groups(read_by_id: dict[str, float],
             continue
         cols.setdefault(m.group(1), []).append(i)
         rows.setdefault(m.group(2), []).append(i)
+    def _key_parts(i: str) -> tuple[str, str]:
+        m = re.match(r"([A-Za-z]+)0*(\d+)$", i)
+        return (m.group(1), m.group(2)) if m else ("", "")
+
     flagged: list[str] = []
-    for label, groups in ((tr("row {n}"), rows), (tr("column {n}"), cols)):
+    for axis, (label, groups) in enumerate(
+            ((tr("row {n}"), rows), (tr("column {n}"), cols))):
         if len(groups) < 4:
             continue
-        for key, members in groups.items():
+        # Neighbour order along this axis: rows by number, columns by letter.
+        keys = sorted(groups, key=(lambda k: int(k)) if axis == 0
+                      else (lambda k: (len(k), k)))
+        for pos, key in enumerate(keys):
+            members = groups[key]
             if len(members) < 4:
                 continue
-            gm = statistics.mean(disp[i] for i in members)
-            if gm > mean + z * sd / (len(members) ** 0.5):
-                flagged.append(label.format(n=key))
+            own_d = statistics.mean(disp[i] for i in members)
+            if own_d <= mean + z * sd / (len(members) ** 0.5):
+                continue
+            # Confirmation gate (Knut's Wolf Faust / LaserSoft false alarms,
+            # #108): structured targets group COLOUR FAMILIES into rows and
+            # columns, so a scanner's hue-dependent response displaces a whole
+            # family coherently — mimicking a shifted line. The tell of a
+            # TRULY shifted line is where it lands: its read ranks sit ON a
+            # neighbouring line's expected ranks (distance ≈ noise), while a
+            # response-shifted family lands BETWEEN lines. Only flag when the
+            # neighbour explains the reads far better than the line itself
+            # (validated: 0 % false alarms on Knut's Wolf Faust reference with
+            # a hue-dependent response, 100 % detection of his engine-chart
+            # squeezes, 93 % of single-line shifts on the structured target —
+            # the remainder lands in the post-build self-check).
+            # _key_parts is (letters, digits); rows are keyed by digits so
+            # their cross key is the LETTERS part (index 0) and vice versa.
+            cross = axis
+            by_cross = {_key_parts(i)[cross]: i for i in members}
+            for npos in (pos - 1, pos + 1):
+                if not 0 <= npos < len(keys):
+                    continue
+                nb = {_key_parts(i)[cross]: i for i in groups[keys[npos]]}
+                shared = sorted(set(by_cross) & set(nb))
+                if len(shared) < 4:
+                    continue
+                nb_d = statistics.mean(
+                    abs(rr[by_cross[c]] - er[nb[c]]) for c in shared)
+                if nb_d < 0.4 * own_d:
+                    flagged.append(label.format(n=key))
+                    break
     return flagged
 
 

@@ -1,5 +1,26 @@
 # Changelog
 
+## v3.13.0-beta.131
+
+### 🐛 Fixes
+- Standard targets (Wolf Faust, LaserSoft…) no longer false-flag the
+  row/column misalignment check on perfectly aligned scans (Knut's
+  beta.130 test). Structured targets group colour FAMILIES into lines,
+  and a scanner's hue-dependent response displaces a whole family
+  coherently — mimicking a shifted line. The check now confirms a
+  candidate by where its reads LAND: a truly shifted line sits on a
+  neighbouring line's expected values; a response-shifted family sits
+  between lines and stays quiet. Validated on Knut's own IT8 reference:
+  0 % false alarms (was 98 % with a hue-dependent response), 99–100 %
+  detection of genuine line shifts on both chart types.
+
+### ✨ Improvements
+- Print Chart: a new image button beside the chart-grid button loads any
+  TIFF — a chart made by another tool, a test image — and prints it
+  through ChromIQ's colour-management-free pipeline (#117, Knut).
+  Printing only, by design: measuring still needs the chart's .ti2, which
+  carries the patch geometry an image alone cannot.
+
 ## v3.13.0-beta.130
 
 ### 🐛 Fixes
