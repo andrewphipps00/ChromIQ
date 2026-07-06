@@ -92,6 +92,12 @@ The pre-built downloads are all most people need — you only need the
 
 ### macOS
 
+**Requires macOS 13 Ventura or newer** (the Qt framework inside ChromIQ sets
+this floor — on macOS 12 and older the app cannot start). On an older Mac,
+ChromIQ can still run from source with an older Qt: install Python 3.12+,
+then `pip install "PyQt6==6.8.*" "PyQt6-WebEngine==6.8.*"` with the other
+requirements and start `python main.py`.
+
 1. Download the universal DMG — **`ChromIQ-macOS-universal_<version>.dmg`**
    (works on both Apple Silicon and Intel).
 2. Open the DMG, then drag **ChromIQ** into your **Applications** folder.

@@ -183,41 +183,52 @@ def page_ids_from_cht(cht: Path) -> set[str] | None:
     return {_plain_id(b.name) for b in geom.patches} or None
 
 
-def misaligned_share(ti3: Path, ti2: Path, ids: set[str] | None = None,
-                     de_limit: float = 15.0) -> tuple[int, int]:
-    """``(patches compared, patches with ΔE76 > de_limit)`` between what the
-    scanner read (through its profile) and the chart's aim values, optionally
-    restricted to the *ids* one page fills. Each side is normalised to its own
-    brightest patch, so exposure / paper-white scale differences don't count
-    as colour error. Printer drift moves colours too, but structuredly and
-    mostly within bounds; a large share of far-off patches flags a scrambled
-    patch assignment (misplaced grid, wrong scan), not an uncalibrated
-    printer. *de_limit* is user-tunable (Settings → Scanner, #108)."""
-    from workflow.icc_info import xyz_to_lab
+def page_reference_agreement(ti3: Path, ti2: Path,
+                             ids: set[str] | None = None) -> float | None:
+    """Printer mode's misalignment signal (#108): Spearman rank agreement
+    between what the scanner measured (through its profile) and the chart's
+    aim values, optionally restricted to the *ids* one page fills.
+
+    Replaces the retired ΔE-vs-aims share check, which was structurally wrong
+    for real prints: a printer can't REACH the chart's ideal aims (gamut
+    compression, paper white), so saturated patches sit ΔE 20–40 away even
+    when everything is perfect — Knut's real aligned scans flagged 100 % on
+    every page while colprof's own fit was excellent (peak 2.9). Print
+    response is monotone, so RANK agreement survives it: his real aligned
+    pages measure ≈ 0.95, scrambled reads ≈ 0. One methodology across
+    scanner, printer and standard modes, as he asked. ``None`` when the
+    files can't be parsed or too few patches match."""
     from workflow.ti3_analysis import parse_ti3
     got = parse_ti3(ti3)
     aim = parse_ti3(ti2)
-    aim_by_id = {_plain_id(s): x for s, x in zip(aim.sample_ids, aim.xyz)}
-    # A page's .cht names patches by LOC ("H1"); a printer-mode .ti3/.ti2 pair
-    # is keyed by numeric SAMPLE_ID with the loc in SAMPLE_LOC — translate so
-    # *ids* restricts correctly under either keying.
     loc_of = {_plain_id(s): _plain_id(l.strip('"'))
               for s, l in zip(aim.sample_ids, aim.sample_locs)}
-    got_w = max(y for _x, y, _z in got.xyz) or 1.0
-    aim_w = max(y for _x, y, _z in aim_by_id.values()) or 1.0
-    n = big = 0
-    for sid, g in zip(got.sample_ids, got.xyz):
+    aim_y = {_plain_id(s): y for s, (_x, y, _z) in zip(aim.sample_ids, aim.xyz)}
+    pairs = []
+    for sid, (_x, y, _z) in zip(got.sample_ids, got.xyz):
         sid = _plain_id(sid)
-        a = aim_by_id.get(sid)
-        if a is None or (ids is not None
-                         and sid not in ids and loc_of.get(sid) not in ids):
+        if ids is not None and sid not in ids and loc_of.get(sid) not in ids:
             continue
-        gl = xyz_to_lab(tuple(c * 100.0 / got_w for c in g))
-        al = xyz_to_lab(tuple(c * 100.0 / aim_w for c in a))
-        de = sum((x - y) ** 2 for x, y in zip(gl, al)) ** 0.5
-        n += 1
-        big += de > de_limit
-    return n, big
+        a = aim_y.get(sid)
+        if a is not None:
+            pairs.append((y, a))
+    if len(pairs) < 8:
+        return None
+
+    def _ranks(v: list[float]) -> list[float]:
+        order = sorted(range(len(v)), key=lambda i: v[i])
+        r = [0.0] * len(v)
+        for pos, i in enumerate(order):
+            r[i] = float(pos)
+        return r
+
+    ra = _ranks([p_[0] for p_ in pairs])
+    rb = _ranks([p_[1] for p_ in pairs])
+    n = len(ra)
+    ma, mb = sum(ra) / n, sum(rb) / n
+    num = sum((a - ma) * (b - mb) for a, b in zip(ra, rb))
+    den = (sum((a - ma) ** 2 for a in ra) * sum((b - mb) ** 2 for b in rb)) ** 0.5
+    return num / den if den else None
 
 
 def locally_misaligned_groups(read_by_id: dict[str, float],
@@ -2196,20 +2207,17 @@ class ScannerProfileDialog(_ToolDialogBase):
         line buried in colprof's -v output."""
         try:
             p = job["params"]
-            de = float(self._settings.get("scanner_align_de", 15.0))
-            share = float(self._settings.get("scanner_align_share", 10)) / 100.0
+            floor = float(self._settings.get("scanner_align_corr", 0.60))
             if p.is_printer:
-                n, big = misaligned_share(
+                rho = page_reference_agreement(
                     p.out_ti3, p.pbase.with_suffix(".ti2"),
-                    ids=page_ids_from_cht(p.cht), de_limit=de)
-                if n and big / n > share:
+                    ids=page_ids_from_cht(p.cht))
+                if rho is not None and rho < floor:
                     msg = tr(
-                        "Page {n}: {p}% of its patches read very differently "
-                        "from what the chart asked the printer to print "
-                        "(ΔE over {d}) — the grid is probably misaligned on "
-                        "this page's scan.").format(
-                            n=job.get("page", 1), p=round(100 * big / n),
-                            d=round(de))
+                        "Page {n}: what the scanner measured doesn't line up "
+                        "with the colours the chart asked the printer to "
+                        "print — the grid is probably misaligned on this "
+                        "page's scan.").format(n=job.get("page", 1))
                     self._log.appendPlainText("⚠ " + msg)
                     self._align_warnings.append(msg)
                 else:
@@ -2218,8 +2226,7 @@ class ScannerProfileDialog(_ToolDialogBase):
                                              ids=page_ids_from_cht(p.cht))
                 return
             rho = scan_reference_correlation(p.out_ti3)
-            if rho is not None and rho < float(
-                    self._settings.get("scanner_align_corr", 0.60)):
+            if rho is not None and rho < floor:
                 msg = (tr("Page {n} (scan {k}): what the scanner read doesn't "
                           "line up with the chart's colours — the grid is "
                           "probably misaligned on this scan.")
@@ -2359,17 +2366,14 @@ class ScannerProfileDialog(_ToolDialogBase):
             # Per-page checks found nothing (or couldn't run — e.g. an
             # unparseable BYO .cht): one whole-chart pass as the safety net.
             try:
-                de = float(self._settings.get("scanner_align_de", 15.0))
-                share = float(self._settings.get("scanner_align_share", 10)) / 100.0
-                n, big = misaligned_share(ti3, base.with_suffix(".ti2"),
-                                          de_limit=de)
-                if n and big / n > share:
+                floor = float(self._settings.get("scanner_align_corr", 0.60))
+                rho = page_reference_agreement(ti3, base.with_suffix(".ti2"))
+                if rho is not None and rho < floor:
                     self._align_warnings.append(tr(
-                        "{p}% of the patches read very differently from what "
-                        "the chart asked the printer to print (ΔE over {d}) — "
-                        "a grid was probably misaligned, or a scan doesn't "
-                        "belong to this chart.").format(
-                            p=round(100 * big / n), d=round(de)))
+                        "What the scanner measured doesn't line up with the "
+                        "colours the chart asked the printer to print — a "
+                        "grid was probably misaligned, or a scan doesn't "
+                        "belong to this chart."))
             except Exception:  # noqa: BLE001 — a sanity check must never block
                 log.warning("misalignment check failed", exc_info=True)
         if self._align_warnings and not self._confirm_despite_misalignment():

@@ -188,9 +188,9 @@ DEFAULTS: dict[str, Any] = {
     # Scanner/camera profiling: misalignment-check thresholds (Knut #108).
     # Editable in Settings → Scanner; the defaults carry a buffer for real
     # scans (noisier than the built-in demo images).
-    "scanner_align_de":          15.0,    # ΔE76 beyond which a patch is "far off"
-    "scanner_align_share":       10,      # % of far-off patches that flags a page
-    "scanner_align_corr":        0.60,    # scan↔reference rank-correlation floor
+    "scanner_align_corr":        0.60,    # scan↔reference rank-agreement floor
+    #   (the ΔE-vs-aims share check was retired in beta.130 — real prints
+    #   can't reach the chart's ideal aims, so it flagged aligned scans)
     "scanner_selfcheck_peak":    30.0,    # colprof self-check peak err → warning
     "scanner_selfcheck_avg":     12.0,    # …AND avg err must exceed this too
     # Settings → Paths (Knut #108): where "Install profile" copies the .icc.

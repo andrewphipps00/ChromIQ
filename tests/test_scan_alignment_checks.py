@@ -136,24 +136,34 @@ def _write_cgats(path, fields, rows):
         + ["END_DATA", ""]))
 
 
-def test_misaligned_share_translates_page_locs(tmp_path, _app):
+def test_page_reference_agreement_translates_page_locs(tmp_path, _app):
     """Printer-mode .ti3/.ti2 are keyed by numeric SAMPLE_ID with the loc in
-    SAMPLE_LOC; a page's .cht gives locs — the share must restrict correctly
-    and flag only the scrambled page."""
-    from ui.dialogs.scanin_dialog import misaligned_share
+    SAMPLE_LOC; a page's .cht gives locs — the agreement must restrict
+    correctly and stay blind to honest response differences (the retired
+    ΔE-vs-aims check flagged Knut's perfectly aligned REAL scans at 100 %
+    on every page, because a print can't reach the chart's ideal aims)."""
+    from ui.dialogs.scanin_dialog import page_reference_agreement
     ti2 = tmp_path / "c.ti2"; ti3 = tmp_path / "c.ti3"
     f2 = ["SAMPLE_ID", "SAMPLE_LOC", "RGB_R", "RGB_G", "RGB_B",
           "XYZ_X", "XYZ_Y", "XYZ_Z"]
-    aims = [[i + 1, f'"{s}{n}"', 50, 50, 50, 10 * i, 10 * i, 10 * i]
-            for i, (s, n) in enumerate((s, n) for s in "AB" for n in range(1, 6))]
+    aims = [[i + 1, f'"{s}{n}"', 50, 50, 50, 8 * i + 1, 8 * i + 1, 8 * i + 1]
+            for i, (s, n) in enumerate((s, n) for s in "AB" for n in range(1, 11))]
     _write_cgats(ti2, f2, aims)
-    got = [r[:5] + ([90 - v for v in r[5:]] if str(r[1]).startswith('"A')
-                    else r[5:]) for r in [list(r) for r in aims]]
-    _write_cgats(ti3, f2, got)                     # page A scrambled, B exact
-    n, big = misaligned_share(ti3, ti2, ids={f"A{i}" for i in range(1, 6)})
-    assert n == 5 and big >= 4                     # page A flagged
-    n, big = misaligned_share(ti3, ti2, ids={f"B{i}" for i in range(1, 6)})
-    assert (n, big) == (5, 0)                      # page B clean
+    # Page A scrambled; page B = heavy but MONOTONE response (compressed):
+    # aligned-but-compressed must stay above the floor.
+    perm = [9, 8, 7, 6, 5, 4, 3, 2, 1, 0]   # fully reversed = scrambled
+    got = []
+    for i, r in enumerate([list(r) for r in aims]):
+        if str(r[1]).startswith('"A'):
+            src = aims[perm[i % 10]]
+            got.append(r[:5] + list(src[5:]))
+        else:
+            got.append(r[:5] + [v ** 0.5 * 3 for v in r[5:]])
+    _write_cgats(ti3, f2, got)
+    a = page_reference_agreement(ti3, ti2, ids={f"A{i}" for i in range(1, 11)})
+    b = page_reference_agreement(ti3, ti2, ids={f"B{i}" for i in range(1, 11)})
+    assert a is None or a < 0.6                     # scrambled page low
+    assert b is not None and b > 0.9                # compressed-but-aligned high
 
 
 def test_scan_reference_correlation_separates(tmp_path, _app):

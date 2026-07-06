@@ -168,6 +168,10 @@ app = BUNDLE(
         'NSPrincipalClass':          'NSApplication',
         'NSRequiresAquaSystemAppearance': False,
         'LSApplicationCategoryType': 'public.app-category.graphics-design',
-        'LSMinimumSystemVersion':    '12.0',
+        # Qt 6.11's frameworks declare minos 13.0 — on macOS 12 the app
+        # launched and dyld killed it instantly (icon flash, no message).
+        # Declaring the TRUE minimum makes older systems show Apple's clean
+        # "requires macOS 13" dialog instead (forum report, Monterey).
+        'LSMinimumSystemVersion':    '13.0',
     },
 )

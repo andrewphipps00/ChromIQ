@@ -1,5 +1,27 @@
 # Changelog
 
+## v3.13.0-beta.130
+
+### 🐛 Fixes
+- **Printer-from-scan: the misalignment check no longer flags perfectly
+  aligned real scans.** The old check compared what the scanner measured
+  against the chart's ideal aim colours — but a real printer can't REACH
+  those aims (gamut compression, paper white), so saturated patches sit
+  ΔE 20–40 away even when everything is perfect: Knut's real aligned
+  pages flagged 100 % while colprof's own fit was excellent (peak 2.9).
+  Printer mode now uses the same rank-agreement check as scanner mode —
+  the ORDER of patch values survives honest physics (verified on his
+  real scans: aligned pages ≈ 0.95, scrambled reads ≈ 0) — one
+  methodology across scanner, printer and standard modes, as requested.
+  The two ΔE threshold rows leave Settings → Scanner Limits with it.
+- macOS: the app bundle now declares its TRUE minimum system version,
+  macOS 13 Ventura (set by the Qt 6.11 frameworks inside — their
+  binaries refuse to load on older systems). On macOS 12 Monterey the
+  app used to flash in the Dock and vanish without a word; it now gets
+  Apple's clear "requires macOS 13" message instead (forum report).
+  Older Macs can run ChromIQ from source with Qt 6.8 — verified working,
+  recipe in the README.
+
 ## v3.13.0-beta.129
 
 ### ✨ Improvements

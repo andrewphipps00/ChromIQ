@@ -895,9 +895,12 @@ def test_marquee_can_zoom_out_below_fit(_app):
 
 
 def test_misalignment_warning_fires_on_scrambled_read(_app, tmp_path):
-    """#108: Knut's misaligned build produced ΔE>20 silently. The sanity check
-    compares the scanner read against the chart aims and warns when >10% of
-    patches are >ΔE15 off; an aligned read stays quiet."""
+    """#108: Knut's misaligned build produced ΔE>20 silently. Round 8 replaced
+    the ΔE-vs-aims share (structurally wrong for real prints — aligned scans
+    flagged 100 %) with rank agreement: an aligned read stays high even under
+    heavy monotone response, a scrambled read collapses toward 0."""
+    from ui.dialogs.scanin_dialog import page_reference_agreement
+
     locs = [f"P{i}" for i in range(1, 21)]
 
     def _write(path, vals):
@@ -917,24 +920,19 @@ BEGIN_DATA
 END_DATA
 """)
 
-    from ui.dialogs.scanin_dialog import misaligned_share
-
     aims = [(20 + i * 3.0, 20 + i * 3.0, 20 + i * 3.0) for i in range(20)]
     _write(tmp_path / "chart.ti2", aims)
-    # Aligned: reads == aims → quiet (0 patches past the ΔE gate).
-    _write(tmp_path / "good.ti3", aims)
-    n, big = misaligned_share(tmp_path / "good.ti3", tmp_path / "chart.ti2")
-    assert n == 20 and big == 0
-    # Scrambled: a third of the patches read a very different colour → over
-    # the >10% warning threshold. (Round 4: the finding now also gates
-    # colprof behind a modal — see test_scan_alignment_checks.py.)
+    # Aligned but heavily compressed (real print): agreement stays high.
+    _write(tmp_path / "good.ti3", [(x ** 0.6, y ** 0.6, z ** 0.6) for x, y, z in aims])
+    rho = page_reference_agreement(tmp_path / "good.ti3", tmp_path / "chart.ti2")
+    assert rho is not None and rho > 0.9
+    # Scrambled: agreement collapses.
     bad = list(aims)
-    for i in range(0, 20, 3):
-        bad[i] = (90.0, 20.0, 5.0)
+    for i in range(0, 20, 2):
+        bad[i] = aims[(i * 7 + 5) % 20]
     _write(tmp_path / "bad.ti3", bad)
-    n, big = misaligned_share(tmp_path / "bad.ti3", tmp_path / "chart.ti2")
-    assert n == 20 and big / n > 0.10
-
+    rho = page_reference_agreement(tmp_path / "bad.ti3", tmp_path / "chart.ti2")
+    assert rho is not None and rho < 0.6
 
 def test_page_count_mismatch_geometry_is_rejected(_app, tmp_path):
     """#108 (Knut's Test-Creating-2-page-Target): printtarg -s re-lays some
