@@ -1,5 +1,16 @@
 # Changelog
 
+## v3.13.0-beta.135
+
+### ✨ Improvements
+- Check alignment probes in Knut's full 8-direction star — left, right,
+  up, down and the four diagonals — so a grid offset in ANY direction has
+  a probe looking toward it (a diagonal ⅓-patch offset on a soft scan now
+  triggers the "nudge it" warning; verified end-to-end). When the first
+  ±40 % ring shows scanin isn't self-registering, a finer ±20 % ring runs
+  automatically — his step ladder condensed to two rungs so the check
+  stays under a minute.
+
 ## v3.13.0-beta.134
 
 ### 🐛 Fixes

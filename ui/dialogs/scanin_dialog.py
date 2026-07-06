@@ -2406,34 +2406,38 @@ class ScannerProfileDialog(_ToolDialogBase):
         # honest way to catch sub-patch offsets on real scans of structured
         # targets, whose smooth colour ramps hide small blends from the
         # whole-page agreement.
-        probe_runs: list[ScaninParams] = []
         base_corners = params.corners
+
+        def _make_probe(i: int, dx: float, dy: float) -> ScaninParams:
+            shifted = [(x + dx, y + dy) for x, y in base_corners]
+            if printer:
+                pb = tmp / f"probe{i}"
+                import shutil as _sh
+                _sh.copy2(pbase.with_suffix(".ti2"), pb.with_suffix(".ti2"))
+                return ScaninParams(
+                    scan, cht, corners=shifted,
+                    perspective=self._perspective.isChecked(),
+                    scan_profile=self._printer_scan_profile, pbase=pb)
+            return ScaninParams(
+                scan, cht, cie, corners=shifted,
+                perspective=self._perspective.isChecked(),
+                out_name=f"probe{i}-scanner.ti3")
+
+        probe_runs: list[ScaninParams] = []
         if base_corners:
-            for i, (dx, dy) in enumerate(self._probe_offsets(cht, base_corners)):
-                shifted = [(x + dx, y + dy) for x, y in base_corners]
-                if printer:
-                    probe_runs.append(ScaninParams(
-                        scan, cht, corners=shifted,
-                        perspective=self._perspective.isChecked(),
-                        scan_profile=self._printer_scan_profile,
-                        pbase=tmp / f"probe{i}"))
-                    import shutil as _sh
-                    _sh.copy2(pbase.with_suffix(".ti2"),
-                              (tmp / f"probe{i}").with_suffix(".ti2"))
-                else:
-                    probe_runs.append(ScaninParams(
-                        scan, cht, cie, corners=shifted,
-                        perspective=self._perspective.isChecked(),
-                        out_name=f"probe{i}-scanner.ti3"))
+            for i, (dx, dy) in enumerate(
+                    self._probe_offsets(cht, base_corners, 0.4)):
+                probe_runs.append(_make_probe(i, dx, dy))
 
         runs = [params] + probe_runs
         results: list[int] = []
+        ring2_added = [False]
 
         def _finish_check() -> None:
             try:
                 verdicts = self._alignment_verdicts(
                     params, printer, pg, results[0],
-                    probes=[p_ for p_, c in zip(probe_runs, results[1:])
+                    probes=[p_ for p_, c in zip(runs[1:], results[1:])
                             if c == 0])
             except Exception:  # noqa: BLE001 — verdicts must never crash the UI
                 log.warning("alignment check failed", exc_info=True)
@@ -2444,9 +2448,34 @@ class ScannerProfileDialog(_ToolDialogBase):
                 self._log.appendPlainText(v)
             self._show_alignment_result(pg, verdicts, diag, tmp)
 
+        def _maybe_add_fine_ring() -> None:
+            """After the ±0.4 star: if any probe read DIFFERS from the
+            primary, scanin isn't self-registering here — add a finer ±0.2
+            star so fractional offsets in any direction get a closer
+            competitor (Knut's step ladder, condensed to two rungs to keep
+            the check under a minute)."""
+            if ring2_added[0] or not base_corners:
+                return
+            ring2_added[0] = True
+            done = [p_ for p_, c in zip(runs[1:], results[1:]) if c == 0]
+            if done and all(self._reads_match(params.out_ti3, p_.out_ti3,
+                                              printer) for p_ in done):
+                return                      # self-registering — ring 2 useless
+            for j, (dx, dy) in enumerate(
+                    self._probe_offsets(cht, base_corners, 0.2)):
+                runs.append(_make_probe(100 + j, dx, dy))
+
         def _run_next(code: int) -> None:
             results.append(code)
-            if len(results) >= len(runs) or (len(results) == 1 and code != 0):
+            if len(results) == 1 and code != 0:
+                _finish_check()
+                return
+            if len(results) == 1 + len(probe_runs):
+                try:
+                    _maybe_add_fine_ring()
+                except Exception:  # noqa: BLE001
+                    log.warning("fine probe ring failed", exc_info=True)
+            if len(results) >= len(runs):
                 _finish_check()
                 return
             self._set_busy_note(note, fraction=len(results) / len(runs))
@@ -2464,10 +2493,12 @@ class ScannerProfileDialog(_ToolDialogBase):
         return tr("Target")
 
     @staticmethod
-    def _probe_offsets(cht: Path, corners) -> list[tuple[float, float]]:
-        """Four ±0.4-pitch offsets (image px) for the probe runs — the
-        practical form of Knut's step-probe idea. Empty when the pitch can't
-        be derived or no corners were placed."""
+    def _probe_offsets(cht: Path, corners,
+                       frac: float = 0.4) -> list[tuple[float, float]]:
+        """Knut's probe star: eight offsets (image px) at *frac* of a patch
+        pitch — left, right, up, down and the four diagonals — so an offset
+        in ANY direction has a probe looking toward it. Empty when the pitch
+        can't be derived or no corners were placed."""
         if not corners or len(corners) != 4:
             return []
         from workflow.cht_parser import ChtParseError, parse_cht
@@ -2492,9 +2523,10 @@ class ScannerProfileDialog(_ToolDialogBase):
                         corners[1][1] - corners[0][1])
         qh = math.hypot(corners[3][0] - corners[0][0],
                         corners[3][1] - corners[0][1])
-        dx = 0.4 * px / bw * qw
-        dy = 0.4 * py / bh * qh
-        return [(dx, 0.0), (-dx, 0.0), (0.0, dy), (0.0, -dy)]
+        dx = frac * px / bw * qw
+        dy = frac * py / bh * qh
+        return [(dx, 0.0), (-dx, 0.0), (0.0, dy), (0.0, -dy),
+                (dx, dy), (dx, -dy), (-dx, dy), (-dx, -dy)]
 
     @staticmethod
     def _reads_match(a: Path, b: Path, printer: bool) -> bool:
