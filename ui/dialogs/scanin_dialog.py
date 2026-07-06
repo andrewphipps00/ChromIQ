@@ -1502,6 +1502,13 @@ class ScannerProfileDialog(_ToolDialogBase):
         if (checked and self._layout is None and not self._byo_awaiting
                 and self._ti3 is not None and Path(self._ti3).is_file()):
             self._set_chart(Path(self._ti3))
+        # The field shows the file the MODE actually consumes: printer mode
+        # reads the chart's .ti2, scanner mode its measured .ti3 — a
+        # pre-filled .ti3 in printer mode read like the wrong input (Knut).
+        elif self._ti3 is not None:
+            want = Path(self._ti3).with_suffix(".ti2" if checked else ".ti3")
+            if want.is_file() and want != Path(self._ti3):
+                self._set_chart(want)
         # Leave the profile-type selector enabled so its tooltip stays readable
         # (Qt hides tooltips on disabled widgets). Its *quality* is honoured for the
         # printer profile; the Matrix/LUT choice isn't (a printer profile is always

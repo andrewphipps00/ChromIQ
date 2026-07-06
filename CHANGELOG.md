@@ -1,5 +1,14 @@
 # Changelog
 
+## v3.13.0-beta.129
+
+### ✨ Improvements
+- Build scanner or camera profile: the chart field now shows the file the
+  mode actually consumes — switching "Profile my printer from this scan"
+  ON swaps a pre-filled measured .ti3 for the chart's .ti2 (and back when
+  switching OFF), so the input no longer reads like the wrong file
+  (Knut).
+
 ## v3.13.0-beta.128
 
 ### ✨ Improvements
