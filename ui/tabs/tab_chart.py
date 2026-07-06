@@ -1238,8 +1238,18 @@ class TabChart(QWidget):
         self._save_defaults_btn.setFixedHeight(36)
         self._save_defaults_btn.clicked.connect(self._on_save_defaults)
 
+        # "Reveal folder" — the chart's files are written deep under the
+        # working folder; put their location one click away (Knut).
+        self._reveal_folder_btn = QPushButton(tr("Reveal folder"), self)
+        self._reveal_folder_btn.setFixedHeight(36)
+        self._reveal_folder_btn.setToolTip(tr(
+            "Open the folder holding the generated chart's files (the TIFF "
+            "pages, .ti1/.ti2 and sidecars) in your file manager."))
+        self._reveal_folder_btn.clicked.connect(self._reveal_chart_folder)
+
         btn_row.addWidget(self._generate_btn)
         btn_row.addStretch()
+        btn_row.addWidget(self._reveal_folder_btn)
         btn_row.addWidget(self._save_defaults_btn)
         left_layout.addLayout(btn_row)
 
@@ -1310,8 +1320,28 @@ class TabChart(QWidget):
         splitter.addWidget(right)
         splitter.setStretchFactor(0, 1)
         splitter.setStretchFactor(1, 1)
+        # The preset combo IGNORES its width (long built-in names must not
+        # stretch the row), which also removes it from the pane's minimum-size
+        # calculation — so a narrow window let the divider slide OVER the
+        # left pane's fields (Knut, beta.124). Give the pane a hard floor.
+        left.setMinimumWidth(400)
+        splitter.setCollapsible(0, False)
 
         root.addWidget(splitter)
+
+    def _reveal_chart_folder(self) -> None:
+        """Open the current chart's run folder (or the working folder before
+        any chart exists) in the file manager (Knut)."""
+        from core.preset_store import reveal_in_file_manager
+        target: Path | None = None
+        if self._margin_tiffs:
+            target = self._margin_tiffs[0].parent
+        elif self._margin_ti2 is not None:
+            target = self._margin_ti2.parent
+        else:
+            custom = str(self._settings.get("custom_output_path", "")).strip()
+            target = Path(custom).expanduser() if custom else Path.home() / "ChromIQ"
+        reveal_in_file_manager(target)
 
     # ------------------------------------------------------------------
     # Guided panel

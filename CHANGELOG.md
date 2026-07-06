@@ -1,5 +1,31 @@
 # Changelog
 
+## v3.13.0-beta.126
+
+### 🐛 Fixes
+- Self-check no longer cries wolf on honest Matrix scanner profiles: a
+  perfectly aligned build can legitimately show a peak fit error around
+  30 while its average stays low (Knut's: 32.8 / 8.5) — the warning now
+  requires the peak AND the average to exceed their limits (a misplaced
+  grid lifts both; his misaligned runs averaged ~40). The average limit
+  is the fifth editable threshold.
+- Create Chart: the left pane has a minimum width, so a narrow window
+  can no longer slide the divider over the input fields (Knut).
+- The post-stop reveal button is now honestly named "Reveal folder" (it
+  opens the folder, and appears even without a diagnostic image —
+  pointing at the scans; Knut).
+
+### ✨ Improvements
+- Create Chart: new "Reveal folder" button between Generate Chart and
+  Save as Defaults opens the generated chart's folder (Knut).
+- Settings: the Scanner tab is now "Scanner Limits"; the Paths tab shows
+  the installation as the app bundle (not its Contents/MacOS innards)
+  and every reference row explains on hover what the location is for
+  (Knut).
+- Scanner tool help leads with the honest framing: a scanner or camera
+  never replaces a spectrophotometer, but gives spectro-less users a
+  real path to better prints (Knut).
+
 ## v3.13.0-beta.125
 
 ### 🐛 Fixes

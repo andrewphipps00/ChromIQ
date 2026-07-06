@@ -263,7 +263,13 @@ class ScannerProfileDialog(_ToolDialogBase):
     MIN_WIDTH   = 760
     SCROLLABLE_CONTENT = True    # tall (mode toggle + inputs + marquee + averaging)
 
+    # Prepended OUTSIDE the main tr() key — appending inside would orphan the
+    # existing help key and its translations (the WHICH_CHART_HELP lesson).
     HELP = tr(
+        "A scanner or camera is never as accurate as a real spectrophotometer "
+        "— but it lets you build a genuinely useful printer profile with no "
+        "spectro at all, and a fine scanner/camera profile for your device."
+    ) + "\n\n" + tr(
         "Builds an ICC colour profile for a scanner or a digital camera, from a "
         "target whose true colours are known. Once built, the profile tells any "
         "colour-managed program how your device really sees colour, so scans and "
@@ -2181,12 +2187,17 @@ class ScannerProfileDialog(_ToolDialogBase):
             # appeared after a FINISHED build, so the diagnostic image the
             # message points at was left to hunt for by hand).
             diags = [d for d in getattr(self, "_run_diags", []) if d.exists()]
-            if diags:
-                self._last_profile = diags[0]
-                self._reveal_btn.setText(tr("Reveal diagnostic image"))
+            scans = [s["path"] for pg in self._pages
+                     for s in self._page_shots(pg) if s["path"]]
+            target = diags[0] if diags else (scans[0] if scans else None)
+            if target is not None:
+                # It reveals the FOLDER (Knut: the old label promised the
+                # image itself, and appeared even with the diag box unticked).
+                self._last_profile = target
+                self._reveal_btn.setText(tr("Reveal folder"))
                 self._reveal_btn.setVisible(True)
                 self._reveal_btn.setEnabled(True)
-            else:
+            if not diags:
                 self._log.appendPlainText(tr(
                     "Tip: tick “Save a diagnostic image of what was read” and "
                     "build again — the image shows exactly which patches were "
@@ -2213,19 +2224,26 @@ class ScannerProfileDialog(_ToolDialogBase):
         return _on_line, found
 
     def _selfcheck_verdict(self, found: list[tuple[float, float]]) -> None:
+        """Warn when colprof's fit check looks like a misread. BOTH numbers
+        must be high: a matrix scanner profile legitimately fits a few
+        extreme patches poorly (Knut's perfectly aligned build: peak 32.8,
+        average 8.5), while a misplaced grid lifts the AVERAGE too (his
+        misaligned runs: peak 60–91 with averages around 40)."""
         if not found:
             return
         peak, avg = found[-1]
-        limit = float(self._settings.get("scanner_selfcheck_peak", 30.0))
-        if peak <= limit:
+        peak_lim = float(self._settings.get("scanner_selfcheck_peak", 30.0))
+        avg_lim = float(self._settings.get("scanner_selfcheck_avg", 12.0))
+        if peak <= peak_lim or avg <= avg_lim:
             return
         self._log.appendPlainText(tr(
-            "⚠ Self-check: colprof reports a peak fit error of {p} (average "
-            "{a}) — an aligned scan stays well under {l}. A grid sitting "
-            "slightly off on one page (even by half a patch) produces exactly "
-            "this. Check the diagnostic images, realign and rebuild before "
-            "trusting this profile. (Threshold: Settings → Scanner.)").format(
-                p=round(peak, 1), a=round(avg, 1), l=round(limit)))
+            "⚠ Self-check: colprof reports a peak fit error of {p} with an "
+            "average of {a} — an aligned read keeps the average well under "
+            "{al}. A grid sitting slightly off on one page (even by half a "
+            "patch) produces exactly this. Check the diagnostic images, "
+            "realign and rebuild before trusting this profile. (Thresholds: "
+            "Settings → Scanner Limits.)").format(
+                p=round(peak, 1), a=round(avg, 1), al=round(avg_lim)))
 
     def _build_printer_profile(self, pbase: Path, base: Path) -> None:
         ti3 = pbase.with_suffix(".ti3")

@@ -702,7 +702,7 @@ class SettingsDialog(QDialog):
                           tr("Instrument Limits"))
         self._tabs.addTab(self._build_chart_layout_tab(), tr("Chart Layout"))
         self._tabs.addTab(self._scroll_wrap(self._build_scanner_tab()),
-                          tr("Scanner"))
+                          tr("Scanner Limits"))
         self._tabs.addTab(self._scroll_wrap(self._build_paths_tab()),
                           tr("Paths"))
 
@@ -847,10 +847,13 @@ class SettingsDialog(QDialog):
         gr.setHorizontalSpacing(8)
         gr.setVerticalSpacing(6)
 
-        def _info_row(r: int, name: str, path: Path) -> None:
-            gr.addWidget(QLabel(name, grp_r), r, 0)
+        def _info_row(r: int, name: str, path: Path, about: str) -> None:
+            lbl = QLabel(name, grp_r)
+            lbl.setToolTip(about)
+            gr.addWidget(lbl, r, 0)
             fld = QLineEdit(str(path), grp_r)
             fld.setReadOnly(True)
+            fld.setToolTip(about)
             gr.addWidget(fld, r, 1)
             btn = QPushButton(tr("Reveal"), grp_r)
             btn.setStyleSheet("QPushButton { padding: 2px 12px; min-height: 0; }")
@@ -859,12 +862,27 @@ class SettingsDialog(QDialog):
                     p if p.is_dir() or not p.suffix else p.parent))
             gr.addWidget(btn, r, 2)
 
-        _info_row(0, tr("Log file:"), log_dir() / "chromiq.log")
-        _info_row(1, tr("Presets:"), presets_dir())
-        _info_row(2, tr("Translation overrides:"), user_i18n_dir())
+        # The install location a USER thinks in: the .app bundle on macOS
+        # (not its Contents/MacOS innards), the executable's folder elsewhere,
+        # the repository when running from source (Knut).
+        app_path = Path(sys.argv[0]).resolve()
+        install = next((p for p in app_path.parents if p.suffix == ".app"),
+                       app_path.parent)
+        _info_row(0, tr("Log file:"), log_dir() / "chromiq.log",
+                  tr("ChromIQ's session log — attach it to a bug report."))
+        _info_row(1, tr("Presets:"), presets_dir(),
+                  tr("Your saved presets as plain .json files — copy them to "
+                     "another machine or share them."))
+        _info_row(2, tr("Translation overrides:"), user_i18n_dir(),
+                  tr("Drop an edited language file here (Tools → Translate / "
+                     "edit language) and it overrides the built-in "
+                     "translation."))
         _info_row(3, tr("ArgyllCMS binaries (change on General):"),
-                  Path(str(self._settings.get("argyll_bin_path", ""))))
-        _info_row(4, tr("Installation:"), Path(sys.argv[0]).resolve().parent)
+                  Path(str(self._settings.get("argyll_bin_path", ""))),
+                  tr("The ArgyllCMS command-line tools ChromIQ runs. Change "
+                     "the path on the General tab."))
+        _info_row(4, tr("Installation:"), install,
+                  tr("Where ChromIQ itself is installed."))
         gr.setColumnStretch(1, 1)
         v.addWidget(grp_r)
         v.addStretch()
@@ -952,7 +970,7 @@ class SettingsDialog(QDialog):
         self._scan_peak_spin.setSingleStep(5.0)
         self._scan_peak_spin.setValue(float(s.get("scanner_selfcheck_peak", 30.0)))
         self._scan_peak_spin.setMinimumWidth(120)
-        _row(3, tr("Self-check: warn above peak fit error:"), self._scan_peak_spin,
+        _row(3, tr("Self-check: peak fit error above:"), self._scan_peak_spin,
              tr("Profile self-check (after building)"),
              tr("After every build, colprof reports how well the finished "
                 "profile fits its own measurements (\"peak err\"). An aligned "
@@ -964,6 +982,23 @@ class SettingsDialog(QDialog):
                 "to check the diagnostic images before trusting the "
                 "profile."))
 
+        self._scan_avg_spin = NoScrollDoubleSpinBox(grp)
+        self._scan_avg_spin.setRange(2.0, 60.0)
+        self._scan_avg_spin.setDecimals(1)
+        self._scan_avg_spin.setSingleStep(1.0)
+        self._scan_avg_spin.setValue(float(s.get("scanner_selfcheck_avg", 12.0)))
+        self._scan_avg_spin.setMinimumWidth(120)
+        _row(4, tr("…and average fit error above:"), self._scan_avg_spin,
+             tr("Why BOTH numbers must be high"),
+             tr("The self-check only warns when the peak AND the average fit "
+                "error are both above their limits.\n\n"
+                "A small Matrix profile legitimately fits a few extreme "
+                "colours poorly — a perfectly aligned build can show a peak "
+                "around 30 while its average stays low (about 8). A misplaced "
+                "grid is different: it degrades EVERY patch, so the average "
+                "climbs too (35–45 in real misalignment tests). Requiring "
+                "both numbers keeps honest builds quiet without letting a "
+                "shifted grid through."))
         g.setColumnStretch(3, 1)
         v.addWidget(grp)
         v.addStretch()
@@ -1866,6 +1901,7 @@ class SettingsDialog(QDialog):
         s.set("scanner_align_share",       int(self._scan_share_spin.value()))
         s.set("scanner_align_corr",        float(self._scan_corr_spin.value()))
         s.set("scanner_selfcheck_peak",    float(self._scan_peak_spin.value()))
+        s.set("scanner_selfcheck_avg",     float(self._scan_avg_spin.value()))
         s.set("profile_install_dir",       self._profile_dir_edit.text().strip())
         from core.platform_paths import set_icc_install_override
         set_icc_install_override(self._profile_dir_edit.text())
