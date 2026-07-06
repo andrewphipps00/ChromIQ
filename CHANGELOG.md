@@ -1,5 +1,16 @@
 # Changelog
 
+## v3.13.0-beta.122
+
+### ✨ Improvements
+- Build Profile tab: the Gamut Source path field now starts exactly under
+  its combobox (guided and manual), and the Advanced section's option pairs
+  sit on one grid so "No output shaper curves (-no)" aligns with "Don't
+  embed measurement data (-nc)" (Basti).
+- Build scanner or camera profile: printer mode's "Scanner profile (.icc)"
+  label and field lose their indent and sit flush with the rows below,
+  the field stretching the full row width (Basti).
+
 ## v3.13.0-beta.121
 
 ### 🐛 Fixes

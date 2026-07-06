@@ -232,7 +232,9 @@ def _align_form_labels(panel: QWidget) -> None:
     A row is any QHBoxLayout whose first item is a QLabel or a text-bearing
     QCheckBox (the metadata rows use the checkbox AS the label) followed
     directly by a control widget. Header rows (label + stretch + ⓘ) aren't
-    touched — their second item is a spacer, not a widget."""
+    touched — their second item is a spacer, not a widget. An empty QLabel
+    with objectName "form_label_spacer" also counts: it indents a follow-up
+    row (e.g. the gamut-source PATH under its combo) to the same column."""
     from PyQt6.QtWidgets import QCheckBox, QHBoxLayout
     leaders: list[QWidget] = []
     for box in panel.findChildren(QHBoxLayout):
@@ -241,7 +243,8 @@ def _align_form_labels(panel: QWidget) -> None:
         w0, w1 = box.itemAt(0).widget(), box.itemAt(1).widget()
         if w1 is None:                       # stretch/spacer → a header row
             continue
-        if isinstance(w0, QLabel) and w0.text().endswith(":"):
+        if isinstance(w0, QLabel) and (w0.text().endswith(":")
+                                       or w0.objectName() == "form_label_spacer"):
             leaders.append(w0)
         elif isinstance(w0, QCheckBox) and w0.text().endswith(":"):
             leaders.append(w0)
@@ -2433,6 +2436,9 @@ class TabProfile(QWidget):
         g.addLayout(mode_row)
 
         path_row = QHBoxLayout()
+        _sp = QLabel("", grp)                    # indent to the control column
+        _sp.setObjectName("form_label_spacer")
+        path_row.addWidget(_sp)
         self._m_gam_path_edit = QLineEdit(grp)
         self._m_gam_path_edit.setPlaceholderText(
             tr("Path to source RGB profile (e.g. ClayRGB1998.icm or sRGB.icm from Argyll/ref/)")
@@ -2615,11 +2621,18 @@ class TabProfile(QWidget):
         grp = QGroupBox(tr("Advanced"), layout.parentWidget())
         g = QVBoxLayout(grp)
 
-        row1 = QHBoxLayout()
+        # One grid, not two HBoxes: the second column's checkboxes line up
+        # under each other regardless of the first column's text width
+        # (Basti, #108: -no sat a little left of -nc).
+        adv = QGridLayout()
+        adv.setHorizontalSpacing(8)
+        adv.setVerticalSpacing(6)
         self._m_no_input_cb  = QCheckBox(tr("No input shaper curves (-ni)"), grp)
         self._m_no_output_cb = QCheckBox(tr("No output shaper curves (-no)"), grp)
-        row1.addWidget(self._m_no_input_cb)
-        row1.addWidget(TooltipButton(
+        self._m_no_grid_pos_cb = QCheckBox(tr("No input grid position curves (-np)"), grp)
+        self._m_no_embedded_cb = QCheckBox(tr("Don't embed measurement data (-nc)"), grp)
+        adv.addWidget(self._m_no_input_cb, 0, 0)
+        adv.addWidget(TooltipButton(
             tr("No Input Shaper Curves (-ni)"),
             tr("Input shaper curves are 1D tone curves applied to device values before\n"
             "the 3D cLUT. They help linearise the device response so the cLUT works\n"
@@ -2628,10 +2641,9 @@ class TabProfile(QWidget):
             "leave unchecked for normal profiling."),
             grp,
             min_width=460,
-        ))
-        row1.addSpacing(16)
-        row1.addWidget(self._m_no_output_cb)
-        row1.addWidget(TooltipButton(
+        ), 0, 1)
+        adv.addWidget(self._m_no_output_cb, 0, 3)
+        adv.addWidget(TooltipButton(
             tr("No Output Shaper Curves (-no)"),
             tr("Output shaper curves are 1D curves applied after the 3D cLUT to refine\n"
             "the final device values. They smooth out the cLUT output and help achieve\n"
@@ -2640,15 +2652,9 @@ class TabProfile(QWidget):
             "leave unchecked for normal profiling."),
             grp,
             min_width=460,
-        ))
-        row1.addStretch()
-        g.addLayout(row1)
-
-        row2 = QHBoxLayout()
-        self._m_no_grid_pos_cb = QCheckBox(tr("No input grid position curves (-np)"), grp)
-        self._m_no_embedded_cb = QCheckBox(tr("Don't embed measurement data (-nc)"), grp)
-        row2.addWidget(self._m_no_grid_pos_cb)
-        row2.addWidget(TooltipButton(
+        ), 0, 4)
+        adv.addWidget(self._m_no_grid_pos_cb, 1, 0)
+        adv.addWidget(TooltipButton(
             tr("No Grid Position Curves (-np)"),
             tr("Grid position curves remap where device values land on the cLUT grid,\n"
             "concentrating grid nodes in regions of greater tonal importance.\n\n"
@@ -2656,17 +2662,17 @@ class TabProfile(QWidget):
             "option — leave unchecked for normal profiling."),
             grp,
             min_width=460,
-        ))
-        row2.addSpacing(16)
-        row2.addWidget(self._m_no_embedded_cb)
-        row2.addWidget(TooltipButton(
+        ), 1, 1)
+        adv.addWidget(self._m_no_embedded_cb, 1, 3)
+        adv.addWidget(TooltipButton(
             tr("Don't Embed .ti3 Data (-nc)"),
             tr("By default colprof embeds the .ti3 measurement data inside the ICC profile.\n"
             "Check this to omit it, resulting in a smaller profile file."),
             grp,
-        ))
-        row2.addStretch()
-        g.addLayout(row2)
+        ), 1, 4)
+        adv.setColumnMinimumWidth(2, 16)     # gap between the two option columns
+        adv.setColumnStretch(5, 1)
+        g.addLayout(adv)
 
         layout.addWidget(grp)
 
@@ -3011,6 +3017,9 @@ class TabProfile(QWidget):
         g.addLayout(mode_row)
 
         path_row = QHBoxLayout()
+        _sp = QLabel("", grp)                    # indent to the control column
+        _sp.setObjectName("form_label_spacer")
+        path_row.addWidget(_sp)
         self._gam_path_edit = QLineEdit(grp)
         self._gam_path_edit.setPlaceholderText(
             tr("Path to source RGB profile (e.g. ClayRGB1998.icm or sRGB.icm from Argyll/ref/)")

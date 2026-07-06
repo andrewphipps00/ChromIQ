@@ -506,7 +506,9 @@ class ScannerProfileDialog(_ToolDialogBase):
 
         self._printer_box = QWidget(self)
         pv = QVBoxLayout(self._printer_box)
-        pv.setContentsMargins(22, 0, 0, 2)
+        # Flush with the other rows — the old 22px indent left the label and
+        # a shorter field floating right of everything else (Basti, #108).
+        pv.setContentsMargins(0, 0, 0, 2)
         # Same labelled-field pattern as the other rows: an always-visible ⓘ that
         # carries the extensive help (a plain hover tooltip left no visible cue).
         pv.addLayout(self._labelled(
