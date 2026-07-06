@@ -2488,5 +2488,18 @@
   "What the scanner measured doesn't line up with the colours the chart asked the printer to print — a grid was probably misaligned, or a scan doesn't belong to this chart.": "What the scanner measured doesn't line up with the colours the chart asked the printer to print — a grid was probably misaligned, or a scan doesn't belong to this chart.",
   "Image loaded for printing (no colour management). To measure a chart afterwards, load its .ti2 with the grid button — an image alone carries no patch geometry.": "Image loaded for printing (no colour management). To measure a chart afterwards, load its .ti2 with the grid button — an image alone carries no patch geometry.",
   "Load image (TIFF).\nOpen any TIFF — for example a chart made by another tool — and print it exactly like a chart: without colour management.\nPrinting only: to MEASURE a chart afterwards, load its .ti2 with the grid button instead, so ChromIQ knows its patches.": "Load image (TIFF).\nOpen any TIFF — for example a chart made by another tool — and print it exactly like a chart: without colour management.\nPrinting only: to MEASURE a chart afterwards, load its .ti2 with the grid button instead, so ChromIQ knows its patches.",
-  "Select TIFF image(s) to print": "Select TIFF image(s) to print"
+  "Select TIFF image(s) to print": "Select TIFF image(s) to print",
+  "Alignment check — page {n}": "Alignment check — page {n}",
+  "Another ArgyllCMS task is still running — wait for it to finish, then check again.": "Another ArgyllCMS task is still running — wait for it to finish, then check again.",
+  "Check alignment": "Check alignment",
+  "Checking the grid on page {n}…": "Checking the grid on page {n}…",
+  "Load a scan for this page first — then Check alignment can read it.": "Load a scan for this page first — then Check alignment can read it.",
+  "No diagnostic image could be produced for this read.": "No diagnostic image could be produced for this read.",
+  "Pick the target type and its reference data first — then Check alignment can read the scan.": "Pick the target type and its reference data first — then Check alignment can read the scan.",
+  "Read the page shown above once, WITHOUT building anything, and show the result: the diagnostic image of what was read plus the misalignment checks' verdict. Uses a temporary folder that is deleted when you close the result — your files stay untouched.": "Read the page shown above once, WITHOUT building anything, and show the result: the diagnostic image of what was read plus the misalignment checks' verdict. Uses a temporary folder that is deleted when you close the result — your files stay untouched.",
+  "The check couldn't judge this read — see the status log.": "The check couldn't judge this read — see the status log.",
+  "⚠ Page {n}: the patches in {groups} read like their neighbours' colours — a grid edge probably sits about one cell off there.": "⚠ Page {n}: the patches in {groups} read like their neighbours' colours — a grid edge probably sits about one cell off there.",
+  "⚠ Page {n}: what was read doesn't line up with the chart's colours — the grid is probably misaligned on this page's scan.": "⚠ Page {n}: what was read doesn't line up with the chart's colours — the grid is probably misaligned on this page's scan.",
+  "⚠ ScanIn couldn't read this page — the grid is probably far off the patches.": "⚠ ScanIn couldn't read this page — the grid is probably far off the patches.",
+  "✓ Page {n} looks well aligned — what was read agrees with the chart (agreement {r}).": "✓ Page {n} looks well aligned — what was read agrees with the chart (agreement {r})."
 }

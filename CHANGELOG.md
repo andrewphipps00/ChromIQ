@@ -1,5 +1,18 @@
 # Changelog
 
+## v3.13.0-beta.132
+
+### ✨ Improvements
+- Build scanner or camera profile: new **Check alignment** button next to
+  Reset grid (Knut's pre-build check, #108). It reads ONLY the page on
+  screen — nothing is built — and shows a window with the verdict of the
+  misalignment checks plus the diagnostic image of what was read. The
+  whole dry-run happens in a temporary folder that is deleted when the
+  window closes, so nothing lands next to your scans; the "Save a
+  diagnostic image" checkbox keeps working for real builds as before.
+  Works in all three modes (scanner/camera, printer-from-scan, standard
+  target).
+
 ## v3.13.0-beta.131
 
 ### 🐛 Fixes

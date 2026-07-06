@@ -1032,9 +1032,21 @@ class ScannerProfileDialog(_ToolDialogBase):
         self._popout_btn.clicked.connect(self._toggle_popout)
         for _b in (self._rotate_btn, self._reset_btn, self._reset_grid_btn, self._popout_btn):
             _b.setStyleSheet(_COMPACT_BTN)
+        # Pre-build alignment check (Knut, #108): a scanin dry-run for the
+        # page on screen, into a temporary folder — verdict + diagnostic image
+        # in a window, nothing left on disk.
+        self._check_align_btn = QPushButton(tr("Check alignment"), self)
+        self._check_align_btn.setToolTip(tr(
+            "Read the page shown above once, WITHOUT building anything, and "
+            "show the result: the diagnostic image of what was read plus the "
+            "misalignment checks' verdict. Uses a temporary folder that is "
+            "deleted when you close the result — your files stay untouched."))
+        self._check_align_btn.setStyleSheet(_COMPACT_BTN)
+        self._check_align_btn.clicked.connect(self._on_check_alignment)
         ctl.addWidget(self._rotate_btn)
         ctl.addWidget(self._reset_btn)
         ctl.addWidget(self._reset_grid_btn)
+        ctl.addWidget(self._check_align_btn)
         ctl.addStretch(1)
         ctl.addWidget(self._popout_btn)
         form.addLayout(ctl)
@@ -2279,12 +2291,14 @@ class ScannerProfileDialog(_ToolDialogBase):
         except Exception:  # noqa: BLE001 — a sanity check must never block
             log.warning("misalignment check failed", exc_info=True)
 
-    def _check_local_groups(self, job: dict, ti3: Path,
-                            ti2: Path | None = None,
-                            ids: set[str] | None = None) -> None:
-        """The LOCAL layer (Knut's row/column idea, #108): a page whose
-        whole-page checks pass can still have one grid edge a cell off —
-        rank-displacement clustering names the affected row/column."""
+    @staticmethod
+    def _read_expected_dicts(ti3: Path, ti2: Path | None = None,
+                             ids: set[str] | None = None
+                             ) -> tuple[dict[str, float], dict[str, float]]:
+        """(read, expected) per plain id: scanner/standard mode pairs the scan
+        luminance with the inline reference; printer mode pairs measured Y
+        with the .ti2 aim Y (keyed by loc). Shared by the per-page checks and
+        the pre-build alignment check."""
         from workflow.ti3_analysis import parse_ti3
         got = parse_ti3(ti3)
         if ti2 is None:                       # scanner mode: reference is inline
@@ -2302,6 +2316,15 @@ class ScannerProfileDialog(_ToolDialogBase):
                     for s, (_x, y, _z) in zip(got.sample_ids, got.xyz)}
             if ids is not None:
                 read = {k: v for k, v in read.items() if k in ids}
+        return read, exp
+
+    def _check_local_groups(self, job: dict, ti3: Path,
+                            ti2: Path | None = None,
+                            ids: set[str] | None = None) -> None:
+        """The LOCAL layer (Knut's row/column idea, #108): a page whose
+        whole-page checks pass can still have one grid edge a cell off —
+        rank-displacement clustering names the affected row/column."""
+        read, exp = self._read_expected_dicts(ti3, ti2, ids)
         groups = locally_misaligned_groups(read, exp)
         if not groups:
             return
@@ -2312,6 +2335,173 @@ class ScannerProfileDialog(_ToolDialogBase):
                 n=job.get("page", 1), groups=", ".join(groups))
         self._log.appendPlainText("⚠ " + msg)
         self._align_warnings.append(msg)
+
+    # ------------------------------------------------- pre-build check (#108)
+    def _on_check_alignment(self) -> None:
+        """Knut's pre-build check: read ONLY the page on screen into a
+        temporary folder, run the misalignment checks on it, and show the
+        verdict with the diagnostic image. The temp folder is deleted when
+        the result window closes — no files land next to the scans."""
+        import shutil
+        import tempfile
+        shot = self._cur_shot()
+        if not shot.get("path"):
+            self._log.appendPlainText(tr(
+                "Load a scan for this page first — then Check alignment can "
+                "read it."))
+            return
+        if self._runner_busy():
+            return
+        self._capture_current_corners()
+        corners = shot["corners"]
+        pg = self._page
+        frac = self._sample_area.value() / 100.0
+        tmp = Path(tempfile.mkdtemp(prefix="chromiq-aligncheck-"))
+        try:
+            scan = tmp / shot["path"].name
+            shutil.copy2(shot["path"], scan)
+            if self._standard_mode():
+                orig_cht, cie = self._std_cht, self._std_ref
+                if orig_cht is None or cie is None:
+                    shutil.rmtree(tmp, ignore_errors=True)
+                    self._log.appendPlainText(tr(
+                        "Pick the target type and its reference data first — "
+                        "then Check alignment can read the scan."))
+                    return
+            else:
+                base = _chart_base(self._ti3)
+                orig_cht, cie = self._files_for_page(pg, base)
+            cht = self._prepare_scanin_cht(orig_cht, corners, frac,
+                                           tmp / "check", f"chk-p{pg + 1}")
+            diag = tmp / "diag.tif"
+            printer = (not self._standard_mode() and self._printer_mode()
+                       and self._printer_scan_profile is not None)
+            if printer:
+                pbase = tmp / "printer"
+                shutil.copy2(_chart_base(self._ti3).with_suffix(".ti2"),
+                             pbase.with_suffix(".ti2"))
+                params = ScaninParams(
+                    scan, cht,
+                    corners=self._scanin_corners(corners, orig_cht),
+                    perspective=self._perspective.isChecked(), diag=diag,
+                    scan_profile=self._printer_scan_profile, pbase=pbase)
+            else:
+                params = ScaninParams(
+                    scan, cht, cie,
+                    corners=self._scanin_corners(corners, orig_cht),
+                    perspective=self._perspective.isChecked(), diag=diag,
+                    out_name="aligncheck-scanner.ti3")
+        except OSError as exc:
+            shutil.rmtree(tmp, ignore_errors=True)
+            self._log.appendPlainText(f"[ERROR] {exc}")
+            return
+        self._log.appendPlainText(
+            tr("Checking the grid on page {n}…").format(n=pg + 1))
+        self._set_busy_note(tr("Checking the grid on page {n}…").format(n=pg + 1))
+
+        def _done(code: int) -> None:
+            try:
+                verdicts = self._alignment_verdicts(params, printer, pg, code)
+            except Exception:  # noqa: BLE001 — verdicts must never crash the UI
+                log.warning("alignment check failed", exc_info=True)
+                verdicts = [tr("The check couldn't judge this read — see the "
+                               "status log.")]
+            self._finish(True)
+            for v in verdicts:
+                self._log.appendPlainText(v)
+            self._show_alignment_result(pg, verdicts, diag, tmp)
+
+        self._scanin.run(params, on_line=self._log_line, on_finish=_done)
+
+    def _runner_busy(self) -> bool:
+        runner = getattr(self._scanin, "_runner", None)
+        if runner is not None and getattr(runner, "is_running", False):
+            self._log.appendPlainText(tr(
+                "Another ArgyllCMS task is still running — wait for it to "
+                "finish, then check again."))
+            return True
+        return False
+
+    def _alignment_verdicts(self, params, printer: bool, pg: int,
+                            code: int) -> list[str]:
+        """The same layered checks a build runs, phrased as a verdict."""
+        out: list[str] = []
+        ti3 = params.out_ti3
+        if code != 0 or not ti3.exists():
+            fail = self._scanin.primary_failure()
+            return [("⚠ " + fail[1]) if fail else
+                    tr("⚠ ScanIn couldn't read this page — the grid is "
+                       "probably far off the patches.")]
+        floor = float(self._settings.get("scanner_align_corr", 0.60))
+        if printer:
+            rho = page_reference_agreement(
+                ti3, params.pbase.with_suffix(".ti2"),
+                ids=page_ids_from_cht(params.cht))
+            read, exp = self._read_expected_dicts(
+                ti3, params.pbase.with_suffix(".ti2"),
+                ids=page_ids_from_cht(params.cht))
+        else:
+            rho = scan_reference_correlation(ti3)
+            read, exp = self._read_expected_dicts(ti3)
+        if rho is not None and rho < floor:
+            out.append(tr(
+                "⚠ Page {n}: what was read doesn't line up with the chart's "
+                "colours — the grid is probably misaligned on this page's "
+                "scan.").format(n=pg + 1))
+        groups = locally_misaligned_groups(read, exp)
+        if groups:
+            out.append(tr(
+                "⚠ Page {n}: the patches in {groups} read like their "
+                "neighbours' colours — a grid edge probably sits about one "
+                "cell off there.").format(n=pg + 1, groups=", ".join(groups)))
+        if not out:
+            out.append(tr(
+                "✓ Page {n} looks well aligned — what was read agrees with "
+                "the chart (agreement {r}).").format(
+                    n=pg + 1, r=f"{rho:.2f}" if rho is not None else "—"))
+        return out
+
+    def _show_alignment_result(self, pg: int, verdicts: list[str],
+                               diag: Path, tmp: Path) -> None:
+        """Verdict + diagnostic image in a window; the temp folder dies with
+        it (Knut: no clutter and leftovers on drive)."""
+        import shutil
+        from PyQt6.QtGui import QPixmap
+        from PyQt6.QtWidgets import QScrollArea
+        dlg = QDialog(self)
+        dlg.setWindowTitle(tr("Alignment check — page {n}").format(n=pg + 1))
+        v = QVBoxLayout(dlg)
+        for line in verdicts:
+            lbl = QLabel(line, dlg)
+            lbl.setWordWrap(True)
+            v.addWidget(lbl)
+        pm = None
+        if diag.exists():
+            img = _load_scan_qimage(diag)
+            if not img.isNull():
+                pm = QPixmap.fromImage(img)
+        if pm is not None:
+            area = QScrollArea(dlg)
+            area.setWidgetResizable(False)
+            pic = QLabel(dlg)
+            pic.setPixmap(pm.scaledToWidth(
+                900, Qt.TransformationMode.SmoothTransformation))
+            area.setWidget(pic)
+            area.setMinimumSize(920, 560)
+            v.addWidget(area, 1)
+        else:
+            note = QLabel(tr(
+                "No diagnostic image could be produced for this read."), dlg)
+            note.setWordWrap(True)
+            v.addWidget(note)
+        bb = QDialogButtonBox(QDialogButtonBox.StandardButton.Close, dlg)
+        bb.rejected.connect(dlg.reject)
+        bb.accepted.connect(dlg.accept)
+        v.addWidget(bb)
+        dlg.finished.connect(
+            lambda _r: shutil.rmtree(tmp, ignore_errors=True))
+        dlg.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
+        dlg.show()
 
     def _confirm_despite_misalignment(self) -> bool:
         """Modal stop before colprof when a page failed the alignment check —
