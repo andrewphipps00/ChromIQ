@@ -1,5 +1,19 @@
 # Changelog
 
+## v3.13.0-beta.133
+
+### 🌍 Translations
+- All twelve languages are fully translated again: the entire scanner-
+  profiling round (misalignment checks, Check alignment, Scanner Limits
+  and Paths settings tabs, the printer-from-scan help card, Print-tab
+  image loading) plus older stragglers from the beta.111–120 window
+  (BYO-.cht rows, profile naming/installing, busy-bar and page-picker
+  strings) — roughly 110 strings × 12 languages. Also caught a few
+  long-standing gaps (Bold/Italic in Norwegian, Swedish and Chinese, the
+  clip "Side:" label in Norwegian). What remains identical to English is
+  identical by design: colour-space names, CIE terms, format-only
+  strings, and words the language genuinely shares.
+
 ## v3.13.0-beta.132
 
 ### ✨ Improvements
