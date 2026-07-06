@@ -1,5 +1,44 @@
 # Changelog
 
+## v3.13.0-beta.121
+
+### 🐛 Fixes
+- **Scanner profiling: ChromIQ engine charts read every strip in reverse —
+  even with a perfectly placed grid** (#108, found via Knut's deliberate
+  misalignment test). The patch-area fiducial rewrite wrote its corners in a
+  fixed order that is correct for standard targets but vertically mirrors
+  engine charts, so H1 was read as H15, H2 as H14, … while every box still
+  landed on a patch. Present since beta.117; scanner and printer-from-scan
+  profiles built from ChromIQ charts in betas 117–120 should be rebuilt.
+  Verified against Knut's real 3-page chart: 0/105 correctly-labelled
+  patches before, 105/105 after — and a new label-aware end-to-end test
+  reads a rendered engine chart back patch-by-patch **by name**, so a
+  scramble like this can't pass silently again.
+- The alignment check now stops the build instead of drowning in colprof's
+  output: findings are collected per page (naming the page to fix) and a
+  warning dialog offers Stop / Build anyway before the profile is built.
+  Scanner mode gets its own detector at last (it had none — its reference
+  values make a ΔE check blind): the scanned patches are rank-correlated
+  against the reference lightness; a misplaced grid scores near 0 and
+  flags the page.
+- "Not every patch on this page could be read" no longer cries wolf on
+  every page of a multi-page printer run — with accumulation, only the
+  final page's report can mean real gaps.
+- The built-in demo scans ("Test files…") are now rendered on exactly the
+  grid edges the reader uses — mid-grid cells could previously sit up to a
+  pixel off (Knut's Hutchcolor diagnostic).
+
+### ✨ Improvements
+- Build scanner or camera profile: the "Other… (choose a .cht file)" picker
+  finally has its label ("Target layout file (.cht):" with ⓘ) and aligns
+  flush with the other file rows; Patch sample area and Profile type sit
+  next to their labels on one shared column with Profile name (Knut, Basti).
+- Build Profile tab, guided and manual: all pulldowns, fields and file
+  boxes start at one common column instead of hugging their own label
+  (Knut).
+- New help-window card "Profile my printer with a flatbed scanner" walks
+  through the printer-from-scan workflow step by step (Knut).
+
 ## v3.13.0-beta.120
 
 ### 🐛 Fixes
