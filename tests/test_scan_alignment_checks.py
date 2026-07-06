@@ -222,3 +222,29 @@ def test_confirm_despite_misalignment(press_stop, _app, monkeypatch):
         assert finished == ([False] if press_stop else [])
     finally:
         dlg.deleteLater()
+
+
+def test_locally_misaligned_groups_flags_shifted_row(_app):
+    """Knut's mid-handle squeeze: only the top row reads the row below it.
+    The rank-displacement cluster check names exactly that row and stays
+    quiet on an aligned page (his literal per-row pattern matching false-
+    alarmed at 98.5 % on randomised charts — see the helper's docstring)."""
+    import random
+    from ui.dialogs.scanin_dialog import locally_misaligned_groups
+    rng = random.Random(42)
+    strips = "ABCDEFG"
+    exp = {f"{s}{i}": rng.random() * 100
+           for s in strips for i in range(1, 16)}
+    read_ok = {k: v * 0.9 + 2 for k, v in exp.items()}     # monotone response
+    assert locally_misaligned_groups(read_ok, exp) == []
+    read_bad = dict(read_ok)
+    for s in strips:                                       # row 1 reads row 2
+        read_bad[f"{s}1"] = read_ok[f"{s}2"]
+    flags = locally_misaligned_groups(read_bad, exp)
+    assert any("1" in f and "row" in f for f in flags), flags
+
+
+def test_locally_misaligned_groups_needs_enough_structure(_app):
+    from ui.dialogs.scanin_dialog import locally_misaligned_groups
+    # Tiny pages (or unparsable ids) are never judged.
+    assert locally_misaligned_groups({"P1": 1.0}, {"P1": 1.0}) == []

@@ -220,6 +220,66 @@ def misaligned_share(ti3: Path, ti2: Path, ids: set[str] | None = None,
     return n, big
 
 
+def locally_misaligned_groups(read_by_id: dict[str, float],
+                              expected_by_id: dict[str, float],
+                              z: float = 3.0) -> list[str]:
+    """Knut's row/column pattern idea (#108), in the form that survives
+    randomised charts: rank both value sets over the whole page (removing
+    scanner/printer response to first order), take each patch's rank
+    displacement |expected − read|, and flag a whole ROW or COLUMN whose
+    mean displacement sits ``z`` standard errors above the page mean — a
+    grid edge sitting a full cell off drags its entire line of patches
+    onto the neighbours' values while the rest of the page stays put.
+
+    Validated on Knut's own 3-page chart: 0 false alarms in 300 noisy
+    aligned trials, 100 % detection of his mid-handle squeeze (top row
+    reading the row below). Sub-⅔-of-a-patch blends stay invisible here
+    (their values are individually plausible) — the post-build self-check
+    covers those. His literal per-row own-pattern matching can't work on a
+    randomised chart: 7-patch rows gave a 98.5 % false-alarm rate, because
+    randomisation removes the row uniqueness the comparison needs.
+
+    Groups are parsed from the sample IDs (letters = column/strip, digits
+    = row); groups need ≥ 4 members and the page ≥ 4 groups to be judged.
+    Returns human-readable labels like ``"row 3"`` / ``"column H"``."""
+    import statistics
+    ids = [i for i in read_by_id if i in expected_by_id]
+    if len(ids) < 16:
+        return []
+
+    def _ranks(vals: list[float]) -> list[int]:
+        order = sorted(range(len(vals)), key=lambda k: vals[k])
+        r = [0] * len(vals)
+        for pos, k in enumerate(order):
+            r[k] = pos
+        return r
+
+    er = dict(zip(ids, _ranks([expected_by_id[i] for i in ids])))
+    rr = dict(zip(ids, _ranks([read_by_id[i] for i in ids])))
+    disp = {i: abs(er[i] - rr[i]) for i in ids}
+    mean = statistics.mean(disp.values())
+    sd = statistics.pstdev(disp.values()) or 1.0
+    rows: dict[str, list[str]] = {}
+    cols: dict[str, list[str]] = {}
+    for i in ids:
+        m = re.match(r"([A-Za-z]+)0*(\d+)$", i)
+        if not m:
+            continue
+        cols.setdefault(m.group(1), []).append(i)
+        rows.setdefault(m.group(2), []).append(i)
+    flagged: list[str] = []
+    for label, groups in ((tr("row {n}"), rows), (tr("column {n}"), cols)):
+        if len(groups) < 4:
+            continue
+        for key, members in groups.items():
+            if len(members) < 4:
+                continue
+            gm = statistics.mean(disp[i] for i in members)
+            if gm > mean + z * sd / (len(members) ** 0.5):
+                flagged.append(label.format(n=key))
+    return flagged
+
+
 def scan_reference_correlation(ti3: Path) -> float | None:
     """Spearman rank correlation between the scan's RGB luminance and the
     reference Y in a scanner-mode ``.ti3`` (RGB = what the scanner saw, XYZ =
@@ -2145,6 +2205,10 @@ class ScannerProfileDialog(_ToolDialogBase):
                             d=round(de))
                     self._log.appendPlainText("⚠ " + msg)
                     self._align_warnings.append(msg)
+                else:
+                    self._check_local_groups(job, p.out_ti3,
+                                             p.pbase.with_suffix(".ti2"),
+                                             ids=page_ids_from_cht(p.cht))
                 return
             rho = scan_reference_correlation(p.out_ti3)
             if rho is not None and rho < float(
@@ -2159,8 +2223,44 @@ class ScannerProfileDialog(_ToolDialogBase):
                     n=job.get("page", 1), k=job.get("shot", 1))
                 self._log.appendPlainText("⚠ " + msg)
                 self._align_warnings.append(msg)
+            else:
+                self._check_local_groups(job, p.out_ti3)
         except Exception:  # noqa: BLE001 — a sanity check must never block
             log.warning("misalignment check failed", exc_info=True)
+
+    def _check_local_groups(self, job: dict, ti3: Path,
+                            ti2: Path | None = None,
+                            ids: set[str] | None = None) -> None:
+        """The LOCAL layer (Knut's row/column idea, #108): a page whose
+        whole-page checks pass can still have one grid edge a cell off —
+        rank-displacement clustering names the affected row/column."""
+        from workflow.ti3_analysis import parse_ti3
+        got = parse_ti3(ti3)
+        if ti2 is None:                       # scanner mode: reference is inline
+            read = {_plain_id(s): 0.2126 * r + 0.7152 * g + 0.0722 * b
+                    for s, (r, g, b) in zip(got.sample_ids, got.rgb)}
+            exp = {_plain_id(s): y
+                   for s, (_x, y, _z) in zip(got.sample_ids, got.xyz)}
+        else:                                 # printer mode: aims from the .ti2
+            aim = parse_ti3(ti2)
+            loc_of = {_plain_id(s): _plain_id(l.strip('"'))
+                      for s, l in zip(aim.sample_ids, aim.sample_locs)}
+            exp = {loc_of.get(_plain_id(s), _plain_id(s)): y
+                   for s, (_x, y, _z) in zip(aim.sample_ids, aim.xyz)}
+            read = {loc_of.get(_plain_id(s), _plain_id(s)): y
+                    for s, (_x, y, _z) in zip(got.sample_ids, got.xyz)}
+            if ids is not None:
+                read = {k: v for k, v in read.items() if k in ids}
+        groups = locally_misaligned_groups(read, exp)
+        if not groups:
+            return
+        msg = tr(
+            "Page {n}: the patches in {groups} read like their neighbours' "
+            "colours — a grid edge probably sits about one cell off there. "
+            "Check that edge of the grid on this page's scan.").format(
+                n=job.get("page", 1), groups=", ".join(groups))
+        self._log.appendPlainText("⚠ " + msg)
+        self._align_warnings.append(msg)
 
     def _confirm_despite_misalignment(self) -> bool:
         """Modal stop before colprof when a page failed the alignment check —

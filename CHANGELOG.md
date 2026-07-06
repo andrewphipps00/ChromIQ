@@ -1,5 +1,22 @@
 # Changelog
 
+## v3.13.0-beta.128
+
+### ✨ Improvements
+- Local misalignment detection (Knut's row/column pattern idea, adapted):
+  a page whose whole-page checks pass can still have ONE grid edge a cell
+  off — the new layer ranks every patch's read value against the
+  reference over the page and flags a whole row or column whose patches
+  are collectively displaced, naming it in the warning ("the patches in
+  row 1 read like their neighbours' colours…"). Validated on the 3-page
+  test chart: zero false alarms across 300 noisy aligned runs, 100 %
+  detection of the mid-handle squeeze that slipped past the page checks.
+  Knut's literal per-row pattern matching couldn't survive randomised
+  charts (7-patch rows lose their uniqueness: 98.5 % false-alarm rate) —
+  the rank-displacement form keeps the idea and fixes the statistics.
+  Runs in scanner AND printer mode; sub-⅔-patch blends remain the
+  post-build self-check's job (their values are individually plausible).
+
 ## v3.13.0-beta.127
 
 ### ✨ Improvements
