@@ -23,8 +23,9 @@ def test_build_cht_text_structure():
     assert "  X A1 A1 _ _ 8.000000 8.000000 10.000000 200.000000 0 0" in txt
     assert "BOX_SHRINK" in txt and "REF_ROTATION 0.0" in txt
     # fiducial line: patch-area corners TL,TR,BR,BL over x∈[10,26], y∈[190,208]
-    assert ("  F _ _ 10.000000 208.000000 26.000000 208.000000 "
-            "26.000000 190.000000 10.000000 190.000000") in txt
+    # in the y-DOWN image convention (#108 round 5) — TL is the ymin corner.
+    assert ("  F _ _ 10.000000 190.000000 26.000000 190.000000 "
+            "26.000000 208.000000 10.000000 208.000000") in txt
     # count is unchanged without fiducials (F was never counted); the F line goes.
     no_f = cht_writer.build_cht_text(boxes, expected, emit_fiducials=False)
     assert "BOXES 3" in no_f
@@ -37,7 +38,11 @@ def test_build_cht_text_structure():
     assert [l for l in txt.splitlines() if l.startswith("YLIST")][0] == "YLIST 4"
 
 
-def test_boxes_from_patch_rects_flips_origin():
+def test_boxes_from_patch_rects_keeps_ydown_origin():
+    """#108 round 5: the cht stays in the image's own top-left/y-down
+    convention — no origin flip. A y-up file read correctly (the -F mapping
+    absorbs any affine) but the reflection it forced made scanin's diagnostic
+    render every label glyph mirrored."""
     rects = [{"page": 0, "slot": 0, "loc": "A1", "x": 0, "y": 0, "w": 100, "h": 100},
              {"page": 1, "slot": 1, "loc": "A1", "x": 0, "y": 0, "w": 100, "h": 100}]
     boxes = cht_writer.boxes_from_patch_rects(rects, 297.0, 100, page=0)  # 1px=0.254mm
@@ -45,7 +50,7 @@ def test_boxes_from_patch_rects_flips_origin():
     b = boxes[0]
     assert abs(b["w"] - 25.4) < 1e-6 and abs(b["h"] - 25.4) < 1e-6
     assert abs(b["x"] - 0.0) < 1e-6
-    assert abs(b["y"] - (297.0 - 25.4)) < 1e-6   # top-left flipped to bottom-left
+    assert abs(b["y"] - 0.0) < 1e-6              # top-left px → top-left mm
 
 
 def test_build_chart_emits_cht(tmp_path):

@@ -46,11 +46,18 @@ def _f_corners(cht_text: str) -> list[tuple[float, float]]:
 
 
 def _engine_cht(marks_outside: float = 0.0) -> str:
-    """A y-up (bottom-left-origin) engine-style cht: strip A runs A1 (top,
-    y=90) → A3 (bottom, y=10), like every ChromIQ engine chart."""
+    """A y-up (bottom-left-origin) cht: strip A runs A1 (top, y=90) → A3
+    (bottom, y=10) — the convention engine charts used before round 5
+    switched the writer to y-down. Such files still exist on disk, so the
+    F rewrite must keep preserving their orientation; the y-up F line is
+    written explicitly here since the writer itself is y-down now."""
+    import re
     boxes = [{"loc": f"A{i + 1}", "x": 10.0, "y": 90.0 - i * 40.0,
               "w": 20.0, "h": 20.0} for i in range(3)]
     txt = build_cht_text(boxes, [(b["loc"], 20.0, 20.0, 20.0) for b in boxes])
+    #        TL (ymax first — y-up)   TR          BR         BL
+    yup_f = "  F _ _ 10.0 110.0 30.0 110.0 30.0 10.0 10.0 10.0"
+    txt = re.sub(r"(?m)^\s*F .*$", yup_f, txt, count=1)
     if marks_outside:
         c = _f_corners(txt)
         moved = [(x + (marks_outside if x > 15 else -marks_outside),
@@ -86,6 +93,16 @@ def test_patchbox_rewrite_preserves_yup_orientation():
         "F corner order flipped — every strip reads reversed (#108)"
     # x order preserved too (TL, TR, BR, BL).
     assert new[0][0] < new[1][0] and new[3][0] < new[2][0]
+
+
+def test_writer_emits_ydown_fiducials():
+    """Round 5: the engine writer uses Argyll's image-style y-down convention
+    — F starts at (xmin, ymin) = top-left — so scanin's -F mapping carries no
+    reflection and the diagnostic image renders labels upright (Knut read
+    mirrored '2' as '5' and reported scrambled label order)."""
+    txt = build_cht_text([{"loc": "A1", "x": 10.0, "y": 5.0, "w": 20.0, "h": 20.0}],
+                         [("A1", 20.0, 20.0, 20.0)])
+    assert _f_corners(txt)[0] == (10.0, 5.0)
 
 
 def test_patchbox_rewrite_preserves_ydown_orientation():

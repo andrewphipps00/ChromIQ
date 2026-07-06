@@ -165,6 +165,10 @@ def _chart_base(ti3: Path) -> Path:
     return ti3.with_name(stem)
 
 
+_PROFCHECK_RE = re.compile(
+    r"Profile check complete, peak err = ([\d.]+), avg err = ([\d.]+)")
+
+
 def _plain_id(sid: str) -> str:
     """``H01`` → ``H1``: scanin zero-pads sample IDs on output; the chart's
     ``.ti2`` rows and layout locs don't."""
@@ -184,15 +188,16 @@ def page_ids_from_cht(cht: Path) -> set[str] | None:
     return {_plain_id(b.name) for b in geom.patches} or None
 
 
-def misaligned_share(ti3: Path, ti2: Path,
-                     ids: set[str] | None = None) -> tuple[int, int]:
-    """``(patches compared, patches with ΔE76 > 15)`` between what the scanner
-    read (through its profile) and the chart's aim values, optionally
+def misaligned_share(ti3: Path, ti2: Path, ids: set[str] | None = None,
+                     de_limit: float = 15.0) -> tuple[int, int]:
+    """``(patches compared, patches with ΔE76 > de_limit)`` between what the
+    scanner read (through its profile) and the chart's aim values, optionally
     restricted to the *ids* one page fills. Each side is normalised to its own
     brightest patch, so exposure / paper-white scale differences don't count
     as colour error. Printer drift moves colours too, but structuredly and
-    mostly within bounds; ΔE76 > 15 on a large share flags a scrambled patch
-    assignment (misplaced grid, wrong scan), not an uncalibrated printer."""
+    mostly within bounds; a large share of far-off patches flags a scrambled
+    patch assignment (misplaced grid, wrong scan), not an uncalibrated
+    printer. *de_limit* is user-tunable (Settings → Scanner, #108)."""
     from workflow.icc_info import xyz_to_lab
     from workflow.ti3_analysis import parse_ti3
     got = parse_ti3(ti3)
@@ -216,7 +221,7 @@ def misaligned_share(ti3: Path, ti2: Path,
         al = xyz_to_lab(tuple(c * 100.0 / aim_w for c in a))
         de = sum((x - y) ** 2 for x, y in zip(gl, al)) ** 0.5
         n += 1
-        big += de > 15.0
+        big += de > de_limit
     return n, big
 
 
@@ -333,6 +338,7 @@ class ScannerProfileDialog(_ToolDialogBase):
         self._printer_scan_profile: Path | None = None   # scanner ICC for printer mode
         self._chart_measured = False   # loaded chart has a real .ti3 (not just .ti2)
         self._align_warnings: list[str] = []   # per-page misalignment findings
+        self._run_diags: list[Path] = []       # diagnostic images this run writes
         self._chart_reject_reason: str | None = None  # why the last pick failed (#101)
         # Bring-your-own-.cht (#105): a printer-mode chart without channels.json
         # waits here for the user to pick printtarg's per-page .cht files.
@@ -648,16 +654,16 @@ class ScannerProfileDialog(_ToolDialogBase):
         self._target_combo.addItem(tr("Other… (choose a .cht file)"), "")
         self._target_combo.currentIndexChanged.connect(self._on_target_changed)
         trow.addWidget(self._target_combo, 1)
-        self._reveal_btn = QPushButton(tr("Try with a demo scan"), self)
-        self._reveal_btn.setStyleSheet(_COMPACT_BTN)
-        self._reveal_btn.setToolTip(tr(
+        self._demo_btn = QPushButton(tr("Try with a demo scan"), self)
+        self._demo_btn.setStyleSheet(_COMPACT_BTN)
+        self._demo_btn.setToolTip(tr(
             "Loads a synthetic practice scan of this target — each patch a flat "
             "colour, drawn from the recognition file — plus its matching reference, "
             "so you can try placing the grid and building a profile with no scanner. "
             "It is NOT a real target: for a real profile, load your own scan and the "
             "reference that came with your physical target instead."))
-        self._reveal_btn.clicked.connect(self._reveal_target_files)
-        trow.addWidget(self._reveal_btn)
+        self._demo_btn.clicked.connect(self._reveal_target_files)
+        trow.addWidget(self._demo_btn)
         v.addLayout(trow)
 
         # Custom .cht browse (only when "Other…" is selected). Labelled like
@@ -1460,7 +1466,7 @@ class ScannerProfileDialog(_ToolDialogBase):
         data = self._target_combo.currentData()
         other = not data
         self._cht_row_w.setVisible(other)
-        self._reveal_btn.setEnabled(not other)
+        self._demo_btn.setEnabled(not other)
         if other:
             txt = self._cht_field.text()
             self._set_std_target(Path(txt) if txt else None)
@@ -1909,6 +1915,7 @@ class ScannerProfileDialog(_ToolDialogBase):
         self._save_placement()                   # remember this target's grid
         self._log.clear()
         self._align_warnings = []                # per-page misalignment findings
+        self._run_diags: list[Path] = []         # diagnostic images this run writes
         method = self._avg_method.currentData() or "mean"
         if self._standard_mode():
             pages = [0]
@@ -1951,6 +1958,8 @@ class ScannerProfileDialog(_ToolDialogBase):
                 # (#102). Distinct scan stems keep the files from colliding.
                 diag = (scan.with_name(scan.stem + "-diag.tif")
                         if self._diag.isChecked() else None)
+                if diag is not None:
+                    self._run_diags.append(diag)
                 params = ScaninParams(
                     scan, cht, cie,
                     corners=self._scanin_corners(s["corners"], orig_cht),
@@ -2085,6 +2094,8 @@ class ScannerProfileDialog(_ToolDialogBase):
             # first — every page's alignment is worth checking (#102).
             diag = (s["path"].with_name(s["path"].stem + "-diag.tif")
                     if self._diag.isChecked() else None)
+            if diag is not None:
+                self._run_diags.append(diag)
             params = ScaninParams(
                 s["path"], cht,
                 corners=self._scanin_corners(s["corners"], orig_cht),
@@ -2117,22 +2128,26 @@ class ScannerProfileDialog(_ToolDialogBase):
         line buried in colprof's -v output."""
         try:
             p = job["params"]
+            de = float(self._settings.get("scanner_align_de", 15.0))
+            share = float(self._settings.get("scanner_align_share", 10)) / 100.0
             if p.is_printer:
                 n, big = misaligned_share(
                     p.out_ti3, p.pbase.with_suffix(".ti2"),
-                    ids=page_ids_from_cht(p.cht))
-                if n and big / n > 0.10:
+                    ids=page_ids_from_cht(p.cht), de_limit=de)
+                if n and big / n > share:
                     msg = tr(
                         "Page {n}: {p}% of its patches read very differently "
                         "from what the chart asked the printer to print "
-                        "(ΔE over 15) — the grid is probably misaligned on "
+                        "(ΔE over {d}) — the grid is probably misaligned on "
                         "this page's scan.").format(
-                            n=job.get("page", 1), p=round(100 * big / n))
+                            n=job.get("page", 1), p=round(100 * big / n),
+                            d=round(de))
                     self._log.appendPlainText("⚠ " + msg)
                     self._align_warnings.append(msg)
                 return
             rho = scan_reference_correlation(p.out_ti3)
-            if rho is not None and rho < 0.5:
+            if rho is not None and rho < float(
+                    self._settings.get("scanner_align_corr", 0.60)):
                 msg = (tr("Page {n} (scan {k}): what the scanner read doesn't "
                           "line up with the chart's colours — the grid is "
                           "probably misaligned on this scan.")
@@ -2167,9 +2182,55 @@ class ScannerProfileDialog(_ToolDialogBase):
         if box.clickedButton() is stop:
             self._log.appendPlainText(tr(
                 "Stopped — realign the flagged page's grid and build again."))
+            # Put the evidence one click away (Knut: the reveal button only
+            # appeared after a FINISHED build, so the diagnostic image the
+            # message points at was left to hunt for by hand).
+            diags = [d for d in getattr(self, "_run_diags", []) if d.exists()]
+            if diags:
+                self._last_profile = diags[0]
+                self._reveal_btn.setText(tr("Reveal diagnostic image"))
+                self._reveal_btn.setVisible(True)
+                self._reveal_btn.setEnabled(True)
+            else:
+                self._log.appendPlainText(tr(
+                    "Tip: tick “Save a diagnostic image of what was read” and "
+                    "build again — the image shows exactly which patches were "
+                    "read from your scan."))
             self._finish(False)
             return False
         return True
+
+    def _watch_profile_check(self):
+        """An ``on_line`` wrapper that also captures colprof's own fit check
+        ("Profile check complete, peak err = …"). Knut's sub-patch grid shifts
+        slip past the per-page pre-checks (a half-patch shift reads plausible
+        BLENDS of neighbouring colours) but blow this number up (his tests:
+        peak 60–91 vs < 10 aligned) — so the fit check is the arbiter of
+        subtle misalignment (#108)."""
+        found: list[tuple[float, float]] = []
+
+        def _on_line(line: str) -> None:
+            m = _PROFCHECK_RE.search(line)
+            if m:
+                found.append((float(m.group(1)), float(m.group(2))))
+            self._log_line(line)
+
+        return _on_line, found
+
+    def _selfcheck_verdict(self, found: list[tuple[float, float]]) -> None:
+        if not found:
+            return
+        peak, avg = found[-1]
+        limit = float(self._settings.get("scanner_selfcheck_peak", 30.0))
+        if peak <= limit:
+            return
+        self._log.appendPlainText(tr(
+            "⚠ Self-check: colprof reports a peak fit error of {p} (average "
+            "{a}) — an aligned scan stays well under {l}. A grid sitting "
+            "slightly off on one page (even by half a patch) produces exactly "
+            "this. Check the diagnostic images, realign and rebuild before "
+            "trusting this profile. (Threshold: Settings → Scanner.)").format(
+                p=round(peak, 1), a=round(avg, 1), l=round(limit)))
 
     def _build_printer_profile(self, pbase: Path, base: Path) -> None:
         ti3 = pbase.with_suffix(".ti3")
@@ -2178,13 +2239,17 @@ class ScannerProfileDialog(_ToolDialogBase):
             # Per-page checks found nothing (or couldn't run — e.g. an
             # unparseable BYO .cht): one whole-chart pass as the safety net.
             try:
-                n, big = misaligned_share(ti3, base.with_suffix(".ti2"))
-                if n and big / n > 0.10:
+                de = float(self._settings.get("scanner_align_de", 15.0))
+                share = float(self._settings.get("scanner_align_share", 10)) / 100.0
+                n, big = misaligned_share(ti3, base.with_suffix(".ti2"),
+                                          de_limit=de)
+                if n and big / n > share:
                     self._align_warnings.append(tr(
                         "{p}% of the patches read very differently from what "
-                        "the chart asked the printer to print (ΔE over 15) — "
+                        "the chart asked the printer to print (ΔE over {d}) — "
                         "a grid was probably misaligned, or a scan doesn't "
-                        "belong to this chart.").format(p=round(100 * big / n)))
+                        "belong to this chart.").format(
+                            p=round(100 * big / n), d=round(de)))
             except Exception:  # noqa: BLE001 — a sanity check must never block
                 log.warning("misalignment check failed", exc_info=True)
         if self._align_warnings and not self._confirm_despite_misalignment():
@@ -2211,18 +2276,21 @@ class ScannerProfileDialog(_ToolDialogBase):
                 self._finish(False)
                 return
             self._log.appendPlainText(tr("[OK] Printer profile saved: {p}").format(p=icc))
+            self._selfcheck_verdict(_check)
             self._log.appendPlainText(tr(
                 "Install it as your printer's profile. The measurement (.ti3) sits "
                 "next to it — load that in the Build Profile tab if you want to "
                 "fine-tune the printer profile (intents, quality, …)."))
             self._last_profile = icc
+            self._reveal_btn.setText(tr("Reveal profile"))
             self._reveal_btn.setVisible(True)
             self._reveal_btn.setEnabled(True)
             self._install_btn.setVisible(True)
             self._install_btn.setEnabled(True)
             self._finish(True)
 
-        self._profiler.build(params, on_line=self._log_line, on_finish=_done)
+        on_line, _check = self._watch_profile_check()
+        self._profiler.build(params, on_line=on_line, on_finish=_done)
 
     def _sanitize_scanner_ti3(self, ti3: Path) -> None:
         """Fix nan/inf values scanin can write for degenerate patches, which would
@@ -2291,17 +2359,20 @@ class ScannerProfileDialog(_ToolDialogBase):
                 self._finish(False)
                 return
             self._log.appendPlainText(tr("[OK] Scanner profile saved: {p}").format(p=icc))
+            self._selfcheck_verdict(_check)
             self._log.appendPlainText(tr(
                 "Install it as your scanner's input profile. Use the diagnostic "
                 "image (if you saved one) to check the patches were read correctly."))
             self._last_profile = icc
+            self._reveal_btn.setText(tr("Reveal profile"))
             self._reveal_btn.setVisible(True)     # let the user find the .icc
             self._reveal_btn.setEnabled(True)
             self._install_btn.setVisible(True)
             self._install_btn.setEnabled(True)
             self._finish(True)
 
-        self._profiler.build(params, on_line=self._log_line, on_finish=_done)
+        on_line, _check = self._watch_profile_check()
+        self._profiler.build(params, on_line=on_line, on_finish=_done)
 
     def _combine_ti3(self, page_ti3s: list[Path], base: Path) -> Path:
         """Single page → use it directly; multi-page → concatenate the data rows

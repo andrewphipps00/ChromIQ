@@ -177,14 +177,14 @@ def test_argyll_ref_target_is_self_consistent(name, tmp_path):
     assert worst < 6.0, f"{name}: Argyll ref/ geometry misregisters ({worst:.1f})"
 
 
-def test_engine_yup_cht_reads_correct_labels_through_rewrite(tmp_path):
-    """#108 round 4 (Knut): engine charts write their .cht y-up; the dialog's
-    patch-bbox F rewrite used a fixed y-down corner order, vertically mirroring
-    the read — every box still landed ON a patch, so the registration-only
-    checks passed while every strip's labels were reversed. This is the
-    label-AWARE end-to-end guard: render an engine-style chart, push its .cht
-    through the dialog's rewrite, scanin -F it, and require every patch to
-    read its OWN colour."""
+def test_engine_cht_reads_correct_labels_through_rewrite(tmp_path):
+    """#108 round 4 (Knut): the dialog's patch-bbox F rewrite used a fixed
+    corner order that vertically mirrored engine charts — every box still
+    landed ON a patch, so the registration-only checks passed while every
+    strip's labels were reversed. This is the label-AWARE end-to-end guard:
+    render an engine-style chart, push its .cht (round 5: now written in
+    Argyll's y-down image convention) through the dialog's rewrite, scanin
+    -F it, and require every patch to read its OWN colour."""
     from workflow.layout_engine.cht_writer import boxes_from_patch_rects, build_cht_text
     from workflow.scanin_runner import cht_with_patchbox_fiducials
     dpi, paper_h_mm = 100, 120.0

@@ -1,5 +1,39 @@
 # Changelog
 
+## v3.13.0-beta.123
+
+### 🐛 Fixes
+- Scanner profiling: engine charts' recognition files are now written in
+  ArgyllCMS's native image convention (origin top-left, y down). The old
+  y-up files read correctly but forced a reflection into scanin's corner
+  mapping, so the diagnostic image drew every label mirrored — Knut read
+  mirrored "2" as "5" / "12" as "15" and reasonably concluded the patch
+  order was scrambled. The diag now renders upright, sequential labels you
+  can actually proof-read (#108). Note: reads scrambled by the beta.117–120
+  bug also poisoned any scanner profile built then — rebuild your scanner
+  profile before profiling a printer through it, or every page will flag
+  as misaligned even when perfectly placed.
+- "Reveal profile" never actually appeared after a build: a widget-name
+  collision made the success handler show the "Try with a demo scan"
+  button instead. Fixed — and after a build STOPPED by the alignment
+  warning, the button now appears as "Reveal diagnostic image" so the
+  evidence is one click away (or, without a diagnostic image, the log
+  suggests enabling it).
+
+### ✨ Improvements
+- Misalignment detection, layered (Knut's systematic tests): grid shifts
+  under ~15% of a patch still read pure patch colour (harmless); the
+  per-page checks catch scrambles and shifts from about two-thirds of a
+  patch; and a new post-build self-check verdict reads colprof's own fit
+  error (peak err 60–91 in Knut's half-patch tests vs under 10 aligned)
+  to catch the subtle blends in between and warn before you trust the
+  profile.
+- All four thresholds are editable in Settings → new "Scanner" tab, each
+  with a plain-language explanation: per-patch ΔE limit, wrong-share per
+  page, scan↔chart agreement floor (raised to 0.60, validated against
+  real data: aligned ≈ 0.88, scrambled ≤ 0.33), and the self-check peak
+  error limit.
+
 ## v3.13.0-beta.122
 
 ### ✨ Improvements

@@ -721,6 +721,8 @@ class SettingsDialog(QDialog):
         self._tabs.addTab(self._scroll_wrap(self._build_margin_thresholds_tab()),
                           tr("Instrument Limits"))
         self._tabs.addTab(self._build_chart_layout_tab(), tr("Chart Layout"))
+        self._tabs.addTab(self._scroll_wrap(self._build_scanner_tab()),
+                          tr("Scanner"))
 
         # ---- About / Updates (below the tabs) ----
         credit1 = QLabel(tr("ChromIQ v{APP_VERSION} · Created by Sebastian Reiprich").format(APP_VERSION=APP_VERSION), self)
@@ -799,6 +801,105 @@ class SettingsDialog(QDialog):
     _MARGIN_INSTRUMENTS = ("i1Pro", "i1Pro 3+", "ColorMunki", "SpectroScan")
     _MARGIN_PAPERS = ("A4", "Letter", "Legal", "A3", "A3+", "A2", "Tabloid")
     _MARGIN_ORIENTS = ("Portrait", "Landscape")
+
+    def _build_scanner_tab(self) -> QWidget:
+        """Scanner/camera profiling: the misalignment-check thresholds (Knut,
+        #108). Four plain numbers with friendly names — the checks themselves
+        live in the Build scanner or camera profile tool."""
+        page = QWidget()
+        v = QVBoxLayout(page)
+        v.setSpacing(10)
+        v.setContentsMargins(12, 12, 12, 12)
+
+        intro = QLabel(tr(
+            "When the scanner tool reads a scanned chart, it checks whether "
+            "the reading grid actually sat on the patches. These are the "
+            "limits those checks use. The defaults include a buffer for real "
+            "scans (noisier than the built-in demo images) — loosen them if "
+            "you get warnings on builds you've verified are fine, tighten "
+            "them to be warned earlier."), page)
+        intro.setWordWrap(True)
+        intro.setStyleSheet("color: #909090; font-size: 11px;")
+        v.addWidget(intro)
+
+        grp = QGroupBox(tr("Misalignment warnings"), page)
+        g = QGridLayout(grp)
+        g.setHorizontalSpacing(8)
+        g.setVerticalSpacing(8)
+
+        def _row(r: int, label: str, spin, tip_title: str, tip_body: str) -> None:
+            g.addWidget(QLabel(label, grp), r, 0)
+            g.addWidget(spin, r, 1)
+            g.addWidget(TooltipButton(tip_title, tip_body, grp), r, 2)
+
+        s = self._settings
+        self._scan_de_spin = NoScrollDoubleSpinBox(grp)
+        self._scan_de_spin.setRange(3.0, 60.0)
+        self._scan_de_spin.setDecimals(1)
+        self._scan_de_spin.setSingleStep(1.0)
+        self._scan_de_spin.setValue(float(s.get("scanner_align_de", 15.0)))
+        self._scan_de_spin.setMinimumWidth(120)
+        _row(0, tr("A patch counts as wrong above (ΔE):"), self._scan_de_spin,
+             tr("Colour difference per patch"),
+             tr("How far a patch's scanned colour may sit from the colour the "
+                "chart says it should be (ΔE, where 1 is barely visible and "
+                "10 is clearly a different colour) before the patch counts "
+                "as wrongly read.\n\n"
+                "This tolerance absorbs honest printer drift — an "
+                "uncalibrated printer misses its aims by a structured, "
+                "bounded amount, while a misplaced grid reads entirely "
+                "unrelated colours far beyond it."))
+
+        self._scan_share_spin = NoScrollSpinBox(grp)
+        self._scan_share_spin.setRange(1, 90)
+        self._scan_share_spin.setSuffix(" %")
+        self._scan_share_spin.setValue(int(float(s.get("scanner_align_share", 10))))
+        self._scan_share_spin.setMinimumWidth(120)
+        _row(1, tr("Warn when this share of a page is wrong:"), self._scan_share_spin,
+             tr("Wrong patches per page"),
+             tr("A page is flagged as misaligned when more than this share of "
+                "its patches count as wrong (per the ΔE limit above).\n\n"
+                "A handful of odd patches can be dust or a printing flaw; a "
+                "misplaced grid scrambles a large share of the page at once."))
+
+        self._scan_corr_spin = NoScrollDoubleSpinBox(grp)
+        self._scan_corr_spin.setRange(0.05, 0.95)
+        self._scan_corr_spin.setDecimals(2)
+        self._scan_corr_spin.setSingleStep(0.05)
+        self._scan_corr_spin.setValue(float(s.get("scanner_align_corr", 0.60)))
+        self._scan_corr_spin.setMinimumWidth(120)
+        _row(2, tr("Scan must match the chart at least (0–1):"), self._scan_corr_spin,
+             tr("Scan↔chart agreement (scanner profiles)"),
+             tr("Used when building a SCANNER or camera profile: how strongly "
+                "the brightness order of the scanned patches must agree with "
+                "the chart's known values (1 = perfect agreement, 0 = none).\n\n"
+                "Even an unprofiled scanner keeps the order of light and dark "
+                "patches intact, so an aligned scan scores around 0.9. A "
+                "misplaced grid pairs patches with the wrong references and "
+                "the agreement collapses toward 0."))
+
+        self._scan_peak_spin = NoScrollDoubleSpinBox(grp)
+        self._scan_peak_spin.setRange(5.0, 200.0)
+        self._scan_peak_spin.setDecimals(0)
+        self._scan_peak_spin.setSingleStep(5.0)
+        self._scan_peak_spin.setValue(float(s.get("scanner_selfcheck_peak", 30.0)))
+        self._scan_peak_spin.setMinimumWidth(120)
+        _row(3, tr("Self-check: warn above peak fit error:"), self._scan_peak_spin,
+             tr("Profile self-check (after building)"),
+             tr("After every build, colprof reports how well the finished "
+                "profile fits its own measurements (\"peak err\"). An aligned "
+                "read fits well; a grid that sat only half a patch off reads "
+                "believable BLENDS of neighbouring colours — too subtle for "
+                "the checks above, but the fit error jumps (60–90 instead of "
+                "under 10).\n\n"
+                "When the peak error is above this limit, ChromIQ warns you "
+                "to check the diagnostic images before trusting the "
+                "profile."))
+
+        g.setColumnStretch(3, 1)
+        v.addWidget(grp)
+        v.addStretch()
+        return page
 
     def _build_margin_thresholds_tab(self) -> QWidget:
         """Per-(instrument, paper+orientation) minimum-margin editor.
@@ -1692,6 +1793,11 @@ class SettingsDialog(QDialog):
         s.set("i1pro_default_preset",      str(self._i1pro_preset_combo.currentData()))
         s.set("i1pro_chromiq_clip_style",  self._chromiq_clip_check.isChecked())
         s.set("grey_ramp_reference",       int(self._grey_ref_spin.value()))
+        # Scanner-profiling misalignment thresholds (Settings → Scanner, #108).
+        s.set("scanner_align_de",          float(self._scan_de_spin.value()))
+        s.set("scanner_align_share",       int(self._scan_share_spin.value()))
+        s.set("scanner_align_corr",        float(self._scan_corr_spin.value()))
+        s.set("scanner_selfcheck_peak",    float(self._scan_peak_spin.value()))
         # Margin inspector: behaviour flags + the per-combo threshold table.
         self._commit_margin_combo()   # flush the currently-shown combo's edits
         s.set("margin_inspector_show",     self._margin_show_check.isChecked())

@@ -185,6 +185,13 @@ DEFAULTS: dict[str, Any] = {
     "margin_guides_show":        False,   # dotted threshold guide lines on preview
     "margin_measured_guides_show": False,  # long dotted lines at the measured margins
     "margin_thresholds":         "",      # JSON blob; "" → default_margin_thresholds()
+    # Scanner/camera profiling: misalignment-check thresholds (Knut #108).
+    # Editable in Settings → Scanner; the defaults carry a buffer for real
+    # scans (noisier than the built-in demo images).
+    "scanner_align_de":          15.0,    # ΔE76 beyond which a patch is "far off"
+    "scanner_align_share":       10,      # % of far-off patches that flags a page
+    "scanner_align_corr":        0.60,    # scan↔reference rank-correlation floor
+    "scanner_selfcheck_peak":    30.0,    # colprof self-check peak err → warning
     # Strip-indicator styling (Knut #93): the per-chart detail controls moved to
     # Settings → Chart Layout. These are the app-wide DEFAULTS used for new charts;
     # presets still carry (and restore) their own styling. Keys mirror the

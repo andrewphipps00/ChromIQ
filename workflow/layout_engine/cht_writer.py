@@ -7,7 +7,12 @@ tracking the rectangle edges it draws; because the ChromIQ engine *computes* the
 layout, we know every patch box exactly and can emit the same file directly from
 geometry — no image edge-detection heuristics (#93, Knut).
 
-Format (origin is **bottom-left, millimetres**, matching printtarg):
+Format (origin is **top-left, millimetres, y down** — the image-style
+convention Argyll's own reference ``.cht`` files and rectarg use; scanin's
+``-F`` pairs these coordinates with image-pixel corners, so matching the
+image's y direction keeps that mapping reflection-free — a y-up file works
+for *reading* but makes scanin's diagnostic render every label glyph
+mirrored, #108 round 5):
 
     BOXES <n>
       F _ _ <x1> <y1> … <x4> <y4>                 # patch-area corners TL,TR,BR,BL
@@ -52,8 +57,9 @@ def _edge_list(positions_len: list[tuple[float, float]]) -> list[tuple[float, fl
 
 def fiducials_from_boxes(boxes: list[dict]) -> tuple[float, ...] | None:
     """The four patch-area corners as ArgyllCMS fiducials, from the boxes'
-    bounding box (bottom-left mm). Order is **TL, TR, BR, BL** — the order the
-    user places them in ``scanin -F`` and the marquee draws them (#98). Returns
+    bounding box (top-left-origin mm, y down). Order is **TL, TR, BR, BL** —
+    the order the user places them in ``scanin -F`` and the marquee draws
+    them (#98). In y-down coordinates the top-left is (xmin, ymin). Returns
     ``None`` for an empty box list."""
     if not boxes:
         return None
@@ -62,7 +68,7 @@ def fiducials_from_boxes(boxes: list[dict]) -> tuple[float, ...] | None:
     ymin = min(b["y"] for b in boxes)
     ymax = max(b["y"] + b["h"] for b in boxes)
     #     TL          TR          BR          BL
-    return (xmin, ymax, xmax, ymax, xmax, ymin, xmin, ymin)
+    return (xmin, ymin, xmax, ymin, xmax, ymax, xmin, ymax)
 
 
 def build_cht_text(boxes: list[dict], expected: list[tuple[str, float, float, float]],
@@ -117,16 +123,17 @@ def build_cht_text(boxes: list[dict], expected: list[tuple[str, float, float, fl
 def boxes_from_patch_rects(patch_rects: list[dict], paper_h_mm: float, dpi: int,
                            page: int = 0) -> list[dict]:
     """Convert engine ``patch_rects_px`` (top-left origin, px) for *page* into
-    ``.cht`` boxes (bottom-left origin, mm)."""
+    ``.cht`` boxes (top-left origin, mm, y down — same direction as the image,
+    so scanin's ``-F`` mapping carries no reflection; *paper_h_mm* is kept for
+    call-site compatibility but no longer used)."""
+    del paper_h_mm
     s = 25.4 / dpi
     boxes = []
     for r in patch_rects:
         if r.get("page", 0) != page:
             continue
-        w, h = r["w"] * s, r["h"] * s
-        x = r["x"] * s
-        y = paper_h_mm - (r["y"] * s + h)        # flip to bottom-left origin
-        boxes.append({"loc": r["loc"], "x": x, "y": y, "w": w, "h": h})
+        boxes.append({"loc": r["loc"], "x": r["x"] * s, "y": r["y"] * s,
+                      "w": r["w"] * s, "h": r["h"] * s})
     return boxes
 
 
