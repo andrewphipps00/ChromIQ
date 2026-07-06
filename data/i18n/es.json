@@ -2492,14 +2492,18 @@
   "Alignment check — page {n}": "Comprobación de alineación — página {n}",
   "Another ArgyllCMS task is still running — wait for it to finish, then check again.": "Otra tarea de ArgyllCMS sigue en ejecución — espera a que termine y comprueba de nuevo.",
   "Check alignment": "Comprobar alineación",
-  "Checking the grid on page {n}…": "Comprobando la cuadrícula en la página {n}…",
   "Load a scan for this page first — then Check alignment can read it.": "Carga primero un escaneo para esta página — entonces «Comprobar alineación» podrá leerlo.",
   "No diagnostic image could be produced for this read.": "No se pudo generar una imagen de diagnóstico para esta lectura.",
   "Pick the target type and its reference data first — then Check alignment can read the scan.": "Elige primero el tipo de target y sus datos de referencia — entonces «Comprobar alineación» podrá leer el escaneo.",
   "Read the page shown above once, WITHOUT building anything, and show the result: the diagnostic image of what was read plus the misalignment checks' verdict. Uses a temporary folder that is deleted when you close the result — your files stay untouched.": "Lee una vez la página mostrada arriba, SIN crear nada, y muestra el resultado: la imagen de diagnóstico de lo leído más el veredicto de las comprobaciones de alineación. Usa una carpeta temporal que se borra al cerrar el resultado — tus archivos quedan intactos.",
   "The check couldn't judge this read — see the status log.": "La comprobación no pudo evaluar esta lectura — mira el registro de estado.",
-  "⚠ Page {n}: the patches in {groups} read like their neighbours' colours — a grid edge probably sits about one cell off there.": "⚠ Página {n}: los parches de {groups} se leen como los colores de sus vecinos — un borde de la cuadrícula probablemente está desplazado una celda allí.",
-  "⚠ Page {n}: what was read doesn't line up with the chart's colours — the grid is probably misaligned on this page's scan.": "⚠ Página {n}: lo leído no encaja con los colores de la carta — la cuadrícula probablemente está desalineada en el escaneo de esta página.",
-  "⚠ ScanIn couldn't read this page — the grid is probably far off the patches.": "⚠ ScanIn no pudo leer esta página — la cuadrícula probablemente está muy lejos de los parches.",
-  "✓ Page {n} looks well aligned — what was read agrees with the chart (agreement {r}).": "✓ La página {n} parece bien alineada — lo leído concuerda con la carta (concordancia {r})."
+  "Checking the grid — {w}…": "Comprobando la cuadrícula — {w}…",
+  "Target": "Target",
+  "⚠ ScanIn couldn't read this — the grid is probably far off the patches.": "⚠ ScanIn no pudo leer esto — la cuadrícula probablemente está muy lejos de los parches.",
+  "⚠ {w}: a nearby grid position matches the chart better than the current one — the grid probably sits a fraction of a patch off. Nudge it and check again.": "⚠ {w}: una posición de cuadrícula cercana coincide mejor con la carta que la actual — la cuadrícula probablemente está desviada una fracción de parche. Muévela un poco y comprueba de nuevo.",
+  "⚠ {w}: the patches in {groups} read like their neighbours' colours — a grid edge probably sits about one cell off there.": "⚠ {w}: los parches de {groups} se leen como los colores de sus vecinos — un borde de la cuadrícula probablemente está desplazado una celda allí.",
+  "⚠ {w}: what was read doesn't line up with the chart's colours — the grid is probably misaligned.": "⚠ {w}: lo leído no encaja con los colores de la carta — la cuadrícula probablemente está desalineada.",
+  "✓ {w} looks well aligned — what was read agrees with the chart (agreement {r}).": "✓ {w} parece bien alineado — lo leído concuerda con la carta (concordancia {r}).",
+  "✓ {w} reads correctly — ScanIn locked onto the target's grid on its own (this target tolerates small placement offsets). Agreement {r}.": "✓ {w} se lee correctamente — ScanIn se ancló por sí solo a la cuadrícula del target (este target tolera pequeños desplazamientos). Concordancia {r}.",
+  "✓ {w}: the current grid position matches the chart best (agreement {r}).": "✓ {w}: la posición actual de la cuadrícula es la que mejor coincide con la carta (concordancia {r})."
 }

@@ -458,7 +458,7 @@ jobs:
               printf 'ChromIQ is ad-hoc signed (not notarized). On macOS Sonoma+ the right-click → Open trick often fails with *"Apple cannot check it for malicious software."* If that happens, remove the quarantine flag in Terminal:\n\n'
               printf '```\nxattr -dr com.apple.quarantine /Applications/ChromIQ.app\n```\n\n'
               printf 'Then double-click as normal.\n\n'
-              printf 'Requires macOS 12+ and ArgyllCMS 3.5.0 at `/Applications/Argyll/bin`.'
+              printf 'Requires macOS 13+ (Ventura) and ArgyllCMS 3.5.0 at `/Applications/Argyll/bin`.'
             } > /tmp/release_notes.txt
             # The arm64 and universal2 matrix legs run in parallel and both
             # pass the `gh release view` check above when neither has created

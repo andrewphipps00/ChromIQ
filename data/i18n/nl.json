@@ -2492,14 +2492,18 @@
   "Alignment check — page {n}": "Uitlijningscontrole — pagina {n}",
   "Another ArgyllCMS task is still running — wait for it to finish, then check again.": "Er draait nog een andere ArgyllCMS-taak — wacht tot die klaar is en controleer dan opnieuw.",
   "Check alignment": "Uitlijning controleren",
-  "Checking the grid on page {n}…": "Raster op pagina {n} wordt gecontroleerd…",
   "Load a scan for this page first — then Check alignment can read it.": "Laad eerst een scan voor deze pagina — dan kan “Uitlijning controleren” hem lezen.",
   "No diagnostic image could be produced for this read.": "Voor deze lezing kon geen diagnosebeeld worden gemaakt.",
   "Pick the target type and its reference data first — then Check alignment can read the scan.": "Kies eerst het targettype en zijn referentiegegevens — dan kan “Uitlijning controleren” de scan lezen.",
   "Read the page shown above once, WITHOUT building anything, and show the result: the diagnostic image of what was read plus the misalignment checks' verdict. Uses a temporary folder that is deleted when you close the result — your files stay untouched.": "Leest de hierboven getoonde pagina één keer, ZONDER iets op te bouwen, en toont het resultaat: het diagnosebeeld van wat gelezen is plus het oordeel van de uitlijningscontroles. Gebruikt een tijdelijke map die wordt verwijderd wanneer je het resultaat sluit — je bestanden blijven onaangeroerd.",
   "The check couldn't judge this read — see the status log.": "De controle kon deze lezing niet beoordelen — zie het statuslogboek.",
-  "⚠ Page {n}: the patches in {groups} read like their neighbours' colours — a grid edge probably sits about one cell off there.": "⚠ Pagina {n}: de meetvelden in {groups} lezen als de kleuren van hun buren — een rasterrand ligt daar waarschijnlijk ongeveer één cel ernaast.",
-  "⚠ Page {n}: what was read doesn't line up with the chart's colours — the grid is probably misaligned on this page's scan.": "⚠ Pagina {n}: wat gelezen is, klopt niet met de kleuren van de kaart — het raster ligt op de scan van deze pagina waarschijnlijk scheef.",
-  "⚠ ScanIn couldn't read this page — the grid is probably far off the patches.": "⚠ ScanIn kon deze pagina niet lezen — het raster ligt waarschijnlijk ver naast de meetvelden.",
-  "✓ Page {n} looks well aligned — what was read agrees with the chart (agreement {r}).": "✓ Pagina {n} lijkt goed uitgelijnd — wat gelezen is, stemt overeen met de kaart (overeenstemming {r})."
+  "Checking the grid — {w}…": "Raster wordt gecontroleerd — {w}…",
+  "Target": "Target",
+  "⚠ ScanIn couldn't read this — the grid is probably far off the patches.": "⚠ ScanIn kon hier niets lezen — het raster ligt waarschijnlijk ver naast de meetvelden.",
+  "⚠ {w}: a nearby grid position matches the chart better than the current one — the grid probably sits a fraction of a patch off. Nudge it and check again.": "⚠ {w}: een nabijgelegen rasterpositie past beter bij de kaart dan de huidige — het raster ligt waarschijnlijk een fractie van een meetveld ernaast. Verschuif het iets en controleer opnieuw.",
+  "⚠ {w}: the patches in {groups} read like their neighbours' colours — a grid edge probably sits about one cell off there.": "⚠ {w}: de meetvelden in {groups} lezen als de kleuren van hun buren — een rasterrand ligt daar waarschijnlijk ongeveer één cel ernaast.",
+  "⚠ {w}: what was read doesn't line up with the chart's colours — the grid is probably misaligned.": "⚠ {w}: wat gelezen is, klopt niet met de kleuren van de kaart — het raster ligt waarschijnlijk scheef.",
+  "✓ {w} looks well aligned — what was read agrees with the chart (agreement {r}).": "✓ {w} lijkt goed uitgelijnd — wat gelezen is, stemt overeen met de kaart (overeenstemming {r}).",
+  "✓ {w} reads correctly — ScanIn locked onto the target's grid on its own (this target tolerates small placement offsets). Agreement {r}.": "✓ {w} wordt correct gelezen — ScanIn heeft zichzelf op het raster van het target vastgeklikt (dit target verdraagt kleine plaatsingsfouten). Overeenstemming {r}.",
+  "✓ {w}: the current grid position matches the chart best (agreement {r}).": "✓ {w}: de huidige rasterpositie past het best bij de kaart (overeenstemming {r})."
 }

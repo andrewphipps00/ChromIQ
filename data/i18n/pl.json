@@ -2492,14 +2492,18 @@
   "Alignment check — page {n}": "Kontrola wyrównania — strona {n}",
   "Another ArgyllCMS task is still running — wait for it to finish, then check again.": "Inne zadanie ArgyllCMS wciąż działa — poczekaj, aż się skończy, i sprawdź ponownie.",
   "Check alignment": "Sprawdź wyrównanie",
-  "Checking the grid on page {n}…": "Sprawdzanie siatki na stronie {n}…",
   "Load a scan for this page first — then Check alignment can read it.": "Najpierw wczytaj skan tej strony — wtedy „Sprawdź wyrównanie” będzie mógł go odczytać.",
   "No diagnostic image could be produced for this read.": "Nie udało się utworzyć obrazu diagnostycznego dla tego odczytu.",
   "Pick the target type and its reference data first — then Check alignment can read the scan.": "Najpierw wybierz typ targetu i jego dane referencyjne — wtedy „Sprawdź wyrównanie” będzie mógł odczytać skan.",
   "Read the page shown above once, WITHOUT building anything, and show the result: the diagnostic image of what was read plus the misalignment checks' verdict. Uses a temporary folder that is deleted when you close the result — your files stay untouched.": "Odczytuje raz stronę pokazaną powyżej, NICZEGO nie budując, i pokazuje wynik: obraz diagnostyczny odczytu plus werdykt kontroli wyrównania. Używa folderu tymczasowego, usuwanego przy zamknięciu wyniku — Twoje pliki pozostają nietknięte.",
   "The check couldn't judge this read — see the status log.": "Kontrola nie mogła ocenić tego odczytu — zobacz dziennik stanu.",
-  "⚠ Page {n}: the patches in {groups} read like their neighbours' colours — a grid edge probably sits about one cell off there.": "⚠ Strona {n}: pola w {groups} czytają się jak kolory sąsiadów — krawędź siatki leży tam prawdopodobnie o około jedną komórkę obok.",
-  "⚠ Page {n}: what was read doesn't line up with the chart's colours — the grid is probably misaligned on this page's scan.": "⚠ Strona {n}: odczyt nie zgadza się z kolorami wzorca — siatka na skanie tej strony jest prawdopodobnie źle wyrównana.",
-  "⚠ ScanIn couldn't read this page — the grid is probably far off the patches.": "⚠ ScanIn nie mógł odczytać tej strony — siatka leży prawdopodobnie daleko od pól.",
-  "✓ Page {n} looks well aligned — what was read agrees with the chart (agreement {r}).": "✓ Strona {n} wygląda na dobrze wyrównaną — odczyt zgadza się ze wzorcem (zgodność {r})."
+  "Checking the grid — {w}…": "Sprawdzanie siatki — {w}…",
+  "Target": "Target",
+  "⚠ ScanIn couldn't read this — the grid is probably far off the patches.": "⚠ ScanIn nie mógł tu nic odczytać — siatka leży prawdopodobnie daleko od pól.",
+  "⚠ {w}: a nearby grid position matches the chart better than the current one — the grid probably sits a fraction of a patch off. Nudge it and check again.": "⚠ {w}: pobliska pozycja siatki pasuje do wzorca lepiej niż obecna — siatka jest prawdopodobnie przesunięta o ułamek pola. Przesuń ją nieco i sprawdź ponownie.",
+  "⚠ {w}: the patches in {groups} read like their neighbours' colours — a grid edge probably sits about one cell off there.": "⚠ {w}: pola w {groups} czytają się jak kolory sąsiadów — krawędź siatki leży tam prawdopodobnie o około jedną komórkę obok.",
+  "⚠ {w}: what was read doesn't line up with the chart's colours — the grid is probably misaligned.": "⚠ {w}: odczyt nie zgadza się z kolorami wzorca — siatka jest prawdopodobnie źle wyrównana.",
+  "✓ {w} looks well aligned — what was read agrees with the chart (agreement {r}).": "✓ {w} wygląda na dobrze wyrównany — odczyt zgadza się ze wzorcem (zgodność {r}).",
+  "✓ {w} reads correctly — ScanIn locked onto the target's grid on its own (this target tolerates small placement offsets). Agreement {r}.": "✓ {w} odczytuje się poprawnie — ScanIn sam zatrzasnął się na siatce targetu (ten target toleruje małe przesunięcia). Zgodność {r}.",
+  "✓ {w}: the current grid position matches the chart best (agreement {r}).": "✓ {w}: obecna pozycja siatki pasuje do wzorca najlepiej (zgodność {r})."
 }

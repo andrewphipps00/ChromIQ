@@ -2492,14 +2492,18 @@
   "Alignment check — page {n}": "Verificação de alinhamento — página {n}",
   "Another ArgyllCMS task is still running — wait for it to finish, then check again.": "Outra tarefa do ArgyllCMS ainda está em execução — aguarde que termine e verifique de novo.",
   "Check alignment": "Verificar alinhamento",
-  "Checking the grid on page {n}…": "A verificar a grelha na página {n}…",
   "Load a scan for this page first — then Check alignment can read it.": "Carregue primeiro uma digitalização para esta página — depois «Verificar alinhamento» poderá lê-la.",
   "No diagnostic image could be produced for this read.": "Não foi possível produzir uma imagem de diagnóstico para esta leitura.",
   "Pick the target type and its reference data first — then Check alignment can read the scan.": "Escolha primeiro o tipo de alvo e os seus dados de referência — depois «Verificar alinhamento» poderá ler a digitalização.",
   "Read the page shown above once, WITHOUT building anything, and show the result: the diagnostic image of what was read plus the misalignment checks' verdict. Uses a temporary folder that is deleted when you close the result — your files stay untouched.": "Lê uma vez a página mostrada acima, SEM criar nada, e mostra o resultado: a imagem de diagnóstico do que foi lido mais o veredicto das verificações de alinhamento. Usa uma pasta temporária apagada ao fechar o resultado — os seus ficheiros ficam intactos.",
   "The check couldn't judge this read — see the status log.": "A verificação não conseguiu avaliar esta leitura — veja o registo de estado.",
-  "⚠ Page {n}: the patches in {groups} read like their neighbours' colours — a grid edge probably sits about one cell off there.": "⚠ Página {n}: as amostras em {groups} leem-se como as cores das vizinhas — uma borda da grelha está provavelmente desviada cerca de uma célula aí.",
-  "⚠ Page {n}: what was read doesn't line up with the chart's colours — the grid is probably misaligned on this page's scan.": "⚠ Página {n}: o que foi lido não condiz com as cores da carta — a grelha está provavelmente desalinhada na digitalização desta página.",
-  "⚠ ScanIn couldn't read this page — the grid is probably far off the patches.": "⚠ O ScanIn não conseguiu ler esta página — a grelha está provavelmente longe das amostras.",
-  "✓ Page {n} looks well aligned — what was read agrees with the chart (agreement {r}).": "✓ A página {n} parece bem alinhada — o que foi lido concorda com a carta (concordância {r})."
+  "Checking the grid — {w}…": "A verificar a grelha — {w}…",
+  "Target": "Alvo",
+  "⚠ ScanIn couldn't read this — the grid is probably far off the patches.": "⚠ O ScanIn não conseguiu ler isto — a grelha está provavelmente longe das amostras.",
+  "⚠ {w}: a nearby grid position matches the chart better than the current one — the grid probably sits a fraction of a patch off. Nudge it and check again.": "⚠ {w}: uma posição de grelha próxima corresponde melhor à carta do que a atual — a grelha está provavelmente desviada uma fração de amostra. Ajuste-a um pouco e verifique de novo.",
+  "⚠ {w}: the patches in {groups} read like their neighbours' colours — a grid edge probably sits about one cell off there.": "⚠ {w}: as amostras em {groups} leem-se como as cores das vizinhas — uma borda da grelha está provavelmente desviada cerca de uma célula aí.",
+  "⚠ {w}: what was read doesn't line up with the chart's colours — the grid is probably misaligned.": "⚠ {w}: o que foi lido não condiz com as cores da carta — a grelha está provavelmente desalinhada.",
+  "✓ {w} looks well aligned — what was read agrees with the chart (agreement {r}).": "✓ {w} parece bem alinhado — o que foi lido concorda com a carta (concordância {r}).",
+  "✓ {w} reads correctly — ScanIn locked onto the target's grid on its own (this target tolerates small placement offsets). Agreement {r}.": "✓ {w} é lido corretamente — o ScanIn fixou-se sozinho na grelha do alvo (este alvo tolera pequenos desvios). Concordância {r}.",
+  "✓ {w}: the current grid position matches the chart best (agreement {r}).": "✓ {w}: a posição atual da grelha é a que melhor corresponde à carta (concordância {r})."
 }

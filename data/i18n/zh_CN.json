@@ -2492,14 +2492,18 @@
   "Alignment check — page {n}": "对齐检查 — 第 {n} 页",
   "Another ArgyllCMS task is still running — wait for it to finish, then check again.": "另一个 ArgyllCMS 任务仍在运行——请等它完成后再检查。",
   "Check alignment": "检查对齐",
-  "Checking the grid on page {n}…": "正在检查第 {n} 页的网格…",
   "Load a scan for this page first — then Check alignment can read it.": "请先为此页载入扫描件——然后“检查对齐”才能读取它。",
   "No diagnostic image could be produced for this read.": "此次读取无法生成诊断图像。",
   "Pick the target type and its reference data first — then Check alignment can read the scan.": "请先选择标板类型及其参考数据——然后“检查对齐”才能读取扫描件。",
   "Read the page shown above once, WITHOUT building anything, and show the result: the diagnostic image of what was read plus the misalignment checks' verdict. Uses a temporary folder that is deleted when you close the result — your files stay untouched.": "只读取上方显示的页面一次，什么都不生成，并展示结果：读取内容的诊断图像加上错位检查的结论。使用临时文件夹，关闭结果时即删除——你的文件不受影响。",
   "The check couldn't judge this read — see the status log.": "检查无法判断此次读取——请查看状态日志。",
-  "⚠ Page {n}: the patches in {groups} read like their neighbours' colours — a grid edge probably sits about one cell off there.": "⚠ 第 {n} 页：{groups} 中的色块读出的是邻居的颜色——那里的网格边缘可能偏了约一格。",
-  "⚠ Page {n}: what was read doesn't line up with the chart's colours — the grid is probably misaligned on this page's scan.": "⚠ 第 {n} 页：读取内容与色卡的颜色对不上——此页扫描件上的网格可能错位了。",
-  "⚠ ScanIn couldn't read this page — the grid is probably far off the patches.": "⚠ ScanIn 无法读取此页——网格可能远离色块。",
-  "✓ Page {n} looks well aligned — what was read agrees with the chart (agreement {r}).": "✓ 第 {n} 页看起来对齐良好——读取内容与色卡一致（一致度 {r}）。"
+  "Checking the grid — {w}…": "正在检查网格 — {w}…",
+  "Target": "标板",
+  "⚠ ScanIn couldn't read this — the grid is probably far off the patches.": "⚠ ScanIn 无法读取——网格可能远离色块。",
+  "⚠ {w}: a nearby grid position matches the chart better than the current one — the grid probably sits a fraction of a patch off. Nudge it and check again.": "⚠ {w}：附近的某个网格位置比当前位置更符合色卡——网格可能偏了几分之一个色块。请稍微挪动后再检查。",
+  "⚠ {w}: the patches in {groups} read like their neighbours' colours — a grid edge probably sits about one cell off there.": "⚠ {w}：{groups} 中的色块读出的是邻居的颜色——那里的网格边缘可能偏了约一格。",
+  "⚠ {w}: what was read doesn't line up with the chart's colours — the grid is probably misaligned.": "⚠ {w}：读取内容与色卡的颜色对不上——网格可能错位了。",
+  "✓ {w} looks well aligned — what was read agrees with the chart (agreement {r}).": "✓ {w} 看起来对齐良好——读取内容与色卡一致（一致度 {r}）。",
+  "✓ {w} reads correctly — ScanIn locked onto the target's grid on its own (this target tolerates small placement offsets). Agreement {r}.": "✓ {w} 读取正确——ScanIn 已自行吸附到标板的网格上（此标板容忍轻微的放置偏差）。一致度 {r}。",
+  "✓ {w}: the current grid position matches the chart best (agreement {r}).": "✓ {w}：当前网格位置与色卡最匹配（一致度 {r}）。"
 }

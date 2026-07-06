@@ -2395,13 +2395,46 @@ class ScannerProfileDialog(_ToolDialogBase):
             shutil.rmtree(tmp, ignore_errors=True)
             self._log.appendPlainText(f"[ERROR] {exc}")
             return
-        self._log.appendPlainText(
-            tr("Checking the grid on page {n}…").format(n=pg + 1))
-        self._set_busy_note(tr("Checking the grid on page {n}…").format(n=pg + 1))
+        note = tr("Checking the grid — {w}…").format(w=self._page_label(pg))
+        self._log.appendPlainText(note)
+        self._set_busy_note(note)
 
-        def _done(code: int) -> None:
+        # Probe runs (Knut's step-probe idea, #108): re-read at ±0.4-pitch
+        # offsets. Identical reads = scanin registered itself onto the grid
+        # (placement-tolerant); differing reads let us ask whether a NEARBY
+        # position matches the chart better than the user's — the only
+        # honest way to catch sub-patch offsets on real scans of structured
+        # targets, whose smooth colour ramps hide small blends from the
+        # whole-page agreement.
+        probe_runs: list[ScaninParams] = []
+        base_corners = params.corners
+        if base_corners:
+            for i, (dx, dy) in enumerate(self._probe_offsets(cht, base_corners)):
+                shifted = [(x + dx, y + dy) for x, y in base_corners]
+                if printer:
+                    probe_runs.append(ScaninParams(
+                        scan, cht, corners=shifted,
+                        perspective=self._perspective.isChecked(),
+                        scan_profile=self._printer_scan_profile,
+                        pbase=tmp / f"probe{i}"))
+                    import shutil as _sh
+                    _sh.copy2(pbase.with_suffix(".ti2"),
+                              (tmp / f"probe{i}").with_suffix(".ti2"))
+                else:
+                    probe_runs.append(ScaninParams(
+                        scan, cht, cie, corners=shifted,
+                        perspective=self._perspective.isChecked(),
+                        out_name=f"probe{i}-scanner.ti3"))
+
+        runs = [params] + probe_runs
+        results: list[int] = []
+
+        def _finish_check() -> None:
             try:
-                verdicts = self._alignment_verdicts(params, printer, pg, code)
+                verdicts = self._alignment_verdicts(
+                    params, printer, pg, results[0],
+                    probes=[p_ for p_, c in zip(probe_runs, results[1:])
+                            if c == 0])
             except Exception:  # noqa: BLE001 — verdicts must never crash the UI
                 log.warning("alignment check failed", exc_info=True)
                 verdicts = [tr("The check couldn't judge this read — see the "
@@ -2411,7 +2444,86 @@ class ScannerProfileDialog(_ToolDialogBase):
                 self._log.appendPlainText(v)
             self._show_alignment_result(pg, verdicts, diag, tmp)
 
-        self._scanin.run(params, on_line=self._log_line, on_finish=_done)
+        def _run_next(code: int) -> None:
+            results.append(code)
+            if len(results) >= len(runs) or (len(results) == 1 and code != 0):
+                _finish_check()
+                return
+            self._set_busy_note(note, fraction=len(results) / len(runs))
+            self._scanin.run(runs[len(results)], on_line=lambda _l: None,
+                             on_finish=_run_next)
+
+        self._scanin.run(params, on_line=self._log_line,
+                         on_finish=_run_next)
+
+    def _page_label(self, pg: int) -> str:
+        """"Page {n}" only when there ARE multiple pages — a single-page
+        target reads better as just "Target" (Knut)."""
+        if len(self._pages) > 1:
+            return tr("Page {n}").format(n=pg + 1)
+        return tr("Target")
+
+    @staticmethod
+    def _probe_offsets(cht: Path, corners) -> list[tuple[float, float]]:
+        """Four ±0.4-pitch offsets (image px) for the probe runs — the
+        practical form of Knut's step-probe idea. Empty when the pitch can't
+        be derived or no corners were placed."""
+        if not corners or len(corners) != 4:
+            return []
+        from workflow.cht_parser import ChtParseError, parse_cht
+        try:
+            geom = parse_cht(cht.read_text(errors="ignore"))
+        except (OSError, ChtParseError):
+            return []
+        if not geom.patches:
+            return []
+        xs = sorted({round(b.x1, 3) for b in geom.patches})
+        ys = sorted({round(b.y1, 3) for b in geom.patches})
+        def _pitch(vals, fallback):
+            gaps = [b - a for a, b in zip(vals, vals[1:]) if b - a > 1e-3]
+            return min(gaps) if gaps else fallback
+        bw = max(b.x2 for b in geom.patches) - min(b.x1 for b in geom.patches)
+        bh = max(b.y2 for b in geom.patches) - min(b.y1 for b in geom.patches)
+        if bw <= 0 or bh <= 0:
+            return []
+        px = _pitch(xs, bw); py = _pitch(ys, bh)
+        import math
+        qw = math.hypot(corners[1][0] - corners[0][0],
+                        corners[1][1] - corners[0][1])
+        qh = math.hypot(corners[3][0] - corners[0][0],
+                        corners[3][1] - corners[0][1])
+        dx = 0.4 * px / bw * qw
+        dy = 0.4 * py / bh * qh
+        return [(dx, 0.0), (-dx, 0.0), (0.0, dy), (0.0, -dy)]
+
+    @staticmethod
+    def _reads_match(a: Path, b: Path, printer: bool) -> bool:
+        """True when two dry-run reads are effectively the same measurement —
+        scanin's own registration snapped both onto the target's grid, so the
+        corner placement didn't matter (crisp targets tolerate up to about
+        half a patch of offset that way). Compares the READ side: the scan's
+        RGB in scanner mode (that mode's XYZ column is the REFERENCE, which
+        is identical across runs by definition), the measured Y in printer
+        mode."""
+        from workflow.ti3_analysis import parse_ti3
+        try:
+            ta, tb = parse_ti3(a), parse_ti3(b)
+        except Exception:  # noqa: BLE001
+            return False
+        if printer:
+            va = {_plain_id(s): y for s, (_x, y, _z) in zip(ta.sample_ids, ta.xyz)}
+            vb = {_plain_id(s): y for s, (_x, y, _z) in zip(tb.sample_ids, tb.xyz)}
+        else:
+            va = {_plain_id(s): 0.2126 * r + 0.7152 * g + 0.0722 * b_
+                  for s, (r, g, b_) in zip(ta.sample_ids, ta.rgb)}
+            vb = {_plain_id(s): 0.2126 * r + 0.7152 * g + 0.0722 * b_
+                  for s, (r, g, b_) in zip(tb.sample_ids, tb.rgb)}
+        ids = set(va) & set(vb)
+        if len(ids) < 8:
+            return False
+        close = sum(1 for i in ids
+                    if abs(va[i] - vb[i]) <= 0.005 * max(1.0, abs(va[i])))
+        return close / len(ids) > 0.9
 
     def _runner_busy(self) -> bool:
         runner = getattr(self._scanin, "_runner", None)
@@ -2423,42 +2535,82 @@ class ScannerProfileDialog(_ToolDialogBase):
         return False
 
     def _alignment_verdicts(self, params, printer: bool, pg: int,
-                            code: int) -> list[str]:
-        """The same layered checks a build runs, phrased as a verdict."""
+                            code: int, probes: list | None = None) -> list[str]:
+        """The build's layered checks plus the probe comparison, phrased as
+        an honest verdict — praise only when the probes back it up (Knut)."""
         out: list[str] = []
+        where = self._page_label(pg)
         ti3 = params.out_ti3
         if code != 0 or not ti3.exists():
             fail = self._scanin.primary_failure()
             return [("⚠ " + fail[1]) if fail else
-                    tr("⚠ ScanIn couldn't read this page — the grid is "
-                       "probably far off the patches.")]
+                    tr("⚠ ScanIn couldn't read this — the grid is probably "
+                       "far off the patches.")]
         floor = float(self._settings.get("scanner_align_corr", 0.60))
+
+        def _agreement(t: Path):
+            if printer:
+                return page_reference_agreement(
+                    t, params.pbase.with_suffix(".ti2"),
+                    ids=page_ids_from_cht(params.cht))
+            return scan_reference_correlation(t)
+
+        rho = _agreement(ti3)
         if printer:
-            rho = page_reference_agreement(
-                ti3, params.pbase.with_suffix(".ti2"),
-                ids=page_ids_from_cht(params.cht))
             read, exp = self._read_expected_dicts(
                 ti3, params.pbase.with_suffix(".ti2"),
                 ids=page_ids_from_cht(params.cht))
         else:
-            rho = scan_reference_correlation(ti3)
             read, exp = self._read_expected_dicts(ti3)
         if rho is not None and rho < floor:
             out.append(tr(
-                "⚠ Page {n}: what was read doesn't line up with the chart's "
-                "colours — the grid is probably misaligned on this page's "
-                "scan.").format(n=pg + 1))
+                "⚠ {w}: what was read doesn't line up with the chart's "
+                "colours — the grid is probably misaligned.").format(w=where))
         groups = locally_misaligned_groups(read, exp)
         if groups:
             out.append(tr(
-                "⚠ Page {n}: the patches in {groups} read like their "
-                "neighbours' colours — a grid edge probably sits about one "
-                "cell off there.").format(n=pg + 1, groups=", ".join(groups)))
+                "⚠ {w}: the patches in {groups} read like their neighbours' "
+                "colours — a grid edge probably sits about one cell off "
+                "there.").format(w=where, groups=", ".join(groups)))
+
+        # Probe comparison (Knut's step-probe idea): identical probe reads
+        # mean scanin registered itself onto the grid — placement-tolerant;
+        # differing reads let a NEARBY position compete with the user's.
+        snapped = None
+        if not out and probes:
+            done = [p_ for p_ in probes if p_.out_ti3.exists()]
+            if done:
+                matches = [self._reads_match(ti3, p_.out_ti3, printer)
+                           for p_ in done]
+                if all(matches):
+                    snapped = True
+                else:
+                    snapped = False
+                    best = max((r for r in (_agreement(p_.out_ti3)
+                                            for p_ in done) if r is not None),
+                               default=None)
+                    if (best is not None and rho is not None
+                            and best > rho + 0.02):
+                        out.append(tr(
+                            "⚠ {w}: a nearby grid position matches the chart "
+                            "better than the current one — the grid probably "
+                            "sits a fraction of a patch off. Nudge it and "
+                            "check again.").format(w=where))
         if not out:
-            out.append(tr(
-                "✓ Page {n} looks well aligned — what was read agrees with "
-                "the chart (agreement {r}).").format(
-                    n=pg + 1, r=f"{rho:.2f}" if rho is not None else "—"))
+            r_txt = f"{rho:.2f}" if rho is not None else "—"
+            if snapped:
+                out.append(tr(
+                    "✓ {w} reads correctly — ScanIn locked onto the target's "
+                    "grid on its own (this target tolerates small placement "
+                    "offsets). Agreement {r}.").format(w=where, r=r_txt))
+            elif snapped is False:
+                out.append(tr(
+                    "✓ {w}: the current grid position matches the chart best "
+                    "(agreement {r}).").format(w=where, r=r_txt))
+            else:
+                out.append(tr(
+                    "✓ {w} looks well aligned — what was read agrees with "
+                    "the chart (agreement {r}).").format(w=where, r=r_txt))
         return out
 
     def _show_alignment_result(self, pg: int, verdicts: list[str],

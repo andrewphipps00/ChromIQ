@@ -1,5 +1,29 @@
 # Changelog
 
+## v3.13.0-beta.134
+
+### 🐛 Fixes
+- **Check alignment now catches sub-patch offsets — and never praises a
+  placement it hasn't verified** (Knut's beta.132 test). Two real defects
+  behind his frozen "agreement 0.93": the demo targets' reference file
+  used a pseudo-Y that capped even a PERFECT read at 0.93 (now true
+  luminance — aligned demo reads score 1.00, so stringent floors like
+  0.95 work); and scanin silently self-registers on crisp targets, so
+  shifted corners up to half a patch produced literally identical (and
+  genuinely correct) reads — which the old single-run check then praised
+  while the user stared at their shifted frame.
+- The check now runs Knut's step-probe idea: after the main read it
+  re-reads at ±40 % of a patch in all four directions. Identical probe
+  reads → "ScanIn locked onto the target's grid on its own" (the honest
+  version of what happened). Differing reads → the positions compete,
+  and if a neighbour explains the chart better you get "a nearby grid
+  position matches the chart better — nudge it and check again" — this
+  catches fractional offsets on real scans that whole-page agreement is
+  structurally blind to on smooth-ramp targets.
+- Single-page targets say "Target:" instead of "Page 1", and the
+  "…on this page's scan" tail is gone from single-page messages (Knut).
+- macOS release notes now state the correct minimum (13+, was 12+).
+
 ## v3.13.0-beta.133
 
 ### 🌍 Translations

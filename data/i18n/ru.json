@@ -2492,14 +2492,18 @@
   "Alignment check — page {n}": "Проверка выравнивания — страница {n}",
   "Another ArgyllCMS task is still running — wait for it to finish, then check again.": "Другая задача ArgyllCMS ещё выполняется — дождитесь её завершения и проверьте снова.",
   "Check alignment": "Проверить выравнивание",
-  "Checking the grid on page {n}…": "Проверка сетки на странице {n}…",
   "Load a scan for this page first — then Check alignment can read it.": "Сначала загрузите скан этой страницы — тогда «Проверить выравнивание» сможет его прочитать.",
   "No diagnostic image could be produced for this read.": "Для этого чтения не удалось создать диагностическое изображение.",
   "Pick the target type and its reference data first — then Check alignment can read the scan.": "Сначала выберите тип мишени и её эталонные данные — тогда «Проверить выравнивание» сможет прочитать скан.",
   "Read the page shown above once, WITHOUT building anything, and show the result: the diagnostic image of what was read plus the misalignment checks' verdict. Uses a temporary folder that is deleted when you close the result — your files stay untouched.": "Один раз читает показанную выше страницу, НИЧЕГО не собирая, и показывает результат: диагностическое изображение прочитанного плюс вердикт проверок выравнивания. Использует временную папку, удаляемую при закрытии результата — ваши файлы остаются нетронутыми.",
   "The check couldn't judge this read — see the status log.": "Проверка не смогла оценить это чтение — смотрите журнал состояния.",
-  "⚠ Page {n}: the patches in {groups} read like their neighbours' colours — a grid edge probably sits about one cell off there.": "⚠ Страница {n}: патчи в {groups} читаются как цвета соседей — край сетки там, вероятно, смещён примерно на одну ячейку.",
-  "⚠ Page {n}: what was read doesn't line up with the chart's colours — the grid is probably misaligned on this page's scan.": "⚠ Страница {n}: прочитанное не согласуется с цветами мишени — сетка на скане этой страницы, вероятно, смещена.",
-  "⚠ ScanIn couldn't read this page — the grid is probably far off the patches.": "⚠ ScanIn не смог прочитать эту страницу — сетка, вероятно, далеко от патчей.",
-  "✓ Page {n} looks well aligned — what was read agrees with the chart (agreement {r}).": "✓ Страница {n} выглядит хорошо выровненной — прочитанное согласуется с мишенью (согласие {r})."
+  "Checking the grid — {w}…": "Проверка сетки — {w}…",
+  "Target": "Мишень",
+  "⚠ ScanIn couldn't read this — the grid is probably far off the patches.": "⚠ ScanIn не смог здесь ничего прочитать — сетка, вероятно, далеко от патчей.",
+  "⚠ {w}: a nearby grid position matches the chart better than the current one — the grid probably sits a fraction of a patch off. Nudge it and check again.": "⚠ {w}: соседняя позиция сетки согласуется с мишенью лучше текущей — сетка, вероятно, смещена на долю патча. Слегка подвиньте её и проверьте снова.",
+  "⚠ {w}: the patches in {groups} read like their neighbours' colours — a grid edge probably sits about one cell off there.": "⚠ {w}: патчи в {groups} читаются как цвета соседей — край сетки там, вероятно, смещён примерно на одну ячейку.",
+  "⚠ {w}: what was read doesn't line up with the chart's colours — the grid is probably misaligned.": "⚠ {w}: прочитанное не согласуется с цветами мишени — сетка, вероятно, смещена.",
+  "✓ {w} looks well aligned — what was read agrees with the chart (agreement {r}).": "✓ {w}: выглядит хорошо выровненной — прочитанное согласуется с мишенью (согласие {r}).",
+  "✓ {w} reads correctly — ScanIn locked onto the target's grid on its own (this target tolerates small placement offsets). Agreement {r}.": "✓ {w}: читается правильно — ScanIn сам зафиксировался на сетке мишени (эта мишень прощает небольшие смещения). Согласие {r}.",
+  "✓ {w}: the current grid position matches the chart best (agreement {r}).": "✓ {w}: текущая позиция сетки согласуется с мишенью лучше всего (согласие {r})."
 }

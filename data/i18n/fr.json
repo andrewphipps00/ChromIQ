@@ -2492,14 +2492,18 @@
   "Alignment check — page {n}": "Contrôle d'alignement — page {n}",
   "Another ArgyllCMS task is still running — wait for it to finish, then check again.": "Une autre tâche ArgyllCMS est encore en cours — attendez qu'elle se termine, puis contrôlez à nouveau.",
   "Check alignment": "Contrôler l'alignement",
-  "Checking the grid on page {n}…": "Contrôle de la grille sur la page {n}…",
   "Load a scan for this page first — then Check alignment can read it.": "Chargez d'abord un scan pour cette page — « Contrôler l'alignement » pourra alors le lire.",
   "No diagnostic image could be produced for this read.": "Aucune image de diagnostic n'a pu être produite pour cette lecture.",
   "Pick the target type and its reference data first — then Check alignment can read the scan.": "Choisissez d'abord le type de cible et ses données de référence — « Contrôler l'alignement » pourra alors lire le scan.",
   "Read the page shown above once, WITHOUT building anything, and show the result: the diagnostic image of what was read plus the misalignment checks' verdict. Uses a temporary folder that is deleted when you close the result — your files stay untouched.": "Lit une fois la page affichée ci-dessus, SANS rien créer, et montre le résultat : l'image de diagnostic de ce qui a été lu plus le verdict des contrôles d'alignement. Utilise un dossier temporaire supprimé à la fermeture du résultat — vos fichiers restent intacts.",
   "The check couldn't judge this read — see the status log.": "Le contrôle n'a pas pu évaluer cette lecture — voir le journal d'état.",
-  "⚠ Page {n}: the patches in {groups} read like their neighbours' colours — a grid edge probably sits about one cell off there.": "⚠ Page {n} : les plages de {groups} se lisent comme les couleurs de leurs voisines — un bord de la grille est probablement décalé d'environ une cellule à cet endroit.",
-  "⚠ Page {n}: what was read doesn't line up with the chart's colours — the grid is probably misaligned on this page's scan.": "⚠ Page {n} : ce qui a été lu ne correspond pas aux couleurs de la mire — la grille est probablement désalignée sur le scan de cette page.",
-  "⚠ ScanIn couldn't read this page — the grid is probably far off the patches.": "⚠ ScanIn n'a pas pu lire cette page — la grille est probablement loin des plages.",
-  "✓ Page {n} looks well aligned — what was read agrees with the chart (agreement {r}).": "✓ La page {n} semble bien alignée — ce qui a été lu concorde avec la mire (concordance {r})."
+  "Checking the grid — {w}…": "Contrôle de la grille — {w}…",
+  "Target": "Cible",
+  "⚠ ScanIn couldn't read this — the grid is probably far off the patches.": "⚠ ScanIn n'a rien pu lire ici — la grille est probablement loin des plages.",
+  "⚠ {w}: a nearby grid position matches the chart better than the current one — the grid probably sits a fraction of a patch off. Nudge it and check again.": "⚠ {w} : une position de grille voisine correspond mieux à la mire que l'actuelle — la grille est probablement décalée d'une fraction de plage. Déplacez-la légèrement et contrôlez à nouveau.",
+  "⚠ {w}: the patches in {groups} read like their neighbours' colours — a grid edge probably sits about one cell off there.": "⚠ {w} : les plages de {groups} se lisent comme les couleurs de leurs voisines — un bord de la grille est probablement décalé d'environ une cellule à cet endroit.",
+  "⚠ {w}: what was read doesn't line up with the chart's colours — the grid is probably misaligned.": "⚠ {w} : ce qui a été lu ne correspond pas aux couleurs de la mire — la grille est probablement désalignée.",
+  "✓ {w} looks well aligned — what was read agrees with the chart (agreement {r}).": "✓ {w} semble bien aligné — ce qui a été lu concorde avec la mire (concordance {r}).",
+  "✓ {w} reads correctly — ScanIn locked onto the target's grid on its own (this target tolerates small placement offsets). Agreement {r}.": "✓ {w} est lu correctement — ScanIn s'est calé tout seul sur la grille de la cible (cette cible tolère de petits décalages). Concordance {r}.",
+  "✓ {w}: the current grid position matches the chart best (agreement {r}).": "✓ {w} : la position actuelle de la grille correspond le mieux à la mire (concordance {r})."
 }

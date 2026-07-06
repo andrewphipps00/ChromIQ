@@ -171,7 +171,12 @@ def make_test_scan(cht_path, out_dir):
             x0 = int((b.x1 - minx) * scale + margin); y0 = int((b.y1 - miny) * scale + margin)
             x1 = int((b.x2 - minx) * scale + margin); y1 = int((b.y2 - miny) * scale + margin)
         draw.rectangle([x0, y0, x1 - 1, y1 - 1], fill=(r, g, bl))
-        cie.append(f"{b.name} {r / 2.55 * 0.95:.3f} {g / 2.55:.3f} {bl / 2.55 * 1.09:.3f}")
+        # Reference Y = the rendered colour's LUMINANCE (not the green channel):
+        # the alignment check rank-compares read luminance against reference Y,
+        # and the old pseudo-Y capped even a PERFECT demo read at ~0.93
+        # agreement — Knut's stringent-floor test flagged flawless placements.
+        lum = 0.2126 * r + 0.7152 * g + 0.0722 * bl
+        cie.append(f"{b.name} {r / 2.55 * 0.95:.3f} {lum / 2.55:.3f} {bl / 2.55 * 1.09:.3f}")
     cie += ['END_DATA', '']
     tif = out_dir / f"{cht_path.stem}-test.tif"; ref = out_dir / f"{cht_path.stem}-test.cie"
     img.save(tif); ref.write_text("\n".join(cie))

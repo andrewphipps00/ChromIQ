@@ -2492,14 +2492,18 @@
   "Alignment check — page {n}": "Innrettingskontroll — side {n}",
   "Another ArgyllCMS task is still running — wait for it to finish, then check again.": "En annen ArgyllCMS-oppgave kjører fortsatt — vent til den er ferdig, og kontroller så igjen.",
   "Check alignment": "Kontroller innretting",
-  "Checking the grid on page {n}…": "Kontrollerer rutenettet på side {n}…",
   "Load a scan for this page first — then Check alignment can read it.": "Last først en skanning for denne siden — da kan «Kontroller innretting» lese den.",
   "No diagnostic image could be produced for this read.": "Kunne ikke lage diagnosebilde for denne avlesningen.",
   "Pick the target type and its reference data first — then Check alignment can read the scan.": "Velg først måltypen og referansedataene — da kan «Kontroller innretting» lese skanningen.",
   "Read the page shown above once, WITHOUT building anything, and show the result: the diagnostic image of what was read plus the misalignment checks' verdict. Uses a temporary folder that is deleted when you close the result — your files stay untouched.": "Leser siden vist over én gang, UTEN å bygge noe, og viser resultatet: diagnosebildet av det som ble lest pluss dommen fra innrettingskontrollene. Bruker en midlertidig mappe som slettes når du lukker resultatet — filene dine forblir urørte.",
   "The check couldn't judge this read — see the status log.": "Kontrollen kunne ikke bedømme denne avlesningen — se statusloggen.",
-  "⚠ Page {n}: the patches in {groups} read like their neighbours' colours — a grid edge probably sits about one cell off there.": "⚠ Side {n}: feltene i {groups} leses som naboenes farger — en rutenettkant ligger trolig omtrent én celle feil der.",
-  "⚠ Page {n}: what was read doesn't line up with the chart's colours — the grid is probably misaligned on this page's scan.": "⚠ Side {n}: det som ble lest stemmer ikke med kartets farger — rutenettet ligger trolig feil på skanningen av denne siden.",
-  "⚠ ScanIn couldn't read this page — the grid is probably far off the patches.": "⚠ ScanIn kunne ikke lese denne siden — rutenettet ligger trolig langt unna feltene.",
-  "✓ Page {n} looks well aligned — what was read agrees with the chart (agreement {r}).": "✓ Side {n} ser godt innrettet ut — det som ble lest samsvarer med kartet (samsvar {r})."
+  "Checking the grid — {w}…": "Kontrollerer rutenettet — {w}…",
+  "Target": "Mål",
+  "⚠ ScanIn couldn't read this — the grid is probably far off the patches.": "⚠ ScanIn kunne ikke lese dette — rutenettet ligger trolig langt unna feltene.",
+  "⚠ {w}: a nearby grid position matches the chart better than the current one — the grid probably sits a fraction of a patch off. Nudge it and check again.": "⚠ {w}: en rutenettposisjon like ved passer kartet bedre enn den nåværende — rutenettet ligger trolig en brøkdel av et felt feil. Flytt det litt og kontroller igjen.",
+  "⚠ {w}: the patches in {groups} read like their neighbours' colours — a grid edge probably sits about one cell off there.": "⚠ {w}: feltene i {groups} leses som naboenes farger — en rutenettkant ligger trolig omtrent én celle feil der.",
+  "⚠ {w}: what was read doesn't line up with the chart's colours — the grid is probably misaligned.": "⚠ {w}: det som ble lest stemmer ikke med kartets farger — rutenettet ligger trolig feil.",
+  "✓ {w} looks well aligned — what was read agrees with the chart (agreement {r}).": "✓ {w} ser godt innrettet ut — det som ble lest samsvarer med kartet (samsvar {r}).",
+  "✓ {w} reads correctly — ScanIn locked onto the target's grid on its own (this target tolerates small placement offsets). Agreement {r}.": "✓ {w} leses riktig — ScanIn låste seg selv på målets rutenett (dette målet tåler små plasseringsavvik). Samsvar {r}.",
+  "✓ {w}: the current grid position matches the chart best (agreement {r}).": "✓ {w}: den nåværende rutenettposisjonen passer kartet best (samsvar {r})."
 }

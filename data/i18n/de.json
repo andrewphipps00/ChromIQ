@@ -2492,14 +2492,18 @@
   "Alignment check — page {n}": "Ausrichtungsprüfung — Seite {n}",
   "Another ArgyllCMS task is still running — wait for it to finish, then check again.": "Eine andere ArgyllCMS-Aufgabe läuft noch — warte, bis sie fertig ist, und prüfe dann erneut.",
   "Check alignment": "Ausrichtung prüfen",
-  "Checking the grid on page {n}…": "Prüfe das Raster auf Seite {n}…",
   "Load a scan for this page first — then Check alignment can read it.": "Lade zuerst einen Scan für diese Seite — dann kann „Ausrichtung prüfen“ ihn lesen.",
   "No diagnostic image could be produced for this read.": "Für diese Lesung konnte kein Diagnosebild erzeugt werden.",
   "Pick the target type and its reference data first — then Check alignment can read the scan.": "Wähle zuerst den Target-Typ und seine Referenzdaten — dann kann „Ausrichtung prüfen“ den Scan lesen.",
   "Read the page shown above once, WITHOUT building anything, and show the result: the diagnostic image of what was read plus the misalignment checks' verdict. Uses a temporary folder that is deleted when you close the result — your files stay untouched.": "Liest die oben angezeigte Seite einmal, OHNE etwas zu erstellen, und zeigt das Ergebnis: das Diagnosebild des Gelesenen plus das Urteil der Ausrichtungsprüfungen. Nutzt einen temporären Ordner, der beim Schließen des Ergebnisses gelöscht wird — deine Dateien bleiben unberührt.",
   "The check couldn't judge this read — see the status log.": "Die Prüfung konnte diese Lesung nicht beurteilen — siehe Statusprotokoll.",
-  "⚠ Page {n}: the patches in {groups} read like their neighbours' colours — a grid edge probably sits about one cell off there.": "⚠ Seite {n}: Die Messfelder in {groups} lesen sich wie die Farben ihrer Nachbarn — eine Rasterkante sitzt dort vermutlich etwa eine Zelle daneben.",
-  "⚠ Page {n}: what was read doesn't line up with the chart's colours — the grid is probably misaligned on this page's scan.": "⚠ Seite {n}: Das Gelesene passt nicht zu den Farben des Charts — das Raster ist auf dem Scan dieser Seite vermutlich verrutscht.",
-  "⚠ ScanIn couldn't read this page — the grid is probably far off the patches.": "⚠ ScanIn konnte diese Seite nicht lesen — das Raster liegt vermutlich weit neben den Messfeldern.",
-  "✓ Page {n} looks well aligned — what was read agrees with the chart (agreement {r}).": "✓ Seite {n} sieht gut ausgerichtet aus — das Gelesene stimmt mit dem Chart überein (Übereinstimmung {r})."
+  "Checking the grid — {w}…": "Prüfe das Raster — {w}…",
+  "Target": "Target",
+  "⚠ ScanIn couldn't read this — the grid is probably far off the patches.": "⚠ ScanIn konnte hier nichts lesen — das Raster liegt vermutlich weit neben den Messfeldern.",
+  "⚠ {w}: a nearby grid position matches the chart better than the current one — the grid probably sits a fraction of a patch off. Nudge it and check again.": "⚠ {w}: Eine benachbarte Rasterposition passt besser zum Chart als die aktuelle — das Raster sitzt vermutlich einen Bruchteil eines Messfelds daneben. Schiebe es etwas und prüfe erneut.",
+  "⚠ {w}: the patches in {groups} read like their neighbours' colours — a grid edge probably sits about one cell off there.": "⚠ {w}: Die Messfelder in {groups} lesen sich wie die Farben ihrer Nachbarn — eine Rasterkante sitzt dort vermutlich etwa eine Zelle daneben.",
+  "⚠ {w}: what was read doesn't line up with the chart's colours — the grid is probably misaligned.": "⚠ {w}: Das Gelesene passt nicht zu den Farben des Charts — das Raster ist vermutlich verrutscht.",
+  "✓ {w} looks well aligned — what was read agrees with the chart (agreement {r}).": "✓ {w} sieht gut ausgerichtet aus — das Gelesene stimmt mit dem Chart überein (Übereinstimmung {r}).",
+  "✓ {w} reads correctly — ScanIn locked onto the target's grid on its own (this target tolerates small placement offsets). Agreement {r}.": "✓ {w} wird korrekt gelesen — ScanIn hat sich selbst am Raster des Targets eingerastet (dieses Target verzeiht kleine Platzierungsfehler). Übereinstimmung {r}.",
+  "✓ {w}: the current grid position matches the chart best (agreement {r}).": "✓ {w}: Die aktuelle Rasterposition passt am besten zum Chart (Übereinstimmung {r})."
 }
