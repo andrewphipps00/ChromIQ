@@ -141,6 +141,8 @@ def main() -> int:
     app.installEventFilter(_tooltip_wrap_filter)
 
     settings = AppSettings()
+    from core.platform_paths import set_icc_install_override
+    set_icc_install_override(str(settings.get("profile_install_dir", "")))
 
     # Language must be set before any widget is built — strings are
     # translated at construction time (restart-to-apply, see core/i18n.py).

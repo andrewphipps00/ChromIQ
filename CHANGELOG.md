@@ -1,5 +1,16 @@
 # Changelog
 
+## v3.13.0-beta.124
+
+### ✨ Improvements
+- Settings → new "Paths" tab collects every folder ChromIQ reads or
+  writes (Knut): the default output folder (moved here from General) and
+  a new editable "Profile install folder" — where "Install profile"
+  copies a finished .icc; blank keeps your system's colour-profile
+  folder — plus read-only rows with Reveal buttons for the log file,
+  presets, translation overrides, ArgyllCMS binaries and the
+  installation folder.
+
 ## v3.13.0-beta.123
 
 ### 🐛 Fixes

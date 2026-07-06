@@ -157,26 +157,6 @@ class SettingsDialog(QDialog):
         layout.addWidget(argyll_grp)
 
         # ---- Output folder ----
-        folder_grp = QGroupBox(tr("Output Folder"), self)
-        fl = QVBoxLayout(folder_grp)
-
-        folder_lbl = QLabel(
-            tr("Default output folder (leave blank to use ~/ChromIQ/):"), self
-        )
-        folder_lbl.setWordWrap(True)
-        fl.addWidget(folder_lbl)
-
-        folder_row = QHBoxLayout()
-        self._folder_edit = QLineEdit(self)
-        self._folder_edit.setPlaceholderText(tr("~/ChromIQ/  (default)"))
-        folder_row.addWidget(self._folder_edit, stretch=1)
-        folder_browse = make_browse_button(self, tr("Select output folder"), icon="folder")
-        folder_browse.clicked.connect(self._browse_folder)
-        folder_row.addWidget(folder_browse)
-        fl.addLayout(folder_row)
-
-        layout.addWidget(folder_grp)
-
         # ---- i1Pro chart defaults ----
         from data.patch_db import I1PRO_DEFAULT_PRESETS, I1PRO_PRESET_LABELS
         i1pro_grp = QGroupBox(tr("i1Pro Chart Defaults"), self)
@@ -723,6 +703,8 @@ class SettingsDialog(QDialog):
         self._tabs.addTab(self._build_chart_layout_tab(), tr("Chart Layout"))
         self._tabs.addTab(self._scroll_wrap(self._build_scanner_tab()),
                           tr("Scanner"))
+        self._tabs.addTab(self._scroll_wrap(self._build_paths_tab()),
+                          tr("Paths"))
 
         # ---- About / Updates (below the tabs) ----
         credit1 = QLabel(tr("ChromIQ v{APP_VERSION} · Created by Sebastian Reiprich").format(APP_VERSION=APP_VERSION), self)
@@ -801,6 +783,92 @@ class SettingsDialog(QDialog):
     _MARGIN_INSTRUMENTS = ("i1Pro", "i1Pro 3+", "ColorMunki", "SpectroScan")
     _MARGIN_PAPERS = ("A4", "Letter", "Legal", "A3", "A3+", "A2", "Tabloid")
     _MARGIN_ORIENTS = ("Portrait", "Landscape")
+
+    def _build_paths_tab(self) -> QWidget:
+        """Every folder ChromIQ reads or writes, in one place (Knut, #108):
+        the two the user may change, and the rest visible with a Reveal
+        button instead of buried in documentation."""
+        import sys
+        from core.i18n import user_i18n_dir
+        from core.platform_paths import icc_install_dir, log_dir, presets_dir
+        from core.preset_store import reveal_in_file_manager
+
+        page = QWidget()
+        v = QVBoxLayout(page)
+        v.setSpacing(10)
+        v.setContentsMargins(12, 12, 12, 12)
+
+        grp_w = QGroupBox(tr("Where ChromIQ writes"), page)
+        gw = QVBoxLayout(grp_w)
+
+        folder_lbl = QLabel(
+            tr("Default output folder (leave blank to use ~/ChromIQ/):"), self)
+        folder_lbl.setWordWrap(True)
+        gw.addWidget(folder_lbl)
+        folder_row = QHBoxLayout()
+        self._folder_edit = QLineEdit(self)
+        self._folder_edit.setPlaceholderText(tr("~/ChromIQ/  (default)"))
+        folder_row.addWidget(self._folder_edit, stretch=1)
+        folder_browse = make_browse_button(self, tr("Select output folder"), icon="folder")
+        folder_browse.clicked.connect(self._browse_folder)
+        folder_row.addWidget(folder_browse)
+        gw.addLayout(folder_row)
+
+        inst_lbl = QLabel(tr(
+            "Profile install folder — where “Install profile” copies a "
+            "finished .icc (leave blank for your system's colour-profile "
+            "folder):"), self)
+        inst_lbl.setWordWrap(True)
+        gw.addWidget(inst_lbl)
+        inst_row = QHBoxLayout()
+        self._profile_dir_edit = QLineEdit(self)
+        self._profile_dir_edit.setPlaceholderText(
+            str(icc_install_dir(ignore_override=True)))
+        self._profile_dir_edit.setText(
+            str(self._settings.get("profile_install_dir", "")))
+        inst_row.addWidget(self._profile_dir_edit, stretch=1)
+        inst_browse = make_browse_button(
+            self, tr("Select profile install folder"), icon="folder")
+
+        def _pick_profile_dir() -> None:
+            d = open_dir_dialog(self, tr("Select profile install folder"),
+                                start_dir=self._profile_dir_edit.text()
+                                or str(icc_install_dir()))
+            if d:
+                self._profile_dir_edit.setText(d)
+
+        inst_browse.clicked.connect(_pick_profile_dir)
+        inst_row.addWidget(inst_browse)
+        gw.addLayout(inst_row)
+        v.addWidget(grp_w)
+
+        grp_r = QGroupBox(tr("For reference"), page)
+        gr = QGridLayout(grp_r)
+        gr.setHorizontalSpacing(8)
+        gr.setVerticalSpacing(6)
+
+        def _info_row(r: int, name: str, path: Path) -> None:
+            gr.addWidget(QLabel(name, grp_r), r, 0)
+            fld = QLineEdit(str(path), grp_r)
+            fld.setReadOnly(True)
+            gr.addWidget(fld, r, 1)
+            btn = QPushButton(tr("Reveal"), grp_r)
+            btn.setStyleSheet("QPushButton { padding: 2px 12px; min-height: 0; }")
+            btn.clicked.connect(
+                lambda _=False, p=path: reveal_in_file_manager(
+                    p if p.is_dir() or not p.suffix else p.parent))
+            gr.addWidget(btn, r, 2)
+
+        _info_row(0, tr("Log file:"), log_dir() / "chromiq.log")
+        _info_row(1, tr("Presets:"), presets_dir())
+        _info_row(2, tr("Translation overrides:"), user_i18n_dir())
+        _info_row(3, tr("ArgyllCMS binaries (change on General):"),
+                  Path(str(self._settings.get("argyll_bin_path", ""))))
+        _info_row(4, tr("Installation:"), Path(sys.argv[0]).resolve().parent)
+        gr.setColumnStretch(1, 1)
+        v.addWidget(grp_r)
+        v.addStretch()
+        return page
 
     def _build_scanner_tab(self) -> QWidget:
         """Scanner/camera profiling: the misalignment-check thresholds (Knut,
@@ -1798,6 +1866,9 @@ class SettingsDialog(QDialog):
         s.set("scanner_align_share",       int(self._scan_share_spin.value()))
         s.set("scanner_align_corr",        float(self._scan_corr_spin.value()))
         s.set("scanner_selfcheck_peak",    float(self._scan_peak_spin.value()))
+        s.set("profile_install_dir",       self._profile_dir_edit.text().strip())
+        from core.platform_paths import set_icc_install_override
+        set_icc_install_override(self._profile_dir_edit.text())
         # Margin inspector: behaviour flags + the per-combo threshold table.
         self._commit_margin_combo()   # flush the currently-shown combo's edits
         s.set("margin_inspector_show",     self._margin_show_check.isChecked())

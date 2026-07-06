@@ -120,16 +120,11 @@ CAMERA_HELP = tr(
 
 
 def _user_profile_dir() -> Path:
-    """The per-user colour-profile folder programs read (Nelson): ColorSync on
-    macOS, the spool color store on Windows, colord's per-user dir elsewhere."""
-    import os
-    import sys
-    if sys.platform == "darwin":
-        return Path.home() / "Library" / "ColorSync" / "Profiles"
-    if sys.platform == "win32":
-        return (Path(os.environ.get("SystemRoot", r"C:\Windows"))
-                / "System32" / "spool" / "drivers" / "color")
-    return Path.home() / ".local" / "share" / "color" / "icc"
+    """The colour-profile folder "Install profile" writes to (Nelson):
+    the platform's per-user store, or the user's own choice from
+    Settings → Paths (Knut #108) — one source of truth in platform_paths."""
+    from core.platform_paths import icc_install_dir
+    return icc_install_dir()
 
 
 def _load_scan_qimage(path) -> "QImage":

@@ -192,6 +192,9 @@ DEFAULTS: dict[str, Any] = {
     "scanner_align_share":       10,      # % of far-off patches that flags a page
     "scanner_align_corr":        0.60,    # scan↔reference rank-correlation floor
     "scanner_selfcheck_peak":    30.0,    # colprof self-check peak err → warning
+    # Settings → Paths (Knut #108): where "Install profile" copies the .icc.
+    # Empty = the platform's per-user colour-profile folder.
+    "profile_install_dir":       "",
     # Strip-indicator styling (Knut #93): the per-chart detail controls moved to
     # Settings → Chart Layout. These are the app-wide DEFAULTS used for new charts;
     # presets still carry (and restore) their own styling. Keys mirror the

@@ -1135,7 +1135,6 @@
   "Out-of-gamut sensitivity": "Gevoeligheid buiten gamut",
   "Out-of-gamut ΔE:": "ΔE buiten gamut:",
   "Output": "Uitvoer",
-  "Output Folder": "Uitvoermap",
   "Output ICC profile:": "Uitvoer-ICC-profiel:",
   "Output shaper curves are 1D curves applied after the 3D cLUT to refine\nthe final device values. They smooth out the cLUT output and help achieve\naccurate highlight and shadow rendering.\n\nDisabling them removes this post-processing step. Diagnostic option —\nleave unchecked for normal profiling.": "Uitvoer-shapercurves zijn 1D-curves die na de 3D-cLUT worden toegepast om\nde uiteindelijke apparaatwaarden te verfijnen. Ze strijken de cLUT-uitvoer\nglad en helpen lichten en schaduwen nauwkeurig weer te geven.\n\nUitschakelen verwijdert deze nabewerkingsstap. Diagnose-optie —\nvoor normaal profileren niet aanvinken.",
   "Output will appear here…": "De uitvoer verschijnt hier…",
@@ -2468,5 +2467,16 @@
   "When the scanner tool reads a scanned chart, it checks whether the reading grid actually sat on the patches. These are the limits those checks use. The defaults include a buffer for real scans (noisier than the built-in demo images) — loosen them if you get warnings on builds you've verified are fine, tighten them to be warned earlier.": "When the scanner tool reads a scanned chart, it checks whether the reading grid actually sat on the patches. These are the limits those checks use. The defaults include a buffer for real scans (noisier than the built-in demo images) — loosen them if you get warnings on builds you've verified are fine, tighten them to be warned earlier.",
   "Wrong patches per page": "Wrong patches per page",
   "{p}% of the patches read very differently from what the chart asked the printer to print (ΔE over {d}) — a grid was probably misaligned, or a scan doesn't belong to this chart.": "{p}% of the patches read very differently from what the chart asked the printer to print (ΔE over {d}) — a grid was probably misaligned, or a scan doesn't belong to this chart.",
-  "⚠ Self-check: colprof reports a peak fit error of {p} (average {a}) — an aligned scan stays well under {l}. A grid sitting slightly off on one page (even by half a patch) produces exactly this. Check the diagnostic images, realign and rebuild before trusting this profile. (Threshold: Settings → Scanner.)": "⚠ Self-check: colprof reports a peak fit error of {p} (average {a}) — an aligned scan stays well under {l}. A grid sitting slightly off on one page (even by half a patch) produces exactly this. Check the diagnostic images, realign and rebuild before trusting this profile. (Threshold: Settings → Scanner.)"
+  "⚠ Self-check: colprof reports a peak fit error of {p} (average {a}) — an aligned scan stays well under {l}. A grid sitting slightly off on one page (even by half a patch) produces exactly this. Check the diagnostic images, realign and rebuild before trusting this profile. (Threshold: Settings → Scanner.)": "⚠ Self-check: colprof reports a peak fit error of {p} (average {a}) — an aligned scan stays well under {l}. A grid sitting slightly off on one page (even by half a patch) produces exactly this. Check the diagnostic images, realign and rebuild before trusting this profile. (Threshold: Settings → Scanner.)",
+  "ArgyllCMS binaries (change on General):": "ArgyllCMS binaries (change on General):",
+  "For reference": "For reference",
+  "Installation:": "Installation:",
+  "Log file:": "Log file:",
+  "Paths": "Paths",
+  "Presets:": "Presets:",
+  "Profile install folder — where “Install profile” copies a finished .icc (leave blank for your system's colour-profile folder):": "Profile install folder — where “Install profile” copies a finished .icc (leave blank for your system's colour-profile folder):",
+  "Reveal": "Reveal",
+  "Select profile install folder": "Select profile install folder",
+  "Translation overrides:": "Translation overrides:",
+  "Where ChromIQ writes": "Where ChromIQ writes"
 }
