@@ -1,5 +1,15 @@
 # Changelog
 
+## v3.13.0-beta.125
+
+### 🐛 Fixes
+- Create Chart → Manual: after picking a preset near the end of the long
+  list (e.g. the Scanner group), reopening the Presets dropdown showed it
+  stranded at the top of the window. macOS aligns the menu-style popup
+  with the SELECTED item, and the popup's height cap shrank it in place
+  without moving it back — it now always anchors at the combobox like a
+  plain dropdown (Basti).
+
 ## v3.13.0-beta.124
 
 ### ✨ Improvements

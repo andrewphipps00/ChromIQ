@@ -858,10 +858,29 @@ class _CappedComboBox(NoScrollComboBox):
             row_h = 22
         max_h = row_h * self._MAX_ROWS + 4
         container = view.window()            # the popup frame
-        if container is not None and container.height() > max_h:
+        if container is None:
+            return
+        if container.height() > max_h:
             view.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
             container.setMaximumHeight(max_h)
             container.resize(container.width(), max_h)
+        # Re-anchor under the combo. macOS positions the menu-style popup so
+        # the SELECTED item overlaps the combo — with a long list and a
+        # selection near its end, the frame starts far above the widget (top
+        # of the screen), and the height cap above shrinks it in place
+        # without moving it back (Basti: popup stranded at the window top
+        # after picking a Scanner preset). Anchoring below (or above when
+        # there's no room) makes it behave like a plain dropdown.
+        below = self.mapToGlobal(self.rect().bottomLeft())
+        scr = (self.screen() or container.screen()).availableGeometry()
+        y = below.y()
+        if y + container.height() > scr.bottom():
+            y = max(scr.top(),
+                    self.mapToGlobal(self.rect().topLeft()).y()
+                    - container.height())
+        x = min(max(below.x(), scr.left()),
+                max(scr.left(), scr.right() - container.width()))
+        container.move(x, y)
 
 
 class _ComboSeparatorDelegate(QStyledItemDelegate):
