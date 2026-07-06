@@ -1,5 +1,13 @@
 # Changelog
 
+## v3.13.0-beta.127
+
+### ✨ Improvements
+- Scanner Limits: two labels now read plainly on their own — "Minimum
+  scan↔chart agreement (0–1)" and "Warn when the finished profile fits
+  worse than (peak) / …and its average error is also above" (the ⓘ texts
+  already explained them; the labels no longer need them to).
+
 ## v3.13.0-beta.126
 
 ### 🐛 Fixes

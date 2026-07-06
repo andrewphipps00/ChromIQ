@@ -954,7 +954,7 @@ class SettingsDialog(QDialog):
         self._scan_corr_spin.setSingleStep(0.05)
         self._scan_corr_spin.setValue(float(s.get("scanner_align_corr", 0.60)))
         self._scan_corr_spin.setMinimumWidth(120)
-        _row(2, tr("Scan must match the chart at least (0–1):"), self._scan_corr_spin,
+        _row(2, tr("Minimum scan↔chart agreement (0–1):"), self._scan_corr_spin,
              tr("Scan↔chart agreement (scanner profiles)"),
              tr("Used when building a SCANNER or camera profile: how strongly "
                 "the brightness order of the scanned patches must agree with "
@@ -970,7 +970,7 @@ class SettingsDialog(QDialog):
         self._scan_peak_spin.setSingleStep(5.0)
         self._scan_peak_spin.setValue(float(s.get("scanner_selfcheck_peak", 30.0)))
         self._scan_peak_spin.setMinimumWidth(120)
-        _row(3, tr("Self-check: peak fit error above:"), self._scan_peak_spin,
+        _row(3, tr("Warn when the finished profile fits worse than (peak):"), self._scan_peak_spin,
              tr("Profile self-check (after building)"),
              tr("After every build, colprof reports how well the finished "
                 "profile fits its own measurements (\"peak err\"). An aligned "
@@ -988,7 +988,7 @@ class SettingsDialog(QDialog):
         self._scan_avg_spin.setSingleStep(1.0)
         self._scan_avg_spin.setValue(float(s.get("scanner_selfcheck_avg", 12.0)))
         self._scan_avg_spin.setMinimumWidth(120)
-        _row(4, tr("…and average fit error above:"), self._scan_avg_spin,
+        _row(4, tr("…and its average error is also above:"), self._scan_avg_spin,
              tr("Why BOTH numbers must be high"),
              tr("The self-check only warns when the peak AND the average fit "
                 "error are both above their limits.\n\n"
