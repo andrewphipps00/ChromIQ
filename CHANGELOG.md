@@ -1,5 +1,52 @@
 # Changelog
 
+## v3.13.0-beta.142
+
+### 🐛 Fixes
+- **Edge detection now fires from every direction** (Knut's beta.140
+  test: only leftward drags triggered). The derivative was one-sided —
+  it assigned each colour change to the right/bottom pixel of the pair,
+  shifting the whole detected edge line by the stride, so boxes crossing
+  an edge rightward/downward didn't contain their own border until much
+  deeper. The gradient is now CENTRED, at two spans (4 px and 8 px) that
+  cover real transition widths — ~3–4 px at 300 dpi, ~5–8 px at 600 dpi.
+  Verified on his real scans: crossings now flag in all four directions.
+- **Dust can no longer fake an edge** (his LaserSoft dust finding, and
+  his suggested rule): a box's hot sub-cells must be CONNECTED — a border
+  line runs through adjacent cells of the 9×9 grid, dust specks scatter
+  and never link up. Page rule recalibrated (default limit 0.30, seven
+  boxes) on his real scans: aligned grids stay quiet including the
+  LaserSoft (whose own printed bars leave a few genuinely edge-carrying
+  boxes), just-crossing grids show 20–160 flagged boxes.
+- **"Checking the grid…" can no longer hang forever**: a run request
+  that hit a still-busy ArgyllCMS runner was silently dropped, leaving
+  the check waiting for a finish that never came. It now fails fast.
+- Demo scans render with realistic edge softness (~3–4 px transitions,
+  as Knut measured on real 300 dpi scans; they were 7–8 px).
+- Printer-from-scan mode: the chart picker only accepts .ti2 (and only
+  .ti3 with the option off); the scanner-profile and BYO-.cht pickers
+  use ChromIQ's file dialog with sidebar shortcuts — and respect the
+  native-dialogs setting (Basti).
+- ArgyllCMS auto-detect resolves symlinks (Homebrew's /opt/homebrew/bin
+  points into the Cellar) so the ref folder next to the real binaries is
+  found (Knut).
+- Scanner Limits: Restore Factory Defaults now resets these fields too;
+  range labels are honest (0.5–0.99 / 0.02–0.5); every limit's tooltip
+  states its default (Knut).
+- The suggested chart name reads instrument, paper and orientation from
+  the layout ENGINE panel when the engine is on — the printtarg widgets
+  could hold stale values (Letter Landscape suggested "A4…Portrait";
+  Knut).
+
+### ✨ Improvements
+- **Two new built-in Scanner presets by Knut**: A4-6860p-2pages and
+  Letter-6500p-2pages — the same 4 mm flatbed layout with a denser patch
+  set over two sheets.
+- Colour extremes generator: "per end" maximum raised to 200, matching
+  Pastels and Highlights & shadows (Knut).
+- The edge-detector help text explains the updated mechanism (centred
+  derivative, connected sub-cells, grain floor) in all 13 languages.
+
 ## v3.13.0-beta.141
 
 ### 🐛 Fixes

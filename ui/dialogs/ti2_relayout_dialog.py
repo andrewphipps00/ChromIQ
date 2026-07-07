@@ -1587,7 +1587,7 @@ class _NewChartDialog(QDialog):
                                      "already covers them. 'Per end' is how many "
                                      "patches at each corner; 'reach' how far in they "
                                      "spiral."))
-        self._gen_spirals_end = _spin(1, 100, 8)
+        self._gen_spirals_end = _spin(1, 200, 8)   # max matches Pastels/H&S (Knut)
         self._gen_spirals_reach = _spin(2, 45, 16)
         self._gen_spirals_count = _count_label()
         gg.addWidget(self._gen_spirals, 10, 0)

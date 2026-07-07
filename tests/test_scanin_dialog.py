@@ -603,15 +603,16 @@ def test_byo_cht_flow_loads_chart_without_sidecar(_app, tmp_path):
         n = len(dlg._log.toPlainText())
         dlg._pick_scan()
         assert "Chart geometry" in dlg._log.toPlainText()[n:]
-        # Supply the pages (stub only the file dialog).
-        from PyQt6.QtWidgets import QFileDialog
+        # Supply the pages (stub only the file dialog — the picker now goes
+        # through ChromIQ's own open_files_dialog, #108).
+        import ui.widgets as _w
         chts = [str(tmp_path / "Printer_01.cht"), str(tmp_path / "Printer_02.cht")]
-        orig = QFileDialog.getOpenFileNames
-        QFileDialog.getOpenFileNames = staticmethod(lambda *a, **k: (chts, ""))
+        orig = _w.open_files_dialog
+        _w.open_files_dialog = lambda *a, **k: chts
         try:
             dlg._pick_byo_cht()
         finally:
-            QFileDialog.getOpenFileNames = orig
+            _w.open_files_dialog = orig
         assert not dlg._byo_awaiting
         assert dlg._layout["engine"] == "printtarg"
         assert dlg._pages == [0, 1]
@@ -645,14 +646,13 @@ def test_byo_cht_wrong_pages_rejected_but_retryable(_app, tmp_path):
     try:
         dlg._printer_cb.setChecked(True)
         dlg._set_chart(tmp_path / "Printer.ti2")
-        from PyQt6.QtWidgets import QFileDialog
-        orig = QFileDialog.getOpenFileNames
-        QFileDialog.getOpenFileNames = staticmethod(
-            lambda *a, **k: ([str(tmp_path / "Printer_01.cht")], ""))
+        import ui.widgets as _w
+        orig = _w.open_files_dialog
+        _w.open_files_dialog = lambda *a, **k: [str(tmp_path / "Printer_01.cht")]
         try:
             dlg._pick_byo_cht()
         finally:
-            QFileDialog.getOpenFileNames = orig
+            _w.open_files_dialog = orig
         assert dlg._layout is None
         assert dlg._byo_awaiting                      # retry stays possible
         assert "cover" in dlg._chart_reject_reason

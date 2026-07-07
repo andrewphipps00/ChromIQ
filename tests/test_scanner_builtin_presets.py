@@ -1,9 +1,10 @@
 """Scanner built-in presets (#100) — Knut's flatbed-scanner printer-profiling
 charts as engine-built built-ins in their own "Scanner" preset group.
 
-Each bundles a fixed .ti1 (3430p A4 / 3250p Letter) plus a full ChromIQ
-layout-engine recipe; selecting one turns the engine on, seeds the layout
-panel from the recipe, and builds from the bundled patch set.
+Each bundles a fixed .ti1 (3430p A4 / 3250p Letter, plus the two-page
+6860p A4 / 6500p Letter variants, #108) with a full ChromIQ layout-engine
+recipe; selecting one turns the engine on, seeds the layout panel from the
+recipe, and builds from the bundled patch set.
 """
 import os
 import re
@@ -24,6 +25,8 @@ from ui.tabs.tab_chart import (  # noqa: E402
 _SCANNER = [p for p in KNUT_PRESETS if p.group == "Scanner"]
 _A4_KEY = "__chromiq_knut_scanner_a4_3430p_1page_landscape__"
 _LETTER_KEY = "__chromiq_knut_scanner_letter_3250p_1page_landscape__"
+_A4_2P_KEY = "__chromiq_knut_scanner_a4_6860p_2pages_landscape__"
+_LETTER_2P_KEY = "__chromiq_knut_scanner_letter_6500p_2pages_landscape__"
 
 
 @pytest.fixture(scope="module")
@@ -48,15 +51,17 @@ def _make_tab(qapp, tmp_path):
 # ---------------------------------------------------------------------------
 
 def test_scanner_family_registered():
-    assert {p.key for p in _SCANNER} == {_A4_KEY, _LETTER_KEY}
+    assert {p.key for p in _SCANNER} == {_A4_KEY, _LETTER_KEY,
+                                          _A4_2P_KEY, _LETTER_2P_KEY}
     assert all(p.layout_recipe is not None for p in _SCANNER)
     assert all(p.key in BUILTIN_PRESET_KEYS for p in _SCANNER)
     assert all(p.combo_label in BUILTIN_PRESET_LABELS for p in _SCANNER)
     # Own "Scanner" group in the dropdown/overlay registry, holding exactly
-    # the two charts.
+    # the four charts.
     groups = dict(BUILTIN_PRESET_GROUPS)
     assert "Scanner" in groups
-    assert [k for (_c, _o, k) in groups["Scanner"]] == [_A4_KEY, _LETTER_KEY]
+    assert [k for (_c, _o, k) in groups["Scanner"]] == [
+        _A4_KEY, _A4_2P_KEY, _LETTER_KEY, _LETTER_2P_KEY]
 
 
 def test_scanner_assets_match_declared_counts():
@@ -72,8 +77,9 @@ def test_scanner_assets_match_declared_counts():
 
 
 def test_scanner_recipes_reproduce_one_page():
-    """The bundled recipe + .ti1 must lay out to exactly the advertised single
-    page — a threshold/margin regression in the engine would silently spill."""
+    """The bundled recipe + .ti1 must lay out to exactly the advertised page
+    count — a threshold/margin regression in the engine would silently
+    spill."""
     from workflow.layout_engine import chart as le_chart
     from workflow.layout_engine.presets import LayoutRecipe
     import tempfile
@@ -86,7 +92,7 @@ def test_scanner_recipes_reproduce_one_page():
             res = le_chart.build_chart(str(resource_path(p.ti1_asset)),
                                        Path(tmp) / "chart", project="t",
                                        **rec.build_kwargs())
-            assert len(res.tiff_paths) == p.pages == 1
+            assert len(res.tiff_paths) == p.pages
 
 
 # ---------------------------------------------------------------------------
@@ -138,3 +144,22 @@ def test_scanner_tooltip_mentions_scan_workflow(qapp, tmp_path):
     assert "scan" in tip.lower()
     assert "3430" in tip
     assert "printtarg" not in tip            # engine preset, no printtarg line
+
+
+def test_suggested_name_reads_engine_paper(qapp, tmp_path):
+    """#108 (Knut): with the layout engine ON, the suggested chart name must
+    take instrument/paper/orientation from the ENGINE panel — the printtarg
+    widgets can hold stale values (A4 Landscape suggested "A4…Portrait";
+    Letter Landscape even suggested "A4…Portrait")."""
+    tab, _s = _make_tab(qapp, tmp_path)
+    try:
+        tab._manual_engine_check.setChecked(True)
+        panel = tab._manual_layout_panel
+        panel.instr.setCurrentIndex(panel.instr.findData("SS"))
+        panel.paper.setCurrentIndex(panel.paper.findData("LetterR"))
+        name = tab._suggest_target_name()
+        assert name.startswith("SpectroScan-Letter")
+        assert "Landscape" in name
+        assert "A4" not in name and "Portrait" not in name
+    finally:
+        tab.deleteLater()

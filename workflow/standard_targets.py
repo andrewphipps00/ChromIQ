@@ -188,7 +188,9 @@ def make_test_scan(cht_path, out_dir):
     # measure, ~0.6–1.2 % per box). Seeded, so demo scans stay
     # byte-reproducible for the tests.
     from PIL import ImageFilter
-    img = img.filter(ImageFilter.GaussianBlur(2))
+    # σ=1 gives ~3–4 px transitions — what Knut measured on real 300 dpi
+    # scans (σ=2 spread edges over 7–8 px, unrealistically soft; #108).
+    img = img.filter(ImageFilter.GaussianBlur(1))
     import numpy as _np
     rng = _np.random.default_rng(42)
     arr = _np.asarray(img, dtype=_np.float64)

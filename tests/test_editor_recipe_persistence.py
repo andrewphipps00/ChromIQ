@@ -225,8 +225,8 @@ def test_builtin_fulllayout_recipes_appear_starred(qapp):
     starred = [n for n in d._preset_recipes if n.startswith("★")]
     # Every Full-layout-setup chart (#63) + the two Scanner charts (#107)
     # carry a sidecar recipe.json.
-    assert len(starred) == 17
-    assert sum(1 for n in starred if "Scanner" in n) == 2
+    assert len(starred) == 19
+    assert sum(1 for n in starred if "Scanner" in n) == 4
     assert any("A4-924p" in n for n in starred)
 
 

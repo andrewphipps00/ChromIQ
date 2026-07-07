@@ -388,17 +388,24 @@ def dense_placement_agreement(
     # several sub-cells, while dust or a noise spike lights only one or
     # two. This sees the border the moment the line enters the box — even
     # a 1–2 % overlap — where any area-mean measure dilutes to nothing.
-    # Derivative over a 3-pixel stride, not adjacent pixels: scan optics
-    # spread a border step over several pixels, and the adjacent-pixel
-    # difference of a blurred edge is a fraction of the true step. A wider
-    # baseline recovers most of the step height regardless of the blur.
-    stride = 2
+    # CENTRED derivative, two scales. Centred matters: a one-sided diff
+    # assigns the edge's gradient to the right/bottom pixel of each pair,
+    # shifting the whole "edge line" by the stride — boxes crossing an edge
+    # leftward contained it, boxes crossing rightward didn't until much
+    # deeper (Knut's beta.140 test: only the left direction triggered).
+    # Two spans (4 px and 8 px) cover real transitions — ~3–4 px at
+    # 300 dpi, ~5–8 px at 600 dpi and on the demo renders — so the step
+    # height is recovered whatever the scan's blur, without smearing.
+    def _cgrad(plane, k):
+        g = np.zeros_like(plane)
+        g[:, k:-k] = np.abs(plane[:, 2 * k:] - plane[:, :-2 * k])
+        gy = np.abs(plane[2 * k:, :] - plane[:-2 * k, :])
+        g[k:-k, :] = np.maximum(g[k:-k, :], gy)
+        return g
+
     grad = None
     for plane in [lum] + chroma:
-        g = np.zeros_like(plane)
-        g[:, stride:] = np.abs(plane[:, stride:] - plane[:, :-stride])
-        gy = np.abs(plane[stride:, :] - plane[:-stride, :])
-        g[stride:, :] = np.maximum(g[stride:, :], gy)
+        g = np.maximum(_cgrad(plane, 2), _cgrad(plane, 4))
         grad = g if grad is None else np.maximum(grad, g)
 
     def cell_peaks(ix):
@@ -432,10 +439,38 @@ def dense_placement_agreement(
         def hot_count(vals) -> int:
             return int(sum(1 for v in vals if v > thr))
 
+        def _line_like(vals) -> bool:
+            """Knut's side-by-side rule: a border line crossing the box runs
+            through 3+ ADJACENT sub-cells; dust specks scatter — even several
+            of them don't connect. Largest 8-connected component of hot
+            cells must reach 3."""
+            hot9 = [i for i, v in enumerate(vals) if v > thr]
+            if len(hot9) < 3:
+                return False
+            cells = {(i // 9, i % 9) for i in hot9}
+            seen: set = set()
+            for start in cells:
+                if start in seen:
+                    continue
+                comp, stack = 0, [start]
+                seen.add(start)
+                while stack:
+                    r, c = stack.pop()
+                    comp += 1
+                    for dr in (-1, 0, 1):
+                        for dc in (-1, 0, 1):
+                            nb = (r + dr, c + dc)
+                            if nb in cells and nb not in seen:
+                                seen.add(nb)
+                                stack.append(nb)
+                if comp >= 3:
+                    return True
+            return False
+
         for n, vals in user_cells.items():
-            if hot_count(vals) < 3:
-                # fewer than 3 hot sub-cells: a crossing border line always
-                # runs through several; one or two are dust or noise.
+            if not _line_like(vals):
+                # dust and noise spikes light scattered cells; only a
+                # connected run of hot cells is an edge (Knut).
                 fbp[n] = 0.0
                 continue
             # Clean-nearby test: a PLACEMENT-caused edge leaves the box at

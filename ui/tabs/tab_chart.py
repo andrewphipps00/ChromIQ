@@ -575,6 +575,22 @@ KNUT_PRESETS: list[_Ti1Preset] = [
                white=2, black=2, tiff_16bit=False, suffix=KNUT_SCANNER_SUFFIX,
                group="Scanner",
                layout_recipe=dict(_KNUT_SCANNER_RECIPE, paper="LetterR")),
+    # Two-page variants (Knut, #108): the same 4 mm scanner layout with a
+    # denser patch set spread over two sheets.
+    _Ti1Preset("scanner_a4_6860p_2pages_landscape",
+               "A4-6860p-2pages-Landscape-w4.0mm" + KNUT_SCANNER_SUFFIX,
+               "SS", "A4R", 1.0, 4, 2,
+               ti1_asset=f"{_KNUT_SCANNER_DIR}/a4_2page/chart.ti1", patches=6860,
+               white=3, black=3, tiff_16bit=False, suffix=KNUT_SCANNER_SUFFIX,
+               group="Scanner",
+               layout_recipe=dict(_KNUT_SCANNER_RECIPE, paper="A4R")),
+    _Ti1Preset("scanner_letter_6500p_2pages_landscape",
+               "Letter-6500p-2pages-Landscape-w4.0mm" + KNUT_SCANNER_SUFFIX,
+               "SS", "LetterR", 1.0, 4, 2,
+               ti1_asset=f"{_KNUT_SCANNER_DIR}/letter_2page/chart.ti1", patches=6500,
+               white=3, black=3, tiff_16bit=False, suffix=KNUT_SCANNER_SUFFIX,
+               group="Scanner",
+               layout_recipe=dict(_KNUT_SCANNER_RECIPE, paper="LetterR")),
 ]
 KNUT_PRESETS_BY_KEY: dict[str, _Ti1Preset] = {p.key: p for p in KNUT_PRESETS}
 KNUT_PRESET_KEYS = frozenset(KNUT_PRESETS_BY_KEY)
@@ -4832,10 +4848,22 @@ class TabChart(QWidget):
                      "p3": "i1Pro3", "SS": "SpectroScan"}
         manual = self._manual_btn is not None and self._manual_btn.isChecked()
         if manual:
-            instr = (self._manual_instr_pw.get_raw_value()
-                     if self._manual_instr_pw is not None else "") or "i1"
-            paper = (self._manual_paper_pw.get_raw_value()
-                     if self._manual_paper_pw is not None else "") or "A4"
+            engine_on = (self._manual_engine_check is not None
+                         and self._manual_engine_check.isChecked())
+            panel = self._manual_layout_panel
+            if engine_on and panel is not None and panel.paper is not None:
+                # The layout ENGINE replaces printtarg — instrument and paper
+                # live in its own panel; the printtarg widgets can hold stale
+                # values (Knut: A4 Landscape suggested "A4…Portrait", Letter
+                # Landscape even suggested "A4…Portrait", #108).
+                instr = (panel.instr.currentData()
+                         if panel.instr is not None else "") or "i1"
+                paper = panel.paper.currentData() or "A4"
+            else:
+                instr = (self._manual_instr_pw.get_raw_value()
+                         if self._manual_instr_pw is not None else "") or "i1"
+                paper = (self._manual_paper_pw.get_raw_value()
+                         if self._manual_paper_pw is not None else "") or "A4"
             spin = self._manual_pages_spin
             patches = self._loaded_ti1_patch_count()
         else:

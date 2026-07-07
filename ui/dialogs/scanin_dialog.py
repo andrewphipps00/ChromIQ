@@ -48,7 +48,7 @@ log = get_logger(__name__)
 _TI3_FILTER = "Measured chart (*.ti3);;All files (*)"
 # Printer mode reads the chart's device + aim values from its .ti2, so a chart you
 # only PRINTED (never measured) is fine — accept either file.
-_CHART_FILTER = "Chart you printed (*.ti2 *.ti3);;All files (*)"
+_CHART_FILTER = "Chart you printed (*.ti2);;All files (*)"
 _SCAN_FILTER = "Scans (*.tif *.tiff);;All files (*)"
 _CHT_FILTER = "Chart recognition (*.cht);;All files (*)"
 _REF_FILTER = "Target reference (*.cie *.txt *.ti3 *.cxf);;All files (*)"
@@ -1516,10 +1516,11 @@ class ScannerProfileDialog(_ToolDialogBase):
                 "there is nothing to pick. The .cht row is only used for "
                 "charts made outside ChromIQ."))
             return
-        paths, _ = QFileDialog.getOpenFileNames(
+        from ui.widgets import open_files_dialog
+        paths = open_files_dialog(
             self, tr("Pick the chart's .cht page file(s)"),
-            str(self._byo_base.parent),
-            tr("Chart geometry (*.cht);;All files (*)"))
+            tr("Chart geometry (*.cht);;All files (*)"),
+            start_dir=str(self._byo_base.parent))
         if not paths:
             return
         cht_paths = sorted(Path(p) for p in paths)   # printtarg numbers _01…_NN
@@ -1693,12 +1694,14 @@ class ScannerProfileDialog(_ToolDialogBase):
         self._refresh()
 
     def _pick_scanner_profile(self) -> None:
-        from PyQt6.QtWidgets import QFileDialog
         start = str(self._printer_scan_profile.parent) if self._printer_scan_profile \
             else self._settings.get("tools_last_dir_scanner_profile", "")
-        p, _ = QFileDialog.getOpenFileName(
+        # ChromIQ's file dialog (sidebar shortcuts incl. ~/ChromIQ, extension
+        # filtering) — and it honours the native-dialogs setting by itself.
+        p = open_file_dialog(
             self, tr("Pick the scanner profile (.icc) you built earlier"),
-            start, tr("ICC profiles (*.icc *.icm)"))
+            tr("ICC profiles (*.icc *.icm);;All files (*)"), start_dir=start,
+            extra_path=str(self._ti3.parent) if getattr(self, "_ti3", None) else "")
         if p:
             self._printer_scan_profile = Path(p)
             self._printer_prof_field.setText(p)
@@ -2661,17 +2664,17 @@ class ScannerProfileDialog(_ToolDialogBase):
 
     def _flank_offenders(self, report) -> list[str]:
         """Patches whose sample box sits ON a patch border flank (Knut):
-        the box contains a patch-border LINE: three or more of its 9×9
-        sub-cells carry a gradient peak above the page's grain floor, and
-        the box reads clean at some nearby position (structure inside the
-        patch itself never does). Four or more such boxes = the grid is on
-        edges, whatever the ladder says; that also catches a dragged corner
-        or side, whose distortion the whole-grid ladder cannot represent
-        (two or three can be soft-border patches on a hand-placed grid)."""
-        lim = float(self._settings.get("scanner_flank_limit", 0.25))
+        the box contains a patch-border LINE: three or more CONNECTED
+        sub-cells of its 9×9 grid carry a gradient peak above the page's
+        grain floor (a line crosses adjacent cells; dust scatters, Knut),
+        and the box reads clean at some nearby position. Seven or more such
+        boxes = the grid is on edges, whatever the ladder says (fewer can
+        be a target's own printed features near box rims — LaserSoft's
+        bars leave up to six on a perfectly aligned grid)."""
+        lim = float(self._settings.get("scanner_flank_limit", 0.30))
         hits = sorted(((n, v) for n, v in report.flank_by_patch.items()
                        if v > lim), key=lambda t: -t[1])
-        return [n for n, _v in hits] if len(hits) >= 4 else []
+        return [n for n, _v in hits] if len(hits) >= 7 else []
 
     def _dense_report(self, params, printer: bool, exp: dict):
         """Run Knut's dense ladder on the dry-run's scan: patch boxes from

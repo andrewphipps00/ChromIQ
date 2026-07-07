@@ -913,10 +913,13 @@ class SettingsDialog(QDialog):
         g.setHorizontalSpacing(8)
         g.setVerticalSpacing(8)
 
+        defaults = {0: "30", 1: "12", 2: "0.85", 3: "0.30"}
+
         def _row(r: int, label: str, spin, tip_title: str, tip_body: str) -> None:
             g.addWidget(QLabel(label, grp), r, 0)
             g.addWidget(spin, r, 1)
-            g.addWidget(TooltipButton(tip_title, tip_body, grp), r, 2)
+            body = tip_body + "\n\n" + tr("Default: {v}.").format(v=defaults[r])
+            g.addWidget(TooltipButton(tip_title, body, grp), r, 2)
 
         s = self._settings
         self._scan_peak_spin = NoScrollDoubleSpinBox(grp)
@@ -943,7 +946,7 @@ class SettingsDialog(QDialog):
         self._scan_check_spin.setSingleStep(0.01)
         self._scan_check_spin.setValue(float(s.get("scanner_check_agreement", 0.85)))
         self._scan_check_spin.setMinimumWidth(120)
-        _row(2, tr("Check alignment: flag placements below (0–1):"),
+        _row(2, tr("Check alignment: flag placements below (0.5–0.99):"),
              self._scan_check_spin,
              tr("Placement agreement (Check alignment and building)"),
              tr("Check alignment samples the scan densely and compares your "
@@ -965,9 +968,9 @@ class SettingsDialog(QDialog):
         self._scan_flank_spin.setRange(0.02, 0.50)
         self._scan_flank_spin.setDecimals(2)
         self._scan_flank_spin.setSingleStep(0.01)
-        self._scan_flank_spin.setValue(float(s.get("scanner_flank_limit", 0.25)))
+        self._scan_flank_spin.setValue(float(s.get("scanner_flank_limit", 0.30)))
         self._scan_flank_spin.setMinimumWidth(120)
-        _row(3, tr("Flag sample boxes on patch edges above (0–1):"),
+        _row(3, tr("Flag sample boxes on patch edges above (0.02–0.5):"),
              self._scan_flank_spin,
              tr("Edge-flank detection"),
              tr("How the edge detector works (Knut's design): a patch "
@@ -978,20 +981,20 @@ class SettingsDialog(QDialog):
                 "means, so an edge is never averaged away). Print grain "
                 "raises every sub-cell equally, so the page's own median "
                 "sets the noise floor.\n\n"
-                "A box is ON an edge when three or more of its sub-cells "
-                "stand above the floor by more than this limit — a border "
-                "line crossing a box always runs through several sub-cells, "
-                "dust or a noise spike lights only one or two — AND the box "
-                "reads clean at some nearby grid position (colour bars or "
-                "wedges inside the patch itself stay hot everywhere and "
-                "never count).\n\n"
-                "Four or more such boxes flag the page IMMEDIATELY, "
+                "A box is ON an edge when three or more CONNECTED "
+                "sub-cells stand above the floor by more than this limit — "
+                "a border line runs through adjacent sub-cells, while dust "
+                "specks scatter and never connect — AND the box reads clean "
+                "at some nearby grid position (colour bars or wedges inside "
+                "the patch itself stay hot everywhere and never count).\n\n"
+                "Seven or more such boxes flag the page IMMEDIATELY, "
                 "overriding the placement floor above, and the worst-placed "
-                "patches are named — this also catches a single dragged "
-                "corner or side. Lower = stricter. Calibrated on real "
+                "patches are named. Lower = stricter. Calibrated on real "
                 "scanned targets and all bundled demo targets: an aligned "
-                "grid shows 0–2 such boxes, a grid crossing borders by even "
-                "2 % of a sample box shows dozens."))
+                "grid stays under the trigger (a target's own printed "
+                "features can leave a few edge-carrying boxes), a grid "
+                "whose boxes just cross their borders shows twenty to a "
+                "hundred and more, in every direction."))
         self._scan_avg_spin = NoScrollDoubleSpinBox(grp)
         self._scan_avg_spin.setRange(2.0, 60.0)
         self._scan_avg_spin.setDecimals(1)
@@ -1272,6 +1275,11 @@ class SettingsDialog(QDialog):
         self._themed_colors_check.setChecked(bool(s.get("gamut_themed_colors", True)))
         self._native_files_check.setChecked(bool(s.get("use_native_file_dialogs", False)))
         self._cal_mode_check.setChecked(bool(s.get("calibration_mode", False)))
+        # Scanner Limits — must follow Restore Factory Defaults too (Knut #108)
+        self._scan_peak_spin.setValue(float(s.get("scanner_selfcheck_peak", 30.0)))
+        self._scan_avg_spin.setValue(float(s.get("scanner_selfcheck_avg", 12.0)))
+        self._scan_check_spin.setValue(float(s.get("scanner_check_agreement", 0.85)))
+        self._scan_flank_spin.setValue(float(s.get("scanner_flank_limit", 0.30)))
         self._chromiq_refine_check.setChecked(bool(s.get("chromiq_refinement", False)))
         self._averaging_check.setChecked(bool(s.get("averaging_enabled", False)))
         self._native_print_check.setChecked(bool(s.get("use_native_print_dialog", False)))
