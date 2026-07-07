@@ -2653,17 +2653,17 @@ class ScannerProfileDialog(_ToolDialogBase):
 
     def _flank_offenders(self, report) -> list[str]:
         """Patches whose sample box sits ON a patch border flank (Knut):
-        one edge strip of the box deviates strongly from the box mean,
-        beyond that box's own ladder minimum. Three or more such boxes = the
-        grid is on edges, whatever the ladder says (one or two can be dust,
-        damage or a print/reference imperfection). Three also catches a
-        single DRAGGED CORNER, whose distortion the whole-grid ladder cannot
-        represent — only the corner's own boxes cross (Knut's beta.138
-        test: 3–6 flank hits there)."""
-        lim = float(self._settings.get("scanner_flank_limit", 0.16))
+        the box contains a patch-border LINE: three or more of its 9×9
+        sub-cells carry a gradient peak above the page's grain floor, and
+        the box reads clean at some nearby position (structure inside the
+        patch itself never does). Four or more such boxes = the grid is on
+        edges, whatever the ladder says; that also catches a dragged corner
+        or side, whose distortion the whole-grid ladder cannot represent
+        (two or three can be soft-border patches on a hand-placed grid)."""
+        lim = float(self._settings.get("scanner_flank_limit", 0.25))
         hits = sorted(((n, v) for n, v in report.flank_by_patch.items()
                        if v > lim), key=lambda t: -t[1])
-        return [n for n, _v in hits] if len(hits) >= 3 else []
+        return [n for n, _v in hits] if len(hits) >= 4 else []
 
     def _dense_report(self, params, printer: bool, exp: dict):
         """Run Knut's dense ladder on the dry-run's scan: patch boxes from

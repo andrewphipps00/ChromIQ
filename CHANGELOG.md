@@ -1,5 +1,28 @@
 # Changelog
 
+## v3.13.0-beta.140
+
+### 🐛 Fixes
+- **Edge detection rebuilt on Knut's derivative design — and it now sees
+  a 2 % overlap.** A patch border is a LINE of sudden colour change, so
+  the detector now works on spatial derivatives: every sample box is
+  split into a 9×9 grid (his suggestion), each sub-cell records its PEAK
+  colour-change over a widened baseline (peaks, not means — an edge is
+  never averaged away), the page's own grain sets the noise floor, a box
+  is on an edge when ≥3 sub-cells stand above it (a border line always
+  crosses several; dust lights one), four such boxes flag the page, and
+  — the piece that makes real
+  targets workable — the box must read CLEAN at some nearby grid
+  position, which cancels colour bars and wedges inside the patch itself
+  (the LaserSoft's structured areas) while still catching dragged corners
+  and sides that a whole-grid comparison can never represent.
+- Calibrated on his three real scans and ALL bundled demo targets:
+  aligned grids show 0–2 flagged boxes everywhere; a grid crossing
+  borders by just 2 % of a sample box shows 14–66 on the real scans.
+  Side drags fire; corner drags fire wherever the corner's patches have
+  contrast to detect (a dark/greyscale corner region has none — physics).
+- The Scanner Limits help text now explains the whole mechanism (Knut).
+
 ## v3.13.0-beta.139
 
 ### 🐛 Fixes

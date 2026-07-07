@@ -198,30 +198,6 @@ def dense_placement_agreement(
     reads: dict[str, list[float | None]] = {}
     spreads: dict[str, list[float | None]] = {}
     box_ixs: dict[str, list] = {}
-    flank_all: dict[str, list] = {}       # per patch, at EVERY ladder position
-
-    def _flank_of(i1, i2, ix) -> float | None:
-        """Max deviation of a THIN edge strip (1/9 of the box side, one per
-        side) from the box mean — the signature of a box edge lying on a
-        patch border flank. Thin strips are the point (Knut's beta.138
-        test): with 3×3 cells, a 5–10 % crossing filled only a sliver of a
-        third-of-a-box cell and diluted below any threshold; a 1/9 strip is
-        half-filled by the same crossing and the deviation jumps."""
-        xa, ya, xb, yb = ix
-        w, h = xb - xa, yb - ya
-        if w < 9 or h < 9:
-            return None
-        whole, _sd = _stats(i1, i2, ix)
-        tx = max(1, w // 9)
-        ty = max(1, h // 9)
-        dev = 0.0
-        for strip in ((xa, ya, xa + tx, yb),          # left
-                      (xb - tx, ya, xb, yb),          # right
-                      (xa, ya, xb, ya + ty),          # top
-                      (xa, yb - ty, xb, yb)):         # bottom
-            m, _d = _stats(i1, i2, strip)
-            dev = max(dev, abs(m - whole))
-        return dev
     for b in named:
         cx, cy = (b.x1 + b.x2) / 2.0, (b.y1 + b.y2) / 2.0
         hx = (b.x2 - b.x1) * sample_frac / 2.0
@@ -245,9 +221,6 @@ def dense_placement_agreement(
         reads[b.name] = vals
         spreads[b.name] = devs
         box_ixs[b.name] = ixs
-        flank_all[b.name] = [
-            _flank_of(integ, integ2, ix) if ix is not None else None
-            for ix in ixs]
 
     # Chroma planes, swept one at a time (two integral images live at once —
     # keeps memory flat): the edge term takes the strongest spread across
@@ -262,14 +235,6 @@ def dense_placement_agreement(
                 _m, dev = _stats(i1, i2, ix)
                 if devs[k] is not None and dev > devs[k]:
                     devs[k] = dev
-            fl = flank_all.get(name)
-            if fl is not None:
-                for k, ix in enumerate(ixs):
-                    if ix is None:
-                        continue
-                    fk = _flank_of(i1, i2, ix)
-                    if fk is not None and (fl[k] is None or fk > fl[k]):
-                        fl[k] = fk
         del i1, i2
 
     # Score every ladder position by page-level consistency: fit a monotone
@@ -411,18 +376,85 @@ def dense_placement_agreement(
     rep = PlacementReport(agree, per_patch, offenders, s_user=s_user,
                           s_best=s_best,
                           s_floor=min(per_dir_worst) if per_dir_worst else None)
-    # Flank SIGNAL per patch: the box's flank at the user's position minus
-    # the same box's minimum across the ladder. A patch with inner structure
-    # (barcodes, wedges — LaserSoft has plenty) is high EVERYWHERE and
-    # cancels out; a box on a patch border is low at the aligned position
-    # and high at the user's — only that difference is an alignment signal.
+    # Flank detection, Knut's derivative design (#108): a patch border is a
+    # LINE of high spatial gradient. Each sample box (at the user's
+    # position) is split into a 9×9 sub-grid and each sub-cell records its
+    # PEAK gradient magnitude — peak, not mean, so the line's strength is
+    # never averaged away. A sub-cell counts when its peak stands above the
+    # page's own grain floor (the median sub-cell peak: print grain and
+    # scanner noise raise every cell equally, an edge only the cells it
+    # crosses). A box is ON an edge when three or more of its sub-cells
+    # are hot: a border line crossing a box necessarily runs through
+    # several sub-cells, while dust or a noise spike lights only one or
+    # two. This sees the border the moment the line enters the box — even
+    # a 1–2 % overlap — where any area-mean measure dilutes to nothing.
+    # Derivative over a 3-pixel stride, not adjacent pixels: scan optics
+    # spread a border step over several pixels, and the adjacent-pixel
+    # difference of a blurred edge is a fraction of the true step. A wider
+    # baseline recovers most of the step height regardless of the blur.
+    stride = 2
+    grad = None
+    for plane in [lum] + chroma:
+        g = np.zeros_like(plane)
+        g[:, stride:] = np.abs(plane[:, stride:] - plane[:, :-stride])
+        gy = np.abs(plane[stride:, :] - plane[:-stride, :])
+        g[stride:, :] = np.maximum(g[stride:, :], gy)
+        grad = g if grad is None else np.maximum(grad, g)
+
+    def cell_peaks(ix):
+        xa, ya, xb, yb = ix
+        w9, h9 = (xb - xa) // 9, (yb - ya) // 9
+        if w9 < 1 or h9 < 1:
+            return None
+        sub = grad[ya:ya + h9 * 9, xa:xa + w9 * 9]
+        return sub.reshape(9, h9, 9, w9).max(axis=(1, 3)).ravel()
+
+    # Grain floor from the user's own boxes: print grain and scanner noise
+    # raise every sub-cell; an edge only the cells it crosses.
+    user_cells: dict[str, list[float]] = {}
+    all_peaks: list[float] = []
+    for b in named:
+        ix = box_ixs[b.name][0]
+        if ix is None:
+            continue
+        c = cell_peaks(ix)
+        if c is None:
+            continue
+        user_cells[b.name] = [float(v) for v in c]
+        all_peaks.extend(user_cells[b.name])
     fbp: dict[str, float] = {}
-    for n, fl in flank_all.items():
-        if fl[0] is None:
-            continue
-        known = [f for f in fl if f is not None]
-        if len(known) < 9:
-            continue
-        fbp[n] = max(0.0, (fl[0] - min(known)) / lum_range)
+    if all_peaks:
+        gfloor = float(np.percentile(all_peaks, 75))
+        thr = gfloor + 0.5 * (float(np.percentile(all_peaks, 99)) - gfloor)
+        # ring of ±20 % positions (ladder step k=2) for the clean-nearby test
+        ring_ix = [1 + d * steps + 1 for d in range(8)]
+
+        def hot_count(vals) -> int:
+            return int(sum(1 for v in vals if v > thr))
+
+        for n, vals in user_cells.items():
+            if hot_count(vals) < 3:
+                # fewer than 3 hot sub-cells: a crossing border line always
+                # runs through several; one or two are dust or noise.
+                fbp[n] = 0.0
+                continue
+            # Clean-nearby test: a PLACEMENT-caused edge leaves the box at
+            # some ±20 % shift; structure inside the patch itself (LaserSoft
+            # bars, wedges) stays hot everywhere and must not count.
+            clean_nearby = False
+            for ri in ring_ix:
+                ix = box_ixs[n][ri] if ri < len(box_ixs[n]) else None
+                if ix is None:
+                    continue
+                c = cell_peaks(ix)
+                if c is not None and hot_count(c) <= 1:
+                    clean_nearby = True
+                    break
+            if not clean_nearby:
+                fbp[n] = 0.0
+                continue
+            hot = sorted(((v - gfloor) / lum_range for v in vals),
+                         reverse=True)
+            fbp[n] = max(0.0, hot[2])
     rep.flank_by_patch = fbp
     return rep

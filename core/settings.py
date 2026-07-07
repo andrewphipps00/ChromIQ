@@ -197,13 +197,14 @@ DEFAULTS: dict[str, Any] = {
     # worst = 0). Calibrated on his real Wolf Faust scan so a 25 % grid
     # offset flags and ≤15 % passes at 50 % sample area (#108).
     "scanner_check_agreement":   0.85,
-    # Flank override (Knut): a sample box whose edge zone deviates from its
-    # centre by more than this — beyond the same box's ladder minimum, so
-    # patches with inner structure (barcodes, wedges) cancel out — sits ON
-    # a patch border. 5+ such boxes flag the page regardless of the ladder
-    # agreement. Calibrated on his three real scans (aligned grids: 0–2
-    # hits; grids on borders: dozens).
-    "scanner_flank_limit":       0.16,
+    # Flank override (Knut's derivative design): patch borders are LINES of
+    # high spatial gradient; a sample box is ON an edge when >=3 of its 9x9
+    # sub-cells carry a gradient peak above the page's grain floor AND the
+    # box is clean at some nearby position (cancels structure inside the
+    # patch itself). 3+ such boxes flag the page regardless of the ladder
+    # agreement. Calibrated on his real scans + all bundled demos: aligned
+    # grids 0-2 hits, 2%-of-box overlaps 14-66 hits.
+    "scanner_flank_limit":       0.25,
     # Settings → Paths (Knut #108): where "Install profile" copies the .icc.
     # Empty = the platform's per-user colour-profile folder.
     "profile_install_dir":       "",

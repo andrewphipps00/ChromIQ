@@ -965,26 +965,33 @@ class SettingsDialog(QDialog):
         self._scan_flank_spin.setRange(0.02, 0.50)
         self._scan_flank_spin.setDecimals(2)
         self._scan_flank_spin.setSingleStep(0.01)
-        self._scan_flank_spin.setValue(float(s.get("scanner_flank_limit", 0.16)))
+        self._scan_flank_spin.setValue(float(s.get("scanner_flank_limit", 0.25)))
         self._scan_flank_spin.setMinimumWidth(120)
         _row(3, tr("Flag sample boxes on patch edges above (0–1):"),
              self._scan_flank_spin,
              tr("Edge-flank detection"),
-             tr("A thin strip along each edge of every sample box (1/9 of "
-                "the box side) is compared with the box mean, in brightness "
-                "and in two opponent-colour planes — relative to the same "
-                "box's best nearby position, so patches with inner "
-                "structure (barcodes, grey wedges) don't count. A box fully "
-                "inside flat colour shows only noise; a box whose edge lies "
-                "on a patch border picks up the neighbouring colour in that "
-                "strip.\n\n"
-                "When three or more boxes exceed this limit, the page is "
-                "flagged as sitting on edges IMMEDIATELY — overriding the "
-                "placement-agreement floor above — and the worst-placed "
-                "patches are named. Three also catches a single dragged "
-                "grid corner. Lower = stricter. Calibrated on real scanned "
-                "targets (Wolf Faust, LaserSoft, a ChromIQ chart with "
-                "spacers)."))
+             tr("How the edge detector works (Knut's design): a patch "
+                "border is a LINE of sudden colour change — a spatial "
+                "derivative. Every sample box is split into a 9×9 grid and "
+                "each sub-cell records its PEAK colour-change (in "
+                "brightness and two opponent-colour planes; peaks, not "
+                "means, so an edge is never averaged away). Print grain "
+                "raises every sub-cell equally, so the page's own median "
+                "sets the noise floor.\n\n"
+                "A box is ON an edge when three or more of its sub-cells "
+                "stand above the floor by more than this limit — a border "
+                "line crossing a box always runs through several sub-cells, "
+                "dust or a noise spike lights only one or two — AND the box "
+                "reads clean at some nearby grid position (colour bars or "
+                "wedges inside the patch itself stay hot everywhere and "
+                "never count).\n\n"
+                "Four or more such boxes flag the page IMMEDIATELY, "
+                "overriding the placement floor above, and the worst-placed "
+                "patches are named — this also catches a single dragged "
+                "corner or side. Lower = stricter. Calibrated on real "
+                "scanned targets and all bundled demo targets: an aligned "
+                "grid shows 0–2 such boxes, a grid crossing borders by even "
+                "2 % of a sample box shows dozens."))
         self._scan_avg_spin = NoScrollDoubleSpinBox(grp)
         self._scan_avg_spin.setRange(2.0, 60.0)
         self._scan_avg_spin.setDecimals(1)
