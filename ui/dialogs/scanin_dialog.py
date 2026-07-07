@@ -2098,7 +2098,15 @@ class ScannerProfileDialog(_ToolDialogBase):
             text = orig_cht.read_text(errors="ignore")
         except OSError:
             text = None
-        if text is not None and corners and len(corners) == 4:
+        # Engine charts' geometry IS their render's pixel truth — rectarg's
+        # integer-edge redistribution would move scanin's sampling up to
+        # ~20 % of a patch off the printed columns (Basti, #108 showcase).
+        # The realignment stays for rectarg-rendered standard targets, whose
+        # images really do sit on those edges.
+        engine_chart = bool(not self._standard_mode() and self._layout
+                            and self._layout.get("patches"))
+        if (text is not None and corners and len(corners) == 4
+                and not engine_chart):
             import math
             wpx = math.hypot(corners[1][0] - corners[0][0], corners[1][1] - corners[0][1])
             hpx = math.hypot(corners[3][0] - corners[0][0], corners[3][1] - corners[0][1])

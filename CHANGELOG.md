@@ -1,5 +1,22 @@
 # Changelog
 
+## v3.13.0-beta.141
+
+### 🐛 Fixes
+- **Engine charts keep their exact geometry in the scanner tool** (found
+  in Basti's showcase session: profiling from a chart's own TIFF). The
+  grid overlay and the .cht handed to scanin both re-placed "uniform"
+  grids onto rectarg's integer pixel edges — correct for rectarg-rendered
+  standard targets, but an engine chart distributes its fractional patch
+  pitch in its own pattern, so the drawn cells (and scanin's sampling)
+  drifted up to ~20 % of a patch off the printed columns mid-chart while
+  the corners stayed pinned. Aligning the grid then looked impossible:
+  the middle columns appeared shifted right no matter where the corners
+  went, even though the measurements still passed (the sample-area
+  margins absorbed the bias). Engine layouts are now used as the pixel
+  truth they are — on screen and in the .cht — in both axes; standard
+  targets keep the (correct) rectarg treatment.
+
 ## v3.13.0-beta.140
 
 ### 🐛 Fixes

@@ -211,6 +211,11 @@ class GridSpec:
     ncols: int = 0        # set when the boxes sit on a uniformly-spaced grid (gaps
     nrows: int = 0        # allowed) → the overlay replicates rectarg's integer edges
     cells: list[tuple[int, int]] | None = None
+    exact_rects: bool = False
+    # ^ True when the rects ARE the render's pixel truth (engine charts):
+    #   the rectarg integer-edge rebuild must not touch them — rectarg
+    #   distributes fractional pitch differently and the drawn cells drift
+    #   off the patches mid-chart (Basti, #108 showcase session).
     # ^ per-patch (col, row) index into the ncols×nrows grid, parallel to ``rects``.
     #   Set whenever the grid is uniformly spaced — including GAPPED grids like
     #   Hutchcolor (528 of a 29×22 grid) — so the interior columns/rows can be
@@ -269,7 +274,8 @@ class GridSpec:
         rects = [((p["x"] - x0) / sw, (p["y"] - y0) / sh, p["w"] / sw, p["h"] / sh)
                  for p in patches]
         nc, nr, cells = cls._grid_structure(patches, sw, sh)
-        return cls(rects, aspect=sw / sh, ncols=nc, nrows=nr, cells=cells)
+        return cls(rects, aspect=sw / sh, ncols=nc, nrows=nr, cells=cells,
+                   exact_rects=True)
 
     @classmethod
     def from_cht(cls, text: str) -> "GridSpec":
@@ -543,7 +549,7 @@ class ScanGridMarquee(QWidget):
         # lines up with a rounded rectarg image, not just the pinned corners.
         # Otherwise fall back to each box's own rect.
         nc, nr, idx = self._grid.ncols, self._grid.nrows, self._grid.cells
-        if nc and nr and idx:
+        if nc and nr and idx and not self._grid.exact_rects:
             c = self._corners
             wpx = ((c[1][0] - c[0][0]) ** 2 + (c[1][1] - c[0][1]) ** 2) ** 0.5
             hpx = ((c[3][0] - c[0][0]) ** 2 + (c[3][1] - c[0][1]) ** 2) ** 0.5

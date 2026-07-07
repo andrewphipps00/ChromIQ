@@ -958,3 +958,41 @@ def test_page_count_mismatch_geometry_is_rejected(_app, tmp_path):
         assert "Patch Size Scale" in dlg._chart_note.text()
     finally:
         dlg.deleteLater()
+
+
+def test_engine_chart_keeps_exact_geometry(_app, tmp_path):
+    """#108 (Basti's showcase session): engine charts ARE their render's
+    pixel truth. The rectarg integer-edge rebuild redistributes fractional
+    pitch differently (up to ~20 % of a patch on a 65-column chart), so it
+    must not touch them — neither on screen nor in the cht scanin reads."""
+    from ui.scan_grid_marquee import GridSpec
+    # 5 columns of 48 px with one 47 px gap — engine-style mixed pitch
+    patches = []
+    x = 0.0
+    for c in range(5):
+        for r in range(4):
+            patches.append({"page": 0, "slot": 0, "loc": f"P{c}_{r}",
+                            "x": x, "y": r * 48.0, "w": 48.0, "h": 48.0})
+        x += 47.0 if c == 1 else 48.0
+    spec = GridSpec.from_patches(patches)
+    assert spec.exact_rects                       # view: draw the true rects
+    assert not GridSpec.from_cht(_PRINTTARG_CHT).exact_rects
+
+    cht = tmp_path / "Engine_01.cht"
+    lines = [f"BOXES {len(patches) + 1}",
+             "  F _ _ 0 0 239 0 239 192 0 192"]
+    for p in patches:
+        lines.append(f"  X {p['loc']} {p['loc']} _ _ "
+                     f"{p['w']} {p['h']} {p['x']} {p['y']} 0 0")
+    cht.write_text("\n".join(lines) + "\n")
+    dlg = _dialog(_app)
+    try:
+        dlg._layout = {"patches": patches}        # engine chart is loaded
+        out = dlg._prepare_scanin_cht(cht, [(0, 0), (955, 0), (955, 767), (0, 767)],
+                                      1.0, tmp_path / "Engine", "t")
+        from workflow.cht_parser import parse_cht
+        got = {b.name: b.x1 for b in parse_cht(out.read_text()).patches}
+        for p in patches:                         # positions byte-true, no rewrite
+            assert got[p["loc"]] == p["x"]
+    finally:
+        dlg.deleteLater()
