@@ -286,3 +286,118 @@ def test_locally_misaligned_groups_ignores_colour_family_response(_app):
         shifted[f"C{d}"] = exp[f"D{d}"] * rng.uniform(0.998, 1.002)
     flags = locally_misaligned_groups(shifted, exp)
     assert any(f.endswith(" C") for f in flags), flags
+
+
+# ---------------------------------------------------------------- placement
+# score (Knut #108 round 12 — probe objective for the Check-alignment star)
+
+def test_placement_score_clean_monotone_is_low():
+    from ui.dialogs.scanin_dialog import placement_score
+    # read = smooth monotone response of expected (a gamma curve): the score
+    # sees ONE consistent response → residuals ≈ 0.
+    exp = {f"P{i}": i / 99 * 100 for i in range(100)}
+    read = {k: (v / 100) ** 2.2 * 90 + 3 for k, v in exp.items()}
+    s = placement_score(read, exp)
+    assert s is not None and s < 0.01
+
+
+def test_placement_score_blends_raise_it():
+    from ui.dialogs.scanin_dialog import placement_score
+    import random
+    rng = random.Random(7)
+    order = list(range(100))
+    rng.shuffle(order)                       # scrambled neighbours, like a chart
+    exp = {f"P{i}": order[i] / 99 * 100 for i in range(100)}
+    clean = {k: (v / 100) ** 2.2 * 90 + 3 for k, v in exp.items()}
+    # 30 % contamination from the (spatially) next patch's colour
+    keys = [f"P{i}" for i in range(100)]
+    blended = {k: 0.7 * clean[k] + 0.3 * clean[keys[(i + 1) % 100]]
+               for i, k in enumerate(keys)}
+    s_clean = placement_score(clean, exp)
+    s_blend = placement_score(blended, exp)
+    assert s_blend > s_clean * 3            # sharply separable
+
+
+def test_placement_score_needs_enough_patches():
+    from ui.dialogs.scanin_dialog import placement_score
+    exp = {f"P{i}": float(i) for i in range(10)}
+    assert placement_score(exp, exp) is None
+
+
+# ------------------------------------------------------------- dense ladder
+# (Knut #108 round 12 — dense_placement_agreement)
+
+def _dense_fixture(tmp_path, offset_frac=0.0):
+    """Synthetic 12×8 chart image with scrambled patch colours + boxes."""
+    import random
+    from PIL import Image, ImageDraw
+    rng = random.Random(3)
+    ncols, nrows, cell, margin = 12, 8, 40, 60
+    W = ncols * cell + 2 * margin
+    H = nrows * cell + 2 * margin
+    img = Image.new("L", (W, H), 230)
+    d = ImageDraw.Draw(img)
+
+    class Box:
+        pass
+
+    boxes, exp = [], {}
+    vals = list(range(ncols * nrows))
+    rng.shuffle(vals)
+    for r in range(nrows):
+        for c in range(ncols):
+            v = int(vals[r * ncols + c] / (ncols * nrows - 1) * 235) + 10
+            d.rectangle([margin + c * cell, margin + r * cell,
+                         margin + (c + 1) * cell - 1,
+                         margin + (r + 1) * cell - 1], fill=v)
+            b = Box()
+            b.x1, b.y1 = c * 10.0, r * 10.0
+            b.x2, b.y2 = c * 10.0 + 10.0, r * 10.0 + 10.0
+            b.name = f"P{r}_{c}"
+            boxes.append(b)
+            exp[b.name] = v
+    from PIL import ImageFilter
+    img = img.filter(ImageFilter.GaussianBlur(3))   # real scans have soft edges
+    path = tmp_path / "chart.png"
+    img.save(path)
+    dx = offset_frac * cell
+    corners = [(margin + dx, margin), (W - margin + dx, margin),
+               (W - margin + dx, H - margin), (margin + dx, H - margin)]
+    return path, boxes, corners, exp
+
+
+def test_dense_ladder_aligned_scores_high(tmp_path):
+    from workflow.placement_probe import dense_placement_agreement
+    path, boxes, corners, exp = _dense_fixture(tmp_path, 0.0)
+    rep = dense_placement_agreement(path, boxes, corners, exp)
+    assert rep is not None and rep.agreement_pct > 95.0
+
+
+def test_dense_ladder_offset_flags_and_is_monotone(tmp_path):
+    from workflow.placement_probe import dense_placement_agreement
+
+    def agree(off):
+        path, boxes, corners, exp = _dense_fixture(tmp_path, off)
+        rep = dense_placement_agreement(path, boxes, corners, exp)
+        assert rep is not None
+        return rep
+    a0, a25, a40 = agree(0.0), agree(0.25), agree(0.40)
+    # agreement falls monotonically with offset and a clearly-contaminated
+    # placement drops below the default floor (85 %); the calibration to
+    # Knut's 15 %/25 % spec lives on his real scans, where edge blur makes
+    # the curve steeper than this synthetic fixture.
+    assert a0.agreement_pct > a25.agreement_pct > a40.agreement_pct
+    assert a40.agreement_pct < 85.0
+    assert a40.offenders                     # worst patches are named
+
+
+def test_dense_ladder_uniformity_objective(tmp_path):
+    from workflow.placement_probe import dense_placement_agreement
+    path, boxes, corners, exp = _dense_fixture(tmp_path, 0.0)
+    ok = dense_placement_agreement(path, boxes, corners, exp,
+                                   objective="uniformity")
+    path2, boxes2, corners2, exp2 = _dense_fixture(tmp_path, 0.35)
+    off = dense_placement_agreement(path2, boxes2, corners2, exp2,
+                                    objective="uniformity")
+    assert ok is not None and off is not None
+    assert ok.agreement_pct > 95.0 > off.agreement_pct

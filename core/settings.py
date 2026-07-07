@@ -193,6 +193,11 @@ DEFAULTS: dict[str, Any] = {
     #   can't reach the chart's ideal aims, so it flagged aligned scans)
     "scanner_selfcheck_peak":    30.0,    # colprof self-check peak err → warning
     "scanner_selfcheck_avg":     12.0,    # …AND avg err must exceed this too
+    # Check-alignment probe verdict: the user's position competes with the
+    # 8-direction probe star on Knut's normalised scale (best probe = 1,
+    # worst = 0). Calibrated on his real Wolf Faust scan so a 25 % grid
+    # offset flags and ≤15 % passes at 50 % sample area (#108).
+    "scanner_check_agreement":   0.85,
     # Settings → Paths (Knut #108): where "Install profile" copies the .icc.
     # Empty = the platform's per-user colour-profile folder.
     "profile_install_dir":       "",

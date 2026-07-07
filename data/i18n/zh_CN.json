@@ -2489,7 +2489,6 @@
   "Image loaded for printing (no colour management). To measure a chart afterwards, load its .ti2 with the grid button — an image alone carries no patch geometry.": "图像已载入以供打印（无色彩管理）。之后要测量色卡的话，请用网格按钮载入它的 .ti2——仅有图像不包含色块的位置信息。",
   "Load image (TIFF).\nOpen any TIFF — for example a chart made by another tool — and print it exactly like a chart: without colour management.\nPrinting only: to MEASURE a chart afterwards, load its .ti2 with the grid button instead, so ChromIQ knows its patches.": "载入图像（TIFF）。\n打开任意 TIFF——例如其他工具制作的色卡——并像色卡一样打印：不做色彩管理。\n仅用于打印：之后要测量色卡，请改用网格按钮载入它的 .ti2，让 ChromIQ 知道它的色块。",
   "Select TIFF image(s) to print": "选择要打印的 TIFF 图像",
-  "Alignment check — page {n}": "对齐检查 — 第 {n} 页",
   "Another ArgyllCMS task is still running — wait for it to finish, then check again.": "另一个 ArgyllCMS 任务仍在运行——请等它完成后再检查。",
   "Check alignment": "检查对齐",
   "Load a scan for this page first — then Check alignment can read it.": "请先为此页载入扫描件——然后“检查对齐”才能读取它。",
@@ -2500,10 +2499,14 @@
   "Checking the grid — {w}…": "正在检查网格 — {w}…",
   "Target": "标板",
   "⚠ ScanIn couldn't read this — the grid is probably far off the patches.": "⚠ ScanIn 无法读取——网格可能远离色块。",
-  "⚠ {w}: a nearby grid position matches the chart better than the current one — the grid probably sits a fraction of a patch off. Nudge it and check again.": "⚠ {w}：附近的某个网格位置比当前位置更符合色卡——网格可能偏了几分之一个色块。请稍微挪动后再检查。",
   "⚠ {w}: the patches in {groups} read like their neighbours' colours — a grid edge probably sits about one cell off there.": "⚠ {w}：{groups} 中的色块读出的是邻居的颜色——那里的网格边缘可能偏了约一格。",
   "⚠ {w}: what was read doesn't line up with the chart's colours — the grid is probably misaligned.": "⚠ {w}：读取内容与色卡的颜色对不上——网格可能错位了。",
   "✓ {w} looks well aligned — what was read agrees with the chart (agreement {r}).": "✓ {w} 看起来对齐良好——读取内容与色卡一致（一致度 {r}）。",
-  "✓ {w} reads correctly — ScanIn locked onto the target's grid on its own (this target tolerates small placement offsets). Agreement {r}.": "✓ {w} 读取正确——ScanIn 已自行吸附到标板的网格上（此标板容忍轻微的放置偏差）。一致度 {r}。",
-  "✓ {w}: the current grid position matches the chart best (agreement {r}).": "✓ {w}：当前网格位置与色卡最匹配（一致度 {r}）。"
+  "Alignment check — {w}": "对齐检查 — {w}",
+  "Scroll to zoom · drag to pan · double-click to fit": "滚轮缩放 · 拖动平移 · 双击适配窗口",
+  "Check alignment: flag placements below (0–1):": "检查对齐：低于此值时标记放置（0–1）：",
+  "Placement agreement (Check alignment button)": "放置一致度（“检查对齐”按钮）",
+  "Check alignment samples the scan densely and compares your grid position with every position of a step ladder around it — 12 steps of 10 % of a patch in all 8 directions. The best position of the ladder is 100 %, the worst position in your grid's direction is 0 %, and your position lands in between, shown with 3 decimals.\n\nBelow this floor (as a fraction of 100 %), the check tells you a nearby position matches better and names the patches reading furthest from expectation. The default is calibrated on real scanned targets so that a grid offset of a quarter patch is flagged while offsets under about 15 % of a patch pass (at 50 % patch sample area).": "“检查对齐”会对扫描件进行高密度采样，并将你的网格位置与其周围步进阶梯的每个位置比较——8 个方向各 12 步，每步为色块的 10%。阶梯中最佳位置为 100%，你的网格所在方向的最差位置为 0%，你的位置落在两者之间，以 3 位小数显示。\n\n低于此阈值（按 100% 的比例）时，检查会提示附近位置更匹配，并列出偏离预期最远的色块。默认值以真实扫描校准：网格偏移四分之一色块会被标记，偏移小于约 15% 色块则通过（色块采样区域为 50% 时）。",
+  "⚠ {w}: a nearby grid position matches the chart better than the current one — the grid probably sits a fraction of a patch off. Nudge it and check again. (Placement agreement {a} %, floor {f} %. Patches reading furthest from expectation: {worst}.)": "⚠ {w}：附近的某个网格位置比当前位置更符合色卡——网格可能偏了几分之一个色块。请稍微挪动后再检查。（放置一致度 {a} %，阈值 {f} %。偏离预期最远的色块：{worst}。）",
+  "✓ {w}: of all nearby grid positions, the current one matches the chart best (placement agreement {r} %).": "✓ {w}：在附近所有网格位置中，当前位置与色卡最匹配（放置一致度 {r} %）。"
 }

@@ -957,6 +957,27 @@ class SettingsDialog(QDialog):
                 "to check the diagnostic images before trusting the "
                 "profile."))
 
+        self._scan_check_spin = NoScrollDoubleSpinBox(grp)
+        self._scan_check_spin.setRange(0.5, 0.99)
+        self._scan_check_spin.setDecimals(2)
+        self._scan_check_spin.setSingleStep(0.01)
+        self._scan_check_spin.setValue(float(s.get("scanner_check_agreement", 0.85)))
+        self._scan_check_spin.setMinimumWidth(120)
+        _row(3, tr("Check alignment: flag placements below (0–1):"),
+             self._scan_check_spin,
+             tr("Placement agreement (Check alignment button)"),
+             tr("Check alignment samples the scan densely and compares your "
+                "grid position with every position of a step ladder around "
+                "it — 12 steps of 10 % of a patch in all 8 directions. The "
+                "best position of the ladder is 100 %, the worst position "
+                "in your grid's direction is 0 %, and your position lands "
+                "in between, shown with 3 decimals.\n\n"
+                "Below this floor (as a fraction of 100 %), the check tells "
+                "you a nearby position matches better and names the patches "
+                "reading furthest from expectation. The default is "
+                "calibrated on real scanned targets so that a grid offset "
+                "of a quarter patch is flagged while offsets under about "
+                "15 % of a patch pass (at 50 % patch sample area)."))
         self._scan_avg_spin = NoScrollDoubleSpinBox(grp)
         self._scan_avg_spin.setRange(2.0, 60.0)
         self._scan_avg_spin.setDecimals(1)
@@ -1875,6 +1896,7 @@ class SettingsDialog(QDialog):
         s.set("scanner_align_corr",        float(self._scan_corr_spin.value()))
         s.set("scanner_selfcheck_peak",    float(self._scan_peak_spin.value()))
         s.set("scanner_selfcheck_avg",     float(self._scan_avg_spin.value()))
+        s.set("scanner_check_agreement",   float(self._scan_check_spin.value()))
         s.set("profile_install_dir",       self._profile_dir_edit.text().strip())
         from core.platform_paths import set_icc_install_override
         set_icc_install_override(self._profile_dir_edit.text())

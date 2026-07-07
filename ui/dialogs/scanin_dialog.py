@@ -153,6 +153,69 @@ def _load_scan_qimage(path) -> "QImage":
         return QImage()
 
 
+class _ZoomPanImageView(QWidget):
+    """Minimal zoom/pan image viewer for the alignment-check result (Knut):
+    scroll (or pinch) zooms about the cursor, dragging pans, double-click
+    fits the image to the window again."""
+
+    def __init__(self, pixmap, parent=None) -> None:
+        super().__init__(parent)
+        self._pm = pixmap
+        self._scale = None            # None = fit-to-widget
+        self._off = [0.0, 0.0]        # top-left of the view in image coords
+        self._drag = None
+        self.setMouseTracking(True)
+
+    def _fit_scale(self) -> float:
+        if self._pm.width() == 0 or self._pm.height() == 0:
+            return 1.0
+        return min(self.width() / self._pm.width(),
+                   self.height() / self._pm.height())
+
+    def paintEvent(self, _ev) -> None:  # noqa: N802
+        from PyQt6.QtGui import QPainter
+        p = QPainter(self)
+        p.fillRect(self.rect(), self.palette().window())
+        s = self._scale or self._fit_scale()
+        p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+        p.translate(-self._off[0] * s, -self._off[1] * s)
+        p.scale(s, s)
+        p.drawPixmap(0, 0, self._pm)
+        p.end()
+
+    def wheelEvent(self, ev) -> None:  # noqa: N802
+        s = self._scale or self._fit_scale()
+        factor = 1.0015 ** ev.angleDelta().y()
+        new = max(self._fit_scale() * 0.5, min(8.0, s * factor))
+        # zoom about the cursor: keep the image point under it fixed
+        pos = ev.position()
+        ix = self._off[0] + pos.x() / s
+        iy = self._off[1] + pos.y() / s
+        self._scale = new
+        self._off = [ix - pos.x() / new, iy - pos.y() / new]
+        self.update()
+
+    def mousePressEvent(self, ev) -> None:  # noqa: N802
+        self._drag = (ev.position(), list(self._off))
+
+    def mouseMoveEvent(self, ev) -> None:  # noqa: N802
+        if self._drag is None:
+            return
+        s = self._scale or self._fit_scale()
+        start, off0 = self._drag
+        d = ev.position() - start
+        self._off = [off0[0] - d.x() / s, off0[1] - d.y() / s]
+        self.update()
+
+    def mouseReleaseEvent(self, _ev) -> None:  # noqa: N802
+        self._drag = None
+
+    def mouseDoubleClickEvent(self, _ev) -> None:  # noqa: N802
+        self._scale = None
+        self._off = [0.0, 0.0]
+        self.update()
+
+
 def _chart_base(ti3: Path) -> Path:
     stem = ti3.stem
     if stem.endswith("-verify"):
@@ -229,6 +292,41 @@ def page_reference_agreement(ti3: Path, ti2: Path,
     num = sum((a - ma) * (b - mb) for a, b in zip(ra, rb))
     den = (sum((a - ma) ** 2 for a in ra) * sum((b - mb) ** 2 for b in rb)) ** 0.5
     return num / den if den else None
+
+
+def placement_score(read_by_id: dict[str, float],
+                    expected_by_id: dict[str, float]) -> float | None:
+    """How badly the read values disagree with being ONE smooth response of
+    the expected values — the placement objective of the Check-alignment
+    probes (Knut, #108). A monotone (isotonic) curve is fitted through
+    (expected, read); every patch's residual from that curve is computed,
+    and the 95th-percentile |residual| (normalised by the read range) is
+    returned. A perfectly placed grid leaves only scanner noise (≈0.05 on
+    Knut's real Wolf Faust scan); sampling areas that cross into
+    neighbouring patches break the single-response assumption and the
+    score climbs steeply (his scan: 0.073 at a 15 % offset, 0.158 at 25 %,
+    0.315 at 40 %). The high percentile implements his "worst value rules"
+    without letting one dust speck decide the verdict."""
+    ids = [i for i in read_by_id if i in expected_by_id]
+    if len(ids) < 16:
+        return None
+    pairs = sorted((expected_by_id[i], read_by_id[i]) for i in ids)
+    ys = [l for _e, l in pairs]
+
+    # Isotonic regression (pool adjacent violators), weights = pool sizes.
+    pools: list[list[float]] = []          # [mean, count]
+    for v in ys:
+        pools.append([v, 1.0])
+        while len(pools) > 1 and pools[-2][0] > pools[-1][0]:
+            v2, n2 = pools.pop()
+            v1, n1 = pools.pop()
+            pools.append([(v1 * n1 + v2 * n2) / (n1 + n2), n1 + n2])
+    fit: list[float] = []
+    for mean, count in pools:
+        fit.extend([mean] * int(count))
+    rng = (max(ys) - min(ys)) or 1.0
+    res = sorted(abs(a - b) / rng for a, b in zip(ys, fit))
+    return res[min(len(res) - 1, int(len(res) * 0.95))]
 
 
 def locally_misaligned_groups(read_by_id: dict[str, float],
@@ -2399,46 +2497,9 @@ class ScannerProfileDialog(_ToolDialogBase):
         self._log.appendPlainText(note)
         self._set_busy_note(note)
 
-        # Probe runs (Knut's step-probe idea, #108): re-read at ±0.4-pitch
-        # offsets. Identical reads = scanin registered itself onto the grid
-        # (placement-tolerant); differing reads let us ask whether a NEARBY
-        # position matches the chart better than the user's — the only
-        # honest way to catch sub-patch offsets on real scans of structured
-        # targets, whose smooth colour ramps hide small blends from the
-        # whole-page agreement.
-        base_corners = params.corners
-
-        def _make_probe(i: int, dx: float, dy: float) -> ScaninParams:
-            shifted = [(x + dx, y + dy) for x, y in base_corners]
-            if printer:
-                pb = tmp / f"probe{i}"
-                import shutil as _sh
-                _sh.copy2(pbase.with_suffix(".ti2"), pb.with_suffix(".ti2"))
-                return ScaninParams(
-                    scan, cht, corners=shifted,
-                    perspective=self._perspective.isChecked(),
-                    scan_profile=self._printer_scan_profile, pbase=pb)
-            return ScaninParams(
-                scan, cht, cie, corners=shifted,
-                perspective=self._perspective.isChecked(),
-                out_name=f"probe{i}-scanner.ti3")
-
-        probe_runs: list[ScaninParams] = []
-        if base_corners:
-            for i, (dx, dy) in enumerate(
-                    self._probe_offsets(cht, base_corners, 0.4)):
-                probe_runs.append(_make_probe(i, dx, dy))
-
-        runs = [params] + probe_runs
-        results: list[int] = []
-        ring2_added = [False]
-
-        def _finish_check() -> None:
+        def _done(code: int) -> None:
             try:
-                verdicts = self._alignment_verdicts(
-                    params, printer, pg, results[0],
-                    probes=[p_ for p_, c in zip(runs[1:], results[1:])
-                            if c == 0])
+                verdicts = self._alignment_verdicts(params, printer, pg, code)
             except Exception:  # noqa: BLE001 — verdicts must never crash the UI
                 log.warning("alignment check failed", exc_info=True)
                 verdicts = [tr("The check couldn't judge this read — see the "
@@ -2448,42 +2509,7 @@ class ScannerProfileDialog(_ToolDialogBase):
                 self._log.appendPlainText(v)
             self._show_alignment_result(pg, verdicts, diag, tmp)
 
-        def _maybe_add_fine_ring() -> None:
-            """After the ±0.4 star: if any probe read DIFFERS from the
-            primary, scanin isn't self-registering here — add a finer ±0.2
-            star so fractional offsets in any direction get a closer
-            competitor (Knut's step ladder, condensed to two rungs to keep
-            the check under a minute)."""
-            if ring2_added[0] or not base_corners:
-                return
-            ring2_added[0] = True
-            done = [p_ for p_, c in zip(runs[1:], results[1:]) if c == 0]
-            if done and all(self._reads_match(params.out_ti3, p_.out_ti3,
-                                              printer) for p_ in done):
-                return                      # self-registering — ring 2 useless
-            for j, (dx, dy) in enumerate(
-                    self._probe_offsets(cht, base_corners, 0.2)):
-                runs.append(_make_probe(100 + j, dx, dy))
-
-        def _run_next(code: int) -> None:
-            results.append(code)
-            if len(results) == 1 and code != 0:
-                _finish_check()
-                return
-            if len(results) == 1 + len(probe_runs):
-                try:
-                    _maybe_add_fine_ring()
-                except Exception:  # noqa: BLE001
-                    log.warning("fine probe ring failed", exc_info=True)
-            if len(results) >= len(runs):
-                _finish_check()
-                return
-            self._set_busy_note(note, fraction=len(results) / len(runs))
-            self._scanin.run(runs[len(results)], on_line=lambda _l: None,
-                             on_finish=_run_next)
-
-        self._scanin.run(params, on_line=self._log_line,
-                         on_finish=_run_next)
+        self._scanin.run(params, on_line=self._log_line, on_finish=_done)
 
     def _page_label(self, pg: int) -> str:
         """"Page {n}" only when there ARE multiple pages — a single-page
@@ -2491,71 +2517,6 @@ class ScannerProfileDialog(_ToolDialogBase):
         if len(self._pages) > 1:
             return tr("Page {n}").format(n=pg + 1)
         return tr("Target")
-
-    @staticmethod
-    def _probe_offsets(cht: Path, corners,
-                       frac: float = 0.4) -> list[tuple[float, float]]:
-        """Knut's probe star: eight offsets (image px) at *frac* of a patch
-        pitch — left, right, up, down and the four diagonals — so an offset
-        in ANY direction has a probe looking toward it. Empty when the pitch
-        can't be derived or no corners were placed."""
-        if not corners or len(corners) != 4:
-            return []
-        from workflow.cht_parser import ChtParseError, parse_cht
-        try:
-            geom = parse_cht(cht.read_text(errors="ignore"))
-        except (OSError, ChtParseError):
-            return []
-        if not geom.patches:
-            return []
-        xs = sorted({round(b.x1, 3) for b in geom.patches})
-        ys = sorted({round(b.y1, 3) for b in geom.patches})
-        def _pitch(vals, fallback):
-            gaps = [b - a for a, b in zip(vals, vals[1:]) if b - a > 1e-3]
-            return min(gaps) if gaps else fallback
-        bw = max(b.x2 for b in geom.patches) - min(b.x1 for b in geom.patches)
-        bh = max(b.y2 for b in geom.patches) - min(b.y1 for b in geom.patches)
-        if bw <= 0 or bh <= 0:
-            return []
-        px = _pitch(xs, bw); py = _pitch(ys, bh)
-        import math
-        qw = math.hypot(corners[1][0] - corners[0][0],
-                        corners[1][1] - corners[0][1])
-        qh = math.hypot(corners[3][0] - corners[0][0],
-                        corners[3][1] - corners[0][1])
-        dx = frac * px / bw * qw
-        dy = frac * py / bh * qh
-        return [(dx, 0.0), (-dx, 0.0), (0.0, dy), (0.0, -dy),
-                (dx, dy), (dx, -dy), (-dx, dy), (-dx, -dy)]
-
-    @staticmethod
-    def _reads_match(a: Path, b: Path, printer: bool) -> bool:
-        """True when two dry-run reads are effectively the same measurement —
-        scanin's own registration snapped both onto the target's grid, so the
-        corner placement didn't matter (crisp targets tolerate up to about
-        half a patch of offset that way). Compares the READ side: the scan's
-        RGB in scanner mode (that mode's XYZ column is the REFERENCE, which
-        is identical across runs by definition), the measured Y in printer
-        mode."""
-        from workflow.ti3_analysis import parse_ti3
-        try:
-            ta, tb = parse_ti3(a), parse_ti3(b)
-        except Exception:  # noqa: BLE001
-            return False
-        if printer:
-            va = {_plain_id(s): y for s, (_x, y, _z) in zip(ta.sample_ids, ta.xyz)}
-            vb = {_plain_id(s): y for s, (_x, y, _z) in zip(tb.sample_ids, tb.xyz)}
-        else:
-            va = {_plain_id(s): 0.2126 * r + 0.7152 * g + 0.0722 * b_
-                  for s, (r, g, b_) in zip(ta.sample_ids, ta.rgb)}
-            vb = {_plain_id(s): 0.2126 * r + 0.7152 * g + 0.0722 * b_
-                  for s, (r, g, b_) in zip(tb.sample_ids, tb.rgb)}
-        ids = set(va) & set(vb)
-        if len(ids) < 8:
-            return False
-        close = sum(1 for i in ids
-                    if abs(va[i] - vb[i]) <= 0.005 * max(1.0, abs(va[i])))
-        return close / len(ids) > 0.9
 
     def _runner_busy(self) -> bool:
         runner = getattr(self._scanin, "_runner", None)
@@ -2567,7 +2528,7 @@ class ScannerProfileDialog(_ToolDialogBase):
         return False
 
     def _alignment_verdicts(self, params, printer: bool, pg: int,
-                            code: int, probes: list | None = None) -> list[str]:
+                            code: int) -> list[str]:
         """The build's layered checks plus the probe comparison, phrased as
         an honest verdict — praise only when the probes back it up (Knut)."""
         out: list[str] = []
@@ -2605,55 +2566,90 @@ class ScannerProfileDialog(_ToolDialogBase):
                 "colours — a grid edge probably sits about one cell off "
                 "there.").format(w=where, groups=", ".join(groups)))
 
-        # Probe comparison (Knut's step-probe idea): identical probe reads
-        # mean scanin registered itself onto the grid — placement-tolerant;
-        # differing reads let a NEARBY position compete with the user's.
-        snapped = None
-        if not out and probes:
-            done = [p_ for p_ in probes if p_.out_ti3.exists()]
-            if done:
-                matches = [self._reads_match(ti3, p_.out_ti3, printer)
-                           for p_ in done]
-                if all(matches):
-                    snapped = True
-                else:
-                    snapped = False
-                    best = max((r for r in (_agreement(p_.out_ti3)
-                                            for p_ in done) if r is not None),
-                               default=None)
-                    if (best is not None and rho is not None
-                            and best > rho + 0.02):
-                        out.append(tr(
-                            "⚠ {w}: a nearby grid position matches the chart "
-                            "better than the current one — the grid probably "
-                            "sits a fraction of a patch off. Nudge it and "
-                            "check again.").format(w=where))
+        # Knut's dense step ladder (#108): the scan is sampled once and the
+        # grid position competes against every position of the 12-step ×
+        # 8-direction ladder — baseline (best position) = 100 %, the worst
+        # position in the grid's octant = 0 %, worst patch listed. Scanner
+        # and standard mode rank positions by consistency with one smooth
+        # response of the reference; printer mode has no usable per-patch
+        # reference (aim values scatter against real prints), so it ranks by
+        # sample-box uniformity — a centred box sits on flat colour, an
+        # offset box straddles patch edges.
+        agree = None
+        report = None
+        try:
+            report = self._dense_report(params, printer, exp)
+        except Exception:  # noqa: BLE001
+            log.warning("dense placement evaluation failed", exc_info=True)
+        if report is not None:
+            agree = report.agreement_pct
+            floor = 100.0 * float(self._settings.get(
+                "scanner_check_agreement", 0.85))
+            if agree < floor:
+                worst = ", ".join(n for n, _p in report.offenders[:5])
+                out.append(tr(
+                    "⚠ {w}: a nearby grid position matches the chart better "
+                    "than the current one — the grid probably sits a "
+                    "fraction of a patch off. Nudge it and check again. "
+                    "(Placement agreement {a} %, floor {f} %. Patches "
+                    "reading furthest from expectation: {worst}.)").format(
+                        w=where, a=f"{agree:.3f}", f=f"{floor:.0f}",
+                        worst=worst))
         if not out:
-            r_txt = f"{rho:.2f}" if rho is not None else "—"
-            if snapped:
+            if agree is not None:
                 out.append(tr(
-                    "✓ {w} reads correctly — ScanIn locked onto the target's "
-                    "grid on its own (this target tolerates small placement "
-                    "offsets). Agreement {r}.").format(w=where, r=r_txt))
-            elif snapped is False:
-                out.append(tr(
-                    "✓ {w}: the current grid position matches the chart best "
-                    "(agreement {r}).").format(w=where, r=r_txt))
+                    "✓ {w}: of all nearby grid positions, the current one "
+                    "matches the chart best (placement agreement "
+                    "{r} %).").format(w=where, r=f"{agree:.3f}"))
             else:
+                r_txt = f"{rho:.2f}" if rho is not None else "—"
                 out.append(tr(
                     "✓ {w} looks well aligned — what was read agrees with "
                     "the chart (agreement {r}).").format(w=where, r=r_txt))
         return out
 
+    def _dense_report(self, params, printer: bool, exp: dict):
+        """Run Knut's dense ladder on the dry-run's scan: patch boxes from
+        the prepared .cht, the user's quad mapped to the PATCH-AREA bbox
+        (when the corners were placed on a fiducial frame, the patch quad is
+        interpolated from the frame), expectations from the same pairing the
+        misalignment checks use."""
+        from workflow.cht_parser import parse_cht
+        from workflow.placement_probe import dense_placement_agreement
+        corners = params.corners
+        if not corners or len(corners) != 4:
+            return None
+        geom = parse_cht(params.cht.read_text(errors="ignore"))
+        if not geom.patches:
+            return None
+
+        class _Box:
+            __slots__ = ("x1", "y1", "x2", "y2", "name")
+
+            def __init__(self, b) -> None:
+                self.x1, self.y1 = b.x1, b.y1
+                self.x2, self.y2 = b.x2, b.y2
+                self.name = _plain_id(b.name)
+
+        boxes = [_Box(b) for b in geom.patches]
+        expected = {_plain_id(k): v for k, v in exp.items()}
+        objective = "uniformity" if printer else "response"
+        return dense_placement_agreement(
+            params.scan_tif, boxes, corners, expected,
+            sample_frac=self._sample_area.value() / 100.0,
+            objective=objective)
+
     def _show_alignment_result(self, pg: int, verdicts: list[str],
                                diag: Path, tmp: Path) -> None:
         """Verdict + diagnostic image in a window; the temp folder dies with
-        it (Knut: no clutter and leftovers on drive)."""
+        it (Knut: no clutter and leftovers on drive). The image pans (drag)
+        and zooms (scroll / pinch) like the marquee pop-out, so misalignment
+        can be studied patch by patch (Knut)."""
         import shutil
         from PyQt6.QtGui import QPixmap
-        from PyQt6.QtWidgets import QScrollArea
         dlg = QDialog(self)
-        dlg.setWindowTitle(tr("Alignment check — page {n}").format(n=pg + 1))
+        dlg.setWindowTitle(
+            tr("Alignment check — {w}").format(w=self._page_label(pg)))
         v = QVBoxLayout(dlg)
         for line in verdicts:
             lbl = QLabel(line, dlg)
@@ -2665,14 +2661,12 @@ class ScannerProfileDialog(_ToolDialogBase):
             if not img.isNull():
                 pm = QPixmap.fromImage(img)
         if pm is not None:
-            area = QScrollArea(dlg)
-            area.setWidgetResizable(False)
-            pic = QLabel(dlg)
-            pic.setPixmap(pm.scaledToWidth(
-                900, Qt.TransformationMode.SmoothTransformation))
-            area.setWidget(pic)
-            area.setMinimumSize(920, 560)
-            v.addWidget(area, 1)
+            view = _ZoomPanImageView(pm, dlg)
+            view.setMinimumSize(920, 560)
+            v.addWidget(view, 1)
+            hint = self._hint_label(tr(
+                "Scroll to zoom · drag to pan · double-click to fit"))
+            v.addWidget(hint)
         else:
             note = QLabel(tr(
                 "No diagnostic image could be produced for this read."), dlg)

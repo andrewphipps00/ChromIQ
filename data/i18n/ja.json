@@ -2489,7 +2489,6 @@
   "Image loaded for printing (no colour management). To measure a chart afterwards, load its .ti2 with the grid button — an image alone carries no patch geometry.": "印刷用に画像を読み込みました（カラーマネジメントなし）。後でチャートを測定するには、グリッドボタンでその .ti2 を読み込んでください。画像だけではパッチの配置情報がありません。",
   "Load image (TIFF).\nOpen any TIFF — for example a chart made by another tool — and print it exactly like a chart: without colour management.\nPrinting only: to MEASURE a chart afterwards, load its .ti2 with the grid button instead, so ChromIQ knows its patches.": "画像を読み込み（TIFF）。\n任意の TIFF（例えば他のツールで作ったチャート）を開き、チャートと同じようにカラーマネジメントなしで印刷します。\n印刷専用です。後でチャートを測定するには、代わりにグリッドボタンで .ti2 を読み込み、ChromIQ にパッチを知らせてください。",
   "Select TIFF image(s) to print": "印刷する TIFF 画像を選択",
-  "Alignment check — page {n}": "位置合わせチェック — ページ {n}",
   "Another ArgyllCMS task is still running — wait for it to finish, then check again.": "別の ArgyllCMS タスクがまだ実行中です。終了を待ってから再度チェックしてください。",
   "Check alignment": "位置合わせをチェック",
   "Load a scan for this page first — then Check alignment can read it.": "先にこのページのスキャンを読み込んでください。そうすれば「位置合わせをチェック」が読み取れます。",
@@ -2500,10 +2499,14 @@
   "Checking the grid — {w}…": "グリッドをチェック中 — {w}…",
   "Target": "ターゲット",
   "⚠ ScanIn couldn't read this — the grid is probably far off the patches.": "⚠ ScanIn はここを読み取れませんでした。グリッドがパッチから大きく外れている可能性があります。",
-  "⚠ {w}: a nearby grid position matches the chart better than the current one — the grid probably sits a fraction of a patch off. Nudge it and check again.": "⚠ {w}: 現在よりも近くの別のグリッド位置のほうがチャートによく一致します。グリッドがパッチの数分の一だけずれている可能性があります。少し動かして再チェックしてください。",
   "⚠ {w}: the patches in {groups} read like their neighbours' colours — a grid edge probably sits about one cell off there.": "⚠ {w}: {groups} のパッチが隣の色として読み取られています。そこでグリッドの端が約1マスずれている可能性があります。",
   "⚠ {w}: what was read doesn't line up with the chart's colours — the grid is probably misaligned.": "⚠ {w}: 読み取り結果がチャートの色と一致しません。グリッドがずれている可能性があります。",
   "✓ {w} looks well aligned — what was read agrees with the chart (agreement {r}).": "✓ {w} は正しく位置合わせされているようです。読み取り結果はチャートと一致しています（一致度 {r}）。",
-  "✓ {w} reads correctly — ScanIn locked onto the target's grid on its own (this target tolerates small placement offsets). Agreement {r}.": "✓ {w} は正しく読み取れています。ScanIn が自力でターゲットのグリッドに吸着しました（このターゲットは小さな位置ずれを許容します）。一致度 {r}。",
-  "✓ {w}: the current grid position matches the chart best (agreement {r}).": "✓ {w}: 現在のグリッド位置がチャートに最もよく一致しています（一致度 {r}）。"
+  "Alignment check — {w}": "位置合わせチェック — {w}",
+  "Scroll to zoom · drag to pan · double-click to fit": "スクロールで拡大縮小 · ドラッグで移動 · ダブルクリックで全体表示",
+  "Check alignment: flag placements below (0–1):": "位置合わせチェック: この値未満の配置を警告（0–1）:",
+  "Placement agreement (Check alignment button)": "配置一致度（「位置合わせをチェック」ボタン）",
+  "Check alignment samples the scan densely and compares your grid position with every position of a step ladder around it — 12 steps of 10 % of a patch in all 8 directions. The best position of the ladder is 100 %, the worst position in your grid's direction is 0 %, and your position lands in between, shown with 3 decimals.\n\nBelow this floor (as a fraction of 100 %), the check tells you a nearby position matches better and names the patches reading furthest from expectation. The default is calibrated on real scanned targets so that a grid offset of a quarter patch is flagged while offsets under about 15 % of a patch pass (at 50 % patch sample area).": "「位置合わせをチェック」はスキャンを高密度にサンプリングし、あなたのグリッド位置を、その周囲のステップはしご（8方向すべてにパッチの10%ずつ12段）の各位置と比較します。はしごの最良位置が100%、グリッドの方向にある最悪位置が0%となり、あなたの位置はその間に置かれ、小数第3位まで表示されます。\n\nこのしきい値（100%に対する割合）を下回ると、近くの位置のほうが一致すると通知し、期待から最も外れたパッチ名を示します。既定値は実際のスキャンで校正済み: パッチの4分の1のずれは警告され、約15%未満のずれは合格します（サンプル領域50%時）。",
+  "⚠ {w}: a nearby grid position matches the chart better than the current one — the grid probably sits a fraction of a patch off. Nudge it and check again. (Placement agreement {a} %, floor {f} %. Patches reading furthest from expectation: {worst}.)": "⚠ {w}: 現在よりも近くの別のグリッド位置のほうがチャートによく一致します。グリッドがパッチの数分の一だけずれている可能性があります。少し動かして再チェックしてください。（配置一致度 {a} %、しきい値 {f} %。期待から最も外れたパッチ: {worst}）",
+  "✓ {w}: of all nearby grid positions, the current one matches the chart best (placement agreement {r} %).": "✓ {w}: 近くのすべてのグリッド位置の中で、現在の位置がチャートに最もよく一致しています（配置一致度 {r} %）。"
 }

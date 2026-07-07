@@ -1,5 +1,31 @@
 # Changelog
 
+## v3.13.0-beta.136
+
+### 🐛 Fixes
+- **Check alignment now implements Knut's dense step-ladder design** — and
+  it works on real scans. The scan is sampled densely once, and the grid
+  position competes against every position of the ladder he specified:
+  12 steps of 10 % of a patch in all 8 directions (his high-density
+  measurement idea, with the scanin detour replaced by direct image
+  sampling — same maths, milliseconds instead of minutes). His
+  normalisation is used verbatim: best ladder position = 100 %, worst
+  position in the grid's octant = 0 %, the grid's own position lands in
+  between with 3-decimal precision, and the patches reading furthest from
+  expectation are named in the warning.
+- Verified on his real scanned Wolf Faust target through the real dialog:
+  aligned 98.067 %, 10 % offset 93.399 %, 15 % offset 87.190 % (all pass),
+  25 % offset 71.311 % and diagonal ¼-patch 71.064 % (flagged) — exactly
+  his acceptance spec (detect ≥25 %, accept <15 %, at 50 % sample area).
+  On his real 3-page engine chart (printer mode) the same spec holds via a
+  reference-free uniformity objective (aim values scatter against real
+  prints, so printer mode ranks positions by whether sample boxes sit on
+  flat colour instead).
+- New Scanner Limits setting "Check alignment: flag placements below
+  (0–1)" (default 0.85 = 85 %, calibrated on those real scans).
+- The alignment-check result window now zooms (scroll) and pans (drag),
+  double-click fits — so misalignment can be studied patch by patch.
+
 ## v3.13.0-beta.135
 
 ### ✨ Improvements

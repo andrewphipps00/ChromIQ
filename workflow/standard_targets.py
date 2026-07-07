@@ -178,6 +178,12 @@ def make_test_scan(cht_path, out_dir):
         lum = 0.2126 * r + 0.7152 * g + 0.0722 * bl
         cie.append(f"{b.name} {r / 2.55 * 0.95:.3f} {lum / 2.55:.3f} {bl / 2.55 * 1.09:.3f}")
     cie += ['END_DATA', '']
+    # Real flatbeds soften edges (MTF); matching that keeps the demo's
+    # Check-alignment behaviour calibrated to the same thresholds as real
+    # scans (a razor-sharp render lets sub-patch offsets sample pure colour
+    # far longer than any physical scan would).
+    from PIL import ImageFilter
+    img = img.filter(ImageFilter.GaussianBlur(2))
     tif = out_dir / f"{cht_path.stem}-test.tif"; ref = out_dir / f"{cht_path.stem}-test.cie"
     img.save(tif); ref.write_text("\n".join(cie))
     return tif, ref
