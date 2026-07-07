@@ -186,24 +186,43 @@ def test_page_ids_from_cht_strips_padding(tmp_path, _app):
     assert page_ids_from_cht(p) == {"A1", "A2", "A3"}
 
 
+def _dense_cht_text(boxes) -> str:
+    """A minimal Argyll .cht: one X line per box + the patch-bbox F line."""
+    minx = min(b.x1 for b in boxes); maxx = max(b.x2 for b in boxes)
+    miny = min(b.y1 for b in boxes); maxy = max(b.y2 for b in boxes)
+    lines = [f"BOXES {len(boxes) + 1}",
+             f"  F _ _ {minx} {miny} {maxx} {miny} {maxx} {maxy} {minx} {maxy}"]
+    for b in boxes:
+        lines.append(f"  X {b.name} {b.name} _ _ "
+                     f"{b.x2 - b.x1} {b.y2 - b.y1} {b.x1} {b.y1} 0 0")
+    return "\n".join(lines) + "\n"
+
+
 def test_check_page_alignment_flags_and_logs(tmp_path, _app):
-    """Drive the real per-page hook with a scrambled scanner-page .ti3: it must
-    log a ⚠ AND collect the finding for the pre-colprof modal."""
+    """Drive the real per-page hook with a MISPLACED grid over a real image:
+    the dense placement check must log a ⚠ AND collect the finding for the
+    pre-colprof modal (Knut: the Build button runs the same check as the
+    Check alignment button)."""
     from ui.dialogs.scanin_dialog import ScannerProfileDialog
     from workflow.scanin_runner import ScaninParams
+    scan, boxes, corners, exp = _dense_fixture(tmp_path, 0.40)
+    (tmp_path / "x.cht").write_text(_dense_cht_text(boxes))
     f = ["SAMPLE_ID", "RGB_R", "RGB_G", "RGB_B", "XYZ_X", "XYZ_Y", "XYZ_Z"]
-    n = 24
-    rows = [[f"P{i + 1}", 4 * i, 4 * i, 4 * i,
-             *([3 * ((i * 7 + 3) % n)] * 3)] for i in range(n)]
-    scan = tmp_path / "scan.tif"; scan.touch()
-    _write_cgats(tmp_path / "scan-scanner.ti3", f, rows)
+    rows = [[n, v, v, v, v, v, v] for n, v in exp.items()]
+    _write_cgats(scan.parent / f"{scan.stem}-scanner.ti3", f, rows)
     dlg = ScannerProfileDialog(object(), _FakeSettings())
     try:
-        job = {"params": ScaninParams(scan, tmp_path / "x.cht"), "page": 2}
-        dlg._check_page_alignment(job)
+        params = ScaninParams(scan, tmp_path / "x.cht", corners=corners)
+        dlg._check_page_alignment({"params": params, "page": 2})
         assert len(dlg._align_warnings) == 1
-        assert "Page 2" in dlg._align_warnings[0]
+        assert "placement agreement" in dlg._align_warnings[0]
         assert "⚠" in dlg._log.toPlainText()
+        # an ALIGNED grid must stay quiet
+        scan2, boxes2, corners2, _exp2 = _dense_fixture(tmp_path, 0.0)
+        dlg._align_warnings.clear()
+        params2 = ScaninParams(scan2, tmp_path / "x.cht", corners=corners2)
+        dlg._check_page_alignment({"params": params2, "page": 1})
+        assert dlg._align_warnings == []
     finally:
         dlg.deleteLater()
 

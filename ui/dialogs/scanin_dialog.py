@@ -2354,36 +2354,32 @@ class ScannerProfileDialog(_ToolDialogBase):
         line buried in colprof's -v output."""
         try:
             p = job["params"]
-            floor = float(self._settings.get("scanner_align_corr", 0.60))
             if p.is_printer:
-                rho = page_reference_agreement(
+                _read, exp = self._read_expected_dicts(
                     p.out_ti3, p.pbase.with_suffix(".ti2"),
                     ids=page_ids_from_cht(p.cht))
-                if rho is not None and rho < floor:
-                    msg = tr(
-                        "Page {n}: what the scanner measured doesn't line up "
-                        "with the colours the chart asked the printer to "
-                        "print — the grid is probably misaligned on this "
-                        "page's scan.").format(n=job.get("page", 1))
-                    self._log.appendPlainText("⚠ " + msg)
-                    self._align_warnings.append(msg)
-                else:
-                    self._check_local_groups(job, p.out_ti3,
-                                             p.pbase.with_suffix(".ti2"),
-                                             ids=page_ids_from_cht(p.cht))
-                return
-            rho = scan_reference_correlation(p.out_ti3)
-            if rho is not None and rho < floor:
-                msg = (tr("Page {n} (scan {k}): what the scanner read doesn't "
-                          "line up with the chart's colours — the grid is "
-                          "probably misaligned on this scan.")
-                       if job.get("nshots", 1) > 1 else
-                       tr("Page {n}: what the scanner read doesn't line up "
-                          "with the chart's colours — the grid is probably "
-                          "misaligned on this page's scan.")).format(
-                    n=job.get("page", 1), k=job.get("shot", 1))
+            else:
+                _read, exp = self._read_expected_dicts(p.out_ti3)
+            report = self._dense_report(p, p.is_printer, exp)
+            floor = 100.0 * float(self._settings.get(
+                "scanner_check_agreement", 0.70))
+            where = self._page_label(job.get("page", 1) - 1)
+            if report is not None and report.agreement_pct < floor:
+                worst = ", ".join(n for n, _pp in report.offenders[:5])
+                msg = tr(
+                    "{w}: a nearby grid position matches the chart better "
+                    "than the current one — the grid probably sits a "
+                    "fraction of a patch off (placement agreement {a} %, "
+                    "floor {f} %). Patches reading furthest from "
+                    "expectation: {worst}.").format(
+                        w=where, a=f"{report.agreement_pct:.2f}",
+                        f=f"{floor:.0f}", worst=worst)
                 self._log.appendPlainText("⚠ " + msg)
                 self._align_warnings.append(msg)
+            elif p.is_printer:
+                self._check_local_groups(job, p.out_ti3,
+                                         p.pbase.with_suffix(".ti2"),
+                                         ids=page_ids_from_cht(p.cht))
             else:
                 self._check_local_groups(job, p.out_ti3)
         except Exception:  # noqa: BLE001 — a sanity check must never block
@@ -2539,26 +2535,16 @@ class ScannerProfileDialog(_ToolDialogBase):
             return [("⚠ " + fail[1]) if fail else
                     tr("⚠ ScanIn couldn't read this — the grid is probably "
                        "far off the patches.")]
-        floor = float(self._settings.get("scanner_align_corr", 0.60))
-
-        def _agreement(t: Path):
-            if printer:
-                return page_reference_agreement(
-                    t, params.pbase.with_suffix(".ti2"),
-                    ids=page_ids_from_cht(params.cht))
-            return scan_reference_correlation(t)
-
-        rho = _agreement(ti3)
         if printer:
             read, exp = self._read_expected_dicts(
                 ti3, params.pbase.with_suffix(".ti2"),
                 ids=page_ids_from_cht(params.cht))
+            rho = page_reference_agreement(
+                ti3, params.pbase.with_suffix(".ti2"),
+                ids=page_ids_from_cht(params.cht))
         else:
             read, exp = self._read_expected_dicts(ti3)
-        if rho is not None and rho < floor:
-            out.append(tr(
-                "⚠ {w}: what was read doesn't line up with the chart's "
-                "colours — the grid is probably misaligned.").format(w=where))
+            rho = scan_reference_correlation(ti3)
         groups = locally_misaligned_groups(read, exp)
         if groups:
             out.append(tr(
@@ -2584,7 +2570,7 @@ class ScannerProfileDialog(_ToolDialogBase):
         if report is not None:
             agree = report.agreement_pct
             floor = 100.0 * float(self._settings.get(
-                "scanner_check_agreement", 0.85))
+                "scanner_check_agreement", 0.70))
             if agree < floor:
                 worst = ", ".join(n for n, _p in report.offenders[:5])
                 out.append(tr(
@@ -2593,14 +2579,14 @@ class ScannerProfileDialog(_ToolDialogBase):
                     "fraction of a patch off. Nudge it and check again. "
                     "(Placement agreement {a} %, floor {f} %. Patches "
                     "reading furthest from expectation: {worst}.)").format(
-                        w=where, a=f"{agree:.3f}", f=f"{floor:.0f}",
+                        w=where, a=f"{agree:.2f}", f=f"{floor:.0f}",
                         worst=worst))
         if not out:
             if agree is not None:
                 out.append(tr(
-                    "✓ {w}: of all nearby grid positions, the current one "
-                    "matches the chart best (placement agreement "
-                    "{r} %).").format(w=where, r=f"{agree:.3f}"))
+                    "✓ {w}: the current grid position keeps all sample "
+                    "boxes within their chart patches (placement agreement "
+                    "{r} %).").format(w=where, r=f"{agree:.2f}"))
             else:
                 r_txt = f"{rho:.2f}" if rho is not None else "—"
                 out.append(tr(
@@ -2622,6 +2608,13 @@ class ScannerProfileDialog(_ToolDialogBase):
         geom = parse_cht(params.cht.read_text(errors="ignore"))
         if not geom.patches:
             return None
+        # The corners correspond to the prepared cht's F line — the real
+        # fiducial frame with "Use fiducial marks" ON, the patch bbox
+        # otherwise. Mapping the patch bbox onto fiducial-frame corners
+        # displaced every sample box outward and blunted the whole ladder
+        # (Knut's beta.136 test: agreement stuck above 99 % on offsets his
+        # diagnostic image showed plainly).
+        fid_quad = geom.fiducials if len(getattr(geom, "fiducials", []) or []) == 4 else None
 
         class _Box:
             __slots__ = ("x1", "y1", "x2", "y2", "name")
@@ -2633,11 +2626,29 @@ class ScannerProfileDialog(_ToolDialogBase):
 
         boxes = [_Box(b) for b in geom.patches]
         expected = {_plain_id(k): v for k, v in exp.items()}
-        objective = "uniformity" if printer else "response"
-        return dense_placement_agreement(
-            params.scan_tif, boxes, corners, expected,
-            sample_frac=self._sample_area.value() / 100.0,
-            objective=objective)
+
+        def _run(objective: str):
+            return dense_placement_agreement(
+                params.scan_tif, boxes, corners, expected,
+                sample_frac=self._sample_area.value() / 100.0,
+                objective=objective, src_quad=fid_quad)
+
+        if printer:
+            # No usable per-patch reference (aim values scatter against real
+            # prints) — the edge lens alone decides.
+            return _run("uniformity")
+        # Worst of both lenses rules (Knut): the response lens sees blends
+        # the edge lens can't (similar-spread neighbours), the edge lens
+        # sees borders the response lens can't (similar-colour neighbours —
+        # an IT8's vertical steps especially).
+        r_resp = _run("response")
+        r_edge = _run("uniformity")
+        if r_resp is None:
+            return r_edge
+        if r_edge is None:
+            return r_resp
+        return (r_resp if r_resp.agreement_pct <= r_edge.agreement_pct
+                else r_edge)
 
     def _show_alignment_result(self, pg: int, verdicts: list[str],
                                diag: Path, tmp: Path) -> None:
@@ -2767,20 +2778,6 @@ class ScannerProfileDialog(_ToolDialogBase):
     def _build_printer_profile(self, pbase: Path, base: Path) -> None:
         ti3 = pbase.with_suffix(".ti3")
         self._sanitize_scanner_ti3(ti3)              # once, on the accumulated .ti3
-        if not self._align_warnings:
-            # Per-page checks found nothing (or couldn't run — e.g. an
-            # unparseable BYO .cht): one whole-chart pass as the safety net.
-            try:
-                floor = float(self._settings.get("scanner_align_corr", 0.60))
-                rho = page_reference_agreement(ti3, base.with_suffix(".ti2"))
-                if rho is not None and rho < floor:
-                    self._align_warnings.append(tr(
-                        "What the scanner measured doesn't line up with the "
-                        "colours the chart asked the printer to print — a "
-                        "grid was probably misaligned, or a scan doesn't "
-                        "belong to this chart."))
-            except Exception:  # noqa: BLE001 — a sanity check must never block
-                log.warning("misalignment check failed", exc_info=True)
         if self._align_warnings and not self._confirm_despite_misalignment():
             return
         self._log.appendPlainText(tr("Building the printer profile…"))

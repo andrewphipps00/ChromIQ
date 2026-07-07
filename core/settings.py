@@ -188,7 +188,6 @@ DEFAULTS: dict[str, Any] = {
     # Scanner/camera profiling: misalignment-check thresholds (Knut #108).
     # Editable in Settings → Scanner; the defaults carry a buffer for real
     # scans (noisier than the built-in demo images).
-    "scanner_align_corr":        0.60,    # scan↔reference rank-agreement floor
     #   (the ΔE-vs-aims share check was retired in beta.130 — real prints
     #   can't reach the chart's ideal aims, so it flagged aligned scans)
     "scanner_selfcheck_peak":    30.0,    # colprof self-check peak err → warning
@@ -197,7 +196,7 @@ DEFAULTS: dict[str, Any] = {
     # 8-direction probe star on Knut's normalised scale (best probe = 1,
     # worst = 0). Calibrated on his real Wolf Faust scan so a 25 % grid
     # offset flags and ≤15 % passes at 50 % sample area (#108).
-    "scanner_check_agreement":   0.85,
+    "scanner_check_agreement":   0.70,
     # Settings → Paths (Knut #108): where "Install profile" copies the .icc.
     # Empty = the platform's per-user colour-profile folder.
     "profile_install_dir":       "",

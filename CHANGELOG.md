@@ -1,5 +1,34 @@
 # Changelog
 
+## v3.13.0-beta.137
+
+### 🐛 Fixes
+- **Placement check: corner-frame bug fixed** (Knut's beta.136 test). With
+  "Use fiducial marks" ON, the grid corners live on the fiducial frame,
+  but the dense evaluator mapped the patch area onto them — every sample
+  box was displaced outward and the ladder went blunt (agreement stuck
+  above 99 % on offsets the diagnostic image showed plainly). The
+  evaluator now maps through the .cht's own F frame, exactly like
+  scanin's -F.
+- **The placement check now sees colour edges, not just brightness.** An
+  IT8's vertical neighbours often differ only in chroma, so a
+  luminance-only check was structurally blind to vertical offsets. The
+  edge lens now samples two opponent-colour planes as well, and scanner
+  mode takes the worst of both lenses — the response lens (blends against
+  the reference) and the edge lens (sample boxes straddling patch
+  borders), per Knut's worst-rules.
+- **Knut's tightened normalisation**: each of the 8 ladder directions has
+  its own worst value and the LEAST worst of them is the 0 % end — the
+  scale no longer depends on which octant the grid sits in, and small
+  offsets move the number immediately.
+- **The Build button now runs the same placement check on every page**
+  (Knut). The old rank-agreement check and its "Minimum scan↔chart
+  agreement" setting are retired; the placement floor covers Check
+  alignment and building alike, and flagged pages are listed in the
+  pre-build warning with Build anyway / Stop.
+- Positive verdict reworded per Knut ("keeps all sample boxes within
+  their chart patches"), agreement shown with 2 decimals.
+
 ## v3.13.0-beta.136
 
 ### 🐛 Fixes

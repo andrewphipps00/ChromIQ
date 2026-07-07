@@ -919,33 +919,13 @@ class SettingsDialog(QDialog):
             g.addWidget(TooltipButton(tip_title, tip_body, grp), r, 2)
 
         s = self._settings
-        self._scan_corr_spin = NoScrollDoubleSpinBox(grp)
-        self._scan_corr_spin.setRange(0.05, 0.95)
-        self._scan_corr_spin.setDecimals(2)
-        self._scan_corr_spin.setSingleStep(0.05)
-        self._scan_corr_spin.setValue(float(s.get("scanner_align_corr", 0.60)))
-        self._scan_corr_spin.setMinimumWidth(120)
-        _row(0, tr("Minimum scan↔chart agreement (0–1):"), self._scan_corr_spin,
-             tr("Scan↔chart agreement"),
-             tr("The per-page misalignment check, in every mode: how strongly "
-                "the order of the read patch values (light to dark) must agree "
-                "with the chart's known values (1 = perfect agreement, 0 = "
-                "none).\n\n"
-                "Order survives what honest physics does to the colours — an "
-                "unprofiled scanner's response, and a printer's gamut "
-                "compression (real prints can't REACH the chart's ideal aims, "
-                "which is why comparing colour differences directly can't "
-                "work). Real aligned pages score around 0.9; a misplaced grid "
-                "pairs patches with the wrong references and the agreement "
-                "collapses toward 0."))
-
         self._scan_peak_spin = NoScrollDoubleSpinBox(grp)
         self._scan_peak_spin.setRange(5.0, 200.0)
         self._scan_peak_spin.setDecimals(0)
         self._scan_peak_spin.setSingleStep(5.0)
         self._scan_peak_spin.setValue(float(s.get("scanner_selfcheck_peak", 30.0)))
         self._scan_peak_spin.setMinimumWidth(120)
-        _row(1, tr("Warn when the finished profile fits worse than (peak):"), self._scan_peak_spin,
+        _row(0, tr("Warn when the finished profile fits worse than (peak):"), self._scan_peak_spin,
              tr("Profile self-check (after building)"),
              tr("After every build, colprof reports how well the finished "
                 "profile fits its own measurements (\"peak err\"). An aligned "
@@ -961,30 +941,33 @@ class SettingsDialog(QDialog):
         self._scan_check_spin.setRange(0.5, 0.99)
         self._scan_check_spin.setDecimals(2)
         self._scan_check_spin.setSingleStep(0.01)
-        self._scan_check_spin.setValue(float(s.get("scanner_check_agreement", 0.85)))
+        self._scan_check_spin.setValue(float(s.get("scanner_check_agreement", 0.70)))
         self._scan_check_spin.setMinimumWidth(120)
-        _row(3, tr("Check alignment: flag placements below (0–1):"),
+        _row(2, tr("Check alignment: flag placements below (0–1):"),
              self._scan_check_spin,
-             tr("Placement agreement (Check alignment button)"),
+             tr("Placement agreement (Check alignment and building)"),
              tr("Check alignment samples the scan densely and compares your "
                 "grid position with every position of a step ladder around "
                 "it — 12 steps of 10 % of a patch in all 8 directions. The "
                 "best position of the ladder is 100 %, the worst position "
                 "in your grid's direction is 0 %, and your position lands "
-                "in between, shown with 3 decimals.\n\n"
+                "in between, shown with 2 decimals.\n\n"
                 "Below this floor (as a fraction of 100 %), the check tells "
                 "you a nearby position matches better and names the patches "
                 "reading furthest from expectation. The default is "
                 "calibrated on real scanned targets so that a grid offset "
                 "of a quarter patch is flagged while offsets under about "
-                "15 % of a patch pass (at 50 % patch sample area)."))
+                "15 % of a patch pass (at 50 % patch sample area).\n\n"
+                "The same check runs for every page when you build — a "
+                "flagged page is listed in the warning popup before "
+                "anything is built."))
         self._scan_avg_spin = NoScrollDoubleSpinBox(grp)
         self._scan_avg_spin.setRange(2.0, 60.0)
         self._scan_avg_spin.setDecimals(1)
         self._scan_avg_spin.setSingleStep(1.0)
         self._scan_avg_spin.setValue(float(s.get("scanner_selfcheck_avg", 12.0)))
         self._scan_avg_spin.setMinimumWidth(120)
-        _row(2, tr("…and its average error is also above:"), self._scan_avg_spin,
+        _row(1, tr("…and its average error is also above:"), self._scan_avg_spin,
              tr("Why BOTH numbers must be high"),
              tr("The self-check only warns when the peak AND the average fit "
                 "error are both above their limits.\n\n"
@@ -1893,7 +1876,6 @@ class SettingsDialog(QDialog):
         s.set("i1pro_chromiq_clip_style",  self._chromiq_clip_check.isChecked())
         s.set("grey_ramp_reference",       int(self._grey_ref_spin.value()))
         # Scanner-profiling misalignment thresholds (Settings → Scanner, #108).
-        s.set("scanner_align_corr",        float(self._scan_corr_spin.value()))
         s.set("scanner_selfcheck_peak",    float(self._scan_peak_spin.value()))
         s.set("scanner_selfcheck_avg",     float(self._scan_avg_spin.value()))
         s.set("scanner_check_agreement",   float(self._scan_check_spin.value()))
