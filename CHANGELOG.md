@@ -1,5 +1,19 @@
 # Changelog
 
+## v3.13.0-beta.143
+
+### ✨ Improvements
+- **New help card: "Dictionary and terminology"** (Knut's idea) — 45
+  terms, phrases and abbreviations from ChromIQ and printer/scanner
+  profiling generally (ΔE, gamut, rendering intents, the ArgyllCMS
+  tools, the .ti1/.ti2/.ti3 pipeline, M0/M1/M2, OBA…), alphabetical, in
+  plain beginner-first language, in its own card in the Help window —
+  fully translated into all 13 languages.
+- The scanner-profiling help now states the scan resolution to use:
+  600 dpi or more, 1200 dpi preferred — 300 dpi is too coarse for clean
+  patch reads (Knut). Added to both Help-window walkthroughs and the
+  Build scanner or camera profile window's ⓘ.
+
 ## v3.13.0-beta.142
 
 ### 🐛 Fixes

@@ -467,7 +467,9 @@ WORKFLOWS: list[dict] = [
                 "chart's .cht + .cie files.")),
             (3, tr("Scan the printed chart on the scanner you want to profile as "
                 "a plain RGB TIFF, with the scanner's own auto-correction and "
-                "colour management turned OFF.")),
+                "colour management turned OFF. Scan at 600 dpi or more — "
+                "1200 dpi is preferred; 300 dpi is too coarse for clean patch "
+                "reads.")),
             (3, tr("Open Tools ▸ Build scanner or camera profile. Pick the "
                 "measured chart and the scan, drag the four corners over the "
                 "patch area until the green grid lines up with the real patches, "
@@ -508,7 +510,8 @@ WORKFLOWS: list[dict] = [
             (3, tr("Scan every printed page on your profiled scanner as a "
                 "plain RGB TIFF, with the scanner's auto-correction and colour "
                 "management turned OFF — the same settings you profiled it "
-                "with.")),
+                "with. Scan at 600 dpi or more — 1200 dpi is preferred; "
+                "300 dpi is too coarse for clean patch reads.")),
             (3, tr("Open Tools ▸ Build scanner or camera profile and tick "
                 "“Profile my printer from this scan”. Pick your scanner "
                 "profile, the chart you printed (its .ti2), and each page's "
@@ -524,6 +527,115 @@ WORKFLOWS: list[dict] = [
         ],
     },
 ]
+
+
+# ---------------------------------------------------------------------------
+# Dictionary and terminology (Knut, #108) — every term, phrase and
+# abbreviation the app (and printer/scanner profiling generally) throws at a
+# newcomer, alphabetical, in plain language. Rendered by its own detail view
+# (no numbered steps).
+GLOSSARY: list[tuple[str, str]] = [
+    (tr(".cht file"),
+     tr("ArgyllCMS's recognition file: where every patch sits on a scanned target, so software can find them in the image.")),
+    (tr(".cie file"),
+     tr("The reference colours of a target — what each patch SHOULD measure — used together with a scan to build a scanner profile.")),
+    (tr(".ti1 / .ti2 / .ti3 files"),
+     tr("ArgyllCMS's chart pipeline: .ti1 = the designed patch set, .ti2 = the printed layout (which patch sits where), .ti3 = the measurements. colprof turns a .ti3 into a profile.")),
+    (tr("Black point"),
+     tr("The darkest colour a printer and paper can produce. Everything darker in an image gets squeezed up to this level.")),
+    (tr("Calibration"),
+     tr("Bringing a device to a fixed, repeatable state (e.g. printer ink limits or a monitor's brightness). Done BEFORE profiling — a profile describes a device, calibration sets it.")),
+    (tr("Chart / test chart"),
+     tr("A printed page of colour patches with known device values. Measuring what the printer actually made of them is the raw material of a profile. Also called a target.")),
+    (tr("chartread"),
+     tr("The ArgyllCMS command-line tool that reads a printed chart with a spectrophotometer. ChromIQ runs it on the Measure tab.")),
+    (tr("CMYK"),
+     tr("Cyan, magenta, yellow and black — printing inks. ChromIQ profiles RGB-driven printers, whose drivers convert to ink internally.")),
+    (tr("Colorimeter"),
+     tr("A measuring device with a few colour filters — fine for monitors, not suitable for printer profiling. Compare spectrophotometer.")),
+    (tr("colprof"),
+     tr("The ArgyllCMS tool that turns a measurement file (.ti3) into an ICC profile.")),
+    (tr("D50"),
+     tr("The standard 'daylight' illuminant of printing: warmish daylight at 5000 K. Profiles and measurements are referenced to it, and prints should be judged under it.")),
+    (tr("Delta E (ΔE)"),
+     tr("The distance between two colours as a single number. Below about 1 is invisible; 2–4 is visible side by side; above 6 is obvious. Used to judge profile quality.")),
+    (tr("Device link"),
+     tr("A special profile that converts directly from one device's colours to another's, in one step, without the usual detour through a neutral colour space.")),
+    (tr("dpi / ppi"),
+     tr("Dots (printer) or pixels (scanner/image) per inch. For scanning charts: 600 dpi is fine, 1200 dpi preferred; the reading software averages each patch anyway.")),
+    (tr("Fiducial marks"),
+     tr("Small crosses or corners printed outside a target's patch area. Scanning software uses them to locate the patch grid precisely.")),
+    (tr("Gamma / TRC"),
+     tr("The tone curve relating stored values to brightness. Profiles carry it per channel (the 'shaper' in shaper/matrix profiles).")),
+    (tr("Gamut"),
+     tr("All the colours a device can reproduce. A printer's gamut is much smaller than what a camera captures or a monitor shows — the profile manages the squeeze.")),
+    (tr("Gamut volume"),
+     tr("A single number for a gamut's size (in Lab space). Useful for comparing papers or printers; bigger is roomier, not automatically better.")),
+    (tr("ICC profile"),
+     tr("A standard file (.icc) describing how a device reproduces colour. Colour-managed programs use it to translate between device colours and real-world colours.")),
+    (tr("Illuminant"),
+     tr("The light a measurement or profile assumes. Printing uses D50; changing the light changes how prints look (see metamerism).")),
+    (tr("Ink limit"),
+     tr("The maximum ink a paper can take before problems (bleeding, pooling). RGB printer drivers handle this internally.")),
+    (tr("Instrument"),
+     tr("The measuring device — in ChromIQ usually a spectrophotometer (i1Pro, ColorMunki, SpectroScan) or, with the scanner workflow, a profiled flatbed scanner.")),
+    (tr("Lab (CIELAB)"),
+     tr("A device-independent colour space built around human vision: L* is lightness, a* red–green, b* yellow–blue. The neutral meeting ground profiles translate through.")),
+    (tr("LUT profile"),
+     tr("A profile built as a lookup table — flexible enough for a printer's irregular gamut. Compare matrix profile.")),
+    (tr("Matrix profile"),
+     tr("A compact profile type: one tone curve per channel plus a 3×3 matrix. Great for well-behaved devices (monitors, scanners); ChromIQ's recommended type for scanner profiles.")),
+    (tr("Measurement modes (M0/M1/M2)"),
+     tr("Standard instrument modes differing in UV content: M0 legacy, M1 includes UV (matches D50), M2 excludes UV ('UV-cut') — matters on OBA-rich papers.")),
+    (tr("Metamerism"),
+     tr("Two colours matching under one light but not under another. The reason prints are judged under standard light (D50).")),
+    (tr("OBA (optical brighteners)"),
+     tr("Additives that make paper look whiter under UV-containing light. They can shift measurements and make prints look different across lighting.")),
+    (tr("Patch"),
+     tr("One coloured rectangle on a test chart. More patches = more measured colours = a potentially more accurate profile.")),
+    (tr("Perceptual (rendering intent)"),
+     tr("Squeezes the whole image smoothly into the printer's gamut, keeping relationships between colours. Good default for photos.")),
+    (tr("printtarg"),
+     tr("The ArgyllCMS tool that lays out a patch set onto printable pages (ChromIQ's layout engine is an alternative to it).")),
+    (tr("Profile (verb)"),
+     tr("To measure how a device reproduces colour and store the result as an ICC profile.")),
+    (tr("Quality (profile build)"),
+     tr("colprof's -q setting: how finely the profile models the measurements. Higher = slower build, bigger file, usually only marginally better.")),
+    (tr("Relative colorimetric (rendering intent)"),
+     tr("Reproduces in-gamut colours exactly, clips out-of-gamut ones to the edge. Good for proofing; can flatten saturated areas.")),
+    (tr("Rendering intent"),
+     tr("The strategy for squeezing colours into a smaller gamut: perceptual, relative colorimetric, saturation, or absolute colorimetric.")),
+    (tr("RGB"),
+     tr("Red, green, blue — how images, monitors, scanners and (from the computer's side) most photo printers describe colour.")),
+    (tr("Saturation (rendering intent)"),
+     tr("Keeps colours as vivid as possible at the expense of accuracy — for graphs and signage, not photos.")),
+    (tr("scanin"),
+     tr("The ArgyllCMS tool that reads patch values out of a SCANNED image of a target, using a .cht file to find the patches.")),
+    (tr("Scanner target (IT8 etc.)"),
+     tr("An industrially-made chart with known reference values (e.g. Wolf Faust IT8, LaserSoft), used to profile a scanner or camera.")),
+    (tr("Soft-proof"),
+     tr("Simulating on screen how an image will look when printed through a given profile — including its gamut limits.")),
+    (tr("Spacer"),
+     tr("A separator strip between patch rows/columns on a chart, helping strip-reading instruments (and scan alignment) stay on track.")),
+    (tr("Spectrophotometer"),
+     tr("A measuring device that samples the whole visible spectrum of a patch — the standard instrument for printer profiling.")),
+    (tr("Strip"),
+     tr("A row of patches read in one sweep by instruments like the i1Pro.")),
+    (tr("targen"),
+     tr("The ArgyllCMS tool that designs a patch SET (which colours to print) before printtarg/the engine lays it out.")),
+    (tr("White point"),
+     tr("The colour of the paper itself — the lightest 'colour' a print can contain. Profiles measure and account for it.")),
+]
+
+GLOSSARY_CARD: dict = {
+    "key": "glossary",
+    "title": tr("Dictionary and terminology"),
+    "subtitle": tr("Every term used in ChromIQ and in printer/scanner "
+                   "profiling, explained in plain language."),
+    "steps": [],
+    "kind": "glossary",
+}
+WORKFLOWS.append(GLOSSARY_CARD)
 
 
 # ---------------------------------------------------------------------------
@@ -858,6 +970,18 @@ class WorkflowIcon(QWidget):
                     y = top + 30 + k * 12
                     x1 = s - inner - (12 if k == 1 else 0)
                     p.drawLine(inner, y, x1, y)
+
+        elif self._key == "glossary":
+            # Dictionary: a big "Aa" with an accent underline.
+            f = QFont()
+            f.setPixelSize(int(s * 0.42))
+            f.setBold(True)
+            p.setFont(f)
+            p.setPen(QPen(fg, stroke))
+            p.drawText(0, 0, s, s - 14, Qt.AlignmentFlag.AlignCenter, "Aa")
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(accent)
+            p.drawRoundedRect(int(s * 0.30), s - 22, int(s * 0.40), 5, 2, 2)
 
         p.end()
 
@@ -1272,15 +1396,47 @@ class WelcomeDialog(QDialog):
             w = item.widget()
             if w is not None:
                 w.deleteLater()
-        # Build new rows. Steps are (tab_idx, text) or (tab_idx, text, optional).
-        for i, step in enumerate(wf["steps"], start=1):
-            tab_idx, text = step[0], step[1]
-            optional = bool(step[2]) if len(step) > 2 else False
-            row = self._make_step_row(i, tab_idx, text, optional=optional)
-            self._steps_layout.addWidget(row)
+        if wf.get("kind") == "glossary":
+            # Alphabetical term/definition rows — no step badges (Knut, #108).
+            for term, definition in GLOSSARY:
+                self._steps_layout.addWidget(self._make_glossary_row(
+                    term, definition))
+        else:
+            # Build new rows. Steps are (tab_idx, text) or
+            # (tab_idx, text, optional).
+            for i, step in enumerate(wf["steps"], start=1):
+                tab_idx, text = step[0], step[1]
+                optional = bool(step[2]) if len(step) > 2 else False
+                row = self._make_step_row(i, tab_idx, text, optional=optional)
+                self._steps_layout.addWidget(row)
         self._steps_layout.addStretch(1)
         self._apply_detail_text_colors()
         self._stack.setCurrentIndex(1)
+
+    # ------------------------------------------------------------------
+    def _make_glossary_row(self, term: str, definition: str) -> QWidget:
+        """One dictionary entry: bold term, plain-language definition under it
+        (Knut's "Dictionary and terminology" card, #108)."""
+        row = QWidget(self._steps_host)
+        v = QVBoxLayout(row)
+        v.setContentsMargins(0, 0, 0, 10)
+        v.setSpacing(2)
+        t = QLabel(term, row)
+        tf = QFont()
+        tf.setPixelSize(13)
+        tf.setBold(True)
+        t.setFont(tf)
+        t.setWordWrap(True)
+        t.setObjectName("welcome_step_body")
+        v.addWidget(t)
+        d = QLabel(definition, row)
+        df = QFont()
+        df.setPixelSize(13)
+        d.setFont(df)
+        d.setWordWrap(True)
+        d.setObjectName("welcome_step_body")
+        v.addWidget(d)
+        return row
 
     # ------------------------------------------------------------------
     def _make_step_row(
