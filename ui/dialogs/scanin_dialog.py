@@ -1627,6 +1627,22 @@ class ScannerProfileDialog(_ToolDialogBase):
         else:
             self._std_grid = None
             if self._layout is not None:
+                # Restore the chart's own page list — the standard-mode visit
+                # collapsed it to one page (a 3-page chart came back showing
+                # only page 1 otherwise).
+                if self._layout.get("patches"):
+                    self._pages = sorted({int(pp.get("page", 0))
+                                          for pp in self._layout["patches"]})
+                else:
+                    self._pages = list(range(len(
+                        self._layout.get("cht_pages", [1]))))
+                self._page = self._pages[0] if self._pages else 0
+                self._page_combo.blockSignals(True)
+                self._page_combo.clear()
+                for pg in self._pages:
+                    self._page_combo.addItem(tr("Page {n}").format(n=pg + 1), pg)
+                self._page_combo.blockSignals(False)
+                self._page_widget.setVisible(len(self._pages) > 1)
                 self._load_page_grid()
             else:
                 self._marquee.set_grid(GridSpec([]))
@@ -1790,7 +1806,25 @@ class ScannerProfileDialog(_ToolDialogBase):
         self._refresh()
 
     def _set_std_target(self, cht: Path | None) -> None:
+        changed = (self._std_cht is not None and cht is not None
+                   and Path(cht) != Path(self._std_cht))
         self._std_cht = cht
+        if changed:
+            # A different target type has different geometry: the previous
+            # placement is meaningless on it, and a DEMO scan belongs to the
+            # previous target outright (Knut: switching types kept showing
+            # the old grid, clearest with Try-a-demo between types).
+            for shot in self._page_shots(self._page):
+                shot["corners"] = None
+            demo_dir = Path.home() / "ChromIQ" / "scanner-test-targets"
+            cur = self._cur_shot().get("path")
+            if cur and demo_dir in Path(cur).parents:
+                self._cur_shot()["path"] = None
+                self._scan_field.setText("")
+                self._marquee.set_image(QImage())
+                if self._std_ref and demo_dir in Path(self._std_ref).parents:
+                    self._std_ref = None
+                    self._ref_field.setText("")
         if not self._fiducials_available() and self._use_fiducials_cb.isChecked():
             self._use_fiducials_cb.setChecked(False)   # new target has no fiducials
         if cht is None or not cht.is_file():
@@ -1798,9 +1832,8 @@ class ScannerProfileDialog(_ToolDialogBase):
             self._marquee.set_grid(GridSpec([]))
         else:
             self._rebuild_std_grid()
-            # Changing the target only swaps the grid; the loaded scan and its
-            # placement stay, so nothing to re-apply here.
         self._update_std_note()
+        self._refresh_shot_bar()
         self._refresh()
 
     def _rebuild_std_grid(self) -> None:
@@ -2362,9 +2395,19 @@ class ScannerProfileDialog(_ToolDialogBase):
                 _read, exp = self._read_expected_dicts(p.out_ti3)
             report = self._dense_report(p, p.is_printer, exp)
             floor = 100.0 * float(self._settings.get(
-                "scanner_check_agreement", 0.70))
+                "scanner_check_agreement", 0.85))
             where = self._page_label(job.get("page", 1) - 1)
-            if report is not None and report.agreement_pct < floor:
+            on_edge = self._flank_offenders(report) if report else []
+            if on_edge:
+                msg = tr(
+                    "{w}: sample boxes sit on patch edges — realign the "
+                    "grid. Worst placed: {worst}. (Placement agreement "
+                    "{a} %.)").format(
+                        w=where, worst=", ".join(on_edge[:6]),
+                        a=f"{report.agreement_pct:.2f}")
+                self._log.appendPlainText("⚠ " + msg)
+                self._align_warnings.append(msg)
+            elif report is not None and report.agreement_pct < floor:
                 worst = ", ".join(n for n, _pp in report.offenders[:5])
                 msg = tr(
                     "{w}: a nearby grid position matches the chart better "
@@ -2380,7 +2423,7 @@ class ScannerProfileDialog(_ToolDialogBase):
                 self._check_local_groups(job, p.out_ti3,
                                          p.pbase.with_suffix(".ti2"),
                                          ids=page_ids_from_cht(p.cht))
-            else:
+            elif (scan_reference_correlation(p.out_ti3) or 1.0) >= 0.8:
                 self._check_local_groups(job, p.out_ti3)
         except Exception:  # noqa: BLE001 — a sanity check must never block
             log.warning("misalignment check failed", exc_info=True)
@@ -2545,7 +2588,13 @@ class ScannerProfileDialog(_ToolDialogBase):
         else:
             read, exp = self._read_expected_dicts(ti3)
             rho = scan_reference_correlation(ti3)
-        groups = locally_misaligned_groups(read, exp)
+        # Reference-based layers only make sense where the reference can
+        # predict the scan at all: on strongly saturated targets (LaserSoft)
+        # even a perfect read ranks against the reference at ρ≈0.5, and
+        # rank-displacement clustering fires on nothing but metamerism.
+        ref_usable = rho is None or rho >= 0.8
+        groups = (locally_misaligned_groups(read, exp)
+                  if ref_usable else [])
         if groups:
             out.append(tr(
                 "⚠ {w}: the patches in {groups} read like their neighbours' "
@@ -2569,9 +2618,17 @@ class ScannerProfileDialog(_ToolDialogBase):
             log.warning("dense placement evaluation failed", exc_info=True)
         if report is not None:
             agree = report.agreement_pct
+            on_edge = self._flank_offenders(report)
+            if on_edge:
+                out.append(tr(
+                    "⚠ {w}: sample boxes sit on patch edges — realign the "
+                    "grid. Worst placed: {worst}. (Placement agreement "
+                    "{a} %.)").format(
+                        w=where, worst=", ".join(on_edge[:6]),
+                        a=f"{agree:.2f}"))
             floor = 100.0 * float(self._settings.get(
-                "scanner_check_agreement", 0.70))
-            if agree < floor:
+                "scanner_check_agreement", 0.85))
+            if not on_edge and agree < floor:
                 worst = ", ".join(n for n, _p in report.offenders[:5])
                 out.append(tr(
                     "⚠ {w}: a nearby grid position matches the chart better "
@@ -2593,6 +2650,17 @@ class ScannerProfileDialog(_ToolDialogBase):
                     "✓ {w} looks well aligned — what was read agrees with "
                     "the chart (agreement {r}).").format(w=where, r=r_txt))
         return out
+
+    def _flank_offenders(self, report) -> list[str]:
+        """Patches whose sample box sits ON a patch border flank (Knut):
+        one edge of the box deviates strongly from the box centre, beyond
+        that box's own ladder minimum. Five or more such boxes = the grid is
+        on edges, whatever the ladder says (fewer can be dust, damage or a
+        structured patch that didn't fully cancel)."""
+        lim = float(self._settings.get("scanner_flank_limit", 0.16))
+        hits = sorted(((n, v) for n, v in report.flank_by_patch.items()
+                       if v > lim), key=lambda t: -t[1])
+        return [n for n, _v in hits] if len(hits) >= 5 else []
 
     def _dense_report(self, params, printer: bool, exp: dict):
         """Run Knut's dense ladder on the dry-run's scan: patch boxes from
@@ -2626,6 +2694,20 @@ class ScannerProfileDialog(_ToolDialogBase):
 
         boxes = [_Box(b) for b in geom.patches]
         expected = {_plain_id(k): v for k, v in exp.items()}
+        if not printer:
+            # Scanner/standard mode: the reference carries full XYZ — hand
+            # the response lens the triples so it can model the scan's
+            # luminance linearly in XYZ (monotone-in-Y breaks on saturated
+            # targets like the LaserSoft).
+            try:
+                from workflow.ti3_analysis import parse_ti3
+                t = parse_ti3(params.out_ti3)
+                triples = {_plain_id(sid): tuple(xyz)
+                           for sid, xyz in zip(t.sample_ids, t.xyz)}
+                if len(triples) >= 16:
+                    expected = triples
+            except Exception:  # noqa: BLE001
+                pass
 
         def _run(objective: str):
             return dense_placement_agreement(

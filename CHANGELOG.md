@@ -1,5 +1,39 @@
 # Changelog
 
+## v3.13.0-beta.138
+
+### ✨ Improvements
+- **Edge-flank detection** (Knut's design): every sample box is split into
+  a 3×3 grid and each border zone is compared with the box centre, in
+  brightness and two opponent-colour planes. A box whose edge lies on a
+  patch border picks up the neighbouring colour along that side — three
+  or more such boxes flag the page IMMEDIATELY, overriding the
+  placement-agreement floor, and the worst-placed patches are named.
+  Each box is judged RELATIVE to its own best nearby position, so
+  patches with inner structure (the LaserSoft barcode row, grey wedges)
+  don't count. Threshold in Settings → Scanner Limits ("Flag sample
+  boxes on patch edges above", default 0.16, five-box rule), calibrated
+  on his three real materials (Wolf Faust, LaserSoft Advanced, the
+  3-page ChromIQ chart with spacers): aligned grids show 0–2 hits,
+  grids on borders dozens.
+- The placement-agreement floor default is 0.85 (Knut). The check (both
+  layers) runs identically in all three scanin modes — standard target,
+  ChromIQ-chart scanner profile, and printer-from-scan — for the Check
+  alignment button and for every page at build time.
+
+### 🐛 Fixes
+- Switching between standard target types no longer keeps the previous
+  target's grid placement — the grid re-seeds for the new geometry, and a
+  demo scan of the previous target is cleared with it (clearest when
+  using "Try with a demo scan" across types; Knut).
+- The page selector is reliably hidden in standard-target mode, and
+  switching back to a multi-page ChromIQ chart restores its full page
+  list (a 3-page chart came back showing only page 1).
+- Demo scans now carry simulated scanner noise (1.5 % Gaussian, the
+  level Knut's real Epson V700 scans measure) on top of the edge
+  softness — so the demo behaves like a real scan under the same
+  thresholds (Knut).
+
 ## v3.13.0-beta.137
 
 ### 🐛 Fixes

@@ -44,6 +44,11 @@ class PlacementReport:
         self.s_user = s_user          # raw score of the user's position
         self.s_best = s_best          # raw score of the ladder's best
         self.s_floor = s_floor        # the 0 %-end raw score (least worst)
+        # Flank detection (Knut, #108): per patch, how strongly one edge of
+        # the sample box deviates from the box centre — a box sitting on a
+        # patch border shows its neighbour's colour along that side. Range-
+        # normalised; ≈ noise for boxes fully inside flat colour.
+        self.flank_by_patch: dict[str, float] = {}
 
 
 def _isotonic(ys: list[float]) -> list[float]:
@@ -193,6 +198,25 @@ def dense_placement_agreement(
     reads: dict[str, list[float | None]] = {}
     spreads: dict[str, list[float | None]] = {}
     box_ixs: dict[str, list] = {}
+    flank_all: dict[str, list] = {}       # per patch, at EVERY ladder position
+
+    def _flank_of(i1, i2, ix) -> float | None:
+        """Max deviation of a 3×3 sub-cell mean from the box mean — the
+        signature of a box edge lying on a patch border flank."""
+        xa, ya, xb, yb = ix
+        if xb - xa < 6 or yb - ya < 6:
+            return None
+        whole, _sd = _stats(i1, i2, ix)
+        xs = [xa, xa + (xb - xa) // 3, xa + 2 * (xb - xa) // 3, xb]
+        ys = [ya, ya + (yb - ya) // 3, ya + 2 * (yb - ya) // 3, yb]
+        dev = 0.0
+        for r in range(3):
+            for c in range(3):
+                if r == 1 and c == 1:
+                    continue
+                m, _d = _stats(i1, i2, (xs[c], ys[r], xs[c + 1], ys[r + 1]))
+                dev = max(dev, abs(m - whole))
+        return dev
     for b in named:
         cx, cy = (b.x1 + b.x2) / 2.0, (b.y1 + b.y2) / 2.0
         hx = (b.x2 - b.x1) * sample_frac / 2.0
@@ -216,6 +240,9 @@ def dense_placement_agreement(
         reads[b.name] = vals
         spreads[b.name] = devs
         box_ixs[b.name] = ixs
+        flank_all[b.name] = [
+            _flank_of(integ, integ2, ix) if ix is not None else None
+            for ix in ixs]
 
     # Chroma planes, swept one at a time (two integral images live at once —
     # keeps memory flat): the edge term takes the strongest spread across
@@ -230,6 +257,14 @@ def dense_placement_agreement(
                 _m, dev = _stats(i1, i2, ix)
                 if devs[k] is not None and dev > devs[k]:
                     devs[k] = dev
+            fl = flank_all.get(name)
+            if fl is not None:
+                for k, ix in enumerate(ixs):
+                    if ix is None:
+                        continue
+                    fk = _flank_of(i1, i2, ix)
+                    if fk is not None and (fl[k] is None or fk > fl[k]):
+                        fl[k] = fk
         del i1, i2
 
     # Score every ladder position by page-level consistency: fit a monotone
@@ -273,10 +308,29 @@ def dense_placement_agreement(
             return res[min(len(res) - 1, int(len(res) * 0.90))], per
 
     def page_score_response(pos_i: int):
-        pairs = sorted((expected_by_id[n], v[pos_i])
-                       for n, v in reads.items() if v[pos_i] is not None)
-        if len(pairs) < 16:
+        named_now = [(n, v[pos_i]) for n, v in reads.items()
+                     if v[pos_i] is not None]
+        if len(named_now) < 16:
             return None, None
+        first = expected_by_id[named_now[0][0]]
+        if isinstance(first, (tuple, list)):
+            # Reference gives full XYZ: model the scan's luminance as a
+            # LINEAR mix of X, Y, Z (broadband scanner channels are close
+            # to linear in XYZ). A monotone-in-Y model breaks on strongly
+            # saturated targets — Knut's LaserSoft scored its aligned grid
+            # at 0 % because scan lum vs reference Y simply isn't monotone
+            # there.
+            import numpy as np
+            a = np.array([[*expected_by_id[n], 1.0] for n, _r in named_now])
+            yv = np.array([r for _n, r in named_now])
+            coef, *_ = np.linalg.lstsq(a, yv, rcond=None)
+            pred = a @ coef
+            rng = (float(yv.max() - yv.min())) or 1.0
+            resid = np.abs(yv - pred) / rng
+            per = {n: float(rr) for (n, _r), rr in zip(named_now, resid)}
+            res = sorted(per.values())
+            return res[min(len(res) - 1, int(len(res) * 0.95))], per
+        pairs = sorted((expected_by_id[n], r) for n, r in named_now)
         ys = [r for _e, r in pairs]
         fit = _isotonic(ys)
         rng = (max(ys) - min(ys)) or 1.0
@@ -289,6 +343,30 @@ def dense_placement_agreement(
 
     lums = [v for vv in reads.values() for v in vv if v is not None]
     lum_range = (max(lums) - min(lums)) or 1.0 if lums else 1.0
+
+    # Self-gate for the response lens: on some targets (LaserSoft's
+    # saturated dyes) the scan's luminance simply cannot be predicted from
+    # the reference — even scanin's own correctly-placed read ranks against
+    # the reference at only ρ≈0.5 there (a Wolf Faust reads ≈0.95). A lens
+    # whose model can't explain the data even when perfectly placed has no
+    # business voting, so the response objective steps aside and the edge
+    # lens rules alone.
+    if objective in ("response", "combined"):
+        pairs0 = [(expected_by_id[n], v[0]) for n, v in reads.items()
+                  if v[0] is not None]
+        if len(pairs0) >= 16:
+            def _y(e):
+                return e[1] if isinstance(e, (tuple, list)) else e
+            ids0 = list(range(len(pairs0)))
+            by_e = sorted(ids0, key=lambda i: _y(pairs0[i][0]))
+            by_r = sorted(ids0, key=lambda i: pairs0[i][1])
+            re_ = {i: k for k, i in enumerate(by_e)}
+            rr_ = {i: k for k, i in enumerate(by_r)}
+            n0 = len(ids0)
+            rho0 = 1 - 6 * sum((re_[i] - rr_[i]) ** 2 for i in ids0) / (
+                n0 * (n0 * n0 - 1))
+            if rho0 < 0.8:
+                return None
 
     s_user, per_user = page_score(0)
     if s_user is None:
@@ -325,6 +403,21 @@ def dense_placement_agreement(
     per_patch = {n: 100.0 * (1.0 - r / worst_res) for n, r in per_user.items()}
     offenders = sorted(per_user.items(), key=lambda t: -t[1])
     offenders = [(n, per_patch[n]) for n, _r in offenders]
-    return PlacementReport(agree, per_patch, offenders, s_user=s_user,
-                           s_best=s_best,
-                           s_floor=min(per_dir_worst) if per_dir_worst else None)
+    rep = PlacementReport(agree, per_patch, offenders, s_user=s_user,
+                          s_best=s_best,
+                          s_floor=min(per_dir_worst) if per_dir_worst else None)
+    # Flank SIGNAL per patch: the box's flank at the user's position minus
+    # the same box's minimum across the ladder. A patch with inner structure
+    # (barcodes, wedges — LaserSoft has plenty) is high EVERYWHERE and
+    # cancels out; a box on a patch border is low at the aligned position
+    # and high at the user's — only that difference is an alignment signal.
+    fbp: dict[str, float] = {}
+    for n, fl in flank_all.items():
+        if fl[0] is None:
+            continue
+        known = [f for f in fl if f is not None]
+        if len(known) < 9:
+            continue
+        fbp[n] = max(0.0, (fl[0] - min(known)) / lum_range)
+    rep.flank_by_patch = fbp
+    return rep

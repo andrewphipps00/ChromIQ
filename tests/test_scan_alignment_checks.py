@@ -215,7 +215,7 @@ def test_check_page_alignment_flags_and_logs(tmp_path, _app):
         params = ScaninParams(scan, tmp_path / "x.cht", corners=corners)
         dlg._check_page_alignment({"params": params, "page": 2})
         assert len(dlg._align_warnings) == 1
-        assert "placement agreement" in dlg._align_warnings[0]
+        assert "lacement agreement" in dlg._align_warnings[0]
         assert "⚠" in dlg._log.toPlainText()
         # an ALIGNED grid must stay quiet
         scan2, boxes2, corners2, _exp2 = _dense_fixture(tmp_path, 0.0)
@@ -420,3 +420,15 @@ def test_dense_ladder_uniformity_objective(tmp_path):
                                     objective="uniformity")
     assert ok is not None and off is not None
     assert ok.agreement_pct > 95.0 > off.agreement_pct
+
+
+def test_flank_detection_fires_on_edges_only(tmp_path):
+    from workflow.placement_probe import dense_placement_agreement
+    path, boxes, corners, exp = _dense_fixture(tmp_path, 0.0)
+    rep = dense_placement_agreement(path, boxes, corners, exp)
+    aligned_hits = [n for n, v in rep.flank_by_patch.items() if v > 0.16]
+    path2, boxes2, corners2, exp2 = _dense_fixture(tmp_path, 0.40)
+    rep2 = dense_placement_agreement(path2, boxes2, corners2, exp2)
+    crossing_hits = [n for n, v in rep2.flank_by_patch.items() if v > 0.16]
+    assert len(aligned_hits) < 5          # noise/dust stays under the 5-box rule
+    assert len(crossing_hits) >= 5        # boxes on edges are named

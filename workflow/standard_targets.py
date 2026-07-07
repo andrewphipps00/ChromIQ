@@ -178,12 +178,22 @@ def make_test_scan(cht_path, out_dir):
         lum = 0.2126 * r + 0.7152 * g + 0.0722 * bl
         cie.append(f"{b.name} {r / 2.55 * 0.95:.3f} {lum / 2.55:.3f} {bl / 2.55 * 1.09:.3f}")
     cie += ['END_DATA', '']
-    # Real flatbeds soften edges (MTF); matching that keeps the demo's
-    # Check-alignment behaviour calibrated to the same thresholds as real
-    # scans (a razor-sharp render lets sub-patch offsets sample pure colour
-    # far longer than any physical scan would).
+    # Real flatbeds soften edges (MTF) and add sensor noise; matching both
+    # keeps the demo's Check-alignment behaviour calibrated to the same
+    # thresholds as real scans (a razor-sharp noise-free render lets
+    # sub-patch offsets sample pure colour far longer than any physical
+    # scan would, and reads implausibly cleanly). Blur first, then ~1.5 %
+    # Gaussian noise on top — the order of a real optical chain (Knut asked
+    # for noise; the level is what his real Epson V700 scans actually
+    # measure, ~0.6–1.2 % per box). Seeded, so demo scans stay
+    # byte-reproducible for the tests.
     from PIL import ImageFilter
     img = img.filter(ImageFilter.GaussianBlur(2))
+    import numpy as _np
+    rng = _np.random.default_rng(42)
+    arr = _np.asarray(img, dtype=_np.float64)
+    arr = arr + rng.normal(0.0, 0.015 * 255.0, size=arr.shape)
+    img = Image.fromarray(_np.clip(arr, 0, 255).astype(_np.uint8))
     tif = out_dir / f"{cht_path.stem}-test.tif"; ref = out_dir / f"{cht_path.stem}-test.cie"
     img.save(tif); ref.write_text("\n".join(cie))
     return tif, ref

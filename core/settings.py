@@ -196,7 +196,14 @@ DEFAULTS: dict[str, Any] = {
     # 8-direction probe star on Knut's normalised scale (best probe = 1,
     # worst = 0). Calibrated on his real Wolf Faust scan so a 25 % grid
     # offset flags and ≤15 % passes at 50 % sample area (#108).
-    "scanner_check_agreement":   0.70,
+    "scanner_check_agreement":   0.85,
+    # Flank override (Knut): a sample box whose edge zone deviates from its
+    # centre by more than this — beyond the same box's ladder minimum, so
+    # patches with inner structure (barcodes, wedges) cancel out — sits ON
+    # a patch border. 5+ such boxes flag the page regardless of the ladder
+    # agreement. Calibrated on his three real scans (aligned grids: 0–2
+    # hits; grids on borders: dozens).
+    "scanner_flank_limit":       0.16,
     # Settings → Paths (Knut #108): where "Install profile" copies the .icc.
     # Empty = the platform's per-user colour-profile folder.
     "profile_install_dir":       "",
