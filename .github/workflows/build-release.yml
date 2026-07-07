@@ -282,24 +282,33 @@ jobs:
             sleep 3
           done
 
-          sleep 2   # let the device fully release before converting
+          # Wait for diskimages-helper to release the image file — convert
+          # needs exclusive access and EAGAINs while the helper lingers
+          # (beta.136 burned all retries in 15 s against a busy handle).
+          for i in $(seq 1 10); do
+            hdiutil info | grep -q "/tmp/rw.dmg" || break
+            echo "image still referenced; waiting… ($i)"
+            sleep 3
+          done
 
-          # Step 5: convert to compressed read-only (UDZO = zlib). Retry — the
-          # device can still report "Resource temporarily unavailable" right
-          # after detach on the runner.
-          for i in 1 2 3; do
-            rm -f "${{ matrix.artifact }}"
-            if hdiutil convert /tmp/rw.dmg \
+          # Step 5: convert to compressed read-only (UDZO = zlib) — from a
+          # fresh COPY of the image: the copy has its own inode, so a stale
+          # exclusive claim on the original can't EAGAIN the convert. Keep
+          # retrying with growing backoff for the copy-also-raced case.
+          for wait in 5 10 20 40; do
+            rm -f "${{ matrix.artifact }}" /tmp/rw-copy.dmg
+            cp /tmp/rw.dmg /tmp/rw-copy.dmg
+            if hdiutil convert /tmp/rw-copy.dmg \
                  -format UDZO -imagekey zlib-level=9 \
                  -o "${{ matrix.artifact }}"; then
               break
             fi
-            echo "convert attempt $i failed; retrying in 5s…"
-            sleep 5
+            echo "convert attempt failed; retrying in ${wait}s…"
+            sleep "$wait"
           done
           [ -f "${{ matrix.artifact }}" ] || { echo "DMG convert failed"; exit 1; }
 
-          rm -f /tmp/rw.dmg
+          rm -f /tmp/rw.dmg /tmp/rw-copy.dmg
 
       - name: Codesign DMG (ad-hoc)
         run: codesign --sign - "${{ matrix.artifact }}"
