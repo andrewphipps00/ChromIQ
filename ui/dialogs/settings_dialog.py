@@ -970,20 +970,21 @@ class SettingsDialog(QDialog):
         _row(3, tr("Flag sample boxes on patch edges above (0–1):"),
              self._scan_flank_spin,
              tr("Edge-flank detection"),
-             tr("Every sample box is split into a 3×3 grid and each border "
-                "zone is compared with the box centre, in brightness and in "
-                "two opponent-colour planes — relative to the same box's "
-                "best nearby position, so patches with inner structure "
-                "(barcodes, grey wedges) don't count. A box fully inside "
-                "flat colour shows only noise; a box whose edge lies on a "
-                "patch border picks up the neighbouring colour along that "
-                "side.\n\n"
-                "When five or more boxes exceed this limit, the page is "
+             tr("A thin strip along each edge of every sample box (1/9 of "
+                "the box side) is compared with the box mean, in brightness "
+                "and in two opponent-colour planes — relative to the same "
+                "box's best nearby position, so patches with inner "
+                "structure (barcodes, grey wedges) don't count. A box fully "
+                "inside flat colour shows only noise; a box whose edge lies "
+                "on a patch border picks up the neighbouring colour in that "
+                "strip.\n\n"
+                "When three or more boxes exceed this limit, the page is "
                 "flagged as sitting on edges IMMEDIATELY — overriding the "
                 "placement-agreement floor above — and the worst-placed "
-                "patches are named. Lower = stricter. Calibrated on real "
-                "scanned targets (Wolf Faust, LaserSoft, a ChromIQ chart "
-                "with spacers)."))
+                "patches are named. Three also catches a single dragged "
+                "grid corner. Lower = stricter. Calibrated on real scanned "
+                "targets (Wolf Faust, LaserSoft, a ChromIQ chart with "
+                "spacers)."))
         self._scan_avg_spin = NoScrollDoubleSpinBox(grp)
         self._scan_avg_spin.setRange(2.0, 60.0)
         self._scan_avg_spin.setDecimals(1)

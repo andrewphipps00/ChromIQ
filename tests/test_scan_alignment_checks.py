@@ -430,5 +430,5 @@ def test_flank_detection_fires_on_edges_only(tmp_path):
     path2, boxes2, corners2, exp2 = _dense_fixture(tmp_path, 0.40)
     rep2 = dense_placement_agreement(path2, boxes2, corners2, exp2)
     crossing_hits = [n for n, v in rep2.flank_by_patch.items() if v > 0.16]
-    assert len(aligned_hits) < 5          # noise/dust stays under the 5-box rule
-    assert len(crossing_hits) >= 5        # boxes on edges are named
+    assert len(aligned_hits) < 3          # noise/dust stays under the 3-box rule
+    assert len(crossing_hits) >= 3        # boxes on edges are named

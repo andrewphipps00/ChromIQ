@@ -201,21 +201,26 @@ def dense_placement_agreement(
     flank_all: dict[str, list] = {}       # per patch, at EVERY ladder position
 
     def _flank_of(i1, i2, ix) -> float | None:
-        """Max deviation of a 3×3 sub-cell mean from the box mean — the
-        signature of a box edge lying on a patch border flank."""
+        """Max deviation of a THIN edge strip (1/9 of the box side, one per
+        side) from the box mean — the signature of a box edge lying on a
+        patch border flank. Thin strips are the point (Knut's beta.138
+        test): with 3×3 cells, a 5–10 % crossing filled only a sliver of a
+        third-of-a-box cell and diluted below any threshold; a 1/9 strip is
+        half-filled by the same crossing and the deviation jumps."""
         xa, ya, xb, yb = ix
-        if xb - xa < 6 or yb - ya < 6:
+        w, h = xb - xa, yb - ya
+        if w < 9 or h < 9:
             return None
         whole, _sd = _stats(i1, i2, ix)
-        xs = [xa, xa + (xb - xa) // 3, xa + 2 * (xb - xa) // 3, xb]
-        ys = [ya, ya + (yb - ya) // 3, ya + 2 * (yb - ya) // 3, yb]
+        tx = max(1, w // 9)
+        ty = max(1, h // 9)
         dev = 0.0
-        for r in range(3):
-            for c in range(3):
-                if r == 1 and c == 1:
-                    continue
-                m, _d = _stats(i1, i2, (xs[c], ys[r], xs[c + 1], ys[r + 1]))
-                dev = max(dev, abs(m - whole))
+        for strip in ((xa, ya, xa + tx, yb),          # left
+                      (xb - tx, ya, xb, yb),          # right
+                      (xa, ya, xb, ya + ty),          # top
+                      (xa, yb - ty, xb, yb)):         # bottom
+            m, _d = _stats(i1, i2, strip)
+            dev = max(dev, abs(m - whole))
         return dev
     for b in named:
         cx, cy = (b.x1 + b.x2) / 2.0, (b.y1 + b.y2) / 2.0

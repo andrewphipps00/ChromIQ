@@ -1,5 +1,21 @@
 # Changelog
 
+## v3.13.0-beta.139
+
+### 🐛 Fixes
+- **Edge-flank detection now actually bites** (Knut's beta.138 test). The
+  3×3 sub-cells were too coarse: a sample box 5–10 % past a patch edge
+  filled only a sliver of a third-of-a-box cell, so the deviation diluted
+  below any threshold — which is also why the Scanner Limits knob seemed
+  dead. The detector now measures THIN EDGE STRIPS (1/9 of the box side,
+  one per side, per Knut's granularity suggestion): the same crossing
+  fills half the strip and the signal jumps. Verified symmetric in all
+  four directions on the demo targets and his real scans (aligned grids:
+  0–2 hits; crossings: 31–288 boxes), and the trigger is now three boxes
+  instead of five, so corner-drag distortions (one grid corner pulled
+  inward — invisible to the whole-grid ladder by construction) trigger
+  via the affected corner's own patches.
+
 ## v3.13.0-beta.138
 
 ### ✨ Improvements
