@@ -130,9 +130,10 @@ def test_selecting_scanner_preset_turns_engine_on(qapp, tmp_path, monkeypatch):
     assert bool(s.get("use_chromiq_layout_engine", False)) is True
     assert tab._manual_layout_panel.get_recipe().instrument == "SS"
     assert built and built[-1].name == "chart.ti1"     # the bundled patch set
-    # A printtarg-era built-in switches the engine back off.
+    # A printtarg-path built-in (one of the double-density "near" fls presets,
+    # which stayed on printtarg) switches the engine back off.
     fls = tab._preset_combo.findData(
-        "__chromiq_knut_fls_i1pro_a4_484p_1page_portrait__")
+        "__chromiq_knut_fls_i1pro_a4_924p_2pages_portrait__")
     assert fls > 0
     tab._preset_combo.setCurrentIndex(fls)
     assert bool(s.get("use_chromiq_layout_engine", False)) is False

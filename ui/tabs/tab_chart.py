@@ -385,6 +385,15 @@ class _Ti1Preset:
     # ChromIQ layout-engine recipe (LayoutRecipe.to_dict()); selecting it turns
     # the engine on and seeds the layout panel instead of the printtarg widgets.
     layout_recipe: dict | None = None   # engine recipe → engine-built preset
+    # Full-layout-setup presets that reproduce printtarg EXACTLY through the
+    # ChromIQ engine (verified byte-for-byte) build on the engine path instead
+    # of printtarg — so they carry native engine geometry (scanner-ready) with
+    # no printtarg -s capture. The recipe is derived from the preset's own
+    # printtarg fields at selection (_fls_engine_recipe), so nothing is
+    # hand-authored. Unlike `layout_recipe`, the printtarg fields stay the
+    # source of truth. (#63; Basti — the 4 double-density "near" presets that
+    # only match in size keep the printtarg path.)
+    engine: bool = False
     group: str = ""                     # dropdown/overlay group ("" → by instrument)
 
     @property
@@ -506,7 +515,7 @@ KNUT_PRESETS: list[_Ti1Preset] = [
     # those — the recipe's td/scale is authoritative). Patch width is in each name.
     _Ti1Preset("fls_colormunki_a3_1196p_2pages_portrait", "A3-1196p-2pages-Portrait-w12.0mm" + KNUT_FLS_SUFFIX,
                _KNUT_CM, "A3", 0.88, 6, 2,
-               double_density=True, ti1_asset=f"{_KNUT_FLS_DIR}/fls_colormunki_a3_1196p_2pages_portrait/chart.ti1", patches=1196, white=9, black=8, no_strip_limit=True, tiff_16bit=False, suffix=KNUT_FLS_SUFFIX),
+               double_density=True, ti1_asset=f"{_KNUT_FLS_DIR}/fls_colormunki_a3_1196p_2pages_portrait/chart.ti1", patches=1196, white=9, black=8, no_strip_limit=True, tiff_16bit=False, suffix=KNUT_FLS_SUFFIX, engine=True),
     _Ti1Preset("fls_colormunki_a3_1224p_2pages_landscape", "A3-1224p-2pages-Landscape-w12.0mm" + KNUT_FLS_SUFFIX,
                _KNUT_CM, "420x297", 0.85, 6, 2,
                double_density=True, ti1_asset=f"{_KNUT_FLS_DIR}/fls_colormunki_a3_1224p_2pages_landscape/chart.ti1", patches=1224, white=9, black=8, no_strip_limit=True, tiff_16bit=False, suffix=KNUT_FLS_SUFFIX),
@@ -515,37 +524,37 @@ KNUT_PRESETS: list[_Ti1Preset] = [
                double_density=True, ti1_asset=f"{_KNUT_FLS_DIR}/fls_colormunki_a3_1575p_3pages_portrait/chart.ti1", patches=1575, white=9, black=8, no_strip_limit=True, tiff_16bit=False, suffix=KNUT_FLS_SUFFIX),
     _Ti1Preset("fls_colormunki_a3_2016p_4pages_portrait", "A3-2016p-4pages-Portrait-w13.0mm" + KNUT_FLS_SUFFIX,
                _KNUT_CM, "A3", 0.96, 6, 4,
-               double_density=True, ti1_asset=f"{_KNUT_FLS_DIR}/fls_colormunki_a3_2016p_4pages_portrait/chart.ti1", patches=2016, white=9, black=8, no_strip_limit=True, tiff_16bit=False, suffix=KNUT_FLS_SUFFIX),
+               double_density=True, ti1_asset=f"{_KNUT_FLS_DIR}/fls_colormunki_a3_2016p_4pages_portrait/chart.ti1", patches=2016, white=9, black=8, no_strip_limit=True, tiff_16bit=False, suffix=KNUT_FLS_SUFFIX, engine=True),
     _Ti1Preset("fls_colormunki_a3_2016p_4pages_portrait_nature_focus", "A3-2016p-4pages-Portrait-w13.0mm-Nature Focus" + KNUT_FLS_SUFFIX,
                _KNUT_CM, "A3", 0.96, 6, 4,
-               double_density=True, ti1_asset=f"{_KNUT_FLS_DIR}/fls_colormunki_a3_2016p_4pages_portrait_nature_focus/chart.ti1", patches=2016, white=9, black=8, no_strip_limit=True, tiff_16bit=False, suffix=KNUT_FLS_SUFFIX),
+               double_density=True, ti1_asset=f"{_KNUT_FLS_DIR}/fls_colormunki_a3_2016p_4pages_portrait_nature_focus/chart.ti1", patches=2016, white=9, black=8, no_strip_limit=True, tiff_16bit=False, suffix=KNUT_FLS_SUFFIX, engine=True),
     _Ti1Preset("fls_colormunki_a3plus_1190p_1page_portrait", "A3Plus-1190p-1page-Portrait-w9.0mm" + KNUT_FLS_SUFFIX,
                _KNUT_CM, "329x483", 1.14, 6, 1,
-               triple_density=True, ti1_asset=f"{_KNUT_FLS_DIR}/fls_colormunki_a3plus_1190p_1page_portrait/chart.ti1", patches=1190, white=9, black=8, no_strip_limit=True, suppress_left_clip=True, tiff_16bit=False, suffix=KNUT_FLS_SUFFIX),
+               triple_density=True, ti1_asset=f"{_KNUT_FLS_DIR}/fls_colormunki_a3plus_1190p_1page_portrait/chart.ti1", patches=1190, white=9, black=8, no_strip_limit=True, suppress_left_clip=True, tiff_16bit=False, suffix=KNUT_FLS_SUFFIX, engine=True),
     _Ti1Preset("fls_colormunki_a3plus_1196p_1page_landscape", "A3Plus-1196p-1page-Landscape-w9.0mm" + KNUT_FLS_SUFFIX,
                _KNUT_CM, "483x329", 1.12, 6, 1,
-               triple_density=True, ti1_asset=f"{_KNUT_FLS_DIR}/fls_colormunki_a3plus_1196p_1page_landscape/chart.ti1", patches=1196, white=9, black=8, no_strip_limit=True, suppress_left_clip=True, tiff_16bit=False, suffix=KNUT_FLS_SUFFIX),
+               triple_density=True, ti1_asset=f"{_KNUT_FLS_DIR}/fls_colormunki_a3plus_1196p_1page_landscape/chart.ti1", patches=1196, white=9, black=8, no_strip_limit=True, suppress_left_clip=True, tiff_16bit=False, suffix=KNUT_FLS_SUFFIX, engine=True),
     _Ti1Preset("fls_colormunki_a4_480p_2pages_portrait", "A4-480p-2pages-Portrait-w13.0mm" + KNUT_FLS_SUFFIX,
                _KNUT_CM, "A4", 0.93, 6, 2,
-               double_density=True, ti1_asset=f"{_KNUT_FLS_DIR}/fls_colormunki_a4_480p_2pages_portrait/chart.ti1", patches=480, white=9, black=8, no_strip_limit=True, tiff_16bit=False, suffix=KNUT_FLS_SUFFIX),
+               double_density=True, ti1_asset=f"{_KNUT_FLS_DIR}/fls_colormunki_a4_480p_2pages_portrait/chart.ti1", patches=480, white=9, black=8, no_strip_limit=True, tiff_16bit=False, suffix=KNUT_FLS_SUFFIX, engine=True),
     _Ti1Preset("fls_colormunki_a4_484p_1page_portrait", "A4-484p-1page-Portrait-w8.5mm" + KNUT_FLS_SUFFIX,
                _KNUT_CM, "A4", 1.08, 6, 1,
-               triple_density=True, ti1_asset=f"{_KNUT_FLS_DIR}/fls_colormunki_a4_484p_1page_portrait/chart.ti1", patches=484, white=9, black=8, no_strip_limit=True, suppress_left_clip=True, tiff_16bit=False, suffix=KNUT_FLS_SUFFIX),
+               triple_density=True, ti1_asset=f"{_KNUT_FLS_DIR}/fls_colormunki_a4_484p_1page_portrait/chart.ti1", patches=484, white=9, black=8, no_strip_limit=True, suppress_left_clip=True, tiff_16bit=False, suffix=KNUT_FLS_SUFFIX, engine=True),
     _Ti1Preset("fls_colormunki_a4_495p_1page_landscape", "A4-495p-1page-Landscape-w8.0mm" + KNUT_FLS_SUFFIX,
                _KNUT_CM, "A4R", 1.06, 6, 1,
-               triple_density=True, ti1_asset=f"{_KNUT_FLS_DIR}/fls_colormunki_a4_495p_1page_landscape/chart.ti1", patches=495, white=9, black=8, no_strip_limit=True, suppress_left_clip=True, tiff_16bit=False, suffix=KNUT_FLS_SUFFIX),
+               triple_density=True, ti1_asset=f"{_KNUT_FLS_DIR}/fls_colormunki_a4_495p_1page_landscape/chart.ti1", patches=495, white=9, black=8, no_strip_limit=True, suppress_left_clip=True, tiff_16bit=False, suffix=KNUT_FLS_SUFFIX, engine=True),
     # i1Pro A4 portrait family — reworked by Knut (#88) to keep the i1Pro clip
     # border (no -L) and honour the strip-length limit (no -P), with patch
     # widths baked into the names. The 960p landscape preset was retired.
     _Ti1Preset("fls_i1pro_a4_1200p_3pages_portrait", "A4-1200p-3pages-Portrait-w8.5mm" + KNUT_FLS_SUFFIX,
                _KNUT_I1, "A4", 1.05, 10, 3,
-               ti1_asset=f"{_KNUT_FLS_DIR}/fls_i1pro_a4_1200p_3pages_portrait/chart.ti1", patches=1200, white=9, black=8, no_strip_limit=False, suppress_left_clip=False, tiff_16bit=False, suffix=KNUT_FLS_SUFFIX),
+               ti1_asset=f"{_KNUT_FLS_DIR}/fls_i1pro_a4_1200p_3pages_portrait/chart.ti1", patches=1200, white=9, black=8, no_strip_limit=False, suppress_left_clip=False, tiff_16bit=False, suffix=KNUT_FLS_SUFFIX, engine=True),
     _Ti1Preset("fls_i1pro_a4_484p_1page_portrait", "A4-484p-1page-Portrait-w7.5mm" + KNUT_FLS_SUFFIX,
                _KNUT_I1, "A4", 0.96, 10, 1,
-               ti1_asset=f"{_KNUT_FLS_DIR}/fls_i1pro_a4_484p_1page_portrait/chart.ti1", patches=484, white=9, black=8, no_strip_limit=False, suppress_left_clip=False, tiff_16bit=False, suffix=KNUT_FLS_SUFFIX),
+               ti1_asset=f"{_KNUT_FLS_DIR}/fls_i1pro_a4_484p_1page_portrait/chart.ti1", patches=484, white=9, black=8, no_strip_limit=False, suppress_left_clip=False, tiff_16bit=False, suffix=KNUT_FLS_SUFFIX, engine=True),
     _Ti1Preset("fls_i1pro_a4_495p_1page_landscape", "A4-495p-1page-Landscape" + KNUT_FLS_SUFFIX,
                _KNUT_I1, "A4R", 1.03, 10, 1,
-               ti1_asset=f"{_KNUT_FLS_DIR}/fls_i1pro_a4_495p_1page_landscape/chart.ti1", patches=495, no_strip_limit=True, suppress_left_clip=True, tiff_16bit=False, suffix=KNUT_FLS_SUFFIX),
+               ti1_asset=f"{_KNUT_FLS_DIR}/fls_i1pro_a4_495p_1page_landscape/chart.ti1", patches=495, no_strip_limit=True, suppress_left_clip=True, tiff_16bit=False, suffix=KNUT_FLS_SUFFIX, engine=True),
     _Ti1Preset("fls_i1pro_a4_924p_2pages_portrait", "A4-924p-2pages-Portrait-w7.5mm" + KNUT_FLS_SUFFIX,
                _KNUT_I1, "A4", 0.98, 10, 2,
                ti1_asset=f"{_KNUT_FLS_DIR}/fls_i1pro_a4_924p_2pages_portrait/chart.ti1", patches=924, white=9, black=8, no_strip_limit=False, suppress_left_clip=False, tiff_16bit=False, suffix=KNUT_FLS_SUFFIX),
@@ -4535,7 +4544,8 @@ class TabChart(QWidget):
             # then win — otherwise the layout panel would show leftovers
             # instead of the preset's real instrument/paper (Knut).
             _kp = KNUT_PRESETS_BY_KEY.get(data)
-            engine_builtin = _kp is not None and _kp.layout_recipe is not None
+            engine_builtin = _kp is not None and (
+                _kp.layout_recipe is not None or _kp.engine)
             if getattr(self, "_manual_engine_check", None) is not None \
                     and self._manual_engine_check.isChecked() != engine_builtin:
                 self._manual_engine_check.setChecked(engine_builtin)
@@ -5666,6 +5676,32 @@ class TabChart(QWidget):
         """Absolute path to the bundled 1168-patch TC9.18+Spyderprint .ti1."""
         return resource_path(KNUT_TI1_ASSET)
 
+    def _fls_engine_recipe(self, p: "_Ti1Preset"):
+        """The layout-engine recipe for a Full-layout-setup ENGINE preset,
+        derived from the preset's own printtarg fields.
+
+        Built from the exact same mapping the engine build uses
+        (`ChartCreator._engine_build_kwargs`), so the engine reproduces
+        printtarg byte-for-byte (verified for all 11 engine presets). We add the
+        explicit per-edge ``margins`` (the mapping only emits ``border``) so the
+        recipe round-trip keeps the preset's margin instead of defaulting to
+        6 mm."""
+        from workflow.chart_creator import ChartParams
+        from workflow.layout_engine.presets import LayoutRecipe
+        params = ChartParams(
+            instrument=p.instrument, paper=p.paper, is_manual=True,
+            tiff_dpi=KNUT_DPI, tiff_16bit=p.tiff_16bit,
+            patch_scale=p.patch_scale, margin_mm=p.margin,
+            triple_density=p.triple_density, double_density=p.double_density,
+            disable_left_border=p.suppress_left_clip,
+            no_strip_limit=p.no_strip_limit)
+        kw = self._creator._engine_build_kwargs(params)
+        kw["margins"] = (float(p.margin),) * 4
+        kw["dpi"] = KNUT_DPI
+        r = LayoutRecipe.from_build_kwargs(kw)
+        r.instrument, r.paper = p.instrument, p.paper
+        return r
+
     def _seed_knut_preset(self, key: str, target_name: str | None = None) -> None:
         """Load a TC9.18+Spyderprint preset's fixed printtarg layout into the panel.
 
@@ -5684,16 +5720,20 @@ class TabChart(QWidget):
             self._on_auto_patches_toggled(False)
         self._load_auto_neutral_states(grey=False, white=False, black=False)
 
-        if p.layout_recipe is not None:
-            # Engine preset (Scanner family, #100): the ChromIQ layout engine
-            # lays the bundled patch set out, so seed the layout panel with the
-            # preset's recipe instead of the (hidden) printtarg widgets. The
-            # engine toggle is already on (_on_preset_selected sets it before
-            # dispatching here).
+        if p.layout_recipe is not None or p.engine:
+            # Engine preset — the ChromIQ layout engine lays the bundled patch
+            # set out, so seed the layout panel with the recipe instead of the
+            # (hidden) printtarg widgets. The engine toggle is already on
+            # (_on_preset_selected sets it before dispatching here). Scanner
+            # presets carry an explicit recipe; the Full-layout-setup engine
+            # presets derive theirs from their printtarg fields, reproducing
+            # printtarg exactly (verified) but on the native engine path (#63).
             if getattr(self, "_manual_layout_panel", None) is not None:
                 from workflow.layout_engine.presets import LayoutRecipe
-                self._manual_layout_panel.set_recipe(
-                    LayoutRecipe.from_dict(p.layout_recipe))
+                recipe = (LayoutRecipe.from_dict(p.layout_recipe)
+                          if p.layout_recipe is not None
+                          else self._fls_engine_recipe(p))
+                self._manual_layout_panel.set_recipe(recipe)
                 self._manual_layout_panel.set_pages(p.pages)
             if self._bit16_radio is not None and self._bit8_radio is not None:
                 (self._bit16_radio if p.tiff_16bit
@@ -6485,7 +6525,17 @@ class TabChart(QWidget):
             eff_margin = INSTRUMENT_DEFAULT_MARGIN.get(instr, 6)
             eff_scale = 1.0
 
-        engine_on = bool(self._settings.get("use_chromiq_layout_engine", False))
+        # Which engine the COUNT must model has to match what will actually
+        # build: Guided always lays out engine instruments with the ChromIQ
+        # engine (regardless of the Manual "use engine" toggle — that governs
+        # Manual only); Manual honours the toggle. Mirroring _should_use_engine
+        # here fixes the Guided count/estimate reading the printtarg DB (or
+        # showing nothing) when the Manual toggle happened to be off (Basti).
+        from workflow.chart_creator import ENGINE_INSTRUMENTS
+        guided_active = not (self._manual_btn is not None
+                             and self._manual_btn.isChecked())
+        engine_on = (instr in ENGINE_INSTRUMENTS) and (
+            guided_active or bool(self._settings.get("use_chromiq_layout_engine", False)))
         if engine_on:
             per_sheet = self._engine_capacity(
                 instr, paper, dd=dd, td=td, eff_lb=eff_lb, nsl=nsl_eff,
@@ -6510,8 +6560,6 @@ class TabChart(QWidget):
         # Live layout-info estimate (Guided + engine). Runs even with a chart on
         # screen, so its "estimate" column tracks the current settings while the
         # "on screen" column keeps the generated chart's real numbers (#93).
-        guided_active = not (self._manual_btn is not None
-                             and self._manual_btn.isChecked())
         if guided_active and getattr(self, "_layout_info_panel", None) is not None:
             if engine_on:
                 geom = self._engine_geom(instr, paper, dd=dd, td=td, eff_lb=eff_lb,

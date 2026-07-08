@@ -43,11 +43,15 @@ def test_layout_info_predicted_before_generate_with_engine(qapp, tmp_path):
     assert panel._actual_labels["total"].text() == "—"
 
 
-def test_layout_info_placeholder_without_engine(qapp, tmp_path):
-    tab = _tab(tmp_path, use_chromiq_layout_engine=False)
-    tab._update_patch_count()
-    # printtarg layout isn't predicted — placeholder until a chart is generated.
-    assert not tab._layout_info_panel._placeholder.isHidden()
+def test_guided_predicts_regardless_of_manual_toggle(qapp, tmp_path):
+    """Guided always lays engine instruments out with the ChromIQ engine, so the
+    layout-info estimate is shown even when the Manual 'use engine' toggle is
+    off — it must model what will actually build (Basti)."""
+    tab = _tab(tmp_path, use_chromiq_layout_engine=False)   # Manual toggle OFF
+    tab._update_patch_count()                                # Guided predictor
+    panel = tab._layout_info_panel
+    assert panel._placeholder.isHidden()                     # predicted, not blank
+    assert int(panel._estimate_labels["total"].text()) > 0
 
 
 def test_estimate_lays_out_onscreen_patch_count(qapp, tmp_path):

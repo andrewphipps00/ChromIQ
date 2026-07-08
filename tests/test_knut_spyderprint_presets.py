@@ -111,8 +111,8 @@ def test_keys_are_stable_sentinels():
 @pytest.mark.parametrize("key", sorted(KNUT_PRESET_KEYS))
 def test_seeded_command_matches_recipe(qapp, settings, key):
     p = KNUT_PRESETS_BY_KEY[key]
-    if p.layout_recipe is not None:
-        pytest.skip("engine-built preset (Scanner family) — printtarg not used")
+    if p.layout_recipe is not None or p.engine:
+        pytest.skip("engine-built preset — printtarg not used")
     tab = _make_tab(qapp, settings)
     tab._seed_knut_preset(key)
     args = _printtarg_args(tab)
