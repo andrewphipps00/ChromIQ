@@ -126,14 +126,22 @@ def test_auto_count_uses_engine_capacity(tmp_path: Path) -> None:
 def test_engine_build_kwargs_mapping(tmp_path: Path) -> None:
     creator = ChartCreator(_EngineRunner(), _MockFileManager(tmp_path / "p"),
                            _EngineSettings())
-    # Guided/Manual ColorMunki triple density → engine extra-high density (3)
+    # Guided/Manual ColorMunki triple density → engine extra-high density (3).
+    # patch_scale carries printtarg's -ii1 -a (1.3 = default); the engine's
+    # native extra-high size is that -a1.3, so it converts to engine pscale
+    # = -a / 1.3. The default 1.3 → 1.0 (unchanged native size, no regression).
     kw = creator._engine_build_kwargs(
         ChartParams(instrument="CM", paper="A3", triple_density=True,
-                    no_spacers=True, patch_scale=0.9, tiff_dpi=600))
+                    no_spacers=True, patch_scale=1.3, tiff_dpi=600))
     assert kw["instrument"] == "CM" and kw["paper"] == "A3"
     assert kw["density"] == 3            # triple density → extra-high
     assert kw["spacer_on"] is False
-    assert kw["pscale"] == 0.9 and kw["dpi"] == 600
+    assert kw["pscale"] == 1.0 and kw["dpi"] == 600
+    # A denser preset scale (printtarg -a1.04) converts to a sub-1 engine scale.
+    kw2 = creator._engine_build_kwargs(
+        ChartParams(instrument="CM", paper="A3", triple_density=True,
+                    patch_scale=1.04))
+    assert kw2["pscale"] == 1.04 / 1.3
     assert ChartParams(instrument="CM", double_density=True) and \
         creator._engine_build_kwargs(ChartParams(instrument="CM", double_density=True))["density"] == 2
 

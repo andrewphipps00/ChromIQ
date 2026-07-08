@@ -111,16 +111,27 @@ def test_colormunki_extra_high_is_native_dense_colormunki():
             > geometry.patches_per_sheet(instruments.build("CM", density=2), *A4))
 
 
-def test_colormunki_extra_high_patch_size_is_scale_independent():
-    """Extra-high is a fixed maximum-density mode, so its auto patch size (and
-    hence the count) does NOT depend on the patch scale — Guided (which passes the
-    old 1.3 trick scale) and Manual (default 1.0) fill to the SAME count (#93)."""
-    a = instruments.build("CM", density=3, border=5.0, pscale=1.0)
-    b = instruments.build("CM", density=3, border=5.0, pscale=1.3)
-    assert (a.pwid, a.plen, a.pspa) == (b.pwid, b.plen, b.pspa)
+def test_colormunki_extra_high_patch_size_scales_with_pscale():
+    """Extra-high honours the patch scale (Basti): the native size (pscale 1.0)
+    is 10.4 x 13.0 mm with a 1.3 mm spacer — the readable size printtarg's -ii1
+    triple-density trick gives at its -a1.3 default — and pscale grows/shrinks
+    the patch AND its spacer from there (the leader/trailer furniture stays
+    fixed), so a denser preset reproduces printtarg at any -a. The
+    printtarg-> engine scale conversion (-a / 1.3) lives in chart_creator, so
+    Guided (which passes -a1.3) still lands on the native size — proven in
+    test_guided_and_manual_colormunki_extra_high_same_patch_geometry."""
+    native = instruments.build("CM", density=3, border=5.0, pscale=1.0)
+    assert (round(native.pwid, 1), round(native.plen, 1), round(native.pspa, 1)) \
+        == (10.4, 13.0, 1.3)
+    dense = instruments.build("CM", density=3, border=5.0, pscale=0.831)
+    # A preset's -a1.08 → engine pscale 0.831 → printtarg's ~8.6 mm patch.
+    assert round(dense.pwid, 2) == round(0.831 * 10.4, 2)
+    assert round(dense.plen, 2) == round(0.831 * 13.0, 2)
+    assert round(dense.pspa, 2) == round(0.831 * 1.3, 2)   # spacer scales too
+    # Denser patch → strictly more patches per sheet than the native size.
     A4L = (297.0, 210.0)
-    assert (geometry.patches_per_sheet(a, *A4L)
-            == geometry.patches_per_sheet(b, *A4L) == 324)
+    assert (geometry.patches_per_sheet(dense, *A4L)
+            > geometry.patches_per_sheet(native, *A4L))
 
 
 def test_colormunki_density_in_area_first():

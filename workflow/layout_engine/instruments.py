@@ -353,14 +353,27 @@ def _build_base(
         # "auto" size is the same in Guided and Manual → both fill to the same
         # count); set an explicit patch_w/patch_h to override.
         if density >= 3:
-            plen = 13.0
-            pwid = rrsp = 10.4
+            # Extra-high density = the engine's native dense ColorMunki strip.
+            # At the native scale (pscale == 1.0) a patch is 10.4 x 13.0 mm — the
+            # readable size printtarg's -ii1 triple-density trick produces at its
+            # -a1.3 default. pscale grows/shrinks it from there so a preset can
+            # pack denser (the caller converts a printtarg -a to this engine
+            # scale: pscale = -a / 1.3; see chart_creator). Only the patch
+            # dimensions scale — the spacer and furniture stay fixed, matching
+            # printtarg -a (which scales patches, not the -A spacer).
+            plen = pscale * 13.0
+            pwid = rrsp = pscale * 10.4
             # ColorMunki has no i1-style ruler, so a strip is never length-capped
             # (matches the other CM densities) — the user pointed out a cap is
             # never needed here, so the page height is the only limit.
             txhisl, lcar, tspa = 7.0, 10.0, 10.0
+            # The spacer scales with the patch (printtarg's -a scales both), so a
+            # denser preset keeps printtarg's proportions; the leader/trailer/
+            # text furniture is fixed, as in the i1 layout. Native (pscale 1.0)
+            # is 1.3 mm = the i1 spacer at printtarg's -a1.3 default.
+            pspa_e = pscale * 1.3
             return Geom(
-                key=key, plen=plen, pspa=(1.3 if spacer_on else 0.0), tspa=tspa,
+                key=key, plen=plen, pspa=(pspa_e if spacer_on else 0.0), tspa=tspa,
                 pwid=pwid, rrsp=rrsp,
                 lspa=border + txhisl + lcar, lcar=lcar, txhisl=txhisl, pglth=5.0,
                 border=border, lbord=_band, hxeh=0.0, hxew=0.0, clwi=0.0, rlwi=0.0,

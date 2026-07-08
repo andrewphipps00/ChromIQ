@@ -109,6 +109,12 @@ _PRINTTARG_ERROR_PATTERNS: list[tuple[re.Pattern[str], str, str]] = [
 # Instruments the ChromIQ layout engine can lay out itself (issue #93).
 ENGINE_INSTRUMENTS = {"i1", "p3", "CM", "SS"}
 
+# printtarg's ColorMunki triple-density trick (-ii1) uses -a1.3 by default; the
+# engine's native extra-high-density (pscale 1.0) reproduces exactly that size,
+# so a printtarg -a maps to engine pscale = -a / this. (Converted in
+# _engine_build_kwargs; the engine geometry is in instruments.py density>=3.)
+CM_TRIPLE_PRINTTARG_SCALE = 1.3
+
 
 def _chromiq_clip_active(p: "ChartParams") -> bool:
     """True when ChromIQ-style clipping border applies to this chart.
@@ -936,7 +942,15 @@ class ChartCreator:
             density = 3 if params.triple_density else (
                 2 if params.double_density else 1)
             kw["density"] = density
-            if density == 2:
+            if density == 3:
+                # patch_scale carries printtarg's -ii1 triple-density -a value
+                # (1.3 = the default). The engine's extra-high-density native
+                # size (pscale 1.0) reproduces printtarg's -a1.3, so a -a maps to
+                # engine scale = -a / 1.3. Guided's 1.3 → 1.0 (unchanged 10.4 mm);
+                # a preset's -a1.08 → 0.83 (8.6 mm, matching printtarg exactly).
+                kw["pscale"] = float(params.patch_scale or CM_TRIPLE_PRINTTARG_SCALE) \
+                    / CM_TRIPLE_PRINTTARG_SCALE
+            elif density == 2:
                 # printtarg's ColorMunki double density (-h) inseparably couples
                 # the 13.7 mm rows with a half-patch row stagger; reproduce it so
                 # Guided matches printtarg. (The decoupled cm_stagger toggle stays
