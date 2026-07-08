@@ -210,9 +210,11 @@ DEFAULTS: dict[str, Any] = {
     # Empty = the platform's per-user colour-profile folder.
     "profile_install_dir":       "",
     # Strip-indicator styling (Knut #93): the per-chart detail controls moved to
-    # Settings → Chart Layout. These are the app-wide DEFAULTS used for new charts;
-    # presets still carry (and restore) their own styling. Keys mirror the
-    # LayoutRecipe.indicator_* / underline_* / strip_label_offset fields.
+    # Settings → Chart Layout. These are the app-wide styling for EVERY engine
+    # chart — overlaid at read time in TabChart._current_layout_recipe, so the
+    # styling fields a preset/saved-defaults recipe carries are inert history.
+    # Keys mirror the LayoutRecipe.indicator_*/underline_*/strip_label_offset
+    # fields.
     "strip_indicator_font":          "JetBrains Mono",
     "strip_indicator_size_mm":       0.0,   # 0 = auto (instrument text height)
     "strip_indicator_bold":          False,
@@ -226,7 +228,8 @@ DEFAULTS: dict[str, Any] = {
 }
 
 # Map LayoutRecipe styling field → its settings key, so the panel and the
-# recipe-overlay helper agree (Knut #93). show_strip_indicators stays per-chart.
+# recipe-overlay helper agree (Knut #93). show_strip_indicators stays per-chart
+# (it's a layout decision, not styling — presets keep it).
 INDICATOR_STYLE_KEYS = {
     "indicator_font":          "strip_indicator_font",
     "indicator_size_mm":       "strip_indicator_size_mm",
@@ -448,11 +451,13 @@ class AppSettings:
     # ------------------------------------------------------------------
     def indicator_style(self) -> dict[str, Any]:
         """The app-wide strip-indicator styling as ``{recipe_field: value}``
-        (typed to each DEFAULTS entry), for seeding a fresh chart's recipe."""
+        (typed to each DEFAULTS entry)."""
         return {field: self.get(key) for field, key in INDICATOR_STYLE_KEYS.items()}
 
     def apply_indicator_style(self, recipe):
         """Return *recipe* with its strip-indicator styling fields overlaid from
-        the app-wide defaults (used for new charts; presets keep their own)."""
+        the app-wide Settings values. The Settings styling applies to every
+        engine chart — recipes from presets or saved defaults carry the fields
+        only as inert history (TabChart._current_layout_recipe overlays them)."""
         from dataclasses import replace
         return replace(recipe, **self.indicator_style())

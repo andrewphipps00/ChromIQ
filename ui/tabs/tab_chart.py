@@ -2959,13 +2959,9 @@ class TabChart(QWidget):
                 log.warning("restore engine layout defaults failed: %s", exc)
         inst, paper, mode = self._manual_layout_panel.selection()
         store = self._layout_store()
-        recipe = store.get(inst, paper, mode)
-        # A fresh default (no stored preset for this combo) takes its strip-
-        # indicator styling from the app-wide Settings defaults; a stored preset
-        # keeps the styling it was saved with (Knut #93).
-        if not store.has(inst, paper, mode):
-            recipe = self._settings.apply_indicator_style(recipe)
-        self._manual_layout_panel.set_recipe(recipe)
+        # No styling overlay here: _current_layout_recipe applies the Settings
+        # strip-indicator styling at read time, so seeding stays verbatim.
+        self._manual_layout_panel.set_recipe(store.get(inst, paper, mode))
 
     def _sync_engine_panel_selection(self) -> None:
         """Seed the engine layout panel's instrument/paper from the canonical
@@ -3019,13 +3015,24 @@ class TabChart(QWidget):
             self._syncing_manual_sel = False
 
     def _current_layout_recipe(self):
-        """The LayoutRecipe from the engine layout panel."""
-        return self._manual_layout_panel.get_recipe()
+        """The LayoutRecipe from the engine layout panel, with the strip-
+        indicator styling overlaid from Settings → Chart Layout. That styling
+        is global — the single source of truth for every engine chart; loaded
+        presets / saved defaults carry the styling fields only as inert
+        history. Overlaying at read time means a style change in Settings
+        reaches the next build/preview immediately, on any recipe (#93)."""
+        return self._settings.apply_indicator_style(
+            self._manual_layout_panel.get_recipe())
 
     @staticmethod
     def _layout_recipe_values(r) -> dict:
-        """The comparable value fields of a recipe (ignores seed / chart text)."""
+        """The comparable value fields of a recipe (ignores seed / chart text /
+        strip-indicator styling — the styling is app-global, so it never counts
+        as a preset modification)."""
+        from core.settings import INDICATOR_STYLE_KEYS
         d = r.to_dict()
+        for k in INDICATOR_STYLE_KEYS:
+            d.pop(k, None)
         d.pop("seed", None)
         d.pop("chart_text", None)
         return d
@@ -7828,7 +7835,9 @@ class TabChart(QWidget):
         try:
             if (bool(self._settings.get("use_chromiq_layout_engine", False))
                     and getattr(self, "_manual_layout_panel", None) is not None):
-                return repr(self._manual_layout_panel.get_recipe().to_dict())
+                # Via _current_layout_recipe so a Settings styling change also
+                # counts as a layout change and re-triggers the auto-preview.
+                return repr(self._current_layout_recipe().to_dict())
             return repr(self._printtarg_signature())
         except Exception:  # noqa: BLE001
             return None
@@ -8258,7 +8267,7 @@ class TabChart(QWidget):
         # takes effect.
         if (getattr(self, "_manual_layout_panel", None) is not None
                 and bool(self._settings.get("use_chromiq_layout_engine", False))):
-            recipe = self._manual_layout_panel.get_recipe()
+            recipe = self._current_layout_recipe()
             p.instrument = recipe.instrument
             p.paper = recipe.paper
             p.tiff_dpi = recipe.dpi

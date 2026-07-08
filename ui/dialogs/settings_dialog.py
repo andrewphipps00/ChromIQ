@@ -1585,7 +1585,8 @@ class SettingsDialog(QDialog):
         """Global strip-indicator styling (font/size/style/rotation/alignment/
         offset/underline) — moved out of the per-chart panel (Knut #93). Wired to
         the ``strip_indicator_*`` / ``strip_underline_*`` settings keys; saved in
-        ``_save``. Used as the default styling for new charts."""
+        ``_save``. The styling for every engine chart (presets don't override
+        it — TabChart._current_layout_recipe overlays these values)."""
         s = self._settings
         grp = QGroupBox(tr("Strip indicator style (all new charts)"), self)
         g = QGridLayout(grp)
@@ -1593,8 +1594,8 @@ class SettingsDialog(QDialog):
         g.setVerticalSpacing(6)
 
         intro = QLabel(tr(
-            "How the per-strip letter labels (A, B, C…) look on every new chart. "
-            "Saved presets keep their own styling."), self)
+            "How the per-strip letter labels (A, B, C…) look on every new chart "
+            "— including charts loaded from a saved preset."), self)
         intro.setWordWrap(True)
         intro.setStyleSheet("color: #909090; font-size: 11px;")
         g.addWidget(intro, 0, 0, 1, 4)
